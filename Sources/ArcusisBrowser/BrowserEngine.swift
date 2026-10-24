@@ -1,0 +1,246 @@
+import AppKit
+import BrowserCore
+import ChromiumBridge
+import Observation
+import SwiftUI
+
+struct PageState: Equatable {
+  var loading: Bool
+  var canGoBack: Bool
+  var canGoForward: Bool
+}
+
+/// Owns live native tabs independently of the selected SwiftUI space.
+@MainActor @Observable
+final class BrowserEngine {
+  let runtime: ARCChromiumRuntime
+  private(set) var pages: [UUID: PageState] = [:]
+  private(set) var notice: String?
+  @ObservationIgnored private weak var store: BrowserStore?
+  @ObservationIgnored private var loadedProfiles: Set<UUID> = []
+  @ObservationIgnored private var loadingProfiles: Set<UUID> = []
+  @ObservationIgnored private var failedProfiles: Set<UUID> = []
+  @ObservationIgnored private var liveTabs: Set<UUID> = []
+  @ObservationIgnored private var failedTabs: Set<UUID> = []
+  @ObservationIgnored private var reconciling = false
+
+  init(runtime: ARCChromiumRuntime, store: BrowserStore) {
+    self.runtime = runtime
+    self.store = store
+    store.engine = self
+    runtime.onNotice = { [weak self] message in self?.notice = message }
+    store.onSessionChanged = { [weak self] in self?.reconcile() }
+    store.onCloseTab = { [weak self] id in
+      guard let self else { return }
+      if self.liveTabs.contains(id) {
+        self.runtime.closeTabID(id.uuidString)
+      } else {
+        self.store?.nativeTabClosed(id)
+      }
+    }
+    runtime.onTabChanged = { [weak self] identity, address, title, loading, back, forward in
+      guard let self, let id = UUID(uuidString: identity) else { return }
+      self.pages[id] = PageState(loading: loading, canGoBack: back, canGoForward: forward)
+      if let url = URL(string: address) { self.store?.nativeTabChanged(id, url: url, title: title) }
+    }
+    runtime.onTabClosed = { [weak self] identity in
+      guard let self, let id = UUID(uuidString: identity) else { return }
+      self.liveTabs.remove(id)
+      self.pages[id] = nil
+      self.store?.nativeTabClosed(id)
+    }
+    runtime.onNewTab = { [weak self] identity, owner, address, opener, foreground in
+      guard let self, let id = UUID(uuidString: identity), let profile = UUID(uuidString: owner),
+        let url = URL(string: address.isEmpty ? "about:blank" : address)
+      else { return }
+      self.liveTabs.insert(id)
+      let accepted =
+        self.store?.nativeTabOpened(
+          BrowserTab(id: id, url: url), profileID: profile,
+          openerID: opener.flatMap(UUID.init(uuidString:)), foreground: foreground) ?? false
+      if !accepted { self.runtime.discardTabID(identity) }
+    }
+  }
+
+  func reconcile() {
+    guard !reconciling, let store else { return }
+    reconciling = true
+    defer { reconciling = false }
+    let session = store.session
+    let wantedTabs = Set(session.spaces.flatMap { $0.tabs.map(\.id) })
+    for removed in liveTabs.subtracting(wantedTabs) {
+      // Ordinary tab close waits for Chromium's beforeunload decision. This path
+      // handles confirmed space removal; profile files are deliberately retained.
+      runtime.discardTabID(removed.uuidString)
+      liveTabs.remove(removed)
+      pages[removed] = nil
+    }
+    for profile in Set(session.spaces.map(\.profileID)) {
+      guard !loadedProfiles.contains(profile), !loadingProfiles.contains(profile),
+        !failedProfiles.contains(profile)
+      else { continue }
+      loadingProfiles.insert(profile)
+      runtime.loadProfileID(profile.uuidString) { [weak self] error in
+        MainActor.assumeIsolated {
+          guard let self else { return }
+          self.loadingProfiles.remove(profile)
+          if let error {
+            self.failedProfiles.insert(profile)
+            self.notice = error.localizedDescription
+          } else {
+            self.loadedProfiles.insert(profile)
+          }
+          // A cached profile can complete synchronously during reconciliation.
+          DispatchQueue.main.async { [weak self] in self?.reconcile() }
+        }
+      }
+    }
+    for space in session.spaces where loadedProfiles.contains(space.profileID) {
+      for tab in space.tabs where !liveTabs.contains(tab.id) && !failedTabs.contains(tab.id) {
+        liveTabs.insert(tab.id)
+        do {
+          try runtime.openTabID(
+            tab.id.uuidString, profileID: space.profileID.uuidString, url: tab.url.absoluteString)
+        } catch {
+          liveTabs.remove(tab.id)
+          failedTabs.insert(tab.id)
+          notice = error.localizedDescription
+        }
+      }
+    }
+    runtime.activateProfileID(session.selectedSpace.profileID.uuidString)
+    if let selected = session.selectedSpace.selectedTabID {
+      runtime.activateTabID(selected.uuidString)
+    }
+  }
+}
+
+struct ChromiumPage: NSViewRepresentable {
+  let engine: BrowserEngine
+  let tabID: UUID
+
+  func makeNSView(context: Context) -> NSView { NSView() }
+
+  func updateNSView(_ container: NSView, context: Context) {
+    guard let page = engine.runtime.view(forTabID: tabID.uuidString) else { return }
+    if page.superview !== container {
+      for child in container.subviews { child.removeFromSuperview() }
+      page.removeFromSuperview()
+      page.frame = container.bounds
+      page.autoresizingMask = [.width, .height]
+      container.addSubview(page)
+      if container.window?.isKeyWindow == true { engine.runtime.focusTabID(tabID.uuidString) }
+    }
+  }
+
+  static func dismantleNSView(_ view: NSView, coordinator: ()) {
+    // Detach the view only. The engine keeps the tab, profile, and page alive.
+    for child in view.subviews { child.removeFromSuperview() }
+  }
+}
+
+/// Chromium owns the AppKit loop; SwiftUI renders the chrome inside its native window.
+@MainActor
+final class NativeBrowserHost: NSObject {
+  private let store: BrowserStore
+  private let engine: BrowserEngine
+
+  init(runtime: ARCChromiumRuntime, store: BrowserStore) {
+    self.store = store
+    engine = BrowserEngine(runtime: runtime, store: store)
+    super.init()
+  }
+
+  static func run(frameworkURL: URL) -> Int32 {
+    do {
+      let directory = URL.applicationSupportDirectory
+        .appending(path: "Arcusis Browser/Chromium", directoryHint: .isDirectory)
+      try FileManager.default.createDirectory(
+        at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+      let runtime = try ARCChromiumRuntime(frameworkURL: frameworkURL)
+      let host = NativeBrowserHost(runtime: runtime, store: .persistent())
+      runtime.onReady = { [weak host] in host?.start() }
+      return withExtendedLifetime(host) {
+        runtime.run(withDataDirectory: directory, testing: false)
+      }
+    } catch {
+      FileHandle.standardError.write(
+        Data("Browser startup failed: \(error.localizedDescription)\n".utf8))
+      return 1
+    }
+  }
+
+  private func start() {
+    guard let window = engine.runtime.window, let content = engine.runtime.hostView else { return }
+    let host = NSHostingView(rootView: BrowserWindow(store: store))
+    host.frame = content.bounds
+    host.autoresizingMask = [.width, .height]
+    content.addSubview(host)
+    window.title = "Arcusis Browser"
+    window.titleVisibility = .hidden
+    window.titlebarAppearsTransparent = true
+    window.styleMask.insert(.fullSizeContentView)
+    window.minSize = NSSize(width: 760, height: 520)
+    installMenus()
+    engine.reconcile()
+    window.center()
+    window.makeKeyAndOrderFront(nil)
+  }
+
+  private func installMenus() {
+    let main = NSMenu()
+    func menu(_ title: String) -> NSMenu {
+      let item = NSMenuItem()
+      let result = NSMenu(title: title)
+      item.submenu = result
+      main.addItem(item)
+      return result
+    }
+    func add(
+      _ title: String, _ action: Selector, _ key: String, to menu: NSMenu,
+      modifiers: NSEvent.ModifierFlags = .command
+    ) {
+      let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+      item.target = self
+      item.keyEquivalentModifierMask = modifiers
+      menu.addItem(item)
+    }
+    let app = menu("Arcusis Browser")
+    add("Quit Arcusis Browser", #selector(quit), "q", to: app)
+    let file = menu("File")
+    add("New tab", #selector(search), "t", to: file)
+    add("Search or enter address", #selector(search), "l", to: file)
+    add("New space…", #selector(newSpace), "", to: file)
+    add("Edit current space…", #selector(editSpace), "", to: file)
+    add("Close tab", #selector(closeTab), "w", to: file)
+    let edit = menu("Edit")
+    for (title, action, key) in [
+      ("Undo", "undo:", "z"), ("Cut", "cut:", "x"), ("Copy", "copy:", "c"),
+      ("Paste", "paste:", "v"), ("Select All", "selectAll:", "a"),
+    ] {
+      edit.addItem(withTitle: title, action: NSSelectorFromString(action), keyEquivalent: key)
+    }
+    let tabs = menu("Tabs")
+    add("Toggle sidebar", #selector(toggleSidebar), "s", to: tabs)
+    add("Next space", #selector(nextSpace), "]", to: tabs, modifiers: [.control, .option])
+    add("Previous space", #selector(previousSpace), "[", to: tabs, modifiers: [.control, .option])
+    add("Reload", #selector(reload), "r", to: tabs)
+    NSApp.mainMenu = main
+  }
+
+  @objc private func search() { store.showCommand() }
+  @objc private func newSpace() { store.spaceEditor = .create }
+  @objc private func editSpace() { store.spaceEditor = .edit(store.session.selectedSpaceID) }
+  @objc private func closeTab() {
+    if let id = store.session.selectedSpace.selectedTabID { store.closeTab(id) }
+  }
+  @objc private func toggleSidebar() { store.sidebarIsVisible.toggle() }
+  @objc private func nextSpace() { store.cycleSpace(by: 1) }
+  @objc private func previousSpace() { store.cycleSpace(by: -1) }
+  @objc private func reload() {
+    if let id = store.session.selectedSpace.selectedTabID {
+      engine.runtime.reloadTabID(id.uuidString)
+    }
+  }
+  @objc private func quit() { engine.runtime.quit() }
+}

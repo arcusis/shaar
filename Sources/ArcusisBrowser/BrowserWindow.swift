@@ -55,7 +55,13 @@ struct BrowserWindow: View {
     .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: store.sidebarIsVisible)
     .sheet(item: $store.spaceEditor) { route in SpaceEditor(store: store, route: route) }
     .onChange(of: store.commandIsOpen) { _, isOpen in
-      if !isOpen { pageIsFocused = true }
+      if !isOpen {
+        if let engine = store.engine, let id = store.session.selectedSpace.selectedTabID {
+          engine.runtime.focusTabID(id.uuidString)
+        } else {
+          pageIsFocused = true
+        }
+      }
     }
   }
 
@@ -68,6 +74,29 @@ struct BrowserWindow: View {
           Image(systemName: "sidebar.left")
         }
         .help("Toggle sidebar (Command-S)")
+        if let engine = store.engine, let id = store.session.selectedSpace.selectedTabID {
+          let state = engine.pages[id]
+          Button {
+            engine.runtime.goBack(inTabID: id.uuidString)
+          } label: {
+            Image(systemName: "chevron.left")
+          }
+          .disabled(state?.canGoBack != true)
+          .help("Back")
+          Button {
+            engine.runtime.goForward(inTabID: id.uuidString)
+          } label: {
+            Image(systemName: "chevron.right")
+          }
+          .disabled(state?.canGoForward != true)
+          .help("Forward")
+          Button {
+            engine.runtime.reloadTabID(id.uuidString)
+          } label: {
+            Image(systemName: "arrow.clockwise")
+          }
+          .help("Reload (Command-R)")
+        }
         Spacer()
         Button {
           store.showCommand()
@@ -91,40 +120,48 @@ struct BrowserWindow: View {
       Divider().opacity(0.4)
       ZStack {
         Color(nsColor: .textBackgroundColor)
-        VStack(spacing: 18) {
-          Image(systemName: store.session.selectedSpace.symbol)
-            .font(.system(size: 32, weight: .light))
-            .foregroundStyle(store.session.selectedSpace.tint.color)
-          Text(store.session.selectedSpace.name)
-            .font(.system(size: 30, weight: .medium, design: .rounded))
-          Text(
-            store.session.selectedSpace.selectedTab == nil
-              ? "A little room for your next idea."
-              : "Browsing is not available in this development preview."
-          )
-          .font(.system(size: 14))
-          .foregroundStyle(.secondary)
-          Button {
-            store.showCommand()
-          } label: {
-            HStack {
-              Image(systemName: "magnifyingglass")
-              Text("Search or enter address")
-              Spacer(minLength: 40)
-              Text("⌘T").foregroundStyle(.tertiary)
-            }
-            .font(.system(size: 14))
-            .padding(16)
-            .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary))
+        if let engine = store.engine, let id = store.session.selectedSpace.selectedTabID {
+          if engine.pages[id] != nil {
+            ChromiumPage(engine: engine, tabID: id)
+          } else {
+            ProgressView("Loading profile…")
           }
-          .buttonStyle(.plain)
-          .frame(maxWidth: 420)
-          Text("\(store.profileName) profile")
-            .font(.system(size: 11))
-            .foregroundStyle(.tertiary)
+        } else {
+          VStack(spacing: 18) {
+            Image(systemName: store.session.selectedSpace.symbol)
+              .font(.system(size: 32, weight: .light))
+              .foregroundStyle(store.session.selectedSpace.tint.color)
+            Text(store.session.selectedSpace.name)
+              .font(.system(size: 30, weight: .medium, design: .rounded))
+            Text(
+              store.session.selectedSpace.selectedTab == nil
+                ? "A little room for your next idea."
+                : "Browsing is not available in this development preview."
+            )
+            .font(.system(size: 14))
+            .foregroundStyle(.secondary)
+            Button {
+              store.showCommand()
+            } label: {
+              HStack {
+                Image(systemName: "magnifyingglass")
+                Text("Search or enter address")
+                Spacer(minLength: 40)
+                Text("⌘T").foregroundStyle(.tertiary)
+              }
+              .font(.system(size: 14))
+              .padding(16)
+              .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
+              .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary))
+            }
+            .buttonStyle(.plain)
+            .frame(maxWidth: 420)
+            Text("\(store.profileName) profile")
+              .font(.system(size: 11))
+              .foregroundStyle(.tertiary)
+          }
+          .padding(32)
         }
-        .padding(32)
       }
       .focusable()
       .focused($pageIsFocused)
@@ -134,6 +171,9 @@ struct BrowserWindow: View {
           .foregroundStyle(.orange)
           .padding(12)
           .frame(maxWidth: .infinity, alignment: .leading)
+      }
+      if let notice = store.engine?.notice {
+        Text(notice).font(.caption).foregroundStyle(.orange).padding(12)
       }
     }
     .background(Color(nsColor: .textBackgroundColor))

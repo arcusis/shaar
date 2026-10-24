@@ -5,6 +5,9 @@ import SwiftUI
 enum ArcusisBrowserMain {
   @MainActor static func main() {
     let arguments = CommandLine.arguments
+    if arguments.contains("--engine-probe") {
+      exit(EngineProbe.run(arguments: arguments))
+    }
     if let index = arguments.firstIndex(of: "--render-preview"),
       arguments.indices.contains(index + 1)
     {
@@ -18,6 +21,12 @@ enum ArcusisBrowserMain {
         exit(1)
       }
       return
+    }
+    if let frameworks = Bundle.main.privateFrameworksURL {
+      let framework = frameworks.appending(path: "Chromium Framework.framework")
+      if FileManager.default.fileExists(atPath: framework.path) {
+        exit(NativeBrowserHost.run(frameworkURL: framework))
+      }
     }
     BrowserApplication.main()
   }

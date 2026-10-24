@@ -25,6 +25,53 @@ private func openTab(_ address: String, in session: inout BrowserSession) throws
   #expect(session.spaces.flatMap(\.tabs).count == 2)
 }
 
+@Test func nativeEventsUpdateAndCloseInactiveTabsWithoutSwitchingAccounts() throws {
+  var session = BrowserSession.fresh()
+  let firstSpace = session.selectedSpaceID
+  let firstProfile = session.selectedSpace.profileID
+  let tab = try openTab("https://example.com", in: &session)
+  session.cycleSpace(by: 1)
+  let selected = session.selectedSpace
+  let updated = session.updateTab(
+    tab, url: URL(string: "https://example.com/redirect")!, title: "Signed in")
+  #expect(updated)
+  #expect(session.selectedSpace == selected)
+  #expect(session.spaces.first { $0.id == firstSpace }?.profileID == firstProfile)
+  #expect(session.spaces.first { $0.id == firstSpace }?.tabs.first?.title == "Signed in")
+  let before = session
+  let unsafe = session.updateTab(tab, url: URL(string: "javascript:alert(1)")!, title: "Unsafe")
+  #expect(!unsafe)
+  #expect(session == before)
+  session.closeTab(tab)
+  #expect(session.selectedSpace == selected)
+  #expect(session.spaces.first { $0.id == firstSpace }?.tabs.isEmpty == true)
+  try session.validate()
+}
+
+@Test func nativePopupStaysWithOpenerSpaceAndRejectsUnknownProfiles() throws {
+  var session = BrowserSession.fresh()
+  let openerSpace = session.selectedSpaceID
+  let profile = session.selectedSpace.profileID
+  let opener = try openTab("https://example.com", in: &session)
+  session.addSpace(name: "Shared project", sharingProfile: profile)
+  let sharedSpace = session.selectedSpaceID
+  let popup = BrowserTab(url: URL(string: "about:blank")!)
+  let accepted = session.insertNativeTab(
+    popup, profileID: profile, openerID: opener, foreground: false)
+  #expect(accepted == openerSpace)
+  #expect(session.selectedSpaceID == sharedSpace)
+  #expect(session.spaces.first { $0.id == openerSpace }?.tabs.contains(popup) == true)
+  let before = session
+  let duplicate = session.insertNativeTab(
+    popup, profileID: profile, openerID: opener, foreground: true)
+  let foreign = session.insertNativeTab(
+    BrowserTab(url: URL(string: "https://example.com")!), profileID: UUID(), openerID: nil,
+    foreground: true)
+  #expect(duplicate == nil && foreign == nil)
+  #expect(session == before)
+  try session.validate()
+}
+
 @Test func profileSharingIsExplicitAndNewSpacesDefaultToNewProfiles() throws {
   var session = BrowserSession.fresh()
   let initialProfile = session.selectedSpace.profileID

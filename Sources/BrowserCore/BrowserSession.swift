@@ -120,7 +120,7 @@ public struct BrowserSession: Codable, Equatable, Sendable {
         profileIDs.contains(space.profileID)
           && !space.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
           && (space.selectedTabID == nil || space.tabs.contains { $0.id == space.selectedTabID })
-          && space.tabs.allSatisfy { NavigationInput.isWebURL($0.url) }
+          && space.tabs.allSatisfy { Self.isPersistableURL($0.url) }
       })
     else { throw SessionError.invalidState }
   }
@@ -201,7 +201,7 @@ public struct BrowserSession: Codable, Equatable, Sendable {
   }
 
   public mutating func closeTab(_ tabID: UUID) {
-    guard let index = spaces.firstIndex(where: { $0.id == selectedSpaceID }),
+    guard let index = spaces.firstIndex(where: { $0.tabs.contains { $0.id == tabID } }),
       let tabIndex = spaces[index].tabs.firstIndex(where: { $0.id == tabID })
     else { return }
     spaces[index].tabs.remove(at: tabIndex)
@@ -209,6 +209,50 @@ public struct BrowserSession: Codable, Equatable, Sendable {
       let tabs = spaces[index].tabs
       spaces[index].selectedTabID = tabs.isEmpty ? nil : tabs[min(tabIndex, tabs.count - 1)].id
     }
+  }
+
+  /// Native navigation changes metadata, never the immutable space/profile assignment.
+  @discardableResult
+  public mutating func updateTab(_ id: UUID, url: URL, title: String) -> Bool {
+    guard Self.isPersistableURL(url),
+      let space = spaces.firstIndex(where: { $0.tabs.contains { $0.id == id } }),
+      let tab = spaces[space].tabs.firstIndex(where: { $0.id == id })
+    else { return false }
+    let title = title.isEmpty ? url.host() ?? url.absoluteString : title
+    guard spaces[space].tabs[tab].url != url || spaces[space].tabs[tab].title != title else {
+      return false
+    }
+    spaces[space].tabs[tab].url = url
+    spaces[space].tabs[tab].title = title
+    return true
+  }
+
+  /// Popups and links inherit their engine profile. Unknown profiles are never reassigned.
+  @discardableResult
+  public mutating func insertNativeTab(
+    _ tab: BrowserTab, profileID: UUID, openerID: UUID?, foreground: Bool
+  ) -> UUID? {
+    guard Self.isPersistableURL(tab.url),
+      !spaces.contains(where: { $0.tabs.contains { $0.id == tab.id } })
+    else { return nil }
+    let openerSpace = spaces.firstIndex {
+      $0.profileID == profileID && $0.tabs.contains { $0.id == openerID }
+    }
+    let currentSpace = spaces.firstIndex { $0.id == selectedSpaceID && $0.profileID == profileID }
+    guard
+      let index = openerSpace ?? currentSpace
+        ?? spaces.firstIndex(where: { $0.profileID == profileID })
+    else { return nil }
+    spaces[index].tabs.append(tab)
+    if foreground {
+      selectedSpaceID = spaces[index].id
+      spaces[index].selectedTabID = tab.id
+    }
+    return spaces[index].id
+  }
+
+  private static func isPersistableURL(_ url: URL) -> Bool {
+    NavigationInput.isWebURL(url) || url.absoluteString == "about:blank"
   }
 
   public mutating func togglePin(_ tabID: UUID) {

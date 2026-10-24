@@ -2,5 +2,6 @@
 .swiftpm/
 build/
 .DS_Store
+.venv/
 *.xcuserstate
 xcuserdata/

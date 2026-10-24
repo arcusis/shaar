@@ -7,7 +7,13 @@ let package = Package(
   products: [.executable(name: "ArcusisBrowser", targets: ["ArcusisBrowser"])],
   targets: [
     .target(name: "BrowserCore"),
-    .executableTarget(name: "ArcusisBrowser", dependencies: ["BrowserCore"]),
+    .target(
+      name: "ChromiumBridge",
+      publicHeadersPath: "include",
+      cxxSettings: [.unsafeFlags(["-fobjc-arc"])],
+      linkerSettings: [.linkedFramework("AppKit")]
+    ),
+    .executableTarget(name: "ArcusisBrowser", dependencies: ["BrowserCore", "ChromiumBridge"]),
     .testTarget(name: "BrowserCoreTests", dependencies: ["BrowserCore"]),
     .testTarget(name: "BrowserAppTests", dependencies: ["ArcusisBrowser"]),
   ]

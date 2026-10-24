@@ -14,6 +14,9 @@ final class BrowserStore {
 
   @ObservationIgnored private let sessionFile: SessionFile?
   @ObservationIgnored private var maySave = true
+  @ObservationIgnored var engine: BrowserEngine?
+  @ObservationIgnored var onSessionChanged: (() -> Void)?
+  @ObservationIgnored var onCloseTab: ((UUID) -> Void)?
 
   init(sessionFile: SessionFile? = nil, session: BrowserSession = .fresh()) {
     self.sessionFile = sessionFile
@@ -71,8 +74,31 @@ final class BrowserStore {
   }
 
   func closeTab(_ id: UUID) {
+    if let onCloseTab {
+      onCloseTab(id)
+      return
+    }
+    nativeTabClosed(id)
+  }
+
+  func nativeTabClosed(_ id: UUID) {
     session.closeTab(id)
     save()
+  }
+
+  func nativeTabChanged(_ id: UUID, url: URL, title: String) {
+    if session.updateTab(id, url: url, title: title) { save() }
+  }
+
+  func nativeTabOpened(_ tab: BrowserTab, profileID: UUID, openerID: UUID?, foreground: Bool)
+    -> Bool
+  {
+    guard
+      session.insertNativeTab(tab, profileID: profileID, openerID: openerID, foreground: foreground)
+        != nil
+    else { return false }
+    save()
+    return true
   }
 
   func togglePin(_ id: UUID) {
@@ -104,6 +130,7 @@ final class BrowserStore {
   }
 
   private func save() {
+    defer { onSessionChanged?() }
     guard maySave else { return }
     do {
       try sessionFile?.save(session)

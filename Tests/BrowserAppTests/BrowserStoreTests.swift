@@ -6,6 +6,22 @@ import Testing
 
 @Suite @MainActor
 struct BrowserStoreTests {
+  @Test func nativeCloseWaitsForEngineBeforeRemovingTheTab() throws {
+    let store = BrowserStore()
+    store.perform(.open(URL(string: "https://example.com")!))
+    let tab = try #require(store.session.selectedSpace.selectedTabID)
+    var requested: UUID?
+    store.onCloseTab = { requested = $0 }
+    store.closeTab(tab)
+    #expect(requested == tab)
+    #expect(store.session.selectedSpace.selectedTabID == tab)
+    store.cycleSpace(by: 1)
+    let current = store.session.selectedSpaceID
+    store.nativeTabClosed(tab)
+    #expect(store.session.selectedSpaceID == current)
+    #expect(!store.session.spaces.flatMap(\.tabs).contains { $0.id == tab })
+  }
+
   @Test func openingAndCancelingLauncherDoesNotCreateTabsOrPersistChanges() throws {
     let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }

@@ -28,3 +28,10 @@ import Testing
   #expect(!ARCReservedBrowserShortcut("g", [.command, .control]))
   #expect(!ARCReservedBrowserShortcut("g", []))
 }
+
+@Test func downloadsShortcutDoesNotReserveOtherCommandJVariants() {
+  #expect(ARCReservedBrowserShortcut("J", [.command, .shift]))
+  #expect(!ARCReservedBrowserShortcut("j", .command))
+  #expect(!ARCReservedBrowserShortcut("j", [.command, .shift, .option]))
+  #expect(!ARCReservedBrowserShortcut("l", [.command, .shift]))
+}

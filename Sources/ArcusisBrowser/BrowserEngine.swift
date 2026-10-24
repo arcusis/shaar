@@ -21,6 +21,7 @@ struct MediaAccessState: Equatable {
 @MainActor @Observable
 final class BrowserEngine {
   let runtime: ARCChromiumRuntime
+  let downloads = DownloadsModel()
   private(set) var pages: [UUID: PageState] = [:]
   private(set) var notice: String?
   private(set) var mediaAccess: [UUID: MediaAccessState] = [:]
@@ -48,6 +49,32 @@ final class BrowserEngine {
     self.presentsNativePanels = presentsNativePanels
     store.engine = self
     runtime.onNotice = { [weak self] message in self?.notice = message }
+    downloads.onCommand = { [weak self] action, id, profile, completion in
+      guard let self else {
+        completion("Download controls are unavailable.")
+        return
+      }
+      self.runtime.downloadCommand(action.rawValue, downloadID: id, profileID: profile.uuidString) {
+        error in
+        MainActor.assumeIsolated { completion(error?.localizedDescription) }
+      }
+    }
+    runtime.onDownloadChanged = { [weak self] owner, record in
+      guard let self, let profile = UUID(uuidString: owner),
+        self.store?.session.profiles.contains(where: { $0.id == profile }) == true
+      else { return }
+      self.downloads.changed(record, profileID: profile)
+    }
+    runtime.onDownloadRemoved = { [weak self] owner, id in
+      guard let self, let profile = UUID(uuidString: owner) else { return }
+      self.downloads.removed(id, profileID: profile)
+    }
+    runtime.onDownloadsRestored = { [weak self] owner, rows in
+      guard let self, let profile = UUID(uuidString: owner),
+        self.store?.session.profiles.contains(where: { $0.id == profile }) == true
+      else { return }
+      self.downloads.restore(rows, profileID: profile)
+    }
     store.onFindRequest = { [weak self] request, forward in
       self?.runtime.find(
         inTabID: request.tabID.uuidString, profileID: request.profileID.uuidString,
@@ -176,6 +203,13 @@ final class BrowserEngine {
             self.notice = error.localizedDescription
           } else {
             self.loadedProfiles.insert(profile)
+            // Chromium's download history initializes asynchronously after profile load.
+            Task { [weak self] in
+              for delay in [300, 700, 2000] {
+                try? await Task.sleep(for: .milliseconds(delay))
+                self?.runtime.refreshDownloads(forProfileID: profile.uuidString)
+              }
+            }
           }
           // A cached profile can complete synchronously during reconciliation.
           DispatchQueue.main.async { [weak self] in self?.reconcile() }
@@ -216,6 +250,23 @@ final class BrowserEngine {
       else { return nil }
       return BrowserExtension(id: id, name: name, version: version)
     }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+  }
+
+  func revealDownload(_ id: String, profileID: UUID, open: Bool) {
+    guard let selected = store?.session.selectedSpace.profileID,
+      let url = downloads.fileToOpen(id: id, profileID: profileID, selectedProfileID: selected)
+    else { return }
+    guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey]),
+      values.isRegularFile == true, values.isSymbolicLink != true
+    else {
+      downloads.fileActionFailed(profileID: profileID)
+      return
+    }
+    if open {
+      if !NSWorkspace.shared.open(url) { downloads.fileActionFailed(profileID: profileID) }
+    } else {
+      NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
   }
 
   func showExtensionList() {
@@ -398,6 +449,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     add("New space…", #selector(newSpace), "", to: file)
     add("Edit current space…", #selector(editSpace), "", to: file)
     add("Close tab", #selector(closeTab), "w", to: file)
+    add("Downloads", #selector(showDownloads), "j", to: file, modifiers: [.command, .shift])
     let edit = menu("Edit")
     for (title, action, key) in [
       ("Undo", "undo:", "z"), ("Cut", "cut:", "x"), ("Copy", "copy:", "c"),
@@ -423,12 +475,14 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     case #selector(findInPage):
       return store.sheet == nil && store.session.selectedSpace.selectedTabID != nil
     case #selector(findNext), #selector(findPrevious): return store.pageFind?.canMove == true
+    case #selector(showDownloads): return store.sheet == nil
     default: return true
     }
   }
   @objc private func findInPage() { store.showPageFind() }
   @objc private func findNext() { store.movePageFind(forward: true) }
   @objc private func findPrevious() { store.movePageFind(forward: false) }
+  @objc private func showDownloads() { store.showDownloads() }
   @objc private func newSpace() { store.spaceEditor = .create }
   @objc private func editSpace() { store.spaceEditor = .edit(store.session.selectedSpaceID) }
   @objc private func closeTab() {

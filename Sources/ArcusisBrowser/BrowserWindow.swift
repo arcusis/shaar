@@ -61,6 +61,10 @@ struct BrowserWindow: View {
       case .space(let route): SpaceEditor(store: store, route: route)
       case .extensionInstall(let request): ExtensionConsent(store: store, request: request)
       case .websiteMedia(let request): WebsiteMediaConsent(store: store, request: request)
+      case .downloads(let profile):
+        if let engine = store.engine {
+          DownloadsPanel(store: store, engine: engine, profileID: profile)
+        }
       }
     }
     .onChange(of: store.commandIsOpen) { _, isOpen in
@@ -126,6 +130,13 @@ struct BrowserWindow: View {
         if let engine = store.engine {
           MediaCaptureIndicator(store: store, engine: engine)
           ExtensionToolbar(engine: engine, store: store)
+          Button {
+            store.showDownloads()
+          } label: {
+            Image(systemName: "arrow.down.circle")
+          }
+          .accessibilityLabel("Downloads")
+          .help("Downloads (Shift-Command-J)")
         }
         Image(systemName: store.session.selectedSpace.symbol)
           .foregroundStyle(.secondary)

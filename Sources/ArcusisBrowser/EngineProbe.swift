@@ -269,6 +269,9 @@ final class EngineProbe {
           runtime: runtime, engine: browserEngine, store: store,
           root: root, phase: phase
         ).run()
+        checks += try await DownloadProbe(
+          runtime: runtime, engine: browserEngine, store: store, root: root, phase: phase
+        ).run()
         localFixturesPassed = true
         if includeBitwarden {
           checks += try await BitwardenProbe(

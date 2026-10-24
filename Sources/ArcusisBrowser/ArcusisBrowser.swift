@@ -117,6 +117,8 @@ private struct BrowserApplication: App {
         Button("Search or enter address") { store.showCommand() }.keyboardShortcut("l")
         Button("New space…") { store.spaceEditor = .create }
         Button("Edit current space…") { store.spaceEditor = .edit(store.session.selectedSpaceID) }
+        Button("Downloads") { store.showDownloads() }.keyboardShortcut(
+          "j", modifiers: [.command, .shift])
       }
       CommandMenu("Tabs") {
         Button("Close tab") {

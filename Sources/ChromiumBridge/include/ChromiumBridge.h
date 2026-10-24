@@ -17,6 +17,9 @@ FOUNDATION_EXPORT BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifier
 @property(copy, nullable) void (^onWebsiteMediaDismissed)(NSString *requestID);
 @property(copy, nullable) void (^onMediaAccess)(NSString *tabID, NSDictionary<NSString *, NSNumber *> *access);
 @property(copy, nullable) void (^onFindResult)(NSString *tabID, NSString *requestID, int count, int active, BOOL final);
+@property(copy, nullable) void (^onDownloadChanged)(NSString *profileID, NSDictionary<NSString *, id> *download);
+@property(copy, nullable) void (^onDownloadRemoved)(NSString *profileID, NSString *downloadID);
+@property(copy, nullable) void (^onDownloadsRestored)(NSString *profileID, NSArray<NSDictionary<NSString *, id> *> *downloads);
 @property(copy, nullable) void (^onTabChanged)(NSString *tabID, NSString *url, NSString *title,
                                              BOOL loading, BOOL canGoBack, BOOL canGoForward);
 @property(copy, nullable) void (^onTabClosed)(NSString *tabID);
@@ -44,6 +47,9 @@ FOUNDATION_EXPORT BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifier
 - (BOOL)findInTabID:(NSString *)tabID profileID:(NSString *)profileID requestID:(NSString *)requestID
               text:(NSString *)text forward:(BOOL)forward;
 - (void)stopFindingInTabID:(NSString *)tabID;
+- (void)downloadCommand:(NSString *)command downloadID:(NSString *)downloadID profileID:(NSString *)profileID
+            completion:(void (^)(NSError * _Nullable))completion;
+- (void)refreshDownloadsForProfileID:(NSString *)profileID;
 /// Evaluates a JavaScript expression and returns its JSON value through ArdiaCore's post callback.
 - (void)evaluateInTabID:(NSString *)tabID script:(NSString *)script
             completion:(void (^)(NSString * _Nullable))completion;
@@ -67,6 +73,8 @@ FOUNDATION_EXPORT BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifier
 /// Sends trusted renderer input only to the current disposable probe popup.
 - (void)clickProbePopupID:(NSString *)popupID buttonTitle:(NSString *)title
               completion:(void (^)(BOOL clicked))completion;
+- (void)clickProbeElementInTabID:(NSString *)tabID elementID:(NSString *)elementID
+                    completion:(void (^)(BOOL clicked))completion;
 @end
 
 NS_ASSUME_NONNULL_END

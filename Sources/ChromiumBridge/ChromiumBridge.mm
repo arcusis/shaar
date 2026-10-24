@@ -1,4 +1,5 @@
 #import "include/ChromiumBridge.h"
+#import "ChromiumDownloads.h"
 #import "../../ThirdParty/ArdiaCore/ArdiaCore.h"
 #import <dlfcn.h>
 #include <string>
@@ -8,6 +9,32 @@
 static NSError *BridgeError(NSString *message) {
   return [NSError errorWithDomain:@"com.arcusis.browser.chromium" code:1
                         userInfo:@{NSLocalizedDescriptionKey: message}];
+}
+
+static void ClickProbeTarget(ArdiaCoreTab *tab, NSString *expression, BOOL (^current)(void),
+                             void (^completion)(BOOL)) {
+  [tab devToolsCall:@"Runtime.evaluate" params:@{@"expression": expression, @"returnByValue": @YES}
+               timeout:5 completion:^(NSDictionary *result, NSString *error) {
+    NSDictionary *point = result[@"result"][@"value"];
+    if (error || ![point isKindOfClass:NSDictionary.class] || !current() ||
+        ![point[@"x"] isKindOfClass:NSNumber.class] || ![point[@"y"] isKindOfClass:NSNumber.class] ||
+        !std::isfinite([point[@"x"] doubleValue]) || !std::isfinite([point[@"y"] doubleValue])) {
+      completion(NO);
+      return;
+    }
+    NSDictionary *press = @{@"type": @"mousePressed", @"x": point[@"x"], @"y": point[@"y"],
+                             @"button": @"left", @"buttons": @1, @"clickCount": @1};
+    [tab devToolsCall:@"Input.dispatchMouseEvent" params:press timeout:5
+            completion:^(NSDictionary *ignored, NSString *pressError) {
+      if (pressError || !current()) { completion(NO); return; }
+      NSDictionary *release = @{@"type": @"mouseReleased", @"x": point[@"x"], @"y": point[@"y"],
+                                 @"button": @"left", @"buttons": @0, @"clickCount": @1};
+      [tab devToolsCall:@"Input.dispatchMouseEvent" params:release timeout:5
+              completion:^(NSDictionary *ignoredRelease, NSString *releaseError) {
+        completion(releaseError == nil && current());
+      }];
+    }];
+  }];
 }
 
 static BOOL ValidID(NSString *value) {
@@ -26,7 +53,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     return [@[@"t", @"l", @"w", @"s", @"q", @"r", @"f", @"g"] containsObject:key.lowercaseString];
   }
   if (chord == (NSEventModifierFlagCommand | NSEventModifierFlagShift)) {
-    return [key.lowercaseString isEqualToString:@"g"];
+    return [@[@"g", @"j"] containsObject:key.lowercaseString];
   }
   return chord == (NSEventModifierFlagControl | NSEventModifierFlagOption) &&
     [@[@"[", @"]"] containsObject:key];
@@ -61,6 +88,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   NSString *_findTabID;
   NSString *_findRequestID;
   NSString *_findText;
+  ARCDownloadService *_downloadService;
 }
 
 - (instancetype)initWithFrameworkURL:(NSURL *)url error:(NSError **)error {
@@ -84,6 +112,17 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   _pendingMedia = [NSMutableDictionary dictionary];
   _probeExtensions = [NSMutableDictionary dictionary];
   _probeDiagnostics = [NSMutableArray array];
+  _downloadService = [[ARCDownloadService alloc] initWithLibrary:_library error:error];
+  if (!_downloadService) return nil;
+  __weak ARCChromiumRuntime *weakSelf = self;
+  _downloadService.onChanged = ^(NSString *profile, NSDictionary *download) {
+    ARCChromiumRuntime *owner = weakSelf;
+    if (owner.onDownloadChanged) owner.onDownloadChanged(profile, download);
+  };
+  _downloadService.onRemoved = ^(NSString *profile, NSString *identity) {
+    ARCChromiumRuntime *owner = weakSelf;
+    if (owner.onDownloadRemoved) owner.onDownloadRemoved(profile, identity);
+  };
   return self;
 }
 
@@ -116,6 +155,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 
 - (void)engineDidStart {
   _engine = [_engineClass sharedEngine];
+  [_downloadService start];
   if (_testing) {
     // Diagnostics only for the empty Bitwarden store-probe profile. No credential entry occurs.
     _engine.pageScript = @"(function(post){"
@@ -156,6 +196,13 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
       self->_profiles[profileID] = profile;
       if (self->_testing) [profile setBoolPreference:@"extensions.ui.developer_mode" value:YES];
       [self->_browserWindow prepareProfile:profile];
+      [self->_downloadService watchProfileID:profileID path:profile.path completion:^(NSArray *rows, NSError *failure) {
+        if (failure) {
+          if (self->_onNotice) self->_onNotice(failure.localizedDescription);
+        } else if (self->_onDownloadsRestored) {
+          self->_onDownloadsRestored(profileID, rows);
+        }
+      }];
     } else {
       error = BridgeError(@"Chromium could not load the requested persistent profile.");
     }
@@ -260,6 +307,25 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 - (void)goBackInTabID:(NSString *)tabID { [_tabs[tabID] goBack]; }
 - (void)goForwardInTabID:(NSString *)tabID { [_tabs[tabID] goForward]; }
 - (void)reloadTabID:(NSString *)tabID { [_tabs[tabID] reload]; }
+- (void)downloadCommand:(NSString *)command downloadID:(NSString *)downloadID profileID:(NSString *)profileID
+            completion:(void (^)(NSError *))completion {
+  if (!_profiles[profileID] || _profiles[profileID].destroyed || _profiles[profileID].offTheRecord) {
+    completion(BridgeError(@"Unknown download profile."));
+    return;
+  }
+  [_downloadService command:command downloadID:downloadID profileID:profileID completion:completion];
+}
+- (void)refreshDownloadsForProfileID:(NSString *)profileID {
+  ArdiaCoreProfile *profile = _profiles[profileID];
+  if (!profile || profile.destroyed || profile.offTheRecord) return;
+  [_downloadService watchProfileID:profileID path:profile.path completion:^(NSArray *rows, NSError *error) {
+    if (error) {
+      if (self->_onNotice) self->_onNotice(error.localizedDescription);
+    } else if (self->_onDownloadsRestored) {
+      self->_onDownloadsRestored(profileID, rows);
+    }
+  }];
+}
 - (BOOL)findInTabID:(NSString *)tabID profileID:(NSString *)profileID requestID:(NSString *)requestID
               text:(NSString *)text forward:(BOOL)forward {
   ArdiaCoreTab *tab = _tabs[tabID];
@@ -452,26 +518,23 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
      "if(!button)return null;button.scrollIntoView({block:'center'});const r=button.getBoundingClientRect();"
      "return {x:r.x+r.width/2,y:r.y+r.height/2};})()", literal];
   ArdiaCoreTab *popup = _extensionPopup;
-  [popup devToolsCall:@"Runtime.evaluate" params:@{@"expression": expression, @"returnByValue": @YES}
-               timeout:5 completion:^(NSDictionary *result, NSString *error) {
-    NSDictionary *point = result[@"result"][@"value"];
-    if (error || ![point isKindOfClass:NSDictionary.class] || ![self->_popupID isEqualToString:popupID] ||
-        ![point[@"x"] isKindOfClass:NSNumber.class] || ![point[@"y"] isKindOfClass:NSNumber.class] ||
-        !std::isfinite([point[@"x"] doubleValue]) || !std::isfinite([point[@"y"] doubleValue])) {
-      completion(NO);
-      return;
-    }
-    NSDictionary *press = @{@"type": @"mousePressed", @"x": point[@"x"], @"y": point[@"y"],
-                             @"button": @"left", @"buttons": @1, @"clickCount": @1};
-    [popup devToolsCall:@"Input.dispatchMouseEvent" params:press timeout:5
-            completion:^(NSDictionary *ignored, NSString *pressError) {
-      if (pressError || ![self->_popupID isEqualToString:popupID]) { completion(NO); return; }
-      NSDictionary *release = @{@"type": @"mouseReleased", @"x": point[@"x"], @"y": point[@"y"],
-                                 @"button": @"left", @"buttons": @0, @"clickCount": @1};
-      [popup devToolsCall:@"Input.dispatchMouseEvent" params:release timeout:5
-              completion:^(NSDictionary *ignoredRelease, NSString *releaseError) { completion(releaseError == nil); }];
-    }];
-  }];
+  ClickProbeTarget(popup, expression, ^BOOL { return [self->_popupID isEqualToString:popupID]; }, completion);
+}
+- (void)clickProbeElementInTabID:(NSString *)tabID elementID:(NSString *)elementID completion:(void (^)(BOOL))completion {
+  ArdiaCoreTab *tab = _tabs[tabID];
+  if (!_testing || !tab || tab.closed || ![_selectedTabID isEqualToString:tabID] || elementID.length > 128) {
+    completion(NO);
+    return;
+  }
+  NSData *data = [NSJSONSerialization dataWithJSONObject:elementID options:NSJSONWritingFragmentsAllowed error:nil];
+  NSString *literal = data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
+  if (!literal) { completion(NO); return; }
+  NSString *expression = [NSString stringWithFormat:
+    @"(()=>{const e=document.getElementById(%@);if(!e)return null;e.scrollIntoView({block:'center'});"
+     "const r=e.getBoundingClientRect();return r.width>0&&r.height>0?{x:r.x+r.width/2,y:r.y+r.height/2}:null;})()", literal];
+  ClickProbeTarget(tab, expression, ^BOOL {
+    return !tab.closed && self->_tabs[tabID] == tab && [self->_selectedTabID isEqualToString:tabID];
+  }, completion);
 }
 - (void)captureProbePopupID:(NSString *)popupID completion:(void (^)(NSData *))completion {
   if (![_popupID isEqualToString:popupID]) { completion(nil); return; }
@@ -584,6 +647,19 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 }
 - (BOOL)engineIsReservedKeyEvent:(NSEvent *)event {
   return ARCReservedBrowserShortcut(event.charactersIgnoringModifiers ?: @"", event.modifierFlags);
+}
+- (void)window:(ArdiaCoreWindow *)window confirmCloseWithDownloads:(int)count completion:(void (^)(BOOL))completion {
+  // Tests must resolve their own transfers before shutdown, without opening a dialog.
+  if (_testing) { completion(NO); return; }
+  NSAlert *alert = [[NSAlert alloc] init];
+  alert.messageText = @"Downloads are still running";
+  alert.informativeText = [NSString stringWithFormat:@"Closing the browser will cancel %d active download%@.", count, count == 1 ? @"" : @"s"];
+  [alert addButtonWithTitle:@"Keep Browser Open"];
+  NSButton *quit = [alert addButtonWithTitle:@"Close and Cancel Downloads"];
+  quit.hasDestructiveAction = YES;
+  [alert beginSheetModalForWindow:window.window completionHandler:^(NSModalResponse response) {
+    completion(response == NSAlertSecondButtonReturn);
+  }];
 }
 - (BOOL)engineIsReservedKey:(NSString *)key unshiftedKey:(NSString *)unshiftedKey modifiers:(NSEventModifierFlags)modifiers {
   return ARCReservedBrowserShortcut(unshiftedKey.length ? unshiftedKey : key, modifiers);

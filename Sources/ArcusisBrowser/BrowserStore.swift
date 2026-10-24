@@ -78,6 +78,15 @@ final class BrowserStore {
 
   func dismissCommand() { commandIsOpen = false }
 
+  func showDownloads() {
+    guard sheet == nil else { return }
+    dismissCommand()
+    dismissPageFind()
+    engine?.extensionPanel = nil
+    sheet = .downloads(profileID: session.selectedSpace.profileID)
+    engine?.runtime.refreshDownloads(forProfileID: session.selectedSpace.profileID.uuidString)
+  }
+
   func showPageFind() {
     guard sheet == nil, let tab = session.selectedSpace.selectedTab else { return }
     commandIsOpen = false
@@ -229,7 +238,7 @@ final class BrowserStore {
     switch request {
     case .extensionInstall(let request): onInstallDecision?(request.id, allow)
     case .websiteMedia(let request): onWebsiteMediaDecision?(request.id, allow)
-    case .space: break
+    case .space, .downloads: break
     }
   }
 
@@ -273,6 +282,9 @@ final class BrowserStore {
   }
 
   private func save() {
+    if case .downloads(let profile) = sheet, profile != session.selectedSpace.profileID {
+      sheet = nil
+    }
     if let current = pageFind, !current.matches(session) { dismissPageFind() }
     for request in consentRequests where !request.matches(session) {
       resolveConsent(request.id, accepted: false)

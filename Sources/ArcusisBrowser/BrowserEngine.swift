@@ -16,6 +16,14 @@ final class BrowserEngine {
   let runtime: ARCChromiumRuntime
   private(set) var pages: [UUID: PageState] = [:]
   private(set) var notice: String?
+  private(set) var extensions: [BrowserExtension] = []
+  private(set) var extensionPopupSize = CGSize(width: 480, height: 560)
+  let presentsExtensionPanels: Bool
+  var extensionPanel: ExtensionPanelRoute? {
+    didSet {
+      if extensionPanel == nil { runtime.closeExtensionPopup() }
+    }
+  }
   @ObservationIgnored private weak var store: BrowserStore?
   @ObservationIgnored private var loadedProfiles: Set<UUID> = []
   @ObservationIgnored private var loadingProfiles: Set<UUID> = []
@@ -23,12 +31,44 @@ final class BrowserEngine {
   @ObservationIgnored private var liveTabs: Set<UUID> = []
   @ObservationIgnored private var failedTabs: Set<UUID> = []
   @ObservationIgnored private var reconciling = false
+  @ObservationIgnored private var lastSpaceID: UUID?
+  @ObservationIgnored private var lastTabID: UUID?
 
-  init(runtime: ARCChromiumRuntime, store: BrowserStore) {
+  init(runtime: ARCChromiumRuntime, store: BrowserStore, presentsExtensionPanels: Bool = true) {
     self.runtime = runtime
     self.store = store
+    self.presentsExtensionPanels = presentsExtensionPanels
     store.engine = self
     runtime.onNotice = { [weak self] message in self?.notice = message }
+    store.onInstallDecision = { [weak self] id, accepted in
+      guard let self else { return }
+      self.runtime.resolveInstallRequestID(id, accepted: accepted)
+      if accepted {
+        Task { [weak self] in
+          for _ in 0..<20 {
+            do { try await Task.sleep(for: .milliseconds(500)) } catch { return }
+            guard let self else { return }
+            self.refreshExtensions()
+          }
+        }
+      }
+    }
+    runtime.onInstallRequest = { [weak self] payload in self?.requestInstallation(payload) }
+    runtime.onExtensionPopup = { [weak self] payload in self?.receivedPopup(payload) }
+    runtime.onExtensionPopupClosed = { [weak self] id in
+      guard let self, case .popup(let context) = self.extensionPanel, context.id == id else {
+        return
+      }
+      self.extensionPanel = nil
+    }
+    runtime.onExtensionPopupSize = { [weak self] id, size in
+      guard let self, case .popup(let context) = self.extensionPanel, context.id == id else {
+        return
+      }
+      self.extensionPopupSize = CGSize(
+        width: min(max(size.width, 200), 800),
+        height: min(max(size.height, 100), 600))
+    }
     store.onSessionChanged = { [weak self] in self?.reconcile() }
     store.onCloseTab = { [weak self] id in
       guard let self else { return }
@@ -67,6 +107,11 @@ final class BrowserEngine {
     reconciling = true
     defer { reconciling = false }
     let session = store.session
+    if lastSpaceID != session.selectedSpaceID || lastTabID != session.selectedSpace.selectedTabID {
+      extensionPanel = nil
+      lastSpaceID = session.selectedSpaceID
+      lastTabID = session.selectedSpace.selectedTabID
+    }
     let wantedTabs = Set(session.spaces.flatMap { $0.tabs.map(\.id) })
     for removed in liveTabs.subtracting(wantedTabs) {
       // Ordinary tab close waits for Chromium's beforeunload decision. This path
@@ -111,6 +156,82 @@ final class BrowserEngine {
     runtime.activateProfileID(session.selectedSpace.profileID.uuidString)
     if let selected = session.selectedSpace.selectedTabID {
       runtime.activateTabID(selected.uuidString)
+    } else {
+      runtime.clearActiveTab()
+    }
+    refreshExtensions()
+  }
+
+  func refreshExtensions() {
+    guard let profile = store?.session.selectedSpace.profileID, loadedProfiles.contains(profile)
+    else {
+      extensions = []
+      return
+    }
+    extensions = runtime.extensions(forProfileID: profile.uuidString).compactMap { record in
+      guard let id = record["id"] as? String, let name = record["name"] as? String,
+        let version = record["version"] as? String
+      else { return nil }
+      return BrowserExtension(id: id, name: name, version: version)
+    }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+  }
+
+  func showExtensionList() {
+    guard let store, store.sheet == nil else { return }
+    extensionPanel = nil
+    store.dismissCommand()
+    refreshExtensions()
+    extensionPanel = .list(
+      profileID: store.session.selectedSpace.profileID,
+      tabID: store.session.selectedSpace.selectedTabID)
+  }
+
+  func executeExtension(_ id: String) {
+    guard let tab = store?.session.selectedSpace.selectedTabID else { return }
+    extensionPanel = nil
+    do { try runtime.executeExtensionID(id, tabID: tab.uuidString) } catch {
+      notice = error.localizedDescription
+    }
+  }
+
+  private func receivedPopup(_ payload: [String: Any]) {
+    guard let store, store.sheet == nil, let id = payload["id"] as? String,
+      let profile = (payload["profileID"] as? String).flatMap(UUID.init(uuidString:)),
+      let tab = (payload["tabID"] as? String).flatMap(UUID.init(uuidString:)),
+      let extensionID = payload["extensionID"] as? String, BrowserExtension.isValidID(extensionID),
+      profile == store.session.selectedSpace.profileID,
+      tab == store.session.selectedSpace.selectedTabID
+    else {
+      runtime.closeExtensionPopup()
+      return
+    }
+    extensionPopupSize = CGSize(width: 480, height: 560)
+    extensionPanel = .popup(
+      ExtensionPopupContext(
+        id: id, profileID: profile, tabID: tab, extensionID: extensionID,
+        name: extensions.first { $0.id == extensionID }?.name ?? "Extension"))
+  }
+
+  private func requestInstallation(_ payload: [String: Any]) {
+    guard let id = payload["requestId"] as? String else { return }
+    extensionPanel = nil
+    guard let store,
+      let profile = (payload["profileID"] as? String).flatMap(UUID.init(uuidString:)),
+      let tab = (payload["tabID"] as? String).flatMap(UUID.init(uuidString:)),
+      let source = (payload["sourceURL"] as? String).flatMap(URL.init(string:)),
+      let extensionID = payload["id"] as? String, let name = payload["name"] as? String,
+      let version = payload["version"] as? String,
+      let permissions = payload["permissions"] as? [String],
+      let kind = (payload["type"] as? String).flatMap(ExtensionInstallKind.init(rawValue:)),
+      let browserExtension = BrowserExtension(id: extensionID, name: name, version: version),
+      let request = ExtensionInstallRequest(
+        id: id, profileID: profile, tabID: tab, sourceURL: source,
+        browserExtension: browserExtension, kind: kind, permissions: permissions),
+      store.requestInstallation(request)
+    else {
+      runtime.resolveInstallRequestID(id, accepted: false)
+      notice = "The extension request could not be verified for this page and profile."
+      return
     }
   }
 }

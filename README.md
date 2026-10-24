@@ -10,7 +10,9 @@ Each profile has its own persistent engine directory. A new space defaults to a 
 
 Spaces can be renamed, recolored, and removed; removing a space closes its tabs, retains the profile's data, and cannot remove the last space. Normal tab closure waits for the engine's beforeunload decision. Profile IDs persist before navigation.
 
-**This is not ready for company daily use.** Disposable local account fixtures prove cookie/localStorage isolation, per-tab sessionStorage, explicit profile sharing, live document retention during switching, and persistence after restart. They do not prove Google Workspace authentication or Bitwarden compatibility. Extension installation and website permissions are currently denied until native consent UI is implemented. History/bookmark UI, drag/reorder, trackpad switching, multiple windows, downloads, signing/notarization, real keychain integration, and engine security updates remain release gates. The engine decision and required compatibility checks are tracked in [issue #1](https://github.com/arcusis/browser/issues/1).
+The profile-scoped extension menu lists installed extensions and hosts action popups in native popovers. Native installation consent displays the engine's requested permissions, extension ID/version, source site, and destination profile. Switching profile/tab or navigating away cancels stale consent; popup views close on context changes and never enter saved tab lists. Unknown or unbound requests are denied. Extension side panels are not implemented.
+
+**This is not ready for company daily use.** Disposable fixtures prove account and MV3 extension storage isolation and restart recovery. A real Chrome Web Store probe reaches native consent and registers Bitwarden 2026.10.0 as an enabled `FROM_STORE` extension. Its setup/welcome UI renders, and the email login form was verified after restart. The fresh-install probe still fails to advance from onboarding to that form; the overall gate remains red while the probe's interaction flow is investigated. This does not establish full Bitwarden support. Google Workspace authentication, website permissions, history/bookmark UI, drag/reorder, trackpad switching, multiple windows, downloads, signing/notarization, real keychain integration, and engine security updates remain release gates. Website permission requests remain denied. Evidence and the compatibility matrix are tracked in [issue #1](https://github.com/arcusis/browser/issues/1).
 
 ## Build and run
 
@@ -51,9 +53,20 @@ Generate native view previews without opening a window or capturing the desktop:
 .build/debug/ArcusisBrowser --render-preview /tmp/arcusis-command.png --command
 .build/debug/ArcusisBrowser --render-preview /tmp/arcusis-compact.png --command --compact
 .build/debug/ArcusisBrowser --render-preview /tmp/arcusis-space-editor.png --space-editor
+.build/debug/ArcusisBrowser --render-preview /tmp/arcusis-extension-consent.png --extension-consent
 ```
 
-The engine test starts an authored HTTP fixture on an ephemeral loopback port and runs the bundled engine twice. It exercises the real native store/space integration with two independent profiles and a third explicitly shared space. It writes JSON reports, logs, and offscreen native/page images to a fresh marked temporary directory printed by the runner. It never opens an existing browser profile, orders a window onscreen, enables a debugging socket, changes VPN/DNS/network settings, or signs into real services. Chromium helpers retain their sandbox. Test profiles use a mock keychain and are not a test of release keychain/signing behavior.
+The engine test starts an authored HTTP fixture on an ephemeral loopback port and runs the bundled engine twice. It exercises the real native store/space integration with two independent profiles and a third explicitly shared space. A component-loaded MV3 fixture checks per-profile extension storage, service workers, long-lived ports, offscreen documents, content scripts, scripted autofill into disposable fields, active-tab targeting, popup disposal, and restart recovery. Component loading is restricted to the marked temporary probe root and does not prove normal store installation. The fixture's manifest contains a public test key only; no private key is distributed.
+
+The runner writes JSON reports, logs, and offscreen native/page/popup images to a fresh temporary directory. It never opens an existing browser profile, orders a window onscreen, enables a debugging socket, changes VPN/DNS/network settings, or signs into real services. Chromium helpers retain their sandbox. Disposable test profiles enable extension error diagnostics and use a mock keychain; they do not verify release keychain/signing behavior.
+
+An additional opt-in integration test uses the actual Chrome Web Store and a separate empty disposable profile:
+
+```sh
+bash scripts/test-engine.sh --bitwarden
+```
+
+This test downloads and installs the signed store extension through the real native consent handler, then follows onboarding toward its email login form and checks installation recovery after restart. It skips the optional browser-password-manager settings change. It never enters credentials or alters an existing Bitwarden vault. Failed stages return a nonzero exit status and write diagnostics; an initial failure is preserved even when the restart phase passes. Diagnostic API reads run only after readiness failure is decided. The fresh-install onboarding-to-login failure currently keeps this gate red; successful component-fixture checks do not override it. Bitwarden unlock, real autofill/save/update, passkeys, native messaging, Touch ID, side panels, and company authentication remain unverified.
 
 Offscreen SwiftUI/AppKit images verify native layout. Chromium's remote rendering surface may be absent from an AppKit bitmap; the test captures the authored page separately through the engine's in-process API. These images do not verify live keyboard focus, window shortcuts, Google Workspace, Bitwarden, Cloudflare Access, or a signed company installation.
 

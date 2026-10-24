@@ -12,10 +12,12 @@ final class EngineProbe {
   private let root: URL
   private let fixture: URL
   private let phase: String
+  private let includeBitwarden: Bool
   private let output: URL
   private var checks: [String] = []
   private var finished = false
   private var passed = false
+  private var localFixturesPassed = false
   private var loadedTabs: Set<String> = []
   private let store: BrowserStore
   private var browserEngine: BrowserEngine?
@@ -27,10 +29,11 @@ final class EngineProbe {
   private let tabB = "B30C0118-3DA8-47D2-B661-D3F0FE3E5F98"
   private let sharedA = "C05629FB-8905-4236-8F72-9336FB84079C"
 
-  private init(root: URL, fixture: URL, phase: String, output: URL) throws {
+  private init(root: URL, fixture: URL, phase: String, output: URL, includeBitwarden: Bool) throws {
     self.root = root
     self.fixture = fixture
     self.phase = phase
+    self.includeBitwarden = includeBitwarden
     self.output = output
     guard let frameworks = Bundle.main.privateFrameworksURL else {
       throw ProbeFailure("Run the probe from the bundled app with its pinned engine.")
@@ -82,14 +85,18 @@ final class EngineProbe {
       else {
         throw ProbeFailure("Probe requires a marked temporary directory and loopback fixture.")
       }
-      let probe = try EngineProbe(root: root, fixture: fixture, phase: phase, output: output)
+      let includeBitwarden = arguments.contains("--bitwarden")
+      let probe = try EngineProbe(
+        root: root, fixture: fixture, phase: phase, output: output,
+        includeBitwarden: includeBitwarden)
       probe.runtime.onReady = { [weak probe] in
         guard let probe else { return }
         probe.attachNativeShell()
         Task { await probe.exercise() }
       }
       // A bounded test must fail even if a renderer never calls its completion.
-      DispatchQueue.main.asyncAfter(deadline: .now() + 45) { [weak probe] in
+      DispatchQueue.main.asyncAfter(deadline: .now() + (includeBitwarden ? 150 : 75)) {
+        [weak probe] in
         probe?.finish(error: ProbeFailure("Engine probe timed out."))
       }
       let code = probe.runtime.run(
@@ -103,7 +110,7 @@ final class EngineProbe {
   }
 
   private func attachNativeShell() {
-    browserEngine = BrowserEngine(runtime: runtime, store: store)
+    browserEngine = BrowserEngine(runtime: runtime, store: store, presentsExtensionPanels: false)
     let changed = runtime.onTabChanged
     runtime.onTabChanged = { [weak self] id, url, title, loading, back, forward in
       changed?(id, url, title, loading, back, forward)
@@ -250,6 +257,19 @@ final class EngineProbe {
       try await Task.sleep(for: .milliseconds(200))
       try renderShell(name: "\(phase)-command.png")
       store.dismissCommand()
+      if let browserEngine {
+        checks += try await ExtensionProbe(
+          runtime: runtime, engine: browserEngine, store: store,
+          root: root, phase: phase
+        ).run()
+        localFixturesPassed = true
+        if includeBitwarden {
+          checks += try await BitwardenProbe(
+            runtime: runtime, engine: browserEngine, store: store,
+            root: root, fixture: fixture, phase: phase
+          ).run()
+        }
+      }
       // Allow Chromium's normal persistent-cookie transaction to commit before graceful shutdown.
       try await Task.sleep(for: .seconds(2))
       finish(error: nil)
@@ -275,8 +295,14 @@ final class EngineProbe {
     passed = error == nil
     let report: [String: Any] = [
       "phase": phase, "passed": passed, "chromiumVersion": runtime.chromiumVersion,
+      "bitwardenStoreProbe": includeBitwarden,
+      "localFixturesPassed": localFixturesPassed,
       "checks": checks, "error": error?.localizedDescription as Any? ?? NSNull(),
-      "scope": "Disposable local fixture. Google Workspace and Bitwarden are not tested.",
+      "scope":
+        includeBitwarden
+        ? "Disposable fixtures plus a real Bitwarden store probe. See separate Bitwarden reports for passed and failed stages. No vault or Workspace credentials entered."
+        : "Disposable account and component-loaded MV3 fixtures. Store installation, Google Workspace and Bitwarden are not tested."
+        ,
     ]
     do {
       try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])

@@ -53,8 +53,17 @@ struct BrowserWindow: View {
     .frame(minWidth: 760, minHeight: 520)
     .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: store.commandIsOpen)
     .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: store.sidebarIsVisible)
-    .sheet(item: $store.spaceEditor) { route in SpaceEditor(store: store, route: route) }
+    .sheet(
+      item: store.engine?.presentsExtensionPanels == false ? .constant(nil) : $store.sheet,
+      onDismiss: { store.sheetDidDismiss() }
+    ) { sheet in
+      switch sheet {
+      case .space(let route): SpaceEditor(store: store, route: route)
+      case .extensionInstall(let request): ExtensionConsent(store: store, request: request)
+      }
+    }
     .onChange(of: store.commandIsOpen) { _, isOpen in
+      if isOpen { store.engine?.extensionPanel = nil }
       if !isOpen {
         if let engine = store.engine, let id = store.session.selectedSpace.selectedTabID {
           engine.runtime.focusTabID(id.uuidString)
@@ -110,6 +119,7 @@ struct BrowserWindow: View {
           .lineLimit(1)
         }
         Spacer()
+        if let engine = store.engine { ExtensionToolbar(engine: engine, store: store) }
         Image(systemName: store.session.selectedSpace.symbol)
           .foregroundStyle(.secondary)
           .accessibilityLabel(store.session.selectedSpace.name)

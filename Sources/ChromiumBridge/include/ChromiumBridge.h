@@ -2,10 +2,17 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+/// Exact modifier matching keeps extension shortcuts such as Command-Shift-L available.
+FOUNDATION_EXPORT BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers);
+
 /// All methods and callbacks run on the main thread. The engine owns the AppKit run loop.
 @interface ARCChromiumRuntime : NSObject
 @property(copy, nullable) void (^onReady)(void);
 @property(copy, nullable) void (^onNotice)(NSString *message);
+@property(copy, nullable) void (^onInstallRequest)(NSDictionary<NSString *, id> *request);
+@property(copy, nullable) void (^onExtensionPopup)(NSDictionary<NSString *, id> *popup);
+@property(copy, nullable) void (^onExtensionPopupClosed)(NSString *popupID);
+@property(copy, nullable) void (^onExtensionPopupSize)(NSString *popupID, NSSize size);
 @property(copy, nullable) void (^onTabChanged)(NSString *tabID, NSString *url, NSString *title,
                                              BOOL loading, BOOL canGoBack, BOOL canGoForward);
 @property(copy, nullable) void (^onTabClosed)(NSString *tabID);
@@ -24,6 +31,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)activateTabID:(NSString *)tabID;
 - (void)focusTabID:(NSString *)tabID;
 - (void)activateProfileID:(NSString *)profileID;
+- (void)clearActiveTab;
 - (void)closeTabID:(NSString *)tabID;
 - (void)discardTabID:(NSString *)tabID;
 - (void)goBackInTabID:(NSString *)tabID;
@@ -34,6 +42,19 @@ NS_ASSUME_NONNULL_BEGIN
             completion:(void (^)(NSString * _Nullable))completion;
 /// Captures only the disposable probe's own tab, without a remote debugging socket.
 - (void)captureProbeTabID:(NSString *)tabID completion:(void (^)(NSData * _Nullable))completion;
+- (NSArray<NSDictionary<NSString *, id> *> *)extensionsForProfileID:(NSString *)profileID;
+- (void)resolveInstallRequestID:(NSString *)requestID accepted:(BOOL)accepted;
+- (BOOL)executeExtensionID:(NSString *)extensionID tabID:(NSString *)tabID error:(NSError **)error;
+- (nullable NSView *)viewForExtensionPopupID:(NSString *)popupID;
+- (void)closeExtensionPopup;
+/// Test-only component loader. Requires a path below the marked disposable probe root.
+- (nullable NSString *)loadProbeExtensionAtURL:(NSURL *)url profileID:(NSString *)profileID error:(NSError **)error;
+- (void)evaluateProbePopupID:(NSString *)popupID script:(NSString *)script
+                 completion:(void (^)(NSString * _Nullable))completion;
+- (int)nativeTabIDForID:(NSString *)tabID;
+- (void)captureProbePopupID:(NSString *)popupID completion:(void (^)(NSData * _Nullable))completion;
+- (void)evaluateProbeUserGestureInTabID:(NSString *)tabID script:(NSString *)script
+                           completion:(void (^)(NSString * _Nullable))completion;
 - (void)quit;
 @end
 

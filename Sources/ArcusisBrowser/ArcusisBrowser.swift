@@ -1,4 +1,5 @@
 import AppKit
+import BrowserCore
 import SwiftUI
 
 @main
@@ -15,7 +16,8 @@ enum ArcusisBrowserMain {
         try renderPreview(
           to: URL(filePath: arguments[index + 1]), showCommand: arguments.contains("--command"),
           compact: arguments.contains("--compact"),
-          showSpaceEditor: arguments.contains("--space-editor"))
+          showSpaceEditor: arguments.contains("--space-editor"),
+          showExtensionConsent: arguments.contains("--extension-consent"))
       } catch {
         FileHandle.standardError.write(Data("Preview failed: \(error.localizedDescription)\n".utf8))
         exit(1)
@@ -32,17 +34,20 @@ enum ArcusisBrowserMain {
   }
 
   @MainActor private static func renderPreview(
-    to url: URL, showCommand: Bool, compact: Bool, showSpaceEditor: Bool
+    to url: URL, showCommand: Bool, compact: Bool, showSpaceEditor: Bool, showExtensionConsent: Bool
   ) throws {
     // Render only this view hierarchy; never capture or activate the desktop.
     let application = NSApplication.shared
     application.setActivationPolicy(.prohibited)
     let size =
-      showSpaceEditor
-      ? NSSize(width: 496, height: 430)
-      : compact ? NSSize(width: 760, height: 520) : NSSize(width: 1200, height: 780)
+      showExtensionConsent
+      ? NSSize(width: 516, height: 480)
+      : showSpaceEditor
+        ? NSSize(width: 496, height: 430)
+        : compact ? NSSize(width: 760, height: 520) : NSSize(width: 1200, height: 780)
     let view = NativePreview(
-      store: .preview(showCommand: showCommand), showSpaceEditor: showSpaceEditor
+      store: .preview(showCommand: showCommand), showSpaceEditor: showSpaceEditor,
+      showExtensionConsent: showExtensionConsent
     )
     .frame(width: size.width, height: size.height)
     .background(Color(nsColor: .windowBackgroundColor))
@@ -69,13 +74,31 @@ enum ArcusisBrowserMain {
 private struct NativePreview: View {
   let store: BrowserStore
   let showSpaceEditor: Bool
+  let showExtensionConsent: Bool
 
   var body: some View {
-    if showSpaceEditor {
+    if showExtensionConsent {
+      ExtensionConsent(store: store, request: previewConsent)
+    } else if showSpaceEditor {
       SpaceEditor(store: store, route: .create)
     } else {
       BrowserWindow(store: store)
     }
+  }
+
+  private var previewConsent: ExtensionInstallRequest {
+    ExtensionInstallRequest(
+      id: "preview", profileID: store.session.selectedSpace.profileID,
+      tabID: store.session.selectedSpace.selectedTabID!,
+      sourceURL: store.session.selectedSpace.selectedTab!.url,
+      browserExtension: BrowserExtension(
+        id: String(repeating: "a", count: 32),
+        name: "Example Password Manager", version: "1.0")!,
+      kind: .install,
+      permissions: [
+        "Read and change all your data on all websites", "Display notifications",
+        "Read data you copy and paste",
+      ])!
   }
 }
 

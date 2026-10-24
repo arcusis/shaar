@@ -9,7 +9,18 @@ final class BrowserStore {
   var commandQuery = ""
   var commandSelection = 0
   var sidebarIsVisible = true
-  var spaceEditor: SpaceEditorRoute?
+  var sheet: BrowserSheet?
+  var spaceEditor: SpaceEditorRoute? {
+    get {
+      if case .space(let route) = sheet { return route }
+      return nil
+    }
+    set {
+      if case .extensionInstall = sheet { return }
+      sheet = newValue.map(BrowserSheet.space)
+    }
+  }
+  private(set) var installationRequests: [ExtensionInstallRequest] = []
   private(set) var storageNotice: String?
 
   @ObservationIgnored private let sessionFile: SessionFile?
@@ -17,6 +28,8 @@ final class BrowserStore {
   @ObservationIgnored var engine: BrowserEngine?
   @ObservationIgnored var onSessionChanged: (() -> Void)?
   @ObservationIgnored var onCloseTab: ((UUID) -> Void)?
+  @ObservationIgnored var onInstallDecision: ((String, Bool) -> Void)?
+  @ObservationIgnored private var presentedInstallRequestID: String?
 
   init(sessionFile: SessionFile? = nil, session: BrowserSession = .fresh()) {
     self.sessionFile = sessionFile
@@ -101,6 +114,41 @@ final class BrowserStore {
     return true
   }
 
+  @discardableResult
+  func requestInstallation(_ request: ExtensionInstallRequest) -> Bool {
+    guard request.matches(session), installationRequests.count < 10,
+      !installationRequests.contains(where: { $0.id == request.id })
+    else { return false }
+    installationRequests.append(request)
+    presentNextInstallation()
+    return true
+  }
+
+  func resolveInstallation(_ id: String, accepted: Bool) {
+    guard let request = installationRequests.first(where: { $0.id == id }) else { return }
+    let presented: Bool
+    if case .extensionInstall(let current) = sheet {
+      presented = current.id == id
+    } else {
+      presented = false
+    }
+    installationRequests.removeAll { $0.id == id }
+    if presentedInstallRequestID == id { presentedInstallRequestID = nil }
+    if presented { sheet = nil }
+    onInstallDecision?(id, accepted && presented && request.matches(session))
+  }
+
+  func presentNextInstallation() {
+    guard sheet == nil, let request = installationRequests.first else { return }
+    presentedInstallRequestID = request.id
+    sheet = .extensionInstall(request)
+  }
+
+  func sheetDidDismiss() {
+    if let id = presentedInstallRequestID { resolveInstallation(id, accepted: false) }
+    presentNextInstallation()
+  }
+
   func togglePin(_ id: UUID) {
     session.togglePin(id)
     save()
@@ -130,6 +178,9 @@ final class BrowserStore {
   }
 
   private func save() {
+    for request in installationRequests where !request.matches(session) {
+      resolveInstallation(request.id, accepted: false)
+    }
     defer { onSessionChanged?() }
     guard maySave else { return }
     do {

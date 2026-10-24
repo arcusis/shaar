@@ -2,6 +2,11 @@ import BrowserCore
 import Foundation
 import Observation
 
+struct ManagedSessionSaveResult {
+  let session: BrowserSession
+  let notice: String?
+}
+
 @MainActor @Observable
 final class BrowserStore {
   private(set) var session: BrowserSession
@@ -42,6 +47,7 @@ final class BrowserStore {
   private(set) var storageNotice: String?
 
   @ObservationIgnored private let sessionFile: SessionFile?
+  @ObservationIgnored private var managedSave: ((BrowserSession) -> ManagedSessionSaveResult)?
   @ObservationIgnored private var maySave = true
   @ObservationIgnored var engine: BrowserEngine?
   @ObservationIgnored var onSessionChanged: (() -> Void)?
@@ -67,6 +73,26 @@ final class BrowserStore {
       storageNotice =
         "Saved session could not be restored. The original file is preserved; changes in this window will not be saved."
     }
+  }
+
+  init(
+    managedSession: BrowserSession, notice: String?,
+    save: @escaping (BrowserSession) -> ManagedSessionSaveResult
+  ) {
+    sessionFile = nil
+    session = managedSession
+    storageNotice = notice
+    managedSave = save
+  }
+
+  /// Workspace projections refresh the view/engine without starting another persistence transaction.
+  func applyManagedSession(_ value: BrowserSession, notice: String?) {
+    guard managedSave != nil else { return }
+    let changed = session != value
+    session = value
+    storageNotice = notice
+    reconcileTransientState()
+    if changed { onSessionChanged?() }
   }
 
   var results: [CommandResult] {
@@ -568,6 +594,25 @@ final class BrowserStore {
   }
 
   private func save() {
+    reconcileTransientState()
+    defer { onSessionChanged?() }
+    if let managedSave {
+      let result = managedSave(session)
+      session = result.session
+      storageNotice = result.notice
+      reconcileTransientState()
+      return
+    }
+    guard maySave else { return }
+    do {
+      try sessionFile?.save(session)
+      storageNotice = nil
+    } catch {
+      storageNotice = "Changes could not be saved. \(error.localizedDescription)"
+    }
+  }
+
+  private func reconcileTransientState() {
     rendererFailures = rendererFailures.filter { $0.value.belongs(to: session) }
     if case .library(let profile, _) = sheet, profile != session.selectedSpace.profileID {
       sheet = nil
@@ -581,14 +626,6 @@ final class BrowserStore {
     if let current = pageFind, !current.matches(session) { dismissPageFind() }
     for request in consentRequests where !request.matches(session) {
       resolveConsent(request.id, accepted: false)
-    }
-    defer { onSessionChanged?() }
-    guard maySave else { return }
-    do {
-      try sessionFile?.save(session)
-      storageNotice = nil
-    } catch {
-      storageNotice = "Changes could not be saved. \(error.localizedDescription)"
     }
   }
 

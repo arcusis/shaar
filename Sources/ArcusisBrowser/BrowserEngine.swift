@@ -37,6 +37,7 @@ final class BrowserEngine {
   private(set) var extensions: [BrowserExtension] = []
   private(set) var extensionPopupSize = CGSize(width: 480, height: 560)
   let presentsNativePanels: Bool
+  let lazyPinnedTabs: Bool
   var extensionPanel: ExtensionPanelRoute? {
     didSet {
       if extensionPanel == nil { runtime.closeExtensionPopup(forWindowID: windowID) }
@@ -56,7 +57,7 @@ final class BrowserEngine {
 
   init(
     events: BrowserRuntimeEvents, windowID: String? = nil, store: BrowserStore,
-    presentsNativePanels: Bool = true
+    presentsNativePanels: Bool = true, lazyPinnedTabs: Bool = false
   ) throws {
     let runtime = events.runtime
     self.runtime = runtime
@@ -67,6 +68,7 @@ final class BrowserEngine {
     }
     self.store = store
     self.presentsNativePanels = presentsNativePanels
+    self.lazyPinnedTabs = lazyPinnedTabs
     try events.router.register(callbacks)
     store.engine = self
     store.onReloadPage = { [weak self] tab, profile in
@@ -355,6 +357,11 @@ final class BrowserEngine {
     }
     for space in session.spaces where loadedProfiles.contains(space.profileID) {
       for tab in space.tabs where !liveTabs.contains(tab.id) && !failedTabs.contains(tab.id) {
+        if lazyPinnedTabs && tab.isPinned
+          && !(space.id == session.selectedSpaceID && space.selectedTabID == tab.id)
+        {
+          continue
+        }
         guard events.router.bindTab(tab.id.uuidString, windowID: windowID) else {
           failedTabs.insert(tab.id)
           notice = "A saved tab already belongs to another window."

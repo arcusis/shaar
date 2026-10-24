@@ -363,6 +363,9 @@ final class EngineProbe {
         checks += try await NativeSelectionProbe(
           primary: browserEngine, store: store, root: root, fixture: fixture, phase: phase
         ).run()
+        checks += try await WorkspaceProbe(
+          primary: browserEngine, store: store, root: root, fixture: fixture, phase: phase
+        ).run()
         localFixturesPassed = true
         if includeBitwarden {
           checks += try await BitwardenProbe(

@@ -50,3 +50,10 @@ import Testing
   #expect(!ARCReservedBrowserShortcut("y", [.command, .option]))
   #expect(!ARCReservedBrowserShortcut("l", [.command, .shift]))
 }
+@Test func nativeWindowShortcutsReserveOnlyTheirExactModifiers() {
+  #expect(ARCReservedBrowserShortcut("n", .command))
+  #expect(ARCReservedBrowserShortcut("W", [.command, .shift]))
+  #expect(!ARCReservedBrowserShortcut("n", [.command, .shift]))
+  #expect(!ARCReservedBrowserShortcut("n", [.command, .option]))
+  #expect(!ARCReservedBrowserShortcut("l", [.command, .shift]))
+}

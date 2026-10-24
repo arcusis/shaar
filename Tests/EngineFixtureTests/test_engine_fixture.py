@@ -1,4 +1,5 @@
 import importlib.util
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -11,6 +12,50 @@ from unittest.mock import Mock, patch
 spec = importlib.util.spec_from_file_location('engine_fixture', Path(__file__).resolve().parents[2] / 'scripts/engine_fixture.py')
 fixture = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fixture)
+
+
+class HostLockCheckpointTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory(prefix='arcusis-engine-probe-')
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+        (self.root / '.arcusis-probe').write_text('arcusis-engine-probe-v1\n')
+        (self.root / 'host-workspace').mkdir()
+        self.path = self.root / 'host-workspace/workspace.lock'
+        self.path.write_text('preserve')
+        self.ready = dict(schema=1, phase='initial', pid=os.getpid(),
+                          token='AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA',
+                          lockFile='host-workspace/workspace.lock')
+
+    def test_foreign_pid_phase_path_or_token_is_rejected(self):
+        for change in [dict(pid=True), dict(pid=os.getpid() + 1), dict(phase='restart'),
+                       dict(lockFile='../foreign'), dict(token='invalid'), dict(schema=True)]:
+            with self.subTest(change=change), self.assertRaises(RuntimeError):
+                fixture.validate_host_lock_checkpoint(self.root, self.ready | change, os.getpid(), 'initial')
+
+    def test_symlink_cannot_authorize_a_foreign_lock(self):
+        self.path.unlink()
+        self.path.symlink_to(self.root / '.arcusis-probe')
+        with self.assertRaises(RuntimeError):
+            fixture.validate_host_lock_checkpoint(self.root, self.ready, os.getpid(), 'initial')
+
+    def test_unlocked_file_never_produces_a_passing_receipt(self):
+        (self.root / 'initial-host-lock-ready.json').write_text(json.dumps(self.ready))
+        with self.assertRaises(RuntimeError):
+            fixture.verify_host_lock_if_ready(self.root, os.getpid(), 'initial')
+        self.assertFalse((self.root / 'initial-host-lock-receipt.json').exists())
+        self.assertEqual(self.path.read_text(), 'preserve')
+
+    def test_locked_descriptor_produces_bound_receipt_without_changing_file(self):
+        (self.root / 'initial-host-lock-ready.json').write_text(json.dumps(self.ready))
+        with self.path.open('r+') as owner:
+            fcntl.flock(owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fixture.verify_host_lock_if_ready(self.root, os.getpid(), 'initial')
+        receipt = json.loads((self.root / 'initial-host-lock-receipt.json').read_text())
+        self.assertTrue(receipt['blocked'])
+        self.assertEqual(receipt['token'], self.ready['token'])
+        self.assertEqual(receipt['parentPID'], os.getpid())
+        self.assertEqual(self.path.read_text(), 'preserve')
 
 
 class AbruptCheckpointTests(unittest.TestCase):

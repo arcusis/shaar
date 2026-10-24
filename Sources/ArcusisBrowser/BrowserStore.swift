@@ -7,6 +7,18 @@ struct ManagedSessionSaveResult {
   let notice: String?
 }
 
+struct SpaceRemovalImpact {
+  let tabs: Int
+  let windows: Int
+  var tabDescription: String { "\(tabs) \(tabs == 1 ? "tab" : "tabs")" }
+
+  var message: String {
+    windows > 1
+      ? "This space will be deleted from all \(windows) windows, closing \(tabDescription). Its profile is kept."
+      : "Tabs in this space will close. Its profile is kept."
+  }
+}
+
 @MainActor @Observable
 final class BrowserStore {
   private(set) var session: BrowserSession
@@ -57,6 +69,7 @@ final class BrowserStore {
   @ObservationIgnored var onFindRequest: ((PageFindState, Bool) -> Bool)?
   @ObservationIgnored var onStopFinding: ((UUID) -> Void)?
   @ObservationIgnored var onReloadPage: ((UUID, UUID) -> Bool)?
+  @ObservationIgnored var onSpaceRemovalImpact: ((UUID) -> SpaceRemovalImpact)?
   @ObservationIgnored private var presentedConsentID: String?
 
   init(sessionFile: SessionFile? = nil, session: BrowserSession = .fresh()) {
@@ -591,6 +604,11 @@ final class BrowserStore {
     guard session.removeSpace(id) else { return false }
     save()
     return true
+  }
+
+  func spaceRemovalImpact(_ id: UUID) -> SpaceRemovalImpact {
+    onSpaceRemovalImpact?(id)
+      ?? SpaceRemovalImpact(tabs: session.spaces.first { $0.id == id }?.tabs.count ?? 0, windows: 1)
   }
 
   private func save() {

@@ -49,6 +49,12 @@ final class BrowserWorkspaceStore {
     persistSnapshot()
   }
 
+  func setGeometry(_ geometry: WorkspaceWindowGeometry, for id: UUID) throws {
+    guard workspace.window(id)?.geometry != geometry else { return }
+    try workspace.setGeometry(geometry, for: id)
+    persistSnapshot()
+  }
+
   /// Called before native restoration as well as after mutations. IO failure leaves valid unsaved state live.
   @discardableResult
   func persistSnapshot() -> Bool {
@@ -64,6 +70,12 @@ final class BrowserWorkspaceStore {
         return ManagedSessionSaveResult(session: session, notice: "The workspace is unavailable.")
       }
       return self.changed(window.id, session: session)
+    }
+    stores[window.id]?.onSpaceRemovalImpact = { [weak self] id in
+      let spaces =
+        self?.workspace.windows.compactMap { $0.session.spaces.first { $0.id == id } } ?? []
+      return SpaceRemovalImpact(
+        tabs: spaces.reduce(0) { $0 + $1.tabs.count }, windows: spaces.count)
     }
   }
 

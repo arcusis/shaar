@@ -22,6 +22,25 @@ public struct WorkspaceWindow: Codable, Identifiable, Equatable, Sendable {
   public let id: UUID
   public internal(set) var session: BrowserSession
   public internal(set) var pins: [WorkspacePinReference]
+  public internal(set) var geometry: WorkspaceWindowGeometry? = nil
+}
+
+public struct WorkspaceWindowGeometry: Codable, Equatable, Sendable {
+  public let x: Double
+  public let y: Double
+  public let width: Double
+  public let height: Double
+
+  public init(x: Double, y: Double, width: Double, height: Double) {
+    self.x = x
+    self.y = y
+    self.width = width
+    self.height = height
+  }
+
+  public var isValid: Bool {
+    [x, y, width, height].allSatisfy(\.isFinite) && width >= 760 && height >= 520
+  }
 }
 
 /// Contains shared metadata and original pin addresses, never window navigation or recovery state.
@@ -91,6 +110,7 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
       uniqueKeysWithValues: catalog.spaces.flatMap { space in space.tabs.map { ($0.id, space) } })
     var claimed: Set<UUID> = []
     for window in windows {
+      guard window.geometry?.isValid != false else { throw WorkspaceError.invalidState }
       try window.session.validate()
       guard window.session.profiles == catalog.profiles,
         window.session.spaces.map(Self.spaceMetadata) == catalog.spaces.map(Self.spaceMetadata),
@@ -151,6 +171,14 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
   public mutating func focusWindow(_ id: UUID) throws {
     guard window(id) != nil else { throw WorkspaceError.unknownWindow }
     focusedWindowID = id
+  }
+
+  public mutating func setGeometry(_ geometry: WorkspaceWindowGeometry, for id: UUID) throws {
+    guard geometry.isValid else { throw WorkspaceError.invalidState }
+    guard let index = windows.firstIndex(where: { $0.id == id }) else {
+      throw WorkspaceError.unknownWindow
+    }
+    windows[index].geometry = geometry
   }
 
   /// Ordinary closure removes only that window. App quit should retain open-window records.
@@ -215,7 +243,8 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
       return space
     }
     draft.catalog = WorkspaceCatalog(profiles: session.profiles, spaces: spaces)
-    draft.windows[index] = WorkspaceWindow(id: id, session: session, pins: references)
+    draft.windows[index] = WorkspaceWindow(
+      id: id, session: session, pins: references, geometry: previous.geometry)
     if draft.catalog != catalog {
       for other in draft.windows.indices where other != index {
         draft.windows[other] = try draft.project(draft.windows[other], allocated: &allocated)
@@ -286,7 +315,7 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
     session.closedTabs = old.session.closedTabs.filter { entry in
       spaces.contains { $0.id == entry.spaceID && $0.profileID == entry.profileID }
     }
-    return WorkspaceWindow(id: old.id, session: session, pins: references)
+    return WorkspaceWindow(id: old.id, session: session, pins: references, geometry: old.geometry)
   }
 
   private static func allocate(_ used: inout Set<UUID>) -> UUID {

@@ -3,6 +3,7 @@
 import http.server
 from http.cookies import SimpleCookie
 import argparse
+import fcntl
 import json
 import hashlib
 import os
@@ -13,7 +14,68 @@ import subprocess
 import tempfile
 import threading
 import time
+import uuid
 from urllib.parse import urlparse
+
+
+def validate_host_lock_checkpoint(root, ready, pid, phase):
+    canonical = root.resolve()
+    if (canonical.parent != Path(tempfile.gettempdir()).resolve()
+            or not canonical.name.startswith('arcusis-engine-probe-')
+            or (canonical / '.arcusis-probe').read_text() != 'arcusis-engine-probe-v1\n'):
+        raise RuntimeError('Host lock verification requires a marked disposable root')
+    if (not isinstance(ready, dict) or type(ready.get('schema')) is not int or ready['schema'] != 1
+            or type(ready.get('pid')) is not int or ready['pid'] != pid or pid <= 1
+            or ready.get('phase') != phase or phase not in ('initial', 'restart')
+            or ready.get('lockFile') != 'host-workspace/workspace.lock'
+            or not isinstance(ready.get('token'), str)):
+        raise RuntimeError('Invalid or foreign host lock checkpoint')
+    try:
+        if str(uuid.UUID(ready['token'])).upper() != ready['token']:
+            raise ValueError('noncanonical token')
+    except ValueError as error:
+        raise RuntimeError('Invalid host lock token') from error
+    path = canonical / 'host-workspace/workspace.lock'
+    if path.is_symlink() or path.resolve(strict=True).parent != canonical / 'host-workspace':
+        raise RuntimeError('Host lock file escaped its disposable directory')
+    return path
+
+
+def verify_host_lock_if_ready(root, pid, phase):
+    ready_file = root / f'{phase}-host-lock-ready.json'
+    receipt = root / f'{phase}-host-lock-receipt.json'
+    if not ready_file.exists() or receipt.exists():
+        return
+    ready = json.loads(ready_file.read_text())
+    path = validate_host_lock_checkpoint(root, ready, pid, phase)
+    descriptor = os.open(path, os.O_RDWR | os.O_NOFOLLOW)
+    try:
+        status = os.fstat(descriptor)
+        if status.st_nlink != 1 or status.st_uid != os.getuid():
+            raise RuntimeError('Invalid host lock file ownership')
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            pass
+        else:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+            raise RuntimeError('Another process acquired the active workspace lock')
+    finally:
+        os.close(descriptor)
+    temporary = receipt.with_suffix('.tmp')
+    temporary.write_text(json.dumps(dict(schema=1, blocked=True, pid=pid, parentPID=os.getpid(),
+                                       phase=phase, token=ready['token'], lockFile=ready['lockFile'])))
+    os.replace(temporary, receipt)
+
+
+def wait_for_probe(process, root, phase, timeout):
+    deadline = time.monotonic() + timeout
+    while process.poll() is None:
+        verify_host_lock_if_ready(root, process.pid, phase)
+        if time.monotonic() >= deadline:
+            raise subprocess.TimeoutExpired(process.args, timeout)
+        time.sleep(0.05)
+    return process.wait()
 
 
 def validate_abrupt_checkpoint(root, ready, pid):
@@ -58,6 +120,7 @@ def terminate_at_checkpoint(process, root, timeout, settle_seconds=0):
     checkpoint = root / 'ready-for-abrupt-termination.json'
     deadline = time.monotonic() + timeout
     while process.poll() is None:
+        verify_host_lock_if_ready(root, process.pid, 'initial')
         if checkpoint.exists():
             ready = json.loads(checkpoint.read_text())
             before = validate_abrupt_checkpoint(root, ready, process.pid)
@@ -246,7 +309,7 @@ def main():
                     if abrupt and phase == 'initial':
                         terminate_at_checkpoint(process, root, timeout=90, settle_seconds=35 if options.abrupt_control else 0)
                         continue
-                    code = process.wait(timeout=170 if options.bitwarden else 90)
+                    code = wait_for_probe(process, root, phase, timeout=170 if options.bitwarden else 90)
                 except subprocess.TimeoutExpired:
                     raise RuntimeError(f"{phase} timed out; see {root}/{phase}.log")
                 finally:

@@ -51,10 +51,10 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   NSEventModifierFlags chord = modifiers & (NSEventModifierFlagCommand | NSEventModifierFlagControl |
     NSEventModifierFlagOption | NSEventModifierFlagShift | NSEventModifierFlagFunction);
   if (chord == NSEventModifierFlagCommand) {
-    return [@[@"t", @"l", @"w", @"s", @"q", @"r", @"f", @"g", @"d", @"y"] containsObject:key.lowercaseString];
+    return [@[@"n", @"t", @"l", @"w", @"s", @"q", @"r", @"f", @"g", @"d", @"y"] containsObject:key.lowercaseString];
   }
   if (chord == (NSEventModifierFlagCommand | NSEventModifierFlagShift)) {
-    return [@[@"g", @"j", @"t"] containsObject:key.lowercaseString];
+    return [@[@"w", @"g", @"j", @"t"] containsObject:key.lowercaseString];
   }
   return chord == (NSEventModifierFlagControl | NSEventModifierFlagOption) &&
     [@[@"[", @"]"] containsObject:key];
@@ -280,6 +280,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   if (!state || state.closed) return;
   state.closed = YES;
   state.closing = YES;
+  BOOL quitting = _closingBrowser;
   dispatch_async(dispatch_get_main_queue(), ^{
     for (NSString *requestID in [self->_pendingInstalls.allKeys copy]) {
       if ([self->_pendingInstalls[requestID][@"windowID"] isEqualToString:identity]) [self resolveInstallRequestID:requestID accepted:NO];
@@ -300,7 +301,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     [self->_windowCloseObservers removeObjectForKey:identity];
     [self->_retiredWindowIDs addObject:identity];
     [self->_windows removeObjectForKey:identity];
-    if (self->_onWindowClosed) self->_onWindowClosed(identity, self->_closingBrowser);
+    if (self->_onWindowClosed) self->_onWindowClosed(identity, quitting);
   });
 }
 - (void)dealloc {

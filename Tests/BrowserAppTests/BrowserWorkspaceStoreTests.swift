@@ -6,6 +6,22 @@ import Testing
 
 @Suite @MainActor
 struct BrowserWorkspaceStoreTests {
+  @Test func removalImpactIncludesEveryManagedWindowBeforeGlobalDeletion() throws {
+    let manager = try BrowserWorkspaceStore(initialSession: fixture())
+    let first = manager.workspace.windows[0].id
+    let second = try manager.newWindow(from: first)
+    let model = manager.stores[first]!
+    let space = model.session.selectedSpaceID
+    let impact = model.spaceRemovalImpact(space)
+    #expect(impact.windows == 2 && impact.tabs == 3)
+    #expect(impact.message.contains("all 2 windows") && impact.message.contains("3 tabs"))
+    manager.stores[second]!.perform(.open(URL(string: "https://example.com/another")!))
+    #expect(model.spaceRemovalImpact(space).tabs == 4)
+    let profiles = manager.workspace.catalog.profiles
+    #expect(model.removeSpace(space))
+    #expect(manager.stores[second]!.session.spaces.allSatisfy { $0.id != space })
+    #expect(manager.workspace.catalog.profiles == profiles)
+  }
   private func fixture() -> BrowserSession {
     var session = BrowserSession.fresh()
     let pin = session.open(URL(string: "https://example.com/pin")!)!

@@ -103,7 +103,7 @@ private struct NativePreview: View {
 }
 
 private struct BrowserApplication: App {
-  @State private var store = BrowserStore.persistent()
+  @State private var store = BrowserStore.preview(showCommand: false)
 
   var body: some Scene {
     Window("Arcusis Browser", id: "browser") {

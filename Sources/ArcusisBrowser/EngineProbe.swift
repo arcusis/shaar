@@ -23,6 +23,8 @@ final class EngineProbe {
   private var loadedTabs: Set<String> = []
   private let store: BrowserStore
   private var browserEngine: BrowserEngine?
+  private var nativeHostProbe: NativeHostProbe?
+  private var resultError: Error?
   private var host: NSHostingView<BrowserWindow>?
 
   private let profileA = "C766672E-AB82-4F84-8ED3-2C6D75AEB1D1"
@@ -130,6 +132,7 @@ final class EngineProbe {
       }
       let code = probe.runtime.run(
         withDataDirectory: root.appending(path: "Chromium"), testing: true)
+      probe.auditNativeHostShutdown()
       return probe.passed ? code : 1
     } catch {
       FileHandle.standardError.write(
@@ -366,6 +369,10 @@ final class EngineProbe {
         checks += try await WorkspaceProbe(
           primary: browserEngine, store: store, root: root, fixture: fixture, phase: phase
         ).run()
+        let nativeHost = try NativeHostProbe(
+          primary: browserEngine, store: store, root: root, fixture: fixture, phase: phase)
+        nativeHostProbe = nativeHost
+        checks += try await nativeHost.run()
         localFixturesPassed = true
         if includeBitwarden {
           checks += try await BitwardenProbe(
@@ -406,13 +413,37 @@ final class EngineProbe {
   private func finish(error: Error?) {
     guard !finished else { return }
     finished = true
-    passed = error == nil
+    resultError = error
+    do { try nativeHostProbe?.prepareForQuit() } catch {
+      resultError = ProbeFailure(
+        "\(resultError?.localizedDescription ?? "") Host quit snapshot: \(error.localizedDescription)"
+      )
+      localFixturesPassed = false
+    }
+    passed = resultError == nil
+    writeReport()
+    runtime.quit()
+  }
+
+  private func auditNativeHostShutdown() {
+    guard localFixturesPassed else { return }
+    do { checks += try nativeHostProbe?.auditAfterQuit() ?? [] } catch {
+      resultError = ProbeFailure(
+        "\(resultError?.localizedDescription ?? "") Host shutdown audit: \(error.localizedDescription)"
+      )
+      passed = false
+      localFixturesPassed = false
+    }
+    writeReport()
+  }
+
+  private func writeReport() {
     let report: [String: Any] = [
       "phase": phase, "passed": passed, "chromiumVersion": runtime.chromiumVersion,
       "bitwardenStoreProbe": includeBitwarden,
       "abruptRecoveryProbe": expectedAfterTermination != nil,
       "localFixturesPassed": localFixturesPassed,
-      "checks": checks, "error": error?.localizedDescription as Any? ?? NSNull(),
+      "checks": checks, "error": resultError?.localizedDescription as Any? ?? NSNull(),
       "scope":
         includeBitwarden
         ? "Disposable fixtures plus a real Bitwarden store probe. See separate Bitwarden reports for passed and failed stages. No vault or Workspace credentials entered."
@@ -427,7 +458,6 @@ final class EngineProbe {
       FileHandle.standardError.write(
         Data("Probe report failed: \(error.localizedDescription)\n".utf8))
     }
-    runtime.quit()
   }
 }
 

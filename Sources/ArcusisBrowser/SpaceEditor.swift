@@ -100,7 +100,7 @@ struct SpaceEditor: View {
         if let id = route.spaceID, store.removeSpace(id) { dismiss() }
       }
     } message: {
-      Text("Tabs in this space will close. Its profile is kept.")
+      Text(route.spaceID.map { store.spaceRemovalImpact($0).message } ?? "")
     }
   }
 
@@ -112,7 +112,12 @@ struct SpaceEditor: View {
   }
 
   private var profileExplanation: String {
-    if route.spaceID != nil {
+    if let id = route.spaceID {
+      let impact = store.spaceRemovalImpact(id)
+      if impact.windows > 1 {
+        return
+          "Changes apply to this Space in all \(impact.windows) windows. Deleting it closes \(impact.tabDescription); its profile is kept."
+      }
       return "Renaming or changing this space’s color keeps its profile and tabs."
     }
     return sharedProfileID == nil

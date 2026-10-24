@@ -30,6 +30,7 @@ final class BrowserEngine {
   let windowID: String
   private let callbacks: BrowserRuntimeClient
   private(set) var isClosed = false
+  var onClosed: ((Bool) -> Void)?
   let downloads = DownloadsModel()
   private(set) var pages: [UUID: PageState] = [:]
   private(set) var notice: String?
@@ -74,7 +75,7 @@ final class BrowserEngine {
     store.onReloadPage = { [weak self] tab, profile in
       self?.runtime.reloadTabID(tab.uuidString, profileID: profile.uuidString) ?? false
     }
-    callbacks.onWindowClosed = { [weak self] _ in
+    callbacks.onWindowClosed = { [weak self] quitting in
       guard let self else { return }
       self.isClosed = true
       self.extensionPanel = nil
@@ -82,6 +83,7 @@ final class BrowserEngine {
       self.liveTabs.removeAll()
       self.pages.removeAll()
       self.mediaAccess.removeAll()
+      self.onClosed?(quitting)
     }
     callbacks.onRendererGone = { [weak self] identity, owner, status, code in
       guard let self, self.runtime.windowID(forTabID: identity) == self.windowID,
@@ -103,7 +105,7 @@ final class BrowserEngine {
       self.store?.nativeDocumentCommitted(tab, profileID: profile)
     }
     store.library.onLoad = { [weak self] key, limit, completion in
-      guard let self else {
+      guard let self, !self.isClosed else {
         completion(.failure(LibraryDataError.invalidBookmarks))
         return
       }
@@ -131,7 +133,7 @@ final class BrowserEngine {
       }
     }
     store.library.onMutation = { [weak self] profile, mutation, completion in
-      guard let self else {
+      guard let self, !self.isClosed else {
         completion("The browser engine is unavailable.")
         return
       }
@@ -160,7 +162,7 @@ final class BrowserEngine {
     }
     callbacks.onNotice = { [weak self] message in self?.notice = message }
     downloads.onCommand = { [weak self] action, id, profile, completion in
-      guard let self else {
+      guard let self, !self.isClosed else {
         completion("Download controls are unavailable.")
         return
       }
@@ -335,6 +337,7 @@ final class BrowserEngine {
         MainActor.assumeIsolated {
           guard let self else { return }
           self.loadingProfiles.remove(profile)
+          guard !self.isClosed else { return }
           if let error {
             self.failedProfiles.insert(profile)
             self.notice = error.localizedDescription
@@ -346,7 +349,8 @@ final class BrowserEngine {
             Task { [weak self] in
               for delay in [300, 700, 2000] {
                 try? await Task.sleep(for: .milliseconds(delay))
-                self?.runtime.refreshDownloads(forProfileID: profile.uuidString)
+                guard let self, !self.isClosed else { return }
+                self.runtime.refreshDownloads(forProfileID: profile.uuidString)
               }
             }
           }
@@ -404,7 +408,8 @@ final class BrowserEngine {
   }
 
   func refreshExtensions() {
-    guard let profile = store?.session.selectedSpace.profileID, loadedProfiles.contains(profile)
+    guard !isClosed, let profile = store?.session.selectedSpace.profileID,
+      loadedProfiles.contains(profile)
     else {
       extensions = []
       return
@@ -416,6 +421,8 @@ final class BrowserEngine {
       return BrowserExtension(id: id, name: name, version: version)
     }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
   }
+
+  func reportNotice(_ message: String) { notice = message }
 
   func revealDownload(_ id: String, profileID: UUID, open: Bool) {
     guard let selected = store?.session.selectedSpace.profileID,
@@ -549,143 +556,4 @@ struct ChromiumPage: NSViewRepresentable {
     // Detach the view only. The engine keeps the tab, profile, and page alive.
     for child in view.subviews { child.removeFromSuperview() }
   }
-}
-
-/// Chromium owns the AppKit loop; SwiftUI renders the chrome inside its native window.
-@MainActor
-final class NativeBrowserHost: NSObject, NSMenuItemValidation {
-  private let store: BrowserStore
-  private let engine: BrowserEngine
-
-  init(runtime: ARCChromiumRuntime, store: BrowserStore) throws {
-    self.store = store
-    engine = try BrowserEngine(events: BrowserRuntimeEvents(runtime: runtime), store: store)
-    super.init()
-  }
-
-  static func run(frameworkURL: URL) -> Int32 {
-    do {
-      let directory = URL.applicationSupportDirectory
-        .appending(path: "Arcusis Browser/Chromium", directoryHint: .isDirectory)
-      try FileManager.default.createDirectory(
-        at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-      let runtime = try ARCChromiumRuntime(frameworkURL: frameworkURL)
-      let host = try NativeBrowserHost(runtime: runtime, store: .persistent())
-      runtime.onReady = { [weak host] in host?.start() }
-      return withExtendedLifetime(host) {
-        runtime.run(withDataDirectory: directory, testing: false)
-      }
-    } catch {
-      FileHandle.standardError.write(
-        Data("Browser startup failed: \(error.localizedDescription)\n".utf8))
-      return 1
-    }
-  }
-
-  private func start() {
-    guard let window = engine.runtime.window, let content = engine.runtime.hostView else { return }
-    let host = NSHostingView(rootView: BrowserWindow(store: store))
-    host.frame = content.bounds
-    host.autoresizingMask = [.width, .height]
-    content.addSubview(host)
-    window.title = "Arcusis Browser"
-    window.titleVisibility = .hidden
-    window.titlebarAppearsTransparent = true
-    window.styleMask.insert(.fullSizeContentView)
-    window.minSize = NSSize(width: 760, height: 520)
-    installMenus()
-    engine.reconcile()
-    window.center()
-    window.makeKeyAndOrderFront(nil)
-  }
-
-  private func installMenus() {
-    let main = NSMenu()
-    func menu(_ title: String) -> NSMenu {
-      let item = NSMenuItem()
-      let result = NSMenu(title: title)
-      item.submenu = result
-      main.addItem(item)
-      return result
-    }
-    func add(
-      _ title: String, _ action: Selector, _ key: String, to menu: NSMenu,
-      modifiers: NSEvent.ModifierFlags = .command
-    ) {
-      let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
-      item.target = self
-      item.keyEquivalentModifierMask = modifiers
-      menu.addItem(item)
-    }
-    let app = menu("Arcusis Browser")
-    add("Quit Arcusis Browser", #selector(quit), "q", to: app)
-    let file = menu("File")
-    add("New tab", #selector(search), "t", to: file)
-    add("Search or enter address", #selector(search), "l", to: file)
-    add("New space…", #selector(newSpace), "", to: file)
-    add("Edit current space…", #selector(editSpace), "", to: file)
-    add("Close tab", #selector(closeTab), "w", to: file)
-    add(
-      "Reopen last closed tab", #selector(reopenClosedTab), "t", to: file,
-      modifiers: [.command, .shift])
-    add("Recently closed…", #selector(showRecentlyClosed), "", to: file)
-    add("Bookmark this page", #selector(bookmarkPage), "d", to: file)
-    add("Bookmarks…", #selector(showBookmarks), "", to: file)
-    add("History…", #selector(showHistory), "y", to: file)
-    add("Downloads", #selector(showDownloads), "j", to: file, modifiers: [.command, .shift])
-    let edit = menu("Edit")
-    for (title, action, key) in [
-      ("Undo", "undo:", "z"), ("Cut", "cut:", "x"), ("Copy", "copy:", "c"),
-      ("Paste", "paste:", "v"), ("Select All", "selectAll:", "a"),
-    ] {
-      edit.addItem(withTitle: title, action: NSSelectorFromString(action), keyEquivalent: key)
-    }
-    edit.addItem(.separator())
-    add("Find in Page…", #selector(findInPage), "f", to: edit)
-    add("Find Next", #selector(findNext), "g", to: edit)
-    add("Find Previous", #selector(findPrevious), "g", to: edit, modifiers: [.command, .shift])
-    let tabs = menu("Tabs")
-    add("Toggle sidebar", #selector(toggleSidebar), "s", to: tabs)
-    add("Next space", #selector(nextSpace), "]", to: tabs, modifiers: [.control, .option])
-    add("Previous space", #selector(previousSpace), "[", to: tabs, modifiers: [.control, .option])
-    add("Reload", #selector(reload), "r", to: tabs)
-    NSApp.mainMenu = main
-  }
-
-  @objc private func search() { store.showCommand() }
-  func validateMenuItem(_ item: NSMenuItem) -> Bool {
-    switch item.action {
-    case #selector(findInPage):
-      return store.canFindCurrentPage
-    case #selector(reload): return store.canReloadCurrentPage
-    case #selector(findNext), #selector(findPrevious): return store.pageFind?.canMove == true
-    case #selector(showDownloads): return store.sheet == nil
-    case #selector(reopenClosedTab): return store.canReopenClosedTab
-    case #selector(showRecentlyClosed): return store.sheet == nil
-    case #selector(bookmarkPage): return store.canBookmarkCurrentPage
-    case #selector(showBookmarks), #selector(showHistory): return store.sheet == nil
-    default: return true
-    }
-  }
-  @objc private func findInPage() { store.showPageFind() }
-  @objc private func findNext() { store.movePageFind(forward: true) }
-  @objc private func findPrevious() { store.movePageFind(forward: false) }
-  @objc private func showDownloads() { store.showDownloads() }
-  @objc private func reopenClosedTab() { store.reopenLastClosedTab() }
-  @objc private func showRecentlyClosed() { store.showRecentlyClosed() }
-  @objc private func bookmarkPage() { store.bookmarkCurrentPage() }
-  @objc private func showBookmarks() { store.showLibrary(.bookmarks) }
-  @objc private func showHistory() { store.showLibrary(.history) }
-  @objc private func newSpace() { store.spaceEditor = .create }
-  @objc private func editSpace() { store.spaceEditor = .edit(store.session.selectedSpaceID) }
-  @objc private func closeTab() {
-    if let id = store.session.selectedSpace.selectedTabID { store.closeTab(id) }
-  }
-  @objc private func toggleSidebar() { store.sidebarIsVisible.toggle() }
-  @objc private func nextSpace() { store.cycleSpace(by: 1) }
-  @objc private func previousSpace() { store.cycleSpace(by: -1) }
-  @objc private func reload() {
-    store.reloadCurrentPage()
-  }
-  @objc private func quit() { engine.runtime.quit() }
 }

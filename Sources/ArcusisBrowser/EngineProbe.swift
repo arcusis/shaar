@@ -262,6 +262,9 @@ final class EngineProbe {
           runtime: runtime, engine: browserEngine, store: store,
           root: root, phase: phase
         ).run()
+        checks += try await PageFindProbe(
+          runtime: runtime, store: store, root: root, phase: phase
+        ).run()
         checks += try await MediaPermissionProbe(
           runtime: runtime, engine: browserEngine, store: store,
           root: root, phase: phase

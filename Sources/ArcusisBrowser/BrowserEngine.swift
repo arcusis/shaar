@@ -48,6 +48,21 @@ final class BrowserEngine {
     self.presentsNativePanels = presentsNativePanels
     store.engine = self
     runtime.onNotice = { [weak self] message in self?.notice = message }
+    store.onFindRequest = { [weak self] request, forward in
+      self?.runtime.find(
+        inTabID: request.tabID.uuidString, profileID: request.profileID.uuidString,
+        requestID: request.requestID.uuidString, text: request.query, forward: forward) ?? false
+    }
+    store.onStopFinding = { [weak self] tabID in
+      self?.runtime.stopFinding(inTabID: tabID.uuidString)
+    }
+    runtime.onFindResult = { [weak store] identity, token, count, active, final in
+      guard let tabID = UUID(uuidString: identity), let requestID = UUID(uuidString: token) else {
+        return
+      }
+      store?.receiveFindResult(
+        tabID: tabID, requestID: requestID, count: Int(count), active: Int(active), final: final)
+    }
     store.onWebsiteMediaDecision = { [weak self] id, accepted in
       self?.runtime.resolveWebsiteMediaRequestID(id, accepted: accepted)
     }
@@ -102,6 +117,9 @@ final class BrowserEngine {
     }
     runtime.onTabChanged = { [weak self] identity, address, title, loading, back, forward in
       guard let self, let id = UUID(uuidString: identity) else { return }
+      if loading && self.pages[id]?.loading != true && self.store?.pageFind?.tabID == id {
+        self.store?.dismissPageFind()
+      }
       self.pages[id] = PageState(loading: loading, canGoBack: back, canGoForward: forward)
       if let url = URL(string: address) { self.store?.nativeTabChanged(id, url: url, title: title) }
     }
@@ -308,7 +326,7 @@ struct ChromiumPage: NSViewRepresentable {
 
 /// Chromium owns the AppKit loop; SwiftUI renders the chrome inside its native window.
 @MainActor
-final class NativeBrowserHost: NSObject {
+final class NativeBrowserHost: NSObject, NSMenuItemValidation {
   private let store: BrowserStore
   private let engine: BrowserEngine
 
@@ -387,6 +405,10 @@ final class NativeBrowserHost: NSObject {
     ] {
       edit.addItem(withTitle: title, action: NSSelectorFromString(action), keyEquivalent: key)
     }
+    edit.addItem(.separator())
+    add("Find in Page…", #selector(findInPage), "f", to: edit)
+    add("Find Next", #selector(findNext), "g", to: edit)
+    add("Find Previous", #selector(findPrevious), "g", to: edit, modifiers: [.command, .shift])
     let tabs = menu("Tabs")
     add("Toggle sidebar", #selector(toggleSidebar), "s", to: tabs)
     add("Next space", #selector(nextSpace), "]", to: tabs, modifiers: [.control, .option])
@@ -396,6 +418,17 @@ final class NativeBrowserHost: NSObject {
   }
 
   @objc private func search() { store.showCommand() }
+  func validateMenuItem(_ item: NSMenuItem) -> Bool {
+    switch item.action {
+    case #selector(findInPage):
+      return store.sheet == nil && store.session.selectedSpace.selectedTabID != nil
+    case #selector(findNext), #selector(findPrevious): return store.pageFind?.canMove == true
+    default: return true
+    }
+  }
+  @objc private func findInPage() { store.showPageFind() }
+  @objc private func findNext() { store.movePageFind(forward: true) }
+  @objc private func findPrevious() { store.movePageFind(forward: false) }
   @objc private func newSpace() { store.spaceEditor = .create }
   @objc private func editSpace() { store.spaceEditor = .edit(store.session.selectedSpaceID) }
   @objc private func closeTab() {

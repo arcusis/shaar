@@ -9,6 +9,7 @@ final class BrowserStore {
   var commandQuery = ""
   var commandSelection = 0
   var sidebarIsVisible = true
+  private(set) var pageFind: PageFindState?
   var sheet: BrowserSheet?
   var spaceEditor: SpaceEditorRoute? {
     get {
@@ -17,6 +18,7 @@ final class BrowserStore {
     }
     set {
       if sheet?.isConsent == true { return }
+      if newValue != nil { dismissPageFind() }
       sheet = newValue.map(BrowserSheet.space)
     }
   }
@@ -42,6 +44,8 @@ final class BrowserStore {
   @ObservationIgnored var onCloseTab: ((UUID) -> Void)?
   @ObservationIgnored var onInstallDecision: ((String, Bool) -> Void)?
   @ObservationIgnored var onWebsiteMediaDecision: ((String, Bool) -> Void)?
+  @ObservationIgnored var onFindRequest: ((PageFindState, Bool) -> Bool)?
+  @ObservationIgnored var onStopFinding: ((UUID) -> Void)?
   @ObservationIgnored private var presentedConsentID: String?
 
   init(sessionFile: SessionFile? = nil, session: BrowserSession = .fresh()) {
@@ -66,12 +70,72 @@ final class BrowserStore {
   }
 
   func showCommand() {
+    dismissPageFind()
     commandQuery = ""
     commandSelection = 0
     commandIsOpen = true
   }
 
   func dismissCommand() { commandIsOpen = false }
+
+  func showPageFind() {
+    guard sheet == nil, let tab = session.selectedSpace.selectedTab else { return }
+    commandIsOpen = false
+    engine?.extensionPanel = nil
+    if var current = pageFind, current.matches(session) {
+      current.focusRequest = UUID()
+      pageFind = current
+    } else {
+      dismissPageFind()
+      pageFind = PageFindState(
+        profileID: session.selectedSpace.profileID, tabID: tab.id, pageURL: tab.url)
+    }
+  }
+
+  func updatePageFindQuery(_ query: String) {
+    guard var current = pageFind, current.matches(session), current.query != query else { return }
+    current.query = query
+    current.matchCount = nil
+    current.activeMatch = 0
+    current.unavailable = false
+    issueFind(current, forward: true)
+  }
+
+  func movePageFind(forward: Bool) {
+    guard let current = pageFind, current.matches(session), current.canMove else { return }
+    issueFind(current, forward: forward)
+  }
+
+  private func issueFind(_ value: PageFindState, forward: Bool) {
+    var current = value
+    current.requestID = UUID()
+    current.searching = !current.query.isEmpty
+    pageFind = current
+    if current.query.isEmpty {
+      onStopFinding?(current.tabID)
+    } else if onFindRequest?(current, forward) == false {
+      current.searching = false
+      current.unavailable = true
+      pageFind = current
+    }
+  }
+
+  func receiveFindResult(tabID: UUID, requestID: UUID, count: Int, active: Int, final: Bool) {
+    guard var current = pageFind, current.matches(session), current.tabID == tabID,
+      current.requestID == requestID, !current.query.isEmpty
+    else { return }
+    if count >= 0 { current.matchCount = count }
+    if active >= 0 { current.activeMatch = active }
+    if let count = current.matchCount { current.activeMatch = min(current.activeMatch, count) }
+    current.searching = !final
+    pageFind = current
+  }
+
+  func dismissPageFind() {
+    guard let current = pageFind else { return }
+    pageFind = nil
+    onStopFinding?(current.tabID)
+  }
 
   func moveCommandSelection(by amount: Int) {
     guard !results.isEmpty else { return }
@@ -150,6 +214,7 @@ final class BrowserStore {
       !consentRequests.contains(where: { $0.id == request.id })
     else { return false }
     consentRequests.append(request)
+    dismissPageFind()
     presentNextConsent()
     return true
   }
@@ -208,6 +273,7 @@ final class BrowserStore {
   }
 
   private func save() {
+    if let current = pageFind, !current.matches(session) { dismissPageFind() }
     for request in consentRequests where !request.matches(session) {
       resolveConsent(request.id, accepted: false)
     }

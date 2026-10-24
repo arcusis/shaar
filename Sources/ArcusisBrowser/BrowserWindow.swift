@@ -65,13 +65,16 @@ struct BrowserWindow: View {
     }
     .onChange(of: store.commandIsOpen) { _, isOpen in
       if isOpen { store.engine?.extensionPanel = nil }
-      if !isOpen {
+      if !isOpen && store.pageFind == nil {
         if let engine = store.engine, let id = store.session.selectedSpace.selectedTabID {
           engine.runtime.focusTabID(id.uuidString)
         } else {
           pageIsFocused = true
         }
       }
+    }
+    .onChange(of: store.pageFind?.id) { _, newValue in
+      if newValue != nil { store.engine?.extensionPanel = nil }
     }
   }
 
@@ -132,6 +135,10 @@ struct BrowserWindow: View {
       .padding(.horizontal, 16)
       .frame(height: 44)
       Divider().opacity(0.4)
+      if let find = store.pageFind {
+        PageFindBar(store: store, state: find)
+        Divider().opacity(0.4)
+      }
       ZStack {
         Color(nsColor: .textBackgroundColor)
         if let engine = store.engine, let id = store.session.selectedSpace.selectedTabID {

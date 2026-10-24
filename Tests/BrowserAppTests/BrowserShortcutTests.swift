@@ -18,3 +18,13 @@ import Testing
   #expect(!ARCReservedBrowserShortcut("]", [.control, .option, .shift]))
   #expect(!ARCReservedBrowserShortcut("]", .command))
 }
+
+@Test func findShortcutsReserveOnlyTheNativeFindChords() {
+  #expect(ARCReservedBrowserShortcut("f", .command))
+  #expect(ARCReservedBrowserShortcut("g", .command))
+  #expect(ARCReservedBrowserShortcut("G", [.command, .shift]))
+  #expect(!ARCReservedBrowserShortcut("f", [.command, .shift]))
+  #expect(!ARCReservedBrowserShortcut("g", [.command, .option]))
+  #expect(!ARCReservedBrowserShortcut("g", [.command, .control]))
+  #expect(!ARCReservedBrowserShortcut("g", []))
+}

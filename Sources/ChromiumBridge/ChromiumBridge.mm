@@ -23,7 +23,10 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   NSEventModifierFlags chord = modifiers & (NSEventModifierFlagCommand | NSEventModifierFlagControl |
     NSEventModifierFlagOption | NSEventModifierFlagShift | NSEventModifierFlagFunction);
   if (chord == NSEventModifierFlagCommand) {
-    return [@[@"t", @"l", @"w", @"s", @"q", @"r"] containsObject:key.lowercaseString];
+    return [@[@"t", @"l", @"w", @"s", @"q", @"r", @"f", @"g"] containsObject:key.lowercaseString];
+  }
+  if (chord == (NSEventModifierFlagCommand | NSEventModifierFlagShift)) {
+    return [key.lowercaseString isEqualToString:@"g"];
   }
   return chord == (NSEventModifierFlagControl | NSEventModifierFlagOption) &&
     [@[@"[", @"]"] containsObject:key];
@@ -55,6 +58,9 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   NSString *_popupOwnerTabID;
   NSString *_popupExtensionID;
   NSMutableArray<NSDictionary *> *_probeDiagnostics;
+  NSString *_findTabID;
+  NSString *_findRequestID;
+  NSString *_findText;
 }
 
 - (instancetype)initWithFrameworkURL:(NSURL *)url error:(NSError **)error {
@@ -230,6 +236,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 - (void)activateTabID:(NSString *)tabID {
   ArdiaCoreTab *tab = _tabs[tabID];
   if (!tab || tab.closed) return;
+  if (_findTabID && ![_findTabID isEqualToString:tabID]) [self stopFindingInTabID:_findTabID];
   if (_testing && ![_selectedTabID isEqualToString:tabID]) {
     [_tabs[_selectedTabID ?: @""] noteShownByHost:NO];
     [tab noteShownByHost:YES];
@@ -239,6 +246,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   [_browserWindow activateTab:tab];
 }
 - (void)clearActiveTab {
+  if (_findTabID) [self stopFindingInTabID:_findTabID];
   if (_testing) [_tabs[_selectedTabID ?: @""] noteShownByHost:NO];
   _selectedTabID = nil;
   [self closeExtensionPopup];
@@ -252,6 +260,35 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 - (void)goBackInTabID:(NSString *)tabID { [_tabs[tabID] goBack]; }
 - (void)goForwardInTabID:(NSString *)tabID { [_tabs[tabID] goForward]; }
 - (void)reloadTabID:(NSString *)tabID { [_tabs[tabID] reload]; }
+- (BOOL)findInTabID:(NSString *)tabID profileID:(NSString *)profileID requestID:(NSString *)requestID
+              text:(NSString *)text forward:(BOOL)forward {
+  ArdiaCoreTab *tab = _tabs[tabID];
+  if (!tab || tab.closed || !text.length || !ValidID(requestID) ||
+      ![_selectedTabID isEqualToString:tabID] || ![_owners[tabID] isEqualToString:profileID]) return NO;
+  if (_findTabID && ![_findTabID isEqualToString:tabID]) [self stopFindingInTabID:_findTabID];
+  // A new query starts a new Chromium find session. Its helper rejects replies
+  // from an aborted session; the native token also gates the SwiftUI state.
+  if (![_findText isEqualToString:text]) {
+    _findRequestID = nil;
+    [tab find:@"" forward:YES];
+  }
+  _findTabID = tabID;
+  _findRequestID = requestID;
+  _findText = text;
+  [tab find:text forward:forward];
+  return YES;
+}
+- (void)stopFindingInTabID:(NSString *)tabID {
+  if (![_findTabID isEqualToString:tabID]) return;
+  _findTabID = nil;
+  _findRequestID = nil;
+  _findText = nil;
+  ArdiaCoreTab *tab = _tabs[tabID];
+  if (tab && !tab.closed) {
+    [tab find:@"" forward:YES];
+    [tab stopFinding];
+  }
+}
 - (void)evaluateInTabID:(NSString *)tabID script:(NSString *)script
             completion:(void (^)(NSString *))completion {
   [self evaluateTab:_tabs[tabID] script:script completion:completion];
@@ -455,6 +492,13 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 - (void)tabDidChangeURL:(ArdiaCoreTab *)tab { [self publish:tab]; }
 - (void)tabDidChangeLoading:(ArdiaCoreTab *)tab { [self publish:tab]; }
 - (void)tabDidChangeNavigationState:(ArdiaCoreTab *)tab { [self publish:tab]; }
+- (void)tab:(ArdiaCoreTab *)tab didFindMatches:(int)count active:(int)active final:(BOOL)final {
+  NSString *identity = [self identityForTab:tab];
+  if (_findRequestID && [identity isEqualToString:_findTabID] &&
+      [identity isEqualToString:_selectedTabID] && _onFindResult) {
+    _onFindResult(identity, _findRequestID, count, active, final);
+  }
+}
 - (void)tab:(ArdiaCoreTab *)tab didChangeMediaAccess:(NSDictionary<NSString *, NSNumber *> *)access {
   NSString *identity = [self identityForTab:tab];
   if (identity && _onMediaAccess) _onMediaAccess(identity, access);
@@ -484,6 +528,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   }
   NSString *identity = [self identityForTab:tab];
   if (!identity) return;
+  if ([identity isEqualToString:_findTabID]) [self stopFindingInTabID:identity];
   [_tabs removeObjectForKey:identity];
   [_owners removeObjectForKey:identity];
   dispatch_async(dispatch_get_main_queue(), ^{

@@ -18,6 +18,7 @@ class Fixture(http.server.BaseHTTPRequestHandler):
 <title>Arcusis account isolation fixture</title>
 <style>body{font:18px system-ui;padding:60px;color:#293445;background:#f0f4f8}</style>
 <h1>Local account isolation fixture</h1><p>Disposable test data only.</p>
+<p>OrbitFindMarker OrbitFindMarker OrbitFindMarker</p>
 <form><label>Username <input id="username" autocomplete="username"></label>
 <label>Password <input id="password" type="password" autocomplete="current-password"></label></form>
 <script>window.arcusisInstance=crypto.randomUUID();</script></html>"""

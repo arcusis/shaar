@@ -131,6 +131,14 @@ private struct BrowserApplication: App {
         Button("Previous space") { store.cycleSpace(by: -1) }.keyboardShortcut(
           "[", modifiers: [.control, .option])
       }
+      CommandGroup(after: .textEditing) {
+        Button("Find in Page…") { store.showPageFind() }.keyboardShortcut("f")
+        Button("Find Next") { store.movePageFind(forward: true) }.keyboardShortcut("g")
+          .disabled(store.pageFind?.canMove != true)
+        Button("Find Previous") { store.movePageFind(forward: false) }
+          .keyboardShortcut("g", modifiers: [.command, .shift])
+          .disabled(store.pageFind?.canMove != true)
+      }
     }
   }
 }

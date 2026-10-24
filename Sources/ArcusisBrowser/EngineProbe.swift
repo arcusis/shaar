@@ -114,8 +114,14 @@ final class EngineProbe {
         expectAbruptRecovery: expectAbruptRecovery)
       probe.runtime.onReady = { [weak probe] in
         guard let probe else { return }
-        probe.attachNativeShell()
-        Task { await probe.exercise() }
+        Task {
+          do {
+            try probe.attachNativeShell()
+            await probe.exercise()
+          } catch {
+            probe.finish(error: error)
+          }
+        }
       }
       // A bounded test must fail even if a renderer never calls its completion.
       DispatchQueue.main.asyncAfter(deadline: .now() + (includeBitwarden ? 150 : 75)) {
@@ -132,8 +138,9 @@ final class EngineProbe {
     }
   }
 
-  private func attachNativeShell() {
-    browserEngine = BrowserEngine(runtime: runtime, store: store, presentsNativePanels: false)
+  private func attachNativeShell() throws {
+    browserEngine = try BrowserEngine(
+      events: BrowserRuntimeEvents(runtime: runtime), store: store, presentsNativePanels: false)
     let changed = runtime.onTabChanged
     runtime.onTabChanged = { [weak self] id, url, title, loading, back, forward in
       changed?(id, url, title, loading, back, forward)
@@ -349,6 +356,9 @@ final class EngineProbe {
         checks += try await NativeWindowProbe(
           runtime: runtime, engine: browserEngine, store: store, root: root, fixture: fixture,
           phase: phase
+        ).run()
+        checks += try await WindowClientProbe(
+          primary: browserEngine, store: store, root: root, fixture: fixture, phase: phase
         ).run()
         localFixturesPassed = true
         if includeBitwarden {

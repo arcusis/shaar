@@ -22,12 +22,14 @@ private struct NativeTabPlacement: Equatable {
   let pinned: Bool
 }
 
-/// Owns the primary window's live tabs independently of its selected SwiftUI space.
-/// Multiple application clients require a coordinator to route the shared runtime callbacks.
+/// Owns one window's live tabs independently of its selected SwiftUI space.
 @MainActor @Observable
 final class BrowserEngine {
   let runtime: ARCChromiumRuntime
+  let events: BrowserRuntimeEvents
   let windowID: String
+  private let callbacks: BrowserRuntimeClient
+  private(set) var isClosed = false
   let downloads = DownloadsModel()
   private(set) var pages: [UUID: PageState] = [:]
   private(set) var notice: String?
@@ -51,16 +53,34 @@ final class BrowserEngine {
   @ObservationIgnored private var lastTabID: UUID?
   @ObservationIgnored private var lastTabOrders: [UUID: [NativeTabPlacement]] = [:]
 
-  init(runtime: ARCChromiumRuntime, store: BrowserStore, presentsNativePanels: Bool = true) {
+  init(
+    events: BrowserRuntimeEvents, windowID: String? = nil, store: BrowserStore,
+    presentsNativePanels: Bool = true
+  ) throws {
+    let runtime = events.runtime
     self.runtime = runtime
-    self.windowID = runtime.primaryWindowID
+    self.events = events
+    self.windowID = windowID ?? runtime.primaryWindowID
+    callbacks = BrowserRuntimeClient(windowID: self.windowID) { [weak store] in
+      Set(store?.session.profiles.map { $0.id.uuidString } ?? [])
+    }
     self.store = store
     self.presentsNativePanels = presentsNativePanels
+    try events.router.register(callbacks)
     store.engine = self
     store.onReloadPage = { [weak self] tab, profile in
       self?.runtime.reloadTabID(tab.uuidString, profileID: profile.uuidString) ?? false
     }
-    runtime.onRendererGone = { [weak self] identity, owner, status, code in
+    callbacks.onWindowClosed = { [weak self] _ in
+      guard let self else { return }
+      self.isClosed = true
+      self.extensionPanel = nil
+      self.store?.dismissPageFind()
+      self.liveTabs.removeAll()
+      self.pages.removeAll()
+      self.mediaAccess.removeAll()
+    }
+    callbacks.onRendererGone = { [weak self] identity, owner, status, code in
       guard let self, self.runtime.windowID(forTabID: identity) == self.windowID,
         let tab = UUID(uuidString: identity), let profile = UUID(uuidString: owner)
       else { return }
@@ -71,7 +91,7 @@ final class BrowserEngine {
       }
       self.store?.nativeRendererGone(tab, profileID: profile, status: status, exitCode: Int(code))
     }
-    runtime.onDocumentCommitted = { [weak self] identity, owner in
+    callbacks.onDocumentCommitted = { [weak self] identity, owner in
       guard let self, self.runtime.windowID(forTabID: identity) == self.windowID,
         let tab = UUID(uuidString: identity), let profile = UUID(uuidString: owner)
       else {
@@ -115,27 +135,27 @@ final class BrowserEngine {
       let done: @MainActor (Error?) -> Void = { error in completion(error?.localizedDescription) }
       switch mutation {
       case .bookmark(let operation):
-        self.runtime.applyBookmarkOperation(
+        self.events.applyBookmarkOperation(
           operation, profileID: profile.uuidString, completion: done)
       case .deleteHistory(let url):
-        self.runtime.deleteHistoryURL(url, profileID: profile.uuidString, completion: done)
+        self.events.deleteHistoryURL(url, profileID: profile.uuidString, completion: done)
       }
     }
-    runtime.onLibraryChanged = { [weak store] owner, value in
+    callbacks.onLibraryChanged = { [weak store] owner, value in
       guard let store, let profile = UUID(uuidString: owner),
         let section = LibrarySection(rawValue: value),
         store.session.profiles.contains(where: { $0.id == profile })
       else { return }
       store.library.invalidate(profile, section: section)
     }
-    runtime.onLibraryError = { [weak store] owner, value, message in
+    callbacks.onLibraryError = { [weak store] owner, value, message in
       guard let store, let profile = UUID(uuidString: owner),
         let section = LibrarySection(rawValue: value),
         store.session.profiles.contains(where: { $0.id == profile })
       else { return }
       store.library.serviceFailed(profile, section: section, message: message)
     }
-    runtime.onNotice = { [weak self] message in self?.notice = message }
+    callbacks.onNotice = { [weak self] message in self?.notice = message }
     downloads.onCommand = { [weak self] action, id, profile, completion in
       guard let self else {
         completion("Download controls are unavailable.")
@@ -146,17 +166,17 @@ final class BrowserEngine {
         MainActor.assumeIsolated { completion(error?.localizedDescription) }
       }
     }
-    runtime.onDownloadChanged = { [weak self] owner, record in
+    callbacks.onDownloadChanged = { [weak self] owner, record in
       guard let self, let profile = UUID(uuidString: owner),
         self.store?.session.profiles.contains(where: { $0.id == profile }) == true
       else { return }
       self.downloads.changed(record, profileID: profile)
     }
-    runtime.onDownloadRemoved = { [weak self] owner, id in
+    callbacks.onDownloadRemoved = { [weak self] owner, id in
       guard let self, let profile = UUID(uuidString: owner) else { return }
       self.downloads.removed(id, profileID: profile)
     }
-    runtime.onDownloadsRestored = { [weak self] owner, rows in
+    callbacks.onDownloadsRestored = { [weak self] owner, rows in
       guard let self, let profile = UUID(uuidString: owner),
         self.store?.session.profiles.contains(where: { $0.id == profile }) == true
       else { return }
@@ -170,7 +190,7 @@ final class BrowserEngine {
     store.onStopFinding = { [weak self] tabID in
       self?.runtime.stopFinding(inTabID: tabID.uuidString)
     }
-    runtime.onFindResult = { [weak store] identity, token, count, active, final in
+    callbacks.onFindResult = { [weak store] identity, token, count, active, final in
       guard let tabID = UUID(uuidString: identity), let requestID = UUID(uuidString: token) else {
         return
       }
@@ -178,13 +198,14 @@ final class BrowserEngine {
         tabID: tabID, requestID: requestID, count: Int(count), active: Int(active), final: final)
     }
     store.onWebsiteMediaDecision = { [weak self] id, accepted in
-      self?.runtime.resolveWebsiteMediaRequestID(id, accepted: accepted)
+      guard let self else { return }
+      self.events.resolveMedia(id, windowID: self.windowID, accepted: accepted)
     }
-    runtime.onWebsiteMediaRequest = { [weak self] payload in self?.requestWebsiteMedia(payload) }
-    runtime.onWebsiteMediaDismissed = { [weak self] id in
+    callbacks.onWebsiteMediaRequest = { [weak self] payload in self?.requestWebsiteMedia(payload) }
+    callbacks.onWebsiteMediaDismissed = { [weak self] id in
       self?.store?.resolveWebsiteMedia(id, accepted: false)
     }
-    runtime.onMediaAccess = { [weak self] identity, state in
+    callbacks.onMediaAccess = { [weak self] identity, state in
       guard let self, self.runtime.windowID(forTabID: identity) == self.windowID,
         let id = UUID(uuidString: identity)
       else { return }
@@ -195,7 +216,7 @@ final class BrowserEngine {
     }
     store.onInstallDecision = { [weak self] id, accepted in
       guard let self else { return }
-      self.runtime.resolveInstallRequestID(id, accepted: accepted)
+      self.events.resolveInstall(id, windowID: self.windowID, accepted: accepted)
       if accepted {
         Task { [weak self] in
           for _ in 0..<20 {
@@ -206,15 +227,15 @@ final class BrowserEngine {
         }
       }
     }
-    runtime.onInstallRequest = { [weak self] payload in self?.requestInstallation(payload) }
-    runtime.onExtensionPopup = { [weak self] payload in self?.receivedPopup(payload) }
-    runtime.onExtensionPopupClosed = { [weak self] id in
+    callbacks.onInstallRequest = { [weak self] payload in self?.requestInstallation(payload) }
+    callbacks.onExtensionPopup = { [weak self] payload in self?.receivedPopup(payload) }
+    callbacks.onExtensionPopupClosed = { [weak self] id in
       guard let self, case .popup(let context) = self.extensionPanel, context.id == id else {
         return
       }
       self.extensionPanel = nil
     }
-    runtime.onExtensionPopupSize = { [weak self] id, size in
+    callbacks.onExtensionPopupSize = { [weak self] id, size in
       guard let self, case .popup(let context) = self.extensionPanel, context.id == id else {
         return
       }
@@ -231,7 +252,7 @@ final class BrowserEngine {
         self.store?.nativeTabClosed(id)
       }
     }
-    runtime.onTabChanged = { [weak self] identity, address, title, loading, back, forward in
+    callbacks.onTabChanged = { [weak self] identity, address, title, loading, back, forward in
       guard let self, self.runtime.windowID(forTabID: identity) == self.windowID,
         let id = UUID(uuidString: identity)
       else { return }
@@ -242,7 +263,7 @@ final class BrowserEngine {
       self.store?.nativePageLoading(id, loading: loading)
       if let url = URL(string: address) { self.store?.nativeTabChanged(id, url: url, title: title) }
     }
-    runtime.onTabClosed = { [weak self] identity in
+    callbacks.onTabClosed = { [weak self] identity in
       guard let self, let id = UUID(uuidString: identity),
         self.liveTabs.contains(id) || self.pages[id] != nil
       else { return }
@@ -251,7 +272,7 @@ final class BrowserEngine {
       self.mediaAccess[id] = nil
       self.store?.nativeTabClosed(id)
     }
-    runtime.onNewTab = { [weak self] identity, owner, address, opener, foreground in
+    callbacks.onNewTab = { [weak self] identity, owner, address, opener, foreground in
       guard let self, self.runtime.windowID(forTabID: identity) == self.windowID,
         let id = UUID(uuidString: identity), let profile = UUID(uuidString: owner),
         let url = URL(string: address.isEmpty ? "about:blank" : address)
@@ -261,12 +282,16 @@ final class BrowserEngine {
         self.store?.nativeTabOpened(
           BrowserTab(id: id, url: url), profileID: profile,
           openerID: opener.flatMap(UUID.init(uuidString:)), foreground: foreground) ?? false
-      if !accepted { self.runtime.discardTabID(identity) }
+      if !accepted {
+        self.liveTabs.remove(id)
+        self.events.router.forgetTab(identity, windowID: self.windowID)
+        self.runtime.discardTabID(identity)
+      }
     }
   }
 
   func reconcile() {
-    guard !reconciling, let store else { return }
+    guard !isClosed, !reconciling, let store else { return }
     reconciling = true
     defer { reconciling = false }
     let session = store.session
@@ -279,6 +304,7 @@ final class BrowserEngine {
     for removed in liveTabs.subtracting(wantedTabs) {
       // Ordinary tab close waits for Chromium's beforeunload decision. This path
       // handles confirmed space removal; profile files are deliberately retained.
+      events.router.forgetTab(removed.uuidString, windowID: windowID)
       runtime.discardTabID(removed.uuidString)
       liveTabs.remove(removed)
       pages[removed] = nil
@@ -315,12 +341,18 @@ final class BrowserEngine {
     }
     for space in session.spaces where loadedProfiles.contains(space.profileID) {
       for tab in space.tabs where !liveTabs.contains(tab.id) && !failedTabs.contains(tab.id) {
+        guard events.router.bindTab(tab.id.uuidString, windowID: windowID) else {
+          failedTabs.insert(tab.id)
+          notice = "A saved tab already belongs to another window."
+          continue
+        }
         liveTabs.insert(tab.id)
         do {
           try runtime.openTabID(
             tab.id.uuidString, profileID: space.profileID.uuidString, windowID: windowID,
             url: tab.url.absoluteString)
         } catch {
+          events.router.forgetTab(tab.id.uuidString, windowID: windowID)
           liveTabs.remove(tab.id)
           failedTabs.insert(tab.id)
           notice = error.localizedDescription
@@ -423,7 +455,7 @@ final class BrowserEngine {
   private func requestInstallation(_ payload: [String: Any]) {
     guard let id = payload["requestId"] as? String else { return }
     guard payload["windowID"] as? String == windowID else {
-      runtime.resolveInstallRequestID(id, accepted: false)
+      events.resolveInstall(id, windowID: windowID, accepted: false)
       return
     }
     extensionPanel = nil
@@ -441,7 +473,7 @@ final class BrowserEngine {
         browserExtension: browserExtension, kind: kind, permissions: permissions),
       store.requestInstallation(request)
     else {
-      runtime.resolveInstallRequestID(id, accepted: false)
+      events.resolveInstall(id, windowID: windowID, accepted: false)
       notice = "The extension request could not be verified for this page and profile."
       return
     }
@@ -450,7 +482,7 @@ final class BrowserEngine {
   private func requestWebsiteMedia(_ payload: [String: Any]) {
     guard let id = payload["id"] as? String else { return }
     guard payload["windowID"] as? String == windowID else {
-      runtime.resolveWebsiteMediaRequestID(id, accepted: false)
+      events.resolveMedia(id, windowID: windowID, accepted: false)
       return
     }
     extensionPanel = nil
@@ -467,7 +499,7 @@ final class BrowserEngine {
         kinds: rawKinds.compactMap(WebsiteMediaKind.init(rawValue:))),
       store.requestWebsiteMedia(request)
     else {
-      runtime.resolveWebsiteMediaRequestID(id, accepted: false)
+      events.resolveMedia(id, windowID: windowID, accepted: false)
       notice = "This permission request is unavailable for the current page and profile."
       return
     }
@@ -504,9 +536,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
   private let store: BrowserStore
   private let engine: BrowserEngine
 
-  init(runtime: ARCChromiumRuntime, store: BrowserStore) {
+  init(runtime: ARCChromiumRuntime, store: BrowserStore) throws {
     self.store = store
-    engine = BrowserEngine(runtime: runtime, store: store)
+    engine = try BrowserEngine(events: BrowserRuntimeEvents(runtime: runtime), store: store)
     super.init()
   }
 
@@ -517,7 +549,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
       try FileManager.default.createDirectory(
         at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
       let runtime = try ARCChromiumRuntime(frameworkURL: frameworkURL)
-      let host = NativeBrowserHost(runtime: runtime, store: .persistent())
+      let host = try NativeBrowserHost(runtime: runtime, store: .persistent())
       runtime.onReady = { [weak host] in host?.start() }
       return withExtendedLifetime(host) {
         runtime.run(withDataDirectory: directory, testing: false)

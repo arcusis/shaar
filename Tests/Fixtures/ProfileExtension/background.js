@@ -36,8 +36,11 @@ chrome.runtime.onMessage.addListener((message, _sender, reply) => {
       offscreen = await chrome.runtime.sendMessage({ target: "offscreen" });
     }
     const { account } = await chrome.storage.local.get("account");
+    const tabs = message.action === "order"
+      ? (await chrome.tabs.query({ currentWindow: true })).map(({ id, index, pinned, active }) => ({ id, index, pinned, active }))
+      : null;
     return { account: account ?? null, tabID: tab?.id ?? null, tabURL: tab?.url ?? null,
-      offscreen, serviceWorker: true };
+      offscreen, tabs, serviceWorker: true };
   })().then(reply, (error) => reply({ error: String(error) }));
   return true;
 });

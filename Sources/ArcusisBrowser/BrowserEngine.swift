@@ -17,6 +17,11 @@ struct MediaAccessState: Equatable {
   var isCapturing: Bool { camera || microphone || screen }
 }
 
+private struct NativeTabPlacement: Equatable {
+  let id: UUID
+  let pinned: Bool
+}
+
 /// Owns live native tabs independently of the selected SwiftUI space.
 @MainActor @Observable
 final class BrowserEngine {
@@ -42,6 +47,7 @@ final class BrowserEngine {
   @ObservationIgnored private var reconciling = false
   @ObservationIgnored private var lastSpaceID: UUID?
   @ObservationIgnored private var lastTabID: UUID?
+  @ObservationIgnored private var lastTabOrders: [UUID: [NativeTabPlacement]] = [:]
 
   init(runtime: ARCChromiumRuntime, store: BrowserStore, presentsNativePanels: Bool = true) {
     self.runtime = runtime
@@ -227,6 +233,20 @@ final class BrowserEngine {
           failedTabs.insert(tab.id)
           notice = error.localizedDescription
         }
+      }
+    }
+    for profile in loadedProfiles {
+      let tabs = session.spaces.filter { $0.profileID == profile }.flatMap(\.tabs)
+        .filter { liveTabs.contains($0.id) }
+      let ordered = tabs.filter(\.isPinned) + tabs.filter { !$0.isPinned }
+      let positions = ordered.map { NativeTabPlacement(id: $0.id, pinned: $0.isPinned) }
+      if lastTabOrders[profile] != positions,
+        runtime.placeTabIDs(
+          ordered.map { $0.id.uuidString },
+          pinnedIDs: ordered.filter(\.isPinned).map { $0.id.uuidString },
+          profileID: profile.uuidString)
+      {
+        lastTabOrders[profile] = positions
       }
     }
     runtime.activateProfileID(session.selectedSpace.profileID.uuidString)

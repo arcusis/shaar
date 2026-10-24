@@ -38,6 +38,11 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
   <key>CFBundleVersion</key><string>1</string>
   <key>LSMinimumSystemVersion</key><string>26.0</string>
   <key>NSHighResolutionCapable</key><true/>
+  <key>UTExportedTypeDeclarations</key><array><dict>
+    <key>UTTypeIdentifier</key><string>com.arcusis.browser.sidebar-item</string>
+    <key>UTTypeDescription</key><string>Arcusis Sidebar Item</string>
+    <key>UTTypeConformsTo</key><array><string>public.data</string></array>
+  </dict></array>
   <key>NSCameraUsageDescription</key><string>Allow websites you approve to use your camera for video calls.</string>
   <key>NSMicrophoneUsageDescription</key><string>Allow websites you approve to use your microphone for calls.</string>
 </dict></plist>

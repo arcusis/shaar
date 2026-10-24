@@ -137,6 +137,63 @@ public struct BrowserSession: Codable, Equatable, Sendable {
   }
 
   @discardableResult
+  public mutating func moveSpace(_ id: UUID, before targetID: UUID?) -> Bool {
+    guard id != targetID, let source = spaces.firstIndex(where: { $0.id == id }),
+      targetID == nil || spaces.contains(where: { $0.id == targetID })
+    else { return false }
+    var reordered = spaces
+    let space = reordered.remove(at: source)
+    let destination = reordered.firstIndex { $0.id == targetID } ?? reordered.endIndex
+    reordered.insert(space, at: destination)
+    guard reordered != spaces else { return false }
+    spaces = reordered
+    return true
+  }
+
+  /// Moving a live tab never changes its engine profile or document identity.
+  @discardableResult
+  public mutating func moveTab(
+    _ id: UUID, from sourceID: UUID, to destinationID: UUID,
+    before targetID: UUID? = nil, pinned: Bool? = nil
+  ) -> Bool {
+    guard id != targetID, let source = spaces.firstIndex(where: { $0.id == sourceID }),
+      let destination = spaces.firstIndex(where: { $0.id == destinationID }),
+      spaces[source].profileID == spaces[destination].profileID,
+      let position = spaces[source].tabs.firstIndex(where: { $0.id == id })
+    else { return false }
+    var tab = spaces[source].tabs[position]
+    tab.isPinned = pinned ?? tab.isPinned
+    if let targetID {
+      guard let target = spaces[destination].tabs.first(where: { $0.id == targetID }),
+        target.isPinned == tab.isPinned
+      else { return false }
+    }
+    let followsSelection = sourceID == selectedSpaceID && spaces[source].selectedTabID == id
+    var updated = spaces
+    updated[source].tabs.remove(at: position)
+    let tabs = updated[destination].tabs
+    let insertion =
+      targetID.flatMap { target in tabs.firstIndex { $0.id == target } }
+      ?? tabs.lastIndex(where: { $0.isPinned == tab.isPinned }).map { $0 + 1 }
+      ?? (tab.isPinned ? tabs.startIndex : tabs.endIndex)
+    updated[destination].tabs.insert(tab, at: insertion)
+    if source != destination {
+      if updated[source].selectedTabID == id {
+        let remaining = updated[source].tabs
+        updated[source].selectedTabID =
+          remaining.isEmpty ? nil : remaining[min(position, remaining.count - 1)].id
+      }
+      if followsSelection || updated[destination].selectedTabID == nil {
+        updated[destination].selectedTabID = id
+      }
+    }
+    guard updated != spaces else { return false }
+    spaces = updated
+    if followsSelection { selectedSpaceID = destinationID }
+    return true
+  }
+
+  @discardableResult
   public mutating func addSpace(
     name: String, sharingProfile profileID: UUID? = nil, tint: SpaceTint? = nil
   ) -> UUID? {
@@ -259,6 +316,7 @@ public struct BrowserSession: Codable, Equatable, Sendable {
     guard let index = spaces.firstIndex(where: { $0.id == selectedSpaceID }),
       let tabIndex = spaces[index].tabs.firstIndex(where: { $0.id == tabID })
     else { return }
-    spaces[index].tabs[tabIndex].isPinned.toggle()
+    let space = spaces[index]
+    moveTab(tabID, from: space.id, to: space.id, pinned: !space.tabs[tabIndex].isPinned)
   }
 }

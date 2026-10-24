@@ -50,6 +50,8 @@ FOUNDATION_EXPORT BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifier
 - (void)downloadCommand:(NSString *)command downloadID:(NSString *)downloadID profileID:(NSString *)profileID
             completion:(void (^)(NSError * _Nullable))completion;
 - (void)refreshDownloadsForProfileID:(NSString *)profileID;
+- (BOOL)placeTabIDs:(NSArray<NSString *> *)tabIDs pinnedIDs:(NSArray<NSString *> *)pinnedIDs
+         profileID:(NSString *)profileID;
 /// Evaluates a JavaScript expression and returns its JSON value through ArdiaCore's post callback.
 - (void)evaluateInTabID:(NSString *)tabID script:(NSString *)script
             completion:(void (^)(NSString * _Nullable))completion;

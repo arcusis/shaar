@@ -307,6 +307,30 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 - (void)goBackInTabID:(NSString *)tabID { [_tabs[tabID] goBack]; }
 - (void)goForwardInTabID:(NSString *)tabID { [_tabs[tabID] goForward]; }
 - (void)reloadTabID:(NSString *)tabID { [_tabs[tabID] reload]; }
+- (BOOL)placeTabIDs:(NSArray<NSString *> *)tabIDs pinnedIDs:(NSArray<NSString *> *)pinnedIDs
+         profileID:(NSString *)profileID {
+  NSSet *identities = [NSSet setWithArray:tabIDs];
+  NSSet *pins = [NSSet setWithArray:pinnedIDs];
+  ArdiaCoreProfile *profile = _profiles[profileID];
+  if (!profile || profile.destroyed || profile.offTheRecord || identities.count != tabIDs.count ||
+      pins.count != pinnedIDs.count || ![pins isSubsetOfSet:identities]) return NO;
+  BOOL seenUnpinned = NO;
+  for (NSString *identity in tabIDs) {
+    ArdiaCoreTab *tab = _tabs[identity];
+    BOOL pinned = [pins containsObject:identity];
+    if (!tab || tab.closed || tab.profile != profile || ![_owners[identity] isEqualToString:profileID] ||
+        (pinned && seenUnpinned)) return NO;
+    if (!pinned) seenUnpinned = YES;
+  }
+  // Set all pin states before the final ordering pass: Chromium constrains
+  // pinned indices, so unpinning several tabs during one pass can shift earlier moves.
+  for (int pass = 0; pass < 2; pass++) {
+    [tabIDs enumerateObjectsUsingBlock:^(NSString *identity, NSUInteger index, BOOL *stop) {
+      [self->_browserWindow placeTab:self->_tabs[identity] index:(int)index pinned:[pins containsObject:identity]];
+    }];
+  }
+  return YES;
+}
 - (void)downloadCommand:(NSString *)command downloadID:(NSString *)downloadID profileID:(NSString *)profileID
             completion:(void (^)(NSError *))completion {
   if (!_profiles[profileID] || _profiles[profileID].destroyed || _profiles[profileID].offTheRecord) {

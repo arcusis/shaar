@@ -5,6 +5,8 @@ import Observation
 @MainActor @Observable
 final class BrowserStore {
   private(set) var session: BrowserSession
+  let dragSessionID = UUID()
+  private(set) var sidebarNotice: String?
   var commandIsOpen = false
   var commandQuery = ""
   var commandSelection = 0
@@ -158,6 +160,7 @@ final class BrowserStore {
   }
 
   func perform(_ action: CommandAction) {
+    sidebarNotice = nil
     switch action {
     case .open(let url): session.open(url)
     case .space(let id): session.selectSpace(id)
@@ -168,6 +171,7 @@ final class BrowserStore {
   }
 
   func cycleSpace(by offset: Int) {
+    sidebarNotice = nil
     session.cycleSpace(by: offset)
     save()
   }
@@ -256,6 +260,51 @@ final class BrowserStore {
   func togglePin(_ id: UUID) {
     session.togglePin(id)
     save()
+  }
+
+  @discardableResult
+  func moveSpace(_ id: UUID, before target: UUID?) -> Bool {
+    guard sheet == nil, session.moveSpace(id, before: target) else { return false }
+    sidebarNotice = nil
+    save()
+    return true
+  }
+
+  @discardableResult
+  func moveTab(
+    _ id: UUID, from source: UUID, to destination: UUID, before target: UUID? = nil,
+    pinned: Bool? = nil
+  ) -> Bool {
+    guard sheet == nil else { return false }
+    if let origin = session.spaces.first(where: { $0.id == source }),
+      let targetSpace = session.spaces.first(where: { $0.id == destination }),
+      origin.profileID != targetSpace.profileID
+    {
+      sidebarNotice = "Tabs can move only between spaces sharing a profile."
+      return false
+    }
+    guard session.moveTab(id, from: source, to: destination, before: target, pinned: pinned) else {
+      return false
+    }
+    sidebarNotice = nil
+    save()
+    return true
+  }
+
+  @discardableResult
+  func acceptSidebarDrop(
+    _ item: SidebarTransfer, into space: UUID, before targetTab: UUID? = nil,
+    pinned: Bool? = nil, beforeSpace: UUID? = nil
+  ) -> Bool {
+    guard session.spaces.contains(where: { $0.id == space }) else { return false }
+    switch item {
+    case .tab(let sessionID, let source, let tab):
+      guard sessionID == dragSessionID else { return false }
+      return moveTab(tab, from: source, to: space, before: targetTab, pinned: pinned)
+    case .space(let sessionID, let id):
+      guard sessionID == dragSessionID, targetTab == nil, pinned == nil else { return false }
+      return moveSpace(id, before: beforeSpace)
+    }
   }
 
   @discardableResult

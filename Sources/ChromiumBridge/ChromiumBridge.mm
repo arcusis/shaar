@@ -73,6 +73,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 @property(copy) NSString *popupExtensionID;
 @property BOOL closing;
 @property BOOL closed;
+@property NSUInteger hostSelectionDepth;
 @end
 @implementation ARCNativeWindowState
 @end
@@ -445,8 +446,32 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     [tab noteShownByHost:YES];
   }
   state.selectedTabID = tabID;
+  state.hostSelectionDepth++;
   state.native.activeProfile = tab.profile;
   [state.native activateTab:tab];
+  state.hostSelectionDepth--;
+}
+- (void)window:(ArdiaCoreWindow *)window didActivateTab:(ArdiaCoreTab *)tab {
+  ARCNativeWindowState *state = [self stateForWindow:window];
+  NSString *identity = [self identityForTab:tab];
+  NSString *profileID = identity ? _owners[identity] : nil;
+  // Each profile has its own native tab strip. Initial/background-profile and
+  // host-selected changes must not replace the visible application's selection.
+  if (!state || state.closed || state.closing || _closingBrowser || state.hostSelectionDepth ||
+      [_openingWindowID isEqualToString:state.identity] || !identity || !profileID || tab.closed ||
+      ![_tabWindows[identity] isEqualToString:state.identity] ||
+      state.native.activeProfile != tab.profile || [state.selectedTabID isEqualToString:identity]) return;
+  if (_testing) {
+    [_tabs[state.selectedTabID ?: @""] noteShownByHost:NO];
+    [tab noteShownByHost:YES];
+  }
+  state.selectedTabID = identity;
+  // Deliver model selection during the notification; clients must defer tab-strip
+  // reconciliation until it unwinds. Otherwise an intervening metadata save can
+  // re-activate the old model selection and erase the engine's activation.
+  if (_onTabActivated) _onTabActivated(identity, profileID);
+  if (state.findTabID && ![state.findTabID isEqualToString:state.selectedTabID]) [self stopFindingInTabID:state.findTabID];
+  if (state.popup && ![state.popupOwnerTabID isEqualToString:state.selectedTabID]) [self closeExtensionPopupForWindowID:state.identity];
 }
 - (void)clearActiveTab {
   [self clearActiveTabInWindowID:_primaryWindowID];
@@ -483,7 +508,11 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 }
 - (void)activateProfileID:(NSString *)profileID windowID:(NSString *)identity {
   ARCNativeWindowState *state = _windows[identity];
-  if (_profiles[profileID] && state && !state.closed && !state.closing && !_closingBrowser) state.native.activeProfile = _profiles[profileID];
+  if (_profiles[profileID] && state && !state.closed && !state.closing && !_closingBrowser) {
+    state.hostSelectionDepth++;
+    state.native.activeProfile = _profiles[profileID];
+    state.hostSelectionDepth--;
+  }
 }
 - (void)goBackInTabID:(NSString *)tabID { [_tabs[tabID] goBack]; }
 - (void)goForwardInTabID:(NSString *)tabID { [_tabs[tabID] goForward]; }
@@ -517,11 +546,13 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   }
   // Set all pin states before the final ordering pass: Chromium constrains
   // pinned indices, so unpinning several tabs during one pass can shift earlier moves.
+  state.hostSelectionDepth++;
   for (int pass = 0; pass < 2; pass++) {
     [tabIDs enumerateObjectsUsingBlock:^(NSString *identity, NSUInteger index, BOOL *stop) {
       [state.native placeTab:self->_tabs[identity] index:(int)index pinned:[pins containsObject:identity]];
     }];
   }
+  state.hostSelectionDepth--;
   return YES;
 }
 - (void)downloadCommand:(NSString *)command downloadID:(NSString *)downloadID profileID:(NSString *)profileID

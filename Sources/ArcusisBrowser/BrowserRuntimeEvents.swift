@@ -20,6 +20,9 @@ final class BrowserRuntimeEvents {
       self?.tabClient(id)?.onTabChanged?(id, address, title, loading, back, forward)
     }
     runtime.onTabClosed = { [weak self] id in self?.router.tabClosed(id) }
+    runtime.onTabActivated = { [weak self] id, profile in
+      self?.tabClient(id)?.onTabActivated?(id, profile)
+    }
     runtime.onRendererGone = { [weak self] id, profile, status, code in
       self?.tabClient(id)?.onRendererGone?(id, profile, status, code)
     }

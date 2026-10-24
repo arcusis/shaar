@@ -49,6 +49,7 @@ final class BrowserEngine {
   @ObservationIgnored private var liveTabs: Set<UUID> = []
   @ObservationIgnored private var failedTabs: Set<UUID> = []
   @ObservationIgnored private var reconciling = false
+  @ObservationIgnored private var receivingNativeSelection = false
   @ObservationIgnored private var lastSpaceID: UUID?
   @ObservationIgnored private var lastTabID: UUID?
   @ObservationIgnored private var lastTabOrders: [UUID: [NativeTabPlacement]] = [:]
@@ -272,6 +273,19 @@ final class BrowserEngine {
       self.mediaAccess[id] = nil
       self.store?.nativeTabClosed(id)
     }
+    callbacks.onTabActivated = { [weak self] identity, owner in
+      guard let self, !self.isClosed, !self.receivingNativeSelection, !self.reconciling,
+        self.runtime.windowID(forTabID: identity) == self.windowID,
+        let id = UUID(uuidString: identity), self.liveTabs.contains(id),
+        let profile = UUID(uuidString: owner)
+      else { return }
+      self.receivingNativeSelection = true
+      self.store?.nativeTabActivated(id, profileID: profile)
+      self.receivingNativeSelection = false
+      // Chromium is still notifying its tab strip. The model is current before
+      // other saves can run, but opening/reordering tabs must wait until it unwinds.
+      DispatchQueue.main.async { [weak self] in self?.reconcile() }
+    }
     callbacks.onNewTab = { [weak self] identity, owner, address, opener, foreground in
       guard let self, self.runtime.windowID(forTabID: identity) == self.windowID,
         let id = UUID(uuidString: identity), let profile = UUID(uuidString: owner),
@@ -291,7 +305,7 @@ final class BrowserEngine {
   }
 
   func reconcile() {
-    guard !isClosed, !reconciling, let store else { return }
+    guard !isClosed, !reconciling, !receivingNativeSelection, let store else { return }
     reconciling = true
     defer { reconciling = false }
     let session = store.session

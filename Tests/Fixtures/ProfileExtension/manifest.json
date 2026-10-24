@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Account isolation probe",
-  "version": "1.4",
+  "version": "1.5",
   "description": "Disposable local fixture. No real credentials or external traffic.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvnIuafbHv5+GLNAtTskR8y8ugcm3gZZWKRXl3c3RGrMbw0OmLfSfonfbfmRgkcxoa2RAUjoNwiAkx7SWLEaHvbCRBh9WU4EJauQ5ccD7usein22Ynl+h2H1NZi9j7aOmm/h4KZ71Kr+65ynsFEyDK0Ru5AwwKokKYTgUJsFNuMzZZnO3cXRtb9RLcv9MyDduYic7whvdoD/yYEvf6bks0hCZIAcS5Aa3A7HisUl34gL7wcV2RtUrFQ/G+hkxHOnlj/qHwk/AzUjh7+DJSGCmyKx6M6Ie6of9d9iRxcQpyW0Y0z/DgnSnq3KE0uhWlbhe5kfnkcYIzQUGI+OB48utHQIDAQAB",
   "permissions": ["storage", "scripting", "activeTab", "offscreen", "bookmarks", "history"],

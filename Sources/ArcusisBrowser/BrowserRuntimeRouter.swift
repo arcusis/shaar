@@ -22,6 +22,7 @@ final class BrowserRuntimeClient {
   var onLibraryError: ((String, String, String) -> Void)?
   var onTabChanged: ((String, String, String, Bool, Bool, Bool) -> Void)?
   var onTabClosed: ((String) -> Void)?
+  var onTabActivated: ((String, String) -> Void)?
   var onRendererGone: ((String, String, String, Int32) -> Void)?
   var onDocumentCommitted: ((String, String) -> Void)?
   var onNewTab: ((String, String, String, String?, Bool) -> Void)?

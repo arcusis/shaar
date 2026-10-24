@@ -15,6 +15,27 @@ chrome.runtime.onMessage.addListener((message, _sender, reply) => {
     if (message.action === "storage-worker") {
       await chrome.storage.local.set({ [message.key]: message.value });
     }
+    if (message.action === "activate-probe") {
+      if (!Array.isArray(message.tabIDs) || message.tabIDs.length < 1 || message.tabIDs.length > 8
+        || !message.tabIDs.every(Number.isInteger) || !Number.isInteger(message.windowID)
+        || !Number.isInteger(message.port) || message.port < 1 || message.port > 65535
+        || typeof message.token !== "string" || !/^[0-9a-f-]{36}$/i.test(message.token)) {
+        throw new Error("Bounded authored activation request required");
+      }
+      const targets = await Promise.all(message.tabIDs.map((id) => chrome.tabs.get(id)));
+      for (const target of targets) {
+        const url = new URL(target.url);
+        if (target.windowId !== message.windowID || url.protocol !== "http:"
+          || url.hostname !== "127.0.0.1" || url.port !== String(message.port)) {
+          throw new Error("Owned loopback fixture window required");
+        }
+      }
+      for (const id of message.tabIDs) await chrome.tabs.update(id, { active: true });
+      const [active] = await chrome.tabs.query({ active: true, windowId: message.windowID });
+      const report = { token: message.token, windowID: message.windowID, tabID: active?.id ?? null };
+      await chrome.storage.local.set({ activationProbe: report });
+      return report;
+    }
     if (message.action === "library-read" || message.action === "library-write") {
       const url = new URL(message.url);
       if (url.protocol !== "http:" || url.hostname !== "127.0.0.1" || !url.pathname.startsWith("/library-")) {

@@ -6,6 +6,8 @@
 
 Chromium owns bookmark/history persistence and extension visibility. Native bookmark mutations explicitly refresh after acknowledgement because the pinned apply endpoint suppresses its own bookmark change events. Extension writes and page visits use the watched event stream. The Swift model coalesces invalidations, rejects stale responses, and keeps separate caches per profile. No upstream implementation source is copied into the application for these services.
 
+The pinned `WindowHost::ActiveTabChanged` implementation delivers `window:didActivateTab:` while the native tab strip is notifying observers. The bridge forwards selection only for a bound tab in the window's current profile. Application clients update model selection immediately and defer tab-strip reconciliation; host profile/selection/ordering operations suppress their own activation echo. This avoids reentering tab-strip mutation from that callback. The public API does not supply an activation event for calls that leave native selection unchanged. No upstream framework modification or private API is used.
+
 The engine archive is pinned separately because upstream reuses the same engine tree across releases. Its SHA-256 matches the pinned source's `packages/ardiacore/prebuilt-engines.tsv` and GitHub's asset digest. `scripts/fetch-engine.sh` verifies the archive before extraction. The binary stays in ignored `build/`, outside Git.
 
 Chromium contains software under multiple third-party licenses. The framework includes its resources and `chrome://credits`; those notices must remain with any distribution. Upstream's separate extension bundle, including uBlock Origin, is not fetched by this project. A distribution and source-compliance review remains part of the release milestone.

@@ -331,6 +331,20 @@ final class BrowserStore {
     if session.updateTab(id, url: url, title: title) { save() }
   }
 
+  /// Engine activation can reveal another Space using this profile, never another account.
+  @discardableResult
+  func nativeTabActivated(_ id: UUID, profileID: UUID) -> Bool {
+    guard session.selectedSpace.profileID == profileID,
+      let owner = session.spaces.first(where: {
+        $0.profileID == profileID && $0.tabs.contains { $0.id == id }
+      })
+    else { return false }
+    guard session.selectedSpaceID != owner.id || owner.selectedTabID != id else { return true }
+    session.selectTab(id, in: owner.id)
+    save()
+    return true
+  }
+
   func nativeTabOpened(_ tab: BrowserTab, profileID: UUID, openerID: UUID?, foreground: Bool)
     -> Bool
   {

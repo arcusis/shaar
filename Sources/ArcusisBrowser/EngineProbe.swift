@@ -13,6 +13,8 @@ final class EngineProbe {
   private let fixture: URL
   private let phase: String
   private let includeBitwarden: Bool
+  private let awaitAbruptTermination: Bool
+  private let expectedAfterTermination: BrowserSession?
   private let output: URL
   private var checks: [String] = []
   private var finished = false
@@ -29,11 +31,17 @@ final class EngineProbe {
   private let tabB = "B30C0118-3DA8-47D2-B661-D3F0FE3E5F98"
   private let sharedA = "C05629FB-8905-4236-8F72-9336FB84079C"
 
-  private init(root: URL, fixture: URL, phase: String, output: URL, includeBitwarden: Bool) throws {
+  private init(
+    root: URL, fixture: URL, phase: String, output: URL, includeBitwarden: Bool,
+    awaitAbruptTermination: Bool, expectAbruptRecovery: Bool
+  ) throws {
     self.root = root
     self.fixture = fixture
     self.phase = phase
     self.includeBitwarden = includeBitwarden
+    self.awaitAbruptTermination = awaitAbruptTermination
+    expectedAfterTermination =
+      expectAbruptRecovery ? try AbruptProbeCheckpoint.expectedSession(root: root) : nil
     self.output = output
     guard let frameworks = Bundle.main.privateFrameworksURL else {
       throw ProbeFailure("Run the probe from the bundled app with its pinned engine.")
@@ -59,6 +67,14 @@ final class EngineProbe {
       profiles: profiles, spaces: spaces, selectedSpaceID: spaces[0].id)
     store = BrowserStore(
       sessionFile: SessionFile(url: root.appending(path: "session.json")), session: session)
+    if let expectedAfterTermination {
+      guard store.session == expectedAfterTermination else {
+        throw AbruptCheckpointError.snapshotMismatch
+      }
+      checks.append(
+        "exact saved Space/profile/tab/folder/recovery model restores before native startup after SIGKILL"
+      )
+    }
   }
 
   static func run(arguments: [String]) -> Int32 {
@@ -86,9 +102,16 @@ final class EngineProbe {
         throw ProbeFailure("Probe requires a marked temporary directory and loopback fixture.")
       }
       let includeBitwarden = arguments.contains("--bitwarden")
+      let awaitAbruptTermination = arguments.contains("--probe-await-abrupt-termination")
+      let expectAbruptRecovery = arguments.contains("--probe-expect-abrupt-recovery")
+      guard !(awaitAbruptTermination && expectAbruptRecovery),
+        !awaitAbruptTermination || (phase == "initial" && !includeBitwarden),
+        !expectAbruptRecovery || (phase == "restart" && !includeBitwarden)
+      else { throw ProbeFailure("Invalid abrupt-recovery probe flags.") }
       let probe = try EngineProbe(
         root: root, fixture: fixture, phase: phase, output: output,
-        includeBitwarden: includeBitwarden)
+        includeBitwarden: includeBitwarden, awaitAbruptTermination: awaitAbruptTermination,
+        expectAbruptRecovery: expectAbruptRecovery)
       probe.runtime.onReady = { [weak probe] in
         guard let probe else { return }
         probe.attachNativeShell()
@@ -178,6 +201,27 @@ final class EngineProbe {
       try runtime.openTabID(tabB, profileID: profileB, url: fixture.absoluteString)
       let firstA = try await snapshot(tabA)
       let firstB = try await snapshot(tabB)
+      if let expectedAfterTermination {
+        let tabs = expectedAfterTermination.spaces.flatMap(\.tabs)
+        var ready = false
+        for _ in 0..<100 {
+          ready = tabs.allSatisfy {
+            runtime.nativeTabID(forID: $0.id.uuidString) >= 0
+              && browserEngine?.pages[$0.id]?.loading == false
+          }
+          if ready { break }
+          try await Task.sleep(for: .milliseconds(100))
+        }
+        let nativeIDs = tabs.map { runtime.nativeTabID(forID: $0.id.uuidString) }
+        try expect(
+          ready && Set(nativeIDs).count == tabs.count,
+          "every saved tab gets a distinct live native tab after abrupt browser termination")
+        try expect(
+          AbruptProbeCheckpoint.matchesAfterNavigation(
+            store.session, expected: expectedAfterTermination),
+          "native startup retains saved profile/Space ownership, ordering, pins, folders, selection, and closed entries after SIGKILL"
+        )
+      }
       if phase == "initial" {
         try expect(
           firstA["local"] is NSNull && firstB["local"] is NSNull, "fresh profiles have no account")
@@ -226,10 +270,23 @@ final class EngineProbe {
           "\(phase) switch \(iteration + 1) selects the correct native space and profile")
         let state = try await snapshot(tab)
         let original = isA ? firstA : firstB
-        try expect(
+        let retainsAccountAndDocument =
           state["cookie"] as? String == "account=\(account)"
-            && state["local"] as? String == account
-            && state["instance"] as? String == original["instance"] as? String,
+          && state["local"] as? String == account
+          && state["instance"] as? String == original["instance"] as? String
+        if !retainsAccountAndDocument {
+          try JSONSerialization.data(
+            withJSONObject: [
+              "phase": phase, "iteration": iteration + 1, "tabID": tab,
+              "profileID": isA ? profileA : profileB,
+              "expectedAccount": account, "original": original, "observed": state,
+              "scope":
+                "Failure-only snapshot of authored disposable account fixture. No real credentials.",
+            ], options: [.prettyPrinted, .sortedKeys]
+          ).write(to: root.appending(path: "\(phase)-account-failure.json"), options: .atomic)
+        }
+        try expect(
+          retainsAccountAndDocument,
           "\(phase) switch \(iteration + 1) retains isolated account and live document")
         try expect(
           phase == "initial"
@@ -297,6 +354,16 @@ final class EngineProbe {
           ).run()
         }
       }
+      if awaitAbruptTermination {
+        try expect(
+          try SessionFile(url: root.appending(path: "session.json")).load() == store.session,
+          "pre-termination checkpoint matches the last completed session save")
+        try AbruptProbeCheckpoint.record(
+          root: root, session: store.session, checks: checks,
+          chromiumVersion: runtime.chromiumVersion)
+        // Keep the real engine loop alive. The parent must observe readiness and SIGKILL this owned process group.
+        return
+      }
       // Allow Chromium's normal persistent-cookie transaction to commit before graceful shutdown.
       try await Task.sleep(for: .seconds(2))
       finish(error: nil)
@@ -323,6 +390,7 @@ final class EngineProbe {
     let report: [String: Any] = [
       "phase": phase, "passed": passed, "chromiumVersion": runtime.chromiumVersion,
       "bitwardenStoreProbe": includeBitwarden,
+      "abruptRecoveryProbe": expectedAfterTermination != nil,
       "localFixturesPassed": localFixturesPassed,
       "checks": checks, "error": error?.localizedDescription as Any? ?? NSNull(),
       "scope":

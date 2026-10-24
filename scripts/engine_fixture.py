@@ -4,6 +4,7 @@ import http.server
 from http.cookies import SimpleCookie
 import argparse
 import json
+import hashlib
 import os
 from pathlib import Path
 import signal
@@ -13,6 +14,146 @@ import tempfile
 import threading
 import time
 from urllib.parse import urlparse
+
+
+def validate_abrupt_checkpoint(root, ready, pid):
+    """Bind the fault checkpoint to this parent's child and its marked temporary files."""
+    canonical = root.resolve()
+    if (canonical.parent != Path(tempfile.gettempdir()).resolve()
+            or not canonical.name.startswith('arcusis-engine-probe-')
+            or (canonical / '.arcusis-probe').read_text() != 'arcusis-engine-probe-v1\n'):
+        raise RuntimeError('Abrupt termination requires a marked disposable probe root')
+    if (not isinstance(ready, dict) or type(ready.get('schema')) is not int or ready['schema'] != 1
+            or ready.get('ready') is not True or ready.get('localFixturesPassed') is not True
+            or ready.get('phase') != 'initial' or type(ready.get('pid')) is not int
+            or ready['pid'] != pid or pid <= 1
+            or ready.get('expectedSnapshot') != 'pre-abrupt-session.json'
+            or not isinstance(ready.get('checks'), list) or not ready['checks']
+            or not all(isinstance(check, str) and check for check in ready['checks'])
+            or not isinstance(ready.get('chromiumVersion'), str) or not ready['chromiumVersion']):
+        raise RuntimeError('Invalid or foreign abrupt-termination checkpoint')
+    files = [canonical / 'session.json', canonical / 'pre-abrupt-session.json']
+    if any(path.is_symlink() or path.resolve(strict=True).parent != canonical for path in files):
+        raise RuntimeError('Abrupt checkpoint files must belong to the disposable root')
+    saved, expected = (path.read_bytes() for path in files)
+    if saved != expected:
+        raise RuntimeError('Session changed after the abrupt checkpoint')
+    # Native startup performs full BrowserSession validation; reject non-object snapshots here too.
+    if not isinstance(json.loads(expected), dict):
+        raise RuntimeError('Invalid abrupt session snapshot')
+    return saved
+
+
+def process_group_exists(pgid):
+    # macOS can reject killpg(..., 0) after SIGKILL. Observe groups without sending a signal.
+    result = subprocess.run(['ps', '-axo', 'pgid='], capture_output=True, text=True, check=True, timeout=5)
+    groups = {int(value) for value in result.stdout.split()}
+    if os.getpgrp() not in groups:
+        raise RuntimeError('Process inventory does not include the observer')
+    return pgid in groups
+
+
+def terminate_at_checkpoint(process, root, timeout, settle_seconds=0):
+    """SIGKILL only the new process group created for this disposable native probe."""
+    checkpoint = root / 'ready-for-abrupt-termination.json'
+    deadline = time.monotonic() + timeout
+    while process.poll() is None:
+        if checkpoint.exists():
+            ready = json.loads(checkpoint.read_text())
+            before = validate_abrupt_checkpoint(root, ready, process.pid)
+            if os.getpgid(process.pid) != process.pid:
+                raise RuntimeError('Probe does not own a separate process group')
+            if not process_group_exists(process.pid):
+                raise RuntimeError('Disposable process group is not observable before termination')
+            if settle_seconds:
+                print(f'CONTROL ONLY: idle {settle_seconds}s before SIGKILL; strict recovery acceptance is not evaluated', flush=True)
+                time.sleep(settle_seconds)
+                if process.poll() is not None or os.getpgid(process.pid) != process.pid:
+                    raise RuntimeError('Probe ended or ownership changed during settled control')
+                if validate_abrupt_checkpoint(root, ready, process.pid) != before:
+                    raise RuntimeError('Session changed during settled control')
+            print('initial: checkpoint ready; sending SIGKILL to disposable probe group', flush=True)
+            os.killpg(process.pid, signal.SIGKILL)
+            code = process.wait(timeout=10)
+            if code != -signal.SIGKILL:
+                raise RuntimeError(f'Unexpected abrupt termination exit: {code}')
+            group_deadline = time.monotonic() + 10
+            while process_group_exists(process.pid):
+                if time.monotonic() >= group_deadline:
+                    raise RuntimeError('Disposable probe group did not finish terminating')
+                time.sleep(0.05)
+            after = (root / 'session.json').read_bytes()
+            if before != after:
+                raise RuntimeError('Saved session changed during abrupt termination')
+            receipt = {
+                'passed': True, 'pid': process.pid, 'signal': 'SIGKILL', 'exitCode': code,
+                'processGroupAbsentAfterKill': True,
+                'controlOnly': settle_seconds != 0, 'idleBeforeKillSeconds': settle_seconds,
+                'sessionSHA256Before': hashlib.sha256(before).hexdigest(),
+                'sessionSHA256After': hashlib.sha256(after).hexdigest(),
+                'chromiumVersion': ready['chromiumVersion'], 'checks': ready['checks'],
+                'scope': ('Settled diagnostic control. The idle interval may allow pending engine writes to commit; this does not establish strict abrupt-restart acceptance.'
+                          if settle_seconds else 'Fault delivery after completed fixture saves. Recovery is evaluated separately by restart.json. No graceful quit or final cookie-drain delay occurred.'),
+            }
+            (root / 'abrupt-termination.json').write_text(json.dumps(receipt, indent=2, sort_keys=True) + '\n')
+            print(f'initial: {len(ready["checks"])} checks before SIGKILL; saved session bytes intact', flush=True)
+            return
+        if time.monotonic() >= deadline:
+            raise RuntimeError('Timed out waiting for abrupt-termination checkpoint')
+        time.sleep(0.05)
+    raise RuntimeError(f'Probe exited before abrupt-termination checkpoint ({process.returncode})')
+
+
+def signal_probe(process, requested_signal):
+    try:
+        if os.getpgid(process.pid) == process.pid:
+            os.killpg(process.pid, requested_signal)
+        else:
+            # If ownership changed, cleanup may signal the known child only.
+            process.send_signal(requested_signal)
+    except ProcessLookupError:
+        pass
+
+
+def record_abrupt_summary(root, control_only):
+    """Derive acceptance without modifying either raw child report or fault receipt."""
+    receipt = json.loads((root / 'abrupt-termination.json').read_text())
+    restart = json.loads((root / 'restart.json').read_text())
+    if (receipt.get('passed') is not True or receipt.get('exitCode') != -signal.SIGKILL
+            or receipt.get('processGroupAbsentAfterKill') is not True
+            or receipt.get('controlOnly', False) is not control_only
+            or not isinstance(receipt.get('sessionSHA256Before'), str)
+            or len(receipt['sessionSHA256Before']) != 64
+            or receipt['sessionSHA256Before'] != receipt.get('sessionSHA256After')):
+        raise RuntimeError('Abrupt fault receipt does not match the requested test mode')
+    verified_recovery = (restart.get('phase') == 'restart'
+                         and restart.get('abruptRecoveryProbe') is True
+                         and restart.get('bitwardenStoreProbe') is False
+                         and restart.get('localFixturesPassed') is True)
+    if restart.get('passed') is True and not verified_recovery:
+        raise RuntimeError('Successful restart report lacks abrupt-recovery context')
+    summary = {
+        'schema': 1, 'controlOnly': control_only, 'faultInjected': True,
+        'restartPassed': restart.get('passed') is True,
+        'recoveryModeVerified': verified_recovery,
+        'strictAcceptancePassed': not control_only and verified_recovery and restart.get('passed') is True,
+        'error': restart.get('error'),
+        'sourceReports': ['abrupt-termination.json', 'restart.json'],
+        'scope': 'Derived acceptance summary. Raw reports remain unchanged. A settled control never passes strict acceptance.',
+    }
+    (root / 'abrupt-recovery-summary.json').write_text(json.dumps(summary, indent=2, sort_keys=True) + '\n')
+    return summary
+
+
+def stop_probe(process):
+    if process.poll() is not None:
+        return
+    signal_probe(process, signal.SIGTERM)
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        signal_probe(process, signal.SIGKILL)
+        process.wait(timeout=10)
 
 
 class Fixture(http.server.BaseHTTPRequestHandler):
@@ -73,8 +214,12 @@ class Fixture(http.server.BaseHTTPRequestHandler):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--bitwarden", action="store_true", help="Install Bitwarden from the real Chrome Web Store in a disposable profile")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--bitwarden", action="store_true", help="Install Bitwarden from the real Chrome Web Store in a disposable profile")
+    mode.add_argument("--abrupt-restart", action="store_true", help="SIGKILL the disposable probe after its fixture checkpoint, then verify recovery")
+    mode.add_argument("--abrupt-control", action="store_true", help="Diagnostic only: idle 35s before SIGKILL; does not establish strict crash-recovery acceptance")
     options = parser.parse_args()
+    abrupt = options.abrupt_restart or options.abrupt_control
     root = Path(tempfile.mkdtemp(prefix="arcusis-engine-probe-"))
     (root / ".arcusis-probe").write_text("arcusis-engine-probe-v1\n")
     shutil.copytree("Tests/Fixtures/ProfileExtension", root / "Extension")
@@ -93,21 +238,24 @@ def main():
                          "--probe-phase", phase, "--probe-output", str(output)]
             if options.bitwarden:
                 arguments.append("--bitwarden")
+            if abrupt:
+                arguments.append('--probe-await-abrupt-termination' if phase == 'initial' else '--probe-expect-abrupt-recovery')
             with (root / f"{phase}.log").open("w") as log:
                 process = subprocess.Popen(arguments, stdout=log, stderr=log, start_new_session=True, env=probe_env)
                 try:
+                    if abrupt and phase == 'initial':
+                        terminate_at_checkpoint(process, root, timeout=90, settle_seconds=35 if options.abrupt_control else 0)
+                        continue
                     code = process.wait(timeout=170 if options.bitwarden else 90)
                 except subprocess.TimeoutExpired:
-                    os.killpg(process.pid, signal.SIGTERM)
-                    try:
-                        process.wait(timeout=10)
-                    except subprocess.TimeoutExpired:
-                        os.killpg(process.pid, signal.SIGKILL)
-                        process.wait()
                     raise RuntimeError(f"{phase} timed out; see {root}/{phase}.log")
+                finally:
+                    stop_probe(process)
             if not output.exists():
                 raise RuntimeError(f"{phase} failed ({code}); see {root}/{phase}.log")
             report = json.loads(output.read_text())
+            if abrupt and phase == 'restart':
+                record_abrupt_summary(root, control_only=options.abrupt_control)
             if code != 0 or not report["passed"]:
                 failure = f"{phase}: {report.get('error') or f'process exit {code}'}"
                 failures.append(failure)

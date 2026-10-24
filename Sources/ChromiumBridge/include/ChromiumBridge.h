@@ -8,6 +8,7 @@ FOUNDATION_EXPORT BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifier
 /// All methods and callbacks run on the main thread. The engine owns the AppKit run loop.
 @interface ARCChromiumRuntime : NSObject
 @property(copy, nullable) void (^onReady)(void);
+@property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onWindowClosed)(NSString *windowID, BOOL quitting);
 @property(copy, nullable) void (^onNotice)(NSString *message);
 @property(copy, nullable) void (^onInstallRequest)(NSDictionary<NSString *, id> *request);
 @property(copy, nullable) void (^onExtensionPopup)(NSDictionary<NSString *, id> *popup);
@@ -36,6 +37,20 @@ FOUNDATION_EXPORT BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifier
 @property(readonly, nullable) NSWindow *window;
 @property(readonly, nullable) NSView *hostView;
 @property(readonly) NSString *chromiumVersion;
+@property(readonly) NSString *primaryWindowID;
+@property(readonly, getter=isQuitting) BOOL quitting;
+/// Windowless compatibility methods target the primary window. Live tabs cannot be implicitly reassigned.
+- (BOOL)createWindowID:(NSString *)windowID error:(NSError **)error;
+- (BOOL)closeWindowID:(NSString *)windowID;
+- (nullable NSWindow *)windowForID:(NSString *)windowID;
+- (nullable NSView *)hostViewForWindowID:(NSString *)windowID;
+- (nullable NSString *)windowIDForTabID:(NSString *)tabID;
+- (int)chromeWindowIDForProfileID:(NSString *)profileID windowID:(NSString *)windowID;
+- (void)clearActiveTabInWindowID:(NSString *)windowID;
+- (void)activateProfileID:(NSString *)profileID windowID:(NSString *)windowID;
+- (BOOL)openTabID:(NSString *)tabID profileID:(NSString *)profileID windowID:(NSString *)windowID url:(NSString *)url error:(NSError **)error;
+- (BOOL)placeTabIDs:(NSArray<NSString *> *)tabIDs pinnedIDs:(NSArray<NSString *> *)pinnedIDs profileID:(NSString *)profileID windowID:(NSString *)windowID;
+- (void)closeExtensionPopupForWindowID:(NSString *)windowID;
 
 - (nullable instancetype)initWithFrameworkURL:(NSURL *)url error:(NSError **)error;
 - (int)runWithDataDirectory:(NSURL *)directory testing:(BOOL)testing;

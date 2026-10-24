@@ -346,6 +346,10 @@ final class EngineProbe {
           runtime: runtime, engine: browserEngine, store: store, root: root, fixture: fixture,
           phase: phase
         ).run()
+        checks += try await NativeWindowProbe(
+          runtime: runtime, engine: browserEngine, store: store, root: root, fixture: fixture,
+          phase: phase
+        ).run()
         localFixturesPassed = true
         if includeBitwarden {
           checks += try await BitwardenProbe(

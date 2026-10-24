@@ -88,6 +88,8 @@ The engine test starts an authored HTTP fixture on an ephemeral loopback port an
 
 The MV3 fixture also checks callback-based storage writes/reads, area-local and global change notifications for popup and worker writes, and serialized payload preservation. Per-profile JSON reports include observed event/callback order; the test requires delivery without imposing a relative ordering guarantee.
 
+An independent reactive-cache diagnostic seeds a serialized false value, observes the area-local change event, starts an asynchronous refresh read, awaits the write callback, and records the cached value a route guard would see immediately. It then requires eventual refresh to true. The reports preserve event/read/callback order and accept either immediate guard value; a stale cache is not classified as a broken storage API. The current authored runs observe stale immediate reads in all three profile contexts before and after restart. This illustrates a hazard in the matching [Bitwarden state implementation](https://github.com/bitwarden/clients/blob/browser-v2026.10.0/libs/state-internal/src/state-base.ts); it does not prove that implementation caused the real onboarding failure.
+
 Media checks use Chromium fake camera/microphone devices and its simulated system-permission backend, restricted to marked disposable probe profiles. They verify separate-profile consent, temporary grants, denial, cancellation on context change, call continuity across space switches, and capture indicators. They never request physical hardware or change real macOS permissions. These checks do not establish Google Meet compatibility or real camera/microphone, screen-sharing, or macOS privacy-prompt behavior.
 
 Find checks search authored fixture text through the real engine, including case-insensitive matching, forward/backward wraparound, rapid query replacement, profile/tab ownership, clearing, and same-URL reload cleanup. The runner also captures native find layouts at normal and minimum window sizes, and captures engine highlights separately. These checks do not prove Find behavior in every web app, PDF, canvas editor, or live native keyboard interaction.
@@ -136,6 +138,14 @@ bash scripts/test-engine.sh --bitwarden
 ```
 
 This test downloads and installs the signed store extension through the real native consent handler, then follows onboarding toward its email login form and checks installation recovery after restart. It skips the optional browser-password-manager settings change. It never enters credentials or alters an existing Bitwarden vault. Failed stages return a nonzero exit status and write diagnostics; an initial failure is preserved even when the restart phase passes. Route/input transitions are recorded. Only after readiness has failed does a separate diagnostic try a second ordinary Log in click; its result cannot change the failed gate. Diagnostic API reads and extension-error inspection follow that second click. The fresh-install onboarding-to-login failure currently keeps this gate red; successful component-fixture checks do not override it. Bitwarden unlock, real autofill/save/update, passkeys, native messaging, Touch ID, side panels, and company authentication remain unverified.
+
+A separate diagnostic control waits for a two-second intro-screen age before its first Log in input. The clean mode retains its existing 500ms stable-screen age. The control changes test input timing only; browser behavior, vendor code and extension storage are not patched or prewarmed.
+
+```sh
+bash scripts/test-engine.sh --bitwarden-onboarding-control
+```
+
+Both Bitwarden modes emit phase/mode-bound vendor reports and `bitwarden-onboarding-summary.json`. A passing control always records `controlOnly: true` and `firstClickAcceptancePassed: false`. Missing or malformed phase/mode/check evidence cannot produce a clean acceptance result. The current two-second control reaches the fresh email login form after its first Log in click; clean first-click readiness remains a separate gate. This establishes timing sensitivity, not a vendor-only or engine-only root cause. It does not replace native input/stock-browser comparison or vault testing.
 
 Offscreen SwiftUI/AppKit images verify native layout. Chromium's remote rendering surface may be absent from an AppKit bitmap; the test captures the authored page separately through the engine's in-process API. These images do not verify live keyboard focus, window shortcuts, Google Workspace, Bitwarden, Cloudflare Access, or a signed company installation.
 

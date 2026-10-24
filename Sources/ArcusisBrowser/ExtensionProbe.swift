@@ -114,6 +114,16 @@ final class ExtensionProbe {
           change?["newValue"] as? NSDictionary == expected && change?["oldValue"] == nil,
           "profile \(index) delivers \(event) storage notification with the original payload")
       }
+      let cache = try await command(popup.id, message: ["action": "storage-cache-read"])
+      try JSONSerialization.data(withJSONObject: cache, options: [.prettyPrinted, .sortedKeys])
+        .write(
+          to: root.appending(path: "\(phase)-extension-cache-read-\(index).json"), options: .atomic)
+      try expect(
+        cache["error"] == nil && cache["initial"] as? Bool == false
+          && cache["refreshed"] as? Bool == true
+          && cache["subsequentGuard"] as? Bool == true && cache["immediateGuard"] is Bool,
+        "profile \(index) delivers the authored reactive-cache refresh without requiring event order"
+      )
       let offscreen = try await command(popup.id, message: ["action": "offscreen"])
       try expect(
         (offscreen["offscreen"] as? [String: Any])?["document"] as? Bool == true,

@@ -13,6 +13,7 @@ final class EngineProbe {
   private let fixture: URL
   private let phase: String
   private let includeBitwarden: Bool
+  private let bitwardenOnboardingControl: Bool
   private let awaitAbruptTermination: Bool
   private let expectedAfterTermination: BrowserSession?
   private let output: URL
@@ -35,12 +36,14 @@ final class EngineProbe {
 
   private init(
     root: URL, fixture: URL, phase: String, output: URL, includeBitwarden: Bool,
+    bitwardenOnboardingControl: Bool,
     awaitAbruptTermination: Bool, expectAbruptRecovery: Bool
   ) throws {
     self.root = root
     self.fixture = fixture
     self.phase = phase
     self.includeBitwarden = includeBitwarden
+    self.bitwardenOnboardingControl = bitwardenOnboardingControl
     self.awaitAbruptTermination = awaitAbruptTermination
     expectedAfterTermination =
       expectAbruptRecovery ? try AbruptProbeCheckpoint.expectedSession(root: root) : nil
@@ -104,15 +107,18 @@ final class EngineProbe {
         throw ProbeFailure("Probe requires a marked temporary directory and loopback fixture.")
       }
       let includeBitwarden = arguments.contains("--bitwarden")
+      let bitwardenOnboardingControl = arguments.contains("--bitwarden-onboarding-control")
       let awaitAbruptTermination = arguments.contains("--probe-await-abrupt-termination")
       let expectAbruptRecovery = arguments.contains("--probe-expect-abrupt-recovery")
-      guard !(awaitAbruptTermination && expectAbruptRecovery),
+      guard !bitwardenOnboardingControl || includeBitwarden,
+        !(awaitAbruptTermination && expectAbruptRecovery),
         !awaitAbruptTermination || (phase == "initial" && !includeBitwarden),
         !expectAbruptRecovery || (phase == "restart" && !includeBitwarden)
       else { throw ProbeFailure("Invalid abrupt-recovery probe flags.") }
       let probe = try EngineProbe(
         root: root, fixture: fixture, phase: phase, output: output,
-        includeBitwarden: includeBitwarden, awaitAbruptTermination: awaitAbruptTermination,
+        includeBitwarden: includeBitwarden, bitwardenOnboardingControl: bitwardenOnboardingControl,
+        awaitAbruptTermination: awaitAbruptTermination,
         expectAbruptRecovery: expectAbruptRecovery)
       probe.runtime.onReady = { [weak probe] in
         guard let probe else { return }
@@ -377,7 +383,8 @@ final class EngineProbe {
         if includeBitwarden {
           checks += try await BitwardenProbe(
             runtime: runtime, engine: browserEngine, store: store,
-            root: root, fixture: fixture, phase: phase
+            root: root, fixture: fixture, phase: phase,
+            onboardingControl: bitwardenOnboardingControl
           ).run()
         }
       }
@@ -441,6 +448,7 @@ final class EngineProbe {
     let report: [String: Any] = [
       "phase": phase, "passed": passed, "chromiumVersion": runtime.chromiumVersion,
       "bitwardenStoreProbe": includeBitwarden,
+      "bitwardenOnboardingControl": bitwardenOnboardingControl,
       "abruptRecoveryProbe": expectedAfterTermination != nil,
       "localFixturesPassed": localFixturesPassed,
       "checks": checks, "error": resultError?.localizedDescription as Any? ?? NSNull(),

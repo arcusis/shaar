@@ -18,6 +18,41 @@ import uuid
 from urllib.parse import urlparse
 
 
+def record_bitwarden_summary(root, control_only):
+    if type(control_only) is not bool:
+        raise RuntimeError('Bitwarden control mode must be explicit')
+    observations = []
+    for phase in ('initial', 'restart'):
+        host = json.loads((root / f'{phase}.json').read_text())
+        vendor = json.loads((root / f'{phase}-bitwarden.json').read_text())
+        if (host.get('phase') != phase or vendor.get('phase') != phase
+                or host.get('bitwardenStoreProbe') is not True
+                or host.get('bitwardenOnboardingControl') is not control_only
+                or vendor.get('controlOnly') is not control_only
+                or type(host.get('passed')) is not bool
+                or type(host.get('localFixturesPassed')) is not bool
+                or type(vendor.get('passed')) is not bool
+                or type(vendor.get('firstClickAcceptancePassed')) is not bool):
+            raise RuntimeError('Bitwarden summary has missing or mismatched phase/mode evidence')
+        for report in (host, vendor):
+            checks = report.get('checks')
+            if (not isinstance(checks, list) or not checks
+                    or not all(isinstance(check, str) and check for check in checks)
+                    or report['passed'] and report.get('error') is not None):
+                raise RuntimeError('Bitwarden summary has malformed check/error evidence')
+        expected = vendor['passed'] and not control_only
+        if vendor['firstClickAcceptancePassed'] is not expected:
+            raise RuntimeError('Bitwarden control or failed phase claimed clean first-click acceptance')
+        observations.append(dict(phase=phase, passed=host['passed'] and vendor['passed'],
+                                 localFixturesPassed=host['localFixturesPassed']))
+    summary = dict(schema=1, controlOnly=control_only, phases=observations,
+                   firstClickAcceptancePassed=(not control_only and all(
+                       p['passed'] and p['localFixturesPassed'] for p in observations)),
+                   scope='Signed-out onboarding only. No vault or company credentials tested.')
+    (root / 'bitwarden-onboarding-summary.json').write_text(json.dumps(summary, indent=2))
+    return summary
+
+
 def validate_host_lock_checkpoint(root, ready, pid, phase):
     canonical = root.resolve()
     if (canonical.parent != Path(tempfile.gettempdir()).resolve()
@@ -279,9 +314,14 @@ def main():
     parser = argparse.ArgumentParser()
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--bitwarden", action="store_true", help="Install Bitwarden from the real Chrome Web Store in a disposable profile")
+    mode.add_argument("--bitwarden-onboarding-control", action="store_true",
+                      help="Diagnostic only: wait two seconds on intro before Log in; cannot establish clean first-click acceptance")
     mode.add_argument("--abrupt-restart", action="store_true", help="SIGKILL the disposable probe after its fixture checkpoint, then verify recovery")
     mode.add_argument("--abrupt-control", action="store_true", help="Diagnostic only: idle 35s before SIGKILL; does not establish strict crash-recovery acceptance")
     options = parser.parse_args()
+    include_bitwarden = options.bitwarden or options.bitwarden_onboarding_control
+    if options.bitwarden_onboarding_control:
+        print('CONTROL ONLY: two-second intro-screen age; clean first-click acceptance is not evaluated', flush=True)
     abrupt = options.abrupt_restart or options.abrupt_control
     root = Path(tempfile.mkdtemp(prefix="arcusis-engine-probe-"))
     (root / ".arcusis-probe").write_text("arcusis-engine-probe-v1\n")
@@ -299,8 +339,10 @@ def main():
             arguments = [str(executable), "--engine-probe", "--probe-data-dir", str(root),
                          "--probe-url", f"http://127.0.0.1:{server.server_port}/account",
                          "--probe-phase", phase, "--probe-output", str(output)]
-            if options.bitwarden:
+            if include_bitwarden:
                 arguments.append("--bitwarden")
+            if options.bitwarden_onboarding_control:
+                arguments.append('--bitwarden-onboarding-control')
             if abrupt:
                 arguments.append('--probe-await-abrupt-termination' if phase == 'initial' else '--probe-expect-abrupt-recovery')
             with (root / f"{phase}.log").open("w") as log:
@@ -309,7 +351,7 @@ def main():
                     if abrupt and phase == 'initial':
                         terminate_at_checkpoint(process, root, timeout=90, settle_seconds=35 if options.abrupt_control else 0)
                         continue
-                    code = wait_for_probe(process, root, phase, timeout=170 if options.bitwarden else 90)
+                    code = wait_for_probe(process, root, phase, timeout=170 if include_bitwarden else 90)
                 except subprocess.TimeoutExpired:
                     raise RuntimeError(f"{phase} timed out; see {root}/{phase}.log")
                 finally:
@@ -317,13 +359,15 @@ def main():
             if not output.exists():
                 raise RuntimeError(f"{phase} failed ({code}); see {root}/{phase}.log")
             report = json.loads(output.read_text())
+            if include_bitwarden and phase == 'restart':
+                record_bitwarden_summary(root, control_only=options.bitwarden_onboarding_control)
             if abrupt and phase == 'restart':
                 record_abrupt_summary(root, control_only=options.abrupt_control)
             if code != 0 or not report["passed"]:
                 failure = f"{phase}: {report.get('error') or f'process exit {code}'}"
                 failures.append(failure)
                 print(f"FAILED {failure}", flush=True)
-                if options.bitwarden and report.get("localFixturesPassed") and (root / f"{phase}-bitwarden.json").exists():
+                if include_bitwarden and report.get("localFixturesPassed") and (root / f"{phase}-bitwarden.json").exists():
                     # Preserve cold-install failure while also collecting restart evidence.
                     continue
                 raise RuntimeError(failure)

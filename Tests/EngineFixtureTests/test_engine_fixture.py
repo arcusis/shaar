@@ -14,6 +14,64 @@ fixture = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fixture)
 
 
+class BitwardenSummaryTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory(prefix='arcusis-engine-probe-')
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+
+    def reports(self, control=False, passed=True):
+        for phase in ('initial', 'restart'):
+            host = dict(phase=phase, passed=passed, bitwardenStoreProbe=True,
+                        bitwardenOnboardingControl=control, localFixturesPassed=True,
+                        checks=['authored fixture observed'])
+            vendor = dict(phase=phase, passed=passed, controlOnly=control,
+                          firstClickAcceptancePassed=passed and not control,
+                          checks=['signed-out vendor result observed'])
+            (self.root / f'{phase}.json').write_text(json.dumps(host))
+            (self.root / f'{phase}-bitwarden.json').write_text(json.dumps(vendor))
+
+    def test_passing_control_can_never_claim_clean_acceptance(self):
+        self.reports(control=True)
+        summary = fixture.record_bitwarden_summary(self.root, control_only=True)
+        self.assertTrue(summary['controlOnly'])
+        self.assertFalse(summary['firstClickAcceptancePassed'])
+        self.assertTrue(all(p['passed'] for p in summary['phases']))
+
+    def test_clean_success_requires_both_phases_and_local_fixtures(self):
+        self.reports()
+        self.assertTrue(fixture.record_bitwarden_summary(self.root, False)['firstClickAcceptancePassed'])
+        path = self.root / 'restart.json'
+        report = json.loads(path.read_text())
+        report['localFixturesPassed'] = False
+        path.write_text(json.dumps(report))
+        self.assertFalse(fixture.record_bitwarden_summary(self.root, False)['firstClickAcceptancePassed'])
+
+    def test_failed_clean_run_stays_failed(self):
+        self.reports(passed=False)
+        self.assertFalse(fixture.record_bitwarden_summary(self.root, False)['firstClickAcceptancePassed'])
+
+    def test_wrong_or_missing_mode_phase_or_vendor_claim_is_rejected(self):
+        for change in (dict(controlOnly=True), dict(controlOnly=0), dict(phase='restart'),
+                       dict(firstClickAcceptancePassed=False), dict(passed=1), dict(checks=[]),
+                       dict(error='failure')):
+            self.reports()
+            path = self.root / 'initial-bitwarden.json'
+            path.write_text(json.dumps(json.loads(path.read_text()) | change))
+            with self.subTest(change=change), self.assertRaises(RuntimeError):
+                fixture.record_bitwarden_summary(self.root, False)
+        self.reports(control=True)
+        with self.assertRaises(RuntimeError):
+            fixture.record_bitwarden_summary(self.root, False)
+
+    def test_missing_report_cannot_produce_acceptance(self):
+        self.reports()
+        (self.root / 'restart-bitwarden.json').unlink()
+        with self.assertRaises(FileNotFoundError):
+            fixture.record_bitwarden_summary(self.root, False)
+        self.assertFalse((self.root / 'bitwarden-onboarding-summary.json').exists())
+
+
 class HostLockCheckpointTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory(prefix='arcusis-engine-probe-')

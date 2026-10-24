@@ -13,6 +13,7 @@ final class BitwardenProbe {
   private let root: URL
   private let fixture: URL
   private let phase: String
+  private let onboardingControl: Bool
   private let extensionID = "nngceckbapebfimnlniiiahkandclblb"
   private var checks: [String] = []
   private var popupWindow: NSWindow?
@@ -20,7 +21,7 @@ final class BitwardenProbe {
 
   init(
     runtime: ARCChromiumRuntime, engine: BrowserEngine, store: BrowserStore,
-    root: URL, fixture: URL, phase: String
+    root: URL, fixture: URL, phase: String, onboardingControl: Bool = false
   ) {
     self.runtime = runtime
     self.engine = engine
@@ -28,6 +29,7 @@ final class BitwardenProbe {
     self.root = root
     self.fixture = fixture
     self.phase = phase
+    self.onboardingControl = onboardingControl
   }
 
   func run() async throws -> [String] {
@@ -35,6 +37,8 @@ final class BitwardenProbe {
       try? write(
         [
           "passed": false, "error": error.localizedDescription, "checks": checks,
+          "phase": phase,
+          "controlOnly": onboardingControl, "firstClickAcceptancePassed": false,
           "scope": "Disposable real-store test. No vault credentials entered.",
         ],
         name: "\(phase)-bitwarden.json")
@@ -210,7 +214,10 @@ final class BitwardenProbe {
           routeChangedAt = clock.now
           transitions.append(["event": "route", "url": address, "text": state["text"] ?? ""])
         }
-        if clock.now - routeChangedAt < .milliseconds(500) {
+        let requiredAge: Duration =
+          onboardingControl && address.contains("#/intro-carousel")
+          ? .seconds(2) : .milliseconds(500)
+        if clock.now - routeChangedAt < requiredAge {
           try await Task.sleep(for: .milliseconds(100))
           continue
         }
@@ -228,7 +235,14 @@ final class BitwardenProbe {
           && !(state["inputs"] as? [String] ?? []).contains("email")
         {
           openedLogin = await clickPopupButton(popup.id, title: "Log in")
-          transitions.append(["event": "login-input", "dispatched": openedLogin, "url": address])
+          let age = (clock.now - routeChangedAt).components
+          transitions.append([
+            "event": "login-input", "dispatched": openedLogin, "url": address,
+            "controlOnly": onboardingControl,
+            "requiredScreenAgeMilliseconds": requiredAge == .seconds(2) ? 2000 : 500,
+            "observedScreenAgeMilliseconds": age.seconds * 1000 + age.attoseconds
+              / 1_000_000_000_000_000,
+          ])
           if openedLogin {
             try expect(true, "clicks Log in in the current Bitwarden popup instance")
           }
@@ -245,6 +259,7 @@ final class BitwardenProbe {
       try await Task.sleep(for: .milliseconds(250))
     }
     popupState["probeInteractions"] = [
+      "controlOnly": onboardingControl,
       "popupID": popup.id, "openedLogin": openedLogin,
       "skippedSetup": skippedSetup, "welcomeNavigations": welcomeNavigations,
       "transitions": transitions,
@@ -296,6 +311,8 @@ final class BitwardenProbe {
     try write(
       [
         "passed": true, "installed": installed, "checks": checks,
+        "phase": phase,
+        "controlOnly": onboardingControl, "firstClickAcceptancePassed": !onboardingControl,
         "scope":
           "Store install and signed-out popup only. No vault login, unlock, autofill, Touch ID, passkeys, or native messaging tested.",
       ],

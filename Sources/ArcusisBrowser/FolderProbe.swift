@@ -217,7 +217,9 @@ final class FolderProbe {
     try await capture(
       BrowserWindow(store: store), size: NSSize(width: 1200, height: 780),
       name: "\(phase)-folders-collapsed.png")
-    try expect(store.session.version == 2, "folder session uses schema v2")
+    try expect(
+      store.session.version == BrowserSession.currentVersion,
+      "folder session uses the current schema")
     try expect(
       try SessionFile(url: root.appending(path: "session.json")).load() == store.session,
       "folder hierarchy, membership, selection, and collapse state save atomically")

@@ -72,34 +72,45 @@ public enum SessionError: Error, LocalizedError, Equatable {
 }
 
 public struct BrowserSession: Codable, Equatable, Sendable {
+  public static let currentVersion = 3
   public let version: Int
   public private(set) var profiles: [BrowserProfile]
   public internal(set) var spaces: [BrowserSpace]
   public internal(set) var selectedSpaceID: UUID
+  public internal(set) var closedTabs: [ClosedBrowserTab]
 
   public init(profiles: [BrowserProfile], spaces: [BrowserSpace], selectedSpaceID: UUID) throws {
-    self.version = 2
+    self.version = Self.currentVersion
     self.profiles = profiles
     self.spaces = spaces
     self.selectedSpaceID = selectedSpaceID
+    closedTabs = []
     try validate()
   }
 
   private enum CodingKeys: String, CodingKey {
-    case version, profiles, spaces, selectedSpaceID
+    case version, profiles, spaces, selectedSpaceID, closedTabs
   }
 
   public init(from decoder: any Decoder) throws {
     let values = try decoder.container(keyedBy: CodingKeys.self)
     let sourceVersion = try values.decode(Int.self, forKey: .version)
-    guard [1, 2].contains(sourceVersion) else { throw SessionError.unsupportedVersion }
-    version = 2
+    guard [1, 2, 3].contains(sourceVersion) else { throw SessionError.unsupportedVersion }
+    version = Self.currentVersion
     profiles = try values.decode([BrowserProfile].self, forKey: .profiles)
     spaces =
       sourceVersion == 1
       ? try values.decode([LegacySpace].self, forKey: .spaces).map(\.value)
       : try values.decode([BrowserSpace].self, forKey: .spaces)
     selectedSpaceID = try values.decode(UUID.self, forKey: .selectedSpaceID)
+    if sourceVersion == Self.currentVersion {
+      closedTabs = try values.decode([ClosedBrowserTab].self, forKey: .closedTabs)
+    } else {
+      guard
+        try values.decodeIfPresent([ClosedBrowserTab].self, forKey: .closedTabs)?.isEmpty != false
+      else { throw SessionError.invalidState }
+      closedTabs = []
+    }
     try validate()
   }
 
@@ -118,16 +129,19 @@ public struct BrowserSession: Codable, Equatable, Sendable {
   }
 
   public func validate() throws {
-    guard version == 2 else { throw SessionError.unsupportedVersion }
+    guard version == Self.currentVersion else { throw SessionError.unsupportedVersion }
     let profileIDs = Set(profiles.map(\.id))
     let spaceIDs = Set(spaces.map(\.id))
     let tabIDs = spaces.flatMap { $0.tabs.map(\.id) }
     let folderIDs = spaces.flatMap { $0.folders.map(\.id) }
+    let closedIDs = closedTabs.map(\.id)
     guard !profiles.isEmpty, !spaces.isEmpty,
       profileIDs.count == profiles.count,
       spaceIDs.count == spaces.count,
       Set(tabIDs).count == tabIDs.count,
       Set(folderIDs).count == folderIDs.count,
+      Set(closedIDs).count == closedIDs.count,
+      Set(closedIDs).isDisjoint(with: tabIDs),
       spaceIDs.contains(selectedSpaceID),
       profiles.allSatisfy({ !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }),
       spaces.allSatisfy({ space in
@@ -135,6 +149,15 @@ public struct BrowserSession: Codable, Equatable, Sendable {
           && !space.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
           && (space.selectedTabID == nil || space.tabs.contains { $0.id == space.selectedTabID })
           && space.tabs.allSatisfy { Self.isPersistableURL($0.url) }
+      })
+    else { throw SessionError.invalidState }
+    let spacesByID = Dictionary(uniqueKeysWithValues: spaces.map { ($0.id, $0) })
+    let closedCounts = Dictionary(grouping: closedTabs, by: \.spaceID)
+    guard closedCounts.values.allSatisfy({ $0.count <= Self.closedTabLimitPerSpace }),
+      closedTabs.allSatisfy({ entry in
+        spacesByID[entry.spaceID]?.profileID == entry.profileID && entry.index >= 0
+          && Self.isPersistableURL(entry.tab.url)
+          && (entry.tab.folderID == nil || entry.tab.isPinned)
       })
     else { throw SessionError.invalidState }
     for space in spaces {
@@ -272,6 +295,7 @@ public struct BrowserSession: Codable, Equatable, Sendable {
       return false
     }
     spaces.remove(at: index)
+    closedTabs.removeAll { $0.spaceID == id }
     if selectedSpaceID == id {
       selectedSpaceID = spaces[min(index, spaces.count - 1)].id
     }
@@ -303,6 +327,15 @@ public struct BrowserSession: Codable, Equatable, Sendable {
     guard let index = spaces.firstIndex(where: { $0.tabs.contains { $0.id == tabID } }),
       let tabIndex = spaces[index].tabs.firstIndex(where: { $0.id == tabID })
     else { return }
+    closedTabs.append(
+      ClosedBrowserTab(
+        tab: spaces[index].tabs[tabIndex], spaceID: spaces[index].id,
+        profileID: spaces[index].profileID, index: tabIndex))
+    if closedTabs.filter({ $0.spaceID == spaces[index].id }).count > Self.closedTabLimitPerSpace,
+      let oldest = closedTabs.firstIndex(where: { $0.spaceID == spaces[index].id })
+    {
+      closedTabs.remove(at: oldest)
+    }
     spaces[index].tabs.remove(at: tabIndex)
     if spaces[index].selectedTabID == tabID {
       let tabs = spaces[index].tabs
@@ -332,6 +365,7 @@ public struct BrowserSession: Codable, Equatable, Sendable {
     _ tab: BrowserTab, profileID: UUID, openerID: UUID?, foreground: Bool
   ) -> UUID? {
     guard Self.isPersistableURL(tab.url),
+      !closedTabs.contains(where: { $0.id == tab.id }),
       !spaces.contains(where: { $0.tabs.contains { $0.id == tab.id } })
     else { return nil }
     let openerSpace = spaces.firstIndex {

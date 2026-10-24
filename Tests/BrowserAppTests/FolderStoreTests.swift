@@ -59,6 +59,8 @@ struct FolderStoreTests {
     var wire = try #require(
       JSONSerialization.jsonObject(with: JSONEncoder().encode(BrowserSession.fresh()))
         as? [String: Any])
+    wire["version"] = 2
+    wire["closedTabs"] = nil
     var spaces = try #require(wire["spaces"] as? [[String: Any]])
     let id = UUID().uuidString
     spaces[0]["folders"] = [["id": id, "name": "Cycle", "parentID": id, "isCollapsed": false]]

@@ -60,6 +60,7 @@ struct BrowserWindow: View {
       switch sheet {
       case .space(let route): SpaceEditor(store: store, route: route)
       case .folder(let route): FolderEditor(store: store, route: route)
+      case .recentlyClosed(let space): RecentlyClosedPanel(store: store, spaceID: space)
       case .extensionInstall(let request): ExtensionConsent(store: store, request: request)
       case .websiteMedia(let request): WebsiteMediaConsent(store: store, request: request)
       case .downloads(let profile):

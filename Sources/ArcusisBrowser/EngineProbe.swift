@@ -278,6 +278,9 @@ final class EngineProbe {
         checks += try await FolderProbe(
           runtime: runtime, engine: browserEngine, store: store, root: root, phase: phase
         ).run()
+        checks += try await ReopenProbe(
+          runtime: runtime, engine: browserEngine, store: store, root: root, phase: phase
+        ).run()
         localFixturesPassed = true
         if includeBitwarden {
           checks += try await BitwardenProbe(

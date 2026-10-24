@@ -89,6 +89,52 @@ final class BrowserStore {
     engine?.runtime.refreshDownloads(forProfileID: session.selectedSpace.profileID.uuidString)
   }
 
+  var canReopenClosedTab: Bool {
+    mayUseClosedTabs(in: session.selectedSpaceID)
+      && !session.recentlyClosedTabs(in: session.selectedSpaceID).isEmpty
+  }
+
+  func showRecentlyClosed() {
+    guard sheet == nil else { return }
+    dismissCommand()
+    dismissPageFind()
+    engine?.extensionPanel = nil
+    sheet = .recentlyClosed(spaceID: session.selectedSpaceID)
+  }
+
+  private func mayUseClosedTabs(in spaceID: UUID) -> Bool {
+    guard session.selectedSpaceID == spaceID else { return false }
+    if case .recentlyClosed(let owner) = sheet { return owner == spaceID }
+    return sheet == nil
+  }
+
+  @discardableResult
+  func reopenLastClosedTab() -> Bool {
+    guard let entry = session.recentlyClosedTabs(in: session.selectedSpaceID).first else {
+      return false
+    }
+    return reopenClosedTab(entry.id, in: session.selectedSpaceID)
+  }
+
+  @discardableResult
+  func reopenClosedTab(_ id: UUID, in spaceID: UUID) -> Bool {
+    guard mayUseClosedTabs(in: spaceID), session.reopenClosedTab(id, in: spaceID) != nil
+    else { return false }
+    dismissCommand()
+    dismissPageFind()
+    engine?.extensionPanel = nil
+    if case .recentlyClosed = sheet { sheet = nil }
+    save()
+    return true
+  }
+
+  @discardableResult
+  func clearClosedTabs(in spaceID: UUID) -> Bool {
+    guard mayUseClosedTabs(in: spaceID), session.clearClosedTabs(in: spaceID) else { return false }
+    save()
+    return true
+  }
+
   func showPageFind() {
     guard sheet == nil, let tab = session.selectedSpace.selectedTab else { return }
     commandIsOpen = false
@@ -166,6 +212,9 @@ final class BrowserStore {
     case .space(let id): session.selectSpace(id)
     case .folder(let space, let folder): session.selectFolder(folder, in: space)
     case .tab(let space, let tab): session.selectTab(tab, in: space)
+    case .reopen(let space, let tab):
+      reopenClosedTab(tab, in: space)
+      return
     }
     commandIsOpen = false
     save()
@@ -243,7 +292,7 @@ final class BrowserStore {
     switch request {
     case .extensionInstall(let request): onInstallDecision?(request.id, allow)
     case .websiteMedia(let request): onWebsiteMediaDecision?(request.id, allow)
-    case .space, .downloads, .folder: break
+    case .space, .downloads, .folder, .recentlyClosed: break
     }
   }
 
@@ -414,6 +463,7 @@ final class BrowserStore {
   }
 
   private func save() {
+    if case .recentlyClosed(let space) = sheet, space != session.selectedSpaceID { sheet = nil }
     if case .folder(let route) = sheet, !route.matches(session) { sheet = nil }
     if case .downloads(let profile) = sheet, profile != session.selectedSpace.profileID {
       sheet = nil

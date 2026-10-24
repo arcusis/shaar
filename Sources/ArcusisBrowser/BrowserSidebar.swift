@@ -74,6 +74,11 @@ struct BrowserSidebar: View {
               .foregroundStyle(.secondary)
               .padding(10)
           }
+          .contextMenu {
+            Button("Reopen last closed tab") { store.reopenLastClosedTab() }
+              .disabled(!store.canReopenClosedTab)
+            Button("Recently closed…") { store.showRecentlyClosed() }
+          }
           sectionDropTarget("Tabs", pinned: false)
           ForEach(store.session.selectedSpace.tabs.filter { !$0.isPinned }) { tab in tabRow(tab) }
           sectionDropTarget("Move to end", pinned: false, isFooter: true)

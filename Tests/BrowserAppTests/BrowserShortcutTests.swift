@@ -35,3 +35,10 @@ import Testing
   #expect(!ARCReservedBrowserShortcut("j", [.command, .shift, .option]))
   #expect(!ARCReservedBrowserShortcut("l", [.command, .shift]))
 }
+
+@Test func reopenShortcutRequiresExactCommandShiftT() {
+  #expect(ARCReservedBrowserShortcut("T", [.command, .shift]))
+  #expect(!ARCReservedBrowserShortcut("t", [.command, .shift, .option]))
+  #expect(!ARCReservedBrowserShortcut("t", [.command, .control]))
+  #expect(!ARCReservedBrowserShortcut("l", [.command, .shift]))
+}

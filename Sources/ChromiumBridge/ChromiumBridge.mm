@@ -53,7 +53,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     return [@[@"t", @"l", @"w", @"s", @"q", @"r", @"f", @"g"] containsObject:key.lowercaseString];
   }
   if (chord == (NSEventModifierFlagCommand | NSEventModifierFlagShift)) {
-    return [@[@"g", @"j"] containsObject:key.lowercaseString];
+    return [@[@"g", @"j", @"t"] containsObject:key.lowercaseString];
   }
   return chord == (NSEventModifierFlagControl | NSEventModifierFlagOption) &&
     [@[@"[", @"]"] containsObject:key];
@@ -88,6 +88,8 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   NSString *_findTabID;
   NSString *_findRequestID;
   NSString *_findText;
+  NSMutableSet<NSString *> *_pendingHostClosures;
+  BOOL _closingBrowser;
   ARCDownloadService *_downloadService;
 }
 
@@ -110,6 +112,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   _profileWaiters = [NSMutableDictionary dictionary];
   _pendingInstalls = [NSMutableDictionary dictionary];
   _pendingMedia = [NSMutableDictionary dictionary];
+  _pendingHostClosures = [NSMutableSet set];
   _probeExtensions = [NSMutableDictionary dictionary];
   _probeDiagnostics = [NSMutableArray array];
   _downloadService = [[ARCDownloadService alloc] initWithLibrary:_library error:error];
@@ -298,9 +301,23 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   _selectedTabID = nil;
   [self closeExtensionPopup];
 }
-- (void)closeTabID:(NSString *)tabID { [_tabs[tabID] close]; }
+- (void)closeTabID:(NSString *)tabID {
+  ArdiaCoreTab *tab = _tabs[tabID];
+  if (!tab || _closingBrowser) return;
+  if (tab.closed) { [self tabWillClose:tab]; return; }
+  [_pendingHostClosures addObject:tabID];
+  [tab close];
+}
 - (void)focusTabID:(NSString *)tabID { [_tabs[tabID] focus]; }
-- (void)discardTabID:(NSString *)tabID { [_tabs[tabID] closeNow]; }
+- (void)discardTabID:(NSString *)tabID {
+  // The model has already removed this tab or rejected its creation.
+  ArdiaCoreTab *tab = _tabs[tabID];
+  [_pendingHostClosures removeObject:tabID];
+  if ([tabID isEqualToString:_findTabID]) [self stopFindingInTabID:tabID];
+  [_tabs removeObjectForKey:tabID];
+  [_owners removeObjectForKey:tabID];
+  [tab closeNow];
+}
 - (void)activateProfileID:(NSString *)profileID {
   if (_profiles[profileID]) _browserWindow.activeProfile = _profiles[profileID];
 }
@@ -405,7 +422,25 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   [tab evaluate:[NSString stringWithFormat:@"post('result', JSON.stringify(%@));", script]
       userGesture:userGesture completion:reply];
 }
-- (void)quit { [_engine quit]; }
+- (void)quit { _closingBrowser = YES; [_engine quit]; }
+- (void)engineQuitCancelled { _closingBrowser = NO; }
+- (void)engineWillShutDown { _closingBrowser = YES; }
+- (BOOL)windowShouldClose:(ArdiaCoreWindow *)window { _closingBrowser = YES; return YES; }
+- (void)windowDidCancelClose:(ArdiaCoreWindow *)window { _closingBrowser = NO; }
+
+- (void)window:(ArdiaCoreWindow *)window didRemoveTab:(ArdiaCoreTab *)tab {
+  NSString *identity = [self identityForTab:tab];
+  if (window != _browserWindow || !identity || ![_pendingHostClosures containsObject:identity]) return;
+  // The pinned API suppresses tabWillClose for host-initiated closes. Observe
+  // removal, then confirm destruction after the tab-strip notification unwinds.
+  // A canceled beforeunload or a live tab detached elsewhere is not a closure.
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (self->_closingBrowser || self->_tabs[identity] != tab ||
+        ![self->_pendingHostClosures containsObject:identity]) return;
+    [self->_pendingHostClosures removeObject:identity];
+    if (tab.closed) [self tabWillClose:tab];
+  });
+}
 - (NSArray<NSDictionary<NSString *, id> *> *)extensionsForProfileID:(NSString *)profileID {
   NSMutableArray *result = [NSMutableArray arrayWithArray:_profiles[profileID].extensions ?: @[]];
   if (_testing) [result addObjectsFromArray:_probeExtensions[profileID] ?: @[]];
@@ -615,6 +650,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   }
   NSString *identity = [self identityForTab:tab];
   if (!identity) return;
+  [_pendingHostClosures removeObject:identity];
   if ([identity isEqualToString:_findTabID]) [self stopFindingInTabID:identity];
   [_tabs removeObjectForKey:identity];
   [_owners removeObjectForKey:identity];

@@ -126,6 +126,10 @@ private struct BrowserApplication: App {
         }
         .keyboardShortcut("w")
         .disabled(store.session.selectedSpace.selectedTabID == nil)
+        Button("Reopen last closed tab") { store.reopenLastClosedTab() }
+          .keyboardShortcut("t", modifiers: [.command, .shift])
+          .disabled(!store.canReopenClosedTab)
+        Button("Recently closed…") { store.showRecentlyClosed() }.disabled(store.sheet != nil)
         Button("Toggle sidebar") { store.sidebarIsVisible.toggle() }.keyboardShortcut("s")
         Divider()
         Button("Next space") { store.cycleSpace(by: 1) }.keyboardShortcut(

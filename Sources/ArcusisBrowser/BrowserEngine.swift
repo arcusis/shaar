@@ -469,6 +469,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     add("New space…", #selector(newSpace), "", to: file)
     add("Edit current space…", #selector(editSpace), "", to: file)
     add("Close tab", #selector(closeTab), "w", to: file)
+    add(
+      "Reopen last closed tab", #selector(reopenClosedTab), "t", to: file,
+      modifiers: [.command, .shift])
+    add("Recently closed…", #selector(showRecentlyClosed), "", to: file)
     add("Downloads", #selector(showDownloads), "j", to: file, modifiers: [.command, .shift])
     let edit = menu("Edit")
     for (title, action, key) in [
@@ -496,6 +500,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
       return store.sheet == nil && store.session.selectedSpace.selectedTabID != nil
     case #selector(findNext), #selector(findPrevious): return store.pageFind?.canMove == true
     case #selector(showDownloads): return store.sheet == nil
+    case #selector(reopenClosedTab): return store.canReopenClosedTab
+    case #selector(showRecentlyClosed): return store.sheet == nil
     default: return true
     }
   }
@@ -503,6 +509,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
   @objc private func findNext() { store.movePageFind(forward: true) }
   @objc private func findPrevious() { store.movePageFind(forward: false) }
   @objc private func showDownloads() { store.showDownloads() }
+  @objc private func reopenClosedTab() { store.reopenLastClosedTab() }
+  @objc private func showRecentlyClosed() { store.showRecentlyClosed() }
   @objc private func newSpace() { store.spaceEditor = .create }
   @objc private func editSpace() { store.spaceEditor = .edit(store.session.selectedSpaceID) }
   @objc private func closeTab() {

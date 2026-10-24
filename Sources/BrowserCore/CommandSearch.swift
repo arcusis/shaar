@@ -34,6 +34,7 @@ public enum CommandAction: Hashable, Sendable {
   case tab(space: UUID, tab: UUID)
   case space(UUID)
   case folder(space: UUID, folder: UUID)
+  case reopen(space: UUID, tab: UUID)
 }
 
 public struct CommandResult: Identifiable, Equatable, Sendable {
@@ -83,6 +84,20 @@ public enum CommandSearch {
             title: space.name, subtitle: "Switch space · \(profile) profile",
             symbol: space.symbol, action: .space(space.id)
           ))
+      }
+      if space.id == session.selectedSpaceID {
+        for entry in session.recentlyClosedTabs(in: space.id)
+        where query.isEmpty
+          || "Reopen closed tab \(entry.tab.title) \(entry.tab.url.absoluteString)"
+            .localizedCaseInsensitiveContains(query)
+        {
+          let profile = session.profiles.first { $0.id == space.profileID }?.name ?? ""
+          results.append(
+            CommandResult(
+              title: entry.tab.title,
+              subtitle: "Reopen closed tab · \(space.name) · \(profile) profile",
+              symbol: "arrow.uturn.backward", action: .reopen(space: space.id, tab: entry.id)))
+        }
       }
     }
     if let url = NavigationInput.destination(for: query) {

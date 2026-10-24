@@ -10,6 +10,7 @@ struct BrowserStoreTests {
     let store = BrowserStore()
     store.perform(.open(URL(string: "https://example.com")!))
     let tab = try #require(store.session.selectedSpace.selectedTabID)
+    let owner = store.session.selectedSpace
     var requested: UUID?
     store.onCloseTab = { requested = $0 }
     store.closeTab(tab)
@@ -20,6 +21,9 @@ struct BrowserStoreTests {
     store.nativeTabClosed(tab)
     #expect(store.session.selectedSpaceID == current)
     #expect(!store.session.spaces.flatMap(\.tabs).contains { $0.id == tab })
+    #expect(store.session.closedTabs.first?.spaceID == owner.id)
+    #expect(store.session.closedTabs.first?.profileID == owner.profileID)
+    #expect(!store.canReopenClosedTab)
   }
 
   @Test func openingAndCancelingLauncherDoesNotCreateTabsOrPersistChanges() throws {

@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 enum SidebarTransfer: Codable, Transferable {
   case tab(sessionID: UUID, sourceSpaceID: UUID, tabID: UUID)
   case space(sessionID: UUID, spaceID: UUID)
+  case folder(sessionID: UUID, sourceSpaceID: UUID, folderID: UUID)
 
   static var transferRepresentation: some TransferRepresentation {
     CodableRepresentation(

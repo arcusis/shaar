@@ -164,6 +164,7 @@ final class BrowserStore {
     switch action {
     case .open(let url): session.open(url)
     case .space(let id): session.selectSpace(id)
+    case .folder(let space, let folder): session.selectFolder(folder, in: space)
     case .tab(let space, let tab): session.selectTab(tab, in: space)
     }
     commandIsOpen = false
@@ -242,7 +243,7 @@ final class BrowserStore {
     switch request {
     case .extensionInstall(let request): onInstallDecision?(request.id, allow)
     case .websiteMedia(let request): onWebsiteMediaDecision?(request.id, allow)
-    case .space, .downloads: break
+    case .space, .downloads, .folder: break
     }
   }
 
@@ -273,7 +274,7 @@ final class BrowserStore {
   @discardableResult
   func moveTab(
     _ id: UUID, from source: UUID, to destination: UUID, before target: UUID? = nil,
-    pinned: Bool? = nil
+    pinned: Bool? = nil, folderID: UUID? = nil
   ) -> Bool {
     guard sheet == nil else { return false }
     if let origin = session.spaces.first(where: { $0.id == source }),
@@ -283,7 +284,10 @@ final class BrowserStore {
       sidebarNotice = "Tabs can move only between spaces sharing a profile."
       return false
     }
-    guard session.moveTab(id, from: source, to: destination, before: target, pinned: pinned) else {
+    guard
+      session.moveTab(
+        id, from: source, to: destination, before: target, pinned: pinned, folderID: folderID)
+    else {
       return false
     }
     sidebarNotice = nil
@@ -294,17 +298,96 @@ final class BrowserStore {
   @discardableResult
   func acceptSidebarDrop(
     _ item: SidebarTransfer, into space: UUID, before targetTab: UUID? = nil,
-    pinned: Bool? = nil, beforeSpace: UUID? = nil
+    pinned: Bool? = nil, beforeSpace: UUID? = nil, folderID: UUID? = nil, beforeFolder: UUID? = nil
   ) -> Bool {
     guard session.spaces.contains(where: { $0.id == space }) else { return false }
     switch item {
     case .tab(let sessionID, let source, let tab):
       guard sessionID == dragSessionID else { return false }
-      return moveTab(tab, from: source, to: space, before: targetTab, pinned: pinned)
+      return moveTab(
+        tab, from: source, to: space, before: targetTab, pinned: pinned, folderID: folderID)
     case .space(let sessionID, let id):
-      guard sessionID == dragSessionID, targetTab == nil, pinned == nil else { return false }
+      guard sessionID == dragSessionID, targetTab == nil, pinned == nil, folderID == nil,
+        beforeFolder == nil
+      else { return false }
       return moveSpace(id, before: beforeSpace)
+    case .folder(let sessionID, let source, let folder):
+      guard sessionID == dragSessionID, targetTab == nil, pinned != false else { return false }
+      return moveFolder(folder, from: source, to: space, parentID: folderID, before: beforeFolder)
     }
+  }
+
+  func showFolderEditor(_ route: FolderEditorRoute) {
+    guard sheet == nil, route.matches(session) else { return }
+    dismissCommand()
+    dismissPageFind()
+    engine?.extensionPanel = nil
+    sheet = .folder(route)
+  }
+
+  private func mayEditFolders(in space: UUID) -> Bool {
+    guard session.selectedSpaceID == space else { return false }
+    if case .folder(let route) = sheet { return route.spaceID == space && route.matches(session) }
+    return sheet == nil
+  }
+
+  @discardableResult
+  func createFolder(name: String, in space: UUID, parentID: UUID? = nil) -> UUID? {
+    guard mayEditFolders(in: space),
+      let id = session.addFolder(name: name, in: space, parentID: parentID)
+    else { return nil }
+    save()
+    return id
+  }
+
+  @discardableResult
+  func renameFolder(_ id: UUID, in space: UUID, name: String) -> Bool {
+    guard mayEditFolders(in: space), session.renameFolder(id, in: space, name: name) else {
+      return false
+    }
+    save()
+    return true
+  }
+
+  @discardableResult
+  func removeFolder(_ id: UUID, in space: UUID) -> Bool {
+    guard mayEditFolders(in: space), session.removeFolder(id, in: space) else { return false }
+    save()
+    return true
+  }
+
+  func toggleFolder(_ id: UUID, in space: UUID) {
+    guard sheet == nil, session.selectedSpaceID == space, session.toggleFolder(id, in: space) else {
+      return
+    }
+    save()
+  }
+
+  @discardableResult
+  func moveFolder(
+    _ id: UUID, from source: UUID, to destination: UUID, parentID: UUID? = nil,
+    before target: UUID? = nil
+  ) -> Bool {
+    guard sheet == nil else { return false }
+    sidebarNotice = nil
+    if let origin = session.spaces.first(where: { $0.id == source }),
+      let targetSpace = session.spaces.first(where: { $0.id == destination })
+    {
+      if origin.profileID != targetSpace.profileID {
+        sidebarNotice = "Folders can move only between spaces sharing a profile."
+        return false
+      }
+      if source == destination,
+        targetSpace.folderPath(to: parentID).contains(where: { $0.id == id })
+      {
+        sidebarNotice = "A folder cannot be moved inside itself."
+        return false
+      }
+    }
+    guard session.moveFolder(id, from: source, to: destination, parentID: parentID, before: target)
+    else { return false }
+    save()
+    return true
   }
 
   @discardableResult
@@ -331,6 +414,7 @@ final class BrowserStore {
   }
 
   private func save() {
+    if case .folder(let route) = sheet, !route.matches(session) { sheet = nil }
     if case .downloads(let profile) = sheet, profile != session.selectedSpace.profileID {
       sheet = nil
     }

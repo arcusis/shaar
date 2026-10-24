@@ -188,7 +188,7 @@ final class OrderingProbe {
   }
 
   private func orderedTabs(_ profile: UUID) -> [BrowserTab] {
-    let tabs = store.session.spaces.filter { $0.profileID == profile }.flatMap(\.tabs)
+    let tabs = store.session.spaces.filter { $0.profileID == profile }.flatMap(\.orderedTabs)
     return tabs.filter(\.isPinned) + tabs.filter { !$0.isPinned }
   }
 
@@ -212,7 +212,7 @@ final class OrderingProbe {
     throw OrderingFailure("Ordering document was not ready.")
   }
 
-  private func verifyNativeOrder(_ expected: [BrowserTab], profile: UUID, label: String)
+  func verifyNativeOrder(_ expected: [BrowserTab], profile: UUID, label: String)
     async throws
   {
     engine.refreshExtensions()

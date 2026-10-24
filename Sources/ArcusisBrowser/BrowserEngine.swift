@@ -236,7 +236,7 @@ final class BrowserEngine {
       }
     }
     for profile in loadedProfiles {
-      let tabs = session.spaces.filter { $0.profileID == profile }.flatMap(\.tabs)
+      let tabs = session.spaces.filter { $0.profileID == profile }.flatMap(\.orderedTabs)
         .filter { liveTabs.contains($0.id) }
       let ordered = tabs.filter(\.isPinned) + tabs.filter { !$0.isPinned }
       let positions = ordered.map { NativeTabPlacement(id: $0.id, pinned: $0.isPinned) }

@@ -19,12 +19,16 @@ public struct BrowserTab: Codable, Identifiable, Equatable, Sendable {
   public var url: URL
   public var title: String
   public var isPinned: Bool
+  public var folderID: UUID?
 
-  public init(id: UUID = UUID(), url: URL, title: String? = nil, isPinned: Bool = false) {
+  public init(
+    id: UUID = UUID(), url: URL, title: String? = nil, isPinned: Bool = false, folderID: UUID? = nil
+  ) {
     self.id = id
     self.url = url
     self.title = title ?? url.host() ?? url.absoluteString
     self.isPinned = isPinned
+    self.folderID = folderID
   }
 }
 
@@ -36,10 +40,12 @@ public struct BrowserSpace: Codable, Identifiable, Equatable, Sendable {
   public var tint: SpaceTint
   public var tabs: [BrowserTab]
   public var selectedTabID: UUID?
+  public var folders: [BrowserFolder]
 
   public init(
     id: UUID = UUID(), profileID: UUID, name: String, symbol: String,
-    tint: SpaceTint, tabs: [BrowserTab] = [], selectedTabID: UUID? = nil
+    tint: SpaceTint, tabs: [BrowserTab] = [], selectedTabID: UUID? = nil,
+    folders: [BrowserFolder] = []
   ) {
     self.id = id
     self.profileID = profileID
@@ -48,6 +54,7 @@ public struct BrowserSpace: Codable, Identifiable, Equatable, Sendable {
     self.tint = tint
     self.tabs = tabs
     self.selectedTabID = selectedTabID ?? tabs.first?.id
+    self.folders = folders
   }
 
   public var selectedTab: BrowserTab? { tabs.first { $0.id == selectedTabID } }
@@ -67,11 +74,11 @@ public enum SessionError: Error, LocalizedError, Equatable {
 public struct BrowserSession: Codable, Equatable, Sendable {
   public let version: Int
   public private(set) var profiles: [BrowserProfile]
-  public private(set) var spaces: [BrowserSpace]
-  public private(set) var selectedSpaceID: UUID
+  public internal(set) var spaces: [BrowserSpace]
+  public internal(set) var selectedSpaceID: UUID
 
   public init(profiles: [BrowserProfile], spaces: [BrowserSpace], selectedSpaceID: UUID) throws {
-    self.version = 1
+    self.version = 2
     self.profiles = profiles
     self.spaces = spaces
     self.selectedSpaceID = selectedSpaceID
@@ -84,9 +91,14 @@ public struct BrowserSession: Codable, Equatable, Sendable {
 
   public init(from decoder: any Decoder) throws {
     let values = try decoder.container(keyedBy: CodingKeys.self)
-    version = try values.decode(Int.self, forKey: .version)
+    let sourceVersion = try values.decode(Int.self, forKey: .version)
+    guard [1, 2].contains(sourceVersion) else { throw SessionError.unsupportedVersion }
+    version = 2
     profiles = try values.decode([BrowserProfile].self, forKey: .profiles)
-    spaces = try values.decode([BrowserSpace].self, forKey: .spaces)
+    spaces =
+      sourceVersion == 1
+      ? try values.decode([LegacySpace].self, forKey: .spaces).map(\.value)
+      : try values.decode([BrowserSpace].self, forKey: .spaces)
     selectedSpaceID = try values.decode(UUID.self, forKey: .selectedSpaceID)
     try validate()
   }
@@ -106,14 +118,16 @@ public struct BrowserSession: Codable, Equatable, Sendable {
   }
 
   public func validate() throws {
-    guard version == 1 else { throw SessionError.unsupportedVersion }
+    guard version == 2 else { throw SessionError.unsupportedVersion }
     let profileIDs = Set(profiles.map(\.id))
     let spaceIDs = Set(spaces.map(\.id))
     let tabIDs = spaces.flatMap { $0.tabs.map(\.id) }
+    let folderIDs = spaces.flatMap { $0.folders.map(\.id) }
     guard !profiles.isEmpty, !spaces.isEmpty,
       profileIDs.count == profiles.count,
       spaceIDs.count == spaces.count,
       Set(tabIDs).count == tabIDs.count,
+      Set(folderIDs).count == folderIDs.count,
       spaceIDs.contains(selectedSpaceID),
       profiles.allSatisfy({ !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }),
       spaces.allSatisfy({ space in
@@ -123,6 +137,22 @@ public struct BrowserSession: Codable, Equatable, Sendable {
           && space.tabs.allSatisfy { Self.isPersistableURL($0.url) }
       })
     else { throw SessionError.invalidState }
+    for space in spaces {
+      let localIDs = Set(space.folders.map(\.id))
+      guard
+        space.folders.allSatisfy({
+          !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && ($0.parentID == nil || localIDs.contains($0.parentID!))
+        }),
+        space.tabs.allSatisfy({
+          $0.folderID == nil || ($0.isPinned && localIDs.contains($0.folderID!))
+        }),
+        space.pinnedItems(includingCollapsed: true).filter({
+          if case .folder = $0 { return true }
+          return false
+        }).count == space.folders.count
+      else { throw SessionError.invalidState }
+    }
   }
 
   public mutating func selectSpace(_ id: UUID) {
@@ -154,7 +184,7 @@ public struct BrowserSession: Codable, Equatable, Sendable {
   @discardableResult
   public mutating func moveTab(
     _ id: UUID, from sourceID: UUID, to destinationID: UUID,
-    before targetID: UUID? = nil, pinned: Bool? = nil
+    before targetID: UUID? = nil, pinned: Bool? = nil, folderID: UUID? = nil
   ) -> Bool {
     guard id != targetID, let source = spaces.firstIndex(where: { $0.id == sourceID }),
       let destination = spaces.firstIndex(where: { $0.id == destinationID }),
@@ -162,10 +192,18 @@ public struct BrowserSession: Codable, Equatable, Sendable {
       let position = spaces[source].tabs.firstIndex(where: { $0.id == id })
     else { return false }
     var tab = spaces[source].tabs[position]
-    tab.isPinned = pinned ?? tab.isPinned
+    if let folderID {
+      guard pinned != false, spaces[destination].folders.contains(where: { $0.id == folderID })
+      else { return false }
+      tab.folderID = folderID
+      tab.isPinned = true
+    } else if source != destination || pinned != nil {
+      tab.folderID = nil
+      tab.isPinned = pinned ?? tab.isPinned
+    }
     if let targetID {
       guard let target = spaces[destination].tabs.first(where: { $0.id == targetID }),
-        target.isPinned == tab.isPinned
+        target.isPinned == tab.isPinned, target.folderID == tab.folderID
       else { return false }
     }
     let followsSelection = sourceID == selectedSpaceID && spaces[source].selectedTabID == id
@@ -174,9 +212,12 @@ public struct BrowserSession: Codable, Equatable, Sendable {
     let tabs = updated[destination].tabs
     let insertion =
       targetID.flatMap { target in tabs.firstIndex { $0.id == target } }
-      ?? tabs.lastIndex(where: { $0.isPinned == tab.isPinned }).map { $0 + 1 }
+      ?? tabs.lastIndex(where: { $0.isPinned == tab.isPinned && $0.folderID == tab.folderID }).map {
+        $0 + 1
+      }
       ?? (tab.isPinned ? tabs.startIndex : tabs.endIndex)
     updated[destination].tabs.insert(tab, at: insertion)
+    updated[destination].expandFolderPath(tab.folderID)
     if source != destination {
       if updated[source].selectedTabID == id {
         let remaining = updated[source].tabs
@@ -255,6 +296,7 @@ public struct BrowserSession: Codable, Equatable, Sendable {
     else { return }
     selectedSpaceID = spaceID
     spaces[index].selectedTabID = tabID
+    spaces[index].expandFolderPath(spaces[index].tabs.first { $0.id == tabID }?.folderID)
   }
 
   public mutating func closeTab(_ tabID: UUID) {

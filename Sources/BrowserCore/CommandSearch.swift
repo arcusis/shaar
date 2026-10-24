@@ -33,6 +33,7 @@ public enum CommandAction: Hashable, Sendable {
   case open(URL)
   case tab(space: UUID, tab: UUID)
   case space(UUID)
+  case folder(space: UUID, folder: UUID)
 }
 
 public struct CommandResult: Identifiable, Equatable, Sendable {
@@ -51,15 +52,29 @@ public enum CommandSearch {
       $0.id == session.selectedSpaceID && $1.id != session.selectedSpaceID
     }
     for space in orderedSpaces {
-      for tab in space.tabs
-      where query.isEmpty
-        || "\(tab.title) \(tab.url.absoluteString)".localizedCaseInsensitiveContains(query)
-      {
+      for tab in space.orderedTabs {
+        let path = space.folderPath(to: tab.folderID).reversed().map(\.name).joined(
+          separator: " / ")
+        guard
+          query.isEmpty
+            || "\(tab.title) \(tab.url.absoluteString) \(path)".localizedCaseInsensitiveContains(
+              query)
+        else { continue }
+        let context = path.isEmpty ? space.name : "\(space.name) · \(path)"
         results.append(
           CommandResult(
-            title: tab.title, subtitle: "\(space.name) · \(tab.url.host() ?? "")",
+            title: tab.title, subtitle: "\(context) · \(tab.url.host() ?? "")",
             symbol: "rectangle.on.rectangle", action: .tab(space: space.id, tab: tab.id)
           ))
+      }
+      for folder in space.folders {
+        let path = space.folderPath(to: folder.id).reversed().map(\.name).joined(separator: " / ")
+        if query.isEmpty || path.localizedCaseInsensitiveContains(query) {
+          results.append(
+            CommandResult(
+              title: folder.name, subtitle: "\(space.name) · \(path)",
+              symbol: "folder", action: .folder(space: space.id, folder: folder.id)))
+        }
       }
       if query.isEmpty || space.name.localizedCaseInsensitiveContains(query) {
         let profile = session.profiles.first { $0.id == space.profileID }?.name ?? ""

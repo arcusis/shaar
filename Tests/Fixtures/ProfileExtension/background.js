@@ -15,6 +15,29 @@ chrome.runtime.onMessage.addListener((message, _sender, reply) => {
     if (message.action === "storage-worker") {
       await chrome.storage.local.set({ [message.key]: message.value });
     }
+    if (message.action === "create-window-probe") {
+      if (!Number.isInteger(message.sourceTabID) || !Number.isInteger(message.windowID)
+        || !Number.isInteger(message.port) || message.port < 1 || message.port > 65535
+        || !["normal", "popup"].includes(message.type)
+        || typeof message.token !== "string" || !/^[0-9a-f-]{36}$/i.test(message.token)) {
+        throw new Error("Bounded authored window request required");
+      }
+      const source = await chrome.tabs.get(message.sourceTabID);
+      const url = new URL(message.url);
+      const sourceURL = new URL(source.url);
+      if (source.windowId !== message.windowID || url.protocol !== "http:"
+        || url.hostname !== "127.0.0.1" || url.port !== String(message.port)
+        || sourceURL.origin !== url.origin || !url.pathname.startsWith("/account/host-engine-")) {
+        throw new Error("Owned loopback source and destination required");
+      }
+      const created = await chrome.windows.create(message.moveExisting === true
+        ? { tabId: source.id, type: message.type, focused: false }
+        : { url: url.href, type: message.type, focused: false });
+      const report = { token: message.token, windowID: created.id,
+        tabID: created.tabs?.[0]?.id ?? null, type: message.type };
+      await chrome.storage.local.set({ windowProbe: report });
+      return report;
+    }
     if (message.action === "activate-probe") {
       if (!Array.isArray(message.tabIDs) || message.tabIDs.length < 1 || message.tabIDs.length > 8
         || !message.tabIDs.every(Number.isInteger) || !Number.isInteger(message.windowID)

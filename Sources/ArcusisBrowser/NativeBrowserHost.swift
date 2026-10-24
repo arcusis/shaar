@@ -51,6 +51,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
   private var started = false
   private var startupFailed = false
   private var previousMenu: NSMenu?
+  private var engineRequestedWindows: Set<String> = []
   var onClosed: ((UUID, Bool) -> Void)?
 
   init(
@@ -92,6 +93,15 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     workspace.persistSnapshot()
     let focused = workspace.workspace.focusedWindowID
     for record in workspace.workspace.windows { try attach(record.id, source: nil) }
+    events.onWindowRequest = { [weak self] profile, type in
+      self?.requestedWindow(profile: profile, type: type)
+    }
+    events.onWindowShowRequest = { [weak self] window, active in
+      self?.showRequestedWindow(window, active: active)
+    }
+    events.onNewTabWillAdopt = { [weak self] tab, profile, opener in
+      self?.prepareNewTab(tab, profile: profile, opener: opener)
+    }
     installMenus()
     if presentation == .visible {
       for context in contexts.values where context.id != focused { context.window.orderFront(nil) }
@@ -178,6 +188,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
   }
 
   func detach() {
+    events.onWindowRequest = nil
+    events.onWindowShowRequest = nil
+    events.onNewTabWillAdopt = nil
     for context in contexts.values {
       stopObserving(context)
       context.engine.onClosed = nil
@@ -185,7 +198,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     if NSApp.mainMenu === menu { NSApp.mainMenu = previousMenu }
   }
 
-  private func attach(_ id: UUID, source: NSRect?) throws {
+  private func attach(_ id: UUID, source: NSRect?, reconcile: Bool = true) throws {
     guard let store = workspace.stores[id], let record = workspace.workspace.window(id) else {
       throw WorkspaceError.unknownWindow
     }
@@ -224,7 +237,77 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     contexts[id] = context
     engine.onClosed = { [weak self] quitting in self?.closed(id, quitting: quitting) }
     observe(context)
-    engine.reconcile()
+    if reconcile { engine.reconcile() }
+  }
+
+  private func requestedWindow(profile: String, type: String) -> String? {
+    guard started, !events.runtime.isQuitting, ["normal", "popup", "app"].contains(type),
+      let profileID = UUID(uuidString: profile),
+      let destination = workspace.workspace.catalog.spaces.first(where: {
+        $0.profileID == profileID
+      })
+    else { return nil }
+    let source = activeContext.flatMap {
+      $0.store.session.selectedSpace.profileID == profileID ? $0 : nil
+    }
+    var created: UUID?
+    do {
+      let previousFocus = workspace.workspace.focusedWindowID
+      let id = try workspace.newWindow(from: source?.id)
+      created = id
+      if let previousFocus { try workspace.focusWindow(previousFocus) }
+      let spaceID = source?.store.session.selectedSpaceID ?? destination.id
+      workspace.stores[id]?.perform(.space(spaceID))
+      // Do not prepare/open any profile here: Chromium attaches its new Browser
+      // to this empty host only after the synchronous factory returns.
+      try attach(id, source: source?.window.frame, reconcile: false)
+      let context = contexts[id]!
+      engineRequestedWindows.insert(context.nativeID)
+      DispatchQueue.main.async { [weak self, weak context] in
+        guard let self, let context, self.contexts[id] === context, !context.engine.isClosed,
+          !self.events.runtime.isQuitting
+        else {
+          return
+        }
+        context.engine.reconcile()
+      }
+      return context.nativeID
+    } catch {
+      if let created {
+        try? workspace.removeWindow(created)
+        events.runtime.closeWindowID(created.uuidString)
+      }
+      report(error)
+      return nil
+    }
+  }
+
+  private func showRequestedWindow(_ nativeID: String, active: Bool) {
+    // The engine can request visibility during insertion. Present only once its
+    // notification has unwound and the application has adopted the page.
+    DispatchQueue.main.async { [weak self] in
+      guard let self, self.presentation == .visible,
+        !self.events.runtime.isQuitting,
+        let context = self.contexts.values.first(where: { $0.nativeID == nativeID }),
+        !context.engine.isClosed
+      else { return }
+      if active { context.window.makeKeyAndOrderFront(nil) } else { context.window.orderFront(nil) }
+    }
+  }
+
+  private func prepareNewTab(_ tab: String, profile: String, opener: String?) {
+    guard let nativeID = events.runtime.windowID(forTabID: tab),
+      engineRequestedWindows.remove(nativeID) != nil
+    else { return }
+    guard let profileID = UUID(uuidString: profile),
+      let opener, let openerID = UUID(uuidString: opener),
+      let sourceNativeID = events.runtime.windowID(forTabID: opener),
+      let source = contexts.values.first(where: { $0.nativeID == sourceNativeID }),
+      let space = source.store.session.spaces.first(where: {
+        $0.profileID == profileID && $0.tabs.contains(where: { $0.id == openerID })
+      }), let destination = contexts.values.first(where: { $0.nativeID == nativeID })
+    else { return }
+    destination.store.perform(.space(space.id))
   }
 
   private func observe(_ context: NativeBrowserContext) {
@@ -271,6 +354,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
 
   private func closed(_ id: UUID, quitting: Bool) {
     guard let context = contexts.removeValue(forKey: id) else { return }
+    engineRequestedWindows.remove(context.nativeID)
     stopObserving(context)
     saveGeometry(context)
     if !quitting {

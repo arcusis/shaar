@@ -6,6 +6,13 @@ final class BrowserRuntimeEvents {
   let runtime: ARCChromiumRuntime
   let router = BrowserRuntimeRouter()
   var onWindowClosed: ((String, Bool) -> Void)?
+  var onWindowRequest: (@MainActor @Sendable (String, String) -> String?)? {
+    didSet { runtime.onWindowRequest = onWindowRequest }
+  }
+  var onWindowShowRequest: (@MainActor @Sendable (String, Bool) -> Void)? {
+    didSet { runtime.onWindowShowRequest = onWindowShowRequest }
+  }
+  var onNewTabWillAdopt: ((String, String, String?) -> Void)?
 
   init(runtime: ARCChromiumRuntime) {
     self.runtime = runtime
@@ -36,6 +43,7 @@ final class BrowserRuntimeEvents {
         self?.runtime.discardTabID(id)
         return
       }
+      self.onNewTabWillAdopt?(id, profile, opener)
       client.onNewTab?(id, profile, address, opener, foreground)
     }
     runtime.onFindResult = { [weak self] id, token, count, active, final in

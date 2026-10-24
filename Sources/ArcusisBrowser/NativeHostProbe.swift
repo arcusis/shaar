@@ -9,6 +9,7 @@ private struct HostProbeIdentity: Codable {
   let firstTab: UUID
   let secondTab: UUID
   let ordinarilyClosed: [UUID]
+  var engineWindow: UUID? = nil
 }
 
 /// Exercises the production host class without ordering windows onscreen or sending OS input.
@@ -138,8 +139,9 @@ final class NativeHostProbe {
       firstID = saved.first
       secondID = saved.second
       closedIDs = saved.ordinarilyClosed
+      let expected = Set([firstID, secondID] + [saved.engineWindow].compactMap { $0 })
       try expect(
-        Set(host.contexts.keys) == Set([firstID, secondID])
+        Set(host.contexts.keys) == expected
           && closedIDs.allSatisfy { host.contexts[$0] == nil },
         "native host startup restores retained windows and excludes ordinarily closed windows")
       try expect(
@@ -152,6 +154,18 @@ final class NativeHostProbe {
           host.contexts[id]!.window.frame
             == NSRect(x: geometry.x, y: geometry.y, width: geometry.width, height: geometry.height),
           "production host restores saved window geometry \(id)")
+      }
+      if let id = saved.engineWindow, let restored = host.contexts[id],
+        let tab = restored.store.session.selectedSpace.selectedTabID
+      {
+        let account = try await document(tab)
+        try expect(
+          account["cookie"] as? String == "account=alpha"
+            && restored.store.session.selectedSpace.profileID == bases[0].profileID,
+          "production startup restores the engine-created normal window in its saved account")
+        primary.runtime.closeWindowID(restored.nativeID)
+        try await wait("restored engine window closure") { host.contexts[id] == nil }
+        closedIDs.append(id)
       }
       focus(secondID)
       try send(.newWindow)
@@ -173,6 +187,11 @@ final class NativeHostProbe {
     try expect(
       beta["cookie"] as? String == "account=beta" && alpha["cookie"] as? String == "account=alpha",
       "native host presents separate beta and alpha account sessions simultaneously")
+    focus(secondID)
+    let requested = try await EngineRequestedWindowProbe(
+      host: host, root: root, fixture: fixture, phase: phase
+    ).run(alpha: second, beta: first)
+    checks += requested.checks
     focus(firstID)
     try send(.search)
     try expect(
@@ -229,11 +248,14 @@ final class NativeHostProbe {
     for (index, context) in [first, second].enumerated() {
       try await capture(context.hosting, index: index + 1)
     }
+    if let created = host.contexts[requested.retained] {
+      try await capture(created.hosting, index: 3)
+    }
     try await captureEditor(second.store)
     try JSONEncoder().encode(
       HostProbeIdentity(
         first: firstID, second: secondID, firstTab: firstTab, secondTab: secondTab,
-        ordinarilyClosed: closedIDs)
+        ordinarilyClosed: closedIDs, engineWindow: requested.retained)
     ).write(to: checkpoint, options: .atomic)
     try expect(
       host.lastError == nil && manager.storageNotice == nil,
@@ -400,7 +422,7 @@ final class NativeHostProbe {
           uniqueKeysWithValues: closures.map { ($0.key.uuidString, $0.value) }),
         "error": error?.localizedDescription as Any? ?? NSNull(),
         "scope":
-          "Production host class with hidden native windows, actual NSMenu target actions, injected owned key-window identity and notifications, real native ordinary closures, managed restoration/geometry, cross-process lock, and engine-quit audit. Physical input/focus, native close-cancellation dialogs, primary/last-engine-window macOS reopen policy and engine-requested windows remain unverified.",
+          "Production host class with hidden native windows, actual NSMenu target actions, injected owned key-window identity and notifications, real native ordinary closures, managed restoration/geometry, cross-process lock, and engine-quit audit. Engine-requested normal-profile windows have a separate report. Physical input/focus, native close-cancellation dialogs, primary/last-engine-window macOS reopen policy, private sessions and company/vendor window flows remain unverified.",
       ], options: [.prettyPrinted, .sortedKeys]
     ).write(to: root.appending(path: "\(phase)-native-host.json"), options: .atomic)
   }

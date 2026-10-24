@@ -73,6 +73,13 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 @property(copy) NSString *popupExtensionID;
 @property BOOL closing;
 @property BOOL closed;
+@property BOOL awaitingBrowserTab;
+@property BOOL closeWhenEmpty;
+@property BOOL rejectsEngineTabs;
+@property(strong) NSMutableDictionary<NSString *, NSArray<NSString *> *> *tabOrders;
+@property(strong) NSMutableDictionary<NSString *, NSArray<NSString *> *> *tabPins;
+@property(strong) ArdiaCoreTab *incomingTab;
+@property(copy) NSString *incomingOpenerID;
 @property NSUInteger hostSelectionDepth;
 @end
 @implementation ARCNativeWindowState
@@ -253,6 +260,8 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     return NO;
   }
   ARCNativeWindowState *state = [[ARCNativeWindowState alloc] init];
+  state.tabOrders = [NSMutableDictionary dictionary];
+  state.tabPins = [NSMutableDictionary dictionary];
   state.identity = identity;
   state.native = [[NSClassFromString(@"ArdiaCoreWindow") alloc] initWithContentRect:NSMakeRect(0, 0, 1200, 780)];
   if (!state.native || !state.native.window) {
@@ -416,9 +425,75 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     tab.delegate = self;
     return;
   }
+  NSString *existingID = [self identityForTab:tab];
+  if (existingID) {
+    BOOL newBrowser = state.awaitingBrowserTab;
+    state.awaitingBrowserTab = NO;
+    ARCNativeWindowState *original = [self stateForTabID:existingID];
+    if (original == state) return;
+    // An extension can request windows.create({tabId}) or tabs.move. Existing
+    // live identities cannot acquire a second owner. Return the same document
+    // after this notification, then restore its application's ordering/selection.
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (tab.closed || self->_closingBrowser) return;
+      if (!original || original.closed || original.closing) {
+        [tab closeNow];
+        return;
+      }
+      [original.native adoptTab:tab];
+      NSString *profileID = self->_owners[existingID];
+      NSArray *order = original.tabOrders[profileID];
+      if (order) [self placeTabIDs:order pinnedIDs:original.tabPins[profileID] ?: @[]
+                        profileID:profileID windowID:original.identity];
+      if (original.selectedTabID) [self activateTabID:original.selectedTabID];
+      if (state.selectedTabID) [self activateTabID:state.selectedTabID];
+      if (newBrowser && !state.closed && !state.closing) [self closeWindowID:state.identity];
+      if (self->_onNotice) self->_onNotice(@"Moving live tabs between windows is not supported.");
+    });
+    return;
+  }
   NSString *profileID = [_profiles allKeysForObject:tab.profile].firstObject;
-  if (!profileID) {
+  if (!profileID || state.rejectsEngineTabs) {
     dispatch_async(dispatch_get_main_queue(), ^{ [tab closeNow]; });
+    return;
+  }
+  BOOL adopting = state.incomingTab == tab;
+  BOOL browserFirstTab = state.awaitingBrowserTab;
+  state.awaitingBrowserTab = NO;
+  NSString *adoptedOpenerID = adopting ? state.incomingOpenerID : nil;
+  if (adopting) {
+    state.incomingTab = nil;
+    state.incomingOpenerID = nil;
+  }
+  if (_onWindowRequest && !adopting && !browserFirstTab &&
+      ([@[@"popup", @"window"] containsObject:disposition])) {
+    NSString *openerID = [self identityForTab:opener];
+    // Page popups are inserted in the source browser first. Adopt only this new,
+    // unclaimed tab after the tab-strip notification; existing tab IDs never move.
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (tab.closed || state.closed || state.closing || self->_closingBrowser) return;
+      NSString *targetID = self->_onWindowRequest ? self->_onWindowRequest(profileID,
+        [disposition isEqualToString:@"popup"] ? @"popup" : @"normal") : nil;
+      ARCNativeWindowState *target = targetID ? self->_windows[targetID] : nil;
+      if (!target || target == state || target.closed || target.closing) {
+        [tab closeNow];
+        return;
+      }
+      target.incomingTab = tab;
+      target.closeWhenEmpty = YES;
+      target.incomingOpenerID = openerID;
+      [target.native adoptTab:tab];
+      NSString *identity = [self identityForTab:tab];
+      if (!identity || ![self->_tabWindows[identity] isEqualToString:targetID]) {
+        target.incomingTab = nil;
+        target.incomingOpenerID = nil;
+        [tab closeNow];
+        [self closeWindowID:targetID];
+        if (self->_onNotice) self->_onNotice(@"The requested page could not be adopted into its window.");
+      } else if (self->_onWindowShowRequest) {
+        self->_onWindowShowRequest(targetID, YES);
+      }
+    });
     return;
   }
   NSString *identity = NSUUID.UUID.UUIDString;
@@ -426,7 +501,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   _owners[identity] = profileID;
   _tabWindows[identity] = state.identity;
   tab.delegate = self;
-  NSString *openerID = [self identityForTab:opener];
+  NSString *openerID = adoptedOpenerID ?: [self identityForTab:opener];
   dispatch_async(dispatch_get_main_queue(), ^{
     if (!tab.closed && !state.closing && !state.closed && self->_onNewTab) {
       self->_onNewTab(identity, profileID, tab.url.length ? tab.url : @"about:blank",
@@ -554,6 +629,8 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     }];
   }
   state.hostSelectionDepth--;
+  state.tabOrders[profileID] = [tabIDs copy];
+  state.tabPins[profileID] = [pinnedIDs copy];
   return YES;
 }
 - (void)downloadCommand:(NSString *)command downloadID:(NSString *)downloadID profileID:(NSString *)profileID
@@ -936,15 +1013,52 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   [_tabWindows removeObjectForKey:identity];
   dispatch_async(dispatch_get_main_queue(), ^{
     if (notify && self->_onTabClosed) self->_onTabClosed(identity);
+    if (notify && state.closeWhenEmpty && !state.closing && !state.closed &&
+        ![self->_tabWindows.allValues containsObject:state.identity]) {
+      [self closeWindowID:state.identity];
+    }
   });
 }
 - (ArdiaCoreWindow *)engineWindowForNewBrowserOfProfile:(ArdiaCoreProfile *)profile type:(NSString *)type {
-  if (![_profiles allKeysForObject:profile].count) return nil;
+  NSString *profileID = [_profiles allKeysForObject:profile].firstObject;
+  if (_closingBrowser) return nil;
+  if (_onWindowRequest) {
+    NSString *identity = profileID && !profile.offTheRecord && !profile.destroyed ? _onWindowRequest(profileID, type) : nil;
+    ARCNativeWindowState *state = identity ? _windows[identity] : nil;
+    if (state && !state.closed && !state.closing) {
+      state.awaitingBrowserTab = YES;
+      state.closeWhenEmpty = YES;
+      return state.native;
+    }
+    // Returning nil lets Chromium build an unmanaged stock window. Instead host
+    // unsupported/private requests briefly in an unseen, unsaved sink and close
+    // it after the synchronous browser-creation notification has unwound.
+    NSString *rejectedID = NSUUID.UUID.UUIDString;
+    if (![self createWindowID:rejectedID error:nil]) return nil;
+    ARCNativeWindowState *rejected = _windows[rejectedID];
+    rejected.native.internal = YES;
+    rejected.rejectsEngineTabs = YES;
+    rejected.awaitingBrowserTab = YES;
+    rejected.closeWhenEmpty = YES;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [self closeWindowID:rejectedID];
+      if (self->_onNotice) self->_onNotice(@"This browser window type or profile is unavailable.");
+    });
+    return rejected.native;
+  }
+  if (!profileID || profile.offTheRecord || profile.destroyed) return nil;
+  // Legacy disposable clients do not install a managed host.
   for (ARCNativeWindowState *state in _windows.allValues) {
     if (!state.closed && !state.closing && state.native.window.isKeyWindow) return state.native;
   }
   ARCNativeWindowState *primary = _windows[_primaryWindowID];
   return primary.closed || primary.closing ? nil : primary.native;
+}
+- (void)window:(ArdiaCoreWindow *)window showRequestedActive:(BOOL)active {
+  ARCNativeWindowState *state = [self stateForWindow:window];
+  if (state && !state.closed && !state.closing && !state.rejectsEngineTabs && !_closingBrowser && _onWindowShowRequest) {
+    _onWindowShowRequest(state.identity, active);
+  }
 }
 - (void)engine:(ArdiaCoreEngine *)engine permissionRequest:(NSDictionary *)request tab:(ArdiaCoreTab *)tab {
   NSString *identity = request[@"id"];

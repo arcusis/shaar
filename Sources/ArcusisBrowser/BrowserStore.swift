@@ -9,8 +9,7 @@ final class BrowserStore {
   var commandQuery = ""
   var commandSelection = 0
   var sidebarIsVisible = true
-  var newSpaceIsOpen = false
-  var newSpaceName = ""
+  var spaceEditor: SpaceEditorRoute?
   private(set) var storageNotice: String?
 
   @ObservationIgnored private let sessionFile: SessionFile?
@@ -20,7 +19,11 @@ final class BrowserStore {
     self.sessionFile = sessionFile
     self.session = session
     do {
-      if let saved = try sessionFile?.load() { self.session = saved }
+      if let saved = try sessionFile?.load() {
+        self.session = saved
+      } else {
+        save()
+      }
     } catch {
       maySave = false
       storageNotice =
@@ -77,11 +80,27 @@ final class BrowserStore {
     save()
   }
 
-  func createSpace() {
-    guard session.addSpace(name: newSpaceName) != nil else { return }
-    newSpaceName = ""
-    newSpaceIsOpen = false
+  @discardableResult
+  func createSpace(name: String, sharingProfile profileID: UUID?, tint: SpaceTint) -> Bool {
+    guard session.addSpace(name: name, sharingProfile: profileID, tint: tint) != nil else {
+      return false
+    }
     save()
+    return true
+  }
+
+  @discardableResult
+  func updateSpace(_ id: UUID, name: String, tint: SpaceTint) -> Bool {
+    guard session.updateSpace(id, name: name, tint: tint) else { return false }
+    save()
+    return true
+  }
+
+  @discardableResult
+  func removeSpace(_ id: UUID) -> Bool {
+    guard session.removeSpace(id) else { return false }
+    save()
+    return true
   }
 
   private func save() {

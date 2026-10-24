@@ -53,7 +53,7 @@ struct BrowserWindow: View {
     .frame(minWidth: 760, minHeight: 520)
     .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: store.commandIsOpen)
     .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: store.sidebarIsVisible)
-    .sheet(isPresented: $store.newSpaceIsOpen) { newSpaceSheet }
+    .sheet(item: $store.spaceEditor) { route in SpaceEditor(store: store, route: route) }
     .onChange(of: store.commandIsOpen) { _, isOpen in
       if !isOpen { pageIsFocused = true }
     }
@@ -142,25 +142,6 @@ struct BrowserWindow: View {
     .shadow(color: .black.opacity(0.08), radius: 8, y: 3)
   }
 
-  private var newSpaceSheet: some View {
-    VStack(alignment: .leading, spacing: 20) {
-      Text("Make a little space").font(.title2.weight(.semibold))
-      Text("Each new space starts with its own profile.")
-        .foregroundStyle(.secondary)
-      TextField("Space name", text: $store.newSpaceName)
-        .textFieldStyle(.roundedBorder)
-        .onSubmit { store.createSpace() }
-      HStack {
-        Button("Cancel", role: .cancel) { store.newSpaceIsOpen = false }
-        Spacer()
-        Button("Create space") { store.createSpace() }
-          .keyboardShortcut(.defaultAction)
-          .disabled(store.newSpaceName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-      }
-    }
-    .padding(28)
-    .frame(width: 380)
-  }
 }
 
 private struct BrowserSidebar: View {
@@ -172,7 +153,7 @@ private struct BrowserSidebar: View {
         Text("Arcusis").font(.system(size: 13, weight: .semibold, design: .rounded))
         Spacer()
         Button {
-          store.newSpaceIsOpen = true
+          store.spaceEditor = .create
         } label: {
           Image(systemName: "plus")
         }
@@ -235,6 +216,9 @@ private struct BrowserSidebar: View {
             .help(space.name)
             .accessibilityLabel("Switch to \(space.name)")
             .accessibilityAddTraits(space.id == store.session.selectedSpaceID ? .isSelected : [])
+            .contextMenu {
+              Button("Edit space…") { store.spaceEditor = .edit(space.id) }
+            }
           }
         }
       }

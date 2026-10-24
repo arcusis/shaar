@@ -12,11 +12,40 @@ struct BrowserStoreTests {
     let file = SessionFile(url: directory.appending(path: "session.json"))
     let store = BrowserStore(sessionFile: file)
     let before = store.session
+    let savedBefore = try Data(contentsOf: file.url)
     store.showCommand()
     store.commandQuery = "example.com"
     store.dismissCommand()
     #expect(store.session == before)
-    #expect(!FileManager.default.fileExists(atPath: file.url.path))
+    #expect(try Data(contentsOf: file.url) == savedBefore)
+  }
+
+  @Test func firstLaunchPersistsProfileIDsBeforeAnyNavigation() throws {
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let file = SessionFile(url: directory.appending(path: "session.json"))
+    let first = BrowserStore(sessionFile: file)
+    let second = BrowserStore(sessionFile: file)
+    #expect(second.session == first.session)
+    #expect(second.session.profiles.map(\.id) == first.session.profiles.map(\.id))
+    #expect(second.session.spaces.allSatisfy { $0.tabs.isEmpty })
+  }
+
+  @Test func spaceEditsPersistWithoutReassigningTheProfile() throws {
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let file = SessionFile(url: directory.appending(path: "session.json"))
+    let store = BrowserStore(sessionFile: file)
+    let profile = store.session.selectedSpace.profileID
+    let created = store.createSpace(name: "Project", sharingProfile: profile, tint: .forest)
+    #expect(created)
+    #expect(store.session.selectedSpace.profileID == profile)
+    let id = store.session.selectedSpaceID
+    let updated = store.updateSpace(id, name: "Renamed", tint: .rose)
+    #expect(updated)
+    #expect(store.session.selectedSpace.name == "Renamed")
+    #expect(store.session.selectedSpace.profileID == profile)
+    #expect(try file.load() == store.session)
   }
 
   @Test func launcherCreatesTabInActiveSpaceAndPersistsIt() throws {

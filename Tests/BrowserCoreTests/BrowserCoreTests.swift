@@ -141,3 +141,50 @@ private func openTab(_ address: String, in session: inout BrowserSession) throws
   #expect(results.count == 10)
   #expect(results.last?.action == .open(URL(string: "https://example.com")!))
 }
+
+@Test func editingSpaceAppearancePreservesProfileAndTabIdentity() throws {
+  var session = BrowserSession.fresh()
+  let id = session.selectedSpaceID
+  let profile = session.selectedSpace.profileID
+  let tab = try openTab("https://example.com", in: &session)
+  session.togglePin(tab)
+  let updated = session.updateSpace(id, name: "  Project  ", tint: .forest)
+  #expect(updated)
+  #expect(session.selectedSpace.name == "Project")
+  #expect(session.selectedSpace.tint == .forest)
+  #expect(session.selectedSpace.profileID == profile)
+  #expect(session.selectedSpace.selectedTabID == tab)
+  #expect(session.selectedSpace.selectedTab?.isPinned == true)
+  let before = session
+  let empty = session.updateSpace(id, name: " ", tint: .rose)
+  let missing = session.updateSpace(UUID(), name: "Missing", tint: .rose)
+  #expect(!empty && !missing)
+  #expect(session == before)
+}
+
+@Test func removingSpaceKeepsProfilesAndOtherSpacesIntact() throws {
+  var session = BrowserSession.fresh()
+  let id = session.selectedSpaceID
+  let profile = session.selectedSpace.profileID
+  _ = try openTab("https://example.com", in: &session)
+  let other = session.spaces[1]
+  let removed = session.removeSpace(id)
+  #expect(removed)
+  #expect(session.spaces == [other])
+  #expect(session.selectedSpaceID == other.id)
+  #expect(session.profiles.contains { $0.id == profile })
+  let before = session
+  let last = session.removeSpace(other.id)
+  #expect(!last)
+  #expect(session == before)
+  try session.validate()
+}
+
+@Test func removingInactiveSpaceDoesNotChangeActiveSelection() throws {
+  var session = BrowserSession.fresh()
+  let selected = session.selectedSpaceID
+  let tab = try openTab("https://example.com", in: &session)
+  session.removeSpace(session.spaces[1].id)
+  #expect(session.selectedSpaceID == selected)
+  #expect(session.selectedSpace.selectedTabID == tab)
+}

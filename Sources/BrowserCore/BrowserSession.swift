@@ -137,7 +137,9 @@ public struct BrowserSession: Codable, Equatable, Sendable {
   }
 
   @discardableResult
-  public mutating func addSpace(name: String, sharingProfile profileID: UUID? = nil) -> UUID? {
+  public mutating func addSpace(
+    name: String, sharingProfile profileID: UUID? = nil, tint: SpaceTint? = nil
+  ) -> UUID? {
     let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !name.isEmpty else { return nil }
     let profile: BrowserProfile
@@ -148,11 +150,35 @@ public struct BrowserSession: Codable, Equatable, Sendable {
       profile = BrowserProfile(name: name)
       profiles.append(profile)
     }
-    let tint = SpaceTint.allCases[spaces.count % SpaceTint.allCases.count]
-    let space = BrowserSpace(profileID: profile.id, name: name, symbol: "square.stack", tint: tint)
+    let color = tint ?? SpaceTint.allCases[spaces.count % SpaceTint.allCases.count]
+    let space = BrowserSpace(profileID: profile.id, name: name, symbol: "square.stack", tint: color)
     spaces.append(space)
     selectedSpaceID = space.id
     return space.id
+  }
+
+  @discardableResult
+  public mutating func updateSpace(_ id: UUID, name: String, tint: SpaceTint) -> Bool {
+    let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !name.isEmpty, let index = spaces.firstIndex(where: { $0.id == id }) else {
+      return false
+    }
+    spaces[index].name = name
+    spaces[index].tint = tint
+    return true
+  }
+
+  @discardableResult
+  public mutating func removeSpace(_ id: UUID) -> Bool {
+    guard spaces.count > 1, let index = spaces.firstIndex(where: { $0.id == id }) else {
+      return false
+    }
+    spaces.remove(at: index)
+    if selectedSpaceID == id {
+      selectedSpaceID = spaces[min(index, spaces.count - 1)].id
+    }
+    // Removing a space must not delete a profile or its future engine-owned data.
+    return true
   }
 
   @discardableResult

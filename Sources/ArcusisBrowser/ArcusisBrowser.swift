@@ -11,7 +11,8 @@ enum ArcusisBrowserMain {
       do {
         try renderPreview(
           to: URL(filePath: arguments[index + 1]), showCommand: arguments.contains("--command"),
-          compact: arguments.contains("--compact"))
+          compact: arguments.contains("--compact"),
+          showSpaceEditor: arguments.contains("--space-editor"))
       } catch {
         FileHandle.standardError.write(Data("Preview failed: \(error.localizedDescription)\n".utf8))
         exit(1)
@@ -21,15 +22,22 @@ enum ArcusisBrowserMain {
     BrowserApplication.main()
   }
 
-  @MainActor private static func renderPreview(to url: URL, showCommand: Bool, compact: Bool) throws
-  {
+  @MainActor private static func renderPreview(
+    to url: URL, showCommand: Bool, compact: Bool, showSpaceEditor: Bool
+  ) throws {
     // Render only this view hierarchy; never capture or activate the desktop.
     let application = NSApplication.shared
     application.setActivationPolicy(.prohibited)
-    let size = compact ? NSSize(width: 760, height: 520) : NSSize(width: 1200, height: 780)
-    let view = BrowserWindow(store: .preview(showCommand: showCommand))
-      .frame(width: size.width, height: size.height)
-      .environment(\.colorScheme, .light)
+    let size =
+      showSpaceEditor
+      ? NSSize(width: 496, height: 430)
+      : compact ? NSSize(width: 760, height: 520) : NSSize(width: 1200, height: 780)
+    let view = NativePreview(
+      store: .preview(showCommand: showCommand), showSpaceEditor: showSpaceEditor
+    )
+    .frame(width: size.width, height: size.height)
+    .background(Color(nsColor: .windowBackgroundColor))
+    .environment(\.colorScheme, .light)
     let host = NSHostingView(rootView: view)
     let window = NSWindow(
       contentRect: NSRect(origin: .zero, size: size),
@@ -49,6 +57,19 @@ enum ArcusisBrowserMain {
   }
 }
 
+private struct NativePreview: View {
+  let store: BrowserStore
+  let showSpaceEditor: Bool
+
+  var body: some View {
+    if showSpaceEditor {
+      SpaceEditor(store: store, route: .create)
+    } else {
+      BrowserWindow(store: store)
+    }
+  }
+}
+
 private struct BrowserApplication: App {
   @State private var store = BrowserStore.persistent()
 
@@ -62,7 +83,8 @@ private struct BrowserApplication: App {
       CommandGroup(replacing: .newItem) {
         Button("New tab") { store.showCommand() }.keyboardShortcut("t")
         Button("Search or enter address") { store.showCommand() }.keyboardShortcut("l")
-        Button("New space…") { store.newSpaceIsOpen = true }
+        Button("New space…") { store.spaceEditor = .create }
+        Button("Edit current space…") { store.spaceEditor = .edit(store.session.selectedSpaceID) }
       }
       CommandMenu("Tabs") {
         Button("Close tab") {

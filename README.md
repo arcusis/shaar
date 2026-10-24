@@ -4,7 +4,7 @@ A native macOS 26+ browser project with an Arc-style sidebar, spaces assigned to
 
 ## Current state
 
-The first native-shell prototype builds and includes local spaces, profile assignments, tabs, pinning, selection, session persistence, and command search across tabs and spaces. New spaces receive separate profile identities; the model also supports explicitly sharing a profile.
+The first native-shell prototype builds and includes local spaces, profile assignments, tabs, pinning, selection, session persistence, and command search across tabs and spaces. The native space editor supports a new profile or explicit sharing of an existing profile. Spaces can be renamed, recolored, and removed; removing a space keeps its profile and refuses to remove the last space. Profile IDs are persisted on first launch before any navigation.
 
 **Webpage rendering and Chrome extensions are not connected yet.** Profile identities in this prototype do not provide real cookie/account isolation until an engine is integrated and verified. History, bookmark search, drag/reorder, trackpad switching, multiple windows, and browser permissions remain future work.
 
@@ -45,6 +45,7 @@ Generate native view previews without opening a window or capturing the desktop:
 .build/debug/ArcusisBrowser --render-preview /tmp/arcusis-shell.png
 .build/debug/ArcusisBrowser --render-preview /tmp/arcusis-command.png --command
 .build/debug/ArcusisBrowser --render-preview /tmp/arcusis-compact.png --command --compact
+.build/debug/ArcusisBrowser --render-preview /tmp/arcusis-space-editor.png --space-editor
 ```
 
 These previews verify native layout; they do not prove window focus, shortcuts, real account isolation, or browser engine compatibility.

@@ -35,6 +35,8 @@ public enum CommandAction: Hashable, Sendable {
   case space(UUID)
   case folder(space: UUID, folder: UUID)
   case reopen(space: UUID, tab: UUID)
+  case bookmark(profile: UUID, id: UUID)
+  case history(profile: UUID, address: String)
 }
 
 public struct CommandResult: Identifiable, Equatable, Sendable {
@@ -46,7 +48,10 @@ public struct CommandResult: Identifiable, Equatable, Sendable {
 }
 
 public enum CommandSearch {
-  public static func results(for query: String, in session: BrowserSession) -> [CommandResult] {
+  public static func results(
+    for query: String, in session: BrowserSession,
+    bookmarks: [BrowserBookmark] = [], history: [BrowserHistoryEntry] = []
+  ) -> [CommandResult] {
     let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
     var results: [CommandResult] = []
     let orderedSpaces = session.spaces.sorted {
@@ -97,6 +102,36 @@ public enum CommandSearch {
               title: entry.tab.title,
               subtitle: "Reopen closed tab · \(space.name) · \(profile) profile",
               symbol: "arrow.uturn.backward", action: .reopen(space: space.id, tab: entry.id)))
+        }
+        let profile = space.profileID
+        let profileName = session.profiles.first { $0.id == profile }?.name ?? ""
+        var bookmarked: Set<String> = []
+        for item in bookmarks where item.profileID == profile && item.destination != nil {
+          guard
+            query.isEmpty
+              || "\(item.title) \(item.address ?? "") \(item.path)"
+                .localizedCaseInsensitiveContains(query)
+          else { continue }
+          bookmarked.insert(item.address!)
+          results.append(
+            CommandResult(
+              title: item.title, subtitle: "Bookmark · \(profileName) profile · \(item.path)",
+              symbol: "star", action: .bookmark(profile: profile, id: item.id)))
+        }
+        for entry in history
+        where entry.profileID == profile && entry.destination != nil
+          && !bookmarked.contains(entry.address)
+        {
+          guard
+            query.isEmpty
+              || "\(entry.title) \(entry.address)".localizedCaseInsensitiveContains(query)
+          else { continue }
+          results.append(
+            CommandResult(
+              title: entry.title,
+              subtitle:
+                "History · \(profileName) profile · \(entry.lastVisit.formatted(date: .abbreviated, time: .omitted))",
+              symbol: "clock", action: .history(profile: profile, address: entry.address)))
         }
       }
     }

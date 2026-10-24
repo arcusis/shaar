@@ -1,4 +1,5 @@
 #import <Foundation/Foundation.h>
+#import "ChromiumEngineServices.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -6,12 +7,12 @@ NS_ASSUME_NONNULL_BEGIN
 @interface ARCDownloadService : NSObject
 @property(copy, nullable) void (^onChanged)(NSString *profileID, NSDictionary<NSString *, id> *download);
 @property(copy, nullable) void (^onRemoved)(NSString *profileID, NSString *downloadID);
-- (nullable instancetype)initWithLibrary:(void *)library error:(NSError **)error;
-- (void)start;
-- (void)watchProfileID:(NSString *)profileID path:(NSString *)path
+- (instancetype)initWithServices:(ARCEngineServices *)services;
+- (void)watchProfileID:(NSString *)profileID
            completion:(void (^)(NSArray<NSDictionary *> * _Nullable, NSError * _Nullable))completion;
 - (void)command:(NSString *)command downloadID:(NSString *)downloadID profileID:(NSString *)profileID
      completion:(void (^)(NSError * _Nullable))completion;
+- (void)receiveTopic:(NSString *)topic profileID:(NSString *)profileID payload:(NSDictionary *)payload;
 @end
 
 NS_ASSUME_NONNULL_END

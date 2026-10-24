@@ -1,5 +1,6 @@
 #import "include/ChromiumBridge.h"
 #import "ChromiumDownloads.h"
+#import "ChromiumLibrary.h"
 #import "../../ThirdParty/ArdiaCore/ArdiaCore.h"
 #import <dlfcn.h>
 #include <string>
@@ -50,7 +51,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   NSEventModifierFlags chord = modifiers & (NSEventModifierFlagCommand | NSEventModifierFlagControl |
     NSEventModifierFlagOption | NSEventModifierFlagShift | NSEventModifierFlagFunction);
   if (chord == NSEventModifierFlagCommand) {
-    return [@[@"t", @"l", @"w", @"s", @"q", @"r", @"f", @"g"] containsObject:key.lowercaseString];
+    return [@[@"t", @"l", @"w", @"s", @"q", @"r", @"f", @"g", @"d", @"y"] containsObject:key.lowercaseString];
   }
   if (chord == (NSEventModifierFlagCommand | NSEventModifierFlagShift)) {
     return [@[@"g", @"j", @"t"] containsObject:key.lowercaseString];
@@ -91,6 +92,8 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   NSMutableSet<NSString *> *_pendingHostClosures;
   BOOL _closingBrowser;
   ARCDownloadService *_downloadService;
+  ARCEngineServices *_services;
+  ARCLibraryService *_libraryService;
 }
 
 - (instancetype)initWithFrameworkURL:(NSURL *)url error:(NSError **)error {
@@ -115,9 +118,24 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   _pendingHostClosures = [NSMutableSet set];
   _probeExtensions = [NSMutableDictionary dictionary];
   _probeDiagnostics = [NSMutableArray array];
-  _downloadService = [[ARCDownloadService alloc] initWithLibrary:_library error:error];
-  if (!_downloadService) return nil;
+  _services = [[ARCEngineServices alloc] initWithLibrary:_library error:error];
+  if (!_services) return nil;
+  _downloadService = [[ARCDownloadService alloc] initWithServices:_services];
+  _libraryService = [[ARCLibraryService alloc] initWithServices:_services];
   __weak ARCChromiumRuntime *weakSelf = self;
+  _services.onEvent = ^(NSString *topic, NSString *profile, NSDictionary *payload) {
+    ARCChromiumRuntime *owner = weakSelf;
+    if (!owner) return;
+    if ([topic hasPrefix:@"downloads."]) {
+      [owner->_downloadService receiveTopic:topic profileID:profile payload:payload];
+    } else if (owner.onLibraryChanged) {
+      owner.onLibraryChanged(profile, [topic hasPrefix:@"bookmarks."] ? @"bookmarks" : @"history");
+    }
+  };
+  _libraryService.onError = ^(NSString *profile, NSString *section, NSString *message) {
+    ARCChromiumRuntime *owner = weakSelf;
+    if (owner.onLibraryError) owner.onLibraryError(profile, section, message);
+  };
   _downloadService.onChanged = ^(NSString *profile, NSDictionary *download) {
     ARCChromiumRuntime *owner = weakSelf;
     if (owner.onDownloadChanged) owner.onDownloadChanged(profile, download);
@@ -158,7 +176,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 
 - (void)engineDidStart {
   _engine = [_engineClass sharedEngine];
-  [_downloadService start];
+  [_services start];
   if (_testing) {
     // Diagnostics only for the empty Bitwarden store-probe profile. No credential entry occurs.
     _engine.pageScript = @"(function(post){"
@@ -195,11 +213,13 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   NSString *directory = [@"Profile " stringByAppendingString:profileID.lowercaseString];
   [_engine loadProfile:directory completion:^(ArdiaCoreProfile *profile) {
     NSError *error = nil;
-    if (profile && !profile.offTheRecord && !profile.destroyed) {
+    if (profile && !profile.offTheRecord && !profile.destroyed &&
+        [self->_services bindProfileID:profileID path:profile.path error:&error]) {
       self->_profiles[profileID] = profile;
       if (self->_testing) [profile setBoolPreference:@"extensions.ui.developer_mode" value:YES];
       [self->_browserWindow prepareProfile:profile];
-      [self->_downloadService watchProfileID:profileID path:profile.path completion:^(NSArray *rows, NSError *failure) {
+      [self->_libraryService watchProfileID:profileID];
+      [self->_downloadService watchProfileID:profileID completion:^(NSArray *rows, NSError *failure) {
         if (failure) {
           if (self->_onNotice) self->_onNotice(failure.localizedDescription);
         } else if (self->_onDownloadsRestored) {
@@ -207,7 +227,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
         }
       }];
     } else {
-      error = BridgeError(@"Chromium could not load the requested persistent profile.");
+      error = error ?: BridgeError(@"Chromium could not load the requested persistent profile.");
     }
     NSArray *waiters = [self->_profileWaiters[profileID] copy];
     [self->_profileWaiters removeObjectForKey:profileID];
@@ -359,13 +379,26 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 - (void)refreshDownloadsForProfileID:(NSString *)profileID {
   ArdiaCoreProfile *profile = _profiles[profileID];
   if (!profile || profile.destroyed || profile.offTheRecord) return;
-  [_downloadService watchProfileID:profileID path:profile.path completion:^(NSArray *rows, NSError *error) {
+  [_downloadService watchProfileID:profileID completion:^(NSArray *rows, NSError *error) {
     if (error) {
       if (self->_onNotice) self->_onNotice(error.localizedDescription);
     } else if (self->_onDownloadsRestored) {
       self->_onDownloadsRestored(profileID, rows);
     }
   }];
+}
+
+- (void)bookmarksForProfileID:(NSString *)profileID completion:(void (^)(NSDictionary *, NSError *))completion {
+  [_libraryService bookmarksForProfileID:profileID completion:completion];
+}
+- (void)applyBookmarkOperation:(NSDictionary *)operation profileID:(NSString *)profileID completion:(void (^)(NSError *))completion {
+  [_libraryService applyBookmarkOperation:operation profileID:profileID completion:completion];
+}
+- (void)historyForProfileID:(NSString *)profileID limit:(NSInteger)limit completion:(void (^)(NSArray<NSDictionary *> *, NSError *))completion {
+  [_libraryService historyForProfileID:profileID limit:limit completion:completion];
+}
+- (void)deleteHistoryURL:(NSString *)url profileID:(NSString *)profileID completion:(void (^)(NSError *))completion {
+  [_libraryService deleteHistoryURL:url profileID:profileID completion:completion];
 }
 - (BOOL)findInTabID:(NSString *)tabID profileID:(NSString *)profileID requestID:(NSString *)requestID
               text:(NSString *)text forward:(BOOL)forward {

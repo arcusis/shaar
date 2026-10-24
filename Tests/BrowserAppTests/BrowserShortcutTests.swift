@@ -42,3 +42,11 @@ import Testing
   #expect(!ARCReservedBrowserShortcut("t", [.command, .control]))
   #expect(!ARCReservedBrowserShortcut("l", [.command, .shift]))
 }
+
+@Test func libraryShortcutsReserveOnlyCommandDAndCommandY() {
+  #expect(ARCReservedBrowserShortcut("d", .command))
+  #expect(ARCReservedBrowserShortcut("y", .command))
+  #expect(!ARCReservedBrowserShortcut("d", [.command, .shift]))
+  #expect(!ARCReservedBrowserShortcut("y", [.command, .option]))
+  #expect(!ARCReservedBrowserShortcut("l", [.command, .shift]))
+}

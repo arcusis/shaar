@@ -137,6 +137,13 @@ private struct BrowserApplication: App {
         Button("Previous space") { store.cycleSpace(by: -1) }.keyboardShortcut(
           "[", modifiers: [.control, .option])
       }
+      CommandMenu("Bookmarks") {
+        Button("Bookmark this page") { store.bookmarkCurrentPage() }.keyboardShortcut("d")
+          .disabled(!store.canBookmarkCurrentPage)
+        Button("Bookmarks…") { store.showLibrary(.bookmarks) }.disabled(store.sheet != nil)
+        Button("History…") { store.showLibrary(.history) }.keyboardShortcut("y").disabled(
+          store.sheet != nil)
+      }
       CommandGroup(after: .textEditing) {
         Button("Find in Page…") { store.showPageFind() }.keyboardShortcut("f")
         Button("Find Next") { store.movePageFind(forward: true) }.keyboardShortcut("g")

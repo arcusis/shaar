@@ -20,6 +20,12 @@ FOUNDATION_EXPORT BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifier
 @property(copy, nullable) void (^onDownloadChanged)(NSString *profileID, NSDictionary<NSString *, id> *download);
 @property(copy, nullable) void (^onDownloadRemoved)(NSString *profileID, NSString *downloadID);
 @property(copy, nullable) void (^onDownloadsRestored)(NSString *profileID, NSArray<NSDictionary<NSString *, id> *> *downloads);
+@property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onLibraryChanged)(NSString *profileID, NSString *section);
+@property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onLibraryError)(NSString *profileID, NSString *section, NSString *message);
+- (void)bookmarksForProfileID:(NSString *)profileID completion:(void (NS_SWIFT_UI_ACTOR ^)(NSDictionary * _Nullable, NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
+- (void)applyBookmarkOperation:(NSDictionary *)operation profileID:(NSString *)profileID completion:(void (NS_SWIFT_UI_ACTOR ^)(NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
+- (void)historyForProfileID:(NSString *)profileID limit:(NSInteger)limit completion:(void (NS_SWIFT_UI_ACTOR ^)(NSArray<NSDictionary *> * _Nullable, NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
+- (void)deleteHistoryURL:(NSString *)url profileID:(NSString *)profileID completion:(void (NS_SWIFT_UI_ACTOR ^)(NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
 @property(copy, nullable) void (^onTabChanged)(NSString *tabID, NSString *url, NSString *title,
                                              BOOL loading, BOOL canGoBack, BOOL canGoForward);
 @property(copy, nullable) void (^onTabClosed)(NSString *tabID);

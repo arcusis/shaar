@@ -8,6 +8,8 @@ enum BrowserSheet: Identifiable {
   case downloads(profileID: UUID)
   case folder(FolderEditorRoute)
   case recentlyClosed(spaceID: UUID)
+  case library(profileID: UUID, section: LibrarySection)
+  case bookmarkEditor(BookmarkEditorRoute)
 
   var id: String {
     switch self {
@@ -17,19 +19,21 @@ enum BrowserSheet: Identifiable {
     case .downloads(let profile): "downloads-\(profile)"
     case .folder(let route): "folder-\(route)"
     case .recentlyClosed(let space): "closed-\(space)"
+    case .library(let profile, let section): "library-\(profile)-\(section)"
+    case .bookmarkEditor(let route): "bookmark-\(route.id)"
     }
   }
 
   var isConsent: Bool {
     switch self {
-    case .space, .downloads, .folder, .recentlyClosed: false
+    case .space, .downloads, .folder, .recentlyClosed, .library, .bookmarkEditor: false
     case .extensionInstall, .websiteMedia: true
     }
   }
 
   func matches(_ session: BrowserSession) -> Bool {
     switch self {
-    case .space, .downloads, .folder, .recentlyClosed: false
+    case .space, .downloads, .folder, .recentlyClosed, .library, .bookmarkEditor: false
     case .extensionInstall(let request): request.matches(session)
     case .websiteMedia(let request): request.matches(session)
     }

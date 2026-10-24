@@ -61,6 +61,9 @@ struct BrowserWindow: View {
       case .space(let route): SpaceEditor(store: store, route: route)
       case .folder(let route): FolderEditor(store: store, route: route)
       case .recentlyClosed(let space): RecentlyClosedPanel(store: store, spaceID: space)
+      case .library(let profile, let section):
+        LibraryPanel(store: store, profileID: profile, section: section)
+      case .bookmarkEditor(let route): BookmarkEditor(store: store, route: route)
       case .extensionInstall(let request): ExtensionConsent(store: store, request: request)
       case .websiteMedia(let request): WebsiteMediaConsent(store: store, request: request)
       case .downloads(let profile):
@@ -129,6 +132,20 @@ struct BrowserWindow: View {
           .lineLimit(1)
         }
         Spacer()
+        Button {
+          store.bookmarkCurrentPage()
+        } label: {
+          Image(systemName: "star")
+        }
+        .disabled(!store.canBookmarkCurrentPage).help("Bookmark this page (Command-D)")
+        .accessibilityLabel("Bookmark this page")
+        Menu {
+          Button("Bookmarks…") { store.showLibrary(.bookmarks) }
+          Button("History…") { store.showLibrary(.history) }
+        } label: {
+          Image(systemName: "books.vertical")
+        }
+        .menuStyle(.borderlessButton).fixedSize().help("Bookmarks and History")
         if let engine = store.engine {
           MediaCaptureIndicator(store: store, engine: engine)
           ExtensionToolbar(engine: engine, store: store)

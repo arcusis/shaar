@@ -15,6 +15,23 @@ chrome.runtime.onMessage.addListener((message, _sender, reply) => {
     if (message.action === "storage-worker") {
       await chrome.storage.local.set({ [message.key]: message.value });
     }
+    if (message.action === "library-read" || message.action === "library-write") {
+      const url = new URL(message.url);
+      if (url.protocol !== "http:" || url.hostname !== "127.0.0.1" || !url.pathname.startsWith("/library-")) {
+        throw new Error("Library fixture origin required");
+      }
+      if (message.action === "library-write") {
+        const [existing] = await chrome.bookmarks.search({ url: url.href });
+        if (existing) await chrome.bookmarks.update(existing.id, { title: message.title });
+        else await chrome.bookmarks.create({ title: message.title, url: url.href });
+      }
+      const bookmarks = await chrome.bookmarks.search({ url: url.href });
+      const history = await chrome.history.search({ text: url.href, startTime: 0, maxResults: 1000 });
+      const { account } = await chrome.storage.local.get("account");
+      return { account, serviceWorker: true,
+        bookmarks: bookmarks.map(({ title, url }) => ({ title, url })),
+        history: history.map(({ title, url, visitCount }) => ({ title, url, visitCount })) };
+    }
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (message.action === "fill") {
       if (!tab || !tab.url?.startsWith("http://127.0.0.1:")) throw new Error("Fixture origin required");

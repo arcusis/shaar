@@ -54,6 +54,62 @@ final class BrowserEngine {
     self.store = store
     self.presentsNativePanels = presentsNativePanels
     store.engine = self
+    store.library.onLoad = { [weak self] key, limit, completion in
+      guard let self else {
+        completion(.failure(LibraryDataError.invalidBookmarks))
+        return
+      }
+      switch key.section {
+      case .bookmarks:
+        self.runtime.bookmarks(forProfileID: key.profileID.uuidString) { value, error in
+          if let error {
+            completion(.failure(error))
+          } else if let value {
+            completion(.success(value))
+          } else {
+            completion(.failure(LibraryDataError.invalidBookmarks))
+          }
+        }
+      case .history:
+        self.runtime.history(forProfileID: key.profileID.uuidString, limit: limit) { value, error in
+          if let error {
+            completion(.failure(error))
+          } else if let value {
+            completion(.success(value))
+          } else {
+            completion(.failure(LibraryDataError.invalidHistory))
+          }
+        }
+      }
+    }
+    store.library.onMutation = { [weak self] profile, mutation, completion in
+      guard let self else {
+        completion("The browser engine is unavailable.")
+        return
+      }
+      let done: @MainActor (Error?) -> Void = { error in completion(error?.localizedDescription) }
+      switch mutation {
+      case .bookmark(let operation):
+        self.runtime.applyBookmarkOperation(
+          operation, profileID: profile.uuidString, completion: done)
+      case .deleteHistory(let url):
+        self.runtime.deleteHistoryURL(url, profileID: profile.uuidString, completion: done)
+      }
+    }
+    runtime.onLibraryChanged = { [weak store] owner, value in
+      guard let store, let profile = UUID(uuidString: owner),
+        let section = LibrarySection(rawValue: value),
+        store.session.profiles.contains(where: { $0.id == profile })
+      else { return }
+      store.library.invalidate(profile, section: section)
+    }
+    runtime.onLibraryError = { [weak store] owner, value, message in
+      guard let store, let profile = UUID(uuidString: owner),
+        let section = LibrarySection(rawValue: value),
+        store.session.profiles.contains(where: { $0.id == profile })
+      else { return }
+      store.library.serviceFailed(profile, section: section, message: message)
+    }
     runtime.onNotice = { [weak self] message in self?.notice = message }
     downloads.onCommand = { [weak self] action, id, profile, completion in
       guard let self else {
@@ -209,6 +265,8 @@ final class BrowserEngine {
             self.notice = error.localizedDescription
           } else {
             self.loadedProfiles.insert(profile)
+            self.store?.library.refresh(profile, section: .bookmarks)
+            self.store?.library.refresh(profile, section: .history)
             // Chromium's download history initializes asynchronously after profile load.
             Task { [weak self] in
               for delay in [300, 700, 2000] {
@@ -473,6 +531,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
       "Reopen last closed tab", #selector(reopenClosedTab), "t", to: file,
       modifiers: [.command, .shift])
     add("Recently closed…", #selector(showRecentlyClosed), "", to: file)
+    add("Bookmark this page", #selector(bookmarkPage), "d", to: file)
+    add("Bookmarks…", #selector(showBookmarks), "", to: file)
+    add("History…", #selector(showHistory), "y", to: file)
     add("Downloads", #selector(showDownloads), "j", to: file, modifiers: [.command, .shift])
     let edit = menu("Edit")
     for (title, action, key) in [
@@ -502,6 +563,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     case #selector(showDownloads): return store.sheet == nil
     case #selector(reopenClosedTab): return store.canReopenClosedTab
     case #selector(showRecentlyClosed): return store.sheet == nil
+    case #selector(bookmarkPage): return store.canBookmarkCurrentPage
+    case #selector(showBookmarks), #selector(showHistory): return store.sheet == nil
     default: return true
     }
   }
@@ -511,6 +574,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
   @objc private func showDownloads() { store.showDownloads() }
   @objc private func reopenClosedTab() { store.reopenLastClosedTab() }
   @objc private func showRecentlyClosed() { store.showRecentlyClosed() }
+  @objc private func bookmarkPage() { store.bookmarkCurrentPage() }
+  @objc private func showBookmarks() { store.showLibrary(.bookmarks) }
+  @objc private func showHistory() { store.showLibrary(.history) }
   @objc private func newSpace() { store.spaceEditor = .create }
   @objc private func editSpace() { store.spaceEditor = .edit(store.session.selectedSpaceID) }
   @objc private func closeTab() {

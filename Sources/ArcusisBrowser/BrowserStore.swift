@@ -6,6 +6,7 @@ import Observation
 final class BrowserStore {
   private(set) var session: BrowserSession
   let dragSessionID = UUID()
+  let library = BrowserLibraryModel()
   private(set) var sidebarNotice: String?
   var commandIsOpen = false
   var commandQuery = ""
@@ -66,7 +67,12 @@ final class BrowserStore {
     }
   }
 
-  var results: [CommandResult] { CommandSearch.results(for: commandQuery, in: session) }
+  var results: [CommandResult] {
+    let profile = session.selectedSpace.profileID
+    return CommandSearch.results(
+      for: commandQuery, in: session,
+      bookmarks: library.bookmarks[profile]?.items ?? [], history: library.history[profile] ?? [])
+  }
   var profileName: String {
     session.profiles.first { $0.id == session.selectedSpace.profileID }?.name ?? ""
   }
@@ -215,6 +221,12 @@ final class BrowserStore {
     case .reopen(let space, let tab):
       reopenClosedTab(tab, in: space)
       return
+    case .bookmark(let profile, let id):
+      openBookmark(id, profileID: profile)
+      return
+    case .history(let profile, let address):
+      openHistoryEntry(address, profileID: profile)
+      return
     }
     commandIsOpen = false
     save()
@@ -292,7 +304,7 @@ final class BrowserStore {
     switch request {
     case .extensionInstall(let request): onInstallDecision?(request.id, allow)
     case .websiteMedia(let request): onWebsiteMediaDecision?(request.id, allow)
-    case .space, .downloads, .folder, .recentlyClosed: break
+    case .space, .downloads, .folder, .recentlyClosed, .library, .bookmarkEditor: break
     }
   }
 
@@ -463,6 +475,10 @@ final class BrowserStore {
   }
 
   private func save() {
+    if case .library(let profile, _) = sheet, profile != session.selectedSpace.profileID {
+      sheet = nil
+    }
+    if case .bookmarkEditor(let route) = sheet, !route.matches(self) { sheet = nil }
     if case .recentlyClosed(let space) = sheet, space != session.selectedSpaceID { sheet = nil }
     if case .folder(let route) = sheet, !route.matches(session) { sheet = nil }
     if case .downloads(let profile) = sheet, profile != session.selectedSpace.profileID {

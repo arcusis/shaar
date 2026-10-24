@@ -153,6 +153,7 @@ final class BitwardenProbe {
     var welcomeNavigations = 0
     var skippedSetup = false
     var openedLogin = false
+    var transitions: [[String: Any]] = []
     let clock = ContinuousClock()
     var lastRoute = ""
     var routeChangedAt = clock.now
@@ -171,6 +172,9 @@ final class BitwardenProbe {
             "An unexpected page/profile replaced the Bitwarden probe context.")
         }
         welcomeNavigations += 1
+        transitions.append([
+          "event": "welcome-tab", "url": selected.selectedTab!.url.absoluteString,
+        ])
         try expect(
           runtime.view(forExtensionPopupID: popup.id) == nil,
           "Bitwarden welcome navigation closes the popup in its original context")
@@ -204,6 +208,7 @@ final class BitwardenProbe {
         if address != lastRoute {
           lastRoute = address
           routeChangedAt = clock.now
+          transitions.append(["event": "route", "url": address, "text": state["text"] ?? ""])
         }
         if clock.now - routeChangedAt < .milliseconds(500) {
           try await Task.sleep(for: .milliseconds(100))
@@ -211,6 +216,7 @@ final class BitwardenProbe {
         }
         if address.contains("#/default-password-manager-prompt") && !skippedSetup {
           skippedSetup = await clickPopupButton(popup.id, title: "Skip")
+          transitions.append(["event": "skip-input", "dispatched": skippedSetup, "url": address])
           if skippedSetup {
             try expect(
               true, "skips optional password-manager settings change in the disposable profile")
@@ -222,6 +228,7 @@ final class BitwardenProbe {
           && !(state["inputs"] as? [String] ?? []).contains("email")
         {
           openedLogin = await clickPopupButton(popup.id, title: "Log in")
+          transitions.append(["event": "login-input", "dispatched": openedLogin, "url": address])
           if openedLogin {
             try expect(true, "clicks Log in in the current Bitwarden popup instance")
           }
@@ -240,11 +247,27 @@ final class BitwardenProbe {
     popupState["probeInteractions"] = [
       "popupID": popup.id, "openedLogin": openedLogin,
       "skippedSetup": skippedSetup, "welcomeNavigations": welcomeNavigations,
+      "transitions": transitions,
     ]
     try write(popupState, name: "\(phase)-bitwarden-popup.json")
     if !ready {
-      // Diagnostic API reads happen only after failure is decided. They must never
-      // initialize a lazy service in time to turn the readiness test into a pass.
+      // The readiness result is already fixed as a failure. A second ordinary
+      // click happens before diagnostic API reads or opening a diagnostic tab.
+      // It cannot turn the original gate green.
+      let secondClick = await clickPopupButton(popup.id, title: "Log in")
+      try await Task.sleep(for: .seconds(1))
+      let after: String? = await withCheckedContinuation { continuation in
+        runtime.evaluateProbePopupID(
+          popup.id,
+          script:
+            "({url:location.href,text:document.body?.innerText,inputs:[...document.querySelectorAll('input')].map(i=>i.type)})"
+        ) { continuation.resume(returning: $0) }
+      }
+      try write(
+        ["dispatched": secondClick, "after": after ?? "unavailable", "readinessPassed": false],
+        name: "\(phase)-bitwarden-second-click.json")
+      // Diagnostic API reads must never initialize a lazy service in time to
+      // turn the readiness test or the second-click diagnostic into a pass.
       await queryPopupAPIs(popup.id)
       try await Task.sleep(for: .milliseconds(500))
       let diagnostic: String? = await withCheckedContinuation { continuation in
@@ -374,6 +397,7 @@ final class BitwardenProbe {
             save('window',async()=>{const w=await chrome.windows.getCurrent({populate:true});return {id:w.id,focused:w.focused,tabs:w.tabs?.map(t=>t.id)};});
             save('lastWindow',async()=>{const w=await chrome.windows.getLastFocused();return {id:w.id,focused:w.focused};});
             save('localKeys',async()=>Object.keys(await chrome.storage.local.get(null)));
+            save('introDismissed',async()=>await chrome.storage.local.get('global_vaultBrowserIntroCarousel_introCarouselDismissed'));
             save('sessionKeys',async()=>Object.keys(await chrome.storage.session.get(null)));
             save('managedKeys',async()=>Object.keys(await chrome.storage.managed.get(null)));
             save('contexts',async()=>(await chrome.runtime.getContexts({})).map(c=>({type:c.contextType,origin:c.documentOrigin})));

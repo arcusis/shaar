@@ -94,6 +94,26 @@ final class ExtensionProbe {
       try expect(
         port["port"] as? Bool == true && port["account"] as? String == account,
         "profile \(index) exchanges isolated state over a long-lived runtime port")
+      let storage = try await command(popup.id, message: ["action": "storage-events"])
+      try JSONSerialization.data(withJSONObject: storage, options: [.prettyPrinted, .sortedKeys])
+        .write(
+          to: root.appending(path: "\(phase)-extension-storage-\(index).json"), options: .atomic)
+      try expect(storage["error"] == nil, "profile \(index) callback/event roundtrip completes")
+      let own = storage["ownValue"] as? NSDictionary
+      let worker = storage["workerValue"] as? NSDictionary
+      try expect(
+        own != nil && worker != nil && storage["callbackSet"] as? Bool == true
+          && storage["workerCallback"] as? Bool == true
+          && storage["callbackGet"] as? NSDictionary == own,
+        "profile \(index) delivers storage callbacks and reads the serialized value")
+      for (event, expected) in [
+        ("areaOwn", own), ("areaWorker", worker), ("globalOwn", own), ("globalWorker", worker),
+      ] {
+        let change = storage[event] as? [String: Any]
+        try expect(
+          change?["newValue"] as? NSDictionary == expected && change?["oldValue"] == nil,
+          "profile \(index) delivers \(event) storage notification with the original payload")
+      }
       let offscreen = try await command(popup.id, message: ["action": "offscreen"])
       try expect(
         (offscreen["offscreen"] as? [String: Any])?["document"] as? Bool == true,

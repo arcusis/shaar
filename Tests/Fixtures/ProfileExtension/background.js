@@ -12,6 +12,9 @@ chrome.runtime.onMessage.addListener((message, _sender, reply) => {
     if (message.action === "set") {
       await chrome.storage.local.set({ account: message.account });
     }
+    if (message.action === "storage-worker") {
+      await chrome.storage.local.set({ [message.key]: message.value });
+    }
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (message.action === "fill") {
       if (!tab || !tab.url?.startsWith("http://127.0.0.1:")) throw new Error("Fixture origin required");

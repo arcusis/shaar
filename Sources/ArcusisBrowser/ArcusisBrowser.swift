@@ -121,6 +121,8 @@ private struct BrowserApplication: App {
           "j", modifiers: [.command, .shift])
       }
       CommandMenu("Tabs") {
+        Button("Reload") { store.reloadCurrentPage() }.keyboardShortcut("r")
+          .disabled(!store.canReloadCurrentPage)
         Button("Close tab") {
           if let id = store.session.selectedSpace.selectedTabID { store.closeTab(id) }
         }
@@ -146,6 +148,7 @@ private struct BrowserApplication: App {
       }
       CommandGroup(after: .textEditing) {
         Button("Find in Page…") { store.showPageFind() }.keyboardShortcut("f")
+          .disabled(!store.canFindCurrentPage)
         Button("Find Next") { store.movePageFind(forward: true) }.keyboardShortcut("g")
           .disabled(store.pageFind?.canMove != true)
         Button("Find Previous") { store.movePageFind(forward: false) }

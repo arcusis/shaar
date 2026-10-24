@@ -113,10 +113,11 @@ struct BrowserWindow: View {
           .disabled(state?.canGoForward != true)
           .help("Forward")
           Button {
-            engine.runtime.reloadTabID(id.uuidString)
+            store.reloadCurrentPage()
           } label: {
             Image(systemName: "arrow.clockwise")
           }
+          .disabled(!store.canReloadCurrentPage)
           .help("Reload (Command-R)")
         }
         Spacer()
@@ -172,7 +173,9 @@ struct BrowserWindow: View {
       ZStack {
         Color(nsColor: .textBackgroundColor)
         if let engine = store.engine, let id = store.session.selectedSpace.selectedTabID {
-          if engine.pages[id] != nil {
+          if let failure = store.rendererFailures[id] {
+            FailedPageView(store: store, failure: failure)
+          } else if engine.pages[id] != nil {
             ChromiumPage(engine: engine, tabID: id)
           } else {
             ProgressView("Loading profile…")

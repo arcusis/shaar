@@ -29,6 +29,8 @@ FOUNDATION_EXPORT BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifier
 @property(copy, nullable) void (^onTabChanged)(NSString *tabID, NSString *url, NSString *title,
                                              BOOL loading, BOOL canGoBack, BOOL canGoForward);
 @property(copy, nullable) void (^onTabClosed)(NSString *tabID);
+@property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onRendererGone)(NSString *tabID, NSString *profileID, NSString *status, int exitCode);
+@property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onDocumentCommitted)(NSString *tabID, NSString *profileID);
 @property(copy, nullable) void (^onNewTab)(NSString *tabID, NSString *profileID, NSString *url,
                                          NSString * _Nullable openerID, BOOL foreground);
 @property(readonly, nullable) NSWindow *window;
@@ -50,6 +52,7 @@ FOUNDATION_EXPORT BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifier
 - (void)goBackInTabID:(NSString *)tabID;
 - (void)goForwardInTabID:(NSString *)tabID;
 - (void)reloadTabID:(NSString *)tabID;
+- (BOOL)reloadTabID:(NSString *)tabID profileID:(NSString *)profileID;
 - (BOOL)findInTabID:(NSString *)tabID profileID:(NSString *)profileID requestID:(NSString *)requestID
               text:(NSString *)text forward:(BOOL)forward;
 - (void)stopFindingInTabID:(NSString *)tabID;
@@ -83,6 +86,8 @@ FOUNDATION_EXPORT BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifier
               completion:(void (^)(BOOL clicked))completion;
 - (void)clickProbeElementInTabID:(NSString *)tabID elementID:(NSString *)elementID
                     completion:(void (^)(BOOL clicked))completion;
+/// Intentionally terminates only an authored loopback page in a disposable probe profile.
+- (BOOL)crashProbeTabID:(NSString *)tabID;
 @end
 
 NS_ASSUME_NONNULL_END

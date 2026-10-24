@@ -31,6 +31,14 @@ enum BrowserSheet: Identifiable {
     }
   }
 
+  var tabID: UUID? {
+    switch self {
+    case .extensionInstall(let request): request.tabID
+    case .websiteMedia(let request): request.tabID
+    default: nil
+    }
+  }
+
   func matches(_ session: BrowserSession) -> Bool {
     switch self {
     case .space, .downloads, .folder, .recentlyClosed, .library, .bookmarkEditor: false

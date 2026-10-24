@@ -13,6 +13,7 @@ final class BrowserStore {
   var commandSelection = 0
   var sidebarIsVisible = true
   private(set) var pageFind: PageFindState?
+  private(set) var rendererFailures: [UUID: RendererFailure] = [:]
   var sheet: BrowserSheet?
   var spaceEditor: SpaceEditorRoute? {
     get {
@@ -49,6 +50,7 @@ final class BrowserStore {
   @ObservationIgnored var onWebsiteMediaDecision: ((String, Bool) -> Void)?
   @ObservationIgnored var onFindRequest: ((PageFindState, Bool) -> Bool)?
   @ObservationIgnored var onStopFinding: ((UUID) -> Void)?
+  @ObservationIgnored var onReloadPage: ((UUID, UUID) -> Bool)?
   @ObservationIgnored private var presentedConsentID: String?
 
   init(sessionFile: SessionFile? = nil, session: BrowserSession = .fresh()) {
@@ -141,8 +143,12 @@ final class BrowserStore {
     return true
   }
 
+  var canFindCurrentPage: Bool {
+    sheet == nil && session.selectedSpace.selectedTabID.map { rendererFailures[$0] == nil } == true
+  }
+
   func showPageFind() {
-    guard sheet == nil, let tab = session.selectedSpace.selectedTab else { return }
+    guard canFindCurrentPage, let tab = session.selectedSpace.selectedTab else { return }
     commandIsOpen = false
     engine?.extensionPanel = nil
     if var current = pageFind, current.matches(session) {
@@ -247,8 +253,78 @@ final class BrowserStore {
   }
 
   func nativeTabClosed(_ id: UUID) {
+    rendererFailures[id] = nil
     session.closeTab(id)
     save()
+  }
+
+  func nativeRendererGone(_ id: UUID, profileID: UUID, status: String, exitCode: Int) {
+    guard status != "normal",
+      session.spaces.contains(where: {
+        $0.profileID == profileID && $0.tabs.contains { $0.id == id }
+      }), let tab = session.spaces.flatMap(\.tabs).first(where: { $0.id == id })
+    else { return }
+    rendererFailures[id] = RendererFailure(
+      profileID: profileID, tabID: id, pageURL: tab.url, status: status, exitCode: exitCode)
+    if pageFind?.tabID == id { dismissPageFind() }
+    for request in consentRequests where request.tabID == id {
+      resolveConsent(request.id, accepted: false)
+    }
+  }
+
+  func nativeDocumentCommitted(_ id: UUID, profileID: UUID) {
+    guard rendererFailures[id]?.profileID == profileID else { return }
+    rendererFailures[id] = nil
+  }
+
+  func nativePageLoading(_ id: UUID, loading: Bool) {
+    guard var failure = rendererFailures[id], failure.reloading else { return }
+    if loading { failure.loadingStarted = true }
+    if !loading && failure.loadingStarted {
+      // A stopped or failed navigation can finish without committing a replacement document.
+      failure.reloading = false
+      failure.loadingStarted = false
+    }
+    rendererFailures[id] = failure
+  }
+
+  var canReloadCurrentPage: Bool {
+    guard sheet == nil, !commandIsOpen, let tab = session.selectedSpace.selectedTab else {
+      return false
+    }
+    return rendererFailures[tab.id]?.reloading != true && onReloadPage != nil
+  }
+
+  func canReloadFailure(_ id: UUID) -> Bool {
+    guard let tab = session.selectedSpace.selectedTab,
+      let failure = rendererFailures[tab.id], failure.id == id,
+      failure.profileID == session.selectedSpace.profileID
+    else { return false }
+    return canReloadCurrentPage
+  }
+
+  @discardableResult
+  func reloadFailedPage(_ id: UUID) -> Bool {
+    guard canReloadFailure(id) else { return false }
+    return reloadCurrentPage()
+  }
+
+  @discardableResult
+  func reloadCurrentPage() -> Bool {
+    guard canReloadCurrentPage, let tab = session.selectedSpace.selectedTab else { return false }
+    dismissPageFind()
+    engine?.extensionPanel = nil
+    let previous = rendererFailures[tab.id]
+    if var failure = previous {
+      failure.reloading = true
+      failure.loadingStarted = false
+      rendererFailures[tab.id] = failure
+    }
+    guard onReloadPage?(tab.id, session.selectedSpace.profileID) == true else {
+      if rendererFailures[tab.id]?.id == previous?.id { rendererFailures[tab.id] = previous }
+      return false
+    }
+    return true
   }
 
   func nativeTabChanged(_ id: UUID, url: URL, title: String) {
@@ -285,7 +361,8 @@ final class BrowserStore {
   }
 
   private func enqueueConsent(_ request: BrowserSheet) -> Bool {
-    guard request.isConsent, request.matches(session), consentRequests.count < 10,
+    guard request.isConsent, let tab = request.tabID, rendererFailures[tab] == nil,
+      request.matches(session), consentRequests.count < 10,
       !consentRequests.contains(where: { $0.id == request.id })
     else { return false }
     consentRequests.append(request)
@@ -300,7 +377,9 @@ final class BrowserStore {
     consentRequests.removeAll { $0.id == id }
     if presentedConsentID == id { presentedConsentID = nil }
     if presented { sheet = nil }
-    let allow = accepted && presented && request.matches(session)
+    let allow =
+      accepted && presented && request.matches(session)
+      && request.tabID.map { rendererFailures[$0] == nil } == true
     switch request {
     case .extensionInstall(let request): onInstallDecision?(request.id, allow)
     case .websiteMedia(let request): onWebsiteMediaDecision?(request.id, allow)
@@ -475,6 +554,7 @@ final class BrowserStore {
   }
 
   private func save() {
+    rendererFailures = rendererFailures.filter { $0.value.belongs(to: session) }
     if case .library(let profile, _) = sheet, profile != session.selectedSpace.profileID {
       sheet = nil
     }

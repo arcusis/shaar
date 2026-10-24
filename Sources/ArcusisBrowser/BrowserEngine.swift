@@ -54,6 +54,25 @@ final class BrowserEngine {
     self.store = store
     self.presentsNativePanels = presentsNativePanels
     store.engine = self
+    store.onReloadPage = { [weak self] tab, profile in
+      self?.runtime.reloadTabID(tab.uuidString, profileID: profile.uuidString) ?? false
+    }
+    runtime.onRendererGone = { [weak self] identity, owner, status, code in
+      guard let self, let tab = UUID(uuidString: identity), let profile = UUID(uuidString: owner)
+      else { return }
+      self.pages[tab]?.loading = false
+      self.mediaAccess[tab] = nil
+      if case .popup(let popup) = self.extensionPanel, popup.tabID == tab {
+        self.extensionPanel = nil
+      }
+      self.store?.nativeRendererGone(tab, profileID: profile, status: status, exitCode: Int(code))
+    }
+    runtime.onDocumentCommitted = { [weak store] identity, owner in
+      guard let tab = UUID(uuidString: identity), let profile = UUID(uuidString: owner) else {
+        return
+      }
+      store?.nativeDocumentCommitted(tab, profileID: profile)
+    }
     store.library.onLoad = { [weak self] key, limit, completion in
       guard let self else {
         completion(.failure(LibraryDataError.invalidBookmarks))
@@ -210,6 +229,7 @@ final class BrowserEngine {
         self.store?.dismissPageFind()
       }
       self.pages[id] = PageState(loading: loading, canGoBack: back, canGoForward: forward)
+      self.store?.nativePageLoading(id, loading: loading)
       if let url = URL(string: address) { self.store?.nativeTabChanged(id, url: url, title: title) }
     }
     runtime.onTabClosed = { [weak self] identity in
@@ -558,7 +578,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
   func validateMenuItem(_ item: NSMenuItem) -> Bool {
     switch item.action {
     case #selector(findInPage):
-      return store.sheet == nil && store.session.selectedSpace.selectedTabID != nil
+      return store.canFindCurrentPage
+    case #selector(reload): return store.canReloadCurrentPage
     case #selector(findNext), #selector(findPrevious): return store.pageFind?.canMove == true
     case #selector(showDownloads): return store.sheet == nil
     case #selector(reopenClosedTab): return store.canReopenClosedTab
@@ -586,9 +607,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
   @objc private func nextSpace() { store.cycleSpace(by: 1) }
   @objc private func previousSpace() { store.cycleSpace(by: -1) }
   @objc private func reload() {
-    if let id = store.session.selectedSpace.selectedTabID {
-      engine.runtime.reloadTabID(id.uuidString)
-    }
+    store.reloadCurrentPage()
   }
   @objc private func quit() { engine.runtime.quit() }
 }

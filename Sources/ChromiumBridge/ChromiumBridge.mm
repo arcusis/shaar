@@ -344,6 +344,13 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 - (void)goBackInTabID:(NSString *)tabID { [_tabs[tabID] goBack]; }
 - (void)goForwardInTabID:(NSString *)tabID { [_tabs[tabID] goForward]; }
 - (void)reloadTabID:(NSString *)tabID { [_tabs[tabID] reload]; }
+- (BOOL)reloadTabID:(NSString *)tabID profileID:(NSString *)profileID {
+  ArdiaCoreTab *tab = _tabs[tabID];
+  if (!tab || tab.closed || ![_selectedTabID isEqualToString:tabID] ||
+      ![_owners[tabID] isEqualToString:profileID]) return NO;
+  [tab reload];
+  return YES;
+}
 - (BOOL)placeTabIDs:(NSArray<NSString *> *)tabIDs pinnedIDs:(NSArray<NSString *> *)pinnedIDs
          profileID:(NSString *)profileID {
   NSSet *identities = [NSSet setWithArray:tabIDs];
@@ -633,6 +640,15 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   [self captureProbeTab:_extensionPopup completion:completion];
 }
 - (int)nativeTabIDForID:(NSString *)tabID { return _tabs[tabID] ? _tabs[tabID].tabId : -1; }
+- (BOOL)crashProbeTabID:(NSString *)tabID {
+  ArdiaCoreTab *tab = _tabs[tabID];
+  NSURL *url = tab ? [NSURL URLWithString:tab.url] : nil;
+  if (!_testing || !tab || tab.closed || ![@[@"127.0.0.1", @"localhost"] containsObject:url.host] ||
+      ![url.scheme isEqualToString:@"http"] || ![url.path hasPrefix:@"/renderer-crash-"]) return NO;
+  // The target may disappear before CDP can acknowledge Page.crash; the renderer callback is the evidence.
+  [tab devToolsCall:@"Page.crash" params:@{} timeout:5 completion:^(NSDictionary *result, NSString *error) {}];
+  return YES;
+}
 - (void)captureProbeTab:(ArdiaCoreTab *)tab completion:(void (^)(NSData *))completion {
   if (!_testing || !tab || tab.closed) { completion(nil); return; }
   [tab devToolsCall:@"Page.captureScreenshot"
@@ -647,6 +663,23 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 - (void)tabDidChangeURL:(ArdiaCoreTab *)tab { [self publish:tab]; }
 - (void)tabDidChangeLoading:(ArdiaCoreTab *)tab { [self publish:tab]; }
 - (void)tabDidChangeNavigationState:(ArdiaCoreTab *)tab { [self publish:tab]; }
+- (void)tab:(ArdiaCoreTab *)tab rendererGone:(NSString *)status code:(int)code {
+  if (tab == _extensionPopup) {
+    [self closeExtensionPopup];
+    if (_onNotice) _onNotice(@"The extension stopped working. Open it again to retry.");
+    return;
+  }
+  NSString *identity = [self identityForTab:tab];
+  NSString *profile = identity ? _owners[identity] : nil;
+  if (!identity || !profile || tab.closed) return;
+  [self stopFindingInTabID:identity];
+  if (_onRendererGone) _onRendererGone(identity, profile, status, code);
+}
+- (void)tabDidCommitDocument:(ArdiaCoreTab *)tab {
+  NSString *identity = [self identityForTab:tab];
+  NSString *profile = identity ? _owners[identity] : nil;
+  if (identity && profile && !tab.closed && _onDocumentCommitted) _onDocumentCommitted(identity, profile);
+}
 - (void)tab:(ArdiaCoreTab *)tab didFindMatches:(int)count active:(int)active final:(BOOL)final {
   NSString *identity = [self identityForTab:tab];
   if (_findRequestID && [identity isEqualToString:_findTabID] &&

@@ -35,7 +35,7 @@ struct ExtensionToolbar: View {
     .help("Extensions for \(store.profileName)")
     .accessibilityLabel("Extensions for \(store.profileName)")
     .popover(
-      item: engine.presentsExtensionPanels ? $engine.extensionPanel : .constant(nil),
+      item: engine.presentsNativePanels ? $engine.extensionPanel : .constant(nil),
       arrowEdge: .top
     ) { route in
       switch route {

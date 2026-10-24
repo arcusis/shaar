@@ -16,11 +16,23 @@ final class BrowserStore {
       return nil
     }
     set {
-      if case .extensionInstall = sheet { return }
+      if sheet?.isConsent == true { return }
       sheet = newValue.map(BrowserSheet.space)
     }
   }
-  private(set) var installationRequests: [ExtensionInstallRequest] = []
+  private var consentRequests: [BrowserSheet] = []
+  var installationRequests: [ExtensionInstallRequest] {
+    consentRequests.compactMap {
+      if case .extensionInstall(let request) = $0 { return request }
+      return nil
+    }
+  }
+  var websiteMediaRequests: [WebsiteMediaRequest] {
+    consentRequests.compactMap {
+      if case .websiteMedia(let request) = $0 { return request }
+      return nil
+    }
+  }
   private(set) var storageNotice: String?
 
   @ObservationIgnored private let sessionFile: SessionFile?
@@ -29,7 +41,8 @@ final class BrowserStore {
   @ObservationIgnored var onSessionChanged: (() -> Void)?
   @ObservationIgnored var onCloseTab: ((UUID) -> Void)?
   @ObservationIgnored var onInstallDecision: ((String, Bool) -> Void)?
-  @ObservationIgnored private var presentedInstallRequestID: String?
+  @ObservationIgnored var onWebsiteMediaDecision: ((String, Bool) -> Void)?
+  @ObservationIgnored private var presentedConsentID: String?
 
   init(sessionFile: SessionFile? = nil, session: BrowserSession = .fresh()) {
     self.sessionFile = sessionFile
@@ -116,37 +129,54 @@ final class BrowserStore {
 
   @discardableResult
   func requestInstallation(_ request: ExtensionInstallRequest) -> Bool {
-    guard request.matches(session), installationRequests.count < 10,
-      !installationRequests.contains(where: { $0.id == request.id })
-    else { return false }
-    installationRequests.append(request)
-    presentNextInstallation()
-    return true
+    enqueueConsent(.extensionInstall(request))
   }
 
   func resolveInstallation(_ id: String, accepted: Bool) {
-    guard let request = installationRequests.first(where: { $0.id == id }) else { return }
-    let presented: Bool
-    if case .extensionInstall(let current) = sheet {
-      presented = current.id == id
-    } else {
-      presented = false
-    }
-    installationRequests.removeAll { $0.id == id }
-    if presentedInstallRequestID == id { presentedInstallRequestID = nil }
-    if presented { sheet = nil }
-    onInstallDecision?(id, accepted && presented && request.matches(session))
+    resolveConsent("install-\(id)", accepted: accepted)
   }
 
-  func presentNextInstallation() {
-    guard sheet == nil, let request = installationRequests.first else { return }
-    presentedInstallRequestID = request.id
-    sheet = .extensionInstall(request)
+  @discardableResult
+  func requestWebsiteMedia(_ request: WebsiteMediaRequest) -> Bool {
+    enqueueConsent(.websiteMedia(request))
+  }
+
+  func resolveWebsiteMedia(_ id: String, accepted: Bool) {
+    resolveConsent("media-\(id)", accepted: accepted)
+  }
+
+  private func enqueueConsent(_ request: BrowserSheet) -> Bool {
+    guard request.isConsent, request.matches(session), consentRequests.count < 10,
+      !consentRequests.contains(where: { $0.id == request.id })
+    else { return false }
+    consentRequests.append(request)
+    presentNextConsent()
+    return true
+  }
+
+  private func resolveConsent(_ id: String, accepted: Bool) {
+    guard let request = consentRequests.first(where: { $0.id == id }) else { return }
+    let presented = sheet?.id == id && presentedConsentID == id
+    consentRequests.removeAll { $0.id == id }
+    if presentedConsentID == id { presentedConsentID = nil }
+    if presented { sheet = nil }
+    let allow = accepted && presented && request.matches(session)
+    switch request {
+    case .extensionInstall(let request): onInstallDecision?(request.id, allow)
+    case .websiteMedia(let request): onWebsiteMediaDecision?(request.id, allow)
+    case .space: break
+    }
+  }
+
+  func presentNextConsent() {
+    guard sheet == nil, let request = consentRequests.first else { return }
+    presentedConsentID = request.id
+    sheet = request
   }
 
   func sheetDidDismiss() {
-    if let id = presentedInstallRequestID { resolveInstallation(id, accepted: false) }
-    presentNextInstallation()
+    if let id = presentedConsentID { resolveConsent(id, accepted: false) }
+    presentNextConsent()
   }
 
   func togglePin(_ id: UUID) {
@@ -178,8 +208,8 @@ final class BrowserStore {
   }
 
   private func save() {
-    for request in installationRequests where !request.matches(session) {
-      resolveInstallation(request.id, accepted: false)
+    for request in consentRequests where !request.matches(session) {
+      resolveConsent(request.id, accepted: false)
     }
     defer { onSessionChanged?() }
     guard maySave else { return }

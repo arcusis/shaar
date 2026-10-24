@@ -153,6 +153,9 @@ final class BitwardenProbe {
     var welcomeNavigations = 0
     var skippedSetup = false
     var openedLogin = false
+    let clock = ContinuousClock()
+    var lastRoute = ""
+    var routeChangedAt = clock.now
     for _ in 0..<160 {
       if store.session.selectedSpace.selectedTabID?.uuidString != tab {
         let selected = store.session.selectedSpace
@@ -177,6 +180,8 @@ final class BitwardenProbe {
           throw BitwardenProbeFailure("Could not reopen Bitwarden after its welcome navigation.")
         }
         popup = reopened
+        skippedSetup = false
+        openedLogin = false
         attachHiddenPopup(popup.id)
       }
       let json: String? = await withCheckedContinuation { continuation in
@@ -196,6 +201,14 @@ final class BitwardenProbe {
         popupState = state
         let text = (state["text"] as? String ?? "").lowercased()
         let address = state["url"] as? String ?? ""
+        if address != lastRoute {
+          lastRoute = address
+          routeChangedAt = clock.now
+        }
+        if clock.now - routeChangedAt < .milliseconds(500) {
+          try await Task.sleep(for: .milliseconds(100))
+          continue
+        }
         if address.contains("#/default-password-manager-prompt") && !skippedSetup {
           skippedSetup = await clickPopupButton(popup.id, title: "Skip")
           if skippedSetup {
@@ -209,6 +222,9 @@ final class BitwardenProbe {
           && !(state["inputs"] as? [String] ?? []).contains("email")
         {
           openedLogin = await clickPopupButton(popup.id, title: "Log in")
+          if openedLogin {
+            try expect(true, "clicks Log in in the current Bitwarden popup instance")
+          }
           try await Task.sleep(for: .milliseconds(100))
           continue
         }
@@ -221,6 +237,10 @@ final class BitwardenProbe {
       }
       try await Task.sleep(for: .milliseconds(250))
     }
+    popupState["probeInteractions"] = [
+      "popupID": popup.id, "openedLogin": openedLogin,
+      "skippedSetup": skippedSetup, "welcomeNavigations": welcomeNavigations,
+    ]
     try write(popupState, name: "\(phase)-bitwarden-popup.json")
     if !ready {
       // Diagnostic API reads happen only after failure is decided. They must never
@@ -293,20 +313,9 @@ final class BitwardenProbe {
   }
 
   private func clickPopupButton(_ id: String, title: String) async -> Bool {
-    let literal = String(data: try! JSONEncoder().encode(title), encoding: .utf8)!
-    let json: String? = await withCheckedContinuation { continuation in
-      runtime.evaluateProbePopupID(
-        id,
-        script: """
-          (()=>{const button=[...document.querySelectorAll('button,a,[role="button"]')].find(b=>b.innerText.trim().replace(/\\s+/g,' ')===\(literal));
-            button?.click();return {clicked:!!button};})()
-          """
-      ) { continuation.resume(returning: $0) }
+    await withCheckedContinuation { continuation in
+      runtime.clickProbePopupID(id, buttonTitle: title) { continuation.resume(returning: $0) }
     }
-    guard let data = json?.data(using: .utf8),
-      let result = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-    else { return false }
-    return result["clicked"] as? Bool == true
   }
 
   private func captureConsent(_ request: ExtensionInstallRequest) async throws {

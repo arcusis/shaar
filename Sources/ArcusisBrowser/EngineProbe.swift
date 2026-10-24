@@ -110,7 +110,7 @@ final class EngineProbe {
   }
 
   private func attachNativeShell() {
-    browserEngine = BrowserEngine(runtime: runtime, store: store, presentsExtensionPanels: false)
+    browserEngine = BrowserEngine(runtime: runtime, store: store, presentsNativePanels: false)
     let changed = runtime.onTabChanged
     runtime.onTabChanged = { [weak self] id, url, title, loading, back, forward in
       changed?(id, url, title, loading, back, forward)
@@ -259,6 +259,10 @@ final class EngineProbe {
       store.dismissCommand()
       if let browserEngine {
         checks += try await ExtensionProbe(
+          runtime: runtime, engine: browserEngine, store: store,
+          root: root, phase: phase
+        ).run()
+        checks += try await MediaPermissionProbe(
           runtime: runtime, engine: browserEngine, store: store,
           root: root, phase: phase
         ).run()

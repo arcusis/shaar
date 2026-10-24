@@ -38,6 +38,8 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
   <key>CFBundleVersion</key><string>1</string>
   <key>LSMinimumSystemVersion</key><string>26.0</string>
   <key>NSHighResolutionCapable</key><true/>
+  <key>NSCameraUsageDescription</key><string>Allow websites you approve to use your camera for video calls.</string>
+  <key>NSMicrophoneUsageDescription</key><string>Allow websites you approve to use your microphone for calls.</string>
 </dict></plist>
 PLIST
 codesign --force --timestamp=none --sign - "$app"

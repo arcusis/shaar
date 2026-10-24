@@ -3,6 +3,7 @@
 #import <dlfcn.h>
 #include <string>
 #include <vector>
+#include <cmath>
 
 static NSError *BridgeError(NSString *message) {
   return [NSError errorWithDomain:@"com.arcusis.browser.chromium" code:1
@@ -47,6 +48,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   NSURL *_probeRoot;
   NSString *_selectedTabID;
   NSMutableDictionary<NSString *, NSDictionary *> *_pendingInstalls;
+  NSMutableDictionary<NSString *, NSDictionary *> *_pendingMedia;
   NSMutableDictionary<NSString *, NSMutableArray<NSDictionary *> *> *_probeExtensions;
   ArdiaCoreTab *_extensionPopup;
   NSString *_popupID;
@@ -73,6 +75,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   _owners = [NSMutableDictionary dictionary];
   _profileWaiters = [NSMutableDictionary dictionary];
   _pendingInstalls = [NSMutableDictionary dictionary];
+  _pendingMedia = [NSMutableDictionary dictionary];
   _probeExtensions = [NSMutableDictionary dictionary];
   _probeDiagnostics = [NSMutableArray array];
   return self;
@@ -98,6 +101,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     strings.push_back("--disable-backgrounding-occluded-windows");
     strings.push_back("--mute-audio");
     strings.push_back("--use-fake-device-for-media-stream");
+    strings.push_back("--ardia-test-system-media-permission=granted");
   }
   std::vector<const char *> arguments;
   for (const auto &value : strings) arguments.push_back(value.c_str());
@@ -226,11 +230,19 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 - (void)activateTabID:(NSString *)tabID {
   ArdiaCoreTab *tab = _tabs[tabID];
   if (!tab || tab.closed) return;
+  if (_testing && ![_selectedTabID isEqualToString:tabID]) {
+    [_tabs[_selectedTabID ?: @""] noteShownByHost:NO];
+    [tab noteShownByHost:YES];
+  }
   _selectedTabID = tabID;
   _browserWindow.activeProfile = tab.profile;
   [_browserWindow activateTab:tab];
 }
-- (void)clearActiveTab { _selectedTabID = nil; [self closeExtensionPopup]; }
+- (void)clearActiveTab {
+  if (_testing) [_tabs[_selectedTabID ?: @""] noteShownByHost:NO];
+  _selectedTabID = nil;
+  [self closeExtensionPopup];
+}
 - (void)closeTabID:(NSString *)tabID { [_tabs[tabID] close]; }
 - (void)focusTabID:(NSString *)tabID { [_tabs[tabID] focus]; }
 - (void)discardTabID:(NSString *)tabID { [_tabs[tabID] closeNow]; }
@@ -281,6 +293,21 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   BOOL contextMatches = [_owners[tabID] isEqualToString:request[@"profileID"]] &&
     [_selectedTabID isEqualToString:tabID] && [_tabs[tabID].url isEqualToString:request[@"sourceURL"]];
   [_engineClass resolveExtensionInstallPrompt:requestID accepted:accepted && contextMatches];
+}
+- (void)resolveWebsiteMediaRequestID:(NSString *)requestID accepted:(BOOL)accepted {
+  NSDictionary *request = _pendingMedia[requestID];
+  if (!request) return;
+  [_pendingMedia removeObjectForKey:requestID];
+  NSString *tabID = request[@"tabID"];
+  NSArray *kinds = request[@"permissions"];
+  BOOL supported = [kinds isKindOfClass:NSArray.class] && kinds.count > 0 && kinds.count <= 2;
+  if (supported) {
+    for (NSString *kind in kinds) supported &= [@[@"camera", @"microphone"] containsObject:kind];
+  }
+  BOOL current = [_selectedTabID isEqualToString:tabID] &&
+    [_owners[tabID] isEqualToString:request[@"profileID"]] &&
+    [_tabs[tabID].url isEqualToString:request[@"pageURL"]];
+  [_engine resolvePermission:requestID result:accepted && current && supported ? @"accept" : @"deny" remember:NO];
 }
 
 - (BOOL)showPopupForExtension:(NSString *)extensionID tabID:(NSString *)tabID error:(NSError **)error {
@@ -374,6 +401,41 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 - (void)captureProbeTabID:(NSString *)tabID completion:(void (^)(NSData *))completion {
   [self captureProbeTab:_tabs[tabID] completion:completion];
 }
+- (void)clickProbePopupID:(NSString *)popupID buttonTitle:(NSString *)title completion:(void (^)(BOOL))completion {
+  if (!_testing || ![_popupID isEqualToString:popupID] || !_extensionPopup || _extensionPopup.closed) {
+    completion(NO);
+    return;
+  }
+  NSData *encoded = [NSJSONSerialization dataWithJSONObject:title options:NSJSONWritingFragmentsAllowed error:nil];
+  NSString *literal = encoded ? [[NSString alloc] initWithData:encoded encoding:NSUTF8StringEncoding] : nil;
+  if (!literal) { completion(NO); return; }
+  NSString *expression = [NSString stringWithFormat:
+    @"(()=>{const button=[...document.querySelectorAll('button,a,[role=button]')].find(b=>"
+     "b.innerText.trim().replace(/\\s+/g,' ')===%@ && b.getBoundingClientRect().width>0 && b.getBoundingClientRect().height>0 && !b.disabled);"
+     "if(!button)return null;button.scrollIntoView({block:'center'});const r=button.getBoundingClientRect();"
+     "return {x:r.x+r.width/2,y:r.y+r.height/2};})()", literal];
+  ArdiaCoreTab *popup = _extensionPopup;
+  [popup devToolsCall:@"Runtime.evaluate" params:@{@"expression": expression, @"returnByValue": @YES}
+               timeout:5 completion:^(NSDictionary *result, NSString *error) {
+    NSDictionary *point = result[@"result"][@"value"];
+    if (error || ![point isKindOfClass:NSDictionary.class] || ![self->_popupID isEqualToString:popupID] ||
+        ![point[@"x"] isKindOfClass:NSNumber.class] || ![point[@"y"] isKindOfClass:NSNumber.class] ||
+        !std::isfinite([point[@"x"] doubleValue]) || !std::isfinite([point[@"y"] doubleValue])) {
+      completion(NO);
+      return;
+    }
+    NSDictionary *press = @{@"type": @"mousePressed", @"x": point[@"x"], @"y": point[@"y"],
+                             @"button": @"left", @"buttons": @1, @"clickCount": @1};
+    [popup devToolsCall:@"Input.dispatchMouseEvent" params:press timeout:5
+            completion:^(NSDictionary *ignored, NSString *pressError) {
+      if (pressError || ![self->_popupID isEqualToString:popupID]) { completion(NO); return; }
+      NSDictionary *release = @{@"type": @"mouseReleased", @"x": point[@"x"], @"y": point[@"y"],
+                                 @"button": @"left", @"buttons": @0, @"clickCount": @1};
+      [popup devToolsCall:@"Input.dispatchMouseEvent" params:release timeout:5
+              completion:^(NSDictionary *ignoredRelease, NSString *releaseError) { completion(releaseError == nil); }];
+    }];
+  }];
+}
 - (void)captureProbePopupID:(NSString *)popupID completion:(void (^)(NSData *))completion {
   if (![_popupID isEqualToString:popupID]) { completion(nil); return; }
   [self captureProbeTab:_extensionPopup completion:completion];
@@ -393,6 +455,10 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 - (void)tabDidChangeURL:(ArdiaCoreTab *)tab { [self publish:tab]; }
 - (void)tabDidChangeLoading:(ArdiaCoreTab *)tab { [self publish:tab]; }
 - (void)tabDidChangeNavigationState:(ArdiaCoreTab *)tab { [self publish:tab]; }
+- (void)tab:(ArdiaCoreTab *)tab didChangeMediaAccess:(NSDictionary<NSString *, NSNumber *> *)access {
+  NSString *identity = [self identityForTab:tab];
+  if (identity && _onMediaAccess) _onMediaAccess(identity, access);
+}
 - (void)tab:(ArdiaCoreTab *)tab preferredSizeDidChange:(NSSize)size {
   if (tab == _extensionPopup && _popupID && _onExtensionPopupSize) _onExtensionPopupSize(_popupID, size);
 }
@@ -428,10 +494,24 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   return [_profiles allKeysForObject:profile].count ? _browserWindow : nil;
 }
 - (void)engine:(ArdiaCoreEngine *)engine permissionRequest:(NSDictionary *)request tab:(ArdiaCoreTab *)tab {
-  // Permission UI is a later milestone. No silent camera/microphone/location grants.
   NSString *identity = request[@"id"];
-  if (identity) [engine resolvePermission:identity result:@"deny" remember:NO];
-  if (_onNotice) _onNotice(@"Website permissions are not available in this development build.");
+  NSString *tabID = [self identityForTab:tab];
+  NSString *profileID = tabID ? _owners[tabID] : nil;
+  if (!identity.length || !profileID || ![_selectedTabID isEqualToString:tabID] || !_onWebsiteMediaRequest ||
+      _pendingMedia.count >= 10) {
+    if (identity) [engine resolvePermission:identity result:@"deny" remember:NO];
+    return;
+  }
+  NSMutableDictionary *bound = request.mutableCopy;
+  bound[@"tabID"] = tabID;
+  bound[@"profileID"] = profileID;
+  bound[@"pageURL"] = tab.url ?: @"";
+  _pendingMedia[identity] = bound;
+  _onWebsiteMediaRequest(bound);
+}
+- (void)engine:(ArdiaCoreEngine *)engine permissionRequestDismissed:(NSString *)requestID {
+  [_pendingMedia removeObjectForKey:requestID];
+  if (_onWebsiteMediaDismissed) _onWebsiteMediaDismissed(requestID);
 }
 - (void)engine:(ArdiaCoreEngine *)engine extensionInstallPrompt:(NSDictionary *)prompt tab:(ArdiaCoreTab *)tab {
   NSString *identity = prompt[@"requestId"];

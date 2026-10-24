@@ -13,6 +13,9 @@ FOUNDATION_EXPORT BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifier
 @property(copy, nullable) void (^onExtensionPopup)(NSDictionary<NSString *, id> *popup);
 @property(copy, nullable) void (^onExtensionPopupClosed)(NSString *popupID);
 @property(copy, nullable) void (^onExtensionPopupSize)(NSString *popupID, NSSize size);
+@property(copy, nullable) void (^onWebsiteMediaRequest)(NSDictionary<NSString *, id> *request);
+@property(copy, nullable) void (^onWebsiteMediaDismissed)(NSString *requestID);
+@property(copy, nullable) void (^onMediaAccess)(NSString *tabID, NSDictionary<NSString *, NSNumber *> *access);
 @property(copy, nullable) void (^onTabChanged)(NSString *tabID, NSString *url, NSString *title,
                                              BOOL loading, BOOL canGoBack, BOOL canGoForward);
 @property(copy, nullable) void (^onTabClosed)(NSString *tabID);
@@ -44,6 +47,7 @@ FOUNDATION_EXPORT BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifier
 - (void)captureProbeTabID:(NSString *)tabID completion:(void (^)(NSData * _Nullable))completion;
 - (NSArray<NSDictionary<NSString *, id> *> *)extensionsForProfileID:(NSString *)profileID;
 - (void)resolveInstallRequestID:(NSString *)requestID accepted:(BOOL)accepted;
+- (void)resolveWebsiteMediaRequestID:(NSString *)requestID accepted:(BOOL)accepted;
 - (BOOL)executeExtensionID:(NSString *)extensionID tabID:(NSString *)tabID error:(NSError **)error;
 - (nullable NSView *)viewForExtensionPopupID:(NSString *)popupID;
 - (void)closeExtensionPopup;
@@ -56,6 +60,9 @@ FOUNDATION_EXPORT BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifier
 - (void)evaluateProbeUserGestureInTabID:(NSString *)tabID script:(NSString *)script
                            completion:(void (^)(NSString * _Nullable))completion;
 - (void)quit;
+/// Sends trusted renderer input only to the current disposable probe popup.
+- (void)clickProbePopupID:(NSString *)popupID buttonTitle:(NSString *)title
+              completion:(void (^)(BOOL clicked))completion;
 @end
 
 NS_ASSUME_NONNULL_END

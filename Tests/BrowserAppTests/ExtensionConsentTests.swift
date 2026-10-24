@@ -110,7 +110,7 @@ struct ExtensionConsentTests {
     store.spaceEditor = .create
     #expect(store.spaceEditor == nil)
     store.resolveInstallation(first.id, accepted: true)
-    store.presentNextInstallation()
+    store.presentNextConsent()
     store.resolveInstallation(second.id, accepted: false)
     #expect(decisions == ["install1:true", "install2:false"])
     #expect(store.installationRequests.isEmpty)

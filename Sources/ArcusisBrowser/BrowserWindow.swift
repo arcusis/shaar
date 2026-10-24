@@ -54,12 +54,13 @@ struct BrowserWindow: View {
     .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: store.commandIsOpen)
     .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: store.sidebarIsVisible)
     .sheet(
-      item: store.engine?.presentsExtensionPanels == false ? .constant(nil) : $store.sheet,
+      item: store.engine?.presentsNativePanels == false ? .constant(nil) : $store.sheet,
       onDismiss: { store.sheetDidDismiss() }
     ) { sheet in
       switch sheet {
       case .space(let route): SpaceEditor(store: store, route: route)
       case .extensionInstall(let request): ExtensionConsent(store: store, request: request)
+      case .websiteMedia(let request): WebsiteMediaConsent(store: store, request: request)
       }
     }
     .onChange(of: store.commandIsOpen) { _, isOpen in
@@ -119,7 +120,10 @@ struct BrowserWindow: View {
           .lineLimit(1)
         }
         Spacer()
-        if let engine = store.engine { ExtensionToolbar(engine: engine, store: store) }
+        if let engine = store.engine {
+          MediaCaptureIndicator(store: store, engine: engine)
+          ExtensionToolbar(engine: engine, store: store)
+        }
         Image(systemName: store.session.selectedSpace.symbol)
           .foregroundStyle(.secondary)
           .accessibilityLabel(store.session.selectedSpace.name)

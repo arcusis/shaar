@@ -10,15 +10,23 @@ struct PageState: Equatable {
   var canGoForward: Bool
 }
 
+struct MediaAccessState: Equatable {
+  let camera: Bool
+  let microphone: Bool
+  let screen: Bool
+  var isCapturing: Bool { camera || microphone || screen }
+}
+
 /// Owns live native tabs independently of the selected SwiftUI space.
 @MainActor @Observable
 final class BrowserEngine {
   let runtime: ARCChromiumRuntime
   private(set) var pages: [UUID: PageState] = [:]
   private(set) var notice: String?
+  private(set) var mediaAccess: [UUID: MediaAccessState] = [:]
   private(set) var extensions: [BrowserExtension] = []
   private(set) var extensionPopupSize = CGSize(width: 480, height: 560)
-  let presentsExtensionPanels: Bool
+  let presentsNativePanels: Bool
   var extensionPanel: ExtensionPanelRoute? {
     didSet {
       if extensionPanel == nil { runtime.closeExtensionPopup() }
@@ -34,12 +42,26 @@ final class BrowserEngine {
   @ObservationIgnored private var lastSpaceID: UUID?
   @ObservationIgnored private var lastTabID: UUID?
 
-  init(runtime: ARCChromiumRuntime, store: BrowserStore, presentsExtensionPanels: Bool = true) {
+  init(runtime: ARCChromiumRuntime, store: BrowserStore, presentsNativePanels: Bool = true) {
     self.runtime = runtime
     self.store = store
-    self.presentsExtensionPanels = presentsExtensionPanels
+    self.presentsNativePanels = presentsNativePanels
     store.engine = self
     runtime.onNotice = { [weak self] message in self?.notice = message }
+    store.onWebsiteMediaDecision = { [weak self] id, accepted in
+      self?.runtime.resolveWebsiteMediaRequestID(id, accepted: accepted)
+    }
+    runtime.onWebsiteMediaRequest = { [weak self] payload in self?.requestWebsiteMedia(payload) }
+    runtime.onWebsiteMediaDismissed = { [weak self] id in
+      self?.store?.resolveWebsiteMedia(id, accepted: false)
+    }
+    runtime.onMediaAccess = { [weak self] identity, state in
+      guard let self, let id = UUID(uuidString: identity) else { return }
+      self.mediaAccess[id] = MediaAccessState(
+        camera: state["camera"]?.boolValue ?? false,
+        microphone: state["microphone"]?.boolValue ?? false,
+        screen: state["screen"]?.boolValue ?? false)
+    }
     store.onInstallDecision = { [weak self] id, accepted in
       guard let self else { return }
       self.runtime.resolveInstallRequestID(id, accepted: accepted)
@@ -87,6 +109,7 @@ final class BrowserEngine {
       guard let self, let id = UUID(uuidString: identity) else { return }
       self.liveTabs.remove(id)
       self.pages[id] = nil
+      self.mediaAccess[id] = nil
       self.store?.nativeTabClosed(id)
     }
     runtime.onNewTab = { [weak self] identity, owner, address, opener, foreground in
@@ -119,6 +142,7 @@ final class BrowserEngine {
       runtime.discardTabID(removed.uuidString)
       liveTabs.remove(removed)
       pages[removed] = nil
+      mediaAccess[removed] = nil
     }
     for profile in Set(session.spaces.map(\.profileID)) {
       guard !loadedProfiles.contains(profile), !loadingProfiles.contains(profile),
@@ -231,6 +255,28 @@ final class BrowserEngine {
     else {
       runtime.resolveInstallRequestID(id, accepted: false)
       notice = "The extension request could not be verified for this page and profile."
+      return
+    }
+  }
+
+  private func requestWebsiteMedia(_ payload: [String: Any]) {
+    guard let id = payload["id"] as? String else { return }
+    extensionPanel = nil
+    guard let store,
+      let profile = (payload["profileID"] as? String).flatMap(UUID.init(uuidString:)),
+      let tab = (payload["tabID"] as? String).flatMap(UUID.init(uuidString:)),
+      let page = (payload["pageURL"] as? String).flatMap(URL.init(string:)),
+      let origin = (payload["origin"] as? String).flatMap(URL.init(string:)),
+      let rawKinds = payload["permissions"] as? [String],
+      rawKinds.allSatisfy({ WebsiteMediaKind(rawValue: $0) != nil }),
+      let request = WebsiteMediaRequest(
+        id: id, profileID: profile, tabID: tab,
+        pageURL: page, requestingOrigin: origin,
+        kinds: rawKinds.compactMap(WebsiteMediaKind.init(rawValue:))),
+      store.requestWebsiteMedia(request)
+    else {
+      runtime.resolveWebsiteMediaRequestID(id, accepted: false)
+      notice = "This permission request is unavailable for the current page and profile."
       return
     }
   }

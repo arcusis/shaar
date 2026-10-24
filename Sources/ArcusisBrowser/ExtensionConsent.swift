@@ -1,18 +1,6 @@
 import BrowserCore
 import SwiftUI
 
-enum BrowserSheet: Identifiable {
-  case space(SpaceEditorRoute)
-  case extensionInstall(ExtensionInstallRequest)
-
-  var id: String {
-    switch self {
-    case .space(let route): "space-\(route)"
-    case .extensionInstall(let request): "install-\(request.id)"
-    }
-  }
-}
-
 struct ExtensionConsent: View {
   let store: BrowserStore
   let request: ExtensionInstallRequest

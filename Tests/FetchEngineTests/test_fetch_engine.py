@@ -28,6 +28,7 @@ def write_archive(path):
         ):
             info = tarfile.TarInfo(directory)
             info.type = tarfile.DIRTYPE
+            info.mode = 0o755
             archive.addfile(info)
         for name, data in files.items():
             info = tarfile.TarInfo(name)

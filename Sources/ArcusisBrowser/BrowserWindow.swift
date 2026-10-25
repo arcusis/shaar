@@ -16,6 +16,7 @@ struct BrowserWindow: View {
   @Bindable var store: BrowserStore
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @FocusState private var pageIsFocused: Bool
+  @State private var webContentFrame: CGRect = .zero
 
   var body: some View {
     ZStack(alignment: .top) {
@@ -29,7 +30,7 @@ struct BrowserWindow: View {
       HStack(spacing: 0) {
         if store.sidebarIsVisible {
           BrowserSidebar(store: store)
-            .frame(width: 240)
+            .frame(width: BrowserChromeLayout.sidebarWidth)
             .transition(.move(edge: .leading).combined(with: .opacity))
         }
         page
@@ -43,13 +44,32 @@ struct BrowserWindow: View {
           .ignoresSafeArea()
           .onTapGesture { store.dismissCommand() }
         GeometryReader { geometry in
-          CommandPanel(store: store)
-            .frame(maxWidth: .infinity)
-            .padding(.top, min(120, geometry.size.height * 0.12))
+          let contentLeft = store.sidebarIsVisible ? BrowserChromeLayout.sidebarWidth : 10
+          let contentTop: CGFloat = store.pageFind == nil ? 55 : 105
+          let initialContentFrame = CGRect(
+            x: contentLeft, y: contentTop,
+            width: max(0, geometry.size.width - contentLeft - 10),
+            height: max(0, geometry.size.height - contentTop - 10))
+          let frame = BrowserChromeLayout.commandPanelFrame(
+            in: webContentFrame.isEmpty ? initialContentFrame : webContentFrame,
+            resultCount: store.results.count
+          )
+          CommandPanel(
+            store: store,
+            resultsHeight: BrowserChromeLayout.commandResultsHeight(
+              resultCount: store.results.count,
+              availableHeight: frame.height
+            )
+          )
+          .frame(width: frame.width)
+          .fixedSize(horizontal: false, vertical: true)
+          .position(x: frame.midX, y: frame.midY)
         }
         .transition(.opacity.combined(with: .scale(scale: 0.98)))
       }
     }
+    .coordinateSpace(name: "browser-window")
+    .onPreferenceChange(WebContentFramePreferenceKey.self) { webContentFrame = $0 }
     .background { SpaceSwipeNavigation(store: store) }
     .frame(minWidth: 760, minHeight: 520)
     .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: store.commandIsOpen)
@@ -91,73 +111,16 @@ struct BrowserWindow: View {
   private var page: some View {
     VStack(spacing: 0) {
       HStack(spacing: 12) {
-        Button {
-          store.sidebarIsVisible.toggle()
-        } label: {
-          Image(systemName: "sidebar.left")
+        if !store.sidebarIsVisible {
+          compactPageControls
+        } else {
+          WindowDragRegion()
+            .frame(maxWidth: .infinity)
+            .frame(height: 44)
         }
-        .help("Toggle sidebar (Command-S)")
-        if let engine = store.engine, let id = store.session.selectedSpace.selectedTabID {
-          let state = engine.pages[id]
-          Button {
-            engine.runtime.goBack(inTabID: id.uuidString)
-          } label: {
-            Image(systemName: "chevron.left")
-          }
-          .disabled(state?.canGoBack != true)
-          .help("Back")
-          Button {
-            engine.runtime.goForward(inTabID: id.uuidString)
-          } label: {
-            Image(systemName: "chevron.right")
-          }
-          .disabled(state?.canGoForward != true)
-          .help("Forward")
-          Button {
-            store.reloadCurrentPage()
-          } label: {
-            Image(systemName: "arrow.clockwise")
-          }
-          .disabled(!store.canReloadCurrentPage)
-          .help("Reload (Command-R)")
-        }
-        Spacer()
-        Button {
-          store.showCommand()
-        } label: {
-          Label(
-            store.session.selectedSpace.selectedTab?.url.host() ?? "Search or enter address",
-            systemImage: "magnifyingglass"
-          )
-          .font(.system(size: 12))
-          .foregroundStyle(.secondary)
-          .lineLimit(1)
-        }
-        Spacer()
-        Button {
-          store.bookmarkCurrentPage()
-        } label: {
-          Image(systemName: "star")
-        }
-        .disabled(!store.canBookmarkCurrentPage).help("Bookmark this page (Command-D)")
-        .accessibilityLabel("Bookmark this page")
-        Menu {
-          Button("Bookmarks…") { store.showLibrary(.bookmarks) }
-          Button("History…") { store.showLibrary(.history) }
-        } label: {
-          Image(systemName: "books.vertical")
-        }
-        .menuStyle(.borderlessButton).fixedSize().help("Bookmarks and History")
         if let engine = store.engine {
           MediaCaptureIndicator(store: store, engine: engine)
           ExtensionToolbar(engine: engine, store: store)
-          Button {
-            store.showDownloads()
-          } label: {
-            Image(systemName: "arrow.down.circle")
-          }
-          .accessibilityLabel("Downloads")
-          .help("Downloads (Shift-Command-J)")
         }
         Image(systemName: store.session.selectedSpace.symbol)
           .foregroundStyle(.secondary)
@@ -220,6 +183,14 @@ struct BrowserWindow: View {
       }
       .focusable()
       .focused($pageIsFocused)
+      .background {
+        GeometryReader { geometry in
+          Color.clear.preference(
+            key: WebContentFramePreferenceKey.self,
+            value: geometry.frame(in: .named("browser-window"))
+          )
+        }
+      }
       if let notice = store.storageNotice {
         Text(notice)
           .font(.caption)
@@ -237,4 +208,78 @@ struct BrowserWindow: View {
     .shadow(color: .black.opacity(0.08), radius: 8, y: 3)
   }
 
+  @ViewBuilder
+  private var compactPageControls: some View {
+    Button {
+      store.sidebarIsVisible.toggle()
+    } label: {
+      Image(systemName: "sidebar.left")
+    }
+    .help("Toggle sidebar (Command-S)")
+    if let engine = store.engine, let id = store.session.selectedSpace.selectedTabID {
+      let state = engine.pages[id]
+      Button {
+        engine.runtime.goBack(inTabID: id.uuidString)
+      } label: {
+        Image(systemName: "chevron.left")
+      }
+      .disabled(state?.canGoBack != true)
+      .help("Back")
+      Button {
+        engine.runtime.goForward(inTabID: id.uuidString)
+      } label: {
+        Image(systemName: "chevron.right")
+      }
+      .disabled(state?.canGoForward != true)
+      .help("Forward")
+      Button {
+        store.reloadCurrentPage()
+      } label: {
+        Image(systemName: "arrow.clockwise")
+      }
+      .disabled(!store.canReloadCurrentPage)
+      .help("Reload (Command-R)")
+    }
+    Button {
+      store.showCommand()
+    } label: {
+      Label(
+        store.session.selectedSpace.selectedTab?.url.host() ?? "Search or enter address",
+        systemImage: "magnifyingglass"
+      )
+      .font(.system(size: 12))
+      .foregroundStyle(.secondary)
+      .lineLimit(1)
+    }
+    WindowDragRegion()
+      .frame(maxWidth: .infinity)
+      .frame(height: 44)
+    Button {
+      store.bookmarkCurrentPage()
+    } label: {
+      Image(systemName: "star")
+    }
+    .disabled(!store.canBookmarkCurrentPage)
+    .help("Bookmark this page (Command-D)")
+    .accessibilityLabel("Bookmark this page")
+    Menu {
+      Button("Bookmarks…") { store.showLibrary(.bookmarks) }
+      Button("History…") { store.showLibrary(.history) }
+      Button("Downloads…") { store.showDownloads() }
+    } label: {
+      Label("Library", systemImage: "books.vertical")
+    }
+    .menuStyle(.borderlessButton)
+    .fixedSize()
+    .help("Library for \(store.profileName) profile")
+  }
+
+}
+
+private struct WebContentFramePreferenceKey: PreferenceKey {
+  static let defaultValue: CGRect = .zero
+
+  static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+    value = nextValue()
+  }
 }

@@ -10,6 +10,8 @@ struct BrowserSidebar: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 20) {
+      WindowDragRegion()
+        .frame(height: 22)
       HStack {
         Text("Arcusis").font(.system(size: 13, weight: .semibold, design: .rounded))
         Spacer()
@@ -20,13 +22,55 @@ struct BrowserSidebar: View {
         }
         .help("Create a space")
       }
-      .padding(.top, 42)
+      HStack(spacing: 14) {
+        Button {
+          store.sidebarIsVisible = false
+        } label: {
+          Image(systemName: "sidebar.left")
+        }
+        .help("Hide sidebar (Command-S)")
+        if let engine = store.engine, let id = store.session.selectedSpace.selectedTabID {
+          let state = engine.pages[id]
+          Button {
+            engine.runtime.goBack(inTabID: id.uuidString)
+          } label: {
+            Image(systemName: "chevron.left")
+          }
+          .disabled(state?.canGoBack != true)
+          .help("Back")
+          Button {
+            engine.runtime.goForward(inTabID: id.uuidString)
+          } label: {
+            Image(systemName: "chevron.right")
+          }
+          .disabled(state?.canGoForward != true)
+          .help("Forward")
+          Button {
+            store.reloadCurrentPage()
+          } label: {
+            Image(systemName: "arrow.clockwise")
+          }
+          .disabled(!store.canReloadCurrentPage)
+          .help("Reload (Command-R)")
+        }
+        Spacer(minLength: 0)
+        Button {
+          store.bookmarkCurrentPage()
+        } label: {
+          Image(systemName: "star")
+        }
+        .disabled(!store.canBookmarkCurrentPage)
+        .help("Bookmark this page (Command-D)")
+        .accessibilityLabel("Bookmark this page")
+      }
+      .font(.system(size: 13))
       Button {
         store.showCommand()
       } label: {
-        HStack {
+        HStack(spacing: 8) {
           Image(systemName: "magnifyingglass")
-          Text("Search anything")
+          Text(store.session.selectedSpace.selectedTab?.url.host() ?? "Search or enter address")
+            .lineLimit(1)
           Spacer()
           Text("⌘T").foregroundStyle(.tertiary)
         }
@@ -86,6 +130,18 @@ struct BrowserSidebar: View {
       }
       Spacer(minLength: 0)
       Divider()
+      HStack(spacing: 8) {
+        Menu {
+          Button("Bookmarks…") { store.showLibrary(.bookmarks) }
+          Button("History…") { store.showLibrary(.history) }
+          Button("Downloads…") { store.showDownloads() }
+        } label: {
+          Label("Library", systemImage: "books.vertical")
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .help("Bookmarks and History for \(store.profileName) profile")
+      }
+      .font(.system(size: 12))
       ScrollView(.horizontal) {
         HStack(spacing: 8) {
           ForEach(store.session.spaces) { space in

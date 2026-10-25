@@ -244,7 +244,9 @@ struct BrowserSidebar: View {
     }
     return Group {
       if favorites.isEmpty {
-        if store.canFavoriteCurrentPage {
+        if case .tab(let tab) = store.session.selectedPage,
+          NavigationInput.isWebURL(tab.url)
+        {
           Button {
             _ = store.addCurrentPageAsFavorite()
           } label: {
@@ -253,6 +255,7 @@ struct BrowserSidebar: View {
               .foregroundStyle(.secondary)
               .padding(.vertical, 5)
           }
+          .disabled(!store.canFavoriteCurrentPage)
           .help("Add current page to Favorites")
         }
       } else {

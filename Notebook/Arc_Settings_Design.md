@@ -10,6 +10,8 @@ Requested password-manager UX: enable/disable, provider selection, connect/disco
 
 Implemented slice: reusable native Settings window, exact Command-Comma, General/Profiles/Shortcuts categories, profile names and unique Space counts. General controls sidebar visibility for new windows; Profiles chooses Google, DuckDuckGo or Bing for that Profile's launcher searches. Shortcuts lists existing commands. Preferences persist separately from account/session data; malformed or future-version files remain preserved. Settings selection never switches a browser window's account. Command-W and Shift-Command-W close Settings when it owns focus.
 
+Profiles supports Add Profile and Rename through a native name-editor sheet. A new profile has its own UUID and zero Spaces until chosen in New Space. Rename changes display metadata, preserving profile-bound preferences and live website accounts. Empty names and stale IDs are rejected; duplicate names remain separate UUID identities. Cancel leaves the workspace untouched. Workspace save failures retain valid in-memory state and show the existing storage notice.
+
 Work order:
 
 1. Verify physical keyboard/focus and accessibility for the implemented window and preferences.

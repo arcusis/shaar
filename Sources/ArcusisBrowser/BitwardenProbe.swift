@@ -552,20 +552,36 @@ final class BitwardenProbe {
     _ driver: BitwardenVaultProbe, credentials: VaultProbeCredentials.Account,
     expectedAccount: String
   ) async -> Bool {
-    guard let state = await driver.state(expectedAccount: expectedAccount),
-      state.passwordFields > 0, state.unlockButton,
-      await driver.fillPassword(credentials.masterPassword), await driver.click("Unlock")
-    else { return false }
-    return await driver.waitFor(
+    guard let state = await driver.state(expectedAccount: expectedAccount) else { return false }
+    vaultLoginObservation["unlockPasswordPresent"] = state.passwordFields > 0
+    vaultLoginObservation["unlockButtonPresent"] = state.unlockButton
+    guard state.passwordFields > 0, state.unlockButton else { return false }
+    let filled = await driver.fillPassword(credentials.masterPassword)
+    vaultLoginObservation["unlockPasswordFilled"] = filled
+    guard filled else { return false }
+    let clicked = await driver.click("Unlock")
+    vaultLoginObservation["unlockButtonClicked"] = clicked
+    guard clicked else { return false }
+    let unlocked = await driver.waitFor(
       { $0.vaultVisible && $0.accountIdentityMatches }, seconds: 60,
       expectedAccount: expectedAccount)
+    vaultLoginObservation["unlockIdentityMatched"] = unlocked
+    return unlocked
   }
 
   private func lockVault(_ driver: BitwardenVaultProbe, accountEmail: String) async -> Bool {
-    guard await driver.click("Bitwarden account \(accountEmail)"),
-      await driver.waitFor({ $0.lockNowButton }), await driver.click("Lock now")
-    else { return false }
-    return await driver.waitFor({ $0.passwordFields > 0 && !$0.vaultVisible })
+    let accountClicked = await driver.click("Bitwarden account \(accountEmail)")
+    vaultLoginObservation["lockAccountButtonClicked"] = accountClicked
+    guard accountClicked else { return false }
+    let menuReady = await driver.waitFor({ $0.lockNowButton })
+    vaultLoginObservation["lockMenuReady"] = menuReady
+    guard menuReady else { return false }
+    let lockClicked = await driver.click("Lock now")
+    vaultLoginObservation["lockButtonClicked"] = lockClicked
+    guard lockClicked else { return false }
+    let locked = await driver.waitFor({ $0.passwordFields > 0 && !$0.vaultVisible })
+    vaultLoginObservation["lockPasswordScreenReached"] = locked
+    return locked
   }
 
   private func verifySharedAlpha(expectedAccount: String) async throws -> Bool {

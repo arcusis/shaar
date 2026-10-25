@@ -1,5 +1,7 @@
 # Bitwarden compatibility gates
 
+These results describe the tested extension backend. User-facing password-manager integration is optional and native Settings is required. Backend choice is under review in [[Native_Password_Manager_Options]]; extension test results do not establish SDK/native-provider compatibility.
+
 An additional opt-in integration test uses the actual Chrome Web Store and a separate empty disposable profile:
 
 ```sh

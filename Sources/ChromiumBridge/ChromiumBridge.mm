@@ -936,7 +936,8 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   if (!_testing || !_probeTLS || !tab || tab.closed || ![self isSelectedTabID:tabID] ||
       ![url.scheme isEqualToString:@"https"] || ![url.host isEqualToString:@"127.0.0.1"] ||
       !url.port || url.port.integerValue < 1 || url.port.integerValue > 65535 ||
-      url.user || url.password || url.query || url.fragment || ![url.path isEqualToString:@"/alive"]) {
+      url.user || url.password || url.query || url.fragment ||
+      ![@[@"/alive", @"/icons/arcusis-fixture.invalid/icon.png"] containsObject:url.path]) {
     completion(@{@"failureStage": @"context", @"testing": @(_testing), @"tlsEnabled": @(_probeTLS),
                  @"tabAvailable": @(tab && !tab.closed), @"selected": @([self isSelectedTabID:tabID])});
     return;

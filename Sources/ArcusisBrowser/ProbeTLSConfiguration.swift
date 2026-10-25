@@ -39,7 +39,7 @@ struct ProbeTLSConfiguration: Decodable {
   private static func valid(_ url: URL) -> Bool {
     url.scheme == "https" && url.host() == "127.0.0.1" && (1...65535).contains(url.port ?? 0)
       && url.user() == nil && url.password() == nil && url.query() == nil && url.fragment() == nil
-      && url.path() == "/alive"
+      && ["/alive", "/icons/arcusis-fixture.invalid/icon.png"].contains(url.path())
   }
 
   private static func readOwned(_ url: URL) throws -> Data {

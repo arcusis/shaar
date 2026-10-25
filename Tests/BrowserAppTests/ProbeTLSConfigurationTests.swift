@@ -62,6 +62,20 @@ import Testing
     #expect(try ProbeTLSConfiguration.load(root: root).spkiSHA256 == fingerprint)
   }
 
+  @Test func fixedAnonymousVaultImageIsAllowedButOtherResourcePathsAreRejected() throws {
+    let root = try fixture()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let address = "https://127.0.0.1:4443/icons/arcusis-fixture.invalid/icon.png"
+    try save(root: root, changes: ["matchedURL": address])
+    #expect(try ProbeTLSConfiguration.load(root: root).matchedURL.absoluteString == address)
+    for path in [
+      "/api/sync", "/icons/example.com/icon.png", "/icons/arcusis-fixture.invalid/icon.png?x=1",
+    ] {
+      try save(root: root, changes: ["matchedURL": "https://127.0.0.1:4443\(path)"])
+      #expect(throws: ProbeTLSFailure.self) { try ProbeTLSConfiguration.load(root: root) }
+    }
+  }
+
   @Test func malformedOrMultipleKeysAndProductionModeFailClosed() throws {
     let root = try fixture()
     defer { try? FileManager.default.removeItem(at: root) }

@@ -93,11 +93,32 @@ struct VaultProbeCredentials: CustomStringConvertible, CustomDebugStringConverti
     let schema: Int
     let serverURL: String
     let accounts: [RawAccount]
+
+    init(from decoder: Decoder) throws {
+      let container = try decoder.container(keyedBy: StrictJSONKey.self)
+      let expectedKeys: Set<String> = ["schema", "serverURL", "accounts"]
+      guard Set(container.allKeys.map(\.stringValue)) == expectedKeys else {
+        throw VaultProbeCredentialsFailure()
+      }
+      schema = try container.decode(Int.self, forKey: StrictJSONKey("schema"))
+      serverURL = try container.decode(String.self, forKey: StrictJSONKey("serverURL"))
+      accounts = try container.decode([RawAccount].self, forKey: StrictJSONKey("accounts"))
+    }
   }
 
   private struct RawAccount: Decodable {
     let email: String
     let masterPassword: String
+
+    init(from decoder: Decoder) throws {
+      let container = try decoder.container(keyedBy: StrictJSONKey.self)
+      let expectedKeys: Set<String> = ["email", "masterPassword"]
+      guard Set(container.allKeys.map(\.stringValue)) == expectedKeys else {
+        throw VaultProbeCredentialsFailure()
+      }
+      email = try container.decode(String.self, forKey: StrictJSONKey("email"))
+      masterPassword = try container.decode(String.self, forKey: StrictJSONKey("masterPassword"))
+    }
   }
 }
 

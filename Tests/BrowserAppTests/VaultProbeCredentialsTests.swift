@@ -104,6 +104,19 @@ import Testing
     }
   }
 
+  @Test func rejectsUnknownCredentialFields() throws {
+    let (root, tls) = try fixture()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let file = root.appending(path: "vault-credentials.json")
+    let json =
+      #"{"schema":1,"serverURL":"https://127.0.0.1:4443","accounts":[{"email":"alpha@arcusis-fixture.invalid","masterPassword":"alpha-secret"},{"email":"beta@arcusis-fixture.invalid","masterPassword":"beta-secret"}],"unexpected":true}"#
+    try Data(json.utf8).write(to: file)
+    try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+    #expect(throws: VaultProbeCredentialsFailure.self) {
+      try VaultProbeCredentials.load(root: root, tls: tls)
+    }
+  }
+
   @Test func rejectsUnownedLinkedPublicAndOversizedFiles() throws {
     let (root, tls) = try fixture()
     defer { try? FileManager.default.removeItem(at: root) }

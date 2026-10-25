@@ -18,8 +18,9 @@ struct ProbeTLSConfiguration: Decodable {
         directory, Data(repeating: 0, count: 32).base64EncodedString(), true, &error) != nil
     else { throw ProbeTLSFailure() }
     do {
+      let metadata = try readOwned(root.appending(path: "probe-tls.json"))
       let configuration = try JSONDecoder().decode(
-        Self.self, from: readOwned(root.appending(path: "probe-tls.json")))
+        Self.self, from: metadata)
       let tlsDirectory = root.appending(path: "vault-tls")
       var info = stat()
       guard lstat(tlsDirectory.path, &info) == 0, info.st_mode & S_IFMT == S_IFDIR,
@@ -34,6 +35,22 @@ struct ProbeTLSConfiguration: Decodable {
       guard configuration.certificateSHA256 == digest else { throw ProbeTLSFailure() }
       return configuration
     } catch { throw ProbeTLSFailure() }
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: StrictJSONKey.self)
+    let expectedKeys: Set<String> = [
+      "schema", "spkiSHA256", "certificateSHA256", "matchedURL", "unmatchedURL",
+    ]
+    guard Set(container.allKeys.map(\.stringValue)) == expectedKeys else {
+      throw ProbeTLSFailure()
+    }
+    schema = try container.decode(Int.self, forKey: StrictJSONKey("schema"))
+    spkiSHA256 = try container.decode(String.self, forKey: StrictJSONKey("spkiSHA256"))
+    certificateSHA256 = try container.decode(
+      String.self, forKey: StrictJSONKey("certificateSHA256"))
+    matchedURL = try container.decode(URL.self, forKey: StrictJSONKey("matchedURL"))
+    unmatchedURL = try container.decode(URL.self, forKey: StrictJSONKey("unmatchedURL"))
   }
 
   private static func valid(_ url: URL) -> Bool {
@@ -55,6 +72,15 @@ struct ProbeTLSConfiguration: Decodable {
     else { throw ProbeTLSFailure() }
     return data
   }
+}
+
+struct StrictJSONKey: CodingKey {
+  let stringValue: String
+  let intValue: Int? = nil
+
+  init(_ stringValue: String) { self.stringValue = stringValue }
+  init?(stringValue: String) { self.init(stringValue) }
+  init?(intValue: Int) { return nil }
 }
 
 struct ProbeTLSFailure: LocalizedError {

@@ -27,7 +27,7 @@ enum EngineTLSProbe {
       let unmatched = await request(configuration.unmatchedURL, runtime: runtime, tab: tab)
       result["unmatched"] = unmatched ?? [:]
       guard unmatched?["success"] as? Bool == false, unmatched?["netError"] as? Int == -202,
-        unmatched?["netErrorName"] as? String == "ERR_CERT_AUTHORITY_INVALID"
+        unmatched?["netErrorName"] as? String == "net::ERR_CERT_AUTHORITY_INVALID"
       else { throw ProbeTLSFailure() }
       result["passed"] = true
       try write()

@@ -937,13 +937,15 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
       ![url.scheme isEqualToString:@"https"] || ![url.host isEqualToString:@"127.0.0.1"] ||
       !url.port || url.port.integerValue < 1 || url.port.integerValue > 65535 ||
       url.user || url.password || url.query || url.fragment || ![url.path isEqualToString:@"/alive"]) {
-    completion(nil);
+    completion(@{@"failureStage": @"context", @"testing": @(_testing), @"tlsEnabled": @(_probeTLS),
+                 @"tabAvailable": @(tab && !tab.closed), @"selected": @([self isSelectedTabID:tabID])});
     return;
   }
   [tab devToolsCall:@"Page.getFrameTree" params:@{} timeout:5 completion:^(NSDictionary *tree, NSString *error) {
     NSString *frame = tree[@"frameTree"][@"frame"][@"id"];
     if (error || ![frame isKindOfClass:NSString.class] || tab.closed || ![self isSelectedTabID:tabID]) {
-      completion(nil);
+      completion(@{@"failureStage": @"frame", @"commandFailed": @(error != nil),
+                   @"frameAvailable": @([frame isKindOfClass:NSString.class])});
       return;
     }
     [tab devToolsCall:@"Network.loadNetworkResource"
@@ -952,7 +954,8 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
       timeout:5 completion:^(NSDictionary *result, NSString *loadError) {
         NSDictionary *resource = result[@"resource"];
         if (loadError || ![resource isKindOfClass:NSDictionary.class] || tab.closed || ![self isSelectedTabID:tabID]) {
-          completion(nil);
+          completion(@{@"failureStage": @"resource", @"commandFailed": @(loadError != nil),
+                       @"resourceAvailable": @([resource isKindOfClass:NSDictionary.class])});
           return;
         }
         NSMutableDictionary *safe = [NSMutableDictionary dictionary];
@@ -964,7 +967,11 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
         if ([stream isKindOfClass:NSString.class]) {
           [tab devToolsCall:@"IO.close" params:@{@"handle": stream} timeout:5
             completion:^(NSDictionary *ignored, NSString *closeError) {
-              completion(closeError || tab.closed || ![self isSelectedTabID:tabID] ? nil : safe);
+              // Ardia detaches an idle CDP client before delivering its reply. Chromium
+              // discards that client's streams; a later close can confirm it is gone.
+              BOOL released = !closeError || [closeError isEqualToString:@"Invalid stream handle"];
+              completion(!released || tab.closed || ![self isSelectedTabID:tabID]
+                ? @{@"failureStage": @"stream-close"} : safe);
             }];
         } else completion(safe);
       }];

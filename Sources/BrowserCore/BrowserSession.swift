@@ -38,13 +38,15 @@ public struct BrowserSpace: Codable, Identifiable, Equatable, Sendable {
   public var name: String
   public var symbol: String
   public var tint: SpaceTint
+  public var customRGB: SpaceRGBColor?
   public var tabs: [BrowserTab]
   public var selectedTabID: UUID?
   public var folders: [BrowserFolder]
 
   public init(
     id: UUID = UUID(), profileID: UUID, name: String, symbol: String,
-    tint: SpaceTint, tabs: [BrowserTab] = [], selectedTabID: UUID? = nil,
+    tint: SpaceTint, customRGB: SpaceRGBColor? = nil, tabs: [BrowserTab] = [],
+    selectedTabID: UUID? = nil,
     folders: [BrowserFolder] = []
   ) {
     self.id = id
@@ -52,6 +54,7 @@ public struct BrowserSpace: Codable, Identifiable, Equatable, Sendable {
     self.name = name
     self.symbol = symbol
     self.tint = tint
+    self.customRGB = customRGB
     self.tabs = tabs
     self.selectedTabID = selectedTabID ?? tabs.first?.id
     self.folders = folders
@@ -259,7 +262,8 @@ public struct BrowserSession: Codable, Equatable, Sendable {
 
   @discardableResult
   public mutating func addSpace(
-    name: String, sharingProfile profileID: UUID? = nil, tint: SpaceTint? = nil
+    name: String, sharingProfile profileID: UUID? = nil, tint: SpaceTint? = nil,
+    customRGB: SpaceRGBColor? = nil
   ) -> UUID? {
     let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !name.isEmpty else { return nil }
@@ -272,20 +276,25 @@ public struct BrowserSession: Codable, Equatable, Sendable {
       profiles.append(profile)
     }
     let color = tint ?? SpaceTint.allCases[spaces.count % SpaceTint.allCases.count]
-    let space = BrowserSpace(profileID: profile.id, name: name, symbol: "square.stack", tint: color)
+    let space = BrowserSpace(
+      profileID: profile.id, name: name, symbol: "square.stack", tint: color,
+      customRGB: customRGB)
     spaces.append(space)
     selectedSpaceID = space.id
     return space.id
   }
 
   @discardableResult
-  public mutating func updateSpace(_ id: UUID, name: String, tint: SpaceTint) -> Bool {
+  public mutating func updateSpace(
+    _ id: UUID, name: String, tint: SpaceTint, customRGB: SpaceRGBColor? = nil
+  ) -> Bool {
     let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !name.isEmpty, let index = spaces.firstIndex(where: { $0.id == id }) else {
       return false
     }
     spaces[index].name = name
     spaces[index].tint = tint
+    spaces[index].customRGB = customRGB
     return true
   }
 

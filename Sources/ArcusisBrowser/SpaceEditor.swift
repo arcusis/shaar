@@ -16,8 +16,9 @@ struct SpaceEditor: View {
   let store: BrowserStore
   let route: SpaceEditorRoute
   @Environment(\.dismiss) private var dismiss
+  @Environment(\.horizontalSizeClass) private var horizontalSizeClass
   @State private var name: String
-  @State private var tint: SpaceTint
+  @State private var appearance: SpaceAppearanceDraft
   @State private var sharedProfileID: UUID?
   @State private var deleteIsPresented = false
   @State private var error: String?
@@ -28,7 +29,9 @@ struct SpaceEditor: View {
     self.route = route
     let space = store.session.spaces.first { $0.id == route.spaceID }
     _name = State(initialValue: space?.name ?? "")
-    _tint = State(initialValue: space?.tint ?? .lavender)
+    let appearance = SpaceAppearanceDraft(
+      tint: space?.tint ?? .lavender, customRGB: space?.customRGB)
+    _appearance = State(initialValue: appearance)
   }
 
   var body: some View {
@@ -36,7 +39,7 @@ struct SpaceEditor: View {
       HStack(spacing: 12) {
         Image(systemName: "square.stack.3d.up")
           .font(.system(size: 26, weight: .light))
-          .foregroundStyle(tint.color)
+          .foregroundStyle(appearanceColor)
         VStack(alignment: .leading, spacing: 4) {
           Text(route.spaceID == nil ? "Make a little space" : "Your space")
             .font(.title2.weight(.semibold))
@@ -45,11 +48,18 @@ struct SpaceEditor: View {
             .foregroundStyle(.secondary)
         }
       }
-      Form {
+      VStack(alignment: .leading, spacing: 12) {
         TextField("Name", text: $name)
           .focused($nameIsFocused)
           .onSubmit { submit() }
-        Picker("Color", selection: $tint) {
+        Picker(
+          "Color",
+          selection: Binding(
+            get: { appearance.tint },
+            set: {
+              appearance.selectPreset($0)
+            })
+        ) {
           ForEach(SpaceTint.allCases, id: \.self) { color in
             Label {
               Text(color.rawValue.capitalized)
@@ -58,6 +68,33 @@ struct SpaceEditor: View {
             }
             .tag(color)
           }
+        }
+        ColorPicker(
+          "Custom color",
+          selection: Binding(
+            get: { appearanceColor },
+            set: { updateCustomColor($0) }), supportsOpacity: false)
+        TextField(
+          "Hex RGB",
+          text: Binding(
+            get: { appearance.hexValue },
+            set: { appearance.setHexDraft($0) })
+        )
+        .accessibilityLabel("Exact RGB hex color")
+        .accessibilityHint(
+          appearance.canSubmit
+            ? "Enter six hexadecimal digits." : "Enter a valid six-digit RGB color to enable Save."
+        )
+        .overlay(alignment: .trailing) {
+          if !appearance.canSubmit {
+            Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.red)
+          }
+        }
+        LabeledContent("Preview") {
+          RoundedRectangle(cornerRadius: 8)
+            .fill(appearanceColor)
+            .frame(width: 72, height: 24)
+            .accessibilityLabel("Space color preview \(appearance.color.hex)")
         }
         if route.spaceID == nil {
           Picker("Profile", selection: $sharedProfileID) {
@@ -70,8 +107,6 @@ struct SpaceEditor: View {
           LabeledContent("Profile", value: profileName)
         }
       }
-      .formStyle(.grouped)
-      .frame(height: 155)
       Text(profileExplanation)
         .font(.caption)
         .foregroundStyle(.secondary)
@@ -88,11 +123,11 @@ struct SpaceEditor: View {
         Button("Cancel", role: .cancel) { dismiss() }
         Button(route.spaceID == nil ? "Create space" : "Save") { submit() }
           .keyboardShortcut(.defaultAction)
-          .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+          .disabled(SpaceEditorSavePolicy.isDisabled(name: name, appearance: appearance))
       }
     }
     .padding(28)
-    .frame(width: 440)
+    .frame(width: horizontalSizeClass == .compact ? 380 : 440)
     .background(Color(nsColor: .windowBackgroundColor))
     .onAppear { nameIsFocused = true }
     .confirmationDialog("Delete \(name)?", isPresented: $deleteIsPresented) {
@@ -126,16 +161,36 @@ struct SpaceEditor: View {
   }
 
   private func submit() {
+    guard !SpaceEditorSavePolicy.isDisabled(name: name, appearance: appearance) else { return }
     let succeeded: Bool
     if let id = route.spaceID {
-      succeeded = store.updateSpace(id, name: name, tint: tint)
+      succeeded = store.updateSpace(
+        id, name: name, tint: appearance.tint, customRGB: appearance.customRGB)
     } else {
-      succeeded = store.createSpace(name: name, sharingProfile: sharedProfileID, tint: tint)
+      succeeded = store.createSpace(
+        name: name, sharingProfile: sharedProfileID, tint: appearance.tint,
+        customRGB: appearance.customRGB)
     }
     if succeeded {
       dismiss()
     } else {
       error = "This space could not be saved. Check its name and profile."
     }
+  }
+
+  private var appearanceColor: Color {
+    let value = appearance.color
+    return Color(
+      .sRGB, red: Double(value.red) / 255, green: Double(value.green) / 255,
+      blue: Double(value.blue) / 255, opacity: 1)
+  }
+
+  private func updateCustomColor(_ value: Color) {
+    guard let color = NSColor(value).usingColorSpace(.sRGB) else {
+      appearance.rejectColorInput()
+      return
+    }
+    _ = appearance.setCustomComponents(
+      red: color.redComponent, green: color.greenComponent, blue: color.blueComponent)
   }
 }

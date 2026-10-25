@@ -609,8 +609,14 @@ final class BrowserStore {
   }
 
   @discardableResult
-  func createSpace(name: String, sharingProfile profileID: UUID?, tint: SpaceTint) -> Bool {
-    guard session.addSpace(name: name, sharingProfile: profileID, tint: tint) != nil else {
+  func createSpace(
+    name: String, sharingProfile profileID: UUID?, tint: SpaceTint,
+    customRGB: SpaceRGBColor? = nil
+  ) -> Bool {
+    guard
+      session.addSpace(
+        name: name, sharingProfile: profileID, tint: tint, customRGB: customRGB) != nil
+    else {
       return false
     }
     save()
@@ -618,8 +624,12 @@ final class BrowserStore {
   }
 
   @discardableResult
-  func updateSpace(_ id: UUID, name: String, tint: SpaceTint) -> Bool {
-    guard session.updateSpace(id, name: name, tint: tint) else { return false }
+  func updateSpace(
+    _ id: UUID, name: String, tint: SpaceTint, customRGB: SpaceRGBColor? = nil
+  ) -> Bool {
+    guard session.updateSpace(id, name: name, tint: tint, customRGB: customRGB) else {
+      return false
+    }
     save()
     return true
   }

@@ -133,7 +133,15 @@ final class WorkspaceProbe {
     }
     let first = manager.stores[ids.first]!
     let second = manager.stores[ids.second]!
+    let selected = first.session.selectedSpace.selectedTabID!
+    _ = try await document(selected)
+    let background = selected == ids.firstOrdinary ? ids.betaTab : ids.firstOrdinary
+    try expect(
+      runtime.nativeTabID(forID: background.uuidString) == -1,
+      "saved background ordinary tabs stay deferred until selection")
+    first.perform(.tab(space: ids.alpha, tab: ids.firstOrdinary))
     _ = try await document(ids.firstOrdinary)
+    first.perform(.tab(space: ids.beta, tab: ids.betaTab))
     let betaDocument = try await document(ids.betaTab)
     try expect(
       betaDocument["cookie"] as? String == "account=beta",

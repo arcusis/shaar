@@ -38,9 +38,8 @@ struct BrowserSidebar: View {
 
   var body: some View {
     let tabIndex = SidebarTabIndex(tabs: store.session.selectedSpace.tabs)
-    VStack(alignment: .leading, spacing: 14) {
-      WindowDragRegion().frame(height: 18)
-      HStack(spacing: 14) {
+    VStack(alignment: .leading, spacing: 8) {
+      HStack(spacing: 12) {
         Button {
           store.sidebarIsVisible = false
         } label: {
@@ -72,45 +71,51 @@ struct BrowserSidebar: View {
           .help("Reload (Command-R)")
         }
         Spacer(minLength: 0)
-        Button {
-          store.bookmarkCurrentPage()
-        } label: {
-          Image(systemName: "star")
+        if store.canBookmarkCurrentPage {
+          Button {
+            store.bookmarkCurrentPage()
+          } label: {
+            Image(systemName: "star")
+          }
+          .help("Bookmark this page (Command-D)")
+          .accessibilityLabel("Bookmark this page")
         }
-        .disabled(!store.canBookmarkCurrentPage)
-        .help("Bookmark this page (Command-D)")
-        .accessibilityLabel("Bookmark this page")
       }
       .font(.system(size: 13))
       profileFavorites
       VStack(alignment: .leading, spacing: 4) {
-        HStack(spacing: 7) {
-          Label(store.session.selectedSpace.name, systemImage: store.session.selectedSpace.symbol)
-            .font(.system(size: 14, weight: .semibold))
-            .lineLimit(1)
-          Spacer(minLength: 0)
-          Image(systemName: "person.crop.circle")
-            .font(.system(size: 12))
-            .foregroundStyle(.secondary)
-            .accessibilityLabel("Profile: \(store.profileName)")
+        Menu {
+          Text("Profile: \(store.profileName)")
+          Divider()
+          Button("New Folder", systemImage: "folder.badge.plus") {
+            beginFolderDraft(parentID: nil)
+          }
+          Button("Edit Space…", systemImage: "slider.horizontal.3") {
+            store.spaceEditor = .edit(store.session.selectedSpaceID)
+          }
+        } label: {
+          HStack(spacing: 7) {
+            Label(store.session.selectedSpace.name, systemImage: store.session.selectedSpace.symbol)
+              .font(.system(size: 14, weight: .semibold))
+              .lineLimit(1)
+              .truncationMode(.tail)
+            Image(systemName: "chevron.down")
+              .font(.system(size: 9, weight: .semibold))
+              .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+          }
+          .contentShape(Rectangle())
         }
-        .accessibilityElement(children: .combine)
+        .menuStyle(.borderlessButton)
         .accessibilityLabel("\(store.session.selectedSpace.name), Profile: \(store.profileName)")
+        .help("Space: \(store.session.selectedSpace.name) · Profile: \(store.profileName)")
         if let notice = store.sidebarNotice {
           Text(notice).font(.caption).fixedSize(horizontal: false, vertical: true)
         }
       }
       ScrollView {
         LazyVStack(alignment: .leading, spacing: 4) {
-          HStack(spacing: 4) {
-            sectionDropTarget("Pinned", pinned: true)
-            Button {
-              beginFolderDraft(parentID: nil)
-            } label: {
-              Image(systemName: "folder.badge.plus")
-            }
-            .help("New folder").accessibilityLabel("New folder").padding(.trailing, 10)
-          }
+          sectionDropTarget(pinned: true)
           if let folderDraft, folderDraft.parentID == nil { folderDraftRow(depth: 0) }
           ForEach(store.session.selectedSpace.pinnedItems()) { item in
             switch item {
@@ -126,7 +131,7 @@ struct BrowserSidebar: View {
           if store.session.selectedSpace.tabs.contains(where: \.isPinned)
             || !store.session.selectedSpace.folders.isEmpty
           {
-            Divider().padding(.vertical, 10)
+            Divider().padding(.vertical, 6)
           }
           Button {
             store.showCommand()
@@ -141,11 +146,11 @@ struct BrowserSidebar: View {
               .disabled(!store.canReopenClosedTab)
             Button("Recently closed…") { store.showRecentlyClosed() }
           }
-          sectionDropTarget("Tabs", pinned: false)
+          sectionDropTarget(pinned: false)
           ForEach(store.session.selectedSpace.tabs.filter { !$0.isPinned }) { tab in
             tabRow(tab, index: tabIndex)
           }
-          sectionDropTarget("Move to end", pinned: false, isFooter: true)
+          sectionDropTarget(pinned: false, isFooter: true)
         }
       }
       Spacer(minLength: 0)
@@ -225,7 +230,8 @@ struct BrowserSidebar: View {
     }
     .buttonStyle(.plain)
     .padding(.horizontal, 14)
-    .padding(.bottom, 16)
+    .padding(.top, 4)
+    .padding(.bottom, 10)
     .coordinateSpace(name: "sidebarBounds")
     .background {
       LinearGradient(
@@ -252,22 +258,7 @@ struct BrowserSidebar: View {
         image: page.flatMap { store.engine?.favicons[$0.tab.id] })
     }
     return Group {
-      if favorites.isEmpty {
-        if case .tab(let tab) = store.session.selectedPage,
-          NavigationInput.isWebURL(tab.url)
-        {
-          Button {
-            _ = store.addCurrentPageAsFavorite()
-          } label: {
-            Label("Add current page to Favorites", systemImage: "star")
-              .font(.system(size: 12))
-              .foregroundStyle(.secondary)
-              .padding(.vertical, 5)
-          }
-          .disabled(!store.canFavoriteCurrentPage)
-          .help("Add current page to Favorites")
-        }
-      } else {
+      if !favorites.isEmpty {
         ProfileFavoritesGrid(
           favorites: favorites,
           selectedID: store.session.selectedSpace.selectedFavoriteID,
@@ -563,29 +554,25 @@ struct BrowserSidebar: View {
     _ = store.addCurrentPageAsFavorite()
   }
 
-  private func sectionDropTarget(_ label: String, pinned: Bool, isFooter: Bool = false) -> some View
-  {
+  private func sectionDropTarget(pinned: Bool, isFooter: Bool = false) -> some View {
     let space = store.session.selectedSpace.id
     let zone = isFooter ? "end" : pinned ? "pinned" : "tabs"
-    return Text(label)
-      .font(.system(size: 11, weight: .medium))
-      .foregroundStyle(.secondary)
-      .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 10).padding(
-        .vertical, 8
-      )
-      .opacity(isFooter ? 0.6 : 1)
+    return Color.clear
+      .frame(maxWidth: .infinity)
+      .frame(height: isFooter ? 32 : 12)
       .contentShape(Rectangle())
-      .background(
-        targetedSection == zone ? Color.accentColor.opacity(0.16) : .clear,
-        in: RoundedRectangle(cornerRadius: 6)
-      )
+      .overlay(alignment: .center) {
+        if targetedSection == zone {
+          Capsule().fill(Color.accentColor).frame(height: 2)
+        }
+      }
       .dropDestination(for: SidebarTransfer.self) { items, _ in
         guard items.count == 1, let item = items.first else { return false }
         return store.acceptSidebarDrop(item, into: space, pinned: pinned)
       } isTargeted: { targeted in
         targetedSection = targeted ? zone : targetedSection == zone ? nil : targetedSection
       }
-      .accessibilityLabel(isFooter ? "Move tab to end" : "\(label) tabs")
+      .accessibilityHidden(true)
   }
 
   private func shiftTab(_ tab: BrowserTab, in space: BrowserSpace, by offset: Int) {

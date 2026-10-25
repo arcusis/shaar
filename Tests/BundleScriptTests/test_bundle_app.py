@@ -1,4 +1,5 @@
 import os
+import plistlib
 import shutil
 import subprocess
 import tempfile
@@ -8,6 +9,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "scripts" / "bundle-app.sh"
+ICON = REPO / "Resources" / "Branding" / "Arcusis.icns"
 
 
 class BundleAppTests(unittest.TestCase):
@@ -20,6 +22,9 @@ class BundleAppTests(unittest.TestCase):
 
         (self.root / "scripts").mkdir()
         shutil.copy2(SCRIPT, self.root / "scripts" / "bundle-app.sh")
+        icon = self.root / "Resources" / "Branding" / "Arcusis.icns"
+        icon.parent.mkdir(parents=True)
+        shutil.copy2(ICON, icon)
         engine_script = self.root / "scripts" / "fetch-engine.sh"
         engine_script.write_text(
             "#!/bin/bash\n"
@@ -88,6 +93,13 @@ class BundleAppTests(unittest.TestCase):
     def _log(self):
         return self.log.read_text() if self.log.exists() else ""
 
+    def _assert_icon_bundle(self, app_path):
+        contents = self.root / app_path / "Contents"
+        with (contents / "Info.plist").open("rb") as plist_file:
+            plist = plistlib.load(plist_file)
+        self.assertEqual(plist["CFBundleIconFile"], "Arcusis.icns")
+        self.assertEqual((contents / "Resources" / "Arcusis.icns").read_bytes(), ICON.read_bytes())
+
     def test_default_build_remains_release_shell_bundle(self):
         result = self._run()
 
@@ -95,6 +107,7 @@ class BundleAppTests(unittest.TestCase):
         self.assertIn("swift build -c release", self._log())
         self.assertIn("Built build/Arcusis Browser Shell.app", result.stdout)
         self.assertIn("not notarized", result.stdout)
+        self._assert_icon_bundle("build/Arcusis Browser Shell.app")
         self.assertTrue(
             (self.root / "build/Arcusis Browser Shell.app/Contents/Resources/ArdiaCore/pin.json").is_file()
         )
@@ -108,6 +121,7 @@ class BundleAppTests(unittest.TestCase):
         self.assertIn("swift build -c release", self._log())
         self.assertIn("fetch-engine", self._log())
         self.assertIn("Built build/Arcusis Browser.app", result.stdout)
+        self._assert_icon_bundle("build/Arcusis Browser.app")
         self.assertTrue(
             (self.root / "build/Arcusis Browser.app/Contents/Frameworks/Chromium Framework.framework/Versions/Current/Libraries/libengine.dylib").is_file()
         )
@@ -120,6 +134,7 @@ class BundleAppTests(unittest.TestCase):
         self.assertIn("swift build -c debug", self._log())
         self.assertIn("Built build/Arcusis Browser Shell Debug.app", result.stdout)
         self.assertIn("not notarized or release-ready", result.stdout)
+        self._assert_icon_bundle("build/Arcusis Browser Shell Debug.app")
         self.assertIn("codesign --force --timestamp=none --sign -", self._log())
         self.assertNotIn("release-ready", self._log())
         self.assertIn("codesign --verify --deep --strict", self._log())
@@ -132,6 +147,7 @@ class BundleAppTests(unittest.TestCase):
         self.assertIn("fetch-engine", self._log())
         self.assertIn("Built build/Arcusis Browser Debug.app", result.stdout)
         self.assertIn("not notarized or release-ready", result.stdout)
+        self._assert_icon_bundle("build/Arcusis Browser Debug.app")
 
     def test_invalid_duplicate_and_malformed_options_fail_before_build(self):
         invalid_arguments = (

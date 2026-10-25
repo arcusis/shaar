@@ -6,4 +6,6 @@ Download checks use real engine transfers from authenticated loopback fixtures i
 
 The sidebar Library footer also provides recent-download hover/toggle cards. File dragging rechecks current profile, record state and readable regular file at drag time. [PR #38](https://github.com/arcusis/browser/pull/38) provides source/layout checks; physical hover/drop/Finder acceptance remains [#37](https://github.com/arcusis/browser/issues/37).
 
+Recent-card visibility uses a scoped 0.14-second ease-out transition. This timing is a design choice, not measured Arc parity. Reduce Motion disables both positional and opacity animation, including inherited animation transactions; profile changes dismiss the card without animation. Static normal/compact previews do not establish physical hover or drag behavior.
+
 Related: [[Bookmark_History]], [[Project_State]].

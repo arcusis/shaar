@@ -360,12 +360,11 @@ final class BrowserEngine {
       }
     }
     for space in session.spaces where loadedProfiles.contains(space.profileID) {
-      for tab in space.tabs where !liveTabs.contains(tab.id) && !failedTabs.contains(tab.id) {
-        if lazyPinnedTabs && tab.isPinned
-          && !(space.id == session.selectedSpaceID && space.selectedTabID == tab.id)
-        {
-          continue
-        }
+      for tab in space.tabs where !failedTabs.contains(tab.id) {
+        let decision = TabMaterializationPolicy.decision(
+          isSelected: space.id == session.selectedSpaceID && space.selectedTabID == tab.id,
+          isLive: liveTabs.contains(tab.id), lazy: lazyPinnedTabs)
+        guard decision == .materialize else { continue }
         guard events.router.bindTab(tab.id.uuidString, windowID: windowID) else {
           failedTabs.insert(tab.id)
           notice = "A saved tab already belongs to another window."

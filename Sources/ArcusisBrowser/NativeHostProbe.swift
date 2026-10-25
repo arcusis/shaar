@@ -246,16 +246,92 @@ final class NativeHostProbe {
     focus(secondID)
     second.store.spaceEditor = .edit(second.store.session.selectedSpaceID)
     try expect(
-      !host.canPerform(.newTab) && !host.canPerform(.closeWindow) && host.canPerform(.newWindow),
+      !host.canPerform(.newTab) && !host.canPerform(.closeWindow)
+        && !host.canPerform(.settings) && host.canPerform(.newWindow),
       "native menu validation respects the focused window's modal state")
     second.store.sheet = nil
     second.store.sheetDidDismiss()
     let newWindowItem = try menuItem(.newWindow)
     let closeWindowItem = try menuItem(.closeWindow)
+    let settingsItem = try menuItem(.settings)
     try expect(
       newWindowItem.keyEquivalent == "n" && newWindowItem.keyEquivalentModifierMask == .command
-        && closeWindowItem.keyEquivalentModifierMask == [.command, .shift],
-      "native window menu registers exact Command-N and Shift-Command-W chords")
+        && closeWindowItem.keyEquivalentModifierMask == [.command, .shift]
+        && settingsItem.keyEquivalent == ","
+        && settingsItem.keyEquivalentModifierMask == .command,
+      "native menus register exact Command-N, Shift-Command-W, and Command-Comma chords")
+    guard let settings = host.settingsController else {
+      throw HostProbeFailure("Native Settings controller is missing.")
+    }
+    let sessionsBeforeSettings = Dictionary(
+      uniqueKeysWithValues: host.contexts.map { ($0.key, $0.value.store.session) })
+    let selectedSpacesBeforeSettings = Dictionary(
+      uniqueKeysWithValues: host.contexts.map { ($0.key, $0.value.store.session.selectedSpaceID) })
+    let profileSpacesBeforeSettings = settings.profiles
+    let activeProfileBeforeSettings = host.activeContext?.store.session.selectedSpace.profileID
+    try send(.settings)
+    guard let openedSettingsWindow = settings.window else {
+      throw HostProbeFailure("Native Settings menu did not create its window.")
+    }
+    guard let settingsContent = openedSettingsWindow.contentView else {
+      throw HostProbeFailure("Native Settings content is missing.")
+    }
+    try await capture(settingsContent, index: 4)
+    let selectedProfile = activeProfileBeforeSettings.flatMap { id in
+      settings.profiles.first { $0.id == id }
+    }
+    try expect(
+      settings.selectedProfileID == activeProfileBeforeSettings,
+      "native Settings initially selects exactly the focused browser profile")
+    let expectedSpaceCount = selectedProfile.map { profile in
+      Set(host.workspace.workspace.catalog.spaces.filter { $0.profileID == profile.id }.map(\.id))
+        .count
+    }
+    if let selectedProfile {
+      _ = settings.selectProfile(selectedProfile.id)
+      _ = settings.selectSearchEngine("duckDuckGo", for: selectedProfile.id)
+    }
+    settings.close()
+    try expect(
+      settingsItem.keyEquivalent == "," && settingsItem.keyEquivalentModifierMask == .command
+        && (selectedProfile == nil
+          || profileSpacesBeforeSettings.first(where: { $0.id == selectedProfile?.id })?.spaceCount
+            == expectedSpaceCount)
+        && sessionsBeforeSettings.allSatisfy {
+          host.contexts[$0.key]?.store.session == $0.value
+            && selectedSpacesBeforeSettings[$0.key]
+              == host.contexts[$0.key]?.store.session.selectedSpaceID
+        }
+        && host.contexts.values.allSatisfy { !$0.window.isVisible }
+        && !openedSettingsWindow.isVisible,
+      "hidden native Settings selection preserves every browser account and session identity")
+    try send(.settings)
+    try expect(
+      settings.window === openedSettingsWindow,
+      "native Settings menu reuses its hidden window")
+    focused = openedSettingsWindow
+    try expect(
+      host.canPerform(.closeTab) && host.canPerform(.closeWindow)
+        && !host.canPerform(.search) && !host.canPerform(.find)
+        && !host.canPerform(.reload),
+      "Settings owns both close shortcuts and disables page commands")
+    try send(.closeTab)
+    try expect(
+      !openedSettingsWindow.isVisible
+        && sessionsBeforeSettings.allSatisfy { host.contexts[$0.key]?.store.session == $0.value },
+      "Command-W closes Settings without closing an underlying browser tab")
+    try send(.settings)
+    try send(.closeWindow)
+    try expect(
+      !openedSettingsWindow.isVisible
+        && sessionsBeforeSettings.allSatisfy { host.contexts[$0.key]?.store.session == $0.value },
+      "Shift-Command-W closes Settings without closing an underlying browser window")
+    focus(secondID)
+    settings.close()
+    try expect(
+      !openedSettingsWindow.isVisible
+        && host.contexts.values.allSatisfy { !$0.window.isVisible },
+      "hidden native Settings never orders browser or Settings windows onscreen")
     first.window.setFrame(NSRect(x: 80, y: 90, width: 1000, height: 720), display: false)
     second.window.setFrame(NSRect(x: 150, y: 130, width: 980, height: 700), display: false)
     host.flushGeometry()

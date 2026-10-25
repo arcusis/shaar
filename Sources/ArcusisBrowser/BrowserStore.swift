@@ -59,6 +59,7 @@ final class BrowserStore {
   private(set) var storageNotice: String?
 
   @ObservationIgnored private let sessionFile: SessionFile?
+  @ObservationIgnored var preferences = BrowserPreferencesStore()
   @ObservationIgnored private var managedSave: ((BrowserSession) -> ManagedSessionSaveResult)?
   @ObservationIgnored private var maySave = true
   @ObservationIgnored var engine: BrowserEngine?
@@ -112,8 +113,14 @@ final class BrowserStore {
     let profile = session.selectedSpace.profileID
     return CommandSearch.results(
       for: commandQuery, in: session,
-      bookmarks: library.bookmarks[profile]?.items ?? [], history: library.history[profile] ?? [])
+      bookmarks: library.bookmarks[profile]?.items ?? [], history: library.history[profile] ?? [],
+      searchEngine: preferences.searchEngine(for: profile))
   }
+  func usePreferences(_ value: BrowserPreferencesStore) {
+    preferences = value
+    sidebarIsVisible = value.sidebarInitiallyVisible
+  }
+
   var profileName: String {
     session.profiles.first { $0.id == session.selectedSpace.profileID }?.name ?? ""
   }

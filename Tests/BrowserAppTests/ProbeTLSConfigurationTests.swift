@@ -93,6 +93,19 @@ import Testing
     #expect(error != nil)
   }
 
+  @Test func rejectsUnknownMetadataFields() throws {
+    let root = try fixture()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let file = root.appending(path: "probe-tls.json")
+    let digest = SHA256.hash(data: Data("public certificate fixture".utf8))
+      .map { String(format: "%02x", $0) }.joined()
+    let json =
+      #"{"schema":1,"spkiSHA256":"\#(fingerprint)","certificateSHA256":"\#(digest)","matchedURL":"https://127.0.0.1:4443/alive","unmatchedURL":"https://127.0.0.1:4444/alive","unexpected":true}"#
+    try Data(json.utf8).write(to: file)
+    try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+    #expect(throws: ProbeTLSFailure.self) { try ProbeTLSConfiguration.load(root: root) }
+  }
+
   @Test func publicRootMarkerAndWrongDirectoryFailClosed() throws {
     let root = try fixture()
     defer { try? FileManager.default.removeItem(at: root) }

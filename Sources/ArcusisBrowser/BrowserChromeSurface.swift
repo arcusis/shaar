@@ -76,7 +76,7 @@ struct BrowserChromeSurface: View {
         store.sidebarIsVisible.toggle()
       }
 
-      if let engine, let id = store.session.selectedSpace.selectedTabID {
+      if let engine, let id = store.session.selectedPage?.tab.id {
         let state = engine.pages[id]
         chromeButton("chevron.left", label: "Back") {
           engine.runtime.goBack(inTabID: id.uuidString)
@@ -97,7 +97,7 @@ struct BrowserChromeSurface: View {
   }
 
   private var addressControl: some View {
-    let host = store.session.selectedSpace.selectedTab?.url.host()
+    let host = store.session.selectedPage?.tab.url.host()
     let title = host ?? "Search or enter address"
     let shouldReduceTransparency = accessibilityOverrides.reduceTransparency ?? reduceTransparency
     let shouldReduceMotion = accessibilityOverrides.reduceMotion ?? reduceMotion

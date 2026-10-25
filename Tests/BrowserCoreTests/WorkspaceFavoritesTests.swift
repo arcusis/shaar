@@ -227,6 +227,57 @@ import Testing
   try workspace.validate()
 }
 
+@Test func unfavoritePreservesPeerFocusWhenFavoriteWasSelectedInTwoSharedSpaces() throws {
+  var session = BrowserSession.fresh()
+  let profile = session.selectedSpace.profileID
+  let sharedSpaceValue = session.addSpace(name: "Shared", sharingProfile: profile)
+  let sharedSpace = try #require(sharedSpaceValue)
+  let favoriteValue = session.addFavorite(
+    profileID: profile, originalURL: URL(string: "https://mail.example.com")!)
+  let favorite = try #require(favoriteValue)
+  var workspace = try BrowserWorkspace(session: session)
+  let source = workspace.windows[0].id
+  let peer = try workspace.addWindow(from: source)
+
+  let selectedFirst = try workspace.selectFavorite(
+    windowID: peer, favoriteID: favorite, in: session.selectedSpaceID)
+  let selectedShared = try workspace.selectFavorite(
+    windowID: peer, favoriteID: favorite, in: sharedSpace)
+  #expect(selectedFirst)
+  #expect(selectedShared)
+  #expect(workspace.window(peer)?.session.selectedSpaceID == sharedSpace)
+
+  let removed = try workspace.removeFavorite(
+    windowID: source, favoriteID: favorite, disposition: .preserveAsTab)
+  #expect(removed)
+  #expect(workspace.window(peer)?.session.selectedSpaceID == sharedSpace)
+  #expect(
+    workspace.window(peer)?.session.spaces.first { $0.id == sharedSpace }?.selectedTabID != nil)
+  try workspace.validate()
+}
+
+@Test func unfavoriteDoesNotSwitchPeerAwayFromUnrelatedProfile() throws {
+  var session = BrowserSession.fresh()
+  let profile = session.selectedSpace.profileID
+  let otherProfileSpaceValue = session.addSpace(name: "Other profile")
+  let otherProfileSpace = try #require(otherProfileSpaceValue)
+  let favoriteValue = session.addFavorite(
+    profileID: profile, originalURL: URL(string: "https://mail.example.com")!)
+  let favorite = try #require(favoriteValue)
+  var workspace = try BrowserWorkspace(session: session)
+  let source = workspace.windows[0].id
+  let peer = try workspace.addWindow(from: source)
+  var peerSession = try #require(workspace.window(peer)?.session)
+  peerSession.selectSpace(otherProfileSpace)
+  try workspace.updateWindow(peer, session: peerSession)
+
+  let removed = try workspace.removeFavorite(
+    windowID: source, favoriteID: favorite, disposition: .preserveAsTab)
+  #expect(removed)
+  #expect(workspace.window(peer)?.session.selectedSpaceID == otherProfileSpace)
+  try workspace.validate()
+}
+
 @Test func tabPromotionPreservesLocalIdentityAndPeerPinPage() throws {
   var session = BrowserSession.fresh()
   let spaceID = session.selectedSpaceID

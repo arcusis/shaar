@@ -10,12 +10,16 @@ struct ManagedSessionSaveResult {
 struct SpaceRemovalImpact {
   let tabs: Int
   let windows: Int
+  var favoritePages: Int = 0
   var tabDescription: String { "\(tabs) \(tabs == 1 ? "tab" : "tabs")" }
 
   var message: String {
-    windows > 1
-      ? "This space will be deleted from all \(windows) windows, closing \(tabDescription). Its profile is kept."
-      : "Tabs in this space will close. Its profile is kept."
+    let favoriteImpact =
+      favoritePages == 0
+      ? "" : " and \(favoritePages) Favorite \(favoritePages == 1 ? "page" : "pages")"
+    return windows > 1
+      ? "This space will be deleted from all \(windows) windows, closing \(tabDescription)\(favoriteImpact). Its profile is kept."
+      : "Tabs in this space will close\(favoriteImpact). Its profile is kept."
   }
 }
 
@@ -197,11 +201,11 @@ final class BrowserStore {
   }
 
   var canFindCurrentPage: Bool {
-    sheet == nil && session.selectedSpace.selectedTabID.map { rendererFailures[$0] == nil } == true
+    sheet == nil && session.selectedPage.map { rendererFailures[$0.tab.id] == nil } == true
   }
 
   func showPageFind() {
-    guard canFindCurrentPage, let tab = session.selectedSpace.selectedTab else { return }
+    guard canFindCurrentPage, let tab = session.selectedPage?.tab else { return }
     commandIsOpen = false
     engine?.extensionPanel = nil
     if var current = pageFind, current.matches(session) {
@@ -276,7 +280,19 @@ final class BrowserStore {
     case .open(let url): session.open(url)
     case .space(let id): session.selectSpace(id)
     case .folder(let space, let folder): session.selectFolder(folder, in: space)
-    case .tab(let space, let tab): session.selectTab(tab, in: space)
+    case .tab(let space, let tab):
+      if session.spaces.first(where: { $0.id == space })?.tabs.contains(where: { $0.id == tab })
+        == true
+      {
+        session.selectTab(tab, in: space)
+      } else if let selected = session.page(forTabID: tab),
+        case .favorite(let page) = selected,
+        session.spaces.first(where: { $0.id == space })?.profileID
+          == session.profileID(forTabID: tab),
+        session.selectFavorite(page.favoriteID, in: space)
+      {
+        // Favorite page identity stays window-local; selection only changes this Space.
+      }
     case .reopen(let space, let tab):
       reopenClosedTab(tab, in: space)
       return
@@ -307,15 +323,109 @@ final class BrowserStore {
 
   func nativeTabClosed(_ id: UUID) {
     rendererFailures[id] = nil
+    if let favoritePage = session.favoritePages.first(where: { $0.tab.id == id }) {
+      _ = session.closeFavoritePage(favoritePage.favoriteID)
+      save()
+      return
+    }
     session.closeTab(id)
     save()
   }
 
+  var profileFavorites: [BrowserFavorite] {
+    session.favorites(for: session.selectedSpace.profileID)
+  }
+
+  var canFavoriteCurrentPage: Bool {
+    guard sheet == nil, !commandIsOpen, let page = session.selectedPage,
+      case .tab(let tab) = page
+    else { return false }
+    return NavigationInput.isWebURL(tab.url)
+  }
+
+  @discardableResult
+  func addCurrentPageAsFavorite() -> Bool {
+    guard canFavoriteCurrentPage, case .tab(let tab) = session.selectedPage else { return false }
+    let tabID = tab.id
+    guard session.promoteTabToFavorite(tabID, in: session.selectedSpaceID) != nil else {
+      return false
+    }
+    save()
+    return true
+  }
+
+  @discardableResult
+  func selectFavorite(_ id: UUID) -> Bool {
+    guard sheet == nil, !commandIsOpen,
+      session.favorites.contains(where: {
+        $0.id == id && $0.profileID == session.selectedSpace.profileID
+      }), session.selectFavorite(id, in: session.selectedSpaceID)
+    else { return false }
+    dismissPageFind()
+    engine?.extensionPanel = nil
+    save()
+    return true
+  }
+
+  @discardableResult
+  func removeFavorite(_ id: UUID) -> Bool {
+    guard sheet == nil, !commandIsOpen,
+      session.favorites.contains(where: {
+        $0.id == id && $0.profileID == session.selectedSpace.profileID
+      }), session.removeFavorite(id, disposition: .preserveAsTab)
+    else { return false }
+    save()
+    return true
+  }
+
+  @ObservationIgnored var onNavigatePage: ((UUID, UUID, URL) -> Bool)?
+
+  @discardableResult
+  func resetFavorite(_ id: UUID) -> Bool {
+    guard sheet == nil, !commandIsOpen,
+      let favorite = session.favorites.first(where: {
+        $0.id == id && $0.profileID == session.selectedSpace.profileID
+      }), session.selectedSpace.profileID == favorite.profileID
+    else { return false }
+    let pageExisted = session.favoritePages.contains { $0.favoriteID == id }
+    let wasSelected = session.selectedSpace.selectedFavoriteID == id
+    guard session.selectFavorite(id, in: session.selectedSpaceID) else { return false }
+    dismissPageFind()
+    engine?.extensionPanel = nil
+    if !pageExisted || !wasSelected { save() }
+    guard let page = session.favoritePages.first(where: { $0.favoriteID == id }) else {
+      return false
+    }
+    return onNavigatePage?(page.tab.id, favorite.profileID, favorite.originalURL) == true
+  }
+
+  @discardableResult
+  func moveFavorite(_ id: UUID, before targetID: UUID?) -> Bool {
+    guard sheet == nil, !commandIsOpen,
+      session.moveFavorite(id, in: session.selectedSpace.profileID, before: targetID)
+    else { return false }
+    save()
+    return true
+  }
+
+  func closeCurrentPage() {
+    guard sheet == nil, !commandIsOpen, let page = session.selectedPage else { return }
+    closeTab(page.tab.id)
+  }
+
+  func nativeFavoriteActivated(_ id: UUID, profileID: UUID) -> Bool {
+    guard session.selectedSpace.profileID == profileID,
+      let page = session.favoritePages.first(where: { $0.tab.id == id }),
+      session.profileID(forTabID: id) == profileID,
+      session.selectFavorite(page.favoriteID, in: session.selectedSpaceID)
+    else { return false }
+    save()
+    return true
+  }
+
   func nativeRendererGone(_ id: UUID, profileID: UUID, status: String, exitCode: Int) {
-    guard status != "normal",
-      session.spaces.contains(where: {
-        $0.profileID == profileID && $0.tabs.contains { $0.id == id }
-      }), let tab = session.spaces.flatMap(\.tabs).first(where: { $0.id == id })
+    guard status != "normal", session.profileID(forTabID: id) == profileID,
+      let tab = session.page(forTabID: id)?.tab
     else { return }
     rendererFailures[id] = RendererFailure(
       profileID: profileID, tabID: id, pageURL: tab.url, status: status, exitCode: exitCode)
@@ -342,14 +452,14 @@ final class BrowserStore {
   }
 
   var canReloadCurrentPage: Bool {
-    guard sheet == nil, !commandIsOpen, let tab = session.selectedSpace.selectedTab else {
+    guard sheet == nil, !commandIsOpen, let tab = session.selectedPage?.tab else {
       return false
     }
     return rendererFailures[tab.id]?.reloading != true && onReloadPage != nil
   }
 
   func canReloadFailure(_ id: UUID) -> Bool {
-    guard let tab = session.selectedSpace.selectedTab,
+    guard let tab = session.selectedPage?.tab,
       let failure = rendererFailures[tab.id], failure.id == id,
       failure.profileID == session.selectedSpace.profileID
     else { return false }
@@ -364,7 +474,7 @@ final class BrowserStore {
 
   @discardableResult
   func reloadCurrentPage() -> Bool {
-    guard canReloadCurrentPage, let tab = session.selectedSpace.selectedTab else { return false }
+    guard canReloadCurrentPage, let tab = session.selectedPage?.tab else { return false }
     dismissPageFind()
     engine?.extensionPanel = nil
     let previous = rendererFailures[tab.id]
@@ -381,7 +491,21 @@ final class BrowserStore {
   }
 
   func nativeTabChanged(_ id: UUID, url: URL, title: String) {
-    if session.updateTab(id, url: url, title: title) { save() }
+    if session.favoritePages.contains(where: { $0.tab.id == id }),
+      let profileID = session.profileID(forTabID: id)
+    {
+      nativeFavoritePageChanged(id, profileID: profileID, url: url, title: title)
+    } else if session.updateTab(id, url: url, title: title) {
+      save()
+    }
+  }
+
+  func nativeFavoritePageChanged(_ id: UUID, profileID: UUID, url: URL, title: String) {
+    guard let page = session.favoritePages.first(where: { $0.tab.id == id }),
+      session.profileID(forTabID: id) == profileID,
+      session.updateFavoritePage(page.favoriteID, url: url, title: title)
+    else { return }
+    save()
   }
 
   /// Engine activation can reveal another Space using this profile, never another account.
@@ -401,10 +525,29 @@ final class BrowserStore {
   func nativeTabOpened(_ tab: BrowserTab, profileID: UUID, openerID: UUID?, foreground: Bool)
     -> Bool
   {
+    let previousSpaceID = session.selectedSpaceID
+    let mayForeground = foreground && session.selectedSpace.profileID == profileID
+    let favoriteOpenerSpace: UUID? = openerID.flatMap { opener -> UUID? in
+      guard session.profileID(forTabID: opener) == profileID,
+        let favoritePage = session.favoritePages.first(where: { $0.tab.id == opener })
+      else { return nil }
+      return session.spaces.first(where: {
+        $0.id == session.selectedSpaceID && $0.profileID == profileID
+      })?.id ?? session.spaces.first(where: {
+        $0.profileID == profileID && $0.selectedFavoriteID == favoritePage.favoriteID
+      })?.id ?? session.spaces.first { $0.profileID == profileID }?.id
+    }
+    if let favoriteOpenerSpace { session.selectSpace(favoriteOpenerSpace) }
     guard
-      session.insertNativeTab(tab, profileID: profileID, openerID: openerID, foreground: foreground)
+      session.insertNativeTab(
+        tab, profileID: profileID,
+        openerID: favoriteOpenerSpace == nil ? openerID : nil, foreground: mayForeground)
         != nil
-    else { return false }
+    else {
+      if !mayForeground { session.selectSpace(previousSpaceID) }
+      return false
+    }
+    if !mayForeground { session.selectSpace(previousSpaceID) }
     save()
     return true
   }
@@ -636,14 +779,26 @@ final class BrowserStore {
 
   @discardableResult
   func removeSpace(_ id: UUID) -> Bool {
-    guard session.removeSpace(id) else { return false }
+    guard session.removeSpace(id, favoriteDisposition: .closePage) else { return false }
     save()
     return true
   }
 
   func spaceRemovalImpact(_ id: UUID) -> SpaceRemovalImpact {
     onSpaceRemovalImpact?(id)
-      ?? SpaceRemovalImpact(tabs: session.spaces.first { $0.id == id }?.tabs.count ?? 0, windows: 1)
+      ?? {
+        guard let space = session.spaces.first(where: { $0.id == id }) else {
+          return SpaceRemovalImpact(tabs: 0, windows: 1)
+        }
+        let lastProfileSpace = session.spaces.filter { $0.profileID == space.profileID }.count == 1
+        let favorites =
+          lastProfileSpace
+          ? session.favoritePages.filter {
+            session.profileID(forTabID: $0.tab.id) == space.profileID
+          }.count
+          : 0
+        return SpaceRemovalImpact(tabs: space.tabs.count, windows: 1, favoritePages: favorites)
+      }()
   }
 
   private func save() {

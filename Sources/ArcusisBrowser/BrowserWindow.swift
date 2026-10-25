@@ -45,7 +45,7 @@ struct BrowserWindow: View {
           .onTapGesture { store.dismissCommand() }
         GeometryReader { geometry in
           let contentLeft = store.sidebarIsVisible ? BrowserChromeLayout.sidebarWidth : 10
-          let contentTop: CGFloat = store.pageFind == nil ? 55 : 105
+          let contentTop: CGFloat = store.pageFind == nil ? 45 : 95
           let initialContentFrame = CGRect(
             x: contentLeft, y: contentTop,
             width: max(0, geometry.size.width - contentLeft - 10),
@@ -97,7 +97,7 @@ struct BrowserWindow: View {
     .onChange(of: store.commandIsOpen) { _, isOpen in
       if isOpen { store.engine?.extensionPanel = nil }
       if !isOpen && store.pageFind == nil {
-        if let engine = store.engine, let id = store.session.selectedSpace.selectedTabID {
+        if let engine = store.engine, let id = store.session.selectedPage?.tab.id {
           engine.runtime.focusTabID(id.uuidString)
         } else {
           pageIsFocused = true
@@ -119,7 +119,7 @@ struct BrowserWindow: View {
       }
       ZStack {
         Color(nsColor: .textBackgroundColor)
-        if let engine = store.engine, let id = store.session.selectedSpace.selectedTabID {
+        if let engine = store.engine, let id = store.session.selectedPage?.tab.id {
           if let failure = store.rendererFailures[id] {
             FailedPageView(store: store, failure: failure)
           } else if engine.pages[id] != nil {
@@ -135,7 +135,7 @@ struct BrowserWindow: View {
             Text(store.session.selectedSpace.name)
               .font(.system(size: 30, weight: .medium, design: .rounded))
             Text(
-              store.session.selectedSpace.selectedTab == nil
+              store.session.selectedPage == nil
                 ? "A little room for your next idea."
                 : "Browsing is not available in this development preview."
             )

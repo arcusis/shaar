@@ -8,6 +8,7 @@ import shutil
 import tarfile
 import tempfile
 import unittest
+from unittest import mock
 
 
 MODULE = Path(__file__).resolve().parents[2] / "scripts/engine_payload.py"
@@ -134,6 +135,17 @@ class EnginePayloadTests(unittest.TestCase):
                     {"sha256": hashlib.sha256(self.archive.read_bytes()).hexdigest()})
                 self.assertFalse(report["payload_match"])
 
+    def test_code_resources_difference_remains_failure(self):
+        path = "Versions/155.0.8059.84/_CodeSignature/CodeResources"
+        self.fixture(files={"Chromium Framework": b"engine", path: b"pinned resources"}, links={})
+        (self.framework / path).write_bytes(b"changed resources")
+        report = payload.compare_payload(self.archive, self.framework,
+            {"sha256": hashlib.sha256(self.archive.read_bytes()).hexdigest()})
+        self.assertTrue(report["archive_metadata_verified"])
+        self.assertFalse(report["payload_match"])
+        self.assertEqual(next(item for item in report["members"] if item["path"] == path)["status"],
+                         "mismatch")
+
     def test_resigning_cannot_hide_changed_macho_code(self):
         self.fixture(files={"Chromium Framework": macho(24, code=b"original code")}, links={})
         (self.framework / "Chromium Framework").write_bytes(macho(40, code=b"changed code"))
@@ -195,6 +207,54 @@ class EnginePayloadTests(unittest.TestCase):
                     {"sha256": hashlib.sha256(self.archive.read_bytes()).hexdigest()})
                 self.assertFalse(report["payload_match"])
                 self.assertIsNotNone(report["reason"])
+
+    def test_exact_malformed_macho_and_overlapping_segments_fail_closed(self):
+        cases = ("truncated_commands", "overlapping_segments")
+        for mutation in cases:
+            with self.subTest(mutation=mutation):
+                source = bytearray(macho())
+                if mutation == "truncated_commands":
+                    struct.pack_into("<I", source, 20, 16)
+                else:
+                    # __TEXT then overlaps __LINKEDIT by one byte.
+                    struct.pack_into("<Q", source, 32 + 48, 257)
+                self.fixture(files={"Chromium Framework": bytes(source)}, links={})
+                report = payload.compare_payload(self.archive, self.framework,
+                    {"sha256": hashlib.sha256(self.archive.read_bytes()).hexdigest()})
+                self.assertTrue(report["archive_metadata_verified"])
+                self.assertFalse(report["payload_match"])
+                self.assertIsNotNone(report["reason"])
+
+    def test_framework_inventory_limits_member_count_and_aggregate_size(self):
+        self.fixture()
+        with mock.patch.object(payload, "MAX_FRAMEWORK_MEMBERS", 2):
+            report = payload.compare_payload(self.archive, self.framework,
+                {"sha256": hashlib.sha256(self.archive.read_bytes()).hexdigest()})
+        self.assertTrue(report["archive_metadata_verified"])
+        self.assertFalse(report["payload_match"])
+        self.assertEqual(report["reason"], "framework member count exceeds cap")
+
+        self.fixture(files={"one": b"123456", "two": b"abcdef"}, links={})
+        with mock.patch.object(payload, "MAX_FRAMEWORK_TOTAL_SIZE", 10):
+            report = payload.compare_payload(self.archive, self.framework,
+                {"sha256": hashlib.sha256(self.archive.read_bytes()).hexdigest()})
+        self.assertTrue(report["archive_metadata_verified"])
+        self.assertFalse(report["payload_match"])
+        self.assertEqual(report["reason"], "framework total size exceeds cap")
+
+    def test_invalid_pin_type_and_hex_fail_without_echoing_input(self):
+        self.fixture()
+        invalid_pins = ((None, "pin is malformed"),
+                        ({"sha256": 123}, "pin has invalid archive SHA-256"),
+                        ({"sha256": "g" * 64}, "pin has invalid archive SHA-256"),
+                        ({"sha256": "f" * 63 + " "}, "pin has invalid archive SHA-256"))
+        for pin, reason in invalid_pins:
+            with self.subTest(pin_type=type(pin).__name__):
+                report = payload.compare_payload(self.archive, self.framework, pin)
+                self.assertFalse(report["archive_metadata_verified"])
+                self.assertFalse(report["payload_match"])
+                self.assertEqual(report["reason"], reason)
+                self.assertNotIn(str(self.root), json.dumps(report))
 
     def test_archive_pin_mismatch_and_truncated_archive_fail(self):
         self.fixture()

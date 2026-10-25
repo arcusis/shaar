@@ -19,9 +19,11 @@ from typing import BinaryIO
 CHUNK_SIZE = 1024 * 1024
 MAX_ARCHIVE_SIZE = 2 * 1024 * 1024 * 1024
 MAX_TOTAL_MEMBER_SIZE = 4 * 1024 * 1024 * 1024
+MAX_FRAMEWORK_TOTAL_SIZE = MAX_TOTAL_MEMBER_SIZE
 MAX_DECOMPRESSED_ARCHIVE_SIZE = 5 * 1024 * 1024 * 1024
 MAX_MEMBER_SIZE = 1024 * 1024 * 1024
 MAX_MEMBERS = 200_000
+MAX_FRAMEWORK_MEMBERS = MAX_MEMBERS
 MAX_PATH_BYTES = 4096
 MAX_LOAD_COMMAND_BYTES = 16 * 1024 * 1024
 FRAMEWORK_NAME = "Chromium Framework.framework"
@@ -115,8 +117,16 @@ def _hash_framework_file(root: Path, relative: str) -> str:
         info = os.fstat(stream.fileno())
         if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_MEMBER_SIZE:
             raise PayloadError("framework member is not a supported regular file")
+        size = 0
         while block := stream.read(CHUNK_SIZE):
+            size += len(block)
+            if size > MAX_MEMBER_SIZE:
+                raise PayloadError("framework member exceeds size cap")
             digest.update(block)
+        final = os.fstat(stream.fileno())
+        if (size != info.st_size or final.st_size != info.st_size
+                or final.st_mtime_ns != info.st_mtime_ns or final.st_ctime_ns != info.st_ctime_ns):
+            raise PayloadError("framework member changed during comparison")
     return digest.hexdigest()
 
 
@@ -215,29 +225,63 @@ def _framework_inventory(root: Path) -> dict[str, dict]:
     if not stat.S_ISDIR(root_stat.st_mode) or stat.S_ISLNK(root_stat.st_mode):
         raise PayloadError("selected framework root is not a directory")
     entries: dict[str, dict] = {}
-    stack = [(root, "")]
-    while stack:
-        directory, prefix = stack.pop()
-        try:
-            children = sorted(os.scandir(directory), key=lambda item: item.name)
-        except OSError as error:
-            raise PayloadError("selected framework inventory is unreadable") from error
-        for child in children:
-            relative = f"{prefix}/{child.name}" if prefix else child.name
-            _safe_archive_path(relative)
-            info = child.stat(follow_symlinks=False)
-            if stat.S_ISDIR(info.st_mode):
-                entries[relative] = {"kind": "directory"}
-                stack.append((Path(child.path), relative))
-            elif stat.S_ISREG(info.st_mode):
-                if info.st_size > MAX_MEMBER_SIZE:
-                    raise PayloadError("framework member exceeds size cap")
-                entries[relative] = {"kind": "file", "size": info.st_size}
-            elif stat.S_ISLNK(info.st_mode):
-                target = os.readlink(child.path)
-                entries[relative] = {"kind": "symlink", "link": _safe_link(relative, target)}
-            else:
-                raise PayloadError("framework contains unsupported file type")
+    count = 0
+    total = 0
+    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        root_fd = os.open(root, directory_flags)
+        opened_root = os.fstat(root_fd)
+        if (opened_root.st_dev, opened_root.st_ino) != (root_stat.st_dev, root_stat.st_ino):
+            os.close(root_fd)
+            raise PayloadError("selected framework changed during inventory")
+    except OSError as error:
+        raise PayloadError("selected framework inventory is unreadable") from error
+    stack = [(root_fd, "")]
+    try:
+        while stack:
+            directory_fd, prefix = stack.pop()
+            try:
+                with os.scandir(directory_fd) as scan:
+                    children = []
+                    for child in scan:
+                        children.append(child.name)
+                        if len(children) > MAX_FRAMEWORK_MEMBERS - count:
+                            raise PayloadError("framework member count exceeds cap")
+                for name in sorted(children):
+                    count += 1
+                    relative = f"{prefix}/{name}" if prefix else name
+                    _safe_archive_path(relative)
+                    info = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+                    if stat.S_ISDIR(info.st_mode):
+                        entries[relative] = {"kind": "directory"}
+                        child_fd = os.open(name, directory_flags, dir_fd=directory_fd)
+                        opened = os.fstat(child_fd)
+                        if (opened.st_dev, opened.st_ino) != (info.st_dev, info.st_ino):
+                            os.close(child_fd)
+                            raise PayloadError("framework directory changed during inventory")
+                        stack.append((child_fd, relative))
+                    elif stat.S_ISREG(info.st_mode):
+                        if info.st_size > MAX_MEMBER_SIZE:
+                            raise PayloadError("framework member exceeds size cap")
+                        total += info.st_size
+                        if total > MAX_FRAMEWORK_TOTAL_SIZE:
+                            raise PayloadError("framework total size exceeds cap")
+                        entries[relative] = {"kind": "file", "size": info.st_size}
+                    elif stat.S_ISLNK(info.st_mode):
+                        target = os.readlink(name, dir_fd=directory_fd)
+                        entries[relative] = {"kind": "symlink", "link": _safe_link(relative, target)}
+                    else:
+                        raise PayloadError("framework contains unsupported file type")
+            finally:
+                os.close(directory_fd)
+    except OSError as error:
+        for descriptor, _ in stack:
+            os.close(descriptor)
+        raise PayloadError("selected framework inventory is unreadable") from error
+    except PayloadError:
+        for descriptor, _ in stack:
+            os.close(descriptor)
+        raise
     _validate_inventory(entries)
     return entries
 
@@ -358,7 +402,9 @@ def _compare_file(source: BinaryIO, archive_size: int, framework_root: Path, rel
         raise PayloadError("framework member could not be opened safely") from error
     with target:
         target_stat = os.fstat(target.fileno())
-        if not stat.S_ISREG(target_stat.st_mode) or target_stat.st_size != archive_size:
+        if not stat.S_ISREG(target_stat.st_mode) or target_stat.st_size > MAX_MEMBER_SIZE:
+            raise PayloadError("framework member is not a supported regular file")
+        if target_stat.st_size != archive_size:
             # Mach-O may legitimately change signature length.
             if not stat.S_ISREG(target_stat.st_mode):
                 raise PayloadError("framework member is not a regular file")
@@ -462,6 +508,11 @@ def _compare_file(source: BinaryIO, archive_size: int, framework_root: Path, rel
                 raise PayloadError("Mach-O signature is not terminal")
         if not normalized and target_stat.st_size != archive_size:
             same = False
+        final_stat = os.fstat(target.fileno())
+        if (final_stat.st_size != target_stat.st_size
+                or final_stat.st_mtime_ns != target_stat.st_mtime_ns
+                or final_stat.st_ctime_ns != target_stat.st_ctime_ns):
+            raise PayloadError("framework member changed during comparison")
         return {"match": same, "normalization": "adhoc_macho_signature" if normalized else "exact",
                 "archive_size": archive_size, "framework_size": target_stat.st_size,
                 "archive_sha256": source_hash.hexdigest(), "framework_sha256": target_hash.hexdigest()}
@@ -499,7 +550,8 @@ def compare_payload(archive: Path, framework: Path, pin: dict) -> dict:
         if not isinstance(pin, dict):
             raise PayloadError("pin is malformed")
         expected_hash = pin.get("sha256")
-        if not isinstance(expected_hash, str) or len(expected_hash) != 64:
+        if (not isinstance(expected_hash, str) or len(expected_hash) != 64
+                or any(character not in "0123456789abcdefABCDEF" for character in expected_hash)):
             raise PayloadError("pin has invalid archive SHA-256")
         archive_size, archive_hash = _hash_file(archive)
         if archive_size == 0:

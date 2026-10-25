@@ -7,6 +7,11 @@ FOUNDATION_EXPORT BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifier
 /// Returns a single certificate-key exception only for an owned, marked disposable test root.
 FOUNDATION_EXPORT NSString * _Nullable ARCProbeTLSArgument(NSURL *directory,
   NSString * _Nullable fingerprint, BOOL testing, NSError **error);
+/// Test-only gate for the marked disposable probe root.
+FOUNDATION_EXPORT BOOL ARCProbeRootIsOwned(NSURL *root);
+/// Test-only sanitizer for external-app audit fixtures; returns fixed primitive fields only.
+FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeExternalAppLaunchAuditForTesting(
+  NSString *url, NSArray *launches, NSURL *root, BOOL enabled);
 
 /// All methods and callbacks run on the main thread. The engine owns the AppKit run loop.
 @interface ARCChromiumRuntime : NSObject
@@ -67,6 +72,8 @@ FOUNDATION_EXPORT NSString * _Nullable ARCProbeTLSArgument(NSURL *directory,
 - (BOOL)openTabID:(NSString *)tabID profileID:(NSString *)profileID url:(NSString *)url
            error:(NSError **)error;
 - (nullable NSView *)viewForTabID:(NSString *)tabID;
+/// Test-only bounded audit. Requires explicit external-probe switch, testing mode, and owned marked root.
+- (nullable NSDictionary *)probeExternalAppLaunchAuditForURL:(NSString *)url;
 - (void)activateTabID:(NSString *)tabID;
 - (void)focusTabID:(NSString *)tabID;
 - (void)activateProfileID:(NSString *)profileID;

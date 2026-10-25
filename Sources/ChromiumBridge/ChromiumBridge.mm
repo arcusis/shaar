@@ -6,6 +6,9 @@
 #include <string>
 #include <vector>
 #include <cmath>
+#include <errno.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 static NSError *BridgeError(NSString *message) {
   return [NSError errorWithDomain:@"com.arcusis.browser.chromium" code:1
@@ -165,6 +168,7 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   NSString *_openingProfileID;
   NSString *_openingWindowID;
   BOOL _testing;
+  BOOL _externalAppProbeTesting;
   BOOL _probeTLS;
   NSURL *_probeRoot;
   NSMutableDictionary<NSString *, NSDictionary *> *_pendingInstalls;
@@ -248,6 +252,18 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   _testing = testing;
   _probeTLS = tlsArgument != nil;
   if (testing) _probeRoot = directory.URLByDeletingLastPathComponent.URLByResolvingSymlinksInPath;
+  static NSString *const externalProbeSwitch = @"--ardia-test-external-protocol-no-launch";
+  BOOL externalProbeRequested = [NSProcessInfo.processInfo.arguments containsObject:externalProbeSwitch];
+  if (externalProbeRequested) {
+    NSURL *root = directory.URLByDeletingLastPathComponent;
+    if (!testing || !directory.isFileURL || ![directory.lastPathComponent isEqualToString:@"Chromium"] ||
+        !ARCProbeRootIsOwned(root)) return 1;
+    struct stat info;
+    int result = lstat(directory.path.stringByStandardizingPath.fileSystemRepresentation, &info);
+    if ((result == 0 && (!S_ISDIR(info.st_mode) || info.st_uid != getuid())) ||
+        (result != 0 && errno != ENOENT)) return 1;
+  }
+  _externalAppProbeTesting = externalProbeRequested;
   // Never forward arbitrary launch flags into company profiles.
   std::vector<std::string> strings = {
     NSProcessInfo.processInfo.arguments.firstObject.UTF8String,
@@ -267,6 +283,7 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
     strings.push_back("--ardia-test-system-media-permission=granted");
     if (tlsArgument) strings.push_back(tlsArgument.UTF8String);
   }
+  if (_externalAppProbeTesting) strings.push_back(externalProbeSwitch.UTF8String);
   std::vector<const char *> arguments;
   for (const auto &value : strings) arguments.push_back(value.c_str());
   return [_engineClass runWithArgc:(int)arguments.size() argv:arguments.data() delegate:self];
@@ -848,6 +865,12 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
 - (void)evaluateInTabID:(NSString *)tabID script:(NSString *)script
             completion:(void (^)(NSString *))completion {
   [self evaluateTab:_tabs[tabID] script:script completion:completion];
+}
+- (NSDictionary *)probeExternalAppLaunchAuditForURL:(NSString *)url {
+  if (!_externalAppProbeTesting || !_testing || !_engineClass || !_probeRoot ||
+      !ARCProbeRootIsOwned(_probeRoot)) return nil;
+  NSArray *launches = [_engineClass testExternalLaunches];
+  return ARCProbeExternalAppLaunchAuditForTesting(url, launches, _probeRoot, YES);
 }
 - (void)evaluateTab:(ArdiaCoreTab *)tab script:(NSString *)script completion:(void (^)(NSString *))completion {
   [self evaluateTab:tab script:script userGesture:NO completion:completion];

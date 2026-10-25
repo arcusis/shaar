@@ -1,6 +1,15 @@
 import BrowserCore
 import SwiftUI
 
+struct SidebarFooterBoundsPreferenceKey: PreferenceKey {
+  static let defaultValue: CGRect = .zero
+
+  static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+    let next = nextValue()
+    if !next.isEmpty { value = next }
+  }
+}
+
 struct BrowserSidebar: View {
   @Bindable var store: BrowserStore
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -38,7 +47,7 @@ struct BrowserSidebar: View {
           Image(systemName: "sidebar.left")
         }
         .help("Hide sidebar (Command-S)")
-        if let engine = store.engine, let id = store.session.selectedSpace.selectedTabID {
+        if let engine = store.engine, let id = store.session.selectedPage?.tab.id {
           let state = engine.pages[id]
           Button {
             engine.runtime.goBack(inTabID: id.uuidString)
@@ -73,20 +82,7 @@ struct BrowserSidebar: View {
         .accessibilityLabel("Bookmark this page")
       }
       .font(.system(size: 13))
-      Button {
-        store.showCommand()
-      } label: {
-        HStack(spacing: 8) {
-          Image(systemName: "magnifyingglass")
-          Text(store.session.selectedSpace.selectedTab?.url.host() ?? "Search or enter address")
-            .lineLimit(1)
-          Spacer()
-          Text("⌘T").foregroundStyle(.tertiary)
-        }
-        .font(.system(size: 12))
-        .padding(10)
-        .background(.white.opacity(0.22), in: RoundedRectangle(cornerRadius: 8))
-      }
+      profileFavorites
       VStack(alignment: .leading, spacing: 4) {
         HStack(spacing: 7) {
           Label(store.session.selectedSpace.name, systemImage: store.session.selectedSpace.symbol)
@@ -218,14 +214,59 @@ struct BrowserSidebar: View {
         .accessibilityLabel("Add Space")
       }
       .frame(height: 32)
+      .background {
+        GeometryReader { geometry in
+          Color.clear.preference(
+            key: SidebarFooterBoundsPreferenceKey.self,
+            value: geometry.frame(in: .named("sidebarBounds")))
+        }
+      }
+      .accessibilityIdentifier("sidebar-space-footer")
     }
     .buttonStyle(.plain)
     .padding(.horizontal, 14)
     .padding(.bottom, 16)
+    .coordinateSpace(name: "sidebarBounds")
     .zIndex(1)
     .onChange(of: store.session.selectedSpaceID) { _, _ in folderDraft = nil }
     .onAppear {
       if folderDraft != nil { folderNameIsFocused = true }
+    }
+  }
+
+  private var profileFavorites: some View {
+    let profileID = store.session.selectedSpace.profileID
+    let favorites = store.profileFavorites.map { favorite in
+      let page = store.session.favoritePages.first { $0.favoriteID == favorite.id }
+      return FavoriteTile(
+        id: favorite.id, title: favorite.title, url: page?.tab.url ?? favorite.originalURL,
+        image: page.flatMap { store.engine?.favicons[$0.tab.id] })
+    }
+    return Group {
+      if favorites.isEmpty {
+        if store.canFavoriteCurrentPage {
+          Button {
+            _ = store.addCurrentPageAsFavorite()
+          } label: {
+            Label("Add current page to Favorites", systemImage: "star")
+              .font(.system(size: 12))
+              .foregroundStyle(.secondary)
+              .padding(.vertical, 5)
+          }
+          .help("Add current page to Favorites")
+        }
+      } else {
+        ProfileFavoritesGrid(
+          favorites: favorites,
+          selectedID: store.session.selectedSpace.selectedFavoriteID,
+          profileID: profileID,
+          dragSessionID: store.dragSessionID,
+          onSelect: { _ = store.selectFavorite($0) },
+          onReset: { _ = store.resetFavorite($0) },
+          onRemove: { _ = store.removeFavorite($0) },
+          onMoveBefore: { _ = store.moveFavorite($0, before: $1) }
+        )
+      }
     }
   }
 
@@ -389,14 +430,22 @@ struct BrowserSidebar: View {
   private func tabRow(_ tab: BrowserTab, index: SidebarTabIndex) -> some View {
     let space = store.session.selectedSpace
     let boundary = index.boundary(for: tab.id)
+    let favicon = store.engine?.favicons[tab.id]
     return HStack(spacing: 8) {
       Button {
         store.perform(.tab(space: space.id, tab: tab.id))
       } label: {
         HStack(spacing: 9) {
-          Image(systemName: tab.isPinned ? "pin" : "globe")
-            .font(.system(size: 12))
-            .foregroundStyle(.secondary)
+          if let favicon {
+            Image(nsImage: favicon)
+              .resizable()
+              .scaledToFit()
+              .frame(width: 14, height: 14)
+          } else {
+            Image(systemName: tab.isPinned ? "pin" : "globe")
+              .font(.system(size: 12))
+              .foregroundStyle(.secondary)
+          }
           Text(tab.title).font(.system(size: 13)).lineLimit(1)
           Spacer(minLength: 0)
         }
@@ -411,7 +460,7 @@ struct BrowserSidebar: View {
     }
     .padding(10)
     .background(
-      .white.opacity(tab.id == store.session.selectedSpace.selectedTabID ? 0.43 : 0),
+      .white.opacity(tab.id == store.session.selectedPage?.tab.id ? 0.43 : 0),
       in: RoundedRectangle(cornerRadius: 8)
     )
     .draggable(
@@ -428,6 +477,12 @@ struct BrowserSidebar: View {
       if targetedTab == tab.id { Rectangle().fill(Color.accentColor).frame(height: 2) }
     }
     .contextMenu {
+      Button("Add to Favorites") {
+        addToFavorites(tabID: tab.id, spaceID: space.id, profileID: space.profileID)
+      }
+      .disabled(
+        store.sheet != nil || store.commandIsOpen || !NavigationInput.isWebURL(tab.url))
+      Divider()
       Button(tab.isPinned ? "Unpin tab" : "Pin tab") { store.togglePin(tab.id) }
       Button("Move up") { shiftTab(tab, in: space, by: -1) }.disabled(boundary.isFirst)
       Button("Move down") { shiftTab(tab, in: space, by: 1) }.disabled(boundary.isLast)
@@ -457,6 +512,19 @@ struct BrowserSidebar: View {
       Divider()
       Button("Close tab") { store.closeTab(tab.id) }
     }
+  }
+
+  private func addToFavorites(tabID: UUID, spaceID: UUID, profileID: UUID) {
+    guard store.sheet == nil, !store.commandIsOpen,
+      store.session.selectedSpaceID == spaceID,
+      let space = store.session.spaces.first(where: { $0.id == spaceID }),
+      space.profileID == profileID,
+      let tab = space.tabs.first(where: { $0.id == tabID }),
+      NavigationInput.isWebURL(tab.url)
+    else { return }
+    store.perform(.tab(space: spaceID, tab: tabID))
+    guard store.session.selectedPage?.tab.id == tabID, store.canFavoriteCurrentPage else { return }
+    _ = store.addCurrentPageAsFavorite()
   }
 
   private func sectionDropTarget(_ label: String, pinned: Bool, isFooter: Bool = false) -> some View
@@ -503,7 +571,10 @@ struct BrowserSidebar: View {
 
   private func folderRow(_ folder: BrowserFolder, depth: Int) -> some View {
     let space = store.session.selectedSpace
-    let active = space.folderPath(to: space.selectedTab?.folderID).contains { $0.id == folder.id }
+    let active =
+      space.folderPath(to: store.session.selectedPage?.tab.folderID).contains {
+        $0.id == folder.id
+      }
     let siblings = space.folders.filter { $0.parentID == folder.parentID }
     return Button {
       store.toggleFolder(folder.id, in: space.id)

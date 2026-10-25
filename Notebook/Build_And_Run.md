@@ -1,0 +1,20 @@
+# Build and run
+
+Requires macOS 26+ and Xcode 26+ with Swift 6.2 or newer. The pinned development engine supports Apple silicon. The shell and unit tests build without downloading it.
+
+```sh
+swift build
+swift run ArcusisBrowser
+```
+
+To build the browser with its engine (requires `curl`, `jq`, and `rg`):
+
+```sh
+bash scripts/bundle-app.sh --with-engine
+```
+
+The script verifies the engine archive's pinned SHA-256, embeds its framework/helpers/resources, signs nested code inside out, and verifies the local bundle. The result is `build/Arcusis Browser.app`, signed ad hoc for development. It is not a notarized release or registered as a default browser. Engine inputs and upstream notices are in [ThirdParty/ArdiaCore](../ThirdParty/ArdiaCore/README.md).
+
+`bash scripts/bundle-app.sh` without `--with-engine` builds `build/Arcusis Browser Shell.app`, a separate UI-only preview. `swift run ArcusisBrowser` also runs that preview without webpage rendering.
+
+Related: [[Source_And_Native_Verification]].

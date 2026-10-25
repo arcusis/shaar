@@ -1,16 +1,53 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-swift build -c release
-binary_dir=$(swift build -c release --show-bin-path)
-app="build/Arcusis Browser Shell.app"
-if [[ "${1:-}" == --with-engine ]]; then app="build/Arcusis Browser.app"; fi
+configuration=release
+with_engine=false
+seen_configuration=false
+seen_engine=false
+while (($#)); do
+  case "$1" in
+    --configuration)
+      if $seen_configuration || (($# < 2)) || [[ "$2" == --* ]]; then
+        echo 'Usage: bundle-app.sh [--configuration release|debug] [--with-engine]' >&2
+        exit 2
+      fi
+      case "$2" in
+        release|debug) configuration="$2" ;;
+        *) echo "Unknown configuration: $2" >&2; exit 2 ;;
+      esac
+      seen_configuration=true
+      shift 2
+      ;;
+    --with-engine)
+      if $seen_engine; then
+        echo 'Duplicate option: --with-engine' >&2
+        exit 2
+      fi
+      seen_engine=true
+      with_engine=true
+      shift
+      ;;
+    *) echo "Unknown option: $1" >&2; exit 2 ;;
+  esac
+done
+
+swift build -c "$configuration"
+binary_dir=$(swift build -c "$configuration" --show-bin-path)
+if $with_engine; then
+  app="build/Arcusis Browser.app"
+else
+  app="build/Arcusis Browser Shell.app"
+fi
+if [[ "$configuration" == debug ]]; then
+  app="${app%.app} Debug.app"
+fi
 mkdir -p "$app/Contents/MacOS"
 cp "$binary_dir/ArcusisBrowser" "$app/Contents/MacOS/ArcusisBrowser"
 mkdir -p "$app/Contents/Resources/ArdiaCore"
 cp ThirdParty/ArdiaCore/LICENSE ThirdParty/ArdiaCore/NOTICE ThirdParty/ArdiaCore/pin.json \
   "$app/Contents/Resources/ArdiaCore/"
-if [[ "${1:-}" == --with-engine ]]; then
+if $with_engine; then
   framework=$(bash scripts/fetch-engine.sh)
   mkdir -p "$app/Contents/Frameworks"
   # Keep version symlinks and upstream resources. Re-sign nested code inside out.
@@ -49,4 +86,8 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 PLIST
 codesign --force --timestamp=none --sign - "$app"
 codesign --verify --deep --strict "$app"
-printf 'Built %s (local ad-hoc signature; not notarized).\n' "$app"
+if [[ "$configuration" == debug ]]; then
+  printf 'Built %s (debug development bundle; local ad-hoc signature; not notarized or release-ready).\n' "$app"
+else
+  printf 'Built %s (local ad-hoc signature; not notarized).\n' "$app"
+fi

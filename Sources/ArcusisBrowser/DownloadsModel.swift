@@ -52,6 +52,19 @@ final class DownloadsModel {
     return item.fileURL
   }
 
+  func fileForDrag(id: String, profileID: UUID, selectedProfileID: UUID) -> URL? {
+    guard selectedProfileID == profileID, let item = records[profileID]?[id],
+      item.profileID == profileID, item.canOpen, let url = item.fileURL
+    else { return nil }
+    let resolvedURL = url.resolvingSymlinksInPath()
+    guard
+      let values = try? resolvedURL.resourceValues(forKeys: [.isRegularFileKey, .isReadableKey]),
+      values.isRegularFile == true, values.isReadable == true,
+      FileManager.default.isReadableFile(atPath: resolvedURL.path)
+    else { return nil }
+    return resolvedURL
+  }
+
   func fileActionFailed(profileID: UUID) {
     notices[profileID] = "The downloaded file is no longer available."
   }

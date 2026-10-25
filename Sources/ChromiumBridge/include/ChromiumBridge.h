@@ -4,6 +4,9 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// Exact modifier matching keeps extension shortcuts such as Command-Shift-L available.
 FOUNDATION_EXPORT BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers);
+/// Returns a single certificate-key exception only for an owned, marked disposable test root.
+FOUNDATION_EXPORT NSString * _Nullable ARCProbeTLSArgument(NSURL *directory,
+  NSString * _Nullable fingerprint, BOOL testing, NSError **error);
 
 /// All methods and callbacks run on the main thread. The engine owns the AppKit run loop.
 @interface ARCChromiumRuntime : NSObject
@@ -58,6 +61,8 @@ FOUNDATION_EXPORT BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifier
 
 - (nullable instancetype)initWithFrameworkURL:(NSURL *)url error:(NSError **)error;
 - (int)runWithDataDirectory:(NSURL *)directory testing:(BOOL)testing;
+- (int)runWithDataDirectory:(NSURL *)directory testing:(BOOL)testing
+       probeTLSFingerprint:(nullable NSString *)fingerprint;
 - (void)loadProfileID:(NSString *)profileID completion:(void (^)(NSError * _Nullable))completion;
 - (BOOL)openTabID:(NSString *)tabID profileID:(NSString *)profileID url:(NSString *)url
            error:(NSError **)error;
@@ -107,6 +112,9 @@ FOUNDATION_EXPORT BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifier
                     completion:(void (^)(BOOL clicked))completion;
 /// Intentionally terminates only an authored loopback page in a disposable probe profile.
 - (BOOL)crashProbeTabID:(NSString *)tabID;
+/// Test-only loopback HTTPS request; response contains transport status, never body/headers.
+- (void)probeTLSResourceURL:(NSURL *)url tabID:(NSString *)tabID
+                completion:(void (NS_SWIFT_UI_ACTOR ^)(NSDictionary * _Nullable))completion NS_SWIFT_UI_ACTOR;
 @end
 
 NS_ASSUME_NONNULL_END

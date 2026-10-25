@@ -107,6 +107,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   NSString *_openingProfileID;
   NSString *_openingWindowID;
   BOOL _testing;
+  BOOL _probeTLS;
   NSURL *_probeRoot;
   NSMutableDictionary<NSString *, NSDictionary *> *_pendingInstalls;
   NSMutableDictionary<NSString *, NSDictionary *> *_pendingMedia;
@@ -176,8 +177,15 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 }
 
 - (int)runWithDataDirectory:(NSURL *)directory testing:(BOOL)testing {
+  return [self runWithDataDirectory:directory testing:testing probeTLSFingerprint:nil];
+}
+- (int)runWithDataDirectory:(NSURL *)directory testing:(BOOL)testing probeTLSFingerprint:(NSString *)fingerprint {
   NSAssert(NSThread.isMainThread, @"Chromium must start on the main thread");
+  NSError *configurationError = nil;
+  NSString *tlsArgument = ARCProbeTLSArgument(directory, fingerprint, testing, &configurationError);
+  if (configurationError) return 1;
   _testing = testing;
+  _probeTLS = tlsArgument != nil;
   if (testing) _probeRoot = directory.URLByDeletingLastPathComponent.URLByResolvingSymlinksInPath;
   // Never forward arbitrary launch flags into company profiles.
   std::vector<std::string> strings = {
@@ -196,6 +204,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     strings.push_back("--mute-audio");
     strings.push_back("--use-fake-device-for-media-stream");
     strings.push_back("--ardia-test-system-media-permission=granted");
+    if (tlsArgument) strings.push_back(tlsArgument.UTF8String);
   }
   std::vector<const char *> arguments;
   for (const auto &value : strings) arguments.push_back(value.c_str());
@@ -205,7 +214,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 - (void)engineDidStart {
   _engine = [_engineClass sharedEngine];
   [_services start];
-  if (_testing) {
+  if (_testing && !_probeTLS) {
     // Diagnostics only for the empty Bitwarden store-probe profile. No credential entry occurs.
     _engine.pageScript = @"(function(post){"
       "if(location.protocol==='chrome-extension:' && location.host==='nngceckbapebfimnlniiiahkandclblb'){"
@@ -921,6 +930,45 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   ARCNativeWindowState *state = [self stateForPopupID:popupID];
   if (!state || state.closed) { completion(nil); return; }
   [self captureProbeTab:state.popup completion:completion];
+}
+- (void)probeTLSResourceURL:(NSURL *)url tabID:(NSString *)tabID completion:(void (^)(NSDictionary *))completion {
+  ArdiaCoreTab *tab = _tabs[tabID];
+  if (!_testing || !_probeTLS || !tab || tab.closed || ![self isSelectedTabID:tabID] ||
+      ![url.scheme isEqualToString:@"https"] || ![url.host isEqualToString:@"127.0.0.1"] ||
+      !url.port || url.port.integerValue < 1 || url.port.integerValue > 65535 ||
+      url.user || url.password || url.query || url.fragment || ![url.path isEqualToString:@"/alive"]) {
+    completion(nil);
+    return;
+  }
+  [tab devToolsCall:@"Page.getFrameTree" params:@{} timeout:5 completion:^(NSDictionary *tree, NSString *error) {
+    NSString *frame = tree[@"frameTree"][@"frame"][@"id"];
+    if (error || ![frame isKindOfClass:NSString.class] || tab.closed || ![self isSelectedTabID:tabID]) {
+      completion(nil);
+      return;
+    }
+    [tab devToolsCall:@"Network.loadNetworkResource"
+      params:@{@"frameId": frame, @"url": url.absoluteString,
+               @"options": @{@"disableCache": @YES, @"includeCredentials": @NO}}
+      timeout:5 completion:^(NSDictionary *result, NSString *loadError) {
+        NSDictionary *resource = result[@"resource"];
+        if (loadError || ![resource isKindOfClass:NSDictionary.class] || tab.closed || ![self isSelectedTabID:tabID]) {
+          completion(nil);
+          return;
+        }
+        NSMutableDictionary *safe = [NSMutableDictionary dictionary];
+        for (NSString *key in @[@"success", @"netError", @"netErrorName", @"httpStatusCode"]) {
+          id value = resource[key];
+          if ([value isKindOfClass:NSNumber.class] || [value isKindOfClass:NSString.class]) safe[key] = value;
+        }
+        NSString *stream = resource[@"stream"];
+        if ([stream isKindOfClass:NSString.class]) {
+          [tab devToolsCall:@"IO.close" params:@{@"handle": stream} timeout:5
+            completion:^(NSDictionary *ignored, NSString *closeError) {
+              completion(closeError || tab.closed || ![self isSelectedTabID:tabID] ? nil : safe);
+            }];
+        } else completion(safe);
+      }];
+  }];
 }
 - (int)nativeTabIDForID:(NSString *)tabID { return _tabs[tabID] ? _tabs[tabID].tabId : -1; }
 - (BOOL)crashProbeTabID:(NSString *)tabID {

@@ -279,6 +279,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     window.titleVisibility = .hidden
     window.titlebarAppearsTransparent = true
     window.styleMask.insert(.fullSizeContentView)
+    window.isMovable = true
     window.minSize = NSSize(width: 760, height: 520)
     window.setFrame(
       NativeWindowPlacement.frame(saved: record.geometry, source: source, screens: screens()),
@@ -286,9 +287,12 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     hosting.frame = content.bounds
     hosting.autoresizingMask = [.width, .height]
     content.addSubview(hosting)
+    // Chromium's embed container can exclude the native titlebar. Install the
+    // safe strip in the window frame so its geometry includes that top edge.
+    let titlebarHost = window.contentView?.superview ?? content
     let titlebarDragView = WindowDragRegion.makeTitlebarDragView(
-      window: window, contentView: content)
-    content.addSubview(titlebarDragView, positioned: .above, relativeTo: hosting)
+      window: window, contentView: titlebarHost)
+    titlebarHost.addSubview(titlebarDragView, positioned: .above, relativeTo: nil)
     let context = NativeBrowserContext(
       id: id, nativeID: nativeID, window: window, store: store, engine: engine, hosting: hosting,
       contentView: content, titlebarDragView: titlebarDragView)
@@ -411,7 +415,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
           MainActor.assumeIsolated {
             guard let self, let context else { return }
             WindowDragRegion.updateTitlebarDragView(
-              context.titlebarDragView, window: context.window, contentView: context.contentView)
+              context.titlebarDragView, window: context.window,
+              contentView: context.titlebarDragView.superview ?? context.contentView)
             context.geometryTask?.cancel()
             context.geometryTask = Task { [weak self, weak context] in
               do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
@@ -450,6 +455,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
   }
 
   private func stopObserving(_ context: NativeBrowserContext) {
+    context.titlebarDragView.removeFromSuperview()
     context.geometryTask?.cancel()
     context.geometryTask = nil
     for observer in context.observers { NotificationCenter.default.removeObserver(observer) }

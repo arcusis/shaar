@@ -35,7 +35,13 @@ final class BrowserStore {
   var sidebarIsVisible = true
   private(set) var pageFind: PageFindState?
   private(set) var rendererFailures: [UUID: RendererFailure] = [:]
-  var sheet: BrowserSheet?
+  var sheet: BrowserSheet? {
+    didSet {
+      if sheet != nil { closeLibraryDrawer() }
+    }
+  }
+  private(set) var libraryDrawerSection: LibraryDrawerSection?
+  private(set) var libraryDrawerProfileID: UUID?
   var spaceEditor: SpaceEditorRoute? {
     get {
       if case .space(let route) = sheet { return route }
@@ -137,6 +143,7 @@ final class BrowserStore {
   }
 
   func showCommand() {
+    closeLibraryDrawer()
     dismissPageFind()
     commandQuery = ""
     commandSelection = 0
@@ -144,6 +151,91 @@ final class BrowserStore {
   }
 
   func dismissCommand() { commandIsOpen = false }
+
+  var canUseLibraryDrawer: Bool {
+    sheet == nil && !commandIsOpen && consentRequests.isEmpty
+  }
+
+  @discardableResult
+  func toggleLibraryDrawer() -> Bool {
+    guard canUseLibraryDrawer else { return false }
+    if libraryDrawerSection != nil {
+      closeLibraryDrawer()
+      return true
+    }
+    return showLibraryDrawer(.spaces)
+  }
+
+  @discardableResult
+  func showLibraryDrawer(_ section: LibraryDrawerSection) -> Bool {
+    guard canUseLibraryDrawer else { return false }
+    dismissPageFind()
+    engine?.extensionPanel = nil
+    libraryDrawerSection = section
+    libraryDrawerProfileID = section == .spaces ? nil : session.selectedSpace.profileID
+    return true
+  }
+
+  @discardableResult
+  func selectLibraryDrawerSection(_ section: LibraryDrawerSection) -> Bool {
+    guard libraryDrawerSection != nil, canUseLibraryDrawer else { return false }
+    libraryDrawerSection = section
+    libraryDrawerProfileID = section == .spaces ? nil : session.selectedSpace.profileID
+    if section != .spaces {
+      engine?.runtime.refreshDownloads(forProfileID: session.selectedSpace.profileID.uuidString)
+    }
+    return true
+  }
+
+  func closeLibraryDrawer() {
+    libraryDrawerSection = nil
+    libraryDrawerProfileID = nil
+  }
+
+  @discardableResult
+  func selectLibrarySpace(_ spaceID: UUID, expectedProfileID: UUID) -> Bool {
+    guard canUseLibraryDrawer, libraryDrawerSection == .spaces,
+      LibrarySpacesOverviewModel.canSelectSpace(
+        spaceID: spaceID, profileID: expectedProfileID, in: session)
+    else { return false }
+    closeLibraryDrawer()
+    session.selectSpace(spaceID)
+    save()
+    return true
+  }
+
+  @discardableResult
+  func selectLibraryTab(
+    _ tabID: UUID, in spaceID: UUID, expectedProfileID: UUID
+  ) -> Bool {
+    guard canUseLibraryDrawer, libraryDrawerSection == .spaces,
+      LibrarySpacesOverviewModel.canSelectTab(
+        spaceID: spaceID, profileID: expectedProfileID, tabID: tabID, in: session)
+    else { return false }
+    closeLibraryDrawer()
+    session.selectTab(tabID, in: spaceID)
+    save()
+    return true
+  }
+
+  @discardableResult
+  func editLibrarySpace(_ spaceID: UUID, expectedProfileID: UUID) -> Bool {
+    guard canUseLibraryDrawer, libraryDrawerSection == .spaces,
+      LibrarySpacesOverviewModel.canEdit(
+        spaceID: spaceID, profileID: expectedProfileID, in: session)
+    else { return false }
+    closeLibraryDrawer()
+    spaceEditor = .edit(spaceID)
+    return true
+  }
+
+  @discardableResult
+  func createLibrarySpace() -> Bool {
+    guard canUseLibraryDrawer, libraryDrawerSection == .spaces else { return false }
+    closeLibraryDrawer()
+    spaceEditor = .create
+    return true
+  }
 
   func showDownloads() {
     guard sheet == nil else { return }
@@ -206,6 +298,7 @@ final class BrowserStore {
 
   func showPageFind() {
     guard canFindCurrentPage, let tab = session.selectedPage?.tab else { return }
+    closeLibraryDrawer()
     commandIsOpen = false
     engine?.extensionPanel = nil
     if var current = pageFind, current.matches(session) {
@@ -278,7 +371,9 @@ final class BrowserStore {
     sidebarNotice = nil
     switch action {
     case .open(let url): session.open(url)
-    case .space(let id): session.selectSpace(id)
+    case .space(let id):
+      closeLibraryDrawer()
+      session.selectSpace(id)
     case .folder(let space, let folder): session.selectFolder(folder, in: space)
     case .favorite(let profile, let id):
       guard commandIsOpen, sheet == nil, session.selectedSpace.profileID == profile,
@@ -288,6 +383,7 @@ final class BrowserStore {
       _ = selectFavorite(id)
       return
     case .tab(let space, let tab):
+      closeLibraryDrawer()
       if session.spaces.first(where: { $0.id == space })?.tabs.contains(where: { $0.id == tab })
         == true
       {
@@ -829,6 +925,15 @@ final class BrowserStore {
 
   private func reconcileTransientState() {
     rendererFailures = rendererFailures.filter { $0.value.belongs(to: session) }
+    if !canUseLibraryDrawer {
+      closeLibraryDrawer()
+    } else if libraryDrawerSection == .spaces {
+      libraryDrawerProfileID = nil
+    } else if libraryDrawerSection != nil,
+      libraryDrawerProfileID != session.selectedSpace.profileID
+    {
+      closeLibraryDrawer()
+    }
     if case .library(let profile, _) = sheet, profile != session.selectedSpace.profileID {
       sheet = nil
     }

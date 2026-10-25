@@ -35,98 +35,38 @@ struct SpaceEditor: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 20) {
-      HStack(spacing: 12) {
-        Image(systemName: "square.stack.3d.up")
-          .font(.system(size: 26, weight: .light))
-          .foregroundStyle(appearanceColor)
-        VStack(alignment: .leading, spacing: 4) {
-          Text(route.spaceID == nil ? "Make a little space" : "Your space")
-            .font(.title2.weight(.semibold))
-          Text("A place for a different part of your day.")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        }
-      }
-      VStack(alignment: .leading, spacing: 12) {
-        TextField("Name", text: $name)
-          .focused($nameIsFocused)
-          .onSubmit { submit() }
-        Picker(
-          "Color",
-          selection: Binding(
-            get: { appearance.tint },
-            set: {
-              appearance.selectPreset($0)
-            })
-        ) {
-          ForEach(SpaceTint.allCases, id: \.self) { color in
-            Label {
-              Text(color.rawValue.capitalized)
-            } icon: {
-              Image(systemName: "circle.fill").foregroundStyle(color.color)
-            }
-            .tag(color)
-          }
-        }
-        ColorPicker(
-          "Custom color",
-          selection: Binding(
-            get: { appearanceColor },
-            set: { updateCustomColor($0) }), supportsOpacity: false)
-        TextField(
-          "Hex RGB",
-          text: Binding(
-            get: { appearance.hexValue },
-            set: { appearance.setHexDraft($0) })
-        )
-        .accessibilityLabel("Exact RGB hex color")
-        .accessibilityHint(
-          appearance.canSubmit
-            ? "Enter six hexadecimal digits." : "Enter a valid six-digit RGB color to enable Save."
-        )
-        .overlay(alignment: .trailing) {
-          if !appearance.canSubmit {
-            Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.red)
-          }
-        }
-        LabeledContent("Preview") {
-          RoundedRectangle(cornerRadius: 8)
-            .fill(appearanceColor)
-            .frame(width: 72, height: 24)
-            .accessibilityLabel("Space color preview \(appearance.color.hex)")
-        }
-        if route.spaceID == nil {
-          Picker("Profile", selection: $sharedProfileID) {
-            Text("New, separate profile").tag(Optional<UUID>.none)
-            ForEach(store.session.profiles) { profile in
-              Text("Share \(profile.name)").tag(Optional(profile.id))
-            }
-          }
-        } else if let profileName {
-          LabeledContent("Profile", value: profileName)
-        }
-      }
-      Text(profileExplanation)
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .fixedSize(horizontal: false, vertical: true)
+    VStack(alignment: .leading, spacing: 14) {
+      Text(route.spaceID == nil ? "Create Space" : "Edit Space")
+        .font(.title2.weight(.semibold))
+
+      TextField("Name", text: $name)
+        .textFieldStyle(.roundedBorder)
+        .focused($nameIsFocused)
+        .onSubmit { submit() }
+        .accessibilityLabel("Space name")
+
+      colorSection
+      profileSection
+      SpaceSidebarPreview(name: name, profileName: selectedProfileName, color: appearanceColor)
+
       if let error {
         Text(error).font(.caption).foregroundStyle(.red)
       }
-      HStack {
+
+      HStack(spacing: 10) {
         if route.spaceID != nil {
-          Button("Delete space…", role: .destructive) { deleteIsPresented = true }
+          Button("Delete…", role: .destructive) { deleteIsPresented = true }
             .disabled(store.session.spaces.count == 1)
         }
-        Spacer()
+        Spacer(minLength: 8)
         Button("Cancel", role: .cancel) { dismiss() }
-        Button(route.spaceID == nil ? "Create space" : "Save") { submit() }
+          .keyboardShortcut(.cancelAction)
+        Button(route.spaceID == nil ? "Create" : "Save") { submit() }
           .keyboardShortcut(.defaultAction)
           .disabled(SpaceEditorSavePolicy.isDisabled(name: name, appearance: appearance))
       }
     }
-    .padding(28)
+    .padding(20)
     .frame(width: horizontalSizeClass == .compact ? 380 : 440)
     .background(Color(nsColor: .windowBackgroundColor))
     .onAppear { nameIsFocused = true }
@@ -137,6 +77,79 @@ struct SpaceEditor: View {
     } message: {
       Text(route.spaceID.map { store.spaceRemovalImpact($0).message } ?? "")
     }
+  }
+
+  private var colorSection: some View {
+    VStack(alignment: .leading, spacing: 9) {
+      Text("Sidebar color")
+        .font(.subheadline.weight(.medium))
+
+      HStack(spacing: 12) {
+        ForEach(SpaceTint.allCases, id: \.self) { tint in
+          Button {
+            appearance.selectPreset(tint)
+          } label: {
+            Circle()
+              .fill(tint.color)
+              .frame(width: 24, height: 24)
+              .padding(3)
+              .overlay {
+                Circle().strokeBorder(
+                  appearance.tint == tint && appearance.customRGB == nil
+                    ? Color.primary : Color.clear,
+                  lineWidth: 1.5)
+              }
+              .contentShape(Circle())
+          }
+          .buttonStyle(.plain)
+          .accessibilityLabel("\(tint.rawValue.capitalized) sidebar color")
+          .accessibilityAddTraits(
+            appearance.tint == tint && appearance.customRGB == nil ? .isSelected : [])
+        }
+
+        Spacer(minLength: 0)
+
+        ColorPicker(
+          "Custom",
+          selection: Binding(
+            get: { appearanceColor },
+            set: { updateCustomColor($0) }),
+          supportsOpacity: false
+        )
+        .accessibilityLabel("Custom sidebar color")
+      }
+      .padding(.horizontal, 2)
+      .padding(.vertical, 2)
+    }
+  }
+
+  @ViewBuilder private var profileSection: some View {
+    if route.spaceID == nil {
+      VStack(alignment: .leading, spacing: 6) {
+        Picker("Profile", selection: $sharedProfileID) {
+          Text("New profile").tag(Optional<UUID>.none)
+          ForEach(store.session.profiles) { profile in
+            Text(profile.name).tag(Optional(profile.id))
+          }
+        }
+        Text(profileExplanation)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+    } else {
+      VStack(alignment: .leading, spacing: 4) {
+        LabeledContent("Profile", value: profileName ?? "Unavailable")
+        Text(profileExplanation)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+    }
+  }
+
+  private var selectedProfileName: String {
+    if route.spaceID != nil { return profileName ?? "Profile" }
+    guard let sharedProfileID else { return "New profile" }
+    return store.session.profiles.first { $0.id == sharedProfileID }?.name ?? "Profile"
   }
 
   private var profileName: String? {
@@ -151,13 +164,13 @@ struct SpaceEditor: View {
       let impact = store.spaceRemovalImpact(id)
       if impact.windows > 1 {
         return
-          "Changes apply to this Space in all \(impact.windows) windows. Deleting it closes \(impact.tabDescription); its profile is kept."
+          "Applies in all \(impact.windows) windows. Deleting Space closes \(impact.tabDescription); Profile stays."
       }
-      return "Renaming or changing this space’s color keeps its profile and tabs."
+      return "Spaces in one Profile share website sign-ins and extensions."
     }
     return sharedProfileID == nil
-      ? "Choose a separate profile for a different account."
-      : "Spaces sharing a profile use the same website sign-ins and extensions."
+      ? "Separate Profile keeps sign-ins and extensions apart."
+      : "Spaces sharing a Profile share website sign-ins and extensions."
   }
 
   private func submit() {
@@ -174,7 +187,7 @@ struct SpaceEditor: View {
     if succeeded {
       dismiss()
     } else {
-      error = "This space could not be saved. Check its name and profile."
+      error = "This Space could not be saved. Check its name and Profile."
     }
   }
 
@@ -192,5 +205,83 @@ struct SpaceEditor: View {
     }
     _ = appearance.setCustomComponents(
       red: color.redComponent, green: color.greenComponent, blue: color.blueComponent)
+  }
+}
+
+private struct SpaceSidebarPreview: View {
+  let name: String
+  let profileName: String
+  let color: Color
+  @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+  var body: some View {
+    HStack(spacing: 0) {
+      VStack(alignment: .leading, spacing: 9) {
+        Text(profileName)
+          .font(.system(size: 8, weight: .medium))
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+        HStack(spacing: 6) {
+          RoundedRectangle(cornerRadius: 2)
+            .fill(color)
+            .frame(width: 3, height: 16)
+          Image(systemName: "square.stack.3d.up.fill")
+            .font(.system(size: 9))
+            .foregroundStyle(color)
+          Text(name.isEmpty ? "Space name" : name)
+            .font(.system(size: 9, weight: .medium))
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .foregroundStyle(.primary)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 5)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(color.opacity(0.16), in: RoundedRectangle(cornerRadius: 5))
+        Label("Pinned tab", systemImage: "globe")
+          .font(.system(size: 8))
+          .foregroundStyle(.secondary)
+          .padding(.leading, 8)
+          .lineLimit(1)
+        Spacer(minLength: 0)
+      }
+      .padding(9)
+      .frame(width: 132, alignment: .topLeading)
+      .background {
+        LinearGradient(
+          colors: [
+            color.opacity(reduceTransparency ? 0.45 : 0.50), Color(nsColor: .windowBackgroundColor),
+          ],
+          startPoint: .topLeading, endPoint: .bottomTrailing)
+      }
+
+      VStack(alignment: .leading, spacing: 7) {
+        HStack(spacing: 4) {
+          Circle().fill(.red.opacity(0.65))
+          Circle().fill(.yellow.opacity(0.7))
+          Circle().fill(.green.opacity(0.65))
+        }
+        .frame(width: 24, height: 5)
+        RoundedRectangle(cornerRadius: 2).fill(.secondary.opacity(0.13))
+          .frame(height: 5)
+        RoundedRectangle(cornerRadius: 2).fill(.secondary.opacity(0.08))
+          .frame(width: 68, height: 5)
+        Spacer(minLength: 0)
+      }
+      .padding(10)
+      .frame(maxWidth: .infinity, alignment: .topLeading)
+      .background(Color(nsColor: .textBackgroundColor))
+      .accessibilityLabel("Neutral page area")
+    }
+    .frame(height: 92)
+    .clipShape(RoundedRectangle(cornerRadius: 9))
+    .overlay {
+      RoundedRectangle(cornerRadius: 9)
+        .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
+    }
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(
+      "Preview: \(name.isEmpty ? "Space name" : name), \(profileName) profile, colored sidebar and neutral page"
+    )
   }
 }

@@ -102,6 +102,20 @@ final class SpaceColorEditorLayoutTests: XCTestCase {
       FileManager.default.fileExists(atPath: output.appending(path: "compact-create.png").path))
     XCTAssertTrue(
       FileManager.default.fileExists(atPath: output.appending(path: "custom-edit.png").path))
+
+    var longNamed = editedSession
+    XCTAssertTrue(
+      longNamed.updateSpace(
+        editID, name: "Research and product design across several teams", tint: .lavender,
+        customRGB: custom))
+    let longNameStore = BrowserStore(sessionFile: nil, session: longNamed)
+    let longNameView = SpaceEditor(store: longNameStore, route: .edit(editID))
+      .environment(\.colorScheme, .light)
+      .environment(\.horizontalSizeClass, .regular)
+    try capture(
+      longNameView, size: NSSize(width: 464, height: 520),
+      to: output.appending(path: "long-name-edit.png"))
+    XCTAssertEqual(longNameStore.session, longNamed)
   }
 
 }

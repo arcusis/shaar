@@ -227,6 +227,15 @@ struct BrowserSidebar: View {
     .padding(.horizontal, 14)
     .padding(.bottom, 16)
     .coordinateSpace(name: "sidebarBounds")
+    .background {
+      LinearGradient(
+        colors: [
+          store.session.selectedSpace.themeColor.opacity(0.50),
+          Color(nsColor: .windowBackgroundColor),
+        ],
+        startPoint: .topLeading, endPoint: .bottomTrailing
+      )
+    }
     .zIndex(1)
     .onChange(of: store.session.selectedSpaceID) { _, _ in folderDraft = nil }
     .onAppear {
@@ -276,23 +285,17 @@ struct BrowserSidebar: View {
   private var recentDownloadsControls: some View {
     let profileID = store.session.selectedSpace.profileID
     let downloads = store.engine?.downloads
-    return Menu {
-      Button("Recent Downloads") {
-        guard downloadsProfileIsCurrent(profileID) else { return }
-        recentDownloadsPinnedOpen.toggle()
-        recentDownloadsIsOpen = recentDownloadsPinnedOpen
-      }
-      .disabled((previewRecentDownloads ?? downloads?.items(in: profileID))?.isEmpty != false)
-      Divider()
-      Button("Bookmarks…") { store.showLibrary(.bookmarks) }
-      Button("History…") { store.showLibrary(.history) }
-      Button("Downloads…") { store.showDownloads() }
-    } label: {
+    return Button(action: toggleLibraryDrawerFromButton) {
       Image(systemName: "books.vertical")
         .frame(width: 30, height: 30)
     }
+    .buttonStyle(.plain)
+    .contextMenu {
+      Button("Bookmarks…") { store.showLibrary(.bookmarks) }
+      Button("History…") { store.showLibrary(.history) }
+    }
     .accessibilityLabel("Library")
-    .help("Bookmarks and History for \(store.profileName) profile")
+    .help("Library")
     .onHover { recentDownloadsAnchorHoverChanged($0) }
     .overlay(alignment: .bottomLeading) {
       Group {
@@ -347,6 +350,15 @@ struct BrowserSidebar: View {
         recentDownloadsCardHovered = false
         recentDownloadsIsOpen = false
       }
+    }
+    .onChange(of: store.libraryDrawerSection) { _, section in
+      if section != nil { closeRecentDownloadsPreview() }
+    }
+    .onChange(of: store.commandIsOpen) { _, isOpen in
+      if isOpen { closeRecentDownloadsPreview() }
+    }
+    .onChange(of: store.sheet?.id) { _, sheetID in
+      if sheetID != nil { closeRecentDownloadsPreview() }
     }
   }
 
@@ -417,17 +429,38 @@ struct BrowserSidebar: View {
 
   private func recentDownloadsHoverChanged(_ inside: Bool) {
     recentDownloadsCloseTask?.cancel()
+    guard store.libraryDrawerSection == nil, !store.commandIsOpen, store.sheet == nil else {
+      closeRecentDownloadsPreview()
+      return
+    }
     if inside {
       recentDownloadsIsOpen = true
       return
     }
     recentDownloadsCloseTask = Task { @MainActor in
       try? await Task.sleep(for: .milliseconds(180))
+      guard store.libraryDrawerSection == nil, !store.commandIsOpen, store.sheet == nil else {
+        closeRecentDownloadsPreview()
+        return
+      }
       if !recentDownloadsAnchorHovered && !recentDownloadsCardHovered && !recentDownloadsPinnedOpen
       {
         recentDownloadsIsOpen = false
       }
     }
+  }
+
+  private func toggleLibraryDrawerFromButton() {
+    closeRecentDownloadsPreview()
+    _ = store.toggleLibraryDrawer()
+  }
+
+  private func closeRecentDownloadsPreview() {
+    recentDownloadsCloseTask?.cancel()
+    recentDownloadsPinnedOpen = false
+    recentDownloadsAnchorHovered = false
+    recentDownloadsCardHovered = false
+    recentDownloadsIsOpen = false
   }
 
   private func tabRow(_ tab: BrowserTab, index: SidebarTabIndex) -> some View {

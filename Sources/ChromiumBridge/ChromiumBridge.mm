@@ -318,6 +318,17 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
 - (NSWindow *)windowForID:(NSString *)identity { return _windows[identity].closed ? nil : _windows[identity].native.window; }
 - (NSView *)hostViewForWindowID:(NSString *)identity { return _windows[identity].closed ? nil : _windows[identity].native.hostView; }
 - (NSString *)windowIDForTabID:(NSString *)identity { return _tabWindows[identity]; }
+- (NSImage *)faviconForTabID:(NSString *)tabID profileID:(NSString *)profileID windowID:(NSString *)windowID {
+  if (!ValidID(tabID) || !ValidID(profileID) || !ValidID(windowID)) return nil;
+  ArdiaCoreTab *tab = _tabs[tabID];
+  ArdiaCoreProfile *profile = _profiles[profileID];
+  ARCNativeWindowState *state = _windows[windowID];
+  if (!tab || !profile || !state || state.closed || state.closing || _closingBrowser || tab.closed ||
+      tab.profile != profile || !state.native ||
+      ![_owners[tabID] isEqualToString:profileID] ||
+      ![_tabWindows[tabID] isEqualToString:windowID]) return nil;
+  return tab.favicon;
+}
 - (int)chromeWindowIDForProfileID:(NSString *)profileID windowID:(NSString *)identity {
   ARCNativeWindowState *state = _windows[identity];
   ArdiaCoreProfile *profile = _profiles[profileID];
@@ -1420,6 +1431,7 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   [self publish:tab];
 }
 - (void)tabDidChangeNavigationState:(ArdiaCoreTab *)tab { [self publish:tab]; }
+- (void)tabDidChangeFavicon:(ArdiaCoreTab *)tab { [self publish:tab]; }
 - (void)tab:(ArdiaCoreTab *)tab rendererGone:(NSString *)status code:(int)code {
   ARCNativeWindowState *popupState = [self stateForPopupTab:tab];
   if (popupState) {

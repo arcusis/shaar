@@ -59,6 +59,7 @@ FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeExternalAppLaunchAuditForTest
 - (nullable NSWindow *)windowForID:(NSString *)windowID;
 - (nullable NSView *)hostViewForWindowID:(NSString *)windowID;
 - (nullable NSString *)windowIDForTabID:(NSString *)tabID;
+- (nullable NSImage *)faviconForTabID:(NSString *)tabID profileID:(NSString *)profileID windowID:(NSString *)windowID;
 - (int)chromeWindowIDForProfileID:(NSString *)profileID windowID:(NSString *)windowID;
 - (void)clearActiveTabInWindowID:(NSString *)windowID;
 - (void)activateProfileID:(NSString *)profileID windowID:(NSString *)windowID;

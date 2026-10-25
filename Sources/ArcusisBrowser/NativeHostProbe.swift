@@ -815,10 +815,79 @@ final class NativeHostProbe {
     context.hosting.layoutSubtreeIfNeeded()
   }
 
+  private func captureNativeHitTesting(_ stage: String, context: NativeBrowserContext) throws {
+    guard let frame = context.window.contentView?.superview else {
+      throw HostProbeFailure("Native window frame view is missing.")
+    }
+    let drag = context.titlebarDragView
+    let points = [CGFloat(100), frame.bounds.midX, frame.bounds.maxX - 20].map {
+      NSPoint(x: $0, y: frame.isFlipped ? 16 : frame.bounds.maxY - 16)
+    }
+    let hits: [[String: Any]] = points.map { point in
+      let hit = frame.hitTest(point)
+      return [
+        "x": point.x, "y": point.y,
+        "class": hit.map { String(describing: type(of: $0)) } ?? "none",
+        "isDragView": hit === drag,
+        "isHostedUI": hit.map { $0 === context.hosting || $0.isDescendant(of: context.hosting) }
+          ?? false,
+      ]
+    }
+    let buttons = [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton]
+      .compactMap { context.window.standardWindowButton($0) }
+    let trafficLightsRemainInteractive =
+      buttons.count == 3
+      && buttons.allSatisfy { button in
+        let center = button.convert(
+          NSPoint(x: button.bounds.midX, y: button.bounds.midY), to: frame)
+        let hit = frame.hitTest(center)
+        return hit === button || hit?.isDescendant(of: button) == true
+      }
+    let pagePoint = context.hosting.convert(
+      NSPoint(x: context.hosting.bounds.midX, y: context.hosting.bounds.midY), to: frame)
+    let pageHit = frame.hitTest(pagePoint)
+    let pageRemainsInteractive = pageHit != nil && pageHit !== drag
+    let blankTopEdgeRoutesToDrag =
+      !drag.isHidden
+      && hits.allSatisfy {
+        $0["isDragView"] as? Bool == true
+      }
+    func describe(_ view: NSView, depth: Int) -> [String: Any] {
+      [
+        "class": String(describing: type(of: view)), "frame": NSStringFromRect(view.frame),
+        "bounds": NSStringFromRect(view.bounds), "hidden": view.isHidden,
+        "flipped": view.isFlipped,
+        "children": depth < 3
+          ? view.subviews.prefix(16).map { describe($0, depth: depth + 1) } : [],
+      ]
+    }
+    try JSONSerialization.data(
+      withJSONObject: [
+        "stage": stage, "windowID": context.id.uuidString,
+        "layout": NSStringFromRect(context.window.contentLayoutRect),
+        "dragFrame": NSStringFromRect(drag.frame), "dragHidden": drag.isHidden,
+        "dragInWindowFrame": drag.superview === frame,
+        "firstResponderClass": context.window.firstResponder.map {
+          String(describing: type(of: $0))
+        } ?? "none",
+        "topHits": hits, "hierarchy": describe(frame, depth: 0),
+        "blankTopEdgeRoutesToDrag": blankTopEdgeRoutesToDrag,
+        "trafficLightsRemainInteractive": trafficLightsRemainInteractive,
+        "pageRemainsInteractive": pageRemainsInteractive,
+        "scope": "Hidden native frame hit testing; no physical input or drag movement proof.",
+      ], options: [.prettyPrinted, .sortedKeys]
+    ).write(to: root.appending(path: "\(phase)-hit-test-\(stage).json"), options: .atomic)
+    try expect(
+      blankTopEdgeRoutesToDrag && trafficLightsRemainInteractive && pageRemainsInteractive,
+      "Native frame routes blank top edge to drag view while preserving traffic lights and page: \(stage)"
+    )
+  }
+
   private func viewportSample(
     _ stage: String, context: NativeBrowserContext, tabID: UUID
   ) async throws -> HostViewportSample {
     try await settleViewportLayout(context)
+    try captureNativeHitTesting(stage, context: context)
     let document = try await document(tabID)
     guard document["fixture"] as? String == "v1",
       let instance = document["instance"] as? String,

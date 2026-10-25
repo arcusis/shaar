@@ -497,6 +497,7 @@ final class EngineProbe {
       "fixtureTLSProbe": probeTLS != nil,
       "abruptRecoveryProbe": expectedAfterTermination != nil,
       "localFixturesPassed": localFixturesPassed,
+      "checkCount": checks.count,
       "checks": bitwardenVaultCredentials == nil
         ? checks : [],
       "error": errorReport,

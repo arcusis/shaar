@@ -19,6 +19,18 @@ final class BitwardenProbe {
   private let extensionID = "nngceckbapebfimnlniiiahkandclblb"
   private var checks: [String] = []
   private var vaultStageResults: [String: Bool] = [:]
+  private enum VaultStage: String {
+    case notStarted = "not-started"
+    case storePage = "store-page"
+    case storeAction = "store-action"
+    case storeConsent = "store-consent"
+    case storeInstallation = "store-installation"
+    case popup, onboarding, environment, login
+    case sharedProfile = "shared-profile"
+    case lockUnlock = "lock-unlock"
+    case completed
+  }
+  private var vaultStage = VaultStage.notStarted
   private var popupWindow: NSWindow?
   private var consentWindow: NSWindow?
 
@@ -541,14 +553,17 @@ final class BitwardenProbe {
           $0["id"] as? String == extensionID
         })
       else { throw BitwardenProbeFailure("Bitwarden is not registered in an account profile.") }
+      vaultStage = .popup
       guard var popupID = try await openVaultPopup() else {
         throw BitwardenProbeFailure("Bitwarden popup did not open for an account profile.")
       }
       let driver = BitwardenVaultProbe(runtime: runtime, popupID: popupID)
       if phase == "initial" {
+        vaultStage = .onboarding
         let signedOut = await prepareVaultLogin(driver)
         vaultStageResults["signed-out-\(label)"] = signedOut
         try writeVaultAccountReport(label: label, signedOut: signedOut, authenticated: false)
+        vaultStage = .environment
         guard signedOut, await driver.configureSelfHostedServer(credentials.serverURL) else {
           vaultStageResults["self-hosted-server-\(label)"] = false
           try writeVaultResult(passed: false)
@@ -558,9 +573,16 @@ final class BitwardenProbe {
       }
       let account = credentials.accounts[label == "alpha" ? 0 : 1]
       let otherAccount = credentials.accounts[label == "alpha" ? 1 : 0]
+      vaultStage = .login
       let authenticated = try await runVaultLogin(
         account, popupID: popupID, expectedAccount: account.email, label: label)
+      vaultStageResults["account-\(label)-login"] = authenticated
+      guard authenticated else {
+        try writeVaultResult(passed: false)
+        throw BitwardenProbeFailure("Bitwarden account UI flow failed.")
+      }
       if label == "alpha" {
+        vaultStage = .sharedProfile
         let sharedAuthenticated = try await verifySharedAlpha(expectedAccount: account.email)
         vaultStageResults["shared-alpha-space-retains-profile"] = sharedAuthenticated
         guard let reopened = try await openVaultPopup() else {
@@ -569,7 +591,6 @@ final class BitwardenProbe {
         popupID = reopened
       }
       let activeDriver = BitwardenVaultProbe(runtime: runtime, popupID: popupID)
-      vaultStageResults["account-\(label)-login"] = authenticated
       if let otherIdentity = await activeDriver.state(expectedAccount: otherAccount.email) {
         vaultStageResults["account-\(label)-cross-profile-mismatch"] =
           authenticated && !otherIdentity.accountIdentityMatches
@@ -577,6 +598,7 @@ final class BitwardenProbe {
         vaultStageResults["account-\(label)-cross-profile-mismatch"] = false
       }
       if phase == "initial" {
+        vaultStage = .lockUnlock
         let locked: Bool
         if authenticated {
           locked = await lockVault(activeDriver, accountEmail: account.email)
@@ -606,10 +628,6 @@ final class BitwardenProbe {
           signedOut: vaultStageResults["signed-out-\(label)"] == true,
           authenticated: authenticated)
       }
-      guard authenticated else {
-        try writeVaultResult(passed: false)
-        throw BitwardenProbeFailure("Bitwarden account UI flow failed.")
-      }
       engine.extensionPanel = nil
     }
     if phase == "initial" {
@@ -620,6 +638,7 @@ final class BitwardenProbe {
       != store.session.spaces.first(where: { $0.name == "Account Beta" })?.profileID
     vaultStageResults["first-click-compatibility"] = false
     let passed = VaultProbeStageAcceptance.accepts(phase: phase, stages: vaultStageResults)
+    if passed { vaultStage = .completed }
     try writeVaultResult(passed: passed)
     guard passed else { throw BitwardenProbeFailure("Required Bitwarden vault stage failed.") }
     return [
@@ -629,6 +648,7 @@ final class BitwardenProbe {
   }
 
   private func installVaultExtension(profile: UUID) async throws {
+    vaultStage = .storePage
     let address = URL(
       string: "https://chromewebstore.google.com/detail/bitwarden-password-manager/\(extensionID)"
     )!
@@ -664,12 +684,14 @@ final class BitwardenProbe {
       try await Task.sleep(for: .milliseconds(250))
     }
     guard buttonReady else { throw BitwardenProbeFailure("Store install action is unavailable.") }
+    vaultStage = .storeAction
     _ = await evaluate(
       sourceTab,
       """
       (()=>{const b=[...document.querySelectorAll('button,[role="button"]')].find(b=>(b.innerText||b.getAttribute('aria-label')||'').trim().toLowerCase()==='add to chrome');b?.click();return !!b})()
       """,
       userGesture: true)
+    vaultStage = .storeConsent
     var request: ExtensionInstallRequest?
     for _ in 0..<120 {
       request = store.installationRequests.first { $0.browserExtension.id == extensionID }
@@ -683,6 +705,7 @@ final class BitwardenProbe {
     else { throw BitwardenProbeFailure("Store consent was not presented in its owning profile.") }
     try await captureConsent(request, capture: false)
     store.resolveInstallation(request.id, accepted: true)
+    vaultStage = .storeInstallation
     for _ in 0..<160 {
       if runtime.extensions(forProfileID: profile.uuidString).contains(where: {
         $0["id"] as? String == extensionID
@@ -777,6 +800,7 @@ final class BitwardenProbe {
     let report: [String: Any] = [
       "phase": phase, "passed": passed, "controlOnly": true,
       "firstClickAcceptancePassed": false, "accountCount": 2, "stages": stages,
+      "lastStage": vaultStage.rawValue,
     ]
     let data = try JSONSerialization.data(
       withJSONObject: report, options: [.prettyPrinted, .sortedKeys])

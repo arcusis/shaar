@@ -26,3 +26,15 @@ Install optional fixture dependencies into the existing project environment, the
 ```
 
 Dependency versions and wheel digests are pinned. Public SDK password-hash, key-stretch and authenticated-encryption vectors are checked independently of fixture round trips. [sdk-reference.json](sdk-reference.json) records the exact [upstream source commit](https://github.com/bitwarden/sdk-internal/tree/5cf919837e83b71c2508bf99344ea57cf5f84e88/crates/bitwarden-crypto/src) and reference-file digests; no vendor SDK source is embedded in the application. These checks establish only the explicitly covered fixture format, not real-extension login, autofill or account isolation.
+
+## Local HTTPS
+
+The installed Bitwarden 2026.10.0 self-hosted environment form requires HTTPS in release builds. `scripts/vault_tls.py` creates short-lived, self-signed server certificate material for the loopback fixture. Its root must be a direct child of the canonical system temporary directory, have the `arcusis-engine-probe-` prefix and mode 0700, and contain the exact owner-only `.arcusis-probe` marker. Foreign owners, symlinks, linked/nonregular markers and existing TLS directories are rejected.
+
+The certificate has only the IP subject alternative name `127.0.0.1`, server-auth usage, no CA authority and an expiry six hours after generation. Its key and certificate are created exclusively with mode 0600 inside a private directory. `FixtureTLS.client_context()` trusts that certificate only in the returned Python TLS context; no system trust-store or network configuration changes occur. The helper also returns the public SHA-256 SPKI fingerprint for a future process-scoped browser test configuration. Browser trust integration and actual extension login are still pending.
+
+```sh
+.venv/bin/python -m unittest discover -s Tests/VaultTLSTests
+```
+
+Tests exercise root/marker ownership and filesystem bounds, private key permissions, certificate identity and scope, key preservation, successful local HTTPS, and rejection when the client trusts an unrelated fixture certificate. Pinned Vaultwarden already includes Rocket TLS support; its fixture process can consume the generated paths through `ROCKET_TLS` while retaining an explicit loopback listener.

@@ -977,8 +977,14 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   NSString *literal = encoded ? [[NSString alloc] initWithData:encoded encoding:NSUTF8StringEncoding] : nil;
   if (!literal) { completion(NO); return; }
   NSString *expression = [NSString stringWithFormat:
-    @"(()=>{const button=[...document.querySelectorAll('button,a,[role=button]')].find(b=>"
-     "b.innerText.trim().replace(/\\s+/g,' ')===%@ && b.getBoundingClientRect().width>0 && b.getBoundingClientRect().height>0 && !b.disabled);"
+    @"(()=>{const excluded=e=>{for(let n=e;n&&n.nodeType===1;n=n.parentElement){"
+     "if(n.hidden||n.getAttribute('aria-hidden')?.toLowerCase()==='true')return true;"
+     "const s=getComputedStyle(n);if(s.display==='none'||s.visibility==='hidden'||s.visibility==='collapse')return true;}return false;};"
+     "const text=e=>{const w=document.createTreeWalker(e,NodeFilter.SHOW_TEXT);let out='',n;"
+     "while((n=w.nextNode()))if(!excluded(n.parentElement))out+=' '+n.nodeValue;return out.trim().replace(/\\s+/g,' ');};"
+     "const label=e=>(e.getAttribute('aria-label')||text(e)).trim().replace(/\\s+/g,' ');"
+     "const button=[...document.querySelectorAll('button,a,[role=button]')].find(b=>"
+     "!excluded(b)&&label(b)===%@ && b.getBoundingClientRect().width>0 && b.getBoundingClientRect().height>0 && !b.disabled);"
      "if(!button)return null;button.scrollIntoView({block:'center'});const r=button.getBoundingClientRect();"
      "return {x:r.x+r.width/2,y:r.y+r.height/2};})()", literal];
   ArdiaCoreTab *popup = state.popup;

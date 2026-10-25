@@ -74,10 +74,20 @@ final class BitwardenVaultProbe {
     let expectedLiteral = expectedAccount.flatMap(Self.jsonLiteral) ?? "null"
     let script = """
       (()=>{const visible=e=>{const r=e.getBoundingClientRect();return r.width>0&&r.height>0;};
+        const excluded=e=>{for(let n=e;n&&n.nodeType===1;n=n.parentElement){
+          if(n.hidden||n.getAttribute('aria-hidden')?.toLowerCase()==='true')return true;
+          const s=getComputedStyle(n);if(s.display==='none'||s.visibility==='hidden'||s.visibility==='collapse')return true;
+        }return false;};
+        const text=e=>{const w=document.createTreeWalker(e,NodeFilter.SHOW_TEXT);let out='',n;
+          while((n=w.nextNode()))if(!excluded(n.parentElement))out+=' '+n.nodeValue;
+          return out.trim().replace(/\\s+/g,' ');};
+        const label=e=>(e.getAttribute('aria-label')||text(e)).trim().toLowerCase();
         const b=[...document.querySelectorAll('button,[role="button"]')].filter(visible);
-        const labels=b.map(x=>(x.innerText||x.getAttribute('aria-label')||'').trim().toLowerCase());
+        const labels=b.map(label);
         const t=(document.body?.innerText||'').toLowerCase();
         const expected=\(expectedLiteral);
+        const accountLabels=[...document.querySelectorAll('app-current-account button')]
+          .filter(e=>visible(e)&&!excluded(e)).map(label);
         return {emailFields:[...document.querySelectorAll('input[type="email"]')].filter(visible).length,
           passwordFields:[...document.querySelectorAll('input[type="password"]')].filter(visible).length,
           loginButton:labels.some(x=>x==='log in'||x==='login'),
@@ -90,7 +100,7 @@ final class BitwardenVaultProbe {
           selfHostedBaseURLField:[...document.querySelectorAll('#self_hosted_env_settings_form_input_base_url')].some(visible),
           saveButton:labels.includes('save'),
           lockNowButton:labels.includes('lock now'),
-          accountIdentityMatches:expected!==null&&t.includes(expected.toLowerCase())};})()
+          accountIdentityMatches:expected!==null&&accountLabels.some(x=>x.split(/\\s+/).includes(expected.toLowerCase()))};})()
       """
     guard let object = await evaluate(script) as? [String: Any],
       let emailFields = object["emailFields"] as? Int,

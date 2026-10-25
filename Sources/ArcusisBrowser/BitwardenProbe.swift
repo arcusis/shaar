@@ -28,7 +28,8 @@ final class BitwardenProbe {
     case popup, onboarding, environment, login
     case loginPrepare = "login-prepare"
     case loginEmail = "login-email"
-    case loginContinue = "login-continue"
+    case loginContinueClick = "login-continue-click"
+    case loginPasswordWait = "login-password-wait"
     case loginPassword = "login-password"
     case loginSubmit = "login-submit"
     case loginResult = "login-result"
@@ -464,12 +465,10 @@ final class BitwardenProbe {
       vaultStage = .loginEmail
       guard await driver.fillEmail(credentials.email) else { return false }
       if initial.passwordFields == 0 {
-        vaultStage = .loginContinue
-        let fresh = await driver.state()
-        let button = fresh?.continueButton == true ? "Continue" : "Log in"
-        guard await driver.click(button), await driver.waitFor({ $0.passwordFields > 0 }) else {
-          return false
-        }
+        vaultStage = .loginContinueClick
+        guard await driver.click("Continue") else { return false }
+        vaultStage = .loginPasswordWait
+        guard await driver.waitFor({ $0.passwordFields > 0 }) else { return false }
       }
     }
     vaultStage = .loginPassword

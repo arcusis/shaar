@@ -34,19 +34,37 @@ struct MediaCaptureIndicator: View {
   }
 
   private var capturingTabs: [CapturingTab] {
-    store.session.spaces.flatMap { space in
-      space.tabs.compactMap { tab in
+    let ordinary: [CapturingTab] = store.session.spaces.flatMap { space -> [CapturingTab] in
+      space.tabs.compactMap { tab -> CapturingTab? in
         guard let access = engine.mediaAccess[tab.id], access.isCapturing else { return nil }
-        let resources = [
-          access.camera ? "camera" : nil, access.microphone ? "microphone" : nil,
-          access.screen ? "screen" : nil,
-        ].compactMap { $0 }.joined(separator: ", ")
         return CapturingTab(
           id: tab.id, spaceID: space.id, spaceName: space.name,
-          title: tab.title, resources: resources, camera: access.camera,
+          title: tab.title, resources: resources(for: access), camera: access.camera,
           microphone: access.microphone)
       }
     }
+    let favorites: [CapturingTab] = store.session.favoritePages.compactMap {
+      page -> CapturingTab? in
+      guard let profileID = store.session.profileID(forTabID: page.tab.id),
+        let space = store.session.spaces.first(where: {
+          $0.id == store.session.selectedSpaceID && $0.profileID == profileID
+        }) ?? store.session.spaces.first(where: { $0.profileID == profileID }),
+        let access = engine.mediaAccess[page.tab.id], access.isCapturing
+      else { return nil }
+      return CapturingTab(
+        id: page.tab.id, spaceID: space.id, spaceName: space.name,
+        title: page.tab.title, resources: resources(for: access), camera: access.camera,
+        microphone: access.microphone)
+    }
+    return ordinary + favorites
+  }
+
+  private func resources(for access: MediaAccessState) -> String {
+    [
+      access.camera ? "camera" : nil, access.microphone ? "microphone" : nil,
+      access.screen ? "screen" : nil,
+    ]
+    .compactMap { $0 }.joined(separator: ", ")
   }
 }
 

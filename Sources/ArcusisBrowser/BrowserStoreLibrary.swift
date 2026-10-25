@@ -14,20 +14,20 @@ extension BrowserStore {
 
   var canBookmarkCurrentPage: Bool {
     sheet == nil
-      && session.selectedSpace.selectedTab.map { NavigationInput.isWebURL($0.url) } == true
+      && session.selectedPage.map { NavigationInput.isWebURL($0.tab.url) } == true
   }
 
   func bookmarkCurrentPage() {
-    guard canBookmarkCurrentPage, let tab = session.selectedSpace.selectedTab else { return }
+    guard canBookmarkCurrentPage, let page = session.selectedPage?.tab else { return }
     let profile = session.selectedSpace.profileID
-    if let existing = library.bookmarks[profile]?.items.first(where: { $0.destination == tab.url })
+    if let existing = library.bookmarks[profile]?.items.first(where: { $0.destination == page.url })
     {
       showBookmarkEditor(BookmarkEditorRoute(profileID: profile, mode: .edit(existing.id)))
     } else {
       showBookmarkEditor(
         BookmarkEditorRoute(
           profileID: profile,
-          mode: .newBookmark(parent: nil, title: tab.title, address: tab.url.absoluteString)))
+          mode: .newBookmark(parent: nil, title: page.title, address: page.url.absoluteString)))
     }
   }
 

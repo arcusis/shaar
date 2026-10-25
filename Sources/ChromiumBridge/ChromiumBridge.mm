@@ -38,6 +38,36 @@ static void ClickProbeTarget(ArdiaCoreTab *tab, NSString *expression, BOOL (^cur
   }];
 }
 
+static NSString *ProbeButtonExpression(NSString *literal, BOOL diagnostic) {
+  return [NSString stringWithFormat:
+    @"(()=>{const title=%@;const excluded=e=>{for(let n=e;n&&n.nodeType===1;n=n.parentElement){"
+     "if(n.hidden||n.inert||n.getAttribute('aria-hidden')?.toLowerCase()==='true')return true;"
+     "const s=getComputedStyle(n);if(s.display==='none'||s.visibility==='hidden'||s.visibility==='collapse'||s.opacity==='0')return true;}return false;};"
+     "const text=e=>{const w=document.createTreeWalker(e,NodeFilter.SHOW_TEXT);let out='',n;"
+     "while((n=w.nextNode()))if(!excluded(n.parentElement))out+=' '+n.nodeValue;return out.trim().replace(/\\s+/g,' ');};"
+     "const label=e=>(e.getAttribute('aria-label')||text(e)).trim().replace(/\\s+/g,' ');"
+     "const candidates=[...document.querySelectorAll('button,a,[role=button]')],exact=candidates.filter(e=>label(e)===title),"
+     "visible=exact.filter(e=>!excluded(e)),sized=visible.filter(e=>{const r=e.getBoundingClientRect();return r.width>0&&r.height>0;}),"
+     "eligible=sized.filter(e=>!e.disabled&&e.getAttribute('aria-disabled')?.toLowerCase()!=='true');const cap=n=>Math.min(n,999),viewportHasArea=innerWidth>0&&innerHeight>0;"
+     "const hit=(e,x,y)=>{const top=document.elementFromPoint(x,y);return !!top&&(top===e||e.contains(top));};"
+     "const point=e=>{const r=e.getBoundingClientRect();if(r.width<=0||r.height<=0)return null;const x=r.x+r.width/2,y=r.y+r.height/2;"
+     "if(x>=0&&y>=0&&x<innerWidth&&y<innerHeight&&hit(e,x,y))return {x,y};const l=Math.max(0,r.left),t=Math.max(0,r.top),"
+     "rr=Math.min(innerWidth,r.right),bb=Math.min(innerHeight,r.bottom);if(rr<=l||bb<=t)return null;"
+     "for(const fx of [.1,.5,.9])for(const fy of [.1,.5,.9]){const px=l+(rr-l)*fx,py=t+(bb-t)*fy;if(hit(e,px,py))return {x:px,y:py};}return null;};"
+     "let reason='none';if(!candidates.length)reason='no_candidate';else if(!exact.length)reason='no_exact_label';"
+     "else if(!visible.length)reason='hidden';else if(!sized.length)reason='no_area';else if(!eligible.length)reason='disabled';"
+     "else if(eligible.length!==1)reason='ambiguous';const button=eligible.length===1?eligible[0]:null;"
+     "const r=button?.getBoundingClientRect(),cx=r?r.x+r.width/2:0,cy=r?r.y+r.height/2:0,"
+     "centerHit=!!button&&cx>=0&&cy>=0&&cx<innerWidth&&cy<innerHeight&&hit(button,cx,cy),"
+     "visiblePointHit=!!button&&!!point(button),scrollNeeded=!!button&&!centerHit&&!visiblePointHit;"
+     "if(reason==='none'&&scrollNeeded)reason='scroll-needed';"
+     "if(%@)return {candidateCount:cap(candidates.length),exactEligibleLabelCount:cap(eligible.length),"
+     "uniqueEligibleMatch:eligible.length===1,matchIsNativeButton:!!button&&button.tagName==='BUTTON',viewportHasArea,"
+     "centerHit,visiblePointHit,scrollNeeded,rejectionReason:reason};"
+     "if(!button)return null;let visiblePoint=point(button);if(!visiblePoint){button.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});visiblePoint=point(button);}return visiblePoint;})()",
+    literal, diagnostic ? @"true" : @"false"];
+}
+
 static BOOL ValidID(NSString *value) {
   return [[[[NSUUID alloc] initWithUUIDString:value] UUIDString] isEqualToString:value];
 }
@@ -89,7 +119,34 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
                                 ArdiaCoreTabDelegate>
 - (void)closedWindowID:(NSString *)identity;
 - (ArdiaCoreTab *)probeVisibilityTargetForID:(NSString *)identity;
+- (BOOL)ownedProbePopupID:(NSString *)popupID state:(ARCNativeWindowState * _Nullable * _Nullable)stateOut;
 @end
+
+static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
+  NSArray<NSString *> *booleans = @[
+    @"uniqueEligibleMatch", @"matchIsNativeButton", @"viewportHasArea", @"centerHit",
+    @"visiblePointHit", @"scrollNeeded",
+  ];
+  NSMutableDictionary *result = [NSMutableDictionary dictionary];
+  NSDictionary *source = [value isKindOfClass:NSDictionary.class] ? value : @{};
+  for (NSString *key in booleans) {
+    id value = source[key];
+    result[key] = [value isKindOfClass:NSNumber.class] &&
+      CFGetTypeID((__bridge CFTypeRef)value) == CFBooleanGetTypeID() ? @([value boolValue]) : @NO;
+  }
+  for (NSString *key in @[@"candidateCount", @"exactEligibleLabelCount"]) {
+    NSNumber *number = [source[key] isKindOfClass:NSNumber.class] ? source[key] : @0;
+    result[key] = @(MIN(999, MAX(0, number.integerValue)));
+  }
+  NSSet *reasons = [NSSet setWithArray:@[
+    @"invalid_context", @"no_candidate", @"no_exact_label", @"hidden", @"no_area",
+    @"disabled", @"ambiguous", @"scroll-needed", @"none",
+  ]];
+  NSString *reason = reasonOverride ?: ([source[@"rejectionReason"] isKindOfClass:NSString.class]
+    ? source[@"rejectionReason"] : @"invalid_context");
+  result[@"rejectionReason"] = [reasons containsObject:reason] ? reason : @"invalid_context";
+  return result;
+}
 
 @implementation ARCChromiumRuntime {
   void *_library;
@@ -964,37 +1021,61 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   if (!_testing || !state || state.closed) { completion(nil); return; }
   [self evaluateTab:state.popup script:script completion:completion];
 }
+
+- (BOOL)ownedProbePopupID:(NSString *)popupID state:(ARCNativeWindowState **)stateOut {
+  ARCNativeWindowState *state = [self stateForPopupID:popupID];
+  ArdiaCoreTab *popup = state.popup;
+  NSString *ownerTabID = state.popupOwnerTabID;
+  ArdiaCoreTab *owner = ownerTabID ? _tabs[ownerTabID] : nil;
+  NSURL *url = [NSURL URLWithString:popup.url ?: @""];
+  BOOL valid = _testing && state && !state.closed && !state.closing && !_closingBrowser &&
+    popup && !popup.closed && [state.popupID isEqualToString:popupID] &&
+    [state.popupExtensionID isEqualToString:@"nngceckbapebfimnlniiiahkandclblb"] &&
+    [url.scheme isEqualToString:@"chrome-extension"] && [url.host isEqualToString:state.popupExtensionID] &&
+    !url.user && !url.password && !url.port && ownerTabID.length > 0 && owner && !owner.closed &&
+    [self stateForTabID:ownerTabID] == state && [self isSelectedTabID:ownerTabID] &&
+    popup.profile == owner.profile && popup.profile == state.native.activeProfile;
+  if (valid && stateOut) *stateOut = state;
+  return valid;
+}
+
 - (void)captureProbeTabID:(NSString *)tabID completion:(void (^)(NSData *))completion {
   [self captureProbeTab:_tabs[tabID] completion:completion];
 }
 - (void)clickProbePopupID:(NSString *)popupID buttonTitle:(NSString *)title completion:(void (^)(BOOL))completion {
-  ARCNativeWindowState *state = [self stateForPopupID:popupID];
-  if (!_testing || !state || state.closed || !state.popup || state.popup.closed) {
-    completion(NO);
-    return;
+  ARCNativeWindowState *state = nil;
+  if (![self ownedProbePopupID:popupID state:&state] || ![title isKindOfClass:NSString.class] ||
+      title.length == 0 || title.length > 256) {
+    completion(NO); return;
   }
   NSData *encoded = [NSJSONSerialization dataWithJSONObject:title options:NSJSONWritingFragmentsAllowed error:nil];
   NSString *literal = encoded ? [[NSString alloc] initWithData:encoded encoding:NSUTF8StringEncoding] : nil;
   if (!literal) { completion(NO); return; }
-  NSString *expression = [NSString stringWithFormat:
-    @"(()=>{const excluded=e=>{for(let n=e;n&&n.nodeType===1;n=n.parentElement){"
-     "if(n.hidden||n.inert||n.getAttribute('aria-hidden')?.toLowerCase()==='true')return true;"
-     "const s=getComputedStyle(n);if(s.display==='none'||s.visibility==='hidden'||s.visibility==='collapse'||s.opacity==='0')return true;}return false;};"
-     "const text=e=>{const w=document.createTreeWalker(e,NodeFilter.SHOW_TEXT);let out='',n;"
-     "while((n=w.nextNode()))if(!excluded(n.parentElement))out+=' '+n.nodeValue;return out.trim().replace(/\\s+/g,' ');};"
-     "const label=e=>(e.getAttribute('aria-label')||text(e)).trim().replace(/\\s+/g,' ');"
-     "const button=[...document.querySelectorAll('button,a,[role=button]')].find(b=>"
-     "!excluded(b)&&label(b)===%@ && b.getBoundingClientRect().width>0 && b.getBoundingClientRect().height>0 && !b.disabled);"
-     "if(!button)return null;const point=()=>{const r=button.getBoundingClientRect();"
-     "if(r.width<=0||r.height<=0)return null;const x=r.x+r.width/2,y=r.y+r.height/2;"
-     "const hits=(x,y)=>{const e=document.elementFromPoint(x,y);return !!e&&(e===button||button.contains(e));};"
-     "if(hits(x,y))return {x,y};const l=Math.max(0,r.left),t=Math.max(0,r.top),"
-     "rr=Math.min(innerWidth,r.right),bb=Math.min(innerHeight,r.bottom);if(rr<=l||bb<=t)return null;"
-     "for(const fx of [.1,.5,.9])for(const fy of [.1,.5,.9]){const px=l+(rr-l)*fx,py=t+(bb-t)*fy;"
-     "if(hits(px,py))return {x:px,y:py};}return null;};const visible=point();if(visible)return visible;"
-     "button.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});return point();})()", literal];
+  NSString *expression = ProbeButtonExpression(literal, NO);
   ArdiaCoreTab *popup = state.popup;
-  ClickProbeTarget(popup, expression, ^BOOL { return !state.closed && [state.popupID isEqualToString:popupID]; }, completion);
+  ClickProbeTarget(popup, expression, ^BOOL {
+    return [self ownedProbePopupID:popupID state:nil] && state.popup == popup;
+  }, completion);
+}
+- (void)diagnoseProbePopupID:(NSString *)popupID buttonTitle:(NSString *)title
+                  completion:(void (^)(NSDictionary *))completion {
+  ARCNativeWindowState *state = nil;
+  if (![self ownedProbePopupID:popupID state:&state] || ![title isKindOfClass:NSString.class] ||
+      title.length == 0 || title.length > 256) {
+    completion(ProbeButtonDiagnostic(nil, @"invalid_context")); return;
+  }
+  NSData *encoded = [NSJSONSerialization dataWithJSONObject:title options:NSJSONWritingFragmentsAllowed error:nil];
+  NSString *literal = encoded ? [[NSString alloc] initWithData:encoded encoding:NSUTF8StringEncoding] : nil;
+  if (!literal) { completion(ProbeButtonDiagnostic(nil, @"invalid_context")); return; }
+  ArdiaCoreTab *popup = state.popup;
+  [popup devToolsCall:@"Runtime.evaluate" params:@{
+    @"expression": ProbeButtonExpression(literal, YES), @"returnByValue": @YES,
+  } timeout:5 completion:^(NSDictionary *response, NSString *error) {
+    if (error || ![self ownedProbePopupID:popupID state:nil] || state.popup != popup) {
+      completion(ProbeButtonDiagnostic(nil, @"invalid_context")); return;
+    }
+    completion(ProbeButtonDiagnostic(response[@"result"][@"value"], nil));
+  }];
 }
 - (void)clickProbePopupID:(NSString *)popupID elementTestID:(NSString *)elementTestID
                completion:(void (^)(BOOL))completion {

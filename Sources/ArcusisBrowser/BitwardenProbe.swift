@@ -4,6 +4,18 @@ import ChromiumBridge
 import Foundation
 import SwiftUI
 
+private struct LockTargetDiagnostic: Sendable {
+  let candidateCount: Int
+  let exactEligibleLabelCount: Int
+  let uniqueEligibleMatch: Bool
+  let matchIsNativeButton: Bool
+  let viewportHasArea: Bool
+  let centerHit: Bool
+  let visiblePointHit: Bool
+  let scrollNeeded: Bool
+  let rejectionReason: String
+}
+
 /// Opt-in public-store test in an empty disposable profile. Never enters vault credentials.
 @MainActor
 final class BitwardenProbe {
@@ -600,39 +612,43 @@ final class BitwardenProbe {
   }
 
   private func observeLockTarget(_ popupID: String) async {
-    let keys = [
-      "unique", "disabled", "viewportHasArea", "centerInViewport", "centerHit",
-      "visibleSampleHit", "hiddenAncestor", "inertAncestor", "ariaHiddenAncestor",
-      "cssHiddenAncestor",
-    ]
-    let script = """
-      (()=>{const flags={unique:false,disabled:false,viewportHasArea:innerWidth>0&&innerHeight>0,
-        centerInViewport:false,centerHit:false,visibleSampleHit:false,hiddenAncestor:false,
-        inertAncestor:false,ariaHiddenAncestor:false,cssHiddenAncestor:false};
-        const candidates=[...document.querySelectorAll('button')].filter(e=>
-          (e.textContent||'').trim().replace(/\\s+/g,' ').toLowerCase().includes('lock now'));
-        flags.unique=candidates.length===1;if(!flags.unique)return flags;const button=candidates[0];
-        flags.disabled=button.disabled||button.getAttribute('aria-disabled')?.toLowerCase()==='true';
-        for(let n=button;n&&n.nodeType===1;n=n.parentElement){const s=getComputedStyle(n);
-          flags.hiddenAncestor||=n.hidden;flags.inertAncestor||=n.inert;
-          flags.ariaHiddenAncestor||=n.getAttribute('aria-hidden')?.toLowerCase()==='true';
-          flags.cssHiddenAncestor||=s.display==='none'||s.visibility==='hidden'||s.visibility==='collapse'||s.opacity==='0';}
-        const r=button.getBoundingClientRect(),x=r.x+r.width/2,y=r.y+r.height/2;
-        const hits=(x,y)=>{const e=document.elementFromPoint(x,y);return !!e&&(e===button||button.contains(e));};
-        flags.centerInViewport=x>=0&&y>=0&&x<innerWidth&&y<innerHeight;
-        flags.centerHit=flags.centerInViewport&&hits(x,y);
-        const l=Math.max(0,r.left),t=Math.max(0,r.top),rr=Math.min(innerWidth,r.right),bb=Math.min(innerHeight,r.bottom);
-        if(rr>l&&bb>t){for(const fx of [.1,.5,.9])for(const fy of [.1,.5,.9])
-          flags.visibleSampleHit||=hits(l+(rr-l)*fx,t+(bb-t)*fy);}return flags;})()
-      """
-    let json: String? = await withCheckedContinuation { continuation in
-      runtime.evaluateProbePopupID(popupID, script: script) { continuation.resume(returning: $0) }
+    let diagnostic: LockTargetDiagnostic = await withCheckedContinuation { continuation in
+      runtime.diagnoseProbePopupID(popupID, buttonTitle: "Lock now") {
+        let value = $0
+        continuation.resume(
+          returning: LockTargetDiagnostic(
+            candidateCount: value["candidateCount"] as? Int ?? -1,
+            exactEligibleLabelCount: value["exactEligibleLabelCount"] as? Int ?? -1,
+            uniqueEligibleMatch: value["uniqueEligibleMatch"] as? Bool ?? false,
+            matchIsNativeButton: value["matchIsNativeButton"] as? Bool ?? false,
+            viewportHasArea: value["viewportHasArea"] as? Bool ?? false,
+            centerHit: value["centerHit"] as? Bool ?? false,
+            visiblePointHit: value["visiblePointHit"] as? Bool ?? false,
+            scrollNeeded: value["scrollNeeded"] as? Bool ?? false,
+            rejectionReason: value["rejectionReason"] as? String ?? "invalid_context"
+          ))
+      }
     }
-    guard let data = json?.data(using: .utf8),
-      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-      keys.allSatisfy({ object[$0] is Bool })
-    else { return }
-    for key in keys { vaultLoginObservation["lockTarget_\(key)"] = object[key] as? Bool }
+    let reasons: Set<String> = [
+      "invalid_context", "no_candidate", "no_exact_label", "hidden", "no_area", "disabled",
+      "ambiguous", "scroll-needed", "none",
+    ]
+    guard (0...999).contains(diagnostic.candidateCount),
+      (0...999).contains(diagnostic.exactEligibleLabelCount),
+      reasons.contains(diagnostic.rejectionReason)
+    else {
+      vaultLoginObservation["lockTarget_rejectionReason"] = "invalid_context"
+      return
+    }
+    vaultLoginObservation["lockTarget_candidateCount"] = diagnostic.candidateCount
+    vaultLoginObservation["lockTarget_exactEligibleLabelCount"] = diagnostic.exactEligibleLabelCount
+    vaultLoginObservation["lockTarget_uniqueEligibleMatch"] = diagnostic.uniqueEligibleMatch
+    vaultLoginObservation["lockTarget_matchIsNativeButton"] = diagnostic.matchIsNativeButton
+    vaultLoginObservation["lockTarget_viewportHasArea"] = diagnostic.viewportHasArea
+    vaultLoginObservation["lockTarget_centerHit"] = diagnostic.centerHit
+    vaultLoginObservation["lockTarget_visiblePointHit"] = diagnostic.visiblePointHit
+    vaultLoginObservation["lockTarget_scrollNeeded"] = diagnostic.scrollNeeded
+    vaultLoginObservation["lockTarget_rejectionReason"] = diagnostic.rejectionReason
   }
 
   private func verifySharedAlpha(expectedAccount: String) async throws -> Bool {

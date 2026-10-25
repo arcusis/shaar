@@ -24,6 +24,7 @@ final class EngineProbe {
   private var passed = false
   private var localFixturesPassed = false
   private var loadedTabs: Set<String> = []
+  private var switchMetrics = SwitchProbeMetricsRecorder()
   private let store: BrowserStore
   private var browserEngine: BrowserEngine?
   private var nativeHostProbe: NativeHostProbe?
@@ -305,6 +306,7 @@ final class EngineProbe {
             $0.tabs.contains { $0.id.uuidString == tab }
           })
         else { throw ProbeFailure("Native tab lost its owning space.") }
+        let switchStart = ProcessInfo.processInfo.systemUptime
         store.perform(.space(space.id))
         try expect(
           store.session.selectedSpace.selectedTabID?.uuidString == tab
@@ -334,6 +336,10 @@ final class EngineProbe {
           phase == "initial"
             ? state["session"] as? String == account : state["session"] is NSNull,
           "\(phase) switch \(iteration + 1) has expected tab session storage")
+        try switchMetrics.record(
+          iteration: iteration + 1,
+          latencySeconds: ProcessInfo.processInfo.systemUptime - switchStart,
+          residentMemoryBytes: NativeResidentMemory.currentBytes())
       }
       let profileIDs = store.session.profiles.map(\.id)
       let restored = BrowserStore(
@@ -483,6 +489,7 @@ final class EngineProbe {
   }
 
   private func writeReport() {
+    let metricsURL = root.appending(path: "\(phase)-switch-metrics.json")
     let errorReport: Any
     if bitwardenVaultCredentials == nil {
       errorReport = resultError.map { $0.localizedDescription } ?? NSNull()
@@ -512,14 +519,29 @@ final class EngineProbe {
     do {
       try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
         .write(to: output, options: .atomic)
+      let encoder = JSONEncoder()
+      encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+      try encoder.encode(switchMetrics.report(phase: phase)).write(to: metricsURL, options: .atomic)
     } catch {
       passed = false
+      var staleReceiptRemains = false
+      for receipt in [output, metricsURL] where FileManager.default.fileExists(atPath: receipt.path)
+      {
+        do {
+          try FileManager.default.removeItem(at: receipt)
+        } catch {
+          staleReceiptRemains = true
+        }
+      }
+      resultError = ProbeFailure("Probe report write failed.")
       let message =
         bitwardenVaultCredentials == nil
         ? "Probe report failed: \(error.localizedDescription)"
         : "Vault probe report failed."
       FileHandle.standardError.write(
-        Data("\(message)\n".utf8))
+        Data(
+          "\(message)\(staleReceiptRemains ? " Prior successful receipt could not be removed." : "")\n"
+            .utf8))
     }
   }
 }

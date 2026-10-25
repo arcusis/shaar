@@ -120,7 +120,11 @@ struct CommandPanel: View {
         .strokeBorder(Color(nsColor: .separatorColor).opacity(0.55), lineWidth: 1)
     }
     .shadow(color: .black.opacity(0.18), radius: 30, y: 16)
-    .onAppear { searchIsFocused = true }
+    .task {
+      await Task.yield()
+      guard !Task.isCancelled, store.commandIsOpen else { return }
+      searchIsFocused = true
+    }
     .onChange(of: store.commandQuery) { _, _ in store.commandSelection = 0 }
     .onKeyPress(.upArrow) {
       store.moveCommandSelection(by: -1)

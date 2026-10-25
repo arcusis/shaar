@@ -357,13 +357,17 @@ final class NativeHostProbe {
     for context in host.contexts.values {
       for space in context.store.session.spaces {
         for tab in space.tabs where primary.runtime.view(forTabID: tab.id.uuidString) != nil {
+          _ = try await document(tab.id)
           if phase == "initial" {
-            _ = await withCheckedContinuation { continuation in
+            let seeded: String? = await withCheckedContinuation { continuation in
               primary.runtime.evaluate(
                 inTabID: tab.id.uuidString,
                 script:
-                  "localStorage.setItem('arcusisProfileMutation','\(space.profileID.uuidString)');sessionStorage.setItem('arcusisProfileMutation','\(tab.id.uuidString)');true"
+                  "(() => {localStorage.setItem('arcusisProfileMutation','\(space.profileID.uuidString)');sessionStorage.setItem('arcusisProfileMutation','\(tab.id.uuidString)');return true;})()"
               ) { continuation.resume(returning: $0) }
+            }
+            guard seeded == "true" else {
+              throw HostProbeFailure("Profile mutation fixture storage setup failed.")
             }
           }
           liveDocuments[tab.id] = try await document(tab.id)
@@ -388,20 +392,31 @@ final class NativeHostProbe {
       else { throw HostProbeFailure("Settings could not rename existing profile.") }
       authoredProfile = HostProbeProfile(id: added.id, name: added.name)
       renamedProfile = HostProbeProfile(id: selectedProfile.id, name: "Probe renamed")
-      var documentsPreserved = liveDocuments.count >= 2
+      var documentChecks = [
+        "multipleLiveDocuments": liveDocuments.count >= 2,
+        "profileStorageSeeded": true, "tabStorageSeeded": true,
+        "nativeTabOwnerPreserved": true, "documentInstancePreserved": true,
+        "cookiePreserved": true, "localStoragePreserved": true, "sessionStoragePreserved": true,
+      ]
       for (id, before) in liveDocuments {
         let after = try await document(id)
-        documentsPreserved =
-          documentsPreserved
-          && before["local"] as? String == tabOwners[id]?.1.uuidString
-          && before["session"] as? String == id.uuidString
-          && primary.runtime.windowID(forTabID: id.uuidString)
-            == tabOwners[id].flatMap { nativeWindowIDs[$0.0] }
-          && before["instance"] as? String == after["instance"] as? String
-          && before["cookie"] as? String == after["cookie"] as? String
-          && before["local"] as? String == after["local"] as? String
-          && before["session"] as? String == after["session"] as? String
+        let checks = [
+          "profileStorageSeeded": before["local"] as? String == tabOwners[id]?.1.uuidString,
+          "tabStorageSeeded": before["session"] as? String == id.uuidString,
+          "nativeTabOwnerPreserved": primary.runtime.windowID(forTabID: id.uuidString)
+            == tabOwners[id].flatMap { nativeWindowIDs[$0.0] },
+          "documentInstancePreserved": before["instance"] as? String == after["instance"]
+            as? String,
+          "cookiePreserved": before["cookie"] as? String == after["cookie"] as? String,
+          "localStoragePreserved": before["local"] as? String == after["local"] as? String,
+          "sessionStoragePreserved": before["session"] as? String == after["session"] as? String,
+        ]
+        for (key, value) in checks { documentChecks[key] = documentChecks[key] == true && value }
       }
+      try JSONSerialization.data(withJSONObject: documentChecks, options: [.sortedKeys])
+        .write(
+          to: root.appending(path: "\(phase)-profile-mutation-documents.json"), options: .atomic)
+      let documentsPreserved = documentChecks.values.allSatisfy { $0 }
       try expect(
         host.contexts.allSatisfy { id, context in
           let before = profileSessions[id]!

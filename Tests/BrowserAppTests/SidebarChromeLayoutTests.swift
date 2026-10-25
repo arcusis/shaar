@@ -128,6 +128,12 @@ final class SidebarChromeLayoutTests: XCTestCase {
 
       let session = capture.store.session
       let selectedSpace = session.selectedSpace
+      XCTAssertEqual(
+        selectedSpace.tabs.filter { !$0.isPinned }.count, capture.scenario == "populated" ? 240 : 0)
+      XCTAssertEqual(
+        selectedSpace.tabs.filter(\.isPinned).count, capture.scenario == "populated" ? 4 : 0)
+      XCTAssertEqual(bounds.width, Int(capture.width))
+      XCTAssertEqual(bounds.height, Int(capture.height))
       captureIndex.append([
         "name": capture.name,
         "path": path.path,
@@ -155,6 +161,58 @@ final class SidebarChromeLayoutTests: XCTestCase {
     let index = try JSONSerialization.data(
       withJSONObject: captureIndex, options: [.prettyPrinted, .sortedKeys])
     try index.write(to: root.appending(path: "capture-index.json"), options: .atomic)
+  }
+
+  func testCapturesSidebarTabRowPresentationStatesInOwnedOffscreenWindows() throws {
+    let root = URL(fileURLWithPath: "/tmp/browser-sidebar-rows", isDirectory: true)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let tabID = UUID(uuidString: "30000000-0000-0000-0000-000000000099")!
+    let longTitle = String(repeating: "Long ordinary tab label with useful context ", count: 4)
+    let states: [(String, String, Bool, Bool, Bool)] = [
+      ("idle-ordinary", "Ordinary tab", false, false, false),
+      ("selected-ordinary", "Ordinary tab", false, true, false),
+      ("close-visible-ordinary", "Ordinary tab", false, false, true),
+      ("long-label-ordinary", longTitle, false, false, false),
+      ("close-visible-pinned", "Pinned tab", true, false, true),
+    ]
+    var index: [[String: Any]] = []
+
+    for (name, title, isPinned, isSelected, closeIsVisible) in states {
+      let path = root.appending(path: "\(name).png")
+      let row = SidebarTabRow(
+        tabID: tabID,
+        title: title,
+        favicon: nil,
+        isPinned: isPinned,
+        isSelected: isSelected,
+        closeIsVisible: closeIsVisible,
+        onSelect: {},
+        onClose: {},
+        onHoverChanged: { _ in }
+      )
+      .background(Color(nsColor: .windowBackgroundColor))
+      let size = NSSize(width: BrowserChromeLayout.sidebarWidth, height: 48)
+      let pixels = try captureRow(row, size: size, to: path)
+      XCTAssertEqual(pixels.width, Int(size.width))
+      XCTAssertEqual(pixels.height, Int(size.height))
+      XCTAssertGreaterThan(try Data(contentsOf: path).count, 100)
+      index.append([
+        "name": name,
+        "path": path.path,
+        "captureKind": "pure-presentation-state",
+        "physicalHoverVerified": false,
+        "title": title,
+        "isPinned": isPinned,
+        "isSelected": isSelected,
+        "closeIsVisible": closeIsVisible,
+        "width": pixels.width,
+        "height": pixels.height,
+      ])
+    }
+
+    let data = try JSONSerialization.data(
+      withJSONObject: index, options: [.prettyPrinted, .sortedKeys])
+    try data.write(to: root.appending(path: "capture-index.json"), options: .atomic)
   }
 
   func testProgrammaticSelectionRevealsLastOrdinaryTabAndCapturesBeforeAfter() async throws {
@@ -425,6 +483,27 @@ final class SidebarChromeLayoutTests: XCTestCase {
     try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(
       to: url, options: .atomic)
     XCTAssertNotNil(measurements.footerFrame)
+    return (bitmap.pixelsWide, bitmap.pixelsHigh)
+  }
+
+  private func captureRow<V: View>(_ view: V, size: NSSize, to url: URL) throws
+    -> (width: Int, height: Int)
+  {
+    let host = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
+    let window = NSWindow(
+      contentRect: NSRect(origin: .zero, size: size), styleMask: .borderless, backing: .buffered,
+      defer: false)
+    window.isReleasedWhenClosed = false
+    window.appearance = NSAppearance(named: .aqua)
+    window.contentView = host
+    defer { window.close() }
+
+    host.layoutSubtreeIfNeeded()
+    XCTAssertFalse(window.isVisible, "Presentation capture window must remain offscreen")
+    let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+    host.cacheDisplay(in: host.bounds, to: bitmap)
+    try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(
+      to: url, options: .atomic)
     return (bitmap.pixelsWide, bitmap.pixelsHigh)
   }
 }

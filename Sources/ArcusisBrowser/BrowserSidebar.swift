@@ -10,10 +10,56 @@ struct SidebarFooterBoundsPreferenceKey: PreferenceKey {
   }
 }
 
+struct SidebarRevealFrames: Equatable {
+  var selected: CGRect = .zero
+  var selectedID: UUID?
+  var viewport: CGRect = .zero
+}
+
+struct SidebarOrdinaryRevealFramesPreferenceKey: PreferenceKey {
+  static let defaultValue = SidebarRevealFrames()
+
+  static func reduce(value: inout SidebarRevealFrames, nextValue: () -> SidebarRevealFrames) {
+    let next = nextValue()
+    if !next.selected.isEmpty {
+      value.selected = next.selected
+      value.selectedID = next.selectedID
+    }
+    if !next.viewport.isEmpty { value.viewport = next.viewport }
+  }
+}
+
+struct SidebarFavoriteRevealFramesPreferenceKey: PreferenceKey {
+  static let defaultValue = SidebarRevealFrames()
+
+  static func reduce(value: inout SidebarRevealFrames, nextValue: () -> SidebarRevealFrames) {
+    let next = nextValue()
+    if !next.selected.isEmpty {
+      value.selected = next.selected
+      value.selectedID = next.selectedID
+    }
+    if !next.viewport.isEmpty { value.viewport = next.viewport }
+  }
+}
+
+struct SidebarSpaceRevealFramesPreferenceKey: PreferenceKey {
+  static let defaultValue = SidebarRevealFrames()
+
+  static func reduce(value: inout SidebarRevealFrames, nextValue: () -> SidebarRevealFrames) {
+    let next = nextValue()
+    if !next.selected.isEmpty {
+      value.selected = next.selected
+      value.selectedID = next.selectedID
+    }
+    if !next.viewport.isEmpty { value.viewport = next.viewport }
+  }
+}
+
 struct BrowserSidebar: View {
   @Bindable var store: BrowserStore
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+  @Environment(\.browserChromeAccessibilityOverrides) private var accessibilityOverrides
   @State private var targetedTab: UUID?
   @State private var targetedSpace: UUID?
   @State private var targetedSection: String?
@@ -26,6 +72,55 @@ struct BrowserSidebar: View {
   @State private var folderDraft: SidebarFolderDraft?
   @FocusState private var folderNameIsFocused: Bool
   let previewRecentDownloads: [BrowserDownload]?
+
+  private var activeSidebarPageID: UUID? {
+    guard let page = store.session.selectedPage else { return nil }
+    return switch page {
+    case .tab(let tab): tab.id
+    case .favorite(let favorite): favorite.favoriteID
+    }
+  }
+
+  private var sidebarReduceMotion: Bool {
+    reduceMotion || accessibilityOverrides.reduceMotion == true
+  }
+
+  private var activeSidebarSelectionKey: String {
+    let kind: String
+    switch store.session.selectedPage {
+    case .tab?: kind = "tab"
+    case .favorite?: kind = "favorite"
+    case nil: kind = "none"
+    }
+    return
+      "\(store.session.selectedSpaceID.uuidString):\(kind):\(activeSidebarPageID?.uuidString ?? "none")"
+  }
+
+  private func scheduleSelectedPageReveal(_ proxy: ScrollViewProxy, selectionKey: String) {
+    DispatchQueue.main.async {
+      DispatchQueue.main.async {
+        guard selectionKey == activeSidebarSelectionKey,
+          case .tab(let tab) = store.session.selectedPage
+        else { return }
+        if sidebarReduceMotion {
+          proxy.scrollTo(tab.id)
+        } else {
+          withAnimation(.easeOut(duration: 0.12)) { proxy.scrollTo(tab.id) }
+        }
+      }
+    }
+  }
+
+  private func scheduleSpaceReveal(_ proxy: ScrollViewProxy, id: UUID) {
+    DispatchQueue.main.async {
+      guard id == store.session.selectedSpaceID else { return }
+      if sidebarReduceMotion {
+        proxy.scrollTo(id)
+      } else {
+        withAnimation(.easeOut(duration: 0.12)) { proxy.scrollTo(id) }
+      }
+    }
+  }
 
   init(
     store: BrowserStore, previewRecentDownloads: [BrowserDownload]? = nil,
@@ -113,44 +208,84 @@ struct BrowserSidebar: View {
           Text(notice).font(.caption).fixedSize(horizontal: false, vertical: true)
         }
       }
-      ScrollView {
-        LazyVStack(alignment: .leading, spacing: 4) {
-          sectionDropTarget(pinned: true)
-          if let folderDraft, folderDraft.parentID == nil { folderDraftRow(depth: 0) }
-          ForEach(store.session.selectedSpace.pinnedItems()) { item in
-            switch item {
-            case .folder(let folder, let depth):
-              folderRow(folder, depth: depth)
-              if let folderDraft, folderDraft.parentID == folder.id {
-                folderDraftRow(depth: depth + 1)
+      ScrollViewReader { tabScroll in
+        ScrollView {
+          LazyVStack(alignment: .leading, spacing: 4) {
+            sectionDropTarget(pinned: true)
+            if let folderDraft, folderDraft.parentID == nil { folderDraftRow(depth: 0) }
+            ForEach(store.session.selectedSpace.pinnedItems()) { item in
+              switch item {
+              case .folder(let folder, let depth):
+                folderRow(folder, depth: depth)
+                if let folderDraft, folderDraft.parentID == folder.id {
+                  folderDraftRow(depth: depth + 1)
+                }
+              case .tab(let tab, let depth):
+                tabRow(tab, index: tabIndex)
+                  .padding(.leading, indentation(depth))
+                  .id(tab.id)
+                  .background {
+                    if tab.id == activeSidebarPageID {
+                      GeometryReader { geometry in
+                        Color.clear.preference(
+                          key: SidebarOrdinaryRevealFramesPreferenceKey.self,
+                          value: SidebarRevealFrames(
+                            selected: geometry.frame(in: .named("sidebarOrdinaryViewport")),
+                            selectedID: tab.id))
+                      }
+                    }
+                  }
               }
-            case .tab(let tab, let depth):
-              tabRow(tab, index: tabIndex).padding(.leading, indentation(depth))
             }
+            if store.session.selectedSpace.tabs.contains(where: \.isPinned)
+              || !store.session.selectedSpace.folders.isEmpty
+            {
+              Divider().padding(.vertical, 6)
+            }
+            Button {
+              store.showCommand()
+            } label: {
+              Label("New tab", systemImage: "plus")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .padding(10)
+            }
+            .contextMenu {
+              Button("Reopen last closed tab") { store.reopenLastClosedTab() }
+                .disabled(!store.canReopenClosedTab)
+              Button("Recently closed…") { store.showRecentlyClosed() }
+            }
+            sectionDropTarget(pinned: false)
+            ForEach(store.session.selectedSpace.tabs.filter { !$0.isPinned }) { tab in
+              tabRow(tab, index: tabIndex)
+                .id(tab.id)
+                .background {
+                  if tab.id == activeSidebarPageID {
+                    GeometryReader { geometry in
+                      Color.clear.preference(
+                        key: SidebarOrdinaryRevealFramesPreferenceKey.self,
+                        value: SidebarRevealFrames(
+                          selected: geometry.frame(in: .named("sidebarOrdinaryViewport")),
+                          selectedID: tab.id))
+                    }
+                  }
+                }
+            }
+            sectionDropTarget(pinned: false, isFooter: true)
           }
-          if store.session.selectedSpace.tabs.contains(where: \.isPinned)
-            || !store.session.selectedSpace.folders.isEmpty
-          {
-            Divider().padding(.vertical, 6)
+        }
+        .coordinateSpace(name: "sidebarOrdinaryViewport")
+        .background {
+          GeometryReader { geometry in
+            Color.clear.preference(
+              key: SidebarOrdinaryRevealFramesPreferenceKey.self,
+              value: SidebarRevealFrames(
+                viewport: CGRect(origin: .zero, size: geometry.size)))
           }
-          Button {
-            store.showCommand()
-          } label: {
-            Label("New tab", systemImage: "plus")
-              .font(.system(size: 13))
-              .foregroundStyle(.secondary)
-              .padding(10)
-          }
-          .contextMenu {
-            Button("Reopen last closed tab") { store.reopenLastClosedTab() }
-              .disabled(!store.canReopenClosedTab)
-            Button("Recently closed…") { store.showRecentlyClosed() }
-          }
-          sectionDropTarget(pinned: false)
-          ForEach(store.session.selectedSpace.tabs.filter { !$0.isPinned }) { tab in
-            tabRow(tab, index: tabIndex)
-          }
-          sectionDropTarget(pinned: false, isFooter: true)
+        }
+        .onAppear { scheduleSelectedPageReveal(tabScroll, selectionKey: activeSidebarSelectionKey) }
+        .onChange(of: activeSidebarSelectionKey) { _, selectionKey in
+          scheduleSelectedPageReveal(tabScroll, selectionKey: selectionKey)
         }
       }
       Spacer(minLength: 0)
@@ -158,55 +293,84 @@ struct BrowserSidebar: View {
       HStack(spacing: 8) {
         recentDownloadsControls
           .frame(width: 30, height: 30)
-        ScrollView(.horizontal) {
-          HStack(spacing: 6) {
-            ForEach(store.session.spaces) { space in
-              Button {
-                store.perform(.space(space.id))
-              } label: {
-                Image(systemName: space.symbol)
-                  .font(.system(size: 14))
-                  .frame(width: 32, height: 30)
-                  .background(
-                    .white.opacity(space.id == store.session.selectedSpaceID ? 0.5 : 0),
-                    in: RoundedRectangle(cornerRadius: 8)
-                  )
-              }
-              .help(space.name)
-              .accessibilityLabel("Switch to \(space.name)")
-              .accessibilityAddTraits(space.id == store.session.selectedSpaceID ? .isSelected : [])
-              .draggable(SidebarTransfer.space(sessionID: store.dragSessionID, spaceID: space.id))
-              .dropDestination(for: SidebarTransfer.self) { items, point in
-                guard items.count == 1, let item = items.first else { return false }
-                let spaces = store.session.spaces
-                let index = spaces.firstIndex { $0.id == space.id }
-                let next = index.flatMap {
-                  spaces.indices.contains($0 + 1) ? spaces[$0 + 1].id : nil
+        ScrollViewReader { spaceScroll in
+          ScrollView(.horizontal) {
+            HStack(spacing: 6) {
+              ForEach(store.session.spaces) { space in
+                Button {
+                  store.perform(.space(space.id))
+                } label: {
+                  Image(systemName: space.symbol)
+                    .font(.system(size: 14))
+                    .frame(width: 32, height: 30)
+                    .background(
+                      .white.opacity(space.id == store.session.selectedSpaceID ? 0.5 : 0),
+                      in: RoundedRectangle(cornerRadius: 8)
+                    )
                 }
-                return store.acceptSidebarDrop(
-                  item, into: space.id,
-                  beforeSpace: point.x < 16 ? space.id : next)
-              } isTargeted: { targeted in
-                targetedSpace =
-                  targeted ? space.id : targetedSpace == space.id ? nil : targetedSpace
-              }
-              .overlay(
-                RoundedRectangle(cornerRadius: 8).strokeBorder(
-                  targetedSpace == space.id ? Color.accentColor : .clear, lineWidth: 2)
-              )
-              .contextMenu {
-                Button("Edit space…") { store.spaceEditor = .edit(space.id) }
-                Divider()
-                Button("Move left") { shiftSpace(space.id, by: -1) }
-                  .disabled(store.session.spaces.first?.id == space.id)
-                Button("Move right") { shiftSpace(space.id, by: 1) }
-                  .disabled(store.session.spaces.last?.id == space.id)
+                .help(space.name)
+                .accessibilityLabel("Switch to \(space.name)")
+                .accessibilityAddTraits(
+                  space.id == store.session.selectedSpaceID ? .isSelected : []
+                )
+                .id(space.id)
+                .background {
+                  if space.id == store.session.selectedSpaceID {
+                    GeometryReader { geometry in
+                      Color.clear.preference(
+                        key: SidebarSpaceRevealFramesPreferenceKey.self,
+                        value: SidebarRevealFrames(
+                          selected: geometry.frame(in: .named("sidebarSpaceViewport")),
+                          selectedID: space.id))
+                    }
+                  }
+                }
+                .draggable(SidebarTransfer.space(sessionID: store.dragSessionID, spaceID: space.id))
+                .dropDestination(for: SidebarTransfer.self) { items, point in
+                  guard items.count == 1, let item = items.first else { return false }
+                  let spaces = store.session.spaces
+                  let index = spaces.firstIndex { $0.id == space.id }
+                  let next = index.flatMap {
+                    spaces.indices.contains($0 + 1) ? spaces[$0 + 1].id : nil
+                  }
+                  return store.acceptSidebarDrop(
+                    item, into: space.id,
+                    beforeSpace: point.x < 16 ? space.id : next)
+                } isTargeted: { targeted in
+                  targetedSpace =
+                    targeted ? space.id : targetedSpace == space.id ? nil : targetedSpace
+                }
+                .overlay(
+                  RoundedRectangle(cornerRadius: 8).strokeBorder(
+                    targetedSpace == space.id ? Color.accentColor : .clear, lineWidth: 2)
+                )
+                .contextMenu {
+                  Button("Edit space…") { store.spaceEditor = .edit(space.id) }
+                  Divider()
+                  Button("Move left") { shiftSpace(space.id, by: -1) }
+                    .disabled(store.session.spaces.first?.id == space.id)
+                  Button("Move right") { shiftSpace(space.id, by: 1) }
+                    .disabled(store.session.spaces.last?.id == space.id)
+                }
               }
             }
           }
+          .scrollIndicators(.hidden)
+          .frame(maxWidth: .infinity)
+          .coordinateSpace(name: "sidebarSpaceViewport")
+          .background {
+            GeometryReader { geometry in
+              Color.clear.preference(
+                key: SidebarSpaceRevealFramesPreferenceKey.self,
+                value: SidebarRevealFrames(
+                  viewport: CGRect(origin: .zero, size: geometry.size)))
+            }
+          }
+          .onAppear { scheduleSpaceReveal(spaceScroll, id: store.session.selectedSpaceID) }
+          .onChange(of: store.session.selectedSpaceID) { _, id in
+            scheduleSpaceReveal(spaceScroll, id: id)
+          }
         }
-        .scrollIndicators(.hidden)
-        .frame(maxWidth: .infinity)
         Button {
           store.spaceEditor = .create
         } label: {
@@ -267,7 +431,11 @@ struct BrowserSidebar: View {
           onSelect: { _ = store.selectFavorite($0) },
           onReset: { _ = store.resetFavorite($0) },
           onRemove: { _ = store.removeFavorite($0) },
-          onMoveBefore: { _ = store.moveFavorite($0, before: $1) }
+          onMoveBefore: { _ = store.moveFavorite($0, before: $1) },
+          accessibilityOverrides: ProfileFavoritesAccessibilityOverrides(
+            reduceMotion: sidebarReduceMotion,
+            reduceTransparency: reduceTransparency
+              || accessibilityOverrides.reduceTransparency == true)
         )
       }
     }

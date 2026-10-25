@@ -9,6 +9,7 @@ import XCTest
 final class SidebarFavoritesLayoutTests: XCTestCase {
   private final class CaptureMeasurements {
     var footerFrame: CGRect?
+    var favoriteRevealFrames = SidebarRevealFrames()
   }
 
   func testCapturesActualSidebarAcrossFavoriteCountsAndWindowSizes() async throws {
@@ -86,7 +87,96 @@ final class SidebarFavoritesLayoutTests: XCTestCase {
       to: URL(fileURLWithPath: "/tmp/browser-sidebar-favorites-proof.json"), options: .atomic)
   }
 
-  private func makeStore(favoriteCount: Int) throws -> BrowserStore {
+  func testProgrammaticSelectionRevealsLastOwnedFavoriteWithBeforeAfterCaptures() async throws {
+    let store = try makeStore(favoriteCount: 50, selectedFavoriteIndex: 49)
+    let lastFavorite = try XCTUnwrap(store.profileFavorites.last)
+    let firstFavorite = try XCTUnwrap(store.profileFavorites.first)
+    let retainedTabID = try XCTUnwrap(store.session.selectedSpace.selectedTabID)
+    let root = URL(fileURLWithPath: "/tmp/browser-sidebar-reveal", isDirectory: true)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let measurements = CaptureMeasurements()
+    let view = BrowserSidebar(store: store)
+      .frame(width: 240, height: 520)
+      .background(Color(nsColor: .windowBackgroundColor))
+      .environment(
+        \.browserChromeAccessibilityOverrides,
+        BrowserChromeAccessibilityOverrides(reduceMotion: true)
+      )
+      .onPreferenceChange(SidebarFooterBoundsPreferenceKey.self) {
+        measurements.footerFrame = $0
+      }
+      .onPreferenceChange(SidebarFavoriteRevealFramesPreferenceKey.self) {
+        measurements.favoriteRevealFrames = $0
+      }
+    let mounted = try MountedFavoritesSidebar(
+      view: view, size: NSSize(width: 240, height: 520), appearance: .aqua)
+    defer { mounted.close() }
+    guard
+      await mounted.waitUntil({
+        isVisible(measurements.favoriteRevealFrames, selectedID: lastFavorite.id)
+      })
+    else {
+      XCTFail("Restored last owned Favorite not visible")
+      return
+    }
+    let initialPath = root.appending(path: "favorite-initial-restored-last.png")
+    try mounted.capture(to: initialPath)
+
+    XCTAssertTrue(store.selectFavorite(firstFavorite.id))
+    guard
+      await mounted.waitUntil({
+        isVisible(measurements.favoriteRevealFrames, selectedID: firstFavorite.id)
+      })
+    else {
+      XCTFail(
+        "Programmatically selected first Favorite not visible: \(measurements.favoriteRevealFrames)"
+      )
+      return
+    }
+    let firstPath = root.appending(path: "favorite-programmatic-first.png")
+    try mounted.capture(to: firstPath)
+    XCTAssertTrue(store.selectFavorite(lastFavorite.id))
+    XCTAssertTrue(store.selectFavorite(firstFavorite.id))
+    XCTAssertTrue(store.selectFavorite(lastFavorite.id))
+    guard
+      await mounted.waitUntil({
+        guard case .favorite(let page) = store.session.selectedPage else { return false }
+        return page.favoriteID == lastFavorite.id
+          && isVisible(measurements.favoriteRevealFrames, selectedID: lastFavorite.id)
+      })
+    else {
+      XCTFail("Programmatically selected last Favorite not visible after stale selection")
+      return
+    }
+    let lastPath = root.appending(path: "favorite-programmatic-last.png")
+    try mounted.capture(to: lastPath)
+    XCTAssertFalse(store.selectFavorite(stableID(9999)))
+    XCTAssertEqual(store.session.selectedSpace.selectedTabID, retainedTabID)
+    guard case .favorite(let selectedPage) = store.session.selectedPage else {
+      return XCTFail("Favorite selection fell back to ordinary tab")
+    }
+    XCTAssertEqual(selectedPage.favoriteID, lastFavorite.id)
+    let captures: [[String: Any]] = [
+      [
+        "phase": "initial-restored-last", "path": initialPath.path,
+        "selectedFavoriteID": lastFavorite.id.uuidString, "favoriteCount": 50,
+      ],
+      [
+        "phase": "programmatic-first", "path": firstPath.path,
+        "selectedFavoriteID": firstFavorite.id.uuidString, "favoriteCount": 50,
+      ],
+      [
+        "phase": "programmatic-last", "path": lastPath.path,
+        "selectedFavoriteID": lastFavorite.id.uuidString, "favoriteCount": 50,
+      ],
+    ]
+    let index = try JSONSerialization.data(
+      withJSONObject: captures, options: [.prettyPrinted, .sortedKeys])
+    try index.write(to: root.appending(path: "favorite-capture-index.json"), options: .atomic)
+  }
+
+  private func makeStore(favoriteCount: Int, selectedFavoriteIndex: Int = 0) throws -> BrowserStore
+  {
     let profileID = UUID(uuidString: "10000000-0000-0000-0000-000000000001")!
     let spaceID = UUID(uuidString: "20000000-0000-0000-0000-000000000001")!
     let tabs = (0..<36).map { index in
@@ -114,7 +204,8 @@ final class SidebarFavoritesLayoutTests: XCTestCase {
       id: spaceID, profileID: profileID,
       name: String(repeating: "Long Space Label ", count: 5), symbol: "globe",
       tint: .ocean, tabs: tabs, selectedTabID: tabs[0].id,
-      selectedFavoriteID: favorites.first?.id)
+      selectedFavoriteID: favorites.indices.contains(selectedFavoriteIndex)
+        ? favorites[selectedFavoriteIndex].id : nil)
     let session = try BrowserSession(
       profiles: [
         BrowserProfile(id: profileID, name: String(repeating: "Long Profile Label ", count: 5))
@@ -125,6 +216,14 @@ final class SidebarFavoritesLayoutTests: XCTestCase {
 
   private func stableID(_ value: Int) -> UUID {
     UUID(uuidString: String(format: "30000000-0000-0000-0000-%012d", value))!
+  }
+
+  private func isVisible(_ frames: SidebarRevealFrames, selectedID: UUID) -> Bool {
+    guard frames.selectedID == selectedID, !frames.selected.isEmpty, !frames.viewport.isEmpty
+    else { return false }
+    let visible = frames.selected.intersection(frames.viewport)
+    return visible.width >= frames.selected.width - 0.5
+      && visible.height >= frames.selected.height - 0.5
   }
 
   private func gitHead() throws -> String {
@@ -158,6 +257,7 @@ final class SidebarFavoritesLayoutTests: XCTestCase {
     window.isReleasedWhenClosed = false
     window.appearance = NSAppearance(named: appearance)
     window.contentView = host
+    host.frame = NSRect(origin: .zero, size: size)
     defer { window.close() }
 
     try await Task.sleep(for: .milliseconds(100))
@@ -172,4 +272,40 @@ final class SidebarFavoritesLayoutTests: XCTestCase {
     XCTAssertNotNil(measurements.footerFrame)
     return (bitmap.pixelsWide, bitmap.pixelsHigh)
   }
+}
+
+@MainActor
+private final class MountedFavoritesSidebar {
+  private let host: NSHostingView<AnyView>
+  private let window: NSWindow
+
+  init<V: View>(view: V, size: NSSize, appearance: NSAppearance.Name) throws {
+    host = NSHostingView(rootView: AnyView(view))
+    window = NSWindow(
+      contentRect: NSRect(origin: .zero, size: size), styleMask: .borderless, backing: .buffered,
+      defer: false)
+    window.isReleasedWhenClosed = false
+    window.appearance = NSAppearance(named: appearance)
+    window.contentView = host
+  }
+
+  func waitUntil(_ condition: () -> Bool) async -> Bool {
+    let deadline = Date(timeIntervalSinceNow: 1)
+    while Date() < deadline {
+      host.layoutSubtreeIfNeeded()
+      if condition() { return true }
+      try? await Task.sleep(for: .milliseconds(10))
+    }
+    return false
+  }
+
+  func capture(to url: URL) throws {
+    host.layoutSubtreeIfNeeded()
+    let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+    host.cacheDisplay(in: host.bounds, to: bitmap)
+    try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(
+      to: url, options: .atomic)
+  }
+
+  func close() { window.close() }
 }

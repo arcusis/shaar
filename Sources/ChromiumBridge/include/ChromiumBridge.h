@@ -112,6 +112,8 @@ FOUNDATION_EXPORT NSString * _Nullable ARCProbeTLSArgument(NSURL *directory,
 /// Sends trusted renderer input only to the current disposable probe popup.
 - (void)clickProbePopupID:(NSString *)popupID buttonTitle:(NSString *)title
               completion:(void (^)(BOOL clicked))completion;
+- (void)clickProbePopupID:(NSString *)popupID elementTestID:(NSString *)elementTestID
+               completion:(void (^)(BOOL clicked))completion;
 - (void)clickProbeElementInTabID:(NSString *)tabID elementID:(NSString *)elementID
                     completion:(void (^)(BOOL clicked))completion;
 /// Intentionally terminates only an authored loopback page in a disposable probe profile.

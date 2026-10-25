@@ -990,6 +990,51 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   ArdiaCoreTab *popup = state.popup;
   ClickProbeTarget(popup, expression, ^BOOL { return !state.closed && [state.popupID isEqualToString:popupID]; }, completion);
 }
+- (void)clickProbePopupID:(NSString *)popupID elementTestID:(NSString *)elementTestID
+               completion:(void (^)(BOOL))completion {
+  ARCNativeWindowState *state = [self stateForPopupID:popupID];
+  NSString *ownerTabID = state ? state.popupOwnerTabID : nil;
+  ArdiaCoreTab *owner = ownerTabID ? _tabs[ownerTabID] : nil;
+  ArdiaCoreTab *popup = state.popup;
+  NSURL *popupURL = [NSURL URLWithString:popup.url ?: @""];
+  BOOL validPopup = _testing && state && !state.closed && !state.closing && !_closingBrowser &&
+    popup && !popup.closed && [state.popupID isEqualToString:popupID] &&
+    [state.popupExtensionID isEqualToString:@"nngceckbapebfimnlniiiahkandclblb"] &&
+    [popupURL.scheme isEqualToString:@"chrome-extension"] &&
+    [popupURL.host isEqualToString:state.popupExtensionID] && !popupURL.user && !popupURL.password && !popupURL.port &&
+    ownerTabID.length > 0 && owner && !owner.closed && [self stateForTabID:ownerTabID] == state &&
+    [self isSelectedTabID:ownerTabID] && popup.profile == owner.profile &&
+    popup.profile == state.native.activeProfile && elementTestID.length > 0 && elementTestID.length <= 128;
+  if (!validPopup) {
+    completion(NO);
+    return;
+  }
+  NSData *encoded = [NSJSONSerialization dataWithJSONObject:elementTestID
+                                                   options:NSJSONWritingFragmentsAllowed error:nil];
+  NSString *literal = encoded ? [[NSString alloc] initWithData:encoded encoding:NSUTF8StringEncoding] : nil;
+  if (!literal) { completion(NO); return; }
+  NSString *expression = [NSString stringWithFormat:
+    @"(()=>{const id=%@;const matches=[...document.querySelectorAll('[data-testid]')].filter(e=>e.getAttribute('data-testid')===id);"
+     "if(matches.length!==1)return null;const button=matches[0];if(button.tagName!=='BUTTON'||button.disabled||"
+     "button.getAttribute('aria-disabled')?.toLowerCase()==='true')return null;"
+     "for(let n=button;n&&n.nodeType===1;n=n.parentElement){if(n.hidden||n.inert||n.getAttribute('aria-hidden')?.toLowerCase()==='true')return null;"
+     "const s=getComputedStyle(n);if(s.display==='none'||s.visibility==='hidden'||s.visibility==='collapse'||s.opacity==='0')return null;}"
+     "const r=button.getBoundingClientRect(),x=r.x+r.width/2,y=r.y+r.height/2;"
+     "if(r.width<=0||r.height<=0||x<0||y<0||x>=innerWidth||y>=innerHeight)return null;return {x,y};})()", literal];
+  ClickProbeTarget(popup, expression, ^BOOL {
+    NSURL *currentPopupURL = [NSURL URLWithString:popup.url ?: @""];
+    return !self->_closingBrowser && !state.closed && !state.closing && !popup.closed &&
+      state.popup == popup && [state.popupID isEqualToString:popupID] &&
+      [state.popupOwnerTabID isEqualToString:ownerTabID] &&
+      [state.popupExtensionID isEqualToString:@"nngceckbapebfimnlniiiahkandclblb"] &&
+      [currentPopupURL.scheme isEqualToString:@"chrome-extension"] &&
+      [currentPopupURL.host isEqualToString:state.popupExtensionID] &&
+      !currentPopupURL.user && !currentPopupURL.password && !currentPopupURL.port &&
+      self->_tabs[ownerTabID] == owner && [self stateForTabID:ownerTabID] == state &&
+      [self isSelectedTabID:ownerTabID] && popup.profile == owner.profile &&
+      popup.profile == state.native.activeProfile;
+  }, completion);
+}
 - (void)clickProbeElementInTabID:(NSString *)tabID elementID:(NSString *)elementID completion:(void (^)(BOOL))completion {
   ArdiaCoreTab *tab = _tabs[tabID];
   if (!_testing || !tab || tab.closed || ![self isSelectedTabID:tabID] || elementID.length > 128) {

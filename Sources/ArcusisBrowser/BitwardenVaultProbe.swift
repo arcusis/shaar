@@ -163,8 +163,14 @@ final class BitwardenVaultProbe {
 
   func click(_ title: String) async -> Bool {
     await withCheckedContinuation { continuation in
-      runtime.clickProbePopupID(popupID, buttonTitle: title) {
-        continuation.resume(returning: $0)
+      if title == "Continue" {
+        runtime.clickProbePopupID(popupID, elementTestID: "login-continue-button") {
+          continuation.resume(returning: $0)
+        }
+      } else {
+        runtime.clickProbePopupID(popupID, buttonTitle: title) {
+          continuation.resume(returning: $0)
+        }
       }
     }
   }

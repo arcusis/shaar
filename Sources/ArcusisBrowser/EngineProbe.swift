@@ -29,6 +29,11 @@ final class EngineProbe {
   private var browserEngine: BrowserEngine?
   private var nativeHostProbe: NativeHostProbe?
   private var resultError: Error?
+  private enum BootstrapStage: String {
+    case startup, loadingAlpha, loadingBeta, openingAlpha, openingBeta
+    case readingAlpha, readingBeta, ready
+  }
+  private var bootstrapStage = BootstrapStage.startup
   private var host: NSHostingView<BrowserWindow>?
 
   private let profileA = "C766672E-AB82-4F84-8ED3-2C6D75AEB1D1"
@@ -241,12 +246,21 @@ final class EngineProbe {
 
   private func exercise() async {
     do {
+      bootstrapStage = .loadingAlpha
       try await load(profileA)
+      bootstrapStage = .loadingBeta
       try await load(profileB)
+      bootstrapStage = .openingAlpha
       try runtime.openTabID(tabA, profileID: profileA, url: fixture.absoluteString)
+      bootstrapStage = .openingBeta
       try runtime.openTabID(tabB, profileID: profileB, url: fixture.absoluteString)
+      bootstrapStage = .readingAlpha
+      try activateRestoredVaultFixture(tabA, profileID: profileA)
       let firstA = try await snapshot(tabA)
+      bootstrapStage = .readingBeta
+      try activateRestoredVaultFixture(tabB, profileID: profileB)
       let firstB = try await snapshot(tabB)
+      bootstrapStage = .ready
       if let expectedAfterTermination {
         let tabs = expectedAfterTermination.spaces.flatMap(\.tabs)
         var ready = false
@@ -407,6 +421,9 @@ final class EngineProbe {
         checks += try await NativeSelectionProbe(
           primary: browserEngine, store: store, root: root, fixture: fixture, phase: phase
         ).run()
+        for (tab, profile) in [(tabA, profileA), (tabB, profileB), (sharedA, profileA)] {
+          try activateRestoredVaultFixture(tab, profileID: profile)
+        }
         checks += try await WorkspaceProbe(
           primary: browserEngine, store: store, root: root, fixture: fixture, phase: phase
         ).run()
@@ -459,6 +476,15 @@ final class EngineProbe {
     try png.write(to: root.appending(path: name), options: .atomic)
   }
 
+  private func activateRestoredVaultFixture(_ tabID: String, profileID: String) throws {
+    guard phase == "restart", bitwardenVaultCredentials != nil else { return }
+    guard let id = UUID(uuidString: tabID),
+      let space = store.session.spaces.first(where: { $0.tabs.contains(where: { $0.id == id }) }),
+      space.profileID.uuidString == profileID
+    else { throw ProbeFailure("Restored fixture tab lost its owning profile.") }
+    store.perform(.tab(space: space.id, tab: id))
+  }
+
   private func finish(error: Error?) {
     guard !finished else { return }
     finished = true
@@ -507,6 +533,7 @@ final class EngineProbe {
       "fixtureTLSProbe": probeTLS != nil,
       "abruptRecoveryProbe": expectedAfterTermination != nil,
       "localFixturesPassed": localFixturesPassed,
+      "bootstrapStage": bootstrapStage.rawValue,
       "checkCount": checks.count,
       "checks": bitwardenVaultCredentials == nil
         ? checks : [],

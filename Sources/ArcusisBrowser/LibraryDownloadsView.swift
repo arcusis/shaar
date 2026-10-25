@@ -10,43 +10,72 @@ struct LibraryDownloadsView: View {
   let profileID: UUID
   let mediaOnly: Bool
 
-  @State private var selectedMode: LibraryDownloadMode
+  private let injectedDownloads: DownloadsModel?
   @State private var search = ""
+  @State private var statusFilter: LibraryDownloadStatusFilter = .all
+  @State private var mediaKind: LibraryMediaKind?
   @State private var thumbnails = LibraryThumbnailLoader()
+  @FocusState private var searchIsFocused: Bool
 
   init(store: BrowserStore, profileID: UUID, mediaOnly: Bool) {
     self.store = store
     self.profileID = profileID
     self.mediaOnly = mediaOnly
-    _selectedMode = State(initialValue: mediaOnly ? .media : .downloads)
+    injectedDownloads = nil
+  }
+
+  init(
+    store: BrowserStore, profileID: UUID, mediaOnly: Bool, downloads: DownloadsModel?
+  ) {
+    self.store = store
+    self.profileID = profileID
+    self.mediaOnly = mediaOnly
+    injectedDownloads = downloads
   }
 
   private var currentProfileID: UUID { store.session.selectedSpace.profileID }
   private var profileIsCurrent: Bool { currentProfileID == profileID }
-  private var downloads: DownloadsModel? { store.engine?.downloads }
+  private var downloads: DownloadsModel? { injectedDownloads ?? store.engine?.downloads }
   private var items: [BrowserDownload] {
     guard profileIsCurrent, let downloads else { return [] }
-    return LibraryDownloadQuery.filtered(
+    let results = LibraryDownloadQuery.filtered(
       downloads.items(in: profileID), search: search,
-      mediaOnly: selectedMode == .media, profileID: profileID,
-      currentProfileID: currentProfileID, downloads: downloads)
+      mediaOnly: mediaOnly, profileID: profileID, currentProfileID: currentProfileID,
+      downloads: downloads)
+    if mediaOnly {
+      return LibraryDownloadQuery.filtered(
+        results, kind: mediaKind, profileID: profileID, currentProfileID: currentProfileID,
+        downloads: downloads)
+    }
+    return results.filter(statusFilter.includes)
   }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       HStack(spacing: 12) {
-        TextField("Search downloads and media", text: $search)
+        TextField(mediaOnly ? "Search Media" : "Search Downloads", text: $search)
           .textFieldStyle(.roundedBorder)
-          .accessibilityLabel("Search downloads and media")
+          .focused($searchIsFocused)
+          .accessibilityLabel(mediaOnly ? "Search Media" : "Search Downloads")
           .onSubmit {}
-        Picker("Library content", selection: $selectedMode) {
-          ForEach(LibraryDownloadMode.allCases) { mode in
-            Text(mode.rawValue).tag(mode)
+        if mediaOnly {
+          Picker("Media type", selection: $mediaKind) {
+            Text("All").tag(LibraryMediaKind?.none)
+            ForEach(LibraryMediaKind.allCases) { kind in
+              Text(kind.rawValue).tag(Optional(kind))
+            }
           }
+          .pickerStyle(.menu)
+          .accessibilityLabel("Media type")
+        } else {
+          Picker("Download status", selection: $statusFilter) {
+            ForEach(LibraryDownloadStatusFilter.allCases) { filter in
+              Text(filter.rawValue).tag(filter)
+            }
+          }
+          .pickerStyle(.menu)
+          .accessibilityLabel("Download status")
         }
-        .pickerStyle(.segmented)
-        .fixedSize()
-        .accessibilityLabel("Library content")
       }
 
       if !profileIsCurrent {
@@ -57,12 +86,12 @@ struct LibraryDownloadsView: View {
           .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else if items.isEmpty {
         ContentUnavailableView(
-          search.isEmpty ? emptyTitle : "No matches",
-          systemImage: selectedMode == .media ? "photo.on.rectangle.angled" : "arrow.down.circle",
-          description: Text(search.isEmpty ? emptyDescription : "Try another search.")
+          filtersAreActive ? "No matches" : emptyTitle,
+          systemImage: mediaOnly ? "photo.on.rectangle.angled" : "arrow.down.circle",
+          description: Text(filtersAreActive ? "Try another search or filter." : emptyDescription)
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-      } else if selectedMode == .media {
+      } else if mediaOnly {
         mediaGrid
       } else {
         downloadList
@@ -76,15 +105,21 @@ struct LibraryDownloadsView: View {
     .padding(16)
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(Color(nsColor: .windowBackgroundColor))
+    .onAppear { searchIsFocused = true }
     .onChange(of: currentProfileID) { _, _ in thumbnails.clear() }
   }
 
+  private var filtersAreActive: Bool {
+    !search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      || (mediaOnly ? mediaKind != nil : statusFilter != .all)
+  }
+
   private var emptyTitle: String {
-    selectedMode == .media ? "No downloaded media" : "No downloads"
+    mediaOnly ? "No downloaded media" : "No downloads"
   }
 
   private var emptyDescription: String {
-    selectedMode == .media
+    mediaOnly
       ? "Downloaded images, videos, and PDFs appear here."
       : "Downloads for this profile appear here."
   }
@@ -111,8 +146,15 @@ struct LibraryDownloadsView: View {
 
   private func downloadRow(_ item: BrowserDownload) -> some View {
     HStack(alignment: .top, spacing: 10) {
-      Image(systemName: item.dangerous ? "exclamationmark.shield" : "doc")
-        .font(.title3).foregroundStyle(.secondary).frame(width: 26)
+      Group {
+        if item.dangerous {
+          Image(systemName: "exclamationmark.shield")
+        } else {
+          Image(nsImage: fileIcon(for: item))
+            .resizable().scaledToFit().frame(width: 22, height: 22)
+        }
+      }
+      .font(.title3).foregroundStyle(.secondary).frame(width: 26)
       VStack(alignment: .leading, spacing: 4) {
         Text(item.filename).font(.headline).lineLimit(1).truncationMode(.middle)
         Text("\(item.source) · \(LibraryDownloadQuery.status(item)) · \(fileType(item))")
@@ -133,23 +175,27 @@ struct LibraryDownloadsView: View {
       .frame(maxWidth: .infinity, alignment: .leading)
       if item.canOpen {
         Button {
+          guard canUseFileActions else { return }
           store.engine?.revealDownload(item.id, profileID: profileID, open: true)
         } label: {
           Image(systemName: "arrow.up.forward.square")
         }
         .help("Open file")
         .accessibilityLabel("Open \(item.filename)")
+        .disabled(!canUseFileActions)
         Button {
+          guard canUseFileActions else { return }
           store.engine?.revealDownload(item.id, profileID: profileID, open: false)
         } label: {
           Image(systemName: "folder")
         }
         .help("Show in Finder")
         .accessibilityLabel("Show \(item.filename) in Finder")
+        .disabled(!canUseFileActions)
       }
       ForEach(item.actions, id: \.rawValue) { action in
         Button {
-          guard profileIsCurrent, let downloads else { return }
+          guard canUseDownloadActions, let downloads else { return }
           downloads.perform(
             action, id: item.id, profileID: profileID, selectedProfileID: currentProfileID)
         } label: {
@@ -157,6 +203,7 @@ struct LibraryDownloadsView: View {
         }
         .help(actionLabel(action))
         .accessibilityLabel("\(actionLabel(action)): \(item.filename)")
+        .disabled(!canUseDownloadActions)
       }
     }
     .buttonStyle(.borderless)
@@ -183,6 +230,14 @@ struct LibraryDownloadsView: View {
     .accessibilityLabel("Downloaded media")
   }
 
+  private var canUseDownloadActions: Bool {
+    profileIsCurrent && store.sheet == nil && !store.commandIsOpen
+  }
+
+  private var canUseFileActions: Bool {
+    canUseDownloadActions && store.engine != nil
+  }
+
   private func mediaCard(
     _ item: BrowserDownload, media: LibraryMediaFile, downloads: DownloadsModel
   ) -> some View {
@@ -206,15 +261,17 @@ struct LibraryDownloadsView: View {
         .font(.caption).foregroundStyle(.secondary).lineLimit(1)
       HStack(spacing: 8) {
         Button("Open") {
-          guard profileIsCurrent else { return }
+          guard canUseFileActions else { return }
           store.engine?.revealDownload(item.id, profileID: profileID, open: true)
         }
         .accessibilityLabel("Open \(item.filename)")
+        .disabled(!canUseFileActions)
         Button("Show in Finder") {
-          guard profileIsCurrent else { return }
+          guard canUseFileActions else { return }
           store.engine?.revealDownload(item.id, profileID: profileID, open: false)
         }
         .accessibilityLabel("Show \(item.filename) in Finder")
+        .disabled(!canUseFileActions)
       }
       .buttonStyle(.borderless)
       .controlSize(.small)
@@ -237,6 +294,13 @@ struct LibraryDownloadsView: View {
       let description = type.localizedDescription
     else { return "File" }
     return description
+  }
+
+  private func fileIcon(for item: BrowserDownload) -> NSImage {
+    guard let url = item.fileURL,
+      let type = UTType(filenameExtension: url.pathExtension.lowercased())
+    else { return NSWorkspace.shared.icon(for: UTType.data) }
+    return NSWorkspace.shared.icon(for: type)
   }
 
   private func byteStatus(_ item: BrowserDownload) -> String {
@@ -267,18 +331,25 @@ struct LibraryDownloadsView: View {
 @MainActor @Observable
 private final class LibraryThumbnailLoader {
   private var images: [String: NSImage] = [:]
+  private var cacheOrder: [String] = []
   private var active: Set<String> = []
   private let maximumConcurrentRequests = 3
+  private let maximumCachedImages = 64
 
   func image(for item: BrowserDownload, media: LibraryMediaFile, profileID: UUID) -> NSImage? {
     images[key(item, media: media, profileID: profileID)]
   }
 
   func remove(_ item: BrowserDownload, profileID: UUID) {
-    images = images.filter { !$0.key.hasPrefix("\(profileID.uuidString):\(item.id):") }
+    let prefix = "\(profileID.uuidString):\(item.id):"
+    images = images.filter { !$0.key.hasPrefix(prefix) }
+    cacheOrder.removeAll { $0.hasPrefix(prefix) }
   }
 
-  func clear() { images.removeAll() }
+  func clear() {
+    images.removeAll()
+    cacheOrder.removeAll()
+  }
 
   func load(
     _ item: BrowserDownload,
@@ -317,6 +388,11 @@ private final class LibraryThumbnailLoader {
         downloads: downloads) == media
     else { return }
     images[cacheKey] = NSImage(cgImage: result.cgImage, size: .zero)
+    cacheOrder.removeAll { $0 == cacheKey }
+    cacheOrder.append(cacheKey)
+    while cacheOrder.count > maximumCachedImages {
+      images[cacheOrder.removeFirst()] = nil
+    }
   }
 
   private func generate(_ request: QLThumbnailGenerator.Request) async -> ThumbnailResult? {

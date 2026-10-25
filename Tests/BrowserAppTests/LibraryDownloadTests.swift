@@ -1,5 +1,7 @@
+import AppKit
 import BrowserCore
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import ArcusisBrowser
@@ -91,6 +93,16 @@ struct LibraryDownloadTests {
         currentProfileID: profile, downloads: model
       ).map(\.id).sorted()
         == [imageID, videoID, pdfID].sorted())
+    #expect(
+      LibraryDownloadQuery.filtered(
+        model.items(in: profile), kind: .image, profileID: profile,
+        currentProfileID: profile, downloads: model
+      ).map(\.id) == [imageID])
+    #expect(
+      LibraryDownloadQuery.filtered(
+        model.items(in: profile), kind: .pdf, profileID: profile,
+        currentProfileID: profile, downloads: model
+      ).map(\.id) == [pdfID])
     let missing = try #require(model.items(in: profile).first { $0.id == missingID })
     let directory = try #require(model.items(in: profile).first { $0.id == directoryID })
     #expect(
@@ -138,5 +150,172 @@ struct LibraryDownloadTests {
         model.items(in: profile), search: "example.test", profileID: profile,
         currentProfileID: profile, downloads: model
       ).count == 3)
+  }
+
+  @Test func statusFiltersMatchProgressAndSafeCompletion() {
+    let profile = UUID()
+    let model = DownloadsModel()
+    let downloadingID = UUID().uuidString.lowercased()
+    let finishedID = UUID().uuidString.lowercased()
+    let blockedID = UUID().uuidString.lowercased()
+    model.restore(
+      [
+        record(downloadingID, filename: "active.zip", state: "downloading"),
+        record(finishedID, filename: "done.zip"),
+        record(blockedID, filename: "blocked.zip", dangerous: true),
+      ], profileID: profile)
+    let items = model.items(in: profile)
+    #expect(items.filter(LibraryDownloadStatusFilter.all.includes).count == 3)
+    #expect(
+      items.filter(LibraryDownloadStatusFilter.inProgress.includes).map(\.id) == [downloadingID])
+    #expect(items.filter(LibraryDownloadStatusFilter.complete.includes).map(\.id) == [finishedID])
+  }
+
+  @Test func capturesActualDownloadsAndMediaComponentsAcrossStates() async throws {
+    let root = FileManager.default.temporaryDirectory
+      .appending(path: "browser-library-download-captures-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let captureRoot = URL(filePath: "/tmp/browser-library-download-review")
+    try FileManager.default.createDirectory(at: captureRoot, withIntermediateDirectories: true)
+
+    let currentProfile = BrowserProfile(name: "Current")
+    let oldProfile = BrowserProfile(name: "Previous")
+    let currentSpace = BrowserSpace(
+      profileID: currentProfile.id, name: "Current", symbol: "circle", tint: .ocean)
+    let oldSpace = BrowserSpace(
+      profileID: oldProfile.id, name: "Previous", symbol: "circle", tint: .rose)
+    let session = try BrowserSession(
+      profiles: [currentProfile, oldProfile], spaces: [currentSpace, oldSpace],
+      selectedSpaceID: currentSpace.id)
+    let store = BrowserStore(sessionFile: nil, session: session)
+    let imageURL = root.appending(path: "authored-image.png")
+    let pdfURL = root.appending(path: "authored-document.pdf")
+    try makePNGFixture().write(to: imageURL)
+    try makePDFFixture().write(to: pdfURL)
+
+    let downloads = DownloadsModel()
+    let imageID = UUID().uuidString.lowercased()
+    let pdfID = UUID().uuidString.lowercased()
+    downloads.restore(
+      [
+        record(imageID, filename: "authored-image.png", path: imageURL.path),
+        record(pdfID, filename: "authored-document.pdf", path: pdfURL.path),
+      ], profileID: currentProfile.id)
+
+    try await capture(
+      LibraryDownloadsView(
+        store: store, profileID: currentProfile.id, mediaOnly: false, downloads: downloads),
+      size: NSSize(width: 760, height: 520), appearance: .aqua,
+      to: captureRoot.appending(path: "populated-downloads.png"))
+    let mediaCapture = try await capture(
+      LibraryDownloadsView(
+        store: store, profileID: currentProfile.id, mediaOnly: true, downloads: downloads),
+      size: NSSize(width: 760, height: 520), appearance: .aqua,
+      to: captureRoot.appending(path: "populated-media.png"), settleMilliseconds: 1200)
+    let inset = Int(Double(mediaCapture.pixelsHigh) * 80 / 520)
+    var blueSamples = 0
+    for y in stride(from: inset, to: mediaCapture.pixelsHigh - inset, by: 4) {
+      for x in stride(from: 0, to: mediaCapture.pixelsWide, by: 4) {
+        if let color = mediaCapture.colorAt(x: x, y: y)?.usingColorSpace(.sRGB),
+          color.blueComponent > 0.65, color.redComponent < 0.3,
+          color.blueComponent - color.greenComponent > 0.2
+        {
+          blueSamples += 1
+        }
+      }
+    }
+    #expect(blueSamples > 200, "Authored blue image must render as a real thumbnail.")
+    try await capture(
+      LibraryDownloadsView(
+        store: store, profileID: currentProfile.id, mediaOnly: false, downloads: DownloadsModel()),
+      size: NSSize(width: 760, height: 520), appearance: .aqua,
+      to: captureRoot.appending(path: "empty-downloads.png"))
+    try await capture(
+      LibraryDownloadsView(
+        store: store, profileID: currentProfile.id, mediaOnly: true, downloads: downloads
+      )
+      .environment(\.colorScheme, .dark),
+      size: NSSize(width: 760, height: 520), appearance: .darkAqua,
+      to: captureRoot.appending(path: "dark-media.png"), settleMilliseconds: 1200)
+    try await capture(
+      LibraryDownloadsView(
+        store: store, profileID: currentProfile.id, mediaOnly: true, downloads: downloads),
+      size: NSSize(width: 320, height: 600), appearance: .aqua,
+      to: captureRoot.appending(path: "compact-media.png"), settleMilliseconds: 1200)
+
+    store.perform(.space(oldSpace.id))
+    try await capture(
+      LibraryDownloadsView(
+        store: store, profileID: currentProfile.id, mediaOnly: true, downloads: downloads),
+      size: NSSize(width: 760, height: 520), appearance: .aqua,
+      to: captureRoot.appending(path: "stale-profile.png"))
+
+    for name in [
+      "populated-downloads.png", "populated-media.png", "empty-downloads.png",
+      "dark-media.png", "compact-media.png", "stale-profile.png",
+    ] {
+      #expect(FileManager.default.fileExists(atPath: captureRoot.appending(path: name).path))
+    }
+  }
+
+  private func makePNGFixture() throws -> Data {
+    let bitmap = NSBitmapImageRep(
+      bitmapDataPlanes: nil, pixelsWide: 24, pixelsHigh: 24, bitsPerSample: 8,
+      samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+      bytesPerRow: 0, bitsPerPixel: 0)!
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmap)
+    NSColor.systemBlue.setFill()
+    NSBezierPath(rect: NSRect(x: 0, y: 0, width: 24, height: 24)).fill()
+    NSGraphicsContext.restoreGraphicsState()
+    return try #require(bitmap.representation(using: .png, properties: [:]))
+  }
+
+  private func makePDFFixture() -> Data {
+    let stream = "BT /F1 12 Tf 10 50 Td (Authored fixture) Tj ET\n"
+    let objects = [
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+      "<< /Length \(stream.utf8.count) >>\nstream\n\(stream)endstream",
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    var pdf = "%PDF-1.4\n"
+    var offsets = [0]
+    for (index, object) in objects.enumerated() {
+      offsets.append(pdf.utf8.count)
+      pdf += "\(index + 1) 0 obj\n\(object)\nendobj\n"
+    }
+    let xrefOffset = pdf.utf8.count
+    pdf += "xref\n0 6\n0000000000 65535 f \n"
+    for offset in offsets.dropFirst() {
+      pdf += String(format: "%010d 00000 n \n", offset)
+    }
+    pdf += "trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n\(xrefOffset)\n%%EOF\n"
+    return Data(pdf.utf8)
+  }
+
+  @discardableResult private func capture<V: View>(
+    _ view: V, size: NSSize, appearance: NSAppearance.Name, to url: URL,
+    settleMilliseconds: Int = 200
+  ) async throws -> NSBitmapImageRep {
+    let window = NSWindow(
+      contentRect: NSRect(origin: .zero, size: size), styleMask: [], backing: .buffered,
+      defer: false)
+    window.isReleasedWhenClosed = false
+    window.appearance = NSAppearance(named: appearance)
+    defer { window.close() }
+    let host = NSHostingView(rootView: view)
+    window.contentView = host
+    host.frame = NSRect(origin: .zero, size: size)
+    host.layoutSubtreeIfNeeded()
+    window.displayIfNeeded()
+    try await Task.sleep(for: .milliseconds(settleMilliseconds))
+    host.layoutSubtreeIfNeeded()
+    let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+    host.cacheDisplay(in: host.bounds, to: bitmap)
+    try #require(bitmap.representation(using: .png, properties: [:])).write(to: url)
+    return bitmap
   }
 }

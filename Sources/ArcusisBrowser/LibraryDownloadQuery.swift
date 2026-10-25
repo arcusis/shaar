@@ -2,13 +2,6 @@ import BrowserCore
 import Foundation
 import UniformTypeIdentifiers
 
-enum LibraryDownloadMode: String, CaseIterable, Identifiable {
-  case downloads = "Downloads"
-  case media = "Media"
-
-  var id: String { rawValue }
-}
-
 enum LibraryMediaKind: String, CaseIterable, Identifiable {
   case image = "Images"
   case video = "Videos"
@@ -21,6 +14,22 @@ enum LibraryMediaKind: String, CaseIterable, Identifiable {
     case .image: "photo"
     case .video: "video"
     case .pdf: "doc.richtext"
+    }
+  }
+}
+
+enum LibraryDownloadStatusFilter: String, CaseIterable, Identifiable {
+  case all = "All"
+  case inProgress = "In progress"
+  case complete = "Complete"
+
+  var id: String { rawValue }
+
+  func includes(_ item: BrowserDownload) -> Bool {
+    switch self {
+    case .all: true
+    case .inProgress: item.state == .downloading
+    case .complete: item.state == .finished && !item.dangerous
     }
   }
 }
@@ -86,6 +95,21 @@ enum LibraryDownloadQuery {
       return item.filename.localizedCaseInsensitiveContains(query)
         || item.source.localizedCaseInsensitiveContains(query)
         || status(item).localizedCaseInsensitiveContains(query)
+    }
+  }
+
+  static func filtered(
+    _ items: [BrowserDownload], kind: LibraryMediaKind?, profileID: UUID,
+    currentProfileID: UUID, downloads: DownloadsModel
+  ) -> [BrowserDownload] {
+    guard profileID == currentProfileID else { return [] }
+    return items.filter { item in
+      guard item.profileID == profileID,
+        let media = mediaFile(
+          for: item, profileID: profileID, currentProfileID: currentProfileID,
+          downloads: downloads)
+      else { return false }
+      return kind == nil || media.kind == kind
     }
   }
 

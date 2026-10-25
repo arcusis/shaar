@@ -13,6 +13,7 @@
 - [[Find_In_Page]]
 - [[Renderer_Recovery]]
 - [[Download_Library]]
+- [[Library_Drawer]]
 - [[Bookmark_History]]
 - [[Build_And_Run]]
 - [[Keyboard_Commands]]

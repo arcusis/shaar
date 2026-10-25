@@ -4,8 +4,8 @@ Downloads use Chromium's authenticated transfer pipeline and a native profile-sc
 
 Download checks use real engine transfers from authenticated loopback fixtures into the marked temporary directory. They verify account-specific file bytes, pause/resume/cancel, background completion across space switches, profile-scoped actions/history, removal without deleting the file, and restart restoration. Links receive trusted in-process renderer input, without a debugging socket or permission bypass. The runner supplies `ARDIA_DOWNLOADS_DIR` only to its disposable child processes. It does not open downloaded files, launch Finder, or display native dialogs. Real Workspace exports/uploads, interrupted-download recovery, blocked-file approval, and native file/quit interactions remain separate acceptance checks.
 
-The sidebar Library footer also provides recent-download hover/toggle cards. File dragging rechecks current profile, record state and readable regular file at drag time. [PR #38](https://github.com/arcusis/browser/pull/38) provides source/layout checks; physical hover/drop/Finder acceptance remains [#37](https://github.com/arcusis/browser/issues/37).
+The sidebar Library footer provides recent-download hover cards. Clicking it opens the in-window [[Library_Drawer]]; the native Downloads panel remains available through Shift-Command-J. File dragging rechecks current profile, record state and readable regular file at drag time. [PR #38](https://github.com/arcusis/browser/pull/38) provides source/layout checks; physical hover/drop/Finder acceptance remains [#37](https://github.com/arcusis/browser/issues/37).
 
 Recent-card visibility uses a scoped 0.14-second ease-out transition. This timing is a design choice, not measured Arc parity. Reduce Motion disables both positional and opacity animation, including inherited animation transactions; profile changes dismiss the card without animation. Static normal/compact previews do not establish physical hover or drag behavior.
 
-Related: [[Bookmark_History]], [[Project_State]].
+Related: [[Library_Drawer]], [[Bookmark_History]], [[Project_State]].

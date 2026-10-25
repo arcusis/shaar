@@ -414,10 +414,18 @@ def run_control(binary=VAULT_BINARY, browser_binary=BROWSER_BINARY, timeout=940,
                               'masterPassword': row['account'].password} for row in accounts],
             })
             # Browser launch reads private handoff file; outer finally removes it on every path.
-            server = ThreadingHTTPServer(('127.0.0.1', 0), engine_fixture.Fixture)
+            other_server = None
+
+            class TransportFixture(engine_fixture.Fixture):
+                def send_header(self, keyword, value):
+                    if keyword.lower() == 'content-security-policy' and other_server is not None:
+                        value += (f'; connect-src {base_url}'
+                                  f' https://127.0.0.1:{other_server.server_port}')
+                    return super().send_header(keyword, value)
+
+            server = ThreadingHTTPServer(('127.0.0.1', 0), TransportFixture)
             thread = None
             other_root = None
-            other_server = None
             other_thread = None
             try:
                 thread = threading.Thread(target=server.serve_forever, daemon=True)

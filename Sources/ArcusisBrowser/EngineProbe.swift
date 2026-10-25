@@ -97,8 +97,11 @@ final class EngineProbe {
       }
       let root = URL(filePath: try value("--probe-data-dir")).standardizedFileURL
         .resolvingSymlinksInPath()
-      let output = URL(filePath: try value("--probe-output")).standardizedFileURL
+      let resolvedOutput = URL(filePath: try value("--probe-output")).standardizedFileURL
         .resolvingSymlinksInPath()
+      // A missing leaf can retain /private/var while its existing parent resolves to /var.
+      let output = resolvedOutput.deletingLastPathComponent().resolvingSymlinksInPath()
+        .appending(path: resolvedOutput.lastPathComponent)
       let phase = try value("--probe-phase")
       let temporary = FileManager.default.temporaryDirectory.standardizedFileURL
         .resolvingSymlinksInPath()

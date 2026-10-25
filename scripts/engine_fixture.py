@@ -19,12 +19,25 @@ from urllib.parse import urlparse
 
 
 def record_bitwarden_summary(root, control_only):
+    summary_path = root / 'bitwarden-onboarding-summary.json'
+    # A prior passing result must never survive a failed recomputation.
+    summary_path.unlink(missing_ok=True)
     if type(control_only) is not bool:
         raise RuntimeError('Bitwarden control mode must be explicit')
+
+    def read_report(path):
+        try:
+            report = json.loads(path.read_text())
+        except json.JSONDecodeError as error:
+            raise RuntimeError(f'Malformed Bitwarden report: {path.name}') from error
+        if not isinstance(report, dict):
+            raise RuntimeError(f'Bitwarden report must be a JSON object: {path.name}')
+        return report
+
     observations = []
     for phase in ('initial', 'restart'):
-        host = json.loads((root / f'{phase}.json').read_text())
-        vendor = json.loads((root / f'{phase}-bitwarden.json').read_text())
+        host = read_report(root / f'{phase}.json')
+        vendor = read_report(root / f'{phase}-bitwarden.json')
         if (host.get('phase') != phase or vendor.get('phase') != phase
                 or host.get('bitwardenStoreProbe') is not True
                 or host.get('bitwardenOnboardingControl') is not control_only
@@ -34,11 +47,17 @@ def record_bitwarden_summary(root, control_only):
                 or type(vendor.get('passed')) is not bool
                 or type(vendor.get('firstClickAcceptancePassed')) is not bool):
             raise RuntimeError('Bitwarden summary has missing or mismatched phase/mode evidence')
+        vault_probe = host.get('bitwardenVaultProbe')
+        if (('bitwardenVaultProbe' in host and type(vault_probe) is not bool)
+                or (vault_probe is True and not control_only)):
+            raise RuntimeError('Vault probe evidence requires explicit control mode')
         for report in (host, vendor):
             checks = report.get('checks')
+            error = report.get('error')
             if (not isinstance(checks, list) or not checks
                     or not all(isinstance(check, str) and check for check in checks)
-                    or report['passed'] and report.get('error') is not None):
+                    or error is not None and (not isinstance(error, str) or not error)
+                    or report['passed'] and error is not None):
                 raise RuntimeError('Bitwarden summary has malformed check/error evidence')
         expected = vendor['passed'] and not control_only
         if vendor['firstClickAcceptancePassed'] is not expected:
@@ -49,7 +68,20 @@ def record_bitwarden_summary(root, control_only):
                    firstClickAcceptancePassed=(not control_only and all(
                        p['passed'] and p['localFixturesPassed'] for p in observations)),
                    scope='Signed-out onboarding only. No vault or company credentials tested.')
-    (root / 'bitwarden-onboarding-summary.json').write_text(json.dumps(summary, indent=2))
+    payload = json.dumps(summary, indent=2)
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=root,
+                                         prefix='.bitwarden-onboarding-summary-',
+                                         suffix='.tmp', delete=False) as temporary:
+            temporary_path = Path(temporary.name)
+            temporary.write(payload)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        os.replace(temporary_path, summary_path)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
     return summary
 
 

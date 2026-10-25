@@ -71,6 +71,63 @@ class BitwardenSummaryTests(unittest.TestCase):
             fixture.record_bitwarden_summary(self.root, False)
         self.assertFalse((self.root / 'bitwarden-onboarding-summary.json').exists())
 
+    def test_failed_recomputation_removes_prior_passing_summary(self):
+        cases = ('missing', 'malformed', 'array', 'mismatched')
+        for case in cases:
+            with self.subTest(case=case):
+                self.reports()
+                summary_path = self.root / 'bitwarden-onboarding-summary.json'
+                fixture.record_bitwarden_summary(self.root, False)
+                self.assertTrue(json.loads(summary_path.read_text())['firstClickAcceptancePassed'])
+
+                report_path = self.root / 'restart-bitwarden.json'
+                if case == 'missing':
+                    report_path.unlink()
+                    expected_error = FileNotFoundError
+                elif case == 'malformed':
+                    report_path.write_text('{')
+                    expected_error = RuntimeError
+                elif case == 'array':
+                    report_path.write_text('[]')
+                    expected_error = RuntimeError
+                else:
+                    report = json.loads(report_path.read_text())
+                    report['phase'] = 'initial'
+                    report_path.write_text(json.dumps(report))
+                    expected_error = RuntimeError
+
+                with self.assertRaises(expected_error):
+                    fixture.record_bitwarden_summary(self.root, False)
+                self.assertFalse(summary_path.exists())
+
+    def test_vault_probe_requires_control_and_rejects_mixed_clean_claim(self):
+        self.reports()
+        host_path = self.root / 'initial.json'
+        host = json.loads(host_path.read_text())
+        host['bitwardenVaultProbe'] = True
+        host_path.write_text(json.dumps(host))
+        with self.assertRaises(RuntimeError):
+            fixture.record_bitwarden_summary(self.root, False)
+        self.assertFalse((self.root / 'bitwarden-onboarding-summary.json').exists())
+
+        self.reports(control=True)
+        host_path = self.root / 'initial.json'
+        host = json.loads(host_path.read_text())
+        host['bitwardenVaultProbe'] = 'true'
+        host_path.write_text(json.dumps(host))
+        with self.assertRaises(RuntimeError):
+            fixture.record_bitwarden_summary(self.root, True)
+
+    def test_passed_control_vendor_report_must_explicitly_deny_acceptance(self):
+        self.reports(control=True)
+        path = self.root / 'initial-bitwarden.json'
+        report = json.loads(path.read_text())
+        report['firstClickAcceptancePassed'] = True
+        path.write_text(json.dumps(report))
+        with self.assertRaises(RuntimeError):
+            fixture.record_bitwarden_summary(self.root, True)
+        self.assertFalse((self.root / 'bitwarden-onboarding-summary.json').exists())
+
 
 class HostLockCheckpointTests(unittest.TestCase):
     def setUp(self):

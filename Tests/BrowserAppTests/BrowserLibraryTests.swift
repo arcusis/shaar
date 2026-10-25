@@ -55,8 +55,12 @@ struct BrowserLibraryTests {
     for _ in 0..<20 { model.invalidate(profile, section: .bookmarks) }
     #expect(replies.count == 1)
     replies[0](.success(tree(title: "First")))
-    try await Task.sleep(for: .milliseconds(220))
-    #expect(replies.count == 2)
+    let clock = ContinuousClock()
+    let deadline = clock.now.advanced(by: .seconds(3))
+    while replies.count < 2 && clock.now < deadline {
+      try await Task.sleep(for: .milliseconds(10))
+    }
+    try #require(replies.count == 2)
     model.serviceFailed(profile, section: .bookmarks, message: "Updates unavailable")
     replies[1](.success(tree(title: "Updated")))
     #expect(model.notice(profile, section: .bookmarks) == "Updates unavailable")

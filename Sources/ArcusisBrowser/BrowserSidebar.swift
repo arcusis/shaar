@@ -3,6 +3,7 @@ import SwiftUI
 
 struct BrowserSidebar: View {
   @Bindable var store: BrowserStore
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var targetedTab: UUID?
   @State private var targetedSpace: UUID?
   @State private var targetedSection: String?
@@ -234,30 +235,42 @@ struct BrowserSidebar: View {
     .font(.system(size: 12))
     .onHover { recentDownloadsAnchorHoverChanged($0) }
     .overlay(alignment: .bottomLeading) {
-      if recentDownloadsIsOpen || previewRecentDownloads != nil,
-        downloadsProfileIsCurrent(profileID),
-        let items = previewRecentDownloads ?? downloads?.items(in: profileID)
-      {
-        RecentDownloadsPopover(
-          items: items, profileID: profileID,
-          selectedProfileID: { store.session.selectedSpace.profileID },
-          dragURL: { item in
-            guard previewRecentDownloads == nil, downloadsProfileIsCurrent(profileID),
-              let downloads
-            else { return nil }
-            return downloads.fileForDrag(
-              id: item.id, profileID: profileID,
-              selectedProfileID: store.session.selectedSpace.profileID)
-          },
-          dismiss: {
-            guard downloadsProfileIsCurrent(profileID) else { return }
-            recentDownloadsPinnedOpen = false
-            recentDownloadsIsOpen = false
-          }
-        )
-        .offset(y: -26)
-        .onHover { recentDownloadsCardHoverChanged($0) }
-        .transition(.opacity.combined(with: .move(edge: .bottom)))
+      Group {
+        if recentDownloadsIsOpen || previewRecentDownloads != nil,
+          downloadsProfileIsCurrent(profileID),
+          let items = previewRecentDownloads ?? downloads?.items(in: profileID)
+        {
+          RecentDownloadsPopover(
+            items: items, profileID: profileID,
+            selectedProfileID: { store.session.selectedSpace.profileID },
+            dragURL: { item in
+              guard previewRecentDownloads == nil, downloadsProfileIsCurrent(profileID),
+                let downloads
+              else { return nil }
+              return downloads.fileForDrag(
+                id: item.id, profileID: profileID,
+                selectedProfileID: store.session.selectedSpace.profileID)
+            },
+            dismiss: {
+              guard downloadsProfileIsCurrent(profileID) else { return }
+              recentDownloadsPinnedOpen = false
+              recentDownloadsIsOpen = false
+            }
+          )
+          .offset(y: -26)
+          .onHover { recentDownloadsCardHoverChanged($0) }
+          .transition(.opacity.combined(with: .move(edge: .bottom)))
+        }
+      }
+      .animation(
+        reduceMotion ? nil : .easeOut(duration: 0.14),
+        value: recentDownloadsIsOpen
+      )
+      .transaction { transaction in
+        if reduceMotion {
+          transaction.animation = nil
+          transaction.disablesAnimations = true
+        }
       }
     }
     .onExitCommand {
@@ -266,10 +279,14 @@ struct BrowserSidebar: View {
     }
     .onChange(of: profileID) { _, _ in
       recentDownloadsCloseTask?.cancel()
-      recentDownloadsPinnedOpen = false
-      recentDownloadsAnchorHovered = false
-      recentDownloadsCardHovered = false
-      recentDownloadsIsOpen = false
+      var transaction = Transaction(animation: nil)
+      transaction.disablesAnimations = true
+      withTransaction(transaction) {
+        recentDownloadsPinnedOpen = false
+        recentDownloadsAnchorHovered = false
+        recentDownloadsCardHovered = false
+        recentDownloadsIsOpen = false
+      }
     }
   }
 

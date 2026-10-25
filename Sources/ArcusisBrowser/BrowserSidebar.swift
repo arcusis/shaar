@@ -165,15 +165,6 @@ struct BrowserSidebar: View {
           .help("Reload (Command-R)")
         }
         Spacer(minLength: 0)
-        if store.canBookmarkCurrentPage {
-          Button {
-            store.bookmarkCurrentPage()
-          } label: {
-            Image(systemName: "star")
-          }
-          .help("Bookmark this page (Command-D)")
-          .accessibilityLabel("Bookmark this page")
-        }
       }
       .font(.system(size: 13))
       profileFavorites

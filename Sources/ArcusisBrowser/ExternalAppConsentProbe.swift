@@ -173,8 +173,10 @@ final class ExternalAppConsentProbe {
     let space = store.session.spaces[0]
     store.perform(.space(space.id))
     stage("denial-space-selected")
-    store.perform(.open(fixture.appending(path: "external-consent-\(evidence.deniedRequests)")))
-    stage("denial-tab-opened")
+    if action == .tabClose {
+      store.perform(.open(fixture.appending(path: "external-consent-close")))
+      stage("denial-disposable-tab-opened")
+    }
     guard let tab = store.session.selectedSpace.selectedTabID else {
       throw failure("Fixture tab missing.")
     }
@@ -198,9 +200,10 @@ final class ExternalAppConsentProbe {
       }
       store.perform(.space(other.id))
     case .navigation:
-      _ = try await gesture(tab, script: "location.href='/external-navigation';true")
+      _ = try await gesture(
+        tab, script: "(()=>{location.href='/external-navigation';return true;})()")
     case .reload:
-      _ = try await gesture(tab, script: "location.reload();true")
+      _ = try await gesture(tab, script: "(()=>{location.reload();return true;})()")
     case .tabClose:
       runtime.closeTabID(tab.uuidString)
     }
@@ -210,8 +213,8 @@ final class ExternalAppConsentProbe {
       store.sheet = nil
       store.presentNextConsent()
     }
+    store.sheetDidDismiss()
     replay(request.id)
-    if action != .tabClose { runtime.closeTabID(tab.uuidString) }
     return audit(target)?.count == 2
   }
 
@@ -246,6 +249,12 @@ final class ExternalAppConsentProbe {
       ) as? Bool == true
     else { throw failure("Could not prepare the authored external link.") }
     runtime.focusTabID(tab.uuidString)
+    let rendered: Bool = await withCheckedContinuation { continuation in
+      runtime.captureProbeTabID(tab.uuidString) {
+        continuation.resume(returning: $0?.isEmpty == false)
+      }
+    }
+    guard rendered else { throw failure("Owned link document did not produce a compositor frame.") }
     let clicked: Bool = await withCheckedContinuation { continuation in
       runtime.clickProbeElement(inTabID: tab.uuidString, elementID: "external-consent-probe") {
         continuation.resume(returning: $0)
@@ -280,7 +289,11 @@ final class ExternalAppConsentProbe {
       }
       try await Task.sleep(for: .milliseconds(50))
     }
-    throw failure("Owned fixture document did not become ready.")
+    let window = runtime.window(forID: owner.windowID)
+    let view = runtime.view(forTabID: tab.uuidString)
+    throw failure(
+      "Owned fixture readiness failed (mapped \(runtime.windowID(forTabID: tab.uuidString) == owner.windowID), loaded \(owner.pages[tab]?.loading == false), attached \(window != nil && view?.window === window), sized \((view?.bounds.width ?? 0) > 0 && (view?.bounds.height ?? 0) > 0), sheetClear \(window?.attachedSheet == nil))."
+    )
   }
 
   private func waitPresented(_ id: String) async throws {

@@ -987,8 +987,11 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
      "!excluded(b)&&label(b)===%@ && b.getBoundingClientRect().width>0 && b.getBoundingClientRect().height>0 && !b.disabled);"
      "if(!button)return null;button.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'});"
      "const r=button.getBoundingClientRect(),x=r.x+r.width/2,y=r.y+r.height/2;"
-     "const hit=document.elementFromPoint(x,y);if(!hit||!(hit===button||button.contains(hit)))return null;"
-     "return {x,y};})()", literal];
+     "const hits=(x,y)=>{const e=document.elementFromPoint(x,y);return !!e&&(e===button||button.contains(e));};"
+     "if(hits(x,y))return {x,y};const l=Math.max(0,r.left),t=Math.max(0,r.top),"
+     "rr=Math.min(innerWidth,r.right),bb=Math.min(innerHeight,r.bottom);if(rr<=l||bb<=t)return null;"
+     "for(const fx of [.1,.5,.9])for(const fy of [.1,.5,.9]){const px=l+(rr-l)*fx,py=t+(bb-t)*fy;"
+     "if(hits(px,py))return {x:px,y:py};}return null;})()", literal];
   ArdiaCoreTab *popup = state.popup;
   ClickProbeTarget(popup, expression, ^BOOL { return !state.closed && [state.popupID isEqualToString:popupID]; }, completion);
 }

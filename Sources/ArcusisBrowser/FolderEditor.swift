@@ -42,22 +42,11 @@ struct FolderEditor: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 20) {
-      Label(route.folderID == nil ? "New folder" : "Edit folder", systemImage: "folder")
-        .font(.title2.weight(.semibold))
-      TextField("Name", text: $name).textFieldStyle(.roundedBorder)
+    VStack(alignment: .leading, spacing: 14) {
+      Label(route.folderID == nil ? "New Folder" : "Rename Folder", systemImage: "folder")
+        .font(.headline)
+      TextField("Folder name", text: $name).textFieldStyle(.roundedBorder)
         .focused($nameIsFocused).onSubmit { submit() }
-      LabeledContent(
-        "Space", value: store.session.spaces.first { $0.id == route.spaceID }?.name ?? "Unavailable"
-      )
-      LabeledContent("Profile", value: store.profileName)
-      LabeledContent("Location") {
-        Text(location).lineLimit(2).truncationMode(.middle).help(location)
-      }
-      Text(
-        "Folders keep pinned tabs together. Collapsing or removing a folder keeps its pages open."
-      )
-      .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
       if let error { Text(error).font(.caption).foregroundStyle(.red) }
       HStack {
         if route.folderID != nil {
@@ -72,7 +61,7 @@ struct FolderEditor: View {
               || !route.matches(store.session))
       }
     }
-    .padding(28).frame(width: 440).background(Color(nsColor: .windowBackgroundColor))
+    .padding(20).frame(width: 360).background(Color(nsColor: .windowBackgroundColor))
     .onAppear { nameIsFocused = true }
     .confirmationDialog("Remove \(name)?", isPresented: $removing) {
       Button("Remove folder", role: .destructive) {
@@ -98,16 +87,4 @@ struct FolderEditor: View {
     }
   }
 
-  private var location: String {
-    guard let space = store.session.spaces.first(where: { $0.id == route.spaceID }) else {
-      return "Unavailable"
-    }
-    let parent: UUID?
-    switch route {
-    case .create(_, let id): parent = id
-    case .edit(_, let id): parent = space.folders.first { $0.id == id }?.parentID
-    }
-    let path = space.folderPath(to: parent).reversed().map(\.name).joined(separator: " / ")
-    return path.isEmpty ? "Pinned tabs" : path
-  }
 }

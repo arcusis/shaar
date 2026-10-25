@@ -1,0 +1,110 @@
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== "arcusis-fixture-state") return;
+  port.onMessage.addListener(async () => {
+    const { account } = await chrome.storage.local.get("account");
+    port.postMessage({ account: account ?? null, port: true });
+  });
+});
+
+chrome.runtime.onMessage.addListener((message, _sender, reply) => {
+  if (message.target === "offscreen") return false;
+  (async () => {
+    if (message.action === "set") {
+      await chrome.storage.local.set({ account: message.account });
+    }
+    if (message.action === "storage-worker") {
+      await chrome.storage.local.set({ [message.key]: message.value });
+    }
+    if (message.action === "create-window-probe") {
+      if (!Number.isInteger(message.sourceTabID) || !Number.isInteger(message.windowID)
+        || !Number.isInteger(message.port) || message.port < 1 || message.port > 65535
+        || !["normal", "popup"].includes(message.type)
+        || typeof message.token !== "string" || !/^[0-9a-f-]{36}$/i.test(message.token)) {
+        throw new Error("Bounded authored window request required");
+      }
+      const source = await chrome.tabs.get(message.sourceTabID);
+      const url = new URL(message.url);
+      const sourceURL = new URL(source.url);
+      if (source.windowId !== message.windowID || url.protocol !== "http:"
+        || url.hostname !== "127.0.0.1" || url.port !== String(message.port)
+        || sourceURL.origin !== url.origin || !url.pathname.startsWith("/account/host-engine-")) {
+        throw new Error("Owned loopback source and destination required");
+      }
+      const created = await chrome.windows.create(message.moveExisting === true
+        ? { tabId: source.id, type: message.type, focused: false }
+        : { url: url.href, type: message.type, focused: false });
+      const report = { token: message.token, windowID: created.id,
+        tabID: created.tabs?.[0]?.id ?? null, type: message.type };
+      await chrome.storage.local.set({ windowProbe: report });
+      return report;
+    }
+    if (message.action === "activate-probe") {
+      if (!Array.isArray(message.tabIDs) || message.tabIDs.length < 1 || message.tabIDs.length > 8
+        || !message.tabIDs.every(Number.isInteger) || !Number.isInteger(message.windowID)
+        || !Number.isInteger(message.port) || message.port < 1 || message.port > 65535
+        || typeof message.token !== "string" || !/^[0-9a-f-]{36}$/i.test(message.token)) {
+        throw new Error("Bounded authored activation request required");
+      }
+      const targets = await Promise.all(message.tabIDs.map((id) => chrome.tabs.get(id)));
+      for (const target of targets) {
+        const url = new URL(target.url);
+        if (target.windowId !== message.windowID || url.protocol !== "http:"
+          || url.hostname !== "127.0.0.1" || url.port !== String(message.port)) {
+          throw new Error("Owned loopback fixture window required");
+        }
+      }
+      for (const id of message.tabIDs) await chrome.tabs.update(id, { active: true });
+      const [active] = await chrome.tabs.query({ active: true, windowId: message.windowID });
+      const report = { token: message.token, windowID: message.windowID, tabID: active?.id ?? null };
+      await chrome.storage.local.set({ activationProbe: report });
+      return report;
+    }
+    if (message.action === "library-read" || message.action === "library-write") {
+      const url = new URL(message.url);
+      if (url.protocol !== "http:" || url.hostname !== "127.0.0.1" || !url.pathname.startsWith("/library-")) {
+        throw new Error("Library fixture origin required");
+      }
+      if (message.action === "library-write") {
+        const [existing] = await chrome.bookmarks.search({ url: url.href });
+        if (existing) await chrome.bookmarks.update(existing.id, { title: message.title });
+        else await chrome.bookmarks.create({ title: message.title, url: url.href });
+      }
+      const bookmarks = await chrome.bookmarks.search({ url: url.href });
+      const history = await chrome.history.search({ text: url.href, startTime: 0, maxResults: 1000 });
+      const { account } = await chrome.storage.local.get("account");
+      return { account, serviceWorker: true,
+        bookmarks: bookmarks.map(({ title, url }) => ({ title, url })),
+        history: history.map(({ title, url, visitCount }) => ({ title, url, visitCount })) };
+    }
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (message.action === "fill") {
+      if (!tab || !tab.url?.startsWith("http://127.0.0.1:")) throw new Error("Fixture origin required");
+      const { account } = await chrome.storage.local.get("account");
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id }, args: [account],
+        func: (value) => {
+          if (document.documentElement.dataset.arcusisFixture !== "v1") throw new Error("Not fixture");
+          document.querySelector("#username").value = value;
+          document.querySelector("#password").value = "disposable-fixture-password";
+        },
+      });
+    }
+    let offscreen = null;
+    if (message.action === "offscreen") {
+      if (!(await chrome.offscreen.hasDocument())) {
+        await chrome.offscreen.createDocument({
+          url: "offscreen.html", reasons: ["LOCAL_STORAGE"],
+          justification: "Verify disposable MV3 extension context isolation",
+        });
+      }
+      offscreen = await chrome.runtime.sendMessage({ target: "offscreen" });
+    }
+    const { account } = await chrome.storage.local.get("account");
+    const tabs = message.action === "order"
+      ? (await chrome.tabs.query({ currentWindow: true })).map(({ id, index, pinned, active }) => ({ id, index, pinned, active }))
+      : null;
+    return { account: account ?? null, tabID: tab?.id ?? null, tabURL: tab?.url ?? null,
+      offscreen, tabs, serviceWorker: true };
+  })().then(reply, (error) => reply({ error: String(error) }));
+  return true;
+});

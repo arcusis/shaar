@@ -1,0 +1,10 @@
+{
+  "repository": "https://github.com/mantrakp04/ardia",
+  "sourceCommit": "91e17a5655519d2dc385ec8452432469232ff9af",
+  "sourceTag": "v0.2.39",
+  "engineTree": "0fd438ac5e7847948832ff6dd080ce9ab0206464",
+  "archiveURL": "https://github.com/mantrakp04/ardia/releases/download/v0.2.39-nightly.9/ArdiaCore-0fd438ac5e78.tar.xz",
+  "sha256": "90217217a1156e0ae70deec1f9e54b0f1e6686b3f890a8581f1aa7c6e44f8aba",
+  "chromiumVersion": "155.0.8059.84",
+  "architecture": "arm64"
+}

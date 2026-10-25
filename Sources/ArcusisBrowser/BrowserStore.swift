@@ -56,6 +56,12 @@ final class BrowserStore {
       return nil
     }
   }
+  var externalAppRequests: [ExternalAppRequest] {
+    consentRequests.compactMap {
+      if case .externalApp(let request) = $0 { return request }
+      return nil
+    }
+  }
   private(set) var storageNotice: String?
 
   @ObservationIgnored private let sessionFile: SessionFile?
@@ -67,6 +73,7 @@ final class BrowserStore {
   @ObservationIgnored var onCloseTab: ((UUID) -> Void)?
   @ObservationIgnored var onInstallDecision: ((String, Bool) -> Void)?
   @ObservationIgnored var onWebsiteMediaDecision: ((String, Bool) -> Void)?
+  @ObservationIgnored var onExternalAppDecision: ((String, Bool) -> Void)?
   @ObservationIgnored var onFindRequest: ((PageFindState, Bool) -> Bool)?
   @ObservationIgnored var onStopFinding: ((UUID) -> Void)?
   @ObservationIgnored var onReloadPage: ((UUID, UUID) -> Bool)?
@@ -420,6 +427,15 @@ final class BrowserStore {
     resolveConsent("media-\(id)", accepted: accepted)
   }
 
+  @discardableResult
+  func requestExternalApp(_ request: ExternalAppRequest) -> Bool {
+    enqueueConsent(.externalApp(request))
+  }
+
+  func resolveExternalApp(_ id: String, accepted: Bool) {
+    resolveConsent("external-\(id)", accepted: accepted)
+  }
+
   private func enqueueConsent(_ request: BrowserSheet) -> Bool {
     guard request.isConsent, let tab = request.tabID, rendererFailures[tab] == nil,
       request.matches(session), consentRequests.count < 10,
@@ -437,12 +453,14 @@ final class BrowserStore {
     consentRequests.removeAll { $0.id == id }
     if presentedConsentID == id { presentedConsentID = nil }
     if presented { sheet = nil }
-    let allow =
+    var allow =
       accepted && presented && request.matches(session)
       && request.tabID.map { rendererFailures[$0] == nil } == true
+    if case .externalApp(let external) = request { allow = allow && external.canOpen }
     switch request {
     case .extensionInstall(let request): onInstallDecision?(request.id, allow)
     case .websiteMedia(let request): onWebsiteMediaDecision?(request.id, allow)
+    case .externalApp(let request): onExternalAppDecision?(request.id, allow)
     case .space, .downloads, .folder, .recentlyClosed, .library, .bookmarkEditor: break
     }
   }

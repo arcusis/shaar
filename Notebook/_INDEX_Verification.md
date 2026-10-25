@@ -1,6 +1,7 @@
 # Verification and acceptance
 
 - [[Source_And_Native_Verification]]
+- [[Saved_Tab_Capacity_Verification]]
 - [[Extension_Storage_Verification]]
 - [[Tab_Order_Verification]]
 - [[Native_Window_Verification]]

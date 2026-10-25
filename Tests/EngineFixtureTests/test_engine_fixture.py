@@ -1,4 +1,6 @@
 import importlib.util
+import contextlib
+import io
 import fcntl
 import json
 import os
@@ -6,12 +8,133 @@ from pathlib import Path
 import signal
 import tempfile
 import unittest
+import uuid
 from unittest.mock import Mock, patch
 
 
 spec = importlib.util.spec_from_file_location('engine_fixture', Path(__file__).resolve().parents[2] / 'scripts/engine_fixture.py')
 fixture = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fixture)
+
+
+class SavedTabCapacityRunnerTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory(prefix='arcusis-engine-probe-')
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+        self.run_id = 'C766672E-AB82-4F84-8ED3-2C6D75AEB1D1'
+
+    def main_report(self, phase):
+        return dict(phase=phase, passed=True, probeMode=fixture.SAVED_TAB_CAPACITY_MODE,
+                    savedTabCapacityOnly=True, savedTabCapacityProbe=True,
+                    savedTabCapacityRunID=self.run_id, scope=fixture.SAVED_TAB_CAPACITY_SCOPE,
+                    localFixturesPassed=False, bitwardenStoreProbe=False,
+                    bitwardenVaultProbe=False, bitwardenOnboardingControl=False,
+                    fixtureTLSProbe=False,
+                    abruptRecoveryProbe=False, error=None)
+
+    def capacity_report(self, phase):
+        profiles = [str(uuid.UUID(int=index)).upper() for index in range(1, 5)]
+        spaces = [str(uuid.UUID(int=index)).upper() for index in range(11, 23)]
+        selected_tabs = [str(uuid.UUID(int=index)).upper() for index in range(101, 113)]
+        native_ids = list(range(501, 509))
+        visit_timings = [dict(spaceID=spaces[index], profileID=profiles[index % 4],
+                              nativeTabID=native_ids[index], nativeLiveTabs=index + 1,
+                              elapsedMilliseconds=float(index + 1)) for index in range(8)]
+        cleanup = dict(mode=fixture.SAVED_TAB_CAPACITY_MODE, phase=phase,
+                       runID=self.run_id, scope=fixture.SAVED_TAB_CAPACITY_SCOPE,
+                       engineClosed=True, primaryWindowClosed=True,
+                       routerClientCount=0, passed=True)
+        return dict(schema=1, mode=fixture.SAVED_TAB_CAPACITY_MODE, phase=phase,
+                    runID=self.run_id, scope=fixture.SAVED_TAB_CAPACITY_SCOPE,
+                    passed=True, profileCount=4, spaceCount=12, savedTabs=1440,
+                    visitedSpaces=8, visitedProfiles=4, initialNativeLiveTabs=1,
+                    peakNativeLiveTabs=8, liveTabsAfterVisits=8,
+                    unvisitedTabsMaterialized=0, checks=['native selected tab loaded'],
+                    workspaceSnapshot='saved-tab-capacity-workspace.json',
+                    identityCheckpoint='saved-tab-capacity-identities.json',
+                    selectedSpaceID=spaces[0], profileIDs=profiles, savedSpaceIDs=spaces,
+                    selectedTabIDs=selected_tabs, initialNativeTabID=native_ids[0],
+                    visitedNativeTabIDs=native_ids, initialDocumentWaitMilliseconds=7.5,
+                    visitDurationMilliseconds=sum(item['elapsedMilliseconds'] for item in visit_timings),
+                    visitTimings=visit_timings,
+                    cleanup=cleanup)
+
+    def write_phase(self, phase):
+        (self.root / f'{phase}.json').write_text(json.dumps(self.main_report(phase)))
+        (self.root / f'{phase}-saved-tab-capacity.json').write_text(
+            json.dumps(self.capacity_report(phase)))
+
+    def test_capacity_flag_is_mutually_exclusive_with_other_runner_modes(self):
+        options = fixture.argument_parser().parse_args(['--saved-tab-capacity'])
+        self.assertTrue(options.saved_tab_capacity)
+        for other in ('--bitwarden', '--bitwarden-onboarding-control',
+                      '--abrupt-restart', '--abrupt-control'):
+            with self.subTest(other=other), contextlib.redirect_stderr(io.StringIO()), \
+                    self.assertRaises(SystemExit):
+                fixture.argument_parser().parse_args(['--saved-tab-capacity', other])
+
+    def test_public_capacity_mode_forwards_to_both_child_phases(self):
+        for phase in ('initial', 'restart'):
+            arguments = fixture.build_engine_probe_arguments(
+                '/tmp/ArcusisBrowser', self.root, 'http://127.0.0.1:43123/account', phase,
+                include_bitwarden=False, onboarding_control=False, abrupt=False,
+                saved_tab_capacity=True)
+            self.assertIn('--probe-saved-tab-capacity', arguments)
+            self.assertEqual(arguments[arguments.index('--probe-phase') + 1], phase)
+            self.assertNotIn('--bitwarden', arguments)
+            self.assertNotIn('--probe-await-abrupt-termination', arguments)
+
+    def test_capacity_reports_bind_phase_mode_scope_cleanup_and_shared_run(self):
+        for phase in ('initial', 'restart'):
+            self.write_phase(phase)
+            fixture.validate_saved_tab_capacity_report(
+                self.root, phase, self.main_report(phase), 0)
+        summary = fixture.record_saved_tab_capacity_summary(self.root)
+        self.assertTrue(summary['passed'])
+        self.assertEqual(summary['mode'], fixture.SAVED_TAB_CAPACITY_MODE)
+        self.assertEqual(summary['runID'], self.run_id)
+        self.assertEqual([phase['phase'] for phase in summary['phases']], ['initial', 'restart'])
+
+    def test_capacity_validation_rejects_wrong_phase_scope_or_cleanup_receipt(self):
+        cases = (
+            ('main phase', lambda main, cap: main.update(phase='restart')),
+            ('main mode', lambda main, cap: main.update(probeMode='full-fixture')),
+            ('capacity scope', lambda main, cap: cap.update(scope='full fixture')),
+            ('cleanup phase', lambda main, cap: cap['cleanup'].update(phase='restart')),
+            ('cleanup window', lambda main, cap: cap['cleanup'].update(primaryWindowClosed=False)),
+            ('unvisited live count', lambda main, cap: cap.update(unvisitedTabsMaterialized=1)),
+            ('visit timing ownership', lambda main, cap: cap['visitTimings'][0].update(nativeTabID=0)),
+            ('local fixtures', lambda main, cap: main.update(localFixturesPassed=True)),
+        )
+        for label, mutate in cases:
+            with self.subTest(label=label):
+                main = self.main_report('initial')
+                capacity = self.capacity_report('initial')
+                mutate(main, capacity)
+                (self.root / 'initial-saved-tab-capacity.json').write_text(json.dumps(capacity))
+                with self.assertRaises(RuntimeError):
+                    fixture.validate_saved_tab_capacity_report(self.root, 'initial', main, 0)
+
+    def test_default_full_runner_rejects_capacity_even_with_local_fixture_pass(self):
+        report = self.main_report('initial')
+        report['localFixturesPassed'] = True
+        with self.assertRaises(RuntimeError):
+            fixture.validate_full_fixture_report(report, 'initial')
+
+    def test_capacity_summary_rejects_initial_restart_run_id_mismatch(self):
+        self.write_phase('initial')
+        self.write_phase('restart')
+        restart = self.capacity_report('restart')
+        restart['runID'] = 'F29A09F3-FAF9-4938-A25B-260F67F42CC3'
+        restart['cleanup']['runID'] = restart['runID']
+        (self.root / 'restart-saved-tab-capacity.json').write_text(json.dumps(restart))
+        main = self.main_report('restart')
+        main['savedTabCapacityRunID'] = restart['runID']
+        (self.root / 'restart.json').write_text(json.dumps(main))
+        with self.assertRaises(RuntimeError):
+            fixture.record_saved_tab_capacity_summary(self.root)
+        self.assertFalse((self.root / 'saved-tab-capacity-summary.json').exists())
 
 
 class BitwardenSummaryTests(unittest.TestCase):
@@ -23,6 +146,8 @@ class BitwardenSummaryTests(unittest.TestCase):
     def reports(self, control=False, passed=True):
         for phase in ('initial', 'restart'):
             host = dict(phase=phase, passed=passed, bitwardenStoreProbe=True,
+                        probeMode='full-fixture', savedTabCapacityOnly=False,
+                        savedTabCapacityProbe=False,
                         bitwardenOnboardingControl=control, localFixturesPassed=True,
                         checks=['authored fixture observed'])
             vendor = dict(phase=phase, passed=passed, controlOnly=control,
@@ -63,6 +188,14 @@ class BitwardenSummaryTests(unittest.TestCase):
         self.reports(control=True)
         with self.assertRaises(RuntimeError):
             fixture.record_bitwarden_summary(self.root, False)
+
+        for change in (dict(probeMode=fixture.SAVED_TAB_CAPACITY_MODE),
+                       dict(savedTabCapacityOnly=True)):
+            self.reports()
+            path = self.root / 'initial.json'
+            path.write_text(json.dumps(json.loads(path.read_text()) | change))
+            with self.subTest(host_change=change), self.assertRaises(RuntimeError):
+                fixture.record_bitwarden_summary(self.root, False)
 
     def test_missing_report_cannot_produce_acceptance(self):
         self.reports()
@@ -274,6 +407,8 @@ class AbruptCheckpointTests(unittest.TestCase):
             receipt = dict(passed=True, exitCode=-signal.SIGKILL, processGroupAbsentAfterKill=True,
                            controlOnly=control, sessionSHA256Before='a' * 64, sessionSHA256After='a' * 64)
             restart = dict(passed=restarted, error=None if restarted else 'Cookie missing',
+                           probeMode='full-fixture', savedTabCapacityOnly=False,
+                           savedTabCapacityProbe=False,
                            phase='restart', abruptRecoveryProbe=True, bitwardenStoreProbe=False,
                            localFixturesPassed=restarted)
             (self.root / 'abrupt-termination.json').write_text(json.dumps(receipt))
@@ -284,6 +419,11 @@ class AbruptCheckpointTests(unittest.TestCase):
             self.assertEqual((self.root / 'restart.json').read_bytes(), raw)
         with self.assertRaises(RuntimeError):
             fixture.record_abrupt_summary(self.root, control_only=True)
+        restart['probeMode'] = fixture.SAVED_TAB_CAPACITY_MODE
+        (self.root / 'restart.json').write_text(json.dumps(restart))
+        with self.assertRaises(RuntimeError):
+            fixture.record_abrupt_summary(self.root, control_only=False)
+        restart['probeMode'] = 'full-fixture'
         restart['abruptRecoveryProbe'] = False
         (self.root / 'restart.json').write_text(json.dumps(restart))
         with self.assertRaises(RuntimeError):

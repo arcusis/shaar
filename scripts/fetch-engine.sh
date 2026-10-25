@@ -29,4 +29,8 @@ if [[ ! -f "$destination/.verified-$checksum" ]]; then
 fi
 framework="$destination/Chromium Framework.framework"
 [[ -f "$framework/Versions/Current/Chromium Framework" ]] || { echo 'Engine framework missing.' >&2; exit 1; }
+python3 scripts/engine_payload.py --archive "$archive" --framework "$framework" --pin "$pin" >/dev/null || {
+  echo 'Engine payload verification failed; refusing bundle.' >&2
+  exit 1
+}
 printf '%s\n' "$framework"

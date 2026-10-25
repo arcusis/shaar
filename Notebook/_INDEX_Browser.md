@@ -8,6 +8,7 @@
 - [[Closed_Tab_Recovery]]
 - [[Extension_Consent]]
 - [[Media_Consent]]
+- [[External_App_Consent]]
 - [[Find_In_Page]]
 - [[Renderer_Recovery]]
 - [[Download_Library]]

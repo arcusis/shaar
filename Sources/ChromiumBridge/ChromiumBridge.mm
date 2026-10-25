@@ -978,20 +978,21 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   if (!literal) { completion(NO); return; }
   NSString *expression = [NSString stringWithFormat:
     @"(()=>{const excluded=e=>{for(let n=e;n&&n.nodeType===1;n=n.parentElement){"
-     "if(n.hidden||n.getAttribute('aria-hidden')?.toLowerCase()==='true')return true;"
-     "const s=getComputedStyle(n);if(s.display==='none'||s.visibility==='hidden'||s.visibility==='collapse')return true;}return false;};"
+     "if(n.hidden||n.inert||n.getAttribute('aria-hidden')?.toLowerCase()==='true')return true;"
+     "const s=getComputedStyle(n);if(s.display==='none'||s.visibility==='hidden'||s.visibility==='collapse'||s.opacity==='0')return true;}return false;};"
      "const text=e=>{const w=document.createTreeWalker(e,NodeFilter.SHOW_TEXT);let out='',n;"
      "while((n=w.nextNode()))if(!excluded(n.parentElement))out+=' '+n.nodeValue;return out.trim().replace(/\\s+/g,' ');};"
      "const label=e=>(e.getAttribute('aria-label')||text(e)).trim().replace(/\\s+/g,' ');"
      "const button=[...document.querySelectorAll('button,a,[role=button]')].find(b=>"
      "!excluded(b)&&label(b)===%@ && b.getBoundingClientRect().width>0 && b.getBoundingClientRect().height>0 && !b.disabled);"
-     "if(!button)return null;button.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'});"
-     "const r=button.getBoundingClientRect(),x=r.x+r.width/2,y=r.y+r.height/2;"
+     "if(!button)return null;const point=()=>{const r=button.getBoundingClientRect();"
+     "if(r.width<=0||r.height<=0)return null;const x=r.x+r.width/2,y=r.y+r.height/2;"
      "const hits=(x,y)=>{const e=document.elementFromPoint(x,y);return !!e&&(e===button||button.contains(e));};"
      "if(hits(x,y))return {x,y};const l=Math.max(0,r.left),t=Math.max(0,r.top),"
      "rr=Math.min(innerWidth,r.right),bb=Math.min(innerHeight,r.bottom);if(rr<=l||bb<=t)return null;"
      "for(const fx of [.1,.5,.9])for(const fy of [.1,.5,.9]){const px=l+(rr-l)*fx,py=t+(bb-t)*fy;"
-     "if(hits(px,py))return {x:px,y:py};}return null;})()", literal];
+     "if(hits(px,py))return {x:px,y:py};}return null;};const visible=point();if(visible)return visible;"
+     "button.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});return point();})()", literal];
   ArdiaCoreTab *popup = state.popup;
   ClickProbeTarget(popup, expression, ^BOOL { return !state.closed && [state.popupID isEqualToString:popupID]; }, completion);
 }

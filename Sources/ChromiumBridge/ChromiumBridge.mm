@@ -451,8 +451,11 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
 
 - (BOOL)respondsToSelector:(SEL)selector {
   if (selector == @selector(tab:externalAppRequest:)) {
-    return self.onExternalAppRequest != nil &&
+    BOOL supported = self.onExternalAppRequest != nil &&
       [_engineClass respondsToSelector:@selector(resolveExternalApp:open:remember:)];
+    if (_testing && _externalAppProbeTesting && ARCProbeRootIsOwned(_probeRoot))
+      fprintf(stderr, "External-app probe delegate supported=%d\n", supported);
+    return supported;
   }
   return [super respondsToSelector:selector];
 }
@@ -1562,6 +1565,8 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
 }
 
 - (void)tab:(ArdiaCoreTab *)tab externalAppRequest:(NSDictionary<NSString *, id> *)request {
+  if (_testing && _externalAppProbeTesting && ARCProbeRootIsOwned(_probeRoot))
+    fprintf(stderr, "External-app probe callback received\n");
   id rawRequestID = [request isKindOfClass:NSDictionary.class] ? request[@"id"] : nil;
   if (![self isCanonicalExternalRequestID:rawRequestID]) {
     if ([rawRequestID isKindOfClass:NSString.class] && [rawRequestID length] > 0)
@@ -1575,6 +1580,10 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   ARCNativeWindowState *state = tabID ? [self stateForTabID:tabID] : nil;
   NSString *windowID = tabID ? _tabWindows[tabID] : nil;
   NSString *pageURL = tab.url;
+  if (_testing && _externalAppProbeTesting && ARCProbeRootIsOwned(_probeRoot))
+    fprintf(stderr, "External-app probe scope mapped=%d profile=%d selected=%d window=%d\n",
+      tabID != nil, profileID && _profiles[profileID] == tab.profile,
+      tabID && [self isSelectedTabID:tabID], state && !state.closed && !state.closing);
   if (!_engineClass || ![_engineClass respondsToSelector:@selector(resolveExternalApp:open:remember:)] ||
       !tabID || !profileID || !_profiles[profileID] || _profiles[profileID] != tab.profile ||
       !state || state.closed || state.closing || state.native == nil || state.native.window == nil ||

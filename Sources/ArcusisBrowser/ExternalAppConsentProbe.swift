@@ -86,7 +86,9 @@ final class ExternalAppConsentProbe {
       "passed": engineClosed && primaryWindowClosed && routerCount == 0 && pending == 0,
     ]
     let audits = evidence.targetByApproval.compactMap { audit($0) }
-    evidence.launchCount = audits.map { $0.count }.max() ?? 0
+    evidence.launchCount =
+      audits.map { $0.count }.max()
+      ?? audit("webcal://audit.invalid.example/calendar.ics")?.count ?? 0
     evidence.checks[13] =
       quitDenied && engineClosed && primaryWindowClosed && pending == 0
       && audits.count == 2 && audits.allSatisfy { $0.count == 2 }
@@ -102,7 +104,10 @@ final class ExternalAppConsentProbe {
   private func exercise() async throws {
     let scheme = try handlerScheme()
     evidence.checks[0] = true
-    let targets = ["\(scheme):probe-one@invalid.example", "\(scheme):probe-two@invalid.example"]
+    let targets =
+      scheme == "webcal"
+      ? ["webcal://one.invalid.example/calendar.ics", "webcal://two.invalid.example/calendar.ics"]
+      : ["\(scheme):probe-one@invalid.example", "\(scheme):probe-two@invalid.example"]
     guard let initial = audit(targets[0]), initial.count == 0,
       initial.matchingCount == 0, initial.allUnremembered
     else { throw failure("Native no-launch audit unavailable or nonzero before request.") }
@@ -112,6 +117,7 @@ final class ExternalAppConsentProbe {
     let spaces = store.session.spaces
     guard spaces.count >= 2 else { throw failure("Two isolated fixture profiles are missing.") }
     for index in 0..<2 {
+      stage("approval-\(index)-begin")
       let space = spaces[index]
       store.dismissPageFind()
       store.perform(.space(space.id))
@@ -135,6 +141,7 @@ final class ExternalAppConsentProbe {
       evidence.approvedRequests += 1
       evidence.launchCount = audit.count
       evidence.checks[index + 2] = true
+      stage("approval-\(index)-recorded")
     }
     for id in approvalIDs { replay(id) }
     guard evidence.targetByApproval.allSatisfy({ audit($0)?.count == 2 }) else {
@@ -162,15 +169,20 @@ final class ExternalAppConsentProbe {
   }
 
   private func denial(_ target: String, action: DenialAction) async throws -> Bool {
+    stage("denial-\(action)-begin")
     let space = store.session.spaces[0]
     store.perform(.space(space.id))
+    stage("denial-space-selected")
     store.perform(.open(fixture.appending(path: "external-consent-\(evidence.deniedRequests)")))
+    stage("denial-tab-opened")
     guard let tab = store.session.selectedSpace.selectedTabID else {
       throw failure("Fixture tab missing.")
     }
     try await ready(tab)
+    stage("denial-tab-ready")
     if action == .unpresented { store.showDownloads() }
     let request = try await trigger(tab, target: target)
+    stage("denial-request-received")
     switch action {
     case .direct:
       try await waitPresented(request.id)
@@ -203,22 +215,15 @@ final class ExternalAppConsentProbe {
     return audit(target)?.count == 2
   }
 
+  private func stage(_ name: String) {
+    FileHandle.standardError.write(Data("External-app probe stage: \(name)\n".utf8))
+  }
+
   private func trigger(_ tab: UUID, target: String) async throws -> ExternalAppRequest {
     guard store.session.selectedSpace.selectedTabID == tab,
       runtime.windowID(forTabID: tab.uuidString) == engine.windowID
     else { throw failure("Selected profile and owned tab did not reconcile.") }
-    let encoded = target.replacingOccurrences(of: "\\", with: "\\\\")
-      .replacingOccurrences(of: "'", with: "\\'")
-    let clicked = await withCheckedContinuation { continuation in
-      runtime.evaluateProbeUserGesture(
-        inTabID: tab.uuidString,
-        script:
-          "(()=>{let a=document.getElementById('external-consent-probe');if(!a){a=document.createElement('a');a.id='external-consent-probe';a.textContent='Open fixture';document.body.append(a)}a.href='\(encoded)';a.click();return true})()"
-      ) { continuation.resume(returning: $0) }
-    }
-    guard clicked == "true" || clicked == "1" else {
-      throw failure("Authored gesture did not run.")
-    }
+    try await clickLink(tab, target: target)
     for _ in 0..<100 {
       if let request = store.externalAppRequests.first(where: { $0.tabID == tab }),
         observedIDs.contains(request.id), request.matches(store.session)
@@ -227,12 +232,44 @@ final class ExternalAppConsentProbe {
       }
       try await Task.sleep(for: .milliseconds(50))
     }
-    throw failure("Real external-protocol callback did not create a current request.")
+    throw failure(
+      "Real external-protocol callback did not create a current request (observed \(observedIDs.count))."
+    )
   }
 
-  private func ready(_ tab: UUID) async throws {
-    for _ in 0..<100 {
-      if runtime.windowID(forTabID: tab.uuidString) == engine.windowID,
+  private func clickLink(_ tab: UUID, target: String) async throws {
+    let encoded = try JSONEncoder().encode(target)
+    guard let literal = String(data: encoded, encoding: .utf8),
+      await evaluate(
+        tab,
+        "(()=>{let a=document.getElementById('external-consent-probe');if(!a){a=document.createElement('a');a.id='external-consent-probe';a.textContent='Open fixture';document.body.append(a)}a.href=\(literal);a.style.cssText='position:fixed;top:4px;left:4px;padding:12px;background:white;z-index:99';window.arcusisExternalClickProof=null;a.onclick=e=>{window.arcusisExternalClickProof={trusted:e.isTrusted,active:navigator.userActivation.isActive};};return true})()"
+      ) as? Bool == true
+    else { throw failure("Could not prepare the authored external link.") }
+    runtime.focusTabID(tab.uuidString)
+    let clicked: Bool = await withCheckedContinuation { continuation in
+      runtime.clickProbeElement(inTabID: tab.uuidString, elementID: "external-consent-probe") {
+        continuation.resume(returning: $0)
+      }
+    }
+    guard clicked else { throw failure("Trusted authored-link input did not complete.") }
+    let proof = await evaluate(tab, "window.arcusisExternalClickProof") as? [String: Any]
+    guard proof?["trusted"] as? Bool == true, proof?["active"] as? Bool == true else {
+      throw failure(
+        "Authored external input missing (seen \(proof != nil), trusted \(proof?["trusted"] as? Bool == true), active \(proof?["active"] as? Bool == true))."
+      )
+    }
+  }
+
+  private func ready(_ tab: UUID, owner: BrowserEngine? = nil) async throws {
+    let owner = owner ?? engine
+    let deadline = ContinuousClock.now.advanced(by: .seconds(10))
+    while ContinuousClock.now < deadline {
+      runtime.hostView(forWindowID: owner.windowID)?.layoutSubtreeIfNeeded()
+      if runtime.windowID(forTabID: tab.uuidString) == owner.windowID,
+        owner.pages[tab]?.loading == false,
+        let window = runtime.window(forID: owner.windowID), window.attachedSheet == nil,
+        let view = runtime.view(forTabID: tab.uuidString), view.window === window,
+        view.bounds.width > 0, view.bounds.height > 0,
         let loaded = await evaluate(
           tab,
           "document.readyState==='complete' && document.documentElement.dataset.arcusisFixture==='v1'"
@@ -287,6 +324,7 @@ final class ExternalAppConsentProbe {
     let window = NSWindow(
       contentRect: NSRect(origin: .zero, size: size), styleMask: .borderless, backing: .buffered,
       defer: false)
+    window.isReleasedWhenClosed = false
     window.appearance = NSAppearance(named: appearance)
     window.contentView = host
     captureWindow = window
@@ -409,7 +447,8 @@ final class ExternalAppConsentProbe {
   }
 
   private func handlerScheme() throws -> String {
-    for scheme in ["mailto", "tel", "facetime", "webcal"] {
+    // Chromium auto-allows mailto before the dialog hook; it cannot test consent.
+    for scheme in ["webcal", "tel", "facetime"] {
       if let url = URL(string: "\(scheme):probe@invalid.example"),
         NSWorkspace.shared.urlForApplication(toOpen: url) != nil
       {
@@ -447,29 +486,13 @@ final class ExternalAppConsentProbe {
   }
 
   private func readySecondary(_ tab: UUID, engine: BrowserEngine) async throws {
-    for _ in 0..<100 {
-      if runtime.windowID(forTabID: tab.uuidString) == engine.windowID,
-        await evaluate(
-          tab,
-          "document.readyState==='complete' && document.documentElement.dataset.arcusisFixture==='v1'"
-        ) as? Bool == true
-      {
-        return
-      }
-      try await Task.sleep(for: .milliseconds(50))
-    }
-    throw failure("Secondary fixture did not become ready.")
+    try await ready(tab, owner: engine)
   }
 
   private func triggerSecondary(
     _ tab: UUID, target: String, engine: BrowserEngine, store: BrowserStore
   ) async throws -> ExternalAppRequest {
-    let escaped = target.replacingOccurrences(of: "'", with: "\\'")
-    _ = try await gesture(
-      tab,
-      script:
-        "(()=>{let a=document.createElement('a');a.id='external-consent-probe';a.href='\(escaped)';a.textContent='Open fixture';document.body.append(a);a.click();return true})()"
-    )
+    try await clickLink(tab, target: target)
     for _ in 0..<100 {
       if let request = store.externalAppRequests.first(where: { $0.tabID == tab }) {
         return request

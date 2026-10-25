@@ -109,6 +109,7 @@ final class NativeHostProbe {
   private var focused: NSWindow?
   private var closures: [UUID: Bool] = [:]
   private var checks: [String] = []
+  private var faviconProof: [String: Any]?
   private var expectedAfterQuit: BrowserWorkspace?
 
   init(primary: BrowserEngine, store: BrowserStore, root: URL, fixture: URL, phase: String) throws {
@@ -1047,23 +1048,26 @@ final class NativeHostProbe {
     }
     defer { runtime.onTabChanged = previous }
 
-    let color = phase == "initial" ? "#345678" : "#8A4B12"
-    let expected =
+    let expectedRGB: [Double] =
       phase == "initial"
-      ? NSColor(deviceRed: 52 / 255, green: 86 / 255, blue: 120 / 255, alpha: 1)
-      : NSColor(deviceRed: 138 / 255, green: 75 / 255, blue: 18 / 255, alpha: 1)
-    let svg =
-      "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"64\" height=\"48\">"
-      + "<rect width=\"64\" height=\"48\" fill=\"\(color)\"/></svg>"
-    let faviconURL = "data:image/svg+xml;base64,\(Data(svg.utf8).base64EncodedString())"
+      ? [52, 86, 120].map { Double($0) / 255 } : [138, 75, 18].map { Double($0) / 255 }
+    let expected = NSColor(
+      deviceRed: expectedRGB[0], green: expectedRGB[1], blue: expectedRGB[2], alpha: 1)
+    var faviconComponents = URLComponents(url: fixture, resolvingAgainstBaseURL: false)!
+    faviconComponents.path = "/favicon-\(phase).png"
+    faviconComponents.query = nil
+    faviconComponents.fragment = nil
+    let faviconURL = faviconComponents.url!.absoluteString
     let script =
       "(()=>{const link=document.createElement('link');link.rel='icon';"
       + "link.href='\(faviconURL)';document.head.append(link);return true})()"
+    func bitmapRepresentation(_ image: NSImage?) -> NSBitmapImageRep? {
+      image?.representations.compactMap { $0 as? NSBitmapImageRep }.first
+    }
     func matchesAuthoredIcon(_ image: NSImage?) -> Bool {
-      guard let data = image?.tiffRepresentation, let bitmap = NSBitmapImageRep(data: data),
+      guard let bitmap = bitmapRepresentation(image),
         bitmap.pixelsWide > 0, bitmap.pixelsHigh > 0,
-        let sample = bitmap.colorAt(x: bitmap.pixelsWide / 2, y: bitmap.pixelsHigh / 2)?
-          .usingColorSpace(.deviceRGB)
+        let sample = bitmap.colorAt(x: bitmap.pixelsWide / 2, y: bitmap.pixelsHigh / 2)
       else { return false }
       return abs(sample.redComponent - expected.redComponent) < 0.07
         && abs(sample.greenComponent - expected.greenComponent) < 0.07
@@ -1074,7 +1078,7 @@ final class NativeHostProbe {
         continuation.resume(returning: $0)
       }
     }
-    try expect(injected != nil, "owned fixture accepts authored data-URL favicon link")
+    try expect(injected != nil, "owned fixture accepts authored loopback PNG favicon link")
     let routedClient = primary.events.router.client(
       forTab: tabID.uuidString, nativeWindowID: windowID)
     try expect(
@@ -1101,6 +1105,36 @@ final class NativeHostProbe {
       try await Task.sleep(for: .milliseconds(100))
     }
     let size = image?.size ?? .zero
+    let bitmap = bitmapRepresentation(image)
+    let center = bitmap.flatMap {
+      $0.colorAt(x: $0.pixelsWide / 2, y: $0.pixelsHigh / 2)
+    }
+    let centerRGB = center.map { [$0.redComponent, $0.greenComponent, $0.blueComponent] }
+    let ownerRoute =
+      routedClient?.windowID == windowID
+      && primary.events.router.client(forTab: tabID.uuidString, nativeWindowID: wrongWindowID)
+        == nil
+    faviconProof = [
+      "phase": phase,
+      "route": faviconURL,
+      "getterNil": image == nil,
+      "imageWidth": bitmap?.pixelsWide ?? 0,
+      "imageHeight": bitmap?.pixelsHigh ?? 0,
+      "centerRGB": centerRGB as Any? ?? NSNull(),
+      "expectedRGB": expectedRGB,
+      "centerMatchesExpected": matchesAuthoredIcon(image),
+      "targetTabChangeCount": targetChanges,
+      "ownerRouteMatches": ownerRoute,
+      "wrongOwnerRouteNil": primary.events.router.client(
+        forTab: tabID.uuidString, nativeWindowID: wrongWindowID) == nil,
+    ]
+    let faviconData = try JSONSerialization.data(
+      withJSONObject: faviconProof!, options: [.prettyPrinted, .sortedKeys])
+    guard faviconData.count <= 4096 else {
+      throw HostProbeFailure("Favicon proof exceeded size bound.")
+    }
+    try faviconData.write(
+      to: root.appending(path: "\(phase)-native-favicon.json"), options: .atomic)
     try expect(
       matchesAuthoredIcon(image) && size.width > 0 && size.height > 0
         && size.width <= 256 && size.height <= 256
@@ -1159,6 +1193,7 @@ final class NativeHostProbe {
     try JSONSerialization.data(
       withJSONObject: [
         "passed": error == nil, "checks": checks,
+        "favicon": faviconProof as Any? ?? NSNull(),
         "closedWindows": Dictionary(
           uniqueKeysWithValues: closures.map { ($0.key.uuidString, $0.value) }),
         "error": error?.localizedDescription as Any? ?? NSNull(),

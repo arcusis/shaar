@@ -4,6 +4,7 @@ import SwiftUI
 struct BrowserSidebar: View {
   @Bindable var store: BrowserStore
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
   @State private var targetedTab: UUID?
   @State private var targetedSpace: UUID?
   @State private var targetedSection: String?
@@ -13,28 +14,23 @@ struct BrowserSidebar: View {
   @State private var recentDownloadsAnchorHovered = false
   @State private var recentDownloadsCardHovered = false
   @State private var recentDownloadsCloseTask: Task<Void, Never>?
+  @State private var folderDraft: SidebarFolderDraft?
+  @FocusState private var folderNameIsFocused: Bool
   let previewRecentDownloads: [BrowserDownload]?
 
-  init(store: BrowserStore, previewRecentDownloads: [BrowserDownload]? = nil) {
+  init(
+    store: BrowserStore, previewRecentDownloads: [BrowserDownload]? = nil,
+    previewFolderDraft: SidebarFolderDraft? = nil
+  ) {
     self.store = store
     self.previewRecentDownloads = previewRecentDownloads
+    _folderDraft = State(initialValue: previewFolderDraft)
   }
 
   var body: some View {
     let tabIndex = SidebarTabIndex(tabs: store.session.selectedSpace.tabs)
-    VStack(alignment: .leading, spacing: 20) {
-      WindowDragRegion()
-        .frame(height: 22)
-      HStack {
-        Text("Arcusis").font(.system(size: 13, weight: .semibold, design: .rounded))
-        Spacer()
-        Button {
-          store.spaceEditor = .create
-        } label: {
-          Image(systemName: "plus")
-        }
-        .help("Create a space")
-      }
+    VStack(alignment: .leading, spacing: 14) {
+      WindowDragRegion().frame(height: 18)
       HStack(spacing: 14) {
         Button {
           store.sidebarIsVisible = false
@@ -91,12 +87,19 @@ struct BrowserSidebar: View {
         .padding(10)
         .background(.white.opacity(0.22), in: RoundedRectangle(cornerRadius: 8))
       }
-      VStack(alignment: .leading, spacing: 5) {
-        Label(store.session.selectedSpace.name, systemImage: store.session.selectedSpace.symbol)
-          .font(.system(size: 14, weight: .semibold))
-        Text("\(store.profileName) profile")
-          .font(.system(size: 11))
-          .foregroundStyle(.secondary)
+      VStack(alignment: .leading, spacing: 4) {
+        HStack(spacing: 7) {
+          Label(store.session.selectedSpace.name, systemImage: store.session.selectedSpace.symbol)
+            .font(.system(size: 14, weight: .semibold))
+            .lineLimit(1)
+          Spacer(minLength: 0)
+          Image(systemName: "person.crop.circle")
+            .font(.system(size: 12))
+            .foregroundStyle(.secondary)
+            .accessibilityLabel("Profile: \(store.profileName)")
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(store.session.selectedSpace.name), Profile: \(store.profileName)")
         if let notice = store.sidebarNotice {
           Text(notice).font(.caption).fixedSize(horizontal: false, vertical: true)
         }
@@ -106,15 +109,20 @@ struct BrowserSidebar: View {
           HStack(spacing: 4) {
             sectionDropTarget("Pinned", pinned: true)
             Button {
-              store.showFolderEditor(.create(spaceID: store.session.selectedSpaceID, parentID: nil))
+              beginFolderDraft(parentID: nil)
             } label: {
               Image(systemName: "folder.badge.plus")
             }
             .help("New folder").accessibilityLabel("New folder").padding(.trailing, 10)
           }
+          if let folderDraft, folderDraft.parentID == nil { folderDraftRow(depth: 0) }
           ForEach(store.session.selectedSpace.pinnedItems()) { item in
             switch item {
-            case .folder(let folder, let depth): folderRow(folder, depth: depth)
+            case .folder(let folder, let depth):
+              folderRow(folder, depth: depth)
+              if let folderDraft, folderDraft.parentID == folder.id {
+                folderDraftRow(depth: depth + 1)
+              }
             case .tab(let tab, let depth):
               tabRow(tab, index: tabIndex).padding(.leading, indentation(depth))
             }
@@ -146,93 +154,101 @@ struct BrowserSidebar: View {
       }
       Spacer(minLength: 0)
       Divider()
-      recentDownloadsControls
-      ScrollView(.horizontal) {
-        HStack(spacing: 8) {
-          ForEach(store.session.spaces) { space in
-            Button {
-              store.perform(.space(space.id))
-            } label: {
-              Image(systemName: space.symbol)
-                .font(.system(size: 14))
-                .frame(width: 32, height: 30)
-                .background(
-                  .white.opacity(space.id == store.session.selectedSpaceID ? 0.5 : 0),
-                  in: RoundedRectangle(cornerRadius: 8)
-                )
-            }
-            .help(space.name)
-            .accessibilityLabel("Switch to \(space.name)")
-            .accessibilityAddTraits(space.id == store.session.selectedSpaceID ? .isSelected : [])
-            .draggable(SidebarTransfer.space(sessionID: store.dragSessionID, spaceID: space.id))
-            .dropDestination(for: SidebarTransfer.self) { items, point in
-              guard items.count == 1, let item = items.first else { return false }
-              let spaces = store.session.spaces
-              let index = spaces.firstIndex { $0.id == space.id }
-              let next = index.flatMap { spaces.indices.contains($0 + 1) ? spaces[$0 + 1].id : nil }
-              return store.acceptSidebarDrop(
-                item, into: space.id,
-                beforeSpace: point.x < 16 ? space.id : next)
-            } isTargeted: { targeted in
-              targetedSpace = targeted ? space.id : targetedSpace == space.id ? nil : targetedSpace
-            }
-            .overlay(
-              RoundedRectangle(cornerRadius: 8).strokeBorder(
-                targetedSpace == space.id ? Color.accentColor : .clear, lineWidth: 2)
-            )
-            .contextMenu {
-              Button("Edit space…") { store.spaceEditor = .edit(space.id) }
-              Divider()
-              Button("Move left") { shiftSpace(space.id, by: -1) }
-                .disabled(store.session.spaces.first?.id == space.id)
-              Button("Move right") { shiftSpace(space.id, by: 1) }
-                .disabled(store.session.spaces.last?.id == space.id)
+      HStack(spacing: 8) {
+        recentDownloadsControls
+          .frame(width: 30, height: 30)
+        ScrollView(.horizontal) {
+          HStack(spacing: 6) {
+            ForEach(store.session.spaces) { space in
+              Button {
+                store.perform(.space(space.id))
+              } label: {
+                Image(systemName: space.symbol)
+                  .font(.system(size: 14))
+                  .frame(width: 32, height: 30)
+                  .background(
+                    .white.opacity(space.id == store.session.selectedSpaceID ? 0.5 : 0),
+                    in: RoundedRectangle(cornerRadius: 8)
+                  )
+              }
+              .help(space.name)
+              .accessibilityLabel("Switch to \(space.name)")
+              .accessibilityAddTraits(space.id == store.session.selectedSpaceID ? .isSelected : [])
+              .draggable(SidebarTransfer.space(sessionID: store.dragSessionID, spaceID: space.id))
+              .dropDestination(for: SidebarTransfer.self) { items, point in
+                guard items.count == 1, let item = items.first else { return false }
+                let spaces = store.session.spaces
+                let index = spaces.firstIndex { $0.id == space.id }
+                let next = index.flatMap {
+                  spaces.indices.contains($0 + 1) ? spaces[$0 + 1].id : nil
+                }
+                return store.acceptSidebarDrop(
+                  item, into: space.id,
+                  beforeSpace: point.x < 16 ? space.id : next)
+              } isTargeted: { targeted in
+                targetedSpace =
+                  targeted ? space.id : targetedSpace == space.id ? nil : targetedSpace
+              }
+              .overlay(
+                RoundedRectangle(cornerRadius: 8).strokeBorder(
+                  targetedSpace == space.id ? Color.accentColor : .clear, lineWidth: 2)
+              )
+              .contextMenu {
+                Button("Edit space…") { store.spaceEditor = .edit(space.id) }
+                Divider()
+                Button("Move left") { shiftSpace(space.id, by: -1) }
+                  .disabled(store.session.spaces.first?.id == space.id)
+                Button("Move right") { shiftSpace(space.id, by: 1) }
+                  .disabled(store.session.spaces.last?.id == space.id)
+              }
             }
           }
         }
+        .scrollIndicators(.hidden)
+        .frame(maxWidth: .infinity)
+        Button {
+          store.spaceEditor = .create
+        } label: {
+          Image(systemName: "plus")
+            .font(.system(size: 13, weight: .medium))
+            .frame(width: 30, height: 30)
+            .background(.white.opacity(0.2), in: RoundedRectangle(cornerRadius: 8))
+        }
+        .help("Create a space")
+        .accessibilityLabel("Add Space")
       }
-      .scrollIndicators(.hidden)
       .frame(height: 32)
     }
     .buttonStyle(.plain)
     .padding(.horizontal, 14)
     .padding(.bottom, 16)
     .zIndex(1)
+    .onChange(of: store.session.selectedSpaceID) { _, _ in folderDraft = nil }
+    .onAppear {
+      if folderDraft != nil { folderNameIsFocused = true }
+    }
   }
 
   private var recentDownloadsControls: some View {
     let profileID = store.session.selectedSpace.profileID
     let downloads = store.engine?.downloads
-    return HStack(spacing: 8) {
-      Menu {
-        Button("Bookmarks…") { store.showLibrary(.bookmarks) }
-        Button("History…") { store.showLibrary(.history) }
-        Button("Downloads…") { store.showDownloads() }
-      } label: {
-        Label("Library", systemImage: "books.vertical")
-          .frame(maxWidth: .infinity, alignment: .leading)
-      }
-      .help("Bookmarks and History for \(store.profileName) profile")
-      Button {
+    return Menu {
+      Button("Recent Downloads") {
         guard downloadsProfileIsCurrent(profileID) else { return }
-        recentDownloadsCloseTask?.cancel()
-        if recentDownloadsIsOpen {
-          recentDownloadsPinnedOpen = false
-          recentDownloadsIsOpen = false
-        } else {
-          recentDownloadsPinnedOpen = true
-          recentDownloadsIsOpen = true
-        }
-      } label: {
-        Image(systemName: "arrow.down.circle")
-          .frame(width: 30, height: 26)
-          .contentShape(Rectangle())
+        recentDownloadsPinnedOpen.toggle()
+        recentDownloadsIsOpen = recentDownloadsPinnedOpen
       }
-      .help("Recent downloads")
-      .accessibilityLabel("Toggle recent downloads")
-      .accessibilityHint("Shows the five most recent downloads for this profile")
+      .disabled((previewRecentDownloads ?? downloads?.items(in: profileID))?.isEmpty != false)
+      Divider()
+      Button("Bookmarks…") { store.showLibrary(.bookmarks) }
+      Button("History…") { store.showLibrary(.history) }
+      Button("Downloads…") { store.showDownloads() }
+    } label: {
+      Image(systemName: "books.vertical")
+        .frame(width: 30, height: 30)
     }
-    .font(.system(size: 12))
+    .accessibilityLabel("Library")
+    .help("Bookmarks and History for \(store.profileName) profile")
     .onHover { recentDownloadsAnchorHoverChanged($0) }
     .overlay(alignment: .bottomLeading) {
       Group {
@@ -287,6 +303,57 @@ struct BrowserSidebar: View {
         recentDownloadsCardHovered = false
         recentDownloadsIsOpen = false
       }
+    }
+  }
+
+  private func beginFolderDraft(parentID: UUID?) {
+    let route = FolderEditorRoute.create(spaceID: store.session.selectedSpaceID, parentID: parentID)
+    guard route.matches(store.session) else { return }
+    folderDraft = SidebarFolderDraft(route: route)
+    folderNameIsFocused = true
+  }
+
+  private func commitFolderDraft() {
+    guard let draft = folderDraft, draft.isValid(in: store.session),
+      store.createFolder(name: draft.name, in: draft.spaceID, parentID: draft.parentID) != nil
+    else { return }
+    folderDraft = nil
+  }
+
+  private func folderDraftRow(depth: Int) -> some View {
+    HStack(spacing: 8) {
+      Image(systemName: "folder").font(.system(size: 12)).foregroundStyle(.secondary)
+      TextField(
+        "Untitled",
+        text: Binding(
+          get: { folderDraft?.name ?? "" },
+          set: { folderDraft?.name = $0 }
+        )
+      )
+      .font(.system(size: 13))
+      .textFieldStyle(.plain)
+      .focused($folderNameIsFocused)
+      .onSubmit(commitFolderDraft)
+      .onExitCommand { folderDraft = nil }
+      Button {
+        folderDraft = nil
+      } label: {
+        Image(systemName: "xmark")
+      }
+      .font(.system(size: 9, weight: .medium))
+      .help("Cancel new folder")
+      .accessibilityLabel("Cancel new folder")
+    }
+    .padding(.vertical, 7).padding(.horizontal, 10)
+    .padding(.leading, indentation(depth))
+    .background(
+      reduceTransparency
+        ? AnyShapeStyle(Color(nsColor: .controlBackgroundColor)) : AnyShapeStyle(.thinMaterial),
+      in: RoundedRectangle(cornerRadius: 7)
+    )
+    .onChange(of: folderDraft?.route) { _, route in
+      guard route != nil else { return }
+      folderNameIsFocused = true
     }
   }
 
@@ -476,9 +543,7 @@ struct BrowserSidebar: View {
       Button("Edit folder…") {
         store.showFolderEditor(.edit(spaceID: space.id, folderID: folder.id))
       }
-      Button("New folder inside…") {
-        store.showFolderEditor(.create(spaceID: space.id, parentID: folder.id))
-      }
+      Button("New Folder Inside") { beginFolderDraft(parentID: folder.id) }
       Divider()
       Button("Move up") { shiftFolder(folder, in: space, by: -1) }.disabled(
         siblings.first?.id == folder.id)

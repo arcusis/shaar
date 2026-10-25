@@ -6,7 +6,8 @@ import SwiftUI
 enum BrowserMenuCommand: String, CaseIterable {
   case newWindow, newTab, search, newSpace, editSpace, closeTab, closeWindow
   case reopenClosed, recentlyClosed, bookmarkPage, bookmarks, history, downloads
-  case find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload, settings, quit
+  case find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload
+  case extensions, help, minimizeWindow, zoomWindow, bringAllToFront, settings, quit
 }
 
 @MainActor
@@ -57,6 +58,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
   private var started = false
   private var startupFailed = false
   private var previousMenu: NSMenu?
+  private var previousServicesMenu: NSMenu?
+  private var previousWindowsMenu: NSMenu?
+  private var previousHelpMenu: NSMenu?
   private var engineRequestedWindows: Set<String> = []
   var onClosed: ((UUID, Bool) -> Void)?
 
@@ -205,6 +209,14 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     case .nextSpace: store.cycleSpace(by: 1)
     case .previousSpace: store.cycleSpace(by: -1)
     case .reload: store.reloadCurrentPage()
+    case .extensions: context.engine.showExtensionList()
+    case .help:
+      if let url = URL(string: "https://github.com/arcusis/browser") { store.perform(.open(url)) }
+    case .minimizeWindow: context.window.performMiniaturize(nil)
+    case .zoomWindow: context.window.zoom(nil)
+    case .bringAllToFront:
+      for browser in contexts.values { browser.window.orderFront(nil) }
+      context.window.makeKeyAndOrderFront(nil)
     case .newWindow, .settings, .quit: break
     }
   }
@@ -222,6 +234,19 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
       context.engine.onClosed = nil
     }
     if NSApp.mainMenu === menu { NSApp.mainMenu = previousMenu }
+    if NSApp.servicesMenu
+      === menu?.items.first?.submenu?.items.first(where: {
+        $0.submenu?.title == "Services"
+      })?.submenu
+    {
+      NSApp.servicesMenu = previousServicesMenu
+    }
+    if NSApp.windowsMenu === menu?.items.first(where: { $0.submenu?.title == "Window" })?.submenu {
+      NSApp.windowsMenu = previousWindowsMenu
+    }
+    if NSApp.helpMenu === menu?.items.first(where: { $0.submenu?.title == "Help" })?.submenu {
+      NSApp.helpMenu = previousHelpMenu
+    }
   }
 
   private func attach(_ id: UUID, source: NSRect?, reconcile: Bool = true) throws {
@@ -422,15 +447,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     return canPerform(command)
   }
 
-  @objc private func menuAction(_ sender: NSMenuItem) {
-    guard let raw = sender.representedObject as? String,
-      let command = BrowserMenuCommand(rawValue: raw)
-    else { return }
-    perform(command)
-  }
-
-  private func installMenus() {
-    previousMenu = NSApp.mainMenu
+  static func makeMenu(target: AnyObject) -> NSMenu {
     let main = NSMenu()
     func section(_ title: String) -> NSMenu {
       let item = NSMenuItem()
@@ -443,33 +460,47 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
       _ command: BrowserMenuCommand, _ title: String, _ key: String, to menu: NSMenu,
       modifiers: NSEvent.ModifierFlags = .command
     ) {
-      let item = NSMenuItem(title: title, action: #selector(menuAction), keyEquivalent: key)
-      item.target = self
+      let item = NSMenuItem(title: title, action: #selector(menuAction(_:)), keyEquivalent: key)
+      item.target = target
       item.representedObject = command.rawValue
       item.keyEquivalentModifierMask = modifiers
       menu.addItem(item)
     }
     let app = section("Arcusis Browser")
+    app.addItem(
+      withTitle: "About Arcusis Browser",
+      action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+    app.addItem(.separator())
+    let services = NSMenu(title: "Services")
+    let servicesItem = NSMenuItem(title: "Services", action: nil, keyEquivalent: "")
+    servicesItem.submenu = services
+    app.addItem(servicesItem)
+    app.addItem(.separator())
     add(.settings, "Settings…", ",", to: app)
+    app.addItem(
+      NSMenuItem(
+        title: "Hide Arcusis Browser", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h"
+      ))
+    app.addItem(
+      NSMenuItem(
+        title: "Hide Others", action: #selector(NSApplication.hideOtherApplications(_:)),
+        keyEquivalent: "h"))
+    app.items.last?.keyEquivalentModifierMask = [.command, .option]
+    app.addItem(
+      NSMenuItem(
+        title: "Show All", action: #selector(NSApplication.unhideAllApplications(_:)),
+        keyEquivalent: ""))
+    app.addItem(.separator())
     add(.quit, "Quit Arcusis Browser", "q", to: app)
     let file = section("File")
     add(.newWindow, "New window", "n", to: file)
     add(.newTab, "New tab", "t", to: file)
     add(.search, "Search or enter address", "l", to: file)
-    add(.newSpace, "New space…", "", to: file)
-    add(.editSpace, "Edit current space…", "", to: file)
-    add(.closeTab, "Close tab", "w", to: file)
     add(.closeWindow, "Close window", "w", to: file, modifiers: [.command, .shift])
-    add(.reopenClosed, "Reopen last closed tab", "t", to: file, modifiers: [.command, .shift])
-    add(.recentlyClosed, "Recently closed…", "", to: file)
-    add(.bookmarkPage, "Bookmark this page", "d", to: file)
-    add(.bookmarks, "Bookmarks…", "", to: file)
-    add(.history, "History…", "y", to: file)
-    add(.downloads, "Downloads", "j", to: file, modifiers: [.command, .shift])
     let edit = section("Edit")
     for (title, action, key) in [
-      ("Undo", "undo:", "z"), ("Cut", "cut:", "x"), ("Copy", "copy:", "c"),
-      ("Paste", "paste:", "v"), ("Select All", "selectAll:", "a"),
+      ("Undo", "undo:", "z"), ("Redo", "redo:", "Z"), ("Cut", "cut:", "x"),
+      ("Copy", "copy:", "c"), ("Paste", "paste:", "v"), ("Select All", "selectAll:", "a"),
     ] {
       edit.addItem(withTitle: title, action: NSSelectorFromString(action), keyEquivalent: key)
     }
@@ -477,12 +508,54 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     add(.find, "Find in Page…", "f", to: edit)
     add(.findNext, "Find Next", "g", to: edit)
     add(.findPrevious, "Find Previous", "g", to: edit, modifiers: [.command, .shift])
+    let view = section("View")
+    add(.sidebar, "Toggle sidebar", "s", to: view)
+    add(.reload, "Reload", "r", to: view)
+    let spaces = section("Spaces")
+    add(.newSpace, "New space…", "", to: spaces)
+    add(.editSpace, "Edit current space…", "", to: spaces)
+    add(.nextSpace, "Next space", "]", to: spaces, modifiers: [.control, .option])
+    add(.previousSpace, "Previous space", "[", to: spaces, modifiers: [.control, .option])
     let tabs = section("Tabs")
-    add(.sidebar, "Toggle sidebar", "s", to: tabs)
-    add(.nextSpace, "Next space", "]", to: tabs, modifiers: [.control, .option])
-    add(.previousSpace, "Previous space", "[", to: tabs, modifiers: [.control, .option])
-    add(.reload, "Reload", "r", to: tabs)
+    add(.closeTab, "Close tab", "w", to: tabs)
+    add(.reopenClosed, "Reopen last closed tab", "t", to: tabs, modifiers: [.command, .shift])
+    let archive = section("Archive")
+    add(.recentlyClosed, "Recently closed…", "", to: archive)
+    add(.bookmarkPage, "Bookmark this page", "d", to: archive)
+    add(.bookmarks, "Bookmarks…", "", to: archive)
+    add(.history, "History…", "y", to: archive)
+    add(.downloads, "Downloads", "j", to: archive, modifiers: [.command, .shift])
+    let extensions = section("Extensions")
+    add(.extensions, "Manage Extensions…", "", to: extensions)
+    let window = section("Window")
+    add(.minimizeWindow, "Minimize", "m", to: window)
+    add(.zoomWindow, "Zoom", "", to: window)
+    add(.bringAllToFront, "Bring All to Front", "", to: window)
+    let help = section("Help")
+    add(.help, "Arcusis Browser Support", "", to: help)
+    return main
+  }
+
+  @objc private func menuAction(_ sender: NSMenuItem) {
+    guard let raw = sender.representedObject as? String,
+      let command = BrowserMenuCommand(rawValue: raw)
+    else { return }
+    (sender.target as? NativeBrowserHost)?.perform(command)
+  }
+
+  private func installMenus() {
+    previousMenu = NSApp.mainMenu
+    previousServicesMenu = NSApp.servicesMenu
+    previousWindowsMenu = NSApp.windowsMenu
+    previousHelpMenu = NSApp.helpMenu
+    let main = Self.makeMenu(target: self)
     menu = main
+    NSApp.servicesMenu =
+      main.items.first?.submenu?.items.first(where: {
+        $0.submenu?.title == "Services"
+      })?.submenu
+    NSApp.windowsMenu = main.items.first(where: { $0.submenu?.title == "Window" })?.submenu
+    NSApp.helpMenu = main.items.first(where: { $0.submenu?.title == "Help" })?.submenu
     NSApp.mainMenu = main
   }
 

@@ -112,6 +112,9 @@ FOUNDATION_EXPORT NSString * _Nullable ARCProbeTLSArgument(NSURL *directory,
 /// Sends trusted renderer input only to the current disposable probe popup.
 - (void)clickProbePopupID:(NSString *)popupID buttonTitle:(NSString *)title
               completion:(void (^)(BOOL clicked))completion;
+/// Test-only selector diagnostics; returns bounded flags, counts, and a fixed reason enum.
+- (void)diagnoseProbePopupID:(NSString *)popupID buttonTitle:(NSString *)title
+                  completion:(void (^)(NSDictionary *diagnostic))completion;
 - (void)clickProbePopupID:(NSString *)popupID elementTestID:(NSString *)elementTestID
                completion:(void (^)(BOOL clicked))completion;
 - (void)clickProbeElementInTabID:(NSString *)tabID elementID:(NSString *)elementID

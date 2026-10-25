@@ -4,6 +4,18 @@ import ChromiumBridge
 import Foundation
 import SwiftUI
 
+private struct LockTargetDiagnostic: Sendable {
+  let candidateCount: Int
+  let exactEligibleLabelCount: Int
+  let uniqueEligibleMatch: Bool
+  let matchIsNativeButton: Bool
+  let viewportHasArea: Bool
+  let centerHit: Bool
+  let visiblePointHit: Bool
+  let scrollNeeded: Bool
+  let rejectionReason: String
+}
+
 /// Opt-in public-store test in an empty disposable profile. Never enters vault credentials.
 @MainActor
 final class BitwardenProbe {
@@ -378,12 +390,15 @@ final class BitwardenProbe {
   }
 
   private func attachHiddenPopup(_ id: String) {
-    guard let page = runtime.view(forExtensionPopupID: id) else { return }
+    guard runtime.view(forExtensionPopupID: id) != nil else { return }
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 480, height: 600),
       styleMask: .borderless, backing: .buffered, defer: false)
-    window.contentView = page
-    page.frame = NSRect(x: 0, y: 0, width: 480, height: 600)
+    let host = NSHostingView(
+      rootView: ExtensionPopupPage(engine: engine, popupID: id)
+        .frame(width: 480, height: 600))
+    window.contentView = host
+    host.layoutSubtreeIfNeeded()
     popupWindow = window
   }
 
@@ -569,7 +584,9 @@ final class BitwardenProbe {
     return unlocked
   }
 
-  private func lockVault(_ driver: BitwardenVaultProbe, accountEmail: String) async -> Bool {
+  private func lockVault(
+    _ driver: BitwardenVaultProbe, accountEmail: String, popupID: String
+  ) async -> Bool {
     let accountClicked = await driver.click("Bitwarden account \(accountEmail)")
     vaultLoginObservation["lockAccountButtonClicked"] = accountClicked
     guard accountClicked else { return false }
@@ -578,7 +595,10 @@ final class BitwardenProbe {
     guard menuReady else { return false }
     let lockClicked = await driver.click("Lock now")
     vaultLoginObservation["lockButtonClicked"] = lockClicked
-    guard lockClicked else { return false }
+    guard lockClicked else {
+      await observeLockTarget(popupID)
+      return false
+    }
     let locked = await driver.waitFor({ $0.passwordFields > 0 && !$0.vaultVisible })
     vaultLoginObservation["lockPasswordScreenReached"] = locked
     if let observed = await driver.state() {
@@ -589,6 +609,46 @@ final class BitwardenProbe {
       vaultLoginObservation["lockResultIntroCarousel"] = observed.introCarousel
     }
     return locked
+  }
+
+  private func observeLockTarget(_ popupID: String) async {
+    let diagnostic: LockTargetDiagnostic = await withCheckedContinuation { continuation in
+      runtime.diagnoseProbePopupID(popupID, buttonTitle: "Lock now") {
+        let value = $0
+        continuation.resume(
+          returning: LockTargetDiagnostic(
+            candidateCount: value["candidateCount"] as? Int ?? -1,
+            exactEligibleLabelCount: value["exactEligibleLabelCount"] as? Int ?? -1,
+            uniqueEligibleMatch: value["uniqueEligibleMatch"] as? Bool ?? false,
+            matchIsNativeButton: value["matchIsNativeButton"] as? Bool ?? false,
+            viewportHasArea: value["viewportHasArea"] as? Bool ?? false,
+            centerHit: value["centerHit"] as? Bool ?? false,
+            visiblePointHit: value["visiblePointHit"] as? Bool ?? false,
+            scrollNeeded: value["scrollNeeded"] as? Bool ?? false,
+            rejectionReason: value["rejectionReason"] as? String ?? "invalid_context"
+          ))
+      }
+    }
+    let reasons: Set<String> = [
+      "invalid_context", "no_candidate", "no_exact_label", "hidden", "no_area", "disabled",
+      "ambiguous", "scroll-needed", "none",
+    ]
+    guard (0...999).contains(diagnostic.candidateCount),
+      (0...999).contains(diagnostic.exactEligibleLabelCount),
+      reasons.contains(diagnostic.rejectionReason)
+    else {
+      vaultLoginObservation["lockTarget_rejectionReason"] = "invalid_context"
+      return
+    }
+    vaultLoginObservation["lockTarget_candidateCount"] = diagnostic.candidateCount
+    vaultLoginObservation["lockTarget_exactEligibleLabelCount"] = diagnostic.exactEligibleLabelCount
+    vaultLoginObservation["lockTarget_uniqueEligibleMatch"] = diagnostic.uniqueEligibleMatch
+    vaultLoginObservation["lockTarget_matchIsNativeButton"] = diagnostic.matchIsNativeButton
+    vaultLoginObservation["lockTarget_viewportHasArea"] = diagnostic.viewportHasArea
+    vaultLoginObservation["lockTarget_centerHit"] = diagnostic.centerHit
+    vaultLoginObservation["lockTarget_visiblePointHit"] = diagnostic.visiblePointHit
+    vaultLoginObservation["lockTarget_scrollNeeded"] = diagnostic.scrollNeeded
+    vaultLoginObservation["lockTarget_rejectionReason"] = diagnostic.rejectionReason
   }
 
   private func verifySharedAlpha(expectedAccount: String) async throws -> Bool {
@@ -676,7 +736,7 @@ final class BitwardenProbe {
         vaultStage = .lockUnlock
         let locked: Bool
         if authenticated {
-          locked = await lockVault(activeDriver, accountEmail: account.email)
+          locked = await lockVault(activeDriver, accountEmail: account.email, popupID: popupID)
         } else {
           locked = false
         }
@@ -691,7 +751,7 @@ final class BitwardenProbe {
         vaultStageResults["initial-unlock-\(label)"] = unlocked
         let relocked: Bool
         if unlocked {
-          relocked = await lockVault(activeDriver, accountEmail: account.email)
+          relocked = await lockVault(activeDriver, accountEmail: account.email, popupID: popupID)
         } else {
           relocked = false
         }

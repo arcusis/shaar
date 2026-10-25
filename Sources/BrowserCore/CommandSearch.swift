@@ -5,7 +5,9 @@ public enum NavigationInput {
     ["http", "https"].contains(url.scheme?.lowercased() ?? "") && !(url.host() ?? "").isEmpty
   }
 
-  public static func destination(for input: String) -> URL? {
+  public static func destination(
+    for input: String, searchEngine: BrowserSearchEngine = .google
+  ) -> URL? {
     let input = input.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !input.isEmpty else { return nil }
     if let url = URL(string: input), isWebURL(url) { return url }
@@ -23,7 +25,13 @@ public enum NavigationInput {
     {
       return url
     }
-    var search = URLComponents(string: "https://www.google.com/search")!
+    let endpoint: String
+    switch searchEngine {
+    case .google: endpoint = "https://www.google.com/search"
+    case .duckDuckGo: endpoint = "https://duckduckgo.com/"
+    case .bing: endpoint = "https://www.bing.com/search"
+    }
+    var search = URLComponents(string: endpoint)!
     search.queryItems = [URLQueryItem(name: "q", value: input)]
     return search.url
   }
@@ -50,7 +58,8 @@ public struct CommandResult: Identifiable, Equatable, Sendable {
 public enum CommandSearch {
   public static func results(
     for query: String, in session: BrowserSession,
-    bookmarks: [BrowserBookmark] = [], history: [BrowserHistoryEntry] = []
+    bookmarks: [BrowserBookmark] = [], history: [BrowserHistoryEntry] = [],
+    searchEngine: BrowserSearchEngine = .google
   ) -> [CommandResult] {
     let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
     var results: [CommandResult] = []
@@ -135,7 +144,7 @@ public enum CommandSearch {
         }
       }
     }
-    if let url = NavigationInput.destination(for: query) {
+    if let url = NavigationInput.destination(for: query, searchEngine: searchEngine) {
       results = Array(results.prefix(9))
       results.append(
         CommandResult(

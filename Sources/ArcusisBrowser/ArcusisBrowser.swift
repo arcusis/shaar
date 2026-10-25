@@ -19,7 +19,9 @@ enum ArcusisBrowserMain {
           hideSidebar: arguments.contains("--hide-sidebar"),
           showSpaceEditor: arguments.contains("--space-editor"),
           showExtensionConsent: arguments.contains("--extension-consent"),
-          showRecentDownloads: arguments.contains("--recent-downloads"))
+          showRecentDownloads: arguments.contains("--recent-downloads"),
+          showSettings: arguments.contains("--settings"),
+          showSettingsProfiles: arguments.contains("--settings-profiles"))
       } catch {
         FileHandle.standardError.write(Data("Preview failed: \(error.localizedDescription)\n".utf8))
         exit(1)
@@ -37,8 +39,13 @@ enum ArcusisBrowserMain {
 
   @MainActor private static func renderPreview(
     to url: URL, showCommand: Bool, compact: Bool, hideSidebar: Bool, showSpaceEditor: Bool,
-    showExtensionConsent: Bool, showRecentDownloads: Bool
+    showExtensionConsent: Bool, showRecentDownloads: Bool, showSettings: Bool,
+    showSettingsProfiles: Bool
   ) throws {
+    if showSettings {
+      try renderSettingsPreview(to: url, compact: compact, withProfiles: showSettingsProfiles)
+      return
+    }
     // Render only this view hierarchy; never capture or activate the desktop.
     let application = NSApplication.shared
     application.setActivationPolicy(.prohibited)
@@ -73,6 +80,81 @@ enum ArcusisBrowserMain {
       throw CocoaError(.fileWriteUnknown)
     }
     try png.write(to: url, options: .atomic)
+  }
+
+  @MainActor private static func renderSettingsPreview(
+    to url: URL, compact: Bool, withProfiles: Bool
+  ) throws {
+    let application = NSApplication.shared
+    application.setActivationPolicy(.prohibited)
+    let size = compact ? NSSize(width: 620, height: 500) : NSSize(width: 720, height: 650)
+    let view = SettingsPreview(withProfiles: withProfiles)
+      .environment(
+        \.colorScheme, CommandLine.arguments.contains("--settings-dark") ? .dark : .light
+      )
+      .frame(width: size.width, height: size.height)
+      .background(Color(nsColor: .windowBackgroundColor))
+    try renderOffscreen(view, to: url, size: size)
+  }
+
+  @MainActor private static func renderOffscreen<V: View>(
+    _ view: V, to url: URL, size: NSSize
+  ) throws {
+    let host = NSHostingView(rootView: view)
+    let window = NSWindow(
+      contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered,
+      defer: false
+    )
+    window.contentView = host
+    host.layoutSubtreeIfNeeded()
+    RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+    guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else {
+      throw CocoaError(.fileWriteUnknown)
+    }
+    host.cacheDisplay(in: host.bounds, to: bitmap)
+    guard let png = bitmap.representation(using: .png, properties: [:]) else {
+      throw CocoaError(.fileWriteUnknown)
+    }
+    try png.write(to: url, options: .atomic)
+  }
+}
+
+private struct SettingsPreview: View {
+  let withProfiles: Bool
+  @State private var selectedProfileID: UUID?
+  @State private var sidebarInitiallyVisible = true
+  @State private var selectedSearchEngine = "google"
+
+  private let profiles = [
+    BrowserSettingsProfile(
+      id: UUID(uuidString: "0A3126F1-683D-4F4F-9C48-7B7C6E741250")!, name: "Work", spaceCount: 3),
+    BrowserSettingsProfile(
+      id: UUID(uuidString: "C992DA8B-4547-4218-A2CE-4E22B2D4FE88")!, name: "Personal",
+      spaceCount: 1),
+    BrowserSettingsProfile(
+      id: UUID(uuidString: "5FEA8AA6-47B6-4270-880C-FF565FFAC16D")!, name: "Research",
+      spaceCount: 2),
+  ]
+  private let searchEngines = [
+    BrowserSettingsChoice(id: "google", title: "Google"),
+    BrowserSettingsChoice(id: "duckDuckGo", title: "DuckDuckGo"),
+    BrowserSettingsChoice(id: "bing", title: "Bing"),
+  ]
+
+  var body: some View {
+    BrowserSettingsView(
+      profiles: withProfiles ? profiles : [], searchEngines: searchEngines,
+      selectedProfileID: $selectedProfileID, sidebarInitiallyVisible: $sidebarInitiallyVisible,
+      selectedSearchEngine: $selectedSearchEngine,
+      initialSection: withProfiles ? .profiles : .general
+    )
+    .onAppear {
+      selectedProfileID =
+        withProfiles
+        ? profiles.first?.id
+        : UUID(
+          uuidString: "E923A7C4-310F-4B2F-A174-0634C377850A")
+    }
   }
 }
 

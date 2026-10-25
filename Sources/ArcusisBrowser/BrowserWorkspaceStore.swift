@@ -49,6 +49,20 @@ final class BrowserWorkspaceStore {
     persistSnapshot()
   }
 
+  @discardableResult
+  func createProfile(name: String) throws -> UUID {
+    let id = try workspace.createProfile(name: name)
+    _ = writeSnapshot()
+    broadcast(excluding: nil)
+    return id
+  }
+
+  func renameProfile(_ id: UUID, name: String) throws {
+    try workspace.renameProfile(id, name: name)
+    _ = writeSnapshot()
+    broadcast(excluding: nil)
+  }
+
   func setGeometry(_ geometry: WorkspaceWindowGeometry, for id: UUID) throws {
     guard workspace.window(id)?.geometry != geometry else { return }
     try workspace.setGeometry(geometry, for: id)

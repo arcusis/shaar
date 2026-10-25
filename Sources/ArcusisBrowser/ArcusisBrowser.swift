@@ -21,7 +21,8 @@ enum ArcusisBrowserMain {
           showExtensionConsent: arguments.contains("--extension-consent"),
           showRecentDownloads: arguments.contains("--recent-downloads"),
           showSettings: arguments.contains("--settings"),
-          showSettingsProfiles: arguments.contains("--settings-profiles"))
+          showSettingsProfiles: arguments.contains("--settings-profiles"),
+          showSettingsProfileEditor: arguments.contains("--settings-profile-editor"))
       } catch {
         FileHandle.standardError.write(Data("Preview failed: \(error.localizedDescription)\n".utf8))
         exit(1)
@@ -40,10 +41,12 @@ enum ArcusisBrowserMain {
   @MainActor private static func renderPreview(
     to url: URL, showCommand: Bool, compact: Bool, hideSidebar: Bool, showSpaceEditor: Bool,
     showExtensionConsent: Bool, showRecentDownloads: Bool, showSettings: Bool,
-    showSettingsProfiles: Bool
+    showSettingsProfiles: Bool, showSettingsProfileEditor: Bool
   ) throws {
-    if showSettings {
-      try renderSettingsPreview(to: url, compact: compact, withProfiles: showSettingsProfiles)
+    if showSettings || showSettingsProfileEditor {
+      try renderSettingsPreview(
+        to: url, compact: compact, withProfiles: showSettingsProfiles,
+        withProfileEditor: showSettingsProfileEditor)
       return
     }
     // Render only this view hierarchy; never capture or activate the desktop.
@@ -83,17 +86,27 @@ enum ArcusisBrowserMain {
   }
 
   @MainActor private static func renderSettingsPreview(
-    to url: URL, compact: Bool, withProfiles: Bool
+    to url: URL, compact: Bool, withProfiles: Bool, withProfileEditor: Bool
   ) throws {
     let application = NSApplication.shared
     application.setActivationPolicy(.prohibited)
-    let size = compact ? NSSize(width: 620, height: 500) : NSSize(width: 720, height: 650)
-    let view = SettingsPreview(withProfiles: withProfiles)
-      .environment(
-        \.colorScheme, CommandLine.arguments.contains("--settings-dark") ? .dark : .light
-      )
-      .frame(width: size.width, height: size.height)
-      .background(Color(nsColor: .windowBackgroundColor))
+    let dark = CommandLine.arguments.contains("--settings-dark")
+    application.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+    let size =
+      withProfileEditor
+      ? NSSize(width: 440, height: 220)
+      : compact ? NSSize(width: 620, height: 500) : NSSize(width: 720, height: 650)
+    let view = Group {
+      if withProfileEditor {
+        ProfileNameEditor(
+          title: "Rename Profile", initialName: "Work", onCancel: {}, onSave: { _ in true })
+      } else {
+        SettingsPreview(withProfiles: withProfiles)
+      }
+    }
+    .frame(width: size.width, height: size.height)
+    .background(Color(nsColor: .windowBackgroundColor))
+    .environment(\.colorScheme, dark ? .dark : .light)
     try renderOffscreen(view, to: url, size: size)
   }
 

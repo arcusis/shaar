@@ -81,6 +81,17 @@ final class BrowserSettingsLayoutTests: XCTestCase {
     XCTAssertGreaterThanOrEqual(host.fittingSize.height, 440)
   }
 
+  func testCompactProfileEditorLayoutFitsWindow() {
+    let view = ProfileNameEditor(
+      title: "Rename Profile", initialName: "Work", onCancel: {}, onSave: { _ in true })
+
+    let host = layout(view, size: NSSize(width: 440, height: 220))
+
+    XCTAssertEqual(host.bounds.size, NSSize(width: 440, height: 220))
+    XCTAssertLessThanOrEqual(host.fittingSize.width, 440)
+    XCTAssertLessThanOrEqual(host.fittingSize.height, 220)
+  }
+
   private func layout<V: View>(_ view: V, size: NSSize) -> NSHostingView<V> {
     let host = NSHostingView(rootView: view)
     host.frame = NSRect(origin: .zero, size: size)

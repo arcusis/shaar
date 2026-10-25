@@ -37,7 +37,7 @@ private final class BrowserSettingsState {
   }
 
   var sidebarInitiallyVisible: Bool { preferences.sidebarInitiallyVisible }
-  var storageNotice: String? { preferences.storageNotice }
+  var storageNotice: String? { workspace.storageNotice ?? preferences.storageNotice }
 
   func prepareFirstPresentation(for profileID: UUID?) {
     guard !didPresent else { return }
@@ -73,6 +73,23 @@ private final class BrowserSettingsState {
   func setSidebarInitiallyVisible(_ value: Bool) {
     preferences.setSidebarInitiallyVisible(value)
   }
+
+  @discardableResult
+  func createProfile(name: String) -> UUID? {
+    do {
+      let id = try workspace.createProfile(name: name)
+      selectedProfileID = id
+      return id
+    } catch { return nil }
+  }
+
+  @discardableResult
+  func renameProfile(_ id: UUID, name: String) -> Bool {
+    do {
+      try workspace.renameProfile(id, name: name)
+      return true
+    } catch { return false }
+  }
 }
 
 private struct BrowserSettingsRoot: View {
@@ -87,7 +104,9 @@ private struct BrowserSettingsRoot: View {
         get: { state.sidebarInitiallyVisible }, set: { state.setSidebarInitiallyVisible($0) }),
       selectedSearchEngine: Binding(
         get: { state.selectedSearchEngine }, set: { _ = state.selectSearchEngine($0) }),
-      storageNotice: state.storageNotice)
+      storageNotice: state.storageNotice,
+      onCreateProfile: { state.createProfile(name: $0) },
+      onRenameProfile: { state.renameProfile($0, name: $1) })
   }
 }
 
@@ -137,6 +156,12 @@ final class BrowserSettingsController: NSObject {
   }
 
   func setSidebarInitiallyVisible(_ value: Bool) { state.setSidebarInitiallyVisible(value) }
+
+  @discardableResult
+  func createProfile(name: String) -> UUID? { state.createProfile(name: name) }
+
+  @discardableResult
+  func renameProfile(_ id: UUID, name: String) -> Bool { state.renameProfile(id, name: name) }
 
   func show(for profileID: UUID? = nil) {
     state.prepareFirstPresentation(for: profileID)

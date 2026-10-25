@@ -378,12 +378,15 @@ final class BitwardenProbe {
   }
 
   private func attachHiddenPopup(_ id: String) {
-    guard let page = runtime.view(forExtensionPopupID: id) else { return }
+    guard runtime.view(forExtensionPopupID: id) != nil else { return }
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 480, height: 600),
       styleMask: .borderless, backing: .buffered, defer: false)
-    window.contentView = page
-    page.frame = NSRect(x: 0, y: 0, width: 480, height: 600)
+    let host = NSHostingView(
+      rootView: ExtensionPopupPage(engine: engine, popupID: id)
+        .frame(width: 480, height: 600))
+    window.contentView = host
+    host.layoutSubtreeIfNeeded()
     popupWindow = window
   }
 

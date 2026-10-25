@@ -421,6 +421,9 @@ final class EngineProbe {
         checks += try await NativeSelectionProbe(
           primary: browserEngine, store: store, root: root, fixture: fixture, phase: phase
         ).run()
+        for (tab, profile) in [(tabA, profileA), (tabB, profileB), (sharedA, profileA)] {
+          try activateRestoredVaultFixture(tab, profileID: profile)
+        }
         checks += try await WorkspaceProbe(
           primary: browserEngine, store: store, root: root, fixture: fixture, phase: phase
         ).run()

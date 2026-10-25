@@ -581,6 +581,13 @@ final class BitwardenProbe {
     guard lockClicked else { return false }
     let locked = await driver.waitFor({ $0.passwordFields > 0 && !$0.vaultVisible })
     vaultLoginObservation["lockPasswordScreenReached"] = locked
+    if let observed = await driver.state() {
+      vaultLoginObservation["lockResultPasswordFields"] = observed.passwordFields
+      vaultLoginObservation["lockResultUnlockButton"] = observed.unlockButton
+      vaultLoginObservation["lockResultVaultVisible"] = observed.vaultVisible
+      vaultLoginObservation["lockResultLoginPrompt"] = observed.loginPrompt
+      vaultLoginObservation["lockResultIntroCarousel"] = observed.introCarousel
+    }
     return locked
   }
 

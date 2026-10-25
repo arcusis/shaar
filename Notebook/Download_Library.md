@@ -1,0 +1,9 @@
+# Profile-owned downloads
+
+Downloads use Chromium's authenticated transfer pipeline and a native profile-scoped panel (Shift-Command-J). It shows progress, pause/resume/cancel, completed-file actions, and removal from the list. Transfers continue across space switches; engine history owns their persistence. Normal files use the engine's Downloads directory. File actions require the selected owning profile, a completed non-blocked record, and an existing regular file. Blocked-file approval is not implemented. Closing with active downloads asks before cancellation. Interactive file opening, Finder, and close-dialog behavior still require native-window acceptance.
+
+Download checks use real engine transfers from authenticated loopback fixtures into the marked temporary directory. They verify account-specific file bytes, pause/resume/cancel, background completion across space switches, profile-scoped actions/history, removal without deleting the file, and restart restoration. Links receive trusted in-process renderer input, without a debugging socket or permission bypass. The runner supplies `ARDIA_DOWNLOADS_DIR` only to its disposable child processes. It does not open downloaded files, launch Finder, or display native dialogs. Real Workspace exports/uploads, interrupted-download recovery, blocked-file approval, and native file/quit interactions remain separate acceptance checks.
+
+The sidebar Library footer also provides recent-download hover/toggle cards. File dragging rechecks current profile, record state and readable regular file at drag time. [PR #38](https://github.com/arcusis/browser/pull/38) provides source/layout checks; physical hover/drop/Finder acceptance remains [#37](https://github.com/arcusis/browser/issues/37).
+
+Related: [[Bookmark_History]], [[Project_State]].

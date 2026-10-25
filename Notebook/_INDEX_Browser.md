@@ -1,0 +1,16 @@
+# Browser architecture and behavior
+
+- [[Browser_Architecture]]
+- [[Profile_Space_Isolation]]
+- [[Native_Window_Ownership]]
+- [[Managed_Workspace_Persistence]]
+- [[Sidebar_Tab_Organization]]
+- [[Closed_Tab_Recovery]]
+- [[Extension_Consent]]
+- [[Media_Consent]]
+- [[Find_In_Page]]
+- [[Renderer_Recovery]]
+- [[Download_Library]]
+- [[Bookmark_History]]
+- [[Build_And_Run]]
+- [[Keyboard_Commands]]

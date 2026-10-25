@@ -1,0 +1,7 @@
+# Closed-tab recovery
+
+Closed tabs can be reopened with Shift-Command-T, the File menu, the New tab context menu, or Command-T search. Recently Closed shows the last 25 tabs for the selected space; even spaces explicitly sharing a profile keep separate recovery lists. Entries are recorded only after confirmed native closure and saved atomically with live tabs. Reopening restores the URL, title, pin, available folder, and position in the original profile, using a fresh native document and tab ID. A removed folder restores at the pinned root; removing a space discards its recovery entries. Clearing the list affects only that space. Back/forward history, unsaved forms, JavaScript state, and sessionStorage are not restored by this URL-based recovery path.
+
+Closed-tab checks wait for real engine closure, reopen pages in their owning profiles, verify cookies/local storage and fresh tab sessions, compare unrelated live documents, inspect extension-visible ordering, and restore archived entries after restart. Unit checks cover canceled/pending closure, late duplicate callbacks, stale context, consent protection, limits, clearing/removal, v1/v2 migration, and malformed v3 preservation. Native recovery-panel light/dark/empty layouts and compact launcher results are captured offscreen. Actual shortcut/menu input, native beforeunload dialogs, back-stack restoration, and abrupt-process recovery remain separate acceptance checks.
+
+Related: [[Managed_Workspace_Persistence]], [[Renderer_Recovery]].

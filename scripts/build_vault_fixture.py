@@ -21,23 +21,70 @@ def digest(path):
 
 def source_members(archive, prefix):
     members = archive.getmembers()
+    seen = set()
+    kinds = {}
     for member in members:
         path = PurePosixPath(member.name)
+        canonical = path.as_posix()
         if (path.is_absolute() or '..' in path.parts or not path.parts
-                or path.parts[0] != prefix or not (member.isdir() or member.isfile() or member.issym())):
+                or path.parts[0] != prefix
+                or member.name not in (canonical, canonical + '/')
+                or (member.name.endswith('/') and not member.isdir())
+                or canonical in seen
+                or not (member.isdir() or member.isfile() or member.issym())):
             raise RuntimeError('Unsupported or escaping vault fixture archive member')
+        seen.add(canonical)
+        kind = 'dir' if member.isdir() else 'file' if member.isfile() else 'symlink'
+        if canonical == prefix and kind != 'dir':
+            raise RuntimeError('Vault fixture archive source root is not a directory')
+        kinds[canonical] = kind
         if member.issym():
             link = PurePosixPath(member.linkname)
-            target = path.parent / link
-            if link.is_absolute() or '..' in link.parts or target.parts[0] != prefix:
+            target = list(path.parent.parts)
+            if link.is_absolute():
                 raise RuntimeError('Vault fixture archive symlink escaped its source root')
+            for part in link.parts:
+                if part in ('', '.'):
+                    continue
+                if part == '..':
+                    if len(target) <= 1:
+                        raise RuntimeError('Vault fixture archive symlink escaped its source root')
+                    target.pop()
+                else:
+                    target.append(part)
+            if not target or target[0] != prefix:
+                raise RuntimeError('Vault fixture archive symlink escaped its source root')
+    for member_path, kind in kinds.items():
+        path = PurePosixPath(member_path)
+        for length in range(1, len(path.parts)):
+            parent = PurePosixPath(*path.parts[:length]).as_posix()
+            if kinds.get(parent, 'dir') != 'dir':
+                raise RuntimeError('Vault fixture archive has conflicting source paths')
+        if kind != 'dir' and any(other.startswith(member_path + '/') for other in kinds):
+            raise RuntimeError('Vault fixture archive has conflicting source paths')
     return members
 
 
 def verify_source(archive, destination, prefix):
-    for member in source_members(archive, prefix):
+    members = source_members(archive, prefix)
+    expected = {prefix: 'dir'}
+    for member in members:
+        path = PurePosixPath(member.name)
+        for length in range(1, len(path.parts)):
+            parent = PurePosixPath(*path.parts[:length]).as_posix()
+            if expected.get(parent) not in (None, 'dir'):
+                raise RuntimeError('Vault fixture archive has conflicting source paths')
+            expected[parent] = 'dir'
+        kind = 'dir' if member.isdir() else 'file' if member.isfile() else 'symlink'
+        canonical = path.as_posix()
+        if canonical in expected and expected[canonical] != kind:
+            raise RuntimeError('Vault fixture archive has conflicting source paths')
+        expected[canonical] = kind
+
+    root = (destination / prefix).resolve()
+    for member in members:
         target = destination / member.name
-        if not target.resolve().is_relative_to((destination / prefix).resolve()):
+        if not target.resolve().is_relative_to(root):
             raise RuntimeError('Vault fixture source escaped its cache')
         if member.issym():
             if not target.is_symlink() or os.readlink(target) != member.linkname:
@@ -47,9 +94,43 @@ def verify_source(archive, destination, prefix):
         if member.isfile():
             if not target.is_file():
                 raise RuntimeError('Vault fixture source is incomplete')
-            expected = hashlib.sha256(archive.extractfile(member).read()).hexdigest()
-            if digest(target) != expected:
+            expected_digest = hashlib.sha256(archive.extractfile(member).read()).hexdigest()
+            if digest(target) != expected_digest:
                 raise RuntimeError('Vault fixture source differs from its verified archive')
+
+    actual = {prefix: 'dir'}
+    pending = [destination / prefix]
+    while pending:
+        directory = pending.pop()
+        if directory.is_symlink() or not directory.is_dir():
+            raise RuntimeError('Vault fixture source directory was replaced')
+        for entry in os.scandir(directory):
+            path = Path(entry.path)
+            relative = path.relative_to(destination).as_posix()
+            if entry.is_symlink():
+                actual[relative] = 'symlink'
+            elif entry.is_dir(follow_symlinks=False):
+                actual[relative] = 'dir'
+                pending.append(path)
+            elif entry.is_file(follow_symlinks=False):
+                actual[relative] = 'file'
+            else:
+                raise RuntimeError('Unsupported vault fixture source file type')
+    if actual != expected:
+        raise RuntimeError('Vault fixture source tree has unexpected or missing inputs')
+
+
+def valid_receipt(receipt_file, binary, pin, fingerprint, source):
+    try:
+        receipt = json.loads(receipt_file.read_text())
+        return (type(receipt.get('schema')) is int and receipt.get('schema') == 1
+                and receipt.get('pinSHA256') == fingerprint
+                and receipt.get('sourceCommit') == pin['sourceCommit']
+                and receipt.get('rustToolchain') == pin['rustToolchain']
+                and receipt.get('binarySHA256') == digest(binary)
+                and receipt.get('cargoLockSHA256') == digest(source / 'Cargo.lock'))
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        return False
 
 
 def main():
@@ -77,8 +158,7 @@ def main():
             package.extractall(CACHE, members=members, filter='data')
         verify_source(package, CACHE, prefix)
     if receipt_file.is_file() and binary.is_file() and not binary.is_symlink():
-        receipt = json.loads(receipt_file.read_text())
-        if receipt.get('pinSHA256') == fingerprint and receipt.get('binarySHA256') == digest(binary):
+        if valid_receipt(receipt_file, binary, pin, fingerprint, source):
             print(binary)
             return
     # Avoid inherited application/registry credentials and user cargo registry configuration.

@@ -17,6 +17,7 @@ final class EngineProbe {
   private let probeTLS: ProbeTLSConfiguration?
   private let bitwardenVaultCredentials: VaultProbeCredentials?
   private let awaitAbruptTermination: Bool
+  private let savedTabCapacityMode: Bool
   private let expectedAfterTermination: BrowserSession?
   private let output: URL
   private var checks: [String] = []
@@ -27,6 +28,8 @@ final class EngineProbe {
   private var switchMetrics = SwitchProbeMetricsRecorder()
   private let store: BrowserStore
   private var browserEngine: BrowserEngine?
+  private var savedTabCapacityFixture: SavedTabCapacityFixture?
+  private var savedTabCapacityProbe: SavedTabCapacityProbe?
   private var nativeHostProbe: NativeHostProbe?
   private var resultError: Error?
   private enum BootstrapStage: String {
@@ -46,7 +49,7 @@ final class EngineProbe {
     root: URL, fixture: URL, phase: String, output: URL, includeBitwarden: Bool,
     bitwardenOnboardingControl: Bool, probeTLS: ProbeTLSConfiguration?,
     bitwardenVaultCredentials: VaultProbeCredentials?,
-    awaitAbruptTermination: Bool, expectAbruptRecovery: Bool
+    awaitAbruptTermination: Bool, expectAbruptRecovery: Bool, savedTabCapacityMode: Bool
   ) throws {
     self.root = root
     self.fixture = fixture
@@ -56,6 +59,7 @@ final class EngineProbe {
     self.probeTLS = probeTLS
     self.bitwardenVaultCredentials = bitwardenVaultCredentials
     self.awaitAbruptTermination = awaitAbruptTermination
+    self.savedTabCapacityMode = savedTabCapacityMode
     expectedAfterTermination =
       expectAbruptRecovery ? try AbruptProbeCheckpoint.expectedSession(root: root) : nil
     self.output = output
@@ -64,25 +68,32 @@ final class EngineProbe {
     }
     runtime = try ARCChromiumRuntime(
       frameworkURL: frameworks.appending(path: "Chromium Framework.framework"))
-    let profiles = [
-      BrowserProfile(id: UUID(uuidString: profileA)!, name: "Account Alpha"),
-      BrowserProfile(id: UUID(uuidString: profileB)!, name: "Account Beta"),
-    ]
-    let spaces = [
-      BrowserSpace(
-        profileID: profiles[0].id, name: "Account Alpha", symbol: "house", tint: .lavender,
-        tabs: [BrowserTab(id: UUID(uuidString: tabA)!, url: fixture)]),
-      BrowserSpace(
-        profileID: profiles[1].id, name: "Account Beta", symbol: "briefcase", tint: .ocean,
-        tabs: [BrowserTab(id: UUID(uuidString: tabB)!, url: fixture)]),
-      BrowserSpace(
-        profileID: profiles[0].id, name: "Shared Alpha", symbol: "square.stack", tint: .forest,
-        tabs: [BrowserTab(id: UUID(uuidString: sharedA)!, url: fixture)]),
-    ]
-    let session = try BrowserSession(
-      profiles: profiles, spaces: spaces, selectedSpaceID: spaces[0].id)
-    store = BrowserStore(
-      sessionFile: SessionFile(url: root.appending(path: "session.json")), session: session)
+    if savedTabCapacityMode {
+      let capacity = try SavedTabCapacityFixture.open(root: root, fixture: fixture, phase: phase)
+      savedTabCapacityFixture = capacity
+      store = capacity.store
+    } else {
+      savedTabCapacityFixture = nil
+      let profiles = [
+        BrowserProfile(id: UUID(uuidString: profileA)!, name: "Account Alpha"),
+        BrowserProfile(id: UUID(uuidString: profileB)!, name: "Account Beta"),
+      ]
+      let spaces = [
+        BrowserSpace(
+          profileID: profiles[0].id, name: "Account Alpha", symbol: "house", tint: .lavender,
+          tabs: [BrowserTab(id: UUID(uuidString: tabA)!, url: fixture)]),
+        BrowserSpace(
+          profileID: profiles[1].id, name: "Account Beta", symbol: "briefcase", tint: .ocean,
+          tabs: [BrowserTab(id: UUID(uuidString: tabB)!, url: fixture)]),
+        BrowserSpace(
+          profileID: profiles[0].id, name: "Shared Alpha", symbol: "square.stack", tint: .forest,
+          tabs: [BrowserTab(id: UUID(uuidString: sharedA)!, url: fixture)]),
+      ]
+      let session = try BrowserSession(
+        profiles: profiles, spaces: spaces, selectedSpaceID: spaces[0].id)
+      store = BrowserStore(
+        sessionFile: SessionFile(url: root.appending(path: "session.json")), session: session)
+    }
     if let expectedAfterTermination {
       guard store.session == expectedAfterTermination else {
         throw AbruptCheckpointError.snapshotMismatch
@@ -128,17 +139,21 @@ final class EngineProbe {
         ? try ProbeTLSConfiguration.load(root: root) : nil
       let awaitAbruptTermination = arguments.contains("--probe-await-abrupt-termination")
       let expectAbruptRecovery = arguments.contains("--probe-expect-abrupt-recovery")
+      let savedTabCapacityMode = arguments.contains("--probe-saved-tab-capacity")
       guard !bitwardenOnboardingControl || includeBitwarden,
         probeTLS == nil || (!awaitAbruptTermination && !expectAbruptRecovery),
         !(awaitAbruptTermination && expectAbruptRecovery),
         !awaitAbruptTermination || (phase == "initial" && !includeBitwarden),
         !expectAbruptRecovery || (phase == "restart" && !includeBitwarden),
+        !savedTabCapacityMode
+          || (!includeBitwarden && probeTLS == nil
+            && !awaitAbruptTermination && !expectAbruptRecovery && !bitwardenVault),
         BitwardenVaultFlags.valid(
           enabled: bitwardenVault, bitwarden: includeBitwarden,
           onboardingControl: bitwardenOnboardingControl, fixtureTLS: probeTLS != nil,
           awaitAbruptTermination: awaitAbruptTermination,
           expectAbruptRecovery: expectAbruptRecovery)
-      else { throw ProbeFailure("Invalid abrupt-recovery probe flags.") }
+      else { throw ProbeFailure("Invalid engine probe mode flags.") }
       let bitwardenVaultCredentials: VaultProbeCredentials? =
         bitwardenVault
         ? try VaultProbeCredentials.load(root: root, tls: probeTLS!) : nil
@@ -147,7 +162,7 @@ final class EngineProbe {
         includeBitwarden: includeBitwarden, bitwardenOnboardingControl: bitwardenOnboardingControl,
         probeTLS: probeTLS, bitwardenVaultCredentials: bitwardenVaultCredentials,
         awaitAbruptTermination: awaitAbruptTermination,
-        expectAbruptRecovery: expectAbruptRecovery)
+        expectAbruptRecovery: expectAbruptRecovery, savedTabCapacityMode: savedTabCapacityMode)
       probe.runtime.onReady = { [weak probe] in
         guard let probe else { return }
         Task {
@@ -161,7 +176,8 @@ final class EngineProbe {
       }
       // A bounded test must fail even if a renderer never calls its completion.
       DispatchQueue.main.asyncAfter(
-        deadline: .now() + (bitwardenVault ? 900 : includeBitwarden ? 150 : 75)
+        deadline: .now()
+          + (bitwardenVault ? 900 : includeBitwarden ? 150 : savedTabCapacityMode ? 180 : 75)
       ) {
         [weak probe] in
         probe?.finish(error: ProbeFailure("Engine probe timed out."))
@@ -184,7 +200,8 @@ final class EngineProbe {
 
   private func attachNativeShell() throws {
     browserEngine = try BrowserEngine(
-      events: BrowserRuntimeEvents(runtime: runtime), store: store, presentsNativePanels: false)
+      events: BrowserRuntimeEvents(runtime: runtime), store: store, presentsNativePanels: false,
+      lazyPinnedTabs: savedTabCapacityMode)
     let changed = runtime.onTabChanged
     runtime.onTabChanged = { [weak self] id, url, title, loading, back, forward in
       changed?(id, url, title, loading, back, forward)
@@ -246,6 +263,14 @@ final class EngineProbe {
 
   private func exercise() async {
     do {
+      if let capacity = savedTabCapacityFixture, let browserEngine {
+        let probe = SavedTabCapacityProbe(
+          runtime: runtime, engine: browserEngine, store: store, phase: phase, capacity: capacity)
+        savedTabCapacityProbe = probe
+        checks += try await probe.run()
+        finish(error: nil)
+        return
+      }
       bootstrapStage = .loadingAlpha
       try await load(profileA)
       bootstrapStage = .loadingBeta
@@ -504,6 +529,28 @@ final class EngineProbe {
   }
 
   private func auditNativeHostShutdown() {
+    if savedTabCapacityMode {
+      do {
+        let routerClientCount = browserEngine?.events.router.clients.count ?? -1
+        let primaryWindowClosed = runtime.window(forID: runtime.primaryWindowID) == nil
+        let engineClosed = browserEngine?.isClosed == true
+        try savedTabCapacityProbe?.recordCleanupAudit(
+          engineClosed: engineClosed, primaryWindowClosed: primaryWindowClosed,
+          routerClientCount: routerClientCount)
+        guard engineClosed, primaryWindowClosed, routerClientCount == 0 else {
+          throw SavedTabCapacityFailure(
+            "Owned window or runtime router client survived engine quit.")
+        }
+        checks.append("Engine quit closed owned window and removed its runtime router client")
+      } catch {
+        resultError = ProbeFailure(
+          "\(resultError?.localizedDescription ?? "") Capacity cleanup audit: \(error.localizedDescription)"
+        )
+        passed = false
+      }
+      writeReport()
+      return
+    }
     guard localFixturesPassed else { return }
     do { checks += try nativeHostProbe?.auditAfterQuit() ?? [] } catch {
       resultError = ProbeFailure(
@@ -520,6 +567,12 @@ final class EngineProbe {
   private func writeReport() {
     let metricsURL = root.appending(path: "\(phase)-switch-metrics.json")
     let errorReport: Any
+    let capacityRunID: Any
+    if let savedTabCapacityFixture {
+      capacityRunID = savedTabCapacityFixture.runID.uuidString
+    } else {
+      capacityRunID = NSNull()
+    }
     if bitwardenVaultCredentials == nil {
       errorReport = resultError.map { $0.localizedDescription } ?? NSNull()
     } else {
@@ -527,6 +580,10 @@ final class EngineProbe {
     }
     let report: [String: Any] = [
       "phase": phase, "passed": passed, "chromiumVersion": runtime.chromiumVersion,
+      "probeMode": savedTabCapacityMode ? SavedTabCapacityFixture.mode : "full-fixture",
+      "savedTabCapacityOnly": savedTabCapacityMode,
+      "savedTabCapacityProbe": savedTabCapacityMode,
+      "savedTabCapacityRunID": capacityRunID,
       "bitwardenStoreProbe": includeBitwarden,
       "bitwardenVaultProbe": bitwardenVaultCredentials != nil,
       "bitwardenOnboardingControl": bitwardenOnboardingControl,
@@ -539,11 +596,13 @@ final class EngineProbe {
         ? checks : [],
       "error": errorReport,
       "scope":
-        includeBitwarden
-        ? (bitwardenVaultCredentials == nil
-          ? "Disposable fixtures plus a real Bitwarden store probe. See separate Bitwarden reports for passed and failed stages. No vault or Workspace credentials entered."
-          : "Redacted Bitwarden vault control probe. firstClickAcceptancePassed remains false.")
-        : "Disposable account and component-loaded MV3 fixtures. Store installation, Google Workspace and Bitwarden are not tested."
+        savedTabCapacityMode
+        ? SavedTabCapacityFixture.scope
+        : includeBitwarden
+          ? (bitwardenVaultCredentials == nil
+            ? "Disposable fixtures plus a real Bitwarden store probe. See separate Bitwarden reports for passed and failed stages. No vault or Workspace credentials entered."
+            : "Redacted Bitwarden vault control probe. firstClickAcceptancePassed remains false.")
+          : "Disposable account and component-loaded MV3 fixtures. Store installation, Google Workspace and Bitwarden are not tested."
         ,
     ]
     do {

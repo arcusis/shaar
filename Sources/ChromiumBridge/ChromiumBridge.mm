@@ -172,6 +172,7 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   NSMutableDictionary<NSString *, NSMutableArray<NSDictionary *> *> *_probeExtensions;
   NSMutableArray<NSDictionary *> *_probeDiagnostics;
   NSMutableSet<NSString *> *_pendingHostClosures;
+  NSMutableDictionary<NSString *, NSMutableDictionary<NSString *, id> *> *_detachedTabSelections;
   NSMutableDictionary<NSString *, NSString *> *_probeVisibilityLeases;
   BOOL _closingBrowser;
   ARCDownloadService *_downloadService;
@@ -204,6 +205,7 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   _pendingInstalls = [NSMutableDictionary dictionary];
   _pendingMedia = [NSMutableDictionary dictionary];
   _pendingHostClosures = [NSMutableSet set];
+  _detachedTabSelections = [NSMutableDictionary dictionary];
   _probeExtensions = [NSMutableDictionary dictionary];
   _probeDiagnostics = [NSMutableArray array];
   _services = [[ARCEngineServices alloc] initWithLibrary:_library error:error];
@@ -366,6 +368,13 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
       if ([self->_pendingMedia[requestID][@"windowID"] isEqualToString:identity]) [self resolveWebsiteMediaRequestID:requestID accepted:NO];
     }
     [self closeExtensionPopupForWindowID:identity];
+    for (NSString *tabID in [self->_detachedTabSelections.allKeys copy]) {
+      NSDictionary *transfer = self->_detachedTabSelections[tabID];
+      if ([transfer[@"sourceWindowID"] isEqualToString:identity] ||
+          [transfer[@"destinationWindowID"] isEqualToString:identity]) {
+        [self->_detachedTabSelections removeObjectForKey:tabID];
+      }
+    }
     for (NSString *tabID in [self->_tabWindows.allKeys copy]) {
       if (![self->_tabWindows[tabID] isEqualToString:identity]) continue;
       [self->_pendingHostClosures removeObject:tabID];
@@ -499,23 +508,54 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
     state.awaitingBrowserTab = NO;
     ARCNativeWindowState *original = [self stateForTabID:existingID];
     if (original == state) return;
+    NSMutableDictionary *transfer = _detachedTabSelections[existingID];
+    if (transfer && [transfer[@"sourceWindowID"] isEqualToString:original.identity]) {
+      transfer[@"destinationWindowID"] = state.identity;
+    } else {
+      transfer = nil;
+    }
     // An extension can request windows.create({tabId}) or tabs.move. Existing
     // live identities cannot acquire a second owner. Return the same document
     // after this notification, then restore its application's ordering/selection.
     dispatch_async(dispatch_get_main_queue(), ^{
-      if (tab.closed || self->_closingBrowser) return;
-      if (!original || original.closed || original.closing) {
-        [tab closeNow];
+      if (tab.closed || self->_closingBrowser) {
+        if (transfer && self->_detachedTabSelections[existingID] == transfer) {
+          [self->_detachedTabSelections removeObjectForKey:existingID];
+        }
         return;
       }
+      if (!original || original.closed || original.closing) {
+        [tab closeNow];
+        if (transfer && self->_detachedTabSelections[existingID] == transfer) {
+          [self->_detachedTabSelections removeObjectForKey:existingID];
+        }
+        return;
+      }
+      BOOL restoreSelection = transfer && self->_detachedTabSelections[existingID] == transfer;
+      original.hostSelectionDepth++;
+      state.hostSelectionDepth++;
       [original.native adoptTab:tab];
       NSString *profileID = self->_owners[existingID];
       NSArray *order = original.tabOrders[profileID];
       if (order) [self placeTabIDs:order pinnedIDs:original.tabPins[profileID] ?: @[]
                         profileID:profileID windowID:original.identity];
+      if (restoreSelection) {
+        NSString *selectionID = transfer[@"selectedTabID"];
+        NSString *fallbackID = transfer[@"fallbackTabID"];
+        if (![transfer[@"fallbackSuperseded"] boolValue] &&
+            ([original.selectedTabID isEqualToString:existingID] ||
+             (fallbackID && [original.selectedTabID isEqualToString:fallbackID]))) {
+          original.selectedTabID = selectionID;
+        }
+      }
       if (original.selectedTabID) [self activateTabID:original.selectedTabID];
       if (state.selectedTabID) [self activateTabID:state.selectedTabID];
+      state.hostSelectionDepth--;
+      original.hostSelectionDepth--;
       if (newBrowser && !state.closed && !state.closing) [self closeWindowID:state.identity];
+      if (transfer && self->_detachedTabSelections[existingID] == transfer) {
+        [self->_detachedTabSelections removeObjectForKey:existingID];
+      }
       if (self->_onNotice) self->_onNotice(@"Moving live tabs between windows is not supported.");
     });
     return;
@@ -583,6 +623,14 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   ArdiaCoreTab *tab = _tabs[tabID];
   ARCNativeWindowState *state = [self stateForTabID:tabID];
   if (!tab || tab.closed || !state || state.closing || state.closed || _closingBrowser) return;
+  if (!state.hostSelectionDepth) {
+    for (NSMutableDictionary *transfer in _detachedTabSelections.allValues) {
+      if ([transfer[@"sourceWindowID"] isEqualToString:state.identity] &&
+          ![transfer[@"selectedTabID"] isEqualToString:tabID]) {
+        transfer[@"fallbackSuperseded"] = @YES;
+      }
+    }
+  }
   if (state.popup && ![state.popupOwnerTabID isEqualToString:tabID]) [self closeExtensionPopupForWindowID:state.identity];
   if (state.findTabID && ![state.findTabID isEqualToString:tabID]) [self stopFindingInTabID:state.findTabID];
   if (_testing && ![state.selectedTabID isEqualToString:tabID]) {
@@ -604,7 +652,40 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   if (!state || state.closed || state.closing || _closingBrowser || state.hostSelectionDepth ||
       [_openingWindowID isEqualToString:state.identity] || !identity || !profileID || tab.closed ||
       ![_tabWindows[identity] isEqualToString:state.identity] ||
-      state.native.activeProfile != tab.profile || [state.selectedTabID isEqualToString:identity]) return;
+      state.native.activeProfile != tab.profile) return;
+  NSString *previousID = state.selectedTabID;
+  ArdiaCoreTab *previous = previousID ? _tabs[previousID] : nil;
+  if (previous && !previous.closed && ![_pendingHostClosures containsObject:previousID] &&
+      ![[state.native tabsForProfile:previous.profile] containsObject:previous] &&
+      !_detachedTabSelections[previousID]) {
+    _detachedTabSelections[previousID] = [@{
+      @"sourceWindowID": state.identity,
+      @"selectedTabID": previousID,
+    } mutableCopy];
+  }
+  if ([state.selectedTabID isEqualToString:identity]) {
+    for (NSMutableDictionary *transfer in _detachedTabSelections.allValues) {
+      if ([transfer[@"sourceWindowID"] isEqualToString:state.identity] &&
+          [transfer[@"fallbackTabID"] isEqualToString:identity]) {
+        transfer[@"fallbackSuperseded"] = @YES;
+      }
+    }
+    return;
+  }
+  BOOL transientFallback = NO;
+  for (NSString *tabID in _detachedTabSelections.allKeys) {
+    NSMutableDictionary *transfer = _detachedTabSelections[tabID];
+    if (![transfer[@"sourceWindowID"] isEqualToString:state.identity]) continue;
+    if ([state.selectedTabID isEqualToString:tabID] &&
+        (!transfer[@"fallbackTabID"] || [transfer[@"fallbackTabID"] isEqualToString:identity]) &&
+        ![transfer[@"fallbackSuperseded"] boolValue]) {
+      transfer[@"fallbackTabID"] = identity;
+      transientFallback = YES;
+    } else {
+      transfer[@"fallbackSuperseded"] = @YES;
+    }
+  }
+  if (transientFallback) return;
   if (_testing) {
     [_tabs[state.selectedTabID ?: @""] noteShownByHost:NO];
     [tab noteShownByHost:YES];
@@ -864,9 +945,13 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
 - (void)quit { _closingBrowser = YES; [_engine quit]; }
 - (void)engineQuitCancelled {
   _closingBrowser = NO;
+  [_detachedTabSelections removeAllObjects];
   for (ARCNativeWindowState *state in _windows.allValues) if (!state.closed) state.closing = NO;
 }
-- (void)engineWillShutDown { _closingBrowser = YES; }
+- (void)engineWillShutDown {
+  _closingBrowser = YES;
+  [_detachedTabSelections removeAllObjects];
+}
 - (BOOL)windowShouldClose:(ArdiaCoreWindow *)window {
   ARCNativeWindowState *state = [self stateForWindow:window];
   if (!state || state.closed) return NO;
@@ -881,7 +966,16 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
 - (void)window:(ArdiaCoreWindow *)window didRemoveTab:(ArdiaCoreTab *)tab {
   NSString *identity = [self identityForTab:tab];
   ARCNativeWindowState *state = [self stateForWindow:window];
-  if (!state || !identity || ![_tabWindows[identity] isEqualToString:state.identity] || ![_pendingHostClosures containsObject:identity]) return;
+  if (!state || !identity || ![_tabWindows[identity] isEqualToString:state.identity]) return;
+  if (!state.closing && !state.closed && !_closingBrowser && !tab.closed &&
+      ![_pendingHostClosures containsObject:identity] &&
+      [state.selectedTabID isEqualToString:identity] && !_detachedTabSelections[identity]) {
+    _detachedTabSelections[identity] = [@{
+      @"sourceWindowID": state.identity,
+      @"selectedTabID": identity,
+    } mutableCopy];
+  }
+  if (![_pendingHostClosures containsObject:identity]) return;
   // The pinned API suppresses tabWillClose for host-initiated closes. Observe
   // removal, then confirm destruction after the tab-strip notification unwinds.
   // A canceled beforeunload or a live tab detached elsewhere is not a closure.
@@ -1275,6 +1369,7 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   }
   NSString *identity = [self identityForTab:tab];
   if (!identity) return;
+  [_detachedTabSelections removeObjectForKey:identity];
   ARCNativeWindowState *state = [self stateForTabID:identity];
   BOOL notify = !_closingBrowser && !state.closing && !state.closed;
   [_pendingHostClosures removeObject:identity];

@@ -706,7 +706,38 @@ final class BitwardenProbe {
       }
       try await Task.sleep(for: .milliseconds(250))
     }
-    guard buttonReady else { throw BitwardenProbeFailure("Store install action is unavailable.") }
+    guard buttonReady else {
+      // Read-only diagnostics run after failure is fixed; they cannot turn it into acceptance.
+      _ = await evaluate(
+        sourceTab,
+        """
+        (()=>{const p=window.arcusisStoreStatus={available:false,callback:false,error:false};
+          if(typeof chrome?.webstorePrivate?.getExtensionStatus!=='function')return {};
+          p.available=true;
+          try{chrome.webstorePrivate.getExtensionStatus('\(extensionID)',status=>{
+            p.callback=true;p.error=!!chrome.runtime.lastError;
+            for(const s of ['installable','enabled','disabled','terminated','blocked_by_policy',
+              'can_request','request_pending','blacklisted','force_installed','corrupted',
+              'custodian_approval_required','custodian_approval_required_for_installation',
+              'deprecated_manifest_version'])p[s]=status===s;
+          });}catch{p.error=true;}return {};})()
+        """)
+      for _ in 0..<20 {
+        let status = await evaluate(sourceTab, "({...window.arcusisStoreStatus})")
+        for key in [
+          "available", "callback", "error", "installable", "enabled", "disabled", "terminated",
+          "blocked_by_policy", "can_request", "request_pending", "blacklisted", "force_installed",
+          "corrupted", "custodian_approval_required",
+          "custodian_approval_required_for_installation",
+          "deprecated_manifest_version",
+        ] {
+          vaultStoreObservation["status_\(key)"] = status?[key] as? Bool ?? false
+        }
+        if status?["callback"] as? Bool == true || status?["error"] as? Bool == true { break }
+        try await Task.sleep(for: .milliseconds(250))
+      }
+      throw BitwardenProbeFailure("Store install action is unavailable.")
+    }
     vaultStage = .storeAction
     _ = await evaluate(
       sourceTab,

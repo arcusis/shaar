@@ -166,6 +166,27 @@ class SwiftAuthProofBoundaryTests(unittest.TestCase):
         self.assertTrue(runner.has_label("logger text\nmfa_challenge=passed\n", "mfa_challenge=passed"))
         self.assertFalse(runner.has_label("logger mfa_challenge=passed\n", "mfa_challenge=passed"))
 
+    def test_late_success_acceptance_uses_fixed_outcome_labels(self):
+        output = "\n".join((
+            "late_sdk_success_observed=passed",
+            "late_publication_rejected=passed",
+            "fresh_sdk_success_published=passed",
+            "independent_profile_attempt_valid=passed",
+        ))
+        outcomes = runner.ownership_outcomes(output)
+        self.assertEqual(set(outcomes.values()), {True})
+        self.assertEqual(set(runner.ownership_outcomes(output.replace(
+            "late_publication_rejected=passed\n", "")).values()), {False, True})
+
+    def test_native_probe_builds_the_shared_gate_source(self):
+        source = (ROOT / "scripts/test-native-bitwarden-swift-auth.py").read_text()
+        probe = (ROOT / "Tests/NativeBitwardenSwiftAuthProbe/main.swift").read_text()
+        gate = ROOT / "Sources/BrowserCore/PasswordAuthenticationGate.swift"
+        self.assertTrue(gate.is_file())
+        self.assertIn('gate_source = ROOT / "Sources/BrowserCore/PasswordAuthenticationGate.swift"', source)
+        self.assertIn('str(support_object), str(gate_source), str(swift)', source)
+        self.assertIn("PasswordAuthenticationGate(binding:", probe)
+
     def test_endpoint_requires_owned_loopback_http_origin(self):
         self.assertTrue(runner.is_owned_endpoint("http://127.0.0.1:1234/"))
         for endpoint in (

@@ -69,6 +69,16 @@ def has_label(output: str, label: str) -> bool:
     return label in output.splitlines()
 
 
+def ownership_outcomes(output: str) -> dict[str, bool]:
+    labels = {
+        "late_sdk_success_observed": "late_sdk_success_observed=passed",
+        "late_publication_rejected": "late_publication_rejected=passed",
+        "fresh_sdk_success_published": "fresh_sdk_success_published=passed",
+        "independent_profile_attempt_valid": "independent_profile_attempt_valid=passed",
+    }
+    return {stage: has_label(output, label) for stage, label in labels.items()}
+
+
 def validate_current_pin() -> None:
     path = ROOT / "ThirdParty/BitwardenAuthSpike/pin.json"
     try:
@@ -198,10 +208,26 @@ class FixtureHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def do_GET(self) -> None:
+        if self.client_address[0] != "127.0.0.1" or self.path != "/probe/waiting":
+            self.reply(404, {})
+            return
+        waiting = self.state["late_success_waiting"].is_set()
+        body = b"waiting" if waiting else b"not-ready"
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_POST(self) -> None:
         try:
             if self.client_address[0] != "127.0.0.1":
                 self.reply(403, {})
+                return
+            if self.path == "/probe/release":
+                self.state["release_late_success"].set()
+                self.reply(200, {"released": True})
                 return
             if self.headers.get("Transfer-Encoding"):
                 self.reply(400, {})
@@ -278,6 +304,12 @@ class FixtureHandler(http.server.BaseHTTPRequestHandler):
                                      "TwoFactorProviders2": {"0": {}}})
             elif token == "123456":
                 self.state["stages"]["mfa_retry_success"] = identity_match
+                if self.state.get("mode") == "ownership" and self.state["late_success_once"]:
+                    self.state["late_success_waiting"].set()
+                    if not self.state["release_late_success"].wait(10):
+                        self.reply(503, {})
+                        return
+                    self.state["late_success_once"] = False
                 self.reply(200, self.state["success_fixture"])
             else:
                 self.state["stages"]["invalid_mfa"] = identity_match
@@ -364,6 +396,9 @@ def main() -> int:
         shutil.copytree(generated, work / "GeneratedSwift")
         shutil.copy2(support, work / "NaiveDateFormatter.swift")
         swift = ROOT / "Tests/NativeBitwardenSwiftAuthProbe/main.swift"
+        gate_source = ROOT / "Sources/BrowserCore/PasswordAuthenticationGate.swift"
+        if swift.is_symlink() or gate_source.is_symlink() or not gate_source.is_file():
+            raise ProofError("host authentication gate source missing or symlinked")
         executable = work / "swift-auth-probe"
         env = sanitized_environment(dict(os.environ))
         env.update({"MACOSX_DEPLOYMENT_TARGET": "26.0", "SWIFT_DETERMINISTIC_HASHING": "1"})
@@ -381,7 +416,8 @@ def main() -> int:
             raise ProofError("pinned Swift support module build failed")
         command = ["swiftc", "-target", "arm64-apple-macosx26.0", "-I", str(work), "-I", str(work / "GeneratedSwift"),
                    *module_flags, "-L", str(dylib.parent), "-lbitwarden_uniffi", "-Xlinker", "-rpath", "-Xlinker",
-                   str(dylib.parent), *sources, str(support_object), str(swift), "-o", str(executable)]
+                   str(dylib.parent), *sources, str(support_object), str(gate_source), str(swift),
+                   "-o", str(executable)]
         result = subprocess.run(command, cwd=work, env=env, timeout=180, capture_output=True, text=True)
         if result.returncode:
             raise ProofError("Swift SDK executable build failed")
@@ -395,6 +431,8 @@ def main() -> int:
 
         FixtureHandler.state = {"prelogin": False, "identity": [], "mode": "normal",
                                 "cancel_waiting": False, "cancel_event": threading.Event(),
+                                "late_success_waiting": threading.Event(),
+                                "release_late_success": threading.Event(), "late_success_once": True,
                                 "malformed_auth_seen": False, "malformed_requests_rejected": 0,
                                 "success_fixture": success_fixture,
                                 "stages": {"mfa_challenge": False, "mfa_retry_success": False,
@@ -416,6 +454,13 @@ def main() -> int:
         malformed_ok = (malformed_code == 0 and has_label(malformed_stdout, "swift_malformed_challenge=rejected")
                         and bool(FixtureHandler.state["malformed_auth_seen"]))
         FixtureHandler.state["stages"]["malformed_challenge"] = malformed_ok
+        stages = FixtureHandler.state["stages"]
+
+        FixtureHandler.state["mode"] = "ownership"
+        ownership_code, ownership_stdout = run_child(executable, endpoint, "ownership", work, env, 45)
+        ownership_stages = ownership_outcomes(ownership_stdout)
+        ownership_ok = ownership_code == 0 and all(ownership_stages.values())
+        stages.update(ownership_stages)
 
         # Attempt native Task cancellation, then independently bound the child lifetime.
         FixtureHandler.state["mode"] = "cancel"
@@ -439,7 +484,6 @@ def main() -> int:
                                   and has_label(cancellation_stdout, "swift_cancellation=requested"))
 
         identity_ok = bool(FixtureHandler.state["identity"]) and all(FixtureHandler.state["identity"])
-        stages = FixtureHandler.state["stages"]
         stages["mfa_retry_success"] = stages["mfa_retry_success"] and normal_ok
         stages["invalid_mfa"] = stages["invalid_mfa"] and normal_ok
         stages["prelogin"] = bool(FixtureHandler.state["prelogin"])
@@ -454,6 +498,7 @@ def main() -> int:
         cleanup_ok = (parent_terminated and child_exit_observed and cancellation_requested
                       and listener_thread_stopped and listener_closed and listener_refused_reconnect)
         stages["bounded_parent_child_cleanup"] = cleanup_ok
+        stages["late_sdk_ownership_scenario"] = ownership_ok
         auth_passed = normal_ok and malformed_ok and malformed_mock_ok and identity_ok and all(
             stages[name] for name in ("prelogin", "mfa_challenge", "mfa_retry_success", "invalid_mfa", "malformed_challenge"))
         proof = {
@@ -472,16 +517,18 @@ def main() -> int:
             "source_commit": SOURCE_COMMIT, "patch_sha256": PATCH_SHA,
             "dylib_sha256": PROOF_SHA, "generated_swift_tree_sha256": TREE_SHA,
             "swift_probe_source_sha256": sha256(swift), "executed_swift_sha256": sha256(executable),
+            "authentication_gate_source_sha256": sha256(gate_source),
             "host_system": platform.platform(), "host_architecture": platform.machine(),
             "dylib_minimum_macos": "26.0", "swift_executable_minimum_macos": "26.0",
-            "status": "diagnostic_complete" if auth_passed and cleanup_ok else "diagnostic_incomplete"}
+            "status": "diagnostic_complete" if auth_passed and cleanup_ok and ownership_ok
+            else "diagnostic_incomplete"}
         write_proof(output, proof)
         print("swift_auth=passed" if auth_passed else "swift_auth=failed")
         print("scope=native_swift_ffi_http_mock")
         print("integration_ready=false")
         print("native_task_cancellation_supported=false")
         print(f"bounded_parent_child_cleanup={'passed' if cleanup_ok else 'failed'}")
-        return 0 if auth_passed and cleanup_ok else 1
+        return 0 if auth_passed and cleanup_ok and ownership_ok else 1
     except subprocess.TimeoutExpired:
         raise ProofError("Swift auth process exceeded fixed timeout") from None
     finally:

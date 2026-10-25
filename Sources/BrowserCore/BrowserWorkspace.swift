@@ -255,11 +255,17 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
   }
 
   private var allocatedIDs: Set<UUID> {
-    Set(
-      windows.map(\.id) + catalog.spaces.flatMap { $0.tabs.map(\.id) }
-        + windows.flatMap {
-          $0.session.spaces.flatMap { $0.tabs.map(\.id) } + $0.session.closedTabs.map(\.id)
-        })
+    var allocated = Set(windows.map(\.id))
+    for space in catalog.spaces {
+      allocated.formUnion(space.tabs.map(\.id))
+    }
+    for window in windows {
+      for space in window.session.spaces {
+        allocated.formUnion(space.tabs.map(\.id))
+      }
+      allocated.formUnion(window.session.closedTabs.map(\.id))
+    }
+    return allocated
   }
 
   private func project(_ old: WorkspaceWindow, allocated: inout Set<UUID>) throws -> WorkspaceWindow

@@ -985,8 +985,10 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
      "const label=e=>(e.getAttribute('aria-label')||text(e)).trim().replace(/\\s+/g,' ');"
      "const button=[...document.querySelectorAll('button,a,[role=button]')].find(b=>"
      "!excluded(b)&&label(b)===%@ && b.getBoundingClientRect().width>0 && b.getBoundingClientRect().height>0 && !b.disabled);"
-     "if(!button)return null;button.scrollIntoView({block:'center'});const r=button.getBoundingClientRect();"
-     "return {x:r.x+r.width/2,y:r.y+r.height/2};})()", literal];
+     "if(!button)return null;button.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'});"
+     "const r=button.getBoundingClientRect(),x=r.x+r.width/2,y=r.y+r.height/2;"
+     "const hit=document.elementFromPoint(x,y);if(!hit||!(hit===button||button.contains(hit)))return null;"
+     "return {x,y};})()", literal];
   ArdiaCoreTab *popup = state.popup;
   ClickProbeTarget(popup, expression, ^BOOL { return !state.closed && [state.popupID isEqualToString:popupID]; }, completion);
 }

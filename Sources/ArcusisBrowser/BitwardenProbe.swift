@@ -662,6 +662,8 @@ final class BitwardenProbe {
       })
     else { throw BitwardenProbeFailure("Store tab is not owned by selected account profile.") }
     let sourceTab = selectedTab.id.uuidString
+    defer { runtime.endProbeVisibilityControl(inTabID: sourceTab) }
+    var visibilityControlStarted = false
     var buttonReady = false
     for _ in 0..<120 {
       guard store.session.selectedSpace.profileID == profile,
@@ -673,6 +675,11 @@ final class BitwardenProbe {
       vaultStoreObservation["nativeTabAvailable"] = runtime.nativeTabID(forID: sourceTab) >= 0
       vaultStoreObservation["engineClosed"] = engine.isClosed
       vaultStoreObservation["engineNoticePresent"] = engine.notice != nil
+      if let view = runtime.view(forTabID: sourceTab) {
+        vaultStoreObservation["nativeViewAttached"] = view.superview != nil
+        vaultStoreObservation["nativeViewHasWindow"] = view.window != nil
+        vaultStoreObservation["nativeViewHasArea"] = view.bounds.width > 0 && view.bounds.height > 0
+      }
       guard vaultStoreObservation["nativeTabAvailable"] == true else {
         try await Task.sleep(for: .milliseconds(250))
         continue
@@ -684,6 +691,7 @@ final class BitwardenProbe {
           const labels=b.map(e=>(e.innerText||e.getAttribute('aria-label')||'').trim().toLowerCase());
           return {ready:b.some((e,i)=>labels[i]==='add to chrome'&&!e.disabled),
             cwsOrigin:location.origin==='https://chromewebstore.google.com',
+            documentVisible:document.visibilityState==='visible',viewportHasArea:innerWidth>0&&innerHeight>0,
             documentComplete:document.readyState==='complete',
             englishDocument:document.documentElement.lang.toLowerCase().startsWith('en'),
             blankPage:location.href==='about:blank',errorPage:location.protocol==='chrome-error:',
@@ -694,13 +702,30 @@ final class BitwardenProbe {
         """)
       vaultStoreObservation["evaluated"] = page != nil
       for key in [
-        "cwsOrigin", "documentComplete", "englishDocument", "blankPage", "errorPage",
+        "cwsOrigin", "documentVisible", "viewportHasArea", "documentComplete", "englishDocument",
+        "blankPage", "errorPage",
         "addActionPresent", "installActionPresent", "removeActionPresent", "challengePresent",
       ] {
         vaultStoreObservation[key] = page?[key] as? Bool ?? false
       }
       vaultStoreButtonCount = min(10000, max(0, page?["buttonCount"] as? Int ?? 0))
-      if page?["ready"] as? Bool == true {
+      if !visibilityControlStarted, page?["cwsOrigin"] as? Bool == true,
+        page?["documentComplete"] as? Bool == true, page?["documentVisible"] as? Bool != true
+      {
+        guard onboardingControl else {
+          throw BitwardenProbeFailure("Hidden store page requires explicit control mode.")
+        }
+        visibilityControlStarted = await withCheckedContinuation { continuation in
+          runtime.beginProbeVisibilityControl(inTabID: sourceTab) {
+            continuation.resume(returning: $0)
+          }
+        }
+        vaultStoreObservation["visibilityControlStarted"] = visibilityControlStarted
+        guard visibilityControlStarted else {
+          throw BitwardenProbeFailure("Disposable store visibility control failed.")
+        }
+      }
+      if page?["ready"] as? Bool == true, page?["documentVisible"] as? Bool == true {
         buttonReady = true
         break
       }

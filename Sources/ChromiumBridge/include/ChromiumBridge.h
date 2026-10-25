@@ -104,6 +104,10 @@ FOUNDATION_EXPORT NSString * _Nullable ARCProbeTLSArgument(NSURL *directory,
 - (void)captureProbePopupID:(NSString *)popupID completion:(void (^)(NSData * _Nullable))completion;
 - (void)evaluateProbeUserGestureInTabID:(NSString *)tabID script:(NSString *)script
                            completion:(void (^)(NSString * _Nullable))completion;
+/// Bounded offscreen CWS visibility control; requires a selected disposable TLS probe tab.
+- (void)beginProbeVisibilityControlInTabID:(NSString *)tabID
+                              completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion NS_SWIFT_UI_ACTOR;
+- (void)endProbeVisibilityControlInTabID:(NSString *)tabID NS_SWIFT_UI_ACTOR;
 - (void)quit;
 /// Sends trusted renderer input only to the current disposable probe popup.
 - (void)clickProbePopupID:(NSString *)popupID buttonTitle:(NSString *)title

@@ -114,6 +114,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   NSMutableDictionary<NSString *, NSMutableArray<NSDictionary *> *> *_probeExtensions;
   NSMutableArray<NSDictionary *> *_probeDiagnostics;
   NSMutableSet<NSString *> *_pendingHostClosures;
+  NSMutableDictionary<NSString *, NSString *> *_probeVisibilityLeases;
   BOOL _closingBrowser;
   ARCDownloadService *_downloadService;
   ARCEngineServices *_services;
@@ -715,6 +716,64 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 - (void)evaluateProbeUserGestureInTabID:(NSString *)tabID script:(NSString *)script completion:(void (^)(NSString *))completion {
   if (!_testing) { completion(nil); return; }
   [self evaluateTab:_tabs[tabID] script:script userGesture:YES completion:completion];
+}
+- (void)beginProbeVisibilityControlInTabID:(NSString *)tabID completion:(void (^)(BOOL))completion {
+  ArdiaCoreTab *tab = _tabs[tabID];
+  if (!_testing || !_probeTLS || !tab || tab.closed || ![self isSelectedTabID:tabID]) {
+    completion(NO);
+    return;
+  }
+  NSURL *url = [NSURL URLWithString:tab.url];
+  if (![url.scheme isEqualToString:@"https"] || ![url.host isEqualToString:@"chromewebstore.google.com"] ||
+      ![url.path hasPrefix:@"/detail/"] || url.user || url.password || url.port ||
+      _probeVisibilityLeases[tabID]) {
+    completion(NO);
+    return;
+  }
+  if (!_probeVisibilityLeases) _probeVisibilityLeases = [NSMutableDictionary dictionary];
+  NSString *event = [@"arcusis-probe-visibility-" stringByAppendingString:NSUUID.UUID.UUIDString];
+  _probeVisibilityLeases[tabID] = event;
+  // The pinned engine detaches idle CDP clients. Keep this control's client alive
+  // with a bounded, cancelable promise; no vendor DOM, routes or storage are changed.
+  NSString *expression = [NSString stringWithFormat:
+    @"new Promise(resolve=>{const end=()=>{clearTimeout(timer);removeEventListener('%@',end);resolve(true);};"
+     "const timer=setTimeout(end,90000);addEventListener('%@',end,{once:true});})", event, event];
+  __weak ARCChromiumRuntime *weakSelf = self;
+  [tab devToolsCall:@"Runtime.evaluate" params:@{@"expression": expression, @"awaitPromise": @YES}
+           timeout:95 completion:^(NSDictionary *result, NSString *error) {
+    ARCChromiumRuntime *owner = weakSelf;
+    if (owner && [owner->_probeVisibilityLeases[tabID] isEqualToString:event]) {
+      [owner endProbeVisibilityControlInTabID:tabID];
+    }
+  }];
+  [tab devToolsCall:@"Emulation.setFocusEmulationEnabled" params:@{@"enabled": @YES}
+           timeout:5 completion:^(NSDictionary *result, NSString *error) {
+    ARCChromiumRuntime *owner = weakSelf;
+    BOOL current = owner && owner->_tabs[tabID] == tab && !tab.closed &&
+      [owner isSelectedTabID:tabID] && [owner->_probeVisibilityLeases[tabID] isEqualToString:event];
+    if (error || !current) {
+      if (owner && [owner->_probeVisibilityLeases[tabID] isEqualToString:event]) {
+        [owner endProbeVisibilityControlInTabID:tabID];
+      }
+      completion(NO);
+    } else {
+      completion(YES);
+    }
+  }];
+}
+- (void)endProbeVisibilityControlInTabID:(NSString *)tabID {
+  if (!_testing) return;
+  NSString *event = _probeVisibilityLeases[tabID];
+  if (!event) return;
+  [_probeVisibilityLeases removeObjectForKey:tabID];
+  ArdiaCoreTab *tab = _tabs[tabID];
+  if (!tab || tab.closed) return;
+  [tab devToolsCall:@"Emulation.setFocusEmulationEnabled" params:@{@"enabled": @NO}
+           timeout:5 completion:^(NSDictionary *result, NSString *error) {
+    [tab devToolsCall:@"Runtime.evaluate"
+              params:@{@"expression": [NSString stringWithFormat:@"dispatchEvent(new Event('%@'))", event]}
+             timeout:5 completion:^(NSDictionary *result, NSString *error) {}];
+  }];
 }
 - (void)evaluateTab:(ArdiaCoreTab *)tab script:(NSString *)script userGesture:(BOOL)userGesture completion:(void (^)(NSString *))completion {
   if (!tab || tab.closed) { completion(nil); return; }

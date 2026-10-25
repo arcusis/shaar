@@ -557,11 +557,11 @@ final class BitwardenProbe {
     engine.extensionPanel = nil
     store.perform(.space(shared.id))
     guard let popup = try await openVaultPopup() else { return false }
-    let state = await BitwardenVaultProbe(runtime: runtime, popupID: popup)
-      .state(expectedAccount: expectedAccount)
+    let authenticated = await BitwardenVaultProbe(runtime: runtime, popupID: popup).waitFor(
+      { $0.vaultVisible && $0.accountIdentityMatches }, expectedAccount: expectedAccount)
     engine.extensionPanel = nil
     store.perform(.space(account.id))
-    return state?.vaultVisible == true && state?.accountIdentityMatches == true
+    return authenticated
   }
 
   private func exerciseVault(_ credentials: VaultProbeCredentials) async throws -> [String] {
@@ -611,15 +611,22 @@ final class BitwardenProbe {
         vaultStage = .sharedProfile
         let sharedAuthenticated = try await verifySharedAlpha(expectedAccount: account.email)
         vaultStageResults["shared-alpha-space-retains-profile"] = sharedAuthenticated
+        guard sharedAuthenticated else {
+          throw BitwardenProbeFailure("Shared-profile vault did not retain its owning account.")
+        }
         guard let reopened = try await openVaultPopup() else {
           throw BitwardenProbeFailure("Bitwarden popup did not reopen in Account Alpha.")
         }
         popupID = reopened
       }
       let activeDriver = BitwardenVaultProbe(runtime: runtime, popupID: popupID)
-      if let otherIdentity = await activeDriver.state(expectedAccount: otherAccount.email) {
+      let activeAccountReady = await activeDriver.waitFor(
+        { $0.vaultVisible && $0.accountIdentityMatches }, expectedAccount: account.email)
+      if activeAccountReady,
+        let otherIdentity = await activeDriver.state(expectedAccount: otherAccount.email)
+      {
         vaultStageResults["account-\(label)-cross-profile-mismatch"] =
-          authenticated && !otherIdentity.accountIdentityMatches
+          authenticated && otherIdentity.vaultVisible && !otherIdentity.accountIdentityMatches
       } else {
         vaultStageResults["account-\(label)-cross-profile-mismatch"] = false
       }
@@ -686,7 +693,7 @@ final class BitwardenProbe {
       })
     else { throw BitwardenProbeFailure("Store tab is not owned by selected account profile.") }
     let sourceTab = selectedTab.id.uuidString
-    defer { runtime.endProbeVisibilityControl(inTabID: sourceTab) }
+    defer { runtime.endProbeVisibilityControl(forID: sourceTab) }
     var visibilityControlStarted = false
     var buttonReady = false
     for _ in 0..<120 {
@@ -740,7 +747,7 @@ final class BitwardenProbe {
           throw BitwardenProbeFailure("Hidden store page requires explicit control mode.")
         }
         visibilityControlStarted = await withCheckedContinuation { continuation in
-          runtime.beginProbeVisibilityControl(inTabID: sourceTab) {
+          runtime.beginProbeVisibilityControl(forID: sourceTab) {
             continuation.resume(returning: $0)
           }
         }
@@ -847,7 +854,14 @@ final class BitwardenProbe {
           try await Task.sleep(for: .milliseconds(100))
           continue
         }
-        return popup.id
+        let visibleControl = await withCheckedContinuation { continuation in
+          runtime.beginProbeVisibilityControl(forID: popup.id) {
+            continuation.resume(returning: $0)
+          }
+        }
+        if visibleControl { return popup.id }
+        try await Task.sleep(for: .milliseconds(100))
+        continue
       }
       guard store.session.selectedSpace.profileID == ownerProfile,
         let selected = store.session.selectedSpace.selectedTab

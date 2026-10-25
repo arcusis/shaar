@@ -88,6 +88,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 @interface ARCChromiumRuntime () <ArdiaCoreEngineDelegate, ArdiaCoreWindowDelegate,
                                 ArdiaCoreTabDelegate>
 - (void)closedWindowID:(NSString *)identity;
+- (ArdiaCoreTab *)probeVisibilityTargetForID:(NSString *)identity;
 @end
 
 @implementation ARCChromiumRuntime {
@@ -717,19 +718,32 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   if (!_testing) { completion(nil); return; }
   [self evaluateTab:_tabs[tabID] script:script userGesture:YES completion:completion];
 }
-- (void)beginProbeVisibilityControlInTabID:(NSString *)tabID completion:(void (^)(BOOL))completion {
-  ArdiaCoreTab *tab = _tabs[tabID];
-  if (!_testing || !_probeTLS || !tab || tab.closed || ![self isSelectedTabID:tabID]) {
-    completion(NO);
-    return;
-  }
+- (ArdiaCoreTab *)probeVisibilityTargetForID:(NSString *)identity {
+  if (!_testing || !_probeTLS) return nil;
+  ArdiaCoreTab *tab = _tabs[identity];
+  ARCNativeWindowState *state = [self stateForPopupID:identity];
+  BOOL popup = !tab && state && !state.closed && !state.closing &&
+    [state.popupExtensionID isEqualToString:@"nngceckbapebfimnlniiiahkandclblb"] &&
+    state.popupOwnerTabID.length > 0 &&
+    [self isSelectedTabID:state.popupOwnerTabID];
+  if (popup) tab = state.popup;
+  if (!tab || tab.closed || (!popup && ![self isSelectedTabID:identity])) return nil;
   NSURL *url = [NSURL URLWithString:tab.url];
-  if (![url.scheme isEqualToString:@"https"] || ![url.host isEqualToString:@"chromewebstore.google.com"] ||
-      ![url.path hasPrefix:@"/detail/"] || url.user || url.password || url.port ||
-      _probeVisibilityLeases[tabID]) {
+  if (url.user || url.password || url.port) return nil;
+  BOOL allowed = popup
+    ? [url.scheme isEqualToString:@"chrome-extension"] && [url.host isEqualToString:state.popupExtensionID] &&
+      tab.profile == state.native.activeProfile
+    : [url.scheme isEqualToString:@"https"] && [url.host isEqualToString:@"chromewebstore.google.com"] &&
+      [url.path hasPrefix:@"/detail/"];
+  return allowed ? tab : nil;
+}
+- (void)beginProbeVisibilityControlForID:(NSString *)tabID completion:(void (^)(BOOL))completion {
+  ArdiaCoreTab *tab = [self probeVisibilityTargetForID:tabID];
+  if (!tab) {
     completion(NO);
     return;
   }
+  if (_probeVisibilityLeases[tabID]) { completion(YES); return; }
   if (!_probeVisibilityLeases) _probeVisibilityLeases = [NSMutableDictionary dictionary];
   NSString *event = [@"arcusis-probe-visibility-" stringByAppendingString:NSUUID.UUID.UUIDString];
   _probeVisibilityLeases[tabID] = event;
@@ -743,17 +757,17 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
            timeout:95 completion:^(NSDictionary *result, NSString *error) {
     ARCChromiumRuntime *owner = weakSelf;
     if (owner && [owner->_probeVisibilityLeases[tabID] isEqualToString:event]) {
-      [owner endProbeVisibilityControlInTabID:tabID];
+      [owner endProbeVisibilityControlForID:tabID];
     }
   }];
   [tab devToolsCall:@"Emulation.setFocusEmulationEnabled" params:@{@"enabled": @YES}
            timeout:5 completion:^(NSDictionary *result, NSString *error) {
     ARCChromiumRuntime *owner = weakSelf;
-    BOOL current = owner && owner->_tabs[tabID] == tab && !tab.closed &&
-      [owner isSelectedTabID:tabID] && [owner->_probeVisibilityLeases[tabID] isEqualToString:event];
+    BOOL current = owner && [owner probeVisibilityTargetForID:tabID] == tab &&
+      [owner->_probeVisibilityLeases[tabID] isEqualToString:event];
     if (error || !current) {
       if (owner && [owner->_probeVisibilityLeases[tabID] isEqualToString:event]) {
-        [owner endProbeVisibilityControlInTabID:tabID];
+        [owner endProbeVisibilityControlForID:tabID];
       }
       completion(NO);
     } else {
@@ -761,12 +775,12 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     }
   }];
 }
-- (void)endProbeVisibilityControlInTabID:(NSString *)tabID {
+- (void)endProbeVisibilityControlForID:(NSString *)tabID {
   if (!_testing) return;
   NSString *event = _probeVisibilityLeases[tabID];
   if (!event) return;
   [_probeVisibilityLeases removeObjectForKey:tabID];
-  ArdiaCoreTab *tab = _tabs[tabID];
+  ArdiaCoreTab *tab = _tabs[tabID] ?: [self stateForPopupID:tabID].popup;
   if (!tab || tab.closed) return;
   [tab devToolsCall:@"Emulation.setFocusEmulationEnabled" params:@{@"enabled": @NO}
            timeout:5 completion:^(NSDictionary *result, NSString *error) {
@@ -916,6 +930,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   ARCNativeWindowState *state = _windows[windowID];
   ArdiaCoreTab *tab = state.popup;
   NSString *identity = state.popupID;
+  if (identity) [self endProbeVisibilityControlForID:identity];
   state.popup = nil;
   state.popupID = nil;
   state.popupOwnerTabID = nil;

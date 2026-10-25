@@ -1036,6 +1036,10 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
         NSDictionary *resource = result[@"resource"];
         if (loadError || ![resource isKindOfClass:NSDictionary.class] || tab.closed || ![self isSelectedTabID:tabID]) {
           completion(@{@"failureStage": @"resource", @"commandFailed": @(loadError != nil),
+                       @"commandTimedOut": @([loadError isEqualToString:@"timed out"]),
+                       @"attachmentRejected": @([loadError isEqualToString:@"can't attach to the tab"]),
+                       @"targetClosed": @([loadError isEqualToString:@"the tab is gone"] ||
+                                           [loadError isEqualToString:@"the tab's DevTools target closed"]),
                        @"resourceAvailable": @([resource isKindOfClass:NSDictionary.class])});
           return;
         }

@@ -83,7 +83,7 @@ final class BitwardenVaultProbe {
           loginButton:labels.some(x=>x==='log in'||x==='login'),
           continueButton:labels.some(x=>x==='continue'),
           unlockButton:labels.some(x=>x==='unlock'),
-          vaultVisible:t.includes('my vault')||t.includes('new item'),
+          vaultVisible:[...document.querySelectorAll('app-vault app-current-account button')].some(visible),
           loginPrompt:t.includes('log in'),skipPrompt:t.includes('default password manager'),
           introCarousel:location.hash==='#/intro-carousel',
           regionSelector:b.some(x=>/^(bitwarden\\.com|bitwarden\\.eu)$/.test((x.innerText||'').trim().toLowerCase())),

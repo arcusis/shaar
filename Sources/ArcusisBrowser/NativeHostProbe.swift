@@ -3,6 +3,16 @@ import BrowserCore
 import Darwin
 import SwiftUI
 
+private struct HostProbeSelection: Codable, Equatable {
+  let space: UUID
+  let tab: UUID?
+
+  init(_ session: BrowserSession) {
+    space = session.selectedSpaceID
+    tab = session.selectedSpace.selectedTabID
+  }
+}
+
 private struct HostProbeIdentity: Codable {
   let first: UUID
   let second: UUID
@@ -10,6 +20,8 @@ private struct HostProbeIdentity: Codable {
   let secondTab: UUID
   let ordinarilyClosed: [UUID]
   var engineWindow: UUID? = nil
+  var engineTab: UUID? = nil
+  var restorationSelections: [UUID: HostProbeSelection]? = nil
 }
 
 /// Exercises the production host class without ordering windows onscreen or sending OS input.
@@ -144,9 +156,17 @@ final class NativeHostProbe {
         Set(host.contexts.keys) == expected
           && closedIDs.allSatisfy { host.contexts[$0] == nil },
         "native host startup restores retained windows and excludes ordinarily closed windows")
+      guard let selections = saved.restorationSelections else {
+        throw HostProbeFailure("Final host-restoration checkpoint is missing.")
+      }
+      guard saved.engineWindow == nil || saved.engineTab != nil else {
+        throw HostProbeFailure("Saved engine-created fixture tab is missing.")
+      }
       try expect(
-        host.contexts[firstID]!.store.session.selectedSpace.selectedTabID == saved.firstTab
-          && host.contexts[secondID]!.store.session.selectedSpace.selectedTabID == saved.secondTab,
+        Set(selections.keys) == expected
+          && selections.allSatisfy { id, selection in
+            host.contexts[id].map { HostProbeSelection($0.store.session) == selection } == true
+          },
         "production host restoration preserves each window's saved Space and tab selection")
       for id in [firstID, secondID] {
         let geometry = manager.workspace.window(id)!.geometry!
@@ -156,8 +176,9 @@ final class NativeHostProbe {
           "production host restores saved window geometry \(id)")
       }
       if let id = saved.engineWindow, let restored = host.contexts[id],
-        let tab = restored.store.session.selectedSpace.selectedTabID
+        let tab = saved.engineTab
       {
+        try selectFixture(tab, in: restored)
         let account = try await document(tab)
         try expect(
           account["cookie"] as? String == "account=alpha"
@@ -177,6 +198,8 @@ final class NativeHostProbe {
         manager.workspace.window(empty) == nil,
         "Close tab becomes Close window for an empty native window")
       closedIDs.append(empty)
+      try selectFixture(saved.firstTab, in: host.contexts[firstID]!)
+      try selectFixture(saved.secondTab, in: host.contexts[secondID]!)
     }
     let first = host.contexts[firstID]!
     let second = host.contexts[secondID]!
@@ -255,7 +278,8 @@ final class NativeHostProbe {
     try JSONEncoder().encode(
       HostProbeIdentity(
         first: firstID, second: secondID, firstTab: firstTab, secondTab: secondTab,
-        ordinarilyClosed: closedIDs, engineWindow: requested.retained)
+        ordinarilyClosed: closedIDs, engineWindow: requested.retained,
+        engineTab: host.contexts[requested.retained]?.store.session.selectedSpace.selectedTabID)
     ).write(to: checkpoint, options: .atomic)
     try expect(
       host.lastError == nil && manager.storageNotice == nil,
@@ -269,6 +293,16 @@ final class NativeHostProbe {
       throw HostProbeFailure("Host quit snapshot failed.")
     }
     expectedAfterQuit = host.workspace.workspace
+    if phase == "initial" {
+      let checkpoint = root.appending(path: "host-identities.json")
+      var saved = try JSONDecoder().decode(
+        HostProbeIdentity.self, from: Data(contentsOf: checkpoint))
+      saved.restorationSelections = Dictionary(
+        uniqueKeysWithValues: host.workspace.workspace.windows.map {
+          ($0.id, HostProbeSelection($0.session))
+        })
+      try JSONEncoder().encode(saved).write(to: checkpoint, options: .atomic)
+    }
   }
 
   func auditAfterQuit() throws -> [String] {
@@ -303,6 +337,15 @@ final class NativeHostProbe {
     if let focused {
       NotificationCenter.default.post(name: NSWindow.didBecomeKeyNotification, object: focused)
     }
+  }
+
+  private func selectFixture(_ tab: UUID, in context: NativeBrowserContext) throws {
+    guard
+      let space = context.store.session.spaces.first(where: {
+        $0.tabs.contains(where: { $0.id == tab })
+      })
+    else { throw HostProbeFailure("Saved host fixture tab is missing.") }
+    context.store.perform(.tab(space: space.id, tab: tab))
   }
 
   private func menuItem(_ command: BrowserMenuCommand) throws -> NSMenuItem {

@@ -146,26 +146,56 @@ class VaultFixtureTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaisesRegex(ValueError, 'Startup timeout'):
                 fixture.VaultFixture(self.binary, self.root, startup_timeout=value)
 
-    def test_sanitized_environment_disables_services_and_invitations(self):
+    def test_default_and_opt_in_environments_are_exact_and_disable_other_services(self):
         tls = self._tls()
         with patch.dict(os.environ, {'AWS_SECRET_ACCESS_KEY': 'never-forward', 'ROCKET_CLI_COLORS': 'off'}, clear=True):
-            environment = fixture._environment(self.root / 'vault-data', tls, 41234)
-        self.assertNotIn('AWS_SECRET_ACCESS_KEY', environment)
-        self.assertEqual(environment['ENV_FILE'], '/dev/null')
-        self.assertEqual(environment['ROCKET_ADDRESS'], '127.0.0.1')
-        self.assertEqual(environment['ROCKET_PORT'], '41234')
-        self.assertEqual(environment['ROCKET_CLI_COLORS'], 'false')
-        self.assertEqual(environment['INVITATIONS_ALLOWED'], 'false')
-        self.assertEqual(environment['SIGNUPS_ALLOWED'], 'false')
-        for key in ('WEB_VAULT_ENABLED', 'PUSH_ENABLED'):
-            self.assertEqual(environment[key], 'false')
-        self.assertNotIn('ADMIN_TOKEN', environment)
-        self.assertNotIn('SMTP_HOST', environment)
-        self.assertNotIn('SMTP_PASSWORD', environment)
-        self.assertEqual(environment['SMTP_SECURITY'], 'off')
-        self.assertEqual(environment['USE_SENDMAIL'], 'false')
-        self.assertEqual(environment['ICON_DOWNLOAD_TIMEOUT'], '0')
-        self.assertEqual(environment['HTTP_REQUEST_BLOCK_REGEX'], '.*')
+            default_environment = fixture._environment(self.root / 'vault-data', tls, 41234)
+            opt_in_environment = fixture._environment(
+                self.root / 'vault-data', tls, 41234, allow_synthetic_registration=True)
+        expected = {
+            'HOME': str(self.root / 'vault-data'),
+            'TMPDIR': str(self.root / 'vault-data'),
+            'ENV_FILE': '/dev/null',
+            'DATA_FOLDER': str(self.root / 'vault-data'),
+            'DOMAIN': 'https://127.0.0.1:41234',
+            'ROCKET_ADDRESS': '127.0.0.1',
+            'ROCKET_PORT': '41234',
+            'ROCKET_TLS': f'{{certs={json.dumps(str(tls.certificate))},key={json.dumps(str(tls.private_key))}}}',
+            'ROCKET_CLI_COLORS': 'false',
+            'WEB_VAULT_ENABLED': 'false',
+            'SMTP_SECURITY': 'off',
+            'USE_SENDMAIL': 'false',
+            'PUSH_ENABLED': 'false',
+            'ICON_DOWNLOAD_TIMEOUT': '0',
+            'DISABLE_ICON_DOWNLOAD': 'true',
+            'HTTP_REQUEST_BLOCK_REGEX': '.*',
+            'SIGNUPS_ALLOWED': 'false',
+            'SIGNUPS_VERIFY': 'false',
+            'INVITATIONS_ALLOWED': 'false',
+        }
+        self.assertEqual(default_environment, expected)
+        self.assertEqual(opt_in_environment, dict(expected, SIGNUPS_ALLOWED='true'))
+        self.assertNotIn('AWS_SECRET_ACCESS_KEY', default_environment)
+        self.assertNotIn('ADMIN_TOKEN', default_environment)
+        self.assertNotIn('SMTP_HOST', default_environment)
+        self.assertNotIn('SMTP_PASSWORD', default_environment)
+
+    def test_synthetic_registration_requires_strict_bool(self):
+        for value in (None, 0, 1, 'true', object()):
+            with self.subTest(value=value), self.assertRaisesRegex(TypeError, 'must be a bool'):
+                fixture.VaultFixture(self.binary, self.root, allow_synthetic_registration=value)
+            with self.subTest(environment_value=value), self.assertRaisesRegex(TypeError, 'must be a bool'):
+                fixture._environment(self.root / 'vault-data', self._tls(), 41234, value)
+        with self.assertRaises(TypeError):
+            fixture.VaultFixture(self.binary, self.root, 20, True)
+
+    def test_synthetic_registration_requires_fresh_marked_root(self):
+        (self.root / 'preexisting').write_text('do not use')
+        with patch.object(fixture.subprocess, 'Popen') as popen:
+            with self.assertRaisesRegex(ValueError, 'fresh marked private temp root'):
+                fixture.VaultFixture(
+                    self.binary, self.root, allow_synthetic_registration=True).__enter__()
+        popen.assert_not_called()
 
     def test_listener_requires_exact_owned_loopback_port(self):
         good = Mock(stdout='p9123\nn127.0.0.1:41234\n')
@@ -216,6 +246,10 @@ class VaultFixtureTests(unittest.TestCase):
                 command, options = popen.call_args.args[0], popen.call_args.kwargs
                 self.assertEqual(command, [str(self.binary)])
                 self.assertEqual(options['env']['ENV_FILE'], '/dev/null')
+                self.assertEqual(options['env']['SIGNUPS_ALLOWED'], 'false')
+                self.assertEqual(options['env']['INVITATIONS_ALLOWED'], 'false')
+                self.assertEqual(options['env']['SIGNUPS_VERIFY'], 'false')
+                self.assertEqual(options['env']['DISABLE_ICON_DOWNLOAD'], 'true')
                 self.assertTrue((self.root / 'vault-data').is_dir())
                 self.assertEqual(stat.S_IMODE((self.root / 'vault-data').stat().st_mode), 0o700)
             process.terminate.assert_called_once_with()
@@ -240,12 +274,18 @@ class VaultFixtureTests(unittest.TestCase):
         with patch.object(fixture.vault_tls, 'create_fixture_tls', return_value=self._tls()), \
                 patch.object(fixture, '_choose_port', return_value=41236), \
                 patch.object(fixture, '_verify_listener', return_value=False), \
-                patch.object(fixture.subprocess, 'Popen', return_value=process), \
+                patch.object(fixture.subprocess, 'Popen', return_value=process) as popen, \
                 patch.object(fixture.time, 'sleep'), \
                 patch.object(fixture.time, 'monotonic', side_effect=[10, 11, 12]):
             with self.assertRaisesRegex(TimeoutError, 'startup timed out'):
-                with fixture.VaultFixture(self.binary, self.root, startup_timeout=1):
+                with fixture.VaultFixture(
+                        self.binary, self.root, startup_timeout=1,
+                        allow_synthetic_registration=True):
                     pass
+        self.assertEqual(popen.call_args.kwargs['env']['SIGNUPS_ALLOWED'], 'true')
+        self.assertEqual(popen.call_args.kwargs['env']['INVITATIONS_ALLOWED'], 'false')
+        self.assertEqual(popen.call_args.kwargs['env']['SIGNUPS_VERIFY'], 'false')
+        self.assertEqual(popen.call_args.kwargs['env']['DISABLE_ICON_DOWNLOAD'], 'true')
         process.terminate.assert_called_once_with()
         process.kill.assert_called_once_with()
         self.assertEqual(process.wait.call_count, 2)

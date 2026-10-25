@@ -84,7 +84,9 @@ def _choose_port():
         return listener.getsockname()[1]
 
 
-def _environment(data_folder, tls, port):
+def _environment(data_folder, tls, port, allow_synthetic_registration=False):
+    if type(allow_synthetic_registration) is not bool:
+        raise TypeError('allow_synthetic_registration must be a bool')
     environment = {key: os.environ[key] for key in ('PATH', 'LANG', 'LC_ALL', 'SYSTEMROOT')
                    if key in os.environ}
     environment.update({
@@ -102,8 +104,10 @@ def _environment(data_folder, tls, port):
         'USE_SENDMAIL': 'false',
         'PUSH_ENABLED': 'false',
         'ICON_DOWNLOAD_TIMEOUT': '0',
+        'DISABLE_ICON_DOWNLOAD': 'true',
         'HTTP_REQUEST_BLOCK_REGEX': '.*',
-        'SIGNUPS_ALLOWED': 'false',
+        'SIGNUPS_ALLOWED': 'true' if allow_synthetic_registration else 'false',
+        'SIGNUPS_VERIFY': 'false',
         'INVITATIONS_ALLOWED': 'false',
     })
     return environment
@@ -132,13 +136,16 @@ def _opener(tls, port):
 class VaultFixture:
     """Context manager for one receipt-verified Vaultwarden child process."""
 
-    def __init__(self, binary, root, startup_timeout=20):
+    def __init__(self, binary, root, startup_timeout=20, *, allow_synthetic_registration=False):
         if (isinstance(startup_timeout, bool) or not isinstance(startup_timeout, (int, float))
                 or not math.isfinite(startup_timeout) or startup_timeout <= 0):
             raise ValueError('Startup timeout must be positive')
+        if type(allow_synthetic_registration) is not bool:
+            raise TypeError('allow_synthetic_registration must be a bool')
         self.binary = Path(binary)
         self.root = Path(root)
         self.startup_timeout = float(startup_timeout)
+        self.allow_synthetic_registration = allow_synthetic_registration
         self.base_url = None
         self.pid = None
         self.tls = None
@@ -147,6 +154,9 @@ class VaultFixture:
     def __enter__(self):
         try:
             self.root = vault_tls.validated_probe_root(self.root)
+            if (self.allow_synthetic_registration
+                    and {path.name for path in self.root.iterdir()} != {'.arcusis-probe'}):
+                raise ValueError('Synthetic registration requires a fresh marked private temp root')
             self.binary = _validate_binary(self.binary)
             data_folder = self.root / 'vault-data'
             data_folder.mkdir(mode=0o700)
@@ -158,7 +168,7 @@ class VaultFixture:
             self.tls = vault_tls.create_fixture_tls(self.root)
             port = _choose_port()
             self.base_url = f'https://127.0.0.1:{port}'
-            environment = _environment(data_folder, self.tls, port)
+            environment = _environment(data_folder, self.tls, port, self.allow_synthetic_registration)
             self._process = subprocess.Popen(
                 [str(self.binary)], cwd=self.root, env=environment,
                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,

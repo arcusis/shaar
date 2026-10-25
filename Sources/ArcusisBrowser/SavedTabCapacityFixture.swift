@@ -87,8 +87,8 @@ struct SavedTabCapacityIdentityCheckpoint: Codable, Equatable {
 
 @MainActor
 struct SavedTabCapacityFixture {
-  static let spaceCount = 36
-  static let tabsPerSpace = 40
+  static let spaceCount = 12
+  static let tabsPerSpace = 120
   static let profileCount = 4
   static let expectedTabCount = spaceCount * tabsPerSpace
   static let mode = "saved-tab-capacity-only"

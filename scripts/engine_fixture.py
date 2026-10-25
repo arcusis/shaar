@@ -444,8 +444,8 @@ def validate_saved_tab_capacity_report(root, phase, report, exit_code):
                             and item['elapsedMilliseconds'] >= 0
                             for index, item in enumerate(timings))
                     and {item.get('profileID') for item in timings} == set(profile_ids)) if (
-                                canonical_ids(profile_ids, 4) and canonical_ids(space_ids, 36)
-                                and canonical_ids(selected_tab_ids, 36)
+                                canonical_ids(profile_ids, 4) and canonical_ids(space_ids, 12)
+                                and canonical_ids(selected_tab_ids, 12)
                                 and native_ids_valid) else False
     initial_document_ms = capacity.get('initialDocumentWaitMilliseconds')
     visits_ms = capacity.get('visitDurationMilliseconds')
@@ -471,12 +471,12 @@ def validate_saved_tab_capacity_report(root, phase, report, exit_code):
             or not isinstance(space_ids, list)
             or capacity.get('selectedSpaceID') not in space_ids
             or any(type(capacity.get(key)) is not int or capacity[key] != expected for key, expected in {
-                'profileCount': 4, 'spaceCount': 36, 'savedTabs': 1440, 'visitedSpaces': 8,
+                'profileCount': 4, 'spaceCount': 12, 'savedTabs': 1440, 'visitedSpaces': 8,
                 'visitedProfiles': 4, 'initialNativeLiveTabs': 1, 'peakNativeLiveTabs': 8,
                 'liveTabsAfterVisits': 8, 'unvisitedTabsMaterialized': 0,
             }.items())
-            or not canonical_ids(profile_ids, 4) or not canonical_ids(space_ids, 36)
-            or not canonical_ids(selected_tab_ids, 36) or not native_ids_valid
+            or not canonical_ids(profile_ids, 4) or not canonical_ids(space_ids, 12)
+            or not canonical_ids(selected_tab_ids, 12) or not native_ids_valid
             or capacity.get('initialNativeTabID') != native_tab_ids[0]
             or not timing_valid
             or type(initial_document_ms) not in (int, float)

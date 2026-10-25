@@ -35,8 +35,8 @@ class SavedTabCapacityRunnerTests(unittest.TestCase):
 
     def capacity_report(self, phase):
         profiles = [str(uuid.UUID(int=index)).upper() for index in range(1, 5)]
-        spaces = [str(uuid.UUID(int=index)).upper() for index in range(11, 47)]
-        selected_tabs = [str(uuid.UUID(int=index)).upper() for index in range(101, 137)]
+        spaces = [str(uuid.UUID(int=index)).upper() for index in range(11, 23)]
+        selected_tabs = [str(uuid.UUID(int=index)).upper() for index in range(101, 113)]
         native_ids = list(range(501, 509))
         visit_timings = [dict(spaceID=spaces[index], profileID=profiles[index % 4],
                               nativeTabID=native_ids[index], nativeLiveTabs=index + 1,
@@ -47,7 +47,7 @@ class SavedTabCapacityRunnerTests(unittest.TestCase):
                        routerClientCount=0, passed=True)
         return dict(schema=1, mode=fixture.SAVED_TAB_CAPACITY_MODE, phase=phase,
                     runID=self.run_id, scope=fixture.SAVED_TAB_CAPACITY_SCOPE,
-                    passed=True, profileCount=4, spaceCount=36, savedTabs=1440,
+                    passed=True, profileCount=4, spaceCount=12, savedTabs=1440,
                     visitedSpaces=8, visitedProfiles=4, initialNativeLiveTabs=1,
                     peakNativeLiveTabs=8, liveTabsAfterVisits=8,
                     unvisitedTabsMaterialized=0, checks=['native selected tab loaded'],

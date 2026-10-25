@@ -18,6 +18,7 @@ final class EngineProbe {
   private let bitwardenVaultCredentials: VaultProbeCredentials?
   private let awaitAbruptTermination: Bool
   private let savedTabCapacityMode: Bool
+  private let externalAppConsentMode: Bool
   private let expectedAfterTermination: BrowserSession?
   private let output: URL
   private var checks: [String] = []
@@ -31,6 +32,8 @@ final class EngineProbe {
   private var savedTabCapacityFixture: SavedTabCapacityFixture?
   private var savedTabCapacityProbe: SavedTabCapacityProbe?
   private var nativeHostProbe: NativeHostProbe?
+  private var externalAppConsentProbe: ExternalAppConsentProbe?
+  private var externalAppEvidence: ExternalAppConsentProbe.Evidence?
   private var resultError: Error?
   private enum BootstrapStage: String {
     case startup, loadingAlpha, loadingBeta, openingAlpha, openingBeta
@@ -49,7 +52,8 @@ final class EngineProbe {
     root: URL, fixture: URL, phase: String, output: URL, includeBitwarden: Bool,
     bitwardenOnboardingControl: Bool, probeTLS: ProbeTLSConfiguration?,
     bitwardenVaultCredentials: VaultProbeCredentials?,
-    awaitAbruptTermination: Bool, expectAbruptRecovery: Bool, savedTabCapacityMode: Bool
+    awaitAbruptTermination: Bool, expectAbruptRecovery: Bool, savedTabCapacityMode: Bool,
+    externalAppConsentMode: Bool
   ) throws {
     self.root = root
     self.fixture = fixture
@@ -60,6 +64,7 @@ final class EngineProbe {
     self.bitwardenVaultCredentials = bitwardenVaultCredentials
     self.awaitAbruptTermination = awaitAbruptTermination
     self.savedTabCapacityMode = savedTabCapacityMode
+    self.externalAppConsentMode = externalAppConsentMode
     expectedAfterTermination =
       expectAbruptRecovery ? try AbruptProbeCheckpoint.expectedSession(root: root) : nil
     self.output = output
@@ -140,6 +145,16 @@ final class EngineProbe {
       let awaitAbruptTermination = arguments.contains("--probe-await-abrupt-termination")
       let expectAbruptRecovery = arguments.contains("--probe-expect-abrupt-recovery")
       let savedTabCapacityMode = arguments.contains("--probe-saved-tab-capacity")
+      let externalAppConsentMode = arguments.contains("--probe-external-app-consent")
+      let noLaunchGuard = arguments.contains("--ardia-test-external-protocol-no-launch")
+      let conflictingFlags = [
+        "--bitwarden", "--bitwarden-onboarding-control", "--bitwarden-vault",
+        "--probe-fixture-tls", "--probe-await-abrupt-termination", "--probe-expect-abrupt-recovery",
+        "--probe-saved-tab-capacity",
+      ]
+      guard externalAppConsentMode == noLaunchGuard,
+        !externalAppConsentMode || !conflictingFlags.contains(where: arguments.contains)
+      else { throw ProbeFailure("Invalid engine probe mode flags.") }
       guard !bitwardenOnboardingControl || includeBitwarden,
         probeTLS == nil || (!awaitAbruptTermination && !expectAbruptRecovery),
         !(awaitAbruptTermination && expectAbruptRecovery),
@@ -162,7 +177,8 @@ final class EngineProbe {
         includeBitwarden: includeBitwarden, bitwardenOnboardingControl: bitwardenOnboardingControl,
         probeTLS: probeTLS, bitwardenVaultCredentials: bitwardenVaultCredentials,
         awaitAbruptTermination: awaitAbruptTermination,
-        expectAbruptRecovery: expectAbruptRecovery, savedTabCapacityMode: savedTabCapacityMode)
+        expectAbruptRecovery: expectAbruptRecovery, savedTabCapacityMode: savedTabCapacityMode,
+        externalAppConsentMode: externalAppConsentMode)
       probe.runtime.onReady = { [weak probe] in
         guard let probe else { return }
         Task {
@@ -177,7 +193,8 @@ final class EngineProbe {
       // A bounded test must fail even if a renderer never calls its completion.
       DispatchQueue.main.asyncAfter(
         deadline: .now()
-          + (bitwardenVault ? 900 : includeBitwarden ? 150 : savedTabCapacityMode ? 180 : 75)
+          + (externalAppConsentMode
+            ? 180 : bitwardenVault ? 900 : includeBitwarden ? 150 : savedTabCapacityMode ? 180 : 75)
       ) {
         [weak probe] in
         probe?.finish(error: ProbeFailure("Engine probe timed out."))
@@ -268,6 +285,19 @@ final class EngineProbe {
           runtime: runtime, engine: browserEngine, store: store, phase: phase, capacity: capacity)
         savedTabCapacityProbe = probe
         checks += try await probe.run()
+        finish(error: nil)
+        return
+      }
+      if externalAppConsentMode {
+        guard let browserEngine else { throw ProbeFailure("External consent engine is missing.") }
+        let probe = try ExternalAppConsentProbe(
+          engine: browserEngine, store: store, root: root, fixture: fixture, phase: phase)
+        externalAppConsentProbe = probe
+        do { externalAppEvidence = try await probe.run() } catch {
+          externalAppEvidence = probe.currentEvidence
+          throw error
+        }
+        probe.prepareForQuit()
         finish(error: nil)
         return
       }
@@ -523,12 +553,27 @@ final class EngineProbe {
           : "Vault UI stage failed.")
       localFixturesPassed = false
     }
-    passed = resultError == nil
-    writeReport()
+    passed = resultError == nil && !externalAppConsentMode
+    if !externalAppConsentMode { writeReport() }
     runtime.quit()
   }
 
   private func auditNativeHostShutdown() {
+    if externalAppConsentMode {
+      let engineClosed = browserEngine?.isClosed == true
+      let primaryWindowClosed = runtime.window(forID: runtime.primaryWindowID) == nil
+      let evidence = externalAppConsentProbe?.auditAfterQuit(
+        engineClosed: engineClosed, primaryWindowClosed: primaryWindowClosed)
+      externalAppEvidence = evidence
+      passed = evidence?.complete == true && resultError == nil
+      if !passed && resultError == nil {
+        resultError = ProbeFailure("External-app consent proof incomplete.")
+      }
+      localFixturesPassed = false
+      writeExternalAppReport(evidence)
+      writeReport()
+      return
+    }
     if savedTabCapacityMode {
       do {
         let routerClientCount = browserEngine?.events.router.clients.count ?? -1
@@ -580,13 +625,18 @@ final class EngineProbe {
     }
     let report: [String: Any] = [
       "phase": phase, "passed": passed, "chromiumVersion": runtime.chromiumVersion,
-      "probeMode": savedTabCapacityMode ? SavedTabCapacityFixture.mode : "full-fixture",
+      "probeMode": externalAppConsentMode
+        ? ExternalAppConsentProbe.mode
+        : savedTabCapacityMode ? SavedTabCapacityFixture.mode : "full-fixture",
       "savedTabCapacityOnly": savedTabCapacityMode,
       "savedTabCapacityProbe": savedTabCapacityMode,
       "savedTabCapacityRunID": capacityRunID,
       "bitwardenStoreProbe": includeBitwarden,
       "bitwardenVaultProbe": bitwardenVaultCredentials != nil,
       "bitwardenOnboardingControl": bitwardenOnboardingControl,
+      "externalAppConsentOnly": externalAppConsentMode,
+      "externalAppConsentProbe": externalAppConsentMode,
+      "externalAppConsentRunID": externalAppEvidence?.runID as Any? ?? NSNull(),
       "fixtureTLSProbe": probeTLS != nil,
       "abruptRecoveryProbe": expectedAfterTermination != nil,
       "localFixturesPassed": localFixturesPassed,
@@ -598,11 +648,13 @@ final class EngineProbe {
       "scope":
         savedTabCapacityMode
         ? SavedTabCapacityFixture.scope
-        : includeBitwarden
-          ? (bitwardenVaultCredentials == nil
-            ? "Disposable fixtures plus a real Bitwarden store probe. See separate Bitwarden reports for passed and failed stages. No vault or Workspace credentials entered."
-            : "Redacted Bitwarden vault control probe. firstClickAcceptancePassed remains false.")
-          : "Disposable account and component-loaded MV3 fixtures. Store installation, Google Workspace and Bitwarden are not tested."
+        : externalAppConsentMode
+          ? ExternalAppConsentProbe.scope
+          : includeBitwarden
+            ? (bitwardenVaultCredentials == nil
+              ? "Disposable fixtures plus a real Bitwarden store probe. See separate Bitwarden reports for passed and failed stages. No vault or Workspace credentials entered."
+              : "Redacted Bitwarden vault control probe. firstClickAcceptancePassed remains false.")
+            : "Disposable account and component-loaded MV3 fixtures. Store installation, Google Workspace and Bitwarden are not tested."
         ,
     ]
     do {
@@ -631,6 +683,28 @@ final class EngineProbe {
         Data(
           "\(message)\(staleReceiptRemains ? " Prior successful receipt could not be removed." : "")\n"
             .utf8))
+    }
+  }
+
+  private func writeExternalAppReport(_ evidence: ExternalAppConsentProbe.Evidence?) {
+    guard let evidence else { return }
+    let names = ExternalAppConsentProbe.checkNames
+    var report: [String: Any] = [
+      "schema": 1, "mode": ExternalAppConsentProbe.mode, "scope": ExternalAppConsentProbe.scope,
+      "phase": phase, "runID": evidence.runID, "passed": evidence.complete,
+      "checks": names, "checkCount": names.count,
+      "approvedRequests": evidence.approvedRequests, "launchCount": evidence.launchCount,
+      "deniedRequests": evidence.deniedRequests, "cleanup": evidence.cleanup,
+    ]
+    for (index, key) in names.enumerated() { report[key] = evidence.checks[index] }
+    do {
+      let data = try JSONSerialization.data(
+        withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
+      try data.write(
+        to: root.appending(path: "\(phase)-external-app-consent.json"), options: .atomic)
+    } catch {
+      passed = false
+      resultError = ProbeFailure("External-app consent report write failed.")
     }
   }
 }

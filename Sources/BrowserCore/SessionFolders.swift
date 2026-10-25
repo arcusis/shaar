@@ -82,7 +82,9 @@ extension BrowserSession {
     let members = spaces[source].tabs.filter { $0.folderID.map(tree.contains) == true }
     let memberIDs = Set(members.map(\.id))
     let selected = spaces[source].selectedTabID
-    let followsSelection = sourceID == selectedSpaceID && selected.map(memberIDs.contains) == true
+    let followsSelection =
+      sourceID == selectedSpaceID
+      && spaces[source].selectedFavoriteID == nil && selected.map(memberIDs.contains) == true
     var movedFolders = spaces[source].folders.filter { tree.contains($0.id) }
     if let root = movedFolders.firstIndex(where: { $0.id == id }) {
       movedFolders[root].parentID = parentID
@@ -104,6 +106,7 @@ extension BrowserSession {
       }
       if followsSelection {
         updated[destination].selectedTabID = selected
+        updated[destination].selectedFavoriteID = nil
       } else if updated[destination].selectedTabID == nil {
         updated[destination].selectedTabID = members.first?.id
       }

@@ -18,7 +18,7 @@ private let legacySession = Data(
   let file = SessionFile(url: directory.appending(path: "session.json"))
   try legacySession.write(to: file.url)
   let session = try #require(try file.load())
-  #expect(session.version == 3)
+  #expect(session.version == BrowserSession.currentVersion)
   #expect(session.profiles[0].id.uuidString == "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA")
   #expect(session.selectedSpace.id.uuidString == "BBBBBBBB-BBBB-4BBB-8BBB-BBBBBBBBBBBB")
   #expect(session.selectedSpace.selectedTabID == nil)
@@ -32,7 +32,7 @@ private let legacySession = Data(
   #expect(try file.load() == session)
   let object = try #require(
     JSONSerialization.jsonObject(with: Data(contentsOf: file.url)) as? [String: Any])
-  #expect(object["version"] as? Int == 3)
+  #expect(object["version"] as? Int == BrowserSession.currentVersion)
 }
 
 @Test func v2RejectsMissingFolderFieldsOrphanMembershipAndCycles() throws {

@@ -40,6 +40,7 @@ extension BrowserSession {
       folderID: folder)
     spaces[space].tabs.insert(tab, at: min(snapshot.index, spaces[space].tabs.count))
     spaces[space].selectedTabID = tab.id
+    spaces[space].selectedFavoriteID = nil
     spaces[space].expandFolderPath(folder)
     closedTabs.remove(at: entry)
     return tab.id

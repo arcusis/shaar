@@ -122,7 +122,9 @@ import Testing
   let file = SessionFile(url: root.appending(path: "session.json"))
   try original.write(to: file.url)
   let migrated = try #require(try file.load())
-  #expect(migrated == session && migrated.version == 3 && migrated.closedTabs.isEmpty)
+  #expect(
+    migrated == session && migrated.version == BrowserSession.currentVersion
+      && migrated.closedTabs.isEmpty)
   #expect(try Data(contentsOf: file.url) == original)
   try file.save(migrated)
   #expect(try file.load() == migrated)

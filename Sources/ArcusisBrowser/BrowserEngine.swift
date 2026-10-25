@@ -77,6 +77,9 @@ final class BrowserEngine {
     }
     callbacks.onWindowClosed = { [weak self] quitting in
       guard let self else { return }
+      for request in self.store?.externalAppRequests ?? [] {
+        self.store?.resolveExternalApp(request.id, accepted: false)
+      }
       self.isClosed = true
       self.extensionPanel = nil
       self.store?.dismissPageFind()
@@ -209,6 +212,14 @@ final class BrowserEngine {
     callbacks.onWebsiteMediaRequest = { [weak self] payload in self?.requestWebsiteMedia(payload) }
     callbacks.onWebsiteMediaDismissed = { [weak self] id in
       self?.store?.resolveWebsiteMedia(id, accepted: false)
+    }
+    store.onExternalAppDecision = { [weak self] id, accepted in
+      guard let self else { return }
+      self.events.resolveExternalApp(id, windowID: self.windowID, accepted: accepted)
+    }
+    callbacks.onExternalAppRequest = { [weak self] payload in self?.requestExternalApp(payload) }
+    callbacks.onExternalAppDismissed = { [weak self] id in
+      self?.store?.resolveExternalApp(id, accepted: false)
     }
     callbacks.onMediaAccess = { [weak self] identity, state in
       guard let self, self.runtime.windowID(forTabID: identity) == self.windowID,
@@ -530,6 +541,61 @@ final class BrowserEngine {
       notice = "This permission request is unavailable for the current page and profile."
       return
     }
+  }
+
+  private func requestExternalApp(_ payload: [String: Any]) {
+    guard let id = payload["id"] as? String else { return }
+    guard let request = Self.externalAppRequest(from: payload, windowID: windowID),
+      let store, request.matches(store.session)
+    else {
+      events.resolveExternalApp(id, windowID: windowID, accepted: false)
+      return
+    }
+    extensionPanel = nil
+    guard store.requestExternalApp(request) else {
+      events.resolveExternalApp(id, windowID: windowID, accepted: false)
+      return
+    }
+  }
+
+  static func externalAppRequest(
+    from payload: [String: Any], windowID: String
+  ) -> ExternalAppRequest? {
+    let keys: Set<String> = [
+      "id", "profileID", "tabID", "windowID", "pageURL", "scheme", "origin", "app",
+    ]
+    guard Set(payload.keys) == keys,
+      let id = payload["id"] as? String,
+      let profileID = (payload["profileID"] as? String).flatMap(UUID.init(uuidString:)),
+      let tabID = (payload["tabID"] as? String).flatMap(UUID.init(uuidString:)),
+      let payloadWindowID = payload["windowID"] as? String, payloadWindowID == windowID,
+      let pageURL = (payload["pageURL"] as? String).flatMap(URL.init(string:)),
+      let scheme = payload["scheme"] as? String,
+      let rawOrigin = payload["origin"],
+      let rawApplicationName = payload["app"]
+    else { return nil }
+
+    let origin: URL?
+    if rawOrigin is NSNull {
+      origin = nil
+    } else if let value = rawOrigin as? String, let url = URL(string: value) {
+      origin = url
+    } else {
+      return nil
+    }
+
+    let applicationName: String?
+    if rawApplicationName is NSNull {
+      applicationName = nil
+    } else if let value = rawApplicationName as? String {
+      applicationName = value
+    } else {
+      return nil
+    }
+
+    return ExternalAppRequest(
+      id: id, profileID: profileID, tabID: tabID, pageURL: pageURL, scheme: scheme,
+      requestingOrigin: origin, applicationName: applicationName, windowID: windowID)
   }
 }
 

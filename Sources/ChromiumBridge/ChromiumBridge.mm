@@ -6,6 +6,9 @@
 #include <string>
 #include <vector>
 #include <cmath>
+#include <errno.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 static NSError *BridgeError(NSString *message) {
   return [NSError errorWithDomain:@"com.arcusis.browser.chromium" code:1
@@ -165,10 +168,13 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   NSString *_openingProfileID;
   NSString *_openingWindowID;
   BOOL _testing;
+  BOOL _externalAppProbeTesting;
   BOOL _probeTLS;
   NSURL *_probeRoot;
   NSMutableDictionary<NSString *, NSDictionary *> *_pendingInstalls;
   NSMutableDictionary<NSString *, NSDictionary *> *_pendingMedia;
+  NSMutableDictionary<NSString *, NSDictionary *> *_pendingExternal;
+  NSMutableDictionary<NSString *, NSNumber *> *_documentGenerations;
   NSMutableDictionary<NSString *, NSMutableArray<NSDictionary *> *> *_probeExtensions;
   NSMutableArray<NSDictionary *> *_probeDiagnostics;
   NSMutableSet<NSString *> *_pendingHostClosures;
@@ -204,6 +210,8 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   _profileWaiters = [NSMutableDictionary dictionary];
   _pendingInstalls = [NSMutableDictionary dictionary];
   _pendingMedia = [NSMutableDictionary dictionary];
+  _pendingExternal = [NSMutableDictionary dictionary];
+  _documentGenerations = [NSMutableDictionary dictionary];
   _pendingHostClosures = [NSMutableSet set];
   _detachedTabSelections = [NSMutableDictionary dictionary];
   _probeExtensions = [NSMutableDictionary dictionary];
@@ -248,6 +256,18 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   _testing = testing;
   _probeTLS = tlsArgument != nil;
   if (testing) _probeRoot = directory.URLByDeletingLastPathComponent.URLByResolvingSymlinksInPath;
+  static NSString *const externalProbeSwitch = @"--ardia-test-external-protocol-no-launch";
+  BOOL externalProbeRequested = [NSProcessInfo.processInfo.arguments containsObject:externalProbeSwitch];
+  if (externalProbeRequested) {
+    NSURL *root = directory.URLByDeletingLastPathComponent;
+    if (!testing || !directory.isFileURL || ![directory.lastPathComponent isEqualToString:@"Chromium"] ||
+        !ARCProbeRootIsOwned(root)) return 1;
+    struct stat info;
+    int result = lstat(directory.path.stringByStandardizingPath.fileSystemRepresentation, &info);
+    if ((result == 0 && (!S_ISDIR(info.st_mode) || info.st_uid != getuid())) ||
+        (result != 0 && errno != ENOENT)) return 1;
+  }
+  _externalAppProbeTesting = externalProbeRequested;
   // Never forward arbitrary launch flags into company profiles.
   std::vector<std::string> strings = {
     NSProcessInfo.processInfo.arguments.firstObject.UTF8String,
@@ -267,6 +287,7 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
     strings.push_back("--ardia-test-system-media-permission=granted");
     if (tlsArgument) strings.push_back(tlsArgument.UTF8String);
   }
+  if (_externalAppProbeTesting) strings.push_back(externalProbeSwitch.UTF8String);
   std::vector<const char *> arguments;
   for (const auto &value : strings) arguments.push_back(value.c_str());
   return [_engineClass runWithArgc:(int)arguments.size() argv:arguments.data() delegate:self];
@@ -359,6 +380,7 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   if (!state || state.closed) return;
   state.closed = YES;
   state.closing = YES;
+  [self invalidateExternalRequestsForTabID:nil windowID:identity];
   BOOL quitting = _closingBrowser;
   dispatch_async(dispatch_get_main_queue(), ^{
     for (NSString *requestID in [self->_pendingInstalls.allKeys copy]) {
@@ -381,6 +403,7 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
       [self->_tabs removeObjectForKey:tabID];
       [self->_owners removeObjectForKey:tabID];
       [self->_tabWindows removeObjectForKey:tabID];
+      [self->_documentGenerations removeObjectForKey:tabID];
     }
     id observer = self->_windowCloseObservers[identity];
     if (observer) [NSNotificationCenter.defaultCenter removeObserver:observer];
@@ -394,6 +417,48 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   for (id observer in _windowCloseObservers.allValues) [NSNotificationCenter.defaultCenter removeObserver:observer];
 }
 - (NSString *)chromiumVersion { return _engine.chromiumVersion ?: @"unavailable"; }
+
+- (BOOL)isCanonicalExternalRequestID:(id)value {
+  if (![value isKindOfClass:NSString.class]) return NO;
+  NSData *bytes = [value dataUsingEncoding:NSASCIIStringEncoding];
+  const unsigned char *digits = (const unsigned char *)bytes.bytes;
+  if (bytes.length < 2 || bytes.length > 11 || digits[0] != 'x' || digits[1] < '1' || digits[1] > '9') return NO;
+  unsigned long long number = 0;
+  for (NSUInteger index = 1; index < bytes.length; index++) {
+    if (digits[index] < '0' || digits[index] > '9') return NO;
+    number = number * 10 + (digits[index] - '0');
+    if (number > INT32_MAX) return NO;
+  }
+  return YES;
+}
+
+- (NSUInteger)advanceDocumentGenerationForTabID:(NSString *)tabID {
+  NSUInteger next = _documentGenerations[tabID].unsignedIntegerValue + 1;
+  _documentGenerations[tabID] = @(next);
+  return next;
+}
+
+- (void)invalidateExternalRequestsForTabID:(NSString *)tabID windowID:(NSString *)windowID {
+  for (NSString *requestID in [_pendingExternal.allKeys copy]) {
+    NSDictionary *request = _pendingExternal[requestID];
+    if ((tabID && ![request[@"tabID"] isEqualToString:tabID]) ||
+        (windowID && ![request[@"windowID"] isEqualToString:windowID])) continue;
+    [_pendingExternal removeObjectForKey:requestID];
+    [_engineClass resolveExternalApp:requestID open:NO remember:NO];
+    if (_onExternalAppDismissed) _onExternalAppDismissed(requestID);
+  }
+}
+
+- (BOOL)respondsToSelector:(SEL)selector {
+  if (selector == @selector(tab:externalAppRequest:)) {
+    BOOL supported = self.onExternalAppRequest != nil &&
+      [_engineClass respondsToSelector:@selector(resolveExternalApp:open:remember:)];
+    if (_testing && _externalAppProbeTesting && ARCProbeRootIsOwned(_probeRoot))
+      fprintf(stderr, "External-app probe delegate supported=%d\n", supported);
+    return supported;
+  }
+  return [super respondsToSelector:selector];
+}
 
 - (void)loadProfileID:(NSString *)profileID completion:(void (^)(NSError *))completion {
   NSAssert(NSThread.isMainThread, @"Profile loading must run on the main thread");
@@ -467,6 +532,7 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   _tabs[tabID] = tab;
   _owners[tabID] = profileID;
   _tabWindows[tabID] = windowID;
+  _documentGenerations[tabID] = @0;
   tab.delegate = self;
   [self publish:tab];
   return YES;
@@ -608,6 +674,7 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   _tabs[identity] = tab;
   _owners[identity] = profileID;
   _tabWindows[identity] = state.identity;
+  _documentGenerations[identity] = @0;
   tab.delegate = self;
   NSString *openerID = adoptedOpenerID ?: [self identityForTab:opener];
   dispatch_async(dispatch_get_main_queue(), ^{
@@ -623,6 +690,8 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   ArdiaCoreTab *tab = _tabs[tabID];
   ARCNativeWindowState *state = [self stateForTabID:tabID];
   if (!tab || tab.closed || !state || state.closing || state.closed || _closingBrowser) return;
+  if (state.selectedTabID && ![state.selectedTabID isEqualToString:tabID])
+    [self invalidateExternalRequestsForTabID:state.selectedTabID windowID:state.identity];
   if (!state.hostSelectionDepth) {
     for (NSMutableDictionary *transfer in _detachedTabSelections.allValues) {
       if ([transfer[@"sourceWindowID"] isEqualToString:state.identity] &&
@@ -686,6 +755,7 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
     }
   }
   if (transientFallback) return;
+  if (state.selectedTabID) [self invalidateExternalRequestsForTabID:state.selectedTabID windowID:state.identity];
   if (_testing) {
     [_tabs[state.selectedTabID ?: @""] noteShownByHost:NO];
     [tab noteShownByHost:YES];
@@ -704,6 +774,7 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
 - (void)clearActiveTabInWindowID:(NSString *)identity {
   ARCNativeWindowState *state = _windows[identity];
   if (!state || state.closed) return;
+  [self invalidateExternalRequestsForTabID:state.selectedTabID windowID:identity];
   if (state.findTabID) [self stopFindingInTabID:state.findTabID];
   if (_testing) [_tabs[state.selectedTabID ?: @""] noteShownByHost:NO];
   state.selectedTabID = nil;
@@ -713,6 +784,7 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   ArdiaCoreTab *tab = _tabs[tabID];
   ARCNativeWindowState *state = [self stateForTabID:tabID];
   if (!tab || _closingBrowser || state.closed || state.closing) return;
+  [self invalidateExternalRequestsForTabID:tabID windowID:nil];
   if (tab.closed) { [self tabWillClose:tab]; return; }
   [_pendingHostClosures addObject:tabID];
   [tab close];
@@ -721,11 +793,13 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
 - (void)discardTabID:(NSString *)tabID {
   // The model has already removed this tab or rejected its creation.
   ArdiaCoreTab *tab = _tabs[tabID];
+  [self invalidateExternalRequestsForTabID:tabID windowID:nil];
   [_pendingHostClosures removeObject:tabID];
   [self stopFindingInTabID:tabID];
   [_tabs removeObjectForKey:tabID];
   [_owners removeObjectForKey:tabID];
   [_tabWindows removeObjectForKey:tabID];
+  [_documentGenerations removeObjectForKey:tabID];
   [tab closeNow];
 }
 - (void)activateProfileID:(NSString *)profileID {
@@ -734,18 +808,28 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
 - (void)activateProfileID:(NSString *)profileID windowID:(NSString *)identity {
   ARCNativeWindowState *state = _windows[identity];
   if (_profiles[profileID] && state && !state.closed && !state.closing && !_closingBrowser) {
+    if (state.native.activeProfile != _profiles[profileID])
+      [self invalidateExternalRequestsForTabID:nil windowID:identity];
     state.hostSelectionDepth++;
     state.native.activeProfile = _profiles[profileID];
     state.hostSelectionDepth--;
   }
 }
-- (void)goBackInTabID:(NSString *)tabID { [_tabs[tabID] goBack]; }
-- (void)goForwardInTabID:(NSString *)tabID { [_tabs[tabID] goForward]; }
-- (void)reloadTabID:(NSString *)tabID { [_tabs[tabID] reload]; }
+- (void)goBackInTabID:(NSString *)tabID {
+  if (_tabs[tabID]) { [self advanceDocumentGenerationForTabID:tabID]; [self invalidateExternalRequestsForTabID:tabID windowID:nil]; [_tabs[tabID] goBack]; }
+}
+- (void)goForwardInTabID:(NSString *)tabID {
+  if (_tabs[tabID]) { [self advanceDocumentGenerationForTabID:tabID]; [self invalidateExternalRequestsForTabID:tabID windowID:nil]; [_tabs[tabID] goForward]; }
+}
+- (void)reloadTabID:(NSString *)tabID {
+  if (_tabs[tabID]) { [self advanceDocumentGenerationForTabID:tabID]; [self invalidateExternalRequestsForTabID:tabID windowID:nil]; [_tabs[tabID] reload]; }
+}
 - (BOOL)reloadTabID:(NSString *)tabID profileID:(NSString *)profileID {
   ArdiaCoreTab *tab = _tabs[tabID];
   if (!tab || tab.closed || ![self isSelectedTabID:tabID] ||
       ![_owners[tabID] isEqualToString:profileID]) return NO;
+  [self advanceDocumentGenerationForTabID:tabID];
+  [self invalidateExternalRequestsForTabID:tabID windowID:nil];
   [tab reload];
   return YES;
 }
@@ -849,6 +933,12 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
             completion:(void (^)(NSString *))completion {
   [self evaluateTab:_tabs[tabID] script:script completion:completion];
 }
+- (NSDictionary *)probeExternalAppLaunchAuditForURL:(NSString *)url {
+  if (!_externalAppProbeTesting || !_testing || !_engineClass || !_probeRoot ||
+      !ARCProbeRootIsOwned(_probeRoot)) return nil;
+  NSArray *launches = [_engineClass testExternalLaunches];
+  return ARCProbeExternalAppLaunchAuditForTesting(url, launches, _probeRoot, YES);
+}
 - (void)evaluateTab:(ArdiaCoreTab *)tab script:(NSString *)script completion:(void (^)(NSString *))completion {
   [self evaluateTab:tab script:script userGesture:NO completion:completion];
 }
@@ -942,7 +1032,11 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   [tab evaluate:[NSString stringWithFormat:@"post('result', JSON.stringify(%@));", script]
       userGesture:userGesture completion:reply];
 }
-- (void)quit { _closingBrowser = YES; [_engine quit]; }
+- (void)quit {
+  _closingBrowser = YES;
+  [self invalidateExternalRequestsForTabID:nil windowID:nil];
+  [_engine quit];
+}
 - (void)engineQuitCancelled {
   _closingBrowser = NO;
   [_detachedTabSelections removeAllObjects];
@@ -950,12 +1044,14 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
 }
 - (void)engineWillShutDown {
   _closingBrowser = YES;
+  [self invalidateExternalRequestsForTabID:nil windowID:nil];
   [_detachedTabSelections removeAllObjects];
 }
 - (BOOL)windowShouldClose:(ArdiaCoreWindow *)window {
   ARCNativeWindowState *state = [self stateForWindow:window];
   if (!state || state.closed) return NO;
   state.closing = YES;
+  [self invalidateExternalRequestsForTabID:nil windowID:state.identity];
   return YES;
 }
 - (void)windowDidCancelClose:(ArdiaCoreWindow *)window {
@@ -967,6 +1063,7 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   NSString *identity = [self identityForTab:tab];
   ARCNativeWindowState *state = [self stateForWindow:window];
   if (!state || !identity || ![_tabWindows[identity] isEqualToString:state.identity]) return;
+  [self invalidateExternalRequestsForTabID:identity windowID:state.identity];
   if (!state.closing && !state.closed && !_closingBrowser && !tab.closed &&
       ![_pendingHostClosures containsObject:identity] &&
       [state.selectedTabID isEqualToString:identity] && !_detachedTabSelections[identity]) {
@@ -1309,8 +1406,19 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   }];
 }
 - (void)tabDidChangeTitle:(ArdiaCoreTab *)tab { [self publish:tab]; }
-- (void)tabDidChangeURL:(ArdiaCoreTab *)tab { [self publish:tab]; }
-- (void)tabDidChangeLoading:(ArdiaCoreTab *)tab { [self publish:tab]; }
+- (void)tabDidChangeURL:(ArdiaCoreTab *)tab {
+  NSString *identity = [self identityForTab:tab];
+  if (identity) [self invalidateExternalRequestsForTabID:identity windowID:nil];
+  [self publish:tab];
+}
+- (void)tabDidChangeLoading:(ArdiaCoreTab *)tab {
+  NSString *identity = [self identityForTab:tab];
+  if (identity && tab.loading) {
+    [self advanceDocumentGenerationForTabID:identity];
+    [self invalidateExternalRequestsForTabID:identity windowID:nil];
+  }
+  [self publish:tab];
+}
 - (void)tabDidChangeNavigationState:(ArdiaCoreTab *)tab { [self publish:tab]; }
 - (void)tab:(ArdiaCoreTab *)tab rendererGone:(NSString *)status code:(int)code {
   ARCNativeWindowState *popupState = [self stateForPopupTab:tab];
@@ -1322,12 +1430,17 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   NSString *identity = [self identityForTab:tab];
   NSString *profile = identity ? _owners[identity] : nil;
   if (!identity || !profile || tab.closed) return;
+  [self invalidateExternalRequestsForTabID:identity windowID:nil];
   [self stopFindingInTabID:identity];
   if (_onRendererGone) _onRendererGone(identity, profile, status, code);
 }
 - (void)tabDidCommitDocument:(ArdiaCoreTab *)tab {
   NSString *identity = [self identityForTab:tab];
   NSString *profile = identity ? _owners[identity] : nil;
+  if (identity) {
+    [self advanceDocumentGenerationForTabID:identity];
+    [self invalidateExternalRequestsForTabID:identity windowID:nil];
+  }
   if (identity && profile && !tab.closed && _onDocumentCommitted) _onDocumentCommitted(identity, profile);
 }
 - (void)tab:(ArdiaCoreTab *)tab didFindMatches:(int)count active:(int)active final:(BOOL)final {
@@ -1369,6 +1482,7 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   }
   NSString *identity = [self identityForTab:tab];
   if (!identity) return;
+  [self invalidateExternalRequestsForTabID:identity windowID:nil];
   [_detachedTabSelections removeObjectForKey:identity];
   ARCNativeWindowState *state = [self stateForTabID:identity];
   BOOL notify = !_closingBrowser && !state.closing && !state.closed;
@@ -1378,6 +1492,7 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   [_tabs removeObjectForKey:identity];
   [_owners removeObjectForKey:identity];
   [_tabWindows removeObjectForKey:identity];
+  [_documentGenerations removeObjectForKey:identity];
   dispatch_async(dispatch_get_main_queue(), ^{
     if (notify && self->_onTabClosed) self->_onTabClosed(identity);
     if (notify && state.closeWhenEmpty && !state.closing && !state.closed &&
@@ -1448,6 +1563,73 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   [_pendingMedia removeObjectForKey:requestID];
   if (_onWebsiteMediaDismissed) _onWebsiteMediaDismissed(requestID);
 }
+
+- (void)tab:(ArdiaCoreTab *)tab externalAppRequest:(NSDictionary<NSString *, id> *)request {
+  if (_testing && _externalAppProbeTesting && ARCProbeRootIsOwned(_probeRoot))
+    fprintf(stderr, "External-app probe callback received\n");
+  id rawRequestID = [request isKindOfClass:NSDictionary.class] ? request[@"id"] : nil;
+  if (![self isCanonicalExternalRequestID:rawRequestID]) {
+    if ([rawRequestID isKindOfClass:NSString.class] && [rawRequestID length] > 0)
+      [_engineClass resolveExternalApp:rawRequestID open:NO remember:NO];
+    return;
+  }
+  NSString *requestID = rawRequestID;
+  if (_pendingExternal[requestID]) return;
+  NSString *tabID = [self identityForTab:tab];
+  NSString *profileID = tabID ? _owners[tabID] : nil;
+  ARCNativeWindowState *state = tabID ? [self stateForTabID:tabID] : nil;
+  NSString *windowID = tabID ? _tabWindows[tabID] : nil;
+  NSString *pageURL = tab.url;
+  if (_testing && _externalAppProbeTesting && ARCProbeRootIsOwned(_probeRoot))
+    fprintf(stderr, "External-app probe scope mapped=%d profile=%d selected=%d window=%d\n",
+      tabID != nil, profileID && _profiles[profileID] == tab.profile,
+      tabID && [self isSelectedTabID:tabID], state && !state.closed && !state.closing);
+  if (!_engineClass || ![_engineClass respondsToSelector:@selector(resolveExternalApp:open:remember:)] ||
+      !tabID || !profileID || !_profiles[profileID] || _profiles[profileID] != tab.profile ||
+      !state || state.closed || state.closing || state.native == nil || state.native.window == nil ||
+      ![windowID isEqualToString:state.identity] || tab.closed ||
+      ![self isSelectedTabID:tabID] || ![pageURL isKindOfClass:NSString.class] || pageURL.length == 0 ||
+      !_onExternalAppRequest || _pendingExternal.count >= 10) {
+    [_engineClass resolveExternalApp:requestID open:NO remember:NO];
+    return;
+  }
+  id origin = [request[@"origin"] isKindOfClass:NSString.class] ? [request[@"origin"] copy] : NSNull.null;
+  id scheme = [request[@"scheme"] isKindOfClass:NSString.class] ? [request[@"scheme"] copy] : NSNull.null;
+  id app = [request[@"app"] isKindOfClass:NSString.class] ? [request[@"app"] copy] : NSNull.null;
+  NSDictionary *context = @{
+    @"id": [requestID copy], @"profileID": [profileID copy], @"tabID": [tabID copy],
+    @"windowID": [windowID copy], @"pageURL": [pageURL copy], @"origin": origin,
+    @"scheme": scheme, @"app": app,
+    @"documentGeneration": _documentGenerations[tabID] ?: @0,
+  };
+  _pendingExternal[requestID] = context;
+  _onExternalAppRequest(@{
+    @"id": context[@"id"], @"profileID": context[@"profileID"], @"tabID": context[@"tabID"],
+    @"windowID": context[@"windowID"], @"pageURL": context[@"pageURL"],
+    @"origin": context[@"origin"], @"scheme": context[@"scheme"], @"app": context[@"app"],
+  });
+}
+
+- (void)resolveExternalAppRequestID:(NSString *)requestID accepted:(BOOL)accepted {
+  NSDictionary *request = _pendingExternal[requestID];
+  if (!request) return;
+  [_pendingExternal removeObjectForKey:requestID];
+  NSString *tabID = request[@"tabID"];
+  NSString *applicationName = [request[@"app"] isKindOfClass:NSString.class] ? request[@"app"] : nil;
+  BOOL canOpenApplication = applicationName.length > 0 &&
+    [applicationName stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet].length > 0;
+  ARCNativeWindowState *state = [self stateForTabID:tabID];
+  BOOL contextMatches = _tabs[tabID] && !_tabs[tabID].closed && state && !state.closed && !state.closing &&
+    state.native != nil && state.native.window != nil && [_tabWindows[tabID] isEqualToString:request[@"windowID"]] &&
+    [state.identity isEqualToString:request[@"windowID"]] &&
+    [_owners[tabID] isEqualToString:request[@"profileID"]] &&
+    _tabs[tabID].profile == _profiles[request[@"profileID"]] &&
+    [[state.native tabsForProfile:_tabs[tabID].profile] containsObject:_tabs[tabID]] &&
+    [self isSelectedTabID:tabID] && [_tabs[tabID].url isEqualToString:request[@"pageURL"]] &&
+    _documentGenerations[tabID].unsignedIntegerValue == [request[@"documentGeneration"] unsignedIntegerValue];
+  [_engineClass resolveExternalApp:requestID open:accepted && contextMatches && canOpenApplication remember:NO];
+}
+
 - (void)engine:(ArdiaCoreEngine *)engine extensionInstallPrompt:(NSDictionary *)prompt tab:(ArdiaCoreTab *)tab {
   NSString *identity = prompt[@"requestId"];
   NSString *tabID = [self identityForTab:tab];

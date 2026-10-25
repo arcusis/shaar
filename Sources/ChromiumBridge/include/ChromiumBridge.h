@@ -7,6 +7,11 @@ FOUNDATION_EXPORT BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifier
 /// Returns a single certificate-key exception only for an owned, marked disposable test root.
 FOUNDATION_EXPORT NSString * _Nullable ARCProbeTLSArgument(NSURL *directory,
   NSString * _Nullable fingerprint, BOOL testing, NSError **error);
+/// Test-only gate for the marked disposable probe root.
+FOUNDATION_EXPORT BOOL ARCProbeRootIsOwned(NSURL *root);
+/// Test-only sanitizer for external-app audit fixtures; returns fixed primitive fields only.
+FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeExternalAppLaunchAuditForTesting(
+  NSString *url, NSArray *launches, NSURL *root, BOOL enabled);
 
 /// All methods and callbacks run on the main thread. The engine owns the AppKit run loop.
 @interface ARCChromiumRuntime : NSObject
@@ -22,6 +27,8 @@ FOUNDATION_EXPORT NSString * _Nullable ARCProbeTLSArgument(NSURL *directory,
 @property(copy, nullable) void (^onExtensionPopupSize)(NSString *popupID, NSSize size);
 @property(copy, nullable) void (^onWebsiteMediaRequest)(NSDictionary<NSString *, id> *request);
 @property(copy, nullable) void (^onWebsiteMediaDismissed)(NSString *requestID);
+@property(copy, nullable) void (^onExternalAppRequest)(NSDictionary<NSString *, id> *request);
+@property(copy, nullable) void (^onExternalAppDismissed)(NSString *requestID);
 @property(copy, nullable) void (^onMediaAccess)(NSString *tabID, NSDictionary<NSString *, NSNumber *> *access);
 @property(copy, nullable) void (^onFindResult)(NSString *tabID, NSString *requestID, int count, int active, BOOL final);
 @property(copy, nullable) void (^onDownloadChanged)(NSString *profileID, NSDictionary<NSString *, id> *download);
@@ -67,6 +74,8 @@ FOUNDATION_EXPORT NSString * _Nullable ARCProbeTLSArgument(NSURL *directory,
 - (BOOL)openTabID:(NSString *)tabID profileID:(NSString *)profileID url:(NSString *)url
            error:(NSError **)error;
 - (nullable NSView *)viewForTabID:(NSString *)tabID;
+/// Test-only bounded audit. Requires explicit external-probe switch, testing mode, and owned marked root.
+- (nullable NSDictionary *)probeExternalAppLaunchAuditForURL:(NSString *)url;
 - (void)activateTabID:(NSString *)tabID;
 - (void)focusTabID:(NSString *)tabID;
 - (void)activateProfileID:(NSString *)profileID;
@@ -93,6 +102,7 @@ FOUNDATION_EXPORT NSString * _Nullable ARCProbeTLSArgument(NSURL *directory,
 - (NSArray<NSDictionary<NSString *, id> *> *)extensionsForProfileID:(NSString *)profileID;
 - (void)resolveInstallRequestID:(NSString *)requestID accepted:(BOOL)accepted;
 - (void)resolveWebsiteMediaRequestID:(NSString *)requestID accepted:(BOOL)accepted;
+- (void)resolveExternalAppRequestID:(NSString *)requestID accepted:(BOOL)accepted;
 - (BOOL)executeExtensionID:(NSString *)extensionID tabID:(NSString *)tabID error:(NSError **)error;
 - (nullable NSView *)viewForExtensionPopupID:(NSString *)popupID;
 - (void)closeExtensionPopup;

@@ -13,6 +13,8 @@ final class BrowserRuntimeClient {
   var onExtensionPopupSize: ((String, NSSize) -> Void)?
   var onWebsiteMediaRequest: (([String: Any]) -> Void)?
   var onWebsiteMediaDismissed: ((String) -> Void)?
+  var onExternalAppRequest: (([String: Any]) -> Void)?
+  var onExternalAppDismissed: ((String) -> Void)?
   var onMediaAccess: ((String, [String: NSNumber]) -> Void)?
   var onFindResult: ((String, String, Int32, Int32, Bool) -> Void)?
   var onDownloadChanged: ((String, [String: Any]) -> Void)?
@@ -42,7 +44,7 @@ enum BrowserRoutingError: Error, LocalizedError {
 /// Retains ownership until close delivery, after Chromium has removed its tab mapping.
 @MainActor
 final class BrowserRuntimeRouter {
-  enum Context: CaseIterable { case popup, installation, media }
+  enum Context: CaseIterable { case popup, installation, media, externalApp }
 
   private struct Subscription {
     weak var client: BrowserRuntimeClient?
@@ -91,6 +93,7 @@ final class BrowserRuntimeRouter {
 
   /// A context can only be introduced by a bound tab in the declared window.
   func claim(_ context: Context, id: String, payload: [String: Any]) -> BrowserRuntimeClient? {
+    if context == .externalApp, contexts[context]?[id] != nil { return nil }
     guard !id.isEmpty, let window = payload["windowID"] as? String,
       let tab = payload["tabID"] as? String, tabOwners[tab] == window,
       let client = subscriptions[window]?.client,
@@ -111,6 +114,8 @@ final class BrowserRuntimeRouter {
     contexts[context]?[id] = nil
     return true
   }
+
+  func owns(_ context: Context, id: String) -> Bool { contexts[context]?[id] != nil }
 
   func windowClosed(_ id: String, quitting: Bool) {
     let client = subscriptions.removeValue(forKey: id)?.client

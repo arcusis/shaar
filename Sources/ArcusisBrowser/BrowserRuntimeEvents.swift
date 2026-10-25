@@ -94,6 +94,23 @@ final class BrowserRuntimeEvents {
     runtime.onWebsiteMediaDismissed = { [weak self] id in
       self?.router.client(for: .media, id: id, removing: true)?.onWebsiteMediaDismissed?(id)
     }
+    runtime.onExternalAppRequest = { [weak self] payload in
+      guard let self, let id = payload["id"] as? String else { return }
+      guard !self.router.owns(.externalApp, id: id) else { return }
+      guard let client = self.router.claim(.externalApp, id: id, payload: payload) else {
+        self.runtime.resolveExternalAppRequestID(id, accepted: false)
+        return
+      }
+      guard let receive = client.onExternalAppRequest else {
+        _ = self.router.consume(.externalApp, id: id, windowID: client.windowID)
+        self.runtime.resolveExternalAppRequestID(id, accepted: false)
+        return
+      }
+      receive(payload)
+    }
+    runtime.onExternalAppDismissed = { [weak self] id in
+      self?.router.client(for: .externalApp, id: id, removing: true)?.onExternalAppDismissed?(id)
+    }
     runtime.onDownloadChanged = { [weak self] profile, record in
       for client in self?.router.clients(forProfile: profile) ?? [] {
         client.onDownloadChanged?(profile, record)
@@ -133,6 +150,11 @@ final class BrowserRuntimeEvents {
   func resolveMedia(_ id: String, windowID: String, accepted: Bool) {
     guard router.consume(.media, id: id, windowID: windowID) else { return }
     runtime.resolveWebsiteMediaRequestID(id, accepted: accepted)
+  }
+
+  func resolveExternalApp(_ id: String, windowID: String, accepted: Bool) {
+    guard router.consume(.externalApp, id: id, windowID: windowID) else { return }
+    runtime.resolveExternalAppRequestID(id, accepted: accepted)
   }
 
   func applyBookmarkOperation(

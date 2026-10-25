@@ -22,6 +22,13 @@ private struct HostProbeIdentity: Codable {
   var engineWindow: UUID? = nil
   var engineTab: UUID? = nil
   var restorationSelections: [UUID: HostProbeSelection]? = nil
+  var authoredProfile: HostProbeProfile? = nil
+  var renamedProfile: HostProbeProfile? = nil
+}
+
+private struct HostProbeProfile: Codable {
+  let id: UUID
+  let name: String
 }
 
 /// Exercises the production host class without ordering windows onscreen or sending OS input.
@@ -94,6 +101,8 @@ final class NativeHostProbe {
     var firstID: UUID
     var secondID: UUID
     var closedIDs: [UUID] = []
+    var authoredProfile: HostProbeProfile?
+    var renamedProfile: HostProbeProfile?
     if phase == "initial" {
       firstID = manager.workspace.windows[0].id
       focus(firstID)
@@ -148,6 +157,8 @@ final class NativeHostProbe {
     } else {
       let saved = try JSONDecoder().decode(
         HostProbeIdentity.self, from: Data(contentsOf: checkpoint))
+      authoredProfile = saved.authoredProfile
+      renamedProfile = saved.renamedProfile
       firstID = saved.first
       secondID = saved.second
       closedIDs = saved.ordinarilyClosed
@@ -332,6 +343,100 @@ final class NativeHostProbe {
       !openedSettingsWindow.isVisible
         && host.contexts.values.allSatisfy { !$0.window.isVisible },
       "hidden native Settings never orders browser or Settings windows onscreen")
+    let profileSessions = Dictionary(
+      uniqueKeysWithValues: host.contexts.map { ($0.key, $0.value.store.session) })
+    let nativeWindowIDs = Dictionary(
+      uniqueKeysWithValues: host.contexts.map { ($0.key, $0.value.nativeID) })
+    let nativeWindows = Dictionary(
+      uniqueKeysWithValues: host.contexts.map { ($0.key, $0.value.window) })
+    let tabOwners = Dictionary(
+      uniqueKeysWithValues: profileSessions.flatMap { windowID, session in
+        session.spaces.flatMap { space in space.tabs.map { ($0.id, (windowID, space.profileID)) } }
+      })
+    var liveDocuments: [UUID: [String: Any]] = [:]
+    for context in host.contexts.values {
+      for space in context.store.session.spaces {
+        for tab in space.tabs where primary.runtime.view(forTabID: tab.id.uuidString) != nil {
+          if phase == "initial" {
+            _ = await withCheckedContinuation { continuation in
+              primary.runtime.evaluate(
+                inTabID: tab.id.uuidString,
+                script:
+                  "localStorage.setItem('arcusisProfileMutation','\(space.profileID.uuidString)');sessionStorage.setItem('arcusisProfileMutation','\(tab.id.uuidString)');true"
+              ) { continuation.resume(returning: $0) }
+            }
+          }
+          liveDocuments[tab.id] = try await document(tab.id)
+        }
+      }
+    }
+    if phase == "initial" {
+      guard let selectedProfile else {
+        throw HostProbeFailure("No profile available for rename probe.")
+      }
+      guard !settings.profiles.contains(where: { $0.name == "Probe unused" }) else {
+        throw HostProbeFailure("Initial host fixture already contains authored profile.")
+      }
+      guard let addedID = settings.createProfile(name: "Probe unused") else {
+        throw HostProbeFailure("Settings could not create the unused profile.")
+      }
+      guard let added = settings.profiles.first(where: { $0.id == addedID }) else {
+        throw HostProbeFailure("Settings did not expose created profile.")
+      }
+      guard added.spaceCount == 0,
+        settings.renameProfile(selectedProfile.id, name: "Probe renamed")
+      else { throw HostProbeFailure("Settings could not rename existing profile.") }
+      authoredProfile = HostProbeProfile(id: added.id, name: added.name)
+      renamedProfile = HostProbeProfile(id: selectedProfile.id, name: "Probe renamed")
+      var documentsPreserved = liveDocuments.count >= 2
+      for (id, before) in liveDocuments {
+        let after = try await document(id)
+        documentsPreserved =
+          documentsPreserved
+          && before["local"] as? String == tabOwners[id]?.1.uuidString
+          && before["session"] as? String == id.uuidString
+          && primary.runtime.windowID(forTabID: id.uuidString)
+            == tabOwners[id].flatMap { nativeWindowIDs[$0.0] }
+          && before["instance"] as? String == after["instance"] as? String
+          && before["cookie"] as? String == after["cookie"] as? String
+          && before["local"] as? String == after["local"] as? String
+          && before["session"] as? String == after["session"] as? String
+      }
+      try expect(
+        host.contexts.allSatisfy { id, context in
+          let before = profileSessions[id]!
+          let after = context.store.session
+          let afterOwners = Dictionary(
+            uniqueKeysWithValues: after.spaces.flatMap { space in
+              space.tabs.map { ($0.id, (id, space.profileID)) }
+            })
+          return before.selectedSpaceID == after.selectedSpaceID
+            && before.spaces.map(\.id) == after.spaces.map(\.id)
+            && before.spaces.flatMap(\.tabs).map(\.id) == after.spaces.flatMap(\.tabs).map(\.id)
+            && tabOwners.filter { $0.value.0 == id }.allSatisfy {
+              afterOwners[$0.key]?.0 == $0.value.0 && afterOwners[$0.key]?.1 == $0.value.1
+            }
+            && nativeWindowIDs[id] == context.nativeID
+            && primary.runtime.window(forID: context.nativeID) === nativeWindows[id]
+            && Set(after.profiles.map(\.id)).contains(added.id)
+        } && documentsPreserved
+          && settings.profiles.count == profileSpacesBeforeSettings.count + 1
+          && settings.profiles.first(where: { $0.id == selectedProfile.id })?.name
+            == "Probe renamed"
+          && settings.profiles.first(where: { $0.id == added.id })?.name == "Probe unused",
+        "native Settings profile creation and rename preserve live windows, tabs, and documents")
+    } else {
+      guard let authoredProfile,
+        settings.profiles.filter({ $0.id == authoredProfile.id && $0.name == authoredProfile.name })
+          .count == 1,
+        let renamedProfile,
+        settings.profiles.filter({ $0.id == renamedProfile.id && $0.name == renamedProfile.name })
+          .count == 1
+      else {
+        throw HostProbeFailure(
+          "Authored profile identity/name did not survive restart exactly once.")
+      }
+    }
     first.window.setFrame(NSRect(x: 80, y: 90, width: 1000, height: 720), display: false)
     second.window.setFrame(NSRect(x: 150, y: 130, width: 980, height: 700), display: false)
     host.flushGeometry()
@@ -355,7 +460,8 @@ final class NativeHostProbe {
       HostProbeIdentity(
         first: firstID, second: secondID, firstTab: firstTab, secondTab: secondTab,
         ordinarilyClosed: closedIDs, engineWindow: requested.retained,
-        engineTab: host.contexts[requested.retained]?.store.session.selectedSpace.selectedTabID)
+        engineTab: host.contexts[requested.retained]?.store.session.selectedSpace.selectedTabID,
+        authoredProfile: authoredProfile, renamedProfile: renamedProfile)
     ).write(to: checkpoint, options: .atomic)
     try expect(
       host.lastError == nil && manager.storageNotice == nil,
@@ -472,7 +578,7 @@ final class NativeHostProbe {
         primary.runtime.evaluate(
           inTabID: id.uuidString,
           script:
-            "({fixture:document.documentElement.dataset.arcusisFixture,instance:window.arcusisInstance,cookie:document.cookie})"
+            "({fixture:document.documentElement.dataset.arcusisFixture,instance:window.arcusisInstance,cookie:document.cookie,local:localStorage.getItem('arcusisProfileMutation'),session:sessionStorage.getItem('arcusisProfileMutation')})"
         ) { continuation.resume(returning: $0) }
       }
       if let data = json?.data(using: .utf8),

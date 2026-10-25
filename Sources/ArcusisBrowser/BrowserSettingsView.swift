@@ -43,12 +43,23 @@ struct BrowserSettingsView: View {
   @Binding var sidebarInitiallyVisible: Bool
   @Binding var selectedSearchEngine: String
   let storageNotice: String?
+  let onCreateProfile: (String) -> UUID?
+  let onRenameProfile: (UUID, String) -> Bool
   @State private var selectedSection: BrowserSettingsSection
+  @State private var profileEditor: ProfileEditorTarget?
+
+  private struct ProfileEditorTarget: Identifiable {
+    let id = UUID()
+    let profileID: UUID?
+    let name: String
+  }
 
   init(
     profiles: [BrowserSettingsProfile], searchEngines: [BrowserSettingsChoice],
     selectedProfileID: Binding<UUID?>, sidebarInitiallyVisible: Binding<Bool>,
     selectedSearchEngine: Binding<String>, storageNotice: String? = nil,
+    onCreateProfile: @escaping (String) -> UUID? = { _ in nil },
+    onRenameProfile: @escaping (UUID, String) -> Bool = { _, _ in false },
     initialSection: BrowserSettingsSection = .general
   ) {
     self.profiles = profiles
@@ -57,6 +68,8 @@ struct BrowserSettingsView: View {
     _sidebarInitiallyVisible = sidebarInitiallyVisible
     _selectedSearchEngine = selectedSearchEngine
     self.storageNotice = storageNotice
+    self.onCreateProfile = onCreateProfile
+    self.onRenameProfile = onRenameProfile
     _selectedSection = State(initialValue: initialSection)
   }
 
@@ -79,6 +92,18 @@ struct BrowserSettingsView: View {
     .frame(minWidth: 600, minHeight: 440)
     .background(Color(nsColor: .windowBackgroundColor))
     .foregroundStyle(.primary)
+    .sheet(item: $profileEditor) { target in
+      ProfileNameEditor(
+        title: target.profileID == nil ? "New Profile" : "Rename Profile",
+        initialName: target.name,
+        onCancel: { profileEditor = nil },
+        onSave: { name in
+          let saved =
+            target.profileID.map { onRenameProfile($0, name) } ?? (onCreateProfile(name) != nil)
+          if saved { profileEditor = nil }
+          return saved
+        })
+    }
   }
 
   private var categoryBar: some View {
@@ -188,6 +213,9 @@ struct BrowserSettingsView: View {
           }
         }
         Spacer(minLength: 0)
+        Button("Add Profile") { profileEditor = ProfileEditorTarget(profileID: nil, name: "") }
+          .accessibilityIdentifier("settings.addProfile")
+          .padding(.horizontal, 10)
       }
       .padding(.horizontal, 14)
       .padding(.top, 20)
@@ -195,17 +223,27 @@ struct BrowserSettingsView: View {
       .frame(maxHeight: .infinity, alignment: .topLeading)
       .background(Color.primary.opacity(0.025))
       Divider()
-      profileDetails
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+      VStack(alignment: .leading, spacing: 0) {
+        profileDetails.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        if let storageNotice {
+          Text(storageNotice).font(.callout).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true).padding(16)
+        }
+      }
     }
   }
 
   @ViewBuilder private var profileDetails: some View {
     if let profile = profiles.first(where: { $0.id == selectedProfileID }) {
       VStack(alignment: .leading, spacing: 18) {
-        Text(profile.name)
-          .font(.title2.weight(.semibold))
-          .lineLimit(1)
+        HStack {
+          Text(profile.name).font(.title2.weight(.semibold)).lineLimit(1)
+          Spacer()
+          Button("Rename") {
+            profileEditor = ProfileEditorTarget(profileID: profile.id, name: profile.name)
+          }
+          .accessibilityIdentifier("settings.renameProfile")
+        }
         settingsGroup {
           HStack(spacing: 12) {
             Text("Search engine")

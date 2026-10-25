@@ -173,6 +173,42 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
     focusedWindowID = id
   }
 
+  /// Adds an unused account profile without changing any live window session state.
+  @discardableResult
+  public mutating func createProfile(name: String) throws -> UUID {
+    let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !cleanName.isEmpty else { throw WorkspaceError.invalidState }
+    var draft = self
+    let profile = BrowserProfile(name: cleanName)
+    draft.catalog.profiles.append(profile)
+    var allocated = draft.allocatedIDs
+    for index in draft.windows.indices {
+      draft.windows[index] = try draft.project(draft.windows[index], allocated: &allocated)
+    }
+    try draft.validate()
+    self = draft
+    return profile.id
+  }
+
+  /// Renames shared profile metadata while retaining its immutable identity.
+  public mutating func renameProfile(_ id: UUID, name: String) throws {
+    let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !cleanName.isEmpty, let index = catalog.profiles.firstIndex(where: { $0.id == id })
+    else { throw WorkspaceError.invalidState }
+    var draft = self
+    draft.catalog.profiles[index].name = cleanName
+    for windowIndex in draft.windows.indices {
+      guard draft.windows[windowIndex].session.profiles.contains(where: { $0.id == id }) else {
+        throw WorkspaceError.invalidState
+      }
+      var allocated = draft.allocatedIDs
+      draft.windows[windowIndex] = try draft.project(
+        draft.windows[windowIndex], allocated: &allocated)
+    }
+    try draft.validate()
+    self = draft
+  }
+
   public mutating func setGeometry(_ geometry: WorkspaceWindowGeometry, for id: UUID) throws {
     guard geometry.isValid else { throw WorkspaceError.invalidState }
     guard let index = windows.firstIndex(where: { $0.id == id }) else {

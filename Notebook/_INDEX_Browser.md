@@ -2,6 +2,7 @@
 
 - [[Browser_Architecture]]
 - [[Profile_Space_Isolation]]
+- [[Profile_Favorites]]
 - [[Native_Window_Ownership]]
 - [[Managed_Workspace_Persistence]]
 - [[Sidebar_Tab_Organization]]

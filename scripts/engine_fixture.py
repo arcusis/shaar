@@ -43,6 +43,8 @@ def record_bitwarden_summary(root, control_only):
                 or host.get('probeMode') != 'full-fixture'
                 or host.get('savedTabCapacityOnly') is not False
                 or host.get('savedTabCapacityProbe') is not False
+                or host.get('externalAppConsentOnly') is not False
+                or host.get('externalAppConsentProbe') is not False
                 or host.get('bitwardenStoreProbe') is not True
                 or host.get('bitwardenOnboardingControl') is not control_only
                 or vendor.get('controlOnly') is not control_only
@@ -253,9 +255,15 @@ def record_abrupt_summary(root, control_only):
     """Derive acceptance without modifying either raw child report or fault receipt."""
     receipt = json.loads((root / 'abrupt-termination.json').read_text())
     restart = json.loads((root / 'restart.json').read_text())
-    if (restart.get('probeMode') != 'full-fixture'
+    initial = json.loads((root / 'initial.json').read_text())
+    if (initial.get('probeMode') != 'full-fixture'
+            or initial.get('externalAppConsentOnly') is not False
+            or initial.get('externalAppConsentProbe') is not False
+            or restart.get('probeMode') != 'full-fixture'
             or restart.get('savedTabCapacityOnly') is not False
-            or restart.get('savedTabCapacityProbe') is not False):
+            or restart.get('savedTabCapacityProbe') is not False
+            or restart.get('externalAppConsentOnly') is not False
+            or restart.get('externalAppConsentProbe') is not False):
         raise RuntimeError('Abrupt summary requires full-fixture restart evidence')
     if (receipt.get('passed') is not True or receipt.get('exitCode') != -signal.SIGKILL
             or receipt.get('processGroupAbsentAfterKill') is not True
@@ -356,6 +364,30 @@ SAVED_TAB_CAPACITY_SCOPE = (
     'four profiles, eight visited Spaces, at most eight live tabs; no user profile '
     'or external host. No hundreds-renderer or process-memory claim.'
 )
+EXTERNAL_APP_CONSENT_MODE = 'external-app-consent-only'
+EXTERNAL_APP_CONSENT_SCOPE = (
+    'Owned loopback external-app consent with native no-launch resolver; no operating-system handler launch, '
+    'company account or release claim.'
+)
+EXTERNAL_APP_CONSENT_CHECKS = (
+    'handlerAvailable', 'noLaunchGuardEnabled', 'profileAApproved', 'profileBApproved',
+    'denyWithoutLaunch', 'replayIgnored', 'unpresentedDenied', 'profileSwitchDenied',
+    'navigationDenied', 'sameURLReloadDenied', 'tabCloseDenied', 'windowCloseDenied',
+    'foreignWindowDenied', 'engineQuitDenied', 'allUnremembered',
+)
+EXTERNAL_APP_CONSENT_BOOLEAN_FIELDS = EXTERNAL_APP_CONSENT_CHECKS
+EXTERNAL_APP_CONSENT_FORBIDDEN_KEYS = {
+    'url', 'apppath', 'icon', 'title', 'message', 'rememberdestination',
+}
+EXTERNAL_APP_CONSENT_REPORT_KEYS = {
+    'schema', 'mode', 'scope', 'phase', 'runID', 'passed', 'checks', 'checkCount',
+    *EXTERNAL_APP_CONSENT_BOOLEAN_FIELDS, 'approvedRequests', 'launchCount',
+    'deniedRequests', 'cleanup',
+}
+EXTERNAL_APP_CONSENT_CLEANUP_KEYS = {
+    'mode', 'scope', 'phase', 'runID', 'engineClosed', 'primaryWindowClosed',
+    'routerClientCount', 'pendingRequests', 'passed',
+}
 
 
 def argument_parser():
@@ -368,11 +400,14 @@ def argument_parser():
     mode.add_argument("--abrupt-control", action="store_true", help="Diagnostic only: idle 35s before SIGKILL; does not establish strict crash-recovery acceptance")
     mode.add_argument("--saved-tab-capacity", action="store_true",
                       help="Run only the owned 1440-saved-tab capacity probe in both phases")
+    mode.add_argument("--external-app-consent", action="store_true",
+                      help="Run only the external-app consent probe with native no-launch guard")
     return parser
 
 
 def build_engine_probe_arguments(executable, root, fixture_url, phase, *, include_bitwarden,
-                                 onboarding_control, abrupt, saved_tab_capacity):
+                                 onboarding_control, abrupt, saved_tab_capacity,
+                                 external_app_consent=False):
     arguments = [str(executable), "--engine-probe", "--probe-data-dir", str(root),
                  "--probe-url", fixture_url, "--probe-phase", phase,
                  "--probe-output", str(root / f"{phase}.json")]
@@ -385,14 +420,92 @@ def build_engine_probe_arguments(executable, root, fixture_url, phase, *, includ
                          else '--probe-expect-abrupt-recovery')
     if saved_tab_capacity:
         arguments.append('--probe-saved-tab-capacity')
+    if external_app_consent:
+        arguments.extend(('--probe-external-app-consent', '--ardia-test-external-protocol-no-launch'))
     return arguments
+
+
+def _reject_external_consent_fields(value):
+    if isinstance(value, dict):
+        if any(''.join(character for character in key.lower() if character.isalnum())
+               in EXTERNAL_APP_CONSENT_FORBIDDEN_KEYS for key in value if isinstance(key, str)):
+            raise RuntimeError('External-app consent report contains forbidden raw fields')
+        for nested in value.values():
+            _reject_external_consent_fields(nested)
+    elif isinstance(value, list):
+        for nested in value:
+            _reject_external_consent_fields(nested)
+
+
+def validate_external_app_consent_report(root, phase, report, exit_code):
+    if not isinstance(report, dict):
+        raise RuntimeError(f'{phase} engine report must be a JSON object')
+    path = root / f'{phase}-external-app-consent.json'
+    try:
+        evidence = json.loads(path.read_text())
+    except json.JSONDecodeError as error:
+        raise RuntimeError(f'Malformed external-app consent report: {path.name}') from error
+    if not isinstance(evidence, dict):
+        raise RuntimeError(f'External-app consent report must be a JSON object: {path.name}')
+    _reject_external_consent_fields(evidence)
+    if set(evidence) != EXTERNAL_APP_CONSENT_REPORT_KEYS:
+        raise RuntimeError('External-app consent report has unknown or missing fields')
+    if not isinstance(evidence.get('cleanup'), dict) or set(evidence['cleanup']) != EXTERNAL_APP_CONSENT_CLEANUP_KEYS:
+        raise RuntimeError('External-app consent cleanup has unknown or missing fields')
+    run_id = evidence.get('runID')
+    try:
+        if not isinstance(run_id, str) or str(uuid.UUID(run_id)).upper() != run_id:
+            raise ValueError('noncanonical UUID')
+    except ValueError as error:
+        raise RuntimeError('External-app consent report has invalid run identity') from error
+    checks = evidence.get('checks')
+    cleanup = evidence.get('cleanup')
+    if (exit_code != 0 or report.get('phase') != phase
+            or report.get('probeMode') != EXTERNAL_APP_CONSENT_MODE
+            or report.get('externalAppConsentOnly') is not True
+            or report.get('externalAppConsentProbe') is not True
+            or report.get('externalAppConsentRunID') != run_id
+            or report.get('savedTabCapacityOnly') is not False
+            or report.get('savedTabCapacityProbe') is not False
+            or report.get('bitwardenStoreProbe') is not False
+            or report.get('bitwardenVaultProbe') is not False
+            or report.get('bitwardenOnboardingControl') is not False
+            or report.get('abruptRecoveryProbe') is not False
+            or report.get('passed') is not True
+            or report.get('localFixturesPassed') is not False
+            or report.get('error') is not None
+            or type(evidence.get('schema')) is not int or evidence['schema'] != 1
+            or evidence.get('mode') != EXTERNAL_APP_CONSENT_MODE
+            or evidence.get('scope') != EXTERNAL_APP_CONSENT_SCOPE
+            or evidence.get('phase') != phase
+            or evidence.get('passed') is not True
+            or not isinstance(checks, list) or checks != list(EXTERNAL_APP_CONSENT_CHECKS)
+            or type(evidence.get('checkCount')) is not int or evidence['checkCount'] != len(checks)
+            or any(type(evidence.get(key)) is not bool or evidence[key] is not True
+                   for key in EXTERNAL_APP_CONSENT_BOOLEAN_FIELDS)
+            or type(evidence.get('approvedRequests')) is not int or evidence['approvedRequests'] != 2
+            or type(evidence.get('launchCount')) is not int or evidence['launchCount'] != 2
+            or type(evidence.get('deniedRequests')) is not int or evidence['deniedRequests'] < 6
+            or not isinstance(cleanup, dict)
+            or cleanup.get('mode') != EXTERNAL_APP_CONSENT_MODE
+            or cleanup.get('scope') != EXTERNAL_APP_CONSENT_SCOPE
+            or cleanup.get('phase') != phase or cleanup.get('runID') != run_id
+            or cleanup.get('engineClosed') is not True
+            or cleanup.get('primaryWindowClosed') is not True
+            or type(cleanup.get('routerClientCount')) is not int or cleanup['routerClientCount'] != 0
+            or type(cleanup.get('pendingRequests')) is not int or cleanup['pendingRequests'] != 0
+            or cleanup.get('passed') is not True):
+        raise RuntimeError(f'{phase} external-app consent evidence has mismatched mode, scope, counts, or cleanup')
+    return evidence
 
 
 def validate_full_fixture_report(report, phase):
     if (not isinstance(report, dict) or report.get('phase') != phase
             or report.get('probeMode') != 'full-fixture'
             or report.get('savedTabCapacityOnly') is not False
-            or report.get('savedTabCapacityProbe') is not False):
+            or report.get('savedTabCapacityProbe') is not False
+            or report.get('externalAppConsentOnly') is not False
+            or report.get('externalAppConsentProbe') is not False):
         raise RuntimeError('Full fixture report has wrong phase or mode')
 
 
@@ -461,6 +574,8 @@ def validate_saved_tab_capacity_report(root, phase, report, exit_code):
             or report.get('bitwardenOnboardingControl') is not False
             or report.get('fixtureTLSProbe') is not False
             or report.get('abruptRecoveryProbe') is not False
+            or report.get('externalAppConsentOnly') is not False
+            or report.get('externalAppConsentProbe') is not False
             or report.get('error') is not None
             or type(capacity.get('schema')) is not int or capacity['schema'] != 1
             or capacity.get('phase') != phase or capacity.get('mode') != SAVED_TAB_CAPACITY_MODE
@@ -537,6 +652,40 @@ def record_saved_tab_capacity_summary(root):
     return summary
 
 
+def record_external_app_consent_summary(root):
+    summary_path = root / 'external-app-consent-summary.json'
+    summary_path.unlink(missing_ok=True)
+    reports = []
+    for phase in ('initial', 'restart'):
+        try:
+            main_report = json.loads((root / f'{phase}.json').read_text())
+        except json.JSONDecodeError as error:
+            raise RuntimeError(f'Malformed engine report: {phase}.json') from error
+        evidence = validate_external_app_consent_report(root, phase, main_report, 0)
+        reports.append(dict(phase=phase, passed=True, runID=evidence['runID'],
+                            approvedRequests=evidence['approvedRequests'],
+                            deniedRequests=evidence['deniedRequests'],
+                            launchCount=evidence['launchCount'], cleanup=evidence['cleanup']))
+    if reports[0]['runID'] != reports[1]['runID']:
+        raise RuntimeError('External-app consent initial and restart evidence have different run identities')
+    summary = dict(schema=1, mode=EXTERNAL_APP_CONSENT_MODE, runID=reports[0]['runID'],
+                   scope=EXTERNAL_APP_CONSENT_SCOPE, phases=reports, passed=True)
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=root,
+                                         prefix='.external-app-consent-summary-',
+                                         suffix='.tmp', delete=False) as temporary:
+            temporary_path = Path(temporary.name)
+            temporary.write(json.dumps(summary, indent=2, sort_keys=True) + '\n')
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        os.replace(temporary_path, summary_path)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+    return summary
+
+
 def main(argv=None):
     options = argument_parser().parse_args(argv)
     include_bitwarden = options.bitwarden or options.bitwarden_onboarding_control
@@ -545,8 +694,11 @@ def main(argv=None):
     abrupt = options.abrupt_restart or options.abrupt_control
     if options.saved_tab_capacity:
         print('SAVED TAB CAPACITY ONLY: no account, MV3, or full baseline claims', flush=True)
+    if options.external_app_consent:
+        print('EXTERNAL APP CONSENT ONLY: owned loopback; native no-launch guard enabled', flush=True)
     root = Path(tempfile.mkdtemp(prefix="arcusis-engine-probe-"))
     (root / ".arcusis-probe").write_text("arcusis-engine-probe-v1\n")
+    (root / ".arcusis-probe").chmod(0o600)
     shutil.copytree("Tests/Fixtures/ProfileExtension", root / "Extension")
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Fixture)
     threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -562,14 +714,16 @@ def main(argv=None):
                 executable, root, f"http://127.0.0.1:{server.server_port}/account", phase,
                 include_bitwarden=include_bitwarden,
                 onboarding_control=options.bitwarden_onboarding_control,
-                abrupt=abrupt, saved_tab_capacity=options.saved_tab_capacity)
+                abrupt=abrupt, saved_tab_capacity=options.saved_tab_capacity,
+                external_app_consent=options.external_app_consent)
             with (root / f"{phase}.log").open("w") as log:
                 process = subprocess.Popen(arguments, stdout=log, stderr=log, start_new_session=True, env=probe_env)
                 try:
                     if abrupt and phase == 'initial':
                         terminate_at_checkpoint(process, root, timeout=90, settle_seconds=35 if options.abrupt_control else 0)
                         continue
-                    timeout = 180 if options.saved_tab_capacity else 170 if include_bitwarden else 90
+                    timeout = (180 if options.external_app_consent else 180 if options.saved_tab_capacity
+                               else 170 if include_bitwarden else 90)
                     code = wait_for_probe(process, root, phase, timeout=timeout)
                 except subprocess.TimeoutExpired:
                     raise RuntimeError(f"{phase} timed out; see {root}/{phase}.log")
@@ -580,6 +734,8 @@ def main(argv=None):
             report = json.loads(output.read_text())
             if options.saved_tab_capacity:
                 validate_saved_tab_capacity_report(root, phase, report, code)
+            elif options.external_app_consent:
+                validate_external_app_consent_report(root, phase, report, code)
             else:
                 validate_full_fixture_report(report, phase)
             if include_bitwarden and phase == 'restart':
@@ -599,6 +755,8 @@ def main(argv=None):
             raise RuntimeError("; ".join(failures))
         if options.saved_tab_capacity:
             record_saved_tab_capacity_summary(root)
+        if options.external_app_consent:
+            record_external_app_consent_summary(root)
     finally:
         server.shutdown()
         server.server_close()

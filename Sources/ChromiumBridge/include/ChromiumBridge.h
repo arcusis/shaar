@@ -27,6 +27,8 @@ FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeExternalAppLaunchAuditForTest
 @property(copy, nullable) void (^onExtensionPopupSize)(NSString *popupID, NSSize size);
 @property(copy, nullable) void (^onWebsiteMediaRequest)(NSDictionary<NSString *, id> *request);
 @property(copy, nullable) void (^onWebsiteMediaDismissed)(NSString *requestID);
+@property(copy, nullable) void (^onExternalAppRequest)(NSDictionary<NSString *, id> *request);
+@property(copy, nullable) void (^onExternalAppDismissed)(NSString *requestID);
 @property(copy, nullable) void (^onMediaAccess)(NSString *tabID, NSDictionary<NSString *, NSNumber *> *access);
 @property(copy, nullable) void (^onFindResult)(NSString *tabID, NSString *requestID, int count, int active, BOOL final);
 @property(copy, nullable) void (^onDownloadChanged)(NSString *profileID, NSDictionary<NSString *, id> *download);
@@ -100,6 +102,7 @@ FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeExternalAppLaunchAuditForTest
 - (NSArray<NSDictionary<NSString *, id> *> *)extensionsForProfileID:(NSString *)profileID;
 - (void)resolveInstallRequestID:(NSString *)requestID accepted:(BOOL)accepted;
 - (void)resolveWebsiteMediaRequestID:(NSString *)requestID accepted:(BOOL)accepted;
+- (void)resolveExternalAppRequestID:(NSString *)requestID accepted:(BOOL)accepted;
 - (BOOL)executeExtensionID:(NSString *)extensionID tabID:(NSString *)tabID error:(NSError **)error;
 - (nullable NSView *)viewForExtensionPopupID:(NSString *)popupID;
 - (void)closeExtensionPopup;

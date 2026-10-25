@@ -27,6 +27,7 @@ class SavedTabCapacityRunnerTests(unittest.TestCase):
     def main_report(self, phase):
         return dict(phase=phase, passed=True, probeMode=fixture.SAVED_TAB_CAPACITY_MODE,
                     savedTabCapacityOnly=True, savedTabCapacityProbe=True,
+                    externalAppConsentOnly=False, externalAppConsentProbe=False,
                     savedTabCapacityRunID=self.run_id, scope=fixture.SAVED_TAB_CAPACITY_SCOPE,
                     localFixturesPassed=False, bitwardenStoreProbe=False,
                     bitwardenVaultProbe=False, bitwardenOnboardingControl=False,
@@ -148,6 +149,7 @@ class BitwardenSummaryTests(unittest.TestCase):
             host = dict(phase=phase, passed=passed, bitwardenStoreProbe=True,
                         probeMode='full-fixture', savedTabCapacityOnly=False,
                         savedTabCapacityProbe=False,
+                      externalAppConsentOnly=False, externalAppConsentProbe=False,
                         bitwardenOnboardingControl=control, localFixturesPassed=True,
                         checks=['authored fixture observed'])
             vendor = dict(phase=phase, passed=passed, controlOnly=control,
@@ -409,8 +411,11 @@ class AbruptCheckpointTests(unittest.TestCase):
             restart = dict(passed=restarted, error=None if restarted else 'Cookie missing',
                            probeMode='full-fixture', savedTabCapacityOnly=False,
                            savedTabCapacityProbe=False,
+            externalAppConsentOnly=False, externalAppConsentProbe=False,
                            phase='restart', abruptRecoveryProbe=True, bitwardenStoreProbe=False,
                            localFixturesPassed=restarted)
+            initial = restart | dict(phase='initial', passed=True, localFixturesPassed=True)
+            (self.root / 'initial.json').write_text(json.dumps(initial))
             (self.root / 'abrupt-termination.json').write_text(json.dumps(receipt))
             raw = json.dumps(restart).encode()
             (self.root / 'restart.json').write_bytes(raw)
@@ -428,6 +433,154 @@ class AbruptCheckpointTests(unittest.TestCase):
         (self.root / 'restart.json').write_text(json.dumps(restart))
         with self.assertRaises(RuntimeError):
             fixture.record_abrupt_summary(self.root, control_only=False)
+
+
+class ExternalAppConsentRunnerTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory(prefix='arcusis-engine-probe-')
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+        self.run_id = 'C766672E-AB82-4F84-8ED3-2C6D75AEB1D1'
+
+    def main_report(self, phase):
+        return dict(phase=phase, passed=True, probeMode=fixture.EXTERNAL_APP_CONSENT_MODE,
+                    externalAppConsentOnly=True, externalAppConsentProbe=True,
+                    externalAppConsentRunID=self.run_id, savedTabCapacityOnly=False,
+                    savedTabCapacityProbe=False, bitwardenStoreProbe=False,
+                    bitwardenVaultProbe=False, bitwardenOnboardingControl=False,
+                    abruptRecoveryProbe=False, localFixturesPassed=False, error=None,
+                    checks=['native external-app consent evidence'], chromiumVersion='test')
+
+    def evidence(self, phase):
+        return dict(schema=1, mode=fixture.EXTERNAL_APP_CONSENT_MODE,
+                    scope=fixture.EXTERNAL_APP_CONSENT_SCOPE, phase=phase, runID=self.run_id,
+                    passed=True, checks=list(fixture.EXTERNAL_APP_CONSENT_CHECKS),
+                    checkCount=len(fixture.EXTERNAL_APP_CONSENT_CHECKS),
+                    **{key: True for key in fixture.EXTERNAL_APP_CONSENT_BOOLEAN_FIELDS},
+                    approvedRequests=2, launchCount=2, deniedRequests=6,
+                    cleanup=dict(mode=fixture.EXTERNAL_APP_CONSENT_MODE,
+                                 scope=fixture.EXTERNAL_APP_CONSENT_SCOPE, phase=phase,
+                                 runID=self.run_id, engineClosed=True, primaryWindowClosed=True,
+                                 routerClientCount=0, pendingRequests=0, passed=True))
+
+    def write_phase(self, phase, report=None, evidence=None):
+        (self.root / f'{phase}.json').write_text(json.dumps(report or self.main_report(phase)))
+        if evidence is not None:
+            (self.root / f'{phase}-external-app-consent.json').write_text(json.dumps(evidence))
+        else:
+            (self.root / f'{phase}-external-app-consent.json').write_text(
+                json.dumps(self.evidence(phase)))
+
+    def test_mode_is_exclusive_and_arguments_include_only_fixed_no_launch_flags(self):
+        self.assertTrue(fixture.argument_parser().parse_args(['--external-app-consent']).external_app_consent)
+        for other in ('--bitwarden', '--bitwarden-onboarding-control', '--abrupt-restart',
+                      '--abrupt-control', '--saved-tab-capacity'):
+            with self.subTest(other=other), contextlib.redirect_stderr(io.StringIO()), \
+                    self.assertRaises(SystemExit):
+                fixture.argument_parser().parse_args(['--external-app-consent', other])
+        for phase in ('initial', 'restart'):
+            args = fixture.build_engine_probe_arguments(
+                '/tmp/ArcusisBrowser', self.root, 'http://127.0.0.1:43123/account', phase,
+                include_bitwarden=False, onboarding_control=False, abrupt=False,
+                saved_tab_capacity=False, external_app_consent=True)
+            self.assertIn('--probe-external-app-consent', args)
+            self.assertIn('--ardia-test-external-protocol-no-launch', args)
+            self.assertEqual(sum(arg.startswith('--probe-external') for arg in args), 1)
+            self.assertFalse(any(arg.startswith('--probe-external-app-consent=') for arg in args))
+
+    def test_valid_reports_bind_each_phase_and_write_shared_run_summary(self):
+        for phase in ('initial', 'restart'):
+            self.write_phase(phase)
+            fixture.validate_external_app_consent_report(self.root, phase,
+                                                         self.main_report(phase), 0)
+        summary = fixture.record_external_app_consent_summary(self.root)
+        self.assertTrue(summary['passed'])
+        self.assertEqual(summary['mode'], fixture.EXTERNAL_APP_CONSENT_MODE)
+        self.assertEqual(summary['runID'], self.run_id)
+        self.assertEqual([item['phase'] for item in summary['phases']], ['initial', 'restart'])
+
+    def test_public_main_forwards_mode_both_phases_and_sets_marker_permissions(self):
+        for phase in ('initial', 'restart'):
+            self.write_phase(phase)
+        server = Mock(server_port=43123)
+        process = Mock()
+        with contextlib.redirect_stdout(io.StringIO()), \
+                patch.object(fixture.tempfile, 'mkdtemp', return_value=str(self.root)), \
+                patch.object(fixture.shutil, 'copytree'), \
+                patch.object(fixture.http.server, 'ThreadingHTTPServer', return_value=server), \
+                patch.object(fixture.threading.Thread, 'start'), \
+                patch.object(fixture.subprocess, 'Popen', return_value=process) as popen, \
+                patch.object(fixture, 'wait_for_probe', return_value=0) as wait, \
+                patch.object(fixture, 'stop_probe'):
+            fixture.main(['--external-app-consent'])
+        self.assertEqual(popen.call_count, 2)
+        for call in popen.call_args_list:
+            args = call.args[0]
+            self.assertIn('--probe-external-app-consent', args)
+            self.assertIn('--ardia-test-external-protocol-no-launch', args)
+        self.assertEqual([call.kwargs['timeout'] for call in wait.call_args_list], [180, 180])
+        self.assertEqual((self.root / '.arcusis-probe').stat().st_mode & 0o777, 0o600)
+        self.assertTrue((self.root / 'external-app-consent-summary.json').exists())
+
+    def test_validation_rejects_wrong_phase_identity_and_malformed_counters_or_booleans(self):
+        cases = (
+            ('main phase', lambda main, item: main.update(phase='restart')),
+            ('main mode', lambda main, item: main.update(probeMode='full-fixture')),
+            ('evidence phase', lambda main, item: item.update(phase='restart')),
+            ('run identity binding', lambda main, item: main.update(externalAppConsentRunID='F29A09F3-FAF9-4938-A25B-260F67F42CC3')),
+            ('strict bool', lambda main, item: item.update(handlerAvailable=1)),
+            ('approved numeric', lambda main, item: item.update(approvedRequests=True)),
+            ('launch count', lambda main, item: item.update(launchCount=3)),
+            ('denied count', lambda main, item: item.update(deniedRequests=5)),
+            ('cleanup pending', lambda main, item: item['cleanup'].update(pendingRequests=False)),
+            ('forbidden field', lambda main, item: item.update(title='private')),
+            ('check list', lambda main, item: item.update(checkCount=1)),
+        )
+        for label, mutate in cases:
+            with self.subTest(label=label):
+                main, evidence = self.main_report('initial'), self.evidence('initial')
+                mutate(main, evidence)
+                self.write_phase('initial', main, evidence)
+                with self.assertRaises(RuntimeError):
+                    fixture.validate_external_app_consent_report(self.root, 'initial', main, 0)
+
+    def test_missing_phase_and_cross_phase_identity_remove_stale_summary(self):
+        self.write_phase('initial')
+        self.write_phase('restart')
+        fixture.record_external_app_consent_summary(self.root)
+        summary_path = self.root / 'external-app-consent-summary.json'
+        restart = self.evidence('restart')
+        restart['runID'] = 'F29A09F3-FAF9-4938-A25B-260F67F42CC3'
+        restart['cleanup']['runID'] = restart['runID']
+        report = self.main_report('restart')
+        report['externalAppConsentRunID'] = restart['runID']
+        self.write_phase('restart', report, restart)
+        with self.assertRaises(RuntimeError):
+            fixture.record_external_app_consent_summary(self.root)
+        self.assertFalse(summary_path.exists())
+        (self.root / 'restart-external-app-consent.json').unlink()
+        with self.assertRaises(FileNotFoundError):
+            fixture.record_external_app_consent_summary(self.root)
+        self.assertFalse(summary_path.exists())
+
+    def test_external_mode_cannot_pass_full_capacity_or_vendor_gates(self):
+        main = self.main_report('initial')
+        with self.assertRaises(RuntimeError):
+            fixture.validate_full_fixture_report(main, 'initial')
+        self.write_phase('initial')
+        (self.root / 'initial-saved-tab-capacity.json').write_text('{}')
+        with self.assertRaises(RuntimeError):
+            fixture.validate_saved_tab_capacity_report(self.root, 'initial', main, 0)
+        host = main | dict(bitwardenStoreProbe=True, bitwardenOnboardingControl=False)
+        (self.root / 'initial.json').write_text(json.dumps(host))
+        (self.root / 'restart.json').write_text(json.dumps(self.main_report('restart')))
+        for phase in ('initial', 'restart'):
+            (self.root / f'{phase}-bitwarden.json').write_text(json.dumps(dict(
+                phase=phase, passed=True, controlOnly=False, firstClickAcceptancePassed=True,
+                checks=['vendor evidence'])))
+        with self.assertRaises(RuntimeError):
+            fixture.record_bitwarden_summary(self.root, False)
+        self.assertFalse((self.root / 'bitwarden-onboarding-summary.json').exists())
 
 
 if __name__ == '__main__':

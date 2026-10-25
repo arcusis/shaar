@@ -20,3 +20,4 @@
 - [[Engine_Interop_Boundary]]
 - [[Arc_Settings_Design]]
 - [[Native_Password_Manager_Options]]
+- [[Native_Vault_Session_Boundary]]

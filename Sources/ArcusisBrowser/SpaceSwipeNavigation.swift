@@ -141,15 +141,20 @@ final class SpaceSwipeWindowMonitor {
     closeObserver = nil
   }
 
-  private func route(_ event: NSEvent) -> NSEvent? {
+  func route(_ event: NSEvent) -> NSEvent? {
+    route(event, deltaX: event.deltaX, deltaY: event.deltaY)
+  }
+
+  func route(_ event: NSEvent, deltaX: CGFloat, deltaY: CGFloat) -> NSEvent? {
     guard let store, let window else { return event }
     let modalOwnsInput =
       store.commandIsOpen || store.sheet != nil || !store.installationRequests.isEmpty
-      || !store.websiteMediaRequests.isEmpty || window.attachedSheet != nil
+      || !store.websiteMediaRequests.isEmpty || store.libraryDrawerSection != nil
+      || window.attachedSheet != nil
       || NSApp.modalWindow != nil
     let result = SpaceSwipeNavigationDecision.route(
-      deltaX: event.deltaX,
-      deltaY: event.deltaY,
+      deltaX: deltaX,
+      deltaY: deltaY,
       eventBelongsToWindow: event.window === window,
       commandPressed: event.modifierFlags.contains(.command),
       modalOwnsInput: modalOwnsInput

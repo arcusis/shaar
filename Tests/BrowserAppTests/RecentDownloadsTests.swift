@@ -1,4 +1,7 @@
+import AppKit
+import BrowserCore
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import ArcusisBrowser
@@ -67,6 +70,88 @@ struct RecentDownloadsTests {
     model.removed(id, profileID: profile)
     #expect(FileManager.default.fileExists(atPath: file.path))
     #expect(model.fileForDrag(id: id, profileID: profile, selectedProfileID: profile) == nil)
+  }
+
+  @Test func recentPopoverRendersFixedDateFixtures() throws {
+    let profile = UUID(uuidString: "43b4d66a-1f9e-4fb8-91b2-7b7bda489a01")!
+    let referenceDate = Date(timeIntervalSince1970: 1_798_000_000)
+    let items = [
+      download(
+        profile: profile, filename: "Arcusis-Release.dmg", state: .finished,
+        startTime: referenceDate.timeIntervalSince1970 - 3_600),
+      download(
+        profile: profile, filename: "research-notes.pdf", state: .downloading,
+        startTime: referenceDate.timeIntervalSince1970 - 120, received: 65_536, total: 262_144),
+      download(
+        profile: profile, filename: "image-export.zip", state: .downloading, paused: true,
+        startTime: referenceDate.timeIntervalSince1970 - 300, received: 1_048_576),
+      download(
+        profile: profile, filename: "blocked-file.dmg", state: .failed, dangerous: true,
+        startTime: referenceDate.timeIntervalSince1970 - 600),
+      download(
+        profile: profile, filename: "failed-report.csv", state: .failed,
+        startTime: referenceDate.timeIntervalSince1970 - 900),
+    ]
+    let output = URL(fileURLWithPath: "/tmp/browser-recent-polish", isDirectory: true)
+    try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+
+    try capture(
+      items: items, profile: profile, referenceDate: referenceDate,
+      scheme: .light, width: 300, name: "normal", output: output)
+    try capture(
+      items: items, profile: profile, referenceDate: referenceDate,
+      scheme: .dark, width: 300, name: "dark", output: output)
+    try capture(
+      items: [], profile: profile, referenceDate: referenceDate,
+      scheme: .light, width: 300, name: "empty", output: output)
+    try capture(
+      items: [items[0]], profile: profile, referenceDate: referenceDate,
+      scheme: .light, width: 300, name: "minimum", output: output)
+    try capture(
+      items: [
+        download(
+          profile: profile,
+          filename: "تقرير־مراجعة־مهم־非常に長いファイル名_日本語-💾.pdf",
+          state: .finished, startTime: referenceDate.timeIntervalSince1970 - 86_400)
+      ],
+      profile: profile, referenceDate: referenceDate,
+      scheme: .light, width: 300, name: "long-name-rtl-unicode", output: output)
+  }
+
+  private func capture(
+    items: [BrowserDownload], profile: UUID, referenceDate: Date,
+    scheme: ColorScheme, width: CGFloat, name: String, output: URL
+  ) throws {
+    let view = RecentDownloadsPopover(
+      items: items, profileID: profile, selectedProfileID: { profile },
+      dragURL: { _ in nil }, dismiss: {}, referenceDate: referenceDate
+    )
+    .environment(\.colorScheme, scheme)
+    let host = NSHostingView(rootView: view)
+    host.frame = NSRect(x: 0, y: 0, width: width, height: 420)
+    host.layoutSubtreeIfNeeded()
+    guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else {
+      Issue.record("Could not allocate recent-download capture: \(name)")
+      return
+    }
+    host.cacheDisplay(in: host.bounds, to: bitmap)
+    guard let data = bitmap.representation(using: .png, properties: [:]) else {
+      Issue.record("Could not encode recent-download capture: \(name)")
+      return
+    }
+    try data.write(to: output.appendingPathComponent("\(name).png"), options: .atomic)
+  }
+
+  private func download(
+    profile: UUID, filename: String, state: DownloadState, paused: Bool = false,
+    dangerous: Bool = false, startTime: Double, received: Double = 0, total: Double = -1
+  ) -> BrowserDownload {
+    BrowserDownload(
+      id: UUID().uuidString.lowercased(), profileID: profile, filename: filename,
+      path: "", sourceURL: "https://downloads.example.test/\(filename)", state: state,
+      paused: paused, dangerous: dangerous, offTheRecord: false,
+      received: received, total: total, startTime: startTime
+    )!
   }
 
   private func record(

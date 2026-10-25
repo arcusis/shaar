@@ -26,6 +26,12 @@ final class BitwardenProbe {
     case storeConsent = "store-consent"
     case storeInstallation = "store-installation"
     case popup, onboarding, environment, login
+    case loginPrepare = "login-prepare"
+    case loginEmail = "login-email"
+    case loginContinue = "login-continue"
+    case loginPassword = "login-password"
+    case loginSubmit = "login-submit"
+    case loginResult = "login-result"
     case sharedProfile = "shared-profile"
     case lockUnlock = "lock-unlock"
     case completed
@@ -33,6 +39,7 @@ final class BitwardenProbe {
   private var vaultStage = VaultStage.notStarted
   private var vaultStoreObservation: [String: Bool] = [:]
   private var vaultStoreButtonCount = 0
+  private var vaultLoginObservation: [String: Any] = [:]
   private var popupWindow: NSWindow?
   private var consentWindow: NSWindow?
 
@@ -440,16 +447,24 @@ final class BitwardenProbe {
     -> Bool
   {
     let driver = BitwardenVaultProbe(runtime: runtime, popupID: popupID)
+    vaultStage = .loginPrepare
     guard await prepareVaultLogin(driver),
       let initial = await driver.state(expectedAccount: expectedAccount)
     else { return false }
+    vaultLoginObservation = [
+      "emailFields": initial.emailFields, "passwordFields": initial.passwordFields,
+      "loginButton": initial.loginButton, "continueButton": initial.continueButton,
+      "unlockButton": initial.unlockButton, "vaultVisible": initial.vaultVisible,
+    ]
     if phase == "restart" {
       let locked = initial.passwordFields > 0 && !initial.vaultVisible
       vaultStageResults["restart-locked-\(label)"] = locked
       guard locked else { return false }
     } else if initial.emailFields > 0 {
+      vaultStage = .loginEmail
       guard await driver.fillEmail(credentials.email) else { return false }
       if initial.passwordFields == 0 {
+        vaultStage = .loginContinue
         let fresh = await driver.state()
         let button = fresh?.continueButton == true ? "Continue" : "Log in"
         guard await driver.click(button), await driver.waitFor({ $0.passwordFields > 0 }) else {
@@ -457,15 +472,24 @@ final class BitwardenProbe {
         }
       }
     }
+    vaultStage = .loginPassword
     guard let passwordScreen = await driver.state(expectedAccount: expectedAccount),
       passwordScreen.passwordFields > 0,
       await driver.fillPassword(credentials.masterPassword)
     else { return false }
     let button = passwordScreen.unlockButton ? "Unlock" : "Log in"
+    vaultStage = .loginSubmit
     guard await driver.click(button) else { return false }
+    vaultStage = .loginResult
     let authenticated = await driver.waitFor(
       { $0.vaultVisible && $0.accountIdentityMatches }, seconds: 60,
       expectedAccount: expectedAccount)
+    if let observed = await driver.state(expectedAccount: expectedAccount) {
+      vaultLoginObservation["resultVaultVisible"] = observed.vaultVisible
+      vaultLoginObservation["resultIdentityMatches"] = observed.accountIdentityMatches
+      vaultLoginObservation["resultEmailFields"] = observed.emailFields
+      vaultLoginObservation["resultPasswordFields"] = observed.passwordFields
+    }
     vaultStageResults["account-\(label)-identity-matches"] = authenticated
     if phase == "restart" {
       vaultStageResults["restart-unlock-\(label)"] = authenticated
@@ -881,6 +905,7 @@ final class BitwardenProbe {
       "firstClickAcceptancePassed": false, "accountCount": 2, "stages": stages,
       "lastStage": vaultStage.rawValue,
       "storeObservation": vaultStoreObservation, "storeButtonCount": vaultStoreButtonCount,
+      "loginObservation": vaultLoginObservation,
     ]
     let data = try JSONSerialization.data(
       withJSONObject: report, options: [.prettyPrinted, .sortedKeys])

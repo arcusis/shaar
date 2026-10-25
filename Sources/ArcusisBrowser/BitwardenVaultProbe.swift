@@ -73,12 +73,13 @@ final class BitwardenVaultProbe {
   func state(expectedAccount: String? = nil) async -> UIState? {
     let expectedLiteral = expectedAccount.flatMap(Self.jsonLiteral) ?? "null"
     let script = """
-      (()=>{const b=[...document.querySelectorAll('button,[role="button"]')];
+      (()=>{const visible=e=>{const r=e.getBoundingClientRect();return r.width>0&&r.height>0;};
+        const b=[...document.querySelectorAll('button,[role="button"]')].filter(visible);
         const labels=b.map(x=>(x.innerText||x.getAttribute('aria-label')||'').trim().toLowerCase());
         const t=(document.body?.innerText||'').toLowerCase();
         const expected=\(expectedLiteral);
-        return {emailFields:[...document.querySelectorAll('input[type="email"]')].length,
-          passwordFields:[...document.querySelectorAll('input[type="password"]')].length,
+        return {emailFields:[...document.querySelectorAll('input[type="email"]')].filter(visible).length,
+          passwordFields:[...document.querySelectorAll('input[type="password"]')].filter(visible).length,
           loginButton:labels.some(x=>x==='log in'||x==='login'),
           continueButton:labels.some(x=>x==='continue'),
           unlockButton:labels.some(x=>x==='unlock'),
@@ -86,7 +87,7 @@ final class BitwardenVaultProbe {
           loginPrompt:t.includes('log in'),skipPrompt:t.includes('default password manager'),
           introCarousel:location.hash==='#/intro-carousel',
           regionSelector:b.some(x=>/^(bitwarden\\.com|bitwarden\\.eu)$/.test((x.innerText||'').trim().toLowerCase())),
-          selfHostedBaseURLField:!!document.querySelector('#self_hosted_env_settings_form_input_base_url'),
+          selfHostedBaseURLField:[...document.querySelectorAll('#self_hosted_env_settings_form_input_base_url')].some(visible),
           saveButton:labels.includes('save'),
           lockNowButton:labels.includes('lock now'),
           accountIdentityMatches:expected!==null&&t.includes(expected.toLowerCase())};})()
@@ -165,7 +166,9 @@ final class BitwardenVaultProbe {
     let literal = String(json[json.index(after: first)..<last])
     guard let selectorLiteral = Self.jsonLiteral(selector) else { return false }
     let script = """
-      (()=>{const e=document.querySelector(\(selectorLiteral));if(!e)return false;
+      (()=>{const e=[...document.querySelectorAll(\(selectorLiteral))].find(e=>{
+        const r=e.getBoundingClientRect();return r.width>0&&r.height>0&&!e.disabled&&!e.readOnly;
+        });if(!e)return false;
         const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')?.set;
         if(!setter)return false;setter.call(e,\(literal));
         e.dispatchEvent(new Event('input',{bubbles:true}));

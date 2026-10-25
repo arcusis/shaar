@@ -22,7 +22,7 @@ struct BrowserWindow: View {
     ZStack(alignment: .top) {
       LinearGradient(
         colors: [
-          store.session.selectedSpace.tint.color.opacity(0.50),
+          store.session.selectedSpace.themeColor.opacity(0.50),
           Color(nsColor: .windowBackgroundColor),
         ],
         startPoint: .topLeading, endPoint: .bottomTrailing
@@ -149,7 +149,7 @@ struct BrowserWindow: View {
           VStack(spacing: 18) {
             Image(systemName: store.session.selectedSpace.symbol)
               .font(.system(size: 32, weight: .light))
-              .foregroundStyle(store.session.selectedSpace.tint.color)
+              .foregroundStyle(store.session.selectedSpace.themeColor)
             Text(store.session.selectedSpace.name)
               .font(.system(size: 30, weight: .medium, design: .rounded))
             Text(

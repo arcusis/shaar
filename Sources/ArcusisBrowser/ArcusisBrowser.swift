@@ -195,7 +195,7 @@ private struct NativePreview: View {
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .padding(10)
       }
-      .background(store.session.selectedSpace.tint.color.opacity(0.5))
+      .background(store.session.selectedSpace.themeColor.opacity(0.5))
     } else if showExtensionConsent {
       ExtensionConsent(store: store, request: previewConsent)
     } else if showSpaceEditor {

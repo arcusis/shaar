@@ -1,0 +1,190 @@
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -1319,6 +1319,7 @@
+ version = "4.0.0"
+ dependencies = [
+  "async-trait",
++ "bitwarden-api-api",
+  "bitwarden-auth",
+  "bitwarden-collections",
+  "bitwarden-commercial-vault",
+--- a/crates/bitwarden-pm/Cargo.toml
++++ b/crates/bitwarden-pm/Cargo.toml
+@@ -70,6 +70,7 @@
+ [dependencies]
+ async-trait = { workspace = true }
+ bitwarden-auth = { workspace = true }
++bitwarden-api-api = { workspace = true }
+ bitwarden-collections = { workspace = true }
+ bitwarden-commercial-vault = { workspace = true, optional = true }
+ bitwarden-core = { workspace = true, features = ["internal"] }
+--- a/crates/bitwarden-pm/src/lib.rs
++++ b/crates/bitwarden-pm/src/lib.rs
+@@ -324,3 +324,91 @@
+             .build();
+     }
+ }
++
++#[derive(Default)]
++struct SyncSnapshotState {
++    pending: Option<Vec<bitwarden_vault::Cipher>>,
++    published: Vec<bitwarden_vault::Cipher>,
++}
++
++struct SyncSnapshotHandler(Arc<std::sync::Mutex<SyncSnapshotState>>);
++
++#[async_trait::async_trait]
++impl bitwarden_sync::SyncHandler for SyncSnapshotHandler {
++    async fn on_sync(
++        &self,
++        response: &bitwarden_api_api::models::SyncResponseModel,
++    ) -> Result<(), bitwarden_sync::SyncHandlerError> {
++        let ciphers = response
++            .ciphers
++            .clone()
++            .unwrap_or_default()
++            .into_iter()
++            .map(bitwarden_vault::Cipher::try_from)
++            .collect::<std::result::Result<Vec<_>, _>>()
++            .map_err(|error| -> bitwarden_sync::SyncHandlerError { Box::new(error) })?;
++        self.0.lock().expect("sync snapshot lock").pending = Some(ciphers);
++        Ok(())
++    }
++
++    async fn on_sync_complete(&self) {
++        let mut state = self.0.lock().expect("sync snapshot lock");
++        if let Some(snapshot) = state.pending.take() {
++            state.published = snapshot;
++        }
++    }
++}
++
++#[async_trait::async_trait]
++impl bitwarden_sync::SyncErrorHandler for SyncSnapshotHandler {
++    async fn on_error(&self, _error: &bitwarden_sync::SyncError) {
++        self.0.lock().expect("sync snapshot lock").pending = None;
++    }
++}
++
++/// Retained SDK sync client with a typed, in-memory encrypted cipher snapshot.
++pub struct SyncCipherSnapshotClient {
++    sdk: bitwarden_sync::SyncClient,
++    state: Arc<std::sync::Mutex<SyncSnapshotState>>,
++}
++
++impl SyncCipherSnapshotClient {
++    fn new(client: bitwarden_core::Client) -> Self {
++        let sdk = client.sync();
++        #[cfg(not(target_arch = "wasm32"))]
++        sdk.register_sync_handler(Arc::new(CryptoSyncHandler::new(client.clone())));
++        sdk.register_sync_handler(Arc::new(FolderSyncHandler::from_client(&client)));
++        sdk.register_sync_handler(Arc::new(SendSyncHandler::from_client(&client)));
++        sdk.register_sync_handler(Arc::new(PolicySyncHandler::from_client(&client)));
++
++        let state = Arc::new(std::sync::Mutex::new(SyncSnapshotState::default()));
++        let handler = Arc::new(SyncSnapshotHandler(state.clone()));
++        sdk.register_sync_handler(handler.clone());
++        sdk.register_error_handler(handler);
++        Self { sdk, state }
++    }
++
++    pub async fn sync(&self, force: bool) -> std::result::Result<bool, bitwarden_sync::SyncError> {
++        self.sdk
++            .sync(bitwarden_sync::SyncRequest {
++                force,
++                exclude_subdomains: None,
++            })
++            .await
++    }
++
++    pub fn encrypted_ciphers(&self) -> Vec<bitwarden_vault::Cipher> {
++        self.state
++            .lock()
++            .expect("sync snapshot lock")
++            .published
++            .clone()
++    }
++}
++
++impl PasswordManagerClient {
++    /// Create a retained sync client and its client-scoped encrypted cipher snapshot.
++    pub fn sync_with_snapshot(&self) -> SyncCipherSnapshotClient {
++        SyncCipherSnapshotClient::new(self.0.clone())
++    }
++}
+--- a/crates/bitwarden-uniffi/src/lib.rs
++++ b/crates/bitwarden-uniffi/src/lib.rs
+@@ -24,6 +24,8 @@
+ pub mod platform;
+ #[allow(missing_docs)]
+ pub mod policies;
++#[allow(missing_docs)]
++pub mod sync;
+ #[allow(missing_docs)]
+ pub mod tools;
+ mod uniffi_support;
+@@ -47,7 +49,10 @@
+ 
+ #[allow(missing_docs)]
+ #[derive(uniffi::Object)]
+-pub struct Client(pub(crate) bitwarden_pm::PasswordManagerClient);
++pub struct Client(
++    pub(crate) bitwarden_pm::PasswordManagerClient,
++    Arc<sync::SyncClientBinding>,
++);
+ 
+ #[uniffi::export(async_runtime = "tokio")]
+ impl Client {
+@@ -69,11 +74,18 @@
+         #[cfg(target_os = "android")]
+         android_support::init();
+ 
+-        Self(bitwarden_pm::PasswordManagerClient::new_with_client_tokens(
++        let password_manager = bitwarden_pm::PasswordManagerClient::new_with_client_tokens(
+             settings,
+             token_provider,
+             &managed_settings.0,
+-        ))
++        );
++        let sync = Arc::new(sync::SyncClientBinding::new(&password_manager));
++        Self(password_manager, sync)
++    }
++
++    /// Actual server sync and typed encrypted cipher snapshot for this client.
++    pub fn sync(&self) -> Arc<sync::SyncClientBinding> {
++        self.1.clone()
+     }
+ 
+     /// Crypto operations
+--- /dev/null
++++ b/crates/bitwarden-uniffi/src/sync.rs
+@@ -0,0 +1,29 @@
++use bitwarden_vault::Cipher;
++
++use crate::error::{Error, Result};
++
++#[allow(missing_docs)]
++#[derive(uniffi::Object)]
++pub struct SyncClientBinding(pub(crate) bitwarden_pm::SyncCipherSnapshotClient);
++
++impl SyncClientBinding {
++    pub(crate) fn new(client: &bitwarden_pm::PasswordManagerClient) -> Self {
++        Self(client.sync_with_snapshot())
++    }
++}
++
++#[uniffi::export(async_runtime = "tokio")]
++impl SyncClientBinding {
++    /// Fetch server sync and publish typed encrypted ciphers after registered handlers succeed.
++    pub async fn sync(&self, force: bool) -> Result<bool> {
++        self.0
++            .sync(force)
++            .await
++            .map_err(|_| Error::Conversion("sync failed".to_owned()))
++    }
++
++    /// Return this client's last successfully published encrypted cipher snapshot.
++    pub fn encrypted_ciphers(&self) -> Vec<Cipher> {
++        self.0.encrypted_ciphers()
++    }
++}

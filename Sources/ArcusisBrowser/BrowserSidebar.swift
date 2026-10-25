@@ -64,6 +64,7 @@ struct BrowserSidebar: View {
   @State private var targetedSpace: UUID?
   @State private var targetedSection: String?
   @State private var targetedFolder: UUID?
+  @State private var hoveredTabID: UUID?
   @State private var recentDownloadsIsOpen = false
   @State private var recentDownloadsPinnedOpen = false
   @State private var recentDownloadsAnchorHovered = false
@@ -628,38 +629,22 @@ struct BrowserSidebar: View {
   private func tabRow(_ tab: BrowserTab, index: SidebarTabIndex) -> some View {
     let space = store.session.selectedSpace
     let boundary = index.boundary(for: tab.id)
-    let favicon = store.engine?.favicons[tab.id]
-    return HStack(spacing: 8) {
-      Button {
+    return SidebarTabRow(
+      tabID: tab.id,
+      title: tab.title,
+      favicon: store.engine?.favicons[tab.id],
+      isPinned: tab.isPinned,
+      isSelected: tab.id == store.session.selectedPage?.tab.id,
+      closeIsVisible: hoveredTabID == tab.id,
+      onSelect: {
         store.perform(.tab(space: space.id, tab: tab.id))
-      } label: {
-        HStack(spacing: 9) {
-          if let favicon {
-            Image(nsImage: favicon)
-              .resizable()
-              .scaledToFit()
-              .frame(width: 14, height: 14)
-          } else {
-            Image(systemName: tab.isPinned ? "pin" : "globe")
-              .font(.system(size: 12))
-              .foregroundStyle(.secondary)
-          }
-          Text(tab.title).font(.system(size: 13)).lineLimit(1)
-          Spacer(minLength: 0)
-        }
-        .contentShape(Rectangle())
-      }
-      Button {
+      },
+      onClose: {
         store.closeTab(tab.id)
-      } label: {
-        Image(systemName: "xmark").font(.system(size: 9, weight: .medium))
+      },
+      onHoverChanged: { isHovered in
+        hoveredTabID = isHovered ? tab.id : hoveredTabID == tab.id ? nil : hoveredTabID
       }
-      .help("Close \(tab.title)")
-    }
-    .padding(10)
-    .background(
-      .white.opacity(tab.id == store.session.selectedPage?.tab.id ? 0.43 : 0),
-      in: RoundedRectangle(cornerRadius: 8)
     )
     .draggable(
       SidebarTransfer.tab(sessionID: store.dragSessionID, sourceSpaceID: space.id, tabID: tab.id)

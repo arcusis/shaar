@@ -466,9 +466,15 @@ final class BitwardenProbe {
       guard await driver.fillEmail(credentials.email) else { return false }
       if initial.passwordFields == 0 {
         vaultStage = .loginContinueClick
-        guard await driver.click("Continue") else { return false }
+        guard await driver.click("Continue") else {
+          await observeVaultLoginFailure(driver)
+          return false
+        }
         vaultStage = .loginPasswordWait
-        guard await driver.waitFor({ $0.passwordFields > 0 }) else { return false }
+        guard await driver.waitFor({ $0.passwordFields > 0 }) else {
+          await observeVaultLoginFailure(driver, timedOut: true)
+          return false
+        }
       }
     }
     vaultStage = .loginPassword
@@ -494,6 +500,20 @@ final class BitwardenProbe {
       vaultStageResults["restart-unlock-\(label)"] = authenticated
     }
     return authenticated
+  }
+
+  private func observeVaultLoginFailure(
+    _ driver: BitwardenVaultProbe, timedOut: Bool = false
+  ) async {
+    // Failure is already fixed. Read-only diagnostics cannot turn it into acceptance.
+    vaultLoginObservation["stageSignalsAvailable"] = false
+    guard let signals = await driver.loginStageSignals(timedOut: timedOut) else { return }
+    vaultLoginObservation["stageSignalsAvailable"] = true
+    vaultLoginObservation["emailFormPresent"] = signals.emailFormPresent
+    vaultLoginObservation["continueButtonEnabled"] = signals.continueButtonEnabled
+    vaultLoginObservation["emailFormValid"] = signals.emailFormValid
+    vaultLoginObservation["passwordRouteArrived"] = signals.passwordRouteArrived
+    vaultLoginObservation["stageClassification"] = signals.classification.rawValue
   }
 
   private func prepareVaultLogin(_ driver: BitwardenVaultProbe) async -> Bool {

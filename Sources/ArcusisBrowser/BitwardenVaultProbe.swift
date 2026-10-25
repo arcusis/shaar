@@ -122,6 +122,23 @@ final class BitwardenVaultProbe {
       accountIdentityMatches: object["accountIdentityMatches"] as? Bool == true)
   }
 
+  /// Returns fixed booleans only; never reads or returns email, page text, or route data.
+  func loginStageSignals(timedOut: Bool = false) async -> BitwardenVaultStageSignals? {
+    let script = """
+      (()=>{const visible=e=>{const r=e.getBoundingClientRect();return r.width>0&&r.height>0;};
+        const email=document.querySelector('input#email[type="email"]');
+        const emailFormPresent=!!email&&visible(email);
+        const continueButton=document.querySelector('button[data-testid="login-continue-button"]');
+        const continueButtonEnabled=!!continueButton&&visible(continueButton)
+          &&!continueButton.disabled&&continueButton.getAttribute('aria-disabled')!=='true';
+        const emailFormValid=!!email&&email.value.trim().length>0&&email.validity.valid;
+        const passwordRouteArrived=[...document.querySelectorAll('input[type="password"]')].some(visible);
+        return {emailFormPresent,continueButtonEnabled,emailFormValid,passwordRouteArrived};})()
+      """
+    guard let object = await evaluate(script) as? [String: Any] else { return nil }
+    return BitwardenVaultStageSignals(object: object, timedOut: timedOut)
+  }
+
   func fillEmail(_ value: String) async -> Bool { await fill(type: "email", value: value) }
   func fillPassword(_ value: String) async -> Bool { await fill(type: "password", value: value) }
   func configureSelfHostedServer(_ url: URL) async -> Bool {

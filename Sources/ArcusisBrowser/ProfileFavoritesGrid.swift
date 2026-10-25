@@ -35,6 +35,7 @@ struct ProfileFavoritesGrid: View {
   let onRemove: (UUID) -> Void
   let onMoveBefore: (UUID, UUID?) -> Void
   let accessibilityOverrides: ProfileFavoritesAccessibilityOverrides?
+  @State private var currentSelectionID: UUID?
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -60,6 +61,7 @@ struct ProfileFavoritesGrid: View {
     self.onRemove = onRemove
     self.onMoveBefore = onMoveBefore
     self.accessibilityOverrides = accessibilityOverrides
+    _currentSelectionID = State(initialValue: selectedID)
   }
 
   private static let columns = Array(
@@ -73,17 +75,48 @@ struct ProfileFavoritesGrid: View {
       reduceTransparency || accessibilityOverrides?.reduceTransparency == true
     Group {
       if !favorites.isEmpty {
-        ScrollView(.vertical) {
-          LazyVGrid(columns: Self.columns, alignment: .leading, spacing: 6) {
-            ForEach(favorites, id: \.id) { favorite in
-              tile(favorite, reduceMotion: motionReduced, reduceTransparency: transparencyReduced)
+        ScrollViewReader { favoriteScroll in
+          ScrollView(.vertical) {
+            LazyVGrid(columns: Self.columns, alignment: .leading, spacing: 6) {
+              ForEach(favorites, id: \.id) { favorite in
+                tile(favorite, reduceMotion: motionReduced, reduceTransparency: transparencyReduced)
+                  .id(favorite.id)
+              }
+            }
+            .padding(.vertical, 1)
+          }
+          .scrollIndicators(.hidden)
+          .frame(height: gridHeight)
+          .accessibilityLabel("Favorite pages")
+          .coordinateSpace(name: "sidebarFavoriteViewport")
+          .background {
+            GeometryReader { geometry in
+              Color.clear.preference(
+                key: SidebarFavoriteRevealFramesPreferenceKey.self,
+                value: SidebarRevealFrames(
+                  viewport: CGRect(origin: .zero, size: geometry.size)))
             }
           }
-          .padding(.vertical, 1)
+          .onAppear {
+            if let selectedID, favorites.contains(where: { $0.id == selectedID }) {
+              favoriteScroll.scrollTo(selectedID)
+            }
+          }
+          .onChange(of: selectedID) { _, id in
+            currentSelectionID = id
+            guard let id, favorites.contains(where: { $0.id == id }) else { return }
+            DispatchQueue.main.async {
+              guard currentSelectionID == id,
+                favorites.contains(where: { $0.id == id })
+              else { return }
+              if motionReduced {
+                favoriteScroll.scrollTo(id)
+              } else {
+                withAnimation(.easeOut(duration: 0.12)) { favoriteScroll.scrollTo(id) }
+              }
+            }
+          }
         }
-        .scrollIndicators(.hidden)
-        .frame(height: gridHeight)
-        .accessibilityLabel("Favorite pages")
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -157,6 +190,17 @@ struct ProfileFavoritesGrid: View {
       }
     }
     .frame(height: Self.tileHeight)
+    .background {
+      GeometryReader { geometry in
+        if isSelected {
+          Color.clear.preference(
+            key: SidebarFavoriteRevealFramesPreferenceKey.self,
+            value: SidebarRevealFrames(
+              selected: geometry.frame(in: .named("sidebarFavoriteViewport")),
+              selectedID: favorite.id))
+        }
+      }
+    }
   }
 
   private func favoriteIcon(_ favorite: FavoriteTile, reduceTransparency: Bool) -> some View {

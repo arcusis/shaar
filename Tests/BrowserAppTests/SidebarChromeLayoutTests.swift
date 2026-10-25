@@ -31,6 +31,8 @@ struct SidebarFolderDraftTests {
 final class SidebarChromeLayoutTests: XCTestCase {
   private final class CaptureMeasurements {
     var footerFrame: CGRect?
+    var ordinaryRevealFrames = SidebarRevealFrames()
+    var spaceRevealFrames = SidebarRevealFrames()
   }
 
   private struct CaptureCase {
@@ -155,7 +157,165 @@ final class SidebarChromeLayoutTests: XCTestCase {
     try index.write(to: root.appending(path: "capture-index.json"), options: .atomic)
   }
 
-  private func makeStore(populated: Bool) throws -> BrowserStore {
+  func testProgrammaticSelectionRevealsLastOrdinaryTabAndCapturesBeforeAfter() async throws {
+    let store = try makeStore(populated: true, selectedLastOrdinaryTab: true)
+    let spaceID = store.session.selectedSpaceID
+    let lastTab = try XCTUnwrap(store.session.selectedSpace.tabs.last(where: { !$0.isPinned }))
+    let firstTab = try XCTUnwrap(store.session.selectedSpace.tabs.first(where: { !$0.isPinned }))
+    XCTAssertEqual(store.session.selectedSpace.selectedTabID, lastTab.id)
+    guard case .tab(let restoredTab) = store.session.selectedPage else {
+      return XCTFail("Expected restored ordinary tab selection")
+    }
+    XCTAssertEqual(restoredTab.id, lastTab.id)
+    let root = URL(fileURLWithPath: "/tmp/browser-sidebar-reveal", isDirectory: true)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    var captures: [[String: Any]] = []
+    let measurements = CaptureMeasurements()
+    let view = BrowserSidebar(store: store)
+      .frame(width: BrowserChromeLayout.sidebarWidth, height: 520)
+      .background(Color(nsColor: .windowBackgroundColor))
+      .environment(
+        \.browserChromeAccessibilityOverrides,
+        BrowserChromeAccessibilityOverrides(reduceMotion: true)
+      )
+      .onPreferenceChange(SidebarFooterBoundsPreferenceKey.self) {
+        measurements.footerFrame = $0
+      }
+      .onPreferenceChange(SidebarOrdinaryRevealFramesPreferenceKey.self) {
+        measurements.ordinaryRevealFrames = $0
+      }
+    let mounted = try MountedChromeSidebar(
+      view: view, size: NSSize(width: BrowserChromeLayout.sidebarWidth, height: 520),
+      appearance: .aqua)
+    defer { mounted.close() }
+    for (phase, tabID) in [("initial-restored-last", lastTab.id)] {
+      guard
+        await mounted.waitUntil({
+          isVisible(measurements.ordinaryRevealFrames, selectedID: tabID)
+        })
+      else {
+        XCTFail("Restored last ordinary tab not visible: \(measurements.ordinaryRevealFrames)")
+        return
+      }
+      let path = root.appending(path: "ordinary-\(phase).png")
+      try mounted.capture(to: path)
+      captures.append(["phase": phase, "path": path.path, "selectedTabID": tabID.uuidString])
+    }
+    store.perform(.tab(space: spaceID, tab: firstTab.id))
+    guard
+      await mounted.waitUntil({
+        isVisible(measurements.ordinaryRevealFrames, selectedID: firstTab.id)
+          && measurements.ordinaryRevealFrames.selected.minY < 100
+      })
+    else {
+      XCTFail("Programmatically selected first ordinary tab not visible")
+      return
+    }
+    let firstPath = root.appending(path: "ordinary-programmatic-first.png")
+    try mounted.capture(to: firstPath)
+    captures.append([
+      "phase": "programmatic-first", "path": firstPath.path,
+      "selectedTabID": firstTab.id.uuidString,
+    ])
+    store.perform(.tab(space: spaceID, tab: lastTab.id))
+    guard
+      await mounted.waitUntil({
+        isVisible(measurements.ordinaryRevealFrames, selectedID: lastTab.id)
+          && measurements.ordinaryRevealFrames.selected.minY > 0
+      })
+    else {
+      XCTFail("Programmatically selected last ordinary tab not visible")
+      return
+    }
+    let lastPath = root.appending(path: "ordinary-programmatic-last.png")
+    try mounted.capture(to: lastPath)
+    captures.append([
+      "phase": "programmatic-last", "path": lastPath.path,
+      "selectedTabID": lastTab.id.uuidString,
+    ])
+    let index = try JSONSerialization.data(
+      withJSONObject: captures, options: [.prettyPrinted, .sortedKeys])
+    try index.write(to: root.appending(path: "ordinary-capture-index.json"), options: .atomic)
+  }
+
+  func testSelectedLastSpaceRevealsOnRestoreAndProgrammaticChange() async throws {
+    let store = try makeSpaceStore(count: 20)
+    let lastSpace = try XCTUnwrap(store.session.spaces.last)
+    let firstSpace = try XCTUnwrap(store.session.spaces.first)
+    let root = URL(fileURLWithPath: "/tmp/browser-sidebar-reveal", isDirectory: true)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let measurements = CaptureMeasurements()
+    let view = BrowserSidebar(store: store)
+      .frame(width: BrowserChromeLayout.sidebarWidth, height: 520)
+      .background(Color(nsColor: .windowBackgroundColor))
+      .environment(
+        \.browserChromeAccessibilityOverrides,
+        BrowserChromeAccessibilityOverrides(reduceMotion: true)
+      )
+      .onPreferenceChange(SidebarSpaceRevealFramesPreferenceKey.self) {
+        measurements.spaceRevealFrames = $0
+      }
+    let mounted = try MountedChromeSidebar(
+      view: view, size: NSSize(width: BrowserChromeLayout.sidebarWidth, height: 520),
+      appearance: .aqua)
+    defer { mounted.close() }
+    guard
+      await mounted.waitUntil({
+        isVisible(measurements.spaceRevealFrames, selectedID: lastSpace.id)
+      })
+    else {
+      XCTFail("Restored last Space not visible: \(measurements.spaceRevealFrames)")
+      return
+    }
+    let initialPath = root.appending(path: "space-initial-restored-last.png")
+    try mounted.capture(to: initialPath)
+
+    store.perform(.space(firstSpace.id))
+    guard
+      await mounted.waitUntil({
+        isVisible(measurements.spaceRevealFrames, selectedID: firstSpace.id)
+          && measurements.spaceRevealFrames.selected.minX < 100
+      })
+    else {
+      XCTFail("Programmatically selected first Space not visible")
+      return
+    }
+    let firstPath = root.appending(path: "space-programmatic-first.png")
+    try mounted.capture(to: firstPath)
+
+    store.perform(.space(lastSpace.id))
+    guard
+      await mounted.waitUntil({
+        isVisible(measurements.spaceRevealFrames, selectedID: lastSpace.id)
+      })
+    else {
+      XCTFail("Programmatically selected last Space not visible")
+      return
+    }
+    let lastPath = root.appending(path: "space-programmatic-last.png")
+    try mounted.capture(to: lastPath)
+    let index: [[String: Any]] = [
+      [
+        "phase": "initial-restored-last", "path": initialPath.path,
+        "selectedSpaceID": lastSpace.id.uuidString, "spaceCount": 20,
+      ],
+      [
+        "phase": "programmatic-first", "path": firstPath.path,
+        "selectedSpaceID": firstSpace.id.uuidString, "spaceCount": 20,
+      ],
+      [
+        "phase": "programmatic-last", "path": lastPath.path,
+        "selectedSpaceID": lastSpace.id.uuidString, "spaceCount": 20,
+      ],
+    ]
+    let data = try JSONSerialization.data(
+      withJSONObject: index, options: [.prettyPrinted, .sortedKeys])
+    try data.write(to: root.appending(path: "space-capture-index.json"), options: .atomic)
+  }
+
+  private func makeStore(populated: Bool, selectedLastOrdinaryTab: Bool = false) throws
+    -> BrowserStore
+  {
     let profileID = stableID(10)
     let spaceID = stableID(20)
     let folderID = stableID(30)
@@ -201,8 +361,9 @@ final class SidebarChromeLayoutTests: XCTestCase {
     let space = BrowserSpace(
       id: spaceID, profileID: profileID,
       name: populated ? "Research Space" : "Personal", symbol: "house", tint: .lavender,
-      tabs: pinnedTabs + ordinaryTabs, selectedTabID: ordinaryTabs.first?.id,
-      selectedFavoriteID: favoritePages.first?.favoriteID,
+      tabs: pinnedTabs + ordinaryTabs,
+      selectedTabID: selectedLastOrdinaryTab ? ordinaryTabs.last?.id : ordinaryTabs.first?.id,
+      selectedFavoriteID: nil,
       folders: populated ? [BrowserFolder(id: folderID, name: "Research & planning")] : [])
     let session = try BrowserSession(
       profiles: [BrowserProfile(id: profileID, name: populated ? "Research Profile" : "Personal")],
@@ -212,6 +373,32 @@ final class SidebarChromeLayoutTests: XCTestCase {
 
   private func stableID(_ value: Int) -> UUID {
     UUID(uuidString: String(format: "30000000-0000-0000-0000-%012d", value))!
+  }
+
+  private func isVisible(_ frames: SidebarRevealFrames, selectedID: UUID) -> Bool {
+    guard frames.selectedID == selectedID, !frames.selected.isEmpty, !frames.viewport.isEmpty
+    else { return false }
+    let visible = frames.selected.intersection(frames.viewport)
+    return visible.width >= frames.selected.width - 0.5
+      && visible.height >= frames.selected.height - 0.5
+  }
+
+  private func makeSpaceStore(count: Int) throws -> BrowserStore {
+    let profileID = stableID(900)
+    let spaces = (0..<count).map { index in
+      BrowserSpace(
+        id: stableID(1_900 + index), profileID: profileID, name: "Space \(index + 1)",
+        symbol: "globe", tint: .ocean,
+        tabs: [
+          BrowserTab(
+            id: stableID(2_900 + index), url: URL(string: "https://space\(index).example")!)
+        ],
+        selectedTabID: stableID(2_900 + index))
+    }
+    let session = try BrowserSession(
+      profiles: [BrowserProfile(id: profileID, name: "Shared profile")], spaces: spaces,
+      selectedSpaceID: spaces.last!.id)
+    return BrowserStore(session: session)
   }
 
   private func captureView<V: View>(
@@ -225,6 +412,7 @@ final class SidebarChromeLayoutTests: XCTestCase {
     window.isReleasedWhenClosed = false
     window.appearance = NSAppearance(named: appearance)
     window.contentView = host
+    host.frame = NSRect(origin: .zero, size: size)
     defer { window.close() }
 
     try await Task.sleep(for: .milliseconds(100))
@@ -239,4 +427,40 @@ final class SidebarChromeLayoutTests: XCTestCase {
     XCTAssertNotNil(measurements.footerFrame)
     return (bitmap.pixelsWide, bitmap.pixelsHigh)
   }
+}
+
+@MainActor
+private final class MountedChromeSidebar {
+  private let host: NSHostingView<AnyView>
+  private let window: NSWindow
+
+  init<V: View>(view: V, size: NSSize, appearance: NSAppearance.Name) throws {
+    host = NSHostingView(rootView: AnyView(view))
+    window = NSWindow(
+      contentRect: NSRect(origin: .zero, size: size), styleMask: .borderless, backing: .buffered,
+      defer: false)
+    window.isReleasedWhenClosed = false
+    window.appearance = NSAppearance(named: appearance)
+    window.contentView = host
+  }
+
+  func waitUntil(_ condition: () -> Bool) async -> Bool {
+    let deadline = Date(timeIntervalSinceNow: 1)
+    while Date() < deadline {
+      host.layoutSubtreeIfNeeded()
+      if condition() { return true }
+      try? await Task.sleep(for: .milliseconds(10))
+    }
+    return false
+  }
+
+  func capture(to url: URL) throws {
+    host.layoutSubtreeIfNeeded()
+    let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+    host.cacheDisplay(in: host.bounds, to: bitmap)
+    try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(
+      to: url, options: .atomic)
+  }
+
+  func close() { window.close() }
 }

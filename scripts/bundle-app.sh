@@ -47,6 +47,7 @@ cp "$binary_dir/ArcusisBrowser" "$app/Contents/MacOS/ArcusisBrowser"
 mkdir -p "$app/Contents/Resources/ArdiaCore"
 cp ThirdParty/ArdiaCore/LICENSE ThirdParty/ArdiaCore/NOTICE ThirdParty/ArdiaCore/pin.json \
   "$app/Contents/Resources/ArdiaCore/"
+cp Resources/Branding/Arcusis.icns "$app/Contents/Resources/Arcusis.icns"
 if $with_engine; then
   framework=$(bash scripts/fetch-engine.sh)
   mkdir -p "$app/Contents/Frameworks"
@@ -71,6 +72,7 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
   <key>CFBundleIdentifier</key><string>com.arcusis.browser</string>
   <key>CFBundleName</key><string>Arcusis Browser</string>
   <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleIconFile</key><string>Arcusis.icns</string>
   <key>CFBundleShortVersionString</key><string>0.1.0</string>
   <key>CFBundleVersion</key><string>1</string>
   <key>LSMinimumSystemVersion</key><string>26.0</string>

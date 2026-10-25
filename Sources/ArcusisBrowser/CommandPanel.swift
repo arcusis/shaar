@@ -3,6 +3,7 @@ import SwiftUI
 
 struct CommandPanel: View {
   @Bindable var store: BrowserStore
+  let resultsHeight: CGFloat
   @FocusState private var searchIsFocused: Bool
 
   var body: some View {
@@ -69,7 +70,7 @@ struct CommandPanel: View {
           }
           .padding(8)
         }
-        .frame(height: min(max(CGFloat(results.count) * 59 + 16, 76), 330))
+        .frame(height: resultsHeight)
         .onChange(of: store.commandSelection) { _, index in
           guard results.indices.contains(index) else { return }
           proxy.scrollTo(results[index].id)
@@ -86,7 +87,6 @@ struct CommandPanel: View {
       .padding(.horizontal, 16)
       .padding(.vertical, 11)
     }
-    .frame(width: 580)
     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 17))
     .overlay(RoundedRectangle(cornerRadius: 17).strokeBorder(.white.opacity(0.5)))
     .shadow(color: .black.opacity(0.18), radius: 30, y: 16)

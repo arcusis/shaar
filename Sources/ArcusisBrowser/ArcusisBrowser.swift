@@ -16,6 +16,7 @@ enum ArcusisBrowserMain {
         try renderPreview(
           to: URL(filePath: arguments[index + 1]), showCommand: arguments.contains("--command"),
           compact: arguments.contains("--compact"),
+          hideSidebar: arguments.contains("--hide-sidebar"),
           showSpaceEditor: arguments.contains("--space-editor"),
           showExtensionConsent: arguments.contains("--extension-consent"))
       } catch {
@@ -34,7 +35,8 @@ enum ArcusisBrowserMain {
   }
 
   @MainActor private static func renderPreview(
-    to url: URL, showCommand: Bool, compact: Bool, showSpaceEditor: Bool, showExtensionConsent: Bool
+    to url: URL, showCommand: Bool, compact: Bool, hideSidebar: Bool, showSpaceEditor: Bool,
+    showExtensionConsent: Bool
   ) throws {
     // Render only this view hierarchy; never capture or activate the desktop.
     let application = NSApplication.shared
@@ -45,8 +47,10 @@ enum ArcusisBrowserMain {
       : showSpaceEditor
         ? NSSize(width: 496, height: 430)
         : compact ? NSSize(width: 760, height: 520) : NSSize(width: 1200, height: 780)
+    let store = BrowserStore.preview(showCommand: showCommand)
+    store.sidebarIsVisible = !hideSidebar
     let view = NativePreview(
-      store: .preview(showCommand: showCommand), showSpaceEditor: showSpaceEditor,
+      store: store, showSpaceEditor: showSpaceEditor,
       showExtensionConsent: showExtensionConsent
     )
     .frame(width: size.width, height: size.height)

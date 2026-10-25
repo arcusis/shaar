@@ -180,15 +180,26 @@ final class NativeHostProbe {
         host.contexts[secondID]!.store.session.spaces.flatMap(\.tabs).isEmpty,
         "native New window menu creates a managed window without copying ordinary live pages")
       focus(secondID)
-      host.contexts[secondID]!.store.perform(
-        .open(fixture.appending(path: "host-second-temporary")))
-      let temporary = host.contexts[secondID]!.store.session.selectedSpace.selectedTabID!
+      let secondStore = host.contexts[secondID]!.store
+      secondStore.perform(.open(fixture.appending(path: "host-second-temporary")))
+      let temporary = secondStore.session.selectedSpace.selectedTabID!
       staleTabID = temporary
       _ = try await document(temporary)
+      let temporaryProfileID = secondStore.session.selectedSpace.profileID
+      let wrongProfileID = secondStore.session.profiles.first { $0.id != temporaryProfileID }!.id
+      try await verifyNativeNavigation(
+        tabID: temporary, store: secondStore, profileID: temporaryProfileID,
+        wrongProfileID: wrongProfileID, windowID: secondID.uuidString,
+        wrongWindowID: firstID.uuidString)
       try send(.closeTab)
       try await wait("host close-tab recovery") {
         host.contexts[secondID]?.store.session.closedTabs.contains { $0.id == temporary } == true
       }
+      try expect(
+        !primary.runtime.navigateTabID(
+          temporary.uuidString, profileID: temporaryProfileID.uuidString,
+          windowID: secondID.uuidString, url: fixture.absoluteString),
+        "native navigation rejects a closed tab identity")
       try expect(
         !initial.store.session.closedTabs.contains { $0.id == temporary },
         "native menu closure records recovery only in its focused managed window")
@@ -1035,6 +1046,76 @@ final class NativeHostProbe {
     throw HostProbeFailure("Native host fixture document not ready.")
   }
 
+  private func verifyNativeNavigation(
+    tabID: UUID, store: BrowserStore, profileID: UUID, wrongProfileID: UUID,
+    windowID: String, wrongWindowID: String
+  ) async throws {
+    let runtime = primary.runtime
+    let tabIdentity = tabID.uuidString
+    let profileIdentity = profileID.uuidString
+    let nativeTabID = runtime.nativeTabID(forID: tabIdentity)
+    let destination = fixture.appending(path: "host-second-navigation-target")
+    try expect(
+      runtime.navigateTabID(
+        tabIdentity, profileID: profileIdentity, windowID: windowID,
+        url: destination.absoluteString),
+      "native navigation accepts an owned HTTP URL")
+
+    let rejectedOwners =
+      !runtime.navigateTabID(
+        tabIdentity, profileID: wrongProfileID.uuidString, windowID: windowID,
+        url: destination.absoluteString)
+      && !runtime.navigateTabID(
+        tabIdentity, profileID: profileIdentity, windowID: wrongWindowID,
+        url: destination.absoluteString)
+    let rejectedURLs = [
+      "javascript:location.href='about:blank'", "file:///etc/passwd", "mailto:test@example.invalid",
+      "chrome://version", "about:blank#other", "https://", "http://127.0.0.1:99999/", "",
+    ].allSatisfy {
+      !runtime.navigateTabID(
+        tabIdentity, profileID: profileIdentity, windowID: windowID, url: $0)
+    }
+    try expect(rejectedOwners, "native navigation rejects wrong profile and window owners")
+    try expect(rejectedURLs, "native navigation rejects unsupported and invalid URLs")
+    try await waitForLocation(destination.absoluteString, tabID: tabID)
+    _ = try await document(tabID)
+
+    let acceptedBlank = runtime.navigateTabID(
+      tabIdentity, profileID: profileIdentity, windowID: windowID, url: "about:blank")
+    try expect(acceptedBlank, "native navigation accepts exact about:blank")
+    try await waitForLocation("about:blank", tabID: tabID)
+    let restoredFixture = runtime.navigateTabID(
+      tabIdentity, profileID: profileIdentity, windowID: windowID,
+      url: destination.absoluteString)
+    try expect(restoredFixture, "native navigation accepts fixture URL after about:blank")
+    try await waitForLocation(destination.absoluteString, tabID: tabID)
+    _ = try await document(tabID)
+    try expect(
+      runtime.nativeTabID(forID: tabIdentity) == nativeTabID
+        && runtime.windowID(forTabID: tabIdentity) == windowID
+        && store.session.selectedSpace.selectedTabID == tabID
+        && store.session.selectedSpace.profileID == profileID,
+      "native navigation preserves tab, profile, and window identity")
+  }
+
+  private func waitForLocation(_ expected: String, tabID: UUID) async throws {
+    for _ in 0..<100 {
+      let json: String? = await withCheckedContinuation { continuation in
+        primary.runtime.evaluate(inTabID: tabID.uuidString, script: "({href:location.href})") {
+          continuation.resume(returning: $0)
+        }
+      }
+      if let data = json?.data(using: .utf8),
+        let value = try? JSONSerialization.jsonObject(with: data) as? [String: String],
+        value["href"] == expected
+      {
+        return
+      }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    throw HostProbeFailure("Native navigation did not commit the expected fixture URL.")
+  }
+
   private func verifyNativeFavicon(
     tabID: UUID, profileID: UUID, windowID: String, wrongWindowID: String, staleTabID: UUID
   ) async throws {
@@ -1048,9 +1129,8 @@ final class NativeHostProbe {
     }
     defer { runtime.onTabChanged = previous }
 
-    let expectedRGB: [Double] =
-      phase == "initial"
-      ? [52, 86, 120].map { Double($0) / 255 } : [138, 75, 18].map { Double($0) / 255 }
+    let expectedBytes = phase == "initial" ? [52.0, 86.0, 120.0] : [138.0, 75.0, 18.0]
+    let expectedRGB = expectedBytes.map { $0 / 255 }
     let expected = NSColor(
       deviceRed: expectedRGB[0], green: expectedRGB[1], blue: expectedRGB[2], alpha: 1)
     var faviconComponents = URLComponents(url: fixture, resolvingAgainstBaseURL: false)!
@@ -1112,8 +1192,8 @@ final class NativeHostProbe {
     let centerRGB = center.map { [$0.redComponent, $0.greenComponent, $0.blueComponent] }
     let ownerRoute =
       routedClient?.windowID == windowID
-      && primary.events.router.client(forTab: tabID.uuidString, nativeWindowID: wrongWindowID)
-        == nil
+      && primary.events.router.client(
+        forTab: tabID.uuidString, nativeWindowID: wrongWindowID) == nil
     faviconProof = [
       "phase": phase,
       "route": faviconURL,

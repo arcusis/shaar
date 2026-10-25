@@ -20,13 +20,7 @@ struct BrowserWindow: View {
 
   var body: some View {
     ZStack(alignment: .top) {
-      LinearGradient(
-        colors: [
-          store.session.selectedSpace.themeColor.opacity(0.50),
-          Color(nsColor: .windowBackgroundColor),
-        ],
-        startPoint: .topLeading, endPoint: .bottomTrailing
-      )
+      Color(nsColor: .windowBackgroundColor)
       HStack(spacing: 0) {
         if store.sidebarIsVisible {
           BrowserSidebar(store: store)
@@ -66,6 +60,27 @@ struct BrowserWindow: View {
           .position(x: frame.midX, y: frame.midY)
         }
         .transition(.opacity.combined(with: .scale(scale: 0.98)))
+      }
+      if store.libraryDrawerSection != nil, store.canUseLibraryDrawer {
+        GeometryReader { geometry in
+          let leading: CGFloat = 10
+          let availableWidth = max(0, geometry.size.width - leading - 20)
+          let isSpaces = store.libraryDrawerSection == .spaces
+          let width = isSpaces ? availableWidth : min(480, availableWidth)
+          let height = max(0, geometry.size.height - 32)
+          ZStack(alignment: .bottomLeading) {
+            Color.clear
+              .contentShape(Rectangle())
+              .onTapGesture { dismissLibraryDrawerAndFocusPage() }
+            BrowserLibraryDrawer(store: store)
+              .frame(width: width, height: height)
+              .padding(.leading, leading)
+              .padding(.bottom, 20)
+          }
+          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+        }
+        .transition(.opacity)
+        .zIndex(2)
       }
     }
     .coordinateSpace(name: "browser-window")
@@ -107,6 +122,9 @@ struct BrowserWindow: View {
     .onChange(of: store.pageFind?.id) { _, newValue in
       if newValue != nil { store.engine?.extensionPanel = nil }
     }
+    .onExitCommand {
+      if store.libraryDrawerSection != nil { dismissLibraryDrawerAndFocusPage() }
+    }
   }
 
   private var page: some View {
@@ -131,7 +149,7 @@ struct BrowserWindow: View {
           VStack(spacing: 18) {
             Image(systemName: store.session.selectedSpace.symbol)
               .font(.system(size: 32, weight: .light))
-              .foregroundStyle(store.session.selectedSpace.themeColor)
+              .foregroundStyle(.secondary)
             Text(store.session.selectedSpace.name)
               .font(.system(size: 30, weight: .medium, design: .rounded))
             Text(
@@ -189,6 +207,15 @@ struct BrowserWindow: View {
     .clipShape(RoundedRectangle(cornerRadius: 13))
     .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(.black.opacity(0.07)))
     .shadow(color: .black.opacity(0.08), radius: 8, y: 3)
+  }
+
+  private func dismissLibraryDrawerAndFocusPage() {
+    store.closeLibraryDrawer()
+    if let engine = store.engine, let id = store.session.selectedPage?.tab.id {
+      engine.runtime.focusTabID(id.uuidString)
+    } else {
+      pageIsFocused = true
+    }
   }
 
 }

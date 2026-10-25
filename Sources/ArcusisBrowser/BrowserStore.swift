@@ -280,6 +280,13 @@ final class BrowserStore {
     case .open(let url): session.open(url)
     case .space(let id): session.selectSpace(id)
     case .folder(let space, let folder): session.selectFolder(folder, in: space)
+    case .favorite(let profile, let id):
+      guard commandIsOpen, sheet == nil, session.selectedSpace.profileID == profile,
+        session.favorites.contains(where: { $0.id == id && $0.profileID == profile })
+      else { return }
+      dismissCommand()
+      _ = selectFavorite(id)
+      return
     case .tab(let space, let tab):
       if session.spaces.first(where: { $0.id == space })?.tabs.contains(where: { $0.id == tab })
         == true

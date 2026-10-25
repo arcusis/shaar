@@ -183,6 +183,7 @@ struct BrowserWindow: View {
         }
       }
       .focusable()
+      .focusEffectDisabled()
       .focused($pageIsFocused)
       .background {
         GeometryReader { geometry in

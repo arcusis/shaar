@@ -345,61 +345,7 @@ struct BrowserSidebar: View {
       ScrollView(.horizontal) {
         HStack(spacing: 6) {
           ForEach(store.session.spaces) { space in
-            Button {
-              store.perform(.space(space.id))
-            } label: {
-              Image(systemName: space.symbol)
-                .font(.system(size: 14))
-                .frame(width: 32, height: 30)
-                .background(
-                  .white.opacity(space.id == store.session.selectedSpaceID ? 0.5 : 0),
-                  in: RoundedRectangle(cornerRadius: 8)
-                )
-            }
-            .help(space.name)
-            .accessibilityLabel("Switch to \(space.name)")
-            .accessibilityAddTraits(
-              space.id == store.session.selectedSpaceID ? .isSelected : []
-            )
-            .id(space.id)
-            .background {
-              if space.id == store.session.selectedSpaceID {
-                GeometryReader { geometry in
-                  Color.clear.preference(
-                    key: SidebarSpaceRevealFramesPreferenceKey.self,
-                    value: SidebarRevealFrames(
-                      selected: geometry.frame(in: .named("sidebarSpaceViewport")),
-                      selectedID: space.id))
-                }
-              }
-            }
-            .draggable(SidebarTransfer.space(sessionID: store.dragSessionID, spaceID: space.id))
-            .dropDestination(for: SidebarTransfer.self) { items, point in
-              guard items.count == 1, let item = items.first else { return false }
-              let spaces = store.session.spaces
-              let index = spaces.firstIndex { $0.id == space.id }
-              let next = index.flatMap {
-                spaces.indices.contains($0 + 1) ? spaces[$0 + 1].id : nil
-              }
-              return store.acceptSidebarDrop(
-                item, into: space.id,
-                beforeSpace: point.x < 16 ? space.id : next)
-            } isTargeted: { targeted in
-              targetedSpace =
-                targeted ? space.id : targetedSpace == space.id ? nil : targetedSpace
-            }
-            .overlay(
-              RoundedRectangle(cornerRadius: 8).strokeBorder(
-                targetedSpace == space.id ? Color.accentColor : .clear, lineWidth: 2)
-            )
-            .contextMenu {
-              Button("Edit space…") { store.spaceEditor = .edit(space.id) }
-              Divider()
-              Button("Move left") { shiftSpace(space.id, by: -1) }
-                .disabled(store.session.spaces.first?.id == space.id)
-              Button("Move right") { shiftSpace(space.id, by: 1) }
-                .disabled(store.session.spaces.last?.id == space.id)
-            }
+            spaceSelector(space)
           }
         }
       }
@@ -418,6 +364,64 @@ struct BrowserSidebar: View {
       .onChange(of: store.session.selectedSpaceID) { _, id in
         scheduleSpaceReveal(spaceScroll, id: id)
       }
+    }
+  }
+
+  private func spaceSelector(_ space: BrowserSpace) -> some View {
+    Button {
+      store.perform(.space(space.id))
+    } label: {
+      Image(systemName: space.symbol)
+        .font(.system(size: 14))
+        .frame(width: 32, height: 30)
+        .background(
+          .white.opacity(space.id == store.session.selectedSpaceID ? 0.5 : 0),
+          in: RoundedRectangle(cornerRadius: 8)
+        )
+    }
+    .help(space.name)
+    .accessibilityLabel("Switch to \(space.name)")
+    .accessibilityAddTraits(
+      space.id == store.session.selectedSpaceID ? .isSelected : []
+    )
+    .id(space.id)
+    .background {
+      if space.id == store.session.selectedSpaceID {
+        GeometryReader { geometry in
+          Color.clear.preference(
+            key: SidebarSpaceRevealFramesPreferenceKey.self,
+            value: SidebarRevealFrames(
+              selected: geometry.frame(in: .named("sidebarSpaceViewport")),
+              selectedID: space.id))
+        }
+      }
+    }
+    .draggable(SidebarTransfer.space(sessionID: store.dragSessionID, spaceID: space.id))
+    .dropDestination(for: SidebarTransfer.self) { items, point in
+      guard items.count == 1, let item = items.first else { return false }
+      let spaces = store.session.spaces
+      let index = spaces.firstIndex { $0.id == space.id }
+      let next = index.flatMap {
+        spaces.indices.contains($0 + 1) ? spaces[$0 + 1].id : nil
+      }
+      return store.acceptSidebarDrop(
+        item, into: space.id,
+        beforeSpace: point.x < 16 ? space.id : next)
+    } isTargeted: { targeted in
+      targetedSpace =
+        targeted ? space.id : targetedSpace == space.id ? nil : targetedSpace
+    }
+    .overlay(
+      RoundedRectangle(cornerRadius: 8).strokeBorder(
+        targetedSpace == space.id ? Color.accentColor : .clear, lineWidth: 2)
+    )
+    .contextMenu {
+      Button("Edit space…") { store.spaceEditor = .edit(space.id) }
+      Divider()
+      Button("Move left") { shiftSpace(space.id, by: -1) }
+        .disabled(store.session.spaces.first?.id == space.id)
+      Button("Move right") { shiftSpace(space.id, by: 1) }
+        .disabled(store.session.spaces.last?.id == space.id)
     }
   }
 

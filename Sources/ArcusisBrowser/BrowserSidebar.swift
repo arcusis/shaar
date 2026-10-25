@@ -20,6 +20,7 @@ struct BrowserSidebar: View {
   }
 
   var body: some View {
+    let tabIndex = SidebarTabIndex(tabs: store.session.selectedSpace.tabs)
     VStack(alignment: .leading, spacing: 20) {
       WindowDragRegion()
         .frame(height: 22)
@@ -113,7 +114,8 @@ struct BrowserSidebar: View {
           ForEach(store.session.selectedSpace.pinnedItems()) { item in
             switch item {
             case .folder(let folder, let depth): folderRow(folder, depth: depth)
-            case .tab(let tab, let depth): tabRow(tab).padding(.leading, indentation(depth))
+            case .tab(let tab, let depth):
+              tabRow(tab, index: tabIndex).padding(.leading, indentation(depth))
             }
           }
           if store.session.selectedSpace.tabs.contains(where: \.isPinned)
@@ -135,7 +137,9 @@ struct BrowserSidebar: View {
             Button("Recently closed…") { store.showRecentlyClosed() }
           }
           sectionDropTarget("Tabs", pinned: false)
-          ForEach(store.session.selectedSpace.tabs.filter { !$0.isPinned }) { tab in tabRow(tab) }
+          ForEach(store.session.selectedSpace.tabs.filter { !$0.isPinned }) { tab in
+            tabRow(tab, index: tabIndex)
+          }
           sectionDropTarget("Move to end", pinned: false, isFooter: true)
         }
       }
@@ -298,9 +302,9 @@ struct BrowserSidebar: View {
     }
   }
 
-  private func tabRow(_ tab: BrowserTab) -> some View {
+  private func tabRow(_ tab: BrowserTab, index: SidebarTabIndex) -> some View {
     let space = store.session.selectedSpace
-    let group = space.tabs.filter { $0.isPinned == tab.isPinned && $0.folderID == tab.folderID }
+    let boundary = index.boundary(for: tab.id)
     return HStack(spacing: 8) {
       Button {
         store.perform(.tab(space: space.id, tab: tab.id))
@@ -341,8 +345,8 @@ struct BrowserSidebar: View {
     }
     .contextMenu {
       Button(tab.isPinned ? "Unpin tab" : "Pin tab") { store.togglePin(tab.id) }
-      Button("Move up") { shiftTab(tab, in: space, by: -1) }.disabled(group.first?.id == tab.id)
-      Button("Move down") { shiftTab(tab, in: space, by: 1) }.disabled(group.last?.id == tab.id)
+      Button("Move up") { shiftTab(tab, in: space, by: -1) }.disabled(boundary.isFirst)
+      Button("Move down") { shiftTab(tab, in: space, by: 1) }.disabled(boundary.isLast)
       Menu("Move to Folder") {
         ForEach(space.folders) { folder in
           Button(folderLabel(folder.id, in: space)) {

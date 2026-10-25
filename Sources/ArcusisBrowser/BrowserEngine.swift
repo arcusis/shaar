@@ -55,6 +55,7 @@ final class BrowserEngine {
   @ObservationIgnored private var lastSpaceID: UUID?
   @ObservationIgnored private var lastTabID: UUID?
   @ObservationIgnored private var lastTabOrders: [UUID: [NativeTabPlacement]] = [:]
+  private(set) var favicons: [UUID: NSImage] = [:]
 
   init(
     events: BrowserRuntimeEvents, windowID: String? = nil, store: BrowserStore,
@@ -75,6 +76,19 @@ final class BrowserEngine {
     store.onReloadPage = { [weak self] tab, profile in
       self?.runtime.reloadTabID(tab.uuidString, profileID: profile.uuidString) ?? false
     }
+    store.onNavigatePage = { [weak self] tab, profile, url in
+      guard let self, !self.isClosed, let store = self.store,
+        self.liveTabs.contains(tab),
+        self.runtime.windowID(forTabID: tab.uuidString) == self.windowID,
+        store.session.profileID(forTabID: tab) == profile,
+        store.session.favoritePages.contains(where: { $0.tab.id == tab }),
+        self.events.router.client(forTab: tab.uuidString, nativeWindowID: self.windowID)
+          === self.callbacks
+      else { return false }
+      return self.runtime.navigateTabID(
+        tab.uuidString, profileID: profile.uuidString, windowID: self.windowID,
+        url: url.absoluteString)
+    }
     callbacks.onWindowClosed = { [weak self] quitting in
       guard let self else { return }
       for request in self.store?.externalAppRequests ?? [] {
@@ -86,6 +100,7 @@ final class BrowserEngine {
       self.liveTabs.removeAll()
       self.pages.removeAll()
       self.mediaAccess.removeAll()
+      self.favicons.removeAll()
       self.onClosed?(quitting)
     }
     callbacks.onRendererGone = { [weak self] identity, owner, status, code in
@@ -277,7 +292,23 @@ final class BrowserEngine {
       }
       self.pages[id] = PageState(loading: loading, canGoBack: back, canGoForward: forward)
       self.store?.nativePageLoading(id, loading: loading)
-      if let url = URL(string: address) { self.store?.nativeTabChanged(id, url: url, title: title) }
+      if let url = URL(string: address) {
+        if let profile = self.store?.session.profileID(forTabID: id),
+          self.store?.session.favoritePages.contains(where: { $0.tab.id == id }) == true
+        {
+          self.store?.nativeFavoritePageChanged(id, profileID: profile, url: url, title: title)
+        } else {
+          self.store?.nativeTabChanged(id, url: url, title: title)
+        }
+      }
+      if let profile = self.store?.session.profileID(forTabID: id),
+        let icon = self.runtime.favicon(
+          forTabID: identity, profileID: profile.uuidString, windowID: self.windowID)
+      {
+        self.favicons[id] = icon
+      } else {
+        self.favicons[id] = nil
+      }
     }
     callbacks.onTabClosed = { [weak self] identity in
       guard let self, let id = UUID(uuidString: identity),
@@ -286,16 +317,22 @@ final class BrowserEngine {
       self.liveTabs.remove(id)
       self.pages[id] = nil
       self.mediaAccess[id] = nil
+      self.favicons[id] = nil
       self.store?.nativeTabClosed(id)
     }
     callbacks.onTabActivated = { [weak self] identity, owner in
       guard let self, !self.isClosed, !self.receivingNativeSelection, !self.reconciling,
         self.runtime.windowID(forTabID: identity) == self.windowID,
         let id = UUID(uuidString: identity), self.liveTabs.contains(id),
-        let profile = UUID(uuidString: owner)
+        let profile = UUID(uuidString: owner),
+        self.store?.session.profileID(forTabID: id) == profile
       else { return }
       self.receivingNativeSelection = true
-      self.store?.nativeTabActivated(id, profileID: profile)
+      if self.store?.session.favoritePages.contains(where: { $0.tab.id == id }) == true {
+        _ = self.store?.nativeFavoriteActivated(id, profileID: profile)
+      } else {
+        _ = self.store?.nativeTabActivated(id, profileID: profile)
+      }
       self.receivingNativeSelection = false
       // Chromium is still notifying its tab strip. The model is current before
       // other saves can run, but opening/reordering tabs must wait until it unwinds.
@@ -324,12 +361,13 @@ final class BrowserEngine {
     reconciling = true
     defer { reconciling = false }
     let session = store.session
-    if lastSpaceID != session.selectedSpaceID || lastTabID != session.selectedSpace.selectedTabID {
+    if lastSpaceID != session.selectedSpaceID || lastTabID != session.selectedPage?.tab.id {
       extensionPanel = nil
       lastSpaceID = session.selectedSpaceID
-      lastTabID = session.selectedSpace.selectedTabID
+      lastTabID = session.selectedPage?.tab.id
     }
-    let wantedTabs = Set(session.spaces.flatMap { $0.tabs.map(\.id) })
+    let wantedTabs = Set(
+      session.spaces.flatMap { $0.tabs.map(\.id) } + session.favoritePages.map { $0.tab.id })
     for removed in liveTabs.subtracting(wantedTabs) {
       // Ordinary tab close waits for Chromium's beforeunload decision. This path
       // handles confirmed space removal; profile files are deliberately retained.
@@ -338,6 +376,7 @@ final class BrowserEngine {
       liveTabs.remove(removed)
       pages[removed] = nil
       mediaAccess[removed] = nil
+      favicons[removed] = nil
     }
     for profile in Set(session.spaces.map(\.profileID)) {
       guard !loadedProfiles.contains(profile), !loadingProfiles.contains(profile),
@@ -373,7 +412,7 @@ final class BrowserEngine {
     for space in session.spaces where loadedProfiles.contains(space.profileID) {
       for tab in space.tabs where !failedTabs.contains(tab.id) {
         let decision = TabMaterializationPolicy.decision(
-          isSelected: space.id == session.selectedSpaceID && space.selectedTabID == tab.id,
+          isSelected: space.id == session.selectedSpaceID && session.selectedPage?.tab.id == tab.id,
           isLive: liveTabs.contains(tab.id), lazy: lazyPinnedTabs)
         guard decision == .materialize else { continue }
         guard events.router.bindTab(tab.id.uuidString, windowID: windowID) else {
@@ -394,10 +433,43 @@ final class BrowserEngine {
         }
       }
     }
+    let favoritePages = Dictionary(
+      uniqueKeysWithValues: session.favoritePages.map { ($0.favoriteID, $0) })
+    for favorite in session.favorites where loadedProfiles.contains(favorite.profileID) {
+      guard let page = favoritePages[favorite.id], !failedTabs.contains(page.tab.id) else {
+        continue
+      }
+      let decision = TabMaterializationPolicy.decision(
+        isSelected: session.selectedSpace.selectedFavoriteID == favorite.id,
+        isLive: liveTabs.contains(page.tab.id), lazy: lazyPinnedTabs)
+      guard decision == .materialize else { continue }
+      guard events.router.bindTab(page.tab.id.uuidString, windowID: windowID) else {
+        failedTabs.insert(page.tab.id)
+        notice = "A saved Favorite page already belongs to another window."
+        continue
+      }
+      liveTabs.insert(page.tab.id)
+      do {
+        try runtime.openTabID(
+          page.tab.id.uuidString, profileID: favorite.profileID.uuidString, windowID: windowID,
+          url: page.tab.url.absoluteString)
+      } catch {
+        events.router.forgetTab(page.tab.id.uuidString, windowID: windowID)
+        liveTabs.remove(page.tab.id)
+        failedTabs.insert(page.tab.id)
+        notice = error.localizedDescription
+      }
+    }
     for profile in loadedProfiles {
       let tabs = session.spaces.filter { $0.profileID == profile }.flatMap(\.orderedTabs)
         .filter { liveTabs.contains($0.id) }
-      let ordered = tabs.filter(\.isPinned) + tabs.filter { !$0.isPinned }
+      let favoriteTabs = session.favorites.compactMap { favorite -> BrowserTab? in
+        guard favorite.profileID == profile, let page = favoritePages[favorite.id],
+          liveTabs.contains(page.tab.id)
+        else { return nil }
+        return page.tab
+      }
+      let ordered = tabs.filter(\.isPinned) + tabs.filter { !$0.isPinned } + favoriteTabs
       let positions = ordered.map { NativeTabPlacement(id: $0.id, pinned: $0.isPinned) }
       if lastTabOrders[profile] != positions,
         runtime.placeTabIDs(
@@ -409,7 +481,7 @@ final class BrowserEngine {
       }
     }
     runtime.activateProfileID(session.selectedSpace.profileID.uuidString, windowID: windowID)
-    if let selected = session.selectedSpace.selectedTabID {
+    if let selected = session.selectedPage?.tab.id {
       runtime.activateTabID(selected.uuidString)
     } else {
       runtime.clearActiveTab(inWindowID: windowID)
@@ -458,11 +530,11 @@ final class BrowserEngine {
     refreshExtensions()
     extensionPanel = .list(
       profileID: store.session.selectedSpace.profileID,
-      tabID: store.session.selectedSpace.selectedTabID)
+      tabID: store.session.selectedPage?.tab.id)
   }
 
   func executeExtension(_ id: String) {
-    guard let tab = store?.session.selectedSpace.selectedTabID else { return }
+    guard let tab = store?.session.selectedPage?.tab.id else { return }
     extensionPanel = nil
     do { try runtime.executeExtensionID(id, tabID: tab.uuidString) } catch {
       notice = error.localizedDescription
@@ -476,7 +548,7 @@ final class BrowserEngine {
       let tab = (payload["tabID"] as? String).flatMap(UUID.init(uuidString:)),
       let extensionID = payload["extensionID"] as? String, BrowserExtension.isValidID(extensionID),
       profile == store.session.selectedSpace.profileID,
-      tab == store.session.selectedSpace.selectedTabID
+      tab == store.session.selectedPage?.tab.id
     else {
       if let owner = payload["windowID"] as? String {
         runtime.closeExtensionPopup(forWindowID: owner)

@@ -11,11 +11,13 @@ import os
 from pathlib import Path
 import signal
 import shutil
+import struct
 import subprocess
 import tempfile
 import threading
 import time
 import uuid
+import zlib
 from urllib.parse import urlparse
 
 
@@ -305,6 +307,28 @@ def stop_probe(process):
 class Fixture(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
+        favicon_colors = {
+            '/favicon-initial.png': (52, 86, 120),
+            '/favicon-restart.png': (138, 75, 18),
+        }
+        if path in favicon_colors:
+            red, green, blue = favicon_colors[path]
+            rows = b''.join(b'\0' + bytes((red, green, blue)) * 64 for _ in range(48))
+
+            def chunk(kind, data):
+                return (struct.pack('!I', len(data)) + kind + data
+                        + struct.pack('!I', zlib.crc32(kind + data) & 0xffffffff))
+
+            body = (b'\x89PNG\r\n\x1a\n'
+                    + chunk(b'IHDR', struct.pack('!IIBBBBB', 64, 48, 8, 2, 0, 0, 0))
+                    + chunk(b'IDAT', zlib.compress(rows)) + chunk(b'IEND', b''))
+            self.send_response(200)
+            self.send_header('Content-Type', 'image/png')
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if path.startswith('/download/'):
             self.download(path.rsplit('/', 1)[-1])
             return
@@ -319,7 +343,7 @@ class Fixture(http.server.BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
-        self.send_header("Content-Security-Policy", "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'")
+        self.send_header("Content-Security-Policy", "default-src 'none'; img-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)

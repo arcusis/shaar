@@ -207,7 +207,7 @@ struct LibraryPanel: View {
   }
 
   private func add(folder: Bool, parent: UUID? = nil) {
-    let tab = store.session.selectedSpace.selectedTab
+    let tab = store.session.selectedPage?.tab
     let mode: BookmarkEditorMode =
       folder
       ? .newFolder(parent: parent)

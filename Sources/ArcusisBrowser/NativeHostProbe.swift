@@ -19,6 +19,7 @@ private struct HostProbeIdentity: Codable {
   let firstTab: UUID
   let secondTab: UUID
   let ordinarilyClosed: [UUID]
+  var staleTab: UUID? = nil
   var engineWindow: UUID? = nil
   var engineTab: UUID? = nil
   var restorationSelections: [UUID: HostProbeSelection]? = nil
@@ -108,6 +109,7 @@ final class NativeHostProbe {
   private var focused: NSWindow?
   private var closures: [UUID: Bool] = [:]
   private var checks: [String] = []
+  private var faviconProof: [String: Any]?
   private var expectedAfterQuit: BrowserWorkspace?
 
   init(primary: BrowserEngine, store: BrowserStore, root: URL, fixture: URL, phase: String) throws {
@@ -164,6 +166,7 @@ final class NativeHostProbe {
     var firstID: UUID
     var secondID: UUID
     var closedIDs: [UUID] = []
+    var staleTabID: UUID?
     var authoredProfile: HostProbeProfile?
     var renamedProfile: HostProbeProfile?
     if phase == "initial" {
@@ -177,14 +180,26 @@ final class NativeHostProbe {
         host.contexts[secondID]!.store.session.spaces.flatMap(\.tabs).isEmpty,
         "native New window menu creates a managed window without copying ordinary live pages")
       focus(secondID)
-      host.contexts[secondID]!.store.perform(
-        .open(fixture.appending(path: "host-second-temporary")))
-      let temporary = host.contexts[secondID]!.store.session.selectedSpace.selectedTabID!
+      let secondStore = host.contexts[secondID]!.store
+      secondStore.perform(.open(fixture.appending(path: "host-second-temporary")))
+      let temporary = secondStore.session.selectedSpace.selectedTabID!
+      staleTabID = temporary
       _ = try await document(temporary)
+      let temporaryProfileID = secondStore.session.selectedSpace.profileID
+      let wrongProfileID = secondStore.session.profiles.first { $0.id != temporaryProfileID }!.id
+      try await verifyNativeNavigation(
+        tabID: temporary, store: secondStore, profileID: temporaryProfileID,
+        wrongProfileID: wrongProfileID, windowID: secondID.uuidString,
+        wrongWindowID: firstID.uuidString)
       try send(.closeTab)
       try await wait("host close-tab recovery") {
         host.contexts[secondID]?.store.session.closedTabs.contains { $0.id == temporary } == true
       }
+      try expect(
+        !primary.runtime.navigateTabID(
+          temporary.uuidString, profileID: temporaryProfileID.uuidString,
+          windowID: secondID.uuidString, url: fixture.absoluteString),
+        "native navigation rejects a closed tab identity")
       try expect(
         !initial.store.session.closedTabs.contains { $0.id == temporary },
         "native menu closure records recovery only in its focused managed window")
@@ -225,6 +240,7 @@ final class NativeHostProbe {
       firstID = saved.first
       secondID = saved.second
       closedIDs = saved.ordinarilyClosed
+      staleTabID = saved.staleTab
       let expected = Set([firstID, secondID] + [saved.engineWindow].compactMap { $0 })
       try expect(
         Set(host.contexts.keys) == expected
@@ -284,6 +300,12 @@ final class NativeHostProbe {
     try expect(
       beta["cookie"] as? String == "account=beta" && alpha["cookie"] as? String == "account=alpha",
       "native host presents separate beta and alpha account sessions simultaneously")
+    guard let staleTabID else {
+      throw HostProbeFailure("Closed native fixture tab identity missing.")
+    }
+    try await verifyNativeFavicon(
+      tabID: secondTab, profileID: second.store.session.selectedSpace.profileID,
+      windowID: second.nativeID, wrongWindowID: first.nativeID, staleTabID: staleTabID)
     focus(secondID)
     let requested = try await EngineRequestedWindowProbe(
       host: host, root: root, fixture: fixture, phase: phase
@@ -539,7 +561,7 @@ final class NativeHostProbe {
     try JSONEncoder().encode(
       HostProbeIdentity(
         first: firstID, second: secondID, firstTab: firstTab, secondTab: secondTab,
-        ordinarilyClosed: closedIDs, engineWindow: requested.retained,
+        ordinarilyClosed: closedIDs, staleTab: staleTabID, engineWindow: requested.retained,
         engineTab: host.contexts[requested.retained]?.store.session.selectedSpace.selectedTabID,
         authoredProfile: authoredProfile, renamedProfile: renamedProfile)
     ).write(to: checkpoint, options: .atomic)
@@ -1024,6 +1046,182 @@ final class NativeHostProbe {
     throw HostProbeFailure("Native host fixture document not ready.")
   }
 
+  private func verifyNativeNavigation(
+    tabID: UUID, store: BrowserStore, profileID: UUID, wrongProfileID: UUID,
+    windowID: String, wrongWindowID: String
+  ) async throws {
+    let runtime = primary.runtime
+    let tabIdentity = tabID.uuidString
+    let profileIdentity = profileID.uuidString
+    let nativeTabID = runtime.nativeTabID(forID: tabIdentity)
+    let destination = fixture.appending(path: "host-second-navigation-target")
+    try expect(
+      runtime.navigateTabID(
+        tabIdentity, profileID: profileIdentity, windowID: windowID,
+        url: destination.absoluteString),
+      "native navigation accepts an owned HTTP URL")
+
+    let rejectedOwners =
+      !runtime.navigateTabID(
+        tabIdentity, profileID: wrongProfileID.uuidString, windowID: windowID,
+        url: destination.absoluteString)
+      && !runtime.navigateTabID(
+        tabIdentity, profileID: profileIdentity, windowID: wrongWindowID,
+        url: destination.absoluteString)
+    let rejectedURLs = [
+      "javascript:location.href='about:blank'", "file:///etc/passwd", "mailto:test@example.invalid",
+      "chrome://version", "about:blank#other", "https://", "http://127.0.0.1:99999/", "",
+    ].allSatisfy {
+      !runtime.navigateTabID(
+        tabIdentity, profileID: profileIdentity, windowID: windowID, url: $0)
+    }
+    try expect(rejectedOwners, "native navigation rejects wrong profile and window owners")
+    try expect(rejectedURLs, "native navigation rejects unsupported and invalid URLs")
+    try await waitForLocation(destination.absoluteString, tabID: tabID)
+    _ = try await document(tabID)
+
+    let acceptedBlank = runtime.navigateTabID(
+      tabIdentity, profileID: profileIdentity, windowID: windowID, url: "about:blank")
+    try expect(acceptedBlank, "native navigation accepts exact about:blank")
+    try await waitForLocation("about:blank", tabID: tabID)
+    let restoredFixture = runtime.navigateTabID(
+      tabIdentity, profileID: profileIdentity, windowID: windowID,
+      url: destination.absoluteString)
+    try expect(restoredFixture, "native navigation accepts fixture URL after about:blank")
+    try await waitForLocation(destination.absoluteString, tabID: tabID)
+    _ = try await document(tabID)
+    try expect(
+      runtime.nativeTabID(forID: tabIdentity) == nativeTabID
+        && runtime.windowID(forTabID: tabIdentity) == windowID
+        && store.session.selectedSpace.selectedTabID == tabID
+        && store.session.selectedSpace.profileID == profileID,
+      "native navigation preserves tab, profile, and window identity")
+  }
+
+  private func waitForLocation(_ expected: String, tabID: UUID) async throws {
+    for _ in 0..<100 {
+      let json: String? = await withCheckedContinuation { continuation in
+        primary.runtime.evaluate(inTabID: tabID.uuidString, script: "({href:location.href})") {
+          continuation.resume(returning: $0)
+        }
+      }
+      if let data = json?.data(using: .utf8),
+        let value = try? JSONSerialization.jsonObject(with: data) as? [String: String],
+        value["href"] == expected
+      {
+        return
+      }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    throw HostProbeFailure("Native navigation did not commit the expected fixture URL.")
+  }
+
+  private func verifyNativeFavicon(
+    tabID: UUID, profileID: UUID, windowID: String, wrongWindowID: String, staleTabID: UUID
+  ) async throws {
+    let runtime = primary.runtime
+    let wrongProfileID = store.session.profiles.first { $0.id != profileID }!.id
+    let previous = runtime.onTabChanged
+    var targetChanges = 0
+    runtime.onTabChanged = { id, url, title, loading, canGoBack, canGoForward in
+      if id == tabID.uuidString { targetChanges += 1 }
+      previous?(id, url, title, loading, canGoBack, canGoForward)
+    }
+    defer { runtime.onTabChanged = previous }
+
+    let expectedBytes = phase == "initial" ? [52.0, 86.0, 120.0] : [138.0, 75.0, 18.0]
+    let expectedRGB = expectedBytes.map { $0 / 255 }
+    let expected = NSColor(
+      deviceRed: expectedRGB[0], green: expectedRGB[1], blue: expectedRGB[2], alpha: 1)
+    var faviconComponents = URLComponents(url: fixture, resolvingAgainstBaseURL: false)!
+    faviconComponents.path = "/favicon-\(phase).png"
+    faviconComponents.query = nil
+    faviconComponents.fragment = nil
+    let faviconURL = faviconComponents.url!.absoluteString
+    let script =
+      "(()=>{const link=document.createElement('link');link.rel='icon';"
+      + "link.href='\(faviconURL)';document.head.append(link);return true})()"
+    func bitmapRepresentation(_ image: NSImage?) -> NSBitmapImageRep? {
+      image?.representations.compactMap { $0 as? NSBitmapImageRep }.first
+    }
+    func matchesAuthoredIcon(_ image: NSImage?) -> Bool {
+      guard let bitmap = bitmapRepresentation(image),
+        bitmap.pixelsWide > 0, bitmap.pixelsHigh > 0,
+        let sample = bitmap.colorAt(x: bitmap.pixelsWide / 2, y: bitmap.pixelsHigh / 2)
+      else { return false }
+      return abs(sample.redComponent - expected.redComponent) < 0.07
+        && abs(sample.greenComponent - expected.greenComponent) < 0.07
+        && abs(sample.blueComponent - expected.blueComponent) < 0.07
+    }
+    let injected: String? = await withCheckedContinuation { continuation in
+      runtime.evaluate(inTabID: tabID.uuidString, script: script) {
+        continuation.resume(returning: $0)
+      }
+    }
+    try expect(injected != nil, "owned fixture accepts authored loopback PNG favicon link")
+    let routedClient = primary.events.router.client(
+      forTab: tabID.uuidString, nativeWindowID: windowID)
+    try expect(
+      runtime.favicon(
+        forTabID: tabID.uuidString, profileID: wrongProfileID.uuidString, windowID: windowID) == nil
+        && runtime.favicon(
+          forTabID: tabID.uuidString, profileID: profileID.uuidString,
+          windowID: wrongWindowID) == nil
+        && runtime.favicon(
+          forTabID: staleTabID.uuidString, profileID: profileID.uuidString,
+          windowID: windowID) == nil,
+      "native favicon getter rejects wrong profile, wrong window, and closed tab identities")
+    try expect(
+      routedClient?.windowID == windowID
+        && primary.events.router.client(forTab: tabID.uuidString, nativeWindowID: wrongWindowID)
+          == nil,
+      "native tab callback route resolves only its owning window client")
+
+    var image: NSImage?
+    for _ in 0..<100 {
+      image = runtime.favicon(
+        forTabID: tabID.uuidString, profileID: profileID.uuidString, windowID: windowID)
+      if matchesAuthoredIcon(image) && targetChanges > 0 { break }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    let size = image?.size ?? .zero
+    let bitmap = bitmapRepresentation(image)
+    let center = bitmap.flatMap {
+      $0.colorAt(x: $0.pixelsWide / 2, y: $0.pixelsHigh / 2)
+    }
+    let centerRGB = center.map { [$0.redComponent, $0.greenComponent, $0.blueComponent] }
+    let ownerRoute =
+      routedClient?.windowID == windowID
+      && primary.events.router.client(
+        forTab: tabID.uuidString, nativeWindowID: wrongWindowID) == nil
+    faviconProof = [
+      "phase": phase,
+      "route": faviconURL,
+      "getterNil": image == nil,
+      "imageWidth": bitmap?.pixelsWide ?? 0,
+      "imageHeight": bitmap?.pixelsHigh ?? 0,
+      "centerRGB": centerRGB as Any? ?? NSNull(),
+      "expectedRGB": expectedRGB,
+      "centerMatchesExpected": matchesAuthoredIcon(image),
+      "targetTabChangeCount": targetChanges,
+      "ownerRouteMatches": ownerRoute,
+      "wrongOwnerRouteNil": primary.events.router.client(
+        forTab: tabID.uuidString, nativeWindowID: wrongWindowID) == nil,
+    ]
+    let faviconData = try JSONSerialization.data(
+      withJSONObject: faviconProof!, options: [.prettyPrinted, .sortedKeys])
+    guard faviconData.count <= 4096 else {
+      throw HostProbeFailure("Favicon proof exceeded size bound.")
+    }
+    try faviconData.write(
+      to: root.appending(path: "\(phase)-native-favicon.json"), options: .atomic)
+    try expect(
+      matchesAuthoredIcon(image) && size.width > 0 && size.height > 0
+        && size.width <= 256 && size.height <= 256
+        && targetChanges > 0,
+      "Chromium favicon becomes a bounded native image and publishes owned tab change")
+  }
+
   private func capture(_ view: NSView, index: Int) async throws {
     view.layoutSubtreeIfNeeded()
     try await Task.sleep(for: .milliseconds(200))
@@ -1075,6 +1273,7 @@ final class NativeHostProbe {
     try JSONSerialization.data(
       withJSONObject: [
         "passed": error == nil, "checks": checks,
+        "favicon": faviconProof as Any? ?? NSNull(),
         "closedWindows": Dictionary(
           uniqueKeysWithValues: closures.map { ($0.key.uuidString, $0.value) }),
         "error": error?.localizedDescription as Any? ?? NSNull(),

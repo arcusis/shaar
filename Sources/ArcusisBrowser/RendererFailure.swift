@@ -20,8 +20,7 @@ struct RendererFailure: Identifiable, Equatable {
   }
 
   func belongs(to session: BrowserSession) -> Bool {
-    session.spaces.contains { space in
-      space.profileID == profileID && space.tabs.contains { $0.id == tabID }
-    }
+    session.profileID(forTabID: tabID) == profileID
+      && session.page(forTabID: tabID) != nil
   }
 }

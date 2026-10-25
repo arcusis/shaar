@@ -318,6 +318,17 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
 - (NSWindow *)windowForID:(NSString *)identity { return _windows[identity].closed ? nil : _windows[identity].native.window; }
 - (NSView *)hostViewForWindowID:(NSString *)identity { return _windows[identity].closed ? nil : _windows[identity].native.hostView; }
 - (NSString *)windowIDForTabID:(NSString *)identity { return _tabWindows[identity]; }
+- (NSImage *)faviconForTabID:(NSString *)tabID profileID:(NSString *)profileID windowID:(NSString *)windowID {
+  if (!ValidID(tabID) || !ValidID(profileID) || !ValidID(windowID)) return nil;
+  ArdiaCoreTab *tab = _tabs[tabID];
+  ArdiaCoreProfile *profile = _profiles[profileID];
+  ARCNativeWindowState *state = _windows[windowID];
+  if (!tab || !profile || !state || state.closed || state.closing || _closingBrowser || tab.closed ||
+      tab.profile != profile || !state.native ||
+      ![_owners[tabID] isEqualToString:profileID] ||
+      ![_tabWindows[tabID] isEqualToString:windowID]) return nil;
+  return tab.favicon;
+}
 - (int)chromeWindowIDForProfileID:(NSString *)profileID windowID:(NSString *)identity {
   ARCNativeWindowState *state = _windows[identity];
   ArdiaCoreProfile *profile = _profiles[profileID];
@@ -500,6 +511,35 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
 - (BOOL)openTabID:(NSString *)tabID profileID:(NSString *)profileID url:(NSString *)url
            error:(NSError **)error {
   return [self openTabID:tabID profileID:profileID windowID:_primaryWindowID url:url error:error];
+}
+- (BOOL)navigateTabID:(NSString *)tabID profileID:(NSString *)profileID windowID:(NSString *)windowID
+                  url:(NSString *)url {
+  NSAssert(NSThread.isMainThread, @"Tab navigation must run on the main thread");
+  if (!ValidID(tabID) || !ValidID(profileID) || !ValidID(windowID) || !url.length ||
+      ![url isEqualToString:[url stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet]] ||
+      [url rangeOfCharacterFromSet:NSCharacterSet.controlCharacterSet].location != NSNotFound) return NO;
+  NSURLComponents *components = [NSURLComponents componentsWithString:url];
+  NSString *scheme = components.scheme.lowercaseString;
+  BOOL blank = [url isEqualToString:@"about:blank"];
+  BOOL validPort = !components.port || components.port.integerValue <= 65535;
+  BOOL web = components.URL && scheme.length &&
+    [@[@"http", @"https"] containsObject:scheme] && components.host.length > 0 && validPort;
+  if (!blank && !web) return NO;
+
+  ArdiaCoreTab *tab = _tabs[tabID];
+  ArdiaCoreProfile *profile = _profiles[profileID];
+  ARCNativeWindowState *state = _windows[windowID];
+  if (!tab || !profile || !state || state.closed || state.closing || _closingBrowser ||
+      !state.native || !state.native.window || profile.destroyed || profile.offTheRecord ||
+      tab.closed || [_pendingHostClosures containsObject:tabID] || tab.profile != profile ||
+      ![_owners[tabID] isEqualToString:profileID] ||
+      ![_tabWindows[tabID] isEqualToString:windowID] ||
+      ![[state.native tabsForProfile:profile] containsObject:tab]) return NO;
+
+  [self advanceDocumentGenerationForTabID:tabID];
+  [self invalidateExternalRequestsForTabID:tabID windowID:nil];
+  [tab loadURL:url userInitiated:YES];
+  return YES;
 }
 - (BOOL)openTabID:(NSString *)tabID profileID:(NSString *)profileID windowID:(NSString *)windowID url:(NSString *)url
            error:(NSError **)error {
@@ -1420,6 +1460,7 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   [self publish:tab];
 }
 - (void)tabDidChangeNavigationState:(ArdiaCoreTab *)tab { [self publish:tab]; }
+- (void)tabDidChangeFavicon:(ArdiaCoreTab *)tab { [self publish:tab]; }
 - (void)tab:(ArdiaCoreTab *)tab rendererGone:(NSString *)status code:(int)code {
   ARCNativeWindowState *popupState = [self stateForPopupTab:tab];
   if (popupState) {

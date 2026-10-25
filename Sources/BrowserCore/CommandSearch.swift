@@ -40,6 +40,7 @@ public enum NavigationInput {
 public enum CommandAction: Hashable, Sendable {
   case open(URL)
   case tab(space: UUID, tab: UUID)
+  case favorite(profile: UUID, id: UUID)
   case space(UUID)
   case folder(space: UUID, folder: UUID)
   case reopen(space: UUID, tab: UUID)
@@ -73,7 +74,28 @@ public enum CommandSearch {
     let orderedSpaces = session.spaces.sorted {
       $0.id == session.selectedSpaceID && $1.id != session.selectedSpaceID
     }
-    search: for space in orderedSpaces {
+    let profileID = session.selectedSpace.profileID
+    let profileName = session.profiles.first { $0.id == profileID }?.name ?? ""
+    let favoritePages = Dictionary(
+      uniqueKeysWithValues: session.favoritePages.map { ($0.favoriteID, $0) })
+    for favorite in session.favorites where favorite.profileID == profileID {
+      let page = favoritePages[favorite.id]
+      let searchable = [
+        favorite.title, favorite.originalURL.absoluteString,
+        page?.tab.title ?? "", page?.tab.url.absoluteString ?? "",
+      ].joined(separator: " ")
+      guard query.isEmpty || searchable.localizedCaseInsensitiveContains(query) else { continue }
+      let currentURL = page?.tab.url ?? favorite.originalURL
+      if append(
+        CommandResult(
+          title: favorite.title,
+          subtitle: "Favorite · \(profileName) profile · \(currentURL.host() ?? "")",
+          symbol: "star.fill", action: .favorite(profile: profileID, id: favorite.id)))
+      {
+        break
+      }
+    }
+    search: for space in orderedSpaces where results.count < resultLimit {
       for tab in space.orderedTabs {
         let path = space.folderPath(to: tab.folderID).reversed().map(\.name).joined(
           separator: " / ")

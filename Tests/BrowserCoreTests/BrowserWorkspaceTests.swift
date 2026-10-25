@@ -87,7 +87,7 @@ private func workspaceFixture() throws -> BrowserSession {
     let bytes = try JSONSerialization.data(withJSONObject: wire)
     try bytes.write(to: file.legacySessionURL)
     let migrated = try #require(try file.load())
-    #expect(migrated.windows[0].session.version == 3)
+    #expect(migrated.windows[0].session.version == BrowserSession.currentVersion)
     #expect(migrated.windows[0].session.selectedSpace.selectedTabID == nil)
     #expect(migrated.windows[0].session.profiles[0].id.uuidString == profile)
     #expect(migrated.windows[0].session.selectedSpace.id.uuidString == space)

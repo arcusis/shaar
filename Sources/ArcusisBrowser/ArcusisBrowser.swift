@@ -266,10 +266,10 @@ private struct BrowserApplication: App {
         Button("Reload") { store.reloadCurrentPage() }.keyboardShortcut("r")
           .disabled(!store.canReloadCurrentPage)
         Button("Close tab") {
-          if let id = store.session.selectedSpace.selectedTabID { store.closeTab(id) }
+          store.closeCurrentPage()
         }
         .keyboardShortcut("w")
-        .disabled(store.session.selectedSpace.selectedTabID == nil)
+        .disabled(store.session.selectedPage == nil)
         Button("Reopen last closed tab") { store.reopenLastClosedTab() }
           .keyboardShortcut("t", modifiers: [.command, .shift])
           .disabled(!store.canReopenClosedTab)

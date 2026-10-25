@@ -32,6 +32,7 @@ final class EngineProbe {
   private var savedTabCapacityFixture: SavedTabCapacityFixture?
   private var savedTabCapacityProbe: SavedTabCapacityProbe?
   private var nativeHostProbe: NativeHostProbe?
+  private var nativeFavoritesProbe: NativeFavoritesProbe?
   private var externalAppConsentProbe: ExternalAppConsentProbe?
   private var externalAppEvidence: ExternalAppConsentProbe.Evidence?
   private var resultError: Error?
@@ -482,6 +483,10 @@ final class EngineProbe {
         checks += try await WorkspaceProbe(
           primary: browserEngine, store: store, root: root, fixture: fixture, phase: phase
         ).run()
+        let nativeFavorites = try NativeFavoritesProbe(
+          primary: browserEngine, root: root, fixture: fixture, phase: phase)
+        nativeFavoritesProbe = nativeFavorites
+        checks += try await nativeFavorites.run()
         let nativeHost = try NativeHostProbe(
           primary: browserEngine, store: store, root: root, fixture: fixture, phase: phase)
         nativeHostProbe = nativeHost
@@ -553,6 +558,12 @@ final class EngineProbe {
           : "Vault UI stage failed.")
       localFixturesPassed = false
     }
+    do { try nativeFavoritesProbe?.prepareForQuit() } catch {
+      resultError = ProbeFailure(
+        "\(resultError?.localizedDescription ?? "") Favorites quit snapshot: \(error.localizedDescription)"
+      )
+      localFixturesPassed = false
+    }
     passed = resultError == nil && !externalAppConsentMode
     if !externalAppConsentMode { writeReport() }
     runtime.quit()
@@ -606,6 +617,13 @@ final class EngineProbe {
       passed = false
       localFixturesPassed = false
     }
+    do { checks += try nativeFavoritesProbe?.auditAfterQuit() ?? [] } catch {
+      resultError = ProbeFailure(
+        "\(resultError?.localizedDescription ?? "") Favorites shutdown audit: \(error.localizedDescription)"
+      )
+      passed = false
+      localFixturesPassed = false
+    }
     writeReport()
   }
 
@@ -640,6 +658,7 @@ final class EngineProbe {
       "fixtureTLSProbe": probeTLS != nil,
       "abruptRecoveryProbe": expectedAfterTermination != nil,
       "localFixturesPassed": localFixturesPassed,
+      "nativeFavoritesPassed": nativeFavoritesProbe?.passed ?? false,
       "bootstrapStage": bootstrapStage.rawValue,
       "checkCount": checks.count,
       "checks": bitwardenVaultCredentials == nil

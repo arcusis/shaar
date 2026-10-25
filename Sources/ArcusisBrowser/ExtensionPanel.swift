@@ -88,7 +88,7 @@ private struct ExtensionList: View {
           .frame(maxWidth: .infinity, alignment: .leading)
         }
         .buttonStyle(.plain)
-        .disabled(store.session.selectedSpace.selectedTabID == nil)
+        .disabled(store.session.selectedPage == nil)
       }
       Divider()
       Button("Get Bitwarden…") {

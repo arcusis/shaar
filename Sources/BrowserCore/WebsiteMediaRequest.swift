@@ -39,7 +39,8 @@ public struct WebsiteMediaRequest: Identifiable, Equatable, Sendable {
 
   public func matches(_ session: BrowserSession) -> Bool {
     session.selectedSpace.profileID == profileID
-      && session.selectedSpace.selectedTabID == tabID
-      && session.selectedSpace.selectedTab?.url == pageURL
+      && session.selectedPage?.tab.id == tabID
+      && session.selectedPage?.tab.url == pageURL
+      && session.profileID(forTabID: tabID) == profileID
   }
 }

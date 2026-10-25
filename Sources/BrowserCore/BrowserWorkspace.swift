@@ -47,10 +47,32 @@ public struct WorkspaceWindowGeometry: Codable, Equatable, Sendable {
 public struct WorkspaceCatalog: Codable, Equatable, Sendable {
   public internal(set) var profiles: [BrowserProfile]
   public internal(set) var spaces: [BrowserSpace]
+  public internal(set) var favorites: [BrowserFavorite]
+}
+
+private struct LegacyWorkspaceCatalog: Decodable {
+  let profiles: [BrowserProfile]
+  let spaces: [BrowserSpace]
+
+  private enum CodingKeys: String, CodingKey { case profiles, spaces, favorites }
+
+  init(from decoder: any Decoder) throws {
+    let values = try decoder.container(keyedBy: CodingKeys.self)
+    guard !values.contains(.favorites) else { throw WorkspaceError.invalidState }
+    profiles = try values.decode([BrowserProfile].self, forKey: .profiles)
+    spaces = try values.decode([BrowserSpace].self, forKey: .spaces)
+  }
+}
+
+private struct LegacyWorkspaceWindow: Decodable {
+  let id: UUID
+  let session: BrowserSession
+  let pins: [WorkspacePinReference]
+  let geometry: WorkspaceWindowGeometry?
 }
 
 public struct BrowserWorkspace: Codable, Equatable, Sendable {
-  public static let currentVersion = 1
+  public static let currentVersion = 2
   public let version: Int
   public private(set) var catalog: WorkspaceCatalog
   public private(set) var windows: [WorkspaceWindow]
@@ -65,9 +87,10 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
         var space = source
         space.tabs = source.tabs.filter(\.isPinned)
         space.selectedTabID = nil
+        space.selectedFavoriteID = nil
         space.folders = source.folders.map(Self.sharedFolder)
         return space
-      })
+      }, favorites: session.favorites)
     let window = WorkspaceWindow(
       id: UUID(), session: session,
       pins: session.spaces.flatMap { $0.tabs.filter(\.isPinned) }.map {
@@ -82,22 +105,122 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
 
   public init(from decoder: any Decoder) throws {
     let values = try decoder.container(keyedBy: CodingKeys.self)
-    version = try values.decode(Int.self, forKey: .version)
-    guard version == Self.currentVersion else { throw WorkspaceError.unsupportedVersion }
-    catalog = try values.decode(WorkspaceCatalog.self, forKey: .catalog)
-    windows = try values.decode([WorkspaceWindow].self, forKey: .windows)
-    focusedWindowID = try values.decodeIfPresent(UUID.self, forKey: .focusedWindowID)
+    let sourceVersion = try values.decode(Int.self, forKey: .version)
+    guard [1, Self.currentVersion].contains(sourceVersion) else {
+      throw WorkspaceError.unsupportedVersion
+    }
+    version = Self.currentVersion
+    if sourceVersion == 1 {
+      let legacyCatalog = try values.decode(LegacyWorkspaceCatalog.self, forKey: .catalog)
+      catalog = WorkspaceCatalog(
+        profiles: legacyCatalog.profiles, spaces: legacyCatalog.spaces, favorites: [])
+      windows = try values.decode([LegacyWorkspaceWindow].self, forKey: .windows).map {
+        WorkspaceWindow(id: $0.id, session: $0.session, pins: $0.pins, geometry: $0.geometry)
+      }
+      focusedWindowID = try values.decodeIfPresent(UUID.self, forKey: .focusedWindowID)
+    } else {
+      catalog = try values.decode(WorkspaceCatalog.self, forKey: .catalog)
+      windows = try values.decode([WorkspaceWindow].self, forKey: .windows)
+      focusedWindowID = try values.decodeIfPresent(UUID.self, forKey: .focusedWindowID)
+    }
     try validate()
   }
 
   public func window(_ id: UUID) -> WorkspaceWindow? { windows.first { $0.id == id } }
 
+  public func favorites(for profileID: UUID) -> [BrowserFavorite] {
+    catalog.favorites.filter { $0.profileID == profileID }
+  }
+
+  @discardableResult
+  public mutating func addFavorite(
+    windowID: UUID, profileID: UUID, originalURL: URL, title: String? = nil, id: UUID = UUID()
+  ) throws -> UUID? {
+    guard var session = window(windowID)?.session else { throw WorkspaceError.unknownWindow }
+    guard
+      let favoriteID = session.addFavorite(
+        profileID: profileID, originalURL: originalURL, title: title, id: id)
+    else { return nil }
+    try updateWindow(windowID, session: session)
+    return favoriteID
+  }
+
+  @discardableResult
+  public mutating func moveFavorite(
+    windowID: UUID, favoriteID: UUID, in profileID: UUID, before targetID: UUID? = nil
+  ) throws -> Bool {
+    guard var session = window(windowID)?.session else { throw WorkspaceError.unknownWindow }
+    guard session.moveFavorite(favoriteID, in: profileID, before: targetID) else { return false }
+    try updateWindow(windowID, session: session)
+    return true
+  }
+
+  @discardableResult
+  public mutating func openFavorite(windowID: UUID, favoriteID: UUID) throws -> UUID? {
+    guard var session = window(windowID)?.session else { throw WorkspaceError.unknownWindow }
+    guard let tabID = session.openFavorite(favoriteID) else { return nil }
+    try updateWindow(windowID, session: session)
+    return tabID
+  }
+
+  @discardableResult
+  public mutating func selectFavorite(
+    windowID: UUID, favoriteID: UUID, in spaceID: UUID
+  ) throws -> Bool {
+    guard var session = window(windowID)?.session else { throw WorkspaceError.unknownWindow }
+    guard session.selectFavorite(favoriteID, in: spaceID) else { return false }
+    try updateWindow(windowID, session: session)
+    return true
+  }
+
+  @discardableResult
+  public mutating func updateFavoritePage(
+    windowID: UUID, favoriteID: UUID, url: URL, title: String
+  ) throws -> Bool {
+    guard var session = window(windowID)?.session else { throw WorkspaceError.unknownWindow }
+    guard session.updateFavoritePage(favoriteID, url: url, title: title) else { return false }
+    try updateWindow(windowID, session: session)
+    return true
+  }
+
+  @discardableResult
+  public mutating func closeFavoritePage(windowID: UUID, favoriteID: UUID) throws -> Bool {
+    guard var session = window(windowID)?.session else { throw WorkspaceError.unknownWindow }
+    guard session.closeFavoritePage(favoriteID) else { return false }
+    try updateWindow(windowID, session: session)
+    return true
+  }
+
+  /// Disposition applies only in source window; peer pages survive as ordinary tabs.
+  @discardableResult
+  public mutating func removeFavorite(
+    windowID: UUID, favoriteID: UUID, disposition: FavoritePageDisposition
+  ) throws -> Bool {
+    guard var session = window(windowID)?.session else { throw WorkspaceError.unknownWindow }
+    guard session.removeFavorite(favoriteID, disposition: disposition) else { return false }
+    try updateWindow(windowID, session: session)
+    return true
+  }
+
+  @discardableResult
+  public mutating func removeSpace(
+    _ spaceID: UUID, windowID: UUID, favoriteDisposition: FavoritePageDisposition
+  ) throws -> Bool {
+    guard var session = window(windowID)?.session else { throw WorkspaceError.unknownWindow }
+    guard session.removeSpace(spaceID, favoriteDisposition: favoriteDisposition) else {
+      return false
+    }
+    try updateWindow(windowID, session: session)
+    return true
+  }
+
   public func validate() throws {
     guard version == Self.currentVersion else { throw WorkspaceError.unsupportedVersion }
     guard let first = catalog.spaces.first else { throw WorkspaceError.invalidState }
-    try BrowserSession(
-      profiles: catalog.profiles, spaces: catalog.spaces, selectedSpaceID: first.id
-    ).validate()
+    let catalogSession = try BrowserSession(
+      profiles: catalog.profiles, spaces: catalog.spaces, selectedSpaceID: first.id,
+      favorites: catalog.favorites)
+    try catalogSession.validate()
     guard
       catalog.spaces.allSatisfy({
         $0.selectedTabID == nil && $0.tabs.allSatisfy(\.isPinned)
@@ -108,12 +231,14 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
     else { throw WorkspaceError.invalidState }
     let definitions = Dictionary(
       uniqueKeysWithValues: catalog.spaces.flatMap { space in space.tabs.map { ($0.id, space) } })
+    let favorites = Dictionary(uniqueKeysWithValues: catalog.favorites.map { ($0.id, $0) })
     var claimed: Set<UUID> = []
     for window in windows {
       guard window.geometry?.isValid != false else { throw WorkspaceError.invalidState }
       try window.session.validate()
       guard window.session.profiles == catalog.profiles,
         window.session.spaces.map(Self.spaceMetadata) == catalog.spaces.map(Self.spaceMetadata),
+        window.session.favorites == catalog.favorites,
         window.pins.count == definitions.count,
         Set(window.pins.map(\.tabID)).count == window.pins.count,
         Set(window.pins.map(\.pinID)) == Set(definitions.keys)
@@ -123,9 +248,17 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
       guard Set(bindings.keys) == Set(localTabs.filter(\.isPinned).map(\.id)) else {
         throw WorkspaceError.invalidState
       }
-      for id in localTabs.map(\.id) + window.session.closedTabs.map(\.id) {
+      for id in localTabs.map(\.id) + window.session.closedTabs.map(\.id)
+        + window.session.favoritePages.map(\.tab.id)
+      {
         guard claimed.insert(id).inserted else { throw WorkspaceError.invalidState }
       }
+      guard window.session.favoritePages.count <= catalog.favorites.count,
+        window.session.favoritePages.allSatisfy({ page in
+          guard let favorite = favorites[page.favoriteID] else { return false }
+          return catalog.spaces.contains(where: { $0.profileID == favorite.profileID })
+        })
+      else { throw WorkspaceError.invalidState }
       for space in window.session.spaces {
         let pins = space.tabs.filter(\.isPinned)
         guard
@@ -150,14 +283,25 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
     var draft = self
     var allocated = allocatedIDs
     let source = sourceID.flatMap(window)
+    var emptyFavoritePages: [BrowserFavoritePage] = []
+    for favorite in catalog.favorites
+    where catalog.spaces.contains(where: { $0.profileID == favorite.profileID }) {
+      emptyFavoritePages.append(
+        BrowserFavoritePage(
+          favoriteID: favorite.id,
+          tab: BrowserTab(
+            id: Self.allocate(&allocated), url: favorite.originalURL, title: favorite.title)))
+    }
     let empty = try BrowserSession(
       profiles: catalog.profiles,
       spaces: catalog.spaces.map { definition in
         var space = definition
         space.tabs = []
         space.selectedTabID = nil
+        space.selectedFavoriteID = nil
         return space
-      }, selectedSpaceID: source?.session.selectedSpaceID ?? catalog.spaces[0].id)
+      }, selectedSpaceID: source?.session.selectedSpaceID ?? catalog.spaces[0].id,
+      favorites: catalog.favorites, favoritePages: emptyFavoritePages)
     let id = Self.allocate(&allocated)
     let projected = try draft.project(
       WorkspaceWindow(id: id, session: empty, pins: []), allocated: &allocated)
@@ -230,6 +374,13 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
     }
     try session.validate()
     let previous = windows[index]
+    let oldFavoriteOwners = Dictionary(
+      uniqueKeysWithValues: catalog.favorites.map { ($0.id, $0.profileID) })
+    for favorite in session.favorites {
+      if let oldOwner = oldFavoriteOwners[favorite.id], oldOwner != favorite.profileID {
+        throw WorkspaceError.invalidState
+      }
+    }
     let previousProfiles = Set(catalog.profiles.map(\.id))
     guard previousProfiles.isSubset(of: Set(session.profiles.map(\.id))) else {
       throw WorkspaceError.invalidState
@@ -259,7 +410,8 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
     }
     var draft = self
     var allocated = allocatedIDs.union(session.spaces.flatMap { $0.tabs.map(\.id) }).union(
-      session.closedTabs.map(\.id))
+      session.closedTabs.map(\.id)
+    ).union(session.favoritePages.map(\.tab.id))
     let oldBindings = Dictionary(uniqueKeysWithValues: previous.pins.map { ($0.tabID, $0.pinID) })
     let oldDefinitions = Dictionary(
       uniqueKeysWithValues: catalog.spaces.flatMap(\.tabs).map { ($0.id, $0) })
@@ -267,6 +419,7 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
     let spaces = session.spaces.map { source in
       var space = source
       space.selectedTabID = nil
+      space.selectedFavoriteID = nil
       space.folders = source.folders.map(Self.sharedFolder)
       space.tabs = source.tabs.filter(\.isPinned).map { tab in
         let pinID = oldBindings[tab.id] ?? Self.allocate(&allocated)
@@ -278,7 +431,8 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
       }
       return space
     }
-    draft.catalog = WorkspaceCatalog(profiles: session.profiles, spaces: spaces)
+    draft.catalog = WorkspaceCatalog(
+      profiles: session.profiles, spaces: spaces, favorites: session.favorites)
     draft.windows[index] = WorkspaceWindow(
       id: id, session: session, pins: references, geometry: previous.geometry)
     if draft.catalog != catalog {
@@ -300,6 +454,7 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
         allocated.formUnion(space.tabs.map(\.id))
       }
       allocated.formUnion(window.session.closedTabs.map(\.id))
+      allocated.formUnion(window.session.favoritePages.map(\.tab.id))
     }
     return allocated
   }
@@ -308,6 +463,9 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
   {
     let oldTabs = Dictionary(
       uniqueKeysWithValues: old.session.spaces.flatMap(\.tabs).map { ($0.id, $0) })
+    let oldFavorites = Dictionary(uniqueKeysWithValues: old.session.favorites.map { ($0.id, $0) })
+    let oldFavoritePages = Dictionary(
+      uniqueKeysWithValues: old.session.favoritePages.map { ($0.favoriteID, $0) })
     let bindings = Dictionary(uniqueKeysWithValues: old.pins.map { ($0.pinID, $0.tabID) })
     let definitions = Set(catalog.spaces.flatMap { $0.tabs.map(\.id) })
     let retainedPins = Set(old.pins.filter { definitions.contains($0.pinID) }.map(\.tabID))
@@ -317,6 +475,10 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
     var spaces = catalog.spaces.map { definition in
       let prior = old.session.spaces.first { $0.id == definition.id }
       var space = definition
+      space.selectedFavoriteID = prior?.selectedFavoriteID.flatMap { id in
+        catalog.favorites.contains(where: { $0.id == id && $0.profileID == definition.profileID })
+          ? id : nil
+      }
       space.folders = definition.folders.map {
         var folder = $0
         folder.isCollapsed = collapsed[folder.id] ?? false
@@ -343,17 +505,63 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
       }
       return space
     }
+    let newFavoriteIDs = Set(catalog.favorites.map(\.id))
+    var favoritePages: [BrowserFavoritePage] = []
+    var removedSelectedPage: (favoriteID: UUID, tab: BrowserTab, profileID: UUID)?
+    for page in old.session.favoritePages where !newFavoriteIDs.contains(page.favoriteID) {
+      guard let favorite = oldFavorites[page.favoriteID],
+        let preferredSpace = old.session.spaces.first(where: {
+          $0.id == old.session.selectedSpaceID && $0.profileID == favorite.profileID
+        }) ?? old.session.spaces.first(where: { $0.selectedFavoriteID == page.favoriteID })
+          ?? old.session.spaces.first(where: { $0.profileID == favorite.profileID }),
+        let destination = spaces.firstIndex(where: {
+          $0.id == preferredSpace.id && $0.profileID == favorite.profileID
+        }) ?? spaces.firstIndex(where: { $0.profileID == favorite.profileID })
+      else { continue }
+      var tab = page.tab
+      tab.isPinned = false
+      tab.folderID = nil
+      spaces[destination].tabs.append(tab)
+      if old.session.spaces.contains(where: { $0.selectedFavoriteID == page.favoriteID }) {
+        spaces[destination].selectedTabID = tab.id
+        if old.session.selectedSpace.selectedFavoriteID == page.favoriteID {
+          removedSelectedPage = (page.favoriteID, tab, favorite.profileID)
+        }
+      }
+    }
+    for favorite in catalog.favorites
+    where spaces.contains(where: { $0.profileID == favorite.profileID }) {
+      if let page = oldFavoritePages[favorite.id] {
+        favoritePages.append(page)
+      } else if oldFavorites[favorite.id] == nil {
+        favoritePages.append(
+          BrowserFavoritePage(
+            favoriteID: favorite.id,
+            tab: BrowserTab(
+              id: Self.allocate(&allocated), url: favorite.originalURL, title: favorite.title)))
+      }
+    }
     var selectedSpace =
       spaces.contains { $0.id == old.session.selectedSpaceID }
       ? old.session.selectedSpaceID : spaces[0].id
-    if let selected = old.session.selectedSpace.selectedTabID,
+    if old.session.selectedSpace.selectedFavoriteID == nil,
+      let selected = old.session.selectedSpace.selectedTabID,
       let destination = spaces.firstIndex(where: { $0.tabs.contains { $0.id == selected } })
     {
       selectedSpace = spaces[destination].id
       spaces[destination].selectedTabID = selected
     }
+    if let removedSelectedPage,
+      let destination = spaces.firstIndex(where: {
+        $0.profileID == removedSelectedPage.profileID
+          && $0.tabs.contains(where: { $0.id == removedSelectedPage.tab.id })
+      })
+    {
+      selectedSpace = spaces[destination].id
+    }
     var session = try BrowserSession(
-      profiles: catalog.profiles, spaces: spaces, selectedSpaceID: selectedSpace)
+      profiles: catalog.profiles, spaces: spaces, selectedSpaceID: selectedSpace,
+      favorites: catalog.favorites, favoritePages: favoritePages)
     session.closedTabs = old.session.closedTabs.filter { entry in
       spaces.contains { $0.id == entry.spaceID && $0.profileID == entry.profileID }
     }
@@ -377,15 +585,24 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
     var space = source
     space.tabs = []
     space.selectedTabID = nil
+    space.selectedFavoriteID = nil
     space.folders = source.folders.map(sharedFolder)
     return space
   }
 
   private static func tabProfiles(_ session: BrowserSession) -> [UUID: UUID] {
-    Dictionary(
+    let favoriteProfiles = Dictionary(
+      uniqueKeysWithValues: session.favorites.map { ($0.id, $0.profileID) })
+    return Dictionary(
       uniqueKeysWithValues: session.spaces.flatMap { space in
         space.tabs.map { ($0.id, space.profileID) }
       }
-        + session.closedTabs.map { ($0.id, $0.profileID) })
+        + session.closedTabs.map { ($0.id, $0.profileID) }
+    )
+    .merging(
+      Dictionary(
+        uniqueKeysWithValues: session.favoritePages.compactMap { page in
+          favoriteProfiles[page.favoriteID].map { (page.tab.id, $0) }
+        }), uniquingKeysWith: { first, _ in first })
   }
 }

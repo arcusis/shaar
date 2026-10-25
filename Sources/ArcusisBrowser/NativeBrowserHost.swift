@@ -4,7 +4,7 @@ import ChromiumBridge
 import SwiftUI
 
 enum BrowserMenuCommand: String, CaseIterable {
-  case newWindow, newTab, search, newSpace, editSpace, closeTab, closeWindow
+  case newWindow, newTab, search, newSpace, editSpace, closeTab, closeWindow, addFavorite
   case reopenClosed, recentlyClosed, bookmarkPage, bookmarks, history, downloads
   case find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload
   case extensions, help, minimizeWindow, zoomWindow, bringAllToFront, settings, quit
@@ -159,6 +159,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     case .reload: return context.store.canReloadCurrentPage
     case .reopenClosed: return context.store.canReopenClosedTab
     case .bookmarkPage: return context.store.canBookmarkCurrentPage
+    case .addFavorite: return context.store.canFavoriteCurrentPage
     default: return true
     }
   }
@@ -190,11 +191,12 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     case .newSpace: store.spaceEditor = .create
     case .editSpace: store.spaceEditor = .edit(store.session.selectedSpaceID)
     case .closeTab:
-      if let tab = store.session.selectedSpace.selectedTabID {
-        store.closeTab(tab)
+      if store.session.selectedPage != nil {
+        store.closeCurrentPage()
       } else {
         events.runtime.closeWindowID(context.nativeID)
       }
+    case .addFavorite: _ = store.addCurrentPageAsFavorite()
     case .closeWindow: events.runtime.closeWindowID(context.nativeID)
     case .reopenClosed: store.reopenLastClosedTab()
     case .recentlyClosed: store.showRecentlyClosed()
@@ -359,11 +361,35 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
       let opener, let openerID = UUID(uuidString: opener),
       let sourceNativeID = events.runtime.windowID(forTabID: opener),
       let source = contexts.values.first(where: { $0.nativeID == sourceNativeID }),
-      let space = source.store.session.spaces.first(where: {
-        $0.profileID == profileID && $0.tabs.contains(where: { $0.id == openerID })
-      }), let destination = contexts.values.first(where: { $0.nativeID == nativeID })
+      source.store.session.profileID(forTabID: openerID) == profileID,
+      let destination = contexts.values.first(where: { $0.nativeID == nativeID })
     else { return }
-    destination.store.perform(.space(space.id))
+    guard
+      let spaceID = Self.openerSpaceID(
+        in: source.store.session, openerID: openerID, profileID: profileID)
+    else { return }
+    destination.store.perform(.space(spaceID))
+  }
+
+  static func openerSpaceID(
+    in session: BrowserSession, openerID: UUID, profileID: UUID
+  ) -> UUID? {
+    guard session.profileID(forTabID: openerID) == profileID else { return nil }
+    if let ordinarySpace = session.spaces.first(where: {
+      $0.profileID == profileID && $0.tabs.contains { $0.id == openerID }
+    }) {
+      return ordinarySpace.id
+    }
+    guard
+      let favoriteID = session.favoritePages.first(where: {
+        $0.tab.id == openerID
+      })?.favoriteID
+    else { return nil }
+    return session.spaces.first(where: {
+      $0.id == session.selectedSpaceID && $0.profileID == profileID
+    })?.id ?? session.spaces.first(where: {
+      $0.profileID == profileID && $0.selectedFavoriteID == favoriteID
+    })?.id ?? session.spaces.first(where: { $0.profileID == profileID })?.id
   }
 
   private func observe(_ context: NativeBrowserContext) {
@@ -441,7 +467,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     else { return false }
     if command == .closeTab {
       item.title =
-        activeContext?.store.session.selectedSpace.selectedTabID == nil
+        activeContext?.store.session.selectedPage == nil
         ? "Close window" : "Close tab"
     }
     return canPerform(command)
@@ -518,6 +544,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     add(.previousSpace, "Previous space", "[", to: spaces, modifiers: [.control, .option])
     let tabs = section("Tabs")
     add(.closeTab, "Close tab", "w", to: tabs)
+    add(.addFavorite, "Add to Favorites", "", to: tabs, modifiers: [])
     add(.reopenClosed, "Reopen last closed tab", "t", to: tabs, modifiers: [.command, .shift])
     let archive = section("Archive")
     add(.recentlyClosed, "Recently closed…", "", to: archive)

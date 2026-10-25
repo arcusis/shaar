@@ -88,8 +88,25 @@ final class BrowserWorkspaceStore {
     stores[window.id]?.onSpaceRemovalImpact = { [weak self] id in
       let spaces =
         self?.workspace.windows.compactMap { $0.session.spaces.first { $0.id == id } } ?? []
+      guard let self,
+        let definition = self.workspace.catalog.spaces.first(where: { $0.id == id })
+      else { return SpaceRemovalImpact(tabs: 0, windows: 0) }
+      let isLastProfileSpace =
+        self.workspace.catalog.spaces.filter {
+          $0.profileID == definition.profileID
+        }.count == 1
+      let favoritePages =
+        isLastProfileSpace
+        ? self.workspace.windows.reduce(0) { count, window in
+          count
+            + window.session.favoritePages.filter {
+              window.session.profileID(forTabID: $0.tab.id) == definition.profileID
+            }.count
+        }
+        : 0
       return SpaceRemovalImpact(
-        tabs: spaces.reduce(0) { $0 + $1.tabs.count }, windows: spaces.count)
+        tabs: spaces.reduce(0) { $0 + $1.tabs.count }, windows: spaces.count,
+        favoritePages: favoritePages)
     }
   }
 

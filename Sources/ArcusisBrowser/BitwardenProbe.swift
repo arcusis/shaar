@@ -31,6 +31,8 @@ final class BitwardenProbe {
     case completed
   }
   private var vaultStage = VaultStage.notStarted
+  private var vaultStoreObservation: [String: Bool] = [:]
+  private var vaultStoreButtonCount = 0
   private var popupWindow: NSWindow?
   private var consentWindow: NSWindow?
 
@@ -668,15 +670,36 @@ final class BitwardenProbe {
           $0.profileID == profile && $0.tabs.contains(where: { $0.id == selectedTab.id })
         })
       else { throw BitwardenProbeFailure("Store tab left its selected account profile.") }
-      guard runtime.nativeTabID(forID: sourceTab) >= 0 else {
+      vaultStoreObservation["nativeTabAvailable"] = runtime.nativeTabID(forID: sourceTab) >= 0
+      vaultStoreObservation["engineClosed"] = engine.isClosed
+      vaultStoreObservation["engineNoticePresent"] = engine.notice != nil
+      guard vaultStoreObservation["nativeTabAvailable"] == true else {
         try await Task.sleep(for: .milliseconds(250))
         continue
       }
       let page = await evaluate(
         sourceTab,
         """
-        ({ready:[...document.querySelectorAll('button,[role="button"]')].some(b=>(b.innerText||b.getAttribute('aria-label')||'').trim().toLowerCase()==='add to chrome'&& !b.disabled)})
+        (()=>{const b=[...document.querySelectorAll('button,[role="button"]')];
+          const labels=b.map(e=>(e.innerText||e.getAttribute('aria-label')||'').trim().toLowerCase());
+          return {ready:b.some((e,i)=>labels[i]==='add to chrome'&&!e.disabled),
+            cwsOrigin:location.origin==='https://chromewebstore.google.com',
+            documentComplete:document.readyState==='complete',
+            englishDocument:document.documentElement.lang.toLowerCase().startsWith('en'),
+            blankPage:location.href==='about:blank',errorPage:location.protocol==='chrome-error:',
+            addActionPresent:labels.includes('add to chrome'),installActionPresent:labels.includes('install'),
+            removeActionPresent:labels.some(t=>t==='remove from chrome'||t==='remove extension'),
+            challengePresent:!!document.querySelector('iframe[src*="captcha"],[id*="captcha"]'),
+            buttonCount:b.length};})()
         """)
+      vaultStoreObservation["evaluated"] = page != nil
+      for key in [
+        "cwsOrigin", "documentComplete", "englishDocument", "blankPage", "errorPage",
+        "addActionPresent", "installActionPresent", "removeActionPresent", "challengePresent",
+      ] {
+        vaultStoreObservation[key] = page?[key] as? Bool ?? false
+      }
+      vaultStoreButtonCount = min(10000, max(0, page?["buttonCount"] as? Int ?? 0))
       if page?["ready"] as? Bool == true {
         buttonReady = true
         break
@@ -801,6 +824,7 @@ final class BitwardenProbe {
       "phase": phase, "passed": passed, "controlOnly": true,
       "firstClickAcceptancePassed": false, "accountCount": 2, "stages": stages,
       "lastStage": vaultStage.rawValue,
+      "storeObservation": vaultStoreObservation, "storeButtonCount": vaultStoreButtonCount,
     ]
     let data = try JSONSerialization.data(
       withJSONObject: report, options: [.prettyPrinted, .sortedKeys])

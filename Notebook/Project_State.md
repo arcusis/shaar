@@ -2,7 +2,7 @@
 
 Native macOS 26+ internal Arc replacement: SwiftUI/AppKit chrome, pinned Chromium, arbitrary Spaces with per-Space pins/folders/saved tabs, simultaneous isolated accounts and explicit profile sharing, page-centered Command-T, Library/downloads and native dragging. Bitwarden is the first optional password-manager integration, controlled in native Settings; supported native backend is under review. Surfshark excluded. Google Workspace/Meet and Cloudflare Access remain company acceptance gates.
 
-Native Settings is missing and now tracked in [#51](https://github.com/arcusis/browser/issues/51); native password-manager feasibility is [#52](https://github.com/arcusis/browser/issues/52). Further extension-specific integration is paused while that architecture is reviewed.
+Native Settings now has General, Profiles and Shortcuts, per-Profile launcher search engines and a new-window sidebar preference. Full Settings parity remains [#51](https://github.com/arcusis/browser/issues/51); native password-manager feasibility is [#52](https://github.com/arcusis/browser/issues/52). Further extension-specific integration is paused while that architecture is reviewed.
 
 The [first milestone](https://github.com/arcusis/browser/milestone/1) remains open. GitHub issues own live task state; this note records acceptance boundaries, not session activity.
 

@@ -6,7 +6,7 @@ import SwiftUI
 enum BrowserMenuCommand: String, CaseIterable {
   case newWindow, newTab, search, newSpace, editSpace, closeTab, closeWindow
   case reopenClosed, recentlyClosed, bookmarkPage, bookmarks, history, downloads
-  case find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload, quit
+  case find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload, settings, quit
 }
 
 @MainActor
@@ -47,6 +47,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
   private let usesPrimaryWindow: Bool
   private let keyWindow: () -> NSWindow?
   private let screens: () -> [NSRect]
+  let preferences: BrowserPreferencesStore
+  private(set) var settingsController: BrowserSettingsController?
   private var claimedPrimary = false
   private var started = false
   private var startupFailed = false
@@ -56,12 +58,14 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
 
   init(
     events: BrowserRuntimeEvents, workspace: BrowserWorkspaceStore,
+    preferences: BrowserPreferencesStore = BrowserPreferencesStore(),
     presentation: Presentation = .visible, usesPrimaryWindow: Bool = true,
     keyWindow: @escaping () -> NSWindow? = { NSApp.keyWindow ?? NSApp.mainWindow },
     screens: @escaping () -> [NSRect] = { NSScreen.screens.map(\.visibleFrame) }
   ) {
     self.events = events
     self.workspace = workspace
+    self.preferences = preferences
     self.presentation = presentation
     self.usesPrimaryWindow = usesPrimaryWindow
     self.keyWindow = keyWindow
@@ -102,6 +106,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     events.onNewTabWillAdopt = { [weak self] tab, profile, opener in
       self?.prepareNewTab(tab, profile: profile, opener: opener)
     }
+    settingsController = BrowserSettingsController(
+      workspace: workspace, preferences: preferences,
+      presentation: presentation == .visible ? .visible : .hiddenProbe)
     installMenus()
     if presentation == .visible {
       for context in contexts.values where context.id != focused { context.window.orderFront(nil) }
@@ -128,6 +135,13 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
   func canPerform(_ command: BrowserMenuCommand) -> Bool {
     guard !events.runtime.isQuitting else { return false }
     if command == .newWindow || command == .quit { return true }
+    if command == .settings {
+      guard let context = activeContext else { return true }
+      return context.store.sheet == nil && context.window.attachedSheet == nil
+    }
+    if let settingsWindow = settingsController?.window, keyWindow() === settingsWindow {
+      return command == .closeTab || command == .closeWindow
+    }
     guard let context = activeContext, context.store.sheet == nil,
       context.window.attachedSheet == nil
     else { return false }
@@ -151,6 +165,14 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     }
     if command == .newWindow {
       do { try newWindow(from: activeContext?.id) } catch { report(error) }
+      return
+    }
+    if command == .settings {
+      settingsController?.show(for: activeContext?.store.session.selectedSpace.profileID)
+      return
+    }
+    if let settingsWindow = settingsController?.window, keyWindow() === settingsWindow {
+      settingsController?.close()
       return
     }
     guard let context = activeContext else { return }
@@ -179,7 +201,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     case .nextSpace: store.cycleSpace(by: 1)
     case .previousSpace: store.cycleSpace(by: -1)
     case .reload: store.reloadCurrentPage()
-    case .newWindow, .quit: break
+    case .newWindow, .settings, .quit: break
     }
   }
 
@@ -202,6 +224,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     guard let store = workspace.stores[id], let record = workspace.workspace.window(id) else {
       throw WorkspaceError.unknownWindow
     }
+    store.usePreferences(preferences)
     let runtime = events.runtime
     let nativeID: String
     if usesPrimaryWindow && !claimedPrimary && runtime.window != nil {
@@ -417,6 +440,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
       menu.addItem(item)
     }
     let app = section("Arcusis Browser")
+    add(.settings, "Settings…", ",", to: app)
     add(.quit, "Quit Arcusis Browser", "q", to: app)
     let file = section("File")
     add(.newWindow, "New window", "n", to: file)
@@ -461,9 +485,12 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
         file: WorkspaceFile(
           url: directory.appending(path: "workspace.json"),
           legacySessionURL: directory.appending(path: "session.json")))
+      let preferences = BrowserPreferencesStore(
+        fileURL: directory.appending(path: "preferences.json"))
       let runtime = try ARCChromiumRuntime(frameworkURL: frameworkURL)
       let host = NativeBrowserHost(
-        events: BrowserRuntimeEvents(runtime: runtime), workspace: workspace)
+        events: BrowserRuntimeEvents(runtime: runtime), workspace: workspace,
+        preferences: preferences)
       runtime.onReady = { [weak host] in
         do { try host?.restore() } catch {
           host?.startupFailed = true

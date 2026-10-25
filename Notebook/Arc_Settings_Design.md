@@ -8,13 +8,13 @@ Profile owns browser/account data and preferences; Space owns tab organization/t
 
 Requested password-manager UX: enable/disable, provider selection, connect/disconnect and clear connection/lock status. Bitwarden first; show only providers backed by an implemented route. Disabling integration must leave normal browsing usable. Backend choice remains [[Native_Password_Manager_Options]].
 
-Current source gap: no native Settings window or Command-Comma route; Profile model stores ID/name, with no persistent preference schema. Existing Space editor, Library/download panels and extension menu do not complete Settings.
+Implemented slice: reusable native Settings window, exact Command-Comma, General/Profiles/Shortcuts categories, profile names and unique Space counts. General controls sidebar visibility for new windows; Profiles chooses Google, DuckDuckGo or Bing for that Profile's launcher searches. Shortcuts lists existing commands. Preferences persist separately from account/session data; malformed or future-version files remain preserved. Settings selection never switches a browser window's account. Command-W and Shift-Command-W close Settings when it owns focus.
 
 Work order:
 
-1. Persistent per-Profile preferences and ownership rules; map each control to actual Swift or engine behavior.
-2. Native Settings window/menu/Command-Comma, toolbar categories, profile list/counts, grouped controls and keyboard accessibility.
-3. Working supported preferences and optional password-manager connection state; separate missing backend work explicitly.
+1. Verify physical keyboard/focus and accessibility for the implemented window and preferences.
+2. Add optional password-manager connection state after a supported backend is established.
+3. Add further supported Profile preferences with real behavior and ownership tests.
 4. Links routing, editable shortcuts and other settings in bounded follow-ups.
 5. Compare normal/compact layouts, focus, hover, transitions and Reduce Motion behavior against supplied/reference material.
 

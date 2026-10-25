@@ -5,11 +5,15 @@ import Testing
 @Test func browserShortcutsDoNotStealBitwardenAutofillOrOtherModifierVariants() {
   #expect(ARCReservedBrowserShortcut("l", .command))
   #expect(ARCReservedBrowserShortcut("t", .command))
+  #expect(ARCReservedBrowserShortcut(",", .command))
   #expect(ARCReservedBrowserShortcut("r", [.command, .capsLock]))
   #expect(!ARCReservedBrowserShortcut("L", [.command, .shift]))
   #expect(!ARCReservedBrowserShortcut("l", [.command, .option]))
   #expect(!ARCReservedBrowserShortcut("l", [.command, .control]))
   #expect(!ARCReservedBrowserShortcut("l", []))
+  #expect(!ARCReservedBrowserShortcut(",", [.command, .shift]))
+  #expect(!ARCReservedBrowserShortcut(",", [.command, .option]))
+  #expect(!ARCReservedBrowserShortcut(",", [.command, .control]))
 }
 
 @Test func nativeSpaceShortcutsRequireTheExactControlOptionChord() {

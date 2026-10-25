@@ -1060,6 +1060,7 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   NSString *identity = [self identityForTab:tab];
   ARCNativeWindowState *state = [self stateForWindow:window];
   if (!state || !identity || ![_tabWindows[identity] isEqualToString:state.identity]) return;
+  [self invalidateExternalRequestsForTabID:identity windowID:state.identity];
   if (!state.closing && !state.closed && !_closingBrowser && !tab.closed &&
       ![_pendingHostClosures containsObject:identity] &&
       [state.selectedTabID isEqualToString:identity] && !_detachedTabSelections[identity]) {
@@ -1407,7 +1408,14 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   if (identity) [self invalidateExternalRequestsForTabID:identity windowID:nil];
   [self publish:tab];
 }
-- (void)tabDidChangeLoading:(ArdiaCoreTab *)tab { [self publish:tab]; }
+- (void)tabDidChangeLoading:(ArdiaCoreTab *)tab {
+  NSString *identity = [self identityForTab:tab];
+  if (identity && tab.loading) {
+    [self advanceDocumentGenerationForTabID:identity];
+    [self invalidateExternalRequestsForTabID:identity windowID:nil];
+  }
+  [self publish:tab];
+}
 - (void)tabDidChangeNavigationState:(ArdiaCoreTab *)tab { [self publish:tab]; }
 - (void)tab:(ArdiaCoreTab *)tab rendererGone:(NSString *)status code:(int)code {
   ARCNativeWindowState *popupState = [self stateForPopupTab:tab];
@@ -1607,6 +1615,7 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
     [state.identity isEqualToString:request[@"windowID"]] &&
     [_owners[tabID] isEqualToString:request[@"profileID"]] &&
     _tabs[tabID].profile == _profiles[request[@"profileID"]] &&
+    [[state.native tabsForProfile:_tabs[tabID].profile] containsObject:_tabs[tabID]] &&
     [self isSelectedTabID:tabID] && [_tabs[tabID].url isEqualToString:request[@"pageURL"]] &&
     _documentGenerations[tabID].unsignedIntegerValue == [request[@"documentGeneration"] unsignedIntegerValue];
   [_engineClass resolveExternalApp:requestID open:accepted && contextMatches && canOpenApplication remember:NO];

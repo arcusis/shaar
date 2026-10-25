@@ -448,7 +448,9 @@ class ExternalAppConsentRunnerTests(unittest.TestCase):
                     externalAppConsentRunID=self.run_id, savedTabCapacityOnly=False,
                     savedTabCapacityProbe=False, bitwardenStoreProbe=False,
                     bitwardenVaultProbe=False, bitwardenOnboardingControl=False,
-                    abruptRecoveryProbe=False, localFixturesPassed=False, error=None,
+                    abruptRecoveryProbe=False, fixtureTLSProbe=False,
+                    scope=fixture.EXTERNAL_APP_CONSENT_SCOPE,
+                    localFixturesPassed=False, error=None,
                     checks=['native external-app consent evidence'], chromiumVersion='test')
 
     def evidence(self, phase):
@@ -526,6 +528,9 @@ class ExternalAppConsentRunnerTests(unittest.TestCase):
         cases = (
             ('main phase', lambda main, item: main.update(phase='restart')),
             ('main mode', lambda main, item: main.update(probeMode='full-fixture')),
+            ('main TLS mixed mode', lambda main, item: main.update(fixtureTLSProbe=True)),
+            ('main wrong scope', lambda main, item: main.update(scope='wrong scope')),
+            ('main missing scope', lambda main, item: main.pop('scope')),
             ('evidence phase', lambda main, item: item.update(phase='restart')),
             ('run identity binding', lambda main, item: main.update(externalAppConsentRunID='F29A09F3-FAF9-4938-A25B-260F67F42CC3')),
             ('strict bool', lambda main, item: item.update(handlerAvailable=1)),

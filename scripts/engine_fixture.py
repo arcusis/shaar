@@ -471,6 +471,8 @@ def validate_external_app_consent_report(root, phase, report, exit_code):
             or report.get('bitwardenVaultProbe') is not False
             or report.get('bitwardenOnboardingControl') is not False
             or report.get('abruptRecoveryProbe') is not False
+            or report.get('fixtureTLSProbe') is not False
+            or report.get('scope') != EXTERNAL_APP_CONSENT_SCOPE
             or report.get('passed') is not True
             or report.get('localFixturesPassed') is not False
             or report.get('error') is not None

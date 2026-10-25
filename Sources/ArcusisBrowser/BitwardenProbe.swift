@@ -569,7 +569,9 @@ final class BitwardenProbe {
     return unlocked
   }
 
-  private func lockVault(_ driver: BitwardenVaultProbe, accountEmail: String) async -> Bool {
+  private func lockVault(
+    _ driver: BitwardenVaultProbe, accountEmail: String, popupID: String
+  ) async -> Bool {
     let accountClicked = await driver.click("Bitwarden account \(accountEmail)")
     vaultLoginObservation["lockAccountButtonClicked"] = accountClicked
     guard accountClicked else { return false }
@@ -578,7 +580,10 @@ final class BitwardenProbe {
     guard menuReady else { return false }
     let lockClicked = await driver.click("Lock now")
     vaultLoginObservation["lockButtonClicked"] = lockClicked
-    guard lockClicked else { return false }
+    guard lockClicked else {
+      await observeLockTarget(popupID)
+      return false
+    }
     let locked = await driver.waitFor({ $0.passwordFields > 0 && !$0.vaultVisible })
     vaultLoginObservation["lockPasswordScreenReached"] = locked
     if let observed = await driver.state() {
@@ -589,6 +594,42 @@ final class BitwardenProbe {
       vaultLoginObservation["lockResultIntroCarousel"] = observed.introCarousel
     }
     return locked
+  }
+
+  private func observeLockTarget(_ popupID: String) async {
+    let keys = [
+      "unique", "disabled", "viewportHasArea", "centerInViewport", "centerHit",
+      "visibleSampleHit", "hiddenAncestor", "inertAncestor", "ariaHiddenAncestor",
+      "cssHiddenAncestor",
+    ]
+    let script = """
+      (()=>{const flags={unique:false,disabled:false,viewportHasArea:innerWidth>0&&innerHeight>0,
+        centerInViewport:false,centerHit:false,visibleSampleHit:false,hiddenAncestor:false,
+        inertAncestor:false,ariaHiddenAncestor:false,cssHiddenAncestor:false};
+        const candidates=[...document.querySelectorAll('button')].filter(e=>
+          (e.textContent||'').trim().replace(/\\s+/g,' ').toLowerCase().includes('lock now'));
+        flags.unique=candidates.length===1;if(!flags.unique)return flags;const button=candidates[0];
+        flags.disabled=button.disabled||button.getAttribute('aria-disabled')?.toLowerCase()==='true';
+        for(let n=button;n&&n.nodeType===1;n=n.parentElement){const s=getComputedStyle(n);
+          flags.hiddenAncestor||=n.hidden;flags.inertAncestor||=n.inert;
+          flags.ariaHiddenAncestor||=n.getAttribute('aria-hidden')?.toLowerCase()==='true';
+          flags.cssHiddenAncestor||=s.display==='none'||s.visibility==='hidden'||s.visibility==='collapse'||s.opacity==='0';}
+        const r=button.getBoundingClientRect(),x=r.x+r.width/2,y=r.y+r.height/2;
+        const hits=(x,y)=>{const e=document.elementFromPoint(x,y);return !!e&&(e===button||button.contains(e));};
+        flags.centerInViewport=x>=0&&y>=0&&x<innerWidth&&y<innerHeight;
+        flags.centerHit=flags.centerInViewport&&hits(x,y);
+        const l=Math.max(0,r.left),t=Math.max(0,r.top),rr=Math.min(innerWidth,r.right),bb=Math.min(innerHeight,r.bottom);
+        if(rr>l&&bb>t){for(const fx of [.1,.5,.9])for(const fy of [.1,.5,.9])
+          flags.visibleSampleHit||=hits(l+(rr-l)*fx,t+(bb-t)*fy);}return flags;})()
+      """
+    let json: String? = await withCheckedContinuation { continuation in
+      runtime.evaluateProbePopupID(popupID, script: script) { continuation.resume(returning: $0) }
+    }
+    guard let data = json?.data(using: .utf8),
+      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      keys.allSatisfy({ object[$0] is Bool })
+    else { return }
+    for key in keys { vaultLoginObservation["lockTarget_\(key)"] = object[key] as? Bool }
   }
 
   private func verifySharedAlpha(expectedAccount: String) async throws -> Bool {
@@ -676,7 +717,7 @@ final class BitwardenProbe {
         vaultStage = .lockUnlock
         let locked: Bool
         if authenticated {
-          locked = await lockVault(activeDriver, accountEmail: account.email)
+          locked = await lockVault(activeDriver, accountEmail: account.email, popupID: popupID)
         } else {
           locked = false
         }
@@ -691,7 +732,7 @@ final class BitwardenProbe {
         vaultStageResults["initial-unlock-\(label)"] = unlocked
         let relocked: Bool
         if unlocked {
-          relocked = await lockVault(activeDriver, accountEmail: account.email)
+          relocked = await lockVault(activeDriver, accountEmail: account.email, popupID: popupID)
         } else {
           relocked = false
         }

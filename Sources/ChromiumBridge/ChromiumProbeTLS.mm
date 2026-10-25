@@ -1,4 +1,5 @@
 #import "include/ChromiumBridge.h"
+#include <errno.h>
 #include <fcntl.h>
 #include <cstring>
 #include <sys/stat.h>
@@ -20,8 +21,13 @@ NSString *ARCProbeTLSArgument(NSURL *directory, NSString *fingerprint, BOOL test
     [directory.URLByResolvingSymlinksInPath.URLByDeletingLastPathComponent.path isEqualToString:canonical.path] &&
     lstat(root.path.stringByStandardizingPath.fileSystemRepresentation, &info) == 0 && S_ISDIR(info.st_mode) &&
     info.st_uid == getuid() && (info.st_mode & 07777) == 0700;
-  if (valid && lstat(directory.path.stringByStandardizingPath.fileSystemRepresentation, &info) == 0) {
-    valid = S_ISDIR(info.st_mode) && info.st_uid == getuid();
+  if (valid) {
+    int dataResult = lstat(directory.path.stringByStandardizingPath.fileSystemRepresentation, &info);
+    if (dataResult == 0) {
+      valid = S_ISDIR(info.st_mode) && info.st_uid == getuid();
+    } else if (errno != ENOENT) {
+      valid = NO;
+    }
   }
   if (valid) {
     NSURL *marker = [canonical URLByAppendingPathComponent:@".arcusis-probe"];

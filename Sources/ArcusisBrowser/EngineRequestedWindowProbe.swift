@@ -12,6 +12,7 @@ final class EngineRequestedWindowProbe {
   private var runtime: ARCChromiumRuntime { host.events.runtime }
   private var checks: [String] = []
   private var observations: [[String: Any]] = []
+  private var rollback: [String: Bool] = [:]
   private var popupCarrier: NSWindow?
   private var declineNextRequest = false
   private var declinedRequestSeen = false
@@ -164,6 +165,23 @@ final class EngineRequestedWindowProbe {
       }
       alpha.engine.extensionPanel = nil
     }
+    let alphaSpaceID = alpha.store.session.selectedSpaceID
+    let sourceOrderBeforeSibling = alpha.store.session.selectedSpace.tabs.map(\.id)
+    let siblingURL = fixture.appending(path: "host-engine-sibling-\(phase)")
+    alpha.store.perform(.open(siblingURL))
+    let siblingTab = alpha.store.session.selectedSpace.selectedTabID!
+    _ = try await document(siblingTab)
+    alpha.store.perform(.tab(space: alphaSpaceID, tab: alphaTab))
+    let sourceOrderBeforeMove = alpha.store.session.selectedSpace.tabs.map(\.id)
+    let sourceNativeOrderBeforeMove = sourceOrderBeforeMove.map {
+      runtime.nativeTabID(forID: $0.uuidString)
+    }
+    let sourceDocumentBeforeMove = try await document(alphaTab)
+    try expect(
+      runtime.nativeTabID(forID: siblingTab.uuidString) >= 0
+        && sourceOrderBeforeMove == sourceOrderBeforeSibling + [siblingTab]
+        && sourceNativeOrderBeforeMove.allSatisfy { $0 >= 0 },
+      "authored sibling is live in source order before rejected move")
     let beforeMove = Set(host.contexts.keys)
     let moveToken = UUID().uuidString
     try await dispatchWindowRequest(
@@ -173,11 +191,45 @@ final class EngineRequestedWindowProbe {
     try await wait("rejected existing-tab move cleanup") {
       Set(self.host.contexts.keys) == beforeMove
     }
+    rollback = [
+      "ownerPreserved": runtime.windowID(forTabID: alphaTab.uuidString) == alpha.nativeID,
+      "selectionPreserved": alpha.store.session.selectedSpace.selectedTabID == alphaTab,
+      "identityPreserved": runtime.nativeTabID(forID: alphaTab.uuidString)
+        == sourceNativeOrderBeforeMove[sourceOrderBeforeMove.firstIndex(of: alphaTab)!],
+      "modelOrderPreserved": sourceOrderBeforeMove
+        == alpha.store.session.selectedSpace.tabs.map(\.id),
+      "nativeIdentitiesPreserved": sourceNativeOrderBeforeMove
+        == alpha.store.session.selectedSpace.tabs.map({
+          runtime.nativeTabID(forID: $0.id.uuidString)
+        }),
+      "allOwnersPreserved": sourceOrderBeforeMove.allSatisfy {
+        runtime.windowID(forTabID: $0.uuidString) == alpha.nativeID
+      },
+    ]
     try expect(
-      runtime.windowID(forTabID: alphaTab.uuidString) == alpha.nativeID
-        && alpha.store.session.selectedSpace.selectedTabID == alphaTab,
-      "extension window creation cannot silently transfer or alias an existing live tab")
+      rollback.values.allSatisfy { $0 },
+      "rejected extension move preserves source selection, native ownership, identities, and tab order"
+    )
+    rollback["chromiumOrderPreserved"] = try await nativeOrderMatches(
+      alpha, expected: sourceNativeOrderBeforeMove,
+      selected: runtime.nativeTabID(forID: alphaTab.uuidString))
+    try expect(
+      rollback["chromiumOrderPreserved"] == true,
+      "Chromium confirms rejected move preserves source tab order and active identity")
+    let sourceDocumentAfterMove = try await document(alphaTab)
+    try expect(
+      sourceDocumentAfterMove as NSDictionary == sourceDocumentBeforeMove as NSDictionary,
+      "rejected extension move preserves live source document, cookie, local, and session state")
     alpha.engine.extensionPanel = nil
+    alpha.store.closeTab(siblingTab)
+    try await wait("authored sibling cleanup") {
+      runtime.nativeTabID(forID: siblingTab.uuidString) == -1
+        && !alpha.store.session.spaces.flatMap(\.tabs).contains(where: { $0.id == siblingTab })
+    }
+    try expect(
+      alpha.store.session.selectedSpace.selectedTabID == alphaTab
+        && alpha.store.session.selectedSpace.tabs.map(\.id) == sourceOrderBeforeSibling,
+      "probe removes only its authored sibling and keeps original selection")
     let beforeDecline = host.workspace.workspace
     let closedBeforeDecline = closedWindows.count
     declineNextRequest = true
@@ -272,6 +324,70 @@ final class EngineRequestedWindowProbe {
     throw WindowProbeFailure("Window worker report did not arrive.")
   }
 
+  private func nativeOrderMatches(
+    _ context: NativeBrowserContext, expected: [Int32], selected: Int32
+  ) async throws -> Bool {
+    context.engine.refreshExtensions()
+    guard
+      let id = context.engine.extensions.first(where: { $0.name == "Account isolation probe" })?.id
+    else { throw WindowProbeFailure("Order worker extension missing.") }
+    context.engine.executeExtension(id)
+    guard case .popup(let popup) = context.engine.extensionPanel,
+      let view = runtime.view(forExtensionPopupID: popup.id)
+    else { throw WindowProbeFailure("Order worker popup missing.") }
+    let carrier = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 420, height: 560), styleMask: .borderless,
+      backing: .buffered, defer: false)
+    carrier.contentView = view
+    popupCarrier = carrier
+    var ready = false
+    for _ in 0..<80 {
+      let json: String? = await withCheckedContinuation { continuation in
+        runtime.evaluateProbePopupID(
+          popup.id, script: "({ready:typeof window.probeCommand==='function'})"
+        ) { continuation.resume(returning: $0) }
+      }
+      if json?.contains("true") == true {
+        ready = true
+        break
+      }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    guard ready else { throw WindowProbeFailure("Order worker popup was not ready.") }
+    let window = runtime.chromeWindowID(
+      forProfileID: context.store.session.selectedSpace.profileID.uuidString,
+      windowID: context.nativeID)
+    guard window >= 0, selected >= 0, expected.allSatisfy({ $0 >= 0 }) else { return false }
+    let encoded = String(data: try JSONEncoder().encode(expected), encoding: .utf8)!
+    let script = """
+      (()=>{window.arcusisMoveOrder=null;chrome.tabs.query({windowId:\(window)}).then(items=>{
+        items.sort((a,b)=>a.index-b.index);const order=JSON.stringify(items.map(t=>t.id))===JSON.stringify(\(encoded));
+        const active=items.filter(t=>t.active).length===1&&items.some(t=>t.active&&t.id===\(selected));
+        window.arcusisMoveOrder={matches:order&&active,orderMatches:order,activeMatches:active};
+      },()=>{window.arcusisMoveOrder={matches:false};});return true;})()
+      """
+    let _: String? = await withCheckedContinuation { continuation in
+      runtime.evaluateProbePopupID(popup.id, script: script) { continuation.resume(returning: $0) }
+    }
+    for _ in 0..<80 {
+      let json: String? = await withCheckedContinuation { continuation in
+        runtime.evaluateProbePopupID(popup.id, script: "window.arcusisMoveOrder") {
+          continuation.resume(returning: $0)
+        }
+      }
+      if let data = json?.data(using: .utf8),
+        let value = try? JSONSerialization.jsonObject(with: data) as? [String: Bool],
+        let matches = value["matches"]
+      {
+        rollback["chromiumOrderMatches"] = value["orderMatches"]
+        rollback["chromiumActiveMatches"] = value["activeMatches"]
+        return matches
+      }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    return false
+  }
+
   private func createdWindow(excluding prior: Set<UUID>, url: URL) async throws
     -> NativeBrowserContext
   {
@@ -293,7 +409,7 @@ final class EngineRequestedWindowProbe {
       if let result = await value(
         id,
         script:
-          "({fixture:document.documentElement.dataset.arcusisFixture,instance:window.arcusisInstance,cookie:document.cookie,hasOpener:!!window.opener})"
+          "({fixture:document.documentElement.dataset.arcusisFixture,instance:window.arcusisInstance,cookie:document.cookie,local:localStorage.getItem('account'),session:sessionStorage.getItem('account'),hasOpener:!!window.opener})"
       ),
         result["fixture"] as? String == "v1", result["instance"] as? String != nil
       {
@@ -335,6 +451,7 @@ final class EngineRequestedWindowProbe {
     try JSONSerialization.data(
       withJSONObject: [
         "passed": error == nil, "checks": checks, "observations": observations,
+        "rollback": rollback,
         "error": error?.localizedDescription as Any? ?? NSNull(),
         "scope":
           "Authored page window.open and MV3 chrome.windows.create in hidden managed normal-profile windows. No real company authentication, physical focus, private sessions, or vendor window flows verified.",

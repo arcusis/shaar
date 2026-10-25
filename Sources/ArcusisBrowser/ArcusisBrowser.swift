@@ -18,7 +18,8 @@ enum ArcusisBrowserMain {
           compact: arguments.contains("--compact"),
           hideSidebar: arguments.contains("--hide-sidebar"),
           showSpaceEditor: arguments.contains("--space-editor"),
-          showExtensionConsent: arguments.contains("--extension-consent"))
+          showExtensionConsent: arguments.contains("--extension-consent"),
+          showRecentDownloads: arguments.contains("--recent-downloads"))
       } catch {
         FileHandle.standardError.write(Data("Preview failed: \(error.localizedDescription)\n".utf8))
         exit(1)
@@ -36,7 +37,7 @@ enum ArcusisBrowserMain {
 
   @MainActor private static func renderPreview(
     to url: URL, showCommand: Bool, compact: Bool, hideSidebar: Bool, showSpaceEditor: Bool,
-    showExtensionConsent: Bool
+    showExtensionConsent: Bool, showRecentDownloads: Bool
   ) throws {
     // Render only this view hierarchy; never capture or activate the desktop.
     let application = NSApplication.shared
@@ -51,7 +52,7 @@ enum ArcusisBrowserMain {
     store.sidebarIsVisible = !hideSidebar
     let view = NativePreview(
       store: store, showSpaceEditor: showSpaceEditor,
-      showExtensionConsent: showExtensionConsent
+      showExtensionConsent: showExtensionConsent, showRecentDownloads: showRecentDownloads
     )
     .frame(width: size.width, height: size.height)
     .background(Color(nsColor: .windowBackgroundColor))
@@ -79,15 +80,57 @@ private struct NativePreview: View {
   let store: BrowserStore
   let showSpaceEditor: Bool
   let showExtensionConsent: Bool
+  let showRecentDownloads: Bool
 
   var body: some View {
-    if showExtensionConsent {
+    if showRecentDownloads {
+      let profileID = store.session.selectedSpace.profileID
+      HStack(spacing: 0) {
+        BrowserSidebar(
+          store: store, previewRecentDownloads: Self.previewDownloads(profileID: profileID)
+        )
+        .frame(width: BrowserChromeLayout.sidebarWidth)
+        VStack {
+          Text("Authored page preview").font(.headline).foregroundStyle(.secondary)
+          Spacer()
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .padding(10)
+      }
+      .background(store.session.selectedSpace.tint.color.opacity(0.5))
+    } else if showExtensionConsent {
       ExtensionConsent(store: store, request: previewConsent)
     } else if showSpaceEditor {
       SpaceEditor(store: store, route: .create)
     } else {
       BrowserWindow(store: store)
     }
+  }
+
+  private static func previewDownloads(profileID: UUID) -> [BrowserDownload] {
+    [
+      BrowserDownload(
+        id: "8ce51349-a188-4bad-bd1c-011b48e48ca6", profileID: profileID,
+        filename: "Arcusis-Release.dmg", path: "/preview/Arcusis-Release.dmg",
+        sourceURL: "https://downloads.example.test/Arcusis-Release.dmg", state: .finished,
+        paused: false, dangerous: false, offTheRecord: false,
+        received: 98_304_000, total: 98_304_000, startTime: 3)!,
+      BrowserDownload(
+        id: "309f2448-0e6c-44a3-9db4-57b3f9ca4a0a", profileID: profileID,
+        filename: "research-notes.pdf", path: "/preview/research-notes.pdf",
+        sourceURL: "https://files.example.test/research-notes.pdf", state: .downloading,
+        paused: false, dangerous: false, offTheRecord: false,
+        received: 65_536, total: 262_144, startTime: 2)!,
+      BrowserDownload(
+        id: "588a94a2-2a2e-4762-9f35-3e4590356a09", profileID: profileID,
+        filename: "image-export.zip", path: "/preview/image-export.zip",
+        sourceURL: "https://files.example.test/image-export.zip", state: .downloading,
+        paused: true, dangerous: false, offTheRecord: false,
+        received: 1_048_576, total: -1, startTime: 1)!,
+    ]
   }
 
   private var previewConsent: ExtensionInstallRequest {

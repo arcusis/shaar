@@ -7,6 +7,17 @@ struct BrowserSidebar: View {
   @State private var targetedSpace: UUID?
   @State private var targetedSection: String?
   @State private var targetedFolder: UUID?
+  @State private var recentDownloadsIsOpen = false
+  @State private var recentDownloadsPinnedOpen = false
+  @State private var recentDownloadsAnchorHovered = false
+  @State private var recentDownloadsCardHovered = false
+  @State private var recentDownloadsCloseTask: Task<Void, Never>?
+  let previewRecentDownloads: [BrowserDownload]?
+
+  init(store: BrowserStore, previewRecentDownloads: [BrowserDownload]? = nil) {
+    self.store = store
+    self.previewRecentDownloads = previewRecentDownloads
+  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 20) {
@@ -130,18 +141,7 @@ struct BrowserSidebar: View {
       }
       Spacer(minLength: 0)
       Divider()
-      HStack(spacing: 8) {
-        Menu {
-          Button("Bookmarks…") { store.showLibrary(.bookmarks) }
-          Button("History…") { store.showLibrary(.history) }
-          Button("Downloads…") { store.showDownloads() }
-        } label: {
-          Label("Library", systemImage: "books.vertical")
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .help("Bookmarks and History for \(store.profileName) profile")
-      }
-      .font(.system(size: 12))
+      recentDownloadsControls
       ScrollView(.horizontal) {
         HStack(spacing: 8) {
           ForEach(store.session.spaces) { space in
@@ -192,6 +192,110 @@ struct BrowserSidebar: View {
     .buttonStyle(.plain)
     .padding(.horizontal, 14)
     .padding(.bottom, 16)
+    .zIndex(1)
+  }
+
+  private var recentDownloadsControls: some View {
+    let profileID = store.session.selectedSpace.profileID
+    let downloads = store.engine?.downloads
+    return HStack(spacing: 8) {
+      Menu {
+        Button("Bookmarks…") { store.showLibrary(.bookmarks) }
+        Button("History…") { store.showLibrary(.history) }
+        Button("Downloads…") { store.showDownloads() }
+      } label: {
+        Label("Library", systemImage: "books.vertical")
+          .frame(maxWidth: .infinity, alignment: .leading)
+      }
+      .help("Bookmarks and History for \(store.profileName) profile")
+      Button {
+        guard downloadsProfileIsCurrent(profileID) else { return }
+        recentDownloadsCloseTask?.cancel()
+        if recentDownloadsIsOpen {
+          recentDownloadsPinnedOpen = false
+          recentDownloadsIsOpen = false
+        } else {
+          recentDownloadsPinnedOpen = true
+          recentDownloadsIsOpen = true
+        }
+      } label: {
+        Image(systemName: "arrow.down.circle")
+          .frame(width: 30, height: 26)
+          .contentShape(Rectangle())
+      }
+      .help("Recent downloads")
+      .accessibilityLabel("Toggle recent downloads")
+      .accessibilityHint("Shows the five most recent downloads for this profile")
+    }
+    .font(.system(size: 12))
+    .onHover { recentDownloadsAnchorHoverChanged($0) }
+    .overlay(alignment: .bottomLeading) {
+      if recentDownloadsIsOpen || previewRecentDownloads != nil,
+        downloadsProfileIsCurrent(profileID),
+        let items = previewRecentDownloads ?? downloads?.items(in: profileID)
+      {
+        RecentDownloadsPopover(
+          items: items, profileID: profileID,
+          selectedProfileID: { store.session.selectedSpace.profileID },
+          dragURL: { item in
+            guard previewRecentDownloads == nil, downloadsProfileIsCurrent(profileID),
+              let downloads
+            else { return nil }
+            return downloads.fileForDrag(
+              id: item.id, profileID: profileID,
+              selectedProfileID: store.session.selectedSpace.profileID)
+          },
+          dismiss: {
+            guard downloadsProfileIsCurrent(profileID) else { return }
+            recentDownloadsPinnedOpen = false
+            recentDownloadsIsOpen = false
+          }
+        )
+        .offset(y: -26)
+        .onHover { recentDownloadsCardHoverChanged($0) }
+        .transition(.opacity.combined(with: .move(edge: .bottom)))
+      }
+    }
+    .onExitCommand {
+      recentDownloadsPinnedOpen = false
+      recentDownloadsIsOpen = false
+    }
+    .onChange(of: profileID) { _, _ in
+      recentDownloadsCloseTask?.cancel()
+      recentDownloadsPinnedOpen = false
+      recentDownloadsAnchorHovered = false
+      recentDownloadsCardHovered = false
+      recentDownloadsIsOpen = false
+    }
+  }
+
+  private func downloadsProfileIsCurrent(_ profileID: UUID) -> Bool {
+    store.session.selectedSpace.profileID == profileID
+  }
+
+  private func recentDownloadsAnchorHoverChanged(_ inside: Bool) {
+    recentDownloadsAnchorHovered = inside
+    recentDownloadsHoverChanged(inside)
+  }
+
+  private func recentDownloadsCardHoverChanged(_ inside: Bool) {
+    recentDownloadsCardHovered = inside
+    recentDownloadsHoverChanged(inside)
+  }
+
+  private func recentDownloadsHoverChanged(_ inside: Bool) {
+    recentDownloadsCloseTask?.cancel()
+    if inside {
+      recentDownloadsIsOpen = true
+      return
+    }
+    recentDownloadsCloseTask = Task { @MainActor in
+      try? await Task.sleep(for: .milliseconds(180))
+      if !recentDownloadsAnchorHovered && !recentDownloadsCardHovered && !recentDownloadsPinnedOpen
+      {
+        recentDownloadsIsOpen = false
+      }
+    }
   }
 
   private func tabRow(_ tab: BrowserTab) -> some View {

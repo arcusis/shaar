@@ -17,12 +17,14 @@ final class NativeBrowserContext {
   let store: BrowserStore
   let engine: BrowserEngine
   let hosting: NSHostingView<BrowserWindow>
+  let contentView: NSView
+  let titlebarDragView: NSView
   var observers: [NSObjectProtocol] = []
   var geometryTask: Task<Void, Never>?
 
   init(
     id: UUID, nativeID: String, window: NSWindow, store: BrowserStore, engine: BrowserEngine,
-    hosting: NSHostingView<BrowserWindow>
+    hosting: NSHostingView<BrowserWindow>, contentView: NSView, titlebarDragView: NSView
   ) {
     self.id = id
     self.nativeID = nativeID
@@ -30,6 +32,8 @@ final class NativeBrowserContext {
     self.store = store
     self.engine = engine
     self.hosting = hosting
+    self.contentView = contentView
+    self.titlebarDragView = titlebarDragView
   }
 }
 
@@ -255,8 +259,12 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     hosting.frame = content.bounds
     hosting.autoresizingMask = [.width, .height]
     content.addSubview(hosting)
+    let titlebarDragView = WindowDragRegion.makeTitlebarDragView(
+      window: window, contentView: content)
+    content.addSubview(titlebarDragView, positioned: .above, relativeTo: hosting)
     let context = NativeBrowserContext(
-      id: id, nativeID: nativeID, window: window, store: store, engine: engine, hosting: hosting)
+      id: id, nativeID: nativeID, window: window, store: store, engine: engine, hosting: hosting,
+      contentView: content, titlebarDragView: titlebarDragView)
     contexts[id] = context
     engine.onClosed = { [weak self] quitting in self?.closed(id, quitting: quitting) }
     observe(context)
@@ -351,6 +359,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
           [weak self, weak context] _ in
           MainActor.assumeIsolated {
             guard let self, let context else { return }
+            WindowDragRegion.updateTitlebarDragView(
+              context.titlebarDragView, window: context.window, contentView: context.contentView)
             context.geometryTask?.cancel()
             context.geometryTask = Task { [weak self, weak context] in
               do { try await Task.sleep(for: .milliseconds(250)) } catch { return }

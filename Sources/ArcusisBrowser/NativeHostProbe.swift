@@ -31,6 +31,69 @@ private struct HostProbeProfile: Codable {
   let name: String
 }
 
+private struct HostViewportRect: Codable {
+  let x: Double
+  let y: Double
+  let width: Double
+  let height: Double
+
+  init(_ rect: NSRect) {
+    x = Double(rect.origin.x)
+    y = Double(rect.origin.y)
+    width = Double(rect.width)
+    height = Double(rect.height)
+  }
+}
+
+private struct HostViewportSample: Codable {
+  let stage: String
+  let windowID: UUID
+  let tabID: UUID
+  let profileID: UUID
+  let accountID: String
+  let documentInstance: String
+  let innerWidthCSSPixels: Double
+  let innerHeightCSSPixels: Double
+  let devicePixelRatio: Double
+  let backingScaleFactor: Double
+  let sidebarVisible: Bool
+  let windowFramePoints: HostViewportRect
+  let contentBoundsPoints: HostViewportRect
+  let hostingBoundsPoints: HostViewportRect
+  let visibleHostingBoundsPoints: HostViewportRect
+  let containerFrameInHostingPoints: HostViewportRect
+  let containerBoundsPoints: HostViewportRect
+  let pageFramePoints: HostViewportRect
+  let expectedPageWidthPoints: Double
+  let containerWithinVisibleHosting: Bool
+  let containerFitsExpectedPageWidth: Bool
+  let pageMatchesContainer: Bool
+  let cssMatchesNativePoints: Bool
+  let tabOwnerMatchesWindow: Bool
+}
+
+private struct HostViewportProof: Codable {
+  let schema: Int
+  let phase: String
+  let passed: Bool
+  let failureCode: String?
+  let cssUnits: String
+  let nativeUnits: String
+  let scaleNote: String
+  let checks: [String: Bool]
+  let samples: [HostViewportSample]
+}
+
+private struct HostViewportWindowState {
+  let context: NativeBrowserContext
+  let frame: NSRect
+  let selectedSpaceID: UUID
+  let selectedTabID: UUID?
+  let sidebarIsVisible: Bool
+  let findTabID: UUID?
+  let findQuery: String?
+}
+
 /// Exercises the production host class without ordering windows onscreen or sending OS input.
 @MainActor
 final class NativeHostProbe {
@@ -226,6 +289,8 @@ final class NativeHostProbe {
       host: host, root: root, fixture: fixture, phase: phase
     ).run(alpha: second, beta: first)
     checks += requested.checks
+    try await verifyViewportLayout(
+      first: first, firstTab: firstTab, second: second, secondTab: secondTab)
     focus(firstID)
     try send(.search)
     try expect(
@@ -483,6 +548,358 @@ final class NativeHostProbe {
       "native host completes without startup, geometry, or persistence errors")
   }
 
+  private func verifyViewportLayout(
+    first: NativeBrowserContext, firstTab: UUID,
+    second: NativeBrowserContext, secondTab: UUID
+  ) async throws {
+    let savedStates = [viewportState(first), viewportState(second)]
+    let savedFocus = focused
+    var samples: [HostViewportSample] = []
+    var viewportChecks: [String: Bool] = [:]
+
+    do {
+      try recordViewportCheck(
+        "windowsRemainHidden", !first.window.isVisible && !second.window.isVisible,
+        "Viewport probe windows stay hidden.", checks: &viewportChecks)
+      let firstOriginal = try await viewportSample(
+        "first-original", context: first, tabID: firstTab)
+      let secondOriginal = try await viewportSample(
+        "second-original", context: second, tabID: secondTab)
+      samples += [firstOriginal, secondOriginal]
+      try recordViewportCheck(
+        "firstAndSecondPagesHaveDifferentAccounts",
+        firstOriginal.accountID != secondOriginal.accountID,
+        "Two owning windows retain distinct authored fixture accounts.", checks: &viewportChecks)
+      try recordViewportCheck(
+        "initialPagesMatchNativePoints",
+        firstOriginal.cssMatchesNativePoints && secondOriginal.cssMatchesNativePoints
+          && firstOriginal.pageMatchesContainer && secondOriginal.pageMatchesContainer
+          && firstOriginal.containerWithinVisibleHosting
+          && secondOriginal.containerWithinVisibleHosting
+          && firstOriginal.containerFitsExpectedPageWidth
+          && secondOriginal.containerFitsExpectedPageWidth,
+        "Initial CSS viewport dimensions match each owning native page in logical points.",
+        checks: &viewportChecks)
+
+      var normalFrame = first.window.frame
+      normalFrame.size = NSSize(
+        width: max(first.window.minSize.width + 240, 1000),
+        height: max(first.window.minSize.height + 220, 760))
+      first.window.setFrame(normalFrame, display: false)
+      try await settleViewportLayout(first)
+      let firstNormal = try await viewportSample("first-normal", context: first, tabID: firstTab)
+      let secondAfterNormal = try await viewportSample(
+        "second-after-first-normal", context: second, tabID: secondTab)
+      samples += [firstNormal, secondAfterNormal]
+      try recordViewportCheck(
+        "normalResizeChangesFirstCssViewport",
+        firstNormal.innerWidthCSSPixels > 0 && firstNormal.innerHeightCSSPixels > 0
+          && firstNormal.cssMatchesNativePoints && firstNormal.pageMatchesContainer
+          && firstNormal.containerWithinVisibleHosting
+          && firstNormal.containerFitsExpectedPageWidth,
+        "Normal window resize produces a measurable first-window viewport.",
+        checks: &viewportChecks)
+      try recordViewportCheck(
+        "normalResizeLeavesSecondWindowStable",
+        viewportSizeMatches(secondAfterNormal, secondOriginal),
+        "Resizing first owning window leaves second window viewport unchanged.",
+        checks: &viewportChecks)
+
+      var minimumFrame = normalFrame
+      minimumFrame.size = first.window.minSize
+      first.window.setFrame(minimumFrame, display: false)
+      try await settleViewportLayout(first)
+      let firstMinimum = try await viewportSample(
+        "first-minimum", context: first, tabID: firstTab)
+      let secondAfterMinimum = try await viewportSample(
+        "second-after-first-minimum", context: second, tabID: secondTab)
+      samples += [firstMinimum, secondAfterMinimum]
+      try recordViewportCheck(
+        "minimumResizeChangesFirstCssViewport",
+        firstMinimum.windowFramePoints.width <= Double(first.window.minSize.width + 1)
+          && firstMinimum.windowFramePoints.height <= Double(first.window.minSize.height + 1)
+          && firstMinimum.cssMatchesNativePoints && firstMinimum.pageMatchesContainer
+          && firstNormal.innerWidthCSSPixels > firstMinimum.innerWidthCSSPixels + 100
+          && firstNormal.innerHeightCSSPixels > firstMinimum.innerHeightCSSPixels + 100
+          && firstMinimum.containerWithinVisibleHosting
+          && firstMinimum.containerFitsExpectedPageWidth,
+        "Minimum window resize updates first-window CSS and native viewport dimensions.",
+        checks: &viewportChecks)
+      try recordViewportCheck(
+        "minimumResizeLeavesSecondWindowStable",
+        viewportSizeMatches(secondAfterMinimum, secondOriginal),
+        "Minimum resize leaves second owning window viewport unchanged.",
+        checks: &viewportChecks)
+
+      first.window.setFrame(normalFrame, display: false)
+      try await settleViewportLayout(first)
+      let firstNormalBeforeChrome = try await viewportSample(
+        "first-normal-before-chrome", context: first, tabID: firstTab)
+      samples.append(firstNormalBeforeChrome)
+      first.store.sidebarIsVisible = false
+      try await settleViewportLayout(first)
+      let sidebarHidden = try await viewportSample(
+        "sidebar-hidden", context: first, tabID: firstTab)
+      samples.append(sidebarHidden)
+      first.store.sidebarIsVisible = true
+      try await settleViewportLayout(first)
+      let sidebarShown = try await viewportSample(
+        "sidebar-shown", context: first, tabID: firstTab)
+      let secondAfterSidebar = try await viewportSample(
+        "second-after-sidebar", context: second, tabID: secondTab)
+      samples += [sidebarShown, secondAfterSidebar]
+      try recordViewportCheck(
+        "sidebarChangesOnlyFirstWindowWidth",
+        sidebarHidden.innerWidthCSSPixels > sidebarShown.innerWidthCSSPixels + 80
+          && sidebarHidden.cssMatchesNativePoints && sidebarShown.cssMatchesNativePoints
+          && sidebarHidden.containerWithinVisibleHosting
+          && sidebarShown.containerWithinVisibleHosting
+          && sidebarHidden.containerFitsExpectedPageWidth
+          && sidebarShown.containerFitsExpectedPageWidth
+          && viewportSizeMatches(secondAfterSidebar, secondOriginal),
+        "Sidebar visibility changes first-window viewport while preserving second window.",
+        checks: &viewportChecks)
+
+      first.store.dismissPageFind()
+      first.store.showPageFind()
+      first.store.updatePageFindQuery("OrbitFindMarker")
+      try await wait("viewport probe Find result") { first.store.pageFind?.canMove == true }
+      try await settleViewportLayout(first)
+      let findOpen = try await viewportSample("find-open", context: first, tabID: firstTab)
+      samples.append(findOpen)
+      first.store.dismissPageFind()
+      try await settleViewportLayout(first)
+      let findClosed = try await viewportSample("find-closed", context: first, tabID: firstTab)
+      let secondAfterFind = try await viewportSample(
+        "second-after-find", context: second, tabID: secondTab)
+      samples += [findClosed, secondAfterFind]
+      try recordViewportCheck(
+        "findChangesOnlyFirstWindowHeight",
+        findClosed.innerHeightCSSPixels > findOpen.innerHeightCSSPixels + 20
+          && findOpen.cssMatchesNativePoints && findClosed.cssMatchesNativePoints
+          && findOpen.containerWithinVisibleHosting
+          && findClosed.containerWithinVisibleHosting
+          && findOpen.containerFitsExpectedPageWidth
+          && findClosed.containerFitsExpectedPageWidth
+          && viewportSizeMatches(secondAfterFind, secondOriginal),
+        "Find visibility changes first-window viewport while preserving second window.",
+        checks: &viewportChecks)
+
+      let identitiesPreserved = samples.allSatisfy { sample in
+        let baseline = sample.tabID == firstTab ? firstOriginal : secondOriginal
+        return sample.profileID == baseline.profileID
+          && sample.accountID == baseline.accountID
+          && sample.documentInstance == baseline.documentInstance
+          && sample.tabOwnerMatchesWindow
+          && sample.pageMatchesContainer
+          && sample.cssMatchesNativePoints
+          && sample.containerWithinVisibleHosting
+          && sample.containerFitsExpectedPageWidth
+      }
+      try recordViewportCheck(
+        "accountDocumentAndNativeOwnershipPreserved", identitiesPreserved,
+        "Every viewport sample retains authored account, document instance, tab owner, and page bounds.",
+        checks: &viewportChecks)
+
+      try await restoreViewportState(savedStates, focusedWindow: savedFocus)
+      let stateRestored =
+        viewportStateMatches(savedStates)
+        && ((savedFocus == nil && focused == nil)
+          || (savedFocus != nil && focused === savedFocus))
+      try recordViewportCheck(
+        "selectionGeometrySidebarAndFindRestored", stateRestored,
+        "Original selection, window geometry, sidebar, Find, and focused host window restored.",
+        checks: &viewportChecks)
+      try writeViewportProof(passed: true, samples: samples, checks: viewportChecks)
+    } catch {
+      try? await restoreViewportState(savedStates, focusedWindow: savedFocus)
+      try? writeViewportProof(
+        passed: false, samples: samples, checks: viewportChecks)
+      throw error
+    }
+  }
+
+  private func viewportState(_ context: NativeBrowserContext) -> HostViewportWindowState {
+    HostViewportWindowState(
+      context: context, frame: context.window.frame,
+      selectedSpaceID: context.store.session.selectedSpaceID,
+      selectedTabID: context.store.session.selectedSpace.selectedTabID,
+      sidebarIsVisible: context.store.sidebarIsVisible,
+      findTabID: context.store.pageFind?.tabID,
+      findQuery: context.store.pageFind?.query)
+  }
+
+  private func restoreViewportState(
+    _ states: [HostViewportWindowState], focusedWindow: NSWindow?
+  ) async throws {
+    for state in states {
+      let context = state.context
+      guard host?.contexts[context.id] === context else {
+        throw HostProbeFailure("Viewport probe lost an owning production window.")
+      }
+      context.window.setFrame(state.frame, display: false)
+      if let selectedTabID = state.selectedTabID {
+        try selectFixture(selectedTabID, in: context)
+      } else if context.store.session.selectedSpaceID != state.selectedSpaceID {
+        context.store.perform(.space(state.selectedSpaceID))
+      }
+      context.store.sidebarIsVisible = state.sidebarIsVisible
+      context.store.dismissPageFind()
+      if let findTabID = state.findTabID {
+        try selectFixture(findTabID, in: context)
+        context.store.showPageFind()
+        if let query = state.findQuery, !query.isEmpty {
+          context.store.updatePageFindQuery(query)
+        }
+      }
+      try await settleViewportLayout(context)
+    }
+    if let focusedWindow,
+      let state = states.first(where: { $0.context.window === focusedWindow })
+    {
+      focus(state.context.id)
+    } else {
+      focused = focusedWindow
+      if let focusedWindow {
+        NotificationCenter.default.post(
+          name: NSWindow.didBecomeKeyNotification, object: focusedWindow)
+      }
+    }
+    host?.flushGeometry()
+  }
+
+  private func viewportStateMatches(_ states: [HostViewportWindowState]) -> Bool {
+    states.allSatisfy { state in
+      let context = state.context
+      return context.window.frame == state.frame
+        && context.store.session.selectedSpaceID == state.selectedSpaceID
+        && context.store.session.selectedSpace.selectedTabID == state.selectedTabID
+        && context.store.sidebarIsVisible == state.sidebarIsVisible
+        && context.store.pageFind?.tabID == state.findTabID
+        && context.store.pageFind?.query == state.findQuery
+    }
+  }
+
+  private func settleViewportLayout(_ context: NativeBrowserContext) async throws {
+    for _ in 0..<4 {
+      context.window.displayIfNeeded()
+      context.contentView.layoutSubtreeIfNeeded()
+      context.hosting.layoutSubtreeIfNeeded()
+      await Task.yield()
+      try await Task.sleep(for: .milliseconds(30))
+    }
+    context.window.displayIfNeeded()
+    context.contentView.layoutSubtreeIfNeeded()
+    context.hosting.layoutSubtreeIfNeeded()
+  }
+
+  private func viewportSample(
+    _ stage: String, context: NativeBrowserContext, tabID: UUID
+  ) async throws -> HostViewportSample {
+    try await settleViewportLayout(context)
+    let document = try await document(tabID)
+    guard document["fixture"] as? String == "v1",
+      let instance = document["instance"] as? String,
+      let cookie = document["cookie"] as? String,
+      let accountID = cookie.split(separator: ";").compactMap({ item -> String? in
+        let pair = item.trimmingCharacters(in: .whitespaces).split(separator: "=", maxSplits: 1)
+        return pair.count == 2 && pair[0] == "account" ? String(pair[1]) : nil
+      }).first,
+      let cssWidth = (document["innerWidth"] as? NSNumber)?.doubleValue,
+      let cssHeight = (document["innerHeight"] as? NSNumber)?.doubleValue,
+      let devicePixelRatio = (document["devicePixelRatio"] as? NSNumber)?.doubleValue,
+      let page = primary.runtime.view(forTabID: tabID.uuidString),
+      let container = pageContainer(in: context.hosting, page: page),
+      page.superview === container
+    else { throw HostProbeFailure("Authored viewport fixture or native page view is missing.") }
+    let containerBounds = container.bounds
+    let pageFrame = page.frame
+    let containerFrame = container.convert(containerBounds, to: context.hosting)
+    let visibleHostingBounds = context.hosting.convert(context.window.contentLayoutRect, from: nil)
+    let leadingInset = context.store.sidebarIsVisible ? BrowserChromeLayout.sidebarWidth : 10
+    let expectedMinX = visibleHostingBounds.minX + leadingInset
+    let expectedMaxX = visibleHostingBounds.maxX - 10
+    let expectedWidth = max(0, expectedMaxX - expectedMinX)
+    let tolerance: CGFloat = 1
+    let containerWithinVisibleHosting =
+      containerFrame.minX >= visibleHostingBounds.minX - tolerance
+      && containerFrame.maxX <= visibleHostingBounds.maxX + tolerance
+      && containerFrame.minY >= visibleHostingBounds.minY - tolerance
+      && containerFrame.maxY <= visibleHostingBounds.maxY + tolerance
+    let containerFitsExpectedPageWidth =
+      abs(containerFrame.width - expectedWidth) <= tolerance
+      && containerFrame.minX >= expectedMinX - tolerance
+      && containerFrame.maxX <= expectedMaxX + tolerance
+    let pageMatchesContainer = pageFrame == containerBounds
+    let cssMatchesNativePoints =
+      abs(cssWidth - Double(pageFrame.width)) <= 1
+      && abs(cssHeight - Double(pageFrame.height)) <= 1
+    return HostViewportSample(
+      stage: stage, windowID: context.id, tabID: tabID,
+      profileID: context.store.session.selectedSpace.profileID,
+      accountID: accountID, documentInstance: instance,
+      innerWidthCSSPixels: cssWidth, innerHeightCSSPixels: cssHeight,
+      devicePixelRatio: devicePixelRatio,
+      backingScaleFactor: Double(context.window.backingScaleFactor),
+      sidebarVisible: context.store.sidebarIsVisible,
+      windowFramePoints: HostViewportRect(context.window.frame),
+      contentBoundsPoints: HostViewportRect(context.contentView.bounds),
+      hostingBoundsPoints: HostViewportRect(context.hosting.bounds),
+      visibleHostingBoundsPoints: HostViewportRect(visibleHostingBounds),
+      containerFrameInHostingPoints: HostViewportRect(containerFrame),
+      containerBoundsPoints: HostViewportRect(containerBounds),
+      pageFramePoints: HostViewportRect(pageFrame),
+      expectedPageWidthPoints: Double(expectedWidth),
+      containerWithinVisibleHosting: containerWithinVisibleHosting,
+      containerFitsExpectedPageWidth: containerFitsExpectedPageWidth,
+      pageMatchesContainer: pageMatchesContainer,
+      cssMatchesNativePoints: cssMatchesNativePoints,
+      tabOwnerMatchesWindow: primary.runtime.windowID(forTabID: tabID.uuidString)
+        == context.nativeID)
+  }
+
+  private func pageContainer(in view: NSView, page: NSView) -> ChromiumPageContainerView? {
+    if let container = view as? ChromiumPageContainerView, container.pageView === page {
+      return container
+    }
+    for child in view.subviews {
+      if let found = pageContainer(in: child, page: page) { return found }
+    }
+    return nil
+  }
+
+  private func viewportSizeMatches(_ lhs: HostViewportSample, _ rhs: HostViewportSample) -> Bool {
+    abs(lhs.innerWidthCSSPixels - rhs.innerWidthCSSPixels) <= 1
+      && abs(lhs.innerHeightCSSPixels - rhs.innerHeightCSSPixels) <= 1
+  }
+
+  private func recordViewportCheck(
+    _ key: String, _ passed: Bool, _ message: String, checks: inout [String: Bool]
+  ) throws {
+    checks[key] = passed
+    try expect(passed, message)
+  }
+
+  private func writeViewportProof(
+    passed: Bool, samples: [HostViewportSample], checks: [String: Bool]
+  ) throws {
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    let proof = HostViewportProof(
+      schema: 1, phase: phase, passed: passed,
+      failureCode: passed ? nil : "viewport_acceptance_failed",
+      cssUnits: "CSS pixels from window.innerWidth and window.innerHeight",
+      nativeUnits: "logical AppKit points from NSView and NSWindow bounds",
+      scaleNote:
+        "devicePixelRatio and backingScaleFactor recorded separately; no DPR multiplication",
+      checks: checks, samples: samples)
+    let data = try encoder.encode(proof)
+    guard data.count <= 64 * 1024 else {
+      throw HostProbeFailure("Viewport proof exceeded its bounded fixture report size.")
+    }
+    try data.write(to: root.appending(path: "\(phase)-native-viewport.json"), options: .atomic)
+  }
+
   func prepareForQuit() throws {
     guard let host else { return }
     host.flushGeometry()
@@ -593,7 +1010,7 @@ final class NativeHostProbe {
         primary.runtime.evaluate(
           inTabID: id.uuidString,
           script:
-            "({fixture:document.documentElement.dataset.arcusisFixture,instance:window.arcusisInstance,cookie:document.cookie,local:localStorage.getItem('arcusisProfileMutation'),session:sessionStorage.getItem('arcusisProfileMutation')})"
+            "({fixture:document.documentElement.dataset.arcusisFixture,instance:window.arcusisInstance,cookie:document.cookie,local:localStorage.getItem('arcusisProfileMutation'),session:sessionStorage.getItem('arcusisProfileMutation'),innerWidth:window.innerWidth,innerHeight:window.innerHeight,devicePixelRatio:window.devicePixelRatio})"
         ) { continuation.resume(returning: $0) }
       }
       if let data = json?.data(using: .utf8),

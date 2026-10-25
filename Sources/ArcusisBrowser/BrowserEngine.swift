@@ -603,22 +603,50 @@ struct ChromiumPage: NSViewRepresentable {
   let engine: BrowserEngine
   let tabID: UUID
 
-  func makeNSView(context: Context) -> NSView { NSView() }
+  func makeNSView(context: Context) -> ChromiumPageContainerView {
+    ChromiumPageContainerView()
+  }
 
-  func updateNSView(_ container: NSView, context: Context) {
-    guard let page = engine.runtime.view(forTabID: tabID.uuidString) else { return }
-    if page.superview !== container {
-      for child in container.subviews { child.removeFromSuperview() }
-      page.removeFromSuperview()
-      page.frame = container.bounds
-      page.autoresizingMask = [.width, .height]
-      container.addSubview(page)
-      if container.window?.isKeyWindow == true { engine.runtime.focusTabID(tabID.uuidString) }
+  func updateNSView(_ container: ChromiumPageContainerView, context: Context) {
+    if container.attach(engine.runtime.view(forTabID: tabID.uuidString)),
+      container.window?.isKeyWindow == true
+    {
+      engine.runtime.focusTabID(tabID.uuidString)
     }
   }
 
-  static func dismantleNSView(_ view: NSView, coordinator: ()) {
-    // Detach the view only. The engine keeps the tab, profile, and page alive.
-    for child in view.subviews { child.removeFromSuperview() }
+  static func dismantleNSView(_ view: ChromiumPageContainerView, coordinator: ()) {
+    view.attach(nil)
+  }
+}
+
+final class ChromiumPageContainerView: NSView {
+  private(set) weak var pageView: NSView?
+
+  @discardableResult
+  func attach(_ page: NSView?) -> Bool {
+    if pageView === page, page?.superview === self { return false }
+    if let pageView, pageView !== page, pageView.superview === self {
+      pageView.removeFromSuperview()
+    }
+    pageView = page
+    if let page {
+      if page.superview !== self {
+        page.removeFromSuperview()
+        page.translatesAutoresizingMaskIntoConstraints = true
+        page.frame = bounds
+        page.autoresizingMask = [.width, .height]
+        addSubview(page)
+      }
+      layoutSubtreeIfNeeded()
+    }
+    return true
+  }
+
+  override func layout() {
+    super.layout()
+    if let pageView, pageView.superview === self, pageView.frame != bounds {
+      pageView.frame = bounds
+    }
   }
 }

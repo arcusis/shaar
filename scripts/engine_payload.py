@@ -73,16 +73,66 @@ def _safe_link(path: str, target: str) -> str:
     return target
 
 
-def _hash_file(path: Path) -> tuple[int, str]:
+def _hash_file(stream: BinaryIO) -> tuple[int, str]:
     digest = hashlib.sha256()
     size = 0
-    with path.open("rb") as stream:
-        while block := stream.read(CHUNK_SIZE):
-            size += len(block)
-            if size > MAX_ARCHIVE_SIZE:
-                raise PayloadError("archive exceeds size cap")
-            digest.update(block)
+    stream.seek(0)
+    while block := stream.read(CHUNK_SIZE):
+        size += len(block)
+        if size > MAX_ARCHIVE_SIZE:
+            raise PayloadError("archive exceeds size cap")
+        digest.update(block)
     return size, digest.hexdigest()
+
+
+def _archive_stat(stream: BinaryIO) -> os.stat_result:
+    info = os.fstat(stream.fileno())
+    if not stat.S_ISREG(info.st_mode) or info.st_size <= 0 or info.st_size > MAX_ARCHIVE_SIZE:
+        raise PayloadError("archive is not a supported regular file")
+    return info
+
+
+def _same_archive_stat(left: os.stat_result, right: os.stat_result) -> bool:
+    return (left.st_dev, left.st_ino, left.st_mode, left.st_size, left.st_mtime_ns, left.st_ctime_ns) == (
+        right.st_dev, right.st_ino, right.st_mode, right.st_size, right.st_mtime_ns, right.st_ctime_ns
+    )
+
+
+def _check_archive_unchanged(stream: BinaryIO, path: Path, initial: os.stat_result) -> None:
+    try:
+        current = _archive_stat(stream)
+        named = path.stat(follow_symlinks=False)
+    except OSError as error:
+        raise PayloadError("archive changed during comparison") from error
+    if (not _same_archive_stat(initial, current) or not stat.S_ISREG(named.st_mode)
+            or (named.st_dev, named.st_ino) != (initial.st_dev, initial.st_ino)):
+        raise PayloadError("archive changed during comparison")
+
+
+def _open_archive(path: Path) -> BinaryIO:
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        named = path.stat(follow_symlinks=False)
+        if not stat.S_ISREG(named.st_mode):
+            raise PayloadError("archive is not a supported regular file")
+        descriptor = os.open(path, flags)
+        stream = os.fdopen(descriptor, "rb")
+        opened = _archive_stat(stream)
+        if (named.st_dev, named.st_ino) != (opened.st_dev, opened.st_ino):
+            raise PayloadError("archive changed during comparison")
+        return stream
+    except OSError as error:
+        if "stream" in locals():
+            stream.close()
+        elif "descriptor" in locals():
+            os.close(descriptor)
+        raise PayloadError("archive unavailable or unsafe") from error
+    except PayloadError:
+        if "stream" in locals():
+            stream.close()
+        elif "descriptor" in locals():
+            os.close(descriptor)
+        raise
 
 
 def _open_framework_file(root: Path, relative: str) -> int:
@@ -130,12 +180,13 @@ def _hash_framework_file(root: Path, relative: str) -> str:
     return digest.hexdigest()
 
 
-def _archive_inventory(archive: Path) -> tuple[dict[str, dict], str]:
+def _archive_inventory(archive: BinaryIO) -> tuple[dict[str, dict], str]:
     # tarfile may stop at tar end markers before validating the xz stream footer.
     # Drain xz independently so a truncated or checksum-invalid container fails closed.
     decompressed = 0
     try:
-        with lzma.open(archive, "rb") as compressed:
+        archive.seek(0)
+        with lzma.LZMAFile(archive, "rb") as compressed:
             while block := compressed.read(CHUNK_SIZE):
                 decompressed += len(block)
                 if decompressed > MAX_DECOMPRESSED_ARCHIVE_SIZE:
@@ -148,40 +199,45 @@ def _archive_inventory(archive: Path) -> tuple[dict[str, dict], str]:
     total = 0
     count = 0
     try:
-        with tarfile.open(archive, mode="r|xz") as tar:
-            for member in tar:
-                count += 1
-                if count > MAX_MEMBERS:
-                    raise PayloadError("archive member count exceeds cap")
-                name = _safe_archive_path(member.name)
-                if name in seen:
-                    raise PayloadError("archive contains duplicate path")
-                seen.add(name)
-                if member.size < 0 or member.size > MAX_MEMBER_SIZE:
-                    raise PayloadError("archive member exceeds size cap")
-                total += member.size
-                if total > MAX_TOTAL_MEMBER_SIZE:
-                    raise PayloadError("archive total size exceeds cap")
-                if member.isdir():
-                    kind = "directory"
-                elif member.isreg():
-                    kind = "file"
-                elif member.issym():
-                    kind = "symlink"
-                    _safe_link(name, member.linkname)
-                else:
-                    raise PayloadError("archive contains unsupported member type")
-                if name == FRAMEWORK_NAME and kind == "directory":
-                    roots.add(name)
-                elif name.endswith("/" + FRAMEWORK_NAME) and kind == "directory":
-                    roots.add(name)
-                if kind == "file":
-                    source = tar.extractfile(member)
-                    if source is None:
-                        raise PayloadError("archive member data unavailable")
-                    source.close()  # Streaming iteration advances over file data.
-                entries[name] = {"kind": kind, "size": member.size,
-                                 "link": member.linkname if kind == "symlink" else None}
+        archive.seek(0)
+        compressed = lzma.LZMAFile(archive, "rb")
+        try:
+            with tarfile.open(fileobj=compressed, mode="r|") as tar:
+                for member in tar:
+                    count += 1
+                    if count > MAX_MEMBERS:
+                        raise PayloadError("archive member count exceeds cap")
+                    name = _safe_archive_path(member.name)
+                    if name in seen:
+                        raise PayloadError("archive contains duplicate path")
+                    seen.add(name)
+                    if member.size < 0 or member.size > MAX_MEMBER_SIZE:
+                        raise PayloadError("archive member exceeds size cap")
+                    total += member.size
+                    if total > MAX_TOTAL_MEMBER_SIZE:
+                        raise PayloadError("archive total size exceeds cap")
+                    if member.isdir():
+                        kind = "directory"
+                    elif member.isreg():
+                        kind = "file"
+                    elif member.issym():
+                        kind = "symlink"
+                        _safe_link(name, member.linkname)
+                    else:
+                        raise PayloadError("archive contains unsupported member type")
+                    if name == FRAMEWORK_NAME and kind == "directory":
+                        roots.add(name)
+                    elif name.endswith("/" + FRAMEWORK_NAME) and kind == "directory":
+                        roots.add(name)
+                    if kind == "file":
+                        source = tar.extractfile(member)
+                        if source is None:
+                            raise PayloadError("archive member data unavailable")
+                        source.close()  # Streaming iteration advances over file data.
+                    entries[name] = {"kind": kind, "size": member.size,
+                                     "link": member.linkname if kind == "symlink" else None}
+        finally:
+            compressed.close()
     except (tarfile.TarError, OSError, EOFError) as error:
         raise PayloadError("archive is malformed or truncated") from error
     if len(roots) != 1:
@@ -553,96 +609,100 @@ def compare_payload(archive: Path, framework: Path, pin: dict) -> dict:
         if (not isinstance(expected_hash, str) or len(expected_hash) != 64
                 or any(character not in "0123456789abcdefABCDEF" for character in expected_hash)):
             raise PayloadError("pin has invalid archive SHA-256")
-        archive_size, archive_hash = _hash_file(archive)
-        if archive_size == 0:
-            raise PayloadError("archive is empty")
-        report["archive_sha256"] = archive_hash
-        if archive_hash != expected_hash.lower():
-            raise PayloadError("archive SHA-256 does not match pin")
-        selected, root = _archive_inventory(archive)
-        report["archive_metadata_verified"] = True
-        framework_entries = _framework_inventory(framework)
-        archive_paths = set(selected)
-        framework_paths = set(framework_entries)
-        results = []
-        differences = []
-        for path in sorted(archive_paths | framework_paths):
-            archive_entry = selected.get(path)
-            framework_entry = framework_entries.get(path)
-            item = {"path": path}
-            if archive_entry is None:
-                item.update({"status": "extra_framework_member", "framework_kind": framework_entry["kind"]})
-                if framework_entry["kind"] == "file":
-                    item["framework_sha256"] = _hash_framework_file(framework, path)
-                elif framework_entry["kind"] == "symlink":
-                    item["framework_target"] = framework_entry["link"]
-                differences.append(path)
-            elif framework_entry is None:
-                item.update({"status": "missing_framework_member", "archive_kind": archive_entry["kind"]})
-                if archive_entry["kind"] == "file":
-                    # Archive data consumed in the second pass below.
-                    pass
-                differences.append(path)
-            elif archive_entry["kind"] != framework_entry["kind"]:
-                item.update({"status": "type_mismatch", "archive_kind": archive_entry["kind"],
-                             "framework_kind": framework_entry["kind"]})
-                if archive_entry["kind"] == "symlink":
-                    item["archive_target"] = archive_entry["link"]
-                if framework_entry["kind"] == "symlink":
-                    item["framework_target"] = framework_entry["link"]
-                if framework_entry["kind"] == "file":
-                    item["framework_sha256"] = _hash_framework_file(framework, path)
-                differences.append(path)
-            elif archive_entry["kind"] == "directory":
-                item["status"] = "match"
-            elif archive_entry["kind"] == "symlink":
-                item.update({"status": "match" if archive_entry["link"] == framework_entry["link"] else "mismatch",
-                             "archive_target": archive_entry["link"],
-                             "framework_target": framework_entry["link"]})
-                if item["status"] != "match":
+        with _open_archive(archive) as source:
+            initial_stat = _archive_stat(source)
+            archive_size, archive_hash = _hash_file(source)
+            report["archive_sha256"] = archive_hash
+            _check_archive_unchanged(source, archive, initial_stat)
+            if archive_hash != expected_hash.lower():
+                raise PayloadError("archive SHA-256 does not match pin")
+            selected, root = _archive_inventory(source)
+            _check_archive_unchanged(source, archive, initial_stat)
+            report["archive_metadata_verified"] = True
+            framework_entries = _framework_inventory(framework)
+            archive_paths = set(selected)
+            framework_paths = set(framework_entries)
+            results = []
+            differences = []
+            for path in sorted(archive_paths | framework_paths):
+                archive_entry = selected.get(path)
+                framework_entry = framework_entries.get(path)
+                item = {"path": path}
+                if archive_entry is None:
+                    item.update({"status": "extra_framework_member", "framework_kind": framework_entry["kind"]})
+                    if framework_entry["kind"] == "file":
+                        item["framework_sha256"] = _hash_framework_file(framework, path)
+                    elif framework_entry["kind"] == "symlink":
+                        item["framework_target"] = framework_entry["link"]
                     differences.append(path)
+                elif framework_entry is None:
+                    item.update({"status": "missing_framework_member", "archive_kind": archive_entry["kind"]})
+                    differences.append(path)
+                elif archive_entry["kind"] != framework_entry["kind"]:
+                    item.update({"status": "type_mismatch", "archive_kind": archive_entry["kind"],
+                                 "framework_kind": framework_entry["kind"]})
+                    if archive_entry["kind"] == "symlink":
+                        item["archive_target"] = archive_entry["link"]
+                    if framework_entry["kind"] == "symlink":
+                        item["framework_target"] = framework_entry["link"]
+                    if framework_entry["kind"] == "file":
+                        item["framework_sha256"] = _hash_framework_file(framework, path)
+                    differences.append(path)
+                elif archive_entry["kind"] == "directory":
+                    item["status"] = "match"
+                elif archive_entry["kind"] == "symlink":
+                    item.update({"status": "match" if archive_entry["link"] == framework_entry["link"] else "mismatch",
+                                 "archive_target": archive_entry["link"],
+                                 "framework_target": framework_entry["link"]})
+                    if item["status"] != "match":
+                        differences.append(path)
+                else:
+                    item["status"] = "pending"
+                results.append(item)
+            pending = {item["path"] for item in results if item["status"] == "pending"}
+            missing_files = {path for path in differences if selected.get(path, {}).get("kind") == "file"}
+            if pending or missing_files:
+                source.seek(0)
+                compressed = lzma.LZMAFile(source, "rb")
+                try:
+                    with tarfile.open(fileobj=compressed, mode="r|") as tar:
+                        for member in tar:
+                            name = _safe_archive_path(member.name)
+                            if not name.startswith(root + "/"):
+                                if member.isreg():
+                                    stream = tar.extractfile(member)
+                                    if stream is not None:
+                                        stream.close()
+                                continue
+                            relative = name[len(root) + 1:]
+                            if not member.isreg():
+                                continue
+                            stream = tar.extractfile(member)
+                            if stream is None:
+                                raise PayloadError("archive member data unavailable")
+                            if relative in pending:
+                                result = _read_archive_member(stream, selected[relative], framework, relative)
+                                item = next(item for item in results if item["path"] == relative)
+                                item.update({"status": "match" if result["match"] else "mismatch",
+                                             "normalization": result["normalization"],
+                                             "archive_sha256": result["archive_sha256"],
+                                             "framework_sha256": result["framework_sha256"]})
+                                if not result["match"]:
+                                    differences.append(relative)
+                            elif relative in missing_files:
+                                result = _read_archive_member(stream, selected[relative], None)
+                                item = next(item for item in results if item["path"] == relative)
+                                item["archive_sha256"] = result["archive_sha256"]
+                            else:
+                                stream.close()
+                finally:
+                    compressed.close()
+            _check_archive_unchanged(source, archive, initial_stat)
+            report["members"] = results
+            if differences:
+                report["reason"] = "framework inventory or payload differs"
             else:
-                item["status"] = "pending"
-            results.append(item)
-        # Re-open verified archive for its streaming data pass; never extract members.
-        pending = {item["path"] for item in results if item["status"] == "pending"}
-        missing_files = {path for path in differences if selected.get(path, {}).get("kind") == "file"}
-        if pending or missing_files:
-            with tarfile.open(archive, mode="r|xz") as tar:
-                for member in tar:
-                    name = _safe_archive_path(member.name)
-                    if not (name.startswith(root + "/")):
-                        if member.isreg():
-                            source = tar.extractfile(member)
-                            if source is not None:
-                                source.close()
-                        continue
-                    relative = name[len(root) + 1:]
-                    if not member.isreg():
-                        continue
-                    source = tar.extractfile(member)
-                    if source is None:
-                        raise PayloadError("archive member data unavailable")
-                    if relative in pending:
-                        result = _read_archive_member(source, selected[relative], framework, relative)
-                        item = next(item for item in results if item["path"] == relative)
-                        item.update({"status": "match" if result["match"] else "mismatch",
-                                     "normalization": result["normalization"],
-                                     "archive_sha256": result["archive_sha256"],
-                                     "framework_sha256": result["framework_sha256"]})
-                        if not result["match"]:
-                            differences.append(relative)
-                    elif relative in missing_files:
-                        result = _read_archive_member(source, selected[relative], None)
-                        item = next(item for item in results if item["path"] == relative)
-                        item["archive_sha256"] = result["archive_sha256"]
-                    else:
-                        source.close()
-        report["members"] = results
-        if differences:
-            report["reason"] = "framework inventory or payload differs"
-        else:
-            report["payload_match"] = True
+                report["payload_match"] = True
     except PayloadError as error:
         report["reason"] = str(error)
     except (OSError, tarfile.TarError, StopIteration):

@@ -103,6 +103,23 @@ class EnginePayloadTests(unittest.TestCase):
         digest = hashlib.sha256(self.archive.read_bytes()).hexdigest()
         return payload.compare_payload(self.archive, self.framework, {"sha256": digest})
 
+    def replacement_archive(self, files=None, links=None):
+        replacement = self.root / "replacement.tar.xz"
+        files = files or {"Chromium Framework": b"substituted engine", "Resources/helper.dat": b"resource",
+                          "Helpers/Browser Helper": b"helper"}
+        links = links or {"Versions/Current": "A"}
+        members = [(FRAMEWORK, "directory", None)]
+        for path in sorted(files):
+            members.append((f"{FRAMEWORK}/{path}", "file", files[path]))
+        for path in sorted(links):
+            members.append((f"{FRAMEWORK}/{path}", "symlink", links[path]))
+        write_archive(replacement, members)
+        for path, data in files.items():
+            target = self.framework / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
+        return replacement
+
     def test_exact_bytes_and_complete_inventory_match(self):
         report = self.fixture()
         self.assertTrue(report["archive_metadata_verified"])
@@ -265,6 +282,66 @@ class EnginePayloadTests(unittest.TestCase):
         report = payload.compare_payload(self.archive, self.framework,
             {"sha256": hashlib.sha256(self.archive.read_bytes()).hexdigest()})
         self.assertFalse(report["archive_metadata_verified"])
+
+    def test_archive_replacement_after_hash_fails_closed(self):
+        self.fixture()
+        pin = hashlib.sha256(self.archive.read_bytes()).hexdigest()
+        replacement = self.replacement_archive()
+        original_hash = payload._hash_file
+
+        def hash_then_replace(stream):
+            result = original_hash(stream)
+            replacement.replace(self.archive)
+            return result
+
+        with mock.patch.object(payload, "_hash_file", side_effect=hash_then_replace):
+            report = payload.compare_payload(self.archive, self.framework, {"sha256": pin})
+        self.assertFalse(report["payload_match"])
+        self.assertEqual(report["reason"], "archive changed during comparison")
+
+    def test_archive_replacement_between_inventory_and_member_passes_fails_closed(self):
+        self.fixture()
+        pin = hashlib.sha256(self.archive.read_bytes()).hexdigest()
+        replacement = self.replacement_archive()
+        original_inventory = payload._archive_inventory
+
+        def inventory_then_replace(stream):
+            result = original_inventory(stream)
+            replacement.replace(self.archive)
+            return result
+
+        with mock.patch.object(payload, "_archive_inventory", side_effect=inventory_then_replace):
+            report = payload.compare_payload(self.archive, self.framework, {"sha256": pin})
+        self.assertFalse(report["payload_match"])
+        self.assertEqual(report["reason"], "archive changed during comparison")
+
+    def test_in_place_archive_mutation_after_hash_fails_closed(self):
+        self.fixture()
+        pin = hashlib.sha256(self.archive.read_bytes()).hexdigest()
+        original_hash = payload._hash_file
+
+        def hash_then_mutate(stream):
+            result = original_hash(stream)
+            with self.archive.open("r+b") as changed:
+                changed.write(b"X" * result[0])
+            return result
+
+        with mock.patch.object(payload, "_hash_file", side_effect=hash_then_mutate):
+            report = payload.compare_payload(self.archive, self.framework, {"sha256": pin})
+        self.assertFalse(report["payload_match"])
+        self.assertEqual(report["reason"], "archive changed during comparison")
+
+    def test_symlink_archive_leaf_fails_closed(self):
+        self.fixture()
+        target = self.root / "archive-target.tar.xz"
+        self.archive.replace(target)
+        self.archive.symlink_to(target)
+        report = payload.compare_payload(self.archive, self.framework,
+            {"sha256": hashlib.sha256(target.read_bytes()).hexdigest()})
+        self.assertFalse(report["archive_metadata_verified"])
+        self.assertFalse(report["payload_match"])
+        self.assertEqual(report["reason"], "archive is not a supported regular file")
+        self.assertNotIn(str(self.root), json.dumps(report))
 
     def test_unavailable_paths_do_not_leak_machine_paths(self):
         missing = self.root / "private-machine-path" / "missing.tar.xz"

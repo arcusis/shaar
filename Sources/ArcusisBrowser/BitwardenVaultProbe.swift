@@ -73,10 +73,10 @@ final class BitwardenVaultProbe {
   func state(expectedAccount: String? = nil) async -> UIState? {
     let expectedLiteral = expectedAccount.flatMap(Self.jsonLiteral) ?? "null"
     let script = """
-      (()=>{const visible=e=>{const r=e.getBoundingClientRect();return r.width>0&&r.height>0;};
+      (()=>{const visible=e=>{const r=e.getBoundingClientRect();return r.width>0&&r.height>0&&!excluded(e);};
         const excluded=e=>{for(let n=e;n&&n.nodeType===1;n=n.parentElement){
-          if(n.hidden||n.getAttribute('aria-hidden')?.toLowerCase()==='true')return true;
-          const s=getComputedStyle(n);if(s.display==='none'||s.visibility==='hidden'||s.visibility==='collapse')return true;
+          if(n.hidden||n.inert||n.getAttribute('aria-hidden')?.toLowerCase()==='true')return true;
+          const s=getComputedStyle(n);if(s.display==='none'||s.visibility==='hidden'||s.visibility==='collapse'||s.opacity==='0')return true;
         }return false;};
         const text=e=>{const w=document.createTreeWalker(e,NodeFilter.SHOW_TEXT);let out='',n;
           while((n=w.nextNode()))if(!excluded(n.parentElement))out+=' '+n.nodeValue;
@@ -91,7 +91,8 @@ final class BitwardenVaultProbe {
         return {emailFields:[...document.querySelectorAll('input[type="email"]')].filter(visible).length,
           passwordFields:[...document.querySelectorAll('input[type="password"]')].filter(visible).length,
           loginButton:labels.some(x=>x==='log in'||x==='login'),
-          continueButton:labels.some(x=>x==='continue'),
+          continueButton:b.some(x=>x.getAttribute('data-testid')==='login-continue-button'&&!x.disabled)
+            ||labels.some(x=>x==='continue'),
           unlockButton:labels.some(x=>x==='unlock'),
           vaultVisible:[...document.querySelectorAll('app-vault app-current-account button')].some(visible),
           loginPrompt:t.includes('log in'),skipPrompt:t.includes('default password manager'),
@@ -163,8 +164,14 @@ final class BitwardenVaultProbe {
 
   func click(_ title: String) async -> Bool {
     await withCheckedContinuation { continuation in
-      runtime.clickProbePopupID(popupID, buttonTitle: title) {
-        continuation.resume(returning: $0)
+      if title == "Continue" {
+        runtime.clickProbePopupID(popupID, elementTestID: "login-continue-button") {
+          continuation.resume(returning: $0)
+        }
+      } else {
+        runtime.clickProbePopupID(popupID, buttonTitle: title) {
+          continuation.resume(returning: $0)
+        }
       }
     }
   }
@@ -194,7 +201,11 @@ final class BitwardenVaultProbe {
     guard let selectorLiteral = Self.jsonLiteral(selector) else { return false }
     let script = """
       (()=>{const e=[...document.querySelectorAll(\(selectorLiteral))].find(e=>{
-        const r=e.getBoundingClientRect();return r.width>0&&r.height>0&&!e.disabled&&!e.readOnly;
+        const r=e.getBoundingClientRect();if(r.width<=0||r.height<=0||e.disabled||e.readOnly)return false;
+        for(let n=e;n&&n.nodeType===1;n=n.parentElement){
+          if(n.hidden||n.inert||n.getAttribute('aria-hidden')?.toLowerCase()==='true')return false;
+          const s=getComputedStyle(n);if(s.display==='none'||s.visibility==='hidden'||s.visibility==='collapse'||s.opacity==='0')return false;
+        }return true;
         });if(!e)return false;
         const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')?.set;
         if(!setter)return false;setter.call(e,\(literal));

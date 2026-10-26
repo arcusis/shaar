@@ -41,11 +41,13 @@ private actor MemoryFillBackend {
   }
 
   func beginSync() throws -> NativeBitwardenSyncTicket { try state.beginSync() }
-  func finishSync(_ ticket: NativeBitwardenSyncTicket, id: UUID, item: NativeBitwardenFillCandidate)
-    throws
-  {
+  func finishSync(
+    _ ticket: NativeBitwardenSyncTicket, id: UUID, item: NativeBitwardenFillCandidate,
+    organizationIDs: Set<UUID> = []
+  ) throws {
     defer { state.finishSync(ticket) }
-    try state.publish(ticket: ticket, snapshot: .empty, items: [id: item])
+    try state.publish(
+      ticket: ticket, snapshot: .empty, items: [id: item], organizationIDs: organizationIDs)
   }
   func access() throws -> NativeBitwardenFillAccess { try state.snapshot().access }
   func lockOrDiscard() { _ = state.revoke() }
@@ -55,8 +57,12 @@ private actor MemoryFillBackend {
   ) async throws -> NativeBitwardenFillCredential {
     try await NativeBitwardenFillLookup.credential(
       isolation: self, id: id, origin: origin,
-      item: { try self.state.item(access: access, id: id) },
-      decrypt: { item in await self.decryptor.decrypt(item) },
+      item: {
+        let item = try self.state.item(access: access, id: id)
+        return (item, try self.state.ownership(access: access, organizationID: item.organizationID))
+      },
+      decrypt: { item in await self.decryptor.decrypt(item.0) },
+      ownership: { $0.1 },
       validate: { try self.state.validate(access) })
   }
 }
@@ -102,6 +108,74 @@ private actor MemoryFillBackend {
       try NativeBitwardenFillPolicy.credential(
         from: candidate(id: id, reprompt: true), id: id, origin: origin)
     }
+  }
+
+  @Test func organizationOwnershipRequiresMatchingEncryptedAndDecryptedIdentity() throws {
+    let id = UUID()
+    let organizationID = UUID()
+    var item = candidate(id: id, organization: true)
+    item.organizationID = organizationID
+    #expect(throws: NativeBitwardenFillError.organizationUnsupported) {
+      try NativeBitwardenFillPolicy.credential(from: item, id: id, origin: origin)
+    }
+    #expect(
+      try NativeBitwardenFillPolicy.credential(
+        from: item, id: id, origin: origin, ownership: .organization(organizationID)
+      ).username
+        == "synthetic-user")
+    #expect(throws: NativeBitwardenFillError.ineligibleCipher) {
+      try NativeBitwardenFillPolicy.credential(
+        from: item, id: id, origin: origin, ownership: .organization(UUID()))
+    }
+    #expect(throws: NativeBitwardenFillError.ineligibleCipher) {
+      try NativeBitwardenFillPolicy.credential(
+        from: candidate(id: id), id: id, origin: origin, ownership: .organization(organizationID))
+    }
+    #expect(throws: NativeBitwardenFillError.ineligibleCipher) {
+      try NativeBitwardenFillPolicy.credential(
+        from: item, id: UUID(), origin: origin, ownership: .organization(organizationID))
+    }
+  }
+
+  @Test func membershipReplacementAndFailedSyncRevokeCapabilities() throws {
+    let id = UUID()
+    let org = UUID()
+    let replacement = UUID()
+    var state = NativeBitwardenFillAccessState<NativeBitwardenFillCandidate>(sessionID: UUID())
+    let first = try state.beginSync()
+    try state.publish(
+      ticket: first, snapshot: .empty, items: [id: candidate(id: id)],
+      organizationIDs: [org])
+    state.finishSync(first)
+    let old = try state.snapshot().access
+    #expect(try state.ownership(access: old, organizationID: org) == .organization(org))
+    #expect(throws: NativeBitwardenFillError.organizationUnsupported) {
+      try state.ownership(access: old, organizationID: replacement)
+    }
+    let next = try state.beginSync()
+    #expect(throws: NativeBitwardenFillError.staleAccess) {
+      try state.ownership(access: old, organizationID: org)
+    }
+    try state.publish(
+      ticket: next, snapshot: .empty, items: [id: candidate(id: id)],
+      organizationIDs: [replacement])
+    state.finishSync(next)
+    let current = try state.snapshot().access
+    #expect(throws: NativeBitwardenFillError.organizationUnsupported) {
+      try state.ownership(access: current, organizationID: org)
+    }
+    #expect(try state.ownership(access: current, organizationID: nil) == .personal)
+    let failed = try state.beginSync()
+    state.finishSync(failed)
+    #expect(throws: NativeBitwardenFillError.staleAccess) { try state.validate(current) }
+    let empty = try state.beginSync()
+    try state.publish(ticket: empty, snapshot: .empty, items: [id: candidate(id: id)])
+    state.finishSync(empty)
+    let emptyAccess = try state.snapshot().access
+    #expect(throws: NativeBitwardenFillError.organizationUnsupported) {
+      try state.ownership(access: emptyAccess, organizationID: replacement)
+    }
+    #expect(try state.ownership(access: emptyAccess, organizationID: nil) == .personal)
   }
 
   @Test func uriModesFailClosedWithoutFullURLOrMatchEngine() throws {
@@ -154,9 +228,13 @@ private actor MemoryFillBackend {
   #if canImport(ArcusisBitwardenSDK)
     @Test func mapsActualSDKViewEligibilityAndMatchModes() throws {
       let id = UUID()
-      func makeView(_ mode: UriMatchType?, reprompt: CipherRepromptType = .none) -> CipherView {
+      func makeView(
+        _ mode: UriMatchType?, reprompt: CipherRepromptType = .none, organizationID: UUID? = nil,
+        viewPassword: Bool = true, partial: Bool = false
+      ) -> CipherView {
         CipherView(
-          id: id.uuidString, organizationId: nil, folderId: nil, collectionIds: [], key: nil,
+          id: id.uuidString, organizationId: organizationID?.uuidString, folderId: nil,
+          collectionIds: [], key: nil,
           name: "synthetic", notes: nil, type: .login,
           login: LoginView(
             username: "synthetic-user", password: "synthetic-password", passwordRevisionDate: nil,
@@ -164,10 +242,10 @@ private actor MemoryFillBackend {
             totp: nil, autofillOnPageLoad: nil, fido2Credentials: nil),
           identity: nil, card: nil, secureNote: nil, sshKey: nil, bankAccount: nil,
           driversLicense: nil, passport: nil, favorite: false, reprompt: reprompt,
-          organizationUseTotp: false, edit: true, permissions: nil, viewPassword: true,
+          organizationUseTotp: false, edit: true, permissions: nil, viewPassword: viewPassword,
           localData: nil, attachments: nil, attachmentDecryptionFailures: nil, fields: nil,
           passwordHistory: nil, creationDate: Date(timeIntervalSince1970: 0), deletedDate: nil,
-          revisionDate: Date(timeIntervalSince1970: 0), archivedDate: nil, partial: false)
+          revisionDate: Date(timeIntervalSince1970: 0), archivedDate: nil, partial: partial)
       }
       let mapped = NativeBitwardenSDKBackend.fillCandidate(makeView(.host))
       let credential = try NativeBitwardenFillPolicy.credential(
@@ -181,6 +259,19 @@ private actor MemoryFillBackend {
           try NativeBitwardenFillPolicy.credential(from: mapped, id: id, origin: origin)
         }
       }
+      let organizationID = UUID()
+      let shared = NativeBitwardenSDKBackend.fillCandidate(
+        makeView(.host, organizationID: organizationID))
+      #expect(shared.organizationID == organizationID)
+      #expect(
+        try NativeBitwardenFillPolicy.credential(
+          from: shared, id: id, origin: origin, ownership: .organization(organizationID)
+        ).username
+          == "synthetic-user")
+      #expect(throws: NativeBitwardenFillError.ineligibleCipher) {
+        try NativeBitwardenFillPolicy.credential(
+          from: shared, id: id, origin: origin, ownership: .organization(UUID()))
+      }
       let never = NativeBitwardenSDKBackend.fillCandidate(makeView(.never))
       #expect(throws: NativeBitwardenFillError.noMatchingURI) {
         try NativeBitwardenFillPolicy.credential(from: never, id: id, origin: origin)
@@ -188,6 +279,16 @@ private actor MemoryFillBackend {
       let reprompt = NativeBitwardenSDKBackend.fillCandidate(makeView(.host, reprompt: .password))
       #expect(throws: NativeBitwardenFillError.repromptRequired) {
         try NativeBitwardenFillPolicy.credential(from: reprompt, id: id, origin: origin)
+      }
+      for view in [
+        makeView(.host, organizationID: organizationID, viewPassword: false),
+        makeView(.host, organizationID: organizationID, partial: true),
+      ] {
+        let restricted = NativeBitwardenSDKBackend.fillCandidate(view)
+        #expect(throws: NativeBitwardenFillError.ineligibleCipher) {
+          try NativeBitwardenFillPolicy.credential(
+            from: restricted, id: id, origin: origin, ownership: .organization(organizationID))
+        }
       }
     }
   #endif
@@ -295,6 +396,28 @@ private actor MemoryFillBackend {
     let credential = try await task.value
     #expect(credential.username == "synthetic-user")
     #expect(credential.password == "synthetic-password")
+  }
+
+  @Test func organizationDecryptCannotReturnAfterMembershipRevocation() async throws {
+    let decryptor = DeferredFillDecryptor()
+    let backend = MemoryFillBackend(sessionID: UUID(), decryptor: decryptor)
+    let id = UUID()
+    let org = UUID()
+    var item = candidate(id: id, organization: true)
+    item.organizationID = org
+    let first = try await backend.beginSync()
+    try await backend.finishSync(first, id: id, item: item, organizationIDs: [org])
+    let access = try await backend.access()
+    let task = Task { try await backend.lookup(access: access, id: id, origin: origin) }
+    await decryptor.waitUntilStarted()
+    let next = try await backend.beginSync()
+    try await backend.finishSync(next, id: id, item: item)
+    await decryptor.resolve(item)
+    await #expect(throws: NativeBitwardenFillError.staleAccess) { try await task.value }
+    let current = try await backend.access()
+    await #expect(throws: NativeBitwardenFillError.organizationUnsupported) {
+      try await backend.lookup(access: current, id: id, origin: origin)
+    }
   }
 
   @Test func cancellationAfterDecryptionStartedDoesNotReturnCredential() async throws {

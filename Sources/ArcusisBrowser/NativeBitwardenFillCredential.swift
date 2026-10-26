@@ -56,6 +56,7 @@ struct NativeBitwardenFillAccessState<Item: Sendable>: Sendable {
     let access: NativeBitwardenFillAccess
     let snapshot: NativeBitwardenVaultSnapshot
     let items: [UUID: Item]
+    let organizationIDs: Set<UUID>
   }
   private let sessionID: UUID
   private var revision = UUID()
@@ -83,14 +84,15 @@ struct NativeBitwardenFillAccessState<Item: Sendable>: Sendable {
   }
 
   mutating func publish(
-    ticket: NativeBitwardenSyncTicket, snapshot: NativeBitwardenVaultSnapshot, items: [UUID: Item]
+    ticket: NativeBitwardenSyncTicket, snapshot: NativeBitwardenVaultSnapshot, items: [UUID: Item],
+    organizationIDs: Set<UUID> = []
   ) throws {
     guard revision == ticket.revision, syncOperation == ticket.operation, accepted == nil else {
       throw NativeBitwardenFillError.staleAccess
     }
     accepted = Accepted(
       access: NativeBitwardenFillAccess(sessionID: sessionID, snapshotID: ticket.revision),
-      snapshot: snapshot, items: items)
+      snapshot: snapshot, items: items, organizationIDs: organizationIDs)
   }
 
   func snapshot() throws -> NativeBitwardenFillSnapshotAccess {
@@ -104,6 +106,19 @@ struct NativeBitwardenFillAccessState<Item: Sendable>: Sendable {
     }
     guard let item = accepted.items[id] else { throw NativeBitwardenFillError.cipherUnavailable }
     return item
+  }
+
+  func ownership(access: NativeBitwardenFillAccess, organizationID: UUID?) throws
+    -> NativeBitwardenFillOwnership
+  {
+    guard let accepted, accepted.access == access else {
+      throw NativeBitwardenFillError.staleAccess
+    }
+    guard let organizationID else { return .personal }
+    guard accepted.organizationIDs.contains(organizationID) else {
+      throw NativeBitwardenFillError.organizationUnsupported
+    }
+    return .organization(organizationID)
   }
 
   func validate(_ access: NativeBitwardenFillAccess) throws {
@@ -125,6 +140,7 @@ struct NativeBitwardenFillCandidate: Sendable, CustomStringConvertible, CustomDe
 {
   let id: UUID?
   let organization: Bool
+  var organizationID: UUID? = nil
   let login: Bool
   let deleted: Bool
   let archived: Bool
@@ -138,11 +154,26 @@ struct NativeBitwardenFillCandidate: Sendable, CustomStringConvertible, CustomDe
   var debugDescription: String { description }
 }
 
+enum NativeBitwardenFillOwnership: Equatable, Sendable {
+  case personal
+  case organization(UUID)
+}
+
 enum NativeBitwardenFillPolicy {
   static func credential(
-    from candidate: NativeBitwardenFillCandidate, id: UUID, origin: PasswordFillOrigin
+    from candidate: NativeBitwardenFillCandidate, id: UUID, origin: PasswordFillOrigin,
+    ownership: NativeBitwardenFillOwnership = .personal
   ) throws -> NativeBitwardenFillCredential {
-    guard !candidate.organization else { throw NativeBitwardenFillError.organizationUnsupported }
+    switch ownership {
+    case .personal:
+      guard !candidate.organization, candidate.organizationID == nil else {
+        throw NativeBitwardenFillError.organizationUnsupported
+      }
+    case .organization(let id):
+      guard candidate.organization, candidate.organizationID == id else {
+        throw NativeBitwardenFillError.ineligibleCipher
+      }
+    }
     guard candidate.id == id, candidate.login, !candidate.deleted, !candidate.archived,
       !candidate.partial, candidate.viewPassword,
       let username = candidate.username, !username.isEmpty,
@@ -180,9 +211,11 @@ enum NativeBitwardenFillLookup {
     isolation: isolated any Actor, id: UUID, origin: PasswordFillOrigin,
     item: () throws -> Item,
     decrypt: (Item) async throws -> NativeBitwardenFillCandidate,
+    ownership: (Item) throws -> NativeBitwardenFillOwnership = { _ in .personal },
     validate: () throws -> Void
   ) async throws -> NativeBitwardenFillCredential {
     let encrypted = try item()
+    let owner = try ownership(encrypted)
     try Task.checkCancellation()
     let candidate: NativeBitwardenFillCandidate
     do {
@@ -193,6 +226,7 @@ enum NativeBitwardenFillLookup {
     }
     try Task.checkCancellation()
     try validate()
-    return try NativeBitwardenFillPolicy.credential(from: candidate, id: id, origin: origin)
+    return try NativeBitwardenFillPolicy.credential(
+      from: candidate, id: id, origin: origin, ownership: owner)
   }
 }

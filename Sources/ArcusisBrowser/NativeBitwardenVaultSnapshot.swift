@@ -13,6 +13,7 @@ struct NativeBitwardenLoginMetadata: Equatable, Sendable, Identifiable {
   let name: String
   let username: String?
   let uris: [NativeBitwardenLoginURI]
+  var organizationID: UUID? = nil
 }
 
 struct NativeBitwardenVaultSnapshot: Equatable, Sendable {
@@ -23,6 +24,7 @@ struct NativeBitwardenVaultSnapshot: Equatable, Sendable {
     let uris: [String]
     let isLogin: Bool
     let isOrganization: Bool
+    var organizationID: UUID? = nil
   }
 
   let logins: [NativeBitwardenLoginMetadata]
@@ -48,7 +50,28 @@ struct NativeBitwardenVaultSnapshot: Equatable, Sendable {
     guard didSynchronize else { throw NativeBitwardenVaultSnapshotError.syncNotPerformed }
   }
 
-  static func make(from ciphers: [CipherMetadata]) throws -> Self {
+  static func validateOwnership(
+    encryptedID: String?, encryptedOrganizationID: String?, viewID: String?,
+    viewOrganizationID: String?, organizationIDs: Set<UUID>
+  ) throws {
+    let cipherID = encryptedID.flatMap(UUID.init(uuidString:))
+    let organizationID = encryptedOrganizationID.flatMap(UUID.init(uuidString:))
+    #if ARCUSIS_NATIVE_BITWARDEN_ORGANIZATION_CANDIDATE
+      guard cipherID != nil else { throw NativeBitwardenVaultSnapshotError.invalidOwnership }
+    #endif
+    guard encryptedID == nil || cipherID != nil,
+      (encryptedID == nil) == (viewID == nil), viewID.flatMap(UUID.init(uuidString:)) == cipherID,
+      (encryptedOrganizationID == nil) == (viewOrganizationID == nil),
+      viewOrganizationID.flatMap(UUID.init(uuidString:)) == organizationID
+    else { throw NativeBitwardenVaultSnapshotError.invalidOwnership }
+    if encryptedOrganizationID != nil {
+      guard let organizationID, organizationIDs.contains(organizationID) else {
+        throw NativeBitwardenVaultSnapshotError.invalidOwnership
+      }
+    }
+  }
+
+  static func make(from ciphers: [CipherMetadata], organizationIDs: Set<UUID> = []) throws -> Self {
     guard ciphers.count <= maximumCipherCount else {
       throw NativeBitwardenVaultSnapshotError.tooManyCiphers
     }
@@ -67,9 +90,12 @@ struct NativeBitwardenVaultSnapshot: Equatable, Sendable {
       guard seenIDs.insert(id).inserted else {
         throw NativeBitwardenVaultSnapshotError.duplicateCipherID
       }
-      guard !cipher.isOrganization else { continue }
+      if cipher.isOrganization {
+        guard let organizationID = cipher.organizationID, organizationIDs.contains(organizationID)
+        else { continue }
+      }
       guard cipher.isLogin else {
-        personalNonLoginCipherCount += 1
+        if !cipher.isOrganization { personalNonLoginCipherCount += 1 }
         continue
       }
       guard cipher.name.utf8.count <= maximumNameBytes,
@@ -86,7 +112,8 @@ struct NativeBitwardenVaultSnapshot: Equatable, Sendable {
       logins.append(
         NativeBitwardenLoginMetadata(
           id: id, name: cipher.name, username: cipher.username,
-          uris: cipher.uris.map(NativeBitwardenLoginURI.init(uri:))))
+          uris: cipher.uris.map(NativeBitwardenLoginURI.init(uri:)),
+          organizationID: cipher.organizationID))
     }
     return Self(
       logins: logins, fetchedCipherCount: ciphers.count,
@@ -109,7 +136,8 @@ struct NativeBitwardenVaultSnapshot: Equatable, Sendable {
       return CipherMetadata(
         id: view.id.flatMap(UUID.init(uuidString:)), name: isLogin ? view.name : "",
         username: isLogin ? view.login?.username : nil, uris: uris,
-        isLogin: isLogin, isOrganization: view.organizationId != nil)
+        isLogin: isLogin, isOrganization: view.organizationId != nil,
+        organizationID: view.organizationId.flatMap(UUID.init(uuidString:)))
     }
   #endif
 }
@@ -119,4 +147,5 @@ enum NativeBitwardenVaultSnapshotError: Error, Equatable, Sendable {
   case tooManyCiphers
   case metadataTooLarge
   case duplicateCipherID
+  case invalidOwnership
 }

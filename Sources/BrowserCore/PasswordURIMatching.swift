@@ -13,6 +13,11 @@ public enum PasswordURIMatchResult: Equatable, Sendable {
 
 private final class PasswordResourceBundleFinder {}
 
+enum PasswordResourceFailure: Error {
+  case missingBundle, invalidBundle, missingData, invalidData, hashMismatch, invalidUTF8,
+    invalidPolicy
+}
+
 /// Immutable public-suffix rules. Invalid or incomplete data never produces a policy.
 public struct PasswordPublicSuffixList: Sendable {
   private let exact: Set<String>
@@ -22,28 +27,59 @@ public struct PasswordPublicSuffixList: Sendable {
     "4155611645690529d1bbea0cfe653b0c45f63b028e0ba039de29a97edc3204ca"
 
   public static func bundled() -> PasswordPublicSuffixList? {
-    loadBundledResource(
-      from: [
-        Bundle.main.resourceURL,
-        Bundle(for: PasswordResourceBundleFinder.self).resourceURL,
-        Bundle.main.bundleURL,
-      ].compactMap { $0 })
+    try? bundledResult().get()
+  }
+
+  static func bundledResult() -> Result<PasswordPublicSuffixList, PasswordResourceFailure> {
+    let main = Bundle.main
+    return loadBundledResourceResult(
+      from: resourceRoots(
+        mainBundleURL: main.bundleURL, mainResourceURL: main.resourceURL,
+        mainExecutableURL: main.executableURL,
+        codeResourceURL: Bundle(for: PasswordResourceBundleFinder.self).resourceURL,
+        loadedBundleURLs: Bundle.allBundles.map(\.bundleURL)))
+  }
+
+  static func resourceRoots(
+    mainBundleURL: URL, mainResourceURL: URL?, mainExecutableURL: URL?,
+    codeResourceURL: URL?, loadedBundleURLs: [URL]
+  ) -> [URL] {
+    var roots = [mainResourceURL, codeResourceURL, mainBundleURL].compactMap { $0 }
+    // Classic SwiftPM places its resources beside the loaded XCTest bundle.
+    // Never search app siblings, even if an app happens to load test bundles.
+    if mainBundleURL.pathExtension != "app", mainExecutableURL?.lastPathComponent == "xctest" {
+      roots += loadedBundleURLs.filter { $0.pathExtension == "xctest" }.map {
+        $0.deletingLastPathComponent()
+      }
+    }
+    return roots
   }
 
   // Roots are supplied explicitly so tests can exercise relocated and damaged bundles.
   static func loadBundledResource(from roots: [URL]) -> PasswordPublicSuffixList? {
+    try? loadBundledResourceResult(from: roots).get()
+  }
+
+  static func loadBundledResourceResult(from roots: [URL])
+    -> Result<PasswordPublicSuffixList, PasswordResourceFailure>
+  {
     for root in roots {
       let bundleURL = root.appendingPathComponent("ArcusisBrowser_BrowserCore.bundle")
       guard FileManager.default.fileExists(atPath: bundleURL.path) else { continue }
-      guard let bundle = Bundle(url: bundleURL),
-        let url = bundle.url(forResource: "public_suffix_list", withExtension: "dat"),
-        let data = boundedResourceData(at: url),
-        SHA256.hash(data: data).map({ String(format: "%02x", $0) }).joined() == expectedHash,
-        let text = String(data: data, encoding: .utf8)
-      else { return nil }
-      return PasswordPublicSuffixList(contents: text)
+      guard let bundle = Bundle(url: bundleURL) else { return .failure(.invalidBundle) }
+      guard let url = bundle.url(forResource: "public_suffix_list", withExtension: "dat") else {
+        return .failure(.missingData)
+      }
+      guard let data = boundedResourceData(at: url) else { return .failure(.invalidData) }
+      guard SHA256.hash(data: data).map({ String(format: "%02x", $0) }).joined() == expectedHash
+      else { return .failure(.hashMismatch) }
+      guard let text = String(data: data, encoding: .utf8) else { return .failure(.invalidUTF8) }
+      guard let policy = PasswordPublicSuffixList(contents: text) else {
+        return .failure(.invalidPolicy)
+      }
+      return .success(policy)
     }
-    return nil
+    return .failure(.missingBundle)
   }
 
   private static func boundedResourceData(at url: URL) -> Data? {

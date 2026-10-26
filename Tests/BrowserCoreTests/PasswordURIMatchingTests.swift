@@ -4,6 +4,16 @@ import XCTest
 @testable import BrowserCore
 
 final class PasswordURIMatchingTests: XCTestCase {
+  private func bundledPolicy() throws -> PasswordPublicSuffixList {
+    try XCTUnwrap(PasswordPublicSuffixList.bundled(), "Resource failure: \(bundledFailure())")
+  }
+
+  private func bundledFailure() -> String {
+    switch PasswordPublicSuffixList.bundledResult() {
+    case .success: return "none"
+    case .failure(let reason): return String(describing: reason)
+    }
+  }
   private func context(_ origin: String, _ document: String? = nil) -> PasswordFillContext {
     let trustedOrigin = PasswordFillOrigin(origin)!
     return PasswordFillContext(
@@ -15,7 +25,7 @@ final class PasswordURIMatchingTests: XCTestCase {
   }
 
   func testBundledDomainPolicyBoundaries() throws {
-    let policy = PasswordURIMatching(suffixes: try XCTUnwrap(.bundled()))
+    let policy = PasswordURIMatching(suffixes: try bundledPolicy())
     let rows: [(String, String, PasswordURIMatchStrategy?, PasswordURIMatchResult)] = [
       ("example.com", "https://login.example.com", nil, .match),
       ("http://example.com:8080", "https://login.example.com:444", .domain, .match),
@@ -47,7 +57,7 @@ final class PasswordURIMatchingTests: XCTestCase {
   }
 
   func testHostPortsDefaultAndRawURLModes() throws {
-    let policy = PasswordURIMatching(suffixes: try XCTUnwrap(.bundled()))
+    let policy = PasswordURIMatching(suffixes: try bundledPolicy())
     let rows:
       [(
         String, PasswordURIMatchStrategy?, PasswordURIMatchStrategy?, String, String?,
@@ -105,7 +115,7 @@ final class PasswordURIMatchingTests: XCTestCase {
   }
 
   func testMalformedSavedURIsAndMismatchedDocumentFailClosed() throws {
-    let policy = PasswordURIMatching(suffixes: try XCTUnwrap(.bundled()))
+    let policy = PasswordURIMatching(suffixes: try bundledPolicy())
     for saved in [
       "", "https://user@example.com", "ftp://example.com", "https://example.com:99999",
       "https://example.com/%zz", "https://example.com:0", "https://example.com:-1",
@@ -146,5 +156,77 @@ final class PasswordURIMatchingTests: XCTestCase {
     ] {
       XCTAssertNil(PasswordPublicSuffixList(contents: malformed))
     }
+  }
+
+  func testClassicTestBundleSiblingAndPackagedAppIsolation() throws {
+    let fileManager = FileManager.default
+    let testBundle = Bundle(for: PasswordURIMatchingTests.self)
+    let sourceRoots = [
+      Bundle.main.resourceURL, testBundle.resourceURL, Bundle.main.bundleURL,
+      testBundle.bundleURL.deletingLastPathComponent(),
+    ].compactMap { $0 }
+    let source = try XCTUnwrap(
+      sourceRoots.map {
+        $0.appendingPathComponent("ArcusisBrowser_BrowserCore.bundle")
+      }.first { fileManager.fileExists(atPath: $0.path) })
+    let fixture = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try fileManager.createDirectory(at: fixture, withIntermediateDirectories: true)
+    defer { try? fileManager.removeItem(at: fixture) }
+    let testContainer = fixture.appendingPathComponent("Fixture.xctest")
+    try fileManager.createDirectory(at: testContainer, withIntermediateDirectories: true)
+    let resource = fixture.appendingPathComponent("ArcusisBrowser_BrowserCore.bundle")
+    try fileManager.copyItem(at: source, to: resource)
+    let roots = PasswordPublicSuffixList.resourceRoots(
+      mainBundleURL: fixture.appendingPathComponent("runner"), mainResourceURL: nil,
+      mainExecutableURL: fixture.appendingPathComponent("xctest"), codeResourceURL: nil,
+      loadedBundleURLs: [testContainer, fixture.appendingPathComponent("Other.bundle")])
+    XCTAssertNotNil(PasswordPublicSuffixList.loadBundledResource(from: roots))
+
+    let app = fixture.appendingPathComponent("Fixture.app")
+    let appRoots = PasswordPublicSuffixList.resourceRoots(
+      mainBundleURL: app, mainResourceURL: app.appendingPathComponent("Contents/Resources"),
+      mainExecutableURL: app.appendingPathComponent("Contents/MacOS/xctest"),
+      codeResourceURL: nil, loadedBundleURLs: [testContainer])
+    XCTAssertNil(PasswordPublicSuffixList.loadBundledResource(from: appRoots))
+    XCTAssertFalse(appRoots.contains(fixture))
+    if case .failure(.missingBundle) = PasswordPublicSuffixList.loadBundledResourceResult(
+      from: appRoots)
+    {
+    } else {
+      XCTFail("Expected missingBundle")
+    }
+    let otherHostRoots = PasswordPublicSuffixList.resourceRoots(
+      mainBundleURL: fixture.appendingPathComponent("runner"), mainResourceURL: nil,
+      mainExecutableURL: fixture.appendingPathComponent("runner"), codeResourceURL: nil,
+      loadedBundleURLs: [testContainer])
+    XCTAssertNil(PasswordPublicSuffixList.loadBundledResource(from: otherHostRoots))
+
+    let relocatedResources = fixture.appendingPathComponent("Relocated.app/Contents/Resources")
+    try fileManager.createDirectory(at: relocatedResources, withIntermediateDirectories: true)
+    try fileManager.copyItem(
+      at: resource,
+      to: relocatedResources.appendingPathComponent("ArcusisBrowser_BrowserCore.bundle"))
+    XCTAssertNotNil(PasswordPublicSuffixList.loadBundledResource(from: [relocatedResources]))
+
+    let bundle = try XCTUnwrap(Bundle(url: resource))
+    let dataURL = try XCTUnwrap(bundle.url(forResource: "public_suffix_list", withExtension: "dat"))
+    let original = try Data(contentsOf: dataURL)
+    try Data("tampered".utf8).write(to: dataURL)
+    XCTAssertNil(PasswordPublicSuffixList.loadBundledResource(from: roots))
+    if case .failure(.hashMismatch) = PasswordPublicSuffixList.loadBundledResourceResult(
+      from: roots)
+    {
+    } else {
+      XCTFail("Expected hashMismatch")
+    }
+    try Data(repeating: 0, count: 2_000_001).write(to: dataURL)
+    XCTAssertNil(PasswordPublicSuffixList.loadBundledResource(from: roots))
+    if case .failure(.invalidData) = PasswordPublicSuffixList.loadBundledResourceResult(from: roots)
+    {
+    } else {
+      XCTFail("Expected invalidData")
+    }
+    try original.write(to: dataURL)
+    XCTAssertNotNil(PasswordPublicSuffixList.loadBundledResource(from: roots))
   }
 }

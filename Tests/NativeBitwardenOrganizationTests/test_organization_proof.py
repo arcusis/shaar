@@ -1,5 +1,6 @@
 """Pure safety tests; these do not claim native SDK proof."""
 import importlib.util
+import errno
 import json
 import os
 from pathlib import Path
@@ -48,6 +49,34 @@ class OrganizationProofTests(unittest.TestCase):
             with self.assertRaises(proof.ProofError) as error:
                 proof.run([sys.executable, '-c', 'import sys; print("PRIVATE_FIXTURE", file=sys.stderr); sys.exit(1)'], cwd=Path(directory), env=os.environ.copy(), timeout=5)
             self.assertNotIn('PRIVATE_FIXTURE', str(error.exception))
+
+    def test_oserror_reports_redacted_stage_and_errno(self):
+        private = 'PRIVATE_FIXTURE_PATH'
+        cases = (
+            ('launch', OSError(errno.EMFILE, private), None, None, errno.EMFILE),
+            ('communicate', None, [OSError(errno.EIO, private)], None, errno.EIO),
+            ('cleanup signal', None, [(b'', b'')], [OSError(errno.EPERM, private)], errno.EPERM),
+            ('timeout cleanup signal', None, [subprocess.TimeoutExpired('private', 1)],
+             [OSError(errno.EPERM, private), None], errno.EPERM),
+            ('timeout cleanup communicate', None,
+             [subprocess.TimeoutExpired('private', 1), OSError(errno.EIO, private)],
+             [None, None], errno.EIO),
+        )
+        for stage, launch_error, communicate, signals, code in cases:
+            with self.subTest(stage=stage):
+                process = mock.Mock(pid=123, returncode=0)
+                process.communicate.side_effect = communicate
+                with mock.patch.object(proof.subprocess, 'Popen', return_value=process,
+                                       side_effect=launch_error), \
+                     mock.patch.object(proof.os, 'killpg', side_effect=signals) as kill:
+                    with self.assertRaises(proof.ProofError) as caught:
+                        proof.run(['private'], cwd=Path('.'), env={}, timeout=1)
+                self.assertEqual(str(caught.exception), f'child {stage} failed (errno={code})')
+                self.assertNotIn(private, str(caught.exception))
+                if launch_error:
+                    kill.assert_not_called()
+                else:
+                    kill.assert_called_with(process.pid, proof.signal.SIGKILL)
 
     def test_timeout_kills_process_group(self):
         with tempfile.TemporaryDirectory() as directory:

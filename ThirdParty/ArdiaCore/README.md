@@ -13,3 +13,19 @@ The engine archive is pinned separately because upstream reuses the same engine 
 Chromium contains software under multiple third-party licenses. The framework includes its resources and `chrome://credits`; those notices must remain with any distribution. Upstream's separate extension bundle, including uBlock Origin, is not fetched by this project. A distribution and source-compliance review remains part of the release milestone.
 
 Development bundles use local ad-hoc signatures following upstream's framework staging procedure. This is not a notarized or managed company release. The pinned engine is an initial compatibility candidate, not a security-update service; shipping requires an engine update process and current security validation.
+
+## Source build and Profile download directories
+
+`source-build.json` pins the Ardia source commit and engine subtree, Chromium 155, both ungoogled source commits, depot_tools, and Siso revision used by the bounded local source-build runner. The runner is opt-in:
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m unittest discover -s Tests/EngineSourceBuildTests
+.venv/bin/python scripts/build-engine-source.py --run
+```
+
+It creates owner-only state beneath ignored `build/EngineSource`, retains stage logs and failures, verifies exact commit, tree, archive digest, and clean state before local source reuse, caps sync at four jobs and build at six jobs, and stops when free space falls below 100 GiB. It stages pinned upstream scripts and applies checked path/job/tool substitutions; it pins Git LFS 3.8.1 by archive digest inside the owned output, keeps vpython and gclient caches there, and does not run the stale `scripts/engine-source.sh` recipe. `receipt.json` binds runner/config/script digests and records local source, Xcode and Metal Toolchain identity/version/signature/hash, GN, DEPS/CIPD, PGO, patch, framework hashes, architecture, minimum OS, and exported API evidence. This receipt is local build evidence, not signed independent provenance.
+
+`patches/profile-download-directory.patch` adds `ac_downloads_directory_get` and `ac_downloads_directory_set` to the existing `Call(profile_dir, ...)` route. Both calls require the exact loaded normal Profile, reject shutdown/private and policy-controlled profiles, reject malformed, nonabsolute, unavailable, or unwritable directories, and return typed structured errors. Chromium `DownloadPrefs` and the Profile `PrefService` remain the persistence authority; the getter and setter compare stored and effective paths so Chromium fallback cannot be reported as success. Existing download list and target selection code remains unchanged, including its process-wide `ARDIA_DOWNLOADS_DIR` test hook; that hook is not acceptance evidence.
+
+Compilation does not establish per-Profile runtime A/B isolation, same-directory sharing across Spaces, restart persistence, native bridge behavior, UI selection behavior, signing, notarization, or release readiness. Those require a future app bridge/native fixture and separate company release evidence.

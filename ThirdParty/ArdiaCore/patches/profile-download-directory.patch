@@ -1,0 +1,279 @@
+diff --git a/chrome/browser/ardia/ac_downloads.cc b/chrome/browser/ardia/ac_downloads.cc
+index 2319db76..45db5835 100644
+--- a/chrome/browser/ardia/ac_downloads.cc
++++ b/chrome/browser/ardia/ac_downloads.cc
+@@ -12,6 +12,7 @@
+ #include <vector>
+ 
+ #include "base/files/file_path.h"
++#include "base/files/file_util.h"
+ #include "base/functional/bind.h"
+ #include "base/json/values_util.h"
+ #include "base/memory/raw_ptr.h"
+@@ -20,6 +21,7 @@
+ #include "base/task/sequenced_task_runner.h"
+ #include "base/time/time.h"
+ #include "chrome/browser/download/download_crx_util.h"
++#include "chrome/browser/download/download_prefs.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/profiles/profile_observer.h"
+ #include "chrome/common/pref_names.h"
+@@ -395,3 +397,136 @@ AC_ENGINE_CALL(ac_downloads_remove) {
+     call.TakeReply().Ok();
+   }
+ }
++
++namespace {
++
++void DirectoryError(ardia::Call& call,
++                    std::string_view code,
++                    std::string_view message) {
++  call.TakeReply().Error(code, message);
++}
++
++bool ValidDownloadDirectory(const base::FilePath& path) {
++  return !path.empty() && path.IsAbsolute() && !path.ReferencesParent() &&
++         base::DirectoryExists(path) && base::PathIsWritable(path);
++}
++
++DownloadPrefs* DownloadPrefsFor(ardia::Call& call) {
++  Profile* profile = call.profile();
++  if (!profile || profile->IsOffTheRecord() || profile->ShutdownStarted()) {
++    DirectoryError(call, "profile_unavailable",
++                   "normal profile is not available");
++    return nullptr;
++  }
++  DownloadPrefs* download_prefs =
++      DownloadPrefs::FromBrowserContext(profile);
++  if (!download_prefs) {
++    DirectoryError(call, "download_preferences_unavailable",
++                   "download preferences are not available");
++    return nullptr;
++  }
++  if (download_prefs->IsDownloadPathManaged()) {
++    DirectoryError(call, "policy_managed",
++                   "download directory is controlled by policy");
++    return nullptr;
++  }
++  const auto* preference = profile->GetPrefs()->FindPreference(
++      prefs::kDownloadDefaultDirectory);
++  if (!preference || !preference->IsUserModifiable()) {
++    DirectoryError(call, "preference_controlled",
++                   "download directory cannot be changed by this profile");
++    return nullptr;
++  }
++  return download_prefs;
++}
++
++}  // namespace
++
++AC_ENGINE_CALL(ac_downloads_directory_get) {
++  ardia::Call call(profile_dir, args_json, reply, context,
++                   ardia::OffTheRecord::kRefuse, true);
++  if (!call) {
++    return;
++  }
++  DownloadPrefs* download_prefs = DownloadPrefsFor(call);
++  if (!download_prefs) {
++    return;
++  }
++  const base::FilePath effective = download_prefs->DownloadPath();
++  const base::FilePath stored =
++      call.profile()->GetPrefs()->GetFilePath(prefs::kDownloadDefaultDirectory);
++  if (effective != stored || !ValidDownloadDirectory(effective)) {
++    DirectoryError(call, "directory_unavailable",
++                   "effective download directory is not a usable directory");
++    return;
++  }
++  call.TakeReply().Send(
++      base::DictValue().Set("ok", true).Set("directory", effective.value()));
++}
++
++AC_ENGINE_CALL(ac_downloads_directory_set) {
++  ardia::Call call(profile_dir, args_json, reply, context,
++                   ardia::OffTheRecord::kRefuse, true);
++  if (!call) {
++    return;
++  }
++  DownloadPrefs* download_prefs = DownloadPrefsFor(call);
++  if (!download_prefs) {
++    return;
++  }
++  const std::string requested = call.String("directory");
++  if (requested.empty() || requested.find('\0') != std::string::npos) {
++    DirectoryError(call, "invalid_directory",
++                   "directory must be a nonempty absolute path");
++    return;
++  }
++  const base::FilePath directory(requested);
++  if (!directory.IsAbsolute() || directory.ReferencesParent()) {
++    DirectoryError(call, "invalid_directory",
++                   "directory must be a normalized absolute path");
++    return;
++  }
++  if (!ValidDownloadDirectory(directory)) {
++    DirectoryError(call, "directory_unavailable",
++                   "directory must exist and be writable");
++    return;
++  }
++
++  PrefService* prefs = call.profile()->GetPrefs();
++  const PrefService::Preference* preference =
++      prefs->FindPreference(prefs::kDownloadDefaultDirectory);
++  const bool had_user_setting = preference->HasUserSetting();
++  const PrefService::Preference* save_preference =
++      prefs->FindPreference(prefs::kSaveFileDefaultDirectory);
++  if (!save_preference) {
++    DirectoryError(call, "download_preferences_unavailable",
++                   "save directory preference is not available");
++    return;
++  }
++  const bool had_user_save_setting = save_preference->HasUserSetting();
++  const base::Value previous_download = preference->GetValue()->Clone();
++  const base::Value previous_save = save_preference->GetValue()->Clone();
++  download_prefs->SetDownloadPath(directory);
++  const base::FilePath effective = download_prefs->DownloadPath();
++  const base::FilePath stored =
++      prefs->GetFilePath(prefs::kDownloadDefaultDirectory);
++  if (effective != directory || stored != directory ||
++      !ValidDownloadDirectory(effective)) {
++    if (had_user_setting) {
++      prefs->Set(prefs::kDownloadDefaultDirectory, previous_download);
++    } else {
++      prefs->ClearPref(prefs::kDownloadDefaultDirectory);
++    }
++    if (had_user_save_setting) {
++      prefs->Set(prefs::kSaveFileDefaultDirectory, previous_save);
++    } else {
++      prefs->ClearPref(prefs::kSaveFileDefaultDirectory);
++    }
++    DirectoryError(call, "directory_rejected",
++                   "Chromium did not retain requested download directory");
++    return;
++  }
++  call.TakeReply().Send(
++      base::DictValue().Set("ok", true).Set("directory", effective.value()));
++}
++
+diff --git a/chrome/browser/ardia/ac_downloads.h b/chrome/browser/ardia/ac_downloads.h
+index 577f0eaf..c2199aad 100644
+--- a/chrome/browser/ardia/ac_downloads.h
++++ b/chrome/browser/ardia/ac_downloads.h
+@@ -11,5 +11,7 @@ AC_ENGINE_CALL(ac_downloads_pause);
+ AC_ENGINE_CALL(ac_downloads_resume);
+ AC_ENGINE_CALL(ac_downloads_keep);
+ AC_ENGINE_CALL(ac_downloads_remove);
++AC_ENGINE_CALL(ac_downloads_directory_get);
++AC_ENGINE_CALL(ac_downloads_directory_set);
+ 
+ #endif
+diff --git a/chrome/browser/ardia/ac_engine.cc b/chrome/browser/ardia/ac_engine.cc
+index 26b3d236..4c115280 100644
+--- a/chrome/browser/ardia/ac_engine.cc
++++ b/chrome/browser/ardia/ac_engine.cc
+@@ -71,31 +71,57 @@ void Reply::Error(std::string_view message) {
+   Send(base::DictValue().Set("error", message));
+ }
+ 
++void Reply::Error(std::string_view code, std::string_view message) {
++  Send(base::DictValue()
++           .Set("ok", false)
++           .Set("error", base::DictValue()
++                             .Set("code", code)
++                             .Set("message", message)));
++}
++
+ Call::Call(const char* profile_dir,
+            const char* args_json,
+            ac_engine_reply_t reply,
+            void* context,
+-           OffTheRecord off_the_record)
+-    : reply_(reply, context) {
++           OffTheRecord off_the_record,
++           bool structured_errors)
++    : reply_(reply, context), structured_errors_(structured_errors) {
+   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+   if (args_json && *args_json) {
+     std::optional<base::Value> parsed = base::JSONReader::Read(
+         args_json, base::JSON_PARSE_CHROMIUM_EXTENSIONS);
+     if (!parsed || !parsed->is_dict()) {
+-      reply_.Error("arguments are not a JSON object");
++      if (structured_errors_) {
++        reply_.Error("invalid_arguments", "arguments are not a JSON object");
++      } else {
++        reply_.Error("arguments are not a JSON object");
++      }
+       return;
+     }
+     args_ = std::move(*parsed).TakeDict();
+   }
+   profile_ = ProfileAt(profile_dir ? profile_dir : "");
+   if (!profile_) {
+-    reply_.Error("profile not loaded");
++    if (structured_errors_) {
++      reply_.Error("profile_unavailable", "profile is not loaded");
++    } else {
++      reply_.Error("profile not loaded");
++    }
++    return;
++  }
++  if (structured_errors_ && profile_->ShutdownStarted()) {
++    profile_ = nullptr;
++    reply_.Error("profile_unavailable", "profile is shutting down");
+     return;
+   }
+   if (args_.FindBool("offTheRecord").value_or(false)) {
+     if (off_the_record != OffTheRecord::kAllow) {
+       profile_ = nullptr;
+-      reply_.Error("not for a private session");
++      if (structured_errors_) {
++        reply_.Error("off_the_record", "call requires a normal profile");
++      } else {
++        reply_.Error("not for a private session");
++      }
+       return;
+     }
+     profile_ = profile_->GetPrimaryOTRProfile(false);
+@@ -103,7 +129,11 @@ Call::Call(const char* profile_dir,
+       profile_ = nullptr;
+     }
+     if (!profile_) {
+-      reply_.Error("no private session");
++      if (structured_errors_) {
++        reply_.Error("off_the_record", "private session is not available");
++      } else {
++        reply_.Error("no private session");
++      }
+     }
+   }
+ }
+diff --git a/chrome/browser/ardia/ac_engine.h b/chrome/browser/ardia/ac_engine.h
+index ee312447..c0bb256f 100644
+--- a/chrome/browser/ardia/ac_engine.h
++++ b/chrome/browser/ardia/ac_engine.h
+@@ -34,6 +34,7 @@ class Reply {
+   void Send(base::DictValue result);
+   void Ok();
+   void Error(std::string_view message);
++  void Error(std::string_view code, std::string_view message);
+ 
+  private:
+   ac_engine_reply_t reply_;
+@@ -48,7 +49,8 @@ class Call {
+        const char* args_json,
+        ac_engine_reply_t reply,
+        void* context,
+-       OffTheRecord off_the_record = OffTheRecord::kRefuse);
++       OffTheRecord off_the_record = OffTheRecord::kRefuse,
++       bool structured_errors = false);
+   Call(const Call&) = delete;
+   Call& operator=(const Call&) = delete;
+   ~Call();
+@@ -66,6 +68,7 @@ class Call {
+   Profile* profile_ = nullptr;
+   base::DictValue args_;
+   Reply reply_;
++  bool structured_errors_ = false;
+ };
+ 
+ Profile* ProfileAt(std::string_view dir);

@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "repository": "https://github.com/mantrakp04/ardia.git",
+    "commit": "91e17a5655519d2dc385ec8452432469232ff9af",
+    "engineTree": "0fd438ac5e7847948832ff6dd080ce9ab0206464"
+  },
+  "chromium": {
+    "repository": "https://chromium.googlesource.com/chromium/src.git",
+    "version": "155.0.8059.84",
+    "tag": "refs/tags/155.0.8059.84",
+    "commit": "5869fe313571d75152b77813cf0a4ee26a4e6df0",
+    "sisoVersion": "git_revision:d38036b64e81c5fdb5d25a92081e6f98a020163d",
+    "checkoutPgoProfiles": true
+  },
+  "ungoogled": {
+    "repository": "https://github.com/ungoogled-software/ungoogled-chromium.git",
+    "tag": "155.0.8059.84-1",
+    "commit": "c7b4b99027bb6f9f33848fdbee8a319a3ba3b238",
+    "macosRepository": "https://github.com/ungoogled-software/ungoogled-chromium-macos.git",
+    "macosTag": "155.0.8059.39-1.1",
+    "macosCommit": "b1238bb72b02cd36219991d9029c1c65183ea295"
+  },
+  "depotTools": {
+    "repository": "https://chromium.googlesource.com/chromium/tools/depot_tools.git",
+    "commit": "b86fc981b72ab966f8260f73b4eca600b3b12677",
+    "pythonPackage": "infra/3pp/tools/cpython3/mac-arm64",
+    "pythonVersionTag": "version:2@3.11.8.chromium.35"
+  },
+  "gitLfs": {
+    "version": "3.8.1",
+    "url": "https://github.com/git-lfs/git-lfs/releases/download/v3.8.1/git-lfs-darwin-arm64-v3.8.1.zip",
+    "archiveSha256": "0ba10e897e0496412cd86eacaed4ed554c97ddc29bc5c709d28faa5eaaa2222c"
+  },
+  "build": {
+    "output": "build/EngineSource",
+    "configuration": "Release_GN_arm64",
+    "target": "chrome_framework",
+    "syncJobs": 4,
+    "buildJobs": 6,
+    "minimumFreeBytes": 107374182400,
+    "timeoutsSeconds": {
+      "clone": 900,
+      "sync": 28800,
+      "patches": 14400,
+      "gn": 1800,
+      "build": 43200
+    }
+  },
+  "patch": {
+    "file": "ThirdParty/ArdiaCore/patches/profile-download-directory.patch",
+    "sha256": "be7185ea26fa81164c2407f9055a260f96c1f0aafffa204878e16cf984758545"
+  }
+}

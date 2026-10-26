@@ -3,13 +3,15 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 configuration=release
 with_engine=false
+with_native_bitwarden_sdk=false
 seen_configuration=false
 seen_engine=false
+seen_native_bitwarden_sdk=false
 while (($#)); do
   case "$1" in
     --configuration)
       if $seen_configuration || (($# < 2)) || [[ "$2" == --* ]]; then
-        echo 'Usage: bundle-app.sh [--configuration release|debug] [--with-engine]' >&2
+        echo 'Usage: bundle-app.sh [--configuration release|debug] [--with-engine] [--with-native-bitwarden-sdk]' >&2
         exit 2
       fi
       case "$2" in
@@ -28,12 +30,52 @@ while (($#)); do
       with_engine=true
       shift
       ;;
+    --with-native-bitwarden-sdk)
+      if $seen_native_bitwarden_sdk; then
+        echo 'Duplicate option: --with-native-bitwarden-sdk' >&2
+        exit 2
+      fi
+      seen_native_bitwarden_sdk=true
+      with_native_bitwarden_sdk=true
+      shift
+      ;;
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
 done
 
-swift build -c "$configuration"
-binary_dir=$(swift build -c "$configuration" --show-bin-path)
+sdk_package="build/NativeBitwardenSDK/Package"
+scratch_mode=default
+if $with_native_bitwarden_sdk; then
+  scratch_mode=native-bitwarden-sdk
+  if [[ ! -d "$sdk_package" ]]; then
+    echo 'Native Bitwarden SDK package missing; refusing SDK bundle.' >&2
+    exit 1
+  fi
+  "${PYTHON:-.venv/bin/python}" - "$sdk_package" <<'PY'
+import json
+import runpy
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1]).resolve(strict=True)
+module = runpy.run_path("scripts/build-native-bitwarden-sdk.py")
+manifest_path = root / "build-manifest.json"
+manifest = json.loads(manifest_path.read_text())
+module["validate_package"](root, manifest)
+if manifest.get("accepted") is not True or manifest.get("architecture") != "arm64":
+    raise SystemExit("Native Bitwarden SDK package is not accepted for this build.")
+print("Validated pinned native Bitwarden SDK package inventory.")
+PY
+fi
+scratch_path="build/swiftpm/$scratch_mode"
+mkdir -p "$scratch_path"
+if $with_native_bitwarden_sdk; then
+  ARCUSIS_NATIVE_BITWARDEN_SDK=1 swift build --manifest-cache none --scratch-path "$scratch_path" -c "$configuration"
+  binary_dir=$(ARCUSIS_NATIVE_BITWARDEN_SDK=1 swift build --manifest-cache none --scratch-path "$scratch_path" -c "$configuration" --show-bin-path)
+else
+  ARCUSIS_NATIVE_BITWARDEN_SDK=0 swift build --manifest-cache none --scratch-path "$scratch_path" -c "$configuration"
+  binary_dir=$(ARCUSIS_NATIVE_BITWARDEN_SDK=0 swift build --manifest-cache none --scratch-path "$scratch_path" -c "$configuration" --show-bin-path)
+fi
 if $with_engine; then
   app="build/Arcusis Browser.app"
 else
@@ -44,10 +86,34 @@ if [[ "$configuration" == debug ]]; then
 fi
 mkdir -p "$app/Contents/MacOS"
 cp "$binary_dir/ArcusisBrowser" "$app/Contents/MacOS/ArcusisBrowser"
+sdk_frameworks="$app/Contents/Frameworks"
+sdk_resources="$app/Contents/Resources/NativeBitwardenSDK"
+if ! $with_native_bitwarden_sdk; then
+  rm -rf "$sdk_frameworks/libbitwarden_uniffi.dylib" "$sdk_resources"
+fi
 mkdir -p "$app/Contents/Resources/ArdiaCore"
 cp ThirdParty/ArdiaCore/LICENSE ThirdParty/ArdiaCore/NOTICE ThirdParty/ArdiaCore/pin.json \
   "$app/Contents/Resources/ArdiaCore/"
 cp Resources/Branding/Arcusis.icns "$app/Contents/Resources/Arcusis.icns"
+if $with_native_bitwarden_sdk; then
+  source_dylib="$sdk_package/Frameworks/BitwardenSDK.xcframework/macos-arm64/libbitwarden_uniffi.dylib"
+  if [[ ! -f "$source_dylib" ]]; then
+    echo 'Validated SDK package has no arm64 dylib; refusing SDK bundle.' >&2
+    exit 1
+  fi
+  mkdir -p "$sdk_frameworks" "$sdk_resources/ThirdPartyNotices"
+  cp "$source_dylib" "$sdk_frameworks/libbitwarden_uniffi.dylib"
+  install_name_tool -id '@rpath/libbitwarden_uniffi.dylib' \
+    "$sdk_frameworks/libbitwarden_uniffi.dylib"
+  # SwiftPM adds its package Frameworks directory as an absolute build rpath.
+  # Remove it so runtime resolves only the app's relative Frameworks directory.
+  install_name_tool -delete_rpath "$binary_dir/PackageFrameworks" \
+    "$app/Contents/MacOS/ArcusisBrowser"
+  for notice in DISCLAIMER.md LICENSE LICENSE_GPL.txt LICENSE_SDK.txt; do
+    cp "$sdk_package/ThirdPartyNotices/$notice" "$sdk_resources/ThirdPartyNotices/"
+  done
+  codesign --force --timestamp=none --sign - "$sdk_frameworks/libbitwarden_uniffi.dylib"
+fi
 if $with_engine; then
   framework=$(bash scripts/fetch-engine.sh)
   mkdir -p "$app/Contents/Frameworks"
@@ -88,7 +154,9 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 PLIST
 codesign --force --timestamp=none --sign - "$app"
 codesign --verify --deep --strict "$app"
-if [[ "$configuration" == debug ]]; then
+if $with_native_bitwarden_sdk; then
+  printf 'Built %s (local native SDK development bundle; ad-hoc signed; not notarized or release-ready).\n' "$app"
+elif [[ "$configuration" == debug ]]; then
   printf 'Built %s (debug development bundle; local ad-hoc signature; not notarized or release-ready).\n' "$app"
 else
   printf 'Built %s (local ad-hoc signature; not notarized).\n' "$app"

@@ -39,6 +39,7 @@ enum BrowserSettingsSection: String, CaseIterable, Identifiable {
 struct BrowserSettingsView: View {
   let profiles: [BrowserSettingsProfile]
   let searchEngines: [BrowserSettingsChoice]
+  let nativeBitwardenController: NativeBitwardenController?
   @Binding var selectedProfileID: UUID?
   @Binding var sidebarInitiallyVisible: Bool
   @Binding var selectedSearchEngine: String
@@ -60,10 +61,12 @@ struct BrowserSettingsView: View {
     selectedSearchEngine: Binding<String>, storageNotice: String? = nil,
     onCreateProfile: @escaping (String) -> UUID? = { _ in nil },
     onRenameProfile: @escaping (UUID, String) -> Bool = { _, _ in false },
+    nativeBitwardenController: NativeBitwardenController? = nil,
     initialSection: BrowserSettingsSection = .general
   ) {
     self.profiles = profiles
     self.searchEngines = searchEngines
+    self.nativeBitwardenController = nativeBitwardenController
     _selectedProfileID = selectedProfileID
     _sidebarInitiallyVisible = sidebarInitiallyVisible
     _selectedSearchEngine = selectedSearchEngine
@@ -264,6 +267,9 @@ struct BrowserSettingsView: View {
               .frame(width: 150)
             }
           }
+        }
+        if let nativeBitwardenController {
+          PasswordManagerSettingsView(controller: nativeBitwardenController)
         }
         Text("Profiles share data across their assigned Spaces.")
           .font(.callout)

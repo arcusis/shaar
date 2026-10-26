@@ -47,6 +47,60 @@ struct BrowserPreferencesTests {
     #expect(store.storageNotice == nil)
   }
 
+  @Test func nativeVaultPreferencesDefaultOffAndPersistStableProfileOwnership() throws {
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let fileURL = directory.appending(path: "preferences.json")
+    let firstProfile = UUID()
+    let secondProfile = UUID()
+    let store = BrowserPreferencesStore(fileURL: fileURL)
+
+    let first = store.nativeVaultPreferences(for: firstProfile)
+    let second = store.nativeVaultPreferences(for: secondProfile)
+    #expect(!first.isEnabled)
+    #expect(first.accountID == nil)
+    #expect(first.vaultID != second.vaultID)
+    #expect(first.deviceID != second.deviceID)
+
+    store.setNativeVaultEnabled(true, for: firstProfile)
+    store.setNativeVaultAccountID(UUID(), for: firstProfile)
+    let saved = store.nativeVaultPreferences(for: firstProfile)
+    let reloaded = BrowserPreferencesStore(fileURL: fileURL)
+    let restored = reloaded.nativeVaultPreferences(for: firstProfile)
+    #expect(restored == saved)
+    #expect(restored.isEnabled)
+    #expect(restored.vaultID == first.vaultID)
+    #expect(restored.deviceID == first.deviceID)
+
+    reloaded.setNativeVaultServer(.init(region: .eu), for: firstProfile)
+    let rebound = reloaded.nativeVaultPreferences(for: firstProfile)
+    #expect(rebound.vaultID != first.vaultID)
+    #expect(rebound.accountID == nil)
+    #expect(rebound.deviceID == first.deviceID)
+    #expect(try String(contentsOf: fileURL, encoding: .utf8).contains("password") == false)
+  }
+
+  @Test func versionOnePreferencesMigrateWithoutChangingExistingValues() throws {
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let fileURL = directory.appending(path: "preferences.json")
+    let profileID = UUID()
+    let old = """
+      {"version":1,"sidebarInitiallyVisible":false,"profileSearchEngines":["\(profileID.uuidString)","bing"]}
+      """
+    try Data(old.utf8).write(to: fileURL)
+
+    let store = BrowserPreferencesStore(fileURL: fileURL)
+    #expect(!store.sidebarInitiallyVisible)
+    #expect(store.searchEngine(for: profileID) == .bing)
+    #expect(!store.nativeVaultPreferences(for: profileID).isEnabled)
+    store.setSidebarInitiallyVisible(true)
+    let reloaded = BrowserPreferencesStore(fileURL: fileURL)
+    #expect(reloaded.searchEngine(for: profileID) == .bing)
+    #expect(reloaded.nativeVaultPreferences(for: profileID).isEnabled == false)
+  }
+
   @Test func malformedAndFutureFilesArePreservedAcrossMutations() throws {
     let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }
@@ -56,7 +110,7 @@ struct BrowserPreferencesTests {
       ("malformed.json", Data("{broken".utf8)),
       (
         "future.json",
-        Data("{\"version\":2,\"sidebarInitiallyVisible\":false,\"profileSearchEngines\":[]}".utf8)
+        Data("{\"version\":3,\"sidebarInitiallyVisible\":false,\"profileSearchEngines\":[]}".utf8)
       ),
     ] {
       let fileURL = directory.appending(path: name)

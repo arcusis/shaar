@@ -8,6 +8,7 @@ public final class BrowserPreferencesStore {
 
   private let fileURL: URL?
   private var profileSearchEngines: [UUID: BrowserSearchEngine] = [:]
+  private var nativeVaultProfiles: [UUID: NativeVaultProfilePreferences] = [:]
   private var preservesExistingFile = false
 
   public private(set) var sidebarInitiallyVisible = true
@@ -24,6 +25,40 @@ public final class BrowserPreferencesStore {
 
   public func setSearchEngine(_ value: BrowserSearchEngine, for profileID: UUID) {
     profileSearchEngines[profileID] = value
+    save()
+  }
+
+  public func nativeVaultPreferences(for profileID: UUID) -> NativeVaultProfilePreferences {
+    if let stored = nativeVaultProfiles[profileID] { return stored }
+    let value = NativeVaultProfilePreferences()
+    nativeVaultProfiles[profileID] = value
+    save()
+    return value
+  }
+
+  public func setNativeVaultEnabled(_ enabled: Bool, for profileID: UUID) {
+    var value = nativeVaultPreferences(for: profileID)
+    value.isEnabled = enabled
+    nativeVaultProfiles[profileID] = value
+    save()
+  }
+
+  public func setNativeVaultServer(
+    _ server: BitwardenServerConfiguration, for profileID: UUID
+  ) {
+    var value = nativeVaultPreferences(for: profileID)
+    guard value.server != server else { return }
+    value.server = server
+    value.vaultID = UUID()
+    value.accountID = nil
+    nativeVaultProfiles[profileID] = value
+    save()
+  }
+
+  public func setNativeVaultAccountID(_ accountID: UUID?, for profileID: UUID) {
+    var value = nativeVaultPreferences(for: profileID)
+    value.accountID = accountID
+    nativeVaultProfiles[profileID] = value
     save()
   }
 
@@ -44,12 +79,13 @@ public final class BrowserPreferencesStore {
         return
       }
       let document = try JSONDecoder().decode(PreferencesDocument.self, from: data)
-      guard document.version == 1 else {
+      guard document.version == 1 || document.version == 2 else {
         preserveWithNotice("Saved preferences use an unsupported version; original file preserved.")
         return
       }
       sidebarInitiallyVisible = document.sidebarInitiallyVisible
       profileSearchEngines = document.profileSearchEngines
+      nativeVaultProfiles = document.nativeVaultProfiles
     } catch {
       preserveWithNotice("Saved preferences are invalid or unreadable; original file preserved.")
     }
@@ -72,8 +108,8 @@ public final class BrowserPreferencesStore {
           attributes: [.posixPermissions: 0o700])
       }
       let document = PreferencesDocument(
-        version: 1, sidebarInitiallyVisible: sidebarInitiallyVisible,
-        profileSearchEngines: profileSearchEngines)
+        version: 2, sidebarInitiallyVisible: sidebarInitiallyVisible,
+        profileSearchEngines: profileSearchEngines, nativeVaultProfiles: nativeVaultProfiles)
       let encoder = JSONEncoder()
       encoder.outputFormatting = [.sortedKeys]
       let data = try encoder.encode(document)
@@ -96,4 +132,53 @@ private struct PreferencesDocument: Codable {
   let version: Int
   let sidebarInitiallyVisible: Bool
   let profileSearchEngines: [UUID: BrowserSearchEngine]
+  let nativeVaultProfiles: [UUID: NativeVaultProfilePreferences]
+
+  private enum CodingKeys: String, CodingKey {
+    case version
+    case sidebarInitiallyVisible
+    case profileSearchEngines
+    case nativeVaultProfiles
+  }
+
+  init(
+    version: Int, sidebarInitiallyVisible: Bool,
+    profileSearchEngines: [UUID: BrowserSearchEngine],
+    nativeVaultProfiles: [UUID: NativeVaultProfilePreferences]
+  ) {
+    self.version = version
+    self.sidebarInitiallyVisible = sidebarInitiallyVisible
+    self.profileSearchEngines = profileSearchEngines
+    self.nativeVaultProfiles = nativeVaultProfiles
+  }
+
+  init(from decoder: Decoder) throws {
+    let values = try decoder.container(keyedBy: CodingKeys.self)
+    version = try values.decode(Int.self, forKey: .version)
+    sidebarInitiallyVisible = try values.decode(Bool.self, forKey: .sidebarInitiallyVisible)
+    profileSearchEngines = try values.decode(
+      [UUID: BrowserSearchEngine].self, forKey: .profileSearchEngines)
+    nativeVaultProfiles =
+      try values.decodeIfPresent(
+        [UUID: NativeVaultProfilePreferences].self, forKey: .nativeVaultProfiles) ?? [:]
+  }
+}
+
+public struct NativeVaultProfilePreferences: Codable, Equatable, Sendable {
+  public var isEnabled: Bool
+  public var server: BitwardenServerConfiguration
+  public var vaultID: UUID
+  public var accountID: UUID?
+  public let deviceID: UUID
+
+  public init(
+    isEnabled: Bool = false, server: BitwardenServerConfiguration = .init(region: .us),
+    vaultID: UUID = UUID(), accountID: UUID? = nil, deviceID: UUID = UUID()
+  ) {
+    self.isEnabled = isEnabled
+    self.server = server
+    self.vaultID = vaultID
+    self.accountID = accountID
+    self.deviceID = deviceID
+  }
 }

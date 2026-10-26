@@ -1,0 +1,474 @@
+diff --git a/crates/bitwarden-core/src/auth/api/request/mod.rs b/crates/bitwarden-core/src/auth/api/request/mod.rs
+index 71d6e66..be89141 100644
+--- a/crates/bitwarden-core/src/auth/api/request/mod.rs
++++ b/crates/bitwarden-core/src/auth/api/request/mod.rs
+@@ -31,7 +31,15 @@ pub(crate) async fn send_identity_connect_request(
+     identity_config: &Configuration,
+     body: impl serde::Serialize,
+ ) -> Result<IdentityTokenResponse, LoginError> {
+-    let response = identity_config
++    send_identity_connect_request_with_status(identity_config, body, false).await
++}
++
++pub(crate) async fn send_identity_connect_request_with_status(
++    identity_config: &Configuration,
++    body: impl serde::Serialize,
++    require_success: bool,
++) -> Result<IdentityTokenResponse, LoginError> {
++    let mut response = identity_config
+         .client
+         .post(format!("{}/connect/token", identity_config.base_path))
+         .header(
+@@ -45,7 +53,64 @@ pub(crate) async fn send_identity_connect_request(
+         .map_err(ApiError::from)?;
+ 
+     let status = response.status();
+-    let text = response.text().await.map_err(ApiError::from)?;
++    let text = if require_success {
++        const MAX_REFRESH_RESPONSE_BYTES: usize = 128 * 1024;
++        if response
++            .content_length()
++            .is_some_and(|length| length > MAX_REFRESH_RESPONSE_BYTES as u64)
++        {
++            return Err(LoginError::InvalidResponse);
++        }
++        #[cfg(not(target_arch = "wasm32"))]
++        let body = {
++            let mut body = Vec::new();
++            while let Some(chunk) = response.chunk().await.map_err(ApiError::from)? {
++                if body.len().checked_add(chunk.len()).is_none_or(|size| size > MAX_REFRESH_RESPONSE_BYTES) {
++                    return Err(LoginError::InvalidResponse);
++                }
++                body.extend_from_slice(&chunk);
++            }
++            body
++        };
++        #[cfg(target_arch = "wasm32")]
++        let body = {
++            let body = response.bytes().await.map_err(ApiError::from)?;
++            if body.len() > MAX_REFRESH_RESPONSE_BYTES {
++                return Err(LoginError::InvalidResponse);
++            }
++            body.to_vec()
++        };
++        String::from_utf8(body).map_err(|_| LoginError::InvalidResponse)?
++    } else {
++        response.text().await.map_err(ApiError::from)?
++    };
+ 
+-    parse_identity_response(status, text)
++    if require_success && !status.is_success() {
++        return match parse_identity_response(status, text) {
++            Err(LoginError::IdentityFail(error)) if status.as_u16() == 400 => {
++                Err(LoginError::IdentityFail(error))
++            }
++            _ => Err(ApiError::Response(bitwarden_api_base::ResponseContent {
++                status,
++                message: String::new(),
++            })
++            .into()),
++        };
++    }
++    if require_success {
++        let value: serde_json::Value =
++            serde_json::from_str(&text).map_err(|_| LoginError::InvalidResponse)?;
++        if !value.is_object()
++            || value
++                .get("refresh_token")
++                .is_some_and(|token| !token.is_string())
++        {
++            return Err(LoginError::InvalidResponse);
++        }
++    }
++    let parsed = parse_identity_response(status, text);
++    if require_success && matches!(parsed, Err(LoginError::IdentityFail(_))) {
++        return Err(LoginError::InvalidResponse);
++    }
++    parsed
+ }
+diff --git a/crates/bitwarden-core/src/auth/api/request/renew_token_request.rs b/crates/bitwarden-core/src/auth/api/request/renew_token_request.rs
+index 04f24bc..c8076f7 100644
+--- a/crates/bitwarden-core/src/auth/api/request/renew_token_request.rs
++++ b/crates/bitwarden-core/src/auth/api/request/renew_token_request.rs
+@@ -23,6 +23,6 @@ impl RenewTokenRequest {
+         &self,
+         identity_config: &Configuration,
+     ) -> Result<IdentityTokenResponse, LoginError> {
+-        super::send_identity_connect_request(identity_config, &self).await
++        super::send_identity_connect_request_with_status(identity_config, &self, true).await
+     }
+ }
+diff --git a/crates/bitwarden-core/src/auth/renew.rs b/crates/bitwarden-core/src/auth/renew.rs
+index 18eef77..3c63aaf 100644
+--- a/crates/bitwarden-core/src/auth/renew.rs
++++ b/crates/bitwarden-core/src/auth/renew.rs
+@@ -94,3 +94,86 @@ pub async fn renew_sm_token_sdk_managed(
+         }
+     }
+ }
++
++#[cfg(test)]
++mod refresh_adapter_tests {
++    use super::*;
++    use std::collections::HashMap;
++    use wiremock::{
++        Mock, MockServer, ResponseTemplate,
++        matchers::{method, path},
++    };
++
++    async fn run_response(
++        status: u16,
++        body: &str,
++    ) -> Result<(String, Option<String>, u64), LoginError> {
++        let server = MockServer::start().await;
++        Mock::given(method("POST"))
++            .and(path("/connect/token"))
++            .respond_with(ResponseTemplate::new(status).set_body_raw(body, "application/json"))
++            .expect(1)
++            .mount(&server)
++            .await;
++        let settings = crate::ClientSettings {
++            identity_url: server.uri(),
++            ..Default::default()
++        };
++        let client = crate::Client::new(Some(settings));
++        let configs: std::sync::Arc<crate::client::ApiConfigurations> =
++            crate::client::FromClientPart::get_part(&client);
++        let login = UserLoginMethod::Username {
++            client_id: "original/client".into(),
++            email: "dummy@example.test".into(),
++            kdf: bitwarden_crypto::Kdf::default_pbkdf2(),
++        };
++        let result = renew_pm_token_sdk_managed(
++            Some("old+token".into()),
++            &login,
++            configs.identity_config.clone(),
++        )
++        .await;
++        let requests = server.received_requests().await.unwrap();
++        let form: HashMap<String, String> = serde_qs::from_bytes(&requests[0].body).unwrap();
++        assert_eq!(
++            form.get("grant_type").map(String::as_str),
++            Some("refresh_token")
++        );
++        assert_eq!(
++            form.get("client_id").map(String::as_str),
++            Some("original/client")
++        );
++        assert_eq!(
++            form.get("refresh_token").map(String::as_str),
++            Some("old+token")
++        );
++        assert_eq!(form.len(), 3);
++        result
++    }
++
++    #[tokio::test]
++    async fn renewal_form_rotation_and_http_status() {
++        let omitted =
++            r#"{"access_token":"dummy","expires_in":3600,"token_type":"Bearer","scope":"api"}"#;
++        let rotated = r#"{"access_token":"dummy","expires_in":3600,"refresh_token":"new","token_type":"Bearer","scope":"api"}"#;
++        assert_eq!(run_response(200, omitted).await.unwrap().1, None);
++        assert_eq!(
++            run_response(200, rotated).await.unwrap().1.as_deref(),
++            Some("new")
++        );
++        for status in [401, 403, 500] {
++            assert!(
++                matches!(run_response(status, rotated).await, Err(LoginError::Api(crate::ApiError::Response(response))) if response.status.as_u16() == status)
++            );
++        }
++        assert!(matches!(
++            run_response(200, "not-json").await,
++            Err(LoginError::InvalidResponse)
++        ));
++        assert!(matches!(
++            run_response(200, &"x".repeat(128 * 1024 + 1)).await,
++            Err(LoginError::InvalidResponse)
++        ));
++        assert!(run_response(200, r#"{"access_token":"dummy","expires_in":3600,"refresh_token":null,"token_type":"Bearer","scope":"api"}"#).await.is_err());
++    }
++}
+diff --git a/crates/bitwarden-pm/src/lib.rs b/crates/bitwarden-pm/src/lib.rs
+index a8fb9f6..8785f08 100644
+--- a/crates/bitwarden-pm/src/lib.rs
++++ b/crates/bitwarden-pm/src/lib.rs
+@@ -433,6 +433,11 @@ impl bitwarden_sync::SyncErrorHandler for SyncSnapshotHandler {
+     }
+ }
+ 
++/// Whether the sync failure came from an HTTP 401 response.
++pub fn sync_error_is_unauthorized(error: &bitwarden_sync::SyncError) -> bool {
++    matches!(error, bitwarden_sync::SyncError::Api(bitwarden_core::ApiError::Response(response)) if response.status.as_u16() == 401)
++}
++
+ /// Retained SDK sync client with a typed, in-memory encrypted cipher snapshot.
+ pub struct SyncCipherSnapshotClient {
+     sdk: bitwarden_sync::SyncClient,
+@@ -653,3 +658,61 @@ mod organization_snapshot_tests {
+         assert!(b.0.lock().unwrap().published.ciphers.is_empty());
+     }
+ }
++
++#[cfg(test)]
++mod refresh_sync_status_tests {
++    use super::*;
++    #[tokio::test]
++    async fn only_http_401_is_unauthorized() {
++        use std::io::{Read, Write};
++        use std::net::TcpListener;
++        use std::time::Duration;
++
++        for status in [401, 403, 500, 200, 0] {
++            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
++            let addr = listener.local_addr().unwrap();
++            listener.set_nonblocking(true).unwrap();
++            let server = std::thread::spawn(move || {
++                let deadline = std::time::Instant::now() + Duration::from_secs(5);
++                let (mut stream, _) = loop {
++                    match listener.accept() {
++                        Ok(connection) => break connection,
++                        Err(error)
++                            if error.kind() == std::io::ErrorKind::WouldBlock
++                                && std::time::Instant::now() < deadline =>
++                        {
++                            std::thread::sleep(Duration::from_millis(10))
++                        }
++                        Err(error) => panic!("loopback accept failed: {error}"),
++                    }
++                };
++                stream
++                    .set_read_timeout(Some(Duration::from_secs(5)))
++                    .unwrap();
++                let mut request = [0u8; 4096];
++                let count = stream.read(&mut request).unwrap();
++                assert!(
++                    std::str::from_utf8(&request[..count])
++                        .unwrap()
++                        .starts_with("GET /sync")
++                );
++                if status == 0 {
++                    return;
++                }
++                let body = "dummy-secret-not-json";
++                write!(stream, "HTTP/1.1 {status} Test\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
++            });
++            let settings = bitwarden_core::ClientSettings {
++                api_url: format!("http://{addr}"),
++                ..Default::default()
++            };
++            let sdk = SyncCipherSnapshotClient::new(bitwarden_core::Client::new(Some(settings)));
++            let error = sdk.sync(true).await.err().expect("expected sync error");
++            assert_eq!(sync_error_is_unauthorized(&error), status == 401);
++            server.join().unwrap();
++        }
++        assert!(!sync_error_is_unauthorized(
++            &bitwarden_sync::SyncError::AccountDeleted
++        ));
++    }
++}
+diff --git a/crates/bitwarden-uniffi/src/auth/mod.rs b/crates/bitwarden-uniffi/src/auth/mod.rs
+index 352103c..668901d 100644
+--- a/crates/bitwarden-uniffi/src/auth/mod.rs
++++ b/crates/bitwarden-uniffi/src/auth/mod.rs
+@@ -17,11 +17,115 @@ use crate::{
+ mod login;
+ mod registration;
+ 
++/// Token renewal result; callers must validate account binding and persist before use.
++#[derive(uniffi::Record)]
++pub struct RefreshResult {
++    pub access_token: String,
++    pub refresh_token: Option<String>,
++    pub expires_in: u64,
++}
++
++/// Redacted renewal failure categories.
++#[derive(Debug, thiserror::Error, uniffi::Error)]
++pub enum RefreshError {
++    #[error("Invalid refresh input")]
++    InvalidInput,
++    #[error("Refresh grant rejected")]
++    Rejected,
++    #[error("Refresh request failed")]
++    RequestFailed,
++    #[error("Invalid refresh response")]
++    InvalidResponse,
++}
++
++fn valid_token(value: &str) -> bool {
++    !value.is_empty() && value.len() <= 16384 && value.bytes().all(|b| b.is_ascii_graphic())
++}
++
++fn validated_refresh(
++    access_token: String,
++    refresh_token: Option<String>,
++    expires_in: u64,
++) -> std::result::Result<RefreshResult, RefreshError> {
++    if !valid_token(&access_token) {
++        return Err(RefreshError::InvalidResponse);
++    }
++    let parts: Vec<_> = access_token.split('.').collect();
++    if parts.len() != 3
++        || parts.iter().any(|part| {
++            part.is_empty()
++                || bitwarden_encoding::B64Url::try_from(*part).is_err()
++                || !part
++                    .bytes()
++                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
++        })
++        || !matches!(access_token.parse::<bitwarden_core::auth::JwtToken>(), Ok(claims) if !claims.sub.is_empty() && claims.exp > 0 && claims.exp <= i64::MAX as u64)
++        || refresh_token
++            .as_ref()
++            .is_some_and(|token| !valid_token(token))
++        || expires_in == 0
++        || expires_in > u32::MAX as u64
++    {
++        return Err(RefreshError::InvalidResponse);
++    }
++    Ok(RefreshResult {
++        access_token,
++        refresh_token,
++        expires_in,
++    })
++}
++
++fn map_refresh_error(error: bitwarden_core::auth::login::LoginError) -> RefreshError {
++    match error {
++        bitwarden_core::auth::login::LoginError::IdentityFail(response)
++            if response.error == "invalid_grant" =>
++        {
++            RefreshError::Rejected
++        }
++        bitwarden_core::auth::login::LoginError::InvalidResponse => RefreshError::InvalidResponse,
++        bitwarden_core::auth::login::LoginError::Api(bitwarden_core::ApiError::Response(
++            response,
++        )) if response.status.is_success() => RefreshError::InvalidResponse,
++        _ => RefreshError::RequestFailed,
++    }
++}
++
+ #[derive(uniffi::Object)]
+ pub struct AuthClient(pub(crate) bitwarden_core::Client);
+ 
+ #[uniffi::export(async_runtime = "tokio")]
+ impl AuthClient {
++    /// Renew using this client's identity configuration and the original username login metadata.
++    /// This does not update the client-managed token provider or persist tokens.
++    pub async fn refresh_password_manager_token(
++        &self,
++        refresh_token: String,
++        client_id: String,
++        email: String,
++        kdf: Kdf,
++    ) -> std::result::Result<RefreshResult, RefreshError> {
++        use bitwarden_core::client::{
++            ApiConfigurations, FromClientPart, login_method::UserLoginMethod,
++        };
++        if !valid_token(&refresh_token) || !valid_token(&client_id) || !valid_token(&email) {
++            return Err(RefreshError::InvalidInput);
++        }
++        let configs: std::sync::Arc<ApiConfigurations> = self.0.get_part();
++        let login = UserLoginMethod::Username {
++            client_id,
++            email,
++            kdf,
++        };
++        let (access, refresh, expires) = bitwarden_core::auth::renew::renew_pm_token_sdk_managed(
++            Some(refresh_token),
++            &login,
++            configs.identity_config.clone(),
++        )
++        .await
++        .map_err(map_refresh_error)?;
++        validated_refresh(access, refresh, expires)
++    }
++
+     /// Client for initializing user account cryptography and unlock methods after JIT provisioning
+     pub fn registration(&self) -> RegistrationClient {
+         RegistrationClient(self.0.clone())
+@@ -181,3 +285,45 @@ impl AuthClient {
+         Ok(self.0.auth().trust_device()?)
+     }
+ }
++
++#[cfg(test)]
++mod refresh_tests {
++    use super::*;
++
++    fn token() -> String {
++        let payload = bitwarden_encoding::B64Url::from(
++            br#"{"sub":"dummy","exp":123,"scope":["api"]}"#.as_slice(),
++        );
++        format!("e30.{payload}.AAAA")
++    }
++
++    #[test]
++    fn validates_refresh_result_without_exposing_errors() {
++        let omitted = validated_refresh(token(), None, 3600).unwrap();
++        assert!(omitted.refresh_token.is_none());
++        assert_eq!(
++            validated_refresh(token(), Some("rotated".into()), 3600)
++                .unwrap()
++                .refresh_token
++                .as_deref(),
++            Some("rotated")
++        );
++        for (access, refresh, expiry) in [
++            ("bad".into(), None, 1),
++            (token(), Some(String::new()), 1),
++            (token(), None, 0),
++            (token(), None, u64::MAX),
++        ] {
++            assert!(matches!(
++                validated_refresh(access, refresh, expiry),
++                Err(RefreshError::InvalidResponse)
++            ));
++        }
++        let internal = bitwarden_core::auth::login::LoginError::Api(
++            std::io::Error::other("dummy-secret").into(),
++        );
++        let exposed = map_refresh_error(internal);
++        assert!(matches!(exposed, RefreshError::RequestFailed));
++        assert_eq!(exposed.to_string(), "Refresh request failed");
++    }
++}
+diff --git a/crates/bitwarden-uniffi/src/sync.rs b/crates/bitwarden-uniffi/src/sync.rs
+index 058da17..bca9157 100644
+--- a/crates/bitwarden-uniffi/src/sync.rs
++++ b/crates/bitwarden-uniffi/src/sync.rs
+@@ -12,6 +12,15 @@ impl SyncClientBinding {
+     }
+ }
+ 
++/// Redacted outcome from a sync attempt.
++#[derive(uniffi::Enum)]
++pub enum SyncOutcome {
++    Synced,
++    Unchanged,
++    Unauthorized,
++    Failed,
++}
++
+ #[uniffi::export(async_runtime = "tokio")]
+ impl SyncClientBinding {
+     /// Fetch server sync and publish typed encrypted ciphers after registered handlers succeed.
+@@ -22,6 +31,18 @@ impl SyncClientBinding {
+             .map_err(|_| Error::Conversion("sync failed".to_owned()))
+     }
+ 
++    /// Sync with a distinct HTTP 401 outcome and no server error text.
++    pub async fn sync_with_outcome(&self, force: bool) -> SyncOutcome {
++        match self.0.sync(force).await {
++            Ok(true) => SyncOutcome::Synced,
++            Ok(false) => SyncOutcome::Unchanged,
++            Err(error) if bitwarden_pm::sync_error_is_unauthorized(&error) => {
++                SyncOutcome::Unauthorized
++            }
++            Err(_) => SyncOutcome::Failed,
++        }
++    }
++
+     /// Return this client's last successfully published encrypted cipher snapshot.
+     pub fn encrypted_ciphers(&self) -> Vec<Cipher> {
+         self.0.encrypted_ciphers()

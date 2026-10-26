@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "accepted": false,
+  "compiled": false,
+  "integration_ready": false,
+  "repository": "https://github.com/bitwarden/sdk-internal",
+  "sourceCommit": "5cf919837e83b71c2508bf99344ea57cf5f84e88",
+  "sourceTree": "9af9432aefeed6796e40e5019ffdc8600f3381e9",
+  "prerequisites": [
+    {
+      "file": "ThirdParty/BitwardenAuthSpike/identity-mfa.patch",
+      "sha256": "850c53c73c710772b338bc88760543f66562119984e25bcf0337bfa986842a91"
+    },
+    {
+      "file": "ThirdParty/BitwardenKeyClearSpike/clear-crypto-keys.patch",
+      "sha256": "f62fb617c615570d1a4280fd459af8b081caa758ad50fe4f57ebd7b34bdc2bf4"
+    },
+    {
+      "file": "ThirdParty/BitwardenSyncSpike/sync.patch",
+      "sha256": "26c6c57921ade94d4b6bed4b1627bf879ee6665fe23b5462b4b10a79633c7533"
+    },
+    {
+      "file": "ThirdParty/BitwardenSyncSpike/organization-keys.patch",
+      "sha256": "b61303ecba50f6b1e75a083324e231878ae80d5663593302fede22dbd785cf1d"
+    },
+    {
+      "file": "ThirdParty/BitwardenSyncSpike/organization-key-replacement.patch",
+      "sha256": "4079044d3bd8dd3e8427ec86a1b2901704e4a08d2491dd67dbbf06dd2778294b"
+    }
+  ],
+  "patchFile": "ThirdParty/BitwardenRefreshSpike/refresh.patch",
+  "changedFiles": [
+    "crates/bitwarden-core/src/auth/api/request/mod.rs",
+    "crates/bitwarden-core/src/auth/api/request/renew_token_request.rs",
+    "crates/bitwarden-core/src/auth/renew.rs",
+    "crates/bitwarden-pm/src/lib.rs",
+    "crates/bitwarden-uniffi/src/auth/mod.rs",
+    "crates/bitwarden-uniffi/src/sync.rs"
+  ],
+  "patchSHA256": "dbbade935ba424c56bbbe788ff87403c8404af1bd733a1e9a0175f34b836b6e8",
+  "patchBytes": 18339,
+  "fiveLayerTree": "11ed604aabfcee88eac5c4ce2b486f9628796914",
+  "sixLayerTree": "64151eb07bdbe0bba1b48aeeea6a8b1add2c4ac9"
+}

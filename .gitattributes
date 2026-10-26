@@ -2,3 +2,4 @@
 ThirdParty/BitwardenAuthSpike/identity-mfa.patch -whitespace
 ThirdParty/BitwardenSyncSpike/organization-key-replacement.patch -whitespace
 ThirdParty/ArdiaCore/patches/native-password-document-url.patch -whitespace
+ThirdParty/BitwardenRefreshSpike/refresh.patch -whitespace

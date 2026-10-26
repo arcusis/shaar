@@ -1,7 +1,9 @@
 import os
 import plistlib
+import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,6 +12,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "scripts" / "bundle-app.sh"
 ICON = REPO / "Resources" / "Branding" / "Arcusis.icns"
+PSL = REPO / "Sources" / "BrowserCore" / "Resources" / "public_suffix_list.dat"
 
 
 class BundleAppTests(unittest.TestCase):
@@ -22,6 +25,8 @@ class BundleAppTests(unittest.TestCase):
 
         (self.root / "scripts").mkdir()
         shutil.copy2(SCRIPT, self.root / "scripts" / "bundle-app.sh")
+        shutil.copy2(REPO / "scripts" / "stage-browser-resources.py", self.root / "scripts")
+        shutil.copytree(REPO / "ThirdParty" / "PublicSuffix", self.root / "ThirdParty" / "PublicSuffix")
         icon = self.root / "Resources" / "Branding" / "Arcusis.icns"
         icon.parent.mkdir(parents=True)
         shutil.copy2(ICON, icon)
@@ -40,6 +45,10 @@ class BundleAppTests(unittest.TestCase):
         self.binary_dir = self.root / "swift-bin"
         self.binary_dir.mkdir()
         (self.binary_dir / "ArcusisBrowser").write_text("stub binary")
+        resource_bundle = self.binary_dir / "ArcusisBrowser_BrowserCore.bundle" / "Contents"
+        (resource_bundle / "Resources").mkdir(parents=True)
+        shutil.copyfile(PSL, resource_bundle / "Resources" / "public_suffix_list.dat")
+        (resource_bundle / "Info.plist").write_text("fixture plist")
         self.framework = self.root / "engine" / "Chromium Framework.framework"
         libraries = self.framework / "Versions" / "Current" / "Libraries"
         helpers = self.framework / "Versions" / "Current" / "Helpers"
@@ -58,8 +67,12 @@ class BundleAppTests(unittest.TestCase):
         )
         self._tool(
             "codesign",
-            "printf 'codesign %s\\n' \"$*\" >> \"$BUNDLE_TEST_LOG\"\n",
+            "if [[ $# -eq 5 && $1 == --force && $2 == --timestamp=none && $3 == --sign && $4 == - ]] || "
+            "[[ $# -eq 4 && $1 == --verify && $2 == --deep && $3 == --strict ]]; then\n"
+            "  printf 'codesign %s\\n' \"$*\" >> \"$BUNDLE_TEST_LOG\"\n"
+            "else printf 'unexpected codesign arguments\\n' >&2; exit 97; fi\n",
         )
+        self._tool("security", "printf 'unexpected security invocation\\n' >&2; exit 97\n")
         self._tool(
             "ditto",
             "printf 'ditto %s\\n' \"$*\" >> \"$BUNDLE_TEST_LOG\"\n"
@@ -81,11 +94,14 @@ class BundleAppTests(unittest.TestCase):
         path.write_text("#!/bin/bash\nset -euo pipefail\n" + body)
         path.chmod(0o755)
 
-    def _run(self, *args):
+    def _run(self, *args, env=None):
+        environment = self.env if env is None else env
+        for name in ("codesign", "security"):
+            self.assertEqual(Path(shutil.which(name, path=environment["PATH"])), self.tools / name)
         return subprocess.run(
             ["bash", str(self.root / "scripts" / "bundle-app.sh"), *args],
             cwd=self.root,
-            env=self.env,
+            env=environment,
             capture_output=True,
             text=True,
         )
@@ -93,8 +109,32 @@ class BundleAppTests(unittest.TestCase):
     def _log(self):
         return self.log.read_text() if self.log.exists() else ""
 
+    def _sdk_python(self):
+        self._tool(
+            "python-validator",
+            "if [[ ${1-} == - ]]; then\n"
+            "  printf 'validate sdk package\\n' >> \"$BUNDLE_TEST_LOG\"\n"
+            "  cat >/dev/null\n"
+            "else\n"
+            f"  exec {shlex.quote(sys.executable)} \"$@\"\n"
+            "fi\n",
+        )
+        return str(self.tools / "python-validator")
+
+    def _assert_staged_resources(self, contents):
+        resources = contents / "Resources"
+        bundle = resources / "ArcusisBrowser_BrowserCore.bundle" / "Contents"
+        self.assertEqual((bundle / "Resources" / "public_suffix_list.dat").read_bytes(), PSL.read_bytes())
+        self.assertEqual((bundle / "Info.plist").read_text(), "fixture plist")
+        for name in ("LICENSE", "pin.json"):
+            self.assertEqual(
+                (resources / "PublicSuffix" / name).read_bytes(),
+                (REPO / "ThirdParty" / "PublicSuffix" / name).read_bytes(),
+            )
+
     def _assert_icon_bundle(self, app_path):
         contents = self.root / app_path / "Contents"
+        self._assert_staged_resources(contents)
         with (contents / "Info.plist").open("rb") as plist_file:
             plist = plistlib.load(plist_file)
         self.assertEqual(plist["CFBundleIconFile"], "Arcusis.icns")
@@ -174,13 +214,7 @@ class BundleAppTests(unittest.TestCase):
         stale_notice.write_text("stale notice")
         inherited_sdk_environment = self.env | {"ARCUSIS_NATIVE_BITWARDEN_SDK": "1"}
 
-        source_only = subprocess.run(
-            ["bash", str(self.root / "scripts/bundle-app.sh"), "--configuration", "debug"],
-            cwd=self.root,
-            env=inherited_sdk_environment,
-            capture_output=True,
-            text=True,
-        )
+        source_only = self._run("--configuration", "debug", env=inherited_sdk_environment)
 
         self.assertEqual(source_only.returncode, 0, source_only.stderr)
         self.assertFalse(stale_library.exists())
@@ -196,20 +230,12 @@ class BundleAppTests(unittest.TestCase):
         notices.mkdir()
         for name in ("DISCLAIMER.md", "LICENSE", "LICENSE_GPL.txt", "LICENSE_SDK.txt"):
             (notices / name).write_text(name)
-        validator = self.tools / "python-validator"
-        validator.write_text("#!/bin/bash\nset -euo pipefail\ncat >/dev/null\n")
-        validator.chmod(0o755)
+        validator = self._sdk_python()
         self._tool("install_name_tool", "printf 'install_name_tool %s\\n' \"$*\" >> \"$BUNDLE_TEST_LOG\"\n")
 
-        sdk_enabled = subprocess.run(
-            [
-                "bash", str(self.root / "scripts/bundle-app.sh"), "--configuration", "debug",
-                "--with-native-bitwarden-sdk",
-            ],
-            cwd=self.root,
-            env=inherited_sdk_environment | {"PYTHON": str(validator)},
-            capture_output=True,
-            text=True,
+        sdk_enabled = self._run(
+            "--configuration", "debug", "--with-native-bitwarden-sdk",
+            env=inherited_sdk_environment | {"PYTHON": validator},
         )
 
         self.assertEqual(sdk_enabled.returncode, 0, sdk_enabled.stderr)
@@ -232,22 +258,13 @@ class BundleAppTests(unittest.TestCase):
         notices.mkdir()
         for name in ("DISCLAIMER.md", "LICENSE", "LICENSE_GPL.txt", "LICENSE_SDK.txt"):
             (notices / name).write_text(name)
-        validator = self.tools / "python-validator"
-        validator.write_text("#!/bin/bash\nset -euo pipefail\ncat >/dev/null\n")
-        validator.chmod(0o755)
+        validator = self._sdk_python()
         self._tool(
             "install_name_tool",
             "printf 'install_name_tool %s\\n' \"$*\" >> \"$BUNDLE_TEST_LOG\"\n",
         )
         environment = self.env | {"PYTHON": str(validator)}
-        sdk = subprocess.run(
-            ["bash", str(self.root / "scripts/bundle-app.sh"), "--configuration", "debug",
-             "--with-native-bitwarden-sdk"],
-            cwd=self.root,
-            env=environment,
-            capture_output=True,
-            text=True,
-        )
+        sdk = self._run("--configuration", "debug", "--with-native-bitwarden-sdk", env=environment)
         self.assertEqual(sdk.returncode, 0, sdk.stderr)
         sdk_scratch = self.root / "build/swiftpm/native-bitwarden-sdk"
         sdk_marker = sdk_scratch / "cache-marker"
@@ -282,33 +299,19 @@ class BundleAppTests(unittest.TestCase):
         for name in ("DISCLAIMER.md", "LICENSE", "LICENSE_GPL.txt", "LICENSE_SDK.txt"):
             (notices / name).write_text(name)
         (notices / "unrelated-source.txt").write_text("must not be bundled")
-        validator = self.tools / "python-validator"
-        validator.write_text(
-            "#!/bin/bash\nset -euo pipefail\n"
-            "printf 'validate sdk package\\n' >> \"$BUNDLE_TEST_LOG\"\n"
-            "cat >/dev/null\n"
-        )
-        validator.chmod(0o755)
+        validator = self._sdk_python()
         self._tool(
             "install_name_tool",
             "printf 'install_name_tool %s\\n' \"$*\" >> \"$BUNDLE_TEST_LOG\"\n",
         )
         environment = self.env | {"PYTHON": str(validator)}
 
-        result = subprocess.run(
-            [
-                "bash", str(self.root / "scripts/bundle-app.sh"), "--configuration", "debug",
-                "--with-native-bitwarden-sdk",
-            ],
-            cwd=self.root,
-            env=environment,
-            capture_output=True,
-            text=True,
-        )
+        result = self._run("--configuration", "debug", "--with-native-bitwarden-sdk", env=environment)
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("not notarized or release-ready", result.stdout)
         app = self.root / "build/Arcusis Browser Shell Debug.app/Contents"
+        self._assert_staged_resources(app)
         bundled_library = app / "Frameworks/libbitwarden_uniffi.dylib"
         self.assertEqual(bundled_library.read_bytes(), b"validated sdk dylib")
         self.assertEqual(
@@ -324,6 +327,16 @@ class BundleAppTests(unittest.TestCase):
         self.assertIn("install_name_tool -delete_rpath", log)
         self.assertIn("PackageFrameworks", log)
         self.assertIn("codesign --force --timestamp=none --sign -", log)
+
+    def test_resource_corruption_stops_bundle_before_signing(self):
+        data = self.binary_dir / "ArcusisBrowser_BrowserCore.bundle/Contents/Resources/public_suffix_list.dat"
+        data.write_text("corrupt")
+
+        result = self._run()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("BrowserCore resource hash mismatch", result.stderr)
+        self.assertNotIn("codesign", self._log())
 
     def test_invalid_duplicate_and_malformed_options_fail_before_build(self):
         invalid_arguments = (

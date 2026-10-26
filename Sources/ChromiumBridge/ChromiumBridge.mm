@@ -187,16 +187,26 @@ static BOOL ARCCanonicalIPHost(NSString *host) {
 }
 
 static BOOL ARCCanonicalHTTPSOrigin(NSString *origin) {
-  if (![origin isKindOfClass:NSString.class]) return NO;
+  if (![origin isKindOfClass:NSString.class] || ![origin hasPrefix:@"https://"]) return NO;
   NSURLComponents *parts = [NSURLComponents componentsWithString:origin];
   if (!parts || ![parts.scheme isEqualToString:@"https"] || !parts.host.length ||
       parts.user || parts.password || parts.query || parts.fragment || parts.path.length ||
-      [parts.percentEncodedHost containsString:@"%"] || !ARCCanonicalIPHost(parts.percentEncodedHost) ||
       (parts.port && (parts.port.integerValue <= 0 || parts.port.integerValue > 65535 ||
                       parts.port.integerValue == 443))) return NO;
-  NSString *canonical = [NSString stringWithFormat:@"https://%@%@", parts.percentEncodedHost,
-    parts.port ? [NSString stringWithFormat:@":%@", parts.port] : @""];
-  return [canonical isEqualToString:origin] && [parts.host isEqualToString:parts.host.lowercaseString];
+  NSString *port = parts.port ? [NSString stringWithFormat:@":%@", parts.port] : @"";
+  NSString *authority = [origin substringFromIndex:@"https://".length];
+  if (![authority hasSuffix:port] || authority.length <= port.length) return NO;
+  NSString *host = [authority substringToIndex:authority.length - port.length];
+  for (NSUInteger i = 0; i < host.length; i++) {
+    unichar c = [host characterAtIndex:i];
+    if (c < 33 || c > 126 || c == '%') return NO;
+  }
+  NSString *canonical = [NSString stringWithFormat:@"https://%@", host];
+  NSURL *normalizedHost = [NSURL URLWithString:[NSString stringWithFormat:@"https://%@", parts.host]];
+  return [host isEqualToString:host.lowercaseString] && ARCCanonicalIPHost(host) &&
+    [normalizedHost.absoluteString isEqualToString:canonical] &&
+    [parts.URL.absoluteString isEqualToString:origin] &&
+    [[canonical stringByAppendingString:port] isEqualToString:origin];
 }
 
 @interface ARCNativeWindowState : NSObject

@@ -46,20 +46,26 @@ struct BrowserLibraryTests {
     #expect(model.bookmarks[profile]?.items.contains { $0.title == "Confirmed" } == true)
   }
 
-  @Test func eventsDuringReadCoalesceIntoFollowupAndWatchErrorsRemainProfileBound() async throws {
+  @Test(.timeLimit(.minutes(1)))
+  func eventsDuringReadCoalesceIntoFollowupAndWatchErrorsRemainProfileBound() async throws {
     let model = BrowserLibraryModel()
     let profile = UUID()
     var replies: [@MainActor (Result<Any, Error>) -> Void] = []
-    model.onLoad = { _, _, done in replies.append(done) }
+    let (reads, continuation) = AsyncStream<Int>.makeStream()
+    defer { continuation.finish() }
+    var events = reads.makeAsyncIterator()
+    model.onLoad = { _, _, done in
+      replies.append(done)
+      continuation.yield(replies.count)
+    }
     model.refresh(profile, section: .bookmarks)
+    let initialRead = await events.next()
+    try #require(initialRead == 1)
     for _ in 0..<20 { model.invalidate(profile, section: .bookmarks) }
     #expect(replies.count == 1)
     replies[0](.success(tree(title: "First")))
-    let clock = ContinuousClock()
-    let deadline = clock.now.advanced(by: .seconds(3))
-    while replies.count < 2 && clock.now < deadline {
-      try await Task.sleep(for: .milliseconds(10))
-    }
+    let followupRead = await events.next()
+    try #require(followupRead == 2)
     try #require(replies.count == 2)
     model.serviceFailed(profile, section: .bookmarks, message: "Updates unavailable")
     replies[1](.success(tree(title: "Updated")))

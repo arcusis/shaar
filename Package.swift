@@ -34,7 +34,7 @@ let package = Package(
   products: [.executable(name: "ArcusisBrowser", targets: ["ArcusisBrowser"])],
   dependencies: nativeBitwardenSDKDependency,
   targets: [
-    .target(name: "BrowserCore"),
+    .target(name: "BrowserCore", resources: [.process("Resources/public_suffix_list.dat")]),
     .target(
       name: "ChromiumBridge",
       publicHeadersPath: "include",

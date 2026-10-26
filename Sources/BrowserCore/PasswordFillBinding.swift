@@ -46,14 +46,21 @@ public struct PasswordFillOrigin: Equatable, Sendable {
   public let value: String
 
   public init?(_ value: String) {
-    guard let parts = URLComponents(string: value), parts.scheme == "https",
-      let host = parts.host, !host.isEmpty, host == host.lowercased(),
-      let encodedHost = parts.percentEncodedHost, !encodedHost.contains("%"),
-      canonicalIPHost(encodedHost),
+    guard value.hasPrefix("https://"),
+      let parts = URLComponents(string: value), parts.scheme == "https",
+      let host = parts.host, !host.isEmpty,
       parts.user == nil, parts.password == nil, parts.path.isEmpty,
       parts.query == nil, parts.fragment == nil,
-      parts.port.map({ (1...65535).contains($0) && $0 != 443 }) ?? true,
-      value == "https://" + encodedHost + (parts.port.map { ":\($0)" } ?? ""), parts.url != nil
+      parts.port.map({ (1...65535).contains($0) && $0 != 443 }) ?? true
+    else { return nil }
+    let portSuffix = parts.port.map { ":\($0)" } ?? ""
+    let authority = String(value.dropFirst("https://".count))
+    guard authority.hasSuffix(portSuffix), authority.count > portSuffix.count else { return nil }
+    let asciiHost = String(authority.dropLast(portSuffix.count))
+    guard asciiHost.utf8.allSatisfy({ (33...126).contains($0) && $0 != 37 }),
+      asciiHost == asciiHost.lowercased(), canonicalIPHost(asciiHost),
+      URL(string: "https://" + host)?.absoluteString == "https://" + asciiHost,
+      value == "https://" + asciiHost + portSuffix, parts.url?.absoluteString == value
     else { return nil }
     self.value = value
   }

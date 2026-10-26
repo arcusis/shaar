@@ -86,6 +86,8 @@ if [[ "$configuration" == debug ]]; then
 fi
 mkdir -p "$app/Contents/MacOS"
 cp "$binary_dir/ArcusisBrowser" "$app/Contents/MacOS/ArcusisBrowser"
+"${PYTHON:-python3}" scripts/stage-browser-resources.py \
+  "$binary_dir" "$app/Contents/Resources"
 sdk_frameworks="$app/Contents/Frameworks"
 sdk_resources="$app/Contents/Resources/NativeBitwardenSDK"
 if ! $with_native_bitwarden_sdk; then

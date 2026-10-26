@@ -7,6 +7,7 @@ import Testing
   @Test func acceptsOnlyCanonicalHTTPSOrigins() {
     for value in [
       "https://example.com", "https://example.com:8443", "https://[::1]", "https://127.0.0.1",
+      "https://xn--0zwm56d.com", "https://login.xn--0zwm56d.com:8443",
     ] {
       #expect(PasswordFillOrigin(value)?.value == value)
     }
@@ -17,7 +18,9 @@ import Testing
       "https://example.com:65536", "https://example.com.evil/path", "https://exa%6dple.com",
       "https://example.com:", "https://example.com?", "https://example.com#",
       "https://127.000.000.001", "https://0x7f000001", "https://127.0.0.1.",
-      "https://[0:0:0:0:0:0:0:1]",
+      "https://[0:0:0:0:0:0:0:1]", "https://测试.com", "https://XN--0ZWM56D.com",
+      "https://xn--.com", "https://xn--a.com", "https://xn--invalid-.com",
+      "https://xn--0zwm56d.com:0443", "https://xn--0zwm56d.com.evil/path",
     ] {
       #expect(PasswordFillOrigin(value) == nil, "Accepted \(value)")
     }
@@ -59,6 +62,9 @@ import Testing
     ] {
       #expect(PasswordFillDocumentURL(value, origin: origin) == nil)
     }
+    let idnOrigin = PasswordFillOrigin("https://xn--0zwm56d.com")!
+    #expect(PasswordFillDocumentURL("https://xn--0zwm56d.com/login?q=1", origin: idnOrigin) != nil)
+    #expect(PasswordFillDocumentURL("https://xn--0zwm56d.com.evil/login", origin: idnOrigin) == nil)
     let portOrigin = PasswordFillOrigin("https://example.com:8443")!
     #expect(
       PasswordFillDocumentURL("https://example.com:8443/path?q=1#x", origin: portOrigin) != nil)

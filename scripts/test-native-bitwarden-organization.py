@@ -76,25 +76,41 @@ def validate_paths(source: Path, output: Path) -> None:
 
 def run(command: list[str], *, cwd: Path, env: dict[str, str], timeout: int,
         data: bytes | None = None) -> bytes:
+    def failure(stage: str, error: OSError) -> ProofError:
+        # Never include exception text: it may contain paths or child input.
+        errno = error.errno if type(error.errno) is int else 'unknown'
+        return ProofError(f'child {stage} failed (errno={errno})')
+
+    def kill_group(stage: str) -> None:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        except OSError as error:
+            raise failure(stage, error) from None
+
     try:
         process = subprocess.Popen(command, cwd=cwd, env=env, stdin=subprocess.PIPE,
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+    except OSError as error:
+        raise failure('launch', error) from None
+    try:
+        stdout, _ = process.communicate(data, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        kill_group('timeout cleanup signal')
         try:
-            stdout, _ = process.communicate(data, timeout=timeout)
-        except subprocess.TimeoutExpired:
-            try: os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError: pass
             process.communicate()
-            raise ProofError('child timed out') from None
-        finally:
-            # Also terminate descendants left behind by an otherwise exited child.
-            try: os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError: pass
-        if process.returncode:
-            raise ProofError('child command failed')
-        return stdout
-    except OSError:
-        raise ProofError('child command unavailable') from None
+        except OSError as error:
+            raise failure('timeout cleanup communicate', error) from None
+        raise ProofError('child timed out') from None
+    except OSError as error:
+        raise failure('communicate', error) from None
+    finally:
+        # Also terminate descendants left behind by an otherwise exited child.
+        kill_group('cleanup signal')
+    if process.returncode:
+        raise ProofError('child command failed')
+    return stdout
 
 def packages(path: Path) -> set[tuple[str, str, str, str]]:
     data = tomllib.loads(path.read_text())

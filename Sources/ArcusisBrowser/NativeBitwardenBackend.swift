@@ -112,6 +112,20 @@ enum NativeBitwardenAccessTokenIdentity {
 
 actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCredentialBackend {
   #if canImport(ArcusisBitwardenSDK)
+    #if ARCUSIS_NATIVE_BITWARDEN_ORGANIZATION_CANDIDATE
+      private let clientFactory: @Sendable (NativeBitwardenTokenProvider, ClientSettings) -> Client
+
+      init(
+        clientFactory:
+          @escaping @Sendable (NativeBitwardenTokenProvider, ClientSettings) -> Client =
+          {
+            Client(tokenProvider: $0, settings: $1, managedSettings: ManagedSettingsBindingClient())
+          }
+      ) {
+        self.clientFactory = clientFactory
+      }
+    #endif
+
     private struct Candidate {
       let client: Client
       let sync: SyncClientBinding
@@ -153,11 +167,13 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
         bitwardenPackageType: "desktop")
       let tokenProvider = NativeBitwardenTokenProvider()
       let bridge = NativeBitwardenStateBridge()
-      let client = Client(
-        tokenProvider: tokenProvider, settings: settings,
-        managedSettings: ManagedSettingsBindingClient())
       #if ARCUSIS_NATIVE_BITWARDEN_ORGANIZATION_CANDIDATE
+        let client = clientFactory(tokenProvider, settings)
         await client.requireFreshOrganizationSync()
+      #else
+        let client = Client(
+          tokenProvider: tokenProvider, settings: settings,
+          managedSettings: ManagedSettingsBindingClient())
       #endif
       client.kmStateBridge().registerBridgeImpl(bridgeImpl: bridge)
       let login = client.auth().login()

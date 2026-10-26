@@ -7,12 +7,20 @@ import SwiftUI
 private final class BrowserSettingsState {
   let workspace: BrowserWorkspaceStore
   let preferences: BrowserPreferencesStore
+  let nativeBitwardenController: NativeBitwardenController
   private(set) var selectedProfileID: UUID?
   private var didPresent = false
 
-  init(workspace: BrowserWorkspaceStore, preferences: BrowserPreferencesStore) {
+  init(
+    workspace: BrowserWorkspaceStore, preferences: BrowserPreferencesStore,
+    nativeBitwardenBackend: any NativeBitwardenBackend = NativeBitwardenSDKBackend(),
+    credentialStore: PasswordCredentialStore = PasswordCredentialStore()
+  ) {
     self.workspace = workspace
     self.preferences = preferences
+    nativeBitwardenController = NativeBitwardenController(
+      preferences: preferences, backend: nativeBitwardenBackend,
+      credentialStore: credentialStore)
   }
 
   var profiles: [BrowserSettingsProfile] {
@@ -46,9 +54,11 @@ private final class BrowserSettingsState {
       workspace.workspace.catalog.profiles.contains(where: { $0.id == profileID })
     else {
       selectedProfileID = nil
+      nativeBitwardenController.selectProfile(nil)
       return
     }
     selectedProfileID = profileID
+    nativeBitwardenController.selectProfile(profileID)
   }
 
   @discardableResult
@@ -57,6 +67,7 @@ private final class BrowserSettingsState {
       return false
     }
     selectedProfileID = id
+    nativeBitwardenController.selectProfile(id)
     return true
   }
 
@@ -79,6 +90,7 @@ private final class BrowserSettingsState {
     do {
       let id = try workspace.createProfile(name: name)
       selectedProfileID = id
+      nativeBitwardenController.selectProfile(id)
       return id
     } catch { return nil }
   }
@@ -106,7 +118,8 @@ private struct BrowserSettingsRoot: View {
         get: { state.selectedSearchEngine }, set: { _ = state.selectSearchEngine($0) }),
       storageNotice: state.storageNotice,
       onCreateProfile: { state.createProfile(name: $0) },
-      onRenameProfile: { state.renameProfile($0, name: $1) })
+      onRenameProfile: { state.renameProfile($0, name: $1) },
+      nativeBitwardenController: state.nativeBitwardenController)
   }
 }
 
@@ -135,15 +148,20 @@ final class BrowserSettingsController: NSObject {
 
   init(
     workspace: BrowserWorkspaceStore, preferences: BrowserPreferencesStore,
-    presentation: Presentation = .visible
+    presentation: Presentation = .visible,
+    nativeBitwardenBackend: any NativeBitwardenBackend = NativeBitwardenSDKBackend(),
+    credentialStore: PasswordCredentialStore = PasswordCredentialStore()
   ) {
-    state = BrowserSettingsState(workspace: workspace, preferences: preferences)
+    state = BrowserSettingsState(
+      workspace: workspace, preferences: preferences,
+      nativeBitwardenBackend: nativeBitwardenBackend, credentialStore: credentialStore)
     self.presentation = presentation
     super.init()
   }
 
   var profiles: [BrowserSettingsProfile] { state.profiles }
   var selectedProfileID: UUID? { state.selectedProfileID }
+  var nativeBitwardenController: NativeBitwardenController { state.nativeBitwardenController }
   var selectedSearchEngine: String { state.selectedSearchEngine }
   var sidebarInitiallyVisible: Bool { state.sidebarInitiallyVisible }
 
@@ -173,7 +191,10 @@ final class BrowserSettingsController: NSObject {
     }
   }
 
-  func close() { window?.orderOut(nil) }
+  func close() {
+    state.nativeBitwardenController.closeSettings()
+    window?.orderOut(nil)
+  }
 
   private func makeWindowIfNeeded() -> NSWindow {
     if let window { return window }

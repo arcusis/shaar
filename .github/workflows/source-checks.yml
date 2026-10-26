@@ -54,3 +54,16 @@ jobs:
 
       - name: Run Python tests
         run: .venv/bin/python scripts/test-python.py
+
+      - name: Capture native Bitwarden settings visuals
+        env:
+          ARCUSIS_NATIVE_SETTINGS_VISUAL_CI: '1'
+        run: swift test --jobs 2 --filter NativeBitwardenSettingsVisualTests
+
+      - name: Upload native Bitwarden settings visual evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: native-settings-visual-ci
+          path: build/Verification/native-settings-visual-ci/
+          if-no-files-found: warn

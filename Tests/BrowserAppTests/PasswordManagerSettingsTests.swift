@@ -158,6 +158,7 @@ private struct UnavailableTestBackend: NativeBitwardenBackend {
     -> NativeBitwardenEstablishedSession
   { throw NativeBitwardenBackendError.sdkUnavailable }
 
+  func syncVault(sessionID: UUID) async throws -> NativeBitwardenVaultSnapshot { .empty }
   func lock(sessionID: UUID) async -> Bool { false }
   func discard(sessionID: UUID) async {}
 }
@@ -176,6 +177,7 @@ private struct SyntheticChallengeBackend: NativeBitwardenBackend {
     -> NativeBitwardenEstablishedSession
   { throw NativeBitwardenBackendError.candidateUnavailable }
 
+  func syncVault(sessionID: UUID) async throws -> NativeBitwardenVaultSnapshot { .empty }
   func lock(sessionID: UUID) async -> Bool { false }
   func discard(sessionID: UUID) async {}
 }

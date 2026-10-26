@@ -27,6 +27,8 @@ final class NativeBitwardenController {
   private var providersByProfile: [UUID: [NativeBitwardenMFAProvider]] = [:]
   private var selectedMFAProviderByProfile: [UUID: NativeBitwardenMFAProvider] = [:]
   private var loadingByProfile: [UUID: Bool] = [:]
+  private var syncStatusByProfile: [UUID: String] = [:]
+  private var vaultSnapshotByProfile: [UUID: NativeBitwardenVaultSnapshot] = [:]
 
   private(set) var selectedProfileID: UUID?
   var email = ""
@@ -85,6 +87,16 @@ final class NativeBitwardenController {
       ? "Not connected" : "Off"
   }
 
+  var syncStatus: String {
+    guard let selectedProfileID else { return "" }
+    return syncStatusByProfile[selectedProfileID] ?? "Not synced"
+  }
+
+  var vaultSnapshot: NativeBitwardenVaultSnapshot {
+    guard let selectedProfileID else { return .empty }
+    return vaultSnapshotByProfile[selectedProfileID] ?? .empty
+  }
+
   var supportedMFAProviders: [NativeBitwardenMFAProvider] {
     guard let selectedProfileID else { return [] }
     return providersByProfile[selectedProfileID] ?? []
@@ -112,6 +124,7 @@ final class NativeBitwardenController {
     guard let profileID = selectedProfileID else { return }
     preferences.setNativeVaultEnabled(enabled, for: profileID)
     let value = state(for: profileID)
+    clearVaultSnapshot(profileID: profileID, state: value)
     value.generation += 1
     if let attempt = value.activeAttempt { value.gate.invalidate(attempt) }
     value.activeAttempt = nil
@@ -135,6 +148,7 @@ final class NativeBitwardenController {
   func setServer(_ server: BitwardenServerConfiguration) {
     guard let profileID = selectedProfileID else { return }
     let value = state(for: profileID)
+    clearVaultSnapshot(profileID: profileID, state: value)
     let oldBinding = value.binding
     let session = value.activeSession
     value.generation += 1
@@ -183,6 +197,7 @@ final class NativeBitwardenController {
     let generation = state.generation
     if let prior = state.activeAttempt { state.gate.invalidate(prior) }
     state.pendingTask?.cancel()
+    clearVaultSnapshot(profileID: profileID, state: state)
     if let oldCandidate = state.pendingCandidateID {
       Task { await backend.discard(sessionID: oldCandidate) }
       state.pendingCandidateID = nil
@@ -217,6 +232,7 @@ final class NativeBitwardenController {
     guard let profileID = selectedProfileID, let state = profiles[profileID] else { return }
     let session = state.activeSession
     state.generation += 1
+    clearVaultSnapshot(profileID: profileID, state: state, status: "Locked")
     let generation = state.generation
     if let attempt = state.activeAttempt { state.gate.invalidate(attempt) }
     state.activeAttempt = nil
@@ -249,14 +265,17 @@ final class NativeBitwardenController {
     clearForm()
     for (profileID, state) in profiles {
       loadingByProfile[profileID] = false
-      state.generation += 1
-      if let attempt = state.activeAttempt { state.gate.invalidate(attempt) }
-      state.activeAttempt = nil
-      state.pendingTask?.cancel()
-      state.pendingTask = nil
-      if let candidateID = state.pendingCandidateID {
-        state.pendingCandidateID = nil
-        Task { await backend.discard(sessionID: candidateID) }
+      if state.activeAttempt != nil || state.pendingCandidateID != nil {
+        state.generation += 1
+        if let attempt = state.activeAttempt { state.gate.invalidate(attempt) }
+        state.activeAttempt = nil
+        state.pendingTask?.cancel()
+        state.pendingTask = nil
+        clearVaultSnapshot(profileID: profileID, state: state)
+        if let candidateID = state.pendingCandidateID {
+          state.pendingCandidateID = nil
+          Task { await backend.discard(sessionID: candidateID) }
+        }
       }
       _ = profileID
     }
@@ -417,8 +436,15 @@ final class NativeBitwardenController {
         await backend.discard(sessionID: candidateID)
       } else {
         previousSession?.tokenProvider.clear()
+        profiles[profileID]?.activeAttempt = nil
+        profiles[profileID]?.pendingTask = nil
+        if let state = profiles[profileID] {
+          clearVaultSnapshot(profileID: profileID, state: state, status: "Syncing")
+        }
         if selectedProfileID == profileID { clearForm() }
         if let previousSession { await backend.discard(sessionID: previousSession.id) }
+        await performVaultSync(
+          profileID: profileID, generation: generation, binding: binding, session: established)
       }
     } catch {
       if profiles[profileID]?.pendingCandidateID == candidateID {
@@ -468,6 +494,7 @@ final class NativeBitwardenController {
     let candidateID = state.pendingCandidateID
     state.pendingCandidateID = nil
     state.activeSession = nil
+    clearVaultSnapshot(profileID: profileID, state: state)
     state.gate.setEnabled(false)
     if selectedProfileID == profileID { clearForm() }
     session?.tokenProvider.clear()
@@ -534,4 +561,35 @@ final class NativeBitwardenController {
     masterPassword = ""
     mfaToken = ""
   }
+
+  private func clearVaultSnapshot(
+    profileID: UUID, state: ProfileState, status: String = "Not synced"
+  ) {
+    vaultSnapshotByProfile[profileID] = .empty
+    syncStatusByProfile[profileID] = status
+  }
+
+  private func performVaultSync(
+    profileID: UUID, generation: Int, binding: PasswordAuthenticationBinding,
+    session: NativeBitwardenEstablishedSession
+  ) async {
+    do {
+      let snapshot = try await backend.syncVault(sessionID: session.id)
+      guard generation == profiles[profileID]?.generation,
+        profiles[profileID]?.activeSession?.id == session.id,
+        profiles[profileID]?.binding == binding,
+        preferences.nativeVaultPreferences(for: profileID).isEnabled
+      else { return }
+      vaultSnapshotByProfile[profileID] = snapshot
+      syncStatusByProfile[profileID] = "Synced \(snapshot.logins.count) personal logins"
+    } catch {
+      guard generation == profiles[profileID]?.generation,
+        profiles[profileID]?.activeSession?.id == session.id,
+        preferences.nativeVaultPreferences(for: profileID).isEnabled
+      else { return }
+      vaultSnapshotByProfile[profileID] = .empty
+      syncStatusByProfile[profileID] = "Sync failed. Vault metadata unavailable."
+    }
+  }
+
 }

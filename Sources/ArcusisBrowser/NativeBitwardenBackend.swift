@@ -11,6 +11,8 @@ enum NativeBitwardenBackendError: Error, Equatable, Sendable {
   case invalidAccessToken
   case unsupportedCryptoSetup
   case candidateUnavailable
+  case sessionLocked
+  case staleSession
 }
 
 enum NativeBitwardenLoginRequestMetadata {
@@ -63,6 +65,7 @@ protocol NativeBitwardenBackend: Sendable {
   ) async throws -> NativeBitwardenLoginResult
   func initializeCrypto(candidateID: UUID, password: String) async throws
     -> NativeBitwardenEstablishedSession
+  func syncVault(sessionID: UUID) async throws -> NativeBitwardenVaultSnapshot
   func lock(sessionID: UUID) async -> Bool
   func discard(sessionID: UUID) async
 }
@@ -110,12 +113,16 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend {
   #if canImport(ArcusisBitwardenSDK)
     private struct Candidate {
       let client: Client
+      let sync: SyncClientBinding
       let bridge: NativeBitwardenStateBridge
       let tokenProvider: NativeBitwardenTokenProvider
       let response: LoginSuccessResponse
       let prelogin: PasswordPreloginResponse
       let email: String
       let userID: UUID
+      var generation: Int
+      var locked: Bool
+      var initialized: Bool
     }
     private var candidates: [UUID: Candidate] = [:]
   #endif
@@ -174,8 +181,9 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend {
         let userID = try NativeBitwardenAccessTokenIdentity.userID(from: response.accessToken)
         let id = UUID()
         candidates[id] = Candidate(
-          client: client, bridge: bridge, tokenProvider: tokenProvider, response: response,
-          prelogin: prelogin, email: email, userID: userID)
+          client: client, sync: client.sync(), bridge: bridge, tokenProvider: tokenProvider,
+          response: response, prelogin: prelogin, email: email, userID: userID,
+          generation: 0, locked: false, initialized: false)
         return .authenticated(NativeBitwardenAuthenticatedCandidate(id: id, accountID: userID))
       }
     #else
@@ -206,6 +214,11 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend {
           accessToken: candidate.response.accessToken,
           refreshToken: candidate.response.refreshToken,
           expiresAt: Date(timeIntervalSince1970: Double(candidate.response.expiresAt) / 1_000))
+        guard var current = candidates[candidateID], !current.locked else {
+          throw NativeBitwardenBackendError.staleSession
+        }
+        current.initialized = true
+        candidates[candidateID] = current
         return NativeBitwardenEstablishedSession(
           id: candidateID, accountID: candidate.userID, credential: credential,
           tokenProvider: candidate.tokenProvider)
@@ -221,7 +234,10 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend {
 
   func lock(sessionID: UUID) async -> Bool {
     #if canImport(ArcusisBitwardenSDK)
-      guard let candidate = candidates[sessionID] else { return false }
+      guard var candidate = candidates[sessionID] else { return false }
+      candidate.generation += 1
+      candidate.locked = true
+      candidates[sessionID] = candidate
       candidate.client.crypto().clearUserCryptoKeys()
       let hadState = await candidate.bridge.hasTransientKeyState()
       let cleared = await candidate.bridge.clearTransientKeyState()
@@ -239,6 +255,54 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend {
       await clearCandidate(sessionID, candidate: candidate)
     #else
       _ = sessionID
+    #endif
+  }
+
+  func syncVault(sessionID: UUID) async throws -> NativeBitwardenVaultSnapshot {
+    #if canImport(ArcusisBitwardenSDK)
+      guard let candidate = candidates[sessionID] else {
+        throw NativeBitwardenBackendError.candidateUnavailable
+      }
+      guard !candidate.locked, candidate.initialized,
+        await candidate.tokenProvider.getAccessToken() != nil
+      else { throw NativeBitwardenBackendError.sessionLocked }
+      let generation = candidate.generation
+      guard isCurrent(candidateID: sessionID, generation: generation) else {
+        throw NativeBitwardenBackendError.staleSession
+      }
+      let synchronized = try await candidate.sync.sync(force: true)
+      guard isCurrent(candidateID: sessionID, generation: generation) else {
+        throw NativeBitwardenBackendError.staleSession
+      }
+      try NativeBitwardenVaultSnapshot.requireCompletedSync(synchronized)
+      let encrypted = candidate.sync.encryptedCiphers()
+      guard encrypted.count <= NativeBitwardenVaultSnapshot.maximumCipherCount else {
+        throw NativeBitwardenVaultSnapshotError.tooManyCiphers
+      }
+      var metadata: [NativeBitwardenVaultSnapshot.CipherMetadata] = []
+      metadata.reserveCapacity(encrypted.count)
+      let ciphers = candidate.client.vault().ciphers()
+      for cipher in encrypted {
+        if cipher.organizationId != nil {
+          metadata.append(
+            NativeBitwardenVaultSnapshot.CipherMetadata(
+              id: cipher.id.flatMap(UUID.init(uuidString:)), name: "", username: nil, uris: [],
+              isLogin: false, isOrganization: true))
+          continue
+        }
+        let view = try await ciphers.decrypt(cipher: cipher)
+        guard isCurrent(candidateID: sessionID, generation: generation) else {
+          throw NativeBitwardenBackendError.staleSession
+        }
+        metadata.append(try NativeBitwardenVaultSnapshot.metadata(from: view))
+      }
+      guard isCurrent(candidateID: sessionID, generation: generation) else {
+        throw NativeBitwardenBackendError.staleSession
+      }
+      return try NativeBitwardenVaultSnapshot.make(from: metadata)
+    #else
+      _ = sessionID
+      throw NativeBitwardenBackendError.sdkUnavailable
     #endif
   }
 
@@ -266,6 +330,11 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend {
       candidate.tokenProvider.clear()
       candidate.client.crypto().clearUserCryptoKeys()
       _ = await candidate.bridge.clearTransientKeyState()
+    }
+
+    private func isCurrent(candidateID: UUID, generation: Int) -> Bool {
+      guard let current = candidates[candidateID] else { return false }
+      return !current.locked && current.initialized && current.generation == generation
     }
   #endif
 }

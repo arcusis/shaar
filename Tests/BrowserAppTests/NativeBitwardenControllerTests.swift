@@ -1,5 +1,6 @@
 import BrowserCore
 import Foundation
+import Observation
 import Synchronization
 import Testing
 
@@ -40,11 +41,16 @@ private actor ControlledBitwardenBackend: NativeBitwardenBackend {
     let loginDeferred: Bool
     let cryptoOutcome: CryptoOutcome
     let challengeProviders: [NativeBitwardenMFAProvider]?
+    let snapshot: NativeBitwardenVaultSnapshot
+    let syncDeferred: Bool
+    let syncFails: Bool
 
     init(
       candidateID: UUID = UUID(), accountID: UUID, token: String,
       loginDeferred: Bool = false, cryptoOutcome: CryptoOutcome = .succeed,
-      challengeProviders: [NativeBitwardenMFAProvider]? = nil
+      challengeProviders: [NativeBitwardenMFAProvider]? = nil,
+      snapshot: NativeBitwardenVaultSnapshot = .empty, syncDeferred: Bool = false,
+      syncFails: Bool = false
     ) {
       self.candidateID = candidateID
       self.accountID = accountID
@@ -52,6 +58,9 @@ private actor ControlledBitwardenBackend: NativeBitwardenBackend {
       self.loginDeferred = loginDeferred
       self.cryptoOutcome = cryptoOutcome
       self.challengeProviders = challengeProviders
+      self.snapshot = snapshot
+      self.syncDeferred = syncDeferred
+      self.syncFails = syncFails
     }
   }
 
@@ -62,6 +71,9 @@ private actor ControlledBitwardenBackend: NativeBitwardenBackend {
     [:]
   private var cryptoContinuations:
     [UUID: CheckedContinuation<NativeBitwardenEstablishedSession, Error>] = [:]
+  private var syncContinuations: [UUID: CheckedContinuation<NativeBitwardenVaultSnapshot, Error>] =
+    [:]
+  private var syncStartedIDs: Set<UUID> = []
   private var loginStartedIDs: Set<UUID> = []
   private var tokenProviders: [UUID: NativeBitwardenTokenProvider] = [:]
   private var planIndex = 0
@@ -141,6 +153,27 @@ private actor ControlledBitwardenBackend: NativeBitwardenBackend {
       throwing: NativeBitwardenBackendError.unsupportedCryptoSetup)
   }
 
+  func syncVault(sessionID: UUID) async throws -> NativeBitwardenVaultSnapshot {
+    syncStartedIDs.insert(sessionID)
+    guard let plan = plans.first(where: { $0.candidateID == sessionID }) else {
+      throw NativeBitwardenBackendError.candidateUnavailable
+    }
+    if plan.syncFails { throw NativeBitwardenBackendError.staleSession }
+    if plan.syncDeferred {
+      return try await withCheckedThrowingContinuation { syncContinuations[sessionID] = $0 }
+    }
+    return plan.snapshot
+  }
+
+  func resolveSync(_ sessionID: UUID) {
+    guard let continuation = syncContinuations.removeValue(forKey: sessionID),
+      let plan = plans.first(where: { $0.candidateID == sessionID })
+    else { return }
+    continuation.resume(returning: plan.snapshot)
+  }
+
+  func didStartSync(_ id: UUID) -> Bool { syncStartedIDs.contains(id) }
+
   private func makeSession(_ plan: Plan) -> NativeBitwardenEstablishedSession {
     let provider = NativeBitwardenTokenProvider()
     tokenProviders[plan.candidateID] = provider
@@ -187,6 +220,9 @@ struct NativeBitwardenControllerTests {
 
       let backend = NativeBitwardenSDKBackend()
       #expect(!(await backend.lock(sessionID: UUID())))
+      await #expect(throws: NativeBitwardenBackendError.candidateUnavailable) {
+        try await backend.syncVault(sessionID: UUID())
+      }
     }
   #endif
 
@@ -203,6 +239,219 @@ struct NativeBitwardenControllerTests {
     }
   }
 
+  @Test func successfulAuthenticationPublishesActualTypedVaultSnapshot() async {
+    let preferences = BrowserPreferencesStore()
+    let profile = UUID()
+    let cipherID = UUID()
+    let snapshot = try! NativeBitwardenVaultSnapshot.make(from: [
+      .init(
+        id: cipherID, name: "Work", username: "alice", uris: ["https://example.test"],
+        isLogin: true, isOrganization: false)
+    ])
+    let plan = ControlledBitwardenBackend.Plan(
+      accountID: UUID(), token: "vault-token", snapshot: snapshot)
+    let backend = ControlledBitwardenBackend(plans: [plan])
+    let controller = makeTestController(preferences: preferences, backend: backend)
+    controller.selectProfile(profile)
+    controller.setEnabled(true)
+    controller.email = "person@example.test"
+    controller.masterPassword = "secret"
+    controller.connect()
+    for _ in 0..<50 {
+      if controller.syncStatus == "Synced 1 personal logins" { break }
+      try? await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(controller.status == "Connected and unlocked")
+    #expect(controller.vaultSnapshot.logins.map(\.id) == [cipherID])
+    #expect(controller.vaultSnapshot.logins.first?.username == "alice")
+    #expect(controller.vaultSnapshot.logins.first?.uris.map(\.uri) == ["https://example.test"])
+    #expect(await backend.didStartSync(plan.candidateID))
+  }
+
+  @Test func syncFailureDoesNotPublishSnapshotAndPreservesAuthenticationStatus() async {
+    let preferences = BrowserPreferencesStore()
+    let profile = UUID()
+    let plan = ControlledBitwardenBackend.Plan(
+      accountID: UUID(), token: "vault-token", syncFails: true)
+    let controller = makeTestController(
+      preferences: preferences, backend: ControlledBitwardenBackend(plans: [plan]))
+    controller.selectProfile(profile)
+    controller.setEnabled(true)
+    controller.email = "person@example.test"
+    controller.masterPassword = "secret"
+    controller.connect()
+    for _ in 0..<50 {
+      if controller.syncStatus.hasPrefix("Sync failed") { break }
+      try? await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(controller.status == "Connected and unlocked")
+    #expect(controller.vaultSnapshot == .empty)
+    #expect(controller.syncStatus == "Sync failed. Vault metadata unavailable.")
+  }
+
+  @Test func lockedProfileRejectsDeferredSyncAndClearsMetadataBeforeAwait() async {
+    let preferences = BrowserPreferencesStore()
+    let profile = UUID()
+    let id = UUID()
+    let snapshot = try! NativeBitwardenVaultSnapshot.make(from: [
+      .init(id: id, name: "Login", username: nil, uris: [], isLogin: true, isOrganization: false)
+    ])
+    let plan = ControlledBitwardenBackend.Plan(
+      accountID: UUID(), token: "vault-token", snapshot: snapshot, syncDeferred: true)
+    let backend = ControlledBitwardenBackend(plans: [plan])
+    let controller = makeTestController(preferences: preferences, backend: backend)
+    controller.selectProfile(profile)
+    controller.setEnabled(true)
+    controller.email = "person@example.test"
+    controller.masterPassword = "secret"
+    controller.connect()
+    for _ in 0..<50 {
+      if await backend.didStartSync(plan.candidateID) { break }
+      try? await Task.sleep(for: .milliseconds(10))
+    }
+    controller.lock()
+    #expect(controller.vaultSnapshot == .empty)
+    #expect(controller.syncStatus == "Locked")
+    await backend.resolveSync(plan.candidateID)
+    try? await Task.sleep(for: .milliseconds(30))
+    #expect(controller.vaultSnapshot == .empty)
+    #expect(controller.syncStatus == "Locked")
+  }
+
+  @Test func closingSettingsKeepsCommittedSessionAndPublishesObservedSyncResult() async {
+    let preferences = BrowserPreferencesStore()
+    let profile = UUID()
+    let cipherID = UUID()
+    let snapshot = try! NativeBitwardenVaultSnapshot.make(from: [
+      .init(
+        id: cipherID, name: "Login", username: "user", uris: [], isLogin: true,
+        isOrganization: false)
+    ])
+    let plan = ControlledBitwardenBackend.Plan(
+      accountID: UUID(), token: "vault-token", snapshot: snapshot, syncDeferred: true)
+    let backend = ControlledBitwardenBackend(plans: [plan])
+    let controller = makeTestController(preferences: preferences, backend: backend)
+    controller.selectProfile(profile)
+    controller.setEnabled(true)
+    controller.email = "person@example.test"
+    controller.masterPassword = "secret"
+    controller.connect()
+    for _ in 0..<50 {
+      if await backend.didStartSync(plan.candidateID) { break }
+      try? await Task.sleep(for: .milliseconds(10))
+    }
+    let didNotify = Mutex(false)
+    withObservationTracking {
+      _ = controller.vaultSnapshot
+    } onChange: {
+      didNotify.withLock { $0 = true }
+    }
+    controller.closeSettings()
+    #expect(controller.hasConnectedSession)
+    #expect(controller.masterPassword.isEmpty)
+    await backend.resolveSync(plan.candidateID)
+    try? await Task.sleep(for: .milliseconds(30))
+    #expect(didNotify.withLock { $0 })
+    #expect(controller.vaultSnapshot.logins.map(\.id) == [cipherID])
+    #expect(controller.syncStatus == "Synced 1 personal logins")
+    #expect(controller.hasConnectedSession)
+  }
+
+  @Test func disconnectDisableAndRebindRejectDeferredSyncResults() async {
+    for invalidation in ["disconnect", "disable", "rebind"] {
+      let preferences = BrowserPreferencesStore()
+      let profile = UUID()
+      let cipherID = UUID()
+      let snapshot = try! NativeBitwardenVaultSnapshot.make(from: [
+        .init(
+          id: cipherID, name: "Stale", username: nil, uris: [], isLogin: true,
+          isOrganization: false)
+      ])
+      let plan = ControlledBitwardenBackend.Plan(
+        accountID: UUID(), token: "vault-token", snapshot: snapshot, syncDeferred: true)
+      let backend = ControlledBitwardenBackend(plans: [plan])
+      let controller = makeTestController(preferences: preferences, backend: backend)
+      controller.selectProfile(profile)
+      controller.setEnabled(true)
+      controller.email = "person@example.test"
+      controller.masterPassword = "secret"
+      controller.connect()
+      for _ in 0..<50 {
+        if await backend.didStartSync(plan.candidateID) { break }
+        try? await Task.sleep(for: .milliseconds(10))
+      }
+      switch invalidation {
+      case "disconnect": controller.disconnect()
+      case "disable": controller.setEnabled(false)
+      default: controller.setServer(BitwardenServerConfiguration(region: .eu))
+      }
+      #expect(controller.vaultSnapshot == .empty)
+      await backend.resolveSync(plan.candidateID)
+      try? await Task.sleep(for: .milliseconds(30))
+      #expect(controller.vaultSnapshot == .empty)
+    }
+  }
+
+  @Test func reconnectAndOtherProfileKeepVaultSnapshotsIsolated() async {
+    let preferences = BrowserPreferencesStore()
+    let firstProfile = UUID()
+    let secondProfile = UUID()
+    let firstID = UUID()
+    let secondID = UUID()
+    let firstSnapshot = try! NativeBitwardenVaultSnapshot.make(from: [
+      .init(
+        id: firstID, name: "First", username: nil, uris: [], isLogin: true, isOrganization: false)
+    ])
+    let secondSnapshot = try! NativeBitwardenVaultSnapshot.make(from: [
+      .init(
+        id: secondID, name: "Second", username: nil, uris: [], isLogin: true, isOrganization: false)
+    ])
+    let first = ControlledBitwardenBackend.Plan(
+      accountID: UUID(), token: "first", snapshot: firstSnapshot, syncDeferred: true)
+    let replacement = ControlledBitwardenBackend.Plan(
+      accountID: first.accountID, token: "replacement", snapshot: .empty)
+    let second = ControlledBitwardenBackend.Plan(
+      accountID: UUID(), token: "second", snapshot: secondSnapshot)
+    let backend = ControlledBitwardenBackend(plans: [first, replacement, second])
+    let controller = makeTestController(preferences: preferences, backend: backend)
+
+    controller.selectProfile(firstProfile)
+    controller.setEnabled(true)
+    controller.email = "first@example.test"
+    controller.masterPassword = "secret"
+    controller.connect()
+    for _ in 0..<50 {
+      if await backend.didStartSync(first.candidateID) { break }
+      try? await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(controller.vaultSnapshot == .empty)
+
+    controller.email = "first@example.test"
+    controller.masterPassword = "secret"
+    controller.connect()
+    for _ in 0..<50 {
+      if controller.syncStatus == "Synced 0 personal logins" { break }
+      try? await Task.sleep(for: .milliseconds(10))
+    }
+    await backend.resolveSync(first.candidateID)
+    try? await Task.sleep(for: .milliseconds(30))
+    #expect(controller.vaultSnapshot == .empty)
+
+    controller.selectProfile(secondProfile)
+    controller.setEnabled(true)
+    controller.email = "second@example.test"
+    controller.masterPassword = "secret"
+    controller.connect()
+    for _ in 0..<50 {
+      if controller.syncStatus == "Synced 1 personal logins" { break }
+      try? await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(controller.vaultSnapshot.logins.map(\.id) == [secondID])
+    controller.selectProfile(firstProfile)
+    #expect(controller.vaultSnapshot == .empty)
+    #expect(controller.syncStatus == "Synced 0 personal logins")
+  }
+
   @Test func loginMetadataUsesRegisteredDesktopClientTypeAndArcusisIdentity() {
     #expect(NativeBitwardenLoginRequestMetadata.clientID == "desktop")
     #expect(NativeBitwardenLoginRequestMetadata.userAgent == "Arcusis Browser")
@@ -214,7 +463,7 @@ struct NativeBitwardenControllerTests {
     let first = UUID()
     let second = UUID()
     let backend = ControlledBitwardenBackend(mode: .waiting)
-    let controller = NativeBitwardenController(preferences: preferences, backend: backend)
+    let controller = makeTestController(preferences: preferences, backend: backend)
     controller.selectProfile(first)
     controller.setEnabled(true)
     controller.email = "person@example.test"
@@ -432,7 +681,7 @@ struct NativeBitwardenControllerTests {
       accountID: account, token: "old-token", cryptoOutcome: .deferred)
     let current = ControlledBitwardenBackend.Plan(accountID: account, token: "current-token")
     let backend = ControlledBitwardenBackend(plans: [old, current])
-    let controller = NativeBitwardenController(preferences: preferences, backend: backend)
+    let controller = makeTestController(preferences: preferences, backend: backend)
     let first = UUID()
     let second = UUID()
     controller.selectProfile(first)
@@ -586,7 +835,7 @@ struct NativeBitwardenControllerTests {
     let account = UUID()
     let plan = ControlledBitwardenBackend.Plan(
       accountID: account, token: "unused", challengeProviders: [])
-    let controller = NativeBitwardenController(
+    let controller = makeTestController(
       preferences: preferences, backend: ControlledBitwardenBackend(plans: [plan]))
     controller.selectProfile(profile)
     controller.setEnabled(true)
@@ -603,6 +852,16 @@ struct NativeBitwardenControllerTests {
     #expect(!controller.isLoading)
     #expect(NativeBitwardenMFAProvider.allCases == [.authenticator, .email, .yubikey])
   }
+}
+
+@MainActor
+private func makeTestController(
+  preferences: BrowserPreferencesStore, backend: any NativeBitwardenBackend
+) -> NativeBitwardenController {
+  NativeBitwardenController(
+    preferences: preferences, backend: backend,
+    credentialStore: PasswordCredentialStore(
+      service: "native-bitwarden-controller-tests", storage: MemoryCredentialItems()))
 }
 
 @MainActor

@@ -163,7 +163,7 @@ final class NativeBitwardenController {
     preferences.setNativeVaultServer(server, for: profileID)
     let updated = preferences.nativeVaultPreferences(for: profileID)
     let newBinding = makeBinding(
-      profileID: profileID, preferences: updated, previousAccountID: nil)
+      profileID: profileID, preferences: updated, accountID: nil)
     value.binding = newBinding
     value.gate.rebind(to: newBinding)
     value.activeSession = nil
@@ -332,7 +332,7 @@ final class NativeBitwardenController {
         let preferences = self.preferences.nativeVaultPreferences(for: profileID)
         let realBinding = makeBinding(
           profileID: profileID, preferences: preferences,
-          previousAccountID: authenticated.accountID)
+          accountID: authenticated.accountID)
         if state.binding != realBinding {
           let oldBinding = state.binding
           let oldSession = state.activeSession
@@ -384,12 +384,18 @@ final class NativeBitwardenController {
       guard isCurrent(profileID: profileID, generation: generation, attempt: attempt),
         profiles[profileID]?.pendingCandidateID == candidateID
       else {
-        established.tokenProvider.clear()
+        clearAttemptTokenProvider(established.tokenProvider)
         if profiles[profileID]?.pendingCandidateID == candidateID {
           profiles[profileID]?.pendingCandidateID = nil
         }
         await backend.discard(sessionID: candidateID)
         return
+      }
+      guard established.id == candidateID, established.accountID == binding.accountID,
+        profiles[profileID]?.binding == binding
+      else {
+        clearAttemptTokenProvider(established.tokenProvider)
+        throw NativeBitwardenBackendError.staleSession
       }
       var writeError: Error?
       var previousSession: NativeBitwardenEstablishedSession?
@@ -481,6 +487,13 @@ final class NativeBitwardenController {
     }
   }
 
+  private func clearAttemptTokenProvider(_ provider: NativeBitwardenTokenProvider) {
+    guard !profiles.values.contains(where: { $0.activeSession?.tokenProvider === provider }) else {
+      return
+    }
+    provider.clear()
+  }
+
   private func disconnect(profileID: UUID) {
     guard let state = profiles[profileID] else { return }
     state.generation += 1
@@ -513,7 +526,7 @@ final class NativeBitwardenController {
     if let state = profiles[profileID] { return state }
     let value = preferences.nativeVaultPreferences(for: profileID)
     let binding = makeBinding(
-      profileID: profileID, preferences: value, previousAccountID: value.accountID)
+      profileID: profileID, preferences: value, accountID: value.accountID)
     let state = ProfileState(binding: binding, enabled: value.isEnabled)
     profiles[profileID] = state
     return state
@@ -536,14 +549,14 @@ final class NativeBitwardenController {
   }
 
   private func makeBinding(
-    profileID: UUID, preferences: NativeVaultProfilePreferences, previousAccountID: UUID?
+    profileID: UUID, preferences: NativeVaultProfilePreferences, accountID: UUID?
   ) -> PasswordAuthenticationBinding {
     let authority =
       (try? preferences.server.endpoints().credentialAuthority)
       ?? URL(string: "https://invalid.invalid")!
     return PasswordAuthenticationBinding(
       profileID: profileID, vaultID: preferences.vaultID,
-      accountID: preferences.accountID ?? previousAccountID ?? UUID(), authority: authority)
+      accountID: accountID ?? preferences.accountID ?? UUID(), authority: authority)
   }
 
   private func isCurrent(

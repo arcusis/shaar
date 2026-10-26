@@ -37,6 +37,8 @@ private actor ControlledBitwardenBackend: NativeBitwardenBackend {
   struct Plan: Sendable {
     let candidateID: UUID
     let accountID: UUID
+    let establishedID: UUID?
+    let establishedAccountID: UUID?
     let token: String
     let loginDeferred: Bool
     let cryptoOutcome: CryptoOutcome
@@ -47,6 +49,7 @@ private actor ControlledBitwardenBackend: NativeBitwardenBackend {
 
     init(
       candidateID: UUID = UUID(), accountID: UUID, token: String,
+      establishedID: UUID? = nil, establishedAccountID: UUID? = nil,
       loginDeferred: Bool = false, cryptoOutcome: CryptoOutcome = .succeed,
       challengeProviders: [NativeBitwardenMFAProvider]? = nil,
       snapshot: NativeBitwardenVaultSnapshot = .empty, syncDeferred: Bool = false,
@@ -54,6 +57,8 @@ private actor ControlledBitwardenBackend: NativeBitwardenBackend {
     ) {
       self.candidateID = candidateID
       self.accountID = accountID
+      self.establishedID = establishedID
+      self.establishedAccountID = establishedAccountID
       self.token = token
       self.loginDeferred = loginDeferred
       self.cryptoOutcome = cryptoOutcome
@@ -178,7 +183,8 @@ private actor ControlledBitwardenBackend: NativeBitwardenBackend {
     let provider = NativeBitwardenTokenProvider()
     tokenProviders[plan.candidateID] = provider
     return NativeBitwardenEstablishedSession(
-      id: plan.candidateID, accountID: plan.accountID,
+      id: plan.establishedID ?? plan.candidateID,
+      accountID: plan.establishedAccountID ?? plan.accountID,
       credential: PasswordCredential(accessToken: plan.token, refreshToken: "refresh-token"),
       tokenProvider: provider)
   }
@@ -192,12 +198,14 @@ private actor ControlledBitwardenBackend: NativeBitwardenBackend {
     tokenProviders[sessionID]?.clear()
   }
   func didDiscard(_ id: UUID) -> Bool { discarded.contains(id) }
+  func discardCount(_ id: UUID) -> Int { discarded.filter { $0 == id }.count }
   func didLock(_ id: UUID) -> Bool { locked.contains(id) }
   func didInitialize(_ id: UUID) -> Bool { initialized.contains(id) }
   func hasStartedLogin(_ id: UUID? = nil) -> Bool {
     id.map { loginStartedIDs.contains($0) } ?? !loginStartedIDs.isEmpty
   }
   func hasStartedCrypto(_ id: UUID) -> Bool { initialized.contains(id) }
+  func hasProducedSession(_ id: UUID) -> Bool { tokenProviders[id] != nil }
   func token(for id: UUID) async -> String? { await tokenProviders[id]?.getAccessToken() }
 }
 
@@ -711,6 +719,141 @@ struct NativeBitwardenControllerTests {
     #expect(controller.status == "Connected and unlocked")
     #expect(controller.hasConnectedSession)
     #expect(!controller.isLoading)
+  }
+
+  @Test func accountSwitchPublishesOnlyUnderAuthenticatedBindingAndRetiresPriorSession()
+    async throws
+  {
+    let preferences = BrowserPreferencesStore()
+    let profile = UUID()
+    let first = ControlledBitwardenBackend.Plan(accountID: UUID(), token: "first-token")
+    let second = ControlledBitwardenBackend.Plan(accountID: UUID(), token: "second-token")
+    let backend = ControlledBitwardenBackend(plans: [first, second])
+    let items = MemoryCredentialItems()
+    let credentials = PasswordCredentialStore(service: "switch-vault-test", storage: items)
+    let controller = NativeBitwardenController(
+      preferences: preferences, backend: backend, credentialStore: credentials)
+    controller.selectProfile(profile)
+    controller.setEnabled(true)
+    controller.email = "first@example.test"
+    controller.masterPassword = "secret"
+    controller.connect()
+    for _ in 0..<50 {
+      if controller.hasConnectedSession { break }
+      try? await Task.sleep(for: .milliseconds(10))
+    }
+    let firstBinding = try passwordBinding(preferences, profile: profile, account: first.accountID)
+    #expect(try credentials.read(for: firstBinding)?.accessToken == "first-token")
+    let originalPreferences = preferences.nativeVaultPreferences(for: profile)
+    controller.email = "second@example.test"
+    controller.masterPassword = "secret"
+    controller.connect()
+    for _ in 0..<50 {
+      if controller.status == "Connected and unlocked", await backend.didDiscard(first.candidateID)
+      {
+        break
+      }
+      try? await Task.sleep(for: .milliseconds(10))
+    }
+
+    let secondBinding = try passwordBinding(
+      preferences, profile: profile, account: second.accountID)
+    let updated = preferences.nativeVaultPreferences(for: profile)
+    #expect(updated.accountID == second.accountID)
+    #expect(updated.vaultID == originalPreferences.vaultID)
+    #expect(updated.server == originalPreferences.server)
+    #expect(try credentials.read(for: firstBinding) == nil)
+    #expect(try credentials.read(for: secondBinding)?.accessToken == "second-token")
+    #expect(items.count == 1)
+    #expect(await backend.token(for: first.candidateID) == nil)
+    #expect(await backend.didDiscard(first.candidateID))
+    #expect(await backend.token(for: second.candidateID) == "second-token")
+    #expect(controller.hasConnectedSession)
+  }
+
+  @Test func mismatchedInitializedIdentityNeverPublishesCredentialsOrPreferences() async throws {
+    for mismatchID in [false, true] {
+      let preferences = BrowserPreferencesStore()
+      let profile = UUID()
+      let account = UUID()
+      preferences.setNativeVaultAccountID(account, for: profile)
+      let plan = ControlledBitwardenBackend.Plan(
+        accountID: account, token: "bad-token",
+        establishedID: mismatchID ? UUID() : nil,
+        establishedAccountID: mismatchID ? nil : UUID())
+      let backend = ControlledBitwardenBackend(plans: [plan])
+      let items = MemoryCredentialItems()
+      let credentials = PasswordCredentialStore(service: "mismatch-vault-test", storage: items)
+      let controller = NativeBitwardenController(
+        preferences: preferences, backend: backend, credentialStore: credentials)
+      controller.selectProfile(profile)
+      controller.setEnabled(true)
+      controller.email = "person@example.test"
+      controller.masterPassword = "secret"
+      controller.connect()
+      for _ in 0..<50 {
+        if controller.status.contains("initialization failed") { break }
+        try? await Task.sleep(for: .milliseconds(10))
+      }
+
+      #expect(controller.status.contains("initialization failed"))
+      #expect(preferences.nativeVaultPreferences(for: profile).accountID == account)
+      #expect(items.count == 0)
+      #expect(!controller.hasConnectedSession)
+      #expect(await backend.didDiscard(plan.candidateID))
+      #expect(await backend.token(for: plan.candidateID) == nil)
+      if let otherID = plan.establishedID { #expect(!(await backend.didDiscard(otherID))) }
+    }
+  }
+
+  @Test func lateMismatchedSessionCannotEraseNewerAccountSession() async throws {
+    let preferences = BrowserPreferencesStore()
+    let profile = UUID()
+    let current = ControlledBitwardenBackend.Plan(accountID: UUID(), token: "current-token")
+    let old = ControlledBitwardenBackend.Plan(
+      accountID: UUID(), token: "old-token", establishedID: current.candidateID,
+      establishedAccountID: current.accountID, cryptoOutcome: .deferred)
+    let backend = ControlledBitwardenBackend(plans: [old, current])
+    let items = MemoryCredentialItems()
+    let credentials = PasswordCredentialStore(service: "late-mismatch-test", storage: items)
+    let controller = NativeBitwardenController(
+      preferences: preferences, backend: backend, credentialStore: credentials)
+    controller.selectProfile(profile)
+    controller.setEnabled(true)
+    controller.email = "old@example.test"
+    controller.masterPassword = "secret"
+    controller.connect()
+    for _ in 0..<50 {
+      if await backend.hasStartedCrypto(old.candidateID) { break }
+      try? await Task.sleep(for: .milliseconds(10))
+    }
+    controller.email = "current@example.test"
+    controller.masterPassword = "secret"
+    controller.connect()
+    for _ in 0..<50 {
+      if controller.hasConnectedSession { break }
+      try? await Task.sleep(for: .milliseconds(10))
+    }
+    await backend.resolveCrypto(old.candidateID)
+    for _ in 0..<50 {
+      if await backend.hasProducedSession(old.candidateID),
+        await backend.token(for: old.candidateID) == nil,
+        await backend.discardCount(old.candidateID) >= 2
+      {
+        break
+      }
+      try? await Task.sleep(for: .milliseconds(10))
+    }
+
+    let binding = try passwordBinding(preferences, profile: profile, account: current.accountID)
+    #expect(preferences.nativeVaultPreferences(for: profile).accountID == current.accountID)
+    #expect(try credentials.read(for: binding)?.accessToken == "current-token")
+    #expect(items.count == 1)
+    #expect(await backend.discardCount(old.candidateID) >= 2)
+    #expect(await backend.token(for: current.candidateID) == "current-token")
+    #expect(!(await backend.didDiscard(current.candidateID)))
+    #expect(controller.status == "Connected and unlocked")
+    #expect(controller.hasConnectedSession)
   }
 
   @Test func successfulSameBindingReconnectRetiresExactPriorSession() async throws {

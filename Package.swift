@@ -2,11 +2,18 @@
 import Foundation
 import PackageDescription
 
+let nativeBitwardenOrganizationCandidate =
+  ProcessInfo.processInfo.environment["ARCUSIS_NATIVE_BITWARDEN_ORGANIZATION_CANDIDATE"] == "1"
 let nativeBitwardenSDKEnabled =
-  ProcessInfo.processInfo.environment["ARCUSIS_NATIVE_BITWARDEN_SDK"] == "1"
+  nativeBitwardenOrganizationCandidate
+  || ProcessInfo.processInfo.environment["ARCUSIS_NATIVE_BITWARDEN_SDK"] == "1"
 let nativeBitwardenSDKDependency: [Package.Dependency] =
   nativeBitwardenSDKEnabled
-  ? [.package(path: "build/NativeBitwardenSDK/Package")]
+  ? [
+    .package(
+      path: nativeBitwardenOrganizationCandidate
+        ? "build/NativeBitwardenOrganizationSDK/Package" : "build/NativeBitwardenSDK/Package")
+  ]
   : []
 let nativeBitwardenSDKProduct: [Target.Dependency] =
   nativeBitwardenSDKEnabled
@@ -16,6 +23,10 @@ let nativeBitwardenSDKLinkerSettings: [LinkerSetting] =
   nativeBitwardenSDKEnabled
   ? [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]
   : []
+
+let nativeBitwardenSwiftSettings: [SwiftSetting] =
+  nativeBitwardenOrganizationCandidate
+  ? [.define("ARCUSIS_NATIVE_BITWARDEN_ORGANIZATION_CANDIDATE")] : []
 
 let package = Package(
   name: "ArcusisBrowser",
@@ -33,10 +44,12 @@ let package = Package(
     .executableTarget(
       name: "ArcusisBrowser",
       dependencies: ["BrowserCore", "ChromiumBridge"] + nativeBitwardenSDKProduct,
+      swiftSettings: nativeBitwardenSwiftSettings,
       linkerSettings: nativeBitwardenSDKLinkerSettings),
     .testTarget(name: "BrowserCoreTests", dependencies: ["BrowserCore"]),
     .testTarget(
       name: "BrowserAppTests",
-      dependencies: ["ArcusisBrowser", "BrowserCore"] + nativeBitwardenSDKProduct),
+      dependencies: ["ArcusisBrowser", "BrowserCore"] + nativeBitwardenSDKProduct,
+      swiftSettings: nativeBitwardenSwiftSettings),
   ]
 )

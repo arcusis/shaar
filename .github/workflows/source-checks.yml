@@ -44,6 +44,17 @@ jobs:
       - name: Run Swift build and tests
         run: swift test --jobs 2
 
+      - name: Check Swift formatting
+        run: swift format lint --strict --recursive Package.swift Sources Tests
+
+      - name: Install Python test dependencies
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --require-hashes --only-binary=:all: -r ThirdParty/VaultwardenFixture/requirements.txt
+
+      - name: Run Python tests
+        run: .venv/bin/python scripts/test-python.py
+
       - name: Capture native Bitwarden settings visuals
         env:
           ARCUSIS_NATIVE_SETTINGS_VISUAL_CI: '1'
@@ -56,14 +67,3 @@ jobs:
           name: native-settings-visual-ci
           path: build/Verification/native-settings-visual-ci/
           if-no-files-found: warn
-
-      - name: Check Swift formatting
-        run: swift format lint --strict --recursive Package.swift Sources Tests
-
-      - name: Install Python test dependencies
-        run: |
-          python -m venv .venv
-          .venv/bin/python -m pip install --require-hashes --only-binary=:all: -r ThirdParty/VaultwardenFixture/requirements.txt
-
-      - name: Run Python tests
-        run: .venv/bin/python scripts/test-python.py

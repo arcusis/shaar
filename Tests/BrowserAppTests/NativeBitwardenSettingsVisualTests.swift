@@ -1,5 +1,6 @@
 import AppKit
 import BrowserCore
+import CoreGraphics
 import Foundation
 import SwiftUI
 import Synchronization
@@ -46,11 +47,14 @@ struct NativeBitwardenSettingsVisualTests {
         let filename = "settings-\(state.rawValue)-\(appearanceName).png"
         let imageURL = outputDirectory.appendingPathComponent(filename)
         var recognized: [String] = []
-        var pixelSize = (width: 0, height: 0)
+        var capture: NativeSettingsCapture?
         do {
-          pixelSize = try await captureOwnedWindow(
+          capture = try await captureOwnedWindow(
             controller: controller, appearance: appearance, to: imageURL)
           recognized = try recognizeText(in: imageURL)
+          guard let capture, capture.alpha.translucentPixels == 0,
+            capture.alpha.transparentPixels == 0
+          else { throw NativeSettingsCaptureError.nonOpaqueImage }
           let visibleText = recognized.joined(separator: " ")
           guard visibleText.contains("Native Bitwarden"),
             visibleText.contains(
@@ -72,17 +76,20 @@ struct NativeBitwardenSettingsVisualTests {
         }
         captures.append([
           "file": filename,
-          "width": pixelSize.width,
-          "height": pixelSize.height,
-          "pointWidth": 720,
-          "pointHeight": 480,
+          "pixelWidth": capture?.pixelWidth ?? 0,
+          "pixelHeight": capture?.pixelHeight ?? 0,
+          "pointWidth": capture?.pointWidth ?? 0,
+          "pointHeight": capture?.pointHeight ?? 0,
+          "alpha": capture?.alpha.manifest ?? [:],
+          "layoutDiagnostics": capture?.layoutDiagnostics ?? [:],
           "profile": profileID.uuidString.lowercased(),
           "state": state.rawValue,
           "sdkAvailable": controller.sdkAvailable,
           "status": controller.status,
           "colorScheme": appearanceName,
           "visibleText": recognized,
-          "captureMethod": "ordered owned NSWindow; NSView cacheDisplay bitmap; Vision OCR",
+          "captureMethod":
+            "owned NSWindow content NSHostingView cacheDisplay bitmap; opaque alpha validation; Vision OCR",
         ])
       }
     }
@@ -112,10 +119,33 @@ private enum CaptureState: String {
   case customServer = "custom-server"
 }
 
+private struct NativeSettingsCapture {
+  let pixelWidth: Int
+  let pixelHeight: Int
+  let pointWidth: Double
+  let pointHeight: Double
+  let alpha: NativeSettingsAlphaProof
+  let layoutDiagnostics: [String: Double]
+}
+
+private struct NativeSettingsAlphaProof {
+  let transparentPixels: Int
+  let translucentPixels: Int
+  let opaquePixels: Int
+
+  var manifest: [String: Int] {
+    [
+      "transparentPixels": transparentPixels,
+      "translucentPixels": translucentPixels,
+      "opaquePixels": opaquePixels,
+    ]
+  }
+}
+
 @MainActor
 private func captureOwnedWindow(
   controller: NativeBitwardenController, appearance: ColorScheme, to url: URL
-) async throws -> (width: Int, height: Int) {
+) async throws -> NativeSettingsCapture {
   let size = NSSize(width: 720, height: 480)
   let window = NSWindow(
     contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled],
@@ -123,11 +153,21 @@ private func captureOwnedWindow(
   window.isReleasedWhenClosed = false
   defer { window.close() }
   window.appearance = NSAppearance(named: appearance == .dark ? .darkAqua : .aqua)
+  window.isOpaque = true
+  window.backgroundColor = .windowBackgroundColor
   let view = NSHostingView(
     rootView: PasswordManagerSettingsView(controller: controller)
-      .environment(\.colorScheme, appearance))
+      .environment(\.colorScheme, appearance)
+      .frame(width: size.width, height: size.height, alignment: .topLeading)
+      .background(Color(nsColor: .windowBackgroundColor)))
   view.appearance = window.appearance
   view.frame = NSRect(origin: .zero, size: size)
+  view.autoresizingMask = [.width, .height]
+  view.wantsLayer = true
+  view.layer?.isOpaque = true
+  window.effectiveAppearance.performAsCurrentDrawingAppearance {
+    view.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+  }
   window.contentView = view
   window.orderFrontRegardless()
 
@@ -137,8 +177,9 @@ private func captureOwnedWindow(
   while ContinuousClock.now < deadline, settledFrames < 3 {
     window.displayIfNeeded()
     view.layoutSubtreeIfNeeded()
-    if view.window === window, view.bounds.width >= 700, view.bounds.height >= 450,
-      !view.subviews.isEmpty, ContinuousClock.now >= minimumSettle
+    if view.window === window, window.contentView === view,
+      view.bounds.size == size, view.frame.size == size,
+      ContinuousClock.now >= minimumSettle
     {
       settledFrames += 1
     } else {
@@ -155,7 +196,62 @@ private func captureOwnedWindow(
     throw NativeSettingsCaptureError.emptyImage
   }
   try png.write(to: url, options: .atomic)
-  return (bitmap.pixelsWide, bitmap.pixelsHigh)
+  guard let cgImage = bitmap.cgImage else { throw NativeSettingsCaptureError.bitmapUnavailable }
+  let alpha = try alphaProof(for: cgImage)
+  return NativeSettingsCapture(
+    pixelWidth: bitmap.pixelsWide,
+    pixelHeight: bitmap.pixelsHigh,
+    pointWidth: Double(view.bounds.width),
+    pointHeight: Double(view.bounds.height),
+    alpha: alpha,
+    layoutDiagnostics: [
+      "viewFrameWidth": Double(view.frame.width),
+      "viewFrameHeight": Double(view.frame.height),
+      "viewBoundsWidth": Double(view.bounds.width),
+      "viewBoundsHeight": Double(view.bounds.height),
+      "viewFittingWidth": Double(view.fittingSize.width),
+      "viewFittingHeight": Double(view.fittingSize.height),
+      "windowContentWidth": Double(window.contentView?.bounds.width ?? 0),
+      "windowContentHeight": Double(window.contentView?.bounds.height ?? 0),
+      "settledFrames": Double(settledFrames),
+    ])
+}
+
+private func alphaProof(for image: CGImage) throws -> NativeSettingsAlphaProof {
+  let width = image.width
+  let height = image.height
+  let bytesPerRow = width * 4
+  var pixels = [UInt8](repeating: 0, count: height * bytesPerRow)
+  let rendered = pixels.withUnsafeMutableBytes { bytes -> Bool in
+    guard
+      let context = CGContext(
+        data: bytes.baseAddress,
+        width: width,
+        height: height,
+        bitsPerComponent: 8,
+        bytesPerRow: bytesPerRow,
+        space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue
+          | CGImageAlphaInfo.premultipliedLast.rawValue)
+    else { return false }
+    context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+    return true
+  }
+  guard rendered else { throw NativeSettingsCaptureError.pixelReadFailed }
+  var transparentPixels = 0
+  var translucentPixels = 0
+  var opaquePixels = 0
+  for offset in stride(from: 3, to: pixels.count, by: 4) {
+    switch pixels[offset] {
+    case 0: transparentPixels += 1
+    case 255: opaquePixels += 1
+    default: translucentPixels += 1
+    }
+  }
+  return NativeSettingsAlphaProof(
+    transparentPixels: transparentPixels,
+    translucentPixels: translucentPixels,
+    opaquePixels: opaquePixels)
 }
 
 private func recognizeText(in url: URL) throws -> [String] {
@@ -189,4 +285,6 @@ private enum NativeSettingsCaptureError: Error {
   case emptyImage
   case requiredTextMissing
   case layoutTimeout
+  case nonOpaqueImage
+  case pixelReadFailed
 }

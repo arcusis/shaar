@@ -21,11 +21,14 @@ import Testing
     fills.append((context, completion))
   }
   func cancel(id: UUID) { canceled.append(id) }
-  func reply(_ index: Int = 0, binding: PasswordFillBinding? = nil) -> PasswordFillContext {
+  func reply(
+    _ index: Int = 0, binding: PasswordFillBinding? = nil,
+    documentURL: PasswordFillDocumentURL? = nil
+  ) -> PasswordFillContext {
     let (id, original, completion) = requests[index]
     let context = PasswordFillContext(
       requestID: id, binding: binding ?? original,
-      origin: PasswordFillOrigin("https://example.com")!)
+      origin: PasswordFillOrigin("https://example.com")!, documentURL: documentURL)
     completion(context)
     return context
   }
@@ -34,6 +37,49 @@ import Testing
 @Suite @MainActor struct NativePasswordFormSessionTests {
   private func binding() -> PasswordFillBinding {
     PasswordFillBinding(windowID: UUID(), profileID: UUID(), tabID: UUID())
+  }
+
+  @Test func fullURLIsBoundToOneUseSession() {
+    let backend = FakePasswordBackend()
+    let bound = binding()
+    let session = NativePasswordFormSession(backend: backend) { bound }
+    let origin = PasswordFillOrigin("https://example.com")!
+    var received: PasswordFillContext?
+    session.request { received = $0 }
+    let url = PasswordFillDocumentURL("https://example.com/login?q=1#part", origin: origin)!
+    let context = backend.reply(documentURL: url)
+    #expect(received == context)
+    let changed = PasswordFillContext(
+      requestID: context.requestID, binding: bound, origin: origin,
+      documentURL: PasswordFillDocumentURL("https://example.com/login?q=1#other", origin: origin)!)
+    var results: [Bool] = []
+    session.fill(context: changed, username: "synthetic", password: "synthetic") {
+      results.append($0)
+    }
+    #expect(results == [false])
+    #expect(backend.fills.isEmpty)
+    session.fill(context: context, username: "synthetic", password: "synthetic") {
+      results.append($0)
+    }
+    session.fill(context: context, username: "synthetic", password: "synthetic") {
+      results.append($0)
+    }
+    #expect(results == [false, false])
+    backend.fills[0].1(true)
+    #expect(results == [false, false, true])
+  }
+
+  @Test func rejectsDocumentURLBoundToDifferentOrigin() {
+    let backend = FakePasswordBackend()
+    let bound = binding()
+    let session = NativePasswordFormSession(backend: backend) { bound }
+    var replies: [PasswordFillContext?] = []
+    session.request { replies.append($0) }
+    let foreign = PasswordFillOrigin("https://other.example")!
+    _ = backend.reply(
+      documentURL: PasswordFillDocumentURL("https://other.example/", origin: foreign)!)
+    #expect(replies.count == 1 && replies[0] == nil)
+    #expect(backend.canceled.count == 1)
   }
 
   @Test func unavailableCompletesOnce() {

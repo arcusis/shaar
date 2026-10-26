@@ -105,6 +105,8 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 // These declarations mirror only the candidate public API. No candidate symbols are linked.
 @protocol ARCNativePasswordRequest <NSObject>
 @property(nonatomic, readonly, copy) NSString *origin;
+@optional
+@property(nonatomic, readonly, copy, nullable) NSString *documentURL;
 @end
 @protocol ARCNativePasswordWindow <NSObject>
 - (void)requestPasswordFillForTab:(ArdiaCoreTab *)tab
@@ -120,15 +122,19 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 @property(nonatomic, readwrite, copy) NSString *profileID;
 @property(nonatomic, readwrite, copy) NSString *tabID;
 @property(nonatomic, readwrite, copy) NSString *origin;
+@property(nonatomic, readwrite, copy, nullable) NSString *documentURL;
 - (instancetype)initWithRequestID:(NSString *)requestID windowID:(NSString *)windowID
-  profileID:(NSString *)profileID tabID:(NSString *)tabID origin:(NSString *)origin;
+  profileID:(NSString *)profileID tabID:(NSString *)tabID origin:(NSString *)origin
+  documentURL:(NSString * _Nullable)documentURL;
 @end
 @implementation ARCPasswordFillContext
 - (instancetype)initWithRequestID:(NSString *)requestID windowID:(NSString *)windowID
-  profileID:(NSString *)profileID tabID:(NSString *)tabID origin:(NSString *)origin {
+  profileID:(NSString *)profileID tabID:(NSString *)tabID origin:(NSString *)origin
+  documentURL:(NSString *)documentURL {
   if ((self = [super init])) {
     _requestID = [requestID copy]; _windowID = [windowID copy];
     _profileID = [profileID copy]; _tabID = [tabID copy]; _origin = [origin copy];
+    _documentURL = [documentURL copy];
   }
   return self;
 }
@@ -684,9 +690,18 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
       [owner finishPasswordRecord:record cancelNative:NO];
       return;
     }
+    NSString *documentURL = nil;
+    if ([request respondsToSelector:@selector(documentURL)]) {
+      documentURL = request.documentURL;
+      if (![documentURL isKindOfClass:NSString.class] || documentURL.length == 0 || documentURL.length > 8192) {
+        [(id<ARCNativePasswordWindow>)window cancelPasswordRequest:request];
+        [owner finishPasswordRecord:record cancelNative:NO];
+        return;
+      }
+    }
     record.nativeRequest = request;
     record.context = [[ARCPasswordFillContext alloc] initWithRequestID:requestID windowID:windowID
-      profileID:profileID tabID:tabID origin:request.origin];
+      profileID:profileID tabID:tabID origin:request.origin documentURL:documentURL];
     void (^reply)(ARCPasswordFillContext *) = record.requestCompletion;
     record.requestCompletion = nil;
     if (reply) reply(record.context);

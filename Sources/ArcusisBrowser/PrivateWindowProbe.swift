@@ -18,11 +18,28 @@ final class PrivateWindowProbe {
   private var historyEntryCount = 0
   private var historyQuerySucceeded = false
   private var stage = "preflight"
-  private var lastDocumentAudit: [String: Bool] = [:]
+  private var lastDocumentAudit: [String: Any] = [:]
+  private var privateEvaluationShape = "unavailable"
   private var normalSelectionBefore: [AnyHashable: Any] = [:]
   private var normalSelectionAudit: [String: Any] = [:]
   private var privateWindows: [String] = []
+  private var privateWindowContexts: [String: String] = [:]
   private var privateContexts: [String] = []
+  private var expectedPrivateCallbackOwners: [String: String] = [:]
+  private var privateChangedTabs: Set<String> = []
+  private var privateSelectedTabs: Set<String> = []
+  private var privateClosedTabs: Set<String> = []
+  private var privateClosedWindows: Set<String> = []
+  private var privateWindowCallbackOwners: [String: String] = [:]
+  private var previousTabChanged: ((String, String, String, Bool, Bool, Bool) -> Void)?
+  private var previousTabClosed: ((String) -> Void)?
+  private var previousPrivateTabChanged:
+    (@MainActor @Sendable (String, String, String, String, String, Bool, Bool, Bool) -> Void)?
+  private var previousPrivateTabSelected: (@MainActor @Sendable (String, String, String) -> Void)?
+  private var previousPrivateTabClosed: (@MainActor @Sendable (String, String, String) -> Void)?
+  private var previousPrivateWindowClosed: (@MainActor @Sendable (String, String) -> Void)?
+  nonisolated(unsafe) private var expectedRegularRouteIDs: Set<String> = []
+  nonisolated(unsafe) private var regularCallbackContamination = false
 
   static let mode = "private-window-owned-engine-fixture"
   static let checkNames = [
@@ -30,6 +47,11 @@ final class PrivateWindowProbe {
     "malformedContextRejected",
     "normalProfileIDCollisionRejected", "normalWindowIDCollisionRejected",
     "normalTabIDCollisionRejected",
+    "multipleTabsShareNativePrivateWindow", "privateSelectionAndNativeViewsOwned",
+    "privateNavigationReloadBackForward", "privateCallbacksUseOwnersWithoutRegularContamination",
+    "invalidPrivateOperationsRejected", "privateTabCloseConfirmedAndStaleRejected",
+    "privateWindowCloseCallbackOwnerRouted", "repeatedPrivateWindowCloseRejected",
+    "normalFactoriesRejectPrivateIdentities", "releaseWhileOwnedWindowRejected",
     "sameSourcePendingCallbacksShareOTR",
     "releaseDuringPendingWindowCreationRejected",
     "nativePrivateTabOwnedByActiveWebContents",
@@ -59,9 +81,12 @@ final class PrivateWindowProbe {
 
   func run() async throws -> [String] {
     do {
-      return try await exercise()
+      let result = try await exercise()
+      restorePrivateCallbackAudit()
+      return result
     } catch {
       await cleanupOwnedObjects()
+      restorePrivateCallbackAudit()
       try? writeReport(runID: runID)
       throw error
     }
@@ -69,6 +94,7 @@ final class PrivateWindowProbe {
 
   private func exercise() async throws -> [String] {
     let marker = runID.lowercased()
+    installPrivateCallbackAudit()
     stage = "normal-fixture-preflight"
     let contextA = UUID().uuidString.uppercased()
     let contextB = UUID().uuidString.uppercased()
@@ -120,8 +146,46 @@ final class PrivateWindowProbe {
     try open(w2, contextA, t2, fixture.appending(path: "private-window-\(marker)-b").absoluteString)
     privateWindows += [w1, w2]
     privateContexts.append(contextA)
+    guard runtime.selectPrivateTabID(t1, windowID: w1, contextID: contextA) else {
+      throw PrivateWindowFailure("Private first tab could not be selected.")
+    }
     try await waitForFixture(tabID: t1, privateTab: true, contextID: contextA)
+    guard runtime.selectPrivateTabID(t2, windowID: w2, contextID: contextA) else {
+      throw PrivateWindowFailure("Private second tab could not be selected.")
+    }
     try await waitForFixture(tabID: t2, privateTab: true, contextID: contextA)
+    let t5 = UUID().uuidString.uppercased()
+    expectedPrivateCallbackOwners[t5] = "\(contextA)|\(w2)"
+    expectedRegularRouteIDs.insert(t5)
+    try runtime.openPrivateTabID(
+      t5, windowID: w2, contextID: contextA,
+      url: fixture.appending(path: "private-window-\(marker)-d").absoluteString)
+    guard runtime.selectPrivateTabID(t5, windowID: w2, contextID: contextA) else {
+      throw PrivateWindowFailure("Private added tab could not be selected.")
+    }
+    try await waitForFixture(tabID: t5, privateTab: true, contextID: contextA)
+    checks["multipleTabsShareNativePrivateWindow"] =
+      runtime.privateProbeAudit(forContextID: contextA)?["windowCount"] as? Int == 2
+      && runtime.privateProbeAudit(forContextID: contextA)?["tabCount"] as? Int == 3
+      && runtime.view(forPrivateTabID: t5, windowID: w2, contextID: contextA) != nil
+    checks["releaseWhileOwnedWindowRejected"] = !runtime.releasePrivateContextID(contextA)
+    let normalProfileRejected = await rejectedNormalProfile(contextA)
+    checks["normalFactoriesRejectPrivateIdentities"] =
+      rejectedNormalWindow(w1)
+      && rejectedNormalTab(t1) && normalProfileRejected
+    checks["privateSelectionAndNativeViewsOwned"] =
+      runtime.selectPrivateTabID(
+        t5, windowID: w2, contextID: contextA)
+      && runtime.window(forPrivateWindowID: w2, contextID: contextA) != nil
+      && runtime.hostView(forPrivateWindowID: w2, contextID: contextA) != nil
+      && runtime.view(forPrivateTabID: t5, windowID: w2, contextID: contextA) != nil
+    checks["privateNavigationReloadBackForward"] = try await exerciseNavigation(
+      tab: t5, window: w2, context: contextA, marker: marker)
+    checks["invalidPrivateOperationsRejected"] =
+      !runtime.selectPrivateTabID(t5, windowID: w1, contextID: contextA)
+      && !runtime.navigatePrivateTabID(
+        t5, windowID: w2, contextID: contextA, url: "javascript:1")
+      && runtime.view(forPrivateTabID: t5, windowID: w1, contextID: contextA) == nil
     checks["normalWindowIDCollisionRejected"] =
       rejectedOpen(
         window: runtime.primaryWindowID, context: contextA, tab: UUID().uuidString.uppercased())
@@ -180,6 +244,9 @@ final class PrivateWindowProbe {
     try open(w3, contextB, t3, fixture.appending(path: "private-window-\(marker)-c").absoluteString)
     privateWindows.append(w3)
     privateContexts.append(contextB)
+    guard runtime.selectPrivateTabID(t3, windowID: w3, contextID: contextB) else {
+      throw PrivateWindowFailure("Isolated private tab could not be selected.")
+    }
     try await waitForFixture(tabID: t3, privateTab: true, contextID: contextB)
     let isolated = try await readPrivate(t3)
     checks["differentSourceContextsIsolated"] =
@@ -187,6 +254,26 @@ final class PrivateWindowProbe {
 
     checks["closingOneSharedWindowRetainsOther"] = await close(w1)
     privateWindows.removeAll { $0 == w1 }
+    checks["privateWindowCloseCallbackOwnerRouted"] =
+      privateClosedWindows.contains(w1)
+      && privateWindowCallbackOwners[w1] == "\(contextA)|\(w1)"
+      && privateClosedTabs.contains(t1)
+    let repeatedWindowClose = await withCheckedContinuation { continuation in
+      runtime.closePrivateWindowID(w1, contextID: contextA) { continuation.resume(returning: $0) }
+    }
+    checks["repeatedPrivateWindowCloseRejected"] = !repeatedWindowClose
+    let tabCloseConfirmed = await closeTab(t5, window: w2, context: contextA)
+    let repeatedTabCloseRejected = await closeTab(t5, window: w2, context: contextA) == false
+    checks["privateTabCloseConfirmedAndStaleRejected"] =
+      tabCloseConfirmed
+      && repeatedTabCloseRejected && privateClosedTabs.contains(t5)
+      && runtime.view(forPrivateTabID: t5, windowID: w2, contextID: contextA) == nil
+      && runtime.privateProbeAudit(forContextID: contextA)?["tabCount"] as? Int == 1
+    checks["privateCallbacksUseOwnersWithoutRegularContamination"] =
+      privateChangedTabs.isSuperset(of: [t1, t2, t5])
+      && privateSelectedTabs.isSuperset(of: [t5, t2])
+      && privateClosedTabs.isSuperset(of: [t1, t5])
+      && !regularCallbackContamination
     let closedTabResult: String? = await withCheckedContinuation { continuation in
       runtime.evaluatePrivateProbeTabID(t1, script: "true") { continuation.resume(returning: $0) }
     }
@@ -208,7 +295,7 @@ final class PrivateWindowProbe {
       && normalAfter["instance"] as? String == normalBefore["instance"] as? String
     var staleRejected = false
     do {
-      try runtime.openPrivateProbeWindowID(
+      try runtime.createPrivateWindowID(
         UUID().uuidString, contextID: UUID().uuidString,
         tabID: UUID().uuidString, url: fixture.absoluteString)
     } catch { staleRejected = true }
@@ -224,7 +311,7 @@ final class PrivateWindowProbe {
     }
     privateWindows.removeAll()
     for context in privateContexts {
-      if !runtime.releasePrivateProbeContextID(context) {
+      if !runtime.releasePrivateContextID(context) {
         throw PrivateWindowFailure("Private OTR context did not retire after final native close.")
       }
     }
@@ -244,7 +331,7 @@ final class PrivateWindowProbe {
     checks["lastCloseReopenClearsPrivateData"] =
       reopened["cookie"] as? String == "" && reopened["local"] is NSNull
       && reopened["session"] is NSNull
-    if !(await close(w4)) || !runtime.releasePrivateProbeContextID(contextC) {
+    if !(await close(w4)) || !runtime.releasePrivateContextID(contextC) {
       throw PrivateWindowFailure("Reopened private fixture did not clean up.")
     }
     privateWindows.removeAll()
@@ -272,7 +359,7 @@ final class PrivateWindowProbe {
     privateWindows = remainingWindows
     var remainingContexts: [String] = []
     for context in privateContexts {
-      if privateWindows.isEmpty && runtime.releasePrivateProbeContextID(context) {
+      if privateWindows.isEmpty && runtime.releasePrivateContextID(context) {
         continue
       }
       remainingContexts.append(context)
@@ -284,7 +371,7 @@ final class PrivateWindowProbe {
 
   private func begin(_ id: String, _ source: String) async throws -> Bool {
     try await withCheckedThrowingContinuation { continuation in
-      runtime.beginPrivateProbeContextID(id, sourceProfileID: source) { success, error in
+      runtime.createPrivateContextID(id, sourceProfileID: source) { success, error in
         if let error {
           continuation.resume(throwing: error)
         } else {
@@ -314,7 +401,7 @@ final class PrivateWindowProbe {
         let sharedProfile =
           profileToken != nil && profileToken == sharedProfileToken
           && (otherBefore == nil || otherBefore?["profileToken"] as? String == sharedProfileToken)
-        let released = self.runtime.releasePrivateProbeContextID(identity)
+        let released = self.runtime.releasePrivateContextID(identity)
         let otherAfter = self.runtime.privateProbeAudit(forContextID: other)
         if otherBefore != nil {
           firstReleaseRetainedSibling =
@@ -328,10 +415,10 @@ final class PrivateWindowProbe {
           && (otherBefore == nil || firstReleaseRetainedSibling)
         if results.count == 2 { continuation.resume(returning: results.values.allSatisfy { $0 }) }
       }
-      runtime.beginPrivateProbeContextID(first, sourceProfileID: source) { success, _ in
+      runtime.createPrivateContextID(first, sourceProfileID: source) { success, _ in
         complete(first, success)
       }
-      runtime.beginPrivateProbeContextID(second, sourceProfileID: source) { success, _ in
+      runtime.createPrivateContextID(second, sourceProfileID: source) { success, _ in
         complete(second, success)
       }
     }
@@ -339,7 +426,7 @@ final class PrivateWindowProbe {
 
   private func rejectedContext(_ id: String, _ source: String) async throws -> Bool {
     try await withCheckedThrowingContinuation { continuation in
-      runtime.beginPrivateProbeContextID(id, sourceProfileID: source) { success, _ in
+      runtime.createPrivateContextID(id, sourceProfileID: source) { success, _ in
         continuation.resume(returning: !success)
       }
     }
@@ -351,21 +438,166 @@ final class PrivateWindowProbe {
   }
 
   private func open(_ window: String, _ context: String, _ tab: String, _ url: String) throws {
-    try runtime.openPrivateProbeWindowID(window, contextID: context, tabID: tab, url: url)
+    expectedPrivateCallbackOwners[tab] = "\(context)|\(window)"
+    expectedRegularRouteIDs.insert(tab)
+    try runtime.createPrivateWindowID(window, contextID: context, tabID: tab, url: url)
+    privateWindowContexts[window] = context
   }
 
   private func rejectedOpen(window: String, context: String, tab: String) -> Bool {
     do {
-      try runtime.openPrivateProbeWindowID(
+      try runtime.createPrivateWindowID(
         window, contextID: context, tabID: tab, url: fixture.absoluteString)
       return false
     } catch { return true }
   }
 
-  private func close(_ window: String) async -> Bool {
+  private func rejectedNormalTab(_ tab: String) -> Bool {
+    do {
+      try runtime.openTabID(
+        tab, profileID: sourceA, windowID: runtime.primaryWindowID,
+        url: fixture.absoluteString)
+      return false
+    } catch { return true }
+  }
+
+  private func rejectedNormalWindow(_ window: String) -> Bool {
+    do {
+      try runtime.createWindowID(window)
+      return false
+    } catch { return true }
+  }
+
+  private func rejectedNormalProfile(_ profile: String) async -> Bool {
     await withCheckedContinuation { continuation in
-      runtime.closePrivateProbeWindowID(window) { continuation.resume(returning: $0) }
+      runtime.loadProfileID(profile) { continuation.resume(returning: $0 != nil) }
     }
+  }
+
+  private func close(_ window: String) async -> Bool {
+    guard let context = privateWindowContexts[window] else { return false }
+    let closed = await withCheckedContinuation { continuation in
+      runtime.closePrivateWindowID(window, contextID: context) {
+        continuation.resume(returning: $0)
+      }
+    }
+    if closed { privateWindowContexts.removeValue(forKey: window) }
+    return closed
+  }
+
+  private func installPrivateCallbackAudit() {
+    previousTabChanged = runtime.onTabChanged
+    previousTabClosed = runtime.onTabClosed
+    previousPrivateTabChanged = runtime.onPrivateTabChanged
+    previousPrivateTabSelected = runtime.onPrivateTabSelected
+    previousPrivateTabClosed = runtime.onPrivateTabClosed
+    previousPrivateWindowClosed = runtime.onPrivateWindowClosed
+    runtime.onPrivateTabChanged = { context, window, tab, _, _, _, _, _ in
+      if self.expectedPrivateCallbackOwners[tab] == "\(context)|\(window)" {
+        self.privateChangedTabs.insert(tab)
+      }
+    }
+    runtime.onPrivateTabSelected = { context, window, tab in
+      if self.expectedPrivateCallbackOwners[tab] == "\(context)|\(window)" {
+        self.privateSelectedTabs.insert(tab)
+      }
+    }
+    runtime.onPrivateTabClosed = { context, window, tab in
+      if self.expectedPrivateCallbackOwners[tab] == "\(context)|\(window)" {
+        self.privateClosedTabs.insert(tab)
+      }
+    }
+    runtime.onPrivateWindowClosed = { context, window in
+      self.privateClosedWindows.insert(window)
+      self.privateWindowCallbackOwners[window] = "\(context)|\(window)"
+    }
+    runtime.onTabChanged = { tab, url, title, loading, canGoBack, canGoForward in
+      if self.expectedRegularRouteIDs.contains(tab) { self.regularCallbackContamination = true }
+      self.previousTabChanged?(tab, url, title, loading, canGoBack, canGoForward)
+    }
+    runtime.onTabClosed = { tab in
+      if self.expectedRegularRouteIDs.contains(tab) { self.regularCallbackContamination = true }
+      self.previousTabClosed?(tab)
+    }
+  }
+
+  private func restorePrivateCallbackAudit() {
+    runtime.onTabChanged = previousTabChanged
+    runtime.onTabClosed = previousTabClosed
+    runtime.onPrivateTabChanged = previousPrivateTabChanged
+    runtime.onPrivateTabSelected = previousPrivateTabSelected
+    runtime.onPrivateTabClosed = previousPrivateTabClosed
+    runtime.onPrivateWindowClosed = previousPrivateWindowClosed
+  }
+
+  private func closeTab(_ tab: String, window: String, context: String) async -> Bool {
+    await withCheckedContinuation { continuation in
+      runtime.closePrivateTabID(tab, windowID: window, contextID: context) {
+        continuation.resume(returning: $0)
+      }
+    }
+  }
+
+  private func exerciseNavigation(tab: String, window: String, context: String, marker: String)
+    async throws -> Bool
+  {
+    let first = fixture.appending(path: "private-window-\(marker)-nav-a")
+    let second = fixture.appending(path: "private-window-\(marker)-nav-b")
+    guard
+      runtime.navigatePrivateTabID(
+        tab, windowID: window, contextID: context, url: first.absoluteString),
+      try await waitForPrivatePath(tab, firstPath: first.path)
+    else { return false }
+    guard
+      runtime.navigatePrivateTabID(
+        tab, windowID: window, contextID: context, url: second.absoluteString),
+      try await waitForPrivatePath(tab, firstPath: second.path)
+    else { return false }
+    guard let priorInstance = try await readPrivate(tab)["instance"] as? String,
+      UUID(uuidString: priorInstance) != nil
+    else { return false }
+    guard runtime.reloadPrivateTabID(tab, windowID: window, contextID: context) else {
+      return false
+    }
+    guard
+      try await waitForPrivateReload(
+        tab, path: second.path, priorInstance: priorInstance)
+    else { return false }
+    guard runtime.goBackPrivateTabID(tab, windowID: window, contextID: context),
+      try await waitForPrivatePath(tab, firstPath: first.path)
+    else { return false }
+    guard runtime.goForwardPrivateTabID(tab, windowID: window, contextID: context),
+      try await waitForPrivatePath(tab, firstPath: second.path)
+    else { return false }
+    return true
+  }
+
+  private func waitForPrivatePath(_ tab: String, firstPath path: String) async throws -> Bool {
+    for _ in 0..<100 {
+      if let value = try? await readPrivate(tab), value["path"] as? String == path {
+        return true
+      }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    return false
+  }
+
+  private func waitForPrivateReload(_ tab: String, path: String, priorInstance: String)
+    async throws -> Bool
+  {
+    for _ in 0..<100 {
+      if let value = try? await readPrivate(tab),
+        value["fixture"] as? String == "v1",
+        value["path"] as? String == path,
+        let instance = value["instance"] as? String,
+        UUID(uuidString: instance) != nil,
+        instance != priorInstance
+      {
+        return true
+      }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    return false
   }
 
   private func evaluateNormal(_ tab: String, _ script: String) async throws -> [String: Any] {
@@ -385,14 +617,21 @@ final class PrivateWindowProbe {
       runtime.evaluatePrivateProbeTabID(
         tab,
         script:
-          "({fixture:document.documentElement.dataset.arcusisFixture, cookie:document.cookie, local:localStorage.getItem('private'), session:sessionStorage.getItem('private')})"
+          "({fixture:document.documentElement.dataset.arcusisFixture, cookie:document.cookie, local:localStorage.getItem('private'), session:sessionStorage.getItem('private'), path:location.pathname, instance:window.arcusisInstance})"
       ) { continuation.resume(returning: $0) }
     }
-    guard let json, let data = json.data(using: .utf8),
-      let value = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-    else {
+    guard let json, let data = json.data(using: .utf8) else {
+      privateEvaluationShape = "missing-json"
+      lastDocumentAudit["privateEvaluationShape"] = privateEvaluationShape
       throw PrivateWindowFailure("Private fixture evaluation failed or used stale context.")
     }
+    let object = try? JSONSerialization.jsonObject(with: data)
+    guard let value = object as? [String: Any] else {
+      privateEvaluationShape = "json-type:" + String(describing: type(of: object))
+      lastDocumentAudit["privateEvaluationShape"] = privateEvaluationShape
+      throw PrivateWindowFailure("Private fixture evaluation failed or used stale context.")
+    }
+    privateEvaluationShape = "object:" + value.keys.sorted().joined(separator: ",")
     return value
   }
 
@@ -438,18 +677,32 @@ final class PrivateWindowProbe {
               audit["allWindowsUsePrivateActiveProfile"] as? Bool == true,
             "allWindowsDisplayOwnedWebContents":
               audit["allWindowsDisplayOwnedWebContents"] as? Bool == true,
+            "tabCount": audit["tabCount"] ?? 0,
+            "windowCount": audit["windowCount"] ?? 0,
+            "privateEvaluationRejected": audit["privateEvaluationRejected"] as? Bool == true,
+            "privateEvaluationStale": audit["privateEvaluationStale"] as? Bool == true,
+            "privateEvaluationSucceeded": audit["privateEvaluationSucceeded"] as? Bool == true,
+            "privateEvaluationTimedOut": audit["privateEvaluationTimedOut"] as? Bool == true,
           ]
-          if lastDocumentAudit["allTabsLoaded"] != true {
+          if lastDocumentAudit["allTabsLoaded"] as? Bool != true {
             try await Task.sleep(for: .milliseconds(100))
             continue
           }
         }
-        let value =
-          privateTab
-          ? try await readPrivate(tabID)
-          : try await evaluateNormal(
+        let fixtureLoaded: Bool
+        if privateTab {
+          lastDocumentAudit["fixtureLoaded"] = false
+          lastDocumentAudit["privateEvaluationResponded"] = false
+          fixtureLoaded =
+            try await readPrivate(tabID)["fixture"] as? String == "v1"
+          lastDocumentAudit["fixtureLoaded"] = fixtureLoaded
+          lastDocumentAudit["privateEvaluationResponded"] = true
+        } else {
+          let value = try await evaluateNormal(
             tabID, "({fixture:document.documentElement.dataset.arcusisFixture})")
-        if value["fixture"] as? String == "v1" {
+          fixtureLoaded = value["fixture"] as? String == "v1"
+        }
+        if fixtureLoaded {
           if privateTab { stage = "private-document-ready" }
           return
         }
@@ -604,7 +857,8 @@ final class PrivateWindowProbe {
       "lastStage": stage,
       "pendingCallbackExercise":
         "Two same-source contexts queued before pinned native factory callback; each waiter retires its context reentrantly.",
-      "lastDocumentAudit": lastDocumentAudit,
+      "lastDocumentAudit": lastDocumentAudit.merging(
+        ["privateEvaluationShape": privateEvaluationShape], uniquingKeysWith: { _, value in value }),
       "normalSelectionAudit": normalSelectionAudit,
       "retirementAudit": retirementAudit,
       "historyPathDigest": historyPathDigest ?? Digest.sha256(Data("missing-history".utf8)),

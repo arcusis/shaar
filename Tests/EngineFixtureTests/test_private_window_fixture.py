@@ -110,6 +110,13 @@ class PrivateWindowFixtureTests(unittest.TestCase):
         mutations = (
             lambda value: value['checks'].pop('staleContextRejected'),
             lambda value: value['checks'].__setitem__('closedWindowRejected', False),
+            lambda value: value['checks'].pop('multipleTabsShareNativePrivateWindow'),
+            lambda value: value['checks'].__setitem__('privateNavigationReloadBackForward', False),
+            lambda value: value['checks'].__setitem__('privateCallbacksUseOwnersWithoutRegularContamination', False),
+            lambda value: value['checks'].pop('privateTabCloseConfirmedAndStaleRejected'),
+            lambda value: value['checks'].__setitem__('privateWindowCloseCallbackOwnerRouted', False),
+            lambda value: value['checks'].__setitem__('normalFactoriesRejectPrivateIdentities', False),
+            lambda value: value['checks'].pop('releaseWhileOwnedWindowRejected'),
             lambda value: value.__setitem__('runID', self.run_id.lower()),
             lambda value: value.__setitem__('checkCount', 1),
             lambda value: value.__setitem__('historyEntryCount', 0),

@@ -212,19 +212,9 @@ struct LibraryDownloadTests {
       LibraryDownloadsView(
         store: store, profileID: currentProfile.id, mediaOnly: true, downloads: downloads),
       size: NSSize(width: 760, height: 520), appearance: .aqua,
-      to: captureRoot.appending(path: "populated-media.png"), settleMilliseconds: 1200)
-    let inset = Int(Double(mediaCapture.pixelsHigh) * 80 / 520)
-    var blueSamples = 0
-    for y in stride(from: inset, to: mediaCapture.pixelsHigh - inset, by: 4) {
-      for x in stride(from: 0, to: mediaCapture.pixelsWide, by: 4) {
-        if let color = mediaCapture.colorAt(x: x, y: y)?.usingColorSpace(.sRGB),
-          color.blueComponent > 0.65, color.redComponent < 0.3,
-          color.blueComponent - color.greenComponent > 0.2
-        {
-          blueSamples += 1
-        }
-      }
-    }
+      to: captureRoot.appending(path: "populated-media.png"),
+      ready: { blueThumbnailSampleCount($0) > 200 })
+    let blueSamples = blueThumbnailSampleCount(mediaCapture)
     #expect(blueSamples > 200, "Authored blue image must render as a real thumbnail.")
     try await capture(
       LibraryDownloadsView(
@@ -296,9 +286,25 @@ struct LibraryDownloadTests {
     return Data(pdf.utf8)
   }
 
+  private func blueThumbnailSampleCount(_ bitmap: NSBitmapImageRep) -> Int {
+    let inset = Int(Double(bitmap.pixelsHigh) * 80 / 520)
+    var blueSamples = 0
+    for y in stride(from: inset, to: bitmap.pixelsHigh - inset, by: 4) {
+      for x in stride(from: 0, to: bitmap.pixelsWide, by: 4) {
+        if let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB),
+          color.blueComponent > 0.65, color.redComponent < 0.3,
+          color.blueComponent - color.greenComponent > 0.2
+        {
+          blueSamples += 1
+        }
+      }
+    }
+    return blueSamples
+  }
+
   @discardableResult private func capture<V: View>(
     _ view: V, size: NSSize, appearance: NSAppearance.Name, to url: URL,
-    settleMilliseconds: Int = 200
+    settleMilliseconds: Int = 200, ready: ((NSBitmapImageRep) -> Bool)? = nil
   ) async throws -> NSBitmapImageRep {
     let window = NSWindow(
       contentRect: NSRect(origin: .zero, size: size), styleMask: [], backing: .buffered,
@@ -313,8 +319,16 @@ struct LibraryDownloadTests {
     window.displayIfNeeded()
     try await Task.sleep(for: .milliseconds(settleMilliseconds))
     host.layoutSubtreeIfNeeded()
-    let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+    var bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
     host.cacheDisplay(in: host.bounds, to: bitmap)
+    let deadline = ContinuousClock.now.advanced(by: .seconds(8))
+    while let ready, !ready(bitmap), ContinuousClock.now < deadline {
+      try await Task.sleep(for: .milliseconds(25))
+      host.layoutSubtreeIfNeeded()
+      window.displayIfNeeded()
+      bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+      host.cacheDisplay(in: host.bounds, to: bitmap)
+    }
     try #require(bitmap.representation(using: .png, properties: [:])).write(to: url)
     return bitmap
   }

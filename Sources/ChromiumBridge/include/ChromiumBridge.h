@@ -102,6 +102,19 @@ FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeExternalAppLaunchAuditForTest
             completion:(void (^)(NSString * _Nullable))completion;
 /// Captures only the disposable probe's own tab, without a remote debugging socket.
 - (void)captureProbeTabID:(NSString *)tabID completion:(void (^)(NSData * _Nullable))completion;
+/// Fixture-only OTR ownership. Requires testing mode and an owned marked disposable root.
+- (void)beginPrivateProbeContextID:(NSString *)contextID sourceProfileID:(NSString *)sourceProfileID
+                        completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL, NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
+- (BOOL)openPrivateProbeWindowID:(NSString *)windowID contextID:(NSString *)contextID
+                            tabID:(NSString *)tabID url:(NSString *)url error:(NSError **)error;
+- (void)evaluatePrivateProbeTabID:(NSString *)tabID script:(NSString *)script
+                       completion:(void (^)(NSString * _Nullable))completion;
+- (void)closePrivateProbeWindowID:(NSString *)windowID
+                       completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion NS_SWIFT_UI_ACTOR;
+- (BOOL)attemptCancelledPrivateProbeCloseID:(NSString *)windowID;
+- (nullable NSDictionary *)privateProbeAuditForContextID:(NSString *)contextID;
+- (NSDictionary *)normalProbeSelectionAuditForTabID:(NSString *)tabID;
+- (BOOL)releasePrivateProbeContextID:(NSString *)contextID;
 - (NSArray<NSDictionary<NSString *, id> *> *)extensionsForProfileID:(NSString *)profileID;
 - (void)resolveInstallRequestID:(NSString *)requestID accepted:(BOOL)accepted;
 - (void)resolveWebsiteMediaRequestID:(NSString *)requestID accepted:(BOOL)accepted;

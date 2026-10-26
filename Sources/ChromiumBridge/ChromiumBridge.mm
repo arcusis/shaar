@@ -75,6 +75,14 @@ static BOOL ValidID(NSString *value) {
   return [[[[NSUUID alloc] initWithUUIDString:value] UUIDString] isEqualToString:value];
 }
 
+static BOOL ProbeViewIsVisibleInWindow(NSView *view, NSWindow *window) {
+  if (!view || !window || view.window != window) return NO;
+  for (NSView *ancestor = view; ancestor; ancestor = ancestor.superview) {
+    if (ancestor.hidden) return NO;
+  }
+  return YES;
+}
+
 static BOOL ValidExtensionID(NSString *value) {
   return value.length == 32 && [value rangeOfCharacterFromSet:
     [[NSCharacterSet characterSetWithCharactersInString:@"abcdefghijklmnop"] invertedSet]].location == NSNotFound;
@@ -162,6 +170,14 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   NSMutableSet<NSString *> *_retiredWindowIDs;
   NSMutableDictionary<NSString *, ArdiaCoreProfile *> *_profiles;
   NSMutableDictionary<NSString *, ArdiaCoreTab *> *_tabs;
+  NSMutableDictionary<NSString *, NSMutableDictionary *> *_privateProbeContexts;
+  NSMutableDictionary<NSString *, NSMutableDictionary *> *_privateProbeWindows;
+  NSMutableDictionary<NSString *, NSDictionary *> *_privateProbeTabs;
+  NSMutableDictionary<NSString *, NSMutableDictionary *> *_privateProbeSourceLeases;
+  NSMutableDictionary<NSString *, NSString *> *_privateProbePendingContexts;
+  NSMutableSet<NSString *> *_privateProbePendingWindows;
+  NSMutableSet<NSString *> *_privateProbePendingTabs;
+  NSMutableSet<NSString *> *_privateProbeCancelledCloses;
   NSMutableDictionary<NSString *, NSString *> *_owners;
   NSMutableDictionary<NSString *, NSMutableArray *> *_profileWaiters;
   NSString *_openingTabID;
@@ -206,6 +222,14 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   _windowCloseObservers = [NSMutableDictionary dictionary];
   _retiredWindowIDs = [NSMutableSet set];
   _tabs = [NSMutableDictionary dictionary];
+  _privateProbeContexts = [NSMutableDictionary dictionary];
+  _privateProbeWindows = [NSMutableDictionary dictionary];
+  _privateProbeTabs = [NSMutableDictionary dictionary];
+  _privateProbeSourceLeases = [NSMutableDictionary dictionary];
+  _privateProbePendingContexts = [NSMutableDictionary dictionary];
+  _privateProbePendingWindows = [NSMutableSet set];
+  _privateProbePendingTabs = [NSMutableSet set];
+  _privateProbeCancelledCloses = [NSMutableSet set];
   _owners = [NSMutableDictionary dictionary];
   _profileWaiters = [NSMutableDictionary dictionary];
   _pendingInstalls = [NSMutableDictionary dictionary];
@@ -426,6 +450,10 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
 }
 - (void)dealloc {
   for (id observer in _windowCloseObservers.allValues) [NSNotificationCenter.defaultCenter removeObserver:observer];
+  for (NSDictionary *entry in _privateProbeWindows.allValues) {
+    id observer = entry[@"observer"];
+    if (observer) [NSNotificationCenter.defaultCenter removeObserver:observer];
+  }
 }
 - (NSString *)chromiumVersion { return _engine.chromiumVersion ?: @"unavailable"; }
 
@@ -506,6 +534,403 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
     [self->_profileWaiters removeObjectForKey:profileID];
     for (void (^waiter)(NSError *) in waiters) waiter(error);
   }];
+}
+
+- (BOOL)privateProbeEnabled {
+  return _testing && _probeRoot && ARCProbeRootIsOwned(_probeRoot) && !_closingBrowser;
+}
+
+- (BOOL)privateProbeIdentityIsAvailable:(NSString *)identity {
+  return identity.length && !_profiles[identity] && !_windows[identity] && !_tabs[identity] &&
+    ![_retiredWindowIDs containsObject:identity] && !_privateProbeContexts[identity] &&
+    !_privateProbeWindows[identity] && !_privateProbeTabs[identity] &&
+    !_privateProbePendingContexts[identity] && ![_privateProbePendingWindows containsObject:identity] &&
+    ![_privateProbePendingTabs containsObject:identity];
+}
+
+- (void)beginPrivateProbeContextID:(NSString *)contextID sourceProfileID:(NSString *)sourceProfileID
+                        completion:(void (^)(BOOL, NSError *))completion {
+  NSAssert(NSThread.isMainThread, @"Private probe creation requires the UI thread");
+  ArdiaCoreProfile *source = _profiles[sourceProfileID];
+  if (![self privateProbeEnabled] || !ValidID(contextID) || !ValidID(sourceProfileID) ||
+      !source || source.destroyed || source.offTheRecord ||
+      ![self privateProbeIdentityIsAvailable:contextID]) {
+    completion(NO, BridgeError(@"Invalid private probe context or source profile."));
+    return;
+  }
+  if (_privateProbePendingContexts[contextID]) {
+    completion(NO, BridgeError(@"Private probe context identity is already pending."));
+    return;
+  }
+  NSMutableDictionary *lease = _privateProbeSourceLeases[sourceProfileID];
+  ArdiaCoreProfile *leasedProfile = NSClassFromString(@"ArdiaCoreProfile") &&
+    [lease[@"profile"] isKindOfClass:NSClassFromString(@"ArdiaCoreProfile")]
+    ? lease[@"profile"] : nil;
+  if (lease && leasedProfile && !leasedProfile.destroyed) {
+    [lease[@"contextIDs"] addObject:contextID];
+    _privateProbeContexts[contextID] = [@{@"sourceProfileID": sourceProfileID,
+      @"sourceProfile": source, @"profile": leasedProfile, @"windows": [NSMutableSet set],
+      @"pendingWindows": [NSMutableSet set]} mutableCopy];
+    completion(YES, nil);
+    return;
+  }
+  BOOL startFactory = lease == nil;
+  if (!lease) {
+    lease = [@{@"sourceProfile": source, @"pending": [NSMutableDictionary dictionary],
+      @"contextIDs": [NSMutableSet set], @"profile": NSNull.null} mutableCopy];
+    _privateProbeSourceLeases[sourceProfileID] = lease;
+  }
+  lease[@"pending"][contextID] = [completion copy];
+  _privateProbePendingContexts[contextID] = sourceProfileID;
+  if (!startFactory) return;
+  NSMutableDictionary *capturedLease = lease;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (self->_privateProbeSourceLeases[sourceProfileID] != capturedLease ||
+        ![self privateProbeEnabled]) {
+      if (self->_privateProbeSourceLeases[sourceProfileID] == capturedLease) {
+        NSDictionary *pending = [capturedLease[@"pending"] copy];
+        [capturedLease[@"pending"] removeAllObjects];
+        [self->_privateProbeSourceLeases removeObjectForKey:sourceProfileID];
+        for (NSString *pendingID in pending) {
+          [self->_privateProbePendingContexts removeObjectForKey:pendingID];
+          void (^waiter)(BOOL, NSError *) = pending[pendingID];
+          waiter(NO, BridgeError(@"Off-the-record profile creation was cancelled."));
+        }
+      }
+      return;
+    }
+    [self->_engine offTheRecordProfileFor:source completion:^(ArdiaCoreProfile *privateProfile, NSString *message) {
+        NSMutableDictionary *current = self->_privateProbeSourceLeases[sourceProfileID];
+        if (current != capturedLease) {
+          // A stale callback cannot release ArdiaCore's shared primary OTR profile.
+          return;
+        }
+        BOOL valid = self->_profiles[sourceProfileID] == source && !source.destroyed && !source.offTheRecord &&
+          privateProfile && !privateProfile.destroyed && privateProfile.offTheRecord && privateProfile != source;
+        if (valid) current[@"profile"] = privateProfile;
+        NSDictionary *pending = [current[@"pending"] copy];
+        [current[@"pending"] removeAllObjects];
+        NSMutableSet<NSString *> *registered = [NSMutableSet set];
+        for (NSString *pendingID in pending) {
+          [self->_privateProbePendingContexts removeObjectForKey:pendingID];
+          if (valid && [self privateProbeEnabled] &&
+              [self privateProbeIdentityIsAvailable:pendingID]) {
+            [current[@"contextIDs"] addObject:pendingID];
+            self->_privateProbeContexts[pendingID] = [@{@"sourceProfileID": sourceProfileID,
+              @"sourceProfile": source, @"profile": privateProfile,
+              @"windows": [NSMutableSet set], @"pendingWindows": [NSMutableSet set]} mutableCopy];
+            [registered addObject:pendingID];
+          }
+        }
+        for (NSString *pendingID in pending) {
+          void (^waiter)(BOOL, NSError *) = pending[pendingID];
+          NSMutableDictionary *context = self->_privateProbeContexts[pendingID];
+          BOOL stillOwned = [registered containsObject:pendingID] &&
+            self->_privateProbeSourceLeases[sourceProfileID] == capturedLease &&
+            [current[@"contextIDs"] containsObject:pendingID] &&
+            context[@"sourceProfile"] == source && context[@"profile"] == privateProfile &&
+            self->_profiles[sourceProfileID] == source && !source.destroyed &&
+            !privateProfile.destroyed && privateProfile.offTheRecord &&
+            [self privateProbeEnabled];
+          if (stillOwned) {
+            waiter(YES, nil);
+          } else {
+            if (context && [registered containsObject:pendingID]) {
+              [self->_privateProbeContexts removeObjectForKey:pendingID];
+              [current[@"contextIDs"] removeObject:pendingID];
+            }
+            waiter(NO, BridgeError(message.length ? message : @"Off-the-record profile creation was rejected."));
+          }
+        }
+        if (self->_privateProbeSourceLeases[sourceProfileID] == capturedLease &&
+            [(NSSet *)current[@"contextIDs"] count] == 0 &&
+            [(NSDictionary *)current[@"pending"] count] == 0) {
+          [self->_privateProbeSourceLeases removeObjectForKey:sourceProfileID];
+          if (valid && !privateProfile.destroyed) [self->_engine releaseProfile:privateProfile];
+        }
+    }];
+  });
+}
+
+- (BOOL)openPrivateProbeWindowID:(NSString *)windowID contextID:(NSString *)contextID
+                            tabID:(NSString *)tabID url:(NSString *)url error:(NSError **)error {
+  NSAssert(NSThread.isMainThread, @"Private probe windows require the UI thread");
+  NSMutableDictionary *context = _privateProbeContexts[contextID];
+  ArdiaCoreProfile *profile = context[@"profile"];
+  NSURLComponents *components = [NSURLComponents componentsWithString:url ?: @""];
+  if (![self privateProbeEnabled] || !ValidID(windowID) || !ValidID(tabID) ||
+      [windowID isEqualToString:contextID] || [tabID isEqualToString:contextID] ||
+      [tabID isEqualToString:windowID] || !context ||
+      ![self privateProbeIdentityIsAvailable:windowID] ||
+      ![self privateProbeIdentityIsAvailable:tabID] ||
+      !profile || profile.destroyed || !profile.offTheRecord ||
+      ![components.scheme.lowercaseString isEqualToString:@"http"] ||
+      ![@[@"127.0.0.1", @"::1", @"localhost"] containsObject:components.host.lowercaseString] ||
+      !components.port) {
+    if (error) *error = BridgeError(@"Invalid, unknown, closed, or non-loopback private probe identity.");
+    return NO;
+  }
+  [context[@"pendingWindows"] addObject:windowID];
+  [_privateProbePendingWindows addObject:windowID];
+  [_privateProbePendingTabs addObject:tabID];
+  context[@"pendingReleaseRejected"] = @(![self releasePrivateProbeContextID:contextID]);
+  NSMutableDictionary *capturedContext = context;
+  NSMutableDictionary *capturedLease = _privateProbeSourceLeases[context[@"sourceProfileID"]];
+  ArdiaCoreProfile *source = context[@"sourceProfile"];
+  BOOL (^creationCurrent)(void) = ^BOOL{
+    return [self privateProbeEnabled] && self->_privateProbeContexts[contextID] == capturedContext &&
+      self->_privateProbeSourceLeases[capturedContext[@"sourceProfileID"]] == capturedLease &&
+      self->_profiles[capturedContext[@"sourceProfileID"]] == source && !source.destroyed &&
+      capturedContext[@"profile"] == profile && !profile.destroyed && profile.offTheRecord &&
+      [capturedContext[@"pendingWindows"] containsObject:windowID] &&
+      [self->_privateProbePendingWindows containsObject:windowID] &&
+      [self->_privateProbePendingTabs containsObject:tabID];
+  };
+  ArdiaCoreWindow *native = [[NSClassFromString(@"ArdiaCoreWindow") alloc]
+    initWithContentRect:NSMakeRect(0, 0, 640, 480)];
+  if (!native || !native.window || !creationCurrent()) {
+    [native close];
+    [context[@"pendingWindows"] removeObject:windowID];
+    [_privateProbePendingWindows removeObject:windowID];
+    [_privateProbePendingTabs removeObject:tabID];
+    if (error) *error = BridgeError(@"Chromium could not create a hidden private probe window.");
+    return NO;
+  }
+  [native prepareProfile:profile];
+  if (!creationCurrent()) {
+    [native close];
+    [context[@"pendingWindows"] removeObject:windowID];
+    [_privateProbePendingWindows removeObject:windowID];
+    [_privateProbePendingTabs removeObject:tabID];
+    if (error) *error = BridgeError(@"Private probe context retired during window preparation.");
+    return NO;
+  }
+  native.activeProfile = profile;
+  ArdiaCoreTab *tab = [native openTab:url profile:profile foreground:NO];
+  if (!tab || !native.hostView || !tab.view || !creationCurrent()) {
+    [tab closeNow];
+    [native close];
+    [context[@"pendingWindows"] removeObject:windowID];
+    [_privateProbePendingWindows removeObject:windowID];
+    [_privateProbePendingTabs removeObject:tabID];
+    if (error) *error = BridgeError(@"Chromium could not create a private probe tab.");
+    return NO;
+  }
+  tab.view.frame = native.hostView.bounds;
+  tab.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  [native.hostView addSubview:tab.view];
+  [tab loadURL:url];
+  tab.delegate = self;
+  if (!creationCurrent()) {
+    [tab closeNow];
+    [native close];
+    [context[@"pendingWindows"] removeObject:windowID];
+    [_privateProbePendingWindows removeObject:windowID];
+    [_privateProbePendingTabs removeObject:tabID];
+    if (error) *error = BridgeError(@"Private probe context retired during navigation start.");
+    return NO;
+  }
+  [native activateTab:tab];
+  if (!creationCurrent()) {
+    [tab closeNow];
+    [native close];
+    [context[@"pendingWindows"] removeObject:windowID];
+    [_privateProbePendingWindows removeObject:windowID];
+    [_privateProbePendingTabs removeObject:tabID];
+    if (error) *error = BridgeError(@"Private probe context retired during tab activation.");
+    return NO;
+  }
+  __weak ARCChromiumRuntime *weakSelf = self;
+  id observer = [NSNotificationCenter.defaultCenter addObserverForName:NSWindowWillCloseNotification
+    object:native.window queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *) {
+      [weakSelf privateProbeWindowDidCloseID:windowID];
+    }];
+  _privateProbeWindows[windowID] = [@{@"contextID": contextID, @"native": native,
+    @"tabIDs": [NSMutableSet setWithObject:tabID], @"observer": observer,
+    @"closing": @NO} mutableCopy];
+  _privateProbeTabs[tabID] = @{@"contextID": contextID, @"windowID": windowID, @"tab": tab};
+  [context[@"pendingWindows"] removeObject:windowID];
+  [_privateProbePendingWindows removeObject:windowID];
+  [_privateProbePendingTabs removeObject:tabID];
+  [context[@"windows"] addObject:windowID];
+  native.delegate = self;
+  return YES;
+}
+
+- (void)evaluatePrivateProbeTabID:(NSString *)tabID script:(NSString *)script
+                       completion:(void (^)(NSString *))completion {
+  NSDictionary *entry = _privateProbeTabs[tabID];
+  ArdiaCoreTab *tab = entry[@"tab"];
+  NSDictionary *context = _privateProbeContexts[entry[@"contextID"]];
+  if (![self privateProbeEnabled] || !tab || tab.closed || !context ||
+      !tab.profile.offTheRecord || tab.profile != context[@"profile"]) {
+    completion(nil);
+    return;
+  }
+  [self evaluateTab:tab script:script completion:^(NSString *json) {
+    NSDictionary *current = self->_privateProbeTabs[tabID];
+    completion(current == entry && !tab.closed ? json : nil);
+  }];
+}
+
+- (void)privateProbeWindowDidCloseID:(NSString *)windowID {
+  NSMutableDictionary *entry = _privateProbeWindows[windowID];
+  if (!entry) return;
+  NSString *contextID = entry[@"contextID"];
+  NSMutableDictionary *context = _privateProbeContexts[contextID];
+  for (NSString *tabID in [entry[@"tabIDs"] copy]) {
+    [_privateProbeTabs removeObjectForKey:tabID];
+  }
+  id observer = entry[@"observer"];
+  if (observer) [NSNotificationCenter.defaultCenter removeObserver:observer];
+  [_privateProbeWindows removeObjectForKey:windowID];
+  [context[@"windows"] removeObject:windowID];
+  void (^completion)(BOOL) = entry[@"closeCompletion"];
+  if (completion) completion(YES);
+}
+
+- (void)closePrivateProbeWindowID:(NSString *)windowID completion:(void (^)(BOOL))completion {
+  NSMutableDictionary *entry = _privateProbeWindows[windowID];
+  if (![self privateProbeEnabled] || !entry || [entry[@"closing"] boolValue] || entry[@"closeCompletion"]) {
+    completion(NO);
+    return;
+  }
+  ArdiaCoreWindow *native = entry[@"native"];
+  NSString *contextID = entry[@"contextID"];
+  NSMutableDictionary *context = _privateProbeContexts[contextID];
+  if (!native || !context || ![context[@"windows"] containsObject:windowID]) {
+    completion(NO);
+    return;
+  }
+  entry[@"closing"] = @YES;
+  entry[@"closeCompletion"] = [completion copy];
+  [native.window performClose:nil];
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+    NSMutableDictionary *current = self->_privateProbeWindows[windowID];
+    if (current != entry) return;
+    void (^pending)(BOOL) = current[@"closeCompletion"];
+    current[@"closeCompletion"] = nil;
+    if (pending) pending(NO);
+  });
+}
+
+- (BOOL)attemptCancelledPrivateProbeCloseID:(NSString *)windowID {
+  NSMutableDictionary *entry = _privateProbeWindows[windowID];
+  if (![self privateProbeEnabled] || !entry || [entry[@"closing"] boolValue]) return NO;
+  [_privateProbeCancelledCloses addObject:windowID];
+  [((ArdiaCoreWindow *)entry[@"native"]).window performClose:nil];
+  NSString *tabID = [entry[@"tabIDs"] anyObject];
+  NSDictionary *tabEntry = _privateProbeTabs[tabID];
+  return _privateProbeWindows[windowID] == entry && ![entry[@"closing"] boolValue] &&
+    tabEntry && ![tabEntry[@"tab"] closed];
+}
+
+- (NSDictionary *)privateProbeAuditForContextID:(NSString *)contextID {
+  NSMutableDictionary *context = _privateProbeContexts[contextID];
+  ArdiaCoreProfile *source = context[@"sourceProfile"];
+  ArdiaCoreProfile *profile = context[@"profile"];
+  if (![self privateProbeEnabled] || !context || !source || !profile) return nil;
+  NSUInteger tabCount = 0;
+  BOOL allHidden = YES;
+  BOOL allTabsLoaded = YES;
+  BOOL allTabsAuthoredLoopbackURL = YES;
+  BOOL anyTabLoading = NO;
+  BOOL allTabsInNativeProfileBrowser = YES;
+  BOOL allTabsAttachedToHostView = YES;
+  BOOL allWindowsUsePrivateActiveProfile = YES;
+  BOOL allWindowsDisplayOwnedWebContents = YES;
+  for (NSString *windowID in context[@"windows"]) {
+    NSDictionary *window = _privateProbeWindows[windowID];
+    ArdiaCoreWindow *nativeWindowObject = window[@"native"];
+    if (nativeWindowObject.activeProfile != profile) allWindowsUsePrivateActiveProfile = NO;
+    for (NSString *tabID in window[@"tabIDs"]) {
+      ArdiaCoreTab *tab = _privateProbeTabs[tabID][@"tab"];
+      NSURL *tabURL = [NSURL URLWithString:tab.url ?: @""];
+      tabCount++;
+      if (!tab || ![[nativeWindowObject tabsForProfile:profile] containsObject:tab])
+        allTabsInNativeProfileBrowser = NO;
+      if (!tab.view || tab.view.superview != nativeWindowObject.hostView)
+        allTabsAttachedToHostView = NO;
+      if (!tab.view || tab.view.hidden || tab.view.window != nativeWindowObject.window ||
+          nativeWindowObject.hostView.subviews.count != 1 ||
+          nativeWindowObject.hostView.subviews.firstObject != tab.view)
+        allWindowsDisplayOwnedWebContents = NO;
+      BOOL loopback = [tabURL.host isEqualToString:@"127.0.0.1"];
+      if (!tab || tab.closed || tab.loading || !loopback) allTabsLoaded = NO;
+      if (!loopback) allTabsAuthoredLoopbackURL = NO;
+      if (tab.loading) anyTabLoading = YES;
+    }
+    NSWindow *nativeWindow = [window[@"native"] window];
+    if (!nativeWindow || nativeWindow.isVisible) allHidden = NO;
+  }
+  NSString *sourceProfileID = context[@"sourceProfileID"];
+  NSDictionary *lease = _privateProbeSourceLeases[sourceProfileID];
+  return @{@"sourceIsRegular": @(!source.destroyed && !source.offTheRecord),
+           @"contextIsPrivate": @(!profile.destroyed && profile.offTheRecord),
+           @"contextDistinct": @(profile != source),
+           @"windowCount": @([context[@"windows"] count]), @"tabCount": @(tabCount),
+           @"allWindowsHidden": @(allHidden), @"allTabsLoaded": @(allTabsLoaded),
+           @"allTabsAuthoredLoopbackURL": @(allTabsAuthoredLoopbackURL),
+           @"anyTabLoading": @(anyTabLoading),
+           @"allTabsInNativeProfileBrowser": @(allTabsInNativeProfileBrowser),
+           @"allTabsAttachedToHostView": @(allTabsAttachedToHostView),
+           @"allWindowsUsePrivateActiveProfile": @(allWindowsUsePrivateActiveProfile),
+           @"allWindowsDisplayOwnedWebContents": @(allWindowsDisplayOwnedWebContents),
+           @"pendingWindowCount": @([(NSSet *)context[@"pendingWindows"] count]),
+           @"pendingReleaseRejected": context[@"pendingReleaseRejected"] ?: @NO,
+           @"sourceLeaseOwnsContext": @([lease[@"contextIDs"] containsObject:contextID]),
+           @"profileToken": [NSString stringWithFormat:@"%p", profile],
+           @"profileAlive": @(!profile.destroyed),
+           @"noPendingFactory": @([(NSDictionary *)lease[@"pending"] count] == 0)};
+}
+
+- (NSDictionary *)normalProbeSelectionAuditForTabID:(NSString *)tabID {
+  if (![self privateProbeEnabled]) return @{};
+  ArdiaCoreTab *tab = _tabs[tabID];
+  ARCNativeWindowState *state = [self stateForTabID:tabID];
+  NSView *view = tab.view;
+  NSWindow *window = state.native.window;
+  __block NSUInteger visibleTabViewCount = 0;
+  [_tabs enumerateKeysAndObjectsUsingBlock:^(NSString *identity, ArdiaCoreTab *ownedTab, BOOL *stop) {
+    if (ownedTab.view && ProbeViewIsVisibleInWindow(ownedTab.view, window)) visibleTabViewCount++;
+  }];
+  BOOL primaryWindow = state && [state.identity isEqualToString:_primaryWindowID];
+  BOOL selectedID = state && [state.selectedTabID isEqualToString:tabID];
+  BOOL activeProfile = state && tab && state.native.activeProfile == tab.profile;
+  BOOL liveTab = tab && !tab.closed;
+  BOOL nativeProfileOwnsTab = state && tab &&
+    [[state.native tabsForProfile:tab.profile] containsObject:tab];
+  BOOL selected = primaryWindow && selectedID && activeProfile && liveTab && nativeProfileOwnsTab &&
+    !state.closed && !state.closing && !_closingBrowser;
+  BOOL attached = selected && view && state.native.hostView &&
+    (view == state.native.hostView || [view isDescendantOf:state.native.hostView]);
+  BOOL visible = selected && ProbeViewIsVisibleInWindow(view, window);
+  BOOL displayed = visible && attached && visibleTabViewCount == 1;
+  return @{@"selectedNativeTab": @(selected), @"displayedNativeWebContents": @(displayed),
+           @"primaryWindow": @(primaryWindow), @"selectedID": @(selectedID),
+           @"activeProfile": @(activeProfile), @"liveTab": @(liveTab),
+           @"nativeProfileOwnsTab": @(nativeProfileOwnsTab),
+           @"selectedViewAttached": @(attached), @"selectedViewVisible": @(visible),
+           @"visibleNativeViewCount": @(visibleTabViewCount),
+           @"nativeTabToken": tab ? [NSString stringWithFormat:@"%p", tab] : @"missing"};
+}
+
+- (BOOL)releasePrivateProbeContextID:(NSString *)contextID {
+  NSMutableDictionary *context = _privateProbeContexts[contextID];
+  if (![self privateProbeEnabled] || !context || [context[@"windows"] count] != 0) return NO;
+  ArdiaCoreProfile *profile = context[@"profile"];
+  if (!profile || !profile.offTheRecord ||
+      [(NSSet *)context[@"pendingWindows"] count] != 0) return NO;
+  NSString *sourceProfileID = context[@"sourceProfileID"];
+  NSMutableDictionary *lease = _privateProbeSourceLeases[sourceProfileID];
+  if (!lease || ![lease[@"contextIDs"] containsObject:contextID]) return NO;
+  [_privateProbeContexts removeObjectForKey:contextID];
+  [lease[@"contextIDs"] removeObject:contextID];
+  if (![lease[@"contextIDs"] count] && ![lease[@"pending"] count]) {
+    [_privateProbeSourceLeases removeObjectForKey:sourceProfileID];
+    if (!profile.destroyed) [_engine releaseProfile:profile];
+  }
+  return YES;
 }
 
 - (BOOL)openTabID:(NSString *)tabID profileID:(NSString *)profileID url:(NSString *)url
@@ -596,6 +1021,14 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
 - (void)window:(ArdiaCoreWindow *)window didInsertTab:(ArdiaCoreTab *)tab
         opener:(ArdiaCoreTab *)opener disposition:(NSString *)disposition {
   ARCNativeWindowState *state = [self stateForWindow:window];
+  if (!state) {
+    for (NSDictionary *privateWindow in _privateProbeWindows.allValues) {
+      if (privateWindow[@"native"] != window) continue;
+      for (NSString *tabID in privateWindow[@"tabIDs"]) {
+        if (_privateProbeTabs[tabID][@"tab"] == tab) return;
+      }
+    }
+  }
   if (!state || state.closing || state.closed || _closingBrowser) {
     dispatch_async(dispatch_get_main_queue(), ^{ [tab closeNow]; });
     return;
@@ -1089,13 +1522,38 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
 }
 - (BOOL)windowShouldClose:(ArdiaCoreWindow *)window {
   ARCNativeWindowState *state = [self stateForWindow:window];
-  if (!state || state.closed) return NO;
+  if (!state) {
+    for (NSString *identity in _privateProbeWindows) {
+      NSMutableDictionary *entry = _privateProbeWindows[identity];
+      if (entry[@"native"] != window) continue;
+      if ([_privateProbeCancelledCloses containsObject:identity]) {
+        [_privateProbeCancelledCloses removeObject:identity];
+        entry[@"closing"] = @NO;
+        return NO;
+      }
+      entry[@"closing"] = @YES;
+      return YES;
+    }
+    return NO;
+  }
+  if (state.closed) return NO;
   state.closing = YES;
   [self invalidateExternalRequestsForTabID:nil windowID:state.identity];
   return YES;
 }
 - (void)windowDidCancelClose:(ArdiaCoreWindow *)window {
   ARCNativeWindowState *state = [self stateForWindow:window];
+  if (!state) {
+    for (NSMutableDictionary *entry in _privateProbeWindows.allValues) {
+      if (entry[@"native"] != window) continue;
+      entry[@"closing"] = @NO;
+      void (^completion)(BOOL) = entry[@"closeCompletion"];
+      entry[@"closeCompletion"] = nil;
+      if (completion) completion(NO);
+      return;
+    }
+    return;
+  }
   if (!state.closed) state.closing = NO;
 }
 

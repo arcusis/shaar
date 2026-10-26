@@ -19,6 +19,8 @@ final class EngineProbe {
   private let awaitAbruptTermination: Bool
   private let savedTabCapacityMode: Bool
   private let externalAppConsentMode: Bool
+  private let privateWindowMode: Bool
+  private let privateWindowRunID: String?
   private let expectedAfterTermination: BrowserSession?
   private let output: URL
   private var checks: [String] = []
@@ -54,7 +56,7 @@ final class EngineProbe {
     bitwardenOnboardingControl: Bool, probeTLS: ProbeTLSConfiguration?,
     bitwardenVaultCredentials: VaultProbeCredentials?,
     awaitAbruptTermination: Bool, expectAbruptRecovery: Bool, savedTabCapacityMode: Bool,
-    externalAppConsentMode: Bool
+    externalAppConsentMode: Bool, privateWindowMode: Bool, privateWindowRunID: String?
   ) throws {
     self.root = root
     self.fixture = fixture
@@ -66,6 +68,8 @@ final class EngineProbe {
     self.awaitAbruptTermination = awaitAbruptTermination
     self.savedTabCapacityMode = savedTabCapacityMode
     self.externalAppConsentMode = externalAppConsentMode
+    self.privateWindowMode = privateWindowMode
+    self.privateWindowRunID = privateWindowRunID
     expectedAfterTermination =
       expectAbruptRecovery ? try AbruptProbeCheckpoint.expectedSession(root: root) : nil
     self.output = output
@@ -147,14 +151,27 @@ final class EngineProbe {
       let expectAbruptRecovery = arguments.contains("--probe-expect-abrupt-recovery")
       let savedTabCapacityMode = arguments.contains("--probe-saved-tab-capacity")
       let externalAppConsentMode = arguments.contains("--probe-external-app-consent")
+      let privateWindowMode = arguments.contains("--probe-private-window")
+      let privateWindowRunID = privateWindowMode ? try value("--probe-private-window-run-id") : nil
+      guard
+        !privateWindowMode
+          || UUID(uuidString: privateWindowRunID ?? "")?.uuidString == privateWindowRunID
+      else {
+        throw ProbeFailure("Private window fixture run identity is malformed.")
+      }
       let noLaunchGuard = arguments.contains("--ardia-test-external-protocol-no-launch")
       let conflictingFlags = [
         "--bitwarden", "--bitwarden-onboarding-control", "--bitwarden-vault",
         "--probe-fixture-tls", "--probe-await-abrupt-termination", "--probe-expect-abrupt-recovery",
         "--probe-saved-tab-capacity",
+        "--probe-private-window",
       ]
       guard externalAppConsentMode == noLaunchGuard,
-        !externalAppConsentMode || !conflictingFlags.contains(where: arguments.contains)
+        !externalAppConsentMode || !conflictingFlags.contains(where: arguments.contains),
+        !privateWindowMode
+          || !conflictingFlags.filter({ $0 != "--probe-private-window" }).contains(
+            where: arguments.contains),
+        !privateWindowMode || (!externalAppConsentMode && !noLaunchGuard)
       else { throw ProbeFailure("Invalid engine probe mode flags.") }
       guard !bitwardenOnboardingControl || includeBitwarden,
         probeTLS == nil || (!awaitAbruptTermination && !expectAbruptRecovery),
@@ -179,7 +196,8 @@ final class EngineProbe {
         probeTLS: probeTLS, bitwardenVaultCredentials: bitwardenVaultCredentials,
         awaitAbruptTermination: awaitAbruptTermination,
         expectAbruptRecovery: expectAbruptRecovery, savedTabCapacityMode: savedTabCapacityMode,
-        externalAppConsentMode: externalAppConsentMode)
+        externalAppConsentMode: externalAppConsentMode, privateWindowMode: privateWindowMode,
+        privateWindowRunID: privateWindowRunID)
       probe.runtime.onReady = { [weak probe] in
         guard let probe else { return }
         Task {
@@ -369,6 +387,34 @@ final class EngineProbe {
           rejected = true
         }
         try expect(rejected, "live tab cannot be reassigned to another profile")
+      }
+      if privateWindowMode {
+        guard
+          let alphaSpace = store.session.spaces.first(where: {
+            $0.tabs.contains { $0.id.uuidString == tabA }
+          }), let alphaTab = UUID(uuidString: tabA)
+        else { throw ProbeFailure("Private fixture lost normal Alpha selection target.") }
+        store.perform(.space(alphaSpace.id))
+        store.perform(.tab(space: alphaSpace.id, tab: alphaTab))
+        var nativeAlphaSelected = false
+        for _ in 0..<100 {
+          let selection = runtime.normalProbeSelectionAudit(forTabID: tabA)
+          nativeAlphaSelected =
+            selection["selectedNativeTab"] as? Bool == true
+            && selection["displayedNativeWebContents"] as? Bool == true
+          if nativeAlphaSelected { break }
+          try await Task.sleep(for: .milliseconds(100))
+        }
+        try expect(
+          nativeAlphaSelected, "store selects live normal Alpha WebContents before private fixture")
+        let before = store.session
+        let privateProbe = PrivateWindowProbe(
+          runtime: runtime, root: root, fixture: fixture, phase: phase,
+          sourceA: profileA, sourceB: profileB, normalTab: tabA,
+          runID: privateWindowRunID!)
+        checks += try await privateProbe.run()
+        try expect(
+          store.session == before, "private fixture leaves normal model and selection unchanged")
       }
       for iteration in 0..<20 {
         let isA = iteration.isMultiple(of: 2)
@@ -643,9 +689,11 @@ final class EngineProbe {
     }
     let report: [String: Any] = [
       "phase": phase, "passed": passed, "chromiumVersion": runtime.chromiumVersion,
-      "probeMode": externalAppConsentMode
-        ? ExternalAppConsentProbe.mode
-        : savedTabCapacityMode ? SavedTabCapacityFixture.mode : "full-fixture",
+      "probeMode": privateWindowMode
+        ? PrivateWindowProbe.mode
+        : externalAppConsentMode
+          ? ExternalAppConsentProbe.mode
+          : savedTabCapacityMode ? SavedTabCapacityFixture.mode : "full-fixture",
       "savedTabCapacityOnly": savedTabCapacityMode,
       "savedTabCapacityProbe": savedTabCapacityMode,
       "savedTabCapacityRunID": capacityRunID,
@@ -655,6 +703,8 @@ final class EngineProbe {
       "externalAppConsentOnly": externalAppConsentMode,
       "externalAppConsentProbe": externalAppConsentMode,
       "externalAppConsentRunID": externalAppEvidence?.runID as Any? ?? NSNull(),
+      "privateWindowOnly": privateWindowMode,
+      "privateWindowProbe": privateWindowMode,
       "fixtureTLSProbe": probeTLS != nil,
       "abruptRecoveryProbe": expectedAfterTermination != nil,
       "localFixturesPassed": localFixturesPassed,
@@ -669,11 +719,13 @@ final class EngineProbe {
         ? SavedTabCapacityFixture.scope
         : externalAppConsentMode
           ? ExternalAppConsentProbe.scope
-          : includeBitwarden
-            ? (bitwardenVaultCredentials == nil
-              ? "Disposable fixtures plus a real Bitwarden store probe. See separate Bitwarden reports for passed and failed stages. No vault or Workspace credentials entered."
-              : "Redacted Bitwarden vault control probe. firstClickAcceptancePassed remains false.")
-            : "Disposable account and component-loaded MV3 fixtures. Store installation, Google Workspace and Bitwarden are not tested."
+          : privateWindowMode
+            ? "Owned private-window fixture composed with normal engine fixture. No real account or vendor service acceptance."
+            : includeBitwarden
+              ? (bitwardenVaultCredentials == nil
+                ? "Disposable fixtures plus a real Bitwarden store probe. See separate Bitwarden reports for passed and failed stages. No vault or Workspace credentials entered."
+                : "Redacted Bitwarden vault control probe. firstClickAcceptancePassed remains false.")
+              : "Disposable account and component-loaded MV3 fixtures. Store installation, Google Workspace and Bitwarden are not tested."
         ,
     ]
     do {

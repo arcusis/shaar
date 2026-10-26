@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import signal
 import shutil
+import socket
 import struct
 import subprocess
 import tempfile
@@ -412,6 +413,28 @@ EXTERNAL_APP_CONSENT_CLEANUP_KEYS = {
     'mode', 'scope', 'phase', 'runID', 'engineClosed', 'primaryWindowClosed',
     'routerClientCount', 'pendingRequests', 'passed',
 }
+PRIVATE_WINDOW_MODE = 'private-window-owned-engine-fixture'
+PRIVATE_WINDOW_SCOPE = (
+    'Owned hidden native windows on synthetic loopback origin. No real accounts, vendor endpoints, '
+    'product UI, or physical/company acceptance tested.'
+)
+PRIVATE_WINDOW_CHECKS = (
+    'freshMarkedRoot', 'sourceProfileAccepted', 'unknownSourceRejected', 'otrSourceRejected',
+    'malformedContextRejected',
+    'normalProfileIDCollisionRejected', 'normalWindowIDCollisionRejected',
+    'normalTabIDCollisionRejected',
+    'sameSourcePendingCallbacksShareOTR',
+    'releaseDuringPendingWindowCreationRejected',
+    'nativePrivateTabOwnedByActiveWebContents',
+    'hiddenWindowsRemainUnordered',
+    'sameSourceWindowsShareCookiesAndLocalStorage', 'sameSourceSessionStorageIsTabLocal',
+    'differentSourceContextsIsolated', 'closingOneSharedWindowRetainsOther',
+    'closeCancellationRetainsOwnership',
+    'normalDocumentAndStorageRemainLive', 'normalHistoryIncludesAuthoredVisit',
+    'normalHistoryExcludesPrivateVisitsBeforeClose', 'normalHistoryExcludesPrivateVisitsAfterClose',
+    'lastCloseReopenClearsPrivateData', 'normalSelectionUnchanged', 'staleContextRejected',
+    'closedWindowRejected', 'cleanupChildrenClosed', 'cleanupContextsRetired',
+)
 
 
 def argument_parser():
@@ -426,12 +449,15 @@ def argument_parser():
                       help="Run only the owned 1440-saved-tab capacity probe in both phases")
     mode.add_argument("--external-app-consent", action="store_true",
                       help="Run only the external-app consent probe with native no-launch guard")
+    mode.add_argument("--private-window", action="store_true",
+                      help="Compose owned native OTR windows with both normal engine fixture phases")
     return parser
 
 
 def build_engine_probe_arguments(executable, root, fixture_url, phase, *, include_bitwarden,
                                  onboarding_control, abrupt, saved_tab_capacity,
-                                 external_app_consent=False):
+                                 external_app_consent=False, private_window=False,
+                                 private_window_run_id=None):
     arguments = [str(executable), "--engine-probe", "--probe-data-dir", str(root),
                  "--probe-url", fixture_url, "--probe-phase", phase,
                  "--probe-output", str(root / f"{phase}.json")]
@@ -446,7 +472,106 @@ def build_engine_probe_arguments(executable, root, fixture_url, phase, *, includ
         arguments.append('--probe-saved-tab-capacity')
     if external_app_consent:
         arguments.extend(('--probe-external-app-consent', '--ardia-test-external-protocol-no-launch'))
+    if private_window:
+        if not isinstance(private_window_run_id, str):
+            raise RuntimeError('Private window mode requires a run identity')
+        arguments.append('--probe-private-window')
+        arguments.extend(('--probe-private-window-run-id', private_window_run_id))
     return arguments
+
+
+def validate_private_window_report(root, phase, report, exit_code):
+    path = root / f'{phase}-private-window.json'
+    try:
+        evidence = json.loads(path.read_text())
+    except json.JSONDecodeError as error:
+        raise RuntimeError(f'Malformed private-window report: {path.name}') from error
+    if not isinstance(evidence, dict):
+        raise RuntimeError(f'Private-window report must be a JSON object: {path.name}')
+    checks = evidence.get('checks')
+    cleanup = evidence.get('cleanup')
+    run_id = evidence.get('runID')
+    try:
+        canonical_run = isinstance(run_id, str) and str(uuid.UUID(run_id)).upper() == run_id
+    except ValueError:
+        canonical_run = False
+    digest = evidence.get('historyPathDigest')
+    if (exit_code != 0 or not isinstance(report, dict)
+            or report.get('phase') != phase or report.get('passed') is not True
+            or report.get('probeMode') != PRIVATE_WINDOW_MODE
+            or report.get('privateWindowOnly') is not True
+            or report.get('privateWindowProbe') is not True
+            or report.get('savedTabCapacityOnly') is not False
+            or report.get('externalAppConsentOnly') is not False
+            or report.get('bitwardenStoreProbe') is not False
+            or report.get('fixtureTLSProbe') is not False
+            or type(evidence.get('schema')) is not int or evidence['schema'] != 1
+            or evidence.get('mode') != PRIVATE_WINDOW_MODE or evidence.get('phase') != phase
+            or not canonical_run or evidence.get('passed') is not True
+            or type(evidence.get('requiredCheckCount')) is not int
+            or evidence['requiredCheckCount'] != len(PRIVATE_WINDOW_CHECKS)
+            or type(evidence.get('checkCount')) is not int
+            or not isinstance(checks, dict) or set(checks) != set(PRIVATE_WINDOW_CHECKS)
+            or evidence['checkCount'] != len(checks)
+            or evidence['checkCount'] != evidence['requiredCheckCount']
+            or type(evidence.get('historyEntryCount')) is not int
+            or evidence['historyEntryCount'] <= 0
+            or evidence.get('historyQuerySucceeded') is not True
+            or any(type(checks.get(name)) is not bool or checks[name] is not True for name in PRIVATE_WINDOW_CHECKS)
+            or not isinstance(digest, str) or len(digest) != 64
+            or any(character not in '0123456789abcdef' for character in digest)
+            or not isinstance(cleanup, dict) or cleanup.get('windowsRemaining') != 0
+            or cleanup.get('contextsRemaining') != 0 or cleanup.get('passed') is not True
+            or evidence.get('scope') != PRIVATE_WINDOW_SCOPE
+            or report.get('localFixturesPassed') is not True):
+        raise RuntimeError(f'{phase} private-window evidence has failed or mismatched checks/cleanup')
+    return evidence
+
+
+def record_private_window_summary(root, *, listener_closed, child_receipts, proof_directory):
+    summaries = []
+    for phase in ('initial', 'restart'):
+        report = json.loads((root / f'{phase}.json').read_text())
+        evidence = json.loads((root / f'{phase}-private-window.json').read_text())
+        try:
+            validate_private_window_report(root, phase, report, report.get('exitCode', 0))
+            validation_error = None
+        except RuntimeError:
+            validation_error = 'failed-or-mismatched-private-window-evidence'
+        summaries.append(dict(
+            phase=phase, passed=validation_error is None,
+            runID=evidence.get('runID'),
+            checkCount=evidence.get('checkCount'),
+            requiredCheckCount=evidence.get('requiredCheckCount'),
+            validationError=validation_error,
+            cleanup=evidence.get('cleanup')))
+    if summaries[0]['runID'] != summaries[1]['runID']:
+        raise RuntimeError('Private-window phases have different run identities')
+    children_closed = (
+        len(child_receipts) == 2
+        and [item.get('phase') for item in child_receipts] == ['initial', 'restart']
+        and all(item.get('childExited') is True and item.get('processGroupAbsent') is True
+                for item in child_receipts))
+    passed = all(phase['passed'] for phase in summaries) and listener_closed is True and children_closed
+    summary = dict(schema=1, mode=PRIVATE_WINDOW_MODE, phases=summaries,
+                   childProcesses=child_receipts, listenerClosed=listener_closed,
+                   passed=passed, proofDirectory=str(proof_directory), scope=PRIVATE_WINDOW_SCOPE)
+    (root / 'private-window-summary.json').write_text(json.dumps(summary, indent=2, sort_keys=True) + '\n')
+    proof_directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    for phase in ('initial', 'restart'):
+        shutil.copy2(root / f'{phase}-private-window.json', proof_directory)
+    shutil.copy2(root / 'private-window-summary.json', proof_directory)
+    return summary
+
+
+def verify_fixture_listener_closed(port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            listener.bind(('127.0.0.1', port))
+        except OSError:
+            return False
+    return True
 
 
 def _reject_external_consent_fields(value):
@@ -722,9 +847,12 @@ def main(argv=None):
         print('SAVED TAB CAPACITY ONLY: no account, MV3, or full baseline claims', flush=True)
     if options.external_app_consent:
         print('EXTERNAL APP CONSENT ONLY: owned loopback; native no-launch guard enabled', flush=True)
+    if options.private_window:
+        print('PRIVATE WINDOW FIXTURE: owned hidden OTR windows; synthetic loopback only', flush=True)
     root = Path(tempfile.mkdtemp(prefix="arcusis-engine-probe-"))
     (root / ".arcusis-probe").write_text("arcusis-engine-probe-v1\n")
     (root / ".arcusis-probe").chmod(0o600)
+    private_window_run_id = str(uuid.uuid4()).upper() if options.private_window else None
     shutil.copytree("Tests/Fixtures/ProfileExtension", root / "Extension")
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Fixture)
     threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -733,6 +861,7 @@ def main(argv=None):
     probe_env = dict(os.environ, ARDIA_DOWNLOADS_DIR=str(root / 'Downloads'))
     print(f"Probe evidence: {root}", flush=True)
     failures = []
+    private_window_children = []
     try:
         for phase in ("initial", "restart"):
             output = root / f"{phase}.json"
@@ -741,27 +870,46 @@ def main(argv=None):
                 include_bitwarden=include_bitwarden,
                 onboarding_control=options.bitwarden_onboarding_control,
                 abrupt=abrupt, saved_tab_capacity=options.saved_tab_capacity,
-                external_app_consent=options.external_app_consent)
+                external_app_consent=options.external_app_consent,
+                private_window=options.private_window,
+                private_window_run_id=private_window_run_id)
             with (root / f"{phase}.log").open("w") as log:
                 process = subprocess.Popen(arguments, stdout=log, stderr=log, start_new_session=True, env=probe_env)
                 try:
                     if abrupt and phase == 'initial':
                         terminate_at_checkpoint(process, root, timeout=90, settle_seconds=35 if options.abrupt_control else 0)
                         continue
-                    timeout = (180 if options.external_app_consent else 180 if options.saved_tab_capacity
+                    timeout = (240 if options.private_window else 180 if options.external_app_consent else 180 if options.saved_tab_capacity
                                else 170 if include_bitwarden else 90)
                     code = wait_for_probe(process, root, phase, timeout=timeout)
                 except subprocess.TimeoutExpired:
                     raise RuntimeError(f"{phase} timed out; see {root}/{phase}.log")
                 finally:
                     stop_probe(process)
+            if options.private_window:
+                group_deadline = time.monotonic() + 10
+                while process_group_exists(process.pid) and time.monotonic() < group_deadline:
+                    time.sleep(0.05)
+                private_window_children.append(dict(
+                    phase=phase, pid=process.pid, childExited=process.poll() is not None,
+                    processGroupAbsent=not process_group_exists(process.pid)))
             if not output.exists():
                 raise RuntimeError(f"{phase} failed ({code}); see {root}/{phase}.log")
             report = json.loads(output.read_text())
+            if options.private_window:
+                report['exitCode'] = code
+                output.write_text(json.dumps(report, indent=2, sort_keys=True) + '\n')
             if options.saved_tab_capacity:
                 validate_saved_tab_capacity_report(root, phase, report, code)
             elif options.external_app_consent:
                 validate_external_app_consent_report(root, phase, report, code)
+            elif options.private_window:
+                try:
+                    validate_private_window_report(root, phase, report, code)
+                except RuntimeError as error:
+                    failure = f"{phase}: {error}"
+                    failures.append(failure)
+                    print(f"FAILED {failure}", flush=True)
             else:
                 validate_full_fixture_report(report, phase)
             if include_bitwarden and phase == 'restart':
@@ -775,9 +923,11 @@ def main(argv=None):
                 if include_bitwarden and report.get("localFixturesPassed") and (root / f"{phase}-bitwarden.json").exists():
                     # Preserve cold-install failure while also collecting restart evidence.
                     continue
+                if options.private_window:
+                    continue
                 raise RuntimeError(failure)
             print(f"{phase}: {len(report['checks'])} checks passed; Chromium {report['chromiumVersion']}", flush=True)
-        if failures:
+        if failures and not options.private_window:
             raise RuntimeError("; ".join(failures))
         if options.saved_tab_capacity:
             record_saved_tab_capacity_summary(root)
@@ -786,6 +936,14 @@ def main(argv=None):
     finally:
         server.shutdown()
         server.server_close()
+    if options.private_window:
+        summary = record_private_window_summary(
+            root, listener_closed=verify_fixture_listener_closed(server.server_port),
+            child_receipts=private_window_children,
+            proof_directory=Path('build/private-window-evidence') / private_window_run_id)
+        print(f"Redacted private evidence: {summary['proofDirectory']}", flush=True)
+        if not summary['passed']:
+            raise RuntimeError('; '.join(failures) or 'Private-window cleanup gate failed')
 
 
 if __name__ == "__main__":

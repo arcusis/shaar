@@ -65,6 +65,7 @@ struct BrowserSidebar: View {
   @State private var targetedSection: String?
   @State private var targetedFolder: UUID?
   @State private var hoveredTabID: UUID?
+  @State private var newTabIsHovered = false
   @State private var recentDownloadsIsOpen = false
   @State private var recentDownloadsPinnedOpen = false
   @State private var recentDownloadsAnchorHovered = false
@@ -253,7 +254,9 @@ struct BrowserSidebar: View {
     return ScrollViewReader { tabScroll in
       ScrollView {
         LazyVStack(alignment: .leading, spacing: 4) {
-          sectionDropTarget(pinned: true)
+          sectionDropTarget(
+            pinned: true,
+            height: store.session.selectedSpace.pinnedItems().isEmpty ? 8 : 12)
           if let folderDraft, folderDraft.parentID == nil { folderDraftRow(depth: 0) }
           ForEach(store.session.selectedSpace.pinnedItems()) { item in
             switch item {
@@ -287,11 +290,28 @@ struct BrowserSidebar: View {
           Button {
             store.showCommand()
           } label: {
-            Label("New tab", systemImage: "plus")
-              .font(.system(size: 13))
-              .foregroundStyle(.secondary)
-              .padding(10)
+            HStack(spacing: 9) {
+              Image(systemName: "plus")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+              Text("New tab")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+              Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .frame(minHeight: 32)
+            .contentShape(Rectangle())
+            .background(
+              newTabIsHovered ? Color.primary.opacity(0.07) : .clear,
+              in: RoundedRectangle(cornerRadius: 8)
+            )
           }
+          .accessibilityLabel("New tab")
+          .onHover { newTabIsHovered = $0 }
+          .animation(sidebarReduceMotion ? nil : .easeOut(duration: 0.12), value: newTabIsHovered)
           .contextMenu {
             Button("Reopen last closed tab") { store.reopenLastClosedTab() }
               .disabled(!store.canReopenClosedTab)
@@ -710,12 +730,14 @@ struct BrowserSidebar: View {
     _ = store.addCurrentPageAsFavorite()
   }
 
-  private func sectionDropTarget(pinned: Bool, isFooter: Bool = false) -> some View {
+  private func sectionDropTarget(
+    pinned: Bool, isFooter: Bool = false, height: CGFloat = 12
+  ) -> some View {
     let space = store.session.selectedSpace.id
     let zone = isFooter ? "end" : pinned ? "pinned" : "tabs"
     return Color.clear
       .frame(maxWidth: .infinity)
-      .frame(height: isFooter ? 32 : 12)
+      .frame(height: isFooter ? 32 : height)
       .contentShape(Rectangle())
       .overlay(alignment: .center) {
         if targetedSection == zone {

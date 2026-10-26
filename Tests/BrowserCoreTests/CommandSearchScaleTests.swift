@@ -225,6 +225,49 @@ private func stableID(_ suffix: Int) -> UUID {
     results.map(\.action) == selectedTabs.prefix(10).map { .tab(space: selectedID, tab: $0.id) })
 }
 
+@Test func nestedPinnedAndUnpinnedTabsKeepSearchOrderingAndPaths() throws {
+  let profile = BrowserProfile(name: "Personal")
+  let spaceID = stableID(9_250)
+  let rootID = stableID(9_251)
+  let childID = stableID(9_252)
+  let folders = [
+    BrowserFolder(id: rootID, name: "Projects"),
+    BrowserFolder(id: childID, name: "Infrastructure", parentID: rootID),
+  ]
+  let tabs = [
+    BrowserTab(
+      id: stableID(9_253), url: URL(string: "https://example.com/root")!, title: "Root",
+      isPinned: true),
+    BrowserTab(
+      id: stableID(9_254), url: URL(string: "https://example.com/child")!, title: "Child",
+      isPinned: true, folderID: childID),
+    BrowserTab(
+      id: stableID(9_255), url: URL(string: "https://example.com/other")!, title: "Other",
+      isPinned: true, folderID: rootID),
+    BrowserTab(
+      id: stableID(9_256), url: URL(string: "https://example.com/unpinned")!, title: "Unpinned"),
+  ]
+  let space = BrowserSpace(
+    id: spaceID, profileID: profile.id, name: "Main", symbol: "house", tint: .ocean,
+    tabs: tabs, folders: folders)
+  let session = try BrowserSession(
+    profiles: [profile], spaces: [space], selectedSpaceID: spaceID)
+
+  let emptyResults = CommandSearch.results(for: "", in: session)
+  #expect(
+    Array(emptyResults.prefix(tabs.count).map(\.action))
+      == space.orderedTabs.map { .tab(space: spaceID, tab: $0.id) })
+  #expect(
+    emptyResults.dropFirst(tabs.count).map(\.action)
+      == folders.map { .folder(space: spaceID, folder: $0.id) } + [.space(spaceID)])
+  let nestedMatch = CommandSearch.results(for: "Infrastructure", in: session)
+  #expect(
+    nestedMatch.first
+      == CommandResult(
+        title: "Child", subtitle: "Main · Projects / Infrastructure · example.com",
+        symbol: "rectangle.on.rectangle", action: .tab(space: spaceID, tab: stableID(9_254))))
+}
+
 @Test func nineResultsReserveFinalOpenSlot() throws {
   let profile = BrowserProfile(name: "Personal")
   let spaceID = stableID(9300)
@@ -245,4 +288,55 @@ private func stableID(_ suffix: Int) -> UUID {
   #expect(
     results.dropLast().map(\.action) == tabs.prefix(9).map { .tab(space: spaceID, tab: $0.id) })
   #expect(results.last?.action == .open(searchURL("Example domain")))
+}
+
+@Test func commandSearchReleaseBenchmarkWhenRequested() throws {
+  guard ProcessInfo.processInfo.environment["COMMAND_SEARCH_BENCHMARK"] == "1" else { return }
+
+  for tabCount in [300, 2_400] {
+    let workload = commandSearchBenchmarkSession(tabCount: tabCount)
+    for (label, query) in [("empty", ""), ("late", "late-match-token")] {
+      for _ in 0..<20 {
+        _ = CommandSearch.results(for: query, in: workload)
+      }
+      var samples: [Double] = []
+      for _ in 0..<nineBenchmarkBatches {
+        let start = ContinuousClock.now
+        for _ in 0..<40 {
+          _ = CommandSearch.results(for: query, in: workload)
+        }
+        let elapsed = start.duration(to: .now)
+        samples.append(
+          Double(elapsed.components.seconds) * 1_000
+            + Double(elapsed.components.attoseconds) / 1e15)
+      }
+      samples.sort()
+      print(
+        "COMMAND_SEARCH_BENCHMARK tabs=\(tabCount) query=\(label) warmup=20 batches=9 iterations=40 median_batch_ms=\(samples[samples.count / 2])"
+      )
+    }
+  }
+}
+
+private let nineBenchmarkBatches = 9
+
+private func commandSearchBenchmarkSession(tabCount: Int) -> BrowserSession {
+  let profile = BrowserProfile(name: "Personal")
+  let spaceID = stableID(30_000 + tabCount)
+  let folders = (0..<12).map { index in
+    BrowserFolder(
+      id: stableID(31_000 + index), name: "Folder \(index)",
+      parentID: index == 0 ? nil : stableID(30_999 + index))
+  }
+  let tabs = (0..<tabCount).map { index in
+    BrowserTab(
+      id: stableID(40_000 + index),
+      url: URL(string: "https://example.com/page-\(index)")!,
+      title: index == tabCount - 1 ? "late-match-token" : "Page \(index)",
+      isPinned: true, folderID: folders[index % folders.count].id)
+  }
+  let space = BrowserSpace(
+    id: spaceID, profileID: profile.id, name: "Main", symbol: "house", tint: .ocean,
+    tabs: tabs, folders: folders)
+  return try! BrowserSession(profiles: [profile], spaces: [space], selectedSpaceID: spaceID)
 }

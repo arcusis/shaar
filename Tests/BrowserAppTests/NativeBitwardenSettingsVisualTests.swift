@@ -56,18 +56,23 @@ struct NativeBitwardenSettingsVisualTests {
             capture.alpha.transparentPixels == 0
           else { throw NativeSettingsCaptureError.nonOpaqueImage }
           let visibleText = recognized.joined(separator: " ")
-          guard visibleText.contains("Native Bitwarden"),
-            visibleText.contains(
+          // Vision can capitalize lowercase glyphs differently across appearances.
+          // Require every expected word, while ignoring OCR-only case changes.
+          func containsVisibleText(_ required: String) -> Bool {
+            visibleText.range(of: required, options: .caseInsensitive) != nil
+          }
+          guard containsVisibleText("Native Bitwarden"),
+            containsVisibleText(
               "Vault sessions belong to this Profile and are shared by its Spaces.")
           else { throw NativeSettingsCaptureError.requiredTextMissing }
           if !controller.sdkAvailable, state == .enabled,
-            !visibleText.contains("Native Bitwarden is unavailable in this build.")
+            !containsVisibleText("Native Bitwarden is unavailable in this build.")
           {
             throw NativeSettingsCaptureError.requiredTextMissing
           }
           if state == .customServer,
-            !visibleText.contains("Enter the HTTPS service base URL.")
-              || !visibleText.contains("Apply")
+            !containsVisibleText("Enter the HTTPS service base URL.")
+              || !containsVisibleText("Apply")
           {
             throw NativeSettingsCaptureError.requiredTextMissing
           }

@@ -1,0 +1,761 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 8174c7e..517762c 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -745,6 +745,7 @@ dependencies = [
+  "bitwarden-uniffi-error",
+  "bitwarden-uuid",
+  "chrono",
++ "futures",
+  "getrandom 0.2.17",
+  "getrandom 0.3.4",
+  "getrandom 0.4.3",
+diff --git a/crates/bitwarden-core/Cargo.toml b/crates/bitwarden-core/Cargo.toml
+index bc46808..ff5d428 100644
+--- a/crates/bitwarden-core/Cargo.toml
++++ b/crates/bitwarden-core/Cargo.toml
+@@ -86,6 +86,7 @@ chrono = { workspace = true, features = ["std"] }
+ getrandom2 = { package = "getrandom", version = "0.2", optional = true }
+ getrandom3 = { package = "getrandom", version = "0.3", optional = true }
+ getrandom4 = { package = "getrandom", version = "0.4", optional = true }
++futures = { workspace = true }
+ http = { workspace = true }
+ rand = { workspace = true }
+ reqwest = { workspace = true }
+diff --git a/crates/bitwarden-core/src/client/builder.rs b/crates/bitwarden-core/src/client/builder.rs
+index a4b4904..ddfc6b1 100644
+--- a/crates/bitwarden-core/src/client/builder.rs
++++ b/crates/bitwarden-core/src/client/builder.rs
+@@ -175,6 +175,10 @@ impl ClientBuilder {
+                 external_http_client,
+                 key_store,
+                 #[cfg(feature = "internal")]
++                org_replacement_lock: futures::lock::Mutex::new(()),
++                #[cfg(feature = "internal")]
++                require_fresh_org_sync: std::sync::atomic::AtomicBool::new(false),
++                #[cfg(feature = "internal")]
+                 security_state: RwLock::new(None),
+                 #[cfg(feature = "internal")]
+                 state_bridge: StateBridge::new(),
+diff --git a/crates/bitwarden-core/src/client/client.rs b/crates/bitwarden-core/src/client/client.rs
+index a97e138..6e69217 100644
+--- a/crates/bitwarden-core/src/client/client.rs
++++ b/crates/bitwarden-core/src/client/client.rs
+@@ -50,6 +50,19 @@ impl Client {
+         ClientBuilder::new()
+     }
+ 
++    /// Require a fresh organization sync before organization keys can be used.
++    /// Call on each new client before unlocking. This opt-in disables offline organization
++    /// rehydration, but preserves personal crypto. It cannot be reversed on this client.
++    #[cfg(feature = "internal")]
++    pub async fn require_fresh_organization_sync(&self) {
++        let _guard = self.internal.org_replacement_lock.lock().await;
++        self.internal
++            .require_fresh_org_sync
++            .store(true, std::sync::atomic::Ordering::SeqCst);
++        // Clearing an empty set is infallible.
++        let _ = self.internal.initialize_org_crypto(Vec::new());
++    }
++
+     /// Whether the client is in Gov Mode.
+     ///
+     /// Inferred today from the configured API URL host. PM-36520 will
+diff --git a/crates/bitwarden-core/src/client/encryption_settings.rs b/crates/bitwarden-core/src/client/encryption_settings.rs
+index 36dcf92..b6b9274 100644
+--- a/crates/bitwarden-core/src/client/encryption_settings.rs
++++ b/crates/bitwarden-core/src/client/encryption_settings.rs
+@@ -6,8 +6,6 @@ use bitwarden_crypto::SymmetricCryptoKey;
+ use bitwarden_crypto::UnsignedSharedKey;
+ use bitwarden_error::bitwarden_error;
+ use thiserror::Error;
+-#[cfg(feature = "internal")]
+-use tracing::info;
+ 
+ #[cfg(any(feature = "secrets", feature = "internal"))]
+ use crate::OrganizationId;
+@@ -34,6 +32,10 @@ pub enum EncryptionSettingsError {
+     #[error("Wrong Pin")]
+     WrongPin,
+ 
++    /// Organization security state could not be persisted.
++    #[error("Unable to persist organization security state")]
++    OrganizationKeyStateUpdateFailed,
++
+     /// No PIN envelope is available, e.g. an AfterFirstUnlock PIN after an app restart
+     #[error("Pin unlock not available")]
+     PinUnlockNotAvailable,
+@@ -90,49 +92,40 @@ impl EncryptionSettings {
+     pub(crate) fn set_org_keys(
+         org_enc_keys: Vec<(OrganizationId, UnsignedSharedKey)>,
+         store: &KeyStore<KeySlotIds>,
++        install: bool,
+     ) -> Result<(), EncryptionSettingsError> {
+         use crate::key_management::PrivateKeySlotId;
+ 
+         let mut ctx = store.context_mut();
+ 
+-        // FIXME: [PM-11690] - Early abort to handle private key being corrupt
++        // Clear first, including for empty input and errors. User and private keys survive.
++        ctx.retain_symmetric_keys(|key_ref| {
++            !matches!(key_ref, SymmetricKeySlotId::Organization(_))
++        });
+         if org_enc_keys.is_empty() {
+-            info!("No organization keys to set");
+             return Ok(());
+         }
+-
+         if !ctx.has_private_key(PrivateKeySlotId::UserPrivateKey) {
+-            info!("User private key is missing, cannot set organization keys");
+             return Err(MissingPrivateKeyError.into());
+         }
+ 
+-        // Make sure we only keep the keys given in the arguments and not any of the previous
+-        // ones, which might be from organizations that the user is no longer a part of anymore
+-        ctx.retain_symmetric_keys(|key_ref| {
+-            !matches!(key_ref, SymmetricKeySlotId::Organization(_))
+-        });
+-
+-        info!("Decrypting organization keys");
+-        // Decrypt the org keys with the private key
++        // Stage every decrypted key in the context before exposing any organization slot.
++        let mut staged = Vec::with_capacity(org_enc_keys.len());
+         for (org_id, org_enc_key) in org_enc_keys {
+-            let _span =
+-                tracing::span!(tracing::Level::INFO, "decapsulate_org_key", org_id = %org_id)
+-                    .entered();
+-            match org_enc_key.decapsulate(PrivateKeySlotId::UserPrivateKey, &mut ctx) {
+-                Err(e) => {
+-                    tracing::error!("Failed to decapsulate organization key: {}", e);
+-                    return Err(e.into());
+-                }
+-                Ok(org_symmetric_key) => {
+-                    tracing::info!(
+-                        org_id = %org_id,
+-                        "Successfully decapsulated organization key for org",
+-                    );
+-                    ctx.persist_symmetric_key(
+-                        org_symmetric_key,
+-                        SymmetricKeySlotId::Organization(org_id),
+-                    )?;
+-                }
++            let key = org_enc_key.decapsulate(PrivateKeySlotId::UserPrivateKey, &mut ctx)?;
++            staged.push((org_id, key));
++        }
++        if !install {
++            return Ok(());
++        }
++        for (org_id, key) in staged {
++            if let Err(error) =
++                ctx.persist_symmetric_key(key, SymmetricKeySlotId::Organization(org_id))
++            {
++                ctx.retain_symmetric_keys(|slot| {
++                    !matches!(slot, SymmetricKeySlotId::Organization(_))
++                });
++                return Err(error.into());
+             }
+         }
+ 
+diff --git a/crates/bitwarden-core/src/client/internal.rs b/crates/bitwarden-core/src/client/internal.rs
+index 2c990c7..d3a1581 100644
+--- a/crates/bitwarden-core/src/client/internal.rs
++++ b/crates/bitwarden-core/src/client/internal.rs
+@@ -117,6 +117,10 @@ pub struct InternalClient {
+ 
+     pub(super) key_store: KeyStore<KeySlotIds>,
+     #[cfg(feature = "internal")]
++    pub(crate) org_replacement_lock: futures::lock::Mutex<()>,
++    #[cfg(feature = "internal")]
++    pub(crate) require_fresh_org_sync: std::sync::atomic::AtomicBool,
++    #[cfg(feature = "internal")]
+     pub(crate) security_state: RwLock<Option<SecurityState>>,
+ 
+     // TODO: Flags have been migrated to Setting but this will have to stay temporarily until the
+@@ -388,13 +392,43 @@ impl InternalClient {
+         EncryptionSettings::new_single_org_key(organization_id, key, &self.key_store);
+     }
+ 
++    /// Restore persisted organization keys only for clients using the legacy offline policy.
++    /// Strict clients must obtain organization keys from a fresh successful sync.
++    #[cfg(feature = "internal")]
++    pub async fn restore_persisted_org_crypto(&self) -> Result<(), EncryptionSettingsError> {
++        let _guard = self.org_replacement_lock.lock().await;
++        if self
++            .require_fresh_org_sync
++            .load(std::sync::atomic::Ordering::SeqCst)
++        {
++            return self.initialize_org_crypto(Vec::new());
++        }
++        let repo = self
++            .state_registry
++            .get::<super::persisted_state::OrganizationSharedKey>()
++            .map_err(|_| EncryptionSettingsError::OrganizationKeyStateUpdateFailed)?;
++        let keys = repo
++            .list()
++            .await
++            .map_err(|_| EncryptionSettingsError::OrganizationKeyStateUpdateFailed)?;
++        self.initialize_org_crypto(keys.into_iter().map(|key| (key.org_id, key.key)).collect())
++    }
++
++    #[cfg(feature = "internal")]
++    pub(crate) fn validate_org_crypto(
++        &self,
++        org_keys: Vec<(OrganizationId, UnsignedSharedKey)>,
++    ) -> Result<(), EncryptionSettingsError> {
++        EncryptionSettings::set_org_keys(org_keys, &self.key_store, false)
++    }
++
+     #[allow(missing_docs)]
+     #[cfg(feature = "internal")]
+     pub fn initialize_org_crypto(
+         &self,
+         org_keys: Vec<(OrganizationId, UnsignedSharedKey)>,
+     ) -> Result<(), EncryptionSettingsError> {
+-        EncryptionSettings::set_org_keys(org_keys, &self.key_store)
++        EncryptionSettings::set_org_keys(org_keys, &self.key_store, true)
+     }
+ 
+     #[cfg(feature = "internal")]
+diff --git a/crates/bitwarden-core/src/key_management/crypto.rs b/crates/bitwarden-core/src/key_management/crypto.rs
+index 6a194e6..5848212 100644
+--- a/crates/bitwarden-core/src/key_management/crypto.rs
++++ b/crates/bitwarden-core/src/key_management/crypto.rs
+@@ -429,26 +429,39 @@ pub(super) async fn initialize_org_crypto(
+     client: &Client,
+     req: InitOrgCryptoRequest,
+ ) -> Result<(), EncryptionSettingsError> {
++    // Serialize replacements for clones of this client. No key-store context crosses await.
++    let _guard = client.internal.org_replacement_lock.lock().await;
+     let organization_keys: Vec<_> = req.organization_keys.into_iter().collect();
+-    client
+-        .internal
+-        .initialize_org_crypto(organization_keys.clone())?;
+-
+-    // Persist org keys for rehydration
+-    if let Ok(repo) = client
++    client.internal.initialize_org_crypto(Vec::new())?;
++    let repo = client
+         .internal
+         .state_registry
+         .get::<OrganizationSharedKey>()
+-    {
+-        for (org_id, key) in organization_keys {
+-            if let Err(e) = repo
+-                .set(org_id, OrganizationSharedKey { org_id, key })
+-                .await
+-            {
+-                tracing::warn!("Failed to persist org key for {org_id}: {e}");
+-            }
+-        }
+-    }
++        .map_err(|_| EncryptionSettingsError::OrganizationKeyStateUpdateFailed)?;
++    repo.remove_all()
++        .await
++        .map_err(|_| EncryptionSettingsError::OrganizationKeyStateUpdateFailed)?;
++
++    // Validate before writing without exposing any organization slots.
++    client
++        .internal
++        .validate_org_crypto(organization_keys.clone())?;
++    let entries = organization_keys
++        .iter()
++        .map(|(org_id, key)| {
++            (
++                *org_id,
++                OrganizationSharedKey {
++                    org_id: *org_id,
++                    key: key.clone(),
++                },
++            )
++        })
++        .collect();
++    repo.set_bulk(entries)
++        .await
++        .map_err(|_| EncryptionSettingsError::OrganizationKeyStateUpdateFailed)?;
++    client.internal.initialize_org_crypto(organization_keys)?;
+ 
+     Ok(())
+ }
+diff --git a/crates/bitwarden-core/src/key_management/crypto_client.rs b/crates/bitwarden-core/src/key_management/crypto_client.rs
+index d3db408..379becf 100644
+--- a/crates/bitwarden-core/src/key_management/crypto_client.rs
++++ b/crates/bitwarden-core/src/key_management/crypto_client.rs
+@@ -59,6 +59,10 @@ impl CryptoClient {
+ 
+     /// Initialization method for the organization crypto. Needs to be called after
+     /// `initialize_user_crypto` but before any other crypto operations.
++    ///
++    /// Hosts must supply keys from a completed paired sync snapshot. If sync fails or its
++    /// payload is malformed before this method is called, invalidate vault access before
++    /// another fill; this method cannot revoke keys for a request it never receives.
+     pub async fn initialize_org_crypto(
+         &self,
+         req: InitOrgCryptoRequest,
+diff --git a/crates/bitwarden-core/src/key_management/mod.rs b/crates/bitwarden-core/src/key_management/mod.rs
+index d8ac686..953bb14 100644
+--- a/crates/bitwarden-core/src/key_management/mod.rs
++++ b/crates/bitwarden-core/src/key_management/mod.rs
+@@ -150,3 +150,6 @@ pub fn create_test_crypto_with_user_and_org_key(
+ 
+     store
+ }
++
++#[cfg(all(test, feature = "test-fixtures", feature = "internal"))]
++mod org_replacement_tests;
+diff --git a/crates/bitwarden-core/src/key_management/org_replacement_tests.rs b/crates/bitwarden-core/src/key_management/org_replacement_tests.rs
+new file mode 100644
+index 0000000..9773d1a
+--- /dev/null
++++ b/crates/bitwarden-core/src/key_management/org_replacement_tests.rs
+@@ -0,0 +1,295 @@
++use crate::{
++    Client, OrganizationId,
++    client::{
++        encryption_settings::{EncryptionSettings, EncryptionSettingsError},
++        persisted_state::OrganizationSharedKey,
++        test_accounts::test_bitwarden_com_account,
++    },
++    key_management::{PrivateKeySlotId, SymmetricKeySlotId, crypto::InitOrgCryptoRequest},
++};
++use bitwarden_crypto::{
++    Decryptable, PrimitiveEncryptable, SymmetricKeyAlgorithm, UnsignedSharedKey,
++};
++use bitwarden_state::repository::{Repository, RepositoryError};
++use bitwarden_test::MemoryRepository;
++use std::sync::{
++    Arc,
++    atomic::{AtomicBool, Ordering},
++};
++
++struct ControlledRepo {
++    inner: MemoryRepository<OrganizationSharedKey>,
++    fail_remove: AtomicBool,
++    fail_set: AtomicBool,
++}
++impl Default for ControlledRepo {
++    fn default() -> Self {
++        Self {
++            inner: MemoryRepository::default(),
++            fail_remove: AtomicBool::new(false),
++            fail_set: AtomicBool::new(false),
++        }
++    }
++}
++async fn yield_once() {
++    let mut yielded = false;
++    futures::future::poll_fn(|cx| {
++        if yielded {
++            std::task::Poll::Ready(())
++        } else {
++            yielded = true;
++            cx.waker().wake_by_ref();
++            std::task::Poll::Pending
++        }
++    })
++    .await
++}
++#[async_trait::async_trait]
++impl Repository<OrganizationSharedKey> for ControlledRepo {
++    async fn get(
++        &self,
++        k: OrganizationId,
++    ) -> Result<Option<OrganizationSharedKey>, RepositoryError> {
++        self.inner.get(k).await
++    }
++    async fn list(&self) -> Result<Vec<OrganizationSharedKey>, RepositoryError> {
++        self.inner.list().await
++    }
++    async fn set(
++        &self,
++        k: OrganizationId,
++        v: OrganizationSharedKey,
++    ) -> Result<(), RepositoryError> {
++        self.inner.set(k, v).await
++    }
++    async fn set_bulk(
++        &self,
++        v: Vec<(OrganizationId, OrganizationSharedKey)>,
++    ) -> Result<(), RepositoryError> {
++        yield_once().await;
++        if self.fail_set.load(Ordering::SeqCst) {
++            if let Some((id, entry)) = v.first() {
++                self.inner.set(*id, entry.clone()).await?;
++            }
++            return Err(RepositoryError::Internal("injected".into()));
++        }
++        self.inner.set_bulk(v).await
++    }
++    async fn remove(&self, k: OrganizationId) -> Result<(), RepositoryError> {
++        self.inner.remove(k).await
++    }
++    async fn remove_bulk(&self, k: Vec<OrganizationId>) -> Result<(), RepositoryError> {
++        self.inner.remove_bulk(k).await
++    }
++    async fn remove_all(&self) -> Result<(), RepositoryError> {
++        yield_once().await;
++        if self.fail_remove.load(Ordering::SeqCst) {
++            return Err(RepositoryError::Internal("injected".into()));
++        }
++        self.inner.remove_all().await
++    }
++}
++fn has(client: &Client, id: OrganizationId) -> bool {
++    client
++        .internal
++        .get_key_store()
++        .context()
++        .has_symmetric_key(SymmetricKeySlotId::Organization(id))
++}
++fn req(keys: Vec<(OrganizationId, UnsignedSharedKey)>) -> InitOrgCryptoRequest {
++    InitOrgCryptoRequest {
++        organization_keys: keys.into_iter().collect(),
++    }
++}
++
++fn generated_org_key(client: &Client) -> UnsignedSharedKey {
++    let store = client.internal.get_key_store();
++    let mut ctx = store.context_mut();
++    #[allow(deprecated)]
++    let public = ctx
++        .dangerous_get_private_key(PrivateKeySlotId::UserPrivateKey)
++        .unwrap()
++        .to_public_key();
++    let key = ctx.make_symmetric_key(SymmetricKeyAlgorithm::XAes256Gcm);
++    UnsignedSharedKey::encapsulate(key, &public, &ctx).unwrap()
++}
++
++#[tokio::test]
++async fn replacement_security_regression() {
++    let client = Client::init_test_account(test_bitwarden_com_account()).await;
++    let other = Client::init_test_account(test_bitwarden_com_account()).await;
++    let repo = client
++        .internal
++        .state_registry
++        .get::<OrganizationSharedKey>()
++        .unwrap();
++    let original = repo.list().await.unwrap().pop().unwrap();
++    let old = original.org_id;
++    let next = OrganizationId::new_v4();
++    let generated = generated_org_key(&client);
++    let personal = {
++        let store = client.internal.get_key_store();
++        let mut ctx = store.context_mut();
++        "personal"
++            .encrypt(&mut ctx, SymmetricKeySlotId::User)
++            .unwrap()
++    };
++    let ciphertext = {
++        let store = client.internal.get_key_store();
++        let mut ctx = store.context_mut();
++        "organization"
++            .encrypt(&mut ctx, SymmetricKeySlotId::Organization(old))
++            .unwrap()
++    };
++    client
++        .crypto()
++        .initialize_org_crypto(req(vec![(next, generated.clone())]))
++        .await
++        .unwrap();
++    assert!(!has(&client, old));
++    assert!(has(&client, next));
++    assert!(has(&other, old));
++    assert!(repo.get(old).await.unwrap().is_none());
++    assert!(repo.get(next).await.unwrap().is_some());
++    {
++        let store = client.internal.get_key_store();
++        let mut ctx = store.context_mut();
++        let revoked: Result<String, _> =
++            ciphertext.decrypt(&mut ctx, SymmetricKeySlotId::Organization(old));
++        assert!(revoked.is_err());
++        let plain: String = personal
++            .decrypt(&mut ctx, SymmetricKeySlotId::User)
++            .unwrap();
++        assert_eq!(plain, "personal");
++    }
++    client
++        .crypto()
++        .initialize_org_crypto(req(vec![]))
++        .await
++        .unwrap();
++    assert!(!has(&client, next));
++    assert!(repo.list().await.unwrap().is_empty());
++    assert!(has(&other, old));
++    client
++        .crypto()
++        .initialize_org_crypto(req(vec![(old, original.key.clone())]))
++        .await
++        .unwrap();
++    let uninitialized = Client::new_test(None);
++    assert!(
++        uninitialized
++            .crypto()
++            .initialize_org_crypto(req(vec![(old, original.key.clone())]))
++            .await
++            .is_err()
++    );
++    assert!(!has(&uninitialized, old));
++    let bad = UnsignedSharedKey::Rsa2048_OaepSha256_B64 { data: vec![0] };
++    assert!(
++        EncryptionSettings::set_org_keys(
++            vec![(next, original.key.clone()), (old, bad.clone())],
++            client.internal.get_key_store(),
++            true
++        )
++        .is_err()
++    );
++    assert!(!has(&client, old));
++    assert!(!has(&client, next));
++    assert!(
++        client
++            .crypto()
++            .initialize_org_crypto(req(vec![(next, original.key), (old, bad)]))
++            .await
++            .is_err()
++    );
++    assert!(repo.list().await.unwrap().is_empty());
++    assert!(!has(&client, old));
++    assert!(!has(&client, next));
++    let plain: String = {
++        let store = client.internal.get_key_store();
++        personal
++            .decrypt(&mut store.context_mut(), SymmetricKeySlotId::User)
++            .unwrap()
++    };
++    assert_eq!(plain, "personal");
++}
++
++#[tokio::test]
++async fn repository_failure_and_concurrent_replacement() {
++    let client = Client::init_test_account(test_bitwarden_com_account()).await;
++    let original = client
++        .internal
++        .state_registry
++        .get::<OrganizationSharedKey>()
++        .unwrap()
++        .list()
++        .await
++        .unwrap()
++        .pop()
++        .unwrap();
++    let repo = Arc::new(ControlledRepo::default());
++    client
++        .internal
++        .state_registry
++        .register_client_managed(repo.clone());
++    repo.set(original.org_id, original.clone()).await.unwrap();
++    client.require_fresh_organization_sync().await;
++    repo.fail_remove.store(true, Ordering::SeqCst);
++    assert!(matches!(
++        client.crypto().initialize_org_crypto(req(vec![])).await,
++        Err(EncryptionSettingsError::OrganizationKeyStateUpdateFailed)
++    ));
++    assert!(!has(&client, original.org_id));
++    assert!(repo.get(original.org_id).await.unwrap().is_some());
++    let recreated = Client::init_test_account(test_bitwarden_com_account()).await;
++    recreated
++        .internal
++        .state_registry
++        .register_client_managed(repo.clone());
++    recreated.require_fresh_organization_sync().await;
++    recreated
++        .internal
++        .restore_persisted_org_crypto()
++        .await
++        .unwrap();
++    assert!(!has(&recreated, original.org_id));
++    assert!(
++        recreated
++            .internal
++            .get_key_store()
++            .context()
++            .has_symmetric_key(SymmetricKeySlotId::User)
++    );
++    repo.fail_remove.store(false, Ordering::SeqCst);
++    repo.fail_set.store(true, Ordering::SeqCst);
++    assert!(matches!(
++        client
++            .crypto()
++            .initialize_org_crypto(req(vec![(original.org_id, original.key.clone())]))
++            .await,
++        Err(EncryptionSettingsError::OrganizationKeyStateUpdateFailed)
++    ));
++    assert!(!has(&client, original.org_id));
++    assert!(repo.get(original.org_id).await.unwrap().is_some());
++    client
++        .internal
++        .restore_persisted_org_crypto()
++        .await
++        .unwrap();
++    assert!(!has(&client, original.org_id));
++    repo.fail_set.store(false, Ordering::SeqCst);
++    let a = OrganizationId::new_v4();
++    let b = OrganizationId::new_v4();
++    let crypto_a = client.crypto();
++    let crypto_b = client.crypto();
++    let (ra, rb) = futures::join!(
++        crypto_a.initialize_org_crypto(req(vec![(a, original.key.clone())])),
++        crypto_b.initialize_org_crypto(req(vec![(b, original.key)]))
++    );
++    ra.unwrap();
++    rb.unwrap();
++    let rows = repo.list().await.unwrap();
++    assert_eq!(rows.len(), 1);
++    assert_eq!(has(&client, a), rows[0].org_id == a);
++    assert_eq!(has(&client, b), rows[0].org_id == b);
++}
+diff --git a/crates/bitwarden-uniffi/src/crypto.rs b/crates/bitwarden-uniffi/src/crypto.rs
+index 70253b3..c7acea6 100644
+--- a/crates/bitwarden-uniffi/src/crypto.rs
++++ b/crates/bitwarden-uniffi/src/crypto.rs
+@@ -23,7 +23,10 @@ impl CryptoClient {
+     }
+ 
+     /// Initialization method for the organization crypto. Needs to be called after
+-    /// `initialize_user_crypto` but before any other crypto operations.
++    /// `initialize_user_crypto` but before any other crypto operations. Supply keys from a
++    /// completed paired sync snapshot. If sync fails or its payload is malformed before this
++    /// call, invalidate vault access before another fill; this method cannot revoke keys for
++    /// a request it never receives.
+     pub async fn initialize_org_crypto(&self, req: InitOrgCryptoRequest) -> Result<()> {
+         Ok(self.0.initialize_org_crypto(req).await?)
+     }
+diff --git a/crates/bitwarden-uniffi/src/lib.rs b/crates/bitwarden-uniffi/src/lib.rs
+index 83e5542..1d75339 100644
+--- a/crates/bitwarden-uniffi/src/lib.rs
++++ b/crates/bitwarden-uniffi/src/lib.rs
+@@ -83,6 +83,11 @@ impl Client {
+         Self(password_manager, sync)
+     }
+ 
++    /// Opt in before unlock on each new client. Organization access requires a fresh sync.
++    pub async fn require_fresh_organization_sync(&self) {
++        self.0.0.require_fresh_organization_sync().await;
++    }
++
+     /// Actual server sync and typed encrypted cipher snapshot for this client.
+     pub fn sync(&self) -> Arc<sync::SyncClientBinding> {
+         self.1.clone()
+diff --git a/crates/bitwarden-unlock/src/unlock_client.rs b/crates/bitwarden-unlock/src/unlock_client.rs
+index c53c66d..2c4d638 100644
+--- a/crates/bitwarden-unlock/src/unlock_client.rs
++++ b/crates/bitwarden-unlock/src/unlock_client.rs
+@@ -2,9 +2,7 @@
+ 
+ use bitwarden_core::Client;
+ #[cfg(feature = "cli")]
+-use bitwarden_core::client::persisted_state::{
+-    ACCOUNT_CRYPTO_STATE, OrganizationSharedKey, SESSION_PROTECTED_USER_KEY,
+-};
++use bitwarden_core::client::persisted_state::{ACCOUNT_CRYPTO_STATE, SESSION_PROTECTED_USER_KEY};
+ 
+ use crate::SessionKey;
+ 
+@@ -151,24 +149,12 @@ impl UnlockClient {
+                 UnlockError::Unknown
+             })?;
+ 
+-        let org_keys = state
+-            .get::<OrganizationSharedKey>()
+-            .map_err(|e| {
+-                tracing::error!("Failed to read organization keys repository: {e}");
+-                UnlockError::Unknown
+-            })?
+-            .list()
+-            .await
+-            .map_err(|e| {
+-                tracing::error!("Failed to list organization keys: {e}");
+-                UnlockError::Unknown
+-            })?;
+-
+         self.client
+             .internal
+-            .initialize_org_crypto(org_keys.into_iter().map(|k| (k.org_id, k.key)).collect())
++            .restore_persisted_org_crypto()
++            .await
+             .map_err(|e| {
+-                tracing::error!("Failed to decrypt organization keys: {e}");
++                tracing::error!("Failed to restore organization crypto: {e}");
+                 UnlockError::Unknown
+             })?;
+ 
+@@ -426,6 +412,80 @@ mod tests {
+         );
+     }
+ 
++    #[tokio::test]
++    async fn policy_rehydration_strict_client_ignores_stale_org_keys() {
++        use bitwarden_core::{OrganizationId, client::persisted_state::OrganizationSharedKey};
++        use bitwarden_crypto::UnsignedSharedKey;
++        ensure_platform_info();
++        let (user_key, crypto_state) = make_test_user_crypto();
++        let expected = user_key.to_base64().to_string();
++        let (envelope, session_key) = seal_with_new_session_key(&user_key);
++        let reg = populate_registry_for_unlock(envelope, crypto_state).await;
++        let org_id = OrganizationId::new_v4();
++        // A stale entry must never be used by a newly created strict client.
++        let repo = reg.get::<OrganizationSharedKey>().unwrap();
++        repo.set(
++            org_id,
++            OrganizationSharedKey {
++                org_id,
++                key: UnsignedSharedKey::Rsa2048_OaepSha256_B64 { data: vec![0] },
++            },
++        )
++        .await
++        .unwrap();
++        let client = Client::load_from_state(Arc::new(NoopTokenHandler), reg)
++            .await
++            .unwrap();
++        client.require_fresh_organization_sync().await;
++        client
++            .unlock()
++            .unlock(UnlockMethod::SessionKey(session_key))
++            .await
++            .unwrap();
++        assert_eq!(user_key_base64(&client), expected);
++        assert!(
++            !client
++                .internal
++                .get_key_store()
++                .context()
++                .has_symmetric_key(SymmetricKeySlotId::Organization(org_id))
++        );
++        assert!(repo.get(org_id).await.unwrap().is_some());
++    }
++
++    #[tokio::test]
++    async fn policy_rehydration_legacy_client_attempts_persisted_org_keys() {
++        use bitwarden_core::{OrganizationId, client::persisted_state::OrganizationSharedKey};
++        use bitwarden_crypto::UnsignedSharedKey;
++        ensure_platform_info();
++        let (user_key, crypto_state) = make_test_user_crypto();
++        let (envelope, session_key) = seal_with_new_session_key(&user_key);
++        let reg = populate_registry_for_unlock(envelope, crypto_state).await;
++        let org_id = OrganizationId::new_v4();
++        reg.get::<OrganizationSharedKey>()
++            .unwrap()
++            .set(
++                org_id,
++                OrganizationSharedKey {
++                    org_id,
++                    key: UnsignedSharedKey::Rsa2048_OaepSha256_B64 { data: vec![0] },
++                },
++            )
++            .await
++            .unwrap();
++        let client = Client::load_from_state(Arc::new(NoopTokenHandler), reg)
++            .await
++            .unwrap();
++        assert!(
++            client
++                .unlock()
++                .unlock(UnlockMethod::SessionKey(session_key))
++                .await
++                .is_err()
++        );
++        assert!(is_unlocked(&client));
++    }
++
+     #[tokio::test]
+     async fn unlock_missing_session_protected_user_key_returns_unknown() {
+         ensure_platform_info();

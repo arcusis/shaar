@@ -466,6 +466,33 @@ def validate_refresh_source(sdk: Path, pin: dict, env: dict[str, str]) -> None:
         raise ValueError('refresh changed path mismatch')
 
 
+def validate_refresh_reused_generator(bindgen: Path, pin: dict) -> str:
+    if bindgen.is_symlink() or not bindgen.is_file() or digest(bindgen) != pin['sourceProofBindgenSHA256']:
+        raise ValueError('refresh reused generator provenance mismatch')
+    return digest(bindgen)
+
+
+def build_refresh_generator(sdk: Path, target: Path, generated: Path, dylib: Path,
+                            pin: dict, env: dict[str, str], common: list[str]) -> tuple[str, list[list[str]]]:
+    bindgen = target / pin['target'] / 'release/uniffi-bindgen'
+    if (target.is_symlink() or not target.is_dir() or target.resolve() != target.absolute()
+            or any(path.is_symlink() for path in (bindgen.parent, bindgen.parent.parent))):
+        raise ValueError('fresh refresh target unsafe')
+    if bindgen.exists() or bindgen.is_symlink() or generated.exists() or generated.is_symlink():
+        raise ValueError('fresh refresh generator or output already exists')
+    build = ['cargo', '+1.98.0', 'build', *common, '--package', 'uniffi-bindgen']
+    refresh_command(build, sdk, env)
+    if bindgen.is_symlink() or not bindgen.is_file() or not os.access(bindgen, os.X_OK):
+        raise ValueError('fresh refresh generator missing or unsafe')
+    generator_sha = digest(bindgen)
+    generated.mkdir()
+    generate = [str(bindgen), 'generate', str(dylib), '--language', 'swift', '--no-format', '--out-dir', str(generated)]
+    refresh_command(generate, sdk, env, 900)
+    if bindgen.is_symlink() or digest(bindgen) != generator_sha:
+        raise ValueError('fresh refresh generator changed during execution')
+    return generator_sha, [build, generate]
+
+
 def refresh_main(args: argparse.Namespace) -> int:
     global LOG_DIR
     LOG_DIR = None
@@ -481,6 +508,8 @@ def refresh_main(args: argparse.Namespace) -> int:
     target = out / 'target'
     generated = out / 'generated'
     pkg = out / 'Package'
+    dylib = target / pin['target'] / 'release/libbitwarden_uniffi.dylib'
+    bindgen = target / pin['target'] / 'release/uniffi-bindgen'
     if args.refresh_stage_existing_proof:
         if not out.is_dir() or out.is_symlink() or pkg.exists() or pkg.is_symlink():
             raise ValueError('refresh proof stage output unsafe')
@@ -504,19 +533,27 @@ def refresh_main(args: argparse.Namespace) -> int:
         common = ['--offline', '--locked', '--release', '--jobs', '2', '--manifest-path', str(sdk / 'Cargo.toml'), '--target', pin['target']]
         refresh_command(['cargo', '+1.98.0', 'rustc', *common, '--package', 'bitwarden-uniffi', '--', '-C',
                          'link-arg=-Wl,-install_name,@rpath/libbitwarden_uniffi.dylib'], sdk, build_env)
-        generated.mkdir()
-        refresh_command(['cargo', '+1.98.0', 'run', *common, '--package', 'uniffi-bindgen', '--', 'generate',
-                         str(target / pin['target'] / 'release/libbitwarden_uniffi.dylib'), '--language', 'swift',
-                         '--no-format', '--out-dir', str(generated)], sdk, build_env)
+        if dylib.is_symlink() or not dylib.is_file() or digest(dylib) != pin['sourceProofDylibSHA256']:
+            raise ValueError('fresh refresh dylib provenance mismatch')
+        generator_sha, generator_recipe = build_refresh_generator(sdk, target, generated, dylib, pin, build_env, common)
     validate_refresh_source(sdk, pin, env)
     if target.is_symlink() or not target.is_dir() or target.resolve() != target.absolute():
         raise ValueError('refresh target unsafe')
-    dylib = target / pin['target'] / 'release/libbitwarden_uniffi.dylib'
-    bindgen = target / pin['target'] / 'release/uniffi-bindgen'
     if any(p.is_symlink() or not p.is_file() for p in (dylib, bindgen)):
         raise ValueError('refresh release artifacts missing or unsafe')
-    if digest(dylib) != pin['sourceProofDylibSHA256'] or digest(bindgen) != pin['sourceProofBindgenSHA256']:
-        raise ValueError('refresh release artifact provenance mismatch')
+    if digest(dylib) != pin['sourceProofDylibSHA256']:
+        raise ValueError('refresh release dylib provenance mismatch')
+    if args.refresh_stage_existing_proof:
+        generator_sha = validate_refresh_reused_generator(bindgen, pin)
+        generator_recipe = []
+        generator_environment = {}
+        generator_provenance = 'pinned-reused-proof'
+    else:
+        generator_provenance = 'fresh-source-build'
+        generator_environment = {key: build_env[key] for key in ('CARGO_BUILD_JOBS', 'CARGO_NET_OFFLINE',
+                                  'MACOSX_DEPLOYMENT_TARGET', 'RUSTFLAGS', 'RUSTUP_AUTO_INSTALL', 'RUSTUP_NO_UPDATE_CHECK')}
+        if digest(bindgen) != generator_sha:
+            raise ValueError('fresh refresh generator changed after execution')
     if generated_inventory(generated) != pin['generatedSHA256']:
         raise ValueError('refresh generated bindings mismatch')
     import re
@@ -571,10 +608,16 @@ def refresh_main(args: argparse.Namespace) -> int:
     if refresh_command([str(executable)], out, env, 60).strip() != 'SDK_REFRESH_CANDIDATE_OK':
         raise ValueError('refresh consumer smoke failed')
     validate_refresh_source(sdk, pin, env)
+    if (bindgen.is_symlink() or digest(bindgen) != generator_sha or digest(dylib) != pin['sourceProofDylibSHA256']
+            or generated_inventory(generated) != pin['generatedSHA256']):
+        raise ValueError('refresh build artifacts changed after validation')
     validate_package(pkg, manifest, refresh=True, expected_dylib=pin['sourceProofDylibSHA256'])
     receipt = {'schema': 1, 'accepted': False, 'integration_ready': False, 'consumerSmoke': 'SDK_REFRESH_CANDIDATE_OK',
                'sourceGitTree': pin['candidateGitTree'], 'rustToolchain': pin['rustToolchain'],
-               'dylibSHA256': pin['sourceProofDylibSHA256'], 'packageTreeSHA256': tree_digest(pkg)}
+               'dylibSHA256': pin['sourceProofDylibSHA256'], 'packageTreeSHA256': tree_digest(pkg),
+               'bindgenSHA256': generator_sha, 'bindgenProvenance': generator_provenance,
+               'bindgenRecipe': generator_recipe, 'bindgenBuildEnvironment': generator_environment,
+               'bindgenWorkingDirectory': str(sdk)}
     (out / 'receipt.json').write_text(json.dumps(receipt, sort_keys=True, indent=2) + '\n')
     return 0
 

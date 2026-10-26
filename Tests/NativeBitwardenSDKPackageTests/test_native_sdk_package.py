@@ -423,5 +423,51 @@ class RefreshCandidateTests(unittest.TestCase):
                     module.validate_package(root, changed, refresh=True, expected_dylib=manifest['dylibSHA256'])
 
 
+class RefreshGeneratorProvenanceTests(unittest.TestCase):
+    def test_fresh_build_executes_constructed_tool_and_reuse_requires_pin(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); sdk = root / 'sdk'; sdk.mkdir(); target = root / 'target'; target.mkdir()
+            generated = root / 'generated'; dylib = root / 'sdk.dylib'; write(dylib, 'dylib')
+            bindgen = target / 'aarch64-apple-darwin/release/uniffi-bindgen'
+            pin = {'target': 'aarch64-apple-darwin', 'sourceProofBindgenSHA256': hashlib.sha256(b'historical').hexdigest()}
+            common = ['--offline', '--locked', '--release', '--jobs', '2', '--target', pin['target']]
+            calls = []
+            def command(argv, cwd, env, timeout=3600):
+                calls.append((list(argv), cwd))
+                if argv[:3] == ['cargo', '+1.98.0', 'build']:
+                    bindgen.parent.mkdir(parents=True); bindgen.write_bytes(b'fresh-compiled'); bindgen.chmod(0o755)
+                else:
+                    self.assertEqual(argv[0], str(bindgen)); write(generated / 'Interface.swift', 'generated')
+                return ''
+            with mock.patch.object(module, 'refresh_command', side_effect=command):
+                observed, recipe = module.build_refresh_generator(sdk, target, generated, dylib, pin, {}, common)
+            self.assertEqual(observed, hashlib.sha256(b'fresh-compiled').hexdigest())
+            self.assertEqual(recipe, [call[0] for call in calls])
+            self.assertEqual(calls[0][0], ['cargo', '+1.98.0', 'build', *common, '--package', 'uniffi-bindgen'])
+            self.assertEqual(calls[1][0][0:3], [str(bindgen), 'generate', str(dylib)])
+            with self.assertRaisesRegex(ValueError, 'reused generator provenance'):
+                module.validate_refresh_reused_generator(bindgen, pin)
+            bindgen.write_bytes(b'historical')
+            self.assertEqual(module.validate_refresh_reused_generator(bindgen, pin), pin['sourceProofBindgenSHA256'])
+
+    def test_fresh_refuses_existing_tool_and_tool_changed_during_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); sdk = root / 'sdk'; sdk.mkdir(); target = root / 'target'; generated = root / 'generated'
+            bindgen = target / 'aarch64-apple-darwin/release/uniffi-bindgen'; write(bindgen, 'preexisting'); bindgen.chmod(0o755)
+            pin = {'target': 'aarch64-apple-darwin'}
+            with mock.patch.object(module, 'refresh_command') as command, self.assertRaisesRegex(ValueError, 'already exists'):
+                module.build_refresh_generator(sdk, target, generated, root / 'dylib', pin, {}, [])
+            command.assert_not_called()
+            bindgen.unlink()
+            def mutate(argv, cwd, env, timeout=3600):
+                if argv[:3] == ['cargo', '+1.98.0', 'build']:
+                    bindgen.write_bytes(b'built'); bindgen.chmod(0o755)
+                else:
+                    bindgen.write_bytes(b'changed')
+                return ''
+            with mock.patch.object(module, 'refresh_command', side_effect=mutate), self.assertRaisesRegex(ValueError, 'changed during execution'):
+                module.build_refresh_generator(sdk, target, generated, root / 'dylib', pin, {}, [])
+
+
 if __name__ == '__main__':
     unittest.main()

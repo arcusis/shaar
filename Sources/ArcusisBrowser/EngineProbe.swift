@@ -43,6 +43,7 @@ final class EngineProbe {
     case readingAlpha, readingBeta, ready
   }
   private var bootstrapStage = BootstrapStage.startup
+  private var fixtureStage = "startup"
   private var host: NSHostingView<BrowserWindow>?
 
   private let profileA = "C766672E-AB82-4F84-8ED3-2C6D75AEB1D1"
@@ -213,7 +214,14 @@ final class EngineProbe {
       DispatchQueue.main.asyncAfter(
         deadline: .now()
           + (externalAppConsentMode
-            ? 180 : bitwardenVault ? 900 : includeBitwarden ? 150 : savedTabCapacityMode ? 180 : 75)
+            ? 180
+            : bitwardenVault
+              ? 900
+              : includeBitwarden
+                ? 150
+                : savedTabCapacityMode
+                  ? 180
+                  : privateWindowMode ? 210 : 75)
       ) {
         [weak probe] in
         probe?.finish(error: ProbeFailure("Engine probe timed out."))
@@ -389,6 +397,7 @@ final class EngineProbe {
         try expect(rejected, "live tab cannot be reassigned to another profile")
       }
       if privateWindowMode {
+        fixtureStage = "private-window"
         guard
           let alphaSpace = store.session.spaces.first(where: {
             $0.tabs.contains { $0.id.uuidString == tabA }
@@ -411,11 +420,12 @@ final class EngineProbe {
         let privateProbe = PrivateWindowProbe(
           runtime: runtime, root: root, fixture: fixture, phase: phase,
           sourceA: profileA, sourceB: profileB, normalTab: tabA,
-          runID: privateWindowRunID!)
+          runID: privateWindowRunID!, normalSession: store.session)
         checks += try await privateProbe.run()
         try expect(
           store.session == before, "private fixture leaves normal model and selection unchanged")
       }
+      fixtureStage = "normal-switches"
       for iteration in 0..<20 {
         let isA = iteration.isMultiple(of: 2)
         let tab = isA ? tabA : tabB
@@ -482,61 +492,77 @@ final class EngineProbe {
       try renderShell(name: "\(phase)-command.png")
       store.dismissCommand()
       if let browserEngine {
+        fixtureStage = "Extension"
         checks += try await ExtensionProbe(
           runtime: runtime, engine: browserEngine, store: store,
           root: root, phase: phase
         ).run()
+        fixtureStage = "PageFind"
         checks += try await PageFindProbe(
           runtime: runtime, store: store, root: root, phase: phase
         ).run()
+        fixtureStage = "MediaPermission"
         checks += try await MediaPermissionProbe(
           runtime: runtime, engine: browserEngine, store: store,
           root: root, phase: phase
         ).run()
+        fixtureStage = "Download"
         checks += try await DownloadProbe(
           runtime: runtime, engine: browserEngine, store: store, root: root, phase: phase
         ).run()
+        fixtureStage = "Ordering"
         checks += try await OrderingProbe(
           runtime: runtime, engine: browserEngine, store: store, root: root, phase: phase
         ).run()
+        fixtureStage = "Folder"
         checks += try await FolderProbe(
           runtime: runtime, engine: browserEngine, store: store, root: root, phase: phase
         ).run()
+        fixtureStage = "Reopen"
         checks += try await ReopenProbe(
           runtime: runtime, engine: browserEngine, store: store, root: root, phase: phase
         ).run()
+        fixtureStage = "Library"
         checks += try await LibraryProbe(
           runtime: runtime, engine: browserEngine, store: store, root: root, fixture: fixture,
           phase: phase
         ).run()
+        fixtureStage = "RendererRecovery"
         checks += try await RendererRecoveryProbe(
           runtime: runtime, engine: browserEngine, store: store, root: root, fixture: fixture,
           phase: phase
         ).run()
+        fixtureStage = "NativeWindow"
         checks += try await NativeWindowProbe(
           runtime: runtime, engine: browserEngine, store: store, root: root, fixture: fixture,
           phase: phase
         ).run()
+        fixtureStage = "WindowClient"
         checks += try await WindowClientProbe(
           primary: browserEngine, store: store, root: root, fixture: fixture, phase: phase
         ).run()
+        fixtureStage = "NativeSelection"
         checks += try await NativeSelectionProbe(
           primary: browserEngine, store: store, root: root, fixture: fixture, phase: phase
         ).run()
         for (tab, profile) in [(tabA, profileA), (tabB, profileB), (sharedA, profileA)] {
           try activateRestoredVaultFixture(tab, profileID: profile)
         }
+        fixtureStage = "Workspace"
         checks += try await WorkspaceProbe(
           primary: browserEngine, store: store, root: root, fixture: fixture, phase: phase
         ).run()
+        fixtureStage = "NativeFavorites"
         let nativeFavorites = try NativeFavoritesProbe(
           primary: browserEngine, root: root, fixture: fixture, phase: phase)
         nativeFavoritesProbe = nativeFavorites
         checks += try await nativeFavorites.run()
+        fixtureStage = "NativeHost"
         let nativeHost = try NativeHostProbe(
           primary: browserEngine, store: store, root: root, fixture: fixture, phase: phase)
         nativeHostProbe = nativeHost
         checks += try await nativeHost.run()
+        fixtureStage = "normal-fixtures-complete"
         localFixturesPassed = true
         if let probeTLS {
           checks += try await EngineTLSProbe.run(
@@ -710,6 +736,7 @@ final class EngineProbe {
       "localFixturesPassed": localFixturesPassed,
       "nativeFavoritesPassed": nativeFavoritesProbe?.passed ?? false,
       "bootstrapStage": bootstrapStage.rawValue,
+      "fixtureStage": fixtureStage,
       "checkCount": checks.count,
       "checks": bitwardenVaultCredentials == nil
         ? checks : [],

@@ -4,7 +4,8 @@ import ChromiumBridge
 import SwiftUI
 
 enum BrowserMenuCommand: String, CaseIterable {
-  case newWindow, newTab, search, newSpace, editSpace, closeTab, closeWindow, addFavorite
+  case newWindow, newPrivateWindow, newTab, search, newSpace, editSpace, closeTab, closeWindow,
+    addFavorite
   case reopenClosed, recentlyClosed, bookmarkPage, bookmarks, history, downloads
   case find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload
   case extensions, help, minimizeWindow, zoomWindow, bringAllToFront, settings, quit
@@ -54,6 +55,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
   private let screens: () -> [NSRect]
   let preferences: BrowserPreferencesStore
   private(set) var settingsController: BrowserSettingsController?
+  private var privateHost: PrivateBrowserHost?
   private var claimedPrimary = false
   private var started = false
   private var startupFailed = false
@@ -105,6 +107,17 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     workspace.persistSnapshot()
     let focused = workspace.workspace.focusedWindowID
     for record in workspace.workspace.windows { try attach(record.id, source: nil) }
+    let privateHost = PrivateBrowserHost(
+      runtime: events.runtime, presentsWindows: presentation == .visible,
+      keyWindow: keyWindow,
+      sourceProfileID: { [weak self] in
+        if let privateSource = self?.privateHost?.activeOwner?.sourceProfileID {
+          return privateSource
+        }
+        return self?.activeContext?.store.session.selectedSpace.profileID.uuidString
+      })
+    self.privateHost = privateHost
+    privateHost.installCallbacks()
     events.onWindowRequest = { [weak self] profile, type in
       self?.requestedWindow(profile: profile, type: type)
     }
@@ -143,6 +156,12 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
   func canPerform(_ command: BrowserMenuCommand) -> Bool {
     guard !events.runtime.isQuitting else { return false }
     if command == .newWindow || command == .quit { return true }
+    if command == .newPrivateWindow {
+      return activeContext != nil || privateHost?.hasActiveWindow == true
+    }
+    if privateHost?.hasActiveWindow == true {
+      return privateHost?.canPerform(command) == true
+    }
     if command == .settings {
       guard let context = activeContext else { return true }
       return context.store.sheet == nil && context.window.attachedSheet == nil
@@ -174,6 +193,14 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     }
     if command == .newWindow {
       do { try newWindow(from: activeContext?.id) } catch { report(error) }
+      return
+    }
+    if command == .newPrivateWindow {
+      do { try privateHost?.openWindow() } catch { report(error) }
+      return
+    }
+    if privateHost?.hasActiveWindow == true {
+      privateHost?.perform(command)
       return
     }
     if command == .settings {
@@ -219,7 +246,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     case .bringAllToFront:
       for browser in contexts.values { browser.window.orderFront(nil) }
       context.window.makeKeyAndOrderFront(nil)
-    case .newWindow, .settings, .quit: break
+    case .newWindow, .newPrivateWindow, .settings, .quit: break
     }
   }
 
@@ -228,6 +255,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
   }
 
   func detach() {
+    privateHost?.detach()
+    privateHost = nil
     events.onWindowRequest = nil
     events.onWindowShowRequest = nil
     events.onNewTabWillAdopt = nil
@@ -526,6 +555,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     add(.quit, "Quit Arcusis Browser", "q", to: app)
     let file = section("File")
     add(.newWindow, "New window", "n", to: file)
+    add(.newPrivateWindow, "New Private Window", "n", to: file, modifiers: [.command, .shift])
     add(.newTab, "New tab", "t", to: file)
     add(.search, "Search or enter address", "l", to: file)
     add(.closeWindow, "Close window", "w", to: file, modifiers: [.command, .shift])

@@ -1,4 +1,5 @@
 import AppKit
+import BrowserCore
 import ChromiumBridge
 import CryptoKit
 import Foundation
@@ -13,10 +14,17 @@ final class PrivateWindowProbe {
   private let sourceB: String
   private let normalTab: String
   private let runID: String
+  private let normalSession: BrowserSession
   private var checks: [String: Bool] = [:]
   private var historyPathDigest: String?
   private var historyEntryCount = 0
   private var historyQuerySucceeded = false
+  private var productWorkspaceSHA256: String?
+  private var productScreenshotSHA256: String?
+  private var productRendererScreenshotSHA256: String?
+  private var productRendererViewportAudit: [String: Any] = [:]
+  private var productRendererCaptureOutcome = "not-attempted"
+  private var productLifecycleBlocker: String?
   private var stage = "preflight"
   private var lastDocumentAudit: [String: Any] = [:]
   private var privateEvaluationShape = "unavailable"
@@ -63,11 +71,31 @@ final class PrivateWindowProbe {
     "normalHistoryExcludesPrivateVisitsBeforeClose", "normalHistoryExcludesPrivateVisitsAfterClose",
     "lastCloseReopenClearsPrivateData", "normalSelectionUnchanged", "staleContextRejected",
     "closedWindowRejected", "cleanupChildrenClosed", "cleanupContextsRetired",
+    "productHostOwnsPrivateNativeWindow", "productCommandTUsesPrivateOpaqueSearch",
+    "productCommandLTargetsCurrentPrivateTab", "productPrivateFocusUsesOwnedTab",
+    "productPrivateNavigationReloadBackForwardCallbacks",
+    "productSameSourceWindowsShareContext", "productDifferentSourceWindowsIsolateContext",
+    "productCancelledCloseRetainsOwner", "productNormalHistoryExcludesPrivateVisit",
+    "productCancelledQuitRetainsLivePrivateLease",
+    "productNativeQuitCancellationReturned", "productCancelledQuitRestoredRuntimeState",
+    "productCancelledQuitRetainedPrivateWindow", "productCancelledQuitRetainedPrivateContext",
+    "productCancelledQuitRetainedNormalWindow",
+    "productFinalCloseAfterCancelledQuitReleasesLease",
+    "productFinalPrivateWindowCloseRequestedWhileQuitAndReleasedAfterConfirmation",
+    "productWorkspaceBytesUnchanged", "productWorkspaceBytesUnchangedAfterClose",
+    "productFinalCloseReleasesOwners", "productWeakStoreReleasedAfterConfirmedClose",
+    "productWeakHostingReleasedAfterConfirmedClose",
+    "productBeforeUnloadUsesRendererUserActivation",
+    "productNativeCDPHoldConfirmedPending",
+    "productNativeBeforeUnloadHandlerFired",
+    "productBeforeUnloadRemovedBeforeFinalFixtureQuit",
+    "productCancelledQuitRetiresOnlyConfirmedPrivateLease",
   ]
 
   init(
     runtime: ARCChromiumRuntime, root: URL, fixture: URL, phase: String,
-    sourceA: String, sourceB: String, normalTab: String, runID: String
+    sourceA: String, sourceB: String, normalTab: String, runID: String,
+    normalSession: BrowserSession
   ) {
     self.runtime = runtime
     self.root = root
@@ -77,6 +105,7 @@ final class PrivateWindowProbe {
     self.sourceB = sourceB
     self.normalTab = normalTab
     self.runID = runID
+    self.normalSession = normalSession
   }
 
   func run() async throws -> [String] {
@@ -87,6 +116,12 @@ final class PrivateWindowProbe {
     } catch {
       await cleanupOwnedObjects()
       restorePrivateCallbackAudit()
+      if productLifecycleBlocker?.isEmpty != false {
+        productLifecycleBlocker = error.localizedDescription
+      }
+      for name in Self.checkNames where name.hasPrefix("product") {
+        if checks[name] == nil { checks[name] = false }
+      }
       try? writeReport(runID: runID)
       throw error
     }
@@ -344,9 +379,21 @@ final class PrivateWindowProbe {
       runtime.privateProbeAudit(forContextID: contextA) == nil
       && runtime.privateProbeAudit(forContextID: contextB) == nil
       && runtime.privateProbeAudit(forContextID: contextC) == nil
+    let product = try await PrivateProductHostProbe(
+      runtime: runtime, root: root, fixture: fixture, phase: phase,
+      runID: runID, normalSession: normalSession, sourceA: sourceA, sourceB: sourceB
+    ).run()
+    for (name, passed) in product.checks { checks[name] = passed }
+    productWorkspaceSHA256 = product.workspaceSHA256
+    productScreenshotSHA256 = product.screenshotSHA256
+    productRendererScreenshotSHA256 = product.rendererScreenshotSHA256
+    productRendererViewportAudit = product.rendererViewportAudit
+    productRendererCaptureOutcome = product.rendererCaptureOutcome
+    productLifecycleBlocker = product.lifecycleBlocker
     try writeReport(runID: runID)
     guard Self.checkNames.allSatisfy({ checks[$0] == true }), !Self.checkNames.isEmpty else {
-      throw PrivateWindowFailure("Private window fixture has failed required checks.")
+      let failed = Self.checkNames.filter { checks[$0] != true }.joined(separator: ", ")
+      throw PrivateWindowFailure("Private window fixture failed required checks: \(failed).")
     }
     return Self.checkNames.map { "Private fixture: \($0)" }
   }
@@ -864,12 +911,19 @@ final class PrivateWindowProbe {
       "historyPathDigest": historyPathDigest ?? Digest.sha256(Data("missing-history".utf8)),
       "historyEntryCount": historyEntryCount,
       "historyQuerySucceeded": historyQuerySucceeded,
+      "workspaceSHA256": productWorkspaceSHA256 ?? "",
+      "productScreenshotSHA256": productScreenshotSHA256 ?? "",
+      "productRendererScreenshotSHA256": productRendererScreenshotSHA256 ?? "",
+      "productRendererViewportAudit": productRendererViewportAudit,
+      "productRendererCaptureOutcome": productRendererCaptureOutcome,
+      "productLifecycleBlocker": productLifecycleBlocker ?? "",
       "cleanup": [
         "windowsRemaining": privateWindows.count, "contextsRemaining": privateContexts.count,
-        "passed": privateWindows.isEmpty && privateContexts.isEmpty,
+        "passed": privateWindows.isEmpty && privateContexts.isEmpty
+          && productLifecycleBlocker == "",
       ],
       "scope":
-        "Owned hidden native windows on synthetic loopback origin. No real accounts, vendor endpoints, product UI, or physical/company acceptance tested.",
+        "Owned hidden native product and engine windows on synthetic loopback origin. No real accounts, vendor endpoints, physical input, or company acceptance tested.",
     ]
     try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
       .write(to: root.appending(path: "\(phase)-private-window.json"), options: .atomic)
@@ -882,7 +936,7 @@ private enum Digest {
   }
 }
 
-private struct PrivateWindowFailure: LocalizedError {
+struct PrivateWindowFailure: LocalizedError {
   let message: String
   init(_ message: String) { self.message = message }
   var errorDescription: String? { message }

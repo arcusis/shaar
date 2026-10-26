@@ -1,3 +1,4 @@
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -24,9 +25,12 @@ class PrivateWindowFixtureTests(unittest.TestCase):
                     privateWindowOnly=True, privateWindowProbe=True,
                     savedTabCapacityOnly=False, externalAppConsentOnly=False,
                     bitwardenStoreProbe=False, fixtureTLSProbe=False,
-                    localFixturesPassed=True)
+                    localFixturesPassed=True, error=None, fixtureStage="normal-fixtures-complete",
+                    checkCount=1, checks=["normal fixture completed"], exitCode=0)
 
     def evidence(self, phase):
+        screenshot = b'\x89PNG\r\n\x1a\n' + f'product-{phase}-owned-window'.encode()
+        renderer = b'\x89PNG\r\n\x1a\n' + f'renderer-product-{phase}-owned-tab'.encode()
         return dict(schema=1, mode=fixture.PRIVATE_WINDOW_MODE, phase=phase,
                     runID=self.run_id, passed=True,
                     checkCount=len(fixture.PRIVATE_WINDOW_CHECKS),
@@ -35,13 +39,29 @@ class PrivateWindowFixtureTests(unittest.TestCase):
                     historyEntryCount=1,
                     historyQuerySucceeded=True,
                     historyPathDigest='a' * 64,
+                    workspaceSHA256='b' * 64,
+                    productScreenshotSHA256=hashlib.sha256(screenshot).hexdigest(),
+                    productRendererScreenshotSHA256=hashlib.sha256(renderer).hexdigest(),
+                    productRendererCaptureOutcome='captured',
+                    productRendererViewportAudit=dict(
+                        allWindowsNativeWindowsAlive=True,
+                        allTabsAttachedToHostView=True,
+                        allWindowsDisplayOwnedWebContents=True,
+                        visibleNativeViewportCount=1),
                     cleanup=dict(windowsRemaining=0, contextsRemaining=0, passed=True),
                     scope=fixture.PRIVATE_WINDOW_SCOPE)
 
     def write_phase(self, phase, evidence=None):
         (self.root / f'{phase}.json').write_text(json.dumps(self.report(phase)))
-        (self.root / f'{phase}-private-window.json').write_text(
-            json.dumps(evidence or self.evidence(phase)))
+        value = evidence or self.evidence(phase)
+        (self.root / f'{phase}-private-window.json').write_text(json.dumps(value))
+        (self.root / f'{phase}-private-quit-diagnostic.json').write_text(
+            json.dumps(dict(schema=1, scope='owned test diagnostic', stages=[])))
+        screenshot = Path('build/private-window-evidence') / self.run_id / f'product-{phase}.png'
+        screenshot.parent.mkdir(parents=True, exist_ok=True)
+        screenshot.write_bytes(b'\x89PNG\r\n\x1a\n' + f'product-{phase}-owned-window'.encode())
+        renderer = Path('build/private-window-evidence') / self.run_id / f'renderer-product-{phase}.png'
+        renderer.write_bytes(b'\x89PNG\r\n\x1a\n' + f'renderer-product-{phase}-owned-tab'.encode())
 
     def test_flag_exclusive_and_child_arguments_preserve_phase(self):
         self.assertTrue(fixture.argument_parser().parse_args(['--private-window']).private_window)
@@ -76,7 +96,12 @@ class PrivateWindowFixtureTests(unittest.TestCase):
         self.assertTrue(result['listenerClosed'])
         self.assertEqual(len(result['childProcesses']), 2)
         self.assertEqual(result['phases'][0]['requiredCheckCount'], len(fixture.PRIVATE_WINDOW_CHECKS))
+        self.assertTrue((self.root / 'proof' / 'initial-private-quit-diagnostic.json').exists())
+        self.assertTrue((self.root / 'proof' / 'renderer-product-initial.png').exists())
         self.assertTrue((self.root / 'proof' / 'private-window-summary.json').exists())
+        for phase in ('initial', 'restart'):
+            self.assertEqual(json.loads((self.root / 'proof' / f'{phase}.json').read_text()),
+                             self.report(phase))
 
     def test_summary_preserves_failing_observed_count_and_runs_both_phases(self):
         initial = self.evidence('initial')
@@ -98,6 +123,34 @@ class PrivateWindowFixtureTests(unittest.TestCase):
         self.assertEqual(result['phases'][0]['requiredCheckCount'], len(fixture.PRIVATE_WINDOW_CHECKS))
         self.assertEqual([phase['phase'] for phase in result['phases']], ['initial', 'restart'])
 
+    def test_missing_or_failed_main_report_is_rejected_and_redacted(self):
+        children = [dict(phase=phase, childExited=True, processGroupAbsent=True)
+                    for phase in ('initial', 'restart')]
+        for phase in ('initial', 'restart'):
+            for missing in (False, True):
+                with self.subTest(phase=phase, missing=missing):
+                    self.write_phase('initial')
+                    self.write_phase('restart')
+                    path = self.root / f'{phase}.json'
+                    if missing:
+                        path.unlink()
+                    else:
+                        report = self.report(phase)
+                        report.update(passed=False, error='Engine probe timed out. secret host-identities.json',
+                                      fixtureStage='NativeHost')
+                        path.write_text(json.dumps(report))
+                    proof = self.root / f'proof-{phase}-{missing}'
+                    result = fixture.record_private_window_summary(
+                        self.root, listener_closed=True, child_receipts=children,
+                        proof_directory=proof)
+                    self.assertFalse(result['passed'])
+                    if not missing:
+                        retained = json.loads((proof / f'{phase}.json').read_text())
+                        self.assertEqual(retained['error'], 'timeout')
+                        self.assertTrue(retained['hostIdentityError'])
+                        self.assertEqual(retained['fixtureStage'], 'NativeHost')
+                        self.assertNotIn('secret', json.dumps(retained))
+
     def test_listener_cleanup_probe_distinguishes_bound_port(self):
         import socket
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
@@ -113,6 +166,11 @@ class PrivateWindowFixtureTests(unittest.TestCase):
             lambda value: value['checks'].pop('multipleTabsShareNativePrivateWindow'),
             lambda value: value['checks'].__setitem__('privateNavigationReloadBackForward', False),
             lambda value: value['checks'].__setitem__('privateCallbacksUseOwnersWithoutRegularContamination', False),
+            lambda value: value['checks'].__setitem__('productNativeBeforeUnloadHandlerFired', False),
+            lambda value: value['checks'].__setitem__('productNativeCDPHoldConfirmedPending', False),
+            lambda value: value['checks'].__setitem__(
+                'productFinalPrivateWindowCloseRequestedWhileQuitAndReleasedAfterConfirmation',
+                False),
             lambda value: value['checks'].pop('privateTabCloseConfirmedAndStaleRejected'),
             lambda value: value['checks'].__setitem__('privateWindowCloseCallbackOwnerRouted', False),
             lambda value: value['checks'].__setitem__('normalFactoriesRejectPrivateIdentities', False),
@@ -123,6 +181,8 @@ class PrivateWindowFixtureTests(unittest.TestCase):
             lambda value: value.__setitem__('historyQuerySucceeded', False),
             lambda value: value.__setitem__('historyPathDigest', 'raw-path'),
             lambda value: value['cleanup'].__setitem__('windowsRemaining', 1),
+            lambda value: value.__setitem__('productRendererScreenshotSHA256', 'raw-renderer'),
+            lambda value: value['productRendererViewportAudit'].__setitem__('visibleNativeViewportCount', -1),
         )
         for mutate in mutations:
             evidence = self.evidence('initial')

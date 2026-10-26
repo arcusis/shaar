@@ -55,7 +55,28 @@ jobs:
       - name: Run Python tests
         run: .venv/bin/python scripts/test-python.py
 
+      - name: Run private window initial and restart fixture
+        id: private_window
+        timeout-minutes: 20
+        env:
+          ARCUSIS_PRIVATE_WINDOW_CI: '1'
+        run: |
+          test "$GITHUB_ACTIONS" = 'true'
+          test "$RUNNER_OS" = 'macOS'
+          test "$ARCUSIS_PRIVATE_WINDOW_CI" = '1'
+          rm -rf build/private-window-evidence
+          bash scripts/test-engine.sh --private-window
+
+      - name: Upload redacted private window evidence
+        if: always() && steps.private_window.outcome != 'skipped'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: private-window-evidence
+          path: build/private-window-evidence/
+          if-no-files-found: warn
+
       - name: Capture native Bitwarden settings visuals
+        if: success() || (failure() && steps.private_window.outcome == 'failure')
         env:
           ARCUSIS_NATIVE_SETTINGS_VISUAL_CI: '1'
         run: swift test --jobs 2 --filter NativeBitwardenSettingsVisualTests

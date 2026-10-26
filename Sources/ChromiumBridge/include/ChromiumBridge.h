@@ -112,6 +112,7 @@ FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeExternalAppLaunchAuditForTest
 - (BOOL)openPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID
                      url:(NSString *)url error:(NSError **)error;
 - (BOOL)selectPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID;
+- (BOOL)focusPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID;
 - (void)closePrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID
                completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion NS_SWIFT_UI_ACTOR;
 - (BOOL)navigatePrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID url:(NSString *)url;
@@ -140,7 +141,15 @@ FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeExternalAppLaunchAuditForTest
                        completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion NS_SWIFT_UI_ACTOR;
 - (BOOL)attemptCancelledPrivateProbeCloseID:(NSString *)windowID;
 - (nullable NSDictionary *)privateProbeAuditForContextID:(NSString *)contextID;
+- (void)capturePrivateProbeTabID:(NSString *)tabID windowID:(NSString *)windowID
+                       contextID:(NSString *)contextID
+                      completion:(void (^)(NSData * _Nullable, NSString * _Nullable))completion;
 - (NSDictionary *)normalProbeSelectionAuditForTabID:(NSString *)tabID;
+- (nullable NSDictionary *)privateQuitCDPHoldAuditForTabID:(NSString *)tabID;
+- (void)preparePrivateQuitCancellationProbeTabID:(NSString *)tabID
+                                      completion:(void (^)(BOOL))completion;
+- (void)cancelPrivateQuitDialogForProbeTabID:(NSString *)tabID
+                                  completion:(void (^)(BOOL))completion;
 - (BOOL)releasePrivateProbeContextID:(NSString *)contextID;
 - (NSArray<NSDictionary<NSString *, id> *> *)extensionsForProfileID:(NSString *)profileID;
 - (void)resolveInstallRequestID:(NSString *)requestID accepted:(BOOL)accepted;

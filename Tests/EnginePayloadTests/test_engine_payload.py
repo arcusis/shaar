@@ -2,6 +2,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import plistlib
 from pathlib import Path
 import struct
 import shutil
@@ -154,14 +155,283 @@ class EnginePayloadTests(unittest.TestCase):
 
     def test_code_resources_difference_remains_failure(self):
         path = "Versions/155.0.8059.84/_CodeSignature/CodeResources"
-        self.fixture(files={"Chromium Framework": b"engine", path: b"pinned resources"}, links={})
-        (self.framework / path).write_bytes(b"changed resources")
+        envelope = {"files": {}, "files2": {"Resources/resource": {"hash2": b"original"}},
+                    "rules": {}, "rules2": {}}
+        self.fixture(files={"Chromium Framework": b"engine",
+                            path: plistlib.dumps(envelope, fmt=plistlib.FMT_BINARY)}, links={})
+        envelope["files2"]["Resources/resource"]["hash2"] = b"changed"
+        (self.framework / path).write_bytes(plistlib.dumps(envelope, fmt=plistlib.FMT_BINARY))
         report = payload.compare_payload(self.archive, self.framework,
             {"sha256": hashlib.sha256(self.archive.read_bytes()).hexdigest()})
         self.assertTrue(report["archive_metadata_verified"])
         self.assertFalse(report["payload_match"])
         self.assertEqual(next(item for item in report["members"] if item["path"] == path)["status"],
                          "mismatch")
+
+    def test_codesign_resources_normalizes_only_signature_envelope_for_matched_macho(self):
+        version = "Versions/155.0.8059.84"
+        helper = "Helpers/app_mode_loader"
+        dylib = "Libraries/libsample.dylib"
+        resource = "Resources/helper.dat"
+        code_resources = f"{version}/_CodeSignature/CodeResources"
+        original_envelope = {
+            "files": {resource: {"hash": b"resource-seal"}},
+            "files2": {
+                helper: {"cdhash": b"old-cdhash", "requirement": "old requirement"},
+                dylib: {"hash2": b"old-dylib-seal"},
+                resource: {"hash2": b"resource-seal"},
+            },
+            "rules": {"^.*": True},
+            "rules2": {"^.*": True},
+        }
+        files = {
+            f"{version}/Chromium Framework": macho(24),
+            f"{version}/{helper}": macho(24),
+            f"{version}/{dylib}": macho(24),
+            f"{version}/{resource}": b"resource",
+            code_resources: plistlib.dumps(original_envelope, fmt=plistlib.FMT_BINARY),
+        }
+        self.fixture(files=files, links={})
+        changed = dict(original_envelope)
+        changed["files2"] = {path: dict(entry) for path, entry in original_envelope["files2"].items()}
+        changed["files2"][helper].update({"cdhash": b"new-cdhash", "requirement": "new requirement"})
+        changed["files2"][dylib]["hash2"] = b"new-dylib-seal"
+        (self.framework / f"{version}/{helper}").write_bytes(macho(40))
+        (self.framework / f"{version}/{dylib}").write_bytes(macho(40))
+        (self.framework / code_resources).write_bytes(plistlib.dumps(changed, fmt=plistlib.FMT_BINARY))
+        report = payload.compare_payload(self.archive, self.framework,
+            {"sha256": hashlib.sha256(self.archive.read_bytes()).hexdigest()})
+        self.assertTrue(report["payload_match"], report["reason"])
+        code_item = next(item for item in report["members"] if item["path"] == code_resources)
+        self.assertEqual(code_item["normalization"], "codesign_resources_signing_envelope")
+        self.assertNotEqual(code_item["archive_sha256"], code_item["framework_sha256"])
+        self.assertTrue(report["source_provenance_unverified"])
+        self.assertTrue(report["signature_verification_not_performed"])
+
+    def test_codesign_bundle_seal_maps_only_through_exact_info_plist_and_executable(self):
+        version = "Versions/155.0.8059.84"
+        app = "Helpers/Browser Helper.app"
+        executable = "Browser Helper"
+        resources = f"{version}/_CodeSignature/CodeResources"
+        app_info = f"{version}/{app}/Contents/Info.plist"
+        app_executable = f"{version}/{app}/Contents/MacOS/{executable}"
+        raw_path = "Resources/app.icns"
+        envelope = {
+            "files": {raw_path: hashlib.sha1(b"icon").digest()},
+            "files2": {app: {"cdhash": b"old-cdhash", "requirement": "old requirement"}},
+            "rules": {}, "rules2": {},
+        }
+        files = {
+            f"{version}/Chromium Framework": macho(24),
+            app_info: plistlib.dumps({"CFBundleExecutable": executable}),
+            app_executable: macho(24),
+            f"{version}/{raw_path}": b"icon",
+            resources: plistlib.dumps(envelope, fmt=plistlib.FMT_BINARY),
+        }
+        self.fixture(files=files, links={})
+        changed = {**envelope, "files2": {app: {"cdhash": b"new-cdhash", "requirement": "new requirement"}}}
+        (self.framework / app_executable).write_bytes(macho(40))
+        (self.framework / resources).write_bytes(plistlib.dumps(changed, fmt=plistlib.FMT_BINARY))
+        report = payload.compare_payload(self.archive, self.framework,
+            {"sha256": hashlib.sha256(self.archive.read_bytes()).hexdigest()})
+        self.assertTrue(report["payload_match"], report["reason"])
+        code_item = next(item for item in report["members"] if item["path"] == resources)
+        self.assertEqual(code_item["normalization"], "codesign_resources_signing_envelope")
+        self.assertNotEqual(code_item["archive_sha256"], code_item["framework_sha256"])
+
+        self.fixture(files=files, links={})
+        (self.framework / app_executable).write_bytes(macho(40, code=b"changed executable"))
+        (self.framework / resources).write_bytes(plistlib.dumps(changed, fmt=plistlib.FMT_BINARY))
+        report = payload.compare_payload(self.archive, self.framework,
+            {"sha256": hashlib.sha256(self.archive.read_bytes()).hexdigest()})
+        self.assertFalse(report["payload_match"])
+
+    def test_codesign_resources_rejects_identical_malformed_files2_schema(self):
+        path = "Versions/155.0.8059.84/_CodeSignature/CodeResources"
+        cases = (
+            {"Resources/item": {"hash2": "not-bytes"}},
+            {"../escape": {"hash2": b"hash"}},
+            {"Resources/item": {"unknown": b"field"}},
+        )
+        for files2 in cases:
+            with self.subTest(files2=files2):
+                envelope = {"files": {}, "files2": files2, "rules": {}, "rules2": {}}
+                self.fixture(files={"Chromium Framework": b"engine",
+                                    path: plistlib.dumps(envelope, fmt=plistlib.FMT_BINARY)}, links={})
+                report = payload.compare_payload(self.archive, self.framework,
+                    {"sha256": hashlib.sha256(self.archive.read_bytes()).hexdigest()})
+                self.assertFalse(report["payload_match"])
+                self.assertIn("CodeResources", report["reason"])
+
+    def test_codesign_resources_rejects_files2_known_field_additions_and_removals(self):
+        version = "Versions/155.0.8059.84"
+        helper = "Helpers/app_mode_loader"
+        code_resources = f"{version}/_CodeSignature/CodeResources"
+        original = {"files": {}, "files2": {helper: {"cdhash": b"old-cdhash",
+                                                        "requirement": "old requirement"}},
+                    "rules": {}, "rules2": {}}
+        mutations = {
+            "add optional": lambda entry: entry.update(optional=True),
+            "add hash2": lambda entry: entry.update(hash2=b"new hash"),
+            "remove cdhash": lambda entry: entry.pop("cdhash"),
+            "remove requirement": lambda entry: entry.pop("requirement"),
+        }
+        for name, mutate in mutations.items():
+            with self.subTest(name=name):
+                files = {
+                    f"{version}/Chromium Framework": macho(24),
+                    f"{version}/{helper}": macho(24),
+                    code_resources: plistlib.dumps(original, fmt=plistlib.FMT_BINARY),
+                }
+                self.fixture(files=files, links={})
+                changed_entry = dict(original["files2"][helper])
+                mutate(changed_entry)
+                changed = {**original, "files2": {helper: changed_entry}}
+                (self.framework / f"{version}/{helper}").write_bytes(macho(40))
+                (self.framework / code_resources).write_bytes(
+                    plistlib.dumps(changed, fmt=plistlib.FMT_BINARY))
+                report = payload.compare_payload(self.archive, self.framework,
+                    {"sha256": hashlib.sha256(self.archive.read_bytes()).hexdigest()})
+                self.assertFalse(report["payload_match"], report["reason"])
+                code_item = next(item for item in report["members"] if item["path"] == code_resources)
+                self.assertEqual(code_item["status"], "mismatch")
+
+    def test_codesign_bundle_seal_rejects_changed_nested_executable_binding(self):
+        version = "Versions/155.0.8059.84"
+        app = "Helpers/Browser Helper.app"
+        executable = "Browser Helper"
+        resources = f"{version}/_CodeSignature/CodeResources"
+        info = f"{version}/{app}/Contents/Info.plist"
+        executable_path = f"{version}/{app}/Contents/MacOS/{executable}"
+        envelope = {"files": {}, "files2": {app: {"cdhash": b"old-cdhash"}},
+                    "rules": {}, "rules2": {}}
+        files = {
+            f"{version}/Chromium Framework": macho(24),
+            info: plistlib.dumps({"CFBundleExecutable": executable}),
+            executable_path: macho(24),
+            resources: plistlib.dumps(envelope, fmt=plistlib.FMT_BINARY),
+        }
+        self.fixture(files=files, links={})
+        (self.framework / info).write_bytes(plistlib.dumps({"CFBundleExecutable": "Other"}))
+        changed = {**envelope, "files2": {app: {"cdhash": b"new-cdhash"}}}
+        (self.framework / executable_path).write_bytes(macho(40))
+        (self.framework / resources).write_bytes(plistlib.dumps(changed, fmt=plistlib.FMT_BINARY))
+        report = payload.compare_payload(self.archive, self.framework,
+            {"sha256": hashlib.sha256(self.archive.read_bytes()).hexdigest()})
+        self.assertFalse(report["payload_match"], report["reason"])
+        code_item = next(item for item in report["members"] if item["path"] == resources)
+        self.assertEqual(code_item["status"], "mismatch")
+
+    def test_codesign_bundle_seal_rejects_added_or_missing_helper_payload(self):
+        version = "Versions/155.0.8059.84"
+        helper = "Helpers/app_mode_loader"
+        resources = f"{version}/_CodeSignature/CodeResources"
+        envelope = {"files": {}, "files2": {helper: {"cdhash": b"old-cdhash"}},
+                    "rules": {}, "rules2": {}}
+        files = {
+            f"{version}/Chromium Framework": macho(24),
+            f"{version}/{helper}": macho(24),
+            resources: plistlib.dumps(envelope, fmt=plistlib.FMT_BINARY),
+        }
+        for change in ("added", "missing"):
+            with self.subTest(change=change):
+                self.fixture(files=files, links={})
+                changed = {**envelope, "files2": {helper: {"cdhash": b"new-cdhash"}}}
+                (self.framework / f"{version}/{helper}").write_bytes(macho(40))
+                if change == "added":
+                    (self.framework / f"{version}/Helpers/extra_helper").write_bytes(b"extra helper")
+                else:
+                    (self.framework / f"{version}/{helper}").unlink()
+                (self.framework / resources).write_bytes(plistlib.dumps(changed, fmt=plistlib.FMT_BINARY))
+                report = payload.compare_payload(self.archive, self.framework,
+                    {"sha256": hashlib.sha256(self.archive.read_bytes()).hexdigest()})
+                self.assertFalse(report["payload_match"], report["reason"])
+
+    def test_codesign_resources_raw_v1_sha1_change_remains_failure(self):
+        path = "Versions/155.0.8059.84/_CodeSignature/CodeResources"
+        envelope = {"files": {"Resources/item": hashlib.sha1(b"old").digest()},
+                    "files2": {}, "rules": {}, "rules2": {}}
+        self.fixture(files={"Chromium Framework": b"engine",
+                            path: plistlib.dumps(envelope, fmt=plistlib.FMT_BINARY)}, links={})
+        envelope["files"]["Resources/item"] = hashlib.sha1(b"new").digest()
+        (self.framework / path).write_bytes(plistlib.dumps(envelope, fmt=plistlib.FMT_BINARY))
+        report = payload.compare_payload(self.archive, self.framework,
+            {"sha256": hashlib.sha256(self.archive.read_bytes()).hexdigest()})
+        self.assertFalse(report["payload_match"])
+        self.assertEqual(next(item for item in report["members"] if item["path"] == path)["status"], "mismatch")
+
+    def test_codesign_envelope_edit_cannot_hide_non_signature_macho_tamper(self):
+        version = "Versions/155.0.8059.84"
+        helper = "Helpers/app_mode_loader"
+        resources = f"{version}/_CodeSignature/CodeResources"
+        envelope = {"files": {}, "files2": {helper: {"cdhash": b"old"}},
+                    "rules": {}, "rules2": {}}
+        self.fixture(files={f"{version}/Chromium Framework": macho(24, code=b"original"),
+                            f"{version}/{helper}": macho(24),
+                            resources: plistlib.dumps(envelope, fmt=plistlib.FMT_BINARY)}, links={})
+        envelope["files2"][helper]["cdhash"] = b"new"
+        (self.framework / f"{version}/{helper}").write_bytes(macho(40, code=b"tampered"))
+        (self.framework / resources).write_bytes(plistlib.dumps(envelope, fmt=plistlib.FMT_BINARY))
+        report = payload.compare_payload(self.archive, self.framework,
+            {"sha256": hashlib.sha256(self.archive.read_bytes()).hexdigest()})
+        self.assertFalse(report["payload_match"])
+        self.assertTrue(any(item["path"] == f"{version}/{helper}" and item["status"] == "mismatch"
+                            for item in report["members"]))
+
+    def test_codesign_resources_rejects_non_signature_envelope_changes(self):
+        version = "Versions/155.0.8059.84"
+        helper = "Helpers/app_mode_loader"
+        code_resources = f"{version}/_CodeSignature/CodeResources"
+        original = {
+            "files": {"Resources/helper.dat": {"hash": b"resource-seal"}},
+            "files2": {helper: {"cdhash": b"old", "requirement": "old"},
+                       "Resources/helper.dat": {"hash2": b"resource-seal"}},
+            "rules": {"^.*": True},
+            "rules2": {"^.*": True},
+        }
+        mutations = {
+            "files seal": lambda data: data["files"]["Resources/helper.dat"].update(hash=b"changed"),
+            "rules": lambda data: data.update(rules={"^.*": False}),
+            "rules2": lambda data: data.update(rules2={"^.*": False}),
+            "unknown root key": lambda data: data.update(extra=True),
+            "unknown signing field": lambda data: data["files2"][helper].update(team=b"unknown"),
+            "unknown files field": lambda data: data["files"]["Resources/helper.dat"].update(team=b"unknown"),
+            "unknown path": lambda data: data["files2"].update({"Resources/other": {"cdhash": b"x"}}),
+            "non-code seal": lambda data: data["files2"][helper].update(hash=b"changed"),
+            "resource seal": lambda data: data["files2"]["Resources/helper.dat"].update(hash2=b"changed"),
+        }
+        for name, mutate in mutations.items():
+            with self.subTest(name=name):
+                files = {
+                    f"{version}/Chromium Framework": macho(24),
+                    f"{version}/{helper}": macho(24),
+                    f"{version}/Resources/helper.dat": b"resource",
+                    code_resources: plistlib.dumps(original, fmt=plistlib.FMT_BINARY),
+                }
+                self.fixture(files=files, links={})
+                changed = {key: value.copy() if isinstance(value, dict) else value for key, value in original.items()}
+                changed["files"] = {key: dict(value) for key, value in original["files"].items()}
+                changed["files2"] = {key: dict(value) for key, value in original["files2"].items()}
+                mutate(changed)
+                (self.framework / f"{version}/{helper}").write_bytes(macho(40))
+                (self.framework / code_resources).write_bytes(plistlib.dumps(changed, fmt=plistlib.FMT_BINARY))
+                report = payload.compare_payload(self.archive, self.framework,
+                    {"sha256": hashlib.sha256(self.archive.read_bytes()).hexdigest()})
+                self.assertFalse(report["payload_match"], report["reason"])
+
+    def test_codesign_resources_rejects_malformed_and_oversized_plists(self):
+        path = "Versions/155.0.8059.84/_CodeSignature/CodeResources"
+        cases = ((b"not a plist", b"not a plist"),
+                 (b"not a plist", b"different malformed plist"),
+                 (b"x" * (payload.MAX_CODE_RESOURCES_SIZE + 1),
+                  b"x" * (payload.MAX_CODE_RESOURCES_SIZE + 1)))
+        for archive_data, framework_data in cases:
+            with self.subTest(size=len(archive_data), equal=archive_data == framework_data):
+                self.fixture(files={"Chromium Framework": b"engine", path: archive_data}, links={})
+                (self.framework / path).write_bytes(framework_data)
+                report = payload.compare_payload(self.archive, self.framework,
+                    {"sha256": hashlib.sha256(self.archive.read_bytes()).hexdigest()})
+                self.assertFalse(report["payload_match"])
 
     def test_resigning_cannot_hide_changed_macho_code(self):
         self.fixture(files={"Chromium Framework": macho(24, code=b"original code")}, links={})

@@ -9,6 +9,7 @@ import json
 import lzma
 import os
 from pathlib import Path, PurePosixPath
+import plistlib
 import stat
 import struct
 import sys
@@ -26,6 +27,7 @@ MAX_MEMBERS = 200_000
 MAX_FRAMEWORK_MEMBERS = MAX_MEMBERS
 MAX_PATH_BYTES = 4096
 MAX_LOAD_COMMAND_BYTES = 16 * 1024 * 1024
+MAX_CODE_RESOURCES_SIZE = 16 * 1024 * 1024
 FRAMEWORK_NAME = "Chromium Framework.framework"
 MACHO64_MAGIC = b"\xcf\xfa\xed\xfe"
 MACHO_MAGICS = {
@@ -591,6 +593,136 @@ def _read_archive_member(source: BinaryIO, entry: dict, framework_root: Path | N
     return _compare_file(source, entry["size"], framework_root, relative)
 
 
+def _read_framework_bytes(root: Path, relative: str, limit: int) -> bytes:
+    try:
+        descriptor = _open_framework_file(root, relative)
+        stream = os.fdopen(descriptor, "rb")
+    except OSError as error:
+        raise PayloadError("framework member could not be opened safely") from error
+    with stream:
+        initial = os.fstat(stream.fileno())
+        if not stat.S_ISREG(initial.st_mode) or initial.st_size > limit:
+            raise PayloadError("CodeResources member exceeds size cap or is not a regular file")
+        data = stream.read(limit + 1)
+        final = os.fstat(stream.fileno())
+        if (len(data) != initial.st_size or len(data) > limit or final.st_size != initial.st_size
+                or final.st_mtime_ns != initial.st_mtime_ns or final.st_ctime_ns != initial.st_ctime_ns):
+            raise PayloadError("CodeResources member changed or exceeds size cap")
+    return data
+
+
+def _code_resources_match(archive_data: bytes, framework_data: bytes, path: str,
+                          normalized_macho_paths: set[str], exact_matched_paths: set[str],
+                          framework_root: Path) -> bool:
+    if len(archive_data) > MAX_CODE_RESOURCES_SIZE or len(framework_data) > MAX_CODE_RESOURCES_SIZE:
+        raise PayloadError("CodeResources member exceeds size cap")
+    try:
+        original = plistlib.loads(archive_data)
+        current = plistlib.loads(framework_data)
+    except (plistlib.InvalidFileException, TypeError, ValueError, OverflowError, RecursionError) as error:
+        raise PayloadError("CodeResources plist is malformed") from error
+    expected_keys = {"files", "files2", "rules", "rules2"}
+    if (not isinstance(original, dict) or not isinstance(current, dict)
+            or set(original) != expected_keys or set(current) != expected_keys):
+        raise PayloadError("CodeResources plist schema is unsupported")
+    if (not isinstance(original["files"], dict) or not isinstance(current["files"], dict)
+            or not isinstance(original["rules"], dict) or not isinstance(current["rules"], dict)
+            or not isinstance(original["rules2"], dict) or not isinstance(current["rules2"], dict)):
+        raise PayloadError("CodeResources plist schema is unsupported")
+    known_file_fields = {"hash", "hash2", "cdhash", "requirement", "optional", "symlink", "weight"}
+    field_types = {"hash": bytes, "hash2": bytes, "cdhash": bytes, "requirement": str,
+                   "optional": bool, "symlink": str, "weight": int}
+    def validate_entries(entries: dict, allow_raw_sha1: bool) -> None:
+        for resource_path, entry in entries.items():
+            if (not isinstance(resource_path, str)
+                    or not ((allow_raw_sha1 and isinstance(entry, bytes) and len(entry) == 20)
+                            or (isinstance(entry, dict) and set(entry).issubset(known_file_fields)
+                                and all(type(value) is field_types[field] for field, value in entry.items())))):
+                raise PayloadError("CodeResources files schema is unsupported")
+            try:
+                if _safe_archive_path(resource_path) != resource_path:
+                    raise PayloadError("CodeResources files path is noncanonical")
+            except PayloadError as error:
+                raise PayloadError("CodeResources files path is unsafe") from error
+    old_files2, new_files2 = original["files2"], current["files2"]
+    if not isinstance(old_files2, dict) or not isinstance(new_files2, dict):
+        raise PayloadError("CodeResources files2 schema is unsupported")
+    validate_entries(original["files"], True)
+    validate_entries(current["files"], True)
+    validate_entries(old_files2, False)
+    validate_entries(new_files2, False)
+    if (original["files"] != current["files"] or original["rules"] != current["rules"]
+            or original["rules2"] != current["rules2"]):
+        return False
+    if original == current:
+        return True
+    if set(old_files2) != set(new_files2):
+        return False
+    changed = False
+    version_root = path.removesuffix("/_CodeSignature/CodeResources")
+    if version_root == path:
+        raise PayloadError("CodeResources path is unsupported")
+    for resource_path, old_entry in old_files2.items():
+        new_entry = new_files2[resource_path]
+        if set(old_entry) != set(new_entry):
+            return False
+        try:
+            safe_relative = _safe_archive_path(resource_path)
+            if safe_relative != resource_path:
+                raise PayloadError("CodeResources files2 path is noncanonical")
+        except PayloadError as error:
+            raise PayloadError("CodeResources files2 path is unsafe") from error
+        candidate_paths = {safe_relative, f"{version_root}/{safe_relative}"}
+        if safe_relative.startswith("Versions/Current/"):
+            candidate_paths.add(f"{version_root}/{safe_relative.removeprefix('Versions/Current/')}")
+        macho_path = next((candidate for candidate in candidate_paths
+                           if candidate in normalized_macho_paths), None)
+        policy_path = safe_relative
+        for prefix in (f"{version_root}/", "Versions/Current/"):
+            if policy_path.startswith(prefix):
+                policy_path = policy_path[len(prefix):]
+                break
+        for field in old_entry:
+            if old_entry[field] == new_entry[field]:
+                continue
+            changed = True
+            bundle_seal = (policy_path.startswith("Helpers/") and policy_path.endswith(".app")
+                           and field in ("cdhash", "requirement"))
+            if macho_path is None and not bundle_seal:
+                return False
+            if field in ("cdhash", "requirement"):
+                if not policy_path.startswith("Helpers/"):
+                    return False
+                if policy_path.endswith(".app"):
+                    info_path = f"{version_root}/{policy_path}/Contents/Info.plist"
+                    if info_path not in exact_matched_paths:
+                        return False
+                    try:
+                        info = plistlib.loads(_read_framework_bytes(framework_root, info_path, 1024 * 1024))
+                    except (PayloadError, plistlib.InvalidFileException, TypeError, ValueError):
+                        return False
+                    executable = info.get("CFBundleExecutable") if isinstance(info, dict) else None
+                    if (not isinstance(executable, str) or not executable or "/" in executable
+                            or executable in (".", "..")):
+                        return False
+                    executable_path = f"{version_root}/{policy_path}/Contents/MacOS/{executable}"
+                    if executable_path not in normalized_macho_paths:
+                        return False
+                    macho_path = executable_path
+                if field == "cdhash" and not all(isinstance(value, bytes) for value in (old_entry[field], new_entry[field])):
+                    raise PayloadError("CodeResources cdhash field is malformed")
+                if field == "requirement" and not all(isinstance(value, str) for value in (old_entry[field], new_entry[field])):
+                    raise PayloadError("CodeResources requirement field is malformed")
+            elif field == "hash2":
+                if not policy_path.startswith("Libraries/") or not policy_path.endswith(".dylib"):
+                    return False
+                if not all(isinstance(value, bytes) for value in (old_entry[field], new_entry[field])):
+                    raise PayloadError("CodeResources hash2 field is malformed")
+            else:
+                return False
+    return changed
+
+
 def compare_payload(archive: Path, framework: Path, pin: dict) -> dict:
     report = {
         "schema": 1,
@@ -661,6 +793,7 @@ def compare_payload(archive: Path, framework: Path, pin: dict) -> dict:
                 results.append(item)
             pending = {item["path"] for item in results if item["status"] == "pending"}
             missing_files = {path for path in differences if selected.get(path, {}).get("kind") == "file"}
+            deferred_code_resources: dict[str, tuple[bytes, bytes]] = {}
             if pending or missing_files:
                 source.seek(0)
                 compressed = lzma.LZMAFile(source, "rb")
@@ -680,7 +813,18 @@ def compare_payload(archive: Path, framework: Path, pin: dict) -> dict:
                             stream = tar.extractfile(member)
                             if stream is None:
                                 raise PayloadError("archive member data unavailable")
-                            if relative in pending:
+                            if relative.endswith("/_CodeSignature/CodeResources") and relative in pending:
+                                size = selected[relative]["size"]
+                                if size > MAX_CODE_RESOURCES_SIZE:
+                                    raise PayloadError("CodeResources member exceeds size cap")
+                                archive_data = _read_exact(stream, size)
+                                stream.close()
+                                framework_data = _read_framework_bytes(framework, relative, MAX_CODE_RESOURCES_SIZE)
+                                item = next(item for item in results if item["path"] == relative)
+                                item.update({"normalization": "exact", "archive_sha256": hashlib.sha256(archive_data).hexdigest(),
+                                             "framework_sha256": hashlib.sha256(framework_data).hexdigest()})
+                                deferred_code_resources[relative] = (archive_data, framework_data)
+                            elif relative in pending:
                                 result = _read_archive_member(stream, selected[relative], framework, relative)
                                 item = next(item for item in results if item["path"] == relative)
                                 item.update({"status": "match" if result["match"] else "mismatch",
@@ -697,6 +841,23 @@ def compare_payload(archive: Path, framework: Path, pin: dict) -> dict:
                                 stream.close()
                 finally:
                     compressed.close()
+            normalized_macho_paths = {
+                item["path"] for item in results
+                if item.get("status") == "match" and item.get("normalization") == "adhoc_macho_signature"
+            }
+            exact_matched_paths = {
+                item["path"] for item in results
+                if item.get("status") == "match" and item.get("normalization", "exact") == "exact"
+            }
+            for path, (archive_data, framework_data) in deferred_code_resources.items():
+                item = next(item for item in results if item["path"] == path)
+                match = _code_resources_match(archive_data, framework_data, path, normalized_macho_paths,
+                                              exact_matched_paths, framework)
+                item["status"] = "match" if match else "mismatch"
+                if match and archive_data != framework_data:
+                    item["normalization"] = "codesign_resources_signing_envelope"
+                if not match:
+                    differences.append(path)
             _check_archive_unchanged(source, archive, initial_stat)
             report["members"] = results
             if differences:

@@ -61,6 +61,13 @@ struct BrowserWindow: View {
         }
         .transition(.opacity.combined(with: .scale(scale: 0.98)))
       }
+      if let coordinator = store.engine?.passwordFill,
+        BrowserEngine.passwordFillInputAvailable(in: store),
+        coordinator.showingPicker || coordinator.message != nil
+      {
+        PasswordFillOverlay(coordinator: coordinator)
+          .zIndex(3)
+      }
       if store.libraryDrawerSection != nil, store.canUseLibraryDrawer {
         GeometryReader { geometry in
           let leading: CGFloat = 10
@@ -110,7 +117,10 @@ struct BrowserWindow: View {
       }
     }
     .onChange(of: store.commandIsOpen) { _, isOpen in
-      if isOpen { store.engine?.extensionPanel = nil }
+      if isOpen {
+        store.engine?.passwordFill?.cancel()
+        store.engine?.extensionPanel = nil
+      }
       if !isOpen && store.pageFind == nil {
         if let engine = store.engine, let id = store.session.selectedPage?.tab.id {
           engine.runtime.focusTabID(id.uuidString)
@@ -119,11 +129,24 @@ struct BrowserWindow: View {
         }
       }
     }
+    .onChange(of: store.sheet?.id) { _, newValue in
+      if newValue != nil { store.engine?.passwordFill?.cancel() }
+    }
     .onChange(of: store.pageFind?.id) { _, newValue in
-      if newValue != nil { store.engine?.extensionPanel = nil }
+      if newValue != nil {
+        store.engine?.passwordFill?.cancel()
+        store.engine?.extensionPanel = nil
+      }
+    }
+    .onChange(of: store.libraryDrawerSection) { _, newValue in
+      if newValue != nil { store.engine?.passwordFill?.cancel() }
     }
     .onExitCommand {
-      if store.libraryDrawerSection != nil { dismissLibraryDrawerAndFocusPage() }
+      if let fill = store.engine?.passwordFill, fill.showingPicker || fill.message != nil {
+        fill.cancel()
+      } else if store.libraryDrawerSection != nil {
+        dismissLibraryDrawerAndFocusPage()
+      }
     }
   }
 

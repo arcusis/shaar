@@ -266,7 +266,7 @@ struct NativeBitwardenControllerTests {
     controller.masterPassword = "secret"
     controller.connect()
     for _ in 0..<50 {
-      if controller.syncStatus == "Synced 1 personal logins" { break }
+      if controller.syncStatus == "Synced 1 logins" { break }
       try? await Task.sleep(for: .milliseconds(10))
     }
     #expect(controller.status == "Connected and unlocked")
@@ -361,7 +361,7 @@ struct NativeBitwardenControllerTests {
     try? await Task.sleep(for: .milliseconds(30))
     #expect(didNotify.withLock { $0 })
     #expect(controller.vaultSnapshot.logins.map(\.id) == [cipherID])
-    #expect(controller.syncStatus == "Synced 1 personal logins")
+    #expect(controller.syncStatus == "Synced 1 logins")
     #expect(controller.hasConnectedSession)
   }
 
@@ -438,7 +438,7 @@ struct NativeBitwardenControllerTests {
     controller.masterPassword = "secret"
     controller.connect()
     for _ in 0..<50 {
-      if controller.syncStatus == "Synced 0 personal logins" { break }
+      if controller.syncStatus == "Synced 0 logins" { break }
       try? await Task.sleep(for: .milliseconds(10))
     }
     await backend.resolveSync(first.candidateID)
@@ -451,13 +451,13 @@ struct NativeBitwardenControllerTests {
     controller.masterPassword = "secret"
     controller.connect()
     for _ in 0..<50 {
-      if controller.syncStatus == "Synced 1 personal logins" { break }
+      if controller.syncStatus == "Synced 1 logins" { break }
       try? await Task.sleep(for: .milliseconds(10))
     }
     #expect(controller.vaultSnapshot.logins.map(\.id) == [secondID])
     controller.selectProfile(firstProfile)
     #expect(controller.vaultSnapshot == .empty)
-    #expect(controller.syncStatus == "Synced 0 personal logins")
+    #expect(controller.syncStatus == "Synced 0 logins")
   }
 
   @Test func loginMetadataUsesRegisteredDesktopClientTypeAndArcusisIdentity() {

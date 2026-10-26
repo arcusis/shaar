@@ -130,6 +130,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     settingsController = BrowserSettingsController(
       workspace: workspace, preferences: preferences,
       presentation: presentation == .visible ? .visible : .hiddenProbe)
+    if presentation == .visible, let controller = settingsController?.nativeBitwardenController {
+      for context in contexts.values { context.engine.attachPasswordFill(controller) }
+    }
     installMenus()
     if presentation == .visible {
       for context in contexts.values where context.id != focused { context.window.orderFront(nil) }
@@ -262,6 +265,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     events.onNewTabWillAdopt = nil
     for context in contexts.values {
       stopObserving(context)
+      context.engine.detachPasswordFill()
       context.engine.onClosed = nil
     }
     if NSApp.mainMenu === menu { NSApp.mainMenu = previousMenu }
@@ -303,6 +307,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
       events: events, windowID: nativeID, store: store,
       presentsNativePanels: presentation == .visible,
       lazyPinnedTabs: true)
+    if presentation == .visible, let controller = settingsController?.nativeBitwardenController {
+      engine.attachPasswordFill(controller)
+    }
     let hosting = NSHostingView(rootView: BrowserWindow(store: store))
     window.title = "Arcusis Browser"
     window.titleVisibility = .hidden
@@ -434,8 +441,16 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
         [weak self, weak context] _ in
         MainActor.assumeIsolated {
           guard let self, let context else { return }
+          context.engine.passwordWindowKeyChanged(true)
           do { try self.workspace.focusWindow(context.id) } catch { self.report(error) }
         }
+      })
+    context.observers.append(
+      center.addObserver(
+        forName: NSWindow.didResignKeyNotification, object: context.window, queue: .main
+      ) {
+        [weak context] _ in
+        MainActor.assumeIsolated { context?.engine.passwordWindowKeyChanged(false) }
       })
     for name in [NSWindow.didMoveNotification, NSWindow.didResizeNotification] {
       context.observers.append(

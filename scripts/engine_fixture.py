@@ -415,8 +415,8 @@ EXTERNAL_APP_CONSENT_CLEANUP_KEYS = {
 }
 PRIVATE_WINDOW_MODE = 'private-window-owned-engine-fixture'
 PRIVATE_WINDOW_SCOPE = (
-    'Owned hidden native windows on synthetic loopback origin. No real accounts, vendor endpoints, '
-    'product UI, or physical/company acceptance tested.'
+    'Owned hidden native product and engine windows on synthetic loopback origin. No real accounts, '
+    'vendor endpoints, physical input, or company acceptance tested.'
 )
 PRIVATE_WINDOW_CHECKS = (
     'freshMarkedRoot', 'sourceProfileAccepted', 'unknownSourceRejected', 'otrSourceRejected',
@@ -439,6 +439,26 @@ PRIVATE_WINDOW_CHECKS = (
     'normalHistoryExcludesPrivateVisitsBeforeClose', 'normalHistoryExcludesPrivateVisitsAfterClose',
     'lastCloseReopenClearsPrivateData', 'normalSelectionUnchanged', 'staleContextRejected',
     'closedWindowRejected', 'cleanupChildrenClosed', 'cleanupContextsRetired',
+    'productHostOwnsPrivateNativeWindow', 'productCommandTUsesPrivateOpaqueSearch',
+    'productCommandLTargetsCurrentPrivateTab',
+    'productPrivateNavigationReloadBackForwardCallbacks',
+    'productPrivateFocusUsesOwnedTab',
+    'productSameSourceWindowsShareContext', 'productDifferentSourceWindowsIsolateContext',
+    'productCancelledCloseRetainsOwner', 'productNormalHistoryExcludesPrivateVisit',
+    'productCancelledQuitRetainsLivePrivateLease',
+    'productNativeQuitCancellationReturned', 'productCancelledQuitRestoredRuntimeState',
+    'productCancelledQuitRetainedPrivateWindow', 'productCancelledQuitRetainedPrivateContext',
+    'productCancelledQuitRetainedNormalWindow',
+    'productFinalCloseAfterCancelledQuitReleasesLease',
+    'productFinalPrivateWindowCloseRequestedWhileQuitAndReleasedAfterConfirmation',
+    'productWorkspaceBytesUnchanged', 'productWorkspaceBytesUnchangedAfterClose',
+    'productFinalCloseReleasesOwners', 'productWeakStoreReleasedAfterConfirmedClose',
+    'productWeakHostingReleasedAfterConfirmedClose',
+    'productBeforeUnloadUsesRendererUserActivation',
+    'productNativeCDPHoldConfirmedPending',
+    'productNativeBeforeUnloadHandlerFired',
+    'productBeforeUnloadRemovedBeforeFinalFixtureQuit',
+    'productCancelledQuitRetiresOnlyConfirmedPrivateLease',
 )
 
 
@@ -501,6 +521,22 @@ def validate_private_window_report(root, phase, report, exit_code):
     except ValueError:
         canonical_run = False
     digest = evidence.get('historyPathDigest')
+    workspace_digest = evidence.get('workspaceSHA256')
+    screenshot_digest = evidence.get('productScreenshotSHA256')
+    renderer_digest = evidence.get('productRendererScreenshotSHA256')
+    viewport_audit = evidence.get('productRendererViewportAudit')
+    screenshot_path = Path('build/private-window-evidence') / (
+        run_id if isinstance(run_id, str) else 'invalid') / f'product-{phase}.png'
+    renderer_path = Path('build/private-window-evidence') / (
+        run_id if isinstance(run_id, str) else 'invalid') / f'renderer-product-{phase}.png'
+    try:
+        screenshot_bytes = screenshot_path.read_bytes()
+    except OSError:
+        screenshot_bytes = b''
+    try:
+        renderer_bytes = renderer_path.read_bytes()
+    except OSError:
+        renderer_bytes = b''
     if (exit_code != 0 or not isinstance(report, dict)
             or report.get('phase') != phase or report.get('passed') is not True
             or report.get('probeMode') != PRIVATE_WINDOW_MODE
@@ -525,6 +561,22 @@ def validate_private_window_report(root, phase, report, exit_code):
             or any(type(checks.get(name)) is not bool or checks[name] is not True for name in PRIVATE_WINDOW_CHECKS)
             or not isinstance(digest, str) or len(digest) != 64
             or any(character not in '0123456789abcdef' for character in digest)
+            or not isinstance(workspace_digest, str) or len(workspace_digest) != 64
+            or any(character not in '0123456789abcdef' for character in workspace_digest)
+            or not isinstance(screenshot_digest, str) or len(screenshot_digest) != 64
+            or any(character not in '0123456789abcdef' for character in screenshot_digest)
+            or not screenshot_bytes.startswith(b'\x89PNG\r\n\x1a\n')
+            or hashlib.sha256(screenshot_bytes).hexdigest() != screenshot_digest
+            or not isinstance(renderer_digest, str) or len(renderer_digest) != 64
+            or any(character not in '0123456789abcdef' for character in renderer_digest)
+            or not renderer_bytes.startswith(b'\x89PNG\r\n\x1a\n')
+            or hashlib.sha256(renderer_bytes).hexdigest() != renderer_digest
+            or evidence.get('productRendererCaptureOutcome') != 'captured'
+            or not isinstance(viewport_audit, dict)
+            or viewport_audit.get('allWindowsNativeWindowsAlive') is not True
+            or type(viewport_audit.get('allTabsAttachedToHostView')) is not bool
+            or viewport_audit.get('allWindowsDisplayOwnedWebContents') is not True
+            or viewport_audit.get('visibleNativeViewportCount') != 1
             or not isinstance(cleanup, dict) or cleanup.get('windowsRemaining') != 0
             or cleanup.get('contextsRemaining') != 0 or cleanup.get('passed') is not True
             or evidence.get('scope') != PRIVATE_WINDOW_SCOPE
@@ -548,10 +600,16 @@ def record_private_window_summary(root, *, listener_closed, child_receipts, proo
             runID=evidence.get('runID'),
             checkCount=evidence.get('checkCount'),
             requiredCheckCount=evidence.get('requiredCheckCount'),
+            workspaceSHA256=evidence.get('workspaceSHA256'),
+            productScreenshotSHA256=evidence.get('productScreenshotSHA256'),
             validationError=validation_error,
             cleanup=evidence.get('cleanup')))
     if summaries[0]['runID'] != summaries[1]['runID']:
         raise RuntimeError('Private-window phases have different run identities')
+    if summaries[0]['workspaceSHA256'] != summaries[1]['workspaceSHA256']:
+        for phase in summaries:
+            phase['passed'] = False
+            phase['validationError'] = 'normal-workspace-changed-between-phases'
     children_closed = (
         len(child_receipts) == 2
         and [item.get('phase') for item in child_receipts] == ['initial', 'restart']
@@ -565,6 +623,15 @@ def record_private_window_summary(root, *, listener_closed, child_receipts, proo
     proof_directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     for phase in ('initial', 'restart'):
         shutil.copy2(root / f'{phase}-private-window.json', proof_directory)
+        diagnostic = root / f'{phase}-private-quit-diagnostic.json'
+        if diagnostic.is_file():
+            shutil.copy2(diagnostic, proof_directory)
+        screenshot = Path('build/private-window-evidence') / summaries[0]['runID'] / f'product-{phase}.png'
+        if screenshot.is_file() and screenshot.resolve() != (proof_directory / screenshot.name).resolve():
+            shutil.copy2(screenshot, proof_directory)
+        renderer = Path('build/private-window-evidence') / summaries[0]['runID'] / f'renderer-product-{phase}.png'
+        if renderer.is_file() and renderer.resolve() != (proof_directory / renderer.name).resolve():
+            shutil.copy2(renderer, proof_directory)
     shutil.copy2(root / 'private-window-summary.json', proof_directory)
     return summary
 

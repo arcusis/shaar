@@ -24,6 +24,7 @@ import Testing
     commandItems.first { $0.0 == command.rawValue }?.1
   }
   #expect(item(.newWindow)?.menu?.title == "File")
+  #expect(item(.newPrivateWindow)?.menu?.title == "File")
   #expect(item(.closeWindow)?.menu?.title == "File")
   #expect(item(.find)?.menu?.title == "Edit")
   #expect(item(.reload)?.menu?.title == "View")
@@ -42,6 +43,8 @@ import Testing
   func item(_ title: String) -> NSMenuItem? { items.first { $0.title == title } }
 
   #expect(item("New window")?.keyEquivalent == "n")
+  #expect(item("New Private Window")?.keyEquivalent == "n")
+  #expect(item("New Private Window")?.keyEquivalentModifierMask == [.command, .shift])
   #expect(item("New tab")?.keyEquivalent == "t")
   #expect(item("Search or enter address")?.keyEquivalent == "l")
   #expect(item("Close tab")?.keyEquivalentModifierMask == .command)

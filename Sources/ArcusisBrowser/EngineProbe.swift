@@ -411,7 +411,7 @@ final class EngineProbe {
         let privateProbe = PrivateWindowProbe(
           runtime: runtime, root: root, fixture: fixture, phase: phase,
           sourceA: profileA, sourceB: profileB, normalTab: tabA,
-          runID: privateWindowRunID!)
+          runID: privateWindowRunID!, normalSession: store.session)
         checks += try await privateProbe.run()
         try expect(
           store.session == before, "private fixture leaves normal model and selection unchanged")

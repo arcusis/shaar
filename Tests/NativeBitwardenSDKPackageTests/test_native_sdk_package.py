@@ -3,6 +3,9 @@ import signal
 import subprocess
 import sys
 import hashlib
+import plistlib
+import copy
+from unittest import mock
 import importlib.util
 import tempfile
 import unittest
@@ -198,6 +201,152 @@ class NativeSDKPackageTests(unittest.TestCase):
         )
         self.run_owned_group_case(parent, 5, r'failed \(7\)', 'failure-marker')
 
+
+def candidate_fixture(root):
+    base = fixture(root)
+    write(root / 'Package.swift', module.SDK_PACKAGE_SWIFT)
+    write(root / 'Sources/BitwardenFFI/shim.c', module.SDK_FFI_SHIM)
+    framework = root / 'Frameworks/BitwardenSDK.xcframework'
+    info = {'AvailableLibraries': [{'LibraryIdentifier': 'macos-arm64', 'LibraryPath': 'libbitwarden_uniffi.dylib',
+                                   'HeadersPath': 'Headers', 'SupportedArchitectures': ['arm64'], 'SupportedPlatform': 'macos'}],
+            'CFBundlePackageType': 'XFWK', 'XCFrameworkFormatVersion': '1.0'}
+    (framework / 'Info.plist').write_bytes(plistlib.dumps(info, sort_keys=True))
+    ffi = root / 'Sources/BitwardenFFI/include'
+    headers = framework / 'macos-arm64/Headers'; headers.mkdir(parents=True)
+    for name in ('bitwardenFFI.h', 'module.modulemap'):
+        (headers / name).write_bytes((ffi / name).read_bytes())
+    base['fileSHA256'] = {p.relative_to(root).as_posix(): module.digest(p) for p in module.safe_tree(root)}
+    swift = root / 'Sources/ArcusisBitwardenSDK'
+    generated = {p.name: module.digest(p) for p in swift.iterdir()}
+    generated['bitwardenFFI.h'] = module.digest(ffi / 'bitwardenFFI.h')
+    pin = {'sourceCommit': 'source', 'sourceGitTree': 'tree', 'sourceCargoLockSHA256': 'base-lock',
+           'candidateCargoLockSHA256': 'candidate-lock', 'patchSHA256': {'patch': 'hash'},
+           'changedPaths': ['exact'], 'sourceManifestSHA256': 'manifest', 'fullDiffSHA256': 'diff',
+           'licenseSHA256': base['licenseSHA256'], 'supportSHA256': base['supportSHA256'],
+           'minMacOS': '26.0', 'architecture': 'arm64', 'accepted': False, 'integration_ready': False,
+           'generatedSHA256': generated, 'combinedModuleMapSHA256': module.digest(ffi / 'module.modulemap')}
+    manifest = {key: pin[key] for key in ('sourceCommit', 'sourceGitTree', 'sourceCargoLockSHA256',
+        'candidateCargoLockSHA256', 'patchSHA256', 'changedPaths', 'sourceManifestSHA256', 'fullDiffSHA256',
+        'licenseSHA256', 'supportSHA256', 'minMacOS', 'architecture', 'accepted', 'integration_ready')}
+    manifest.update(schema=1, bindingTreeSHA256=base['bindingTreeSHA256'],
+                    generatedModuleNames=base['generatedModuleNames'], dylibSHA256=base['dylibSHA256'],
+                    fileSHA256=base['fileSHA256'])
+    return pin, manifest
+
+
+class OrganizationCandidateTests(unittest.TestCase):
+    def test_frozen_pin_and_exact_layer_order(self):
+        pin = module.read_organization_pin()
+        self.assertEqual(len(pin['changedPaths']), 31)
+        self.assertEqual(list(module.ORG_PATCH_ORDER)[2:], [
+            'ThirdParty/BitwardenSyncSpike/sync.patch',
+            'ThirdParty/BitwardenSyncSpike/organization-keys.patch',
+            'ThirdParty/BitwardenSyncSpike/organization-key-replacement.patch'])
+        self.assertIs(pin['accepted'], False)
+        self.assertIs(pin['integration_ready'], False)
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = Path(tmp) / 'pin.json'; fake.write_text('{}')
+            with mock.patch.object(module, 'ORG_PIN', fake), self.assertRaisesRegex(ValueError, 'pin'):
+                module.read_organization_pin()
+
+    def test_candidate_manifest_rejects_flags_paths_and_untrusted_dylib(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / 'Package'; pin, manifest = candidate_fixture(root)
+            with mock.patch.object(module, 'read_organization_pin', return_value=pin):
+                module.validate_package(root, manifest, organization=True, expected_dylib=manifest['dylibSHA256'])
+                for key, value in [('accepted', True), ('integration_ready', 0), ('changedPaths', ['foreign']),
+                                   ('sourceManifestSHA256', 'bad'), ('fullDiffSHA256', 'bad'), ('schema', True)]:
+                    changed = copy.deepcopy(manifest); changed[key] = value
+                    with self.subTest(key=key), self.assertRaises(ValueError):
+                        module.validate_package(root, changed, organization=True, expected_dylib=manifest['dylibSHA256'])
+                changed = copy.deepcopy(manifest); changed['extra'] = 1
+                with self.assertRaisesRegex(ValueError, 'shape'):
+                    module.validate_package(root, changed, organization=True, expected_dylib=manifest['dylibSHA256'])
+                with self.assertRaisesRegex(ValueError, 'provenance'):
+                    module.validate_package(root, manifest, organization=True)
+                with self.assertRaisesRegex(ValueError, 'provenance'):
+                    module.validate_package(root, manifest, organization=True, expected_dylib='wrong')
+                extra = root / 'extra.txt'; write(extra, 'extra')
+                changed = copy.deepcopy(manifest); changed['fileSHA256']['extra.txt'] = module.digest(extra)
+                with self.assertRaisesRegex(ValueError, 'path inventory'):
+                    module.validate_package(root, changed, organization=True, expected_dylib=manifest['dylibSHA256'])
+                extra.unlink(); (root / 'empty-extra').mkdir()
+                with self.assertRaisesRegex(ValueError, 'directory inventory'):
+                    module.validate_package(root, manifest, organization=True, expected_dylib=manifest['dylibSHA256'])
+
+    def test_candidate_rejects_generated_or_payload_drift_even_with_rehashed_manifest(self):
+        for path in ('Sources/ArcusisBitwardenSDK/Bindings.swift', 'Sources/BitwardenFFI/include/bitwardenFFI.h'):
+            with self.subTest(path=path), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp) / 'Package'; pin, manifest = candidate_fixture(root)
+                write(root / path, 'tampered\n')
+                manifest['fileSHA256'][path] = module.digest(root / path)
+                if path.endswith('.swift'):
+                    manifest['bindingTreeSHA256'] = module.tree_digest(root / 'Sources/ArcusisBitwardenSDK')
+                with mock.patch.object(module, 'read_organization_pin', return_value=pin), self.assertRaises(ValueError):
+                    module.validate_package(root, manifest, organization=True, expected_dylib=manifest['dylibSHA256'])
+
+    def test_complete_source_manifest_detects_added_and_mutated_files_and_modes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); write(root / 'nested/file', 'one'); first = module.source_manifest(root)
+            write(root / 'nested/added', 'two'); self.assertNotEqual(first, module.source_manifest(root))
+            (root / 'nested/added').unlink(); self.assertEqual(first, module.source_manifest(root))
+            (root / 'nested/file').chmod(0o755); self.assertNotEqual(first, module.source_manifest(root))
+            (root / 'nested/file').chmod(0o644); write(root / 'nested/file', 'other'); self.assertNotEqual(first, module.source_manifest(root))
+            (root / 'nested/.git').mkdir()
+            with self.assertRaisesRegex(ValueError, 'nested source git'):
+                module.source_manifest(root)
+
+    def test_cache_rejects_extra_binding_drift_and_symlink(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); (root / 'sdk-frozen').mkdir(); (root / 'cargo-home/registry').mkdir(parents=True)
+            write(root / 'generated-final/A.swift', 'generated')
+            write(root / 'target-frozen/debug/libbitwarden_uniffi.dylib', 'library')
+            write(root / 'target-frozen/debug/deps/libbitwarden_uniffi.dylib', 'library')
+            write(root / 'target-frozen/debug/uniffi-bindgen', 'bindgen')
+            pin = {'generatedSHA256': {'A.swift': module.digest(root / 'generated-final/A.swift')},
+                   'sourceProofDylibSHA256': module.digest(root / 'target-frozen/debug/libbitwarden_uniffi.dylib'),
+                   'sourceProofBindgenSHA256': module.digest(root / 'target-frozen/debug/uniffi-bindgen')}
+            with mock.patch.object(module, 'validate_organization_source'):
+                module.validate_organization_cache(root, pin)
+                write(root / 'generated-final/extra.h', 'extra')
+                with self.assertRaisesRegex(ValueError, 'binding'):
+                    module.validate_organization_cache(root, pin)
+                (root / 'generated-final/extra.h').unlink()
+                write(root / 'target-frozen/debug/deps/libbitwarden_uniffi.dylib', 'drift')
+                with self.assertRaisesRegex(ValueError, 'dylib'):
+                    module.validate_organization_cache(root, pin)
+                write(root / 'target-frozen/debug/deps/libbitwarden_uniffi.dylib', 'library')
+                (root / 'cargo-home/link').symlink_to(root / 'sdk-frozen')
+                with self.assertRaisesRegex(ValueError, 'symlink'):
+                    module.validate_organization_cache(root, pin)
+
+    def test_successful_candidate_command_reaps_owned_descendant(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); ready = root / 'ready'; group = root / 'group'
+            child = ('import os,signal,time; signal.signal(signal.SIGTERM,signal.SIG_IGN); '
+                     f"open({str(group)!r},'w').write(str(os.getpgrp())); "
+                     f"open({str(ready)!r},'w').write('ready'); time.sleep(60)")
+            parent = ('import subprocess,sys,pathlib,time; '
+                      f"subprocess.Popen([sys.executable,'-c',{child!r}], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL); "
+                      f"p=pathlib.Path({str(ready)!r}); exec(\"while not p.exists(): time.sleep(0.01)\"); "
+                      "print('ok')")
+            result = module.organization_command([sys.executable, '-c', parent], root, os.environ.copy(), 10)
+            self.assertEqual(result.strip(), 'ok')
+            with self.assertRaises(ProcessLookupError): os.killpg(int(group.read_text()), 0)
+
+    def test_shared_interface_staging_requires_complete_inputs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); generated = root / 'generated'; generated.mkdir(); sdk = root / 'sdk'
+            write(sdk / 'crates/bitwarden-uniffi/swift/Sources/BitwardenSdkSupport/NaiveDateFormatter.swift', 'support')
+            write(generated / 'A.swift', 'swift'); write(generated / 'A.h', 'header')
+            with self.assertRaisesRegex(ValueError, 'missing'):
+                module.stage_generated_sources(sdk, generated, root / 'missing')
+            write(generated / 'A.modulemap', 'module A { header "A.h" export * }')
+            maps = module.stage_generated_sources(sdk, generated, root / 'Package')
+            self.assertEqual([p.name for p in maps], ['A.modulemap'])
+            self.assertEqual((root / 'Package/Sources/ArcusisBitwardenSDK/A.swift').read_text(), 'swift')
+            self.assertEqual((root / 'Package/Sources/BitwardenFFI/include/A.h').read_text(), 'header')
+            self.assertEqual((root / 'Package/Sources/BitwardenFFI/include/module.modulemap').read_text(), 'module A { header "A.h" export * }\n')
 
 if __name__ == '__main__':
     unittest.main()

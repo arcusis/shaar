@@ -634,6 +634,17 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   }
 }
 
+- (BOOL)supportsPasswordFillInWindowID:(NSString *)windowID {
+  NSAssert(NSThread.isMainThread, @"Password feature queries require the UI thread");
+  ARCNativeWindowState *state = _windows[windowID];
+  ArdiaCoreWindow *window = state.native;
+  return ValidID(windowID) && !_closingBrowser && state && !state.closed && !state.closing &&
+    window && window.window &&
+    [window respondsToSelector:@selector(requestPasswordFillForTab:completion:)] &&
+    [window respondsToSelector:@selector(fillPasswordRequest:username:password:completion:)] &&
+    [window respondsToSelector:@selector(cancelPasswordRequest:)];
+}
+
 - (void)requestPasswordFillForRequestID:(NSString *)requestID windowID:(NSString *)windowID
   profileID:(NSString *)profileID tabID:(NSString *)tabID
   completion:(void (^)(ARCPasswordFillContext *))completion {
@@ -643,9 +654,7 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   if (!ValidID(requestID) || !ValidID(windowID) || !ValidID(profileID) || !ValidID(tabID) ||
       _passwordRequests[requestID] || _passwordFills[requestID] ||
       _passwordRequests.count + _passwordFills.count >= 32 ||
-      ![window respondsToSelector:@selector(requestPasswordFillForTab:completion:)] ||
-      ![window respondsToSelector:@selector(fillPasswordRequest:username:password:completion:)] ||
-      ![window respondsToSelector:@selector(cancelPasswordRequest:)]) { completion(nil); return; }
+      ![self supportsPasswordFillInWindowID:windowID]) { completion(nil); return; }
   ARCPasswordFillRecord *record = [ARCPasswordFillRecord new];
   record.requestID = requestID; record.windowID = windowID; record.profileID = profileID;
   record.tabID = tabID; record.window = window; record.tab = _tabs[tabID];

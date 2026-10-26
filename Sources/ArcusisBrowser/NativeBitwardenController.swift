@@ -12,6 +12,8 @@ final class NativeBitwardenController {
     var activeSession: NativeBitwardenEstablishedSession?
     var pendingCandidateID: UUID?
     var pendingTask: Task<Void, Never>?
+    var fillEpoch = UUID()
+    var fillPair: NativeBitwardenFillSnapshotAccess?
 
     init(binding: PasswordAuthenticationBinding, enabled: Bool) {
       self.binding = binding
@@ -23,6 +25,8 @@ final class NativeBitwardenController {
   private let backend: any NativeBitwardenBackend
   private let credentialStore: PasswordCredentialStore
   private var profiles: [UUID: ProfileState] = [:]
+  @ObservationIgnored private var fillObservers: [UUID: (UUID) -> Void] = [:]
+  private(set) var fillRevision = 0
   private var statusByProfile: [UUID: String] = [:]
   private var providersByProfile: [UUID: [NativeBitwardenMFAProvider]] = [:]
   private var selectedMFAProviderByProfile: [UUID: NativeBitwardenMFAProvider] = [:]
@@ -112,6 +116,71 @@ final class NativeBitwardenController {
     return preferences.nativeVaultPreferences(for: selectedProfileID).server
   }
 
+  struct FillHandle: Sendable {
+    let binding: PasswordAuthenticationBinding
+    let epoch: UUID
+    let pair: NativeBitwardenFillSnapshotAccess
+  }
+
+  func observeFillChanges(_ observer: @escaping (UUID) -> Void) -> UUID {
+    let id = UUID()
+    fillObservers[id] = observer
+    return id
+  }
+
+  func removeFillObserver(_ id: UUID) { fillObservers[id] = nil }
+
+  private func invalidateFill(profileID: UUID, state: ProfileState) {
+    state.fillEpoch = UUID()
+    state.fillPair = nil
+    fillRevision &+= 1
+    for observer in Array(fillObservers.values) { observer(profileID) }
+  }
+
+  func fillHandle(profileID: UUID) -> FillHandle? {
+    _ = fillRevision
+    guard let state = profiles[profileID], let session = state.activeSession,
+      let pair = state.fillPair, pair.access.sessionID == session.id
+    else { return nil }
+    let stored = preferences.nativeVaultPreferences(for: profileID)
+    guard let endpoints = try? stored.server.endpoints(),
+      stored.isEnabled, stored.accountID == session.accountID,
+      endpoints.credentialAuthority == state.binding.authority,
+      state.binding.accountID == session.accountID,
+      state.binding
+        == makeBinding(profileID: profileID, preferences: stored, accountID: session.accountID)
+    else { return nil }
+    return FillHandle(binding: state.binding, epoch: state.fillEpoch, pair: pair)
+  }
+
+  func isFillHandleCurrent(_ handle: FillHandle) -> Bool {
+    guard let current = fillHandle(profileID: handle.binding.profileID) else { return false }
+    return current.binding == handle.binding && current.epoch == handle.epoch
+      && current.pair.access == handle.pair.access && current.pair.snapshot == handle.pair.snapshot
+  }
+
+  func fillCredential(
+    handle: FillHandle, cipherID: UUID, context: PasswordFillContext
+  ) async throws -> NativeBitwardenFillCredential {
+    guard isFillHandleCurrent(handle), context.binding.profileID == handle.binding.profileID,
+      handle.pair.snapshot.logins.contains(where: { $0.id == cipherID }),
+      let provider = backend as? any NativeBitwardenFillCredentialBackend
+    else { throw NativeBitwardenFillError.staleAccess }
+    do {
+      let credential = try await provider.fillCredential(
+        access: handle.pair.access, cipherID: cipherID, context: context)
+      guard !Task.isCancelled, isFillHandleCurrent(handle) else {
+        throw NativeBitwardenFillError.staleAccess
+      }
+      return credential
+    } catch {
+      guard !Task.isCancelled, isFillHandleCurrent(handle) else {
+        throw NativeBitwardenFillError.staleAccess
+      }
+      throw error
+    }
+  }
+
   func selectProfile(_ profileID: UUID?) {
     guard selectedProfileID != profileID else { return }
     clearForm()
@@ -122,9 +191,9 @@ final class NativeBitwardenController {
 
   func setEnabled(_ enabled: Bool) {
     guard let profileID = selectedProfileID else { return }
-    preferences.setNativeVaultEnabled(enabled, for: profileID)
     let value = state(for: profileID)
     clearVaultSnapshot(profileID: profileID, state: value)
+    preferences.setNativeVaultEnabled(enabled, for: profileID)
     value.generation += 1
     if let attempt = value.activeAttempt { value.gate.invalidate(attempt) }
     value.activeAttempt = nil
@@ -496,6 +565,7 @@ final class NativeBitwardenController {
 
   private func disconnect(profileID: UUID) {
     guard let state = profiles[profileID] else { return }
+    clearVaultSnapshot(profileID: profileID, state: state)
     state.generation += 1
     if let attempt = state.activeAttempt { state.gate.invalidate(attempt) }
     state.activeAttempt = nil
@@ -507,7 +577,6 @@ final class NativeBitwardenController {
     let candidateID = state.pendingCandidateID
     state.pendingCandidateID = nil
     state.activeSession = nil
-    clearVaultSnapshot(profileID: profileID, state: state)
     state.gate.setEnabled(false)
     if selectedProfileID == profileID { clearForm() }
     session?.tokenProvider.clear()
@@ -542,6 +611,7 @@ final class NativeBitwardenController {
       accountID: preferences.accountID ?? oldState.binding.accountID,
       authority: endpoints.credentialAuthority)
     if oldState.binding != binding {
+      invalidateFill(profileID: profileID, state: oldState)
       oldState.gate.rebind(to: binding)
       oldState.binding = binding
     }
@@ -578,6 +648,7 @@ final class NativeBitwardenController {
   private func clearVaultSnapshot(
     profileID: UUID, state: ProfileState, status: String = "Not synced"
   ) {
+    invalidateFill(profileID: profileID, state: state)
     vaultSnapshotByProfile[profileID] = .empty
     syncStatusByProfile[profileID] = status
   }
@@ -586,6 +657,16 @@ final class NativeBitwardenController {
     profileID: UUID, generation: Int, binding: PasswordAuthenticationBinding,
     session: NativeBitwardenEstablishedSession
   ) async {
+    let stored = preferences.nativeVaultPreferences(for: profileID)
+    guard generation == profiles[profileID]?.generation,
+      profiles[profileID]?.activeSession?.id == session.id,
+      profiles[profileID]?.activeSession?.accountID == session.accountID,
+      profiles[profileID]?.binding == binding, stored.isEnabled,
+      stored.accountID == session.accountID,
+      (try? stored.server.endpoints().credentialAuthority) == binding.authority,
+      makeBinding(profileID: profileID, preferences: stored, accountID: session.accountID)
+        == binding
+    else { return }
     do {
       let snapshot = try await backend.syncVault(sessionID: session.id)
       guard generation == profiles[profileID]?.generation,
@@ -594,7 +675,26 @@ final class NativeBitwardenController {
         preferences.nativeVaultPreferences(for: profileID).isEnabled
       else { return }
       vaultSnapshotByProfile[profileID] = snapshot
-      syncStatusByProfile[profileID] = "Synced \(snapshot.logins.count) personal logins"
+      syncStatusByProfile[profileID] = "Synced \(snapshot.logins.count) logins"
+      guard let state = profiles[profileID],
+        let provider = backend as? any NativeBitwardenFillCredentialBackend
+      else { return }
+      let epoch = state.fillEpoch
+      guard let pair = try? await provider.fillSnapshot(sessionID: session.id) else { return }
+      guard generation == state.generation, state.fillEpoch == epoch,
+        state.activeSession?.id == session.id, state.activeSession?.accountID == session.accountID,
+        state.binding == binding, pair.access.sessionID == session.id, pair.snapshot == snapshot,
+        preferences.nativeVaultPreferences(for: profileID).isEnabled,
+        preferences.nativeVaultPreferences(for: profileID).accountID == session.accountID,
+        (try? preferences.nativeVaultPreferences(for: profileID).server.endpoints()
+          .credentialAuthority) == binding.authority,
+        makeBinding(
+          profileID: profileID, preferences: preferences.nativeVaultPreferences(for: profileID),
+          accountID: session.accountID) == binding
+      else { return }
+      state.fillPair = pair
+      fillRevision &+= 1
+      for observer in Array(fillObservers.values) { observer(profileID) }
     } catch {
       guard generation == profiles[profileID]?.generation,
         profiles[profileID]?.activeSession?.id == session.id,

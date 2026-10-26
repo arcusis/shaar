@@ -18,6 +18,7 @@ struct NativeBitwardenSettingsVisualTests {
         && ProcessInfo.processInfo.environment["ARCUSIS_NATIVE_SETTINGS_VISUAL_CI"] == "1",
       "Native component capture runs only in explicitly enabled GitHub Actions CI."))
   func capturesSettingsStatesAndRequiresVisibleSwiftUIText() async throws {
+    guard isNativeVisualCI else { return }
     _ = NSApplication.shared
     let outputDirectory = URL(
       fileURLWithPath: "build/Verification/native-settings-visual-ci", isDirectory: true)
@@ -116,6 +117,87 @@ struct NativeBitwardenSettingsVisualTests {
     #expect(captures.count == 6)
     #expect(failures.isEmpty, "Visual capture/OCR failures: \(failures)")
   }
+
+  @Test(
+    .enabled(
+      if: ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true"
+        && ProcessInfo.processInfo.environment["ARCUSIS_NATIVE_SETTINGS_VISUAL_CI"] == "1",
+      "Native component capture runs only in explicitly enabled GitHub Actions CI."))
+  func capturesFillPickerOnContrastingPageBackgrounds() async throws {
+    guard isNativeVisualCI else { return }
+    _ = NSApplication.shared
+    let outputDirectory = URL(
+      fileURLWithPath: "build/Verification/native-settings-visual-ci/native-fill",
+      isDirectory: true)
+    try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
+    var captures: [[String: Any]] = []
+    var failures: [String] = []
+    for appearance in [ColorScheme.light, .dark] {
+      for page in [FillCaptureBackground.light, .dark] {
+        let appearanceName = appearance == .dark ? "dark" : "light"
+        let filename = "picker-\(appearanceName)-on-\(page.rawValue).png"
+        let imageURL = outputDirectory.appendingPathComponent(filename)
+        var capture: NativeSettingsCapture?
+        var recognized: [String] = []
+        do {
+          let coordinator = try makeFillCaptureCoordinator()
+          defer { coordinator.cancel() }
+          coordinator.request()
+          guard coordinator.showingPicker, coordinator.entries.count == 2 else {
+            throw NativeSettingsCaptureError.fixtureUnavailable
+          }
+          capture = try await captureOwnedView(
+            rootView: FillCapturePage(coordinator: coordinator, page: page),
+            appearance: appearance, to: imageURL)
+          recognized = try recognizeText(in: imageURL)
+          guard let capture, capture.alpha.translucentPixels == 0,
+            capture.alpha.transparentPixels == 0
+          else { throw NativeSettingsCaptureError.nonOpaqueImage }
+          let visibleText = recognized.joined(separator: " ")
+          for required in ["Choose a vault entry", "Example Portal", "Sample Account", "Cancel"] {
+            guard visibleText.range(of: required, options: .caseInsensitive) != nil else {
+              throw NativeSettingsCaptureError.requiredTextMissing
+            }
+          }
+        } catch {
+          failures.append("\(filename): \(error)")
+        }
+        captures.append([
+          "file": filename,
+          "pixelWidth": capture?.pixelWidth ?? 0,
+          "pixelHeight": capture?.pixelHeight ?? 0,
+          "pointWidth": capture?.pointWidth ?? 0,
+          "pointHeight": capture?.pointHeight ?? 0,
+          "alpha": capture?.alpha.manifest ?? [:],
+          "layoutDiagnostics": capture?.layoutDiagnostics ?? [:],
+          "colorScheme": appearanceName,
+          "pageBackground": page.rawValue,
+          "visibleText": recognized,
+          "captureMethod":
+            "owned NSWindow content NSHostingView cacheDisplay bitmap; opaque alpha validation; Vision OCR",
+        ])
+      }
+    }
+    let manifest: [String: Any] = [
+      "componentOnly": true,
+      "scope": "same-window SwiftUI password fill overlay with synthetic memory-only fixtures",
+      "actualChromiumFill": false,
+      "keyboardFocusProof": false,
+      "providerAcceptance": false,
+      "visualAcceptance": false,
+      "desktopActivation": false,
+      "physicalInput": false,
+      "screenCapturePermission": false,
+      "sourceRevision": ProcessInfo.processInfo.environment["GITHUB_SHA"] ?? "unavailable",
+      "captures": captures,
+      "failures": failures,
+    ]
+    let data = try JSONSerialization.data(
+      withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys])
+    try data.write(to: outputDirectory.appendingPathComponent("manifest.json"), options: .atomic)
+    #expect(captures.count == 4)
+    #expect(failures.isEmpty, "Fill component capture/OCR failures: \(failures)")
+  }
 }
 
 private enum CaptureState: String {
@@ -151,6 +233,15 @@ private struct NativeSettingsAlphaProof {
 private func captureOwnedWindow(
   controller: NativeBitwardenController, appearance: ColorScheme, to url: URL
 ) async throws -> NativeSettingsCapture {
+  try await captureOwnedView(
+    rootView: PasswordManagerSettingsView(controller: controller), appearance: appearance, to: url)
+}
+
+@MainActor
+private func captureOwnedView<Content: View>(
+  rootView: Content, appearance: ColorScheme, to url: URL
+) async throws -> NativeSettingsCapture {
+  guard isNativeVisualCI else { throw NativeSettingsCaptureError.captureDisabled }
   let size = NSSize(width: 720, height: 480)
   let window = NSWindow(
     contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled],
@@ -161,7 +252,8 @@ private func captureOwnedWindow(
   window.isOpaque = true
   window.backgroundColor = .windowBackgroundColor
   let view = NSHostingView(
-    rootView: PasswordManagerSettingsView(controller: controller)
+    rootView:
+      rootView
       .environment(\.colorScheme, appearance)
       .frame(width: size.width, height: size.height, alignment: .topLeading)
       .background(Color(nsColor: .windowBackgroundColor)))
@@ -286,10 +378,99 @@ private final class InMemoryCredentialItems: PasswordCredentialItemStorage, Send
 }
 
 private enum NativeSettingsCaptureError: Error {
+  case captureDisabled
+  case fixtureUnavailable
   case bitmapUnavailable
   case emptyImage
   case requiredTextMissing
   case layoutTimeout
   case nonOpaqueImage
   case pixelReadFailed
+}
+
+private var isNativeVisualCI: Bool {
+  ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true"
+    && ProcessInfo.processInfo.environment["ARCUSIS_NATIVE_SETTINGS_VISUAL_CI"] == "1"
+}
+
+private enum FillCaptureBackground: String {
+  case light, dark
+
+  var color: Color {
+    self == .light
+      ? Color(red: 0.94, green: 0.96, blue: 0.98)
+      : Color(red: 0.08, green: 0.11, blue: 0.15)
+  }
+}
+
+private struct FillCapturePage: View {
+  let coordinator: NativePasswordFillCoordinator
+  let page: FillCaptureBackground
+
+  var body: some View {
+    ZStack(alignment: .top) {
+      page.color
+      PasswordFillOverlay(coordinator: coordinator)
+    }
+  }
+}
+
+@MainActor private final class FillCaptureForm: PasswordFillForm {
+  let owner: PasswordFillBinding
+  init(owner: PasswordFillBinding) { self.owner = owner }
+  func request(completion: @escaping (PasswordFillContext?) -> Void) {
+    completion(
+      PasswordFillContext(
+        requestID: UUID(), binding: owner, origin: PasswordFillOrigin("https://example.test")!))
+  }
+  func fill(
+    context: PasswordFillContext, username: String, password: String,
+    completion: @escaping (Bool) -> Void
+  ) {
+    completion(false)
+  }
+  func cancel() {}
+}
+
+@MainActor private final class FillCaptureVault: PasswordFillVault {
+  let handle: NativeBitwardenController.FillHandle
+  init(owner: PasswordFillBinding) throws {
+    let first = UUID()
+    let second = UUID()
+    let snapshot = try NativeBitwardenVaultSnapshot.make(from: [
+      .init(
+        id: first, name: "Example Portal", username: "sample@example.test", uris: [], isLogin: true,
+        isOrganization: false),
+      .init(
+        id: second, name: "Sample Account", username: "reader@example.test", uris: [],
+        isLogin: true, isOrganization: false),
+    ])
+    var state = NativeBitwardenFillAccessState<Int>(sessionID: UUID())
+    let ticket = try state.beginSync()
+    try state.publish(ticket: ticket, snapshot: snapshot, items: [first: 1, second: 2])
+    state.finishSync(ticket)
+    handle = .init(
+      binding: .init(
+        profileID: owner.profileID, vaultID: UUID(), accountID: UUID(),
+        authority: URL(string: "https://example.test")!),
+      epoch: UUID(), pair: try state.snapshot())
+  }
+  func fillHandle(profileID: UUID) -> NativeBitwardenController.FillHandle? {
+    profileID == handle.binding.profileID ? handle : nil
+  }
+  func isFillHandleCurrent(_ handle: NativeBitwardenController.FillHandle) -> Bool {
+    handle.epoch == self.handle.epoch && handle.binding == self.handle.binding
+  }
+  func fillCredential(
+    handle: NativeBitwardenController.FillHandle, cipherID: UUID, context: PasswordFillContext
+  ) async throws -> NativeBitwardenFillCredential {
+    throw NativeBitwardenFillError.cipherUnavailable
+  }
+}
+
+@MainActor private func makeFillCaptureCoordinator() throws -> NativePasswordFillCoordinator {
+  let owner = PasswordFillBinding(windowID: UUID(), profileID: UUID(), tabID: UUID())
+  return NativePasswordFillCoordinator(
+    form: FillCaptureForm(owner: owner), vault: try FillCaptureVault(owner: owner),
+    binding: { owner })
 }

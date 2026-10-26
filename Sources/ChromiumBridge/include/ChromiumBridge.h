@@ -66,6 +66,8 @@ FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeExternalAppLaunchAuditForTest
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onDocumentCommitted)(NSString *tabID, NSString *profileID);
 @property(copy, nullable) void (^onNewTab)(NSString *tabID, NSString *profileID, NSString *url,
                                          NSString * _Nullable openerID, BOOL foreground);
+/// Reports selector availability for a live normal window, not form eligibility.
+- (BOOL)supportsPasswordFillInWindowID:(NSString *)windowID NS_SWIFT_UI_ACTOR;
 /// Explicit identities only. Nil/NO includes unsupported engines, stale context, and cancellation.
 - (void)requestPasswordFillForRequestID:(NSString *)requestID windowID:(NSString *)windowID
   profileID:(NSString *)profileID tabID:(NSString *)tabID

@@ -33,12 +33,20 @@ def stage(binary_dir: Path, resources: Path, pin_dir: Path) -> None:
     pin = json.loads(read_bounded(pin_dir / "pin.json").decode("utf-8"))
     if pin.get("sha256") != DATA_HASH or pin.get("license_sha256") != LICENSE_HASH:
         raise ValueError("PublicSuffix pin hashes do not match expected hashes")
-    if digest(source / "Contents/Resources/public_suffix_list.dat") != DATA_HASH:
+    contents = source / "Contents"
+    if contents.exists():
+        if (source / "public_suffix_list.dat").exists() or (source / "Info.plist").exists():
+            raise ValueError("BrowserCore resource bundle layout is ambiguous")
+        data = contents / "Resources/public_suffix_list.dat"
+        if not (contents / "Info.plist").is_file():
+            raise ValueError("BrowserCore resource bundle Info.plist missing")
+    else:
+        # Classic SwiftPM emits a flat resource bundle without Info.plist.
+        data = source / "public_suffix_list.dat"
+    if digest(data) != DATA_HASH:
         raise ValueError("BrowserCore resource hash mismatch")
     if digest(pin_dir / "LICENSE") != LICENSE_HASH:
         raise ValueError("PublicSuffix license hash mismatch")
-    if not (source / "Contents/Info.plist").is_file():
-        raise ValueError("BrowserCore resource bundle Info.plist missing")
     resources.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=resources, prefix=".browser-resources-") as temporary:
         tmp = Path(temporary)

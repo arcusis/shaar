@@ -4,6 +4,7 @@
 - [[Profile_Space_Isolation]]
 - [[Profile_Favorites]]
 - [[Native_Window_Ownership]]
+- [[Private_Window_Ownership_Plan]]
 - [[Managed_Workspace_Persistence]]
 - [[Sidebar_Tab_Organization]]
 - [[Closed_Tab_Recovery]]

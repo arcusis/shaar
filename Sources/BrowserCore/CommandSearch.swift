@@ -76,8 +76,10 @@ public enum CommandSearch {
     }
     let profileID = session.selectedSpace.profileID
     let profileName = session.profiles.first { $0.id == profileID }?.name ?? ""
-    let favoritePages = Dictionary(
-      uniqueKeysWithValues: session.favoritePages.map { ($0.favoriteID, $0) })
+    let hasScopedFavorites = session.favorites.contains { $0.profileID == profileID }
+    let favoritePages =
+      hasScopedFavorites
+      ? Dictionary(uniqueKeysWithValues: session.favoritePages.map { ($0.favoriteID, $0) }) : [:]
     for favorite in session.favorites where favorite.profileID == profileID {
       let page = favoritePages[favorite.id]
       let searchable = [
@@ -96,14 +98,31 @@ public enum CommandSearch {
       }
     }
     search: for space in orderedSpaces where results.count < resultLimit {
-      for tab in space.orderedTabs {
-        let path = space.folderPath(to: tab.folderID).reversed().map(\.name).joined(
-          separator: " / ")
+      let foldersByID = Dictionary(
+        space.folders.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+      var folderPaths: [UUID?: String] = [nil: ""]
+      func folderPathString(to id: UUID?) -> String {
+        if let cached = folderPaths[id] { return cached }
+        var path: [BrowserFolder] = []
+        var next = id
+        var visited: Set<UUID> = []
+        while let current = next, let folder = foldersByID[current],
+          visited.insert(current).inserted
+        {
+          path.append(folder)
+          next = folder.parentID
+        }
+        let value = path.reversed().map(\.name).joined(separator: " / ")
+        folderPaths[id] = value
+        return value
+      }
+      func appendTabResult(_ tab: BrowserTab) -> Bool {
+        let path = folderPathString(to: tab.folderID)
         guard
           query.isEmpty
             || "\(tab.title) \(tab.url.absoluteString) \(path)".localizedCaseInsensitiveContains(
               query)
-        else { continue }
+        else { return false }
         let context = path.isEmpty ? space.name : "\(space.name) · \(path)"
         if append(
           CommandResult(
@@ -111,11 +130,20 @@ public enum CommandSearch {
             symbol: "rectangle.on.rectangle", action: .tab(space: space.id, tab: tab.id)
           ))
         {
+          return true
+        }
+        return false
+      }
+      for item in space.pinnedItems(includingCollapsed: true) {
+        if case .tab(let tab, _) = item, appendTabResult(tab) {
           break search
         }
       }
+      for tab in space.tabs where !tab.isPinned {
+        if appendTabResult(tab) { break search }
+      }
       for folder in space.folders {
-        let path = space.folderPath(to: folder.id).reversed().map(\.name).joined(separator: " / ")
+        let path = folderPathString(to: folder.id)
         if query.isEmpty || path.localizedCaseInsensitiveContains(query) {
           if append(
             CommandResult(

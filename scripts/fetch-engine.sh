@@ -19,9 +19,19 @@ if [[ ! -f "$archive" ]] || ! verify "$archive"; then
 fi
 destination="$cache/$key"
 if [[ ! -f "$destination/.verified-$checksum" ]]; then
-  if tar -tf "$archive" | rg '(^/|(^|/)\.\.(/|$))' >&2; then
+  archive_paths=$(tar -tf "$archive") || {
+    echo 'Cannot inspect engine archive; refusing extraction.' >&2
+    exit 1
+  }
+  if /usr/bin/grep -E '(^/|(^|/)\.\.(/|$))' <<< "$archive_paths" >&2; then
     echo 'Unsafe archive path; refusing extraction.' >&2
     exit 1
+  else
+    validation_status=$?
+    [[ $validation_status == 1 ]] || {
+      echo 'Archive path validation failed; refusing extraction.' >&2
+      exit 1
+    }
   fi
   mkdir -p "$destination"
   tar -xf "$archive" -C "$destination"

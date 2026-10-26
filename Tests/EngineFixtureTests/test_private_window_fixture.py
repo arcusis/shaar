@@ -25,7 +25,8 @@ class PrivateWindowFixtureTests(unittest.TestCase):
                     privateWindowOnly=True, privateWindowProbe=True,
                     savedTabCapacityOnly=False, externalAppConsentOnly=False,
                     bitwardenStoreProbe=False, fixtureTLSProbe=False,
-                    localFixturesPassed=True)
+                    localFixturesPassed=True, error=None, fixtureStage="normal-fixtures-complete",
+                    checkCount=1, checks=["normal fixture completed"], exitCode=0)
 
     def evidence(self, phase):
         screenshot = b'\x89PNG\r\n\x1a\n' + f'product-{phase}-owned-window'.encode()
@@ -98,6 +99,9 @@ class PrivateWindowFixtureTests(unittest.TestCase):
         self.assertTrue((self.root / 'proof' / 'initial-private-quit-diagnostic.json').exists())
         self.assertTrue((self.root / 'proof' / 'renderer-product-initial.png').exists())
         self.assertTrue((self.root / 'proof' / 'private-window-summary.json').exists())
+        for phase in ('initial', 'restart'):
+            self.assertEqual(json.loads((self.root / 'proof' / f'{phase}.json').read_text()),
+                             self.report(phase))
 
     def test_summary_preserves_failing_observed_count_and_runs_both_phases(self):
         initial = self.evidence('initial')
@@ -118,6 +122,34 @@ class PrivateWindowFixtureTests(unittest.TestCase):
         self.assertEqual(result['phases'][0]['checkCount'], len(fixture.PRIVATE_WINDOW_CHECKS) - 1)
         self.assertEqual(result['phases'][0]['requiredCheckCount'], len(fixture.PRIVATE_WINDOW_CHECKS))
         self.assertEqual([phase['phase'] for phase in result['phases']], ['initial', 'restart'])
+
+    def test_missing_or_failed_main_report_is_rejected_and_redacted(self):
+        children = [dict(phase=phase, childExited=True, processGroupAbsent=True)
+                    for phase in ('initial', 'restart')]
+        for phase in ('initial', 'restart'):
+            for missing in (False, True):
+                with self.subTest(phase=phase, missing=missing):
+                    self.write_phase('initial')
+                    self.write_phase('restart')
+                    path = self.root / f'{phase}.json'
+                    if missing:
+                        path.unlink()
+                    else:
+                        report = self.report(phase)
+                        report.update(passed=False, error='Engine probe timed out. secret host-identities.json',
+                                      fixtureStage='NativeHost')
+                        path.write_text(json.dumps(report))
+                    proof = self.root / f'proof-{phase}-{missing}'
+                    result = fixture.record_private_window_summary(
+                        self.root, listener_closed=True, child_receipts=children,
+                        proof_directory=proof)
+                    self.assertFalse(result['passed'])
+                    if not missing:
+                        retained = json.loads((proof / f'{phase}.json').read_text())
+                        self.assertEqual(retained['error'], 'timeout')
+                        self.assertTrue(retained['hostIdentityError'])
+                        self.assertEqual(retained['fixtureStage'], 'NativeHost')
+                        self.assertNotIn('secret', json.dumps(retained))
 
     def test_listener_cleanup_probe_distinguishes_bound_port(self):
         import socket

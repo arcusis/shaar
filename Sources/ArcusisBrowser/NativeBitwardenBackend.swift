@@ -109,7 +109,7 @@ enum NativeBitwardenAccessTokenIdentity {
   }
 }
 
-actor NativeBitwardenSDKBackend: NativeBitwardenBackend {
+actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCredentialBackend {
   #if canImport(ArcusisBitwardenSDK)
     private struct Candidate {
       let client: Client
@@ -123,6 +123,7 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend {
       var generation: Int
       var locked: Bool
       var initialized: Bool
+      var fillAccess: NativeBitwardenFillAccessState<Cipher>
     }
     private var candidates: [UUID: Candidate] = [:]
   #endif
@@ -183,7 +184,8 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend {
         candidates[id] = Candidate(
           client: client, sync: client.sync(), bridge: bridge, tokenProvider: tokenProvider,
           response: response, prelogin: prelogin, email: email, userID: userID,
-          generation: 0, locked: false, initialized: false)
+          generation: 0, locked: false, initialized: false,
+          fillAccess: NativeBitwardenFillAccessState(sessionID: id))
         return .authenticated(NativeBitwardenAuthenticatedCandidate(id: id, accountID: userID))
       }
     #else
@@ -237,6 +239,7 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend {
       guard var candidate = candidates[sessionID] else { return false }
       candidate.generation += 1
       candidate.locked = true
+      _ = candidate.fillAccess.revoke()
       candidates[sessionID] = candidate
       candidate.client.crypto().clearUserCryptoKeys()
       let hadState = await candidate.bridge.hasTransientKeyState()
@@ -260,9 +263,25 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend {
 
   func syncVault(sessionID: UUID) async throws -> NativeBitwardenVaultSnapshot {
     #if canImport(ArcusisBitwardenSDK)
-      guard let candidate = candidates[sessionID] else {
+      guard var candidate = candidates[sessionID] else {
         throw NativeBitwardenBackendError.candidateUnavailable
       }
+      candidate.generation += 1
+      let ticket: NativeBitwardenSyncTicket
+      do {
+        ticket = try candidate.fillAccess.beginSync()
+      } catch {
+        candidates[sessionID] = candidate
+        throw error
+      }
+      candidates[sessionID] = candidate
+      defer {
+        if var current = candidates[sessionID] {
+          current.fillAccess.finishSync(ticket)
+          candidates[sessionID] = current
+        }
+      }
+      try Task.checkCancellation()
       guard !candidate.locked, candidate.initialized,
         await candidate.tokenProvider.getAccessToken() != nil
       else { throw NativeBitwardenBackendError.sessionLocked }
@@ -270,7 +289,9 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend {
       guard isCurrent(candidateID: sessionID, generation: generation) else {
         throw NativeBitwardenBackendError.staleSession
       }
+      try Task.checkCancellation()
       let synchronized = try await candidate.sync.sync(force: true)
+      try Task.checkCancellation()
       guard isCurrent(candidateID: sessionID, generation: generation) else {
         throw NativeBitwardenBackendError.staleSession
       }
@@ -291,6 +312,7 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend {
           continue
         }
         let view = try await ciphers.decrypt(cipher: cipher)
+        try Task.checkCancellation()
         guard isCurrent(candidateID: sessionID, generation: generation) else {
           throw NativeBitwardenBackendError.staleSession
         }
@@ -299,14 +321,91 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend {
       guard isCurrent(candidateID: sessionID, generation: generation) else {
         throw NativeBitwardenBackendError.staleSession
       }
-      return try NativeBitwardenVaultSnapshot.make(from: metadata)
+      let snapshot = try NativeBitwardenVaultSnapshot.make(from: metadata)
+      var items: [UUID: Cipher] = [:]
+      for cipher in encrypted {
+        if let id = cipher.id.flatMap(UUID.init(uuidString:)) { items[id] = cipher }
+      }
+      try Task.checkCancellation()
+      guard var current = candidates[sessionID],
+        isCurrent(candidateID: sessionID, generation: generation)
+      else { throw NativeBitwardenBackendError.staleSession }
+      try current.fillAccess.publish(ticket: ticket, snapshot: snapshot, items: items)
+      candidates[sessionID] = current
+      return snapshot
     #else
       _ = sessionID
       throw NativeBitwardenBackendError.sdkUnavailable
     #endif
   }
 
+  func fillSnapshot(sessionID: UUID) async throws -> NativeBitwardenFillSnapshotAccess {
+    #if canImport(ArcusisBitwardenSDK)
+      guard let candidate = candidates[sessionID], !candidate.locked, candidate.initialized else {
+        throw NativeBitwardenFillError.staleAccess
+      }
+      try Task.checkCancellation()
+      return try candidate.fillAccess.snapshot()
+    #else
+      _ = sessionID
+      throw NativeBitwardenBackendError.sdkUnavailable
+    #endif
+  }
+
+  func fillCredential(
+    access: NativeBitwardenFillAccess, cipherID: UUID, context: PasswordFillContext
+  ) async throws -> NativeBitwardenFillCredential {
+    #if canImport(ArcusisBitwardenSDK)
+      guard let candidate = candidates[access.sessionID], !candidate.locked, candidate.initialized
+      else { throw NativeBitwardenFillError.staleAccess }
+      return try await NativeBitwardenFillLookup.credential(
+        isolation: self, id: cipherID, origin: context.origin,
+        item: {
+          guard let current = self.candidates[access.sessionID], !current.locked,
+            current.initialized
+          else { throw NativeBitwardenFillError.staleAccess }
+          let cipher = try current.fillAccess.item(access: access, id: cipherID)
+          guard cipher.organizationId == nil else {
+            throw NativeBitwardenFillError.organizationUnsupported
+          }
+          return cipher
+        },
+        decrypt: { cipher in
+          let view = try await candidate.client.vault().ciphers().decrypt(cipher: cipher)
+          return Self.fillCandidate(view)
+        },
+        validate: {
+          guard let current = self.candidates[access.sessionID], !current.locked,
+            current.initialized
+          else { throw NativeBitwardenFillError.staleAccess }
+          try current.fillAccess.validate(access)
+        })
+    #else
+      _ = (access, cipherID, context)
+      throw NativeBitwardenBackendError.sdkUnavailable
+    #endif
+  }
+
   #if canImport(ArcusisBitwardenSDK)
+    static func fillCandidate(_ view: CipherView) -> NativeBitwardenFillCandidate {
+      let uris = (view.login?.uris ?? []).map { uri in
+        let mode: NativeBitwardenFillURIMode
+        switch uri.match {
+        case .host: mode = .host
+        case .never: mode = .never
+        case .domain, .startsWith, .exact, .regularExpression, nil: mode = .unsupported
+        @unknown default: mode = .unsupported
+        }
+        return NativeBitwardenFillURI(value: uri.uri, mode: mode)
+      }
+      return NativeBitwardenFillCandidate(
+        id: view.id.flatMap(UUID.init(uuidString:)), organization: view.organizationId != nil,
+        login: view.type == .login, deleted: view.deletedDate != nil,
+        archived: view.archivedDate != nil, partial: view.partial, viewPassword: view.viewPassword,
+        reprompt: view.reprompt != .none, username: view.login?.username,
+        password: view.login?.password, uris: uris)
+    }
+
     private func sdkProvider(_ provider: NativeBitwardenMFAProvider) -> TwoFactorProvider {
       switch provider {
       case .authenticator: .authenticator

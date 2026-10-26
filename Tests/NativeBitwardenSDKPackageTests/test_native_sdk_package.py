@@ -426,7 +426,7 @@ class RefreshCandidateTests(unittest.TestCase):
 class RefreshGeneratorProvenanceTests(unittest.TestCase):
     def test_fresh_build_executes_constructed_tool_and_reuse_requires_pin(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp); sdk = root / 'sdk'; sdk.mkdir(); target = root / 'target'; target.mkdir()
+            root = Path(tmp).resolve(); sdk = root / 'sdk'; sdk.mkdir(); target = root / 'target'; target.mkdir()
             generated = root / 'generated'; dylib = root / 'sdk.dylib'; write(dylib, 'dylib')
             bindgen = target / 'aarch64-apple-darwin/release/uniffi-bindgen'
             pin = {'target': 'aarch64-apple-darwin', 'sourceProofBindgenSHA256': hashlib.sha256(b'historical').hexdigest()}
@@ -452,7 +452,7 @@ class RefreshGeneratorProvenanceTests(unittest.TestCase):
 
     def test_fresh_refuses_existing_tool_and_tool_changed_during_run(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp); sdk = root / 'sdk'; sdk.mkdir(); target = root / 'target'; generated = root / 'generated'
+            root = Path(tmp).resolve(); sdk = root / 'sdk'; sdk.mkdir(); target = root / 'target'; generated = root / 'generated'
             bindgen = target / 'aarch64-apple-darwin/release/uniffi-bindgen'; write(bindgen, 'preexisting'); bindgen.chmod(0o755)
             pin = {'target': 'aarch64-apple-darwin'}
             with mock.patch.object(module, 'refresh_command') as command, self.assertRaisesRegex(ValueError, 'already exists'):

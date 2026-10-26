@@ -28,6 +28,10 @@ class LifecycleBoundaryTests(unittest.TestCase):
         for name in ("BitwardenLifecycleProbe", "BitwardenAuthSpike",
                      "BitwardenKeyClearSpike", "BitwardenSyncSpike"):
             shutil.copytree(ROOT / "ThirdParty" / name, third_party / name)
+        test_pin_path = third_party / "BitwardenLifecycleProbe/pin.json"
+        test_pin = json.loads(test_pin_path.read_text(encoding="utf-8"))
+        test_pin["accepted"] = False
+        test_pin_path.write_text(json.dumps(test_pin), encoding="utf-8")
         self.root_patch = mock.patch.object(RUNNER, "ROOT", self.root)
         self.root_patch.start()
         self.addCleanup(self.root_patch.stop)

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "accepted": false,
+  "accepted": true,
   "integration_ready": false,
   "repository": "https://github.com/bitwarden/sdk-internal",
   "sourceCommit": "5cf919837e83b71c2508bf99344ea57cf5f84e88",

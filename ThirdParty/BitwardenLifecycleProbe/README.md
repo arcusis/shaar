@@ -14,24 +14,27 @@ clear on lock, retained handle rejection, explicit unlock, and disconnect.
 The synthetic HTTPS identity scopes local storage only; TLS and authority
 binding acceptance remain false.
 
-Current pin remains `accepted: false` and `integration_ready: false` until parent
-review. `--candidate` is required for current pin. With parent review promotion,
-default run mode requires `accepted: true`; candidate flag then fails closed.
+Parent review accepted this composed fixture proof: pin has `accepted: true` and
+`integration_ready: false`. Default invocation reads the accepted source pin
+without `--candidate`. After promotion, `--candidate` fails closed because that
+mode requires an unaccepted pin.
 
 Example on arm64 macOS 27:
 
 ```sh
-python3 scripts/test-native-bitwarden-lifecycle.py --candidate \
+python3 scripts/test-native-bitwarden-lifecycle.py \
   --source /path/to/pristine/sdk-internal \
   --output /private/tmp/native-bitwarden-lifecycle-proof
 ```
 
-SDK clone, fixture values, requests, tokens, encrypted values, executable, and
-bindings stay under fresh mode-0700 private work. Raw request/output data never
-enters logs or receipts. Work is removed on every exit. Receipt uses mode 0600
-and records source/patch/lock/artifact digests, counted Rust tests, stage
-booleans, cleanup observations, and actual BrowserCore source digests. SDK and
-Swift deployment target is macOS 26; runtime host macOS 27 remains separate.
-This candidate does not establish TLS/service, organization/full-vault,
-vendor/browser form-fill, native UI, product, zeroization, or distribution
-acceptance.
+Fresh mode-0700 private work under owned output contains SDK clone, fixture
+values, requests, tokens, encrypted values, executable, and bindings. Raw
+request/output data never enters logs or receipts. Runner removes private work
+on exit while retaining nonsecret build artifacts and mode-0600 private receipts
+under owned output. Receipt records source/patch/lock/artifact digests, counted Rust tests,
+stage booleans, cleanup observations, and actual BrowserCore source digests.
+SDK and Swift deployment target is macOS 26; runtime host macOS 27 remains
+separate. This accepted fixture proof does not establish integration readiness,
+TLS/service, organization/full-vault, vendor/browser form-fill, native UI,
+product, or distribution acceptance. No cryptographic zeroization, task
+cancellation, or product availability is claimed.

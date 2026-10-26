@@ -13,6 +13,17 @@ FOUNDATION_EXPORT BOOL ARCProbeRootIsOwned(NSURL *root);
 FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeExternalAppLaunchAuditForTesting(
   NSString *url, NSArray *launches, NSURL *root, BOOL enabled);
 
+/// Immutable public metadata for a native, one-use password request. The native handle remains private.
+@interface ARCPasswordFillContext : NSObject
+@property(nonatomic, readonly, copy) NSString *requestID;
+@property(nonatomic, readonly, copy) NSString *windowID;
+@property(nonatomic, readonly, copy) NSString *profileID;
+@property(nonatomic, readonly, copy) NSString *tabID;
+@property(nonatomic, readonly, copy) NSString *origin;
+- (instancetype)init NS_UNAVAILABLE;
++ (instancetype)new NS_UNAVAILABLE;
+@end
+
 /// All methods and callbacks run on the main thread. The engine owns the AppKit run loop.
 @interface ARCChromiumRuntime : NSObject
 @property(copy, nullable) void (^onReady)(void);
@@ -55,6 +66,14 @@ FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeExternalAppLaunchAuditForTest
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onDocumentCommitted)(NSString *tabID, NSString *profileID);
 @property(copy, nullable) void (^onNewTab)(NSString *tabID, NSString *profileID, NSString *url,
                                          NSString * _Nullable openerID, BOOL foreground);
+/// Explicit identities only. Nil/NO includes unsupported engines, stale context, and cancellation.
+- (void)requestPasswordFillForRequestID:(NSString *)requestID windowID:(NSString *)windowID
+  profileID:(NSString *)profileID tabID:(NSString *)tabID
+  completion:(void (NS_SWIFT_UI_ACTOR ^)(ARCPasswordFillContext * _Nullable))completion NS_SWIFT_UI_ACTOR;
+- (void)fillPasswordContext:(ARCPasswordFillContext *)context username:(NSString *)username
+  password:(NSString *)password completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion NS_SWIFT_UI_ACTOR;
+/// Cancels pending publication; already delivered renderer work cannot be undone.
+- (void)cancelPasswordRequestID:(NSString *)requestID NS_SWIFT_UI_ACTOR;
 @property(readonly, nullable) NSWindow *window;
 @property(readonly, nullable) NSView *hostView;
 @property(readonly) NSString *chromiumVersion;

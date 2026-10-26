@@ -8,6 +8,8 @@ import importlib.util
 import json
 import os
 import platform
+import plistlib
+import stat
 import shutil
 import subprocess
 import signal
@@ -20,6 +22,16 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / 'build/SDKCache/bitwarden-sdk-5cf9198'
 OUTPUT = ROOT / 'build/NativeBitwardenSDK'
 RUNNER = ROOT / 'scripts/test-native-bitwarden-lifecycle.py'
+ORG_OUTPUT = ROOT / 'build/OrganizationSDKPackage'
+ORG_PIN = ROOT / 'ThirdParty/BitwardenSyncSpike/organization-sdk-package.pin.json'
+ORG_PIN_SHA256 = 'f8428c821c558732f59155b398b38a55f1a3263e29fc59a423ad6bcb371986e0'
+ORG_PATCH_ORDER = ('ThirdParty/BitwardenAuthSpike/identity-mfa.patch',
+                   'ThirdParty/BitwardenKeyClearSpike/clear-crypto-keys.patch',
+                   'ThirdParty/BitwardenSyncSpike/sync.patch',
+                   'ThirdParty/BitwardenSyncSpike/organization-keys.patch',
+                   'ThirdParty/BitwardenSyncSpike/organization-key-replacement.patch')
+SDK_PACKAGE_SWIFT = '// swift-tools-version: 5.9\nimport PackageDescription\nlet package = Package(name: "ArcusisBitwardenSDK", platforms: [.macOS("26.0")], products: [.library(name: "ArcusisBitwardenSDK", targets: ["ArcusisBitwardenSDK"])], targets: [.binaryTarget(name: "BitwardenSDK", path: "Frameworks/BitwardenSDK.xcframework"), .target(name: "BitwardenFFI", path: "Sources/BitwardenFFI", publicHeadersPath: "include"), .target(name: "BitwardenSdkSupport", path: "Sources/BitwardenSdkSupport"), .target(name: "ArcusisBitwardenSDK", dependencies: ["BitwardenSDK", "BitwardenFFI", "BitwardenSdkSupport"], path: "Sources/ArcusisBitwardenSDK")])\n'
+SDK_FFI_SHIM = 'void arcusis_bitwarden_ffi_link_anchor(void) {}\n'
 LOG_DIR: Path | None = None
 COMMANDS: list[list[str]] = []
 
@@ -59,22 +71,39 @@ def safe_tree(root: Path) -> list[Path]:
     return result
 
 
-def validate_package(root: Path, manifest: dict) -> None:
+def validate_package(root: Path, manifest: dict, *, organization: bool = False, expected_dylib: str | None = None) -> None:
     if root.is_symlink() or not root.is_dir():
         raise ValueError('unsafe output directory')
     root = root.resolve(strict=True)
-    runner = load_runner()
-    if manifest.get('sourceCommit') != runner.SOURCE_COMMIT:
-        raise ValueError('manifest source pin mismatch')
-    if manifest.get('sourceGitTree') != runner.SOURCE_TREE:
-        raise ValueError('manifest source Git tree mismatch')
-    if manifest.get('sourceCargoLockSHA256') != runner.SOURCE_LOCK_SHA or manifest.get('candidateCargoLockSHA256') != runner.CANDIDATE_LOCK_SHA:
-        raise ValueError('manifest Cargo.lock pin mismatch')
-    if manifest.get('patchSHA256') != runner.PATCH_SHAS:
-        raise ValueError('manifest patch digest mismatch')
-    changed = manifest.get('changedPaths')
-    if not isinstance(changed, list) or len(changed) != 22 or len(set(changed)) != 22 or set(changed) != runner.CHANGED_PATHS:
-        raise ValueError('manifest changed-path result mismatch')
+    if organization:
+        pin = read_organization_pin()
+        expected_fields = {'schema', 'sourceCommit', 'sourceGitTree', 'sourceCargoLockSHA256',
+                           'candidateCargoLockSHA256', 'patchSHA256', 'changedPaths',
+                           'sourceManifestSHA256', 'fullDiffSHA256', 'bindingTreeSHA256',
+                           'generatedModuleNames', 'licenseSHA256', 'supportSHA256', 'dylibSHA256',
+                           'minMacOS', 'architecture', 'accepted', 'integration_ready', 'fileSHA256'}
+        if set(manifest) != expected_fields or type(manifest.get('schema')) is not int or manifest['schema'] != 1:
+            raise ValueError('organization manifest shape invalid')
+        for key in ('sourceCommit', 'sourceGitTree', 'sourceCargoLockSHA256', 'candidateCargoLockSHA256',
+                    'patchSHA256', 'changedPaths', 'sourceManifestSHA256', 'fullDiffSHA256',
+                    'licenseSHA256', 'supportSHA256', 'minMacOS', 'architecture', 'accepted', 'integration_ready'):
+            if type(manifest.get(key)) is not type(pin[key]) or manifest[key] != pin[key]:
+                raise ValueError('organization manifest pin mismatch: ' + key)
+        if not expected_dylib or manifest.get('dylibSHA256') != expected_dylib:
+            raise ValueError('organization dylib provenance mismatch')
+    else:
+        runner = load_runner()
+        if manifest.get('sourceCommit') != runner.SOURCE_COMMIT:
+            raise ValueError('manifest source pin mismatch')
+        if manifest.get('sourceGitTree') != runner.SOURCE_TREE:
+            raise ValueError('manifest source Git tree mismatch')
+        if manifest.get('sourceCargoLockSHA256') != runner.SOURCE_LOCK_SHA or manifest.get('candidateCargoLockSHA256') != runner.CANDIDATE_LOCK_SHA:
+            raise ValueError('manifest Cargo.lock pin mismatch')
+        if manifest.get('patchSHA256') != runner.PATCH_SHAS:
+            raise ValueError('manifest patch digest mismatch')
+        changed = manifest.get('changedPaths')
+        if not isinstance(changed, list) or len(changed) != 22 or len(set(changed)) != 22 or set(changed) != runner.CHANGED_PATHS:
+            raise ValueError('manifest changed-path result mismatch')
     swift = root / 'Sources/ArcusisBitwardenSDK'
     support = root / 'Sources/BitwardenSdkSupport'
     ffi = root / 'Sources/BitwardenFFI/include'
@@ -116,6 +145,45 @@ def validate_package(root: Path, manifest: dict) -> None:
                if p.relative_to(root).as_posix() != 'build-manifest.json'}
     if manifest.get('fileSHA256') != payload:
         raise ValueError('package inventory or artifact digest mismatch')
+    if organization:
+        generated = pin['generatedSHA256']
+        swift_expected = {name: value for name, value in generated.items() if name.endswith('.swift')}
+        header_expected = {name: value for name, value in generated.items() if name.endswith('.h')}
+        if {p.name: digest(p) for p in safe_tree(swift)} != swift_expected:
+            raise ValueError('organization generated Swift inventory mismatch')
+        if {p.name: digest(p) for p in headers} != header_expected:
+            raise ValueError('organization generated header inventory mismatch')
+        if digest(ffi / 'module.modulemap') != pin['combinedModuleMapSHA256']:
+            raise ValueError('organization modulemap inventory mismatch')
+        expected_paths = {'Package.swift', 'Sources/BitwardenFFI/shim.c',
+                          'Sources/BitwardenFFI/include/module.modulemap',
+                          'Sources/BitwardenSdkSupport/NaiveDateFormatter.swift',
+                          'Frameworks/BitwardenSDK.xcframework/Info.plist',
+                          'Frameworks/BitwardenSDK.xcframework/macos-arm64/libbitwarden_uniffi.dylib',
+                          'Frameworks/BitwardenSDK.xcframework/macos-arm64/Headers/module.modulemap'}
+        expected_paths |= {'Sources/ArcusisBitwardenSDK/' + n for n in swift_expected}
+        expected_paths |= {'Sources/BitwardenFFI/include/' + n for n in header_expected}
+        expected_paths |= {'Frameworks/BitwardenSDK.xcframework/macos-arm64/Headers/' + n for n in header_expected}
+        expected_paths |= {'ThirdPartyNotices/' + n for n in pin['licenseSHA256']}
+        if set(payload) != expected_paths:
+            raise ValueError('organization package path inventory mismatch')
+        expected_dirs = {parent.as_posix() for name in expected_paths for parent in Path(name).parents if parent.as_posix() != '.'}
+        actual_dirs = {path.relative_to(root).as_posix() for path in root.rglob('*') if path.is_dir()}
+        if actual_dirs != expected_dirs:
+            raise ValueError('organization package directory inventory mismatch')
+        if ((root / 'Package.swift').read_text() != SDK_PACKAGE_SWIFT
+                or (root / 'Sources/BitwardenFFI/shim.c').read_text() != SDK_FFI_SHIM):
+            raise ValueError('organization package contract mismatch')
+        framework_headers = root / 'Frameworks/BitwardenSDK.xcframework/macos-arm64/Headers'
+        if ({p.name: digest(p) for p in safe_tree(framework_headers)}
+                != (header_expected | {'module.modulemap': pin['combinedModuleMapSHA256']})):
+            raise ValueError('organization framework header mismatch')
+        expected_info = {'AvailableLibraries': [{'LibraryIdentifier': 'macos-arm64',
+                          'LibraryPath': 'libbitwarden_uniffi.dylib', 'HeadersPath': 'Headers',
+                          'SupportedArchitectures': ['arm64'], 'SupportedPlatform': 'macos'}],
+                         'CFBundlePackageType': 'XFWK', 'XCFrameworkFormatVersion': '1.0'}
+        if (root / 'Frameworks/BitwardenSDK.xcframework/Info.plist').read_bytes() != plistlib.dumps(expected_info, sort_keys=True):
+            raise ValueError('organization XCFramework contract mismatch')
 
 
 def tree_digest(root: Path) -> str:
@@ -174,7 +242,7 @@ def terminate_owned_group(proc: subprocess.Popen[str], grace: float = 5.0) -> No
         raise RuntimeError('owned process group survived SIGKILL')
 
 
-def command(argv: list[str], cwd: Path, env: dict[str, str], timeout: int = 3600, log_dir: Path | None = None) -> str:
+def command(argv: list[str], cwd: Path, env: dict[str, str], timeout: int = 3600, log_dir: Path | None = None, *, cleanup_success: bool = False) -> str:
     COMMANDS.append(list(argv))
     proc = subprocess.Popen(argv, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             text=True, start_new_session=True)
@@ -191,6 +259,8 @@ def command(argv: list[str], cwd: Path, env: dict[str, str], timeout: int = 3600
         if failure is None and proc.returncode:
             terminate_owned_group(proc)
             failure = RuntimeError(f'{Path(argv[0]).name} failed ({proc.returncode}): {(stderr or stdout)[-4000:]}')
+        elif failure is None and cleanup_success:
+            terminate_owned_group(proc)
     finally:
         if log_dir is None:
             log_dir = LOG_DIR
@@ -203,11 +273,244 @@ def command(argv: list[str], cwd: Path, env: dict[str, str], timeout: int = 3600
     return stdout
 
 
+def read_organization_pin() -> dict:
+    if ORG_PIN.is_symlink() or not ORG_PIN.is_file() or digest(ORG_PIN) != ORG_PIN_SHA256:
+        raise ValueError('organization package pin missing or changed')
+    pin = json.loads(ORG_PIN.read_text())
+    keys = {'schema', 'accepted', 'integration_ready', 'repository', 'sourceCommit', 'sourceGitTree',
+            'sourceCargoLockSHA256', 'candidateCargoLockSHA256', 'fullDiffSHA256', 'sourceManifestSHA256',
+            'sourceManifestEntries', 'patchSHA256', 'changedPaths', 'rustToolchain', 'target', 'minMacOS',
+            'architecture', 'sourceProofDylibSHA256', 'sourceProofBindgenSHA256', 'generatedSHA256',
+            'supportSHA256', 'licenseSHA256', 'combinedModuleMapSHA256'}
+    if (not isinstance(pin, dict) or set(pin) != keys or type(pin['schema']) is not int or pin['schema'] != 1
+            or pin['accepted'] is not False or pin['integration_ready'] is not False
+            or len(pin['changedPaths']) != 31 or len(set(pin['changedPaths'])) != 31
+            or set(pin['patchSHA256']) != set(ORG_PATCH_ORDER) or pin['sourceManifestEntries'] != 2356):
+        raise ValueError('organization package pin invalid')
+    for name, expected in pin['patchSHA256'].items():
+        path = ROOT / name
+        if path.is_symlink() or not path.is_file() or digest(path) != expected:
+            raise ValueError('organization prerequisite patch mismatch')
+    return pin
+
+
+def source_manifest(root: Path) -> tuple[str, int]:
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError('unsafe source tree')
+    rows = []
+    for current, dirs, files in os.walk(root, topdown=True, followlinks=False):
+        here = Path(current)
+        if here != root and '.git' in dirs:
+            raise ValueError('nested source git directory')
+        dirs[:] = sorted(d for d in dirs if d != '.git')
+        for name in sorted(dirs + files):
+            path = here / name
+            rel = path.relative_to(root).as_posix()
+            mode = path.lstat().st_mode
+            if stat.S_ISLNK(mode):
+                rows.append({'path': rel, 'kind': 'symlink', 'target': os.readlink(path)})
+            elif stat.S_ISREG(mode):
+                rows.append({'path': rel, 'kind': 'file', 'executable': bool(mode & 0o111), 'sha256': digest(path)})
+            elif not stat.S_ISDIR(mode):
+                raise ValueError('unsupported source entry')
+    rows.sort(key=lambda row: row['path'])
+    data = ''.join(json.dumps(row, sort_keys=True, separators=(',', ':')) + '\n' for row in rows).encode()
+    return hashlib.sha256(data).hexdigest(), len(rows)
+
+
+def generated_inventory(root: Path) -> dict[str, str]:
+    files = safe_tree(root)
+    if any(p.parent != root for p in files):
+        raise ValueError('unexpected nested generated artifact')
+    return {p.name: digest(p) for p in files}
+
+
+def validate_organization_source(root: Path, pin: dict) -> None:
+    if source_manifest(root) != (pin['sourceManifestSHA256'], pin['sourceManifestEntries']):
+        raise ValueError('organization source manifest mismatch')
+    if digest(root / 'Cargo.lock') != pin['candidateCargoLockSHA256']:
+        raise ValueError('organization source lock mismatch')
+    if digest(root / 'crates/bitwarden-uniffi/swift/Sources/BitwardenSdkSupport/NaiveDateFormatter.swift') != pin['supportSHA256']:
+        raise ValueError('organization support source mismatch')
+    if {name: digest(root / name) for name in pin['licenseSHA256']} != pin['licenseSHA256']:
+        raise ValueError('organization license source mismatch')
+
+
+def validate_organization_cache(root: Path, pin: dict) -> None:
+    if root.is_symlink() or not root.is_dir() or root.resolve() != root.absolute():
+        raise ValueError('organization cache root unsafe')
+    sdk, generated, target, cargo_home = (root / name for name in ('sdk-frozen', 'generated-final', 'target-frozen', 'cargo-home'))
+    validate_organization_source(sdk, pin)
+    if generated_inventory(generated) != pin['generatedSHA256']:
+        raise ValueError('proof binding, header or modulemap mismatch')
+    for path in (target / 'debug/libbitwarden_uniffi.dylib', target / 'debug/deps/libbitwarden_uniffi.dylib'):
+        if path.is_symlink() or digest(path) != pin['sourceProofDylibSHA256']:
+            raise ValueError('proof dylib mismatch')
+    if digest(target / 'debug/uniffi-bindgen') != pin['sourceProofBindgenSHA256']:
+        raise ValueError('proof bindgen mismatch')
+    if not (cargo_home / 'registry').is_dir():
+        raise ValueError('offline Cargo cache missing')
+    for cache in (cargo_home, target):
+        if cache.is_symlink() or not cache.is_dir() or any(p.is_symlink() for p in cache.rglob('*')):
+            raise ValueError('offline Cargo cache contains symlink')
+
+
+def organization_command(argv: list[str], cwd: Path, env: dict[str, str], timeout: int = 3600) -> str:
+    return command(argv, cwd, env, timeout, cleanup_success=True)
+
+
+def stage_generated_sources(sdk: Path, generated: Path, pkg: Path) -> list[Path]:
+    maps = sorted(generated.glob('*.modulemap'))
+    headers = sorted(generated.glob('*.h'))
+    swift_files = sorted(generated.glob('*.swift'))
+    if not maps or not headers or not swift_files:
+        raise ValueError('UniFFI output missing Swift, modulemap, or headers')
+    swift = pkg / 'Sources/ArcusisBitwardenSDK'
+    ffi = pkg / 'Sources/BitwardenFFI/include'
+    support = pkg / 'Sources/BitwardenSdkSupport'
+    for directory in (swift, ffi, support):
+        directory.mkdir(parents=True)
+    for path in swift_files:
+        shutil.copy2(path, swift / path.name)
+    for path in headers:
+        shutil.copy2(path, ffi / path.name)
+    shutil.copy2(sdk / 'crates/bitwarden-uniffi/swift/Sources/BitwardenSdkSupport/NaiveDateFormatter.swift', support / 'NaiveDateFormatter.swift')
+    (pkg / 'Sources/BitwardenFFI/shim.c').write_text(SDK_FFI_SHIM)
+    (ffi / 'module.modulemap').write_text('\n'.join(path.read_text() for path in maps) + '\n')
+    return maps
+
+
+def organization_main(args: argparse.Namespace) -> int:
+    global LOG_DIR
+    pin = read_organization_pin()
+    if args.candidate_cache is None:
+        raise ValueError('organization candidate requires explicit --candidate-cache')
+    cache = args.candidate_cache.expanduser().absolute()
+    out = (args.output or ORG_OUTPUT).expanduser().absolute()
+    owned = ROOT / 'build'
+    owned.mkdir(mode=0o700, exist_ok=True)
+    validate_output_path(owned, out)
+    if out == OUTPUT or cache == out or cache in out.parents or out in cache.parents:
+        raise ValueError('organization output must be separate from accepted package and cache')
+    if platform.system() != 'Darwin' or platform.machine() != 'arm64':
+        raise ValueError('requires arm64 macOS')
+    runner = load_runner()
+    env = {k: os.environ[k] for k in ('PATH', 'HOME', 'TMPDIR', 'DEVELOPER_DIR', 'SDKROOT', 'RUSTUP_HOME') if k in os.environ}
+    runner.read_pin(False)
+    source, _ = runner.verify_source(args.source.absolute(), env, {'commands': []})
+    # Lifecycle validator checks tracked files; candidate requires a genuinely clean source.
+    if organization_command(['git', '-C', str(source), 'status', '--porcelain=v1', '--untracked-files=all'], ROOT, env, 30).strip():
+        raise ValueError('organization upstream source must be clean')
+    runner.check_toolchain(env, {'commands': []})
+    validate_organization_cache(cache, pin)
+    out.mkdir(mode=0o700)
+    LOG_DIR = out / 'logs'
+    work = out / 'work'
+    work.mkdir(mode=0o700)
+    sdk = work / 'sdk'
+    organization_command(['git', 'clone', '--local', '--no-hardlinks', '--no-checkout', str(source), str(sdk)], ROOT, env, 120)
+    organization_command(['git', '-C', str(sdk), 'checkout', '--detach', pin['sourceCommit']], ROOT, env, 30)
+    for name in ORG_PATCH_ORDER:
+        patch = ROOT / name
+        organization_command(['git', '-C', str(sdk), 'apply', '--check', '--whitespace=error', str(patch)], ROOT, env, 30)
+        organization_command(['git', '-C', str(sdk), 'apply', '--whitespace=error', str(patch)], ROOT, env, 60)
+    paths = sorted(line[3:] for line in organization_command(['git', '-C', str(sdk), 'status', '--porcelain=v1', '--untracked-files=all'], ROOT, env, 30).splitlines())
+    if paths != pin['changedPaths']:
+        raise ValueError('organization changed paths mismatch')
+    organization_command(['git', '-C', str(sdk), 'add', '-N', '-A'], ROOT, env, 30)
+    diff = organization_command(['git', '-C', str(sdk), 'diff', '--binary', 'HEAD'], ROOT, env, 30)
+    if hashlib.sha256(diff.encode()).hexdigest() != pin['fullDiffSHA256']:
+        raise ValueError('organization layered diff mismatch')
+    validate_organization_source(sdk, pin)
+    cargo_home, target = out / 'cargo-home', out / 'cargo-target'
+    validate_cache_path(cargo_home); validate_cache_path(target)
+    organization_command(['cp', '-cR', str(cache / 'cargo-home'), str(cargo_home)], ROOT, env, 600)
+    organization_command(['cp', '-cR', str(cache / 'target-frozen'), str(target)], ROOT, env, 600)
+    tmp = out / 'tmp'; tmp.mkdir(mode=0o700)
+    home = out / 'home'; home.mkdir(mode=0o700)
+    build_env = dict(env, HOME=str(home), RUSTUP_HOME=env.get('RUSTUP_HOME', str(Path.home() / '.rustup')),
+                     CARGO_HOME=str(cargo_home), CARGO_TARGET_DIR=str(target), TMPDIR=str(tmp),
+                     RUSTUP_TOOLCHAIN=pin['rustToolchain'], RUSTUP_AUTO_INSTALL='0', RUSTUP_NO_UPDATE_CHECK='1',
+                     CARGO_BUILD_JOBS='2', CARGO_NET_OFFLINE='true', MACOSX_DEPLOYMENT_TARGET='26.0',
+                     CARGO_TERM_COLOR='never', RUSTFLAGS='-C link-arg=-mmacosx-version-min=26.0 --cfg bitwarden_ensure_non_commercial')
+    common = ['--offline', '--locked', '--jobs', '2', '--manifest-path', str(sdk / 'Cargo.toml'), '--target', pin['target']]
+    organization_command(['cargo', 'rustc', *common, '--package', 'bitwarden-uniffi', '--', '-C',
+             'link-arg=-Wl,-install_name,@rpath/libbitwarden_uniffi.dylib'], sdk, build_env)
+    dylib = target / pin['target'] / 'debug/libbitwarden_uniffi.dylib'
+    dylib_sha = digest(dylib)
+    import re
+    identity = organization_command(['otool', '-D', str(dylib)], work, env, 30).splitlines()
+    if len(identity) != 2 or identity[1].strip() != '@rpath/libbitwarden_uniffi.dylib':
+        raise ValueError('organization dylib install name mismatch')
+    if (organization_command(['lipo', '-archs', str(dylib)], work, env, 30).strip() != 'arm64'
+            or not re.search(r'minos\s+26\.0(?:\s|$)', organization_command(['vtool', '-show-build', str(dylib)], work, env, 30))):
+        raise ValueError('organization dylib platform mismatch')
+    generated = work / 'GeneratedSwift'; generated.mkdir()
+    organization_command(['cargo', 'run', *common, '--package', 'uniffi-bindgen', '--', 'generate', str(dylib),
+             '--language', 'swift', '--no-format', '--out-dir', str(generated)], sdk, build_env, 900)
+    if digest(dylib) != dylib_sha or generated_inventory(generated) != pin['generatedSHA256']:
+        raise ValueError('organization bindings or dylib differ from frozen interfaces')
+    validate_organization_source(sdk, pin)
+    pkg = out / 'Package'
+    maps = stage_generated_sources(sdk, generated, pkg)
+    swift = pkg / 'Sources/ArcusisBitwardenSDK'; ffi = pkg / 'Sources/BitwardenFFI/include'
+    support = pkg / 'Sources/BitwardenSdkSupport'; notices = pkg / 'ThirdPartyNotices'
+    notices.mkdir()
+    for name in pin['licenseSHA256']: shutil.copy2(sdk / name, notices / name)
+    framework = pkg / 'Frameworks/BitwardenSDK.xcframework'; library = framework / 'macos-arm64'
+    (library / 'Headers').mkdir(parents=True)
+    shutil.copy2(dylib, library / 'libbitwarden_uniffi.dylib')
+    for path in safe_tree(ffi): shutil.copy2(path, library / 'Headers' / path.name)
+    info = {'AvailableLibraries': [{'LibraryIdentifier': 'macos-arm64', 'LibraryPath': 'libbitwarden_uniffi.dylib',
+                                    'HeadersPath': 'Headers', 'SupportedArchitectures': ['arm64'], 'SupportedPlatform': 'macos'}],
+            'CFBundlePackageType': 'XFWK', 'XCFrameworkFormatVersion': '1.0'}
+    (framework / 'Info.plist').write_bytes(plistlib.dumps(info, sort_keys=True))
+    (pkg / 'Package.swift').write_text(SDK_PACKAGE_SWIFT)
+    modules = sorted(set(m for path in maps for m in re.findall(r'\bmodule\s+([A-Za-z_][A-Za-z0-9_]*)', path.read_text())))
+    manifest = {key: pin[key] for key in ('sourceCommit', 'sourceGitTree', 'sourceCargoLockSHA256', 'candidateCargoLockSHA256', 'patchSHA256', 'changedPaths', 'sourceManifestSHA256', 'fullDiffSHA256', 'licenseSHA256', 'supportSHA256', 'minMacOS', 'architecture', 'accepted', 'integration_ready')}
+    manifest.update(schema=1, bindingTreeSHA256=tree_digest(swift), generatedModuleNames=modules, dylibSHA256=dylib_sha)
+    manifest['fileSHA256'] = {p.relative_to(pkg).as_posix(): digest(p) for p in safe_tree(pkg)}
+    (pkg / 'build-manifest.json').write_text(json.dumps(manifest, sort_keys=True, indent=2) + '\n')
+    validate_package(pkg, manifest, organization=True, expected_dylib=dylib_sha)
+    consumer = work / 'consumer'; (consumer / 'Sources/sdk-consumer').mkdir(parents=True)
+    (consumer / 'Package.swift').write_text('// swift-tools-version: 5.9\nimport PackageDescription\nlet package = Package(name: "SDKConsumer", platforms: [.macOS("26.0")], dependencies: [.package(path: '+json.dumps(str(pkg))+')], targets: [.executableTarget(name: "sdk-consumer", dependencies: [.product(name: "ArcusisBitwardenSDK", package: "Package")])])\n')
+    (consumer / 'Sources/sdk-consumer/main.swift').write_text('import ArcusisBitwardenSDK\nimport Foundation\nfinal class EmptyTokens: ClientManagedTokens { func getAccessToken() async -> String? { nil } }\n@main struct Smoke { static func main() async throws { let client = Client(tokenProvider: EmptyTokens(), settings: nil, managedSettings: ManagedSettingsBindingClient()); await client.requireFreshOrganizationSync(); let snapshot = client.sync().encryptedSnapshot(); guard snapshot.generation == 0 && snapshot.organizationKeys.isEmpty else { fatalError("unexpected snapshot") }; client.crypto().clearUserCryptoKeys(); print("SDK_ORGANIZATION_CANDIDATE_OK") } }\n')
+    swift_env = dict(build_env, CLANG_MODULE_CACHE_PATH=str(tmp / 'clang-cache'))
+    scratch = out / 'swift-build'; swift_cache = out / 'swift-cache'; swift_cache.mkdir()
+    organization_command(['swift', 'build', '--package-path', str(consumer), '--scratch-path', str(scratch), '--cache-path', str(swift_cache), '--disable-dependency-cache', '--product', 'sdk-consumer', '-Xlinker', '-rpath', '-Xlinker', str(library)], work, swift_env, 900)
+    bin_path = Path(organization_command(['swift', 'build', '--package-path', str(consumer), '--scratch-path', str(scratch), '--cache-path', str(swift_cache), '--disable-dependency-cache', '--show-bin-path'], work, swift_env, 60).strip())
+    executable = bin_path / 'sdk-consumer'
+    if executable.is_symlink() or not executable.is_file(): raise ValueError('organization SwiftPM consumer missing')
+    if not re.search(r'minos\s+26\.0(?:\s|$)', organization_command(['vtool', '-show-build', str(executable)], work, env, 30)):
+        raise ValueError('organization consumer minimum macOS mismatch')
+    smoke = organization_command([str(executable)], work, {'PATH': env.get('PATH', ''), 'HOME': str(home), 'TMPDIR': str(tmp)}, 60)
+    if smoke.strip() != 'SDK_ORGANIZATION_CANDIDATE_OK': raise ValueError('organization typed consumer smoke failed')
+    validate_package(pkg, manifest, organization=True, expected_dylib=dylib_sha)
+    validate_organization_source(sdk, pin)
+    validate_organization_cache(cache, pin)
+    if digest(dylib) != dylib_sha or generated_inventory(generated) != pin['generatedSHA256']:
+        raise ValueError('organization build inputs changed')
+    receipt = {'schema': 1, 'status': 'built', 'accepted': False, 'integration_ready': False,
+               'sourceManifestSHA256': pin['sourceManifestSHA256'], 'fullDiffSHA256': pin['fullDiffSHA256'],
+               'dylibSHA256': dylib_sha, 'packageTreeSHA256': tree_digest(pkg), 'consumerSmoke': smoke.strip(),
+               'commercialExclusion': True, 'architecture': 'arm64', 'minMacOS': '26.0', 'commands': COMMANDS}
+    (out / 'receipt.json').write_text(json.dumps(receipt, sort_keys=True, indent=2) + '\n')
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument('--source', type=Path, default=SOURCE)
-    parser.add_argument('--output', type=Path, default=OUTPUT)
+    parser.add_argument('--output', type=Path)
+    parser.add_argument('--organization-candidate', action='store_true')
+    parser.add_argument('--candidate-cache', type=Path)
     args = parser.parse_args()
+    if args.organization_candidate:
+        return organization_main(args)
+    if args.candidate_cache is not None:
+        raise ValueError('candidate cache requires organization-candidate mode')
+    if args.output is None:
+        args.output = OUTPUT
     COMMANDS.clear()
     out = args.output.expanduser().absolute()
     owned_root = ROOT / 'build'
@@ -253,21 +556,9 @@ def main() -> int:
         dylib=target/runner.TARGET/'debug/libbitwarden_uniffi.dylib'
         generated=work/'GeneratedSwift'; generated.mkdir()
         command(['cargo','run',*common,'--package','uniffi-bindgen','--','generate',str(dylib),'--language','swift','--no-format','--out-dir',str(generated)],sdk,build_env,900)
-        modulemaps=sorted(generated.glob('*.modulemap'))
-        headers=sorted(generated.glob('*.h'))
-        swift=sorted(generated.glob('*.swift'))
-        if not modulemaps or not headers or not swift:
-            raise ValueError('UniFFI output missing Swift, modulemap, or headers')
-        # All SDK FFI module maps and headers stay together; package names derive from generated module declarations.
-        pkg=out/'Package'; (pkg/'Sources/ArcusisBitwardenSDK').mkdir(parents=True)
-        (pkg/'Sources/BitwardenFFI/include').mkdir(parents=True)
-        (pkg/'Sources/BitwardenSdkSupport').mkdir(parents=True)
-        for p in swift: shutil.copy2(p,pkg/'Sources/ArcusisBitwardenSDK'/p.name)
-        support=sdk/'crates/bitwarden-uniffi/swift/Sources/BitwardenSdkSupport/NaiveDateFormatter.swift'
-        shutil.copy2(support,pkg/'Sources/BitwardenSdkSupport'/support.name)
-        for p in headers: shutil.copy2(p,pkg/'Sources/BitwardenFFI/include'/p.name)
-        (pkg/'Sources/BitwardenFFI/shim.c').write_text('void arcusis_bitwarden_ffi_link_anchor(void) {}\n')
-        (pkg/'Sources/BitwardenFFI/include/module.modulemap').write_text('\n'.join(p.read_text() for p in modulemaps)+'\n')
+        # All generated SDK interfaces remain in the existing package layout.
+        pkg=out/'Package'
+        modulemaps=stage_generated_sources(sdk, generated, pkg)
         staged=pkg/'Frameworks/BitwardenSDK.xcframework'
         staged.parent.mkdir(parents=True)
         dylib_copy=work/'libbitwarden_uniffi.dylib'; shutil.copy2(dylib,dylib_copy)
@@ -292,7 +583,7 @@ def main() -> int:
                   'dylibSHA256':digest(next(p for p in safe_tree(staged) if p.name=='libbitwarden_uniffi.dylib')),
                   'minMacOS':'26.0','architecture':'arm64','accepted':True,'integration_ready':False}
         # Public SwiftPM product uses generated bindings and linked binary framework.
-        manifest_swift='// swift-tools-version: 5.9\nimport PackageDescription\nlet package = Package(name: "ArcusisBitwardenSDK", platforms: [.macOS("26.0")], products: [.library(name: "ArcusisBitwardenSDK", targets: ["ArcusisBitwardenSDK"])], targets: [.binaryTarget(name: "BitwardenSDK", path: "Frameworks/BitwardenSDK.xcframework"), .target(name: "BitwardenFFI", path: "Sources/BitwardenFFI", publicHeadersPath: "include"), .target(name: "BitwardenSdkSupport", path: "Sources/BitwardenSdkSupport"), .target(name: "ArcusisBitwardenSDK", dependencies: ["BitwardenSDK", "BitwardenFFI", "BitwardenSdkSupport"], path: "Sources/ArcusisBitwardenSDK")])\n'
+        manifest_swift=SDK_PACKAGE_SWIFT
         (pkg/'Package.swift').write_text(manifest_swift)
         manifest['fileSHA256']={p.relative_to(pkg).as_posix():digest(p) for p in safe_tree(pkg)}
         (pkg/'build-manifest.json').write_text(json.dumps(manifest,sort_keys=True,indent=2)+'\n')

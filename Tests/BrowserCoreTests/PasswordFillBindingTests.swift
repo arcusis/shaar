@@ -39,4 +39,55 @@ import Testing
     #expect(validResult)
     #expect(!replayResult)
   }
+
+  @Test func validatesExactDocumentURLAndOrigin() {
+    let origin = PasswordFillOrigin("https://example.com")!
+    for value in [
+      "https://example.com", "https://example.com/login?next=%2Fhome#part",
+      "https://example.com/?#",
+    ] {
+      #expect(PasswordFillDocumentURL(value, origin: origin)?.value == value)
+    }
+    for value in [
+      "", "http://example.com/login", "https://other.example/login",
+      "https://example.com.evil/login", "https://example.com:443/login",
+      "https://example.com:8443/login", "https://example.com:0/login",
+      "https://example.com:65536/login", "https://user@example.com/login",
+      "https://user:pass@example.com/login", "https://example.com:/login",
+      "https://example.com/%zz", "https://example.com/space here",
+      "https://example.com/\\evil", "https://example.com/" + String(repeating: "a", count: 8192),
+    ] {
+      #expect(PasswordFillDocumentURL(value, origin: origin) == nil)
+    }
+    let portOrigin = PasswordFillOrigin("https://example.com:8443")!
+    #expect(
+      PasswordFillDocumentURL("https://example.com:8443/path?q=1#x", origin: portOrigin) != nil)
+    #expect(PasswordFillDocumentURL("https://example.com/path", origin: portOrigin) == nil)
+  }
+
+  @Test func leaseBindsFullURLAndSupportsAbsentURL() {
+    let binding = PasswordFillBinding(windowID: UUID(), profileID: UUID(), tabID: UUID())
+    let origin = PasswordFillOrigin("https://example.com")!
+    let id = UUID()
+    let url = PasswordFillDocumentURL("https://example.com/path?x=1#part", origin: origin)!
+    let context = PasswordFillContext(
+      requestID: id, binding: binding, origin: origin, documentURL: url)
+    let other = PasswordFillContext(
+      requestID: id, binding: binding, origin: origin,
+      documentURL: PasswordFillDocumentURL("https://example.com/path?x=2#part", origin: origin)!)
+    let absent = PasswordFillContext(requestID: id, binding: binding, origin: origin)
+    let lease = PasswordFillLease(context: context, deadline: 20)
+    #expect(!lease.consume(context: other, binding: binding, now: 1))
+    #expect(!lease.consume(context: absent, binding: binding, now: 1))
+    #expect(lease.consume(context: context, binding: binding, now: 1))
+    #expect(!lease.consume(context: context, binding: binding, now: 1))
+    let legacy = PasswordFillLease(context: absent, deadline: 20)
+    #expect(legacy.consume(context: absent, binding: binding, now: 1))
+    let foreignOrigin = PasswordFillOrigin("https://other.example")!
+    let inconsistent = PasswordFillContext(
+      requestID: id, binding: binding, origin: origin,
+      documentURL: PasswordFillDocumentURL("https://other.example/", origin: foreignOrigin)!)
+    let inconsistentLease = PasswordFillLease(context: inconsistent, deadline: 20)
+    #expect(!inconsistentLease.consume(context: inconsistent, binding: binding, now: 1))
+  }
 }

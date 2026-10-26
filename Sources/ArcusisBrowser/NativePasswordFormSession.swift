@@ -40,10 +40,19 @@ final class ChromiumPasswordFormBackend: NativePasswordFormBackend {
         completion(nil)
         return
       }
+      var documentURL: PasswordFillDocumentURL?
+      if let value = native.documentURL {
+        guard let validated = PasswordFillDocumentURL(value, origin: origin) else {
+          self.runtime.cancelPasswordRequestID(id.uuidString)
+          completion(nil)
+          return
+        }
+        documentURL = validated
+      }
       let context = PasswordFillContext(
         requestID: requestID,
         binding: PasswordFillBinding(windowID: windowID, profileID: profileID, tabID: tabID),
-        origin: origin)
+        origin: origin, documentURL: documentURL)
       guard requestID == id, context.binding == binding else {
         self.runtime.cancelPasswordRequestID(id.uuidString)
         completion(nil)
@@ -148,6 +157,7 @@ final class NativePasswordFormSession {
       let currentTime = self.now()
       guard self.pending === item, item.requestReply != nil else { return }
       guard let context, context.requestID == item.id, context.binding == item.binding,
+        context.documentURL.map({ $0.origin == context.origin }) ?? true,
         binding == item.binding, currentTime.isFinite, currentTime < item.deadline
       else {
         self.cancel()

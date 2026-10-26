@@ -59,15 +59,42 @@ public struct PasswordFillOrigin: Equatable, Sendable {
   }
 }
 
+/// Serialized URL supplied by the native request, retained exactly for lease identity.
+public struct PasswordFillDocumentURL: Equatable, Sendable {
+  public let value: String
+  public let origin: PasswordFillOrigin
+
+  public init?(_ value: String, origin: PasswordFillOrigin) {
+    let bytes = value.utf8
+    guard !bytes.isEmpty, bytes.count <= 8192,
+      bytes.allSatisfy({ (33...126).contains($0) && $0 != 92 }),
+      value.hasPrefix(origin.value)
+    else { return nil }
+    let suffix = value.dropFirst(origin.value.count)
+    guard suffix.first.map({ ["/", "?", "#"].contains($0) }) ?? true,
+      let parts = URLComponents(string: value, encodingInvalidCharacters: false),
+      parts.scheme == "https", parts.user == nil, parts.password == nil,
+      parts.url?.absoluteString == value
+    else { return nil }
+    self.value = value
+    self.origin = origin
+  }
+}
+
 public struct PasswordFillContext: Equatable, Sendable {
   public let requestID: UUID
   public let binding: PasswordFillBinding
   public let origin: PasswordFillOrigin
+  public let documentURL: PasswordFillDocumentURL?
 
-  public init(requestID: UUID, binding: PasswordFillBinding, origin: PasswordFillOrigin) {
+  public init(
+    requestID: UUID, binding: PasswordFillBinding, origin: PasswordFillOrigin,
+    documentURL: PasswordFillDocumentURL? = nil
+  ) {
     self.requestID = requestID
     self.binding = binding
     self.origin = origin
+    self.documentURL = documentURL
   }
 }
 
@@ -87,6 +114,7 @@ public final class PasswordFillLease {
     context: PasswordFillContext, binding: PasswordFillBinding?, now: TimeInterval
   ) -> Bool {
     guard !consumed, self.context == context, binding == context.binding,
+      context.documentURL.map({ $0.origin == context.origin }) ?? true,
       now.isFinite, deadline.isFinite, now < deadline
     else { return false }
     consumed = true

@@ -20,6 +20,7 @@ FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeExternalAppLaunchAuditForTest
 @property(nonatomic, readonly, copy) NSString *profileID;
 @property(nonatomic, readonly, copy) NSString *tabID;
 @property(nonatomic, readonly, copy) NSString *origin;
+@property(nonatomic, readonly, copy, nullable) NSString *documentURL;
 - (instancetype)init NS_UNAVAILABLE;
 + (instancetype)new NS_UNAVAILABLE;
 @end

@@ -17,6 +17,11 @@ final class PrivateProductHostProbe {
     let lifecycleBlocker: String
   }
 
+  private struct NativeCloseObservation {
+    let contextID: String
+    let confirmedWhileQuitting: Bool
+  }
+
   private struct NativeCloseReceipt {
     let closed: Bool
     let requestedWhileQuitting: Bool
@@ -42,6 +47,7 @@ final class PrivateProductHostProbe {
   private var rendererCaptureOutcome = "not-attempted"
   private var lifecycleBlocker = ""
   private var quitDiagnosticStages: [[String: Any]] = []
+  private var nativeCloseObservations: [String: NativeCloseObservation] = [:]
   private weak var lifecycleStore: PrivateBrowserStore?
   private weak var lifecycleHosting: NSHostingView<PrivateBrowserWindow>?
 
@@ -78,6 +84,15 @@ final class PrivateProductHostProbe {
       sourceProfileID: { [weak self] in self?.source })
     host = privateHost
     privateHost.installCallbacks()
+    // Record native confirmation before the product retires its last context.
+    let forwardNativeClose = runtime.onPrivateWindowClosed
+    runtime.onPrivateWindowClosed = { [weak self] contextID, windowID in
+      if let self {
+        self.nativeCloseObservations[windowID] = NativeCloseObservation(
+          contextID: contextID, confirmedWhileQuitting: self.runtime.isQuitting)
+      }
+      forwardNativeClose?(contextID, windowID)
+    }
     do {
       try await exercise(privateHost)
       if privateHost.windowCount == 0 {
@@ -706,6 +721,24 @@ final class PrivateProductHostProbe {
                     privateCloseConfirmed,
                 ])
             }
+            // A canceled explicit close can be followed by a confirmed engine close.
+            if receipt.requestedWhileQuitting {
+              let confirmed = await waitForNativeCloseObservation(owner)
+              privateCloseConfirmed = confirmed
+              writeQuitDiagnostic(
+                confirmed
+                  ? "privateWindowNativeCloseObserved"
+                  : "privateWindowNativeCloseNotObserved",
+                owner: owner, normalWindow: normalWindow, normalTabID: normalTabID,
+                values: [
+                  "explicitCloseReceiptClosed": receipt.closed,
+                  "nativeCloseEventObserved": confirmed,
+                  "nativeCloseEventObservedWhileQuitting":
+                    nativeCloseObservations[owner.windowID]?.confirmedWhileQuitting ?? false,
+                ])
+            } else {
+              privateCloseConfirmed = false
+            }
           }
           writeQuitDiagnostic(
             "nativeQuitCancellationConfirmed", owner: owner,
@@ -801,6 +834,16 @@ final class PrivateProductHostProbe {
     let hostDigest = sha256(data)
     let rendererDigest = sha256(rendererData)
     return (hostDigest: hostDigest, rendererDigest: rendererDigest)
+  }
+
+  private func waitForNativeCloseObservation(_ owner: PrivateBrowserHost.Owner) async -> Bool {
+    for _ in 0..<100 {
+      if nativeCloseObservations[owner.windowID]?.contextID == owner.contextID {
+        return true
+      }
+      try? await Task.sleep(for: .milliseconds(50))
+    }
+    return false
   }
 
   private func closeNativeWindow(_ owner: PrivateBrowserHost.Owner) async -> Bool {

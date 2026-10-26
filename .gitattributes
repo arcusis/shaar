@@ -1,3 +1,4 @@
 # Unified diffs require a single context-prefix space on blank context lines.
 ThirdParty/BitwardenAuthSpike/identity-mfa.patch -whitespace
 ThirdParty/BitwardenSyncSpike/organization-key-replacement.patch -whitespace
+ThirdParty/ArdiaCore/patches/native-password-document-url.patch -whitespace

@@ -1,3 +1,9 @@
+import BrowserCore
+import Foundation
+import XCTest
+
+@testable import ArcusisBrowser
+
 #if ARCUSIS_NATIVE_BITWARDEN_STRICT_SDK && ARCUSIS_NATIVE_BITWARDEN_REFRESH_FIXTURE && canImport(ArcusisBitwardenSDK)
   import ArcusisBitwardenSDK
   import BrowserCore
@@ -239,16 +245,108 @@
       XCTAssertEqual(updated.username, "synthetic-new-user")
       XCTAssertEqual(updated.password, "synthetic-new-pass")
       print("strict-stage: credential")
-      _ = try await backend.prepareStrictUpdate(
+      let preCreate = try await backend.prepareStrictUpdate(
         access: fresh, context: context, cipherID: fixture.cipherID)
+      let createInput = NativeBitwardenWriteInput(
+        username: "synthetic-create-user", password: "synthetic-create-pass",
+        name: "synthetic-create-name")
+      let creating = Task {
+        try await backend.createLogin(access: fresh, context: context, input: createInput)
+      }
+      var createDispatched = false
+      for _ in 0..<100 {
+        if String(data: try await control(endpoint, path: "fixture/create-status"), encoding: .utf8)
+          == "ready"
+        {
+          createDispatched = true
+          break
+        }
+        try await Task.sleep(for: .milliseconds(25))
+      }
+      XCTAssertTrue(createDispatched)
+      do {
+        _ = try await backend.syncVault(sessionID: session.id)
+        XCTFail("Sync overlapped pending create")
+      } catch { XCTAssertEqual(error as? NativeBitwardenWriteError, .operationInProgress) }
+      do {
+        try await backend.strictUpdate(
+          access: fresh, context: context, handle: preCreate, input: input)
+        XCTFail("Prepared update survived create dispatch")
+      } catch { XCTAssertEqual(error as? NativeBitwardenWriteError, .staleAccess) }
+      _ = try await control(endpoint, path: "fixture/create-release")
+      do {
+        _ = try await creating.value
+        XCTFail("Create reported HTTP-only confirmation")
+      } catch { XCTAssertEqual(error as? NativeBitwardenWriteError, .unconfirmed) }
+      let completedCreates = await backend.completedStrictCreatesForFixture()
+      XCTAssertEqual(completedCreates, 1)
+      let reconciled = try await backend.syncVault(sessionID: session.id)
+      let createdID = try XCTUnwrap(UUID(uuidString: "22222222-2222-4222-8222-222222222222"))
+      XCTAssertTrue(
+        reconciled.logins.contains { $0.id == createdID && $0.username == "synthetic-create-user" })
+      let afterCreate = try await backend.fillSnapshot(sessionID: session.id).access
+      _ = try await backend.prepareStrictUpdate(
+        access: afterCreate, context: context, cipherID: fixture.cipherID)
+      print("strict-stage: create-reconciled")
       _ = await backend.lock(sessionID: session.id)
       do {
         _ = try await backend.prepareStrictUpdate(
-          access: fresh, context: context, cipherID: fixture.cipherID)
+          access: afterCreate, context: context, cipherID: fixture.cipherID)
         XCTFail("Locked session accepted")
       } catch { XCTAssertEqual(error as? NativeBitwardenWriteError, .staleAccess) }
       await backend.discard(sessionID: session.id)
       print("strict-stage: complete")
+    }
+  }
+#endif
+
+#if !ARCUSIS_NATIVE_BITWARDEN_STRICT_SDK
+  final class NativeBitwardenStrictDefaultTests: XCTestCase {
+    func testLegacyPathsRemainFailClosedWithoutSession() async throws {
+      let id = UUID()
+      var state = NativeBitwardenFillAccessState<Int>(sessionID: id)
+      let ticket = try state.beginSync()
+      try state.publish(ticket: ticket, snapshot: .empty, items: [:])
+      state.finishSync(ticket)
+      let access = try state.snapshot().access
+      let context = PasswordFillContext(
+        requestID: UUID(),
+        binding: PasswordFillBinding(windowID: UUID(), profileID: UUID(), tabID: UUID()),
+        origin: try XCTUnwrap(PasswordFillOrigin("https://fixture.example")))
+      let backend = NativeBitwardenSDKBackend()
+      let input = NativeBitwardenWriteInput(
+        username: "synthetic-u", password: "synthetic-p", name: "synthetic-n")
+      do {
+        _ = try await backend.updateLogin(
+          access: access, context: context, cipherID: UUID(),
+          revision: Date(timeIntervalSince1970: 0), input: input)
+        XCTFail("Legacy update unexpectedly available")
+      } catch { XCTAssertEqual(error as? NativeBitwardenWriteError, .sdkUpdateUnavailable) }
+      do {
+        _ = try await backend.prepareStrictUpdate(
+          access: access, context: context, cipherID: UUID())
+        XCTFail("Strict SDK unexpectedly available")
+      } catch { XCTAssertEqual(error as? NativeBitwardenWriteError, .sdkUpdateUnavailable) }
+      do {
+        _ = try await backend.createLogin(access: access, context: context, input: input)
+        XCTFail("Create accepted missing session")
+      } catch {
+        #if canImport(ArcusisBitwardenSDK)
+          XCTAssertEqual(error as? NativeBitwardenWriteError, .staleAccess)
+        #else
+          XCTAssertEqual(error as? NativeBitwardenBackendError, .sdkUnavailable)
+        #endif
+      }
+      do {
+        _ = try await backend.fillSnapshot(sessionID: id)
+        XCTFail("Read accepted missing session")
+      } catch {
+        #if canImport(ArcusisBitwardenSDK)
+          XCTAssertEqual(error as? NativeBitwardenFillError, .staleAccess)
+        #else
+          XCTAssertEqual(error as? NativeBitwardenBackendError, .sdkUnavailable)
+        #endif
+      }
     }
   }
 #endif

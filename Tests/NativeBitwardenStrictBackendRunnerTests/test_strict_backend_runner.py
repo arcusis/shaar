@@ -98,6 +98,31 @@ class StrictBackendRunnerTests(unittest.TestCase):
             with self.assertRaises(runner.GuardError):
                 runner.verify_package(receipt, package, "debug")
 
+    def test_legacy_package_provenance_and_inventory(self):
+        package = self.root / "legacy"
+        package.mkdir()
+        payload = package / "payload"
+        payload.write_bytes(b"synthetic")
+        manifest = {"schema": 1, "integration_ready": False, "accepted": True,
+                    "sourceCommit": "5cf919837e83b71c2508bf99344ea57cf5f84e88",
+                    "architecture": "arm64", "minMacOS": "26.0",
+                    "fileSHA256": {"payload": runner.sha(b"synthetic")}}
+        path = package / "build-manifest.json"
+        data = json.dumps(manifest).encode()
+        path.write_bytes(data)
+        with patch.dict(runner.LEGACY_MANIFESTS, {"sdk3": runner.sha(data)}):
+            runner.verify_legacy_package(package, "sdk3")
+            with self.assertRaises(runner.GuardError):
+                runner.verify_legacy_package(package, "sdk7")
+            (package / "extra").write_text("extra")
+            with self.assertRaises(runner.GuardError):
+                runner.verify_legacy_package(package, "sdk3")
+            (package / "extra").unlink()
+            payload.unlink()
+            payload.symlink_to(path)
+            with self.assertRaises(runner.GuardError):
+                runner.verify_legacy_package(package, "sdk3")
+
 
 if __name__ == "__main__":
     unittest.main()

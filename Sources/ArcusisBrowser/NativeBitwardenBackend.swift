@@ -200,6 +200,9 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
         let client: Client
         let value: StrictPersonalPreparation
       }
+      #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_FIXTURE
+        private var fixtureCompletedCreates = 0
+      #endif
     #endif
     private var candidates: [UUID: Candidate] = [:]
   #endif
@@ -242,6 +245,11 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
           candidate.initialized, !candidate.locked
         else { return nil }
         return candidate.client
+      }
+
+      func completedStrictCreatesForFixture() -> Int? {
+        guard Self.fixtureHostAllowed else { return nil }
+        return fixtureCompletedCreates
       }
     #endif
   #endif
@@ -659,6 +667,9 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
         let result = try await candidate.client.vault().ciphers().create(request: request)
         #if ARCUSIS_NATIVE_BITWARDEN_STRICT_SDK
           _ = result
+          #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_FIXTURE
+            fixtureCompletedCreates += 1
+          #endif
           throw NativeBitwardenWriteError.unconfirmed
         #else
           return try writeReceipt(

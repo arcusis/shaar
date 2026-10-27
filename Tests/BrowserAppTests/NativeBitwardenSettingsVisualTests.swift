@@ -198,6 +198,98 @@ struct NativeBitwardenSettingsVisualTests {
     #expect(captures.count == 4)
     #expect(failures.isEmpty, "Fill component capture/OCR failures: \(failures)")
   }
+
+  @Test(
+    .enabled(
+      if: ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true"
+        && ProcessInfo.processInfo.environment["ARCUSIS_NATIVE_SETTINGS_VISUAL_CI"] == "1",
+      "Native component capture runs only in explicitly enabled GitHub Actions CI."))
+  func capturesSaveConsentOnContrastingPageBackgrounds() async throws {
+    guard isNativeVisualCI else { return }
+    _ = NSApplication.shared
+    let outputDirectory = URL(
+      fileURLWithPath: "build/Verification/native-settings-visual-ci/native-save",
+      isDirectory: true)
+    try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
+    var captures: [[String: Any]] = []
+    var failures: [String] = []
+    for appearance in [ColorScheme.light, .dark] {
+      for page in [FillCaptureBackground.light, .dark] {
+        let appearanceName = appearance == .dark ? "dark" : "light"
+        let filename = "save-\(appearanceName)-on-\(page.rawValue).png"
+        let imageURL = outputDirectory.appendingPathComponent(filename)
+        var capture: NativeSettingsCapture?
+        var recognized: [String] = []
+        var syntheticMarkerObserved = false
+        do {
+          let coordinator = try makeSaveCaptureCoordinator()
+          defer { coordinator.cancel() }
+          guard coordinator.presentation != nil else {
+            throw NativeSettingsCaptureError.fixtureUnavailable
+          }
+          capture = try await captureOwnedView(
+            rootView: SaveCapturePage(coordinator: coordinator, page: page),
+            appearance: appearance, to: imageURL)
+          recognized = try recognizeText(in: imageURL)
+          let visibleText = recognized.joined(separator: " ")
+          if visibleText.range(of: "document-query-marker", options: .caseInsensitive) != nil
+            || visibleText.range(of: "synthetic-secret-marker", options: .caseInsensitive) != nil
+          {
+            syntheticMarkerObserved = true
+            throw NativeSettingsCaptureError.requiredTextMissing
+          }
+          guard let capture, capture.alpha.translucentPixels == 0,
+            capture.alpha.transparentPixels == 0
+          else { throw NativeSettingsCaptureError.nonOpaqueImage }
+          for required in [
+            "Save password", "login.example", "Sample vault", "Save new login",
+            "Example Portal", "Update", "Cancel", "Example webpage",
+          ] {
+            guard visibleText.range(of: required, options: .caseInsensitive) != nil else {
+              throw NativeSettingsCaptureError.requiredTextMissing
+            }
+          }
+        } catch {
+          failures.append("\(filename): \(error)")
+        }
+        captures.append([
+          "file": filename,
+          "pixelWidth": capture?.pixelWidth ?? 0,
+          "pixelHeight": capture?.pixelHeight ?? 0,
+          "pointWidth": capture?.pointWidth ?? 0,
+          "pointHeight": capture?.pointHeight ?? 0,
+          "alpha": capture?.alpha.manifest ?? [:],
+          "layoutDiagnostics": capture?.layoutDiagnostics ?? [:],
+          "colorScheme": appearanceName,
+          "pageBackground": page.rawValue,
+          "visibleText": recognized,
+          "syntheticMarkerObserved": syntheticMarkerObserved,
+          "captureMethod":
+            "owned NSWindow content NSHostingView cacheDisplay bitmap; opaque alpha validation; Vision OCR",
+        ])
+      }
+    }
+    let manifest: [String: Any] = [
+      "componentOnly": true,
+      "scope": "same-window save consent component with synthetic memory-only fixtures",
+      "syntheticMarkersOnly": true,
+      "actualChromiumSubmission": false,
+      "keyboardFocusProof": false,
+      "providerAcceptance": false,
+      "visualAcceptance": false,
+      "desktopActivation": false,
+      "physicalInput": false,
+      "screenCapturePermission": false,
+      "sourceRevision": ProcessInfo.processInfo.environment["GITHUB_SHA"] ?? "unavailable",
+      "captures": captures,
+      "failures": failures,
+    ]
+    let data = try JSONSerialization.data(
+      withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys])
+    try data.write(to: outputDirectory.appendingPathComponent("manifest.json"), options: .atomic)
+    #expect(captures.count == 4)
+    #expect(failures.isEmpty, "Save consent capture/OCR failures: \(failures)")
+  }
 }
 
 private enum CaptureState: String {
@@ -473,4 +565,92 @@ private struct FillCapturePage: View {
   return NativePasswordFillCoordinator(
     form: FillCaptureForm(owner: owner), vault: try FillCaptureVault(owner: owner),
     binding: { owner })
+}
+
+private struct SaveCapturePage: View {
+  let coordinator: NativePasswordSaveCoordinator
+  let page: FillCaptureBackground
+
+  var body: some View {
+    ZStack(alignment: .topTrailing) {
+      page.color
+      Text("Example webpage")
+        .foregroundStyle(page == .light ? Color.black : Color.white)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(20)
+      NativePasswordSaveConsentView(coordinator: coordinator)
+        .padding(.top, 36)
+        .padding(.trailing, 20)
+    }
+  }
+}
+
+@MainActor private final class SaveCaptureBridge: NativePasswordSubmissionBridge {
+  func bindAuthority(
+    submission: NativePasswordSubmission, authority: NativePasswordSaveDispatchAuthority
+  ) -> Bool { false }
+
+  func consume(
+    submission: NativePasswordSubmission,
+    completion: @escaping (
+      Result<NativePasswordSubmittedCredential, NativePasswordSaveFailure>
+    ) -> Void
+  ) { completion(.failure(.unavailable)) }
+
+  func cancel(offerID: UUID) {}
+}
+
+@MainActor private final class SaveCaptureVault: NativePasswordSaveVault {
+  let owner: NativePasswordSubmissionOwner
+  init(owner: NativePasswordSubmissionOwner) { self.owner = owner }
+
+  func prepare(
+    submission: NativePasswordSubmission,
+    completion: @escaping (Result<NativePasswordSaveAdmission, NativePasswordSaveFailure>) -> Void
+  ) {
+    completion(
+      .success(
+        NativePasswordSaveAdmission(
+          owner: owner, sessionID: UUID(), snapshotTicket: UUID(), accountLabel: "Sample vault",
+          allowCreate: true,
+          choices: [
+            NativePasswordSaveChoice(id: UUID(), name: "Example Portal", username: "Sample user")
+          ])))
+  }
+
+  func write(
+    submission: NativePasswordSubmission, admission: NativePasswordSaveAdmission,
+    decision: NativePasswordSaveDecision, credential: NativePasswordSubmittedCredential,
+    authority: NativePasswordSaveDispatchAuthority,
+    completion: @escaping (NativePasswordSaveRawWriteResult) -> Void
+  ) { completion(.rejectedBeforeDispatch) }
+
+  func reconcile(
+    submission: NativePasswordSubmission, admission: NativePasswordSaveAdmission,
+    decision: NativePasswordSaveDecision,
+    completion: @escaping (NativePasswordSaveReconciliationResult) -> Void
+  ) { completion(.unresolved) }
+
+  func cancel(offerID: UUID) {}
+}
+
+@MainActor private func makeSaveCaptureCoordinator() throws -> NativePasswordSaveCoordinator {
+  let profile = UUID()
+  let owner = NativePasswordSubmissionOwner(
+    browser: PasswordFillBinding(windowID: UUID(), profileID: profile, tabID: UUID()),
+    account: PasswordAuthenticationBinding(
+      profileID: profile, vaultID: UUID(), accountID: UUID(),
+      authority: try #require(URL(string: "https://vault.example"))),
+    ownerEpoch: UUID())
+  let origin = try #require(PasswordFillOrigin("https://login.example"))
+  let document = try #require(
+    PasswordFillDocumentURL("https://login.example/signin?document-query-marker=1", origin: origin))
+  let offer = NativePasswordSubmission(
+    id: UUID(), owner: owner, origin: origin, documentURL: document,
+    provenance: .htmlForm, deadline: 20)
+  let coordinator = NativePasswordSaveCoordinator(
+    bridge: SaveCaptureBridge(), vault: SaveCaptureVault(owner: owner),
+    currentOwner: { owner }, now: { 10 })
+  coordinator.present(offer) { _ in }
+  return coordinator
 }

@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 #include <cmath>
+#include <mutex>
 #include <errno.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -14,6 +15,64 @@
 static NSError *BridgeError(NSString *message) {
   return [NSError errorWithDomain:@"com.arcusis.browser.chromium" code:1
                         userInfo:@{NSLocalizedDescriptionKey: message}];
+}
+
+using NativePasswordPolicyConfigure = int (*)(uint32_t);
+
+// One runtime owns one engine start. Never hold the mutex across engine code.
+class NativePasswordStartupArbiter {
+ public:
+  bool select(const void *owner, void *library, NativePasswordPolicyConfigure configure,
+              bool allowUnavailable) {
+    if (!owner || !library) return false;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      if (state_ != State::unclaimed) return false;
+      owner_ = owner;
+      library_ = library;
+      state_ = State::selecting;
+    }
+    const bool selected = configure && configure(1) == 1;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      native_ = selected;
+      state_ = selected || allowUnavailable ? State::ready : State::rejected;
+      return state_ == State::ready;
+    }
+  }
+
+  bool begin(const void *owner, void *library) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (state_ != State::ready || owner != owner_ || library != library_) return false;
+    state_ = State::started;
+    return true;
+  }
+
+  bool nativeAvailable(const void *owner, void *library) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return state_ == State::started && native_ && owner == owner_ && library == library_;
+  }
+
+ private:
+  enum class State { unclaimed, selecting, ready, rejected, started };
+  std::mutex mutex_;
+  State state_ = State::unclaimed;
+  const void *owner_ = nullptr;
+  void *library_ = nullptr;
+  bool native_ = false;
+};
+
+static NativePasswordStartupArbiter &PasswordStartup() {
+  static NativePasswordStartupArbiter arbiter;
+  return arbiter;
+}
+
+static constexpr bool NativePasswordPolicyAllowsUnavailable() {
+#if defined(DEBUG) && DEBUG
+  return true;
+#else
+  return false;
+#endif
 }
 
 static void ClickProbeTarget(ArdiaCoreTab *tab, NSString *expression, BOOL (^current)(void),
@@ -236,6 +295,9 @@ static BOOL ARCCanonicalHTTPSOrigin(NSString *origin) {
 
 @interface ARCChromiumRuntime () <ArdiaCoreEngineDelegate, ArdiaCoreWindowDelegate,
                                 ArdiaCoreTabDelegate>
+#if defined(ARC_NATIVE_PASSWORD_STARTUP_FIXTURE)
+- (void)fixtureSetLibrary:(void *)library windows:(NSDictionary *)windows;
+#endif
 - (void)closedWindowID:(NSString *)identity;
 - (BOOL)privateIdentityOccupied:(NSString *)identity;
 - (BOOL)isPrivateIdentity:(NSString *)identity;
@@ -321,6 +383,18 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   ARCLibraryService *_libraryService;
 }
 
+#if defined(ARC_NATIVE_PASSWORD_STARTUP_FIXTURE)
+- (void)fixtureSetLibrary:(void *)library windows:(NSDictionary *)windows {
+  _library = library;
+  _windows = [NSMutableDictionary dictionary];
+  for (NSString *identity in windows) {
+    ARCNativeWindowState *state = [ARCNativeWindowState new];
+    state.native = windows[identity];
+    _windows[identity] = state;
+  }
+}
+#endif
+
 - (instancetype)initWithFrameworkURL:(NSURL *)url error:(NSError **)error {
   if (!(self = [super init])) return nil;
   NSURL *binary = [url URLByAppendingPathComponent:@"Versions/Current/Chromium Framework"];
@@ -388,6 +462,13 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
     ARCChromiumRuntime *owner = weakSelf;
     if (owner.onDownloadRemoved) owner.onDownloadRemoved(profile, identity);
   };
+  auto configure = reinterpret_cast<NativePasswordPolicyConfigure>(
+    dlsym(_library, "ArdiaCoreConfigureNativePasswordPolicy"));
+  if (!PasswordStartup().select((__bridge const void *)self, _library, configure,
+                                NativePasswordPolicyAllowsUnavailable())) {
+    if (error) *error = BridgeError(@"Native password policy version 1 is unavailable; Chromium cannot start safely.");
+    return nil;
+  }
   return self;
 }
 
@@ -436,6 +517,7 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   if (_externalAppProbeTesting) strings.push_back(externalProbeSwitch.UTF8String);
   std::vector<const char *> arguments;
   for (const auto &value : strings) arguments.push_back(value.c_str());
+  if (!PasswordStartup().begin((__bridge const void *)self, _library)) return 1;
   return [_engineClass runWithArgc:(int)arguments.size() argv:arguments.data() delegate:self];
 }
 
@@ -617,7 +699,8 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   ARCNativeWindowState *state = _windows[record.windowID];
   ArdiaCoreProfile *profile = _profiles[record.profileID];
   ArdiaCoreTab *tab = _tabs[record.tabID];
-  return !_closingBrowser && state && !state.closed && !state.closing &&
+  return PasswordStartup().nativeAvailable((__bridge const void *)self, _library) &&
+    !_closingBrowser && state && !state.closed && !state.closing &&
     state.native == record.window && state.native.window && state.native.window.isKeyWindow &&
     profile && !profile.offTheRecord && !profile.destroyed && tab == record.tab && !tab.closed &&
     tab.profile == profile && state.native.activeProfile == profile &&
@@ -654,7 +737,8 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   NSAssert(NSThread.isMainThread, @"Password feature queries require the UI thread");
   ARCNativeWindowState *state = _windows[windowID];
   ArdiaCoreWindow *window = state.native;
-  return ValidID(windowID) && !_closingBrowser && state && !state.closed && !state.closing &&
+  return PasswordStartup().nativeAvailable((__bridge const void *)self, _library) &&
+    ValidID(windowID) && !_closingBrowser && state && !state.closed && !state.closing &&
     window && window.window &&
     [window respondsToSelector:@selector(requestPasswordFillForTab:completion:)] &&
     [window respondsToSelector:@selector(fillPasswordRequest:username:password:completion:)] &&

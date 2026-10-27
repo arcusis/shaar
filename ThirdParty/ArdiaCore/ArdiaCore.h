@@ -1,6 +1,17 @@
 #import <AppKit/AppKit.h>
+#include <stdint.h>
 
 #define ARDIACORE_EXPORT __attribute__((visibility("default")))
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+// Optional ABI: version 1 selects native-only web password policy before startup.
+// Returns 1 only for the first valid pre-start selection; not a consent signal.
+ARDIACORE_EXPORT int ArdiaCoreConfigureNativePasswordPolicy(uint32_t version);
+#ifdef __cplusplus
+}
+#endif
 
 NS_ASSUME_NONNULL_BEGIN
 

@@ -67,7 +67,7 @@ FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeExternalAppLaunchAuditForTest
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onDocumentCommitted)(NSString *tabID, NSString *profileID);
 @property(copy, nullable) void (^onNewTab)(NSString *tabID, NSString *profileID, NSString *url,
                                          NSString * _Nullable openerID, BOOL foreground);
-/// Reports selector availability for a live normal window, not form eligibility.
+/// Requires the process native-only policy and selectors for a live normal window, not form eligibility.
 - (BOOL)supportsPasswordFillInWindowID:(NSString *)windowID NS_SWIFT_UI_ACTOR;
 /// Explicit identities only. Nil/NO includes unsupported engines, stale context, and cancellation.
 - (void)requestPasswordFillForRequestID:(NSString *)requestID windowID:(NSString *)windowID
@@ -98,6 +98,7 @@ FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeExternalAppLaunchAuditForTest
 - (BOOL)placeTabIDs:(NSArray<NSString *> *)tabIDs pinnedIDs:(NSArray<NSString *> *)pinnedIDs profileID:(NSString *)profileID windowID:(NSString *)windowID;
 - (void)closeExtensionPopupForWindowID:(NSString *)windowID;
 
+/// Release initialization fails if the engine cannot select native-only password policy version 1.
 - (nullable instancetype)initWithFrameworkURL:(NSURL *)url error:(NSError **)error;
 - (int)runWithDataDirectory:(NSURL *)directory testing:(BOOL)testing;
 - (int)runWithDataDirectory:(NSURL *)directory testing:(BOOL)testing

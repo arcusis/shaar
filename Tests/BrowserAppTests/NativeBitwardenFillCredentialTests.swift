@@ -74,6 +74,8 @@ private actor MemoryFillBackend {
   }
 }
 
+private final class NativeBitwardenResourceTestMarker {}
+
 @Suite struct NativeBitwardenFillCredentialTests {
   private let origin = PasswordFillOrigin("https://example.test")!
 
@@ -87,6 +89,36 @@ private actor MemoryFillBackend {
       id: id, organization: organization, login: login, deleted: deleted, archived: archived,
       partial: partial, viewPassword: viewPassword, reprompt: reprompt, username: username,
       password: password, uris: uris ?? [.init(value: "https://example.test", mode: .host)])
+  }
+
+  @Test func bundledURIPolicyIsAvailableInSwiftTestingHost() {
+    let main = Bundle.main
+    let testBundle = Bundle(for: NativeBitwardenResourceTestMarker.self)
+    let bundleName = "ArcusisBrowser_BrowserCore.bundle"
+    let fileManager = FileManager.default
+    let mainResourceHasBundle =
+      main.resourceURL.map {
+        fileManager.fileExists(atPath: $0.appendingPathComponent(bundleName).path)
+      } ?? false
+    let markerResourceHasBundle =
+      testBundle.resourceURL.map {
+        fileManager.fileExists(atPath: $0.appendingPathComponent(bundleName).path)
+      } ?? false
+    let markerSiblingHasBundle = fileManager.fileExists(
+      atPath: testBundle.bundleURL.deletingLastPathComponent().appendingPathComponent(bundleName)
+        .path)
+    let loadedTestBundles = Bundle.allBundles.filter { $0.bundleURL.pathExtension == "xctest" }
+      .map { $0.bundleURL.lastPathComponent }.sorted().joined(separator: ",")
+    print(
+      "uri_resource_host=\(main.executableURL?.lastPathComponent ?? "none") "
+        + "main_bundle=\(main.bundleURL.lastPathComponent) "
+        + "marker_bundle=\(testBundle.bundleURL.lastPathComponent) "
+        + "loaded_xctest=\(loadedTestBundles) "
+        + "main_resource=\(mainResourceHasBundle) "
+        + "marker_resource=\(markerResourceHasBundle) "
+        + "marker_sibling=\(markerSiblingHasBundle)"
+    )
+    #expect(PasswordPublicSuffixList.bundled() != nil)
   }
 
   @Test func onlyEligiblePersonalLoginCanReturnTransientCredential() throws {

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build isolated SDK8 packages only from an explicitly reviewed source pin."""
+"""Build isolated SDK8 or SDK9 packages from explicitly reviewed source pins."""
 from __future__ import annotations
 
 import argparse
@@ -16,10 +16,30 @@ import subprocess
 import sys
 import tomllib
 from pathlib import Path, PurePosixPath
+from typing import NamedTuple
 
 ROOT = Path(__file__).resolve().parents[1]
 WORK = ROOT / 'build/NativeBitwardenStrictSDK8'
 PIN = ROOT / 'ThirdParty/BitwardenStrictEditSpike/sdk-package.pin.json'
+class SourceProfile(NamedTuple):
+    name: str
+    work: Path
+    pin: Path
+
+
+SDK8_PROFILE = SourceProfile('sdk8', WORK, PIN)
+SDK9_PROFILE = SourceProfile('sdk9', ROOT / 'build/NativeBitwardenStrictSDK9',
+                            ROOT / 'ThirdParty/BitwardenStrictEditSpike/service-sdk-package.pin.json')
+SDK8_PIN_SHA256 = '8c09ce296c3214848fb4728d16adfc2886c5bbecccd80760e389ab36948aba52'
+SERVICE_PATCH_SHA256 = '8917fd3a357dd3a075391ba9d9aeefbf5343f8a665aebf58c4bdb457ca80d76c'
+SERVICE_CANDIDATE_SHA256 = '9a202a82c43c72c116f2748683adb6c197be7c441ca41d83a5f31c906f20c50d'
+SERVICE_PIN_SHA256 = 'a4c51b81da8a9521ce142401e030e0ac644c6fc505939529c66b4c8c97ac0f80'
+SERVICE_REVIEW_SHA256 = 'dc75d775f7727996133e7034903b9f411237494f97953356722c7c3cc11799d8'
+SERVICE_TREE = 'd43b3922107fb7e760090cb9ec18715c73776b2a'
+SERVICE_MANIFEST = '88cd4a2b04071483b59f99f633b53b82ede90cc6c992b56cdde459c5903d2c67'
+SERVICE_DIFF = '1f4a3ae897a64373299bdae1385de1ff40cc4196574631676ecf6bd268ecabc5'
+SERVICE_PATCH_PATH = 'ThirdParty/BitwardenStrictEditSpike/strict-service-shapes.patch'
+
 LEGACY_SHA256 = 'ca79ea5ebc76a11dbba612c57976d14c5ae9f04fdf099e495ec22e8b9547809e'
 COMMIT = '5cf919837e83b71c2508bf99344ea57cf5f84e88'
 TREE = '9af9432aefeed6796e40e5019ffdc8600f3381e9'
@@ -248,6 +268,87 @@ def load_pin(path: Path, expected: str) -> dict:
     return pin
 
 
+def validate_service_pin(pin: dict, base: dict, candidate: dict) -> dict:
+    """Validate SDK9 against independently validated SDK8 and service candidate."""
+    validate_pin(base)
+    if (not isinstance(candidate, dict) or type(candidate.get('schema')) is not int or
+            candidate['schema'] != 1 or candidate.get('integrationReady') is not False or
+            candidate.get('candidateStatus') != 'SOURCE_CANDIDATE_REVIEW_REQUIRED' or
+            candidate.get('sourceCommit') != COMMIT or candidate.get('baseTree') != CANDIDATE_TREE or
+            candidate.get('baselinePatches') != base['patches'] or
+            candidate.get('patchSha256') != SERVICE_PATCH_SHA256):
+        raise ValueError('service candidate ancestry mismatch')
+    transition = candidate.get('changedSourceSha256')
+    paths = candidate.get('changedPaths')
+    if (not isinstance(transition, dict) or not isinstance(paths, list) or
+            any(not isinstance(name, str) for name in paths) or paths != sorted(set(paths)) or
+            set(transition) != set(paths) or len(transition) != 3 or
+            not set(transition).issubset(base['changedSourceSHA256'])):
+        raise ValueError('service transition inventory mismatch')
+    for name, value in transition.items():
+        safe_relative(name)
+        if not isinstance(value, str) or not HEX64.fullmatch(value):
+            raise ValueError('service transition digest invalid')
+    primary = candidate.get('primarySha256')
+    if (not isinstance(primary, dict) or len(primary) != 15 or
+            not isinstance(candidate.get('primaryPaths'), dict) or
+            not isinstance(candidate.get('primaryCommits'), dict) or
+            set(primary) != set(candidate['primaryPaths'])):
+        raise ValueError('primary source inventory mismatch')
+    for name, value in primary.items():
+        safe_relative(name)
+        safe_relative(candidate['primaryPaths'][name])
+        if not isinstance(value, str) or not HEX64.fullmatch(value):
+            raise ValueError('primary source digest invalid')
+    changes = dict(base['changedSourceSHA256'])
+    changes.update(transition)
+    expected = {'schema': 1, 'profile': 'sdk9-service-shapes', 'accepted': False,
+        'integrationReady': False, 'sdk8PinSHA256': SDK8_PIN_SHA256,
+        'baseTree': CANDIDATE_TREE, 'baseSourceManifestSHA256': SOURCE_MANIFEST,
+        'baseSourceManifestEntries': SOURCE_ENTRIES, 'sourceCommit': COMMIT,
+        'candidateGitTree': SERVICE_TREE, 'candidateCargoLockSHA256': CANDIDATE_LOCK,
+        'sourceManifestSHA256': SERVICE_MANIFEST, 'sourceManifestEntries': SOURCE_ENTRIES,
+        'fullDiffSHA256': SERVICE_DIFF, 'changedPaths': sorted(changes),
+        'changedSourceSHA256': changes, 'patches': base['patches'] + [
+            {'path': SERVICE_PATCH_PATH, 'sha256': SERVICE_PATCH_SHA256}],
+        'serviceCandidateSHA256': SERVICE_CANDIDATE_SHA256,
+        'primarySha256': primary, 'primaryPaths': candidate['primaryPaths'],
+        'primaryCommits': candidate['primaryCommits'], 'dependencyChanges': base['dependencyChanges'],
+        'serviceReviewSHA256': SERVICE_REVIEW_SHA256}
+    if (not isinstance(pin, dict) or set(pin) != set(expected) or
+            any(type(pin[k]) is not type(v) or pin[k] != v for k, v in expected.items())):
+        raise ValueError('SDK9 pin mismatch')
+    effective = dict(base)
+    for key in ('candidateGitTree', 'candidateCargoLockSHA256', 'sourceManifestSHA256',
+                'sourceManifestEntries', 'fullDiffSHA256', 'changedPaths',
+                'changedSourceSHA256', 'patches', 'dependencyChanges'):
+        effective[key] = pin[key]
+    return effective
+
+
+def validate_service_review(review: dict, pin: dict) -> None:
+    expected = {key: value for key, value in pin.items() if key != 'serviceReviewSHA256'}
+    if (not isinstance(review, dict) or set(review) != set(expected) or
+            any(type(review[k]) is not type(value) or review[k] != value for k, value in expected.items())):
+        raise ValueError('service review differs from pin')
+
+
+def verify_primary_sources(root: Path, candidate: dict) -> None:
+    files, _, _ = file_inventory(root)
+    if files != candidate['primarySha256']:
+        raise ValueError('primary sources differ from reviewed candidate')
+
+
+def verify_service_transition(helper, sdk: Path, pin: dict, candidate: dict, env: dict[str, str]) -> None:
+    git = lambda *args: run(helper, ['git', '-C', str(sdk), *args], ROOT, env, 120)
+    paths = git('diff', '--no-ext-diff', '--no-textconv', '--name-only', CANDIDATE_TREE,
+                pin['candidateGitTree']).splitlines()
+    if paths != candidate['changedPaths']:
+        raise ValueError('SDK9 transition path mismatch')
+    if sha(git('show', CANDIDATE_TREE + ':Cargo.lock').encode()) != pin['candidateCargoLockSHA256']:
+        raise ValueError('SDK8 lock changed in transition')
+
+
 def validate_source_review(review: dict, pin: dict) -> None:
     fields = ('sourceCommit', 'sourceGitTree', 'candidateGitTree', 'sourceManifestSHA256',
               'sourceManifestEntries', 'fullDiffSHA256', 'changedPaths', 'changedSourceSHA256',
@@ -395,7 +496,7 @@ def verify_source(helper, sdk: Path, pin: dict, env: dict[str, str]) -> None:
 
 
 def stage_package(helper, sdk: Path, generated: Path, dylib: Path, pkg: Path,
-                  pin: dict, mode: str, binding: dict[str, str]) -> dict:
+                  pin: dict, mode: str, binding: dict[str, str], profile: SourceProfile = SDK8_PROFILE) -> dict:
     maps = helper.stage_generated_sources(sdk, generated, pkg)
     ffi = pkg / 'Sources/BitwardenFFI/include'
     notices = pkg / 'ThirdPartyNotices'
@@ -450,6 +551,9 @@ def stage_package(helper, sdk: Path, generated: Path, dylib: Path, pkg: Path,
                 'testOnly': mode == 'debug', 'mode': mode, 'architecture': 'arm64', 'minMacOS': '26.0',
                 'dylibSHA256': digest(dylib), 'generatedSHA256': binding, 'generatedModules': modules,
                 'licenseSHA256': pin['licenseSHA256'], 'fileSHA256': files}
+    if profile == SDK9_PROFILE:
+        manifest.update(profile='sdk9-service-shapes', serviceCandidateSHA256=SERVICE_CANDIDATE_SHA256,
+                        servicePatchSHA256=SERVICE_PATCH_SHA256)
     (pkg / 'build-manifest.json').write_text(json.dumps(manifest, sort_keys=True, indent=2) + '\n')
     actual = validate_package_inventory(pkg, expected | {'build-manifest.json'})
     if any(actual[k] != v for k, v in files.items()):
@@ -459,7 +563,12 @@ def stage_package(helper, sdk: Path, generated: Path, dylib: Path, pkg: Path,
 
 def main() -> int:
     parser = argparse.ArgumentParser()
+    parser.add_argument('--profile', choices=('sdk8', 'sdk9'), default='sdk8')
     parser.add_argument('--pin-sha256', required=True)
+    parser.add_argument('--service-patch', type=Path)
+    parser.add_argument('--service-candidate', type=Path)
+    parser.add_argument('--service-source-review', type=Path)
+    parser.add_argument('--service-primary', type=Path)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--legacy-builder', type=Path, required=True)
     parser.add_argument('--upstream', type=Path, required=True)
@@ -470,20 +579,48 @@ def main() -> int:
     parser.add_argument('--cargo-git', type=Path, required=True)
     parser.add_argument('--consumer-source', type=Path, required=True)
     args = parser.parse_args()
-    pin = load_pin(PIN, args.pin_sha256)
+    profile = SDK8_PROFILE if args.profile == 'sdk8' else SDK9_PROFILE
+    service_args = (args.service_patch, args.service_candidate, args.service_source_review, args.service_primary)
+    if profile == SDK8_PROFILE:
+        if any(value is not None for value in service_args):
+            raise ValueError('SDK8 does not accept service profile inputs')
+        base_pin = load_pin(profile.pin, args.pin_sha256)
+        pin = base_pin
+        service_candidate = None
+        service_pin = None
+    else:
+        if any(value is None for value in service_args):
+            raise ValueError('SDK9 requires all service profile inputs')
+        base_path = under(args.patch_root, 'ThirdParty/BitwardenStrictEditSpike/sdk-package.pin.json')
+        base_pin = load_pin(base_path, SDK8_PIN_SHA256)
+        for path in (profile.pin, args.service_patch, args.service_candidate, args.service_source_review):
+            require_regular(path)
+        require_directory(args.service_primary)
+        if (args.pin_sha256 != SERVICE_PIN_SHA256 or digest(profile.pin) != SERVICE_PIN_SHA256 or
+                digest(args.service_patch) != SERVICE_PATCH_SHA256 or
+                digest(args.service_candidate) != SERVICE_CANDIDATE_SHA256 or
+                digest(args.service_source_review) != SERVICE_REVIEW_SHA256):
+            raise ValueError('SDK9 reviewed input digest mismatch')
+        service_pin = json_bytes(profile.pin.read_bytes())
+        service_candidate = json_bytes(args.service_candidate.read_bytes())
+        pin = validate_service_pin(service_pin, base_pin, service_candidate)
+        validate_service_review(json_bytes(args.service_source_review.read_bytes()), service_pin)
+        verify_primary_sources(args.service_primary, service_candidate)
     for path in (args.upstream, args.patch_root, args.cargo_registry, args.cargo_git):
         require_directory(path)
     for path in (args.write_candidate, args.source_review, args.consumer_source, args.legacy_builder):
         require_regular(path)
     if digest(args.source_review) != SOURCE_REVIEW:
         raise ValueError('source review digest mismatch')
-    validate_source_review(json_bytes(args.source_review.read_bytes()), pin)
+    validate_source_review(json_bytes(args.source_review.read_bytes()), base_pin)
     if digest(args.write_candidate) != pin['writeCandidateSHA256']:
         raise ValueError('write checkpoint digest mismatch')
-    validate_checkpoint(json_bytes(args.write_candidate.read_bytes()), pin)
+    validate_checkpoint(json_bytes(args.write_candidate.read_bytes()), base_pin)
     consumer = args.consumer_source.read_bytes()
     validate_consumer(consumer, pin)
-    for entry in pin['patches']:
+    if profile == SDK9_PROFILE and b'revisionToken' not in consumer:
+        raise ValueError('consumer revision token API reference missing')
+    for entry in base_pin['patches']:
         path = under(args.patch_root, entry['path'])
         require_regular(path)
         if digest(path) != entry['sha256']:
@@ -496,9 +633,9 @@ def main() -> int:
         raise ValueError('offline git cache inventory mismatch')
     if platform.system() != 'Darwin' or platform.machine() != 'arm64':
         raise ValueError('requires arm64 macOS')
-    require_directory(WORK)
+    require_directory(profile.work)
     out = args.output
-    if (not out.is_absolute() or out.parent != WORK or safe_relative(out.name) != out.name or
+    if (not out.is_absolute() or out.parent != profile.work or safe_relative(out.name) != out.name or
             out.exists() or out.is_symlink()):
         raise ValueError('owned output must be a fresh direct child')
     helper = load_packaging_helpers(args.legacy_builder)
@@ -512,14 +649,22 @@ def main() -> int:
     sdk = out / 'source'
     run(helper, ['git', 'clone', '--local', '--no-hardlinks', '--no-checkout', str(args.upstream), str(sdk)], ROOT, env, 180)
     run(helper, ['git', '-C', str(sdk), 'checkout', '--detach', COMMIT], ROOT, env, 120)
-    for entry in pin['patches']:
+    for entry in base_pin['patches']:
         path = under(args.patch_root, entry['path'])
         if digest(path) != entry['sha256']:
             raise ValueError('patch changed before application')
         run(helper, ['git', '-C', str(sdk), 'apply', '--check', '--whitespace=error', str(path)], ROOT, env, 120)
         run(helper, ['git', '-C', str(sdk), 'apply', '--whitespace=error', str(path)], ROOT, env, 120)
     run(helper, ['git', '-C', str(sdk), 'add', '-A', '-f'], ROOT, env, 120)
-    verify_source(helper, sdk, pin, env)
+    verify_source(helper, sdk, base_pin, env)
+    if profile == SDK9_PROFILE:
+        if digest(args.service_patch) != SERVICE_PATCH_SHA256:
+            raise ValueError('service patch changed before application')
+        run(helper, ['git', '-C', str(sdk), 'apply', '--check', '--whitespace=error', str(args.service_patch)], ROOT, env, 120)
+        run(helper, ['git', '-C', str(sdk), 'apply', '--whitespace=error', str(args.service_patch)], ROOT, env, 120)
+        run(helper, ['git', '-C', str(sdk), 'add', '-A', '-f'], ROOT, env, 120)
+        verify_source(helper, sdk, pin, env)
+        verify_service_transition(helper, sdk, pin, service_candidate, env)
     cargo_home = out / 'cargo-home'
     cargo_home.mkdir()
     shutil.copytree(args.cargo_registry, cargo_home / 'registry', symlinks=True)
@@ -570,7 +715,7 @@ def main() -> int:
         if digest(bindgen) != generator_hash or digest(dylib) != dylib_hash:
             raise ValueError('generator or dylib changed')
         pkg = out / ('Package-' + mode)
-        manifest = stage_package(helper, sdk, generated, dylib, pkg, pin, mode, binding)
+        manifest = stage_package(helper, sdk, generated, dylib, pkg, pin, mode, binding, profile)
         manifest_hash = digest(pkg / 'build-manifest.json')
         _, package_before_hash, package_before_count = file_inventory(pkg)
         consumer_dir = out / ('consumer-' + mode)
@@ -637,9 +782,16 @@ def main() -> int:
         raise ValueError('reviewed helper or consumer changed during build')
     if digest(args.source_review) != SOURCE_REVIEW:
         raise ValueError('source review changed during build')
-    if digest(args.write_candidate) != pin['writeCandidateSHA256'] or digest(PIN) != args.pin_sha256:
+    if digest(args.write_candidate) != base_pin['writeCandidateSHA256'] or digest(profile.pin) != args.pin_sha256:
         raise ValueError('reviewed inputs changed after build')
-    for entry in pin['patches']:
+    if profile == SDK9_PROFILE:
+        if (digest(base_path) != SDK8_PIN_SHA256 or digest(args.service_patch) != SERVICE_PATCH_SHA256 or
+                digest(args.service_candidate) != SERVICE_CANDIDATE_SHA256 or
+                digest(args.service_source_review) != SERVICE_REVIEW_SHA256):
+            raise ValueError('SDK9 reviewed inputs changed during build')
+        verify_primary_sources(args.service_primary, service_candidate)
+        verify_service_transition(helper, sdk, pin, service_candidate, env)
+    for entry in base_pin['patches']:
         if digest(under(args.patch_root, entry['path'])) != entry['sha256']:
             raise ValueError('patch changed during build')
     receipt = {'schema': 1, 'accepted': False, 'integrationReady': False,
@@ -649,6 +801,10 @@ def main() -> int:
                'sourceManifestSHA256': pin['sourceManifestSHA256'], 'bindgenSHA256': generator_hash,
                'consumerSHA256': pin['consumerSHA256'], 'packages': receipts,
                'commands': helper.COMMANDS, 'logSHA256': file_inventory(out / 'logs')[0]}
+    if profile == SDK9_PROFILE:
+        receipt.update(profile='sdk9-service-shapes', sdk8PinSHA256=SDK8_PIN_SHA256,
+                       serviceCandidateSHA256=SERVICE_CANDIDATE_SHA256,
+                       serviceReviewSHA256=SERVICE_REVIEW_SHA256, servicePatchSHA256=SERVICE_PATCH_SHA256)
     (out / 'receipt.json').write_text(json.dumps(receipt, sort_keys=True, indent=2) + '\n')
     return 0
 

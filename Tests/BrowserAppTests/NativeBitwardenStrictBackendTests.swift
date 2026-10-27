@@ -17,6 +17,7 @@ import XCTest
     let email: String
     let currentPassword: String
     let cipherID: UUID
+    let shape: String?
   }
 
   private actor StrictPreflightBarrier {
@@ -186,6 +187,49 @@ import XCTest
         origin: try XCTUnwrap(PasswordFillOrigin("https://fixture.example")))
       let input = NativeBitwardenStrictUpdateInput(
         username: "synthetic-new-user", password: "synthetic-new-pass")
+      var originalView: CipherView?
+      if let shape = fixture.shape {
+        guard ["bitwarden", "vaultwarden"].contains(shape) else {
+          return XCTFail("Invalid service shape")
+        }
+        let paired = fixtureClient.sync().encryptedSnapshot()
+        let encrypted = try XCTUnwrap(
+          paired.ciphers.first { $0.id == fixture.cipherID.uuidString.lowercased() })
+        originalView = try await fixtureClient.vault().ciphers().decrypt(cipher: encrypted)
+        let sdkPreparation = try XCTUnwrap(
+          fixtureClient.strictPreparePersonalLogin(
+            cipherId: fixture.cipherID.uuidString.lowercased(),
+            expectedGeneration: paired.generation))
+        XCTAssertEqual(sdkPreparation.revisionToken(), "2025-01-01T00:00:00.123456789Z")
+        for fault in ["data", "partial"] {
+          _ = try await control(endpoint, path: "fixture/shape-" + fault)
+          if (try? await backend.syncVault(sessionID: session.id)) != nil {
+            let invalidAccess = try await backend.fillSnapshot(sessionID: session.id).access
+            let invalidAuthority = NativeBitwardenWriteAuthority()
+            _ = try await adopt(
+              backend, authority: invalidAuthority, session: session,
+              access: invalidAccess, profileID: profileID, server: server)
+            do {
+              _ = try await backend.prepareStrictUpdate(
+                access: invalidAccess, context: context, cipherID: fixture.cipherID)
+              XCTFail("Contradictory or partial response accepted")
+            } catch { XCTAssertEqual(error as? NativeBitwardenWriteError, .ineligibleCipher) }
+          } else {
+            do {
+              _ = try await backend.prepareStrictUpdate(
+                access: access, context: context, cipherID: fixture.cipherID)
+              XCTFail("Failed replacement retained authority")
+            } catch { XCTAssertEqual(error as? NativeBitwardenWriteError, .staleAccess) }
+          }
+        }
+        let countsData = try await control(endpoint, path: "fixture/count")
+        let counts = try JSONDecoder().decode([String: Int].self, from: countsData)
+        XCTAssertEqual(counts["put"], 0)
+        XCTAssertEqual(counts["create"], 0)
+        _ = try await control(endpoint, path: "fixture/shape-valid")
+        _ = try await backend.syncVault(sessionID: session.id)
+        access = try await backend.fillSnapshot(sessionID: session.id).access
+      }
       do {
         _ = try await backend.prepareStrictUpdate(
           access: access, context: context, cipherID: fixture.cipherID)
@@ -370,6 +414,18 @@ import XCTest
         access: fresh, cipherID: fixture.cipherID, context: context)
       XCTAssertEqual(updated.username, "synthetic-new-user")
       XCTAssertEqual(updated.password, "synthetic-new-pass")
+      if let originalView {
+        let paired = fixtureClient.sync().encryptedSnapshot()
+        let encrypted = try XCTUnwrap(
+          paired.ciphers.first { $0.id == fixture.cipherID.uuidString.lowercased() })
+        let view = try await fixtureClient.vault().ciphers().decrypt(cipher: encrypted)
+        XCTAssertEqual(view.name, originalView.name)
+        XCTAssertEqual(view.notes, originalView.notes)
+        XCTAssertEqual(view.fields, originalView.fields)
+        XCTAssertEqual(view.attachments, originalView.attachments)
+        XCTAssertEqual(view.login?.uris, originalView.login?.uris)
+        XCTAssertEqual(view.permissions, originalView.permissions)
+      }
       print("strict-stage: credential")
       let preCreate = try await backend.prepareStrictUpdate(
         access: fresh, context: context, cipherID: fixture.cipherID)

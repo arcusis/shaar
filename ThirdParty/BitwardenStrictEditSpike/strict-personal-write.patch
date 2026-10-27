@@ -322,7 +322,7 @@ index 73b71c8..ab01b28 100644
  http = { workspace = true }
  tokio = { workspace = true, features = ["rt"] }
 diff --git a/crates/bitwarden-pm/src/lib.rs b/crates/bitwarden-pm/src/lib.rs
-index 6a4e507..dd2152a 100644
+index 6a4e507..af6b4ed 100644
 --- a/crates/bitwarden-pm/src/lib.rs
 +++ b/crates/bitwarden-pm/src/lib.rs
 @@ -13,8 +13,7 @@ use std::sync::Arc;
@@ -428,8 +428,8 @@ index 6a4e507..dd2152a 100644
 +            }
 +        }
 +        result
-     }
- 
++    }
++
 +    fn strict_api_client(&self) -> Option<&bitwarden_api_api::apis::ApiClient> {
 +        let trusted = self.client.internal.get_strict_api_client()?;
 +        #[cfg(test)]
@@ -499,8 +499,8 @@ index 6a4e507..dd2152a 100644
 +        // snapshot mutation is attempted; any return needs a fresh sync to reconcile.
 +        let _ = api.ciphers_api().put(capability.cipher_id.into(), Some(request)).await;
 +        StrictPersonalWriteOutcome::Unconfirmed
-+    }
-+
+     }
+ 
 +    /// Clone the last published encrypted cipher snapshot.
      pub fn encrypted_ciphers(&self) -> Vec<bitwarden_vault::Cipher> {
          self.state
@@ -538,7 +538,7 @@ index 6a4e507..dd2152a 100644
          });
          let id = "11111111-1111-4111-8111-111111111111".parse().unwrap();
  
-@@ -1178,3 +1301,492 @@ mod refresh_sync_status_tests {
+@@ -1178,3 +1301,628 @@ mod refresh_sync_status_tests {
          ));
      }
  }
@@ -709,6 +709,36 @@ index 6a4e507..dd2152a 100644
 +        (Arc::new(SyncCipherSnapshotClient {
 +            sdk, state, client, strict_test_api: Some(transport.internal.get_api_configurations()),
 +        }), intercept)
++    }
++
++    // Synthetic owned attachment records use vendor-generated keys and encryption.
++    async fn fixture_with_keyed_attachments() -> (Arc<SyncCipherSnapshotClient>, Arc<Intercept>) {
++        let (sdk, intercept) = fixture("2025-01-01T00:00:00.123456789Z").await;
++        let keys = {
++            let mut ctx = sdk.client.internal.get_key_store().context_mut();
++            (0..2).map(|_| {
++                let slot = ctx.make_symmetric_key(SymmetricKeyAlgorithm::Aes256CbcHmac);
++                #[allow(deprecated)]
++                ctx.dangerous_get_symmetric_key(slot).unwrap().clone()
++            }).collect::<Vec<_>>()
++        };
++        let mut view = login_view("2025-01-01T00:00:00.123456789Z");
++        view.attachments = Some(keys.into_iter().enumerate().map(|(i, key)| bitwarden_vault::AttachmentView {
++            id: Some(format!("attachment-{i}")),
++            url: Some(format!("https://files.invalid/synthetic-{i}")),
++            size: Some((100 + i).to_string()), size_name: Some(format!("{} bytes", 100 + i)),
++            file_name: Some(format!("synthetic-file-{i}.txt")), key: Some(key),
++        }).collect());
++        let cipher = sdk.client.vault().ciphers().encrypt(view).await.unwrap().cipher;
++        let encoded = serde_json::to_value(&cipher).unwrap();
++        let mut server_record = wire(&cipher);
++        server_record["attachments"] = Value::Array(encoded["attachments"].as_array().unwrap().iter().map(|item| json!({
++            "object": "attachment", "id": item["id"], "url": item["url"],
++            "size": item["size"], "sizeName": item["sizeName"],
++            "fileName": item["fileName"], "key": item["key"]
++        })).collect());
++        *intercept.sync_response.lock().unwrap() = json!({"profile":{"organizations":[]},"ciphers":[server_record]}).to_string();
++        (sdk, intercept)
 +    }
 +
 +    fn sibling(owner: &Arc<SyncCipherSnapshotClient>, intercept: &Arc<Intercept>) -> Arc<SyncCipherSnapshotClient> {
@@ -979,17 +1009,123 @@ index 6a4e507..dd2152a 100644
 +    }
 +
 +    #[tokio::test]
-+    async fn strict_write_rejects_attachment_with_unproven_server_preservation() {
-+        let (sdk, intercept) = fixture("2025-01-01T00:00:00.123456789Z").await;
++    async fn strict_write_preserves_modern_keyed_attachment_records() {
++        let (sdk, intercept) = fixture_with_keyed_attachments().await;
++        let original: Value = serde_json::from_str(&intercept.sync_response.lock().unwrap()).unwrap();
++        let record = &original["ciphers"][0];
++        let original_model: bitwarden_api_api::models::CipherDetailsResponseModel = serde_json::from_value(record.clone()).unwrap();
++        let original_view = sdk.client.vault().ciphers().decrypt(bitwarden_vault::Cipher::try_from(original_model).unwrap()).await.unwrap();
++        assert!(sdk.sync(true).await.unwrap());
++        let prep = sdk.strict_prepare_personal_login(CIPHER_ID.parse().unwrap(), 1).unwrap();
++        assert_eq!(sdk.strict_personal_update(&prep, Some("synthetic-new-user".into()), "synthetic-new-pass".into()).await, StrictPersonalWriteOutcome::Unconfirmed);
++        let body = { let writes = intercept.writes.lock().unwrap(); assert_eq!(writes.len(), 1); writes[0].clone() };
++        assert_eq!(body["lastKnownRevisionDate"], "2025-01-01T00:00:00.123456789Z");
++        assert!(body["attachments"].is_null());
++        assert_eq!(body["key"], record["key"]);
++        let updates = body["attachments2"].as_object().unwrap();
++        let saved = record["attachments"].as_array().unwrap();
++        assert_eq!(updates.len(), saved.len());
++        let mut retained = saved.clone();
++        for attachment in &mut retained {
++            let update = &updates[attachment["id"].as_str().unwrap()];
++            assert_eq!(update["fileName"], attachment["fileName"]);
++            assert_eq!(update["key"], attachment["key"]);
++            // Simulate only pinned source behavior: metadata stays on existing records.
++            attachment["fileName"] = update["fileName"].clone();
++            attachment["key"] = update["key"].clone();
++        }
++        assert_eq!(retained, *saved);
++        let mut response = record.clone();
++        for field in ["name", "notes", "key", "login", "fields", "passwordHistory"] {
++            response[field] = body.get(field).cloned().unwrap_or(Value::Null);
++        }
++        response["attachments"] = Value::Array(retained);
++        let model: bitwarden_api_api::models::CipherDetailsResponseModel = serde_json::from_value(response).unwrap();
++        let decoded = sdk.client.vault().ciphers().decrypt(bitwarden_vault::Cipher::try_from(model).unwrap()).await.unwrap();
++        assert_eq!(decoded.key, original_view.key);
++        assert_eq!(decoded.attachments, original_view.attachments);
++        assert_eq!(decoded.name, original_view.name);
++        assert_eq!(decoded.notes, original_view.notes);
++        assert_eq!(decoded.fields, original_view.fields);
++        assert_eq!(decoded.login.unwrap().password.as_deref(), Some("synthetic-new-pass"));
++        assert!(!body.to_string().contains("synthetic-file-"));
++        assert_eq!(intercept.unexpected.load(Ordering::SeqCst), 0);
++    }
++
++    #[tokio::test]
++    async fn strict_write_preserves_absent_and_empty_attachment_shapes() {
++        for empty in [false, true] {
++            let (sdk, intercept) = fixture("2025-01-01T00:00:00.123456789Z").await;
++            if empty {
++                let mut raw = intercept.sync_response.lock().unwrap();
++                let mut json: Value = serde_json::from_str(&raw).unwrap();
++                json["ciphers"][0]["attachments"] = json!([]);
++                *raw = json.to_string();
++            }
++            assert!(sdk.sync(true).await.unwrap());
++            let prep = sdk.strict_prepare_personal_login(CIPHER_ID.parse().unwrap(), 1).unwrap();
++            assert_eq!(sdk.strict_personal_update(&prep, None, "synthetic-new-pass".into()).await, StrictPersonalWriteOutcome::Unconfirmed);
++            let writes = intercept.writes.lock().unwrap();
++            assert_eq!(writes.len(), 1);
++            if empty { assert_eq!(writes[0]["attachments2"], json!({})); }
++            else { assert!(writes[0].get("attachments2").is_none()); }
++            assert_eq!(intercept.unexpected.load(Ordering::SeqCst), 0);
++        }
++    }
++
++    #[tokio::test]
++    async fn strict_write_rejects_bad_or_legacy_attachment_records() {
++        for variation in ["missing-id", "duplicate-id", "empty-id", "missing-name", "missing-key", "corrupt-name", "corrupt-key", "keyless-cipher"] {
++            let (sdk, intercept) = fixture_with_keyed_attachments().await;
++            {
++                let mut raw = intercept.sync_response.lock().unwrap();
++                let mut json: Value = serde_json::from_str(&raw).unwrap();
++                let item = &mut json["ciphers"][0];
++                match variation {
++                    "missing-id" => item["attachments"][0]["id"] = Value::Null,
++                    "duplicate-id" => item["attachments"][1]["id"] = item["attachments"][0]["id"].clone(),
++                    "empty-id" => item["attachments"][0]["id"] = json!(" "),
++                    "missing-name" => item["attachments"][0]["fileName"] = Value::Null,
++                    "missing-key" => item["attachments"][0]["key"] = Value::Null,
++                    "keyless-cipher" => item["key"] = Value::Null,
++                    "corrupt-name" | "corrupt-key" => {
++                        let field = if variation == "corrupt-name" { "fileName" } else { "key" };
++                        let encrypted = item["attachments"][0][field].as_str().unwrap();
++                        let (prefix, _) = encrypted.rsplit_once('|').unwrap();
++                        item["attachments"][0][field] = json!(format!("{prefix}|AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="));
++                    }
++                    _ => unreachable!(),
++                }
++                *raw = json.to_string();
++            }
++            let _ = sdk.sync(true).await;
++            if let Some(prep) = sdk.strict_prepare_personal_login(CIPHER_ID.parse().unwrap(), 1) {
++                assert_eq!(sdk.strict_personal_update(&prep, None, "synthetic-new-pass".into()).await, StrictPersonalWriteOutcome::RejectedBeforeDispatch, "{variation}");
++            }
++            assert!(intercept.writes.lock().unwrap().is_empty(), "{variation}");
++            assert_eq!(intercept.unexpected.load(Ordering::SeqCst), 0, "{variation}");
++        }
++    }
++
++    #[tokio::test]
++    async fn strict_write_rejects_valid_keyless_cipher_with_attachment() {
++        let (sdk, intercept) = fixture_with_options("2025-01-01T00:00:00.123456789Z", 0, true).await;
++        let (name, wrapped_key) = {
++            let mut ctx = sdk.client.internal.get_key_store().context_mut();
++            let slot = ctx.make_symmetric_key(SymmetricKeyAlgorithm::Aes256CbcHmac);
++            let wrapped = ctx.wrap_symmetric_key(SymmetricKeySlotId::User, slot).unwrap();
++            let name = "synthetic-keyless-file".encrypt(&mut ctx, SymmetricKeySlotId::User).unwrap();
++            (name.to_string(), wrapped.to_string())
++        };
 +        {
 +            let mut raw = intercept.sync_response.lock().unwrap();
 +            let mut json: Value = serde_json::from_str(&raw).unwrap();
-+            json["ciphers"][0]["attachments"] = json!([{"object":"attachment", "id":"attachment-a",
-+                "url":null, "fileName":null, "key":null, "size":"7", "sizeName":"7 bytes"}]);
++            json["ciphers"][0]["attachments"] = json!([{"object":"attachment", "id":"keyless-attachment",
++                "url":"https://files.invalid/keyless", "size":"7", "sizeName":"7 bytes", "fileName":name, "key":wrapped_key}]);
 +            *raw = json.to_string();
 +        }
 +        assert!(sdk.sync(true).await.unwrap());
-+        let prep = sdk.strict_prepare_personal_login(CIPHER_ID.parse().unwrap(), 1).unwrap();
++        let prep = sdk.strict_prepare_personal_login(CIPHER_ID.parse().unwrap(), 1).expect("valid keyless decrypt");
 +        assert_eq!(sdk.strict_personal_update(&prep, None, "synthetic-new-pass".into()).await, StrictPersonalWriteOutcome::RejectedBeforeDispatch);
 +        assert!(intercept.writes.lock().unwrap().is_empty());
 +        assert_eq!(intercept.unexpected.load(Ordering::SeqCst), 0);
@@ -1137,10 +1273,10 @@ index 739eb42..8e9a469 100644
      }
  }
 diff --git a/crates/bitwarden-vault/src/cipher/cipher_client/mod.rs b/crates/bitwarden-vault/src/cipher/cipher_client/mod.rs
-index f22f69b..47a82da 100644
+index f22f69b..294ef28 100644
 --- a/crates/bitwarden-vault/src/cipher/cipher_client/mod.rs
 +++ b/crates/bitwarden-vault/src/cipher/cipher_client/mod.rs
-@@ -350,6 +350,54 @@ impl CiphersClient {
+@@ -350,6 +350,69 @@ impl CiphersClient {
          Some(revision)
      }
  
@@ -1152,9 +1288,19 @@ index f22f69b..47a82da 100644
 +        username: Option<String>,
 +        password: String,
 +    ) -> Option<bitwarden_api_api::models::CipherRequestModel> {
-+        if password.is_empty() || original.local_data.is_some()
-+            || original.attachments.as_ref().is_some_and(|a| !a.is_empty()) {
++        if password.is_empty() || original.local_data.is_some() {
 +            return None;
++        }
++        // Only modern attachments wrapped by an existing cipher key can be
++        // retained without migrating their encrypted representation.
++        if let Some(attachments) = original.attachments.as_ref().filter(|a| !a.is_empty()) {
++            let mut ids = std::collections::HashSet::new();
++            if original.key.is_none() || attachments.iter().any(|a| {
++                a.id.as_deref().is_none_or(|id| id.trim().is_empty() || !ids.insert(id))
++                    || a.file_name.is_none() || a.key.is_none()
++            }) {
++                return None;
++            }
 +        }
 +        let original_view: CipherView = self.key_store.decrypt(&StrictPersonalDecrypt(original.clone())).ok()?;
 +        let mut modified = original_view.clone();
@@ -1173,6 +1319,11 @@ index f22f69b..47a82da 100644
 +        let encrypted_by_key_id = self.key_store.context()
 +            .get_symmetric_key_id(modified.key_identifier()).map(|id| id.to_string());
 +        let mut encrypted: Cipher = self.key_store.encrypt(EncryptMode::Legacy(modified.clone())).ok()?;
++        // Preserve exact wrapped item key and attachment ciphertext for keyed
++        // attachments. The strict decrypt below validates the retained linkage.
++        if original.attachments.as_ref().is_some_and(|a| !a.is_empty()) {
++            encrypted.key = original.key.clone();
++        }
 +        // Retain original encrypted attachment representation, including absent vs empty.
 +        encrypted.attachments = original.attachments.clone();
 +        let verified: CipherView = self.key_store.decrypt(&StrictPersonalDecrypt(encrypted.clone())).ok()?;

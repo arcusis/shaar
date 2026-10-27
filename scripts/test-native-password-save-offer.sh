@@ -52,6 +52,8 @@ xctest="$DEVELOPER_DIR/usr/bin/xctest"
   exit 1
 }
 tests=(
+  testCanonicalOriginAndOriginalURLValidation
+  testSaveAdmissionPredicates
   testMetadataThenSingleExplicitConsume
   testRevocationWinsBeforeDelayedCredentialCallback
   testRejectsForeignURLAndRevokesBeforeCallback

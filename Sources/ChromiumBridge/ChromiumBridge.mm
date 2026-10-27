@@ -353,8 +353,11 @@ static BOOL ARCCanonicalHTTPSOrigin(NSString *origin) {
 - (void)fixtureAddSaveTab:(id)tab tabID:(NSString *)tabID profileID:(NSString *)profileID
   windowID:(NSString *)windowID;
 - (void)fixtureAddSaveProfile:(id)profile profileID:(NSString *)profileID;
+- (BOOL)fixtureSaveOwnerCurrent:(NSString *)captureID;
+- (BOOL)fixtureSaveCaptureInstalled:(NSString *)captureID;
 #endif
 - (void)closedWindowID:(NSString *)identity;
+- (BOOL)passwordRecordIsCurrent:(ARCPasswordFillRecord *)record;
 - (void)invalidatePasswordSaveCapturesForTabID:(NSString *)tabID windowID:(NSString *)windowID;
 - (void)finishPasswordSaveRecord:(ARCPasswordSaveRecord *)record cancelNative:(BOOL)cancelNative;
 - (BOOL)privateIdentityOccupied:(NSString *)identity;
@@ -484,6 +487,14 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
 }
 - (void)fixtureAddSaveProfile:(id)profile profileID:(NSString *)profileID {
   _profiles[profileID] = profile;
+}
+- (BOOL)fixtureSaveOwnerCurrent:(NSString *)captureID {
+  ARCPasswordSaveRecord *record = _passwordSaveCaptures[captureID];
+  return record && [self passwordRecordIsCurrent:record];
+}
+- (BOOL)fixtureSaveCaptureInstalled:(NSString *)captureID {
+  ARCPasswordSaveRecord *record = _passwordSaveCaptures[captureID];
+  return record && record.nativeCapture != nil;
 }
 #endif
 

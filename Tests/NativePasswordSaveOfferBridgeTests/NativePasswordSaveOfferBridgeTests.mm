@@ -87,6 +87,7 @@ NSString *const accountEpoch = @"14CAB0F2-E91A-43CA-9AC2-FB1C86044D0C";
 @interface NativePasswordSaveOfferBridgeTests : XCTestCase
 @end
 @implementation NativePasswordSaveOfferBridgeTests
+#define REQUIRE_CALLBACK(callback) do { XCTAssertNotNil(callback); if (!(callback)) return; } while (0)
 
 - (ARCChromiumRuntime *)runtimeWithWindow:(SaveFakeWindow **)result version:(uint32_t (*)(void))version {
   XCTAssertTrue(NSThread.isMainThread);
@@ -114,6 +115,35 @@ NSString *const accountEpoch = @"14CAB0F2-E91A-43CA-9AC2-FB1C86044D0C";
   return offer;
 }
 
+- (void)testCanonicalOriginAndOriginalURLValidation {
+  XCTAssertTrue(ARCCanonicalHTTPSOrigin(@"https://login.example"));
+  XCTAssertTrue(ARCSaveDocumentURLMatchesOrigin(@"https://login.example/login?q=private",
+                                                @"https://login.example"));
+  XCTAssertFalse(ARCSaveDocumentURLMatchesOrigin(@"https://other.example/path",
+                                                 @"https://login.example"));
+}
+
+- (void)testSaveAdmissionPredicates {
+  SaveFakeWindow *window;
+  ARCChromiumRuntime *runtime = [self runtimeWithWindow:&window version:VersionOne];
+  __block NSInteger offers = 0;
+  XCTAssertTrue([runtime armPasswordSaveCaptureID:captureID windowID:windowID
+    profileID:profileID tabID:tabID accountEpoch:accountEpoch
+    onOffer:^(ARCPasswordSaveOffer *offer) { ++offers; } onRevoke:^{}]);
+  XCTAssertTrue([runtime fixtureSaveOwnerCurrent:captureID], @"owner");
+  XCTAssertTrue([runtime fixtureSaveCaptureInstalled:captureID], @"capture");
+  SaveFakeOffer *offer = [self offer];
+  XCTAssertTrue(ValidID(offer.offerID), @"offer ID");
+  XCTAssertEqualObjects(offer.accountEpoch, accountEpoch, @"account");
+  XCTAssertTrue(ARCSaveDocumentURLMatchesOrigin(offer.originalDocumentURL, offer.originalOrigin), @"URL");
+  XCTAssertTrue(offer.provenance >= 1 && offer.provenance <= 3, @"provenance");
+  XCTAssertTrue(offer.deadline > NSProcessInfo.processInfo.systemUptime, @"deadline");
+  REQUIRE_CALLBACK(window.offerCallback);
+  window.offerCallback(offer);
+  XCTAssertEqual(offers, 1);
+  [runtime cancelPasswordSaveCaptureID:captureID];
+}
+
 - (void)testMetadataThenSingleExplicitConsume {
   SaveFakeWindow *window;
   ARCChromiumRuntime *runtime = [self runtimeWithWindow:&window version:VersionOne];
@@ -123,8 +153,10 @@ NSString *const accountEpoch = @"14CAB0F2-E91A-43CA-9AC2-FB1C86044D0C";
     profileID:profileID tabID:tabID accountEpoch:accountEpoch
     onOffer:^(ARCPasswordSaveOffer *offer) { received = offer; }
     onRevoke:^{ ++revoked; }]);
+  REQUIRE_CALLBACK(window.offerCallback);
   window.offerCallback([self offer]);
   XCTAssertNotNil(received);
+  if (!received) return;
   XCTAssertEqualObjects(received.originalOrigin, @"https://login.example");
   XCTAssertEqualObjects(received.originalDocumentURL, @"https://login.example/login?q=private");
   XCTAssertEqualObjects(received.accountEpoch, accountEpoch);
@@ -138,6 +170,7 @@ NSString *const accountEpoch = @"14CAB0F2-E91A-43CA-9AC2-FB1C86044D0C";
       XCTAssertEqualObjects(password, @"synthetic-password");
     }];
   XCTAssertEqual(window.consumeCount, 1);
+  REQUIRE_CALLBACK(window.consumeCallback);
   window.consumeCallback(0, @"synthetic-user", @"synthetic-password");
   window.consumeCallback(0, @"synthetic-user", @"synthetic-password");
   XCTAssertEqual(completions, 1);
@@ -154,7 +187,10 @@ NSString *const accountEpoch = @"14CAB0F2-E91A-43CA-9AC2-FB1C86044D0C";
     profileID:profileID tabID:tabID accountEpoch:accountEpoch
     onOffer:^(ARCPasswordSaveOffer *offer) { received = offer; }
     onRevoke:^{ ++revoked; }]);
+  REQUIRE_CALLBACK(window.offerCallback);
   window.offerCallback([self offer]);
+  XCTAssertNotNil(received);
+  if (!received) return;
   [runtime consumePasswordSaveOffer:received displayedOrigin:received.originalOrigin
     completion:^(ARCPasswordSaveStatus status, NSString *username, NSString *password) {
       ++completions;
@@ -163,6 +199,7 @@ NSString *const accountEpoch = @"14CAB0F2-E91A-43CA-9AC2-FB1C86044D0C";
       XCTAssertNil(username); XCTAssertNil(password);
     }];
   [runtime cancelPasswordSaveCaptureID:captureID];
+  REQUIRE_CALLBACK(window.consumeCallback);
   window.consumeCallback(0, @"synthetic-user", @"synthetic-password");
   XCTAssertEqual(revoked, 1);
   XCTAssertEqual(completions, 1);
@@ -177,6 +214,7 @@ NSString *const accountEpoch = @"14CAB0F2-E91A-43CA-9AC2-FB1C86044D0C";
     profileID:profileID tabID:tabID accountEpoch:accountEpoch
     onOffer:^(ARCPasswordSaveOffer *offer) { ++offers; } onRevoke:^{ ++revoked; }]);
   SaveFakeOffer *bad = [self offer]; bad.originalDocumentURL = @"https://other.example/path";
+  REQUIRE_CALLBACK(window.offerCallback);
   window.offerCallback(bad);
   XCTAssertEqual(offers, 0);
   XCTAssertEqual(revoked, 1);
@@ -209,7 +247,10 @@ NSString *const accountEpoch = @"14CAB0F2-E91A-43CA-9AC2-FB1C86044D0C";
   XCTAssertTrue([runtime armPasswordSaveCaptureID:captureID windowID:windowID
     profileID:profileID tabID:tabID accountEpoch:accountEpoch
     onOffer:^(ARCPasswordSaveOffer *offer) { received = offer; } onRevoke:^{ ++revokes; }]);
+  REQUIRE_CALLBACK(window.offerCallback);
   window.offerCallback([self offer]);
+  XCTAssertNotNil(received);
+  if (!received) return;
   [runtime consumePasswordSaveOffer:received displayedOrigin:@"https://other.example"
     completion:^(ARCPasswordSaveStatus status, NSString *username, NSString *password) {
       ++completions;
@@ -230,6 +271,7 @@ NSString *const accountEpoch = @"14CAB0F2-E91A-43CA-9AC2-FB1C86044D0C";
     onOffer:^(ARCPasswordSaveOffer *offer) { ++offers; } onRevoke:^{ ++revokes; }]);
   SaveFakeOffer *bad = [self offer];
   bad.accountEpoch = @"EFEE0A65-44B9-42F1-85F2-2DCE137092BB";
+  REQUIRE_CALLBACK(window.offerCallback);
   window.offerCallback(bad);
   XCTAssertEqual(offers, 0); XCTAssertEqual(revokes, 1);
 
@@ -239,6 +281,7 @@ NSString *const accountEpoch = @"14CAB0F2-E91A-43CA-9AC2-FB1C86044D0C";
     onOffer:^(ARCPasswordSaveOffer *offer) { ++offers; } onRevoke:^{ ++revokes; }]);
   SaveFakeOffer *expired = [self offer];
   expired.deadline = NSProcessInfo.processInfo.systemUptime - 1;
+  REQUIRE_CALLBACK(window.offerCallback);
   window.offerCallback(expired);
   XCTAssertEqual(offers, 0); XCTAssertEqual(revokes, 2);
 }
@@ -254,6 +297,7 @@ NSString *const accountEpoch = @"14CAB0F2-E91A-43CA-9AC2-FB1C86044D0C";
       [runtime cancelPasswordSaveCaptureID:captureID];
     } onRevoke:^{ ++revokes; }]);
   void (^oldCallback)(id<ARCNativeSaveOffer>) = window.offerCallback;
+  REQUIRE_CALLBACK(oldCallback);
   oldCallback([self offer]);
   oldCallback([self offer]);
   XCTAssertEqual(offers, 1);
@@ -280,6 +324,7 @@ NSString *const accountEpoch = @"14CAB0F2-E91A-43CA-9AC2-FB1C86044D0C";
     profileID:secondProfile tabID:secondTab accountEpoch:accountEpoch
     onOffer:^(ARCPasswordSaveOffer *offer) { ++secondOffers; } onRevoke:^{ ++secondRevoked; }]);
   [runtime cancelPasswordSaveCaptureID:captureID];
+  REQUIRE_CALLBACK(second.offerCallback);
   second.offerCallback([self offer]);
   XCTAssertEqual(firstRevoked, 1);
   XCTAssertEqual(secondRevoked, 0);
@@ -310,6 +355,7 @@ NSString *const accountEpoch = @"14CAB0F2-E91A-43CA-9AC2-FB1C86044D0C";
     onOffer:^(ARCPasswordSaveOffer *offer) { ++offers; } onRevoke:^{ ++revoked; }]);
   SaveFakeOffer *bad = [self offer];
   bad.accountEpoch = (NSString *)(id)@42;
+  REQUIRE_CALLBACK(window.offerCallback);
   window.offerCallback(bad);
   XCTAssertEqual(offers, 0);
   XCTAssertEqual(revoked, 1);
@@ -333,7 +379,10 @@ NSString *const accountEpoch = @"14CAB0F2-E91A-43CA-9AC2-FB1C86044D0C";
     profileID:profileID tabID:tabID accountEpoch:accountEpoch
     onOffer:^(ARCPasswordSaveOffer *offer) { received = offer; }
     onRevoke:^{ [window.eventTrace addObject:@"revoke"]; }]);
+  REQUIRE_CALLBACK(window.offerCallback);
   window.offerCallback([self offer]);
+  XCTAssertNotNil(received);
+  if (!received) return;
   [runtime consumePasswordSaveOffer:received displayedOrigin:received.originalOrigin
     completion:^(ARCPasswordSaveStatus status, NSString *username, NSString *password) {
       ++completions;
@@ -346,6 +395,7 @@ NSString *const accountEpoch = @"14CAB0F2-E91A-43CA-9AC2-FB1C86044D0C";
   [runtime fixtureAddSaveTab:other tabID:otherTabID profileID:profileID windowID:windowID];
   [runtime activateTabID:otherTabID];
   XCTAssertEqualObjects(window.eventTrace, (@[@"revoke", @"completion", @"profile", @"activate"]));
+  REQUIRE_CALLBACK(window.consumeCallback);
   window.consumeCallback(0, @"synthetic-user", @"synthetic-password");
   XCTAssertEqual(completions, 1);
 }
@@ -386,6 +436,7 @@ NSString *const accountEpoch = @"14CAB0F2-E91A-43CA-9AC2-FB1C86044D0C";
     onOffer:^(ARCPasswordSaveOffer *offer) { ++secondOffers; } onRevoke:^{ ++secondRevoked; }]);
   XCTAssertTrue([runtime closeWindowID:windowID]);
   XCTAssertEqualObjects(first.eventTrace, (@[@"revoke", @"close"]));
+  REQUIRE_CALLBACK(second.offerCallback);
   second.offerCallback([self offer]);
   XCTAssertEqual(secondRevoked, 0);
   XCTAssertEqual(secondOffers, 1);
@@ -416,3 +467,4 @@ NSString *const accountEpoch = @"14CAB0F2-E91A-43CA-9AC2-FB1C86044D0C";
   XCTAssertEqual(revoked, 1);
 }
 @end
+#undef REQUIRE_CALLBACK

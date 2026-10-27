@@ -72,7 +72,8 @@ private final class SaveVaultDouble: NativePasswordSaveVault {
     writeCount += 1
     self.decision = decision
     self.authority = authority
-    receivedSyntheticCredential = credential.username == "synthetic-user"
+    receivedSyntheticCredential =
+      credential.username == "synthetic-user"
       && credential.password == "synthetic-password"
     writeReply = completion
   }

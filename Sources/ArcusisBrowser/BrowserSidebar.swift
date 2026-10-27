@@ -494,7 +494,8 @@ struct BrowserSidebar: View {
       .disabled(previewRecentDownloads == nil && downloads == nil)
       .accessibilityLabel("Recent downloads")
       .accessibilityHint(
-        recentDownloads.isPinned ? "Hide recent downloads" : "Show recent downloads for this profile")
+        recentDownloads.isPinned
+          ? "Hide recent downloads" : "Show recent downloads for this profile")
       .help("Recent downloads")
     }
     .buttonStyle(.plain)
@@ -632,8 +633,9 @@ struct BrowserSidebar: View {
       closeRecentDownloadsPreview()
       return
     }
-    guard let token = recentDownloads.hover(
-      target, inside: inside, profileID: profileID, epoch: epoch)
+    guard
+      let token = recentDownloads.hover(
+        target, inside: inside, profileID: profileID, epoch: epoch)
     else { return }
     recentDownloadsCloseTask = Task { @MainActor in
       do { try await Task.sleep(for: .milliseconds(180)) } catch { return }

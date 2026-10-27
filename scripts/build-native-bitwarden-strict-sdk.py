@@ -587,7 +587,8 @@ def main() -> int:
         cache.mkdir()
         swift = ['swift', 'build', '--jobs', '2', '--package-path', str(consumer_dir),
                  '--scratch-path', str(scratch), '--cache-path', str(cache), '--disable-dependency-cache',
-                 '--disable-keychain', '--disable-netrc', '--disable-prefetching', '--manifest-cache', 'none']
+                 '--disable-keychain', '--disable-netrc', '--disable-prefetching', '--manifest-cache', 'none',
+                 '--disable-sandbox']
         library = pkg / 'Frameworks/BitwardenSDK.xcframework/macos-arm64'
         run(helper, swift + ['--product', 'StrictSDKConsumer', '-Xlinker', '-rpath', '-Xlinker',
                             str(library)], out, env, 1800)

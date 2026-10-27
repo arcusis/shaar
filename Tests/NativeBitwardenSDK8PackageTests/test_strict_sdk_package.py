@@ -12,7 +12,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / 'scripts/build-native-bitwarden-strict-sdk.py'
-WORK = ROOT / 'build/NativeBitwardenStrictSDK8'
+WORK = ROOT / 'build/NativeBitwardenStrictSDK9/sdk8-guards'
 spec = importlib.util.spec_from_file_location('strict_sdk_package', SCRIPT)
 builder = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(builder)

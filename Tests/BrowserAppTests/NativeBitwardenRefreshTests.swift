@@ -62,7 +62,7 @@ private final class RefreshMemoryItems: PasswordCredentialItemStorage, Sendable 
   let store: PasswordCredentialStore
   let storage: RefreshMemoryItems
   let initial: PasswordSessionRecoveryRecord
-  let now = Date(timeIntervalSince1970: 1_800_000_000)
+  var now = Date(timeIntervalSince1970: 1_800_000_000)
   var responses = 0
   var published: [String] = []
   var persistedAtPublication = false
@@ -174,12 +174,19 @@ private final class RefreshMemoryItems: PasswordCredentialItemStorage, Sendable 
     let deferLogin: Bool
     let sdkExtra: TimeInterval
     let jwtLead: TimeInterval
+    let failLogin: Bool
+    let failCrypto: Bool
     var isAvailable: Bool { true }
 
-    init(sdkExtra: TimeInterval = 0, deferLogin: Bool = false, jwtLead: TimeInterval = 30) {
+    init(
+      sdkExtra: TimeInterval = 0, deferLogin: Bool = false, jwtLead: TimeInterval = 30,
+      failLogin: Bool = false, failCrypto: Bool = false
+    ) {
       self.sdkExtra = sdkExtra
       self.deferLogin = deferLogin
       self.jwtLead = jwtLead
+      self.failLogin = failLogin
+      self.failCrypto = failCrypto
     }
 
     func token(expires: Date) throws -> String {
@@ -200,11 +207,13 @@ private final class RefreshMemoryItems: PasswordCredentialItemStorage, Sendable 
       endpoint = server
       device = deviceID
       if deferLogin { await withCheckedContinuation { loginContinuation = $0 } }
+      if failLogin { throw NativeBitwardenBackendError.unauthorized }
       return .authenticated(.init(id: session, accountID: account))
     }
     func initializeCrypto(candidateID: UUID, password: String) async throws
       -> NativeBitwardenEstablishedSession
     {
+      if failCrypto { throw NativeBitwardenBackendError.staleSession }
       let expiry = Date().addingTimeInterval(jwtLead)
       claimExpiry = expiry
       return NativeBitwardenEstablishedSession(
@@ -258,13 +267,15 @@ private final class RefreshMemoryItems: PasswordCredentialItemStorage, Sendable 
 #endif
 
 @Suite @MainActor struct NativeBitwardenRefreshTests {
-  @Test func desktopEntryMatchesFixtureBuildMode() {
-    #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_FIXTURE
-      #expect(!ArcusisBrowserMain.desktopEntryAllowed)
-    #else
-      #expect(ArcusisBrowserMain.desktopEntryAllowed)
-    #endif
-  }
+  #if !ARCUSIS_REFRESH_PURE_TESTS
+    @Test func desktopEntryMatchesFixtureBuildMode() {
+      #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_FIXTURE
+        #expect(!ArcusisBrowserMain.desktopEntryAllowed)
+      #else
+        #expect(ArcusisBrowserMain.desktopEntryAllowed)
+      #endif
+    }
+  #endif
 
   #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_CANDIDATE && canImport(ArcusisBitwardenSDK)
     private struct PublicCryptoVector: Decodable {
@@ -395,6 +406,68 @@ private final class RefreshMemoryItems: PasswordCredentialItemStorage, Sendable 
     _ = try await second.ensureFresh()
     #expect(near.responses == 1)
     #expect(near.published.count == 1)
+  }
+
+  @Test(arguments: [3540.0, 3601.0])
+  func delayedUnauthorizedRefreshesExpiredNewRevision(elapsed: TimeInterval) async throws {
+    let h = try RefreshHarness(expiresIn: 3600)
+    defer { h.cleanup() }
+    var consumed: [String] = []
+    var published: [String] = []
+    var pending: CheckedContinuation<Void, Error>?
+    var calls = 0
+    var coordinator: NativeBitwardenRefreshCoordinator? = try NativeBitwardenRefreshCoordinator(
+      binding: h.binding, record: h.initial, store: h.store, lease: h.lease, now: { h.now },
+      transport: { record in
+        consumed.append(record.credential.refreshToken ?? "missing")
+        return NativeBitwardenRefreshResponse(
+          accessToken: try h.token(), refreshToken: "r\(consumed.count)", expiresIn: 3600)
+      }, isOwner: { true }, publish: { published.append($0) }, revoke: {})
+    let operation = Task { [coordinator] in
+      try await coordinator!.performReadOnlySync {
+        calls += 1
+        if calls == 1 {
+          try await withCheckedThrowingContinuation { pending = $0 }
+          throw NativeBitwardenBackendError.unauthorized
+        }
+        return published.last
+      }
+    }
+    for _ in 0..<100 where pending == nil { await Task.yield() }
+    let continuation = try #require(pending)
+    _ = try await coordinator!.ensureFresh(force: true, observedRevision: 1)
+    _ = try await coordinator!.ensureFresh(force: true, observedRevision: 1)
+    #expect(consumed == ["old-refresh"])
+    await #expect(throws: NativeBitwardenRefreshFailure.stale) {
+      try await coordinator!.ensureFresh(force: true, observedRevision: 99)
+    }
+    h.now = h.now.addingTimeInterval(elapsed)
+    continuation.resume()
+    let retried = try await operation.value
+    #expect(consumed == ["old-refresh", "r1"])
+    #expect(calls == 2)
+    #expect(retried == published.last)
+    #expect(published.count == 2)
+    coordinator = nil
+  }
+
+  @Test func futureRevisionRejectedWhileRefreshIsInFlight() async throws {
+    let h = try RefreshHarness()
+    defer { h.cleanup() }
+    let response = NativeBitwardenRefreshResponse(
+      accessToken: try h.token(), refreshToken: "r1", expiresIn: 3600)
+    var coordinator: NativeBitwardenRefreshCoordinator? = try h.coordinator(
+      deferred: true, result: response)
+    let task = Task { [coordinator] in try await coordinator!.ensureFresh() }
+    for _ in 0..<100 where h.continuation == nil { await Task.yield() }
+    let continuation = try #require(h.continuation)
+    await #expect(throws: NativeBitwardenRefreshFailure.stale) {
+      try await coordinator!.ensureFresh(force: true, observedRevision: 2)
+    }
+    continuation.resume(returning: response)
+    _ = try await task.value
+    #expect(h.responses == 1)
+    coordinator = nil
   }
 
   @Test func previousRevisionReplacementRequiresExactOwnedRecord() throws {
@@ -536,6 +609,87 @@ private final class RefreshMemoryItems: PasswordCredentialItemStorage, Sendable 
   }
 
   #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_CANDIDATE && canImport(ArcusisBitwardenSDK)
+    @Test(arguments: [false, true], [0, 1, 2])
+    func mismatchedEmailUsesFreshLoginWithoutRestoringOldRecord(
+      differentAccount: Bool, failureStage: Int
+    ) async throws {
+      let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+      try FileManager.default.createDirectory(
+        at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+      defer { try? FileManager.default.removeItem(at: directory) }
+      let prefs = BrowserPreferencesStore(fileURL: directory.appending(path: "preferences.json"))
+      let profile = UUID()
+      prefs.setNativeVaultEnabled(true, for: profile)
+      let backend = DelayedRefreshBackend(
+        deferLogin: true, jwtLead: 3600, failLogin: failureStage == 1, failCrypto: failureStage == 2
+      )
+      let oldAccount = differentAccount ? UUID() : backend.account
+      let original = prefs.nativeVaultPreferences(for: profile)
+      try prefs.persistNativeVaultAccountID(oldAccount, for: profile, expected: original)
+      let saved = prefs.nativeVaultPreferences(for: profile)
+      let endpoints = try saved.server.endpoints()
+      let oldBinding = PasswordAuthenticationBinding(
+        profileID: profile, vaultID: saved.vaultID, accountID: oldAccount,
+        authority: endpoints.credentialAuthority)
+      let items = RefreshMemoryItems()
+      let store = PasswordCredentialStore(
+        service: "changed-email-test", storage: items, sessionLockDirectory: directory,
+        usesSessionLocks: true)
+      let expiry = Date().addingTimeInterval(3600)
+      let payload = try JSONSerialization.data(withJSONObject: [
+        "sub": oldAccount.uuidString, "client_id": "desktop", "exp": expiry.timeIntervalSince1970,
+      ]).base64EncodedString().replacingOccurrences(of: "+", with: "-")
+        .replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
+      let oldToken = "e30.\(payload).c2ln"
+      let record = try PasswordSessionRecoveryRecord(
+        binding: oldBinding, identityURL: endpoints.identityURL, apiURL: endpoints.apiURL,
+        serviceID: endpoints.stableServiceID, deviceID: saved.deviceID,
+        clientID: NativeBitwardenLoginRequestMetadata.clientID, email: "fixture@example.invalid",
+        sdkRevision: NativeBitwardenController.recoverySDKRevision, kdf: Data("kdf".utf8),
+        wrappedAccountState: Data("wrapped".utf8), masterPasswordUnlockData: Data("unlock".utf8),
+        credential: PasswordCredential(
+          accessToken: oldToken, refreshToken: "old-synthetic", expiresAt: expiry),
+        revision: 2, state: .ready)
+      var lease: PasswordCredentialSessionLock? = try store.acquireSessionLock(for: oldBinding)
+      try store.writeRecovery(record, for: oldBinding, expected: .missing, lease: #require(lease))
+      lease = nil
+      let oldBytes = try #require(items.onlyRecord())
+      let controller = NativeBitwardenController(
+        preferences: prefs, backend: backend, credentialStore: store)
+      controller.selectProfile(profile)
+      controller.email = differentAccount ? "other@example.invalid" : "FIXTURE@example.invalid"
+      controller.masterPassword = "synthetic"
+      controller.connect()
+      for _ in 0..<500 where !(await backend.loginWaiting()) { await Task.yield() }
+      #expect(await backend.restoredCount() == 0)
+      #expect(await backend.tokenValue() == nil)
+      #expect(items.onlyRecord() == oldBytes)
+      guard await backend.loginWaiting() else {
+        Issue.record("Fresh login was not attempted")
+        return
+      }
+      await backend.releaseLogin()
+      if failureStage != 0 {
+        for _ in 0..<500 where controller.isLoading { await Task.yield() }
+        #expect(!controller.hasConnectedSession)
+        #expect(items.onlyRecord() == oldBytes)
+        #expect(prefs.nativeVaultPreferences(for: profile).accountID == oldAccount)
+        #expect(await backend.tokenValue() == nil)
+      } else {
+        for _ in 0..<500 where !controller.syncStatus.hasPrefix("Synced") { await Task.yield() }
+        #expect(controller.syncStatus.hasPrefix("Synced"))
+        #expect(prefs.nativeVaultPreferences(for: profile).accountID == backend.account)
+        #expect(items.onlyRecord() != oldBytes)
+        #expect(await backend.tokenValue() != oldToken)
+        if differentAccount {
+          #expect(try store.read(for: oldBinding) == nil)
+        }
+        controller.disconnect()
+        for _ in 0..<500 where controller.status == "Removing credentials…" { await Task.yield() }
+        #expect(controller.status == "Disconnected")
+      }
+    }
+
     @Test(arguments: [0, 1, 2])
     func initialPreferenceFailureCreatesNoCredential(failureStage: Int) async throws {
       let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)

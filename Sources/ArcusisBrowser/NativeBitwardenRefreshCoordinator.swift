@@ -76,6 +76,9 @@ final class NativeBitwardenRefreshCoordinator {
     -> PasswordCredential
   {
     guard !invalidated, isOwner() else { throw NativeBitwardenRefreshFailure.stale }
+    if force, let observedRevision, observedRevision > record.revision {
+      throw NativeBitwardenRefreshFailure.stale
+    }
     if let inFlight {
       let credential = try await inFlight.value
       guard !invalidated, isOwner() else { throw NativeBitwardenRefreshFailure.stale }
@@ -83,7 +86,11 @@ final class NativeBitwardenRefreshCoordinator {
     }
     if force, let observedRevision, observedRevision != record.revision {
       guard observedRevision < record.revision else { throw NativeBitwardenRefreshFailure.stale }
-      return record.credential
+      if let expiry = record.credential.expiresAt,
+        expiry.timeIntervalSince(now()) > expirySkew
+      {
+        return record.credential
+      }
     }
     guard let expiry = record.credential.expiresAt else {
       invalidate()

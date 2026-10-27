@@ -473,7 +473,14 @@ final class NativeBitwardenController {
           let oldBinding = state.binding
           let oldSession = state.activeSession
           oldSession?.tokenProvider.clear()
-          #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_CANDIDATE
+          var deferredPreviousBinding: PasswordAuthenticationBinding?
+          #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_CANDIDATE && canImport(ArcusisBitwardenSDK)
+            if backend is any NativeBitwardenRefreshBackend {
+              deferredPreviousBinding = oldBinding
+            } else {
+              try credentialStore.delete(for: oldBinding)
+            }
+          #elseif ARCUSIS_NATIVE_BITWARDEN_REFRESH_CANDIDATE
             try credentialStore.delete(for: oldBinding)
           #else
             try? credentialStore.delete(for: oldBinding)
@@ -490,7 +497,8 @@ final class NativeBitwardenController {
           state.activeAttempt = cryptoAttempt
           await initializeAndPublish(
             profileID: profileID, generation: generation, attempt: cryptoAttempt,
-            candidateID: authenticated.id, password: password, binding: realBinding)
+            candidateID: authenticated.id, password: password, binding: realBinding,
+            previousBinding: deferredPreviousBinding)
         } else {
           await initializeAndPublish(
             profileID: profileID, generation: generation, attempt: attempt,
@@ -520,7 +528,8 @@ final class NativeBitwardenController {
 
   private func initializeAndPublish(
     profileID: UUID, generation: Int, attempt: PasswordAuthenticationGate.Attempt,
-    candidateID: UUID, password: String, binding: PasswordAuthenticationBinding
+    candidateID: UUID, password: String, binding: PasswordAuthenticationBinding,
+    previousBinding: PasswordAuthenticationBinding? = nil
   ) async {
     do {
       let established = try await backend.initializeCrypto(
@@ -545,7 +554,8 @@ final class NativeBitwardenController {
         if let refreshBackend = backend as? any NativeBitwardenRefreshBackend {
           await initializeRefreshAndPublish(
             profileID: profileID, generation: generation, attempt: attempt, binding: binding,
-            established: established, refreshBackend: refreshBackend)
+            established: established, previousBinding: previousBinding,
+            refreshBackend: refreshBackend)
           return
         }
       #endif
@@ -857,6 +867,7 @@ final class NativeBitwardenController {
     private func initializeRefreshAndPublish(
       profileID: UUID, generation: Int, attempt: PasswordAuthenticationGate.Attempt,
       binding: PasswordAuthenticationBinding, established: NativeBitwardenEstablishedSession,
+      previousBinding: PasswordAuthenticationBinding?,
       refreshBackend: any NativeBitwardenRefreshBackend
     ) async {
       do {
@@ -890,9 +901,20 @@ final class NativeBitwardenController {
         let normalizedSession = NativeBitwardenEstablishedSession(
           id: established.id, accountID: established.accountID, credential: credential,
           tokenProvider: established.tokenProvider)
+        var previousLease: PasswordCredentialSessionLock?
+        if let previousBinding, let previousAccount = prefs.accountID {
+          guard
+            previousBinding
+              == makeBinding(
+                profileID: profileID, preferences: prefs, accountID: previousAccount)
+          else { throw NativeBitwardenBackendError.staleSession }
+          previousLease = try credentialStore.acquireSessionLock(for: previousBinding)
+          try credentialStore.delete(for: previousBinding, lease: previousLease)
+        }
         // The durable nonsecret pointer must exist before any account-scoped record can be written.
         try preferences.persistNativeVaultAccountID(
           established.accountID, for: profileID, expected: prefs)
+        withExtendedLifetime(previousLease) {}
         try lease.markPendingRotation(revision: 0)
         try credentialStore.writeRecovery(marker, for: binding, expected: previous, lease: lease)
         let ready = try marker.replacing(credential: marker.credential, revision: 0, state: .ready)
@@ -973,7 +995,7 @@ final class NativeBitwardenController {
       // A user-initiated Connect with credentials performs a new login for an
       // interrupted rotation; it never retries the old refresh token.
       guard record.state == .ready else { return false }
-      guard record.email == email else { throw NativeBitwardenBackendError.staleSession }
+      guard record.email == email else { return false }
       try NativeBitwardenRefreshCoordinator.validateStored(record)
       let candidateID = try await refreshBackend.restoreLocked(record: record, server: server)
       do {

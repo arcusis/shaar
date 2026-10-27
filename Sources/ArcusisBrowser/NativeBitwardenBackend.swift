@@ -142,7 +142,9 @@ enum NativeBitwardenAccessTokenIdentity {
   }
 }
 
-actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCredentialBackend {
+actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCredentialBackend,
+  NativeBitwardenWriteBackend
+{
   #if canImport(ArcusisBitwardenSDK)
     #if ARCUSIS_NATIVE_BITWARDEN_ORGANIZATION_CANDIDATE
       private let clientFactory: @Sendable (NativeBitwardenTokenProvider, ClientSettings) -> Client
@@ -172,12 +174,16 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
       let deviceID: UUID
       let restoredContext: NativeBitwardenRecoveryContext?
       var unlocking: Bool
+      var locking = false
+      var operation: UUID? = nil
       let email: String
       let userID: UUID
       var generation: Int
       var locked: Bool
       var initialized: Bool
       var fillAccess: NativeBitwardenFillAccessState<Cipher>
+      var cipherRepository: NativeBitwardenCipherRepository
+      var writable = false
     }
     private var candidates: [UUID: Candidate] = [:]
   #endif
@@ -207,6 +213,11 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
         bundles.append(URL(fileURLWithPath: bundlePath))
       }
       return isFixtureTestHost(executable: URL(fileURLWithPath: path), bundles: bundles)
+    }
+
+    func cipherRepositoryForFixture(sessionID: UUID) -> NativeBitwardenCipherRepository? {
+      guard Self.fixtureHostAllowed else { return nil }
+      return candidates[sessionID]?.cipherRepository
     }
   #endif
 
@@ -248,6 +259,11 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
           managedSettings: ManagedSettingsBindingClient())
       #endif
       client.kmStateBridge().registerBridgeImpl(bridgeImpl: bridge)
+      let id = UUID()
+      let repository = NativeBitwardenCipherRepository()
+      Self.register(repository, client: client)
+      var retainedRepository = false
+      defer { if !retainedRepository { repository.revoke() } }
       let login = client.auth().login()
       let prelogin = try await login.getPasswordPrelogin(email: email)
       let sdkFactor: TwoFactorRequest?
@@ -270,16 +286,17 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
         let providers = challenge.providers.compactMap(nativeProvider)
         return .challenge(UUID(), providers)
       case .authenticated(let response):
+        try Task.checkCancellation()
         // Subject supplies account metadata only after typed SDK login succeeds.
         let userID = try NativeBitwardenAccessTokenIdentity.userID(from: response.accessToken)
-        let id = UUID()
         candidates[id] = Candidate(
           client: client, sync: client.sync(), bridge: bridge, tokenProvider: tokenProvider,
           response: response, prelogin: prelogin, identityURL: endpoints.identityURL,
           apiURL: endpoints.apiURL, deviceID: deviceID,
           restoredContext: nil, unlocking: false,
           email: email, userID: userID, generation: 0, locked: false, initialized: false,
-          fillAccess: NativeBitwardenFillAccessState(sessionID: id))
+          fillAccess: NativeBitwardenFillAccessState(sessionID: id), cipherRepository: repository)
+        retainedRepository = true
         return .authenticated(NativeBitwardenAuthenticatedCandidate(id: id, accountID: userID))
       }
     #else
@@ -292,11 +309,18 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
     candidateID: UUID, password: String
   ) async throws -> NativeBitwardenEstablishedSession {
     #if canImport(ArcusisBitwardenSDK)
-      guard let candidate = candidates[candidateID], let response = candidate.response,
+      guard var candidate = candidates[candidateID], !candidate.locked, !candidate.initialized,
+        !candidate.unlocking, let response = candidate.response,
         let prelogin = candidate.prelogin,
         let wrappedState = response.wrappedAccountCryptoState,
         let unlockData = response.userDecryptionOptions.masterPasswordUnlock
       else { throw NativeBitwardenBackendError.unsupportedCryptoSetup }
+      candidate.unlocking = true
+      candidate.generation += 1
+      candidate.cipherRepository.revoke()
+      candidate.cipherRepository = NativeBitwardenCipherRepository()
+      Self.register(candidate.cipherRepository, client: candidate.client)
+      candidates[candidateID] = candidate
       do {
         try await candidate.client.crypto().initializeUserCrypto(
           req: InitUserCryptoRequest(
@@ -311,9 +335,12 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
           accessToken: response.accessToken,
           refreshToken: response.refreshToken,
           expiresAt: Date(timeIntervalSince1970: Double(response.expiresAt) / 1_000))
-        guard var current = candidates[candidateID], !current.locked else {
+        guard var current = candidates[candidateID], !current.locked,
+          current.unlocking, current.generation == candidate.generation, !Task.isCancelled
+        else {
           throw NativeBitwardenBackendError.staleSession
         }
+        current.unlocking = false
         current.initialized = true
         candidates[candidateID] = current
         return NativeBitwardenEstablishedSession(
@@ -331,15 +358,23 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
 
   func lock(sessionID: UUID) async -> Bool {
     #if canImport(ArcusisBitwardenSDK)
-      guard var candidate = candidates[sessionID] else { return false }
+      guard var candidate = candidates[sessionID], !candidate.locking else { return false }
       candidate.generation += 1
+      candidate.locking = true
+      let lockGeneration = candidate.generation
       candidate.locked = true
+      candidate.writable = false
+      candidate.cipherRepository.revoke()
       _ = candidate.fillAccess.revoke()
       candidates[sessionID] = candidate
       candidate.client.crypto().clearUserCryptoKeys()
       let hadState = await candidate.bridge.hasTransientKeyState()
       let cleared = await candidate.bridge.clearTransientKeyState()
       let remains = await candidate.bridge.hasTransientKeyState()
+      if var current = candidates[sessionID], current.generation == lockGeneration {
+        current.locking = false
+        candidates[sessionID] = current
+      }
       return (!hadState || cleared) && !remains
     #else
       _ = sessionID
@@ -361,18 +396,31 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
       guard var candidate = candidates[sessionID] else {
         throw NativeBitwardenBackendError.candidateUnavailable
       }
+      guard !candidate.locked, candidate.initialized, !candidate.unlocking else {
+        throw NativeBitwardenBackendError.sessionLocked
+      }
+      guard candidate.operation == nil else { throw NativeBitwardenWriteError.operationInProgress }
+      let operation = UUID()
+      candidate.operation = operation
       candidate.generation += 1
+      candidate.cipherRepository.revoke()
+      let repository = NativeBitwardenCipherRepository()
+      candidate.cipherRepository = repository
+      candidate.writable = false
       let ticket: NativeBitwardenSyncTicket
       do {
         ticket = try candidate.fillAccess.beginSync()
       } catch {
+        repository.revoke()
+        candidate.operation = nil
         candidates[sessionID] = candidate
         throw error
       }
       candidates[sessionID] = candidate
       defer {
-        if var current = candidates[sessionID] {
+        if var current = candidates[sessionID], current.operation == operation {
           current.fillAccess.finishSync(ticket)
+          current.operation = nil
           candidates[sessionID] = current
         }
       }
@@ -472,11 +520,27 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
         else { throw NativeBitwardenBackendError.staleSession }
         try current.fillAccess.publish(
           ticket: ticket, snapshot: snapshot, items: items, organizationIDs: organizationIDs)
+        // Writable limits are independent of the already validated read snapshot.
+        // A failed replacement must never expose a partial writable repository.
+        do {
+          try repository.acceptSnapshot(
+            encrypted.filter { $0.id != nil && $0.partialData == nil && $0.data == nil })
+          current.writable = true
+        } catch {
+          repository.revoke()
+          current.writable = false
+        }
         candidates[sessionID] = current
+        if current.writable { Self.register(repository, client: current.client) }
         return snapshot
       } catch {
+        repository.revoke()
         #if ARCUSIS_NATIVE_BITWARDEN_ORGANIZATION_CANDIDATE
-          await candidate.client.requireFreshOrganizationSync()
+          if let current = candidates[sessionID], current.generation == candidate.generation,
+            current.cipherRepository === repository
+          {
+            await candidate.client.requireFreshOrganizationSync()
+          }
         #endif
         throw error
       }
@@ -537,7 +601,164 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
     #endif
   }
 
+  func createLogin(
+    access: NativeBitwardenFillAccess, context: PasswordFillContext,
+    input: NativeBitwardenWriteInput
+  ) async throws -> NativeBitwardenWriteReceipt {
+    #if canImport(ArcusisBitwardenSDK)
+      try input.validate()
+      let (candidate, operation) = try beginWrite(access: access, context: context)
+      defer { finishWrite(sessionID: access.sessionID, operation: operation) }
+      try await validateWrite(candidate: candidate, access: access, operation: operation)
+      let login = LoginView(
+        username: input.username, password: input.password, passwordRevisionDate: nil,
+        uris: [LoginUriView(uri: context.origin.value, match: nil, uriChecksum: nil)],
+        totp: nil, autofillOnPageLoad: nil, fido2Credentials: nil)
+      let request = CipherCreateRequest(
+        organizationId: nil, collectionIds: [], folderId: nil, name: input.name, notes: nil,
+        favorite: false, reprompt: .none, type: .login(login), fields: [], archivedDate: nil)
+      try markDispatched(access: access, operation: operation)
+      defer { candidate.cipherRepository.revoke() }
+      do {
+        let result = try await candidate.client.vault().ciphers().create(request: request)
+        return try writeReceipt(result, candidate: candidate, access: access, operation: operation)
+      } catch { throw NativeBitwardenWriteError.unconfirmed }
+    #else
+      _ = (access, context, input)
+      throw NativeBitwardenBackendError.sdkUnavailable
+    #endif
+  }
+
+  func updateLogin(
+    access: NativeBitwardenFillAccess, context: PasswordFillContext, cipherID: UUID,
+    revision: Date, input: NativeBitwardenWriteInput
+  ) async throws -> NativeBitwardenWriteReceipt {
+    // SDK does not expose verified strict decryption or lossless revision tokens.
+    _ = (access, context, cipherID, revision, input)
+    throw NativeBitwardenWriteError.sdkUpdateUnavailable
+  }
+
+  #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_FIXTURE && canImport(ArcusisBitwardenSDK)
+    /// Synthetic XCTest experiment only; never a product update path.
+    func updateLoginFixture(
+      access: NativeBitwardenFillAccess, context: PasswordFillContext, cipherID: UUID,
+      revision: Date, input: NativeBitwardenWriteInput
+    ) async throws -> NativeBitwardenWriteReceipt {
+      #if canImport(ArcusisBitwardenSDK)
+        guard Self.fixtureHostAllowed else { throw NativeBitwardenWriteError.sdkUpdateUnavailable }
+        try input.validate()
+        let (candidate, operation) = try beginWrite(access: access, context: context)
+        defer { finishWrite(sessionID: access.sessionID, operation: operation) }
+        try await validateWrite(candidate: candidate, access: access, operation: operation)
+        guard let current = candidates[access.sessionID] else {
+          throw NativeBitwardenWriteError.staleAccess
+        }
+        let cipher = try current.fillAccess.item(access: access, id: cipherID)
+        guard cipher.organizationId == nil, cipher.partialData == nil, cipher.data == nil else {
+          throw NativeBitwardenWriteError.ineligibleCipher
+        }
+        let stored = try await candidate.cipherRepository.get(id: cipherID.uuidString.lowercased())
+        try await validateWrite(candidate: candidate, access: access, operation: operation)
+        guard stored == cipher else { throw NativeBitwardenWriteError.ineligibleCipher }
+        let view = try await candidate.client.vault().ciphers().decrypt(cipher: cipher)
+        try await validateWrite(candidate: candidate, access: access, operation: operation)
+        guard view.id.flatMap(UUID.init(uuidString:)) == cipherID, view.organizationId == nil,
+          view.collectionIds.isEmpty, view.type == .login, view.edit, view.viewPassword,
+          view.reprompt == .none, !view.partial, view.deletedDate == nil, view.archivedDate == nil,
+          view.localData == nil, (view.attachmentDecryptionFailures ?? []).isEmpty,
+          view.identity == nil, view.card == nil, view.secureNote == nil, view.sshKey == nil,
+          view.bankAccount == nil, view.driversLicense == nil, view.passport == nil,
+          let login = view.login
+        else { throw NativeBitwardenWriteError.ineligibleCipher }
+        guard view.revisionDate == revision else { throw NativeBitwardenWriteError.staleRevision }
+        _ = try NativeBitwardenFillPolicy.credential(
+          from: Self.fillCandidate(view), id: cipherID, context: context)
+        let replacement = LoginView(
+          username: input.username, password: input.password,
+          passwordRevisionDate: login.passwordRevisionDate, uris: login.uris, totp: login.totp,
+          autofillOnPageLoad: login.autofillOnPageLoad, fido2Credentials: login.fido2Credentials)
+        let request = CipherEditRequest(
+          id: cipherID.uuidString.lowercased(), organizationId: nil, folderId: view.folderId,
+          favorite: view.favorite, reprompt: view.reprompt, name: view.name, notes: view.notes,
+          fields: view.fields ?? [], type: .login(replacement), revisionDate: view.revisionDate,
+          archivedDate: view.archivedDate, attachments: view.attachments ?? [], key: view.key)
+        try markDispatched(access: access, operation: operation)
+        defer { candidate.cipherRepository.revoke() }
+        do {
+          let result = try await candidate.client.vault().ciphers().edit(request: request)
+          let receipt = try writeReceipt(
+            result, candidate: candidate, access: access, operation: operation)
+          guard receipt.cipherID == cipherID else { throw NativeBitwardenWriteError.unconfirmed }
+          return receipt
+        } catch { throw NativeBitwardenWriteError.unconfirmed }
+      #else
+        _ = (access, context, cipherID, revision, input)
+        throw NativeBitwardenBackendError.sdkUnavailable
+      #endif
+    }
+
+  #endif
+
   #if canImport(ArcusisBitwardenSDK)
+    private func beginWrite(access: NativeBitwardenFillAccess, context: PasswordFillContext) throws
+      -> (Candidate, UUID)
+    {
+      guard context.documentURL.map({ $0.origin == context.origin }) ?? true,
+        var candidate = candidates[access.sessionID], !candidate.locked, candidate.initialized,
+        !candidate.unlocking, candidate.writable
+      else { throw NativeBitwardenWriteError.staleAccess }
+      guard candidate.operation == nil else { throw NativeBitwardenWriteError.operationInProgress }
+      try candidate.fillAccess.validate(access)
+      try Task.checkCancellation()
+      let operation = UUID()
+      candidate.operation = operation
+      candidates[access.sessionID] = candidate
+      return (candidate, operation)
+    }
+
+    private func validateWrite(
+      candidate: Candidate, access: NativeBitwardenFillAccess, operation: UUID
+    ) async throws {
+      guard let token = await candidate.tokenProvider.getAccessToken(), !token.isEmpty else {
+        throw NativeBitwardenWriteError.staleAccess
+      }
+      try Task.checkCancellation()
+      guard let current = candidates[access.sessionID], !current.locked, current.initialized,
+        current.generation == candidate.generation, current.operation == operation,
+        current.cipherRepository === candidate.cipherRepository
+      else { throw NativeBitwardenWriteError.staleAccess }
+      try current.fillAccess.validate(access)
+    }
+
+    private func markDispatched(access: NativeBitwardenFillAccess, operation: UUID) throws {
+      try Task.checkCancellation()
+      guard var current = candidates[access.sessionID], !current.locked, current.initialized,
+        current.operation == operation
+      else { throw NativeBitwardenWriteError.staleAccess }
+      try current.fillAccess.validate(access)
+      _ = current.fillAccess.revoke()
+      current.writable = false
+      candidates[access.sessionID] = current
+    }
+
+    private func writeReceipt(
+      _ view: CipherView, candidate: Candidate, access: NativeBitwardenFillAccess, operation: UUID
+    ) throws -> NativeBitwardenWriteReceipt {
+      try Task.checkCancellation()
+      guard let current = candidates[access.sessionID], !current.locked, current.initialized,
+        current.generation == candidate.generation, current.operation == operation,
+        current.cipherRepository === candidate.cipherRepository, view.organizationId == nil,
+        let id = view.id.flatMap(UUID.init(uuidString:))
+      else { throw NativeBitwardenWriteError.unconfirmed }
+      return NativeBitwardenWriteReceipt(cipherID: id, revision: view.revisionDate)
+    }
+
+    private func finishWrite(sessionID: UUID, operation: UUID) {
+      guard var current = candidates[sessionID], current.operation == operation else { return }
+      current.operation = nil
+      candidates[sessionID] = current
+    }
+
     static func fillCandidate(_ view: CipherView) -> NativeBitwardenFillCandidate {
       let uris = (view.login?.uris ?? []).map { uri in
         let mode: NativeBitwardenFillURIMode
@@ -581,6 +802,7 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
     }
 
     private func clearCandidate(_ id: UUID, candidate: Candidate) async {
+      candidate.cipherRepository.revoke()
       candidates.removeValue(forKey: id)
       candidate.tokenProvider.clear()
       candidate.client.crypto().clearUserCryptoKeys()
@@ -590,6 +812,13 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
     private func isCurrent(candidateID: UUID, generation: Int) -> Bool {
       guard let current = candidates[candidateID] else { return false }
       return !current.locked && current.initialized && current.generation == generation
+    }
+
+    private static func register(_ repository: NativeBitwardenCipherRepository, client: Client) {
+      client.platform().state().registerClientManagedRepositories(
+        repositories: Repositories(
+          cipher: repository, folder: nil, localUserDataKeyState: nil, organizationSharedKey: nil,
+          send: nil, policy: nil, organization: nil))
     }
   #endif
 }
@@ -639,6 +868,8 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
       await client.requireFreshOrganizationSync()
       client.kmStateBridge().registerBridgeImpl(bridgeImpl: bridge)
       let id = UUID()
+      let repository = NativeBitwardenCipherRepository()
+      Self.register(repository, client: client)
       let context = NativeBitwardenRecoveryContext(
         email: record.email, identityURL: record.identityURL, apiURL: record.apiURL,
         deviceID: record.deviceID, kdf: record.kdf, wrappedAccountState: record.wrappedAccountState,
@@ -648,7 +879,8 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
         response: nil, prelogin: nil, identityURL: endpoints.identityURL, apiURL: endpoints.apiURL,
         deviceID: record.deviceID, restoredContext: context, unlocking: false,
         email: record.email, userID: record.accountID, generation: 0,
-        locked: true, initialized: false, fillAccess: NativeBitwardenFillAccessState(sessionID: id))
+        locked: true, initialized: false, fillAccess: NativeBitwardenFillAccessState(sessionID: id),
+        cipherRepository: repository)
       return id
     }
 
@@ -656,6 +888,7 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
       sessionID: UUID, record: PasswordSessionRecoveryRecord, password: String
     ) async throws -> NativeBitwardenEstablishedSession {
       guard var candidate = candidates[sessionID], candidate.locked, !candidate.unlocking,
+        !candidate.locking, candidate.operation == nil,
         let context = candidate.restoredContext, candidate.userID == record.accountID,
         candidate.identityURL == record.identityURL, candidate.apiURL == record.apiURL,
         candidate.deviceID == record.deviceID, candidate.email == record.email,
@@ -664,6 +897,9 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
       else { throw NativeBitwardenBackendError.staleSession }
       candidate.unlocking = true
       candidate.generation += 1
+      candidate.cipherRepository.revoke()
+      candidate.cipherRepository = NativeBitwardenCipherRepository()
+      Self.register(candidate.cipherRepository, client: candidate.client)
       let generation = candidate.generation
       candidates[sessionID] = candidate
       do {
@@ -690,9 +926,12 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
           id: sessionID, accountID: candidate.userID, credential: record.credential,
           tokenProvider: candidate.tokenProvider)
       } catch {
+        candidate.cipherRepository.revoke()
         candidate.client.crypto().clearUserCryptoKeys()
         _ = await candidate.bridge.clearTransientKeyState()
-        if var current = candidates[sessionID], current.generation == generation {
+        if var current = candidates[sessionID],
+          current.cipherRepository === candidate.cipherRepository
+        {
           current.unlocking = false
           candidates[sessionID] = current
         }

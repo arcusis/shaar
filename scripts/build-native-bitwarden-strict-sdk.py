@@ -31,6 +31,17 @@ class SourceProfile(NamedTuple):
 SDK8_PROFILE = SourceProfile('sdk8', WORK, PIN)
 SDK9_PROFILE = SourceProfile('sdk9', ROOT / 'build/NativeBitwardenStrictSDK9',
                             ROOT / 'ThirdParty/BitwardenStrictEditSpike/service-sdk-package.pin.json')
+SDK10_PROFILE = SourceProfile('sdk10', ROOT / 'build/NativeBitwardenStrictSDK10',
+                             ROOT / 'ThirdParty/BitwardenStrictEditSpike/normalization-sdk-package.pin.json')
+NORMALIZATION_PIN_SHA256 = 'a4c82a31ce2b83b06447c0195b425e85cb80ea5ce595731d8f7d6c907f806010'
+NORMALIZATION_CANDIDATE_SHA256 = 'bdda46346fa82ec8aed81337b61d578039e774a76c5c3266d24820b4847c5a6d'
+NORMALIZATION_PATCH_SHA256 = 'a1fa54b7affc3101c92b5ecaebee72209c90b4d75da4a9a368ca14642e8c91c4'
+NORMALIZATION_PATH = 'crates/bitwarden-vault/src/cipher/cipher_client/mod.rs'
+NORMALIZATION_PATCH_PATH = 'ThirdParty/BitwardenStrictEditSpike/strict-empty-totp.patch'
+NORMALIZATION_FILE_SHA256 = '74bf96c3df7f31fa3e1ca4bf807a624553e6d52955028031641314a1ff837f19'
+NORMALIZATION_TREE = '3755ee1144f047435a9bc2ba7412b21e2f300f94'
+NORMALIZATION_MANIFEST = '10606cdadd889971f11f25e6bfb631243b6634e4932f7f788b1d762b8167d9b0'
+NORMALIZATION_DIFF = '831840ebf3ba297c89e7228a7cf1a40fb13d1cc1bc1198a92b3b4bb63be79fed'
 SDK8_PIN_SHA256 = '8c09ce296c3214848fb4728d16adfc2886c5bbecccd80760e389ab36948aba52'
 SERVICE_PATCH_SHA256 = '8917fd3a357dd3a075391ba9d9aeefbf5343f8a665aebf58c4bdb457ca80d76c'
 SERVICE_CANDIDATE_SHA256 = '9a202a82c43c72c116f2748683adb6c197be7c441ca41d83a5f31c906f20c50d'
@@ -376,6 +387,46 @@ def validate_service_review(review: dict, pin: dict) -> None:
         raise ValueError('service review differs from pin')
 
 
+def validate_normalization_pin(pin: dict, candidate: dict, sdk9: dict) -> dict:
+    transition = {'sourceCommit': COMMIT, 'baseSDK9Tree': SERVICE_TREE,
+                  'candidateTree': NORMALIZATION_TREE, 'patchPath': NORMALIZATION_PATCH_PATH,
+                  'patchSHA256': NORMALIZATION_PATCH_SHA256, 'changedPath': NORMALIZATION_PATH,
+                  'changedSourceSHA256': NORMALIZATION_FILE_SHA256,
+                  'sourceManifestSHA256': NORMALIZATION_MANIFEST,
+                  'sourceManifestEntries': SOURCE_ENTRIES, 'fullDiffSHA256': NORMALIZATION_DIFF,
+                  'cargoLockSHA256': CANDIDATE_LOCK}
+    expected_candidate = {'schema': 1, 'candidateStatus': 'SOURCE_CANDIDATE_REVIEW_REQUIRED',
+                          'integrationReady': False, **transition}
+    expected_pin = {'schema': 1, 'profile': 'sdk10-empty-totp', 'accepted': False,
+                    'integrationReady': False, 'sdk9PinSHA256': SERVICE_PIN_SHA256,
+                    'normalizationCandidateSHA256': NORMALIZATION_CANDIDATE_SHA256, **transition}
+    for actual, expected in ((candidate, expected_candidate), (pin, expected_pin)):
+        if (not isinstance(actual, dict) or set(actual) != set(expected) or
+            any(type(actual[k]) is not type(v) or actual[k] != v for k, v in expected.items())):
+            raise ValueError('SDK10 normalization pin mismatch')
+    if (sdk9['candidateGitTree'] != SERVICE_TREE or sdk9['candidateCargoLockSHA256'] != CANDIDATE_LOCK
+        or NORMALIZATION_PATH not in sdk9['changedSourceSHA256']):
+        raise ValueError('SDK10 ancestry mismatch')
+    effective = dict(sdk9)
+    effective['candidateGitTree'] = NORMALIZATION_TREE
+    effective['sourceManifestSHA256'] = NORMALIZATION_MANIFEST
+    effective['fullDiffSHA256'] = NORMALIZATION_DIFF
+    effective['changedSourceSHA256'] = dict(sdk9['changedSourceSHA256'],
+                                            **{NORMALIZATION_PATH: NORMALIZATION_FILE_SHA256})
+    effective['patches'] = sdk9['patches'] + [{'path': NORMALIZATION_PATCH_PATH,
+                                               'sha256': NORMALIZATION_PATCH_SHA256}]
+    return effective
+
+
+def verify_normalization_transition(helper, sdk: Path, env: dict[str, str]) -> None:
+    git = lambda *args: run(helper, ['git', '-C', str(sdk), *args], ROOT, env, 120)
+    if git('diff', '--no-ext-diff', '--no-textconv', '--name-only', SERVICE_TREE,
+           NORMALIZATION_TREE).splitlines() != [NORMALIZATION_PATH]:
+        raise ValueError('SDK10 transition path mismatch')
+    if sha(git('show', NORMALIZATION_TREE + ':' + NORMALIZATION_PATH).encode()) != NORMALIZATION_FILE_SHA256:
+        raise ValueError('SDK10 transition content mismatch')
+
+
 def verify_primary_sources(root: Path, candidate: dict) -> None:
     files, _, _ = file_inventory(root)
     if files != candidate['primarySha256']:
@@ -595,9 +646,12 @@ def stage_package(helper, sdk: Path, generated: Path, dylib: Path, pkg: Path,
                 'testOnly': mode == 'debug', 'mode': mode, 'architecture': 'arm64', 'minMacOS': '26.0',
                 'dylibSHA256': digest(dylib), 'generatedSHA256': binding, 'generatedModules': modules,
                 'licenseSHA256': pin['licenseSHA256'], 'fileSHA256': files}
-    if profile == SDK9_PROFILE:
+    if profile in (SDK9_PROFILE, SDK10_PROFILE):
         manifest.update(profile='sdk9-service-shapes', serviceCandidateSHA256=SERVICE_CANDIDATE_SHA256,
                         servicePatchSHA256=SERVICE_PATCH_SHA256)
+    if profile == SDK10_PROFILE:
+        manifest.update(profile='sdk10-empty-totp', normalizationCandidateSHA256=NORMALIZATION_CANDIDATE_SHA256,
+                        normalizationPatchSHA256=NORMALIZATION_PATCH_SHA256, sdk9PinSHA256=SERVICE_PIN_SHA256)
     if hosted_provenance is not None:
         manifest['hostedInputProvenance'] = hosted_provenance
     (pkg / 'build-manifest.json').write_text(json.dumps(manifest, sort_keys=True, indent=2) + '\n')
@@ -609,12 +663,14 @@ def stage_package(helper, sdk: Path, generated: Path, dylib: Path, pkg: Path,
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument('--profile', choices=('sdk8', 'sdk9'), default='sdk8')
+    parser.add_argument('--profile', choices=('sdk8', 'sdk9', 'sdk10'), default='sdk8')
     parser.add_argument('--pin-sha256', required=True)
     parser.add_argument('--service-patch', type=Path)
     parser.add_argument('--service-candidate', type=Path)
     parser.add_argument('--service-source-review', type=Path)
     parser.add_argument('--service-primary', type=Path)
+    parser.add_argument('--normalization-patch', type=Path)
+    parser.add_argument('--normalization-candidate', type=Path)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--legacy-builder', type=Path, required=True)
     parser.add_argument('--upstream', type=Path, required=True)
@@ -631,7 +687,7 @@ def main() -> int:
     parser.add_argument('--hosted-cargo', type=Path)
     parser.add_argument('--consumer-source', type=Path, required=True)
     args = parser.parse_args()
-    profile = SDK8_PROFILE if args.profile == 'sdk8' else SDK9_PROFILE
+    profile = {'sdk8': SDK8_PROFILE, 'sdk9': SDK9_PROFILE, 'sdk10': SDK10_PROFILE}[args.profile]
     hosted_args = (args.hosted_inputs, args.hosted_preparer, args.hosted_checkpoint,
                    args.hosted_checkpoint_sha256, args.hosted_rustup_home, args.hosted_cargo)
     hosted = hosted_input_profile(profile, (args.cargo_registry, args.cargo_git), hosted_args)
@@ -642,6 +698,9 @@ def main() -> int:
         require_directory(args.hosted_rustup_home)
         require_regular(args.hosted_cargo)
     service_args = (args.service_patch, args.service_candidate, args.service_source_review, args.service_primary)
+    normalization_args = (args.normalization_patch, args.normalization_candidate)
+    if profile != SDK10_PROFILE and any(value is not None for value in normalization_args):
+        raise ValueError('normalization inputs require SDK10')
     if profile == SDK8_PROFILE:
         if any(value is not None for value in service_args):
             raise ValueError('SDK8 does not accept service profile inputs')
@@ -654,19 +713,34 @@ def main() -> int:
             raise ValueError('SDK9 requires all service profile inputs')
         base_path = under(args.patch_root, 'ThirdParty/BitwardenStrictEditSpike/sdk-package.pin.json')
         base_pin = load_pin(base_path, SDK8_PIN_SHA256)
-        for path in (profile.pin, args.service_patch, args.service_candidate, args.service_source_review):
+        service_pin_path = SDK9_PROFILE.pin
+        for path in (service_pin_path, args.service_patch, args.service_candidate, args.service_source_review):
             require_regular(path)
         require_directory(args.service_primary)
-        if (args.pin_sha256 != SERVICE_PIN_SHA256 or digest(profile.pin) != SERVICE_PIN_SHA256 or
+        if ((profile == SDK9_PROFILE and args.pin_sha256 != SERVICE_PIN_SHA256) or
+                digest(service_pin_path) != SERVICE_PIN_SHA256 or
                 digest(args.service_patch) != SERVICE_PATCH_SHA256 or
                 digest(args.service_candidate) != SERVICE_CANDIDATE_SHA256 or
                 digest(args.service_source_review) != SERVICE_REVIEW_SHA256):
             raise ValueError('SDK9 reviewed input digest mismatch')
-        service_pin = json_bytes(profile.pin.read_bytes())
+        service_pin = json_bytes(service_pin_path.read_bytes())
         service_candidate = json_bytes(args.service_candidate.read_bytes())
-        pin = validate_service_pin(service_pin, base_pin, service_candidate)
+        sdk9_pin = validate_service_pin(service_pin, base_pin, service_candidate)
+        pin = sdk9_pin
         validate_service_review(json_bytes(args.service_source_review.read_bytes()), service_pin)
         verify_primary_sources(args.service_primary, service_candidate)
+        if profile == SDK10_PROFILE:
+            if any(value is None for value in normalization_args):
+                raise ValueError('SDK10 requires normalization inputs')
+            require_regular(profile.pin)
+            for path in normalization_args:
+                require_regular(path)
+            if (args.pin_sha256 != NORMALIZATION_PIN_SHA256 or digest(profile.pin) != NORMALIZATION_PIN_SHA256 or
+                digest(args.normalization_patch) != NORMALIZATION_PATCH_SHA256 or
+                digest(args.normalization_candidate) != NORMALIZATION_CANDIDATE_SHA256):
+                raise ValueError('SDK10 reviewed input digest mismatch')
+            pin = validate_normalization_pin(json_bytes(profile.pin.read_bytes()),
+                json_bytes(args.normalization_candidate.read_bytes()), sdk9_pin)
     for path in (args.upstream, args.patch_root):
         require_directory(path)
     if not hosted:
@@ -682,7 +756,7 @@ def main() -> int:
     validate_checkpoint(json_bytes(args.write_candidate.read_bytes()), base_pin)
     consumer = args.consumer_source.read_bytes()
     validate_consumer(consumer, pin)
-    if profile == SDK9_PROFILE and b'revisionToken' not in consumer:
+    if profile in (SDK9_PROFILE, SDK10_PROFILE) and b'revisionToken' not in consumer:
         raise ValueError('consumer revision token API reference missing')
     for entry in base_pin['patches']:
         path = under(args.patch_root, entry['path'])
@@ -732,14 +806,22 @@ def main() -> int:
         run(helper, ['git', '-C', str(sdk), 'apply', '--whitespace=error', str(path)], ROOT, env, 120)
     run(helper, ['git', '-C', str(sdk), 'add', '-A', '-f'], ROOT, env, 120)
     verify_source(helper, sdk, base_pin, env)
-    if profile == SDK9_PROFILE:
+    if profile in (SDK9_PROFILE, SDK10_PROFILE):
         if digest(args.service_patch) != SERVICE_PATCH_SHA256:
             raise ValueError('service patch changed before application')
         run(helper, ['git', '-C', str(sdk), 'apply', '--check', '--whitespace=error', str(args.service_patch)], ROOT, env, 120)
         run(helper, ['git', '-C', str(sdk), 'apply', '--whitespace=error', str(args.service_patch)], ROOT, env, 120)
         run(helper, ['git', '-C', str(sdk), 'add', '-A', '-f'], ROOT, env, 120)
+        verify_source(helper, sdk, sdk9_pin, env)
+        verify_service_transition(helper, sdk, sdk9_pin, service_candidate, env)
+    if profile == SDK10_PROFILE:
+        if digest(args.normalization_patch) != NORMALIZATION_PATCH_SHA256:
+            raise ValueError('normalization patch changed before application')
+        run(helper, ['git', '-C', str(sdk), 'apply', '--check', '--whitespace=error', str(args.normalization_patch)], ROOT, env, 120)
+        run(helper, ['git', '-C', str(sdk), 'apply', '--whitespace=error', str(args.normalization_patch)], ROOT, env, 120)
+        run(helper, ['git', '-C', str(sdk), 'add', '-A', '-f'], ROOT, env, 120)
         verify_source(helper, sdk, pin, env)
-        verify_service_transition(helper, sdk, pin, service_candidate, env)
+        verify_normalization_transition(helper, sdk, env)
     cargo_home = out / 'cargo-home'
     cargo_home.mkdir()
     hosted_provenance = None
@@ -888,13 +970,19 @@ def main() -> int:
         raise ValueError('source review changed during build')
     if digest(args.write_candidate) != base_pin['writeCandidateSHA256'] or digest(profile.pin) != args.pin_sha256:
         raise ValueError('reviewed inputs changed after build')
-    if profile == SDK9_PROFILE:
+    if profile in (SDK9_PROFILE, SDK10_PROFILE):
         if (digest(base_path) != SDK8_PIN_SHA256 or digest(args.service_patch) != SERVICE_PATCH_SHA256 or
                 digest(args.service_candidate) != SERVICE_CANDIDATE_SHA256 or
                 digest(args.service_source_review) != SERVICE_REVIEW_SHA256):
             raise ValueError('SDK9 reviewed inputs changed during build')
         verify_primary_sources(args.service_primary, service_candidate)
-        verify_service_transition(helper, sdk, pin, service_candidate, env)
+        verify_service_transition(helper, sdk, sdk9_pin, service_candidate, env)
+    if profile == SDK10_PROFILE:
+        if (digest(service_pin_path) != SERVICE_PIN_SHA256 or
+            digest(args.normalization_patch) != NORMALIZATION_PATCH_SHA256 or
+            digest(args.normalization_candidate) != NORMALIZATION_CANDIDATE_SHA256):
+            raise ValueError('SDK10 reviewed inputs changed during build')
+        verify_normalization_transition(helper, sdk, env)
     for entry in base_pin['patches']:
         if digest(under(args.patch_root, entry['path'])) != entry['sha256']:
             raise ValueError('patch changed during build')
@@ -905,10 +993,14 @@ def main() -> int:
                'sourceManifestSHA256': pin['sourceManifestSHA256'], 'bindgenSHA256': generator_hash,
                'consumerSHA256': pin['consumerSHA256'], 'packages': receipts,
                'commands': helper.COMMANDS, 'logSHA256': file_inventory(out / 'logs')[0]}
-    if profile == SDK9_PROFILE:
+    if profile in (SDK9_PROFILE, SDK10_PROFILE):
         receipt.update(profile='sdk9-service-shapes', sdk8PinSHA256=SDK8_PIN_SHA256,
                        serviceCandidateSHA256=SERVICE_CANDIDATE_SHA256,
                        serviceReviewSHA256=SERVICE_REVIEW_SHA256, servicePatchSHA256=SERVICE_PATCH_SHA256)
+    if profile == SDK10_PROFILE:
+        receipt.update(profile='sdk10-empty-totp', sdk9PinSHA256=SERVICE_PIN_SHA256,
+                       normalizationCandidateSHA256=NORMALIZATION_CANDIDATE_SHA256,
+                       normalizationPatchSHA256=NORMALIZATION_PATCH_SHA256)
     if hosted_provenance is not None:
         receipt['hostedInputProvenance'] = hosted_provenance
     (out / 'receipt.json').write_text(json.dumps(receipt, sort_keys=True, indent=2) + '\n')

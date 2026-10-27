@@ -506,7 +506,7 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
       guard let candidate = candidates[access.sessionID], !candidate.locked, candidate.initialized
       else { throw NativeBitwardenFillError.staleAccess }
       return try await NativeBitwardenFillLookup.credential(
-        isolation: self, id: cipherID, origin: context.origin,
+        isolation: self, id: cipherID, context: context,
         item: {
           guard let current = self.candidates[access.sessionID], !current.locked,
             current.initialized
@@ -542,9 +542,13 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
       let uris = (view.login?.uris ?? []).map { uri in
         let mode: NativeBitwardenFillURIMode
         switch uri.match {
+        case nil: mode = .default
+        case .domain: mode = .domain
         case .host: mode = .host
+        case .exact: mode = .exact
+        case .startsWith: mode = .startsWith
         case .never: mode = .never
-        case .domain, .startsWith, .exact, .regularExpression, nil: mode = .unsupported
+        case .regularExpression: mode = .unsupported
         @unknown default: mode = .unsupported
         }
         return NativeBitwardenFillURI(value: uri.uri, mode: mode)

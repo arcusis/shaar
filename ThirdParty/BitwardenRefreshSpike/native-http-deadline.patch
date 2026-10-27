@@ -1,0 +1,16 @@
+diff --git a/crates/bitwarden-api-base/src/client.rs b/crates/bitwarden-api-base/src/client.rs
+index 0623887e..006529a8 100644
+--- a/crates/bitwarden-api-base/src/client.rs
++++ b/crates/bitwarden-api-base/src/client.rs
+@@ -18,6 +18,11 @@ pub fn new_http_client_builder() -> reqwest::ClientBuilder {
+ 
+         use rustls::ClientConfig;
+         use rustls_platform_verifier::ConfigVerifierExt;
++        use std::time::Duration;
++        // Bound connection establishment and the complete response body.
++        client_builder = client_builder
++            .connect_timeout(Duration::from_secs(10))
++            .timeout(Duration::from_secs(30));
+         client_builder = client_builder.tls_backend_preconfigured(
+             ClientConfig::with_platform_verifier().expect("Failed to create platform verifier"),
+         );

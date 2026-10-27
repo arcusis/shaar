@@ -55,8 +55,15 @@ private actor MemoryFillBackend {
   func lookup(
     access: NativeBitwardenFillAccess, id: UUID, origin: PasswordFillOrigin
   ) async throws -> NativeBitwardenFillCredential {
+    try await lookup(
+      access: access, id: id, context: NativeBitwardenFillPolicy.originOnlyContext(origin))
+  }
+
+  func lookup(
+    access: NativeBitwardenFillAccess, id: UUID, context: PasswordFillContext
+  ) async throws -> NativeBitwardenFillCredential {
     try await NativeBitwardenFillLookup.credential(
-      isolation: self, id: id, origin: origin,
+      isolation: self, id: id, context: context,
       item: {
         let item = try self.state.item(access: access, id: id)
         return (item, try self.state.ownership(access: access, organizationID: item.organizationID))
@@ -66,6 +73,8 @@ private actor MemoryFillBackend {
       validate: { try self.state.validate(access) })
   }
 }
+
+private final class NativeBitwardenResourceTestMarker {}
 
 @Suite struct NativeBitwardenFillCredentialTests {
   private let origin = PasswordFillOrigin("https://example.test")!
@@ -80,6 +89,36 @@ private actor MemoryFillBackend {
       id: id, organization: organization, login: login, deleted: deleted, archived: archived,
       partial: partial, viewPassword: viewPassword, reprompt: reprompt, username: username,
       password: password, uris: uris ?? [.init(value: "https://example.test", mode: .host)])
+  }
+
+  @Test func bundledURIPolicyIsAvailableInSwiftTestingHost() {
+    let main = Bundle.main
+    let testBundle = Bundle(for: NativeBitwardenResourceTestMarker.self)
+    let bundleName = "ArcusisBrowser_BrowserCore.bundle"
+    let fileManager = FileManager.default
+    let mainResourceHasBundle =
+      main.resourceURL.map {
+        fileManager.fileExists(atPath: $0.appendingPathComponent(bundleName).path)
+      } ?? false
+    let markerResourceHasBundle =
+      testBundle.resourceURL.map {
+        fileManager.fileExists(atPath: $0.appendingPathComponent(bundleName).path)
+      } ?? false
+    let markerSiblingHasBundle = fileManager.fileExists(
+      atPath: testBundle.bundleURL.deletingLastPathComponent().appendingPathComponent(bundleName)
+        .path)
+    let loadedTestBundles = Bundle.allBundles.filter { $0.bundleURL.pathExtension == "xctest" }
+      .map { $0.bundleURL.lastPathComponent }.sorted().joined(separator: ",")
+    print(
+      "uri_resource_host=\(main.executableURL?.lastPathComponent ?? "none") "
+        + "main_bundle=\(main.bundleURL.lastPathComponent) "
+        + "marker_bundle=\(testBundle.bundleURL.lastPathComponent) "
+        + "loaded_xctest=\(loadedTestBundles) "
+        + "main_resource=\(mainResourceHasBundle) "
+        + "marker_resource=\(markerResourceHasBundle) "
+        + "marker_sibling=\(markerSiblingHasBundle)"
+    )
+    #expect(PasswordPublicSuffixList.bundled() != nil)
   }
 
   @Test func onlyEligiblePersonalLoginCanReturnTransientCredential() throws {
@@ -178,7 +217,7 @@ private actor MemoryFillBackend {
     #expect(try state.ownership(access: emptyAccess, organizationID: nil) == .personal)
   }
 
-  @Test func uriModesFailClosedWithoutFullURLOrMatchEngine() throws {
+  @Test func hostAndUnsupportedModesFollowMatcher() throws {
     let id = UUID()
     for mode in [NativeBitwardenFillURIMode.never, .host] {
       let uri = NativeBitwardenFillURI(value: "https://other.example.test", mode: mode)
@@ -188,8 +227,8 @@ private actor MemoryFillBackend {
       }
     }
     for value in [
-      "http://example.test", "https://example.test:8443", "https://sub.example.test/path",
-      "https://example.test.evil/path", "https://user@example.test/path", "https://example.test:",
+      "https://example.test:8443", "https://sub.example.test/path",
+      "https://example.test.evil/path", "https://user@example.test/path",
     ] {
       #expect(throws: NativeBitwardenFillError.noMatchingURI) {
         try NativeBitwardenFillPolicy.credential(
@@ -197,7 +236,8 @@ private actor MemoryFillBackend {
       }
     }
     for value in [
-      "https://example.test/", "https://EXAMPLE.test:443/path?x=1#fragment",
+      "http://example.test", "https://example.test/",
+      "https://EXAMPLE.test:443/path?x=1#fragment",
     ] {
       let matched = candidate(id: id, uris: [.init(value: value, mode: .host)])
       #expect(
@@ -225,12 +265,88 @@ private actor MemoryFillBackend {
         == "synthetic-user")
   }
 
+  @Test func uriPolicyUsesBundledPrivateSuffixesAndAccountDefault() throws {
+    let id = UUID()
+    let target = PasswordFillOrigin("https://login.a.github.io")!
+    let sameTenant = candidate(id: id, uris: [.init(value: "https://a.github.io", mode: .default)])
+    #expect(
+      try NativeBitwardenFillPolicy.credential(from: sameTenant, id: id, origin: target).username
+        == "synthetic-user")
+    let otherTenant = candidate(id: id, uris: [.init(value: "https://b.github.io", mode: .domain)])
+    #expect(throws: NativeBitwardenFillError.noMatchingURI) {
+      try NativeBitwardenFillPolicy.credential(from: otherTenant, id: id, origin: target)
+    }
+    let context = NativeBitwardenFillPolicy.originOnlyContext(target)
+    #expect(throws: NativeBitwardenFillError.noMatchingURI) {
+      try NativeBitwardenFillPolicy.credential(
+        from: sameTenant, id: id, context: context, defaultStrategy: .host)
+    }
+    #expect(throws: NativeBitwardenFillError.unsupportedMatch) {
+      try NativeBitwardenFillPolicy.credential(
+        from: sameTenant, id: id, context: context, defaultStrategy: .regularExpression)
+    }
+  }
+
+  @Test func exactAndPrefixRequireTrustedDocumentURL() throws {
+    let id = UUID()
+    let binding = PasswordFillBinding(windowID: UUID(), profileID: UUID(), tabID: UUID())
+    let document = PasswordFillDocumentURL("https://example.test/login?next=home", origin: origin)!
+    let context = PasswordFillContext(
+      requestID: UUID(), binding: binding, origin: origin, documentURL: document)
+    let missing = PasswordFillContext(requestID: UUID(), binding: binding, origin: origin)
+    let exact = candidate(id: id, uris: [.init(value: document.value, mode: .exact)])
+    let prefix = candidate(
+      id: id, uris: [.init(value: "https://example.test/login?next=", mode: .startsWith)])
+    for item in [exact, prefix] {
+      #expect(
+        try NativeBitwardenFillPolicy.credential(from: item, id: id, context: context).username
+          == "synthetic-user")
+      #expect(throws: NativeBitwardenFillError.noMatchingURI) {
+        try NativeBitwardenFillPolicy.credential(from: item, id: id, context: missing)
+      }
+      #expect(throws: NativeBitwardenFillError.noMatchingURI) {
+        try NativeBitwardenFillPolicy.credential(from: item, id: id, origin: origin)
+      }
+    }
+    for uri in [
+      NativeBitwardenFillURI(value: "https://example.test/login", mode: .exact),
+      NativeBitwardenFillURI(value: "https://example.test/other", mode: .startsWith),
+      NativeBitwardenFillURI(value: document.value, mode: .never),
+    ] {
+      #expect(throws: NativeBitwardenFillError.noMatchingURI) {
+        try NativeBitwardenFillPolicy.credential(
+          from: candidate(id: id, uris: [uri]), id: id, context: context)
+      }
+    }
+    #expect(throws: NativeBitwardenFillError.unsupportedMatch) {
+      try NativeBitwardenFillPolicy.credential(
+        from: candidate(id: id, uris: [.init(value: document.value, mode: .regularExpression)]),
+        id: id, context: context)
+    }
+    let mixed = candidate(
+      id: id,
+      uris: [
+        .init(value: ".*", mode: .regularExpression), .init(value: document.value, mode: .exact),
+      ])
+    #expect(
+      try NativeBitwardenFillPolicy.credential(from: mixed, id: id, context: context).username
+        == "synthetic-user")
+    let foreign = PasswordFillOrigin("https://other.test")!
+    let mismatched = PasswordFillContext(
+      requestID: UUID(), binding: binding, origin: origin,
+      documentURL: PasswordFillDocumentURL("https://other.test/", origin: foreign))
+    #expect(throws: NativeBitwardenFillError.noMatchingURI) {
+      try NativeBitwardenFillPolicy.credential(from: exact, id: id, context: mismatched)
+    }
+  }
+
   #if canImport(ArcusisBitwardenSDK)
     @Test func mapsActualSDKViewEligibilityAndMatchModes() throws {
       let id = UUID()
       func makeView(
         _ mode: UriMatchType?, reprompt: CipherRepromptType = .none, organizationID: UUID? = nil,
-        viewPassword: Bool = true, partial: Bool = false
+        viewPassword: Bool = true, partial: Bool = false,
+        uri: String = "https://example.test/path"
       ) -> CipherView {
         CipherView(
           id: id.uuidString, organizationId: organizationID?.uuidString, folderId: nil,
@@ -238,7 +354,7 @@ private actor MemoryFillBackend {
           name: "synthetic", notes: nil, type: .login,
           login: LoginView(
             username: "synthetic-user", password: "synthetic-password", passwordRevisionDate: nil,
-            uris: [LoginUriView(uri: "https://example.test/path", match: mode, uriChecksum: nil)],
+            uris: [LoginUriView(uri: uri, match: mode, uriChecksum: nil)],
             totp: nil, autofillOnPageLoad: nil, fido2Credentials: nil),
           identity: nil, card: nil, secureNote: nil, sshKey: nil, bankAccount: nil,
           driversLicense: nil, passport: nil, favorite: false, reprompt: reprompt,
@@ -252,12 +368,41 @@ private actor MemoryFillBackend {
         from: mapped, id: id, origin: origin)
       #expect(credential.username == "synthetic-user")
       #expect(credential.password == "synthetic-password")
-      let unsupported: [UriMatchType?] = [.domain, .startsWith, .exact, .regularExpression, nil]
-      for mode in unsupported {
+      let expectedModes: [(UriMatchType?, NativeBitwardenFillURIMode)] = [
+        (nil, .default), (.domain, .domain), (.host, .host), (.exact, .exact),
+        (.startsWith, .startsWith), (.never, .never), (.regularExpression, .unsupported),
+      ]
+      for (sdkMode, expected) in expectedModes {
+        #expect(
+          NativeBitwardenSDKBackend.fillCandidate(makeView(sdkMode)).uris.first?.mode == expected)
+      }
+      let subdomain = PasswordFillOrigin("https://login.example.test")!
+      let domainModes: [UriMatchType?] = [nil, .domain]
+      for mode in domainModes {
         let mapped = NativeBitwardenSDKBackend.fillCandidate(makeView(mode))
-        #expect(throws: NativeBitwardenFillError.unsupportedMatch) {
+        #expect(
+          try NativeBitwardenFillPolicy.credential(from: mapped, id: id, origin: subdomain).username
+            == "synthetic-user")
+      }
+      let binding = PasswordFillBinding(windowID: UUID(), profileID: UUID(), tabID: UUID())
+      let documentURL = "https://example.test/path?next=home"
+      let context = PasswordFillContext(
+        requestID: UUID(), binding: binding, origin: origin,
+        documentURL: PasswordFillDocumentURL(documentURL, origin: origin))
+      for (mode, uri) in [
+        (UriMatchType.exact, documentURL), (.startsWith, "https://example.test/path?"),
+      ] {
+        let mapped = NativeBitwardenSDKBackend.fillCandidate(makeView(mode, uri: uri))
+        #expect(
+          try NativeBitwardenFillPolicy.credential(from: mapped, id: id, context: context).username
+            == "synthetic-user")
+        #expect(throws: NativeBitwardenFillError.noMatchingURI) {
           try NativeBitwardenFillPolicy.credential(from: mapped, id: id, origin: origin)
         }
+      }
+      let regex = NativeBitwardenSDKBackend.fillCandidate(makeView(.regularExpression))
+      #expect(throws: NativeBitwardenFillError.unsupportedMatch) {
+        try NativeBitwardenFillPolicy.credential(from: regex, id: id, context: context)
       }
       let organizationID = UUID()
       let shared = NativeBitwardenSDKBackend.fillCandidate(
@@ -396,6 +541,25 @@ private actor MemoryFillBackend {
     let credential = try await task.value
     #expect(credential.username == "synthetic-user")
     #expect(credential.password == "synthetic-password")
+  }
+
+  @Test func lookupPassesTrustedDocumentURLThroughDecryption() async throws {
+    let decryptor = DeferredFillDecryptor()
+    let backend = MemoryFillBackend(sessionID: UUID(), decryptor: decryptor)
+    let id = UUID()
+    let url = "https://example.test/login?next=home"
+    let item = candidate(id: id, uris: [.init(value: url, mode: .exact)])
+    let revision = try await backend.beginSync()
+    try await backend.finishSync(revision, id: id, item: item)
+    let access = try await backend.access()
+    let context = PasswordFillContext(
+      requestID: UUID(),
+      binding: PasswordFillBinding(windowID: UUID(), profileID: UUID(), tabID: UUID()),
+      origin: origin, documentURL: PasswordFillDocumentURL(url, origin: origin))
+    let task = Task { try await backend.lookup(access: access, id: id, context: context) }
+    await decryptor.waitUntilStarted()
+    await decryptor.resolve(item)
+    #expect(try await task.value.username == "synthetic-user")
   }
 
   @Test func organizationDecryptCannotReturnAfterMembershipRevocation() async throws {

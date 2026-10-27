@@ -1,4 +1,5 @@
 import BrowserCore
+import Darwin
 import Foundation
 import Observation
 
@@ -7,6 +8,7 @@ public final class BrowserPreferencesStore {
   private static let maximumFileSize = 4 * 1024 * 1024
 
   private let fileURL: URL?
+  private let syncDirectory: (URL) throws -> Void
   private var profileSearchEngines: [UUID: BrowserSearchEngine] = [:]
   private var nativeVaultProfiles: [UUID: NativeVaultProfilePreferences] = [:]
   private var preservesExistingFile = false
@@ -16,7 +18,21 @@ public final class BrowserPreferencesStore {
 
   public init(fileURL: URL? = nil) {
     self.fileURL = fileURL
+    self.syncDirectory = Self.syncDirectory
     load()
+  }
+
+  init(fileURL: URL?, syncDirectory: @escaping (URL) throws -> Void) {
+    self.fileURL = fileURL
+    self.syncDirectory = syncDirectory
+    load()
+  }
+
+  private static func syncDirectory(_ directory: URL) throws {
+    let descriptor = open(directory.path, O_RDONLY | O_DIRECTORY)
+    guard descriptor >= 0 else { throw DurableVaultSaveError.writeFailed }
+    defer { close(descriptor) }
+    guard fsync(descriptor) == 0 else { throw DurableVaultSaveError.writeFailed }
   }
 
   public func searchEngine(for profileID: UUID) -> BrowserSearchEngine {
@@ -60,6 +76,81 @@ public final class BrowserPreferencesStore {
     value.accountID = accountID
     nativeVaultProfiles[profileID] = value
     save()
+  }
+
+  public enum DurableVaultSaveError: Error, Equatable {
+    case unavailable
+    case bindingChanged
+    case writeFailed
+  }
+
+  /// Commits account ownership only after the complete preferences file is written.
+  /// A thrown error may follow a file mutation; callers must keep recovery fail-closed.
+  public func persistNativeVaultAccountID(
+    _ accountID: UUID?, for profileID: UUID, expected: NativeVaultProfilePreferences
+  ) throws {
+    var updated = expected
+    updated.accountID = accountID
+    try persistNativeVaultPreferences(updated, for: profileID, expected: expected)
+  }
+
+  public func persistNativeVaultServer(
+    _ server: BitwardenServerConfiguration, for profileID: UUID,
+    expected: NativeVaultProfilePreferences
+  ) throws {
+    guard expected.server != server else { return }
+    var updated = expected
+    updated.server = server
+    updated.vaultID = UUID()
+    updated.accountID = nil
+    try persistNativeVaultPreferences(updated, for: profileID, expected: expected)
+  }
+
+  private func persistNativeVaultPreferences(
+    _ updated: NativeVaultProfilePreferences, for profileID: UUID,
+    expected: NativeVaultProfilePreferences
+  ) throws {
+    guard let fileURL, !preservesExistingFile else { throw DurableVaultSaveError.unavailable }
+    guard nativeVaultProfiles[profileID] == expected else {
+      throw DurableVaultSaveError.bindingChanged
+    }
+    var profiles = nativeVaultProfiles
+    profiles[profileID] = updated
+    do {
+      let parent = fileURL.deletingLastPathComponent()
+      if !FileManager.default.fileExists(atPath: parent.path) {
+        try FileManager.default.createDirectory(
+          at: parent, withIntermediateDirectories: true,
+          attributes: [.posixPermissions: 0o700])
+      }
+      let document = PreferencesDocument(
+        version: 2, sidebarInitiallyVisible: sidebarInitiallyVisible,
+        profileSearchEngines: profileSearchEngines, nativeVaultProfiles: profiles)
+      let encoder = JSONEncoder()
+      encoder.outputFormatting = [.sortedKeys]
+      let data = try encoder.encode(document)
+      guard data.count <= Self.maximumFileSize else { throw DurableVaultSaveError.writeFailed }
+      try data.write(to: fileURL, options: .atomic)
+      try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
+      let handle = try FileHandle(forWritingTo: fileURL)
+      defer { try? handle.close() }
+      try handle.synchronize()
+      // Ordinary preference writes may have created any ancestor earlier in this
+      // process. Flush every directory entry through the filesystem root.
+      var directory = parent.standardizedFileURL
+      while true {
+        try syncDirectory(directory)
+        let ancestor = directory.deletingLastPathComponent().standardizedFileURL
+        if ancestor.path == directory.path { break }
+        directory = ancestor
+      }
+      guard try Data(contentsOf: fileURL) == data else { throw DurableVaultSaveError.writeFailed }
+      nativeVaultProfiles = profiles
+      storageNotice = nil
+    } catch {
+      storageNotice = "Preferences could not be saved. Try again after fixing storage access."
+      throw DurableVaultSaveError.writeFailed
+    }
   }
 
   public func setSidebarInitiallyVisible(_ value: Bool) {

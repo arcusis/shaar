@@ -214,6 +214,7 @@ struct NativeBitwardenControllerTests {
   #if canImport(ArcusisBitwardenSDK)
     @Test func acceptedSDKClientExecutesTypedCryptoClearAndRejectsUnknownHandle() async {
       let bridge = NativeBitwardenStateBridge()
+      NativeBitwardenLogging.bootstrap()
       let client = Client(
         tokenProvider: NativeBitwardenTokenProvider(),
         settings: ClientSettings(

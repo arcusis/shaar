@@ -4,7 +4,20 @@ import SwiftUI
 
 @main
 enum ArcusisBrowserMain {
+  static var desktopEntryAllowed: Bool {
+    #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_FIXTURE
+      false
+    #else
+      true
+    #endif
+  }
+
   @MainActor static func main() {
+    guard desktopEntryAllowed else {
+      FileHandle.standardError.write(Data("Fixture build cannot start the browser.\n".utf8))
+      exit(1)
+    }
+    NativeBitwardenLogging.bootstrap()
     let arguments = CommandLine.arguments
     if arguments.contains("--engine-probe") {
       exit(EngineProbe.run(arguments: arguments))

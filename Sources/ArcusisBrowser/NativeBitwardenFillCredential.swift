@@ -127,7 +127,19 @@ struct NativeBitwardenFillAccessState<Item: Sendable>: Sendable {
 }
 
 enum NativeBitwardenFillURIMode: Equatable, Sendable {
-  case host, never, unsupported
+  case `default`, domain, host, exact, startsWith, never, regularExpression, unsupported
+
+  fileprivate var strategy: PasswordURIMatchStrategy? {
+    switch self {
+    case .default, .unsupported: nil
+    case .domain: .domain
+    case .host: .host
+    case .exact: .exact
+    case .startsWith: .startsWith
+    case .never: .never
+    case .regularExpression: .regularExpression
+    }
+  }
 }
 
 struct NativeBitwardenFillURI: Sendable {
@@ -160,8 +172,19 @@ enum NativeBitwardenFillOwnership: Equatable, Sendable {
 }
 
 enum NativeBitwardenFillPolicy {
+  private static let matcher = PasswordPublicSuffixList.bundled().map(PasswordURIMatching.init)
+
   static func credential(
     from candidate: NativeBitwardenFillCandidate, id: UUID, origin: PasswordFillOrigin,
+    ownership: NativeBitwardenFillOwnership = .personal
+  ) throws -> NativeBitwardenFillCredential {
+    try credential(
+      from: candidate, id: id, context: originOnlyContext(origin), ownership: ownership)
+  }
+
+  static func credential(
+    from candidate: NativeBitwardenFillCandidate, id: UUID, context: PasswordFillContext,
+    defaultStrategy: PasswordURIMatchStrategy? = nil,
     ownership: NativeBitwardenFillOwnership = .personal
   ) throws -> NativeBitwardenFillCredential {
     switch ownership {
@@ -181,27 +204,34 @@ enum NativeBitwardenFillPolicy {
     else { throw NativeBitwardenFillError.ineligibleCipher }
     guard !candidate.reprompt else { throw NativeBitwardenFillError.repromptRequired }
 
-    // Host mode compares host and effective port. Stored paths do not participate.
-    if candidate.uris.contains(where: { $0.mode == .host && hostOrigin($0.value) == origin }) {
-      return NativeBitwardenFillCredential(username: username, password: password)
+    var unsupported = false
+    for uri in candidate.uris {
+      if uri.mode == .unsupported || uri.mode == .regularExpression {
+        unsupported = true
+        continue
+      }
+      guard let value = uri.value, let matcher else { continue }
+      switch matcher.match(
+        savedURI: value, strategy: uri.mode.strategy, defaultStrategy: defaultStrategy,
+        context: context)
+      {
+      case .match:
+        return NativeBitwardenFillCredential(username: username, password: password)
+      case .unsupportedRegularExpression:
+        unsupported = true
+      case .noMatch:
+        break
+      }
     }
-    if candidate.uris.contains(where: { $0.mode == .unsupported }) {
-      throw NativeBitwardenFillError.unsupportedMatch
-    }
+    if unsupported { throw NativeBitwardenFillError.unsupportedMatch }
     throw NativeBitwardenFillError.noMatchingURI
   }
 
-  private static func hostOrigin(_ uri: String?) -> PasswordFillOrigin? {
-    guard let uri, let parts = URLComponents(string: uri),
-      parts.scheme?.lowercased() == "https", parts.user == nil, parts.password == nil,
-      let host = parts.percentEncodedHost?.lowercased(), !host.isEmpty,
-      parts.url != nil, let separator = uri.range(of: "://"),
-      parts.port.map({ (1...65535).contains($0) }) ?? true
-    else { return nil }
-    let authority = uri[separator.upperBound...].prefix { !"/?#".contains($0) }.lowercased()
-    guard authority == host + (parts.port.map { ":\($0)" } ?? "") else { return nil }
-    let port = parts.port.flatMap { $0 == 443 ? nil : ":\($0)" } ?? ""
-    return PasswordFillOrigin("https://" + host + port)
+  static func originOnlyContext(_ origin: PasswordFillOrigin) -> PasswordFillContext {
+    PasswordFillContext(
+      requestID: UUID(),
+      binding: PasswordFillBinding(windowID: UUID(), profileID: UUID(), tabID: UUID()),
+      origin: origin)
   }
 }
 
@@ -209,6 +239,19 @@ enum NativeBitwardenFillPolicy {
 enum NativeBitwardenFillLookup {
   static func credential<Item: Sendable>(
     isolation: isolated any Actor, id: UUID, origin: PasswordFillOrigin,
+    item: () throws -> Item,
+    decrypt: (Item) async throws -> NativeBitwardenFillCandidate,
+    ownership: (Item) throws -> NativeBitwardenFillOwnership = { _ in .personal },
+    validate: () throws -> Void
+  ) async throws -> NativeBitwardenFillCredential {
+    try await credential(
+      isolation: isolation, id: id, context: NativeBitwardenFillPolicy.originOnlyContext(origin),
+      item: item, decrypt: decrypt, ownership: ownership, validate: validate)
+  }
+
+  static func credential<Item: Sendable>(
+    isolation: isolated any Actor, id: UUID, context: PasswordFillContext,
+    defaultStrategy: PasswordURIMatchStrategy? = nil,
     item: () throws -> Item,
     decrypt: (Item) async throws -> NativeBitwardenFillCandidate,
     ownership: (Item) throws -> NativeBitwardenFillOwnership = { _ in .personal },
@@ -227,6 +270,6 @@ enum NativeBitwardenFillLookup {
     try Task.checkCancellation()
     try validate()
     return try NativeBitwardenFillPolicy.credential(
-      from: candidate, id: id, origin: origin, ownership: owner)
+      from: candidate, id: id, context: context, defaultStrategy: defaultStrategy, ownership: owner)
   }
 }

@@ -269,7 +269,7 @@ final class SidebarChromeLayoutTests: XCTestCase {
         return
       }
       let path = root.appending(path: "ordinary-\(phase).png")
-      _ = try await mounted.capture(to: path, requiredText: ["Long", "ordinary"])
+      _ = try await mounted.capture(to: path, requiredText: ["Last"])
       captures.append([
         "phase": phase, "path": path.lastPathComponent, "selectedTabID": tabID.uuidString,
       ])
@@ -286,7 +286,7 @@ final class SidebarChromeLayoutTests: XCTestCase {
       return
     }
     let firstPath = root.appending(path: "ordinary-programmatic-first.png")
-    _ = try await mounted.capture(to: firstPath, requiredText: ["Long", "ordinary"])
+    _ = try await mounted.capture(to: firstPath, requiredText: ["First"])
     captures.append([
       "phase": "programmatic-first", "path": firstPath.lastPathComponent,
       "selectedTabID": firstTab.id.uuidString,
@@ -303,7 +303,7 @@ final class SidebarChromeLayoutTests: XCTestCase {
       return
     }
     let lastPath = root.appending(path: "ordinary-programmatic-last.png")
-    _ = try await mounted.capture(to: lastPath, requiredText: ["Long", "ordinary"])
+    _ = try await mounted.capture(to: lastPath, requiredText: ["Last"])
     captures.append([
       "phase": "programmatic-last", "path": lastPath.lastPathComponent,
       "selectedTabID": lastTab.id.uuidString,
@@ -433,6 +433,7 @@ final class SidebarChromeLayoutTests: XCTestCase {
           id: stableID(1_000 + index),
           url: URL(string: "https://ordinary-\(index).example/research")!,
           title: "\(index): "
+            + (index == 0 ? "First " : index == 239 ? "Last " : "")
             + String(repeating: "Long ordinary tab title with useful context ", count: 3))
       }
       : []

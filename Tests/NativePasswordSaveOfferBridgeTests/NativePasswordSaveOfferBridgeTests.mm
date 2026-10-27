@@ -123,6 +123,10 @@ NSString *const accountEpoch = @"14CAB0F2-E91A-43CA-9AC2-FB1C86044D0C";
   XCTAssertTrue(ARCSaveDocumentURLMatchesOrigin(@"https://login.example:8443/login?q=private",
                                                 @"https://login.example:8443"));
   XCTAssertFalse(ARCCanonicalHTTPSOrigin(@"https://login.example:443"));
+  XCTAssertFalse(ARCCanonicalHTTPSOrigin(@"http://login.example"));
+  XCTAssertFalse(ARCCanonicalHTTPSOrigin(@"https://login.example:abc"));
+  XCTAssertFalse(ARCCanonicalHTTPSOrigin(@"https://login.example:0"));
+  XCTAssertFalse(ARCCanonicalHTTPSOrigin(@"https://login.example:65536"));
   XCTAssertFalse(ARCCanonicalHTTPSOrigin(@"https://LOGIN.example"));
   XCTAssertFalse(ARCCanonicalHTTPSOrigin(@"https://user@login.example"));
   XCTAssertFalse(ARCSaveDocumentURLMatchesOrigin(@"https://user@login.example/login",

@@ -1,0 +1,1819 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 517762c1..36cfaff8 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -1348,6 +1348,7 @@ dependencies = [
+  "bitwarden-unlock",
+  "bitwarden-user-crypto-management",
+  "bitwarden-vault",
++ "http",
+  "reqwest-middleware",
+  "thiserror",
+  "tokio",
+diff --git a/crates/bitwarden-api-api/src/apis/sync_api.rs b/crates/bitwarden-api-api/src/apis/sync_api.rs
+index df09a81b..df3f56ab 100644
+--- a/crates/bitwarden-api-api/src/apis/sync_api.rs
++++ b/crates/bitwarden-api-api/src/apis/sync_api.rs
+@@ -31,6 +31,17 @@ pub trait SyncApi: Send + Sync {
+         &self,
+         exclude_domains: Option<bool>,
+     ) -> Result<models::SyncResponseModel, Error>;
++
++    /// Fetch with provenance only when the implementation supports raw JSON inspection.
++    /// Mock and other implementations default to an unproven response.
++    async fn get_with_strict_schema(
++        &self,
++        exclude_domains: Option<bool>,
++    ) -> Result<StrictSyncResponse, Error> {
++        Ok(StrictSyncResponse::unproven(
++            self.get(exclude_domains).await?,
++        ))
++    }
+ }
+ 
+ pub struct SyncApiClient {
+@@ -66,4 +77,558 @@ impl SyncApi for SyncApiClient {
+ 
+         bitwarden_api_base::process_with_json_response(local_var_req_builder).await
+     }
++
++    async fn get_with_strict_schema(
++        &self,
++        exclude_domains: Option<bool>,
++    ) -> Result<StrictSyncResponse, Error> {
++        let configuration = &self.configuration;
++        let uri = format!("{}/sync", configuration.base_path);
++        let mut request = configuration
++            .client
++            .request(reqwest::Method::GET, uri.as_str());
++        if let Some(value) = exclude_domains {
++            request = request.query(&[("excludeDomains", &value.to_string())]);
++        }
++        request = request.with_extension(AuthRequired::Bearer);
++        let wire: StrictSyncWireResponse =
++            bitwarden_api_base::process_with_json_response(request).await?;
++        Ok(wire.0)
++    }
++}
++
++/// A sync response paired with nonsecret eligibility derived during JSON parsing.
++/// Only the SDK parser can create a proven sidecar; host-built responses are unproven.
++pub struct StrictSyncResponse {
++    response: models::SyncResponseModel,
++    eligible_ids: std::collections::HashSet<uuid::Uuid>,
++}
++
++impl StrictSyncResponse {
++    /// Wrap a response without claiming anything about its wire completeness.
++    pub fn unproven(response: models::SyncResponseModel) -> Self {
++        Self {
++            response,
++            eligible_ids: Default::default(),
++        }
++    }
++    /// The unchanged typed SDK response.
++    pub fn response(&self) -> &models::SyncResponseModel {
++        &self.response
++    }
++    /// Whether this ID passed the original envelope schema check.
++    pub fn is_eligible(&self, id: uuid::Uuid) -> bool {
++        self.eligible_ids.contains(&id)
++    }
++}
++
++// Preserve object entries in order, including duplicates, while the ordinary typed
++// model is deserialized by serde_json. A serde_json::Value map would erase duplicates.
++#[derive(Debug, serde::Serialize)]
++#[serde(untagged)]
++enum Captured {
++    Null,
++    Bool(bool),
++    Signed(i64),
++    Unsigned(u64),
++    Float(f64),
++    String(String),
++    Array(Vec<Captured>),
++    Object(CapturedObject),
++}
++#[derive(Debug)]
++struct CapturedObject(Vec<(String, Captured)>);
++impl serde::Serialize for CapturedObject {
++    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
++        use serde::ser::SerializeMap;
++        let mut map = serializer.serialize_map(Some(self.0.len()))?;
++        for (key, value) in &self.0 {
++            map.serialize_entry(key, value)?;
++        }
++        map.end()
++    }
++}
++impl<'de> serde::Deserialize<'de> for Captured {
++    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
++        struct Visitor;
++        impl<'de> serde::de::Visitor<'de> for Visitor {
++            type Value = Captured;
++            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++                f.write_str("JSON value")
++            }
++            fn visit_unit<E: serde::de::Error>(self) -> Result<Self::Value, E> {
++                Ok(Captured::Null)
++            }
++            fn visit_bool<E: serde::de::Error>(self, v: bool) -> Result<Self::Value, E> {
++                Ok(Captured::Bool(v))
++            }
++            fn visit_i64<E: serde::de::Error>(self, v: i64) -> Result<Self::Value, E> {
++                Ok(Captured::Signed(v))
++            }
++            fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<Self::Value, E> {
++                Ok(Captured::Unsigned(v))
++            }
++            fn visit_f64<E: serde::de::Error>(self, v: f64) -> Result<Self::Value, E> {
++                Ok(Captured::Float(v))
++            }
++            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
++                Ok(Captured::String(v.to_owned()))
++            }
++            fn visit_string<E: serde::de::Error>(self, v: String) -> Result<Self::Value, E> {
++                Ok(Captured::String(v))
++            }
++            fn visit_seq<A: serde::de::SeqAccess<'de>>(
++                self,
++                mut a: A,
++            ) -> Result<Self::Value, A::Error> {
++                let mut items = Vec::new();
++                while let Some(v) = a.next_element()? {
++                    items.push(v);
++                }
++                Ok(Captured::Array(items))
++            }
++            fn visit_map<A: serde::de::MapAccess<'de>>(
++                self,
++                mut a: A,
++            ) -> Result<Self::Value, A::Error> {
++                let mut items = Vec::new();
++                while let Some(pair) = a.next_entry()? {
++                    items.push(pair);
++                }
++                Ok(Captured::Object(CapturedObject(items)))
++            }
++        }
++        d.deserialize_any(Visitor)
++    }
++}
++
++// The deliberately closed v1 subset requires explicit keys, even when a supported
++// optional value is null. Unknown keys, duplicates, unsupported FIDO and the legacy
++// ignored login.uri disqualify only strict eligibility, never the ordinary typed read.
++fn object<'a>(
++    value: &'a Captured,
++    allowed: &[&str],
++) -> Option<std::collections::HashMap<String, &'a Captured>> {
++    let Captured::Object(map) = value else {
++        return None;
++    };
++    let mut out = std::collections::HashMap::new();
++    for (key, value) in &map.0 {
++        let mut normalized = key.to_ascii_lowercase();
++        if normalized == "r#type" {
++            normalized = "type".to_owned();
++        }
++        if normalized == "r#match" {
++            normalized = "match".to_owned();
++        }
++        let canonical = match normalized.as_str() {
++            "organizationid" => "organizationId",
++            "partialdata" => "partialData",
++            "securenote" => "secureNote",
++            "sshkey" => "sshKey",
++            "bankaccount" => "bankAccount",
++            "driverslicense" => "driversLicense",
++            "passwordhistory" => "passwordHistory",
++            "organizationusetotp" => "organizationUseTotp",
++            "revisiondate" => "revisionDate",
++            "creationdate" => "creationDate",
++            "deleteddate" => "deletedDate",
++            "folderid" => "folderId",
++            "viewpassword" => "viewPassword",
++            "archiveddate" => "archivedDate",
++            "collectionids" => "collectionIds",
++            "passwordrevisiondate" => "passwordRevisionDate",
++            "autofillonpageload" => "autofillOnPageLoad",
++            "fido2credentials" => "fido2Credentials",
++            "urichecksum" => "uriChecksum",
++            "linkedid" => "linkedId",
++            "lastuseddate" => "lastUsedDate",
++            "filename" => "fileName",
++            "sizename" => "sizeName",
++            _ => normalized.as_str(),
++        };
++        let mut pascal = canonical.to_owned();
++        if let Some(first) = pascal.get_mut(0..1) {
++            first.make_ascii_uppercase();
++        }
++        let exact_name = match canonical {
++            "type" => key == "type" || key == "R#type",
++            "match" => key == "match" || key == "R#match",
++            _ => key == canonical || *key == pascal,
++        };
++        if !exact_name
++            || !allowed.contains(&normalized.as_str())
++            || out.insert(normalized, value).is_some()
++        {
++            return None;
++        }
++    }
++    if allowed.iter().any(|key| !out.contains_key(*key)) {
++        return None;
++    }
++    Some(out)
++}
++fn nonnull(value: &Captured) -> bool {
++    !matches!(value, Captured::Null)
++}
++fn null(value: &Captured) -> bool {
++    matches!(value, Captured::Null)
++}
++fn array_or_null(value: &Captured, keys: &[&str], required_nonnull: &[&str]) -> bool {
++    match value {
++        Captured::Null => true,
++        Captured::Array(items) => items.iter().all(|item| {
++            object(item, keys).is_some_and(|m| required_nonnull.iter().all(|k| nonnull(m[*k])))
++        }),
++        _ => false,
++    }
++}
++fn unique_attachment_ids(value: &Captured) -> bool {
++    let Captured::Array(attachments) = value else {
++        return null(value);
++    };
++    let mut seen = std::collections::HashSet::new();
++    attachments.iter().all(|attachment| {
++        let Some(fields) = object(
++            attachment,
++            &["object", "id", "url", "filename", "key", "size", "sizename"],
++        ) else {
++            return false;
++        };
++        let Captured::String(id) = fields["id"] else {
++            return false;
++        };
++        !id.is_empty() && seen.insert(id.as_str())
++    })
++}
++
++fn revision_fits_chrono(value: &Captured) -> bool {
++    let Captured::String(value) = value else {
++        return false;
++    };
++    let Some((_, time)) = value.split_once('T') else {
++        return false;
++    };
++    match time.split_once('.') {
++        None => true,
++        Some((_, fraction)) => {
++            let digits = fraction.bytes().take_while(u8::is_ascii_digit).count();
++            (1..=9).contains(&digits)
++        }
++    }
++}
++fn eligible(cipher: &Captured) -> Option<uuid::Uuid> {
++    let keys = [
++        "object",
++        "id",
++        "organizationid",
++        "type",
++        "data",
++        "partialdata",
++        "name",
++        "notes",
++        "login",
++        "card",
++        "identity",
++        "securenote",
++        "sshkey",
++        "bankaccount",
++        "driverslicense",
++        "passport",
++        "fields",
++        "passwordhistory",
++        "attachments",
++        "organizationusetotp",
++        "revisiondate",
++        "creationdate",
++        "deleteddate",
++        "reprompt",
++        "key",
++        "folderid",
++        "favorite",
++        "edit",
++        "viewpassword",
++        "archiveddate",
++        "permissions",
++        "collectionids",
++    ];
++    let m = object(cipher, &keys)?;
++    if [
++        "id",
++        "type",
++        "name",
++        "login",
++        "revisiondate",
++        "creationdate",
++        "reprompt",
++        "favorite",
++        "edit",
++        "viewpassword",
++        "organizationusetotp",
++    ]
++    .iter()
++    .any(|k| !nonnull(m[*k]))
++    {
++        return None;
++    }
++    if [
++        "organizationid",
++        "data",
++        "partialdata",
++        "card",
++        "identity",
++        "securenote",
++        "sshkey",
++        "bankaccount",
++        "driverslicense",
++        "passport",
++        "deleteddate",
++        "archiveddate",
++        "permissions",
++    ]
++    .iter()
++    .any(|k| !null(m[*k]))
++    {
++        return None;
++    }
++    if !matches!(m["collectionids"], Captured::Array(v) if v.is_empty()) {
++        return None;
++    }
++    if !revision_fits_chrono(m["revisiondate"]) || !revision_fits_chrono(m["creationdate"]) {
++        return None;
++    }
++    let login = object(
++        m["login"],
++        &[
++            "uri",
++            "uris",
++            "username",
++            "password",
++            "passwordrevisiondate",
++            "totp",
++            "autofillonpageload",
++            "fido2credentials",
++        ],
++    )?;
++    if !null(login["passwordrevisiondate"]) && !revision_fits_chrono(login["passwordrevisiondate"])
++    {
++        return None;
++    }
++    if !null(login["uri"])
++        || !(null(login["fido2credentials"])
++            || matches!(login["fido2credentials"], Captured::Array(v) if v.is_empty()))
++    {
++        return None;
++    }
++    if !array_or_null(
++        login["uris"],
++        &["uri", "urichecksum", "match"],
++        &["uri", "urichecksum"],
++    ) || !array_or_null(
++        m["fields"],
++        &["type", "name", "value", "linkedid"],
++        &["type"],
++    ) || !array_or_null(
++        m["passwordhistory"],
++        &["password", "lastuseddate"],
++        &["password", "lastuseddate"],
++    ) || !array_or_null(
++        m["attachments"],
++        &["object", "id", "url", "filename", "key", "size", "sizename"],
++        &["id"],
++    ) {
++        return None;
++    }
++    if !unique_attachment_ids(m["attachments"]) {
++        return None;
++    }
++    if let Captured::Array(history) = m["passwordhistory"] {
++        if history.iter().any(|entry| {
++            object(entry, &["password", "lastuseddate"])
++                .is_none_or(|fields| !revision_fits_chrono(fields["lastuseddate"]))
++        }) {
++            return None;
++        }
++    }
++    let Captured::String(id) = m["id"] else {
++        return None;
++    };
++    let id: uuid::Uuid = id.parse().ok()?;
++    (!id.is_nil()).then_some(id)
++}
++struct StrictSyncWireResponse(StrictSyncResponse);
++impl<'de> serde::Deserialize<'de> for StrictSyncWireResponse {
++    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
++        let raw = Captured::deserialize(d)?;
++        let json = serde_json::to_string(&raw).map_err(serde::de::Error::custom)?;
++        let response = serde_json::from_str(&json).map_err(serde::de::Error::custom)?;
++        let mut ids = std::collections::HashSet::new();
++        let mut duplicates = std::collections::HashSet::new();
++        if let Captured::Object(root) = &raw {
++            for (key, value) in &root.0 {
++                if key.eq_ignore_ascii_case("ciphers") {
++                    if let Captured::Array(ciphers) = value {
++                        for cipher in ciphers {
++                            if let Some(id) = eligible(cipher) {
++                                if !ids.insert(id) {
++                                    duplicates.insert(id);
++                                }
++                            } else if let Captured::Object(fields) = cipher {
++                                for (name, value) in &fields.0 {
++                                    if name.eq_ignore_ascii_case("id") {
++                                        if let Captured::String(value) = value {
++                                            if let Ok(id) = value.parse() {
++                                                duplicates.insert(id);
++                                            }
++                                        }
++                                    }
++                                }
++                            }
++                        }
++                    }
++                }
++            }
++        }
++        ids.retain(|id| !duplicates.contains(id));
++        Ok(Self(StrictSyncResponse {
++            response,
++            eligible_ids: ids,
++        }))
++    }
++}
++
++#[cfg(test)]
++mod strict_schema_tests {
++    use super::*;
++    const ID: &str = "11111111-1111-4111-8111-111111111111";
++
++    fn cipher() -> serde_json::Value {
++        serde_json::json!({
++            "object":"cipher", "id":ID, "organizationId":null, "type":1, "data":null, "partialData":null,
++            "name":"encrypted", "notes":null, "login":{ "uri":null, "uris":null, "username":null,
++                "password":null, "passwordRevisionDate":null, "totp":null, "autofillOnPageLoad":null, "fido2Credentials":null },
++            "card":null,"identity":null,"secureNote":null,"sshKey":null,"bankAccount":null,
++            "driversLicense":null,"passport":null,"fields":null,"passwordHistory":null,"attachments":null,
++            "organizationUseTotp":false,"revisionDate":"2025-01-01T00:00:00.123456789Z",
++            "creationDate":"2025-01-01T00:00:00Z","deletedDate":null,"reprompt":0,"key":null,
++            "folderId":null,"favorite":false,"edit":true,"viewPassword":true,"archivedDate":null,
++            "permissions":null,"collectionIds":[]
++        })
++    }
++    fn parse(cipher: serde_json::Value) -> StrictSyncResponse {
++        let json = serde_json::json!({"ciphers":[cipher]}).to_string();
++        serde_json::from_str::<StrictSyncWireResponse>(&json)
++            .unwrap()
++            .0
++    }
++    #[test]
++    fn strict_schema_accepts_complete_and_host_constructed_is_unproven() {
++        let proven = parse(cipher());
++        let id = ID.parse().unwrap();
++        assert!(proven.is_eligible(id));
++        let unproven = StrictSyncResponse::unproven(proven.response().clone());
++        assert!(!unproven.is_eligible(id));
++    }
++    #[test]
++    fn strict_schema_rejects_unknown_missing_null_and_unsupported_without_breaking_read() {
++        let id = ID.parse().unwrap();
++        let mut variants = Vec::new();
++        let mut unknown = cipher();
++        unknown["login"]["future"] = serde_json::json!(1);
++        variants.push(unknown);
++        let mut missing = cipher();
++        missing.as_object_mut().unwrap().remove("notes");
++        variants.push(missing);
++        let mut null_edit = cipher();
++        null_edit["edit"] = serde_json::Value::Null;
++        variants.push(null_edit);
++        let mut org = cipher();
++        org["collectionIds"] = serde_json::json!(["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"]);
++        variants.push(org);
++        let mut excessive_precision = cipher();
++        excessive_precision["revisionDate"] = serde_json::json!("2025-01-01T00:00:00.1234567891Z");
++        variants.push(excessive_precision);
++        let mut excessive_creation = cipher();
++        excessive_creation["creationDate"] = serde_json::json!("2025-01-01T00:00:00.1234567891Z");
++        variants.push(excessive_creation);
++        let mut excessive_password_revision = cipher();
++        excessive_password_revision["login"]["passwordRevisionDate"] =
++            serde_json::json!("2025-01-01T00:00:00.1234567891Z");
++        variants.push(excessive_password_revision);
++        let mut excessive_history_date = cipher();
++        excessive_history_date["passwordHistory"] = serde_json::json!([{
++            "password":"encrypted", "lastUsedDate":"2025-01-01T00:00:00.1234567891Z"
++        }]);
++        variants.push(excessive_history_date);
++        let mut nil_id = cipher();
++        nil_id["id"] = serde_json::json!("00000000-0000-0000-0000-000000000000");
++        assert!(!parse(nil_id).is_eligible(uuid::Uuid::nil()));
++        let mut legacy = cipher();
++        legacy["login"]["uri"] = serde_json::json!("encrypted");
++        variants.push(legacy);
++        let mut bad_alias = cipher();
++        bad_alias["login"]["uris"] =
++            serde_json::json!([{ "uri":"ciphertext", "uriChecksum":"ciphertext", "Match":1 }]);
++        variants.push(bad_alias);
++        for variant in variants {
++            let result = parse(variant);
++            assert!(!result.is_eligible(id));
++            assert_eq!(result.response().ciphers.as_ref().unwrap().len(), 1);
++        }
++    }
++    #[test]
++    fn strict_schema_rejects_duplicate_attachment_ids_without_changing_reads() {
++        let id = ID.parse().unwrap();
++        let attachment = serde_json::json!({
++            "object":"attachment", "id":"attachment-a", "url":null, "fileName":null,
++            "key":null, "size":null, "sizeName":null
++        });
++        let mut duplicate = cipher();
++        duplicate["attachments"] = serde_json::json!([attachment.clone(), attachment.clone()]);
++        let parsed = parse(duplicate);
++        assert!(!parsed.is_eligible(id));
++        assert_eq!(
++            parsed.response().ciphers.as_ref().unwrap()[0]
++                .attachments
++                .as_ref()
++                .unwrap()
++                .len(),
++            2
++        );
++        let mut unique = cipher();
++        let mut second = attachment.clone();
++        second["id"] = serde_json::json!("attachment-b");
++        unique["attachments"] = serde_json::json!([attachment, second]);
++        assert!(parse(unique).is_eligible(id));
++    }
++
++    #[test]
++    fn strict_schema_rejects_duplicate_unknown_and_duplicate_id() {
++        let id = ID.parse().unwrap();
++        let json = serde_json::json!({"ciphers":[cipher()]})
++            .to_string()
++            .replace(
++                "\"username\":null",
++                "\"future\":1,\"future\":2,\"username\":null",
++            );
++        let result = serde_json::from_str::<StrictSyncWireResponse>(&json)
++            .unwrap()
++            .0;
++        assert!(!result.is_eligible(id));
++        let duplicate_known = serde_json::json!({"ciphers":[cipher()]})
++            .to_string()
++            .replace(
++                "\"name\":\"encrypted\"",
++                "\"name\":null,\"name\":\"encrypted\"",
++            );
++        assert!(serde_json::from_str::<models::SyncResponseModel>(&duplicate_known).is_err());
++        assert!(serde_json::from_str::<StrictSyncWireResponse>(&duplicate_known).is_err());
++        let mut second = cipher();
++        second["edit"] = serde_json::Value::Null;
++        let json = serde_json::json!({"ciphers":[cipher(),second]}).to_string();
++        let result = serde_json::from_str::<StrictSyncWireResponse>(&json)
++            .unwrap()
++            .0;
++        assert!(!result.is_eligible(id));
++    }
+ }
+diff --git a/crates/bitwarden-pm/Cargo.toml b/crates/bitwarden-pm/Cargo.toml
+index 56db20aa..73b71c8d 100644
+--- a/crates/bitwarden-pm/Cargo.toml
++++ b/crates/bitwarden-pm/Cargo.toml
+@@ -110,4 +110,5 @@ wasm-bindgen-futures = { workspace = true, optional = true }
+ workspace = true
+ 
+ [dev-dependencies]
++http = { workspace = true }
+ tokio = { workspace = true, features = ["rt"] }
+diff --git a/crates/bitwarden-pm/src/lib.rs b/crates/bitwarden-pm/src/lib.rs
+index 8785f088..6a4e5079 100644
+--- a/crates/bitwarden-pm/src/lib.rs
++++ b/crates/bitwarden-pm/src/lib.rs
+@@ -339,10 +339,31 @@ pub struct SyncSnapshot {
+     pub organization_keys: OrganizationKeys,
+ }
+ 
++/// SDK-owned strict provenance captured with the published snapshot.
++pub struct StrictSyncSnapshot {
++    snapshot: SyncSnapshot,
++    eligible_ids: std::collections::HashSet<bitwarden_vault::CipherId>,
++}
++impl StrictSyncSnapshot {
++    /// Published ciphertext and generation captured with this sidecar.
++    pub fn snapshot(&self) -> &SyncSnapshot {
++        &self.snapshot
++    }
++    /// Check this sidecar's parser-owned eligibility for the selected ID.
++    pub fn is_proven(&self, id: bitwarden_vault::CipherId) -> bool {
++        self.eligible_ids.contains(&id)
++    }
++}
++
+ #[derive(Default)]
+ struct SyncSnapshotState {
+     pending: Option<SyncSnapshot>,
+     published: SyncSnapshot,
++    pending_eligible: std::collections::HashSet<bitwarden_vault::CipherId>,
++    published_eligible: std::collections::HashSet<bitwarden_vault::CipherId>,
++    active_strict_attempts: std::collections::HashSet<u64>,
++    latest_strict_attempt: u64,
++    pending_strict_attempt: Option<u64>,
+ }
+ 
+ fn organization_keys(
+@@ -393,14 +414,29 @@ fn organization_keys(
+ 
+ struct SyncSnapshotHandler(Arc<std::sync::Mutex<SyncSnapshotState>>);
+ 
+-#[async_trait::async_trait]
+-impl bitwarden_sync::SyncHandler for SyncSnapshotHandler {
+-    async fn on_sync(
++impl SyncSnapshotHandler {
++    fn prepare(
+         &self,
+         response: &bitwarden_api_api::models::SyncResponseModel,
++        proof: Option<&bitwarden_api_api::apis::sync_api::StrictSyncResponse>,
++        attempt: Option<u64>,
+     ) -> Result<(), bitwarden_sync::SyncHandlerError> {
+-        self.0.lock().expect("sync snapshot lock").pending = None;
++        {
++            let mut state = self.0.lock().expect("sync snapshot lock");
++            state.pending = None;
++            state.pending_eligible.clear();
++            state.pending_strict_attempt = None;
++        }
+         let organization_keys = organization_keys(response)?;
++        let strict_eligible_ids = response
++            .ciphers
++            .as_ref()
++            .into_iter()
++            .flatten()
++            .filter_map(|cipher| cipher.id)
++            .filter(|id| proof.is_some_and(|p| p.is_eligible(*id)))
++            .map(bitwarden_vault::CipherId::new)
++            .collect();
+         let ciphers = response
+             .ciphers
+             .clone()
+@@ -409,27 +445,104 @@ impl bitwarden_sync::SyncHandler for SyncSnapshotHandler {
+             .map(bitwarden_vault::Cipher::try_from)
+             .collect::<std::result::Result<Vec<_>, _>>()
+             .map_err(|error| -> bitwarden_sync::SyncHandlerError { Box::new(error) })?;
+-        self.0.lock().expect("sync snapshot lock").pending = Some(SyncSnapshot {
++        let mut state = self.0.lock().expect("sync snapshot lock");
++        state.pending = Some(SyncSnapshot {
+             generation: 0,
+             ciphers,
+             organization_keys,
+         });
++        state.pending_eligible = strict_eligible_ids;
++        state.pending_strict_attempt = attempt;
+         Ok(())
+     }
+ 
+-    async fn on_sync_complete(&self) {
++    fn publish(&self, attempt: Option<u64>) {
+         let mut state = self.0.lock().expect("sync snapshot lock");
++        if attempt.is_some() && state.pending_strict_attempt != attempt {
++            return;
++        }
+         if let Some(mut snapshot) = state.pending.take() {
+-            snapshot.generation = state.published.generation.checked_add(1).expect("sync generation overflow");
++            snapshot.generation = state
++                .published
++                .generation
++                .checked_add(1)
++                .expect("sync generation overflow");
+             state.published = snapshot;
++            let eligible = attempt.is_some_and(|id| {
++                state.pending_strict_attempt == Some(id)
++                    && state.latest_strict_attempt == id
++                    && state.active_strict_attempts.len() == 1
++                    && state.active_strict_attempts.contains(&id)
++            });
++            state.published_eligible = if eligible {
++                std::mem::take(&mut state.pending_eligible)
++            } else {
++                state.pending_eligible.clear();
++                Default::default()
++            };
++            state.pending_strict_attempt = None;
++        }
++    }
++}
++
++#[async_trait::async_trait]
++impl bitwarden_sync::SyncHandler for SyncSnapshotHandler {
++    async fn on_sync(
++        &self,
++        response: &bitwarden_api_api::models::SyncResponseModel,
++    ) -> Result<(), bitwarden_sync::SyncHandlerError> {
++        self.prepare(response, None, None)
++    }
++
++    async fn on_sync_with_strict_schema(
++        &self,
++        proof: &bitwarden_api_api::apis::sync_api::StrictSyncResponse,
++    ) -> Result<(), bitwarden_sync::SyncHandlerError> {
++        self.prepare(proof.response(), Some(proof), None)
++    }
++
++    fn on_strict_sync_start(&self, attempt: u64) {
++        let mut state = self.0.lock().expect("sync snapshot lock");
++        state.active_strict_attempts.insert(attempt);
++        state.latest_strict_attempt = state.latest_strict_attempt.max(attempt);
++        state.published_eligible.clear();
++    }
++
++    fn on_strict_sync_end(&self, attempt: u64) {
++        let mut state = self.0.lock().expect("sync snapshot lock");
++        state.active_strict_attempts.remove(&attempt);
++        if state.pending_strict_attempt == Some(attempt) {
++            state.pending = None;
++            state.pending_eligible.clear();
++            state.pending_strict_attempt = None;
+         }
+     }
++
++    async fn on_sync_with_strict_attempt(
++        &self,
++        proof: &bitwarden_api_api::apis::sync_api::StrictSyncResponse,
++        attempt: u64,
++    ) -> Result<(), bitwarden_sync::SyncHandlerError> {
++        self.prepare(proof.response(), Some(proof), Some(attempt))
++    }
++
++    async fn on_sync_complete_for_strict_attempt(&self, attempt: u64) {
++        self.publish(Some(attempt));
++    }
++
++    async fn on_sync_complete(&self) {
++        self.publish(None);
++    }
+ }
+ 
+ #[async_trait::async_trait]
+ impl bitwarden_sync::SyncErrorHandler for SyncSnapshotHandler {
+     async fn on_error(&self, _error: &bitwarden_sync::SyncError) {
+-        self.0.lock().expect("sync snapshot lock").pending = None;
++        let mut state = self.0.lock().expect("sync snapshot lock");
++        state.pending = None;
++        state.pending_eligible.clear();
++        state.pending_strict_attempt = None;
++        state.published_eligible.clear();
+     }
+ }
+ 
+@@ -446,7 +559,8 @@ pub struct SyncCipherSnapshotClient {
+ 
+ impl SyncCipherSnapshotClient {
+     fn new(client: bitwarden_core::Client) -> Self {
+-        let sdk = client.sync();
++        let mut sdk = client.sync();
++        sdk.enable_strict_schema();
+         #[cfg(not(target_arch = "wasm32"))]
+         sdk.register_sync_handler(Arc::new(CryptoSyncHandler::new(client.clone())));
+         sdk.register_sync_handler(Arc::new(FolderSyncHandler::from_client(&client)));
+@@ -480,7 +594,20 @@ impl SyncCipherSnapshotClient {
+ 
+     /// Clone ciphers and organization keys together under one lock.
+     pub fn encrypted_snapshot(&self) -> SyncSnapshot {
+-        self.state.lock().expect("sync snapshot lock").published.clone()
++        self.state
++            .lock()
++            .expect("sync snapshot lock")
++            .published
++            .clone()
++    }
++
++    /// Capture strict metadata and the corresponding snapshot atomically.
++    pub fn strict_snapshot(&self) -> StrictSyncSnapshot {
++        let state = self.state.lock().expect("sync snapshot lock");
++        StrictSyncSnapshot {
++            snapshot: state.published.clone(),
++            eligible_ids: state.published_eligible.clone(),
++        }
+     }
+ 
+     /// Return encrypted organization keys from the last successful snapshot.
+@@ -505,8 +632,8 @@ impl PasswordManagerClient {
+ mod organization_snapshot_tests {
+     use super::*;
+     use bitwarden_api_api::models::{
+-        CipherDetailsResponseModel, CipherType, ProfileOrganizationResponseModel, ProfileResponseModel,
+-        SyncResponseModel,
++        CipherDetailsResponseModel, CipherType, ProfileOrganizationResponseModel,
++        ProfileResponseModel, SyncResponseModel,
+     };
+     use bitwarden_sync::{SyncErrorHandler, SyncHandler};
+ 
+@@ -543,6 +670,336 @@ mod organization_snapshot_tests {
+         ))
+     }
+ 
++    // All requests are intercepted before the SDK transport or authentication middleware.
++    // Unknown methods/routes/counts panic; there is no fallback or socket path.
++    const STRICT_FIXTURE: &str = r#"{
++        "profile":{"organizations":[]},
++        "ciphers":[{
++            "object":"cipher","id":"11111111-1111-4111-8111-111111111111",
++            "organizationId":null,"type":1,"data":null,"partialData":null,
++            "name":"2.xzDCDWqRBpHm42EilUvyVw==|nIrWV3l/EeTbWTnAznrK0Q==|sUj8ol2OTgvvTvD86a9i9XUP58hmtCEBqhck7xT5YNk=",
++            "notes":null,"login":{"uri":null,"uris":null,"username":null,"password":null,
++                "passwordRevisionDate":null,"totp":null,"autofillOnPageLoad":null,"fido2Credentials":null},
++            "card":null,"identity":null,"secureNote":null,"sshKey":null,"bankAccount":null,
++            "driversLicense":null,"passport":null,"fields":null,"passwordHistory":null,"attachments":null,
++            "organizationUseTotp":false,"revisionDate":"2025-01-01T00:00:00.123456789Z",
++            "creationDate":"2025-01-01T00:00:00Z","deletedDate":null,"reprompt":0,"key":null,
++            "folderId":null,"favorite":false,"edit":true,"viewPassword":true,
++            "archivedDate":null,"permissions":null,"collectionIds":[]
++        }]
++    }"#;
++
++    struct MemorySyncMiddleware {
++        sync_calls: std::sync::atomic::AtomicUsize,
++        revision_calls: std::sync::atomic::AtomicUsize,
++        entered: tokio::sync::Notify,
++        release: tokio::sync::Semaphore,
++    }
++    impl MemorySyncMiddleware {
++        fn new() -> Self {
++            Self {
++                sync_calls: std::sync::atomic::AtomicUsize::new(0),
++                revision_calls: std::sync::atomic::AtomicUsize::new(0),
++                entered: tokio::sync::Notify::new(),
++                release: tokio::sync::Semaphore::new(0),
++            }
++        }
++    }
++    #[async_trait::async_trait]
++    impl reqwest_middleware::Middleware for MemorySyncMiddleware {
++        async fn handle(
++            &self,
++            request: reqwest_middleware::reqwest::Request,
++            _extensions: &mut http::Extensions,
++            _next: reqwest_middleware::Next<'_>,
++        ) -> reqwest_middleware::Result<reqwest_middleware::reqwest::Response> {
++            use std::sync::atomic::Ordering;
++            assert_eq!(request.method(), reqwest_middleware::reqwest::Method::GET);
++            assert_eq!(request.url().scheme(), "https");
++            assert_eq!(request.url().host_str(), Some("strict-test.invalid"));
++            assert!(request.url().query().is_none());
++            let (status, body) = match request.url().path() {
++                "/accounts/revision-date" => {
++                    assert_eq!(self.revision_calls.fetch_add(1, Ordering::SeqCst), 0);
++                    (200, "0")
++                }
++                "/sync" => {
++                    let call = self.sync_calls.fetch_add(1, Ordering::SeqCst) + 1;
++                    assert!(call <= 12, "unexpected synthetic sync request");
++                    if matches!(call, 3..=5 | 9..=11) {
++                        self.entered.notify_one();
++                        self.release.acquire().await.unwrap().forget();
++                    }
++                    if call == 3 {
++                        (503, "{}")
++                    } else {
++                        (200, STRICT_FIXTURE)
++                    }
++                }
++                _ => panic!("unexpected synthetic route"),
++            };
++            let response = http::Response::builder()
++                .status(status)
++                .header(http::header::CONTENT_TYPE, "application/json")
++                .body(body)
++                .unwrap();
++            Ok(response.into())
++        }
++    }
++
++    struct MemoryCallback {
++        calls: std::sync::atomic::AtomicUsize,
++        fail_next: std::sync::atomic::AtomicBool,
++    }
++    #[async_trait::async_trait]
++    impl bitwarden_sync::SyncHandler for MemoryCallback {
++        async fn on_sync(
++            &self,
++            _response: &SyncResponseModel,
++        ) -> Result<(), bitwarden_sync::SyncHandlerError> {
++            use std::sync::atomic::Ordering;
++            self.calls.fetch_add(1, Ordering::SeqCst);
++            if self.fail_next.swap(false, Ordering::SeqCst) {
++                return Err("synthetic callback failure".into());
++            }
++            Ok(())
++        }
++    }
++
++    async fn wait_for_attempts(state: &Arc<std::sync::Mutex<SyncSnapshotState>>, expected: usize) {
++        for _ in 0..1000 {
++            if state.lock().unwrap().active_strict_attempts.len() == expected {
++                return;
++            }
++            tokio::task::yield_now().await;
++        }
++        panic!("strict attempt count not reached");
++    }
++
++    #[tokio::test]
++    async fn strict_snapshot_real_parser_sync_overlap_failure_and_recovery() {
++        use bitwarden_sync::SyncClientExt as _;
++        use std::sync::atomic::Ordering;
++        let transport = Arc::new(MemorySyncMiddleware::new());
++        let settings = bitwarden_core::ClientSettings {
++            api_url: "https://strict-test.invalid".into(),
++            identity_url: "https://strict-test.invalid".into(),
++            user_agent: "strict-sdk-synthetic".into(),
++            device_type: bitwarden_core::DeviceType::SDK,
++            device_identifier: None,
++            bitwarden_client_version: None,
++            bitwarden_package_type: None,
++        };
++        let client = bitwarden_core::Client::builder()
++            .with_settings(settings)
++            .with_middleware(vec![transport.clone()])
++            .build();
++        let mut sdk = client.sync();
++        sdk.enable_strict_schema();
++        let state = Arc::new(std::sync::Mutex::new(SyncSnapshotState::default()));
++        let handler = Arc::new(SyncSnapshotHandler(state.clone()));
++        let callback = Arc::new(MemoryCallback {
++            calls: std::sync::atomic::AtomicUsize::new(0),
++            fail_next: std::sync::atomic::AtomicBool::new(false),
++        });
++        sdk.register_sync_handler(handler.clone());
++        sdk.register_sync_handler(callback.clone());
++        sdk.register_error_handler(handler);
++        let snapshot_client = Arc::new(SyncCipherSnapshotClient {
++            sdk,
++            state: state.clone(),
++        });
++        let id = "11111111-1111-4111-8111-111111111111".parse().unwrap();
++
++        assert!(snapshot_client.sync(true).await.unwrap());
++        assert_eq!(snapshot_client.strict_snapshot().snapshot().generation, 1);
++        assert!(snapshot_client.strict_snapshot().is_proven(id));
++        assert_eq!(snapshot_client.encrypted_snapshot().ciphers.len(), 1);
++
++        assert!(
++            !tokio::time::timeout(
++                std::time::Duration::from_secs(3),
++                snapshot_client.sync(false)
++            )
++            .await
++            .unwrap()
++            .unwrap()
++        );
++        assert_eq!(transport.revision_calls.load(Ordering::SeqCst), 1);
++        assert_eq!(snapshot_client.encrypted_snapshot().generation, 1);
++        assert_eq!(snapshot_client.encrypted_snapshot().ciphers.len(), 1);
++        assert!(!snapshot_client.strict_snapshot().is_proven(id));
++        assert!(snapshot_client.sync(true).await.unwrap());
++        assert_eq!(snapshot_client.strict_snapshot().snapshot().generation, 2);
++        assert!(snapshot_client.strict_snapshot().is_proven(id));
++
++        let first = {
++            let snapshot_client = snapshot_client.clone();
++            tokio::spawn(async move { snapshot_client.sync(true).await })
++        };
++        tokio::time::timeout(
++            std::time::Duration::from_secs(3),
++            transport.entered.notified(),
++        )
++        .await
++        .unwrap();
++        assert_eq!(snapshot_client.encrypted_snapshot().generation, 2);
++        assert_eq!(snapshot_client.encrypted_snapshot().ciphers.len(), 1);
++        assert!(!snapshot_client.strict_snapshot().is_proven(id));
++        let second = {
++            let snapshot_client = snapshot_client.clone();
++            tokio::spawn(async move { snapshot_client.sync(true).await })
++        };
++        wait_for_attempts(&state, 2).await;
++        assert_eq!(transport.sync_calls.load(Ordering::SeqCst), 3);
++        assert!(!snapshot_client.strict_snapshot().is_proven(id));
++        transport.release.add_permits(1);
++        assert!(first.await.unwrap().is_err());
++        tokio::time::timeout(
++            std::time::Duration::from_secs(3),
++            transport.entered.notified(),
++        )
++        .await
++        .unwrap();
++        assert_eq!(snapshot_client.encrypted_snapshot().generation, 2);
++        assert!(!snapshot_client.strict_snapshot().is_proven(id));
++        transport.release.add_permits(1);
++        assert!(second.await.unwrap().unwrap());
++        assert_eq!(snapshot_client.strict_snapshot().snapshot().generation, 3);
++        assert!(snapshot_client.strict_snapshot().is_proven(id));
++
++        let cancelled = {
++            let snapshot_client = snapshot_client.clone();
++            tokio::spawn(async move { snapshot_client.sync(true).await })
++        };
++        tokio::time::timeout(
++            std::time::Duration::from_secs(3),
++            transport.entered.notified(),
++        )
++        .await
++        .unwrap();
++        assert!(!snapshot_client.strict_snapshot().is_proven(id));
++        cancelled.abort();
++        assert!(cancelled.await.unwrap_err().is_cancelled());
++        assert_eq!(state.lock().unwrap().active_strict_attempts.len(), 0);
++        assert!(!snapshot_client.strict_snapshot().is_proven(id));
++        assert!(snapshot_client.sync(true).await.unwrap());
++        assert_eq!(snapshot_client.strict_snapshot().snapshot().generation, 4);
++        assert!(snapshot_client.strict_snapshot().is_proven(id));
++
++        callback.fail_next.store(true, Ordering::SeqCst);
++        assert!(snapshot_client.sync(true).await.is_err());
++        assert_eq!(snapshot_client.encrypted_snapshot().generation, 4);
++        assert_eq!(snapshot_client.encrypted_snapshot().ciphers.len(), 1);
++        assert!(!snapshot_client.strict_snapshot().is_proven(id));
++        assert!(snapshot_client.sync(true).await.unwrap());
++        assert_eq!(snapshot_client.strict_snapshot().snapshot().generation, 5);
++        assert!(snapshot_client.strict_snapshot().is_proven(id));
++        let older = {
++            let snapshot_client = snapshot_client.clone();
++            tokio::spawn(async move { snapshot_client.sync(true).await })
++        };
++        tokio::time::timeout(
++            std::time::Duration::from_secs(3),
++            transport.entered.notified(),
++        )
++        .await
++        .unwrap();
++        let newer = {
++            let snapshot_client = snapshot_client.clone();
++            tokio::spawn(async move { snapshot_client.sync(true).await })
++        };
++        wait_for_attempts(&state, 2).await;
++        transport.release.add_permits(1);
++        assert!(older.await.unwrap().unwrap());
++        tokio::time::timeout(
++            std::time::Duration::from_secs(3),
++            transport.entered.notified(),
++        )
++        .await
++        .unwrap();
++        assert_eq!(snapshot_client.encrypted_snapshot().generation, 6);
++        assert!(!snapshot_client.strict_snapshot().is_proven(id));
++        transport.release.add_permits(1);
++        assert!(newer.await.unwrap().unwrap());
++        assert_eq!(snapshot_client.strict_snapshot().snapshot().generation, 7);
++        assert!(snapshot_client.strict_snapshot().is_proven(id));
++
++        let older = {
++            let snapshot_client = snapshot_client.clone();
++            tokio::spawn(async move { snapshot_client.sync(true).await })
++        };
++        tokio::time::timeout(
++            std::time::Duration::from_secs(3),
++            transport.entered.notified(),
++        )
++        .await
++        .unwrap();
++        let newer = {
++            let snapshot_client = snapshot_client.clone();
++            tokio::spawn(async move { snapshot_client.sync(true).await })
++        };
++        wait_for_attempts(&state, 2).await;
++        newer.abort();
++        assert!(newer.await.unwrap_err().is_cancelled());
++        transport.release.add_permits(1);
++        assert!(older.await.unwrap().unwrap());
++        assert_eq!(snapshot_client.encrypted_snapshot().generation, 8);
++        assert!(!snapshot_client.strict_snapshot().is_proven(id));
++        assert!(snapshot_client.sync(true).await.unwrap());
++        assert_eq!(snapshot_client.strict_snapshot().snapshot().generation, 9);
++        assert!(snapshot_client.strict_snapshot().is_proven(id));
++        assert_eq!(transport.sync_calls.load(Ordering::SeqCst), 12);
++        assert_eq!(callback.calls.load(Ordering::SeqCst), 10);
++        assert_eq!(state.lock().unwrap().active_strict_attempts.len(), 0);
++    }
++
++    #[tokio::test]
++    async fn strict_snapshot_marker_follows_its_generation() {
++        let h = handler();
++        let id = "11111111-1111-4111-8111-111111111111".parse().unwrap();
++        h.on_strict_sync_start(1);
++        h.prepare(&response(vec![], true), None, Some(1)).unwrap();
++        // This unit isolates publication; integrated test obtains real parser proof.
++        h.0.lock().unwrap().pending_eligible.insert(id);
++        h.on_sync_complete_for_strict_attempt(1).await;
++        h.on_strict_sync_end(1);
++        {
++            let state = h.0.lock().unwrap();
++            assert_eq!(state.published.generation, 1);
++            assert!(state.published_eligible.contains(&id));
++        }
++        h.on_strict_sync_start(2);
++        h.on_error(&bitwarden_sync::SyncError::AccountDeleted).await;
++        h.on_strict_sync_end(2);
++        {
++            let state = h.0.lock().unwrap();
++            assert_eq!(state.published.generation, 1);
++            assert_eq!(state.published.ciphers.len(), 1);
++            assert!(!state.published_eligible.contains(&id));
++        }
++        h.on_strict_sync_start(3);
++        h.prepare(&response(vec![], true), None, Some(3)).unwrap();
++        h.on_sync_complete_for_strict_attempt(3).await;
++        h.on_strict_sync_end(3);
++        let state = h.0.lock().unwrap();
++        assert_eq!(state.published.generation, 2);
++        assert!(!state.published_eligible.contains(&id));
++    }
++
++    #[tokio::test]
++    async fn strict_snapshot_unproven_model_never_grants_eligibility() {
++        let h = handler();
++        let proof =
++            bitwarden_api_api::apis::sync_api::StrictSyncResponse::unproven(response(vec![], true));
++        h.on_sync_with_strict_schema(&proof).await.unwrap();
++        h.on_sync_complete().await;
++        let state = h.0.lock().unwrap();
++        let id = "11111111-1111-4111-8111-111111111111".parse().unwrap();
++        assert_eq!(state.published.generation, 1);
++        assert!(!state.published_eligible.contains(&id));
++    }
++
+     #[tokio::test]
+     async fn paired_publication_and_revocation() {
+         let h = handler();
+@@ -582,7 +1039,12 @@ mod organization_snapshot_tests {
+         });
+         for generation in 1..=100 {
+             let present = generation % 2 == 1;
+-            h.on_sync(&response(if present { vec![org(ID, KEY)] } else { vec![] }, present)).await.unwrap();
++            h.on_sync(&response(
++                if present { vec![org(ID, KEY)] } else { vec![] },
++                present,
++            ))
++            .await
++            .unwrap();
+             h.on_sync_complete().await;
+         }
+         reader.join().unwrap();
+diff --git a/crates/bitwarden-sync/src/handler.rs b/crates/bitwarden-sync/src/handler.rs
+index bdb4489e..ae3fd1a8 100644
+--- a/crates/bitwarden-sync/src/handler.rs
++++ b/crates/bitwarden-sync/src/handler.rs
+@@ -31,6 +31,36 @@ pub trait SyncHandler: Send + Sync {
+     /// for converting these to domain types as needed and persisting data to local storage.
+     async fn on_sync(&self, response: &SyncResponseModel) -> Result<(), SyncHandlerError>;
+ 
++    /// Handle a sync response with a parser-owned, nonsecret schema sidecar.
++    /// Ordinary handlers retain their existing behavior.
++    async fn on_sync_with_strict_schema(
++        &self,
++        response: &bitwarden_api_api::apis::sync_api::StrictSyncResponse,
++    ) -> Result<(), SyncHandlerError> {
++        self.on_sync(response.response()).await
++    }
++
++    /// A strict snapshot sync attempt has started, before it waits or contacts the server.
++    /// Ordinary handlers inherit this no-op.
++    fn on_strict_sync_start(&self, _attempt: u64) {}
++
++    /// A strict snapshot sync attempt has ended, including on cancellation.
++    fn on_strict_sync_end(&self, _attempt: u64) {}
++
++    /// Process a strict response with its attempt identity.
++    async fn on_sync_with_strict_attempt(
++        &self,
++        response: &bitwarden_api_api::apis::sync_api::StrictSyncResponse,
++        _attempt: u64,
++    ) -> Result<(), SyncHandlerError> {
++        self.on_sync_with_strict_schema(response).await
++    }
++
++    /// Complete a strict response with its attempt identity.
++    async fn on_sync_complete_for_strict_attempt(&self, _attempt: u64) {
++        self.on_sync_complete().await;
++    }
++
+     /// Called after all handlers have finished processing [`on_sync`](SyncHandler::on_sync)
+     ///
+     /// Override this method to perform post-processing work that should happen after all
+diff --git a/crates/bitwarden-sync/src/sync_client.rs b/crates/bitwarden-sync/src/sync_client.rs
+index 3111a2f3..b7cd8f58 100644
+--- a/crates/bitwarden-sync/src/sync_client.rs
++++ b/crates/bitwarden-sync/src/sync_client.rs
+@@ -55,6 +55,30 @@ pub struct SyncClient {
+     error_handlers: HandlerRegistry<dyn SyncErrorHandler>,
+     sync_lock: Mutex<()>,
+     last_sync: Option<Setting<DateTime<Utc>>>,
++    strict_schema: bool,
++    strict_attempt_counter: std::sync::atomic::AtomicU64,
++}
++
++struct StrictAttemptGuard {
++    attempt: u64,
++    handlers: Vec<Arc<dyn SyncHandler>>,
++}
++
++impl StrictAttemptGuard {
++    fn new(attempt: u64, handlers: Vec<Arc<dyn SyncHandler>>) -> Self {
++        for handler in &handlers {
++            handler.on_strict_sync_start(attempt);
++        }
++        Self { attempt, handlers }
++    }
++}
++
++impl Drop for StrictAttemptGuard {
++    fn drop(&mut self) {
++        for handler in &self.handlers {
++            handler.on_strict_sync_end(self.attempt);
++        }
++    }
+ }
+ 
+ impl SyncClient {
+@@ -66,9 +90,16 @@ impl SyncClient {
+             error_handlers: HandlerRegistry::new(),
+             sync_lock: Mutex::new(()),
+             last_sync: client.platform().state().setting(LAST_SYNC).ok(),
++            strict_schema: false,
++            strict_attempt_counter: std::sync::atomic::AtomicU64::new(0),
+         }
+     }
+ 
++    /// Opt this SDK-owned snapshot client into wire schema provenance.
++    pub fn enable_strict_schema(&mut self) {
++        self.strict_schema = true;
++    }
++
+     /// Get the timestamp of the last successful sync or confirmed-up-to-date skip, if any.
+     pub async fn last_sync(&self) -> Option<DateTime<Utc>> {
+         match self.last_sync.as_ref()?.get().await {
+@@ -122,6 +153,29 @@ impl SyncClient {
+     /// registered error handlers before being returned to the caller. `last_sync` is never
+     /// bumped on an error path.
+     pub async fn sync(&self, request: SyncRequest) -> Result<bool, SyncError> {
++        // Revoke strict authority synchronously before waiting for another attempt or
++        // making the revision-date request. Drop also runs on cancellation.
++        let strict_attempt = if self.strict_schema {
++            let handlers = self.sync_handlers.handlers();
++            let previous = match self.strict_attempt_counter.fetch_update(
++                std::sync::atomic::Ordering::Relaxed,
++                std::sync::atomic::Ordering::Relaxed,
++                |value| value.checked_add(1),
++            ) {
++                Ok(value) => value,
++                Err(_) => {
++                    // Exhaustion cannot leave prior authority live.
++                    for handler in &handlers {
++                        handler.on_strict_sync_start(u64::MAX);
++                    }
++                    panic!("strict sync attempt overflow");
++                }
++            };
++            Some(StrictAttemptGuard::new(previous + 1, handlers))
++        } else {
++            None
++        };
++
+         // Wait for any in-progress sync to complete before starting a new one
+         let _guard = self.sync_lock.lock().await;
+ 
+@@ -154,9 +208,23 @@ impl SyncClient {
+         }
+ 
+         let result = async {
+-            let response = self.perform_sync(&request).await?;
+-            self.run_handlers(&response).await?;
+-            Ok(response)
++            if self.strict_schema {
++                let response = self
++                    .api_configurations
++                    .api_client
++                    .sync_api()
++                    .get_with_strict_schema(request.exclude_subdomains)
++                    .await?;
++                self.run_strict_handlers(
++                    &response,
++                    strict_attempt.as_ref().expect("strict attempt").attempt,
++                )
++                .await?;
++            } else {
++                let response = self.perform_sync(&request).await?;
++                self.run_handlers(&response).await?;
++            }
++            Ok::<(), SyncError>(())
+         }
+         .await;
+ 
+@@ -228,6 +296,24 @@ impl SyncClient {
+         Ok(())
+     }
+ 
++    async fn run_strict_handlers(
++        &self,
++        response: &bitwarden_api_api::apis::sync_api::StrictSyncResponse,
++        attempt: u64,
++    ) -> Result<(), SyncError> {
++        let handlers = self.sync_handlers.handlers();
++        for handler in &handlers {
++            handler
++                .on_sync_with_strict_attempt(response, attempt)
++                .await
++                .map_err(SyncError::HandlerFailed)?;
++        }
++        for handler in &handlers {
++            handler.on_sync_complete_for_strict_attempt(attempt).await;
++        }
++        Ok(())
++    }
++
+     /// Run all error handlers for a sync error
+     ///
+     /// All error handlers are called sequentially in registration order.
+@@ -318,6 +404,8 @@ mod tests {
+             error_handlers: HandlerRegistry::new(),
+             sync_lock: tokio::sync::Mutex::new(()),
+             last_sync: None,
++            strict_schema: false,
++            strict_attempt_counter: std::sync::atomic::AtomicU64::new(0),
+         }
+     }
+ 
+diff --git a/crates/bitwarden-uniffi/src/vault/ciphers.rs b/crates/bitwarden-uniffi/src/vault/ciphers.rs
+index 0574ae7a..739eb42a 100644
+--- a/crates/bitwarden-uniffi/src/vault/ciphers.rs
++++ b/crates/bitwarden-uniffi/src/vault/ciphers.rs
+@@ -1,3 +1,5 @@
++use std::sync::Arc;
++
+ use bitwarden_collections::collection::CollectionId;
+ use bitwarden_core::OrganizationId;
+ use bitwarden_vault::{
+@@ -6,7 +8,7 @@ use bitwarden_vault::{
+     EncryptionContext, FolderId,
+ };
+ 
+-use crate::Result;
++use crate::{Client, Result};
+ 
+ #[allow(missing_docs)]
+ #[derive(uniffi::Object)]
+@@ -232,3 +234,70 @@ impl CiphersClient {
+             .await?)
+     }
+ }
++
++/// Minimal strict preparation from a single SDK-owned published sync snapshot.
++/// This does not establish host acceptance or wire-model completeness.
++#[derive(uniffi::Object)]
++pub struct StrictPersonalPreparation {
++    cipher_id: CipherId,
++    generation: u64,
++    revision_token: String,
++    // Retains the producing SDK sync binding for a future same-client revalidation.
++    #[allow(dead_code)]
++    binding: Arc<crate::sync::SyncClientBinding>,
++}
++
++#[uniffi::export]
++impl StrictPersonalPreparation {
++    /// Selected cipher identity.
++    pub fn cipher_id(&self) -> CipherId {
++        self.cipher_id
++    }
++    /// Published SDK sync generation.
++    pub fn generation(&self) -> u64 {
++        self.generation
++    }
++    /// Opaque to callers; preserves the Rust chrono timestamp precision.
++    pub fn revision_token(&self) -> String {
++        self.revision_token.clone()
++    }
++}
++
++#[uniffi::export]
++impl Client {
++    /// Prepare only if the unique selected cipher remains in the same generation.
++    pub fn strict_prepare_personal_login(
++        &self,
++        cipher_id: CipherId,
++        expected_generation: u64,
++    ) -> Option<Arc<StrictPersonalPreparation>> {
++        let strict_snapshot = self.1.0.strict_snapshot();
++        let snapshot = strict_snapshot.snapshot();
++        if expected_generation == 0
++            || snapshot.generation != expected_generation
++            || !strict_snapshot.is_proven(cipher_id)
++        {
++            return None;
++        }
++        let mut matches = snapshot.ciphers.iter().filter(|c| c.id == Some(cipher_id));
++        let original = matches.next()?.clone();
++        if matches.next().is_some() {
++            return None;
++        }
++        let revision_token = self
++            .0
++            .vault()
++            .ciphers()
++            .strict_personal_revision(original)?;
++        let current = self.1.0.strict_snapshot();
++        if current.snapshot().generation != expected_generation || !current.is_proven(cipher_id) {
++            return None;
++        }
++        Some(Arc::new(StrictPersonalPreparation {
++            cipher_id,
++            generation: expected_generation,
++            revision_token,
++            binding: Arc::clone(&self.1),
++        }))
++    }
++}
+diff --git a/crates/bitwarden-vault/src/cipher/cipher.rs b/crates/bitwarden-vault/src/cipher/cipher.rs
+index 0793e90a..edc8b7b4 100644
+--- a/crates/bitwarden-vault/src/cipher/cipher.rs
++++ b/crates/bitwarden-vault/src/cipher/cipher.rs
+@@ -1742,13 +1742,91 @@ impl Decryptable<KeySlotIds, SymmetricKeySlotId, CipherView> for StrictDecrypt<C
+ 
+ /// Strict Cipher → CipherView decryption body, used by the `StrictDecrypt<Cipher>` impl
+ /// when the cipher is in the legacy field-level format.
++/// Strict write preparation for a legacy, fully represented personal login.
++/// This checks the typed SDK model only; unknown wire fields may already be lost.
++pub(crate) struct StrictPersonalDecrypt(pub(crate) Cipher);
++
++impl IdentifyKey<SymmetricKeySlotId> for StrictPersonalDecrypt {
++    fn key_identifier(&self) -> SymmetricKeySlotId {
++        self.0.key_identifier()
++    }
++}
++
++impl Decryptable<KeySlotIds, SymmetricKeySlotId, CipherView> for StrictPersonalDecrypt {
++    fn decrypt(
++        &self,
++        ctx: &mut KeyStoreContext<KeySlotIds>,
++        key: SymmetricKeySlotId,
++    ) -> Result<CipherView, CryptoError> {
++        let c = &self.0;
++        let mut attachment_ids = std::collections::HashSet::new();
++        if c.attachments.as_ref().is_some_and(|attachments| {
++            attachments.iter().any(|attachment| {
++                attachment
++                    .id
++                    .as_deref()
++                    .is_none_or(|id| id.is_empty() || !attachment_ids.insert(id))
++            })
++        }) {
++            return Err(CryptoError::Decrypt);
++        }
++
++        if c.id.is_none()
++            || c.organization_id.is_some()
++            || !c.collection_ids.is_empty()
++            || c.r#type != CipherType::Login
++            || c.login.is_none()
++            || c.login
++                .as_ref()
++                .and_then(|login| login.fido2_credentials.as_ref())
++                .is_some_and(|credentials| !credentials.is_empty())
++            || c.name.is_none()
++            || c.data.is_some()
++            || c.partial_data.is_some()
++            || c.deleted_date.is_some()
++            || c.archived_date.is_some()
++            || c.reprompt != CipherRepromptType::None
++            || !c.edit
++            || !c.view_password
++            || c.permissions.is_some()
++            || c.identity.is_some()
++            || c.card.is_some()
++            || c.secure_note.is_some()
++            || c.ssh_key.is_some()
++            || c.bank_account.is_some()
++            || c.drivers_license.is_some()
++            || c.passport.is_some()
++        {
++            return Err(CryptoError::Decrypt);
++        }
++        strict_decrypt_cipher_view_with_policy(c, ctx, key, true)
++    }
++}
++
+ fn strict_decrypt_cipher_view(
+     cipher: &Cipher,
+     ctx: &mut KeyStoreContext<KeySlotIds>,
+     key: SymmetricKeySlotId,
++) -> Result<CipherView, CryptoError> {
++    strict_decrypt_cipher_view_with_policy(cipher, ctx, key, false)
++}
++
++fn strict_decrypt_cipher_view_with_policy(
++    cipher: &Cipher,
++    ctx: &mut KeyStoreContext<KeySlotIds>,
++    key: SymmetricKeySlotId,
++    personal_write: bool,
+ ) -> Result<CipherView, CryptoError> {
+     let ciphers_key = Cipher::decrypt_cipher_key(ctx, key, &cipher.key)?;
+ 
++    // PasswordHistory's ordinary decrypt substitutes an empty string on failure,
++    // even from the SDK's otherwise strict cipher path. Validate each entry here.
++    if personal_write {
++        for history in cipher.password_history.iter().flatten() {
++            history.decrypt_for_strict_personal_edit(ctx, ciphers_key)?;
++        }
++    }
++
+     // Separate successful and failed attachment decryptions
+     let (attachments, attachment_decryption_failures) =
+         attachment::decrypt_attachments_with_failures(
+@@ -1822,6 +1900,25 @@ fn strict_decrypt_cipher_view(
+         archived_date: cipher.archived_date,
+     };
+ 
++    if personal_write {
++        if view
++            .attachment_decryption_failures
++            .as_ref()
++            .is_some_and(|f| !f.is_empty())
++            || view.attachments.as_ref().is_some_and(|a| {
++                a.iter()
++                    .any(|a| a.id.as_ref().is_none_or(|id| id.is_empty()))
++            })
++            || view
++                .login
++                .as_ref()
++                .and_then(|l| l.uris.as_ref())
++                .is_some_and(|uris| uris.iter().any(|uri| !uri.is_checksum_valid()))
++        {
++            return Err(CryptoError::Decrypt);
++        }
++    }
++
+     // For compatibility we only remove URLs with invalid checksums if the cipher has a key
+     // or the user is on Crypto V2
+     if view.key.is_some()
+@@ -4247,6 +4344,164 @@ mod tests {
+             view
+         }
+ 
++        #[test]
++        fn strict_personal_valid_and_corrupt_notes() {
++            let key_store = make_key_store();
++            let cipher = encrypt_legacy(base_login_view(), &key_store);
++            let view: CipherView = key_store
++                .decrypt(&StrictPersonalDecrypt(cipher.clone()))
++                .unwrap();
++            assert_eq!(
++                view.login.unwrap().username.as_deref(),
++                Some("alice@example.com")
++            );
++            let mut corrupt = cipher.clone();
++            corrupt.notes = Some(TEST_ENC_STRING_1.parse().unwrap());
++            assert!(
++                key_store
++                    .decrypt::<_, _, CipherView>(&StrictPersonalDecrypt(corrupt))
++                    .is_err()
++            );
++            let mut corrupt_history = cipher;
++            corrupt_history.password_history = Some(vec![
++                serde_json::from_value(serde_json::json!({
++                    "password": TEST_ENC_STRING_1,
++                    "lastUsedDate": "2024-01-30T17:55:36.150Z",
++                }))
++                .unwrap(),
++            ]);
++            assert!(
++                key_store
++                    .decrypt::<_, _, CipherView>(&StrictPersonalDecrypt(corrupt_history))
++                    .is_err()
++            );
++        }
++
++        #[test]
++        fn strict_personal_rejects_tampered_uri_and_unsupported_shapes() {
++            let key_store = make_key_store();
++            let mut view = base_login_view();
++            view.login.as_mut().unwrap().uris = Some(vec![LoginUriView {
++                uri: Some("https://example.com".into()),
++                r#match: None,
++                uri_checksum: None,
++            }]);
++            let cipher = encrypt_legacy(view, &key_store);
++            assert!(
++                key_store
++                    .decrypt::<_, _, CipherView>(&StrictPersonalDecrypt(cipher.clone()))
++                    .is_ok()
++            );
++            let mut bad_uri = cipher.clone();
++            bad_uri.login.as_mut().unwrap().uris.as_mut().unwrap()[0].uri_checksum = None;
++            assert!(
++                key_store
++                    .decrypt::<_, _, CipherView>(&StrictPersonalDecrypt(bad_uri))
++                    .is_err()
++            );
++            let mut tampered = cipher.clone();
++            let uri = &mut tampered.login.as_mut().unwrap().uris.as_mut().unwrap()[0];
++            uri.uri_checksum = uri.uri.clone();
++            assert!(
++                key_store
++                    .decrypt::<_, _, CipherView>(&StrictPersonalDecrypt(tampered))
++                    .is_err()
++            );
++            let mut partial = cipher.clone();
++            partial.partial_data = Some("{}".into());
++            assert!(
++                key_store
++                    .decrypt::<_, _, CipherView>(&StrictPersonalDecrypt(partial))
++                    .is_err()
++            );
++            let mut archived = cipher;
++            archived.archived_date = Some(archived.revision_date);
++            assert!(
++                key_store
++                    .decrypt::<_, _, CipherView>(&StrictPersonalDecrypt(archived))
++                    .is_err()
++            );
++        }
++
++        #[test]
++        fn strict_personal_preserves_history_and_rejects_attachment_and_fido_failures() {
++            let key_store = make_key_store();
++            let mut input = base_login_view();
++            input.notes = Some("synthetic notes".into());
++            input.password_history = Some(vec![PasswordHistoryView {
++                password: "synthetic old value".into(),
++                last_used_date: "2024-01-30T17:55:36.150Z".parse().unwrap(),
++            }]);
++            input.attachments = Some(vec![AttachmentView {
++                id: Some("synthetic-id".into()),
++                url: None,
++                size: None,
++                size_name: None,
++                file_name: Some("synthetic.txt".into()),
++                key: None,
++            }]);
++            let cipher = encrypt_legacy(input, &key_store);
++            let view: CipherView = key_store
++                .decrypt(&StrictPersonalDecrypt(cipher.clone()))
++                .unwrap();
++            assert_eq!(view.notes.as_deref(), Some("synthetic notes"));
++            assert_eq!(view.password_history.unwrap().len(), 1);
++            assert_eq!(view.attachments.unwrap().len(), 1);
++            let mut missing_id = cipher.clone();
++            missing_id.attachments.as_mut().unwrap()[0].id = None;
++            assert!(
++                key_store
++                    .decrypt::<_, _, CipherView>(&StrictPersonalDecrypt(missing_id))
++                    .is_err()
++            );
++            let mut bad_attachment = cipher;
++            bad_attachment.attachments = Some(failing_attachments());
++            assert!(
++                key_store
++                    .decrypt::<_, _, CipherView>(&StrictPersonalDecrypt(bad_attachment))
++                    .is_err()
++            );
++            let mut fido = base_login_view();
++            fido.login.as_mut().unwrap().fido2_credentials = Some(vec![generate_fido2_view()]);
++            assert!(
++                key_store
++                    .decrypt::<_, _, CipherView>(&StrictPersonalDecrypt(encrypt_legacy(
++                        fido, &key_store
++                    )))
++                    .is_err()
++            );
++        }
++
++        #[test]
++        fn strict_personal_rejects_duplicate_attachment_ids() {
++            let key_store = make_key_store();
++            let mut input = base_login_view();
++            let first = AttachmentView {
++                id: Some("attachment-a".into()),
++                url: None,
++                size: None,
++                size_name: None,
++                file_name: Some("synthetic.txt".into()),
++                key: None,
++            };
++            input.attachments = Some(vec![first.clone(), first.clone()]);
++            let duplicate = encrypt_legacy(input.clone(), &key_store);
++            let ordinary: CipherView = key_store.decrypt(&duplicate).unwrap();
++            assert_eq!(ordinary.attachments.unwrap().len(), 2);
++            assert!(
++                key_store
++                    .decrypt::<_, _, CipherView>(&StrictPersonalDecrypt(duplicate))
++                    .is_err()
++            );
++            input.attachments.as_mut().unwrap()[1].id = Some("attachment-b".into());
++            let unique = encrypt_legacy(input, &key_store);
++            assert!(
++                key_store
++                    .decrypt::<_, _, CipherView>(&StrictPersonalDecrypt(unique))
++                    .is_ok()
++            );
++        }
++
+         /// Blob cipher → `CipherView` dispatch works end-to-end.
+         #[test]
+         fn dispatches_blob_to_cipher_view() {
+diff --git a/crates/bitwarden-vault/src/cipher/cipher_client/mod.rs b/crates/bitwarden-vault/src/cipher/cipher_client/mod.rs
+index 6ec41e63..f22f69be 100644
+--- a/crates/bitwarden-vault/src/cipher/cipher_client/mod.rs
++++ b/crates/bitwarden-vault/src/cipher/cipher_client/mod.rs
+@@ -17,7 +17,10 @@ use super::EncryptionContext;
+ use crate::Fido2CredentialFullView;
+ use crate::{
+     Cipher, CipherError, CipherListView, CipherView, DecryptError, EncryptError,
+-    cipher::cipher::{DecryptCipherListResult, DecryptCipherResult, EncryptMode, StrictDecrypt},
++    cipher::cipher::{
++        DecryptCipherListResult, DecryptCipherResult, EncryptMode, StrictDecrypt,
++        StrictPersonalDecrypt,
++    },
+     cipher_client::admin::CipherAdminClient,
+ };
+ 
+@@ -334,6 +337,19 @@ impl CiphersClient {
+ 
+ #[allow(deprecated)]
+ impl CiphersClient {
++    /// Validate a typed legacy personal login without exposing its plaintext.
++    /// The caller must bind the supplied cipher to a current SDK-owned snapshot.
++    pub fn strict_personal_revision(&self, cipher: Cipher) -> Option<String> {
++        let revision = cipher
++            .revision_date
++            .to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true);
++        let _: CipherView = self
++            .key_store
++            .decrypt(&StrictPersonalDecrypt(cipher))
++            .ok()?;
++        Some(revision)
++    }
++
+     fn get_repository(&self) -> Result<Arc<dyn Repository<Cipher>>, RepositoryError> {
+         Ok(self.client.platform().state().get::<Cipher>()?)
+     }
+@@ -361,6 +377,20 @@ mod tests {
+         cipher::blob::try_parse_blob,
+     };
+ 
++    #[tokio::test]
++    async fn strict_personal_preserves_same_second_fractional_revision() {
++        let client = Client::init_test_account(test_bitwarden_com_account()).await;
++        let ciphers = client.vault().ciphers();
++        let mut first = test_cipher();
++        first.revision_date = "2024-05-31T11:20:58.123456789Z".parse().unwrap();
++        let mut second = first.clone();
++        second.revision_date = "2024-05-31T11:20:58.123456790Z".parse().unwrap();
++        let a = ciphers.strict_personal_revision(first).unwrap();
++        let b = ciphers.strict_personal_revision(second).unwrap();
++        assert_eq!(a, "2024-05-31T11:20:58.123456789Z");
++        assert_ne!(a, b);
++    }
++
+     fn test_cipher() -> Cipher {
+         Cipher {
+             partial_data: None,
+diff --git a/crates/bitwarden-vault/src/password_history.rs b/crates/bitwarden-vault/src/password_history.rs
+index b256227e..707901ab 100644
+--- a/crates/bitwarden-vault/src/password_history.rs
++++ b/crates/bitwarden-vault/src/password_history.rs
+@@ -56,6 +56,20 @@ impl CompositeEncryptable<KeySlotIds, SymmetricKeySlotId, PasswordHistory> for P
+     }
+ }
+ 
++impl PasswordHistory {
++    /// Validate history without the lossy fallback of the generic decrypt path.
++    pub(crate) fn decrypt_for_strict_personal_edit(
++        &self,
++        ctx: &mut KeyStoreContext<KeySlotIds>,
++        key: SymmetricKeySlotId,
++    ) -> Result<PasswordHistoryView, CryptoError> {
++        Ok(PasswordHistoryView {
++            password: self.password.decrypt(ctx, key)?,
++            last_used_date: self.last_used_date,
++        })
++    }
++}
++
+ impl Decryptable<KeySlotIds, SymmetricKeySlotId, PasswordHistoryView> for PasswordHistory {
+     fn decrypt(
+         &self,

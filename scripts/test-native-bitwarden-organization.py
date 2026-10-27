@@ -94,6 +94,7 @@ def run(command: list[str], *, cwd: Path, env: dict[str, str], timeout: int,
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
     except OSError as error:
         raise failure('launch', error) from None
+    timeout_cleanup_complete = False
     try:
         stdout, _ = process.communicate(data, timeout=timeout)
     except subprocess.TimeoutExpired:
@@ -102,12 +103,14 @@ def run(command: list[str], *, cwd: Path, env: dict[str, str], timeout: int,
             process.communicate()
         except OSError as error:
             raise failure('timeout cleanup communicate', error) from None
+        timeout_cleanup_complete = True
         raise ProofError('child timed out') from None
     except OSError as error:
         raise failure('communicate', error) from None
     finally:
         # Also terminate descendants left behind by an otherwise exited child.
-        kill_group('cleanup signal')
+        if not timeout_cleanup_complete:
+            kill_group('cleanup signal')
     if process.returncode:
         raise ProofError('child command failed')
     return stdout

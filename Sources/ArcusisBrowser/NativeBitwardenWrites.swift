@@ -45,3 +45,37 @@ protocol NativeBitwardenWriteBackend: Sendable {
     revision: Date, input: NativeBitwardenWriteInput
   ) async throws -> NativeBitwardenWriteReceipt
 }
+
+/// An in-memory lookup key, not evidence of browser ownership or user consent.
+struct NativeBitwardenStrictUpdateHandle: Sendable, Equatable {
+  let id: UUID
+  init() { id = UUID() }
+}
+
+struct NativeBitwardenStrictUpdateInput: Sendable, CustomStringConvertible,
+  CustomDebugStringConvertible
+{
+  let username: String?
+  let password: String
+  var description: String { "NativeBitwardenStrictUpdateInput(<redacted>)" }
+  var debugDescription: String { description }
+
+  func validate() throws {
+    guard
+      username.map({ $0.utf8.count <= NativeBitwardenVaultSnapshot.maximumUsernameBytes }) ?? true,
+      !password.isEmpty, password.utf8.count <= 16_384
+    else { throw NativeBitwardenWriteError.invalidInput }
+  }
+}
+
+/// Internal plumbing only. The caller must establish and revalidate ownership and consent.
+protocol NativeBitwardenStrictWriteBackend: Sendable {
+  func prepareStrictUpdate(
+    access: NativeBitwardenFillAccess, context: PasswordFillContext, cipherID: UUID
+  ) async throws -> NativeBitwardenStrictUpdateHandle
+  func cancelStrictUpdate(sessionID: UUID, handle: NativeBitwardenStrictUpdateHandle) async
+  func strictUpdate(
+    access: NativeBitwardenFillAccess, context: PasswordFillContext,
+    handle: NativeBitwardenStrictUpdateHandle, input: NativeBitwardenStrictUpdateInput
+  ) async throws
+}

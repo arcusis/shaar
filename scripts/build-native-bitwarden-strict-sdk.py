@@ -15,6 +15,7 @@ import stat
 import subprocess
 import sys
 import tomllib
+import types
 from pathlib import Path, PurePosixPath
 from typing import NamedTuple
 
@@ -85,6 +86,48 @@ HEX64 = re.compile(r'^[0-9a-f]{64}$')
 HEX40 = re.compile(r'^[0-9a-f]{40}$')
 SANDBOX = '/usr/bin/sandbox-exec'
 NO_NETWORK = '(version 1)(allow default)(deny network*)'
+HOSTED_PIN_SHA256 = 'c7f71d14a29abfa5a4dca441c49fce5e6a87127d4fff8a206af793b9558b3489'
+
+
+def load_hosted_preparer(path: Path, checkpoint: Path, checkpoint_sha: str):
+    require_regular(path)
+    require_regular(checkpoint)
+    if not HEX64.fullmatch(checkpoint_sha) or digest(checkpoint) != checkpoint_sha:
+        raise ValueError('hosted checkpoint digest mismatch')
+    record = json_bytes(checkpoint.read_bytes())
+    expected_names = {'scripts/build-native-bitwarden-strict-sdk.py',
+                      'scripts/prepare-native-bitwarden-hosted-inputs.py',
+                      'ThirdParty/BitwardenStrictEditSpike/hosted-inputs.pin.json'}
+    if (not isinstance(record, dict) or set(record) != {'schema', 'files'} or
+        type(record['schema']) is not int or record['schema'] != 1 or
+        not isinstance(record['files'], dict) or set(record['files']) != expected_names):
+        raise ValueError('hosted checkpoint schema')
+    paths = {'scripts/build-native-bitwarden-strict-sdk.py': Path(__file__).absolute(),
+             'scripts/prepare-native-bitwarden-hosted-inputs.py': path,
+             'ThirdParty/BitwardenStrictEditSpike/hosted-inputs.pin.json': ROOT / 'ThirdParty/BitwardenStrictEditSpike/hosted-inputs.pin.json'}
+    for name, item in paths.items():
+        if digest(item) != record['files'][name]:
+            raise ValueError('hosted checkpoint source drift')
+    if record['files']['ThirdParty/BitwardenStrictEditSpike/hosted-inputs.pin.json'] != HOSTED_PIN_SHA256:
+        raise ValueError('hosted pin mismatch')
+    source = path.read_bytes()
+    if sha(source) != record['files']['scripts/prepare-native-bitwarden-hosted-inputs.py']:
+        raise ValueError('hosted preparer changed')
+    module = types.ModuleType('hosted_sdk9_inputs')
+    module.__file__ = str(path)
+    exec(compile(source, str(path), 'exec'), module.__dict__)
+    return module, paths
+
+
+def hosted_input_profile(profile: SourceProfile, historical: tuple, hosted_values: tuple) -> bool:
+    selected = any(value is not None for value in hosted_values)
+    if selected:
+        if (profile != SDK9_PROFILE or any(value is None for value in hosted_values) or
+            any(value is not None for value in historical)):
+            raise ValueError('hosted and historical input profiles cannot be mixed')
+    elif any(value is None for value in historical):
+        raise ValueError('historical profile requires both Cargo caches')
+    return selected
 
 
 def sha(data: bytes) -> str:
@@ -496,7 +539,8 @@ def verify_source(helper, sdk: Path, pin: dict, env: dict[str, str]) -> None:
 
 
 def stage_package(helper, sdk: Path, generated: Path, dylib: Path, pkg: Path,
-                  pin: dict, mode: str, binding: dict[str, str], profile: SourceProfile = SDK8_PROFILE) -> dict:
+                  pin: dict, mode: str, binding: dict[str, str], profile: SourceProfile = SDK8_PROFILE,
+                  hosted_provenance: dict | None = None) -> dict:
     maps = helper.stage_generated_sources(sdk, generated, pkg)
     ffi = pkg / 'Sources/BitwardenFFI/include'
     notices = pkg / 'ThirdPartyNotices'
@@ -554,6 +598,8 @@ def stage_package(helper, sdk: Path, generated: Path, dylib: Path, pkg: Path,
     if profile == SDK9_PROFILE:
         manifest.update(profile='sdk9-service-shapes', serviceCandidateSHA256=SERVICE_CANDIDATE_SHA256,
                         servicePatchSHA256=SERVICE_PATCH_SHA256)
+    if hosted_provenance is not None:
+        manifest['hostedInputProvenance'] = hosted_provenance
     (pkg / 'build-manifest.json').write_text(json.dumps(manifest, sort_keys=True, indent=2) + '\n')
     actual = validate_package_inventory(pkg, expected | {'build-manifest.json'})
     if any(actual[k] != v for k, v in files.items()):
@@ -575,11 +621,26 @@ def main() -> int:
     parser.add_argument('--patch-root', type=Path, required=True)
     parser.add_argument('--write-candidate', type=Path, required=True)
     parser.add_argument('--source-review', type=Path, required=True)
-    parser.add_argument('--cargo-registry', type=Path, required=True)
-    parser.add_argument('--cargo-git', type=Path, required=True)
+    parser.add_argument('--cargo-registry', type=Path)
+    parser.add_argument('--cargo-git', type=Path)
+    parser.add_argument('--hosted-inputs', type=Path)
+    parser.add_argument('--hosted-preparer', type=Path)
+    parser.add_argument('--hosted-checkpoint', type=Path)
+    parser.add_argument('--hosted-checkpoint-sha256')
+    parser.add_argument('--hosted-rustup-home', type=Path)
+    parser.add_argument('--hosted-cargo', type=Path)
     parser.add_argument('--consumer-source', type=Path, required=True)
     args = parser.parse_args()
     profile = SDK8_PROFILE if args.profile == 'sdk8' else SDK9_PROFILE
+    hosted_args = (args.hosted_inputs, args.hosted_preparer, args.hosted_checkpoint,
+                   args.hosted_checkpoint_sha256, args.hosted_rustup_home, args.hosted_cargo)
+    hosted = hosted_input_profile(profile, (args.cargo_registry, args.cargo_git), hosted_args)
+    if hosted:
+        hosted_module, hosted_paths = load_hosted_preparer(
+            args.hosted_preparer, args.hosted_checkpoint, args.hosted_checkpoint_sha256)
+        require_directory(args.hosted_inputs)
+        require_directory(args.hosted_rustup_home)
+        require_regular(args.hosted_cargo)
     service_args = (args.service_patch, args.service_candidate, args.service_source_review, args.service_primary)
     if profile == SDK8_PROFILE:
         if any(value is not None for value in service_args):
@@ -606,8 +667,11 @@ def main() -> int:
         pin = validate_service_pin(service_pin, base_pin, service_candidate)
         validate_service_review(json_bytes(args.service_source_review.read_bytes()), service_pin)
         verify_primary_sources(args.service_primary, service_candidate)
-    for path in (args.upstream, args.patch_root, args.cargo_registry, args.cargo_git):
+    for path in (args.upstream, args.patch_root):
         require_directory(path)
+    if not hosted:
+        require_directory(args.cargo_registry)
+        require_directory(args.cargo_git)
     for path in (args.write_candidate, args.source_review, args.consumer_source, args.legacy_builder):
         require_regular(path)
     if digest(args.source_review) != SOURCE_REVIEW:
@@ -625,12 +689,13 @@ def main() -> int:
         require_regular(path)
         if digest(path) != entry['sha256']:
             raise ValueError('patch digest mismatch')
-    _, registry_hash, registry_count = file_inventory(args.cargo_registry)
-    if (registry_hash, registry_count) != (pin['cargoRegistrySHA256'], pin['cargoRegistryEntries']):
-        raise ValueError('offline registry inventory mismatch')
-    _, git_hash, git_count = file_inventory(args.cargo_git, allow_git_dirs=True)
-    if (git_hash, git_count) != (pin['cargoGitSHA256'], pin['cargoGitEntries']):
-        raise ValueError('offline git cache inventory mismatch')
+    if not hosted:
+        _, registry_hash, registry_count = file_inventory(args.cargo_registry)
+        if (registry_hash, registry_count) != (pin['cargoRegistrySHA256'], pin['cargoRegistryEntries']):
+            raise ValueError('offline registry inventory mismatch')
+        _, git_hash, git_count = file_inventory(args.cargo_git, allow_git_dirs=True)
+        if (git_hash, git_count) != (pin['cargoGitSHA256'], pin['cargoGitEntries']):
+            raise ValueError('offline git cache inventory mismatch')
     if platform.system() != 'Darwin' or platform.machine() != 'arm64':
         raise ValueError('requires arm64 macOS')
     require_directory(profile.work)
@@ -640,10 +705,20 @@ def main() -> int:
         raise ValueError('owned output must be a fresh direct child')
     helper = load_packaging_helpers(args.legacy_builder)
     env = {name: os.environ[name] for name in ('PATH', 'HOME', 'TMPDIR') if name in os.environ}
-    rust = run(helper, ['rustc', '+1.98.0', '-vV'], ROOT, env, 30)
+    if hosted:
+        out.mkdir(mode=0o700)
+        hosted_home = out / 'hosted-home'
+        hosted_home.mkdir(mode=0o700)
+        env.update(HOME=str(hosted_home), RUSTUP_HOME=str(args.hosted_rustup_home),
+                   PATH=str(args.hosted_cargo.parent) + ':/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin')
+        rust_cmd = [str(args.hosted_cargo.parent / 'rustc'), '-vV']
+    else:
+        rust_cmd = ['rustc', '+1.98.0', '-vV']
+    rust = run(helper, rust_cmd, ROOT, env, 30)
     if not rust.startswith('rustc 1.98.0 (88d9e12ae 2026-08-18)\n') or 'host: aarch64-apple-darwin\n' not in rust:
         raise ValueError('Rust toolchain identity mismatch')
-    out.mkdir(mode=0o700)
+    if not hosted:
+        out.mkdir(mode=0o700)
     helper.LOG_DIR = out / 'logs'
     (out / 'toolchain.txt').write_text(rust)
     sdk = out / 'source'
@@ -667,16 +742,34 @@ def main() -> int:
         verify_service_transition(helper, sdk, pin, service_candidate, env)
     cargo_home = out / 'cargo-home'
     cargo_home.mkdir()
-    shutil.copytree(args.cargo_registry, cargo_home / 'registry', symlinks=True)
-    shutil.copytree(args.cargo_git, cargo_home / 'git', symlinks=True)
-    _, copied_hash, copied_count = file_inventory(cargo_home / 'registry')
-    _, source_hash, source_count = file_inventory(args.cargo_registry)
-    if (copied_hash, copied_count, source_hash, source_count) != (registry_hash, registry_count, registry_hash, registry_count):
-        raise ValueError('offline registry changed during copy')
-    _, copied_git_hash, copied_git_count = file_inventory(cargo_home / 'git', allow_git_dirs=True)
-    _, source_git_hash, source_git_count = file_inventory(args.cargo_git, allow_git_dirs=True)
-    if (copied_git_hash, copied_git_count, source_git_hash, source_git_count) != (git_hash, git_count, git_hash, git_count):
-        raise ValueError('offline git cache changed during copy')
+    hosted_provenance = None
+    if hosted:
+        hosted_pin = ROOT / 'ThirdParty/BitwardenStrictEditSpike/hosted-inputs.pin.json'
+        hosted_proof = hosted_module.validate_inputs(
+            sdk, args.hosted_inputs, hosted_pin, args.hosted_rustup_home, args.hosted_cargo)
+        hosted_provenance = {'profile': 'hosted-sdk9-public-source', 'checkpointSHA256': args.hosted_checkpoint_sha256,
+                             'pinSHA256': HOSTED_PIN_SHA256,
+                             'cargoCommit': hosted_proof['cargoCommit'],
+                             'sourceInventorySHA256': sha(json.dumps(hosted_proof, sort_keys=True, separators=(',', ':')).encode()),
+                             'networkRouteProven': False}
+        staged_vendor = out / 'hosted-vendor'
+        shutil.copytree(args.hosted_inputs / 'vendor', staged_vendor, symlinks=False)
+        if hosted_module.inventory(staged_vendor) != hosted_proof['vendor']:
+            raise ValueError('hosted vendor changed during copy')
+        raw_config = (args.hosted_inputs / 'vendor-config.toml').read_text()
+        (cargo_home / 'config.toml').write_text(hosted_module.replacement_config(
+            raw_config, args.hosted_inputs / 'vendor', staged_vendor))
+    else:
+        shutil.copytree(args.cargo_registry, cargo_home / 'registry', symlinks=True)
+        shutil.copytree(args.cargo_git, cargo_home / 'git', symlinks=True)
+        _, copied_hash, copied_count = file_inventory(cargo_home / 'registry')
+        _, source_hash, source_count = file_inventory(args.cargo_registry)
+        if (copied_hash, copied_count, source_hash, source_count) != (registry_hash, registry_count, registry_hash, registry_count):
+            raise ValueError('offline registry changed during copy')
+        _, copied_git_hash, copied_git_count = file_inventory(cargo_home / 'git', allow_git_dirs=True)
+        _, source_git_hash, source_git_count = file_inventory(args.cargo_git, allow_git_dirs=True)
+        if (copied_git_hash, copied_git_count, source_git_hash, source_git_count) != (git_hash, git_count, git_hash, git_count):
+            raise ValueError('offline git cache changed during copy')
     target = out / 'cargo-target'
     env = dict(env, CARGO_HOME=str(cargo_home), CARGO_TARGET_DIR=str(target),
                CARGO_NET_OFFLINE='true', CARGO_BUILD_JOBS='2', RUSTUP_AUTO_INSTALL='0',
@@ -685,7 +778,8 @@ def main() -> int:
                RUSTFLAGS='-C link-arg=-mmacosx-version-min=26.0 --cfg bitwarden_ensure_non_commercial')
     common = ['--offline', '--locked', '--jobs', '2', '--manifest-path', str(sdk / 'Cargo.toml'),
               '--target', 'aarch64-apple-darwin']
-    run(helper, ['cargo', '+1.98.0', 'build', *common, '--release', '--package', 'uniffi-bindgen'], sdk, env)
+    cargo_cmd = [str(args.hosted_cargo)] if hosted else ['cargo', '+1.98.0']
+    run(helper, [*cargo_cmd, 'build', *common, '--release', '--package', 'uniffi-bindgen'], sdk, env)
     bindgen = target / 'aarch64-apple-darwin/release/uniffi-bindgen'
     require_regular(bindgen)
     generator_hash = digest(bindgen)
@@ -693,7 +787,7 @@ def main() -> int:
     release_binding = None
     for mode in ('release', 'debug'):
         flags = ['--release'] if mode == 'release' else []
-        run(helper, ['cargo', '+1.98.0', 'rustc', *common, *flags, '--package', 'bitwarden-uniffi', '--',
+        run(helper, [*cargo_cmd, 'rustc', *common, *flags, '--package', 'bitwarden-uniffi', '--',
                      '-C', 'link-arg=-Wl,-install_name,@rpath/libbitwarden_uniffi.dylib'], sdk, env)
         dylib = target / 'aarch64-apple-darwin' / mode / 'libbitwarden_uniffi.dylib'
         require_regular(dylib)
@@ -715,7 +809,7 @@ def main() -> int:
         if digest(bindgen) != generator_hash or digest(dylib) != dylib_hash:
             raise ValueError('generator or dylib changed')
         pkg = out / ('Package-' + mode)
-        manifest = stage_package(helper, sdk, generated, dylib, pkg, pin, mode, binding, profile)
+        manifest = stage_package(helper, sdk, generated, dylib, pkg, pin, mode, binding, profile, hosted_provenance)
         manifest_hash = digest(pkg / 'build-manifest.json')
         _, package_before_hash, package_before_count = file_inventory(pkg)
         consumer_dir = out / ('consumer-' + mode)
@@ -772,12 +866,22 @@ def main() -> int:
                           'inventorySHA256': package_after_hash, 'inventoryEntries': package_after_count,
                           'consumerBinarySHA256': consumer_binary_hash,
                           'testOnly': mode == 'debug', 'consumerCompiled': True, 'consumerExecuted': False}
-    _, final_registry_hash, final_registry_count = file_inventory(args.cargo_registry)
-    if (final_registry_hash, final_registry_count) != (registry_hash, registry_count):
-        raise ValueError('offline registry changed during build')
-    _, final_git_hash, final_git_count = file_inventory(args.cargo_git, allow_git_dirs=True)
-    if (final_git_hash, final_git_count) != (git_hash, git_count):
-        raise ValueError('offline git cache changed during build')
+    if hosted:
+        if (hosted_module.validate_inputs(sdk, args.hosted_inputs, hosted_pin,
+                                          args.hosted_rustup_home, args.hosted_cargo) != hosted_proof or
+            hosted_module.inventory(staged_vendor) != hosted_proof['vendor'] or
+            digest(args.hosted_checkpoint) != args.hosted_checkpoint_sha256):
+            raise ValueError('hosted inputs changed during build')
+        for name, item in hosted_paths.items():
+            if digest(item) != json_bytes(args.hosted_checkpoint.read_bytes())['files'][name]:
+                raise ValueError('hosted checkpoint source changed')
+    else:
+        _, final_registry_hash, final_registry_count = file_inventory(args.cargo_registry)
+        if (final_registry_hash, final_registry_count) != (registry_hash, registry_count):
+            raise ValueError('offline registry changed during build')
+        _, final_git_hash, final_git_count = file_inventory(args.cargo_git, allow_git_dirs=True)
+        if (final_git_hash, final_git_count) != (git_hash, git_count):
+            raise ValueError('offline git cache changed during build')
     if digest(args.legacy_builder) != LEGACY_SHA256 or digest(args.consumer_source) != pin['consumerSHA256']:
         raise ValueError('reviewed helper or consumer changed during build')
     if digest(args.source_review) != SOURCE_REVIEW:
@@ -805,6 +909,8 @@ def main() -> int:
         receipt.update(profile='sdk9-service-shapes', sdk8PinSHA256=SDK8_PIN_SHA256,
                        serviceCandidateSHA256=SERVICE_CANDIDATE_SHA256,
                        serviceReviewSHA256=SERVICE_REVIEW_SHA256, servicePatchSHA256=SERVICE_PATCH_SHA256)
+    if hosted_provenance is not None:
+        receipt['hostedInputProvenance'] = hosted_provenance
     (out / 'receipt.json').write_text(json.dumps(receipt, sort_keys=True, indent=2) + '\n')
     return 0
 

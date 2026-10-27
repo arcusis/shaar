@@ -495,7 +495,8 @@ struct BrowserSidebar: View {
       .accessibilityLabel("Recent downloads")
       .accessibilityHint(
         recentDownloads.isPinned
-          ? "Hide recent downloads" : "Show recent downloads for this profile")
+          ? "Hide recent downloads" : "Show recent downloads for this profile"
+      )
       .help("Recent downloads")
     }
     .buttonStyle(.plain)

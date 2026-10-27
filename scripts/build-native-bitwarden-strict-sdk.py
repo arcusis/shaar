@@ -98,9 +98,11 @@ HEX40 = re.compile(r'^[0-9a-f]{40}$')
 SANDBOX = '/usr/bin/sandbox-exec'
 NO_NETWORK = '(version 1)(allow default)(deny network*)'
 HOSTED_PIN_SHA256 = 'c7f71d14a29abfa5a4dca441c49fce5e6a87127d4fff8a206af793b9558b3489'
+HOSTED_SDK10_PIN_SHA256 = 'ecbc2ca8e4e3b5102afca1809d928d2d05671acb1c2a899ad6361e712ff99085'
 
 
-def load_hosted_preparer(path: Path, checkpoint: Path, checkpoint_sha: str):
+def load_hosted_preparer(path: Path, checkpoint: Path, checkpoint_sha: str,
+                         profile: SourceProfile = SDK9_PROFILE):
     require_regular(path)
     require_regular(checkpoint)
     if not HEX64.fullmatch(checkpoint_sha) or digest(checkpoint) != checkpoint_sha:
@@ -109,6 +111,10 @@ def load_hosted_preparer(path: Path, checkpoint: Path, checkpoint_sha: str):
     expected_names = {'scripts/build-native-bitwarden-strict-sdk.py',
                       'scripts/prepare-native-bitwarden-hosted-inputs.py',
                       'ThirdParty/BitwardenStrictEditSpike/hosted-inputs.pin.json'}
+    if profile == SDK10_PROFILE:
+        expected_names.add('ThirdParty/BitwardenStrictEditSpike/hosted-sdk10-inputs.pin.json')
+    elif profile != SDK9_PROFILE:
+        raise ValueError('unsupported hosted profile')
     if (not isinstance(record, dict) or set(record) != {'schema', 'files'} or
         type(record['schema']) is not int or record['schema'] != 1 or
         not isinstance(record['files'], dict) or set(record['files']) != expected_names):
@@ -116,11 +122,17 @@ def load_hosted_preparer(path: Path, checkpoint: Path, checkpoint_sha: str):
     paths = {'scripts/build-native-bitwarden-strict-sdk.py': Path(__file__).absolute(),
              'scripts/prepare-native-bitwarden-hosted-inputs.py': path,
              'ThirdParty/BitwardenStrictEditSpike/hosted-inputs.pin.json': ROOT / 'ThirdParty/BitwardenStrictEditSpike/hosted-inputs.pin.json'}
+    if profile == SDK10_PROFILE:
+        paths['ThirdParty/BitwardenStrictEditSpike/hosted-sdk10-inputs.pin.json'] = (
+            ROOT / 'ThirdParty/BitwardenStrictEditSpike/hosted-sdk10-inputs.pin.json')
     for name, item in paths.items():
         if digest(item) != record['files'][name]:
             raise ValueError('hosted checkpoint source drift')
     if record['files']['ThirdParty/BitwardenStrictEditSpike/hosted-inputs.pin.json'] != HOSTED_PIN_SHA256:
         raise ValueError('hosted pin mismatch')
+    if (profile == SDK10_PROFILE and
+        record['files']['ThirdParty/BitwardenStrictEditSpike/hosted-sdk10-inputs.pin.json'] != HOSTED_SDK10_PIN_SHA256):
+        raise ValueError('SDK10 hosted pin mismatch')
     source = path.read_bytes()
     if sha(source) != record['files']['scripts/prepare-native-bitwarden-hosted-inputs.py']:
         raise ValueError('hosted preparer changed')
@@ -133,7 +145,7 @@ def load_hosted_preparer(path: Path, checkpoint: Path, checkpoint_sha: str):
 def hosted_input_profile(profile: SourceProfile, historical: tuple, hosted_values: tuple) -> bool:
     selected = any(value is not None for value in hosted_values)
     if selected:
-        if (profile != SDK9_PROFILE or any(value is None for value in hosted_values) or
+        if (profile not in (SDK9_PROFILE, SDK10_PROFILE) or any(value is None for value in hosted_values) or
             any(value is not None for value in historical)):
             raise ValueError('hosted and historical input profiles cannot be mixed')
     elif any(value is None for value in historical):
@@ -546,7 +558,25 @@ def generated_files(path: Path) -> dict[str, str]:
     return result
 
 
-def verify_source(helper, sdk: Path, pin: dict, env: dict[str, str]) -> None:
+def verify_source_diff(git, pin: dict, *, hosted_sdk10: bool = False) -> None:
+    args = ['diff', '--no-ext-diff', '--no-textconv', '--binary']
+    if hosted_sdk10:
+        args.append('--abbrev=8')
+    diff = git(*args, COMMIT, pin['candidateGitTree']).encode()
+    paths = git('diff', '--no-ext-diff', '--no-textconv', '--name-only',
+                COMMIT, pin['candidateGitTree']).splitlines()
+    diff_hash = sha(diff)
+    paths_match = paths == pin['changedPaths']
+    if hosted_sdk10:
+        print(json.dumps({'sourceDiffSHA256': diff_hash, 'changedPathCount': len(paths),
+                          'changedPathsMatch': paths_match,
+                          'gitVersion': git('--version').strip()}, sort_keys=True), flush=True)
+    if diff_hash != pin['fullDiffSHA256'] or not paths_match:
+        raise ValueError('source diff mismatch')
+
+
+def verify_source(helper, sdk: Path, pin: dict, env: dict[str, str],
+                  *, hosted_sdk10: bool = False) -> None:
     files, fingerprint, count = file_inventory(sdk, exclude_git=True)
     if (fingerprint, count) != (pin['sourceManifestSHA256'], pin['sourceManifestEntries']):
         raise ValueError('complete source inventory mismatch')
@@ -559,9 +589,7 @@ def verify_source(helper, sdk: Path, pin: dict, env: dict[str, str]) -> None:
         raise ValueError('candidate tree mismatch')
     if git('rev-parse', COMMIT + '^{tree}').strip() != TREE:
         raise ValueError('upstream tree mismatch')
-    diff = git('diff', '--no-ext-diff', '--no-textconv', '--binary', COMMIT, pin['candidateGitTree']).encode()
-    if sha(diff) != pin['fullDiffSHA256'] or git('diff', '--no-ext-diff', '--no-textconv', '--name-only', COMMIT, pin['candidateGitTree']).splitlines() != pin['changedPaths']:
-        raise ValueError('source diff mismatch')
+    verify_source_diff(git, pin, hosted_sdk10=hosted_sdk10)
     git('diff', '--quiet')
     if git('ls-files', '--others').strip():
         raise ValueError('untracked source file')
@@ -693,7 +721,7 @@ def main() -> int:
     hosted = hosted_input_profile(profile, (args.cargo_registry, args.cargo_git), hosted_args)
     if hosted:
         hosted_module, hosted_paths = load_hosted_preparer(
-            args.hosted_preparer, args.hosted_checkpoint, args.hosted_checkpoint_sha256)
+            args.hosted_preparer, args.hosted_checkpoint, args.hosted_checkpoint_sha256, profile)
         require_directory(args.hosted_inputs)
         require_directory(args.hosted_rustup_home)
         require_regular(args.hosted_cargo)
@@ -805,14 +833,14 @@ def main() -> int:
         run(helper, ['git', '-C', str(sdk), 'apply', '--check', '--whitespace=error', str(path)], ROOT, env, 120)
         run(helper, ['git', '-C', str(sdk), 'apply', '--whitespace=error', str(path)], ROOT, env, 120)
     run(helper, ['git', '-C', str(sdk), 'add', '-A', '-f'], ROOT, env, 120)
-    verify_source(helper, sdk, base_pin, env)
+    verify_source(helper, sdk, base_pin, env, hosted_sdk10=hosted and profile == SDK10_PROFILE)
     if profile in (SDK9_PROFILE, SDK10_PROFILE):
         if digest(args.service_patch) != SERVICE_PATCH_SHA256:
             raise ValueError('service patch changed before application')
         run(helper, ['git', '-C', str(sdk), 'apply', '--check', '--whitespace=error', str(args.service_patch)], ROOT, env, 120)
         run(helper, ['git', '-C', str(sdk), 'apply', '--whitespace=error', str(args.service_patch)], ROOT, env, 120)
         run(helper, ['git', '-C', str(sdk), 'add', '-A', '-f'], ROOT, env, 120)
-        verify_source(helper, sdk, sdk9_pin, env)
+        verify_source(helper, sdk, sdk9_pin, env, hosted_sdk10=hosted and profile == SDK10_PROFILE)
         verify_service_transition(helper, sdk, sdk9_pin, service_candidate, env)
     if profile == SDK10_PROFILE:
         if digest(args.normalization_patch) != NORMALIZATION_PATCH_SHA256:
@@ -820,17 +848,19 @@ def main() -> int:
         run(helper, ['git', '-C', str(sdk), 'apply', '--check', '--whitespace=error', str(args.normalization_patch)], ROOT, env, 120)
         run(helper, ['git', '-C', str(sdk), 'apply', '--whitespace=error', str(args.normalization_patch)], ROOT, env, 120)
         run(helper, ['git', '-C', str(sdk), 'add', '-A', '-f'], ROOT, env, 120)
-        verify_source(helper, sdk, pin, env)
+        verify_source(helper, sdk, pin, env, hosted_sdk10=hosted and profile == SDK10_PROFILE)
         verify_normalization_transition(helper, sdk, env)
     cargo_home = out / 'cargo-home'
     cargo_home.mkdir()
     hosted_provenance = None
     if hosted:
-        hosted_pin = ROOT / 'ThirdParty/BitwardenStrictEditSpike/hosted-inputs.pin.json'
+        hosted_pin = ROOT / ('ThirdParty/BitwardenStrictEditSpike/hosted-sdk10-inputs.pin.json'
+                             if profile == SDK10_PROFILE else 'ThirdParty/BitwardenStrictEditSpike/hosted-inputs.pin.json')
+        hosted_profile = hosted_module.HOSTED_SDK10 if profile == SDK10_PROFILE else hosted_module.HOSTED_SDK9
         hosted_proof = hosted_module.validate_inputs(
-            sdk, args.hosted_inputs, hosted_pin, args.hosted_rustup_home, args.hosted_cargo)
-        hosted_provenance = {'profile': 'hosted-sdk9-public-source', 'checkpointSHA256': args.hosted_checkpoint_sha256,
-                             'pinSHA256': HOSTED_PIN_SHA256,
+            sdk, args.hosted_inputs, hosted_pin, args.hosted_rustup_home, args.hosted_cargo, hosted_profile)
+        hosted_provenance = {'profile': hosted_profile.name, 'checkpointSHA256': args.hosted_checkpoint_sha256,
+                             'pinSHA256': hosted_profile.pin_sha256,
                              'cargoCommit': hosted_proof['cargoCommit'],
                              'sourceInventorySHA256': sha(json.dumps(hosted_proof, sort_keys=True, separators=(',', ':')).encode()),
                              'networkRouteProven': False}
@@ -929,7 +959,7 @@ def main() -> int:
         rpaths = run(helper, ['otool', '-l', str(executable)], out, env, 30)
         if not re.search(r'cmd LC_RPATH\s+cmdsize \d+\s+path ' + re.escape(str(library)) + r' \(offset \d+\)', rpaths):
             raise ValueError('consumer rpath mismatch')
-        verify_source(helper, sdk, pin, env)
+        verify_source(helper, sdk, pin, env, hosted_sdk10=hosted and profile == SDK10_PROFILE)
         if digest(dylib) != dylib_hash or digest(bindgen) != generator_hash or generated_files(generated) != binding:
             raise ValueError('build artifacts changed after consumer compilation')
         package_inventory = validate_package_inventory(pkg, set(manifest['fileSHA256']) | {'build-manifest.json'})
@@ -950,7 +980,7 @@ def main() -> int:
                           'testOnly': mode == 'debug', 'consumerCompiled': True, 'consumerExecuted': False}
     if hosted:
         if (hosted_module.validate_inputs(sdk, args.hosted_inputs, hosted_pin,
-                                          args.hosted_rustup_home, args.hosted_cargo) != hosted_proof or
+                                          args.hosted_rustup_home, args.hosted_cargo, hosted_profile) != hosted_proof or
             hosted_module.inventory(staged_vendor) != hosted_proof['vendor'] or
             digest(args.hosted_checkpoint) != args.hosted_checkpoint_sha256):
             raise ValueError('hosted inputs changed during build')

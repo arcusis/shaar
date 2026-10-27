@@ -1,9 +1,13 @@
 import copy
 import hashlib
 import importlib.util
+import io
 import json
 from pathlib import Path
+import subprocess
+import tempfile
 import unittest
+from contextlib import redirect_stdout
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -66,9 +70,12 @@ class SDK10PinTests(unittest.TestCase):
         baseline['candidateGitTree'] = '0' * 40
         with self.assertRaises(ValueError): BUILDER.validate_normalization_pin(self.pin, self.candidate, baseline)
 
-    def test_sdk10_hosted_mode_unavailable(self):
+    def test_sdk10_hosted_mode_is_explicit_and_exclusive(self):
+        self.assertTrue(BUILDER.hosted_input_profile(BUILDER.SDK10_PROFILE, (None, None), ('x',) * 6))
         with self.assertRaises(ValueError):
-            BUILDER.hosted_input_profile(BUILDER.SDK10_PROFILE, (None, None), ('x',) * 6)
+            BUILDER.hosted_input_profile(BUILDER.SDK10_PROFILE, ('registry', None), ('x',) * 6)
+        with self.assertRaises(ValueError):
+            BUILDER.hosted_input_profile(BUILDER.SDK10_PROFILE, (None, None), ('x',) * 5 + (None,))
         self.assertFalse(BUILDER.hosted_input_profile(BUILDER.SDK10_PROFILE, ('registry', 'git'), (None,) * 6))
 
     def test_transition_requires_one_exact_path_and_blob(self):
@@ -77,6 +84,60 @@ class SDK10PinTests(unittest.TestCase):
             BUILDER.verify_normalization_transition(None, Path('/tmp/sdk'), {})
         with patch.object(BUILDER, 'run', return_value='unexpected\n'):
             with self.assertRaises(ValueError): BUILDER.verify_normalization_transition(None, Path('/tmp/sdk'), {})
+
+    def test_diff_contract_rejects_content_and_path_mismatch(self):
+        expected = b'fixed diff\n'
+        pin = {'candidateGitTree': 'a' * 40, 'fullDiffSHA256': hashlib.sha256(expected).hexdigest(),
+               'changedPaths': ['file']}
+        calls = []
+
+        def git(*args):
+            calls.append(args)
+            if '--binary' in args:
+                return expected.decode()
+            if '--name-only' in args:
+                return 'file\n'
+            if args == ('--version',):
+                return 'git version synthetic\n'
+            raise AssertionError(args)
+
+        BUILDER.verify_source_diff(git, pin)
+        self.assertNotIn('--abbrev=8', calls[0])
+        calls.clear()
+        with redirect_stdout(io.StringIO()) as output:
+            BUILDER.verify_source_diff(git, pin, hosted_sdk10=True)
+        self.assertIn('--abbrev=8', calls[0])
+        diagnostic = json.loads(output.getvalue())
+        self.assertEqual(diagnostic['sourceDiffSHA256'], pin['fullDiffSHA256'])
+        self.assertEqual(diagnostic['changedPathCount'], 1)
+        self.assertTrue(diagnostic['changedPathsMatch'])
+        self.assertEqual(diagnostic['gitVersion'], 'git version synthetic')
+        for key, value in (('fullDiffSHA256', '0' * 64), ('changedPaths', ['other'])):
+            broken = dict(pin, **{key: value})
+            with redirect_stdout(io.StringIO()), self.assertRaisesRegex(ValueError, 'source diff mismatch'):
+                BUILDER.verify_source_diff(git, broken, hosted_sdk10=True)
+
+    def test_explicit_abbreviation_ignores_git_configuration(self):
+        with tempfile.TemporaryDirectory() as temp:
+            env = {'PATH': '/usr/bin:/bin', 'HOME': temp, 'LC_ALL': 'C',
+                   'GIT_CONFIG_NOSYSTEM': '1', 'GIT_TERMINAL_PROMPT': '0'}
+
+            def git(*args, input=None):
+                return subprocess.run(['/usr/bin/git', *args], cwd=temp, env=env, input=input,
+                                      text=True, capture_output=True, check=True).stdout
+
+            git('init', '--quiet')
+            old = git('hash-object', '-w', '--stdin', input='old\n').strip()
+            new = git('hash-object', '-w', '--stdin', input='new\n').strip()
+            before = git('mktree', input=f'100644 blob {old}\tfile\n').strip()
+            after = git('mktree', input=f'100644 blob {new}\tfile\n').strip()
+            diff = ('diff', '--no-ext-diff', '--no-textconv', '--binary')
+            implicit7 = git('-c', 'core.abbrev=7', *diff, before, after)
+            implicit12 = git('-c', 'core.abbrev=12', *diff, before, after)
+            explicit7 = git('-c', 'core.abbrev=7', *diff, '--abbrev=8', before, after)
+            explicit12 = git('-c', 'core.abbrev=12', *diff, '--abbrev=8', before, after)
+            self.assertNotEqual(implicit7, implicit12)
+            self.assertEqual(explicit7, explicit12)
 
 
 if __name__ == '__main__':

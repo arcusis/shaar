@@ -171,6 +171,7 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
       let prelogin: PasswordPreloginResponse?
       let identityURL: URL
       let apiURL: URL
+      let credentialAuthority: URL
       let deviceID: UUID
       let restoredContext: NativeBitwardenRecoveryContext?
       var unlocking: Bool
@@ -187,9 +188,14 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
       #if ARCUSIS_NATIVE_BITWARDEN_STRICT_SDK
         var strictGeneration: UInt64?
         var strictPreparation: StrictPreparation?
+        var strictOwner: StrictOwner?
       #endif
     }
     #if ARCUSIS_NATIVE_BITWARDEN_STRICT_SDK
+      private struct StrictOwner {
+        let authority: NativeBitwardenWriteAuthority
+        let lease: NativeBitwardenWriteAuthority.Lease
+      }
       private struct StrictPreparation {
         let handle: NativeBitwardenStrictUpdateHandle
         let access: NativeBitwardenFillAccess
@@ -202,6 +208,7 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
       }
       #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_FIXTURE
         private var fixtureCompletedCreates = 0
+        private var fixtureStrictPreflight: (@Sendable () async -> Void)?
       #endif
     #endif
     private var candidates: [UUID: Candidate] = [:]
@@ -219,7 +226,7 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
       }
     }
 
-    private static var fixtureHostAllowed: Bool {
+    static var fixtureHostAllowed: Bool {
       var pathBytes = [UInt8](repeating: 0, count: 4096)
       guard proc_pidpath(getpid(), &pathBytes, UInt32(pathBytes.count)) > 0 else { return false }
       let path = String(decoding: pathBytes.prefix { $0 != 0 }, as: UTF8.self)
@@ -250,6 +257,12 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
       func completedStrictCreatesForFixture() -> Int? {
         guard Self.fixtureHostAllowed else { return nil }
         return fixtureCompletedCreates
+      }
+
+      func setStrictPreflightForFixture(_ hook: (@Sendable () async -> Void)?) -> Bool {
+        guard Self.fixtureHostAllowed else { return false }
+        fixtureStrictPreflight = hook
+        return true
       }
     #endif
   #endif
@@ -325,7 +338,8 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
         candidates[id] = Candidate(
           client: client, sync: client.sync(), bridge: bridge, tokenProvider: tokenProvider,
           response: response, prelogin: prelogin, identityURL: endpoints.identityURL,
-          apiURL: endpoints.apiURL, deviceID: deviceID,
+          apiURL: endpoints.apiURL, credentialAuthority: endpoints.credentialAuthority,
+          deviceID: deviceID,
           restoredContext: nil, unlocking: false,
           email: email, userID: userID, generation: 0, locked: false, initialized: false,
           fillAccess: NativeBitwardenFillAccessState(sessionID: id), cipherRepository: repository)
@@ -398,6 +412,8 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
       candidate.locked = true
       candidate.writable = false
       #if ARCUSIS_NATIVE_BITWARDEN_STRICT_SDK
+        candidate.strictOwner?.authority.revoke()
+        candidate.strictOwner = nil
         candidate.strictGeneration = nil
         candidate.strictPreparation = nil
       #endif
@@ -445,6 +461,8 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
       candidate.cipherRepository = repository
       candidate.writable = false
       #if ARCUSIS_NATIVE_BITWARDEN_STRICT_SDK
+        candidate.strictOwner?.authority.revoke()
+        candidate.strictOwner = nil
         candidate.strictGeneration = nil
         candidate.strictPreparation = nil
       #endif
@@ -691,6 +709,33 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
     throw NativeBitwardenWriteError.sdkUpdateUnavailable
   }
 
+  func adoptStrictWriteAuthority(
+    _ admission: NativeBitwardenWriteAdmission
+  ) async throws {
+    #if ARCUSIS_NATIVE_BITWARDEN_STRICT_SDK && canImport(ArcusisBitwardenSDK)
+      let authority = admission.authority
+      let lease = admission.lease
+      let binding = lease.binding
+      guard authority.isCurrent(lease),
+        var candidate = candidates[binding.access.sessionID], !candidate.locked,
+        candidate.initialized, !candidate.unlocking, candidate.operation == nil,
+        candidate.writable, candidate.strictGeneration != nil, candidate.strictOwner == nil,
+        candidate.userID == binding.owner.accountID,
+        candidate.identityURL == binding.identityURL, candidate.apiURL == binding.apiURL,
+        candidate.credentialAuthority == binding.owner.authority
+      else { throw NativeBitwardenWriteError.staleAccess }
+      try candidate.fillAccess.validate(binding.access)
+      try Task.checkCancellation()
+      guard authority.isCurrent(lease) else { throw NativeBitwardenWriteError.staleAccess }
+      candidate.strictPreparation = nil
+      candidate.strictOwner = StrictOwner(authority: authority, lease: lease)
+      candidates[binding.access.sessionID] = candidate
+    #else
+      _ = admission
+      throw NativeBitwardenWriteError.sdkUpdateUnavailable
+    #endif
+  }
+
   func prepareStrictUpdate(
     access: NativeBitwardenFillAccess, context: PasswordFillContext, cipherID: UUID
   ) async throws -> NativeBitwardenStrictUpdateHandle {
@@ -756,6 +801,12 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
       let (candidate, operation) = try beginWrite(access: access, context: context)
       defer { finishWrite(sessionID: access.sessionID, operation: operation) }
       try await validateWrite(candidate: candidate, access: access, operation: operation)
+      #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_FIXTURE
+        if let hook = fixtureStrictPreflight {
+          await hook()
+          try await validateWrite(candidate: candidate, access: access, operation: operation)
+        }
+      #endif
       guard let current = candidates[access.sessionID], let prepared = current.strictPreparation,
         prepared.handle == handle, prepared.access == access, prepared.context == context,
         prepared.client === current.client, current.strictGeneration == prepared.generation,
@@ -848,6 +899,12 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
         var candidate = candidates[access.sessionID], !candidate.locked, candidate.initialized,
         !candidate.unlocking, candidate.writable
       else { throw NativeBitwardenWriteError.staleAccess }
+      #if ARCUSIS_NATIVE_BITWARDEN_STRICT_SDK
+        guard let owner = candidate.strictOwner, owner.lease.binding.access == access,
+          owner.lease.binding.owner.profileID == context.binding.profileID,
+          owner.authority.isCurrent(owner.lease)
+        else { throw NativeBitwardenWriteError.staleAccess }
+      #endif
       guard candidate.operation == nil else { throw NativeBitwardenWriteError.operationInProgress }
       try candidate.fillAccess.validate(access)
       try Task.checkCancellation()
@@ -868,6 +925,11 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
         current.generation == candidate.generation, current.operation == operation,
         current.cipherRepository === candidate.cipherRepository
       else { throw NativeBitwardenWriteError.staleAccess }
+      #if ARCUSIS_NATIVE_BITWARDEN_STRICT_SDK
+        guard let owner = current.strictOwner, owner.lease.binding.access == access,
+          owner.authority.isCurrent(owner.lease)
+        else { throw NativeBitwardenWriteError.staleAccess }
+      #endif
       try current.fillAccess.validate(access)
     }
 
@@ -877,6 +939,12 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
         current.operation == operation
       else { throw NativeBitwardenWriteError.staleAccess }
       try current.fillAccess.validate(access)
+      #if ARCUSIS_NATIVE_BITWARDEN_STRICT_SDK
+        guard let owner = current.strictOwner, owner.lease.binding.access == access,
+          owner.authority.claim(owner.lease)
+        else { throw NativeBitwardenWriteError.staleAccess }
+        current.strictOwner = nil
+      #endif
       _ = current.fillAccess.revoke()
       current.writable = false
       #if ARCUSIS_NATIVE_BITWARDEN_STRICT_SDK
@@ -947,6 +1015,9 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
     }
 
     private func clearCandidate(_ id: UUID, candidate: Candidate) async {
+      #if ARCUSIS_NATIVE_BITWARDEN_STRICT_SDK
+        candidate.strictOwner?.authority.revoke()
+      #endif
       candidate.cipherRepository.revoke()
       candidates.removeValue(forKey: id)
       candidate.tokenProvider.clear()
@@ -1022,6 +1093,7 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
       candidates[id] = Candidate(
         client: client, sync: client.sync(), bridge: bridge, tokenProvider: provider,
         response: nil, prelogin: nil, identityURL: endpoints.identityURL, apiURL: endpoints.apiURL,
+        credentialAuthority: endpoints.credentialAuthority,
         deviceID: record.deviceID, restoredContext: context, unlocking: false,
         email: record.email, userID: record.accountID, generation: 0,
         locked: true, initialized: false, fillAccess: NativeBitwardenFillAccessState(sessionID: id),

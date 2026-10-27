@@ -20,10 +20,42 @@ from pathlib import Path, PurePosixPath
 from urllib.parse import parse_qs, urlsplit
 
 RECEIPT_SHA256 = "d5cadc8fcd0e231b9578aff1613a75cfb95aa486beeb12f84439ac70167a3c70"
-ROOT_HEAD = "62a01b48505d2b1cb119c3f35937ae8bfae59f27"
+SDK9_RECEIPT_SHA256 = "9d6dd982c467bce5036f13a6c84bbcb38e223560114231816ddd89ea447f30e3"
+SDK9_MANIFESTS = {"debug": "65583856b2d973ae175c3a8184f87e3cb127edf54f5242a21f58083296cb844c",
+                  "release": "fd4b5d40bf571f5bc5f64e78741c8663925c8bea6b0ccb9891b2d28f1392326d"}
+SERVICE_CANDIDATE_SHA256 = "9a202a82c43c72c116f2748683adb6c197be7c441ca41d83a5f31c906f20c50d"
+SERVICE_PATCH_SHA256 = "8917fd3a357dd3a075391ba9d9aeefbf5343f8a665aebf58c4bdb457ca80d76c"
+SERVICE_PRIMARY = {
+    "BitwardenApiStartup.cs": "f6f8d5edbab88298bdd69bf7a4617b4a7e7b3e53b36266a5220d1fefc673aa20",
+    "CipherResponseModel.cs": "5d03b29732a34d3bb2952b7d291d7ea77a3830c7b526ae80a13a47358bdc48d3",
+    "CipherData.cs": "c70d82936c5d5d2dfab1cb66a4d30c8047ec5710902420b361536e0c9fdb59b9",
+    "CipherFieldData.cs": "1d57095e665a3fee3666437c3ee7198acb101674e74957b193580bf0131e2191",
+    "CipherFieldModel.cs": "be47b0c6ae1ee68d1bfdd757cab8819d6c0ce7cb201350d7dc7c185b0ccd6ea7",
+    "CipherLoginData.cs": "ff274558fad5e275213e383e53bebb5433f9cd2cb8622a801ccf73c0ec26ab07",
+    "CipherLoginModel.cs": "13fa0586973cc60b0824071341fa6e2824e8230a4fcae97dbd57ddb27e2a5f22",
+    "CipherPasswordHistoryData.cs": "15245b3b4dd8bb16556f55f4de83813129f8447e2e25a954213e31282f06f888",
+    "CipherPasswordHistoryModel.cs": "f079129837f77e276fb3354779546f9fb2d1b5352cf421d3da2def9e6b99cfbb",
+    "CipherPermissionsResponseModel.cs": "e8830a03a3fc3db99684c0a77a56140f7fad203bf99f6fa588788825f6e00897",
+    "CipherRequestModel.cs": "2bf00f62aab1332a77c7483d00eecdbb75ef9591a501fa2e647bc6c24a74e317",
+    "CipherService.cs": "8afa818552819964d28bb40395b31b9684974a47686853021855c457c6ddf875",
+    "NormalCipherPermissions.cs": "f7a1bd4ca3288d09a97610d63ada97b600bbda337a85e1d38bfd9d4ac0790834",
+    "vaultwarden-cipher-model.rs": "c3ae6804d8dc2a6a914a9e9e95a97a98037d7f3cbde9421fc50ece10872c1c3a",
+    "vaultwarden-ciphers.rs": "18c4cb7fb77b548b90716634a9b8041ca33a7f68df3e76a7aeeaded229924553",
+}
+ROOT_HEAD = "3f1d88b89257ce9680f57d2d353d2f09f1ed9a67"
 HELPER_SHA256 = "cfb4653252fe700e34c8d8ae735e989657b8d355cb36c63588b81e3b2cf2c680"
 EXTRACTOR_SHA256 = "ed4436414633d5d89be69d7ef89f241e775f13b5a5b9c6ad167884ea05d807bb"
 VECTOR_SHA256 = "2347b7c7b3856b4672c38354fcaa00b0a2bb8afdbf842145230328bb6b9fb2c7"
+ADMISSION_SHA256 = "bfd67db0eb69ca7ddb4e43125862b3f0408f8938fedcc286d1d90596fc7ea1c6"
+ADMISSION_BEGIN = b"// BEGIN WRITE ADMISSION DECLARATION\n"
+ADMISSION_END = b"// END WRITE ADMISSION DECLARATION\n"
+ADMISSION_PROBE = b'''final class NativeBitwardenWriteAuthority: Sendable {
+  struct Lease: Sendable {}
+}
+func attempt(_ authority: NativeBitwardenWriteAuthority, _ lease: NativeBitwardenWriteAuthority.Lease) {
+  _ = NativeBitwardenWriteAdmission(authority: authority, lease: lease)
+}
+'''
 LEGACY_MANIFESTS = {
     "sdk3": "8b19e0aad144a523135f56eab2e0ebd4b3a9612f5111969099411fc95c71c9b0",
     "sdk7": "dd2e42bb29bf52f94d9f6ee64fcb6a7f5ab6f09b18dda75b7b01432afe299d15",
@@ -51,6 +83,8 @@ INPUTS = frozenset({
     "Sources/BrowserCore/BitwardenServerConfiguration.swift",
     "Sources/BrowserCore/Resources/public_suffix_list.dat",
     "Sources/ArcusisBrowser/NativeBitwardenBackend.swift",
+    "Sources/ArcusisBrowser/NativeBitwardenController.swift",
+    "Sources/ArcusisBrowser/NativeBitwardenWriteAuthority.swift",
     "Sources/ArcusisBrowser/NativeBitwardenWrites.swift",
     "Sources/ArcusisBrowser/NativeBitwardenCipherRepository.swift",
     "Sources/ArcusisBrowser/NativeBitwardenFillCredential.swift",
@@ -58,6 +92,7 @@ INPUTS = frozenset({
     "Sources/ArcusisBrowser/NativeBitwardenLogging.swift",
     "Sources/ArcusisBrowser/NativeBitwardenRefreshCoordinator.swift",
     "Tests/BrowserAppTests/NativeBitwardenStrictBackendTests.swift",
+    "Tests/BrowserAppTests/NativeBitwardenWriteAuthorityTests.swift",
     "scripts/test-native-bitwarden-strict-backend.py",
     "Tests/NativeBitwardenStrictBackendRunnerTests/test_strict_backend_runner.py",
 })
@@ -65,6 +100,35 @@ INPUTS = frozenset({
 
 class GuardError(ValueError):
     pass
+
+
+def compiled_input(name: str) -> bool:
+    return ((name.startswith("Sources/") and name != "Sources/ArcusisBrowser/NativeBitwardenController.swift")
+            or name in {"Tests/BrowserAppTests/NativeBitwardenStrictBackendTests.swift",
+                        "Tests/BrowserAppTests/NativeBitwardenWriteAuthorityTests.swift"})
+
+
+def admission_declaration(controller: bytes) -> bytes:
+    if controller.count(ADMISSION_BEGIN) != 1 or controller.count(ADMISSION_END) != 1:
+        raise GuardError("admission marker count")
+    start = controller.index(ADMISSION_BEGIN)
+    end = controller.index(ADMISSION_END) + len(ADMISSION_END)
+    if start >= end:
+        raise GuardError("admission marker order")
+    block = controller[start:end]
+    if sha(block) != ADMISSION_SHA256 or re.search(
+            rb"(?m)^[ \t]*(?:@[A-Za-z_][A-Za-z0-9_]*(?:\([^\r\n)]*\))?[ \t]+)*import\b", block):
+        raise GuardError("admission declaration mismatch")
+    return block
+
+
+def is_expected_admission_denial(output: bytes, exit_code: int) -> bool:
+    lines = [line for line in output.splitlines() if b"error:" in line and not line.lstrip().startswith(b"|")]
+    if len(lines) != 1:
+        return False
+    header = re.fullmatch(rb"(?:.*/)?AdmissionAccessProbe\.swift:[0-9]+:[0-9]+: error: ([^\r\n]+)", lines[0])
+    expected = b"'NativeBitwardenWriteAdmission' initializer is inaccessible due to 'fileprivate' protection level"
+    return exit_code != 0 and header is not None and header.group(1) == expected
 
 
 def unique(pairs):
@@ -157,11 +221,13 @@ def inventory(root: Path) -> dict[str, str]:
     return result
 
 
-def verify_package(receipt_path: Path, package: Path, mode: str) -> None:
+def verify_package(receipt_path: Path, package: Path, mode: str, profile: str = "sdk8") -> None:
+    if profile not in ("sdk8", "sdk9"):
+        raise GuardError("invalid SDK profile")
     if mode not in ("debug", "release") or any(p.is_symlink() for p in (receipt_path, *receipt_path.parents)):
         raise GuardError("invalid package selection")
     data = read_regular(receipt_path)
-    if sha(data) != RECEIPT_SHA256:
+    if sha(data) != (SDK9_RECEIPT_SHA256 if profile == "sdk9" else RECEIPT_SHA256):
         raise GuardError("receipt digest mismatch")
     receipt = parse_json(data)
     if (not isinstance(receipt, dict) or receipt.get("accepted") is not False
@@ -172,6 +238,24 @@ def verify_package(receipt_path: Path, package: Path, mode: str) -> None:
     if (entries.get("testOnly") is not (mode == "debug") or not isinstance(expected, dict)
             or len(expected) != 84 or inventory(package) != expected):
         raise GuardError("package inventory mismatch")
+    if profile == "sdk9" and entries.get("manifestSHA256") != SDK9_MANIFESTS[mode]:
+        raise GuardError("SDK9 manifest mismatch")
+
+
+def verify_service_sources(primary: Path, candidate: Path, patch: Path) -> None:
+    for path, digest in ((candidate, SERVICE_CANDIDATE_SHA256), (patch, SERVICE_PATCH_SHA256)):
+        if not path.is_absolute() or any(part.is_symlink() for part in (path, *path.parents)):
+            raise GuardError("unsafe service source")
+        if sha(read_regular(path)) != digest:
+            raise GuardError("service source mismatch")
+    for name, digest in SERVICE_PRIMARY.items():
+        if sha(read_regular(safe_path(primary, name))) != digest:
+            raise GuardError("primary service source mismatch")
+    value = parse_json(read_regular(candidate))
+    if (not isinstance(value, dict) or value.get("primarySha256") != SERVICE_PRIMARY
+            or value.get("patchSha256") != SERVICE_PATCH_SHA256
+            or value.get("sourceCommit") != "5cf919837e83b71c2508bf99344ea57cf5f84e88"):
+        raise GuardError("service candidate provenance mismatch")
 
 
 def verify_legacy_package(package: Path, mode: str) -> None:
@@ -240,7 +324,48 @@ def public_fixture(source: Path, extractor: Path):
     return vector, token, response
 
 
-def host_handler(helper, vector, token, response):
+def service_record(original: dict, shape: str, fault: str | None = None) -> dict:
+    if shape not in ("bitwarden", "vaultwarden") or fault not in (None, "data", "partial"):
+        raise GuardError("unsupported synthetic service shape")
+    record = json.loads(json.dumps(original))
+    record.pop("partialData", None)
+    record["permissions"] = {"delete": True, "restore": True}
+    login = record["login"]
+    uris = login.get("uris")
+    login["uri"] = uris[0].get("uri") if uris else None
+    if shape == "bitwarden" or fault == "data":
+        data = {"Name": record.get("name"), "Notes": record.get("notes"),
+                "Fields": None if record.get("fields") is None else [
+                    {"Type": x.get("type"), "Name": x.get("name"), "Value": x.get("value"), "LinkedId": x.get("linkedId")}
+                    for x in record["fields"]],
+                "PasswordHistory": None if record.get("passwordHistory") is None else [
+                    {"Password": x.get("password"), "LastUsedDate": x.get("lastUsedDate")}
+                    for x in record["passwordHistory"]],
+                "Uris": None if uris is None else [
+                    {"Uri": x.get("uri"), "UriChecksum": x.get("uriChecksum"), "Match": x.get("match")}
+                    for x in uris],
+                "Username": login.get("username"), "Password": login.get("password"),
+                "PasswordRevisionDate": login.get("passwordRevisionDate"), "Totp": login.get("totp"),
+                "AutofillOnPageLoad": login.get("autofillOnPageLoad"), "Fido2Credentials": login.get("fido2Credentials")}
+        def omit_null(value):
+            if isinstance(value, dict):
+                return {key: omit_null(item) for key, item in value.items() if item is not None}
+            if isinstance(value, list):
+                return [omit_null(item) for item in value]
+            return value
+        data = omit_null(data)
+        if fault == "data":
+            data["Name"] = "synthetic-contradiction"
+        record["data"] = json.dumps(data, separators=(",", ":"))
+    else:
+        record.pop("data", None)
+        record["organizationUseTotp"] = True
+    if fault == "partial":
+        record["partialData"] = "synthetic-partial"
+    return record
+
+
+def host_handler(helper, vector, token, response, shape=None):
     class Handler(helper.Handler):
         def do_POST(self):
             if self.path == "/api/ciphers":
@@ -319,6 +444,55 @@ def host_handler(helper, vector, token, response):
             self.headers.replace_header("Authorization", "Bearer synthetic-owned-token")
 
         def do_GET(self):
+            if shape is not None and self.path in ("/fixture/shape-data", "/fixture/shape-partial", "/fixture/shape-valid"):
+                try:
+                    self.count_request()
+                    if self.client_address[0] != "127.0.0.1":
+                        raise GuardError("control boundary")
+                    with self.server.lock:
+                        self.server.controls += 1
+                        if self.server.controls > 80:
+                            raise GuardError("control count")
+                        self.server.shape_fault = {"/fixture/shape-data": "data", "/fixture/shape-partial": "partial",
+                                                   "/fixture/shape-valid": None}[self.path]
+                    self.send_json(200, {})
+                except (ValueError, OSError):
+                    self.note_error("shape control rejected")
+                return
+            if shape is not None and self.path.startswith("/api/sync"):
+                try:
+                    self.count_request()
+                    parts = urlsplit(self.path)
+                    if (self.client_address[0] != "127.0.0.1" or parts.path != "/api/sync"
+                            or parts.query not in ("", "excludeDomains=true", "excludeDomains=false")
+                            or self.headers.get("Authorization") != "Bearer " + token or self.server.seed is None):
+                        raise GuardError("sync boundary")
+                    with self.server.lock:
+                        self.server.syncs += 1
+                        if self.server.syncs > 10:
+                            raise GuardError("sync count")
+                        originals = [self.server.seed] + ([self.server.created] if self.server.created else [])
+                        records = [service_record(item, shape, self.server.shape_fault) for item in originals]
+                    self.send_json(200, {"profile": {"organizations": []}, "folders": [], "sends": [],
+                                         "policiesNew": [], "ciphers": records})
+                except (ValueError, OSError, KeyError, TypeError):
+                    self.note_error("service sync rejected")
+                    self.send_json(400, {})
+                return
+            if self.path == "/fixture/count":
+                try:
+                    self.count_request()
+                    if self.client_address[0] != "127.0.0.1":
+                        raise GuardError("control boundary")
+                    with self.server.lock:
+                        self.server.controls += 1
+                        if self.server.controls > 80:
+                            raise GuardError("control count")
+                        counts = {"put": self.server.puts, "create": self.server.creates}
+                    self.send_json(200, counts)
+                except (ValueError, OSError):
+                    self.note_error("count control rejected")
+                return
             if self.path in ("/fixture/create-status", "/fixture/create-release"):
                 try:
                     self.count_request()
@@ -413,7 +587,55 @@ def run_build(command: list[str], cwd: Path, log: Path, timeout: int) -> bytes:
     return data
 
 
-def run_test(command: list[str], cwd: Path, extra: dict[str, str], result: dict, timeout: int) -> None:
+def run_admission_negative(helper, output_dir: Path, declaration_path: Path) -> None:
+    probe = output_dir / "AdmissionAccessProbe.swift"
+    probe.write_bytes(ADMISSION_PROBE)
+    os.chmod(probe, 0o600)
+    cache = output_dir / "admission-module-cache"
+    cache.mkdir(mode=0o700)
+    command = ["/usr/bin/sandbox-exec", "-p", helper.BUILD_SANDBOX, "swiftc", "-typecheck",
+               "-parse-as-library", "-target", "arm64-apple-macosx26.0", "-module-cache-path", str(cache),
+               str(declaration_path), str(probe)]
+    environment = {key: os.environ[key] for key in ("PATH", "HOME", "TMPDIR") if key in os.environ}
+    process = subprocess.Popen(command, cwd=output_dir, env=environment, stdin=subprocess.DEVNULL,
+                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
+    output = b""
+    try:
+        try:
+            output, _ = process.communicate(timeout=60)
+        except subprocess.TimeoutExpired as error:
+            output = error.output or b""
+            raise
+        if not is_expected_admission_denial(output, process.returncode):
+            raise GuardError("admission compiler denial not established")
+    finally:
+        try:
+            if process.poll() is None:
+                try:
+                    if os.getpgid(process.pid) != process.pid:
+                        raise GuardError("probe process identity changed")
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            process.wait(timeout=5)
+            try:
+                os.killpg(process.pid, 0)
+            except ProcessLookupError:
+                pass
+            else:
+                raise GuardError("probe process group survived")
+        finally:
+            if process.stdout is not None:
+                process.stdout.close()
+            log_fd = os.open(output_dir / "admission-negative.log", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(log_fd, "wb") as log:
+                log.write(output[-262144:])
+    if read_regular(probe) != ADMISSION_PROBE or sha(read_regular(declaration_path)) != ADMISSION_SHA256:
+        raise GuardError("admission probe input changed")
+
+
+def run_test(command: list[str], cwd: Path, extra: dict[str, str], result: dict, timeout: int,
+             expected_tests: int = 1) -> None:
     environment = {key: os.environ[key] for key in ("PATH", "HOME", "TMPDIR") if key in os.environ}
     environment.update(extra)
     process = subprocess.Popen(command, cwd=cwd, env=environment, stdin=subprocess.DEVNULL,
@@ -430,7 +652,8 @@ def run_test(command: list[str], cwd: Path, extra: dict[str, str], result: dict,
                        "unsupportedMatch", "cipherUnavailable", "invalidSnapshot", "syncFailed")
         result["knownErrorCases"] = [case for case in error_cases if case.encode() in output]
         result["xctestExitCode"] = process.returncode
-        if process.returncode != 0 or b"Executed 1 test, with 0 failures" not in output:
+        marker = f"Executed {expected_tests} test".encode()
+        if process.returncode != 0 or marker not in output or b"with 0 failures" not in output:
             raise GuardError("named XCTest failed")
     finally:
         if process.poll() is None:
@@ -453,46 +676,61 @@ def run_test(command: list[str], cwd: Path, extra: dict[str, str], result: dict,
 
 def run_backend(args, result: dict) -> None:
     before = verify_checkpoint(args.source_root, args.source_manifest, args.source_manifest_sha256)
-    verify_package(args.receipt, args.debug_package, "debug")
+    verify_package(args.receipt, args.debug_package, "debug", args.sdk_profile)
+    if args.sdk_profile == "sdk9":
+        verify_service_sources(args.service_primary, args.service_candidate, args.service_patch)
     helper = load_pinned(args.transport_helper, HELPER_SHA256, "strict_transport_helper")
     vector, token, response = public_fixture(args.sdk_source, args.extractor)
-    base = safe_path(Path(__file__).resolve().parents[1], "build/NativeBitwardenStrictBackend")
+    output_name = "NativeBitwardenServiceBackend" if args.sdk_profile == "sdk9" else "NativeBitwardenWriteAuthority"
+    base = safe_path(Path(__file__).resolve().parents[1], "build/" + output_name)
     if args.output.parent != base or not args.output.is_absolute() or args.output.exists() or args.output.is_symlink():
         raise GuardError("fresh owned output required")
     base.mkdir(parents=True, exist_ok=True)
-    safe_path(Path(__file__).resolve().parents[1], "build/NativeBitwardenStrictBackend")
+    safe_path(Path(__file__).resolve().parents[1], "build/" + output_name)
     if sha(read_regular(Path(__file__).resolve())) != before["scripts/test-native-bitwarden-strict-backend.py"]:
         raise GuardError("running runner differs from checkpoint")
     args.output.mkdir(mode=0o700)
     result["outputCreated"] = True
     package = args.output / "SDKPackage"
     shutil.copytree(args.debug_package, package)
-    verify_package(args.receipt, package, "debug")
+    verify_package(args.receipt, package, "debug", args.sdk_profile)
     harness = args.output / "harness"
     harness.mkdir()
     for name in sorted(INPUTS):
-        if not (name.startswith("Sources/") or name == "Tests/BrowserAppTests/NativeBitwardenStrictBackendTests.swift"):
+        if not compiled_input(name):
             continue
         destination = harness / name
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(safe_path(args.source_root, name), destination)
         if sha(read_regular(destination)) != before[name]:
             raise GuardError("staged input mismatch")
+    declaration = admission_declaration(read_regular(safe_path(
+        args.source_root, "Sources/ArcusisBrowser/NativeBitwardenController.swift")))
+    declaration_path = harness / "Sources/ArcusisBrowser/NativeBitwardenControllerAdmission.swift"
+    declaration_path.write_bytes(declaration)
     (harness / "Package.swift").write_text(PACKAGE)
     def check_staged():
         for name in INPUTS:
-            if name.startswith("Sources/") or name == "Tests/BrowserAppTests/NativeBitwardenStrictBackendTests.swift":
+            if compiled_input(name):
                 if sha(read_regular(safe_path(harness, name))) != before[name]:
                     raise GuardError("staged source changed")
         if read_regular(harness / "Package.swift") != PACKAGE.encode():
             raise GuardError("harness package changed")
+        if read_regular(declaration_path) != declaration:
+            raise GuardError("staged admission changed")
         if (sha(read_regular(args.transport_helper)) != HELPER_SHA256
                 or sha(read_regular(args.extractor)) != EXTRACTOR_SHA256
                 or sha(read_regular(safe_path(args.sdk_source, "crates/bitwarden-core/src/client/test_accounts.rs"))) != VECTOR_SHA256):
             raise GuardError("fixture source changed")
         verify_checkpoint(args.source_root, args.source_manifest, args.source_manifest_sha256)
-        verify_package(args.receipt, args.debug_package, "debug")
-        verify_package(args.receipt, package, "debug")
+        verify_package(args.receipt, args.debug_package, "debug", args.sdk_profile)
+        verify_package(args.receipt, package, "debug", args.sdk_profile)
+        if args.sdk_profile == "sdk9":
+            verify_service_sources(args.service_primary, args.service_candidate, args.service_patch)
+    check_staged()
+    result["phase"] = "admission-negative"
+    run_admission_negative(helper, args.output, declaration_path)
+    result["unrelatedFileAdmissionDenied"] = True
     check_staged()
     scratch = args.output / "swift-build"
     cache = args.output / "swift-cache"
@@ -524,14 +762,22 @@ def run_backend(args, result: dict) -> None:
     binary = bundle / "Contents/MacOS/BrowserAppTests"
     binary_hash = sha(read_regular(helper.regular(binary)))
     result["testBinarySHA256Before"] = binary_hash
+    result["phase"] = "authority-xctest"
+    authority_command = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny process-fork)(deny network*)",
+                         XCTEST, "-XCTest", "BrowserAppTests.NativeBitwardenWriteAuthorityTests", str(bundle)]
+    authority_result = {}
+    run_test(authority_command, args.output, {}, authority_result, 60, expected_tests=4)
+    result["authorityTests"] = "passed"
+    check_staged()
     server = helper.Server()
-    server.RequestHandlerClass = host_handler(helper, vector, token, response)
+    server.RequestHandlerClass = host_handler(helper, vector, token, response, args.provider_shape)
     server.prelogins = 0
     server.logins = 0
     server.creates = 0
     server.created = None
     server.create_pending = threading.Event()
     server.create_release = threading.Event()
+    server.shape_fault = None
     address = server.server_address
     server.timeout = 0.1
     stop = threading.Event()
@@ -543,7 +789,8 @@ def run_backend(args, result: dict) -> None:
         worker.start()
         result["phase"] = "xctest"
         fixture = {"endpoint": f"http://127.0.0.1:{address[1]}", "email": vector["email"],
-                   "currentPassword": vector["currentPassword"], "cipherID": CIPHER_ID}
+                   "currentPassword": vector["currentPassword"], "cipherID": CIPHER_ID,
+                   "shape": args.provider_shape}
         extra = {"ARCUSIS_STRICT_BACKEND_FIXTURE": base64.b64encode(json.dumps(fixture).encode()).decode()}
         command = ["/usr/bin/sandbox-exec", "-p", helper.runtime_sandbox(address[1]), XCTEST,
                    "-XCTest", "BrowserAppTests.NativeBitwardenStrictBackendTests/testStrictPreparationLifecycle", str(bundle)]
@@ -579,7 +826,8 @@ def run_backend(args, result: dict) -> None:
             raise GuardError("fixture threads survived")
         if not result["listenerClosed"]:
             raise GuardError("listener survived")
-    if (server.errors or server.prelogins != 1 or server.logins != 1 or server.syncs != 4
+    expected_syncs = 9 if args.sdk_profile == "sdk9" else 6
+    if (server.errors or server.prelogins != 2 or server.logins != 2 or server.syncs != expected_syncs
             or server.puts != 1 or server.creates != 1):
         raise GuardError("fixture count mismatch")
     if result["testBinarySHA256After"] != binary_hash:
@@ -595,11 +843,11 @@ def run_legacy(args, result: dict) -> None:
     helper = load_pinned(args.transport_helper, HELPER_SHA256, "strict_transport_legacy_helper")
     if mode != "default":
         verify_legacy_package(args.legacy_package, mode)
-    base = safe_path(Path(__file__).resolve().parents[1], "build/NativeBitwardenStrictBackend")
+    base = safe_path(Path(__file__).resolve().parents[1], "build/NativeBitwardenWriteAuthority")
     if args.output.parent != base or not args.output.is_absolute() or args.output.exists() or args.output.is_symlink():
         raise GuardError("fresh owned output required")
     base.mkdir(parents=True, exist_ok=True)
-    safe_path(Path(__file__).resolve().parents[1], "build/NativeBitwardenStrictBackend")
+    safe_path(Path(__file__).resolve().parents[1], "build/NativeBitwardenWriteAuthority")
     if sha(read_regular(Path(__file__).resolve())) != before["scripts/test-native-bitwarden-strict-backend.py"]:
         raise GuardError("running runner differs from checkpoint")
     args.output.mkdir(mode=0o700)
@@ -611,11 +859,15 @@ def run_legacy(args, result: dict) -> None:
     harness = args.output / "harness"
     harness.mkdir()
     for name in sorted(INPUTS):
-        if not (name.startswith("Sources/") or name == "Tests/BrowserAppTests/NativeBitwardenStrictBackendTests.swift"):
+        if not compiled_input(name):
             continue
         target = harness / name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(safe_path(args.source_root, name), target)
+    declaration = admission_declaration(read_regular(safe_path(
+        args.source_root, "Sources/ArcusisBrowser/NativeBitwardenController.swift")))
+    declaration_path = harness / "Sources/ArcusisBrowser/NativeBitwardenControllerAdmission.swift"
+    declaration_path.write_bytes(declaration)
     dependency = 'dependencies: [.package(name: "SDKPackage", path: "../SDKPackage")],' if mode != "default" else ""
     product = ', .product(name: "ArcusisBitwardenSDK", package: "SDKPackage")' if mode != "default" else ""
     settings = (', swiftSettings: [.define("ARCUSIS_NATIVE_BITWARDEN_ORGANIZATION_CANDIDATE"), '
@@ -635,11 +887,13 @@ let package = Package(name: "ArcusisBrowser", platforms: [.macOS("26.0")],
         if sha(read_regular(args.transport_helper)) != HELPER_SHA256:
             raise GuardError("helper changed")
         for name in INPUTS:
-            if name.startswith("Sources/") or name == "Tests/BrowserAppTests/NativeBitwardenStrictBackendTests.swift":
+            if compiled_input(name):
                 if sha(read_regular(safe_path(harness, name))) != before[name]:
                     raise GuardError("staged source changed")
         if read_regular(harness / "Package.swift") != package_text.encode():
             raise GuardError("harness package changed")
+        if read_regular(declaration_path) != declaration:
+            raise GuardError("staged admission changed")
         if mode != "default":
             verify_legacy_package(args.legacy_package, mode)
             verify_legacy_package(package, mode)
@@ -688,6 +942,11 @@ def main() -> None:
     parser.add_argument("--source-manifest-sha256", required=True)
     parser.add_argument("--receipt", type=Path)
     parser.add_argument("--debug-package", type=Path)
+    parser.add_argument("--sdk-profile", choices=("sdk8", "sdk9"), default="sdk8")
+    parser.add_argument("--provider-shape", choices=("bitwarden", "vaultwarden"))
+    parser.add_argument("--service-primary", type=Path)
+    parser.add_argument("--service-candidate", type=Path)
+    parser.add_argument("--service-patch", type=Path)
     parser.add_argument("--run-fixture", action="store_true")
     parser.add_argument("--run-legacy", choices=("default", "sdk3", "sdk7"))
     parser.add_argument("--legacy-package", type=Path)
@@ -697,7 +956,7 @@ def main() -> None:
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     if args.run_legacy:
-        if (args.run_fixture or args.transport_helper is None or args.output is None
+        if (args.sdk_profile != "sdk8" or args.provider_shape is not None or args.run_fixture or args.transport_helper is None or args.output is None
                 or (args.run_legacy != "default" and args.legacy_package is None)
                 or (args.run_legacy == "default" and args.legacy_package is not None)):
             parser.error("legacy mode requires helper, fresh output and selected package")
@@ -730,8 +989,15 @@ def main() -> None:
     if args.run_fixture:
         if any(value is None for value in (args.receipt, args.debug_package, args.transport_helper, args.sdk_source, args.extractor, args.output)):
             parser.error("fixture requires transport helper, SDK source, extractor and fresh output")
+        if args.sdk_profile == "sdk9" and (args.provider_shape is None or any(
+                value is None for value in (args.service_primary, args.service_candidate, args.service_patch))):
+            parser.error("SDK9 requires provider shape and pinned service sources")
+        if args.sdk_profile == "sdk8" and (args.provider_shape is not None or any(
+                value is not None for value in (args.service_primary, args.service_candidate, args.service_patch))):
+            parser.error("SDK8 cannot use service-shape inputs")
         result = {"status": "incomplete", "phase": "validation", "outputCreated": False,
-                  "sourceManifestSHA256": args.source_manifest_sha256, "productAcceptance": False}
+                  "sourceManifestSHA256": args.source_manifest_sha256, "productAcceptance": False,
+                  "sdkProfile": args.sdk_profile, "providerShape": args.provider_shape}
         try:
             run_backend(args, result)
         except BaseException as error:
@@ -741,7 +1007,7 @@ def main() -> None:
             if result["outputCreated"]:
                 try:
                     verify_checkpoint(args.source_root, args.source_manifest, args.source_manifest_sha256)
-                    verify_package(args.receipt, args.debug_package, "debug")
+                    verify_package(args.receipt, args.debug_package, "debug", args.sdk_profile)
                     result["sourceAndPackageAfter"] = "matched"
                 except Exception as error:
                     result["sourceAndPackageAfter"] = "mismatch"
@@ -757,7 +1023,7 @@ def main() -> None:
     if args.receipt is None or args.debug_package is None:
         parser.error("input verification requires receipt and debug package")
     verify_checkpoint(args.source_root, args.source_manifest, args.source_manifest_sha256)
-    verify_package(args.receipt, args.debug_package, "debug")
+    verify_package(args.receipt, args.debug_package, "debug", args.sdk_profile)
     print("input checkpoint verified; no fixture was run")
 
 

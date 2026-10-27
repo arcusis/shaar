@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "profile": "hosted-sdk10-public-source",
+  "cargoCommit": "797e8a9bca276c1c9f9f738d2a20f484fa4eea9d",
+  "accepted": false,
+  "integrationReady": false,
+  "sdkSourceCommit": "5cf919837e83b71c2508bf99344ea57cf5f84e88",
+  "sdkSourceTree": "9af9432aefeed6796e40e5019ffdc8600f3381e9",
+  "sdkCandidateTree": "3755ee1144f047435a9bc2ba7412b21e2f300f94",
+  "cargoLockSHA256": "48cef19482dfc18bbaf67e233b756a0b2a8e1551e558384893f0c05d3d7efd3e",
+  "registrySource": "registry+https://github.com/rust-lang/crates.io-index",
+  "registryPackages": 657,
+  "registryArchiveOrigin": "https://static.crates.io",
+  "gitSource": "git+https://github.com/bitwarden/passkey-rs?rev=043279e92e2eb5f509bf87eb7fa50987fd377e32#043279e92e2eb5f509bf87eb7fa50987fd377e32",
+  "gitCommit": "043279e92e2eb5f509bf87eb7fa50987fd377e32",
+  "gitTree": "e6f5aece3d5a7fa346fda8ca688ac8280ff419be",
+  "gitPackages": 6,
+  "sdk9PinSHA256": "a4c51b81da8a9521ce142401e030e0ac644c6fc505939529c66b4c8c97ac0f80",
+  "sdk10PinSHA256": "a4c82a31ce2b83b06447c0195b425e85cb80ea5ce595731d8f7d6c907f806010",
+  "normalizationCandidateSHA256": "bdda46346fa82ec8aed81337b61d578039e774a76c5c3266d24820b4847c5a6d",
+  "normalizationPatchSHA256": "a1fa54b7affc3101c92b5ecaebee72209c90b4d75da4a9a368ca14642e8c91c4",
+  "serviceCandidateSHA256": "9a202a82c43c72c116f2748683adb6c197be7c441ca41d83a5f31c906f20c50d"
+}

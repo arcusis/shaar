@@ -285,10 +285,74 @@ class HostedTests(unittest.TestCase):
     def test_mixed_historical_and_hosted_profiles_rejected(self):
         full = ('inputs', 'preparer', 'checkpoint', 'digest', 'rustup', 'cargo')
         self.assertTrue(BUILDER.hosted_input_profile(BUILDER.SDK9_PROFILE, (None, None), full))
+        self.assertTrue(BUILDER.hosted_input_profile(BUILDER.SDK10_PROFILE, (None, None), full))
         self.assertFalse(BUILDER.hosted_input_profile(BUILDER.SDK8_PROFILE, ('registry', 'git'), (None,) * 6))
         with self.assertRaises(ValueError): BUILDER.hosted_input_profile(BUILDER.SDK8_PROFILE, (None, None), full)
         with self.assertRaises(ValueError): BUILDER.hosted_input_profile(BUILDER.SDK9_PROFILE, ('registry', None), full)
+        with self.assertRaises(ValueError): BUILDER.hosted_input_profile(BUILDER.SDK10_PROFILE, ('registry', None), full)
         with self.assertRaises(ValueError): BUILDER.hosted_input_profile(BUILDER.SDK9_PROFILE, (None, None), full[:-1] + (None,))
+
+    def test_hosted_sdk10_pin_cannot_select_sdk9_or_vice_versa(self):
+        sdk9 = ROOT / 'ThirdParty/BitwardenStrictEditSpike/hosted-inputs.pin.json'
+        sdk10 = ROOT / 'ThirdParty/BitwardenStrictEditSpike/hosted-sdk10-inputs.pin.json'
+        lock = self.root / 'Cargo.lock'
+        lock.write_bytes(b'synthetic')
+        with self.assertRaisesRegex(ValueError, 'pin or lock mismatch'):
+            MODULE.load_pin(sdk10, lock, MODULE.HOSTED_SDK9)
+        with self.assertRaisesRegex(ValueError, 'pin or lock mismatch'):
+            MODULE.load_pin(sdk9, lock, MODULE.HOSTED_SDK10)
+        self.assertEqual(MODULE.digest(sdk9), MODULE.HOSTED_SDK9.pin_sha256)
+        self.assertEqual(MODULE.digest(sdk10), MODULE.HOSTED_SDK10.pin_sha256)
+        self.assertNotEqual(MODULE.HOSTED_SDK9.tree, MODULE.HOSTED_SDK10.tree)
+
+    def test_sdk10_checkpoint_requires_both_unchanged_pins(self):
+        preparer = self.root / 'preparer.py'
+        preparer.write_text('value = 7\n')
+        names = ('ThirdParty/BitwardenStrictEditSpike/hosted-inputs.pin.json',
+                 'ThirdParty/BitwardenStrictEditSpike/hosted-sdk10-inputs.pin.json')
+        for name in names:
+            destination = self.root / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes((ROOT / name).read_bytes())
+        entries = {'scripts/build-native-bitwarden-strict-sdk.py': BUILDER.digest(Path(BUILDER.__file__).absolute()),
+                   'scripts/prepare-native-bitwarden-hosted-inputs.py': BUILDER.digest(preparer),
+                   **{name: BUILDER.digest(self.root / name) for name in names}}
+        checkpoint = self.root / 'checkpoint.json'
+        checkpoint.write_text(json.dumps({'schema': 1, 'files': entries}))
+        with patch.object(BUILDER, 'ROOT', self.root):
+            module, _ = BUILDER.load_hosted_preparer(preparer, checkpoint, BUILDER.digest(checkpoint),
+                                                     BUILDER.SDK10_PROFILE)
+            self.assertEqual(module.value, 7)
+            (self.root / names[1]).write_text('changed')
+            with self.assertRaisesRegex(ValueError, 'source drift'):
+                BUILDER.load_hosted_preparer(preparer, checkpoint, BUILDER.digest(checkpoint),
+                                            BUILDER.SDK10_PROFILE)
+
+    def test_download_size_bound_checks_exited_process_and_still_cleans(self):
+        class Process:
+            pid = 4242
+            returncode = None
+
+            def wait(self, timeout):
+                self.returncode = 0
+                return 0
+
+        (self.root / 'oversize').write_bytes(b'1234')
+        calls = []
+
+        def killpg(pid, sig):
+            calls.append(sig)
+            if sig == 0:
+                raise ProcessLookupError()
+
+        with patch.object(MODULE.subprocess, 'Popen', return_value=Process()) as spawn, \
+             patch.object(MODULE.os, 'waitid', return_value=object()), \
+             patch.object(MODULE.os, 'killpg', side_effect=killpg):
+            with self.assertRaisesRegex(ValueError, 'owned download exceeds size limit'):
+                MODULE.command(['synthetic'], self.root, {}, offline=False,
+                               size_root=self.root, size_limit=3)
+        self.assertIsNotNone(spawn.call_args.kwargs['preexec_fn'])
+        self.assertEqual(calls, [signal.SIGKILL, 0])
 
     def test_vendor_config_pins_source_and_rejects_extra(self):
         origin = self.root / 'vendor'

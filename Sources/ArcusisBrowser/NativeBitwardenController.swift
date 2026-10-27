@@ -2,6 +2,30 @@ import BrowserCore
 import Foundation
 import Observation
 
+// BEGIN WRITE ADMISSION DECLARATION
+/// Controller-created admission for one already validated snapshot.
+struct NativeBitwardenWriteAdmission: Sendable {
+  let authority: NativeBitwardenWriteAuthority
+  let lease: NativeBitwardenWriteAuthority.Lease
+
+  fileprivate init(
+    authority: NativeBitwardenWriteAuthority, lease: NativeBitwardenWriteAuthority.Lease
+  ) {
+    self.authority = authority
+    self.lease = lease
+  }
+}
+
+#if ARCUSIS_NATIVE_BITWARDEN_STRICT_SDK && ARCUSIS_NATIVE_BITWARDEN_REFRESH_FIXTURE && canImport(ArcusisBitwardenSDK)
+  func nativeBitwardenFixtureAdmission(
+    authority: NativeBitwardenWriteAuthority, lease: NativeBitwardenWriteAuthority.Lease
+  ) -> NativeBitwardenWriteAdmission? {
+    guard NativeBitwardenSDKBackend.fixtureHostAllowed else { return nil }
+    return NativeBitwardenWriteAdmission(authority: authority, lease: lease)
+  }
+#endif
+// END WRITE ADMISSION DECLARATION
+
 @MainActor @Observable
 final class NativeBitwardenController {
   @MainActor private final class ProfileState {
@@ -22,6 +46,7 @@ final class NativeBitwardenController {
     #endif
     var fillEpoch = UUID()
     var fillPair: NativeBitwardenFillSnapshotAccess?
+    let writeAuthority = NativeBitwardenWriteAuthority()
 
     init(binding: PasswordAuthenticationBinding, enabled: Bool) {
       self.binding = binding
@@ -139,6 +164,7 @@ final class NativeBitwardenController {
   func removeFillObserver(_ id: UUID) { fillObservers[id] = nil }
 
   private func invalidateFill(profileID: UUID, state: ProfileState) {
+    state.writeAuthority.revoke()
     state.fillEpoch = UUID()
     state.fillPair = nil
     fillRevision &+= 1
@@ -807,6 +833,7 @@ final class NativeBitwardenController {
   #endif
 
   private func invalidateRefresh(_ state: ProfileState) {
+    state.writeAuthority.revoke()
     #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_CANDIDATE
       if let refresh = state.refresh {
         let task = refresh.invalidate()
@@ -1165,6 +1192,13 @@ final class NativeBitwardenController {
       makeBinding(profileID: profileID, preferences: stored, accountID: session.accountID)
         == binding
     else { return }
+    guard let syncState = profiles[profileID] else { return }
+    clearVaultSnapshot(profileID: profileID, state: syncState, status: "Syncing")
+    guard generation == syncState.generation, profiles[profileID] === syncState,
+      syncState.activeSession?.id == session.id, syncState.binding == binding,
+      preferences.nativeVaultPreferences(for: profileID) == stored
+    else { return }
+    let syncEpoch = syncState.fillEpoch
     do {
       #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_CANDIDATE
         let snapshot: NativeBitwardenVaultSnapshot
@@ -1179,9 +1213,10 @@ final class NativeBitwardenController {
         let snapshot = try await backend.syncVault(sessionID: session.id)
       #endif
       guard generation == profiles[profileID]?.generation,
+        profiles[profileID]?.fillEpoch == syncEpoch,
         profiles[profileID]?.activeSession?.id == session.id,
         profiles[profileID]?.binding == binding,
-        preferences.nativeVaultPreferences(for: profileID).isEnabled
+        preferences.nativeVaultPreferences(for: profileID) == stored
       else { return }
       vaultSnapshotByProfile[profileID] = snapshot
       syncStatusByProfile[profileID] = "Synced \(snapshot.logins.count) logins"
@@ -1189,10 +1224,14 @@ final class NativeBitwardenController {
         let provider = backend as? any NativeBitwardenFillCredentialBackend
       else { return }
       let epoch = state.fillEpoch
+      #if ARCUSIS_NATIVE_BITWARDEN_STRICT_SDK
+        let authorityTicket = state.writeAuthority.revoke()
+      #endif
       guard let pair = try? await provider.fillSnapshot(sessionID: session.id) else { return }
       guard generation == state.generation, state.fillEpoch == epoch,
         state.activeSession?.id == session.id, state.activeSession?.accountID == session.accountID,
         state.binding == binding, pair.access.sessionID == session.id, pair.snapshot == snapshot,
+        preferences.nativeVaultPreferences(for: profileID) == stored,
         preferences.nativeVaultPreferences(for: profileID).isEnabled,
         preferences.nativeVaultPreferences(for: profileID).accountID == session.accountID,
         (try? preferences.nativeVaultPreferences(for: profileID).server.endpoints()
@@ -1201,11 +1240,38 @@ final class NativeBitwardenController {
           profileID: profileID, preferences: preferences.nativeVaultPreferences(for: profileID),
           accountID: session.accountID) == binding
       else { return }
+      #if ARCUSIS_NATIVE_BITWARDEN_STRICT_SDK
+        if let writeBackend = backend as? any NativeBitwardenStrictWriteBackend,
+          let endpoints = try? stored.server.endpoints(),
+          let lease = state.writeAuthority.adopt(
+            ticket: authorityTicket,
+            binding: NativeBitwardenWriteAuthority.Binding(
+              owner: binding, identityURL: endpoints.identityURL, apiURL: endpoints.apiURL,
+              access: pair.access))
+        {
+          do {
+            let admission = NativeBitwardenWriteAdmission(
+              authority: state.writeAuthority, lease: lease)
+            try await writeBackend.adoptStrictWriteAuthority(admission)
+          } catch {
+            state.writeAuthority.revoke(lease)
+          }
+          guard generation == state.generation, profiles[profileID] === state,
+            state.fillEpoch == epoch, state.activeSession?.id == session.id,
+            state.activeSession?.accountID == session.accountID, state.binding == binding,
+            preferences.nativeVaultPreferences(for: profileID) == stored
+          else {
+            state.writeAuthority.revoke(lease)
+            return
+          }
+        }
+      #endif
       state.fillPair = pair
       fillRevision &+= 1
       for observer in Array(fillObservers.values) { observer(profileID) }
     } catch {
       guard generation == profiles[profileID]?.generation,
+        profiles[profileID] === syncState, profiles[profileID]?.fillEpoch == syncEpoch,
         profiles[profileID]?.activeSession?.id == session.id,
         preferences.nativeVaultPreferences(for: profileID).isEnabled
       else { return }

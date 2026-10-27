@@ -19,6 +19,48 @@ import XCTest
     let cipherID: UUID
   }
 
+  private actor StrictPreflightBarrier {
+    private var entered = false
+    private var released = false
+    private var enteredWaiter: CheckedContinuation<Void, Never>?
+    private var releaseWaiter: CheckedContinuation<Void, Never>?
+
+    func pause() async {
+      entered = true
+      enteredWaiter?.resume()
+      enteredWaiter = nil
+      if !released { await withCheckedContinuation { releaseWaiter = $0 } }
+    }
+
+    func waitUntilEntered() async {
+      if !entered { await withCheckedContinuation { enteredWaiter = $0 } }
+    }
+
+    func release() {
+      released = true
+      releaseWaiter?.resume()
+      releaseWaiter = nil
+    }
+  }
+
+  private func adopt(
+    _ backend: NativeBitwardenSDKBackend, authority: NativeBitwardenWriteAuthority,
+    session: NativeBitwardenEstablishedSession, access: NativeBitwardenFillAccess,
+    profileID: UUID, server: BitwardenServerConfiguration
+  ) async throws -> NativeBitwardenWriteAuthority.Lease {
+    let endpoints = try server.endpoints()
+    let binding = NativeBitwardenWriteAuthority.Binding(
+      owner: PasswordAuthenticationBinding(
+        profileID: profileID, vaultID: UUID(), accountID: session.accountID,
+        authority: endpoints.credentialAuthority),
+      identityURL: endpoints.identityURL, apiURL: endpoints.apiURL, access: access)
+    let lease = try XCTUnwrap(authority.adopt(ticket: authority.revoke(), binding: binding))
+    let admission = try XCTUnwrap(
+      nativeBitwardenFixtureAdmission(authority: authority, lease: lease))
+    try await backend.adoptStrictWriteAuthority(admission)
+    return lease
+  }
+
   private func optional(_ value: Any?) -> Any { value ?? NSNull() }
 
   private func control(_ endpoint: URL, path: String, body: Data? = nil) async throws -> Data {
@@ -135,13 +177,91 @@ import XCTest
       try await seed(fixtureClient, endpoint: endpoint, cipherID: fixture.cipherID)
       _ = try await backend.syncVault(sessionID: session.id)
       print("strict-stage: first-sync")
-      let access = try await backend.fillSnapshot(sessionID: session.id).access
+      var access = try await backend.fillSnapshot(sessionID: session.id).access
+      let profileID = UUID()
+      let authority = NativeBitwardenWriteAuthority()
       let context = PasswordFillContext(
         requestID: UUID(),
-        binding: PasswordFillBinding(windowID: UUID(), profileID: UUID(), tabID: UUID()),
+        binding: PasswordFillBinding(windowID: UUID(), profileID: profileID, tabID: UUID()),
         origin: try XCTUnwrap(PasswordFillOrigin("https://fixture.example")))
       let input = NativeBitwardenStrictUpdateInput(
         username: "synthetic-new-user", password: "synthetic-new-pass")
+      do {
+        _ = try await backend.prepareStrictUpdate(
+          access: access, context: context, cipherID: fixture.cipherID)
+        XCTFail("Unadopted snapshot accepted")
+      } catch { XCTAssertEqual(error as? NativeBitwardenWriteError, .staleAccess) }
+      let endpoints = try server.endpoints()
+      let badOwner = PasswordAuthenticationBinding(
+        profileID: profileID, vaultID: UUID(), accountID: UUID(),
+        authority: endpoints.credentialAuthority)
+      let correctOwner = PasswordAuthenticationBinding(
+        profileID: profileID, vaultID: UUID(), accountID: session.accountID,
+        authority: endpoints.credentialAuthority)
+      let invalidBindings = [
+        NativeBitwardenWriteAuthority.Binding(
+          owner: badOwner, identityURL: endpoints.identityURL,
+          apiURL: endpoints.apiURL, access: access),
+        NativeBitwardenWriteAuthority.Binding(
+          owner: correctOwner, identityURL: URL(string: "https://other.example")!,
+          apiURL: endpoints.apiURL, access: access),
+        NativeBitwardenWriteAuthority.Binding(
+          owner: correctOwner, identityURL: endpoints.identityURL,
+          apiURL: URL(string: "https://other.example")!, access: access),
+        NativeBitwardenWriteAuthority.Binding(
+          owner: PasswordAuthenticationBinding(
+            profileID: profileID, vaultID: UUID(), accountID: session.accountID,
+            authority: URL(string: "https://other.example")!), identityURL: endpoints.identityURL,
+          apiURL: endpoints.apiURL, access: access),
+      ]
+      for binding in invalidBindings {
+        let invalid = NativeBitwardenWriteAuthority()
+        let lease = try XCTUnwrap(invalid.adopt(ticket: invalid.revoke(), binding: binding))
+        let admission = try XCTUnwrap(
+          nativeBitwardenFixtureAdmission(authority: invalid, lease: lease))
+        do {
+          try await backend.adoptStrictWriteAuthority(admission)
+          XCTFail("Mismatched account or endpoint accepted")
+        } catch { XCTAssertEqual(error as? NativeBitwardenWriteError, .staleAccess) }
+        invalid.revoke()
+      }
+      let oldLease = try await adopt(
+        backend, authority: authority, session: session,
+        access: access, profileID: profileID, server: server)
+      let pausedHandle = try await backend.prepareStrictUpdate(
+        access: access, context: context, cipherID: fixture.cipherID)
+      let barrier = StrictPreflightBarrier()
+      let installed = await backend.setStrictPreflightForFixture { await barrier.pause() }
+      XCTAssertTrue(installed)
+      let pausedAccess = access
+      let paused = Task {
+        try await backend.strictUpdate(
+          access: pausedAccess, context: context, handle: pausedHandle, input: input)
+      }
+      await barrier.waitUntilEntered()
+      authority.revoke()
+      await barrier.release()
+      do {
+        try await paused.value
+        XCTFail("Revoked paused preflight dispatched")
+      } catch { XCTAssertEqual(error as? NativeBitwardenWriteError, .staleAccess) }
+      let clearedHook = await backend.setStrictPreflightForFixture(nil)
+      XCTAssertTrue(clearedHook)
+      let countData = try await control(endpoint, path: "fixture/count")
+      let counts = try JSONDecoder().decode([String: Int].self, from: countData)
+      XCTAssertEqual(counts["put"], 0)
+      XCTAssertEqual(counts["create"], 0)
+      _ = try await backend.syncVault(sessionID: session.id)
+      let oldAdmission = try XCTUnwrap(
+        nativeBitwardenFixtureAdmission(authority: authority, lease: oldLease))
+      do {
+        try await backend.adoptStrictWriteAuthority(oldAdmission)
+        XCTFail("Revoked adoption revived after sync")
+      } catch { XCTAssertEqual(error as? NativeBitwardenWriteError, .staleAccess) }
+      access = try await backend.fillSnapshot(sessionID: session.id).access
+      _ = try await adopt(
+        backend, authority: authority, session: session,
+        access: access, profileID: profileID, server: server)
       do {
         _ = try await backend.prepareStrictUpdate(
           access: access, context: context, cipherID: UUID())
@@ -203,6 +323,9 @@ import XCTest
         XCTFail("Replaced snapshot accepted")
       } catch { XCTAssertEqual(error as? NativeBitwardenWriteError, .staleAccess) }
       let latest = try await backend.fillSnapshot(sessionID: session.id).access
+      _ = try await adopt(
+        backend, authority: authority, session: session,
+        access: latest, profileID: profileID, server: server)
       let final = try await backend.prepareStrictUpdate(
         access: latest, context: context, cipherID: fixture.cipherID)
       let pending = Task {
@@ -240,6 +363,9 @@ import XCTest
       _ = try await backend.syncVault(sessionID: session.id)
       print("strict-stage: reconciliation-sync")
       let fresh = try await backend.fillSnapshot(sessionID: session.id).access
+      let freshLease = try await adopt(
+        backend, authority: authority, session: session,
+        access: fresh, profileID: profileID, server: server)
       let updated = try await backend.fillCredential(
         access: fresh, cipherID: fixture.cipherID, context: context)
       XCTAssertEqual(updated.username, "synthetic-new-user")
@@ -247,11 +373,44 @@ import XCTest
       print("strict-stage: credential")
       let preCreate = try await backend.prepareStrictUpdate(
         access: fresh, context: context, cipherID: fixture.cipherID)
+      let otherProfile = UUID()
+      let otherAuthority = NativeBitwardenWriteAuthority()
+      let otherLogin = try await backend.login(
+        server: server, email: fixture.email, password: fixture.currentPassword,
+        deviceID: UUID(), secondFactor: nil)
+      guard case .authenticated(let otherCandidate) = otherLogin else {
+        return XCTFail("Second synthetic login rejected")
+      }
+      let otherSession = try await backend.initializeCrypto(
+        candidateID: otherCandidate.id, password: fixture.currentPassword)
+      otherSession.tokenProvider.publish(otherSession.credential.accessToken)
+      _ = try await backend.syncVault(sessionID: otherSession.id)
+      let otherAccess = try await backend.fillSnapshot(sessionID: otherSession.id).access
+      let otherContext = PasswordFillContext(
+        requestID: UUID(),
+        binding: PasswordFillBinding(windowID: UUID(), profileID: otherProfile, tabID: UUID()),
+        origin: try XCTUnwrap(PasswordFillOrigin("https://fixture.example")))
+      _ = try await adopt(
+        backend, authority: otherAuthority, session: otherSession,
+        access: otherAccess, profileID: otherProfile, server: server)
+      let otherPrepared = try await backend.prepareStrictUpdate(
+        access: otherAccess, context: otherContext, cipherID: fixture.cipherID)
+      authority.revoke()
+      do {
+        try await backend.strictUpdate(
+          access: fresh, context: context, handle: preCreate, input: input)
+        XCTFail("Revoked Profile retained dispatch authority")
+      } catch { XCTAssertEqual(error as? NativeBitwardenWriteError, .staleAccess) }
+      let independentData = try await control(endpoint, path: "fixture/count")
+      let independentCounts = try JSONDecoder().decode([String: Int].self, from: independentData)
+      XCTAssertEqual(independentCounts["put"], 1)
+      XCTAssertEqual(independentCounts["create"], 0)
       let createInput = NativeBitwardenWriteInput(
         username: "synthetic-create-user", password: "synthetic-create-pass",
         name: "synthetic-create-name")
       let creating = Task {
-        try await backend.createLogin(access: fresh, context: context, input: createInput)
+        try await backend.createLogin(
+          access: otherAccess, context: otherContext, input: createInput)
       }
       var createDispatched = false
       for _ in 0..<100 {
@@ -265,12 +424,12 @@ import XCTest
       }
       XCTAssertTrue(createDispatched)
       do {
-        _ = try await backend.syncVault(sessionID: session.id)
+        _ = try await backend.syncVault(sessionID: otherSession.id)
         XCTFail("Sync overlapped pending create")
       } catch { XCTAssertEqual(error as? NativeBitwardenWriteError, .operationInProgress) }
       do {
         try await backend.strictUpdate(
-          access: fresh, context: context, handle: preCreate, input: input)
+          access: otherAccess, context: otherContext, handle: otherPrepared, input: input)
         XCTFail("Prepared update survived create dispatch")
       } catch { XCTAssertEqual(error as? NativeBitwardenWriteError, .staleAccess) }
       _ = try await control(endpoint, path: "fixture/create-release")
@@ -280,21 +439,33 @@ import XCTest
       } catch { XCTAssertEqual(error as? NativeBitwardenWriteError, .unconfirmed) }
       let completedCreates = await backend.completedStrictCreatesForFixture()
       XCTAssertEqual(completedCreates, 1)
-      let reconciled = try await backend.syncVault(sessionID: session.id)
+      let reconciled = try await backend.syncVault(sessionID: otherSession.id)
       let createdID = try XCTUnwrap(UUID(uuidString: "22222222-2222-4222-8222-222222222222"))
       XCTAssertTrue(
         reconciled.logins.contains { $0.id == createdID && $0.username == "synthetic-create-user" })
-      let afterCreate = try await backend.fillSnapshot(sessionID: session.id).access
+      let afterCreate = try await backend.fillSnapshot(sessionID: otherSession.id).access
+      let otherLease = try await adopt(
+        backend, authority: otherAuthority, session: otherSession,
+        access: afterCreate, profileID: otherProfile, server: server)
       _ = try await backend.prepareStrictUpdate(
-        access: afterCreate, context: context, cipherID: fixture.cipherID)
+        access: afterCreate, context: otherContext, cipherID: fixture.cipherID)
       print("strict-stage: create-reconciled")
       _ = await backend.lock(sessionID: session.id)
+      let lockedAdmission = try XCTUnwrap(
+        nativeBitwardenFixtureAdmission(authority: authority, lease: freshLease))
+      do {
+        try await backend.adoptStrictWriteAuthority(lockedAdmission)
+        XCTFail("Locked owner accepted stale adoption")
+      } catch { XCTAssertEqual(error as? NativeBitwardenWriteError, .staleAccess) }
+      XCTAssertTrue(otherAuthority.isCurrent(otherLease))
       do {
         _ = try await backend.prepareStrictUpdate(
-          access: afterCreate, context: context, cipherID: fixture.cipherID)
+          access: fresh, context: context, cipherID: fixture.cipherID)
         XCTFail("Locked session accepted")
       } catch { XCTAssertEqual(error as? NativeBitwardenWriteError, .staleAccess) }
       await backend.discard(sessionID: session.id)
+      _ = await backend.lock(sessionID: otherSession.id)
+      await backend.discard(sessionID: otherSession.id)
       print("strict-stage: complete")
     }
   }

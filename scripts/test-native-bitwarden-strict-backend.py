@@ -24,6 +24,16 @@ ROOT_HEAD = "62a01b48505d2b1cb119c3f35937ae8bfae59f27"
 HELPER_SHA256 = "cfb4653252fe700e34c8d8ae735e989657b8d355cb36c63588b81e3b2cf2c680"
 EXTRACTOR_SHA256 = "ed4436414633d5d89be69d7ef89f241e775f13b5a5b9c6ad167884ea05d807bb"
 VECTOR_SHA256 = "2347b7c7b3856b4672c38354fcaa00b0a2bb8afdbf842145230328bb6b9fb2c7"
+ADMISSION_SHA256 = "bfd67db0eb69ca7ddb4e43125862b3f0408f8938fedcc286d1d90596fc7ea1c6"
+ADMISSION_BEGIN = b"// BEGIN WRITE ADMISSION DECLARATION\n"
+ADMISSION_END = b"// END WRITE ADMISSION DECLARATION\n"
+ADMISSION_PROBE = b'''final class NativeBitwardenWriteAuthority: Sendable {
+  struct Lease: Sendable {}
+}
+func attempt(_ authority: NativeBitwardenWriteAuthority, _ lease: NativeBitwardenWriteAuthority.Lease) {
+  _ = NativeBitwardenWriteAdmission(authority: authority, lease: lease)
+}
+'''
 LEGACY_MANIFESTS = {
     "sdk3": "8b19e0aad144a523135f56eab2e0ebd4b3a9612f5111969099411fc95c71c9b0",
     "sdk7": "dd2e42bb29bf52f94d9f6ee64fcb6a7f5ab6f09b18dda75b7b01432afe299d15",
@@ -51,6 +61,8 @@ INPUTS = frozenset({
     "Sources/BrowserCore/BitwardenServerConfiguration.swift",
     "Sources/BrowserCore/Resources/public_suffix_list.dat",
     "Sources/ArcusisBrowser/NativeBitwardenBackend.swift",
+    "Sources/ArcusisBrowser/NativeBitwardenController.swift",
+    "Sources/ArcusisBrowser/NativeBitwardenWriteAuthority.swift",
     "Sources/ArcusisBrowser/NativeBitwardenWrites.swift",
     "Sources/ArcusisBrowser/NativeBitwardenCipherRepository.swift",
     "Sources/ArcusisBrowser/NativeBitwardenFillCredential.swift",
@@ -58,6 +70,7 @@ INPUTS = frozenset({
     "Sources/ArcusisBrowser/NativeBitwardenLogging.swift",
     "Sources/ArcusisBrowser/NativeBitwardenRefreshCoordinator.swift",
     "Tests/BrowserAppTests/NativeBitwardenStrictBackendTests.swift",
+    "Tests/BrowserAppTests/NativeBitwardenWriteAuthorityTests.swift",
     "scripts/test-native-bitwarden-strict-backend.py",
     "Tests/NativeBitwardenStrictBackendRunnerTests/test_strict_backend_runner.py",
 })
@@ -65,6 +78,35 @@ INPUTS = frozenset({
 
 class GuardError(ValueError):
     pass
+
+
+def compiled_input(name: str) -> bool:
+    return ((name.startswith("Sources/") and name != "Sources/ArcusisBrowser/NativeBitwardenController.swift")
+            or name in {"Tests/BrowserAppTests/NativeBitwardenStrictBackendTests.swift",
+                        "Tests/BrowserAppTests/NativeBitwardenWriteAuthorityTests.swift"})
+
+
+def admission_declaration(controller: bytes) -> bytes:
+    if controller.count(ADMISSION_BEGIN) != 1 or controller.count(ADMISSION_END) != 1:
+        raise GuardError("admission marker count")
+    start = controller.index(ADMISSION_BEGIN)
+    end = controller.index(ADMISSION_END) + len(ADMISSION_END)
+    if start >= end:
+        raise GuardError("admission marker order")
+    block = controller[start:end]
+    if sha(block) != ADMISSION_SHA256 or re.search(
+            rb"(?m)^[ \t]*(?:@[A-Za-z_][A-Za-z0-9_]*(?:\([^\r\n)]*\))?[ \t]+)*import\b", block):
+        raise GuardError("admission declaration mismatch")
+    return block
+
+
+def is_expected_admission_denial(output: bytes, exit_code: int) -> bool:
+    lines = [line for line in output.splitlines() if b"error:" in line and not line.lstrip().startswith(b"|")]
+    if len(lines) != 1:
+        return False
+    header = re.fullmatch(rb"(?:.*/)?AdmissionAccessProbe\.swift:[0-9]+:[0-9]+: error: ([^\r\n]+)", lines[0])
+    expected = b"'NativeBitwardenWriteAdmission' initializer is inaccessible due to 'fileprivate' protection level"
+    return exit_code != 0 and header is not None and header.group(1) == expected
 
 
 def unique(pairs):
@@ -319,6 +361,20 @@ def host_handler(helper, vector, token, response):
             self.headers.replace_header("Authorization", "Bearer synthetic-owned-token")
 
         def do_GET(self):
+            if self.path == "/fixture/count":
+                try:
+                    self.count_request()
+                    if self.client_address[0] != "127.0.0.1":
+                        raise GuardError("control boundary")
+                    with self.server.lock:
+                        self.server.controls += 1
+                        if self.server.controls > 80:
+                            raise GuardError("control count")
+                        counts = {"put": self.server.puts, "create": self.server.creates}
+                    self.send_json(200, counts)
+                except (ValueError, OSError):
+                    self.note_error("count control rejected")
+                return
             if self.path in ("/fixture/create-status", "/fixture/create-release"):
                 try:
                     self.count_request()
@@ -413,7 +469,55 @@ def run_build(command: list[str], cwd: Path, log: Path, timeout: int) -> bytes:
     return data
 
 
-def run_test(command: list[str], cwd: Path, extra: dict[str, str], result: dict, timeout: int) -> None:
+def run_admission_negative(helper, output_dir: Path, declaration_path: Path) -> None:
+    probe = output_dir / "AdmissionAccessProbe.swift"
+    probe.write_bytes(ADMISSION_PROBE)
+    os.chmod(probe, 0o600)
+    cache = output_dir / "admission-module-cache"
+    cache.mkdir(mode=0o700)
+    command = ["/usr/bin/sandbox-exec", "-p", helper.BUILD_SANDBOX, "swiftc", "-typecheck",
+               "-parse-as-library", "-target", "arm64-apple-macosx26.0", "-module-cache-path", str(cache),
+               str(declaration_path), str(probe)]
+    environment = {key: os.environ[key] for key in ("PATH", "HOME", "TMPDIR") if key in os.environ}
+    process = subprocess.Popen(command, cwd=output_dir, env=environment, stdin=subprocess.DEVNULL,
+                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
+    output = b""
+    try:
+        try:
+            output, _ = process.communicate(timeout=60)
+        except subprocess.TimeoutExpired as error:
+            output = error.output or b""
+            raise
+        if not is_expected_admission_denial(output, process.returncode):
+            raise GuardError("admission compiler denial not established")
+    finally:
+        try:
+            if process.poll() is None:
+                try:
+                    if os.getpgid(process.pid) != process.pid:
+                        raise GuardError("probe process identity changed")
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            process.wait(timeout=5)
+            try:
+                os.killpg(process.pid, 0)
+            except ProcessLookupError:
+                pass
+            else:
+                raise GuardError("probe process group survived")
+        finally:
+            if process.stdout is not None:
+                process.stdout.close()
+            log_fd = os.open(output_dir / "admission-negative.log", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(log_fd, "wb") as log:
+                log.write(output[-262144:])
+    if read_regular(probe) != ADMISSION_PROBE or sha(read_regular(declaration_path)) != ADMISSION_SHA256:
+        raise GuardError("admission probe input changed")
+
+
+def run_test(command: list[str], cwd: Path, extra: dict[str, str], result: dict, timeout: int,
+             expected_tests: int = 1) -> None:
     environment = {key: os.environ[key] for key in ("PATH", "HOME", "TMPDIR") if key in os.environ}
     environment.update(extra)
     process = subprocess.Popen(command, cwd=cwd, env=environment, stdin=subprocess.DEVNULL,
@@ -430,7 +534,8 @@ def run_test(command: list[str], cwd: Path, extra: dict[str, str], result: dict,
                        "unsupportedMatch", "cipherUnavailable", "invalidSnapshot", "syncFailed")
         result["knownErrorCases"] = [case for case in error_cases if case.encode() in output]
         result["xctestExitCode"] = process.returncode
-        if process.returncode != 0 or b"Executed 1 test, with 0 failures" not in output:
+        marker = f"Executed {expected_tests} test".encode()
+        if process.returncode != 0 or marker not in output or b"with 0 failures" not in output:
             raise GuardError("named XCTest failed")
     finally:
         if process.poll() is None:
@@ -456,11 +561,11 @@ def run_backend(args, result: dict) -> None:
     verify_package(args.receipt, args.debug_package, "debug")
     helper = load_pinned(args.transport_helper, HELPER_SHA256, "strict_transport_helper")
     vector, token, response = public_fixture(args.sdk_source, args.extractor)
-    base = safe_path(Path(__file__).resolve().parents[1], "build/NativeBitwardenStrictBackend")
+    base = safe_path(Path(__file__).resolve().parents[1], "build/NativeBitwardenWriteAuthority")
     if args.output.parent != base or not args.output.is_absolute() or args.output.exists() or args.output.is_symlink():
         raise GuardError("fresh owned output required")
     base.mkdir(parents=True, exist_ok=True)
-    safe_path(Path(__file__).resolve().parents[1], "build/NativeBitwardenStrictBackend")
+    safe_path(Path(__file__).resolve().parents[1], "build/NativeBitwardenWriteAuthority")
     if sha(read_regular(Path(__file__).resolve())) != before["scripts/test-native-bitwarden-strict-backend.py"]:
         raise GuardError("running runner differs from checkpoint")
     args.output.mkdir(mode=0o700)
@@ -471,21 +576,27 @@ def run_backend(args, result: dict) -> None:
     harness = args.output / "harness"
     harness.mkdir()
     for name in sorted(INPUTS):
-        if not (name.startswith("Sources/") or name == "Tests/BrowserAppTests/NativeBitwardenStrictBackendTests.swift"):
+        if not compiled_input(name):
             continue
         destination = harness / name
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(safe_path(args.source_root, name), destination)
         if sha(read_regular(destination)) != before[name]:
             raise GuardError("staged input mismatch")
+    declaration = admission_declaration(read_regular(safe_path(
+        args.source_root, "Sources/ArcusisBrowser/NativeBitwardenController.swift")))
+    declaration_path = harness / "Sources/ArcusisBrowser/NativeBitwardenControllerAdmission.swift"
+    declaration_path.write_bytes(declaration)
     (harness / "Package.swift").write_text(PACKAGE)
     def check_staged():
         for name in INPUTS:
-            if name.startswith("Sources/") or name == "Tests/BrowserAppTests/NativeBitwardenStrictBackendTests.swift":
+            if compiled_input(name):
                 if sha(read_regular(safe_path(harness, name))) != before[name]:
                     raise GuardError("staged source changed")
         if read_regular(harness / "Package.swift") != PACKAGE.encode():
             raise GuardError("harness package changed")
+        if read_regular(declaration_path) != declaration:
+            raise GuardError("staged admission changed")
         if (sha(read_regular(args.transport_helper)) != HELPER_SHA256
                 or sha(read_regular(args.extractor)) != EXTRACTOR_SHA256
                 or sha(read_regular(safe_path(args.sdk_source, "crates/bitwarden-core/src/client/test_accounts.rs"))) != VECTOR_SHA256):
@@ -493,6 +604,10 @@ def run_backend(args, result: dict) -> None:
         verify_checkpoint(args.source_root, args.source_manifest, args.source_manifest_sha256)
         verify_package(args.receipt, args.debug_package, "debug")
         verify_package(args.receipt, package, "debug")
+    check_staged()
+    result["phase"] = "admission-negative"
+    run_admission_negative(helper, args.output, declaration_path)
+    result["unrelatedFileAdmissionDenied"] = True
     check_staged()
     scratch = args.output / "swift-build"
     cache = args.output / "swift-cache"
@@ -524,6 +639,13 @@ def run_backend(args, result: dict) -> None:
     binary = bundle / "Contents/MacOS/BrowserAppTests"
     binary_hash = sha(read_regular(helper.regular(binary)))
     result["testBinarySHA256Before"] = binary_hash
+    result["phase"] = "authority-xctest"
+    authority_command = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny process-fork)(deny network*)",
+                         XCTEST, "-XCTest", "BrowserAppTests.NativeBitwardenWriteAuthorityTests", str(bundle)]
+    authority_result = {}
+    run_test(authority_command, args.output, {}, authority_result, 60, expected_tests=4)
+    result["authorityTests"] = "passed"
+    check_staged()
     server = helper.Server()
     server.RequestHandlerClass = host_handler(helper, vector, token, response)
     server.prelogins = 0
@@ -579,7 +701,7 @@ def run_backend(args, result: dict) -> None:
             raise GuardError("fixture threads survived")
         if not result["listenerClosed"]:
             raise GuardError("listener survived")
-    if (server.errors or server.prelogins != 1 or server.logins != 1 or server.syncs != 4
+    if (server.errors or server.prelogins != 2 or server.logins != 2 or server.syncs != 6
             or server.puts != 1 or server.creates != 1):
         raise GuardError("fixture count mismatch")
     if result["testBinarySHA256After"] != binary_hash:
@@ -595,11 +717,11 @@ def run_legacy(args, result: dict) -> None:
     helper = load_pinned(args.transport_helper, HELPER_SHA256, "strict_transport_legacy_helper")
     if mode != "default":
         verify_legacy_package(args.legacy_package, mode)
-    base = safe_path(Path(__file__).resolve().parents[1], "build/NativeBitwardenStrictBackend")
+    base = safe_path(Path(__file__).resolve().parents[1], "build/NativeBitwardenWriteAuthority")
     if args.output.parent != base or not args.output.is_absolute() or args.output.exists() or args.output.is_symlink():
         raise GuardError("fresh owned output required")
     base.mkdir(parents=True, exist_ok=True)
-    safe_path(Path(__file__).resolve().parents[1], "build/NativeBitwardenStrictBackend")
+    safe_path(Path(__file__).resolve().parents[1], "build/NativeBitwardenWriteAuthority")
     if sha(read_regular(Path(__file__).resolve())) != before["scripts/test-native-bitwarden-strict-backend.py"]:
         raise GuardError("running runner differs from checkpoint")
     args.output.mkdir(mode=0o700)
@@ -611,11 +733,15 @@ def run_legacy(args, result: dict) -> None:
     harness = args.output / "harness"
     harness.mkdir()
     for name in sorted(INPUTS):
-        if not (name.startswith("Sources/") or name == "Tests/BrowserAppTests/NativeBitwardenStrictBackendTests.swift"):
+        if not compiled_input(name):
             continue
         target = harness / name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(safe_path(args.source_root, name), target)
+    declaration = admission_declaration(read_regular(safe_path(
+        args.source_root, "Sources/ArcusisBrowser/NativeBitwardenController.swift")))
+    declaration_path = harness / "Sources/ArcusisBrowser/NativeBitwardenControllerAdmission.swift"
+    declaration_path.write_bytes(declaration)
     dependency = 'dependencies: [.package(name: "SDKPackage", path: "../SDKPackage")],' if mode != "default" else ""
     product = ', .product(name: "ArcusisBitwardenSDK", package: "SDKPackage")' if mode != "default" else ""
     settings = (', swiftSettings: [.define("ARCUSIS_NATIVE_BITWARDEN_ORGANIZATION_CANDIDATE"), '
@@ -635,11 +761,13 @@ let package = Package(name: "ArcusisBrowser", platforms: [.macOS("26.0")],
         if sha(read_regular(args.transport_helper)) != HELPER_SHA256:
             raise GuardError("helper changed")
         for name in INPUTS:
-            if name.startswith("Sources/") or name == "Tests/BrowserAppTests/NativeBitwardenStrictBackendTests.swift":
+            if compiled_input(name):
                 if sha(read_regular(safe_path(harness, name))) != before[name]:
                     raise GuardError("staged source changed")
         if read_regular(harness / "Package.swift") != package_text.encode():
             raise GuardError("harness package changed")
+        if read_regular(declaration_path) != declaration:
+            raise GuardError("staged admission changed")
         if mode != "default":
             verify_legacy_package(args.legacy_package, mode)
             verify_legacy_package(package, mode)

@@ -14,9 +14,9 @@ spec.loader.exec_module(runner)
 
 class StrictBackendRunnerTests(unittest.TestCase):
     def setUp(self):
-        parent = runner.safe_path(SCRIPT.parents[1], "build/NativeBitwardenStrictBackend")
+        parent = runner.safe_path(SCRIPT.parents[1], "build/NativeBitwardenWriteAuthority")
         parent.mkdir(parents=True, exist_ok=True)
-        runner.safe_path(SCRIPT.parents[1], "build/NativeBitwardenStrictBackend")
+        runner.safe_path(SCRIPT.parents[1], "build/NativeBitwardenWriteAuthority")
         self.temp = tempfile.TemporaryDirectory(dir=parent)
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
@@ -122,6 +122,32 @@ class StrictBackendRunnerTests(unittest.TestCase):
             payload.symlink_to(path)
             with self.assertRaises(runner.GuardError):
                 runner.verify_legacy_package(package, "sdk3")
+
+    def test_admission_extraction_rejects_missing_duplicate_and_import(self):
+        block = runner.ADMISSION_BEGIN + b"struct Admission {}\n" + runner.ADMISSION_END
+        with patch.object(runner, "ADMISSION_SHA256", runner.sha(block)):
+            self.assertEqual(runner.admission_declaration(b"prefix\n" + block + b"suffix\n"), block)
+            for source in (b"", block + block, runner.ADMISSION_END + runner.ADMISSION_BEGIN,
+                           block.replace(b"Admission", b"Changed")):
+                with self.subTest(source=source), self.assertRaises(runner.GuardError):
+                    runner.admission_declaration(source)
+        for line in (b"import AppKit\n", b"@testable import AppKit\n"):
+            imported = runner.ADMISSION_BEGIN + line + runner.ADMISSION_END
+            with patch.object(runner, "ADMISSION_SHA256", runner.sha(imported)):
+                with self.assertRaises(runner.GuardError):
+                    runner.admission_declaration(imported)
+
+    def test_compiler_denial_requires_exact_single_error(self):
+        expected = (b"AdmissionAccessProbe.swift:5:7: error: 'NativeBitwardenWriteAdmission' initializer "
+                    b"is inaccessible due to 'fileprivate' protection level")
+        self.assertTrue(runner.is_expected_admission_denial(expected, 1))
+        annotation = b"\n | `- error: 'NativeBitwardenWriteAdmission' initializer is inaccessible due to 'fileprivate' protection level"
+        self.assertTrue(runner.is_expected_admission_denial(expected + annotation, 1))
+        self.assertFalse(runner.is_expected_admission_denial(expected, 0))
+        self.assertFalse(runner.is_expected_admission_denial(b"error: module unavailable", 1))
+        self.assertFalse(runner.is_expected_admission_denial(expected + b"\nerror: module unavailable", 1))
+        self.assertFalse(runner.is_expected_admission_denial(expected + b"\nother.swift:1:2: error: unrelated", 1))
+        self.assertFalse(runner.is_expected_admission_denial(expected.replace(b"AdmissionAccessProbe.swift", b"other.swift"), 1))
 
 
 if __name__ == "__main__":

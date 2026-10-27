@@ -469,5 +469,42 @@ class RefreshGeneratorProvenanceTests(unittest.TestCase):
                 module.build_refresh_generator(sdk, target, generated, root / 'dylib', pin, {}, [])
 
 
+class BoundedCandidateTests(unittest.TestCase):
+    def test_seventh_layer_pin_preserves_interfaces_and_historical_pin(self):
+        prior = module.read_refresh_pin()
+        bounded = module.read_bounded_pin()
+        self.assertEqual(bounded['candidateGitTree'], '0a934e609b3dfef012a3477d2973ace834b1a1c2')
+        self.assertEqual(bounded['generatedSHA256'], prior['generatedSHA256'])
+        self.assertEqual(bounded['sourceProofBindgenSHA256'], prior['sourceProofBindgenSHA256'])
+        self.assertEqual(len(bounded['changedPaths']), 36)
+        self.assertIs(bounded['accepted'], False)
+        self.assertIs(bounded['integration_ready'], False)
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = Path(tmp) / 'pin.json'; fake.write_text('{}')
+            with mock.patch.object(module, 'BOUNDED_PIN', fake), self.assertRaises(ValueError):
+                module.read_bounded_pin()
+
+    def test_bounded_manifest_rejects_rehashed_bindings_and_false_flags(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / 'Package'; pin, manifest = refresh_fixture(root)
+            with mock.patch.object(module, 'read_bounded_pin', return_value=pin):
+                module.validate_package(root, manifest, bounded=True, expected_dylib=manifest['dylibSHA256'])
+                changed = copy.deepcopy(manifest); changed['accepted'] = True
+                (root / 'build-manifest.json').write_text(json.dumps(changed))
+                with self.assertRaises(ValueError):
+                    module.validate_package(root, changed, bounded=True, expected_dylib=manifest['dylibSHA256'])
+                (root / 'build-manifest.json').write_text(json.dumps(manifest))
+                with self.assertRaisesRegex(ValueError, 'mutually exclusive'):
+                    module.validate_package(root, manifest, refresh=True, bounded=True, expected_dylib=manifest['dylibSHA256'])
+                binding = root / 'Sources/ArcusisBitwardenSDK/Bindings.swift'
+                binding.write_text(binding.read_text() + 'tamper')
+                changed = copy.deepcopy(manifest)
+                changed['bindingTreeSHA256'] = module.tree_digest(binding.parent)
+                changed['fileSHA256'][binding.relative_to(root).as_posix()] = module.digest(binding)
+                (root / 'build-manifest.json').write_text(json.dumps(changed))
+                with self.assertRaises(ValueError):
+                    module.validate_package(root, changed, bounded=True, expected_dylib=manifest['dylibSHA256'])
+
+
 if __name__ == '__main__':
     unittest.main()

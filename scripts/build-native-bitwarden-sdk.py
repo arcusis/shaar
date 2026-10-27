@@ -28,12 +28,18 @@ ORG_PIN_SHA256 = 'f8428c821c558732f59155b398b38a55f1a3263e29fc59a423ad6bcb371986
 REFRESH_ROOT = ROOT / 'build/NativeBitwardenRefreshSDK'
 REFRESH_PIN = ROOT / 'ThirdParty/BitwardenRefreshSpike/sdk-package.pin.json'
 REFRESH_PIN_SHA256 = '1b5e8a0a2d6e0e447d049e740aaa6107733280332a69ddc8fec4b254f32a9869'
+BOUNDED_ROOT = ROOT / 'build/NativeBitwardenRefreshSDK7'
+BOUNDED_PIN = ROOT / 'ThirdParty/BitwardenRefreshSpike/bounded-sdk-package.pin.json'
+BOUNDED_PIN_SHA256 = '6c4ec0eb96a3311ef209838aa75b3962c925f2a9b600d12852296b0fc42fcdb1'
+DEADLINE_CANDIDATE = ROOT / 'ThirdParty/BitwardenRefreshSpike/deadline.candidate.json'
+DEADLINE_CANDIDATE_SHA256 = 'df2c8a5018a2b88edf5e4c5b8f7745488cdea87989413f22144952a00e3100cf'
 ORG_PATCH_ORDER = ('ThirdParty/BitwardenAuthSpike/identity-mfa.patch',
                    'ThirdParty/BitwardenKeyClearSpike/clear-crypto-keys.patch',
                    'ThirdParty/BitwardenSyncSpike/sync.patch',
                    'ThirdParty/BitwardenSyncSpike/organization-keys.patch',
                    'ThirdParty/BitwardenSyncSpike/organization-key-replacement.patch')
 REFRESH_PATCH_ORDER = ORG_PATCH_ORDER + ('ThirdParty/BitwardenRefreshSpike/refresh.patch',)
+BOUNDED_PATCH_ORDER = REFRESH_PATCH_ORDER + ('ThirdParty/BitwardenRefreshSpike/native-http-deadline.patch',)
 SDK_PACKAGE_SWIFT = '// swift-tools-version: 5.9\nimport PackageDescription\nlet package = Package(name: "ArcusisBitwardenSDK", platforms: [.macOS("26.0")], products: [.library(name: "ArcusisBitwardenSDK", targets: ["ArcusisBitwardenSDK"])], targets: [.binaryTarget(name: "BitwardenSDK", path: "Frameworks/BitwardenSDK.xcframework"), .target(name: "BitwardenFFI", path: "Sources/BitwardenFFI", publicHeadersPath: "include"), .target(name: "BitwardenSdkSupport", path: "Sources/BitwardenSdkSupport"), .target(name: "ArcusisBitwardenSDK", dependencies: ["BitwardenSDK", "BitwardenFFI", "BitwardenSdkSupport"], path: "Sources/ArcusisBitwardenSDK")])\n'
 SDK_FFI_SHIM = 'void arcusis_bitwarden_ffi_link_anchor(void) {}\n'
 LOG_DIR: Path | None = None
@@ -77,24 +83,24 @@ def safe_tree(root: Path) -> list[Path]:
     return result
 
 
-def validate_package(root: Path, manifest: dict, *, organization: bool = False, refresh: bool = False, expected_dylib: str | None = None) -> None:
+def validate_package(root: Path, manifest: dict, *, organization: bool = False, refresh: bool = False, bounded: bool = False, expected_dylib: str | None = None) -> None:
     if root.is_symlink() or not root.is_dir():
         raise ValueError('unsafe output directory')
     root = root.resolve(strict=True)
-    if refresh:
+    if refresh or bounded:
         manifest_path = root / 'build-manifest.json'
         if manifest_path.is_symlink() or not manifest_path.is_file() or json.loads(manifest_path.read_text()) != manifest:
             raise ValueError('refresh on-disk manifest mismatch')
-    if organization and refresh:
+    if sum((organization, refresh, bounded)) > 1:
         raise ValueError('candidate modes are mutually exclusive')
-    if organization or refresh:
-        pin = read_refresh_pin() if refresh else read_organization_pin()
+    if organization or refresh or bounded:
+        pin = read_bounded_pin() if bounded else (read_refresh_pin() if refresh else read_organization_pin())
         expected_fields = {'schema', 'sourceCommit', 'sourceGitTree', 'sourceCargoLockSHA256',
                            'candidateCargoLockSHA256', 'patchSHA256', 'changedPaths',
                            'sourceManifestSHA256', 'fullDiffSHA256', 'bindingTreeSHA256',
                            'generatedModuleNames', 'licenseSHA256', 'supportSHA256', 'dylibSHA256',
                            'minMacOS', 'architecture', 'accepted', 'integration_ready', 'fileSHA256'}
-        if refresh:
+        if refresh or bounded:
             expected_fields |= {'candidateGitTree', 'rustToolchain'}
         if set(manifest) != expected_fields or type(manifest.get('schema')) is not int or manifest['schema'] != 1:
             raise ValueError('organization manifest shape invalid')
@@ -103,12 +109,12 @@ def validate_package(root: Path, manifest: dict, *, organization: bool = False, 
                     'licenseSHA256', 'supportSHA256', 'minMacOS', 'architecture', 'accepted', 'integration_ready'):
             if type(manifest.get(key)) is not type(pin[key]) or manifest[key] != pin[key]:
                 raise ValueError('organization manifest pin mismatch: ' + key)
-        if refresh:
+        if refresh or bounded:
             for key in ('candidateGitTree', 'rustToolchain'):
                 if manifest.get(key) != pin[key]:
                     raise ValueError('refresh manifest pin mismatch: ' + key)
         if (not expected_dylib or manifest.get('dylibSHA256') != expected_dylib
-                or (refresh and expected_dylib != pin['sourceProofDylibSHA256'])):
+                or ((refresh or bounded) and expected_dylib != pin['sourceProofDylibSHA256'])):
             raise ValueError('candidate dylib provenance mismatch')
     else:
         runner = load_runner()
@@ -138,7 +144,7 @@ def validate_package(root: Path, manifest: dict, *, organization: bool = False, 
     expected = manifest.get('bindingTreeSHA256')
     if not isinstance(expected, str) or expected != tree_digest(swift):
         raise ValueError('generated binding digest mismatch')
-    if refresh:
+    if refresh or bounded:
         text = '\n'.join(p.read_text() for p in safe_tree(swift) if p.suffix == '.swift')
         for declaration in ('func refreshPasswordManagerToken(', 'func syncWithOutcome(',
                             'func sync(force:', 'enum SyncOutcome:', 'enum RefreshError:'):
@@ -170,7 +176,7 @@ def validate_package(root: Path, manifest: dict, *, organization: bool = False, 
                if p.relative_to(root).as_posix() != 'build-manifest.json'}
     if manifest.get('fileSHA256') != payload:
         raise ValueError('package inventory or artifact digest mismatch')
-    if organization or refresh:
+    if organization or refresh or bounded:
         generated = pin['generatedSHA256']
         swift_expected = {name: value for name, value in generated.items() if name.endswith('.swift')}
         header_expected = {name: value for name, value in generated.items() if name.endswith('.h')}
@@ -441,6 +447,54 @@ def read_refresh_pin() -> dict:
     return pin
 
 
+def read_bounded_pin() -> dict:
+    if BOUNDED_PIN.is_symlink() or not BOUNDED_PIN.is_file() or digest(BOUNDED_PIN) != BOUNDED_PIN_SHA256:
+        raise ValueError('bounded package pin missing or changed')
+    if (DEADLINE_CANDIDATE.is_symlink() or not DEADLINE_CANDIDATE.is_file()
+            or digest(DEADLINE_CANDIDATE) != DEADLINE_CANDIDATE_SHA256):
+        raise ValueError('deadline candidate missing or changed')
+    pin = json.loads(BOUNDED_PIN.read_text())
+    candidate = json.loads(DEADLINE_CANDIDATE.read_text())
+    prior = read_refresh_pin()
+    if not isinstance(pin, dict) or set(pin) != set(prior):
+        raise ValueError('bounded package pin shape invalid')
+    fixed = {
+        'candidateGitTree': '0a934e609b3dfef012a3477d2973ace834b1a1c2',
+        'sourceManifestSHA256': 'a07d87fa57dc49dd53fadc2924c2ad4b9764ae61a708a872b7e8b16bf625ec79',
+        'sourceManifestEntries': 2356,
+        'fullDiffSHA256': '2dd1ac8411b2285ca214345161d6865d46dee1b868bc8f82bf49716d02ff4588',
+    }
+    for key, value in fixed.items():
+        if type(pin.get(key)) is not type(value) or pin[key] != value:
+            raise ValueError('bounded pin mismatch: ' + key)
+    import re
+    if (not isinstance(pin.get('sourceProofDylibSHA256'), str)
+            or not re.fullmatch(r'[0-9a-f]{64}', pin['sourceProofDylibSHA256'])
+            or pin['sourceProofDylibSHA256'] == prior['sourceProofDylibSHA256']):
+        raise ValueError('bounded dylib pin invalid')
+    changed = sorted(set(prior['changedPaths']) | {'crates/bitwarden-api-base/src/client.rs'})
+    patches = dict(prior['patchSHA256'])
+    patches[BOUNDED_PATCH_ORDER[-1]] = '8ec29eb0694c0624788922950b878d05e324dc344fbcfb5d44f34f307b862b87'
+    if pin['changedPaths'] != changed or pin['patchSHA256'] != patches:
+        raise ValueError('bounded patch or path mismatch')
+    for key in set(prior) - set(fixed) - {'changedPaths', 'patchSHA256', 'sourceProofDylibSHA256'}:
+        if type(pin[key]) is not type(prior[key]) or pin[key] != prior[key]:
+            raise ValueError('bounded prerequisite mismatch: ' + key)
+    patch = ROOT / BOUNDED_PATCH_ORDER[-1]
+    if patch.is_symlink() or not patch.is_file() or digest(patch) != patches[BOUNDED_PATCH_ORDER[-1]]:
+        raise ValueError('deadline patch mismatch')
+    if (candidate.get('accepted') is not False or candidate.get('compiled') is not False
+            or candidate.get('integration_ready') is not False or candidate.get('sevenLayerTree') != pin['candidateGitTree']
+            or candidate.get('sixLayerTree') != prior['candidateGitTree']
+            or candidate.get('patchSHA256') != patches[BOUNDED_PATCH_ORDER[-1]]
+            or candidate.get('sourceManifestSHA256') != pin['sourceManifestSHA256']
+            or candidate.get('fullDiffSHA256') != pin['fullDiffSHA256']
+            or candidate.get('nativeConnectTimeoutSeconds') != 10
+            or candidate.get('nativeTotalTimeoutSeconds') != 30):
+        raise ValueError('deadline candidate mismatch')
+    return pin
+
+
 def refresh_command(argv: list[str], cwd: Path, env: dict[str, str], timeout: int = 3600) -> str:
     # Command output is retained only in memory; failures expose no subprocess output.
     try:
@@ -496,14 +550,14 @@ def build_refresh_generator(sdk: Path, target: Path, generated: Path, dylib: Pat
 def refresh_main(args: argparse.Namespace) -> int:
     global LOG_DIR
     LOG_DIR = None
-    pin = read_refresh_pin()
+    pin = read_bounded_pin()
     if platform.system() != 'Darwin' or platform.machine() != 'arm64':
         raise ValueError('requires arm64 macOS')
     env = {key: os.environ[key] for key in ('PATH', 'HOME', 'TMPDIR') if key in os.environ}
     rust = refresh_command(['rustc', '+1.98.0', '-vV'], ROOT, env, 30)
     if not rust.startswith('rustc 1.98.0 (88d9e12ae 2026-08-18)\n') or 'host: aarch64-apple-darwin\n' not in rust:
         raise ValueError('refresh Rust toolchain mismatch')
-    out = REFRESH_ROOT
+    out = BOUNDED_ROOT
     sdk = out / 'source'
     target = out / 'target'
     generated = out / 'generated'
@@ -521,7 +575,7 @@ def refresh_main(args: argparse.Namespace) -> int:
             raise ValueError('refresh upstream source unsafe')
         refresh_command(['git', 'clone', '--local', '--no-hardlinks', '--no-checkout', str(source), str(sdk)], ROOT, env, 120)
         refresh_command(['git', '-C', str(sdk), 'checkout', '--detach', pin['sourceCommit']], ROOT, env, 60)
-        for name in REFRESH_PATCH_ORDER:
+        for name in BOUNDED_PATCH_ORDER:
             refresh_command(['git', '-C', str(sdk), 'apply', '--check', '--whitespace=error', str(ROOT / name)], ROOT, env, 60)
             refresh_command(['git', '-C', str(sdk), 'apply', '--whitespace=error', str(ROOT / name)], ROOT, env, 60)
         refresh_command(['git', '-C', str(sdk), 'add', '-A'], ROOT, env, 60)
@@ -586,7 +640,7 @@ def refresh_main(args: argparse.Namespace) -> int:
     manifest.update(schema=1, bindingTreeSHA256=tree_digest(swift), generatedModuleNames=modules, dylibSHA256=digest(dylib))
     manifest['fileSHA256'] = {p.relative_to(pkg).as_posix(): digest(p) for p in safe_tree(pkg)}
     (pkg / 'build-manifest.json').write_text(json.dumps(manifest, sort_keys=True, indent=2) + '\n')
-    validate_package(pkg, manifest, refresh=True, expected_dylib=pin['sourceProofDylibSHA256'])
+    validate_package(pkg, manifest, bounded=True, expected_dylib=pin['sourceProofDylibSHA256'])
     consumer = out / 'consumer'; (consumer / 'Sources/sdk-consumer').mkdir(parents=True)
     (consumer / 'Package.swift').write_text('// swift-tools-version: 5.9\nimport PackageDescription\nlet package = Package(name: "SDKConsumer", platforms: [.macOS("26.0")], dependencies: [.package(path: '+json.dumps(str(pkg))+')], targets: [.executableTarget(name: "sdk-consumer", dependencies: [.product(name: "ArcusisBitwardenSDK", package: "Package")])])\n')
     shutil.copy2(ROOT / 'Tests/NativeBitwardenRefreshPackageProbe/main.swift', consumer / 'Sources/sdk-consumer/Probe.swift')
@@ -611,7 +665,7 @@ def refresh_main(args: argparse.Namespace) -> int:
     if (bindgen.is_symlink() or digest(bindgen) != generator_sha or digest(dylib) != pin['sourceProofDylibSHA256']
             or generated_inventory(generated) != pin['generatedSHA256']):
         raise ValueError('refresh build artifacts changed after validation')
-    validate_package(pkg, manifest, refresh=True, expected_dylib=pin['sourceProofDylibSHA256'])
+    validate_package(pkg, manifest, bounded=True, expected_dylib=pin['sourceProofDylibSHA256'])
     receipt = {'schema': 1, 'accepted': False, 'integration_ready': False, 'consumerSmoke': 'SDK_REFRESH_CANDIDATE_OK',
                'sourceGitTree': pin['candidateGitTree'], 'rustToolchain': pin['rustToolchain'],
                'dylibSHA256': pin['sourceProofDylibSHA256'], 'packageTreeSHA256': tree_digest(pkg),

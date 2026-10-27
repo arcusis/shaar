@@ -102,6 +102,7 @@ jobs:
           capture_status=0
           swift test --jobs 2 --filter SidebarChromeLayoutTests || capture_status=1
           swift test --jobs 2 --filter SpaceEditorVisualTests || capture_status=1
+          swift test --jobs 2 --filter CommandPanelVisualTests || capture_status=1
           exit "$capture_status"
 
       - name: Upload hosted sidebar component visuals

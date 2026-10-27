@@ -80,7 +80,8 @@ import Testing
     }
 
     func fillSnapshot(sessionID: UUID) async throws -> NativeBitwardenFillSnapshotAccess {
-      guard let pair = pairs[sessionID], let plan = plans.first(where: { $0.sessionID == sessionID })
+      guard let pair = pairs[sessionID],
+        let plan = plans.first(where: { $0.sessionID == sessionID })
       else { throw NativeBitwardenFillError.staleAccess }
       if plan.delayFill {
         return try await withCheckedThrowingContinuation { pending[sessionID] = $0 }
@@ -136,7 +137,8 @@ import Testing
       try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
       return (
         NativeBitwardenController(
-          preferences: BrowserPreferencesStore(fileURL: directory.appendingPathComponent("preferences.json")),
+          preferences: BrowserPreferencesStore(
+            fileURL: directory.appendingPathComponent("preferences.json")),
           backend: backend,
           credentialStore: PasswordCredentialStore(
             service: "strict-controller-memory", storage: StrictMemoryItems())),
@@ -168,7 +170,8 @@ import Testing
       let backend = StrictControllerBackend([first, second])
       let (subject, directory) = try controller(backend)
       defer { try? FileManager.default.removeItem(at: directory) }
-      let firstProfile = UUID(), secondProfile = UUID()
+      let firstProfile = UUID()
+      let secondProfile = UUID()
       start(subject, profile: firstProfile)
       try #require(await awaitCondition { await backend.adopted(first.sessionID) })
       start(subject, profile: secondProfile)

@@ -4,7 +4,8 @@ import PackageDescription
 
 let strictSDK8 = ProcessInfo.processInfo.environment["ARCUSIS_NATIVE_BITWARDEN_STRICT_SDK"] == "1"
 let strictSDK9 = ProcessInfo.processInfo.environment["ARCUSIS_NATIVE_BITWARDEN_SERVICE_SDK"] == "1"
-let strictSDK10 = ProcessInfo.processInfo.environment["ARCUSIS_NATIVE_BITWARDEN_NORMALIZATION_SDK"] == "1"
+let strictSDK10 =
+  ProcessInfo.processInfo.environment["ARCUSIS_NATIVE_BITWARDEN_NORMALIZATION_SDK"] == "1"
 if strictSDK8 && strictSDK9 {
   fatalError("Strict SDK8 and SDK9 selections are mutually exclusive")
 }
@@ -47,12 +48,12 @@ let nativeBitwardenSDKDependency: [Package.Dependency] =
             ? "build/NativeBitwardenStrictSDK10/Package-debug"
             : "build/NativeBitwardenStrictSDK10/Package-release")
           : strictSDK9
-          ? (strictFixture
-            ? "build/NativeBitwardenStrictSDK9/Package-debug"
-            : "build/NativeBitwardenStrictSDK9/Package-release")
-          : (strictFixture
-            ? "build/NativeBitwardenStrictSDK8/Package-debug"
-            : "build/NativeBitwardenStrictSDK8/Package-release"))
+            ? (strictFixture
+              ? "build/NativeBitwardenStrictSDK9/Package-debug"
+              : "build/NativeBitwardenStrictSDK9/Package-release")
+            : (strictFixture
+              ? "build/NativeBitwardenStrictSDK8/Package-debug"
+              : "build/NativeBitwardenStrictSDK8/Package-release"))
         : nativeBitwardenRefreshFixture
           ? "build/NativeBitwardenRefreshSDK7Fixture/Package"
           : (nativeBitwardenRefreshCandidate

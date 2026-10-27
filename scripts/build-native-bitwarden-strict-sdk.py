@@ -558,7 +558,25 @@ def generated_files(path: Path) -> dict[str, str]:
     return result
 
 
-def verify_source(helper, sdk: Path, pin: dict, env: dict[str, str]) -> None:
+def verify_source_diff(git, pin: dict, *, hosted_sdk10: bool = False) -> None:
+    args = ['diff', '--no-ext-diff', '--no-textconv', '--binary']
+    if hosted_sdk10:
+        args.append('--abbrev=8')
+    diff = git(*args, COMMIT, pin['candidateGitTree']).encode()
+    paths = git('diff', '--no-ext-diff', '--no-textconv', '--name-only',
+                COMMIT, pin['candidateGitTree']).splitlines()
+    diff_hash = sha(diff)
+    paths_match = paths == pin['changedPaths']
+    if hosted_sdk10:
+        print(json.dumps({'sourceDiffSHA256': diff_hash, 'changedPathCount': len(paths),
+                          'changedPathsMatch': paths_match,
+                          'gitVersion': git('--version').strip()}, sort_keys=True), flush=True)
+    if diff_hash != pin['fullDiffSHA256'] or not paths_match:
+        raise ValueError('source diff mismatch')
+
+
+def verify_source(helper, sdk: Path, pin: dict, env: dict[str, str],
+                  *, hosted_sdk10: bool = False) -> None:
     files, fingerprint, count = file_inventory(sdk, exclude_git=True)
     if (fingerprint, count) != (pin['sourceManifestSHA256'], pin['sourceManifestEntries']):
         raise ValueError('complete source inventory mismatch')
@@ -571,9 +589,7 @@ def verify_source(helper, sdk: Path, pin: dict, env: dict[str, str]) -> None:
         raise ValueError('candidate tree mismatch')
     if git('rev-parse', COMMIT + '^{tree}').strip() != TREE:
         raise ValueError('upstream tree mismatch')
-    diff = git('diff', '--no-ext-diff', '--no-textconv', '--binary', COMMIT, pin['candidateGitTree']).encode()
-    if sha(diff) != pin['fullDiffSHA256'] or git('diff', '--no-ext-diff', '--no-textconv', '--name-only', COMMIT, pin['candidateGitTree']).splitlines() != pin['changedPaths']:
-        raise ValueError('source diff mismatch')
+    verify_source_diff(git, pin, hosted_sdk10=hosted_sdk10)
     git('diff', '--quiet')
     if git('ls-files', '--others').strip():
         raise ValueError('untracked source file')
@@ -817,14 +833,14 @@ def main() -> int:
         run(helper, ['git', '-C', str(sdk), 'apply', '--check', '--whitespace=error', str(path)], ROOT, env, 120)
         run(helper, ['git', '-C', str(sdk), 'apply', '--whitespace=error', str(path)], ROOT, env, 120)
     run(helper, ['git', '-C', str(sdk), 'add', '-A', '-f'], ROOT, env, 120)
-    verify_source(helper, sdk, base_pin, env)
+    verify_source(helper, sdk, base_pin, env, hosted_sdk10=hosted and profile == SDK10_PROFILE)
     if profile in (SDK9_PROFILE, SDK10_PROFILE):
         if digest(args.service_patch) != SERVICE_PATCH_SHA256:
             raise ValueError('service patch changed before application')
         run(helper, ['git', '-C', str(sdk), 'apply', '--check', '--whitespace=error', str(args.service_patch)], ROOT, env, 120)
         run(helper, ['git', '-C', str(sdk), 'apply', '--whitespace=error', str(args.service_patch)], ROOT, env, 120)
         run(helper, ['git', '-C', str(sdk), 'add', '-A', '-f'], ROOT, env, 120)
-        verify_source(helper, sdk, sdk9_pin, env)
+        verify_source(helper, sdk, sdk9_pin, env, hosted_sdk10=hosted and profile == SDK10_PROFILE)
         verify_service_transition(helper, sdk, sdk9_pin, service_candidate, env)
     if profile == SDK10_PROFILE:
         if digest(args.normalization_patch) != NORMALIZATION_PATCH_SHA256:
@@ -832,7 +848,7 @@ def main() -> int:
         run(helper, ['git', '-C', str(sdk), 'apply', '--check', '--whitespace=error', str(args.normalization_patch)], ROOT, env, 120)
         run(helper, ['git', '-C', str(sdk), 'apply', '--whitespace=error', str(args.normalization_patch)], ROOT, env, 120)
         run(helper, ['git', '-C', str(sdk), 'add', '-A', '-f'], ROOT, env, 120)
-        verify_source(helper, sdk, pin, env)
+        verify_source(helper, sdk, pin, env, hosted_sdk10=hosted and profile == SDK10_PROFILE)
         verify_normalization_transition(helper, sdk, env)
     cargo_home = out / 'cargo-home'
     cargo_home.mkdir()
@@ -943,7 +959,7 @@ def main() -> int:
         rpaths = run(helper, ['otool', '-l', str(executable)], out, env, 30)
         if not re.search(r'cmd LC_RPATH\s+cmdsize \d+\s+path ' + re.escape(str(library)) + r' \(offset \d+\)', rpaths):
             raise ValueError('consumer rpath mismatch')
-        verify_source(helper, sdk, pin, env)
+        verify_source(helper, sdk, pin, env, hosted_sdk10=hosted and profile == SDK10_PROFILE)
         if digest(dylib) != dylib_hash or digest(bindgen) != generator_hash or generated_files(generated) != binding:
             raise ValueError('build artifacts changed after consumer compilation')
         package_inventory = validate_package_inventory(pkg, set(manifest['fileSHA256']) | {'build-manifest.json'})

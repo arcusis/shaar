@@ -232,7 +232,7 @@ def main() -> None:
         inputs.command(['git', 'add', '-A', '-f'], candidate, env)
         helper = builder.load_packaging_helpers(ROOT / 'scripts/build-native-bitwarden-sdk.py')
         helper.LOG_DIR = output / 'logs'
-        builder.verify_source(helper, candidate, sdk10, env)
+        builder.verify_source(helper, candidate, sdk10, env, hosted_sdk10=True)
         inputs.source_check(candidate, env, inputs.HOSTED_SDK10)
         verify_regular_tree(primary)
         receipt.update(status='passed', upstreamCommit=UPSTREAM_COMMIT,

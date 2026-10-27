@@ -25,6 +25,27 @@ FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeExternalAppLaunchAuditForTest
 + (instancetype)new NS_UNAVAILABLE;
 @end
 
+/// Immutable, nonsecret metadata for one inferred submission. Full URL is private matching context.
+@interface ARCPasswordSaveOffer : NSObject
+@property(nonatomic, readonly, copy) NSString *offerID;
+@property(nonatomic, readonly, copy) NSString *captureID;
+@property(nonatomic, readonly, copy) NSString *windowID;
+@property(nonatomic, readonly, copy) NSString *profileID;
+@property(nonatomic, readonly, copy) NSString *tabID;
+@property(nonatomic, readonly, copy) NSString *accountEpoch;
+@property(nonatomic, readonly, copy) NSString *originalOrigin;
+@property(nonatomic, readonly, copy) NSString *originalDocumentURL;
+@property(nonatomic, readonly) NSInteger provenance;
+@property(nonatomic, readonly) NSTimeInterval deadline;
+- (instancetype)init NS_UNAVAILABLE;
++ (instancetype)new NS_UNAVAILABLE;
+@end
+
+typedef NS_ENUM(NSInteger, ARCPasswordSaveStatus) {
+  ARCPasswordSaveStatusConsumed = 0,
+  ARCPasswordSaveStatusUnavailable = 1,
+};
+
 /// All methods and callbacks run on the main thread. The engine owns the AppKit run loop.
 @interface ARCChromiumRuntime : NSObject
 @property(copy, nullable) void (^onReady)(void);
@@ -77,6 +98,15 @@ FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeExternalAppLaunchAuditForTest
   password:(NSString *)password completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion NS_SWIFT_UI_ACTOR;
 /// Cancels pending publication; already delivered renderer work cannot be undone.
 - (void)cancelPasswordRequestID:(NSString *)requestID NS_SWIFT_UI_ACTOR;
+/// Registration and revocation callbacks run synchronously on the main thread.
+- (BOOL)armPasswordSaveCaptureID:(NSString *)captureID windowID:(NSString *)windowID
+  profileID:(NSString *)profileID tabID:(NSString *)tabID accountEpoch:(NSString *)accountEpoch
+  onOffer:(void (NS_SWIFT_UI_ACTOR ^)(ARCPasswordSaveOffer *))onOffer
+  onRevoke:(void (NS_SWIFT_UI_ACTOR ^)(void))onRevoke NS_SWIFT_UI_ACTOR;
+- (void)consumePasswordSaveOffer:(ARCPasswordSaveOffer *)offer displayedOrigin:(NSString *)origin
+  completion:(void (NS_SWIFT_UI_ACTOR ^)(ARCPasswordSaveStatus, NSString * _Nullable,
+                                         NSString * _Nullable))completion NS_SWIFT_UI_ACTOR;
+- (void)cancelPasswordSaveCaptureID:(NSString *)captureID NS_SWIFT_UI_ACTOR;
 @property(readonly, nullable) NSWindow *window;
 @property(readonly, nullable) NSView *hostView;
 @property(readonly) NSString *chromiumVersion;

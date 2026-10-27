@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 #include <cmath>
+#include <cfloat>
 #include <mutex>
 #include <errno.h>
 #include <sys/stat.h>
@@ -174,6 +175,38 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   password:(NSString *)password completion:(void (^)(BOOL))completion;
 - (void)cancelPasswordRequest:(id<ARCNativePasswordRequest>)request;
 @end
+@protocol ARCNativeSaveOffer <NSObject>
+@property(nonatomic, readonly, copy) NSString *offerID;
+@property(nonatomic, readonly, copy) NSString *accountEpoch;
+@property(nonatomic, readonly, copy) NSString *originalOrigin;
+@property(nonatomic, readonly, copy) NSString *originalDocumentURL;
+@property(nonatomic, readonly) NSInteger provenance;
+@property(nonatomic, readonly) NSTimeInterval deadline;
+@end
+@protocol ARCNativeSaveWindow <NSObject>
+- (id)armPasswordSaveForTab:(ArdiaCoreTab *)tab accountEpoch:(NSString *)epoch
+  onOffer:(void (^)(id<ARCNativeSaveOffer>))onOffer onRevoke:(void (^)(void))onRevoke;
+- (void)consumePasswordSaveOffer:(id<ARCNativeSaveOffer>)offer displayedOrigin:(NSString *)origin
+  completion:(void (^)(NSInteger, NSString * _Nullable, NSString * _Nullable))completion;
+- (void)cancelPasswordSaveCapture:(id)capture;
+@end
+
+@interface ARCPasswordSaveOffer ()
+@property(nonatomic, readwrite, copy) NSString *offerID;
+@property(nonatomic, readwrite, copy) NSString *captureID;
+@property(nonatomic, readwrite, copy) NSString *windowID;
+@property(nonatomic, readwrite, copy) NSString *profileID;
+@property(nonatomic, readwrite, copy) NSString *tabID;
+@property(nonatomic, readwrite, copy) NSString *accountEpoch;
+@property(nonatomic, readwrite, copy) NSString *originalOrigin;
+@property(nonatomic, readwrite, copy) NSString *originalDocumentURL;
+@property(nonatomic, readwrite) NSInteger provenance;
+@property(nonatomic, readwrite) NSTimeInterval deadline;
+- (instancetype)initForNativeOffer;
+@end
+@implementation ARCPasswordSaveOffer
+- (instancetype)initForNativeOffer { return [super init]; }
+@end
 
 @interface ARCPasswordFillContext ()
 @property(nonatomic, readwrite, copy) NSString *requestID;
@@ -214,6 +247,19 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 @property BOOL consumed;
 @end
 @implementation ARCPasswordFillRecord
+@end
+
+@interface ARCPasswordSaveRecord : ARCPasswordFillRecord
+@property(copy) NSString *accountEpoch;
+@property(strong) id nativeCapture;
+@property(strong) id<ARCNativeSaveOffer> nativeOffer;
+@property(strong) ARCPasswordSaveOffer *offer;
+@property(copy) void (^offerCallback)(ARCPasswordSaveOffer *);
+@property(copy) void (^revokeCallback)(void);
+@property(copy) void (^consumeCallback)(ARCPasswordSaveStatus, NSString *, NSString *);
+@property(strong) id keyObserver;
+@end
+@implementation ARCPasswordSaveRecord
 @end
 
 static BOOL ARCCanonicalIPHost(NSString *host) {
@@ -298,7 +344,19 @@ static BOOL ARCCanonicalHTTPSOrigin(NSString *origin) {
 #if defined(ARC_NATIVE_PASSWORD_STARTUP_FIXTURE)
 - (void)fixtureSetLibrary:(void *)library windows:(NSDictionary *)windows;
 #endif
+#if defined(ARC_NATIVE_PASSWORD_SAVE_FIXTURE)
+- (void)fixtureSetSaveLibrary:(void *)library version:(uint32_t (*)(void))version
+  window:(id)window profile:(id)profile tab:(id)tab
+  windowID:(NSString *)windowID profileID:(NSString *)profileID tabID:(NSString *)tabID;
+- (void)fixtureAddSaveWindow:(id)window profile:(id)profile tab:(id)tab
+  windowID:(NSString *)windowID profileID:(NSString *)profileID tabID:(NSString *)tabID;
+- (void)fixtureAddSaveTab:(id)tab tabID:(NSString *)tabID profileID:(NSString *)profileID
+  windowID:(NSString *)windowID;
+- (void)fixtureAddSaveProfile:(id)profile profileID:(NSString *)profileID;
+#endif
 - (void)closedWindowID:(NSString *)identity;
+- (void)invalidatePasswordSaveCapturesForTabID:(NSString *)tabID windowID:(NSString *)windowID;
+- (void)finishPasswordSaveRecord:(ARCPasswordSaveRecord *)record cancelNative:(BOOL)cancelNative;
 - (BOOL)privateIdentityOccupied:(NSString *)identity;
 - (BOOL)isPrivateIdentity:(NSString *)identity;
 - (BOOL)privateURLIsAllowed:(NSString *)url;
@@ -377,6 +435,10 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   NSMutableDictionary<NSString *, NSString *> *_probeVisibilityLeases;
   NSMutableDictionary<NSString *, ARCPasswordFillRecord *> *_passwordRequests;
   NSMutableDictionary<NSString *, ARCPasswordFillRecord *> *_passwordFills;
+  NSMutableDictionary<NSString *, ARCPasswordSaveRecord *> *_passwordSaveCaptures;
+#if defined(ARC_NATIVE_PASSWORD_SAVE_FIXTURE)
+  uint32_t (*_fixtureSaveVersion)(void);
+#endif
   BOOL _closingBrowser;
   ARCDownloadService *_downloadService;
   ARCEngineServices *_services;
@@ -395,6 +457,36 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
 }
 #endif
 
+#if defined(ARC_NATIVE_PASSWORD_SAVE_FIXTURE)
+- (void)fixtureSetSaveLibrary:(void *)library version:(uint32_t (*)(void))version
+  window:(id)window profile:(id)profile tab:(id)tab
+  windowID:(NSString *)windowID profileID:(NSString *)profileID tabID:(NSString *)tabID {
+  _library = library; _fixtureSaveVersion = version;
+  ARCNativeWindowState *state = [ARCNativeWindowState new];
+  state.identity = windowID; state.native = window; state.selectedTabID = tabID;
+  _windows = [@{windowID: state} mutableCopy];
+  _profiles = [@{profileID: profile} mutableCopy];
+  _tabs = [@{tabID: tab} mutableCopy];
+  _owners = [@{tabID: profileID} mutableCopy];
+  _tabWindows = [@{tabID: windowID} mutableCopy];
+  _passwordSaveCaptures = [NSMutableDictionary dictionary];
+}
+- (void)fixtureAddSaveWindow:(id)window profile:(id)profile tab:(id)tab
+  windowID:(NSString *)windowID profileID:(NSString *)profileID tabID:(NSString *)tabID {
+  ARCNativeWindowState *state = [ARCNativeWindowState new];
+  state.identity = windowID; state.native = window; state.selectedTabID = tabID;
+  _windows[windowID] = state; _profiles[profileID] = profile; _tabs[tabID] = tab;
+  _owners[tabID] = profileID; _tabWindows[tabID] = windowID;
+}
+- (void)fixtureAddSaveTab:(id)tab tabID:(NSString *)tabID profileID:(NSString *)profileID
+  windowID:(NSString *)windowID {
+  _tabs[tabID] = tab; _owners[tabID] = profileID; _tabWindows[tabID] = windowID;
+}
+- (void)fixtureAddSaveProfile:(id)profile profileID:(NSString *)profileID {
+  _profiles[profileID] = profile;
+}
+#endif
+
 - (instancetype)initWithFrameworkURL:(NSURL *)url error:(NSError **)error {
   if (!(self = [super init])) return nil;
   NSURL *binary = [url URLByAppendingPathComponent:@"Versions/Current/Chromium Framework"];
@@ -410,6 +502,7 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   }
   _passwordRequests = [NSMutableDictionary dictionary];
   _passwordFills = [NSMutableDictionary dictionary];
+  _passwordSaveCaptures = [NSMutableDictionary dictionary];
   _profiles = [NSMutableDictionary dictionary];
   _primaryWindowID = NSUUID.UUID.UUIDString;
   _windows = [NSMutableDictionary dictionary];
@@ -611,7 +704,10 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   ARCNativeWindowState *state = _windows[identity];
   if (!state || state.closing || state.closed || _closingBrowser) return NO;
   state.closing = YES;
+  [self invalidatePasswordSaveCapturesForTabID:nil windowID:identity];
+  if (_windows[identity] != state || state.closed || !state.closing || _closingBrowser) return NO;
   [self invalidatePasswordRequestsForTabID:nil windowID:identity];
+  if (_windows[identity] != state || state.closed || !state.closing || _closingBrowser) return NO;
   [state.native close];
   return YES;
 }
@@ -620,6 +716,8 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   if (!state || state.closed) return;
   state.closed = YES;
   state.closing = YES;
+  [self invalidatePasswordSaveCapturesForTabID:nil windowID:identity];
+  if (_windows[identity] != state) return;
   [self invalidateExternalRequestsForTabID:nil windowID:identity];
   BOOL quitting = _closingBrowser;
   dispatch_async(dispatch_get_main_queue(), ^{
@@ -654,6 +752,8 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   });
 }
 - (void)dealloc {
+  for (ARCPasswordSaveRecord *record in [_passwordSaveCaptures.allValues copy])
+    [self finishPasswordSaveRecord:record cancelNative:YES];
   [self invalidatePasswordRequestsForTabID:nil windowID:nil];
   for (id observer in _windowCloseObservers.allValues) [NSNotificationCenter.defaultCenter removeObserver:observer];
   for (NSDictionary *entry in _privateProbeWindows.allValues) {
@@ -722,6 +822,177 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
     [(id<ARCNativePasswordWindow>)record.window cancelPasswordRequest:record.nativeRequest];
   if (requestCompletion) requestCompletion(nil);
   if (fillCompletion) fillCompletion(NO);
+}
+
+- (void)finishPasswordSaveRecord:(ARCPasswordSaveRecord *)record cancelNative:(BOOL)cancelNative {
+  if (_passwordSaveCaptures[record.requestID] != record) return;
+  [_passwordSaveCaptures removeObjectForKey:record.requestID];
+  id native = record.nativeCapture;
+  ArdiaCoreWindow *window = record.window;
+  id observer = record.keyObserver;
+  void (^revoke)(void) = record.revokeCallback;
+  void (^consume)(ARCPasswordSaveStatus, NSString *, NSString *) = record.consumeCallback;
+  record.nativeCapture = nil; record.nativeOffer = nil; record.offer = nil;
+  record.offerCallback = nil; record.revokeCallback = nil; record.consumeCallback = nil;
+  record.keyObserver = nil;
+  if (observer) [NSNotificationCenter.defaultCenter removeObserver:observer];
+  // Revoke the host's shared dispatch grant before any engine callback can reenter.
+  if (revoke) revoke();
+  if (cancelNative && native) [(id<ARCNativeSaveWindow>)window cancelPasswordSaveCapture:native];
+  if (consume) consume(ARCPasswordSaveStatusUnavailable, nil, nil);
+}
+
+- (void)invalidatePasswordSaveCapturesForTabID:(NSString *)tabID windowID:(NSString *)windowID {
+  __attribute__((objc_precise_lifetime)) ARCChromiumRuntime *owner = self;
+  NSArray<ARCPasswordSaveRecord *> *records = [_passwordSaveCaptures.allValues copy];
+  for (ARCPasswordSaveRecord *record in records) {
+    if ((tabID && ![record.tabID isEqualToString:tabID]) ||
+        (windowID && ![record.windowID isEqualToString:windowID])) continue;
+    [owner finishPasswordSaveRecord:record cancelNative:YES];
+  }
+}
+
+static BOOL ARCSaveDocumentURLMatchesOrigin(NSString *documentURL, NSString *origin) {
+  if (![documentURL isKindOfClass:NSString.class] || documentURL.length == 0 ||
+      documentURL.length > 8192 || !ARCCanonicalHTTPSOrigin(origin)) return NO;
+  NSURLComponents *document = [NSURLComponents componentsWithString:documentURL];
+  NSURLComponents *site = [NSURLComponents componentsWithString:origin];
+  return document && site && [document.scheme isEqualToString:@"https"] &&
+    !document.user && !document.password && document.host.length &&
+    [document.host isEqualToString:site.host] &&
+    ((!document.port && !site.port) || [document.port isEqual:site.port]) &&
+    [document.URL.absoluteString isEqualToString:documentURL];
+}
+
+- (BOOL)armPasswordSaveCaptureID:(NSString *)captureID windowID:(NSString *)windowID
+  profileID:(NSString *)profileID tabID:(NSString *)tabID accountEpoch:(NSString *)accountEpoch
+  onOffer:(void (^)(ARCPasswordSaveOffer *))onOffer onRevoke:(void (^)(void))onRevoke {
+  NSAssert(NSThread.isMainThread, @"Password capture requires the UI thread");
+#if defined(ARC_NATIVE_PASSWORD_SAVE_FIXTURE)
+  auto version = _fixtureSaveVersion;
+#else
+  auto version = reinterpret_cast<uint32_t (*)(void)>(dlsym(_library, "ArdiaCoreNativePasswordSaveOfferABIVersion"));
+#endif
+  ARCNativeWindowState *state = _windows[windowID];
+  ArdiaCoreWindow *window = state.native;
+  if (!PasswordStartup().nativeAvailable((__bridge const void *)self, _library) ||
+      !version || version() != 1 || !ValidID(captureID) || !ValidID(windowID) ||
+      !ValidID(profileID) || !ValidID(tabID) || !ValidID(accountEpoch) ||
+      !onOffer || !onRevoke || _passwordSaveCaptures[captureID] ||
+      _passwordSaveCaptures.count >= 16 || !window ||
+      ![window respondsToSelector:@selector(armPasswordSaveForTab:accountEpoch:onOffer:onRevoke:)] ||
+      ![window respondsToSelector:@selector(consumePasswordSaveOffer:displayedOrigin:completion:)] ||
+      ![window respondsToSelector:@selector(cancelPasswordSaveCapture:)]) return NO;
+  ARCPasswordSaveRecord *record = [ARCPasswordSaveRecord new];
+  record.requestID = captureID; record.windowID = windowID; record.profileID = profileID;
+  record.tabID = tabID; record.accountEpoch = accountEpoch; record.window = window;
+  record.tab = _tabs[tabID]; record.deadline = DBL_MAX;
+  record.offerCallback = onOffer; record.revokeCallback = onRevoke;
+  if (![self passwordRecordIsCurrent:record]) return NO;
+  _passwordSaveCaptures[captureID] = record;
+  __weak ARCChromiumRuntime *weakSelf = self;
+  record.keyObserver = [NSNotificationCenter.defaultCenter
+    addObserverForName:NSWindowDidResignKeyNotification object:window.window
+    queue:nil usingBlock:^(NSNotification *note) {
+      NSAssert(NSThread.isMainThread, @"Window ownership changes require the UI thread");
+      ARCChromiumRuntime *owner = weakSelf;
+      if (owner) [owner finishPasswordSaveRecord:record cancelNative:YES];
+    }];
+  id native = [(id<ARCNativeSaveWindow>)window armPasswordSaveForTab:record.tab
+    accountEpoch:accountEpoch onOffer:^(id<ARCNativeSaveOffer> offered) {
+      ARCChromiumRuntime *owner = weakSelf;
+      if (!owner || owner->_passwordSaveCaptures[captureID] != record) return;
+      if (!record.nativeCapture || record.offer || ![owner passwordRecordIsCurrent:record] ||
+          ![offered respondsToSelector:@selector(offerID)] ||
+          ![offered respondsToSelector:@selector(accountEpoch)] ||
+          ![offered respondsToSelector:@selector(originalOrigin)] ||
+          ![offered respondsToSelector:@selector(originalDocumentURL)] ||
+          ![offered respondsToSelector:@selector(provenance)] ||
+          ![offered respondsToSelector:@selector(deadline)] ||
+          ![offered.offerID isKindOfClass:NSString.class] ||
+          ![offered.accountEpoch isKindOfClass:NSString.class] ||
+          !ValidID(offered.offerID) || ![offered.accountEpoch isEqualToString:record.accountEpoch] ||
+          !ARCSaveDocumentURLMatchesOrigin(offered.originalDocumentURL, offered.originalOrigin) ||
+          (offered.provenance != 1 && offered.provenance != 2 && offered.provenance != 3) ||
+          !std::isfinite(offered.deadline) ||
+          offered.deadline <= NSProcessInfo.processInfo.systemUptime ||
+          offered.deadline - NSProcessInfo.processInfo.systemUptime > 30) {
+        [owner finishPasswordSaveRecord:record cancelNative:YES];
+        return;
+      }
+      ARCPasswordSaveOffer *offer = [[ARCPasswordSaveOffer alloc] initForNativeOffer];
+      offer.offerID = offered.offerID; offer.captureID = captureID;
+      offer.windowID = windowID; offer.profileID = profileID; offer.tabID = tabID;
+      offer.accountEpoch = accountEpoch; offer.originalOrigin = offered.originalOrigin;
+      offer.originalDocumentURL = offered.originalDocumentURL; offer.provenance = offered.provenance;
+      offer.deadline = offered.deadline;
+      record.deadline = offer.deadline; record.nativeOffer = offered; record.offer = offer;
+      __weak ARCPasswordSaveRecord *weakRecord = record;
+      NSTimeInterval remaining = MAX(0, offer.deadline - NSProcessInfo.processInfo.systemUptime);
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(remaining * NSEC_PER_SEC)),
+                     dispatch_get_main_queue(), ^{
+        ARCChromiumRuntime *current = weakSelf;
+        ARCPasswordSaveRecord *pending = weakRecord;
+        if (current && pending) [current finishPasswordSaveRecord:pending cancelNative:YES];
+      });
+      void (^reply)(ARCPasswordSaveOffer *) = record.offerCallback;
+      record.offerCallback = nil;
+      if (reply) reply(offer);
+    } onRevoke:^{
+      ARCChromiumRuntime *owner = weakSelf;
+      if (owner) [owner finishPasswordSaveRecord:record cancelNative:NO];
+    }];
+  if (!native || _passwordSaveCaptures[captureID] != record) {
+    if (native) [(id<ARCNativeSaveWindow>)window cancelPasswordSaveCapture:native];
+    [self finishPasswordSaveRecord:record cancelNative:NO];
+    return NO;
+  }
+  record.nativeCapture = native;
+  return YES;
+}
+
+- (void)consumePasswordSaveOffer:(ARCPasswordSaveOffer *)offer displayedOrigin:(NSString *)origin
+  completion:(void (^)(ARCPasswordSaveStatus, NSString *, NSString *))completion {
+  NSAssert(NSThread.isMainThread, @"Password consume requires the UI thread");
+  if (!completion) return;
+  if (![offer isKindOfClass:ARCPasswordSaveOffer.class]) {
+    completion(ARCPasswordSaveStatusUnavailable, nil, nil); return;
+  }
+  ARCPasswordSaveRecord *record = _passwordSaveCaptures[offer.captureID];
+  if (!record || record.offer != offer || record.consumed || !record.nativeOffer ||
+      ![origin isEqualToString:offer.originalOrigin] || ![self passwordRecordIsCurrent:record]) {
+    if (record && record.offer == offer) [self finishPasswordSaveRecord:record cancelNative:YES];
+    completion(ARCPasswordSaveStatusUnavailable, nil, nil);
+    return;
+  }
+  record.consumed = YES;
+  record.consumeCallback = completion;
+  id<ARCNativeSaveOffer> nativeOffer = record.nativeOffer;
+  record.nativeOffer = nil;
+  __weak ARCChromiumRuntime *weakSelf = self;
+  [(id<ARCNativeSaveWindow>)record.window consumePasswordSaveOffer:nativeOffer
+    displayedOrigin:origin completion:^(NSInteger status, NSString *username, NSString *password) {
+      ARCChromiumRuntime *owner = weakSelf;
+      if (!owner || owner->_passwordSaveCaptures[record.requestID] != record ||
+          !record.consumeCallback) return;
+      void (^reply)(ARCPasswordSaveStatus, NSString *, NSString *) = record.consumeCallback;
+      record.consumeCallback = nil;
+      BOOL current = [owner passwordRecordIsCurrent:record];
+      if (status == 0 && current && [username isKindOfClass:NSString.class] &&
+          [password isKindOfClass:NSString.class] && password.length > 0 &&
+          username.length < 1024 && password.length < 1024) {
+        reply(ARCPasswordSaveStatusConsumed, username, password);
+      } else {
+        [owner finishPasswordSaveRecord:record cancelNative:YES];
+        reply(ARCPasswordSaveStatusUnavailable, nil, nil);
+      }
+    }];
+}
+
+- (void)cancelPasswordSaveCaptureID:(NSString *)captureID {
+  NSAssert(NSThread.isMainThread, @"Password cancellation requires the UI thread");
+  ARCPasswordSaveRecord *record = _passwordSaveCaptures[captureID];
+  if (record) [self finishPasswordSaveRecord:record cancelNative:YES];
 }
 
 - (void)invalidatePasswordRequestsForTabID:(NSString *)tabID windowID:(NSString *)windowID {
@@ -2042,8 +2313,17 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   ArdiaCoreTab *tab = _tabs[tabID];
   ARCNativeWindowState *state = [self stateForTabID:tabID];
   if (!tab || tab.closed || !state || state.closing || state.closed || _closingBrowser) return;
-  if (state.selectedTabID && ![state.selectedTabID isEqualToString:tabID])
+  NSString *previousID = state.selectedTabID;
+  if (previousID && ![previousID isEqualToString:tabID]) {
+    [self invalidatePasswordSaveCapturesForTabID:previousID windowID:state.identity];
+    if (_tabs[tabID] != tab || tab.closed || _windows[state.identity] != state || state.closed ||
+        state.closing || _closingBrowser || ![_tabWindows[tabID] isEqualToString:state.identity] ||
+        ![state.selectedTabID isEqualToString:previousID]) return;
     [self invalidateExternalRequestsForTabID:state.selectedTabID windowID:state.identity];
+    if (_tabs[tabID] != tab || tab.closed || _windows[state.identity] != state ||
+        state.closed || state.closing || _closingBrowser ||
+        ![state.selectedTabID isEqualToString:previousID]) return;
+  }
   if (!state.hostSelectionDepth) {
     for (NSMutableDictionary *transfer in _detachedTabSelections.allValues) {
       if ([transfer[@"sourceWindowID"] isEqualToString:state.identity] &&
@@ -2124,7 +2404,15 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
     }
   }
   if (transientFallback) return;
-  if (state.selectedTabID) [self invalidateExternalRequestsForTabID:state.selectedTabID windowID:state.identity];
+  if (state.selectedTabID) {
+    NSString *oldSelection = state.selectedTabID;
+    [self invalidatePasswordSaveCapturesForTabID:oldSelection windowID:state.identity];
+    if (_windows[state.identity] != state || state.closed || state.closing || _closingBrowser ||
+        ![state.selectedTabID isEqualToString:oldSelection] || _tabs[identity] != tab) return;
+    [self invalidateExternalRequestsForTabID:oldSelection windowID:state.identity];
+    if (_windows[state.identity] != state || state.closed || state.closing || _closingBrowser ||
+        ![state.selectedTabID isEqualToString:oldSelection] || _tabs[identity] != tab) return;
+  }
   if (_testing) {
     [_tabs[state.selectedTabID ?: @""] noteShownByHost:NO];
     [tab noteShownByHost:YES];
@@ -2143,7 +2431,13 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
 - (void)clearActiveTabInWindowID:(NSString *)identity {
   ARCNativeWindowState *state = _windows[identity];
   if (!state || state.closed) return;
+  NSString *oldSelection = state.selectedTabID;
+  [self invalidatePasswordSaveCapturesForTabID:oldSelection windowID:identity];
+  if (_windows[identity] != state || state.closed ||
+      !((!oldSelection && !state.selectedTabID) || [state.selectedTabID isEqualToString:oldSelection])) return;
   [self invalidateExternalRequestsForTabID:state.selectedTabID windowID:identity];
+  if (_windows[identity] != state || state.closed ||
+      !((!oldSelection && !state.selectedTabID) || [state.selectedTabID isEqualToString:oldSelection])) return;
   if (state.findTabID) [self stopFindingInTabID:state.findTabID];
   if (_testing) [_tabs[state.selectedTabID ?: @""] noteShownByHost:NO];
   state.selectedTabID = nil;
@@ -2153,7 +2447,10 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   ArdiaCoreTab *tab = _tabs[tabID];
   ARCNativeWindowState *state = [self stateForTabID:tabID];
   if (!tab || _closingBrowser || state.closed || state.closing) return;
+  [self invalidatePasswordSaveCapturesForTabID:tabID windowID:nil];
+  if (_tabs[tabID] != tab || _closingBrowser || state.closed || state.closing) return;
   [self invalidateExternalRequestsForTabID:tabID windowID:nil];
+  if (_tabs[tabID] != tab || _closingBrowser || state.closed || state.closing) return;
   if (tab.closed) { [self tabWillClose:tab]; return; }
   [_pendingHostClosures addObject:tabID];
   [tab close];
@@ -2162,7 +2459,10 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
 - (void)discardTabID:(NSString *)tabID {
   // The model has already removed this tab or rejected its creation.
   ArdiaCoreTab *tab = _tabs[tabID];
+  [self invalidatePasswordSaveCapturesForTabID:tabID windowID:nil];
+  if (_tabs[tabID] != tab) return;
   [self invalidateExternalRequestsForTabID:tabID windowID:nil];
+  if (_tabs[tabID] != tab) return;
   [_pendingHostClosures removeObject:tabID];
   [self stopFindingInTabID:tabID];
   [_tabs removeObjectForKey:tabID];
@@ -2177,8 +2477,15 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
 - (void)activateProfileID:(NSString *)profileID windowID:(NSString *)identity {
   ARCNativeWindowState *state = _windows[identity];
   if (_profiles[profileID] && state && !state.closed && !state.closing && !_closingBrowser) {
-    if (state.native.activeProfile != _profiles[profileID])
+    if (state.native.activeProfile != _profiles[profileID]) {
+      ArdiaCoreProfile *profile = _profiles[profileID];
+      [self invalidatePasswordSaveCapturesForTabID:nil windowID:identity];
+      if (_windows[identity] != state || _profiles[profileID] != profile ||
+          state.closed || state.closing || _closingBrowser) return;
       [self invalidateExternalRequestsForTabID:nil windowID:identity];
+      if (_windows[identity] != state || _profiles[profileID] != profile ||
+          state.closed || state.closing || _closingBrowser) return;
+    }
     state.hostSelectionDepth++;
     state.native.activeProfile = _profiles[profileID];
     state.hostSelectionDepth--;
@@ -2403,6 +2710,8 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
 }
 - (void)quit {
   _closingBrowser = YES;
+  [self invalidatePasswordSaveCapturesForTabID:nil windowID:nil];
+  if (!_closingBrowser) return;
   [self invalidateExternalRequestsForTabID:nil windowID:nil];
   [_engine quit];
 }
@@ -2413,6 +2722,8 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
 }
 - (void)engineWillShutDown {
   _closingBrowser = YES;
+  [self invalidatePasswordSaveCapturesForTabID:nil windowID:nil];
+  if (!_closingBrowser) return;
   [self invalidateExternalRequestsForTabID:nil windowID:nil];
   [_detachedTabSelections removeAllObjects];
 }
@@ -2434,7 +2745,10 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   }
   if (state.closed) return NO;
   state.closing = YES;
+  [self invalidatePasswordSaveCapturesForTabID:nil windowID:state.identity];
+  if (_windows[state.identity] != state || state.closed || !state.closing) return NO;
   [self invalidateExternalRequestsForTabID:nil windowID:state.identity];
+  if (_windows[state.identity] != state || state.closed || !state.closing) return NO;
   return YES;
 }
 - (void)windowDidCancelClose:(ArdiaCoreWindow *)window {
@@ -2467,6 +2781,9 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   NSString *identity = [self identityForTab:tab];
   ARCNativeWindowState *state = [self stateForWindow:window];
   if (!state || !identity || ![_tabWindows[identity] isEqualToString:state.identity]) return;
+  [self invalidatePasswordSaveCapturesForTabID:identity windowID:state.identity];
+  if (_windows[state.identity] != state || _tabs[identity] != tab ||
+      ![_tabWindows[identity] isEqualToString:state.identity]) return;
   [self invalidateExternalRequestsForTabID:identity windowID:state.identity];
   if (!state.closing && !state.closed && !_closingBrowser && !tab.closed &&
       ![_pendingHostClosures containsObject:identity] &&
@@ -2842,6 +3159,8 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   NSString *identity = [self identityForTab:tab];
   NSString *profile = identity ? _owners[identity] : nil;
   if (!identity || !profile || tab.closed) return;
+  [self invalidatePasswordSaveCapturesForTabID:identity windowID:nil];
+  if (_tabs[identity] != tab || tab.closed || ![_owners[identity] isEqualToString:profile]) return;
   [self invalidateExternalRequestsForTabID:identity windowID:nil];
   [self stopFindingInTabID:identity];
   if (_onRendererGone) _onRendererGone(identity, profile, status, code);
@@ -2915,6 +3234,8 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   }
   NSString *identity = [self identityForTab:tab];
   if (!identity) return;
+  [self invalidatePasswordSaveCapturesForTabID:identity windowID:nil];
+  if (_tabs[identity] != tab) return;
   [self invalidateExternalRequestsForTabID:identity windowID:nil];
   [_detachedTabSelections removeObjectForKey:identity];
   ARCNativeWindowState *state = [self stateForTabID:identity];

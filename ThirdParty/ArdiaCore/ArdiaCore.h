@@ -9,6 +9,7 @@ extern "C" {
 // Optional ABI: version 1 selects native-only web password policy before startup.
 // Returns 1 only for the first valid pre-start selection; not a consent signal.
 ARDIACORE_EXPORT int ArdiaCoreConfigureNativePasswordPolicy(uint32_t version);
+ARDIACORE_EXPORT uint32_t ArdiaCoreNativePasswordSaveOfferABIVersion(void);
 #ifdef __cplusplus
 }
 #endif
@@ -19,6 +20,8 @@ NS_ASSUME_NONNULL_BEGIN
 @class ArdiaCoreProfile;
 @class ArdiaCoreTab;
 @class ArdiaCoreWindow;
+@class ArdiaCorePasswordSaveCapture;
+@class ArdiaCorePasswordSaveOffer;
 
 @protocol ArdiaCoreEngineDelegate <NSObject>
 - (void)engineDidStart;

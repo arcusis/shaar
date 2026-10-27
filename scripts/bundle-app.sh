@@ -43,6 +43,13 @@ while (($#)); do
   esac
 done
 
+# Candidate packages have distinct payloads and are unsupported by this bundler.
+# Reject even empty or disabled values so the inherited mode cannot be ambiguous.
+if [[ ${ARCUSIS_NATIVE_BITWARDEN_ORGANIZATION_CANDIDATE+x} || ${ARCUSIS_NATIVE_BITWARDEN_REFRESH_CANDIDATE+x} || ${ARCUSIS_NATIVE_BITWARDEN_REFRESH_FIXTURE+x} ]]; then
+  echo 'Unsupported native Bitwarden candidate environment; unset candidate flags before bundling.' >&2
+  exit 1
+fi
+
 sdk_package="build/NativeBitwardenSDK/Package"
 scratch_mode=default
 if $with_native_bitwarden_sdk; then

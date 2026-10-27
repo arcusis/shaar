@@ -62,6 +62,10 @@ class BundleAppTests(unittest.TestCase):
 
         self._tool(
             "swift",
+            "if [[ ${ARCUSIS_NATIVE_BITWARDEN_ORGANIZATION_CANDIDATE+x} || "
+            "${ARCUSIS_NATIVE_BITWARDEN_REFRESH_CANDIDATE+x} || "
+            "${ARCUSIS_NATIVE_BITWARDEN_REFRESH_FIXTURE+x} ]]; then "
+            "printf 'unexpected candidate mode\\n' >&2; exit 98; fi\n"
             "printf 'swift sdk=%s %s\\n' \"${ARCUSIS_NATIVE_BITWARDEN_SDK-<unset>}\" \"$*\" >> \"$BUNDLE_TEST_LOG\"\n"
             "if [[ \"$*\" == *--show-bin-path* ]]; then printf '%s\\n' \"$BUNDLE_TEST_BIN\"; fi\n",
         )
@@ -235,13 +239,43 @@ class BundleAppTests(unittest.TestCase):
 
         sdk_enabled = self._run(
             "--configuration", "debug", "--with-native-bitwarden-sdk",
-            env=inherited_sdk_environment | {"PYTHON": validator},
+            env=self.env | {"ARCUSIS_NATIVE_BITWARDEN_SDK": "0", "PYTHON": validator},
         )
 
         self.assertEqual(sdk_enabled.returncode, 0, sdk_enabled.stderr)
+        self.assertEqual((app / "Frameworks/libbitwarden_uniffi.dylib").read_bytes(), b"validated sdk dylib")
         log = self._log()
         self.assertIn("swift sdk=1 build --manifest-cache none --scratch-path build/swiftpm/native-bitwarden-sdk", log)
         self.assertIn("swift sdk=1 build --manifest-cache none --scratch-path build/swiftpm/native-bitwarden-sdk -c debug --show-bin-path", log)
+
+    def test_candidate_environment_is_rejected_before_build_or_payload_changes(self):
+        flags = (
+            "ARCUSIS_NATIVE_BITWARDEN_ORGANIZATION_CANDIDATE",
+            "ARCUSIS_NATIVE_BITWARDEN_REFRESH_CANDIDATE",
+            "ARCUSIS_NATIVE_BITWARDEN_REFRESH_FIXTURE",
+        )
+        package = self.root / "build/NativeBitwardenSDK/Package"
+        package.mkdir(parents=True)
+        app = self.root / "build/Arcusis Browser Shell.app/Contents"
+        sentinel = app / "Frameworks/libbitwarden_uniffi.dylib"
+        sentinel.parent.mkdir(parents=True)
+        sentinel.write_bytes(b"existing payload")
+        validator = self._sdk_python()
+        for args in ((), ("--with-native-bitwarden-sdk",)):
+            for selected in (*((name,) for name in flags), flags):
+                for value in ("1", "0", "", "unexpected"):
+                    with self.subTest(args=args, flags=selected, value=value):
+                        environment = self.env | {
+                            "ARCUSIS_NATIVE_BITWARDEN_SDK": "1",
+                            "PYTHON": validator,
+                            **{name: value for name in selected},
+                        }
+                        result = self._run(*args, env=environment)
+                        self.assertEqual(result.returncode, 1)
+                        self.assertIn("Unsupported native Bitwarden candidate environment", result.stderr)
+                        self.assertEqual(self._log(), "")
+                        self.assertFalse((self.root / "build/swiftpm").exists())
+                        self.assertEqual(sentinel.read_bytes(), b"existing payload")
 
     def test_default_sdk_default_switch_keeps_mode_scratch_and_removes_sdk_payload(self):
         first = self._run("--configuration", "debug")

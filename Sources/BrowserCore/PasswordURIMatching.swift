@@ -45,9 +45,13 @@ public struct PasswordPublicSuffixList: Sendable {
     codeResourceURL: URL?, loadedBundleURLs: [URL]
   ) -> [URL] {
     var roots = [mainResourceURL, codeResourceURL, mainBundleURL].compactMap { $0 }
-    // Classic SwiftPM places its resources beside the loaded XCTest bundle.
+    // Classic SwiftPM places resources beside the loaded XCTest bundle. Swift Testing
+    // uses its own helper to load that bundle instead of the xctest executable.
     // Never search app siblings, even if an app happens to load test bundles.
-    if mainBundleURL.pathExtension != "app", mainExecutableURL?.lastPathComponent == "xctest" {
+    if mainBundleURL.pathExtension != "app",
+      let executableName = mainExecutableURL?.lastPathComponent,
+      ["xctest", "swiftpm-testing-helper"].contains(executableName)
+    {
       roots += loadedBundleURLs.filter { $0.pathExtension == "xctest" }.map {
         $0.deletingLastPathComponent()
       }

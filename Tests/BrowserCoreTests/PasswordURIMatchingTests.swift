@@ -182,6 +182,12 @@ final class PasswordURIMatchingTests: XCTestCase {
       loadedBundleURLs: [testContainer, fixture.appendingPathComponent("Other.bundle")])
     XCTAssertNotNil(PasswordPublicSuffixList.loadBundledResource(from: roots))
 
+    let helperRoots = PasswordPublicSuffixList.resourceRoots(
+      mainBundleURL: fixture.appendingPathComponent("runner"), mainResourceURL: nil,
+      mainExecutableURL: fixture.appendingPathComponent("swiftpm-testing-helper"),
+      codeResourceURL: nil, loadedBundleURLs: [testContainer])
+    XCTAssertNotNil(PasswordPublicSuffixList.loadBundledResource(from: helperRoots))
+
     let app = fixture.appendingPathComponent("Fixture.app")
     let appRoots = PasswordPublicSuffixList.resourceRoots(
       mainBundleURL: app, mainResourceURL: app.appendingPathComponent("Contents/Resources"),
@@ -189,6 +195,12 @@ final class PasswordURIMatchingTests: XCTestCase {
       codeResourceURL: nil, loadedBundleURLs: [testContainer])
     XCTAssertNil(PasswordPublicSuffixList.loadBundledResource(from: appRoots))
     XCTAssertFalse(appRoots.contains(fixture))
+    let appHelperRoots = PasswordPublicSuffixList.resourceRoots(
+      mainBundleURL: app, mainResourceURL: app.appendingPathComponent("Contents/Resources"),
+      mainExecutableURL: app.appendingPathComponent("Contents/MacOS/swiftpm-testing-helper"),
+      codeResourceURL: nil, loadedBundleURLs: [testContainer])
+    XCTAssertFalse(appHelperRoots.contains(fixture))
+    XCTAssertNil(PasswordPublicSuffixList.loadBundledResource(from: appHelperRoots))
     if case .failure(.missingBundle) = PasswordPublicSuffixList.loadBundledResourceResult(
       from: appRoots)
     {
@@ -200,6 +212,11 @@ final class PasswordURIMatchingTests: XCTestCase {
       mainExecutableURL: fixture.appendingPathComponent("runner"), codeResourceURL: nil,
       loadedBundleURLs: [testContainer])
     XCTAssertNil(PasswordPublicSuffixList.loadBundledResource(from: otherHostRoots))
+    let similarlyNamedHostRoots = PasswordPublicSuffixList.resourceRoots(
+      mainBundleURL: fixture.appendingPathComponent("runner"), mainResourceURL: nil,
+      mainExecutableURL: fixture.appendingPathComponent("swiftpm-testing-helper-extra"),
+      codeResourceURL: nil, loadedBundleURLs: [testContainer])
+    XCTAssertNil(PasswordPublicSuffixList.loadBundledResource(from: similarlyNamedHostRoots))
 
     let relocatedResources = fixture.appendingPathComponent("Relocated.app/Contents/Resources")
     try fileManager.createDirectory(at: relocatedResources, withIntermediateDirectories: true)
@@ -213,6 +230,12 @@ final class PasswordURIMatchingTests: XCTestCase {
     let original = try Data(contentsOf: dataURL)
     try Data("tampered".utf8).write(to: dataURL)
     XCTAssertNil(PasswordPublicSuffixList.loadBundledResource(from: roots))
+    if case .failure(.hashMismatch) = PasswordPublicSuffixList.loadBundledResourceResult(
+      from: helperRoots + [relocatedResources])
+    {
+    } else {
+      XCTFail("Expected the first damaged resource to fail closed")
+    }
     if case .failure(.hashMismatch) = PasswordPublicSuffixList.loadBundledResourceResult(
       from: roots)
     {

@@ -3,6 +3,7 @@ import signal
 import subprocess
 import sys
 import hashlib
+import json
 import plistlib
 import copy
 from unittest import mock
@@ -347,6 +348,126 @@ class OrganizationCandidateTests(unittest.TestCase):
             self.assertEqual((root / 'Package/Sources/ArcusisBitwardenSDK/A.swift').read_text(), 'swift')
             self.assertEqual((root / 'Package/Sources/BitwardenFFI/include/A.h').read_text(), 'header')
             self.assertEqual((root / 'Package/Sources/BitwardenFFI/include/module.modulemap').read_text(), 'module A { header "A.h" export * }\n')
+
+
+def refresh_fixture(root):
+    pin, manifest = candidate_fixture(root)
+    swift = root / 'Sources/ArcusisBitwardenSDK/Bindings.swift'
+    swift.write_text('func refreshPasswordManagerToken(\nfunc syncWithOutcome(\nfunc sync(force:\nenum SyncOutcome:\nenum RefreshError:\n')
+    pin['generatedSHA256'][swift.name] = module.digest(swift)
+    manifest['bindingTreeSHA256'] = module.tree_digest(swift.parent)
+    manifest['fileSHA256'][swift.relative_to(root).as_posix()] = module.digest(swift)
+    pin.update(candidateGitTree='six-layer-tree', rustToolchain='1.98.0',
+               sourceProofDylibSHA256=manifest['dylibSHA256'])
+    manifest.update(candidateGitTree=pin['candidateGitTree'], rustToolchain=pin['rustToolchain'])
+    (root / 'build-manifest.json').write_text(json.dumps(manifest, sort_keys=True, indent=2) + '\n')
+    return pin, manifest
+
+
+class RefreshCandidateTests(unittest.TestCase):
+    def test_pin_fixes_refresh_tree_toolchain_and_patch_order(self):
+        pin = module.read_refresh_pin()
+        self.assertEqual(pin['candidateGitTree'], '64151eb07bdbe0bba1b48aeeea6a8b1add2c4ac9')
+        self.assertEqual(pin['rustToolchain'], '1.98.0')
+        self.assertEqual(module.REFRESH_PATCH_ORDER[-1], 'ThirdParty/BitwardenRefreshSpike/refresh.patch')
+        self.assertEqual(len(pin['changedPaths']), 35)
+        self.assertIs(pin['accepted'], False)
+        self.assertIs(pin['integration_ready'], False)
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = Path(tmp) / 'pin.json'; fake.write_text('{}')
+            with mock.patch.object(module, 'REFRESH_PIN', fake), self.assertRaises(ValueError):
+                module.read_refresh_pin()
+
+    def test_refresh_manifest_and_generated_payload_reject_tampering(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / 'Package'; pin, manifest = refresh_fixture(root)
+            with mock.patch.object(module, 'read_refresh_pin', return_value=pin):
+                module.validate_package(root, manifest, refresh=True, expected_dylib=manifest['dylibSHA256'])
+                for key, value in [('accepted', True), ('integration_ready', True),
+                                   ('candidateGitTree', 'wrong'), ('rustToolchain', '1.90'),
+                                   ('sourceManifestSHA256', 'wrong')]:
+                    changed = copy.deepcopy(manifest); changed[key] = value
+                    (root / 'build-manifest.json').write_text(json.dumps(changed))
+                    with self.subTest(key=key), self.assertRaises(ValueError):
+                        module.validate_package(root, changed, refresh=True, expected_dylib=manifest['dylibSHA256'])
+                (root / 'build-manifest.json').write_text('{}')
+                with self.assertRaisesRegex(ValueError, 'on-disk manifest'):
+                    module.validate_package(root, manifest, refresh=True, expected_dylib=manifest['dylibSHA256'])
+                path = root / 'Sources/ArcusisBitwardenSDK/Bindings.swift'
+                path.write_text(path.read_text() + 'changed binding')
+                changed = copy.deepcopy(manifest)
+                changed['bindingTreeSHA256'] = module.tree_digest(path.parent)
+                changed['fileSHA256'][path.relative_to(root).as_posix()] = module.digest(path)
+                (root / 'build-manifest.json').write_text(json.dumps(changed))
+                with self.assertRaisesRegex(ValueError, 'generated Swift inventory'):
+                    module.validate_package(root, changed, refresh=True, expected_dylib=manifest['dylibSHA256'])
+
+    def test_refresh_rejects_rehashed_extra_and_foreign_dylib(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / 'Package'; pin, manifest = refresh_fixture(root)
+            with mock.patch.object(module, 'read_refresh_pin', return_value=pin):
+                with self.assertRaisesRegex(ValueError, 'provenance'):
+                    module.validate_package(root, manifest, refresh=True, expected_dylib='foreign')
+                dylib = root / 'Frameworks/BitwardenSDK.xcframework/macos-arm64/libbitwarden_uniffi.dylib'
+                original = dylib.read_text(); dylib.write_text('foreign library')
+                changed = copy.deepcopy(manifest); changed['dylibSHA256'] = module.digest(dylib)
+                changed['fileSHA256'][dylib.relative_to(root).as_posix()] = module.digest(dylib)
+                (root / 'build-manifest.json').write_text(json.dumps(changed))
+                with self.assertRaisesRegex(ValueError, 'provenance'):
+                    module.validate_package(root, changed, refresh=True, expected_dylib=changed['dylibSHA256'])
+                dylib.write_text(original)
+                extra = root / 'extra.txt'; write(extra, 'extra')
+                changed = copy.deepcopy(manifest); changed['fileSHA256']['extra.txt'] = module.digest(extra)
+                (root / 'build-manifest.json').write_text(json.dumps(changed))
+                with self.assertRaisesRegex(ValueError, 'path inventory'):
+                    module.validate_package(root, changed, refresh=True, expected_dylib=manifest['dylibSHA256'])
+
+
+class RefreshGeneratorProvenanceTests(unittest.TestCase):
+    def test_fresh_build_executes_constructed_tool_and_reuse_requires_pin(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); sdk = root / 'sdk'; sdk.mkdir(); target = root / 'target'; target.mkdir()
+            generated = root / 'generated'; dylib = root / 'sdk.dylib'; write(dylib, 'dylib')
+            bindgen = target / 'aarch64-apple-darwin/release/uniffi-bindgen'
+            pin = {'target': 'aarch64-apple-darwin', 'sourceProofBindgenSHA256': hashlib.sha256(b'historical').hexdigest()}
+            common = ['--offline', '--locked', '--release', '--jobs', '2', '--target', pin['target']]
+            calls = []
+            def command(argv, cwd, env, timeout=3600):
+                calls.append((list(argv), cwd))
+                if argv[:3] == ['cargo', '+1.98.0', 'build']:
+                    bindgen.parent.mkdir(parents=True); bindgen.write_bytes(b'fresh-compiled'); bindgen.chmod(0o755)
+                else:
+                    self.assertEqual(argv[0], str(bindgen)); write(generated / 'Interface.swift', 'generated')
+                return ''
+            with mock.patch.object(module, 'refresh_command', side_effect=command):
+                observed, recipe = module.build_refresh_generator(sdk, target, generated, dylib, pin, {}, common)
+            self.assertEqual(observed, hashlib.sha256(b'fresh-compiled').hexdigest())
+            self.assertEqual(recipe, [call[0] for call in calls])
+            self.assertEqual(calls[0][0], ['cargo', '+1.98.0', 'build', *common, '--package', 'uniffi-bindgen'])
+            self.assertEqual(calls[1][0][0:3], [str(bindgen), 'generate', str(dylib)])
+            with self.assertRaisesRegex(ValueError, 'reused generator provenance'):
+                module.validate_refresh_reused_generator(bindgen, pin)
+            bindgen.write_bytes(b'historical')
+            self.assertEqual(module.validate_refresh_reused_generator(bindgen, pin), pin['sourceProofBindgenSHA256'])
+
+    def test_fresh_refuses_existing_tool_and_tool_changed_during_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); sdk = root / 'sdk'; sdk.mkdir(); target = root / 'target'; generated = root / 'generated'
+            bindgen = target / 'aarch64-apple-darwin/release/uniffi-bindgen'; write(bindgen, 'preexisting'); bindgen.chmod(0o755)
+            pin = {'target': 'aarch64-apple-darwin'}
+            with mock.patch.object(module, 'refresh_command') as command, self.assertRaisesRegex(ValueError, 'already exists'):
+                module.build_refresh_generator(sdk, target, generated, root / 'dylib', pin, {}, [])
+            command.assert_not_called()
+            bindgen.unlink()
+            def mutate(argv, cwd, env, timeout=3600):
+                if argv[:3] == ['cargo', '+1.98.0', 'build']:
+                    bindgen.write_bytes(b'built'); bindgen.chmod(0o755)
+                else:
+                    bindgen.write_bytes(b'changed')
+                return ''
+            with mock.patch.object(module, 'refresh_command', side_effect=mutate), self.assertRaisesRegex(ValueError, 'changed during execution'):
+                module.build_refresh_generator(sdk, target, generated, root / 'dylib', pin, {}, [])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -90,9 +90,25 @@ jobs:
           path: build/Verification/native-settings-visual-ci/
           if-no-files-found: warn
 
+  hosted-sidebar-visual:
+    name: Hosted sidebar component visuals
+    runs-on: macos-26
+    timeout-minutes: 20
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+
+    steps:
+      - name: Check out source
+        # actions/checkout v5.1.0
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+
+      - name: Build visual test targets
+        run: swift build --build-tests --jobs 2
+
       - name: Capture hosted sidebar component visuals
         id: sidebar_visual
-        if: success() || (failure() && (steps.private_window.outcome == 'failure' || steps.native_settings_visual.outcome == 'failure'))
         env:
           ARCUSIS_SIDEBAR_VISUAL_CI: '1'
         run: |

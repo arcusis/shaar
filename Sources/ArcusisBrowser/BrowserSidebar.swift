@@ -66,10 +66,7 @@ struct BrowserSidebar: View {
   @State private var targetedFolder: UUID?
   @State private var hoveredTabID: UUID?
   @State private var newTabIsHovered = false
-  @State private var recentDownloadsIsOpen = false
-  @State private var recentDownloadsPinnedOpen = false
-  @State private var recentDownloadsAnchorHovered = false
-  @State private var recentDownloadsCardHovered = false
+  @State private var recentDownloads: RecentDownloadsPresentation
   @State private var recentDownloadsCloseTask: Task<Void, Never>?
   @State private var folderDraft: SidebarFolderDraft?
   @FocusState private var folderNameIsFocused: Bool
@@ -130,6 +127,8 @@ struct BrowserSidebar: View {
   ) {
     self.store = store
     self.previewRecentDownloads = previewRecentDownloads
+    _recentDownloads = State(
+      initialValue: RecentDownloadsPresentation(profileID: store.session.selectedSpace.profileID))
     _folderDraft = State(initialValue: previewFolderDraft)
   }
 
@@ -205,7 +204,7 @@ struct BrowserSidebar: View {
       Divider()
       HStack(spacing: 8) {
         recentDownloadsControls
-          .frame(width: 30, height: 30)
+          .frame(height: 30)
         spaceSelectors
         Button {
           store.spaceEditor = .create
@@ -468,21 +467,45 @@ struct BrowserSidebar: View {
   private var recentDownloadsControls: some View {
     let profileID = store.session.selectedSpace.profileID
     let downloads = store.engine?.downloads
-    return Button(action: toggleLibraryDrawerFromButton) {
-      Image(systemName: "books.vertical")
-        .frame(width: 30, height: 30)
+    let epoch = recentDownloads.epoch
+    return HStack(spacing: 2) {
+      Button(action: toggleLibraryDrawerFromButton) {
+        Image(systemName: "books.vertical")
+          .frame(width: 30, height: 30)
+      }
+      .contextMenu {
+        Button("Bookmarks…") { store.showLibrary(.bookmarks) }
+        Button("History…") { store.showLibrary(.history) }
+      }
+      .accessibilityLabel("Library")
+      .help("Library")
+
+      Button {
+        guard downloadsProfileIsCurrent(profileID), recentDownloads.epoch == epoch,
+          store.libraryDrawerSection == nil,
+          !store.commandIsOpen, store.sheet == nil
+        else { return }
+        recentDownloadsCloseTask?.cancel()
+        recentDownloads.toggle(profileID: profileID, epoch: epoch)
+      } label: {
+        Image(systemName: "arrow.down.circle")
+          .frame(width: 24, height: 30)
+      }
+      .disabled(previewRecentDownloads == nil && downloads == nil)
+      .accessibilityLabel("Recent downloads")
+      .accessibilityHint(
+        recentDownloads.isPinned
+          ? "Hide recent downloads" : "Show recent downloads for this profile"
+      )
+      .help("Recent downloads")
     }
     .buttonStyle(.plain)
-    .contextMenu {
-      Button("Bookmarks…") { store.showLibrary(.bookmarks) }
-      Button("History…") { store.showLibrary(.history) }
+    .onHover {
+      recentDownloadsHoverChanged(.anchor, inside: $0, profileID: profileID, epoch: epoch)
     }
-    .accessibilityLabel("Library")
-    .help("Library")
-    .onHover { recentDownloadsAnchorHoverChanged($0) }
     .overlay(alignment: .bottomLeading) {
       Group {
-        if recentDownloadsIsOpen || previewRecentDownloads != nil,
+        if recentDownloads.isOpen || previewRecentDownloads != nil,
           downloadsProfileIsCurrent(profileID),
           let items = previewRecentDownloads ?? downloads?.items(in: profileID)
         {
@@ -491,6 +514,7 @@ struct BrowserSidebar: View {
             selectedProfileID: { store.session.selectedSpace.profileID },
             dragURL: { item in
               guard previewRecentDownloads == nil, downloadsProfileIsCurrent(profileID),
+                recentDownloads.epoch == epoch,
                 let downloads
               else { return nil }
               return downloads.fileForDrag(
@@ -498,19 +522,22 @@ struct BrowserSidebar: View {
                 selectedProfileID: store.session.selectedSpace.profileID)
             },
             dismiss: {
-              guard downloadsProfileIsCurrent(profileID) else { return }
-              recentDownloadsPinnedOpen = false
-              recentDownloadsIsOpen = false
+              guard downloadsProfileIsCurrent(profileID), recentDownloads.epoch == epoch
+              else { return }
+              recentDownloadsCloseTask?.cancel()
+              recentDownloads.dismiss(profileID: profileID, epoch: epoch)
             }
           )
           .offset(y: -26)
-          .onHover { recentDownloadsCardHoverChanged($0) }
+          .onHover {
+            recentDownloadsHoverChanged(.card, inside: $0, profileID: profileID, epoch: epoch)
+          }
           .transition(.opacity.combined(with: .move(edge: .bottom)))
         }
       }
       .animation(
         reduceMotion ? nil : .easeOut(duration: 0.14),
-        value: recentDownloadsIsOpen
+        value: recentDownloads.isOpen
       )
       .transaction { transaction in
         if reduceMotion {
@@ -520,18 +547,16 @@ struct BrowserSidebar: View {
       }
     }
     .onExitCommand {
-      recentDownloadsPinnedOpen = false
-      recentDownloadsIsOpen = false
+      guard downloadsProfileIsCurrent(profileID), recentDownloads.epoch == epoch else { return }
+      recentDownloadsCloseTask?.cancel()
+      recentDownloads.dismiss(profileID: profileID, epoch: epoch)
     }
-    .onChange(of: profileID) { _, _ in
+    .onChange(of: profileID) { _, newProfileID in
       recentDownloadsCloseTask?.cancel()
       var transaction = Transaction(animation: nil)
       transaction.disablesAnimations = true
       withTransaction(transaction) {
-        recentDownloadsPinnedOpen = false
-        recentDownloadsAnchorHovered = false
-        recentDownloadsCardHovered = false
-        recentDownloadsIsOpen = false
+        recentDownloads.selectProfile(newProfileID)
       }
     }
     .onChange(of: store.libraryDrawerSection) { _, section in
@@ -600,36 +625,27 @@ struct BrowserSidebar: View {
     store.session.selectedSpace.profileID == profileID
   }
 
-  private func recentDownloadsAnchorHoverChanged(_ inside: Bool) {
-    recentDownloadsAnchorHovered = inside
-    recentDownloadsHoverChanged(inside)
-  }
-
-  private func recentDownloadsCardHoverChanged(_ inside: Bool) {
-    recentDownloadsCardHovered = inside
-    recentDownloadsHoverChanged(inside)
-  }
-
-  private func recentDownloadsHoverChanged(_ inside: Bool) {
+  private func recentDownloadsHoverChanged(
+    _ target: RecentDownloadsPresentation.HoverTarget, inside: Bool, profileID: UUID, epoch: UInt64
+  ) {
+    guard downloadsProfileIsCurrent(profileID), recentDownloads.epoch == epoch else { return }
     recentDownloadsCloseTask?.cancel()
     guard store.libraryDrawerSection == nil, !store.commandIsOpen, store.sheet == nil else {
       closeRecentDownloadsPreview()
       return
     }
-    if inside {
-      recentDownloadsIsOpen = true
-      return
-    }
+    guard
+      let token = recentDownloads.hover(
+        target, inside: inside, profileID: profileID, epoch: epoch)
+    else { return }
     recentDownloadsCloseTask = Task { @MainActor in
-      try? await Task.sleep(for: .milliseconds(180))
+      do { try await Task.sleep(for: .milliseconds(180)) } catch { return }
+      guard downloadsProfileIsCurrent(profileID), recentDownloads.epoch == epoch else { return }
       guard store.libraryDrawerSection == nil, !store.commandIsOpen, store.sheet == nil else {
         closeRecentDownloadsPreview()
         return
       }
-      if !recentDownloadsAnchorHovered && !recentDownloadsCardHovered && !recentDownloadsPinnedOpen
-      {
-        recentDownloadsIsOpen = false
-      }
+      recentDownloads.finishHoverLeave(token: token, profileID: profileID, epoch: epoch)
     }
   }
 
@@ -640,10 +656,8 @@ struct BrowserSidebar: View {
 
   private func closeRecentDownloadsPreview() {
     recentDownloadsCloseTask?.cancel()
-    recentDownloadsPinnedOpen = false
-    recentDownloadsAnchorHovered = false
-    recentDownloadsCardHovered = false
-    recentDownloadsIsOpen = false
+    recentDownloads.dismiss(
+      profileID: store.session.selectedSpace.profileID, epoch: recentDownloads.epoch)
   }
 
   private func tabRow(_ tab: BrowserTab, index: SidebarTabIndex) -> some View {

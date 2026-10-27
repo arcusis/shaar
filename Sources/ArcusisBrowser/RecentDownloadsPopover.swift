@@ -84,7 +84,7 @@ struct RecentDownloadsPopover: View {
         } else {
           Text(stateLabel)
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.primary)
             .lineLimit(1)
           if item.state == .downloading && !item.dangerous {
             if let progress = item.progress {

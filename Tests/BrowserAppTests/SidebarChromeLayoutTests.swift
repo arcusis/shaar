@@ -75,6 +75,20 @@ final class SidebarChromeLayoutTests: XCTestCase {
         path: "/tmp/recent-report-final.pdf", sourceURL: "https://example.com/report",
         state: .finished, paused: false, dangerous: false, offTheRecord: false,
         received: 1024, total: 1024, startTime: 1_735_689_600))
+    let progressDownload = try XCTUnwrap(
+      BrowserDownload(
+        id: UUID().uuidString, profileID: store.session.selectedSpace.profileID,
+        filename: "research-notes.pdf", path: "/preview/research-notes.pdf",
+        sourceURL: "https://example.com/research", state: .downloading,
+        paused: false, dangerous: false, offTheRecord: false,
+        received: 65_536, total: 262_144, startTime: 1_735_689_500))
+    let pausedDownload = try XCTUnwrap(
+      BrowserDownload(
+        id: UUID().uuidString, profileID: store.session.selectedSpace.profileID,
+        filename: "archive.zip", path: "/preview/archive.zip",
+        sourceURL: "https://example.com/archive", state: .downloading,
+        paused: true, dangerous: false, offTheRecord: false,
+        received: 1_024, total: -1, startTime: 1_735_689_400))
     let root = try SidebarVisualCaptureSupport.prepare()
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     let emptyStore = try makeStore(populated: false)
@@ -101,6 +115,10 @@ final class SidebarChromeLayoutTests: XCTestCase {
         width: BrowserChromeLayout.sidebarWidth, height: 520, appearance: .aqua,
         colorScheme: .light, draft: nil, showsDownloads: true, scenario: "recent-downloads"),
       CaptureCase(
+        name: "sidebar-recent-files-regular.png", store: store,
+        width: BrowserChromeLayout.sidebarWidth, height: 760, appearance: .aqua,
+        colorScheme: .light, draft: nil, showsDownloads: true, scenario: "recent-downloads"),
+      CaptureCase(
         name: "sidebar-inline-folder.png", store: store,
         width: BrowserChromeLayout.sidebarWidth, height: 760, appearance: .aqua,
         colorScheme: .light,
@@ -118,11 +136,11 @@ final class SidebarChromeLayoutTests: XCTestCase {
       let view = HStack(spacing: 0) {
         BrowserSidebar(
           store: capture.store,
-          previewRecentDownloads: capture.showsDownloads ? [download] : nil,
+          previewRecentDownloads: capture.showsDownloads
+            ? [download, progressDownload, pausedDownload] : nil,
           previewFolderDraft: capture.draft
         )
         .frame(width: capture.width, height: capture.height)
-        .zIndex(1)
         if capture.showsDownloads {
           Color(nsColor: .windowBackgroundColor)
             .frame(width: surroundingWidth, height: capture.height)
@@ -502,7 +520,8 @@ final class SidebarChromeLayoutTests: XCTestCase {
     case "empty", "empty-minimum": ["Personal", "New tab"]
     case "populated": ["Research", "New tab"]
     case "inline-folder-draft": ["Untitled"]
-    case "recent-downloads": ["recent", "final.pdf"]
+    case "recent-downloads":
+      ["recent", "final.pdf", "research-notes.pdf", "Downloading", "archive.zip"]
     default: []
     }
   }

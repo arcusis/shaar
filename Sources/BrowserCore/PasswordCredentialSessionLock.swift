@@ -12,12 +12,14 @@ public final class PasswordCredentialSessionLock: @unchecked Sendable {
   }
 
   private let descriptor: Int32
+  private let owningProcessID: pid_t
   private let identity: String
   private let flushFile: @Sendable (Int32) -> Int32
   private init(
     descriptor: Int32, identity: String, flushFile: @escaping @Sendable (Int32) -> Int32
   ) {
     self.descriptor = descriptor
+    self.owningProcessID = getpid()
     self.identity = identity
     self.flushFile = flushFile
   }
@@ -38,7 +40,12 @@ public final class PasswordCredentialSessionLock: @unchecked Sendable {
     let data = try JSONEncoder().encode(fields)
     return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() + ".lock"
   }
-  deinit { Darwin.close(descriptor) }
+  deinit {
+    // A duplicated or inherited descriptor can outlive this lease. Release its
+    // lock explicitly, but never unlock the parent's lease from a forked child.
+    if getpid() == owningProcessID { _ = flock(descriptor, LOCK_UN) }
+    Darwin.close(descriptor)
+  }
 
   /// Nonempty marker means a rotating credential may have been consumed.
   /// Unknown or partial marker bytes are also treated as pending.

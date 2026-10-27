@@ -37,6 +37,7 @@ import XCTest
         return
       }
 
+      NativeBitwardenLogging.bootstrap()
       let preparation = Client(
         tokenProvider: NativeBitwardenTokenProvider(), settings: nil,
         managedSettings: ManagedSettingsBindingClient())

@@ -12,6 +12,14 @@ final class NativeBitwardenController {
     var activeSession: NativeBitwardenEstablishedSession?
     var pendingCandidateID: UUID?
     var pendingTask: Task<Void, Never>?
+    #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_CANDIDATE
+      var refresh: NativeBitwardenRefreshCoordinator?
+      var credentialLease: PasswordCredentialSessionLock?
+      var retiredRefresh: NativeBitwardenRefreshCoordinator?
+      var retiredLease: PasswordCredentialSessionLock?
+      var retiredTask: Task<PasswordCredential, Error>?
+      var cleanupTask: Task<Void, Never>?
+    #endif
     var fillEpoch = UUID()
     var fillPair: NativeBitwardenFillSnapshotAccess?
 
@@ -192,6 +200,13 @@ final class NativeBitwardenController {
   func setEnabled(_ enabled: Bool) {
     guard let profileID = selectedProfileID else { return }
     let value = state(for: profileID)
+    #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_CANDIDATE
+      guard value.cleanupTask == nil else {
+        statusByProfile[profileID] = "Credential removal is still pending."
+        return
+      }
+    #endif
+    invalidateRefresh(value)
     clearVaultSnapshot(profileID: profileID, state: value)
     preferences.setNativeVaultEnabled(enabled, for: profileID)
     value.generation += 1
@@ -217,6 +232,19 @@ final class NativeBitwardenController {
   func setServer(_ server: BitwardenServerConfiguration) {
     guard let profileID = selectedProfileID else { return }
     let value = state(for: profileID)
+    #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_CANDIDATE
+      guard value.cleanupTask == nil, value.retiredRefresh == nil else {
+        statusByProfile[profileID] = "Credential removal is still pending."
+        return
+      }
+    #endif
+    #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_CANDIDATE && canImport(ArcusisBitwardenSDK)
+      if backend is any NativeBitwardenRefreshBackend {
+        setRefreshServer(server, profileID: profileID, state: value)
+        return
+      }
+    #endif
+    invalidateRefresh(value)
     clearVaultSnapshot(profileID: profileID, state: value)
     let oldBinding = value.binding
     let session = value.activeSession
@@ -238,7 +266,15 @@ final class NativeBitwardenController {
     value.activeSession = nil
     statusByProfile[profileID] = updated.isEnabled ? "Not connected" : "Off"
     if let session { session.tokenProvider.clear() }
-    try? credentialStore.delete(for: oldBinding)
+    #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_CANDIDATE
+      do {
+        try credentialStore.delete(for: oldBinding)
+      } catch {
+        statusByProfile[profileID] = "Could not remove previous credentials securely."
+      }
+    #else
+      try? credentialStore.delete(for: oldBinding)
+    #endif
     if let candidateID { Task { await backend.discard(sessionID: candidateID) } }
     if let session {
       Task { await backend.discard(sessionID: session.id) }
@@ -247,6 +283,14 @@ final class NativeBitwardenController {
 
   func connect() {
     guard let profileID = selectedProfileID else { return }
+    #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_CANDIDATE
+      if let state = profiles[profileID],
+        state.cleanupTask != nil || state.retiredRefresh != nil
+      {
+        statusByProfile[profileID] = "Credential removal is still pending."
+        return
+      }
+    #endif
     let stored = preferences.nativeVaultPreferences(for: profileID)
     guard stored.isEnabled else {
       statusByProfile[profileID] = "Turn on Bitwarden for this Profile first."
@@ -262,6 +306,13 @@ final class NativeBitwardenController {
       statusByProfile[profileID] = "Server URL is invalid. Use an HTTPS service URL."
       return
     }
+    invalidateRefresh(state)
+    #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_CANDIDATE
+      if state.retiredRefresh != nil {
+        statusByProfile[profileID] = "Previous session is still stopping."
+        return
+      }
+    #endif
     state.generation += 1
     let generation = state.generation
     if let prior = state.activeAttempt { state.gate.invalidate(prior) }
@@ -299,7 +350,14 @@ final class NativeBitwardenController {
 
   func lock() {
     guard let profileID = selectedProfileID, let state = profiles[profileID] else { return }
+    #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_CANDIDATE
+      guard state.cleanupTask == nil else {
+        statusByProfile[profileID] = "Credential removal is still pending."
+        return
+      }
+    #endif
     let session = state.activeSession
+    invalidateRefresh(state)
     state.generation += 1
     clearVaultSnapshot(profileID: profileID, state: state, status: "Locked")
     let generation = state.generation
@@ -360,6 +418,15 @@ final class NativeBitwardenController {
       guard await backend.isAvailable else {
         throw NativeBitwardenBackendError.sdkUnavailable
       }
+      #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_CANDIDATE && canImport(ArcusisBitwardenSDK)
+        if let refreshBackend = backend as? any NativeBitwardenRefreshBackend,
+          try await restoreSavedIfPresent(
+            profileID: profileID, generation: generation, attempt: attempt,
+            server: server, email: email, password: password, refreshBackend: refreshBackend)
+        {
+          return
+        }
+      #endif
       switch try await backend.login(
         server: server, email: email, password: password, deviceID: deviceID,
         secondFactor: secondFactor)
@@ -406,8 +473,12 @@ final class NativeBitwardenController {
           let oldBinding = state.binding
           let oldSession = state.activeSession
           oldSession?.tokenProvider.clear()
-          try? credentialStore.delete(for: oldBinding)
-          self.preferences.setNativeVaultAccountID(nil, for: profileID)
+          #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_CANDIDATE
+            try credentialStore.delete(for: oldBinding)
+          #else
+            try? credentialStore.delete(for: oldBinding)
+            self.preferences.setNativeVaultAccountID(nil, for: profileID)
+          #endif
           state.activeSession = nil
           if let oldSession { Task { await backend.discard(sessionID: oldSession.id) } }
           state.binding = realBinding
@@ -429,11 +500,15 @@ final class NativeBitwardenController {
     } catch {
       if let candidateID { await backend.discard(sessionID: candidateID) }
       if isCurrent(profileID: profileID, generation: generation, attempt: attempt) {
-        statusByProfile[profileID] =
-          error is NativeBitwardenBackendError
-            && (error as? NativeBitwardenBackendError) == .sdkUnavailable
-          ? "Native Bitwarden is unavailable in this build."
-          : "Connection failed. Check server, email, password, and verification response."
+        if (error as? NativeBitwardenRefreshFailure) == .reauthenticationRequired {
+          statusByProfile[profileID] = "Reauthentication required. Sign in again."
+        } else {
+          statusByProfile[profileID] =
+            error is NativeBitwardenBackendError
+              && (error as? NativeBitwardenBackendError) == .sdkUnavailable
+            ? "Native Bitwarden is unavailable in this build."
+            : "Connection failed. Check server, email, password, and verification response."
+        }
         if selectedProfileID == profileID {
           masterPassword = ""
           mfaToken = ""
@@ -466,6 +541,14 @@ final class NativeBitwardenController {
         clearAttemptTokenProvider(established.tokenProvider)
         throw NativeBitwardenBackendError.staleSession
       }
+      #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_CANDIDATE && canImport(ArcusisBitwardenSDK)
+        if let refreshBackend = backend as? any NativeBitwardenRefreshBackend {
+          await initializeRefreshAndPublish(
+            profileID: profileID, generation: generation, attempt: attempt, binding: binding,
+            established: established, refreshBackend: refreshBackend)
+          return
+        }
+      #endif
       var writeError: Error?
       var previousSession: NativeBitwardenEstablishedSession?
       let committed =
@@ -565,6 +648,13 @@ final class NativeBitwardenController {
 
   private func disconnect(profileID: UUID) {
     guard let state = profiles[profileID] else { return }
+    #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_CANDIDATE
+      guard state.cleanupTask == nil else {
+        statusByProfile[profileID] = "Credential removal is still pending."
+        return
+      }
+    #endif
+    invalidateRefresh(state)
     clearVaultSnapshot(profileID: profileID, state: state)
     state.generation += 1
     if let attempt = state.activeAttempt { state.gate.invalidate(attempt) }
@@ -580,16 +670,402 @@ final class NativeBitwardenController {
     state.gate.setEnabled(false)
     if selectedProfileID == profileID { clearForm() }
     session?.tokenProvider.clear()
-    try? credentialStore.delete(for: binding)
-    preferences.setNativeVaultAccountID(nil, for: profileID)
-    statusByProfile[profileID] =
-      preferences.nativeVaultPreferences(for: profileID).isEnabled
-      ? "Disconnected" : "Off"
+    #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_CANDIDATE && canImport(ArcusisBitwardenSDK)
+      if backend is any NativeBitwardenRefreshBackend {
+        let expected = preferences.nativeVaultPreferences(for: profileID)
+        let generation = state.generation
+        let refresh = state.retiredRefresh
+        let lease = state.retiredLease
+        let task = state.retiredTask
+        statusByProfile[profileID] = "Removing credentials…"
+        state.cleanupTask = Task {
+          if let task { _ = try? await task.value }
+          defer {
+            if state.retiredRefresh === refresh {
+              state.retiredRefresh = nil
+              state.retiredLease = nil
+              state.retiredTask = nil
+            }
+            state.cleanupTask = nil
+          }
+          guard state.generation == generation, state.binding == binding,
+            state.activeSession == nil, expected.vaultID == binding.vaultID,
+            expected.accountID == binding.accountID
+              || (expected.accountID == nil && session == nil),
+            (try? expected.server.endpoints().credentialAuthority) == binding.authority,
+            preferences.nativeVaultPreferences(for: profileID) == expected
+          else {
+            statusByProfile[profileID] = "Could not remove credentials securely."
+            return
+          }
+          do {
+            try credentialStore.delete(for: binding, lease: lease)
+            try preferences.persistNativeVaultAccountID(nil, for: profileID, expected: expected)
+            statusByProfile[profileID] = expected.isEnabled ? "Disconnected" : "Off"
+          } catch {
+            statusByProfile[profileID] = "Could not remove credentials securely."
+          }
+        }
+      } else {
+        try? credentialStore.delete(for: binding)
+        preferences.setNativeVaultAccountID(nil, for: profileID)
+        statusByProfile[profileID] =
+          preferences.nativeVaultPreferences(for: profileID).isEnabled ? "Disconnected" : "Off"
+      }
+    #else
+      try? credentialStore.delete(for: binding)
+      preferences.setNativeVaultAccountID(nil, for: profileID)
+      statusByProfile[profileID] =
+        preferences.nativeVaultPreferences(for: profileID).isEnabled
+        ? "Disconnected" : "Off"
+    #endif
     Task {
       if let candidateID { await backend.discard(sessionID: candidateID) }
       if let session { await backend.discard(sessionID: session.id) }
     }
   }
+
+  #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_CANDIDATE && canImport(ArcusisBitwardenSDK)
+    private func setRefreshServer(
+      _ server: BitwardenServerConfiguration, profileID: UUID, state: ProfileState
+    ) {
+      let expected = preferences.nativeVaultPreferences(for: profileID)
+      guard expected.server != server else { return }
+      let binding = state.binding
+      let session = state.activeSession
+      invalidateRefresh(state)
+      clearVaultSnapshot(profileID: profileID, state: state)
+      state.generation += 1
+      let generation = state.generation
+      if let attempt = state.activeAttempt { state.gate.invalidate(attempt) }
+      state.activeAttempt = nil
+      state.pendingTask?.cancel()
+      state.pendingTask = nil
+      let candidateID = state.pendingCandidateID
+      state.pendingCandidateID = nil
+      state.activeSession = nil
+      state.gate.setEnabled(false)
+      loadingByProfile[profileID] = false
+      clearForm()
+      session?.tokenProvider.clear()
+      let refresh = state.retiredRefresh
+      let lease = state.retiredLease
+      let task = state.retiredTask
+      statusByProfile[profileID] = "Removing previous credentials…"
+      state.cleanupTask = Task {
+        if let task { _ = try? await task.value }
+        defer {
+          if state.retiredRefresh === refresh {
+            state.retiredRefresh = nil
+            state.retiredLease = nil
+            state.retiredTask = nil
+          }
+          state.cleanupTask = nil
+        }
+        guard state.generation == generation, state.binding == binding,
+          state.activeSession == nil, expected.vaultID == binding.vaultID,
+          expected.accountID == binding.accountID || (expected.accountID == nil && session == nil),
+          (try? expected.server.endpoints().credentialAuthority) == binding.authority,
+          preferences.nativeVaultPreferences(for: profileID) == expected
+        else {
+          statusByProfile[profileID] = "Could not remove previous credentials securely."
+          return
+        }
+        do {
+          try credentialStore.delete(for: binding, lease: lease)
+        } catch {
+          statusByProfile[profileID] = "Could not remove previous credentials securely."
+          return
+        }
+        do {
+          try preferences.persistNativeVaultServer(server, for: profileID, expected: expected)
+          let updated = preferences.nativeVaultPreferences(for: profileID)
+          let newBinding = makeBinding(profileID: profileID, preferences: updated, accountID: nil)
+          state.binding = newBinding
+          state.gate.rebind(to: newBinding)
+          state.gate.setEnabled(updated.isEnabled)
+          statusByProfile[profileID] = updated.isEnabled ? "Not connected" : "Off"
+        } catch {
+          statusByProfile[profileID] = "Could not save server securely."
+        }
+      }
+      Task {
+        if let candidateID { await backend.discard(sessionID: candidateID) }
+        if let session { await backend.discard(sessionID: session.id) }
+      }
+    }
+  #endif
+
+  private func invalidateRefresh(_ state: ProfileState) {
+    #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_CANDIDATE
+      if let refresh = state.refresh {
+        let task = refresh.invalidate()
+        state.refresh = nil
+        state.retiredRefresh = refresh
+        state.retiredLease = state.credentialLease
+        state.retiredTask = task
+        state.credentialLease = nil
+        state.activeSession?.tokenProvider.clear()
+        Task {
+          if let task { _ = try? await task.value }
+          guard state.cleanupTask == nil, state.retiredRefresh === refresh else { return }
+          state.retiredRefresh = nil
+          state.retiredLease = nil
+          state.retiredTask = nil
+        }
+      }
+    #else
+      _ = state
+    #endif
+  }
+
+  #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_CANDIDATE && canImport(ArcusisBitwardenSDK)
+    static let recoverySDKRevision =
+      "sdk7-dd2e42bb29bf52f94d9f6ee64fcb6a7f5ab6f09b18dda75b7b01432afe299d15"
+
+    private static let previousSDKRevision =
+      "sdk6-391b8b63b97980b99b661dab487f18e610aa902c7fe07b26e0aca3ca8a697150"
+
+    private func recoveryLookup(
+      binding: PasswordAuthenticationBinding, endpoints: BitwardenServiceEndpoints,
+      deviceID: UUID, lease: PasswordCredentialSessionLock
+    ) throws -> (PasswordCredentialStore.RecoveryLookup, Bool) {
+      do {
+        return (
+          try credentialStore.readRecovery(
+            for: binding, identityURL: endpoints.identityURL, apiURL: endpoints.apiURL,
+            serviceID: endpoints.stableServiceID, deviceID: deviceID,
+            clientID: NativeBitwardenLoginRequestMetadata.clientID,
+            sdkRevision: Self.recoverySDKRevision, lease: lease), false
+        )
+      } catch PasswordSessionRecoveryRecord.Error.bindingMismatch {
+        guard Self.recoverySDKRevision != Self.previousSDKRevision else {
+          throw PasswordSessionRecoveryRecord.Error.bindingMismatch
+        }
+        let prior = try credentialStore.readRecovery(
+          for: binding, identityURL: endpoints.identityURL, apiURL: endpoints.apiURL,
+          serviceID: endpoints.stableServiceID, deviceID: deviceID,
+          clientID: NativeBitwardenLoginRequestMetadata.clientID,
+          sdkRevision: Self.previousSDKRevision, lease: lease)
+        guard case .record = prior else {
+          throw PasswordSessionRecoveryRecord.Error.bindingMismatch
+        }
+        return (prior, true)
+      }
+    }
+
+    private func initializeRefreshAndPublish(
+      profileID: UUID, generation: Int, attempt: PasswordAuthenticationGate.Attempt,
+      binding: PasswordAuthenticationBinding, established: NativeBitwardenEstablishedSession,
+      refreshBackend: any NativeBitwardenRefreshBackend
+    ) async {
+      do {
+        let context = try await refreshBackend.recoveryContext(sessionID: established.id)
+        guard isCurrent(profileID: profileID, generation: generation, attempt: attempt),
+          let state = profiles[profileID], state.pendingCandidateID == established.id,
+          state.binding == binding
+        else { throw NativeBitwardenBackendError.staleSession }
+        let prefs = preferences.nativeVaultPreferences(for: profileID)
+        let endpoints = try prefs.server.endpoints()
+        guard prefs.isEnabled, endpoints.credentialAuthority == binding.authority,
+          makeBinding(profileID: profileID, preferences: prefs, accountID: established.accountID)
+            == binding,
+          endpoints.identityURL == context.identityURL, endpoints.apiURL == context.apiURL,
+          prefs.deviceID == context.deviceID
+        else { throw NativeBitwardenBackendError.staleSession }
+        let lease = try credentialStore.acquireSessionLock(for: binding)
+        let (previous, _) = try recoveryLookup(
+          binding: binding, endpoints: endpoints, deviceID: prefs.deviceID, lease: lease)
+        let initial = try PasswordSessionRecoveryRecord(
+          binding: binding, identityURL: endpoints.identityURL, apiURL: endpoints.apiURL,
+          serviceID: endpoints.stableServiceID, deviceID: prefs.deviceID,
+          clientID: NativeBitwardenLoginRequestMetadata.clientID,
+          email: context.email, sdkRevision: Self.recoverySDKRevision, kdf: context.kdf,
+          wrappedAccountState: context.wrappedAccountState,
+          masterPasswordUnlockData: context.masterPasswordUnlockData,
+          credential: established.credential, revision: 0, state: .reauthenticationRequired)
+        let credential = try NativeBitwardenRefreshCoordinator.validateInitial(initial, now: Date())
+        let marker = try initial.replacing(
+          credential: credential, revision: 0, state: .reauthenticationRequired)
+        let normalizedSession = NativeBitwardenEstablishedSession(
+          id: established.id, accountID: established.accountID, credential: credential,
+          tokenProvider: established.tokenProvider)
+        // The durable nonsecret pointer must exist before any account-scoped record can be written.
+        try preferences.persistNativeVaultAccountID(
+          established.accountID, for: profileID, expected: prefs)
+        try lease.markPendingRotation(revision: 0)
+        try credentialStore.writeRecovery(marker, for: binding, expected: previous, lease: lease)
+        let ready = try marker.replacing(credential: marker.credential, revision: 0, state: .ready)
+        try credentialStore.writeRecovery(
+          ready, for: binding, expected: .record(marker), lease: lease)
+        let confirmed = try credentialStore.readRecovery(
+          for: binding, identityURL: endpoints.identityURL, apiURL: endpoints.apiURL,
+          serviceID: endpoints.stableServiceID, deviceID: prefs.deviceID,
+          clientID: NativeBitwardenLoginRequestMetadata.clientID,
+          sdkRevision: Self.recoverySDKRevision, lease: lease)
+        guard confirmed == .record(ready) else {
+          throw PasswordCredentialStoreError.recoveryConflict
+        }
+        guard let expiry = credential.expiresAt, expiry > Date() else {
+          throw NativeBitwardenRefreshFailure.invalidResponse
+        }
+        try lease.clearPendingRotation()
+        let coordinator = try makeRefreshCoordinator(
+          profileID: profileID, generation: generation, binding: binding,
+          session: normalizedSession,
+          record: ready, lease: lease, refreshBackend: refreshBackend)
+        var previousSession: NativeBitwardenEstablishedSession?
+        let committed = state.gate.commit(attempt) {
+          previousSession = state.activeSession
+          state.activeSession = normalizedSession
+          state.pendingCandidateID = nil
+          state.activeAttempt = nil
+          state.pendingTask = nil
+          state.credentialLease = lease
+          state.refresh = coordinator
+          normalizedSession.tokenProvider.publish(normalizedSession.credential.accessToken)
+          loadingByProfile[profileID] = false
+          statusByProfile[profileID] = "Connected and unlocked"
+        }
+        guard committed else { throw NativeBitwardenBackendError.staleSession }
+        previousSession?.tokenProvider.clear()
+        clearVaultSnapshot(profileID: profileID, state: state, status: "Syncing")
+        if selectedProfileID == profileID { clearForm() }
+        if let previousSession { await backend.discard(sessionID: previousSession.id) }
+        await performVaultSync(
+          profileID: profileID, generation: generation, binding: binding, session: normalizedSession
+        )
+      } catch {
+        established.tokenProvider.clear()
+        if let state = profiles[profileID], state.generation == generation,
+          state.pendingCandidateID == established.id
+        {
+          state.pendingCandidateID = nil
+          loadingByProfile[profileID] = false
+          statusByProfile[profileID] = "Could not save session securely; sign in again."
+          if selectedProfileID == profileID { clearForm() }
+        }
+        await backend.discard(sessionID: established.id)
+      }
+    }
+
+    private func restoreSavedIfPresent(
+      profileID: UUID, generation: Int, attempt: PasswordAuthenticationGate.Attempt,
+      server: BitwardenServerConfiguration, email: String, password: String,
+      refreshBackend: any NativeBitwardenRefreshBackend
+    ) async throws -> Bool {
+      let prefs = preferences.nativeVaultPreferences(for: profileID)
+      guard let accountID = prefs.accountID, let state = profiles[profileID] else { return false }
+      let binding = makeBinding(profileID: profileID, preferences: prefs, accountID: accountID)
+      guard state.binding == binding, prefs.isEnabled, prefs.server == server else {
+        throw NativeBitwardenBackendError.staleSession
+      }
+      let endpoints = try server.endpoints()
+      let lease = try credentialStore.acquireSessionLock(for: binding)
+      let pendingRotation = try lease.hasPendingRotation()
+      let (lookup, previousRevision) = try recoveryLookup(
+        binding: binding, endpoints: endpoints, deviceID: prefs.deviceID, lease: lease)
+      // The user's Connect supplies fresh credentials; never unlock or publish
+      // a record from the previous experimental SDK revision.
+      if previousRevision { return false }
+      if pendingRotation { return false }
+      guard case .record(let record) = lookup else { return false }
+      // A user-initiated Connect with credentials performs a new login for an
+      // interrupted rotation; it never retries the old refresh token.
+      guard record.state == .ready else { return false }
+      guard record.email == email else { throw NativeBitwardenBackendError.staleSession }
+      try NativeBitwardenRefreshCoordinator.validateStored(record)
+      let candidateID = try await refreshBackend.restoreLocked(record: record, server: server)
+      do {
+        guard isCurrent(profileID: profileID, generation: generation, attempt: attempt),
+          state.binding == binding
+        else { throw NativeBitwardenBackendError.staleSession }
+        state.pendingCandidateID = candidateID
+        let session = try await refreshBackend.unlockRestored(
+          sessionID: candidateID, record: record, password: password)
+        guard isCurrent(profileID: profileID, generation: generation, attempt: attempt),
+          state.pendingCandidateID == candidateID, session.id == candidateID,
+          session.accountID == binding.accountID, state.binding == binding
+        else { throw NativeBitwardenBackendError.staleSession }
+        let coordinator = try makeRefreshCoordinator(
+          profileID: profileID, generation: generation, binding: binding, session: session,
+          record: record, lease: lease, refreshBackend: refreshBackend)
+        var previous: NativeBitwardenEstablishedSession?
+        let committed = state.gate.commit(attempt) {
+          previous = state.activeSession
+          state.activeSession = session
+          state.pendingCandidateID = nil
+          state.activeAttempt = nil
+          state.pendingTask = nil
+          state.credentialLease = lease
+          state.refresh = coordinator
+          loadingByProfile[profileID] = false
+          statusByProfile[profileID] = "Unlocked"
+        }
+        guard committed else { throw NativeBitwardenBackendError.staleSession }
+        previous?.tokenProvider.clear()
+        if let previous { await backend.discard(sessionID: previous.id) }
+        do {
+          let credential = try await coordinator.ensureFresh()
+          guard state.generation == generation, state.activeSession?.id == session.id,
+            state.refresh === coordinator,
+            preferences.nativeVaultPreferences(for: profileID).isEnabled
+          else { throw NativeBitwardenBackendError.staleSession }
+          session.tokenProvider.publish(credential.accessToken)
+          clearVaultSnapshot(profileID: profileID, state: state, status: "Syncing")
+          if selectedProfileID == profileID { clearForm() }
+          await performVaultSync(
+            profileID: profileID, generation: generation, binding: binding, session: session)
+        } catch {
+          if state.generation == generation, state.activeSession?.id == session.id {
+            invalidateRefresh(state)
+            state.activeSession = nil
+            statusByProfile[profileID] = "Reauthentication required. Sign in again."
+            if selectedProfileID == profileID { clearForm() }
+          }
+          await backend.discard(sessionID: candidateID)
+        }
+        return true
+      } catch {
+        if state.pendingCandidateID == candidateID { state.pendingCandidateID = nil }
+        await backend.discard(sessionID: candidateID)
+        throw error
+      }
+    }
+
+    private func makeRefreshCoordinator(
+      profileID: UUID, generation: Int, binding: PasswordAuthenticationBinding,
+      session: NativeBitwardenEstablishedSession, record: PasswordSessionRecoveryRecord,
+      lease: PasswordCredentialSessionLock, refreshBackend: any NativeBitwardenRefreshBackend
+    ) throws -> NativeBitwardenRefreshCoordinator {
+      try NativeBitwardenRefreshCoordinator(
+        binding: binding, record: record, store: credentialStore, lease: lease,
+        transport: { value in try await refreshBackend.refresh(sessionID: session.id, record: value)
+        },
+        isOwner: { [weak self] in
+          guard let self, let state = self.profiles[profileID], state.generation == generation,
+            state.binding == binding, state.activeSession?.id == session.id
+          else { return false }
+          let prefs = self.preferences.nativeVaultPreferences(for: profileID)
+          guard let endpoints = try? prefs.server.endpoints() else { return false }
+          return prefs.isEnabled && prefs.accountID == session.accountID
+            && prefs.vaultID == binding.vaultID && prefs.deviceID == record.deviceID
+            && endpoints.identityURL == record.identityURL && endpoints.apiURL == record.apiURL
+            && endpoints.stableServiceID == record.serviceID
+            && endpoints.credentialAuthority == binding.authority
+        },
+        publish: { session.tokenProvider.publish($0) },
+        revoke: { [weak self] in
+          session.tokenProvider.clear()
+          guard let self, let state = self.profiles[profileID], state.generation == generation,
+            state.activeSession?.id == session.id
+          else { return }
+          self.clearVaultSnapshot(
+            profileID: profileID, state: state, status: "Reauthentication required")
+          self.statusByProfile[profileID] = "Reauthentication required. Sign in again."
+        })
+    }
+  #endif
 
   private func state(for profileID: UUID) -> ProfileState {
     if let state = profiles[profileID] { return state }
@@ -668,7 +1144,18 @@ final class NativeBitwardenController {
         == binding
     else { return }
     do {
-      let snapshot = try await backend.syncVault(sessionID: session.id)
+      #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_CANDIDATE
+        let snapshot: NativeBitwardenVaultSnapshot
+        if let refresh = profiles[profileID]?.refresh {
+          snapshot = try await refresh.performReadOnlySync {
+            try await backend.syncVault(sessionID: session.id)
+          }
+        } else {
+          snapshot = try await backend.syncVault(sessionID: session.id)
+        }
+      #else
+        let snapshot = try await backend.syncVault(sessionID: session.id)
+      #endif
       guard generation == profiles[profileID]?.generation,
         profiles[profileID]?.activeSession?.id == session.id,
         profiles[profileID]?.binding == binding,

@@ -2,8 +2,14 @@
 import Foundation
 import PackageDescription
 
+let nativeBitwardenRefreshFixture =
+  ProcessInfo.processInfo.environment["ARCUSIS_NATIVE_BITWARDEN_REFRESH_FIXTURE"] == "1"
+let nativeBitwardenRefreshCandidate =
+  nativeBitwardenRefreshFixture
+  || ProcessInfo.processInfo.environment["ARCUSIS_NATIVE_BITWARDEN_REFRESH_CANDIDATE"] == "1"
 let nativeBitwardenOrganizationCandidate =
-  ProcessInfo.processInfo.environment["ARCUSIS_NATIVE_BITWARDEN_ORGANIZATION_CANDIDATE"] == "1"
+  nativeBitwardenRefreshCandidate
+  || ProcessInfo.processInfo.environment["ARCUSIS_NATIVE_BITWARDEN_ORGANIZATION_CANDIDATE"] == "1"
 let nativeBitwardenSDKEnabled =
   nativeBitwardenOrganizationCandidate
   || ProcessInfo.processInfo.environment["ARCUSIS_NATIVE_BITWARDEN_SDK"] == "1"
@@ -11,8 +17,12 @@ let nativeBitwardenSDKDependency: [Package.Dependency] =
   nativeBitwardenSDKEnabled
   ? [
     .package(
-      path: nativeBitwardenOrganizationCandidate
-        ? "build/NativeBitwardenOrganizationSDK/Package" : "build/NativeBitwardenSDK/Package")
+      path: nativeBitwardenRefreshFixture
+        ? "build/NativeBitwardenRefreshSDK7Fixture/Package"
+        : (nativeBitwardenRefreshCandidate
+          ? "build/NativeBitwardenRefreshSDK7/Package"
+          : (nativeBitwardenOrganizationCandidate
+            ? "build/NativeBitwardenOrganizationSDK/Package" : "build/NativeBitwardenSDK/Package")))
   ]
   : []
 let nativeBitwardenSDKProduct: [Target.Dependency] =
@@ -25,8 +35,12 @@ let nativeBitwardenSDKLinkerSettings: [LinkerSetting] =
   : []
 
 let nativeBitwardenSwiftSettings: [SwiftSetting] =
-  nativeBitwardenOrganizationCandidate
-  ? [.define("ARCUSIS_NATIVE_BITWARDEN_ORGANIZATION_CANDIDATE")] : []
+  (nativeBitwardenOrganizationCandidate
+    ? [.define("ARCUSIS_NATIVE_BITWARDEN_ORGANIZATION_CANDIDATE")] : [])
+  + (nativeBitwardenRefreshCandidate
+    ? [.define("ARCUSIS_NATIVE_BITWARDEN_REFRESH_CANDIDATE")] : [])
+  + (nativeBitwardenRefreshFixture
+    ? [.define("ARCUSIS_NATIVE_BITWARDEN_REFRESH_FIXTURE")] : [])
 
 let package = Package(
   name: "ArcusisBrowser",

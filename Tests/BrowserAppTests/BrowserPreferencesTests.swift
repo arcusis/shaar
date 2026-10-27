@@ -149,6 +149,96 @@ struct BrowserPreferencesTests {
     #expect(store.storageNotice == nil)
   }
 
+  @Test func durableVaultAccountSavePersistsOnlyCurrentBinding() throws {
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let file = directory.appending(path: "preferences.json")
+    let profile = UUID()
+    let account = UUID()
+    let store = BrowserPreferencesStore(fileURL: file)
+    store.setNativeVaultEnabled(true, for: profile)
+    let expected = store.nativeVaultPreferences(for: profile)
+    try store.persistNativeVaultAccountID(account, for: profile, expected: expected)
+    #expect(store.nativeVaultPreferences(for: profile).accountID == account)
+    let reloaded = BrowserPreferencesStore(fileURL: file)
+    #expect(reloaded.nativeVaultPreferences(for: profile).accountID == account)
+    #expect(throws: BrowserPreferencesStore.DurableVaultSaveError.bindingChanged) {
+      try store.persistNativeVaultAccountID(UUID(), for: profile, expected: expected)
+    }
+    #expect(
+      BrowserPreferencesStore(fileURL: file).nativeVaultPreferences(for: profile).accountID
+        == account)
+  }
+
+  @Test func durableVaultAccountSaveFailsClosedOnUnavailableOrFailedStorage() throws {
+    let profile = UUID()
+    let memory = BrowserPreferencesStore()
+    let memoryExpected = memory.nativeVaultPreferences(for: profile)
+    #expect(throws: BrowserPreferencesStore.DurableVaultSaveError.unavailable) {
+      try memory.persistNativeVaultAccountID(UUID(), for: profile, expected: memoryExpected)
+    }
+    #expect(memory.nativeVaultPreferences(for: profile).accountID == nil)
+
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try Data("not a directory".utf8).write(to: directory)
+    let store = BrowserPreferencesStore(fileURL: directory.appending(path: "preferences.json"))
+    let expected = store.nativeVaultPreferences(for: profile)
+    #expect(throws: BrowserPreferencesStore.DurableVaultSaveError.writeFailed) {
+      try store.persistNativeVaultAccountID(UUID(), for: profile, expected: expected)
+    }
+    #expect(store.nativeVaultPreferences(for: profile).accountID == nil)
+    #expect(store.storageNotice != nil)
+  }
+
+  @Test func durableVaultAccountSaveFailsClosedIfDirectorySyncFails() throws {
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let file = directory.appending(path: "preferences.json")
+    let profile = UUID()
+    let account = UUID()
+    var didSync = false
+    let store = BrowserPreferencesStore(
+      fileURL: file,
+      syncDirectory: { parent in
+        didSync = parent.standardizedFileURL.path == directory.standardizedFileURL.path
+        throw BrowserPreferencesStore.DurableVaultSaveError.writeFailed
+      })
+    store.setNativeVaultEnabled(true, for: profile)
+    let expected = store.nativeVaultPreferences(for: profile)
+    #expect(throws: BrowserPreferencesStore.DurableVaultSaveError.writeFailed) {
+      try store.persistNativeVaultAccountID(account, for: profile, expected: expected)
+    }
+    #expect(didSync)
+    #expect(store.nativeVaultPreferences(for: profile) == expected)
+    #expect(store.storageNotice != nil)
+  }
+
+  @Test func durableVaultAccountSaveRequiresAncestrySync() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let nested = root.appending(path: "support").appending(path: "browser")
+    let file = nested.appending(path: "preferences.json")
+    var visited: [String] = []
+    let store = BrowserPreferencesStore(
+      fileURL: file,
+      syncDirectory: { directory in
+        visited.append(directory.standardizedFileURL.path)
+        if directory.standardizedFileURL.path == root.appending(path: "support").path {
+          throw BrowserPreferencesStore.DurableVaultSaveError.writeFailed
+        }
+      })
+    let profile = UUID()
+    store.setNativeVaultEnabled(true, for: profile)
+    let expected = store.nativeVaultPreferences(for: profile)
+    #expect(throws: BrowserPreferencesStore.DurableVaultSaveError.writeFailed) {
+      try store.persistNativeVaultAccountID(UUID(), for: profile, expected: expected)
+    }
+    #expect(visited == [nested.path, root.appending(path: "support").path])
+    #expect(store.nativeVaultPreferences(for: profile) == expected)
+    #expect(store.storageNotice != nil)
+  }
+
   @Test func moreThan512ProfilesRemainReadableAfterSave() throws {
     let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }

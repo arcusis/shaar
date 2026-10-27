@@ -35,6 +35,7 @@ public enum PasswordCredentialStoreError: Error, Equatable, Sendable, CustomStri
   case corruptRecord
   case unsupportedRecordVersion(Int)
   case bindingMismatch
+  case recoveryConflict
   case storage(operation: Operation, status: Int32)
 
   public enum Operation: String, Sendable {
@@ -57,6 +58,8 @@ public enum PasswordCredentialStoreError: Error, Equatable, Sendable, CustomStri
       return "Password credential record version \(version) is unsupported."
     case .bindingMismatch:
       return "Password credential record does not match its binding."
+    case .recoveryConflict:
+      return "Password recovery record changed or requires explicit recovery handling."
     case .storage(let operation, let status):
       return "Password credential storage \(operation.rawValue) failed (status \(status))."
     }
@@ -74,25 +77,62 @@ public final class PasswordCredentialStore: Sendable {
 
   private let service: String
   private let storage: any PasswordCredentialItemStorage
+  private let usesSessionLocks: Bool
+  private let sessionLockDirectory: URL?
   private let encoder = JSONEncoder()
   private let decoder = JSONDecoder()
 
   public init() {
     self.service = Self.applicationService
     self.storage = KeychainPasswordCredentialStorage()
+    self.usesSessionLocks = true
+    self.sessionLockDirectory = nil
   }
 
   init(probeNamespace: PasswordCredentialProbeNamespace) {
     self.service = "\(Self.probeServicePrefix).\(probeNamespace.id.uuidString.lowercased())"
     self.storage = KeychainPasswordCredentialStorage()
+    self.usesSessionLocks = true
+    self.sessionLockDirectory = nil
   }
 
-  init(service: String, storage: any PasswordCredentialItemStorage) {
+  init(
+    service: String, storage: any PasswordCredentialItemStorage, sessionLockDirectory: URL? = nil,
+    usesSessionLocks: Bool = false
+  ) {
     self.service = service
     self.storage = storage
+    self.usesSessionLocks = usesSessionLocks
+    self.sessionLockDirectory = sessionLockDirectory
   }
 
-  public func read(for binding: PasswordAuthenticationBinding) throws -> PasswordCredential? {
+  public func acquireSessionLock(for binding: PasswordAuthenticationBinding) throws
+    -> PasswordCredentialSessionLock
+  {
+    if let sessionLockDirectory {
+      return try PasswordCredentialSessionLock.acquire(
+        service: service, binding: binding, applicationSupport: sessionLockDirectory)
+    }
+    return try PasswordCredentialSessionLock.acquire(service: service, binding: binding)
+  }
+
+  private func operationLock(
+    for binding: PasswordAuthenticationBinding, lease: PasswordCredentialSessionLock?
+  ) throws -> PasswordCredentialSessionLock? {
+    if let lease {
+      guard try lease.matches(service: service, binding: binding) else {
+        throw PasswordCredentialStoreError.bindingMismatch
+      }
+      return lease
+    }
+    return try usesSessionLocks ? acquireSessionLock(for: binding) : nil
+  }
+
+  public func read(
+    for binding: PasswordAuthenticationBinding, lease: PasswordCredentialSessionLock? = nil
+  ) throws -> PasswordCredential? {
+    let held = try operationLock(for: binding, lease: lease)
+    defer { withExtendedLifetime(held) {} }
     let authority = try Self.canonicalAuthority(binding.authority)
     let account = Self.accountName(for: binding, authority: authority)
     let data: Data
@@ -133,15 +173,32 @@ public final class PasswordCredentialStore: Sendable {
       expiresAt: record.expiresAt)
   }
 
-  public func write(_ credential: PasswordCredential, for binding: PasswordAuthenticationBinding)
-    throws
-  {
+  public func write(
+    _ credential: PasswordCredential, for binding: PasswordAuthenticationBinding,
+    lease: PasswordCredentialSessionLock? = nil
+  ) throws {
+    let held = try operationLock(for: binding, lease: lease)
+    defer { withExtendedLifetime(held) {} }
     let authority = try Self.canonicalAuthority(binding.authority)
     guard Self.validToken(credential.accessToken) else {
       throw PasswordCredentialStoreError.invalidCredential
     }
     if let refreshToken = credential.refreshToken, !Self.validToken(refreshToken) {
       throw PasswordCredentialStoreError.invalidCredential
+    }
+    do {
+      if let existing = try storage.read(
+        service: service, account: Self.accountName(for: binding, authority: authority))
+      {
+        guard existing.count <= 128 * 1024,
+          let json = try? JSONSerialization.jsonObject(with: existing) as? [String: Any],
+          let version = json["version"] as? Int, version == Self.recordVersion
+        else { throw PasswordCredentialStoreError.recoveryConflict }
+      }
+    } catch let error as PasswordCredentialStoreError {
+      throw error
+    } catch {
+      throw Self.storageError(.write, error)
     }
     let record = CredentialRecord(
       version: Self.recordVersion,
@@ -173,7 +230,84 @@ public final class PasswordCredentialStore: Sendable {
     }
   }
 
-  public func delete(for binding: PasswordAuthenticationBinding) throws {
+  public enum RecoveryLookup: Equatable, Sendable {
+    case missing
+    case legacy
+    case record(PasswordSessionRecoveryRecord)
+  }
+
+  /// Recovery writes require a held lease across read, network rotation, and publication.
+  public func readRecovery(
+    for binding: PasswordAuthenticationBinding, identityURL: URL, apiURL: URL,
+    serviceID: String, deviceID: UUID, clientID: String, sdkRevision: String,
+    lease: PasswordCredentialSessionLock
+  ) throws -> RecoveryLookup {
+    let held = try operationLock(for: binding, lease: lease)
+    defer { withExtendedLifetime(held) {} }
+    let authority = try Self.canonicalAuthority(binding.authority)
+    let data: Data
+    do {
+      guard
+        let value = try storage.read(
+          service: service, account: Self.accountName(for: binding, authority: authority))
+      else { return .missing }
+      data = value
+    } catch let error as PasswordCredentialStoreError {
+      throw error
+    } catch {
+      throw Self.storageError(.read, error)
+    }
+    guard data.count <= 128 * 1024 else { throw PasswordCredentialStoreError.recordTooLarge }
+    guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      let version = json["version"] as? Int
+    else { throw PasswordCredentialStoreError.corruptRecord }
+    if version == Self.recordVersion {
+      _ = try read(for: binding, lease: lease)
+      return .legacy
+    }
+    guard version == 2 else { throw PasswordCredentialStoreError.unsupportedRecordVersion(version) }
+    return .record(
+      try PasswordSessionRecoveryRecord.decode(
+        data, binding: binding, identityURL: identityURL, apiURL: apiURL, serviceID: serviceID,
+        deviceID: deviceID,
+        clientID: clientID, sdkRevision: sdkRevision))
+  }
+
+  public func writeRecovery(
+    _ record: PasswordSessionRecoveryRecord, for binding: PasswordAuthenticationBinding,
+    expected: RecoveryLookup, lease: PasswordCredentialSessionLock
+  ) throws {
+    guard record.belongs(to: binding) else { throw PasswordCredentialStoreError.bindingMismatch }
+    let expectedRevision: String
+    if case .record(let previous) = expected {
+      expectedRevision = previous.sdkRevision
+    } else {
+      expectedRevision = record.sdkRevision
+    }
+    let current = try readRecovery(
+      for: binding, identityURL: record.identityURL, apiURL: record.apiURL,
+      serviceID: record.serviceID, deviceID: record.deviceID, clientID: record.clientID,
+      sdkRevision: expectedRevision,
+      lease: lease)
+    guard current == expected else { throw PasswordCredentialStoreError.recoveryConflict }
+    let data = try record.encode()
+    let authority = try Self.canonicalAuthority(binding.authority)
+    do {
+      try storage.write(
+        data, service: service, account: Self.accountName(for: binding, authority: authority))
+    } catch let error as PasswordCredentialStoreError {
+      throw error
+    } catch {
+      throw Self.storageError(.write, error)
+    }
+    withExtendedLifetime(lease) {}
+  }
+
+  public func delete(
+    for binding: PasswordAuthenticationBinding, lease: PasswordCredentialSessionLock? = nil
+  ) throws {
+    let held = try operationLock(for: binding, lease: lease)
+    defer { withExtendedLifetime(held) {} }
     let authority = try Self.canonicalAuthority(binding.authority)
     do {
       try storage.delete(
@@ -189,7 +323,7 @@ public final class PasswordCredentialStore: Sendable {
     !token.isEmpty && token.utf8.count <= maximumTokenBytes
   }
 
-  private static func canonicalAuthority(_ url: URL) throws -> String {
+  static func canonicalAuthority(_ url: URL) throws -> String {
     guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
       components.scheme?.lowercased() == "https",
       let host = components.host?.lowercased(), !host.isEmpty,

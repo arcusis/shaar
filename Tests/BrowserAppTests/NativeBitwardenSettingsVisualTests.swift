@@ -592,9 +592,10 @@ private struct SaveCapturePage: View {
 
   func consume(
     submission: NativePasswordSubmission,
-    completion: @escaping (
-      Result<NativePasswordSubmittedCredential, NativePasswordSaveFailure>
-    ) -> Void
+    completion:
+      @escaping (
+        Result<NativePasswordSubmittedCredential, NativePasswordSaveFailure>
+      ) -> Void
   ) { completion(.failure(.unavailable)) }
 
   func cancel(offerID: UUID) {}

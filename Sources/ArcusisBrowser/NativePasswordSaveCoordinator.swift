@@ -89,7 +89,10 @@ final class NativePasswordSaveCoordinator {
       guard let self, let current, self.attempt === current, current.phase == .preparing else {
         return
       }
-      guard self.valid(current) else { self.finish(current, .failed(.stale)); return }
+      guard self.valid(current) else {
+        self.finish(current, .failed(.stale))
+        return
+      }
       switch result {
       case .failure(let error):
         self.finish(current, .failed(error))
@@ -102,7 +105,10 @@ final class NativePasswordSaveCoordinator {
             !$0.name.isEmpty && $0.name.utf8.count <= 1_024
               && ($0.username?.utf8.count ?? 0) <= 1_024
           })
-        else { self.finish(current, .failed(.stale)); return }
+        else {
+          self.finish(current, .failed(.stale))
+          return
+        }
         current.admission = admission
         current.phase = .offered
         self.presentation = Presentation(
@@ -120,7 +126,10 @@ final class NativePasswordSaveCoordinator {
     guard let current = attempt, current.phase == .offered, let admission = current.admission else {
       return
     }
-    guard valid(current) else { finish(current, .failed(.stale)); return }
+    guard valid(current) else {
+      finish(current, .failed(.stale))
+      return
+    }
     switch decision {
     case .create:
       guard admission.allowCreate else { return }
@@ -158,7 +167,10 @@ final class NativePasswordSaveCoordinator {
       case .success(let credential):
         guard !credential.password.isEmpty, credential.password.utf8.count <= 16_384,
           credential.username.utf8.count <= 1_024
-        else { self.finish(current, .failed(.rejected)); return }
+        else {
+          self.finish(current, .failed(.rejected))
+          return
+        }
         current.phase = .writing
         self.vault.write(
           submission: current.submission, admission: admission, decision: decision,
@@ -195,7 +207,10 @@ final class NativePasswordSaveCoordinator {
                   proof.sessionID == admission.sessionID,
                   proof.freshSnapshotTicket != admission.snapshotTicket,
                   proof.decision == decision
-                else { self.finish(current, .unconfirmed); return }
+                else {
+                  self.finish(current, .unconfirmed)
+                  return
+                }
                 if case .update(let id) = decision, proof.cipherID != id {
                   self.finish(current, .unconfirmed)
                   return

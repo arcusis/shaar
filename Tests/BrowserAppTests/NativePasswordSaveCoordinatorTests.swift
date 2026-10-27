@@ -30,9 +30,10 @@ private final class SaveBridgeDouble: NativePasswordSubmissionBridge {
 
   func consume(
     submission: NativePasswordSubmission,
-    completion: @escaping (
-      Result<NativePasswordSubmittedCredential, NativePasswordSaveFailure>
-    ) -> Void
+    completion:
+      @escaping (
+        Result<NativePasswordSubmittedCredential, NativePasswordSaveFailure>
+      ) -> Void
   ) {
     consumeCount += 1
     callback = completion
@@ -58,7 +59,9 @@ private final class SaveVaultDouble: NativePasswordSaveVault {
   func prepare(
     submission: NativePasswordSubmission,
     completion: @escaping (Result<NativePasswordSaveAdmission, NativePasswordSaveFailure>) -> Void
-  ) { prepareReply = completion }
+  ) {
+    prepareReply = completion
+  }
 
   func write(
     submission: NativePasswordSubmission, admission: NativePasswordSaveAdmission,

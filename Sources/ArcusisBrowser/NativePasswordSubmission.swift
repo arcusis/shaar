@@ -158,9 +158,10 @@ protocol NativePasswordSubmissionBridge: AnyObject {
   /// Release secrets only after native consent; implementations must complete once.
   func consume(
     submission: NativePasswordSubmission,
-    completion: @escaping (
-      Result<NativePasswordSubmittedCredential, NativePasswordSaveFailure>
-    ) -> Void
+    completion:
+      @escaping (
+        Result<NativePasswordSubmittedCredential, NativePasswordSaveFailure>
+      ) -> Void
   )
   func cancel(offerID: UUID)
 }

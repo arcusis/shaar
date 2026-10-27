@@ -102,7 +102,7 @@ class HostedTests(unittest.TestCase):
 
         def killpg(pid, sig):
             if sig == signal.SIGKILL:
-                raise PermissionError('synthetic cleanup failure')
+                raise OSError('synthetic cleanup failure')
             raise ProcessLookupError()
 
         with patch.object(MODULE.subprocess, 'Popen', side_effect=spawn), \
@@ -110,7 +110,41 @@ class HostedTests(unittest.TestCase):
              patch.object(MODULE.os, 'killpg', side_effect=killpg):
             with self.assertRaisesRegex(ValueError, 'owned command failed') as result:
                 MODULE.command(['synthetic'], self.root, {}, offline=False)
-        self.assertEqual(result.exception.__notes__, ['owned process cleanup failed: PermissionError'])
+        self.assertEqual(result.exception.__notes__, ['owned process cleanup failed: OSError'])
+
+    def test_signal_permission_unknown_requires_positive_group_absence(self):
+        class Process:
+            pid = 4242
+            returncode = None
+
+            def wait(self, timeout):
+                self.returncode = 0
+                return 0
+
+        for persists in (False, True):
+            with self.subTest(persists=persists):
+                events = []
+
+                def killpg(pid, sig):
+                    events.append(sig)
+                    if sig == signal.SIGKILL:
+                        raise PermissionError()
+                    if persists:
+                        raise PermissionError()
+                    raise ProcessLookupError()
+
+                clock = [0, 0, 6] if persists else [0, 0]
+                with patch.object(MODULE.subprocess, 'Popen', return_value=Process()), \
+                     patch.object(MODULE.os, 'waitid', return_value=object()), \
+                     patch.object(MODULE.os, 'killpg', side_effect=killpg), \
+                     patch.object(MODULE.time, 'monotonic', side_effect=clock), \
+                     patch.object(MODULE.time, 'sleep'):
+                    if persists:
+                        with self.assertRaisesRegex(ValueError, 'process group survived'):
+                            MODULE.command(['synthetic'], self.root, {}, offline=False)
+                    else:
+                        self.assertEqual(MODULE.command(['synthetic'], self.root, {}, offline=False), '')
+                self.assertEqual(events, [signal.SIGKILL, 0])
 
     def test_command_retries_permission_unknown_until_absent_or_deadline(self):
         class Process:

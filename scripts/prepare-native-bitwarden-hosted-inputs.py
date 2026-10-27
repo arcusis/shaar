@@ -255,6 +255,10 @@ def command(argv, cwd, env, *, offline=True):
             # An exited leader may be the only remaining member and already
             # unsignalable; its unreaped PID still cannot be reused.
             pass
+        except PermissionError:
+            # A group containing only an exited leader may be unsignalable on
+            # macOS. Treat this as unknown until post-reap observation.
+            pass
         except BaseException as error:
             cleanup = error
         try:

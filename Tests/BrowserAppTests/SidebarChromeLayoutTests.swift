@@ -29,6 +29,14 @@ struct SidebarFolderDraftTests {
 
 @MainActor
 final class SidebarChromeLayoutTests: XCTestCase {
+  nonisolated override func setUpWithError() throws {
+    try super.setUpWithError()
+    try XCTSkipUnless(
+      SidebarVisualCaptureSupport.enabled,
+      "Sidebar capture requires explicitly enabled GitHub Actions macOS CI")
+    _ = try SidebarVisualCaptureSupport.prepare()
+  }
+
   private final class CaptureMeasurements {
     var footerFrame: CGRect?
     var ordinaryRevealFrames = SidebarRevealFrames()
@@ -67,7 +75,7 @@ final class SidebarChromeLayoutTests: XCTestCase {
         path: "/tmp/recent-report-final.pdf", sourceURL: "https://example.com/report",
         state: .finished, paused: false, dangerous: false, offTheRecord: false,
         received: 1024, total: 1024, startTime: 1_735_689_600))
-    let root = URL(fileURLWithPath: "/tmp/browser-sidebar-chrome", isDirectory: true)
+    let root = try SidebarVisualCaptureSupport.prepare()
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     let emptyStore = try makeStore(populated: false)
     let populatedStore = try makeStore(populated: true)
@@ -104,27 +112,39 @@ final class SidebarChromeLayoutTests: XCTestCase {
     for capture in captures {
       let path = root.appending(path: capture.name)
       let measurements = CaptureMeasurements()
-      let view = BrowserSidebar(
-        store: capture.store,
-        previewRecentDownloads: capture.showsDownloads ? [download] : nil,
-        previewFolderDraft: capture.draft
-      )
-      .frame(width: capture.width, height: capture.height)
+      // The production hover card extends into the page beside the sidebar.
+      let surroundingWidth: CGFloat = capture.showsDownloads ? 320 : 0
+      let canvasWidth = capture.width + surroundingWidth
+      let view = HStack(spacing: 0) {
+        BrowserSidebar(
+          store: capture.store,
+          previewRecentDownloads: capture.showsDownloads ? [download] : nil,
+          previewFolderDraft: capture.draft
+        )
+        .frame(width: capture.width, height: capture.height)
+        .zIndex(1)
+        if capture.showsDownloads {
+          Color(nsColor: .windowBackgroundColor)
+            .frame(width: surroundingWidth, height: capture.height)
+        }
+      }
+      .frame(width: canvasWidth, height: capture.height)
       .background(Color(nsColor: .windowBackgroundColor))
       .environment(\.colorScheme, capture.colorScheme)
       .onPreferenceChange(SidebarFooterBoundsPreferenceKey.self) {
         measurements.footerFrame = $0
       }
       let bounds = try await captureView(
-        view, size: NSSize(width: capture.width, height: capture.height),
-        appearance: capture.appearance, to: path, measurements: measurements)
+        view, size: NSSize(width: canvasWidth, height: capture.height),
+        appearance: capture.appearance, to: path, measurements: measurements,
+        requiredText: requiredText(for: capture.scenario))
       let footer = try XCTUnwrap(measurements.footerFrame, "Footer bounds missing: \(capture.name)")
       XCTAssertGreaterThan(footer.width, 0, "Footer width missing: \(capture.name)")
       XCTAssertGreaterThan(footer.height, 0, "Footer height missing: \(capture.name)")
-      let footerFits = footer.minY >= 0 && footer.maxY <= capture.height
-      if capture.height == 520 {
-        XCTAssertTrue(footerFits, "Sidebar footer clipped: \(capture.name), frame=\(footer)")
-      }
+      let footerFits =
+        footer.minX >= 0 && footer.minY >= 0
+        && footer.maxX <= capture.width && footer.maxY <= capture.height
+      XCTAssertTrue(footerFits, "Sidebar footer clipped: \(capture.name), frame=\(footer)")
 
       let session = capture.store.session
       let selectedSpace = session.selectedSpace
@@ -132,13 +152,16 @@ final class SidebarChromeLayoutTests: XCTestCase {
         selectedSpace.tabs.filter { !$0.isPinned }.count, capture.scenario == "populated" ? 240 : 0)
       XCTAssertEqual(
         selectedSpace.tabs.filter(\.isPinned).count, capture.scenario == "populated" ? 4 : 0)
-      XCTAssertEqual(bounds.width, Int(capture.width))
-      XCTAssertEqual(bounds.height, Int(capture.height))
+      XCTAssertGreaterThanOrEqual(bounds.width, Int(canvasWidth))
+      XCTAssertGreaterThanOrEqual(bounds.height, Int(capture.height))
+      XCTAssertLessThanOrEqual(bounds.width, Int(canvasWidth * 3))
+      XCTAssertLessThanOrEqual(bounds.height, Int(capture.height * 3))
       captureIndex.append([
         "name": capture.name,
-        "path": path.path,
+        "path": path.lastPathComponent,
         "scenario": capture.scenario,
-        "width": capture.width,
+        "width": canvasWidth,
+        "sidebarWidth": capture.width,
         "height": capture.height,
         "colorScheme": capture.colorScheme == .dark ? "dark" : "light",
         "appearance": capture.appearance == .darkAqua ? "dark" : "light",
@@ -160,11 +183,11 @@ final class SidebarChromeLayoutTests: XCTestCase {
 
     let index = try JSONSerialization.data(
       withJSONObject: captureIndex, options: [.prettyPrinted, .sortedKeys])
-    try index.write(to: root.appending(path: "capture-index.json"), options: .atomic)
+    try index.write(to: root.appending(path: "sidebar-capture-index.json"), options: .atomic)
   }
 
-  func testCapturesSidebarTabRowPresentationStatesInOwnedOffscreenWindows() throws {
-    let root = URL(fileURLWithPath: "/tmp/browser-sidebar-rows", isDirectory: true)
+  func testCapturesSidebarTabRowPresentationStatesInOwnedWindows() async throws {
+    let root = try SidebarVisualCaptureSupport.prepare()
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     let tabID = UUID(uuidString: "30000000-0000-0000-0000-000000000099")!
     let longTitle = String(repeating: "Long ordinary tab label with useful context ", count: 4)
@@ -192,13 +215,14 @@ final class SidebarChromeLayoutTests: XCTestCase {
       )
       .background(Color(nsColor: .windowBackgroundColor))
       let size = NSSize(width: BrowserChromeLayout.sidebarWidth, height: 48)
-      let pixels = try captureRow(row, size: size, to: path)
-      XCTAssertEqual(pixels.width, Int(size.width))
-      XCTAssertEqual(pixels.height, Int(size.height))
+      let required = isPinned ? "Pinned" : (name == "long-label-ordinary" ? "Long" : "Ordinary")
+      let pixels = try await captureRow(row, size: size, to: path, requiredText: [required])
+      XCTAssertGreaterThanOrEqual(pixels.width, Int(size.width))
+      XCTAssertGreaterThanOrEqual(pixels.height, Int(size.height))
       XCTAssertGreaterThan(try Data(contentsOf: path).count, 100)
       index.append([
         "name": name,
-        "path": path.path,
+        "path": path.lastPathComponent,
         "captureKind": "pure-presentation-state",
         "physicalHoverVerified": false,
         "title": title,
@@ -212,7 +236,7 @@ final class SidebarChromeLayoutTests: XCTestCase {
 
     let data = try JSONSerialization.data(
       withJSONObject: index, options: [.prettyPrinted, .sortedKeys])
-    try data.write(to: root.appending(path: "capture-index.json"), options: .atomic)
+    try data.write(to: root.appending(path: "row-capture-index.json"), options: .atomic)
   }
 
   func testProgrammaticSelectionRevealsLastOrdinaryTabAndCapturesBeforeAfter() async throws {
@@ -225,7 +249,7 @@ final class SidebarChromeLayoutTests: XCTestCase {
       return XCTFail("Expected restored ordinary tab selection")
     }
     XCTAssertEqual(restoredTab.id, lastTab.id)
-    let root = URL(fileURLWithPath: "/tmp/browser-sidebar-reveal", isDirectory: true)
+    let root = try SidebarVisualCaptureSupport.prepare()
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     var captures: [[String: Any]] = []
     let measurements = CaptureMeasurements()
@@ -252,12 +276,15 @@ final class SidebarChromeLayoutTests: XCTestCase {
           isVisible(measurements.ordinaryRevealFrames, selectedID: tabID)
         })
       else {
+        try recordRevealFailure(root: root, phase: "ordinary-initial-restored-last")
         XCTFail("Restored last ordinary tab not visible: \(measurements.ordinaryRevealFrames)")
         return
       }
       let path = root.appending(path: "ordinary-\(phase).png")
-      try mounted.capture(to: path)
-      captures.append(["phase": phase, "path": path.path, "selectedTabID": tabID.uuidString])
+      _ = try await mounted.capture(to: path, requiredText: ["Last"])
+      captures.append([
+        "phase": phase, "path": path.lastPathComponent, "selectedTabID": tabID.uuidString,
+      ])
     }
     store.perform(.tab(space: spaceID, tab: firstTab.id))
     guard
@@ -266,13 +293,14 @@ final class SidebarChromeLayoutTests: XCTestCase {
           && measurements.ordinaryRevealFrames.selected.minY < 100
       })
     else {
+      try recordRevealFailure(root: root, phase: "ordinary-programmatic-first")
       XCTFail("Programmatically selected first ordinary tab not visible")
       return
     }
     let firstPath = root.appending(path: "ordinary-programmatic-first.png")
-    try mounted.capture(to: firstPath)
+    _ = try await mounted.capture(to: firstPath, requiredText: ["First"])
     captures.append([
-      "phase": "programmatic-first", "path": firstPath.path,
+      "phase": "programmatic-first", "path": firstPath.lastPathComponent,
       "selectedTabID": firstTab.id.uuidString,
     ])
     store.perform(.tab(space: spaceID, tab: lastTab.id))
@@ -282,13 +310,14 @@ final class SidebarChromeLayoutTests: XCTestCase {
           && measurements.ordinaryRevealFrames.selected.minY > 0
       })
     else {
+      try recordRevealFailure(root: root, phase: "ordinary-programmatic-last")
       XCTFail("Programmatically selected last ordinary tab not visible")
       return
     }
     let lastPath = root.appending(path: "ordinary-programmatic-last.png")
-    try mounted.capture(to: lastPath)
+    _ = try await mounted.capture(to: lastPath, requiredText: ["Last"])
     captures.append([
-      "phase": "programmatic-last", "path": lastPath.path,
+      "phase": "programmatic-last", "path": lastPath.lastPathComponent,
       "selectedTabID": lastTab.id.uuidString,
     ])
     let index = try JSONSerialization.data(
@@ -300,7 +329,7 @@ final class SidebarChromeLayoutTests: XCTestCase {
     let store = try makeSpaceStore(count: 20)
     let lastSpace = try XCTUnwrap(store.session.spaces.last)
     let firstSpace = try XCTUnwrap(store.session.spaces.first)
-    let root = URL(fileURLWithPath: "/tmp/browser-sidebar-reveal", isDirectory: true)
+    let root = try SidebarVisualCaptureSupport.prepare()
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     let measurements = CaptureMeasurements()
     let view = BrowserSidebar(store: store)
@@ -322,11 +351,12 @@ final class SidebarChromeLayoutTests: XCTestCase {
         isVisible(measurements.spaceRevealFrames, selectedID: lastSpace.id)
       })
     else {
+      try recordRevealFailure(root: root, phase: "space-initial-restored-last")
       XCTFail("Restored last Space not visible: \(measurements.spaceRevealFrames)")
       return
     }
     let initialPath = root.appending(path: "space-initial-restored-last.png")
-    try mounted.capture(to: initialPath)
+    _ = try await mounted.capture(to: initialPath, requiredText: ["Space"])
 
     store.perform(.space(firstSpace.id))
     guard
@@ -335,11 +365,12 @@ final class SidebarChromeLayoutTests: XCTestCase {
           && measurements.spaceRevealFrames.selected.minX < 100
       })
     else {
+      try recordRevealFailure(root: root, phase: "space-programmatic-first")
       XCTFail("Programmatically selected first Space not visible")
       return
     }
     let firstPath = root.appending(path: "space-programmatic-first.png")
-    try mounted.capture(to: firstPath)
+    _ = try await mounted.capture(to: firstPath, requiredText: ["Space"])
 
     store.perform(.space(lastSpace.id))
     guard
@@ -347,22 +378,23 @@ final class SidebarChromeLayoutTests: XCTestCase {
         isVisible(measurements.spaceRevealFrames, selectedID: lastSpace.id)
       })
     else {
+      try recordRevealFailure(root: root, phase: "space-programmatic-last")
       XCTFail("Programmatically selected last Space not visible")
       return
     }
     let lastPath = root.appending(path: "space-programmatic-last.png")
-    try mounted.capture(to: lastPath)
+    _ = try await mounted.capture(to: lastPath, requiredText: ["Space"])
     let index: [[String: Any]] = [
       [
-        "phase": "initial-restored-last", "path": initialPath.path,
+        "phase": "initial-restored-last", "path": initialPath.lastPathComponent,
         "selectedSpaceID": lastSpace.id.uuidString, "spaceCount": 20,
       ],
       [
-        "phase": "programmatic-first", "path": firstPath.path,
+        "phase": "programmatic-first", "path": firstPath.lastPathComponent,
         "selectedSpaceID": firstSpace.id.uuidString, "spaceCount": 20,
       ],
       [
-        "phase": "programmatic-last", "path": lastPath.path,
+        "phase": "programmatic-last", "path": lastPath.lastPathComponent,
         "selectedSpaceID": lastSpace.id.uuidString, "spaceCount": 20,
       ],
     ]
@@ -413,6 +445,7 @@ final class SidebarChromeLayoutTests: XCTestCase {
           id: stableID(1_000 + index),
           url: URL(string: "https://ordinary-\(index).example/research")!,
           title: "\(index): "
+            + (index == 0 ? "First " : index == 239 ? "Last " : "")
             + String(repeating: "Long ordinary tab title with useful context ", count: 3))
       }
       : []
@@ -459,87 +492,45 @@ final class SidebarChromeLayoutTests: XCTestCase {
     return BrowserStore(session: session)
   }
 
+  private func recordRevealFailure(root: URL, phase: String) throws {
+    try SidebarVisualCaptureSupport.record(
+      root: root, entry: ["phase": phase, "status": "failed", "error": "selected item not visible"])
+  }
+
+  private func requiredText(for scenario: String) -> [String] {
+    switch scenario {
+    case "empty", "empty-minimum": ["Personal", "New tab"]
+    case "populated": ["Research", "New tab"]
+    case "inline-folder-draft": ["Untitled"]
+    case "recent-downloads": ["recent", "final.pdf"]
+    default: []
+    }
+  }
+
   private func captureView<V: View>(
     _ view: V, size: NSSize, appearance: NSAppearance.Name, to url: URL,
-    measurements: CaptureMeasurements
+    measurements: CaptureMeasurements, requiredText: [String]
   ) async throws -> (width: Int, height: Int) {
-    let host = NSHostingView(rootView: view)
-    let window = NSWindow(
-      contentRect: NSRect(origin: .zero, size: size), styleMask: .borderless, backing: .buffered,
-      defer: false)
-    window.isReleasedWhenClosed = false
-    window.appearance = NSAppearance(named: appearance)
-    window.contentView = host
-    host.frame = NSRect(origin: .zero, size: size)
-    defer { window.close() }
-
-    try await Task.sleep(for: .milliseconds(100))
-    host.layoutSubtreeIfNeeded()
-    XCTAssertEqual(host.bounds.size, size)
-    let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
-    XCTAssertEqual(bitmap.pixelsWide, Int(size.width))
-    XCTAssertEqual(bitmap.pixelsHigh, Int(size.height))
-    host.cacheDisplay(in: host.bounds, to: bitmap)
-    try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(
-      to: url, options: .atomic)
-    XCTAssertNotNil(measurements.footerFrame)
-    return (bitmap.pixelsWide, bitmap.pixelsHigh)
-  }
-
-  private func captureRow<V: View>(_ view: V, size: NSSize, to url: URL) throws
-    -> (width: Int, height: Int)
-  {
-    let host = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
-    let window = NSWindow(
-      contentRect: NSRect(origin: .zero, size: size), styleMask: .borderless, backing: .buffered,
-      defer: false)
-    window.isReleasedWhenClosed = false
-    window.appearance = NSAppearance(named: .aqua)
-    window.contentView = host
-    defer { window.close() }
-
-    host.layoutSubtreeIfNeeded()
-    XCTAssertFalse(window.isVisible, "Presentation capture window must remain offscreen")
-    let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
-    host.cacheDisplay(in: host.bounds, to: bitmap)
-    try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(
-      to: url, options: .atomic)
-    return (bitmap.pixelsWide, bitmap.pixelsHigh)
-  }
-}
-
-@MainActor
-private final class MountedChromeSidebar {
-  private let host: NSHostingView<AnyView>
-  private let window: NSWindow
-
-  init<V: View>(view: V, size: NSSize, appearance: NSAppearance.Name) throws {
-    host = NSHostingView(rootView: AnyView(view))
-    window = NSWindow(
-      contentRect: NSRect(origin: .zero, size: size), styleMask: .borderless, backing: .buffered,
-      defer: false)
-    window.isReleasedWhenClosed = false
-    window.appearance = NSAppearance(named: appearance)
-    window.contentView = host
-  }
-
-  func waitUntil(_ condition: () -> Bool) async -> Bool {
-    let deadline = Date(timeIntervalSinceNow: 1)
-    while Date() < deadline {
-      host.layoutSubtreeIfNeeded()
-      if condition() { return true }
-      try? await Task.sleep(for: .milliseconds(10))
+    let mounted = try MountedChromeSidebar(view: view, size: size, appearance: appearance)
+    defer { mounted.close() }
+    guard await mounted.waitUntil({ measurements.footerFrame != nil }) else {
+      try SidebarVisualCaptureSupport.record(
+        root: SidebarVisualCaptureSupport.prepare(),
+        entry: ["file": url.lastPathComponent, "status": "failed", "error": "footer unavailable"])
+      XCTFail("Sidebar footer did not appear")
+      throw SidebarCaptureFailure.footerUnavailable
     }
-    return false
+    return try await mounted.capture(to: url, requiredText: requiredText)
   }
 
-  func capture(to url: URL) throws {
-    host.layoutSubtreeIfNeeded()
-    let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
-    host.cacheDisplay(in: host.bounds, to: bitmap)
-    try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(
-      to: url, options: .atomic)
+  private func captureRow<V: View>(
+    _ view: V, size: NSSize, to url: URL, requiredText: [String]
+  ) async throws -> (width: Int, height: Int) {
+    let mounted = try MountedChromeSidebar(
+      view: view.frame(width: size.width, height: size.height), size: size, appearance: .aqua)
+    defer { mounted.close() }
+    return try await mounted.capture(to: url, requiredText: requiredText)
   }
-
-  func close() { window.close() }
 }
+
+private enum SidebarCaptureFailure: Error { case footerUnavailable }

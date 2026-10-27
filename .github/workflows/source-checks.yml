@@ -76,6 +76,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Capture native Bitwarden settings visuals
+        id: native_settings_visual
         if: success() || (failure() && steps.private_window.outcome == 'failure')
         env:
           ARCUSIS_NATIVE_SETTINGS_VISUAL_CI: '1'
@@ -87,4 +88,43 @@ jobs:
         with:
           name: native-settings-visual-ci
           path: build/Verification/native-settings-visual-ci/
+          if-no-files-found: warn
+
+  hosted-sidebar-visual:
+    name: Hosted sidebar component visuals
+    runs-on: macos-26
+    timeout-minutes: 20
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+
+    steps:
+      - name: Check out source
+        # actions/checkout v5.1.0
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+
+      - name: Build visual test targets
+        run: swift build --build-tests --jobs 2
+
+      - name: Capture hosted sidebar component visuals
+        id: sidebar_visual
+        env:
+          ARCUSIS_SIDEBAR_VISUAL_CI: '1'
+        run: |
+          test "$GITHUB_ACTIONS" = 'true'
+          test "$RUNNER_OS" = 'macOS'
+          test "$ARCUSIS_SIDEBAR_VISUAL_CI" = '1'
+          capture_status=0
+          swift test --jobs 2 --filter SidebarChromeLayoutTests || capture_status=1
+          swift test --jobs 2 --filter SpaceEditorVisualTests || capture_status=1
+          swift test --jobs 2 --filter CommandPanelVisualTests || capture_status=1
+          exit "$capture_status"
+
+      - name: Upload hosted sidebar component visuals
+        if: always() && steps.sidebar_visual.outcome != 'skipped'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: sidebar-chrome-ci
+          path: build/Verification/sidebar-chrome-ci/
           if-no-files-found: warn

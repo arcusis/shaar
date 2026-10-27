@@ -300,7 +300,7 @@ static BOOL ARCCanonicalHTTPSOrigin(NSString *origin) {
                       parts.port.integerValue == 443))) return NO;
   NSString *port = parts.port ? [NSString stringWithFormat:@":%@", parts.port] : @"";
   NSString *authority = [origin substringFromIndex:@"https://".length];
-  if (![authority hasSuffix:port] || authority.length <= port.length) return NO;
+  if ((port.length && ![authority hasSuffix:port]) || authority.length <= port.length) return NO;
   NSString *host = [authority substringToIndex:authority.length - port.length];
   for (NSUInteger i = 0; i < host.length; i++) {
     unichar c = [host characterAtIndex:i];

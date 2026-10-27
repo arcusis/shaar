@@ -98,9 +98,11 @@ HEX40 = re.compile(r'^[0-9a-f]{40}$')
 SANDBOX = '/usr/bin/sandbox-exec'
 NO_NETWORK = '(version 1)(allow default)(deny network*)'
 HOSTED_PIN_SHA256 = 'c7f71d14a29abfa5a4dca441c49fce5e6a87127d4fff8a206af793b9558b3489'
+HOSTED_SDK10_PIN_SHA256 = 'ecbc2ca8e4e3b5102afca1809d928d2d05671acb1c2a899ad6361e712ff99085'
 
 
-def load_hosted_preparer(path: Path, checkpoint: Path, checkpoint_sha: str):
+def load_hosted_preparer(path: Path, checkpoint: Path, checkpoint_sha: str,
+                         profile: SourceProfile = SDK9_PROFILE):
     require_regular(path)
     require_regular(checkpoint)
     if not HEX64.fullmatch(checkpoint_sha) or digest(checkpoint) != checkpoint_sha:
@@ -109,6 +111,10 @@ def load_hosted_preparer(path: Path, checkpoint: Path, checkpoint_sha: str):
     expected_names = {'scripts/build-native-bitwarden-strict-sdk.py',
                       'scripts/prepare-native-bitwarden-hosted-inputs.py',
                       'ThirdParty/BitwardenStrictEditSpike/hosted-inputs.pin.json'}
+    if profile == SDK10_PROFILE:
+        expected_names.add('ThirdParty/BitwardenStrictEditSpike/hosted-sdk10-inputs.pin.json')
+    elif profile != SDK9_PROFILE:
+        raise ValueError('unsupported hosted profile')
     if (not isinstance(record, dict) or set(record) != {'schema', 'files'} or
         type(record['schema']) is not int or record['schema'] != 1 or
         not isinstance(record['files'], dict) or set(record['files']) != expected_names):
@@ -116,11 +122,17 @@ def load_hosted_preparer(path: Path, checkpoint: Path, checkpoint_sha: str):
     paths = {'scripts/build-native-bitwarden-strict-sdk.py': Path(__file__).absolute(),
              'scripts/prepare-native-bitwarden-hosted-inputs.py': path,
              'ThirdParty/BitwardenStrictEditSpike/hosted-inputs.pin.json': ROOT / 'ThirdParty/BitwardenStrictEditSpike/hosted-inputs.pin.json'}
+    if profile == SDK10_PROFILE:
+        paths['ThirdParty/BitwardenStrictEditSpike/hosted-sdk10-inputs.pin.json'] = (
+            ROOT / 'ThirdParty/BitwardenStrictEditSpike/hosted-sdk10-inputs.pin.json')
     for name, item in paths.items():
         if digest(item) != record['files'][name]:
             raise ValueError('hosted checkpoint source drift')
     if record['files']['ThirdParty/BitwardenStrictEditSpike/hosted-inputs.pin.json'] != HOSTED_PIN_SHA256:
         raise ValueError('hosted pin mismatch')
+    if (profile == SDK10_PROFILE and
+        record['files']['ThirdParty/BitwardenStrictEditSpike/hosted-sdk10-inputs.pin.json'] != HOSTED_SDK10_PIN_SHA256):
+        raise ValueError('SDK10 hosted pin mismatch')
     source = path.read_bytes()
     if sha(source) != record['files']['scripts/prepare-native-bitwarden-hosted-inputs.py']:
         raise ValueError('hosted preparer changed')
@@ -133,7 +145,7 @@ def load_hosted_preparer(path: Path, checkpoint: Path, checkpoint_sha: str):
 def hosted_input_profile(profile: SourceProfile, historical: tuple, hosted_values: tuple) -> bool:
     selected = any(value is not None for value in hosted_values)
     if selected:
-        if (profile != SDK9_PROFILE or any(value is None for value in hosted_values) or
+        if (profile not in (SDK9_PROFILE, SDK10_PROFILE) or any(value is None for value in hosted_values) or
             any(value is not None for value in historical)):
             raise ValueError('hosted and historical input profiles cannot be mixed')
     elif any(value is None for value in historical):
@@ -693,7 +705,7 @@ def main() -> int:
     hosted = hosted_input_profile(profile, (args.cargo_registry, args.cargo_git), hosted_args)
     if hosted:
         hosted_module, hosted_paths = load_hosted_preparer(
-            args.hosted_preparer, args.hosted_checkpoint, args.hosted_checkpoint_sha256)
+            args.hosted_preparer, args.hosted_checkpoint, args.hosted_checkpoint_sha256, profile)
         require_directory(args.hosted_inputs)
         require_directory(args.hosted_rustup_home)
         require_regular(args.hosted_cargo)
@@ -826,11 +838,13 @@ def main() -> int:
     cargo_home.mkdir()
     hosted_provenance = None
     if hosted:
-        hosted_pin = ROOT / 'ThirdParty/BitwardenStrictEditSpike/hosted-inputs.pin.json'
+        hosted_pin = ROOT / ('ThirdParty/BitwardenStrictEditSpike/hosted-sdk10-inputs.pin.json'
+                             if profile == SDK10_PROFILE else 'ThirdParty/BitwardenStrictEditSpike/hosted-inputs.pin.json')
+        hosted_profile = hosted_module.HOSTED_SDK10 if profile == SDK10_PROFILE else hosted_module.HOSTED_SDK9
         hosted_proof = hosted_module.validate_inputs(
-            sdk, args.hosted_inputs, hosted_pin, args.hosted_rustup_home, args.hosted_cargo)
-        hosted_provenance = {'profile': 'hosted-sdk9-public-source', 'checkpointSHA256': args.hosted_checkpoint_sha256,
-                             'pinSHA256': HOSTED_PIN_SHA256,
+            sdk, args.hosted_inputs, hosted_pin, args.hosted_rustup_home, args.hosted_cargo, hosted_profile)
+        hosted_provenance = {'profile': hosted_profile.name, 'checkpointSHA256': args.hosted_checkpoint_sha256,
+                             'pinSHA256': hosted_profile.pin_sha256,
                              'cargoCommit': hosted_proof['cargoCommit'],
                              'sourceInventorySHA256': sha(json.dumps(hosted_proof, sort_keys=True, separators=(',', ':')).encode()),
                              'networkRouteProven': False}
@@ -950,7 +964,7 @@ def main() -> int:
                           'testOnly': mode == 'debug', 'consumerCompiled': True, 'consumerExecuted': False}
     if hosted:
         if (hosted_module.validate_inputs(sdk, args.hosted_inputs, hosted_pin,
-                                          args.hosted_rustup_home, args.hosted_cargo) != hosted_proof or
+                                          args.hosted_rustup_home, args.hosted_cargo, hosted_profile) != hosted_proof or
             hosted_module.inventory(staged_vendor) != hosted_proof['vendor'] or
             digest(args.hosted_checkpoint) != args.hosted_checkpoint_sha256):
             raise ValueError('hosted inputs changed during build')

@@ -70,6 +70,9 @@ struct NativeBitwardenStrictUpdateInput: Sendable, CustomStringConvertible,
 
 /// Internal plumbing only. The caller must establish and revalidate ownership and consent.
 protocol NativeBitwardenStrictWriteBackend: Sendable {
+  func adoptStrictWriteAuthority(
+    _ admission: NativeBitwardenWriteAdmission
+  ) async throws
   func prepareStrictUpdate(
     access: NativeBitwardenFillAccess, context: PasswordFillContext, cipherID: UUID
   ) async throws -> NativeBitwardenStrictUpdateHandle

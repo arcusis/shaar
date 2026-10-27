@@ -66,9 +66,12 @@ class SDK10PinTests(unittest.TestCase):
         baseline['candidateGitTree'] = '0' * 40
         with self.assertRaises(ValueError): BUILDER.validate_normalization_pin(self.pin, self.candidate, baseline)
 
-    def test_sdk10_hosted_mode_unavailable(self):
+    def test_sdk10_hosted_mode_is_explicit_and_exclusive(self):
+        self.assertTrue(BUILDER.hosted_input_profile(BUILDER.SDK10_PROFILE, (None, None), ('x',) * 6))
         with self.assertRaises(ValueError):
-            BUILDER.hosted_input_profile(BUILDER.SDK10_PROFILE, (None, None), ('x',) * 6)
+            BUILDER.hosted_input_profile(BUILDER.SDK10_PROFILE, ('registry', None), ('x',) * 6)
+        with self.assertRaises(ValueError):
+            BUILDER.hosted_input_profile(BUILDER.SDK10_PROFILE, (None, None), ('x',) * 5 + (None,))
         self.assertFalse(BUILDER.hosted_input_profile(BUILDER.SDK10_PROFILE, ('registry', 'git'), (None,) * 6))
 
     def test_transition_requires_one_exact_path_and_blob(self):

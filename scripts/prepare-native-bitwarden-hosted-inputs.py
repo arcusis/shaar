@@ -6,6 +6,7 @@ Run only on an explicitly approved hosted worker. Importing this module is inert
 from __future__ import annotations
 
 import argparse
+from collections import namedtuple
 import configparser
 import hashlib
 import io
@@ -13,6 +14,7 @@ import json
 import os
 from pathlib import Path
 import re
+import resource
 import shutil
 import signal
 import stat
@@ -36,6 +38,15 @@ NO_NETWORK = '(version 1)(allow default)(deny network*)'
 SOURCE_CONFIG_SHA = 'b6d973a24da7644ebf4d8520af23722350ea06e32985a70d80d2eef96368c9f3'
 CARGO_CHECKSUM_COMMENT = 'This file only protects against accidental modifications. It is not a security mechanism and does not protect against malicious changes.'
 CARGO_COMMIT = '797e8a9bca276c1c9f9f738d2a20f484fa4eea9d'
+
+
+HostedProfile = namedtuple('HostedProfile', ('name', 'pin_sha256', 'tree'))
+
+
+HOSTED_SDK9 = HostedProfile('hosted-sdk9-public-source', PIN_SHA, TREE)
+HOSTED_SDK10 = HostedProfile(
+    'hosted-sdk10-public-source', 'ecbc2ca8e4e3b5102afca1809d928d2d05671acb1c2a899ad6361e712ff99085',
+    '3755ee1144f047435a9bc2ba7412b21e2f300f94')
 
 
 def digest(path: Path) -> str:
@@ -93,13 +104,15 @@ def parse_lock(raw: bytes):
     return remote
 
 
-def load_pin(path: Path, lock: Path):
-    if digest(path) != PIN_SHA or digest(lock) != LOCK_SHA:
+def load_pin(path: Path, lock: Path, profile: HostedProfile = HOSTED_SDK9):
+    if profile not in (HOSTED_SDK9, HOSTED_SDK10):
+        raise ValueError('unknown hosted profile')
+    if digest(path) != profile.pin_sha256 or digest(lock) != LOCK_SHA:
         raise ValueError('pin or lock mismatch')
     pin = json.loads(regular(path).read_bytes(), object_pairs_hook=unique)
-    if (pin.get('profile') != 'hosted-sdk9-public-source' or pin.get('accepted') is not False
+    if (pin.get('profile') != profile.name or pin.get('accepted') is not False
         or pin.get('integrationReady') is not False or pin.get('cargoLockSHA256') != LOCK_SHA
-        or pin.get('sdkCandidateTree') != TREE or pin.get('gitCommit') != COMMIT
+        or pin.get('sdkCandidateTree') != profile.tree or pin.get('gitCommit') != COMMIT
         or pin.get('gitTree') != GIT_TREE or pin.get('registrySource') != REGISTRY
         or pin.get('gitSource') != GIT or pin.get('cargoCommit') != CARGO_COMMIT):
         raise ValueError('hosted pin provenance')
@@ -232,19 +245,47 @@ def environment(home: Path, cargo_home: Path, rustup_home: Path):
             'CARGO_NET_GIT_FETCH_WITH_CLI': 'true'}
 
 
-def command(argv, cwd, env, *, offline=True):
+def command(argv, cwd, env, *, offline=True, size_root=None, size_limit=None):
+    if (size_root is None) != (size_limit is None) or (size_limit is not None and size_limit <= 0):
+        raise ValueError('invalid command size limit')
+    if size_root is not None:
+        directory(size_root)
     if offline:
         argv = ['/usr/bin/sandbox-exec', '-p', NO_NETWORK, *argv]
+    def check_size():
+        total = 0
+        for current, _, names in os.walk(size_root, followlinks=False):
+            for name in names:
+                try:
+                    info = (Path(current) / name).lstat()
+                except FileNotFoundError:
+                    continue
+                if stat.S_ISREG(info.st_mode):
+                    total += info.st_size
+                    if total > size_limit:
+                        raise ValueError('owned download exceeds size limit')
+
+    def set_file_limit():
+        resource.setrlimit(resource.RLIMIT_FSIZE, (size_limit, size_limit))
+
     with tempfile.TemporaryFile() as output, tempfile.TemporaryFile() as errors:
         process = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
-                                   stdout=output, stderr=errors, start_new_session=True)
+                                   stdout=output, stderr=errors, start_new_session=True,
+                                   preexec_fn=set_file_limit if size_root is not None else None)
         primary = cleanup = None
         try:
             deadline = time.monotonic() + 1800
+            next_size_check = 0.0
             while os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT) is None:
-                if time.monotonic() >= deadline:
+                now = time.monotonic()
+                if size_root is not None and now >= next_size_check:
+                    check_size()
+                    next_size_check = now + 1
+                if now >= deadline:
                     raise subprocess.TimeoutExpired(argv, 1800)
                 time.sleep(0.05)
+            if size_root is not None:
+                check_size()
         except BaseException as error:
             primary = error
         try:
@@ -279,6 +320,11 @@ def command(argv, cwd, env, *, offline=True):
         except BaseException as error:
             if cleanup is None:
                 cleanup = error
+        if primary is None and size_root is not None:
+            try:
+                check_size()
+            except BaseException as error:
+                primary = error
         output.seek(0)
         errors.seek(0)
         stdout, stderr = output.read(), errors.read()
@@ -354,7 +400,9 @@ def safe_git_config(git_dir: Path, *, origin: str | None, allow_local_origin=Fal
         raise ValueError('unsafe git config')
 
 
-def source_check(source: Path, env):
+def source_check(source: Path, env, profile: HostedProfile = HOSTED_SDK9):
+    if profile not in (HOSTED_SDK9, HOSTED_SDK10):
+        raise ValueError('unknown hosted profile')
     directory(source)
     safe_git_config(source / '.git', origin=None, allow_local_origin=True)
     for parent in source.parents:
@@ -368,9 +416,9 @@ def source_check(source: Path, env):
         raise ValueError('source Cargo config mismatch')
     if (source / '.cargo/config').exists() or (source / '.cargo/config').is_symlink():
         raise ValueError('unexpected source Cargo config')
-    if command(['git', 'write-tree'], source, env).strip() != TREE:
+    if command(['git', 'write-tree'], source, env).strip() != profile.tree:
         raise ValueError('source tree mismatch')
-    verify_worktree(source, command(['git', 'ls-tree', '-rz', TREE], source, env))
+    verify_worktree(source, command(['git', 'ls-tree', '-rz', profile.tree], source, env))
 
 
 def git_check(cargo_home: Path, env, *, check_checkout=True):
@@ -475,7 +523,7 @@ def replacement_config(raw, original: Path, destination: Path):
             '[source.' + json.dumps(name) + ']\ndirectory = ' + json.dumps(str(destination)) + '\n')
 
 
-def validate_inputs(source, root, pin_path, rustup_home, cargo):
+def validate_inputs(source, root, pin_path, rustup_home, cargo, profile: HostedProfile = HOSTED_SDK9):
     directory(root)
     directory(root / 'home')
     directory(root / 'cargo-home')
@@ -485,8 +533,8 @@ def validate_inputs(source, root, pin_path, rustup_home, cargo):
         raise ValueError('unexpected Cargo executable')
     env = environment(root / 'home', root / 'cargo-home', rustup_home)
     check_cargo_version(cargo, source, env)
-    source_check(source, env)
-    _, packages = load_pin(pin_path, source / 'Cargo.lock')
+    source_check(source, env, profile)
+    _, packages = load_pin(pin_path, source / 'Cargo.lock', profile)
     registry_inventory = inventory(root / 'cargo-home/registry')
     git_inventory = inventory(root / 'cargo-home/git')
     archives = verify_archives(root / 'cargo-home', packages)
@@ -510,26 +558,28 @@ def validate_inputs(source, root, pin_path, rustup_home, cargo):
         git_check(scratch_cargo, copied_env)
     if regenerated != original:
         raise ValueError('vendor regeneration mismatch')
-    source_check(source, env)
+    source_check(source, env, profile)
     if (verify_archives(root / 'cargo-home', packages) != archives or
         git_check(root / 'cargo-home', env) != git or
         inventory(root / 'cargo-home/registry') != registry_inventory or
         inventory(root / 'cargo-home/git') != git_inventory):
         raise ValueError('inputs changed')
-    return {'profile': 'hosted-sdk9-public-source', 'lockSHA256': LOCK_SHA,
-            'candidateTree': TREE, 'git': git, 'cargoCommit': CARGO_COMMIT, 'archives': archives, 'vendor': original,
+    return {'profile': profile.name, 'lockSHA256': LOCK_SHA,
+            'candidateTree': profile.tree, 'git': git, 'cargoCommit': CARGO_COMMIT, 'archives': archives, 'vendor': original,
             'vendorConfigSHA256': digest(root / 'vendor-config.toml')}
 
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--profile', choices=('sdk9', 'sdk10'), default='sdk9')
     for flag in ('source', 'pin', 'output', 'rustup-home', 'cargo'):
         parser.add_argument('--' + flag, type=Path, required=True)
     args = parser.parse_args()
+    profile = {'sdk9': HOSTED_SDK9, 'sdk10': HOSTED_SDK10}[args.profile]
     directory(args.source)
     directory(args.rustup_home)
     regular(args.cargo)
-    load_pin(args.pin, args.source / 'Cargo.lock')
+    load_pin(args.pin, args.source / 'Cargo.lock', profile)
     if (not args.output.is_absolute() or args.output.exists() or args.output.is_symlink()
         or args.output.parent.resolve(strict=True) != args.output.parent
         or any(p.is_symlink() for p in (args.output.parent, *args.output.parent.parents))):
@@ -542,24 +592,26 @@ def main():
         home.mkdir(mode=0o700)
         cargo_home.mkdir(mode=0o700)
         env = environment(home, cargo_home, args.rustup_home)
-        source_check(args.source, env)
+        source_check(args.source, env, profile)
         if args.cargo != args.rustup_home / 'toolchains/1.98.0-aarch64-apple-darwin/bin/cargo':
             raise ValueError('unexpected Cargo executable')
         check_cargo_version(args.cargo, args.source, env)
         # Public acquisition is intentionally a separate, approval-gated hosted step.
         receipt['stage'] = 'fetch'
         command([str(args.cargo), 'fetch', '--locked', '--manifest-path',
-                 str(args.source / 'Cargo.toml')], args.source, env, offline=False)
+                 str(args.source / 'Cargo.toml')], args.source, env, offline=False,
+                size_root=cargo_home if profile == HOSTED_SDK10 else None,
+                size_limit=4 * 1024 * 1024 * 1024 if profile == HOSTED_SDK10 else None)
         receipt['stage'] = 'source-validation'
-        _, packages = load_pin(args.pin, args.source / 'Cargo.lock')
+        _, packages = load_pin(args.pin, args.source / 'Cargo.lock', profile)
         verify_archives(cargo_home, packages)
         git_check(cargo_home, env)
-        source_check(args.source, env)
+        source_check(args.source, env, profile)
         receipt['stage'] = 'vendor'
         _, config = vendor_again(args.source, cargo_home, env, args.cargo, args.output / 'vendor', packages)
         (args.output / 'vendor-config.toml').write_text(config)
         receipt['stage'] = 'revalidation'
-        proof = validate_inputs(args.source, args.output, args.pin, args.rustup_home, args.cargo)
+        proof = validate_inputs(args.source, args.output, args.pin, args.rustup_home, args.cargo, profile)
         receipt.update(proof, status='passed', stage='complete')
     except BaseException as error:
         receipt['errorType'] = type(error).__name__

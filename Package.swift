@@ -2,10 +2,25 @@
 import Foundation
 import PackageDescription
 
+let strictSDK = ProcessInfo.processInfo.environment["ARCUSIS_NATIVE_BITWARDEN_STRICT_SDK"] == "1"
+let strictFixture =
+  ProcessInfo.processInfo.environment["ARCUSIS_NATIVE_BITWARDEN_STRICT_FIXTURE"] == "1"
+if strictFixture && !strictSDK {
+  fatalError("Strict SDK fixture requires ARCUSIS_NATIVE_BITWARDEN_STRICT_SDK=1")
+}
+if strictSDK
+  && [
+    "ARCUSIS_NATIVE_BITWARDEN_REFRESH_FIXTURE", "ARCUSIS_NATIVE_BITWARDEN_REFRESH_CANDIDATE",
+    "ARCUSIS_NATIVE_BITWARDEN_ORGANIZATION_CANDIDATE", "ARCUSIS_NATIVE_BITWARDEN_SDK",
+  ].contains(where: { ProcessInfo.processInfo.environment[$0] == "1" })
+{
+  fatalError("Strict SDK cannot be combined with legacy SDK selection")
+}
 let nativeBitwardenRefreshFixture =
-  ProcessInfo.processInfo.environment["ARCUSIS_NATIVE_BITWARDEN_REFRESH_FIXTURE"] == "1"
+  strictFixture
+  || ProcessInfo.processInfo.environment["ARCUSIS_NATIVE_BITWARDEN_REFRESH_FIXTURE"] == "1"
 let nativeBitwardenRefreshCandidate =
-  nativeBitwardenRefreshFixture
+  strictSDK || nativeBitwardenRefreshFixture
   || ProcessInfo.processInfo.environment["ARCUSIS_NATIVE_BITWARDEN_REFRESH_CANDIDATE"] == "1"
 let nativeBitwardenOrganizationCandidate =
   nativeBitwardenRefreshCandidate
@@ -17,17 +32,26 @@ let nativeBitwardenSDKDependency: [Package.Dependency] =
   nativeBitwardenSDKEnabled
   ? [
     .package(
-      path: nativeBitwardenRefreshFixture
-        ? "build/NativeBitwardenRefreshSDK7Fixture/Package"
-        : (nativeBitwardenRefreshCandidate
-          ? "build/NativeBitwardenRefreshSDK7/Package"
-          : (nativeBitwardenOrganizationCandidate
-            ? "build/NativeBitwardenOrganizationSDK/Package" : "build/NativeBitwardenSDK/Package")))
+      path: strictSDK
+        ? (strictFixture
+          ? "build/NativeBitwardenStrictSDK8/Package-debug"
+          : "build/NativeBitwardenStrictSDK8/Package-release")
+        : nativeBitwardenRefreshFixture
+          ? "build/NativeBitwardenRefreshSDK7Fixture/Package"
+          : (nativeBitwardenRefreshCandidate
+            ? "build/NativeBitwardenRefreshSDK7/Package"
+            : (nativeBitwardenOrganizationCandidate
+              ? "build/NativeBitwardenOrganizationSDK/Package" : "build/NativeBitwardenSDK/Package"))
+    )
   ]
   : []
 let nativeBitwardenSDKProduct: [Target.Dependency] =
   nativeBitwardenSDKEnabled
-  ? [.product(name: "ArcusisBitwardenSDK", package: "Package")]
+  ? [
+    .product(
+      name: "ArcusisBitwardenSDK",
+      package: strictSDK ? (strictFixture ? "package-debug" : "package-release") : "Package")
+  ]
   : []
 let nativeBitwardenSDKLinkerSettings: [LinkerSetting] =
   nativeBitwardenSDKEnabled
@@ -35,7 +59,8 @@ let nativeBitwardenSDKLinkerSettings: [LinkerSetting] =
   : []
 
 let nativeBitwardenSwiftSettings: [SwiftSetting] =
-  (nativeBitwardenOrganizationCandidate
+  (strictSDK ? [.define("ARCUSIS_NATIVE_BITWARDEN_STRICT_SDK")] : [])
+  + (nativeBitwardenOrganizationCandidate
     ? [.define("ARCUSIS_NATIVE_BITWARDEN_ORGANIZATION_CANDIDATE")] : [])
   + (nativeBitwardenRefreshCandidate
     ? [.define("ARCUSIS_NATIVE_BITWARDEN_REFRESH_CANDIDATE")] : [])

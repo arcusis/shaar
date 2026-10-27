@@ -143,7 +143,7 @@ enum NativeBitwardenAccessTokenIdentity {
 }
 
 actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCredentialBackend,
-  NativeBitwardenWriteBackend
+  NativeBitwardenWriteBackend, NativeBitwardenStrictWriteBackend
 {
   #if canImport(ArcusisBitwardenSDK)
     #if ARCUSIS_NATIVE_BITWARDEN_ORGANIZATION_CANDIDATE
@@ -184,7 +184,26 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
       var fillAccess: NativeBitwardenFillAccessState<Cipher>
       var cipherRepository: NativeBitwardenCipherRepository
       var writable = false
+      #if ARCUSIS_NATIVE_BITWARDEN_STRICT_SDK
+        var strictGeneration: UInt64?
+        var strictPreparation: StrictPreparation?
+      #endif
     }
+    #if ARCUSIS_NATIVE_BITWARDEN_STRICT_SDK
+      private struct StrictPreparation {
+        let handle: NativeBitwardenStrictUpdateHandle
+        let access: NativeBitwardenFillAccess
+        let context: PasswordFillContext
+        let cipherID: UUID
+        let generation: UInt64
+        let revision: String
+        let client: Client
+        let value: StrictPersonalPreparation
+      }
+      #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_FIXTURE
+        private var fixtureCompletedCreates = 0
+      #endif
+    #endif
     private var candidates: [UUID: Candidate] = [:]
   #endif
 
@@ -219,6 +238,20 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
       guard Self.fixtureHostAllowed else { return nil }
       return candidates[sessionID]?.cipherRepository
     }
+
+    #if ARCUSIS_NATIVE_BITWARDEN_STRICT_SDK
+      func strictClientForFixture(sessionID: UUID) -> Client? {
+        guard Self.fixtureHostAllowed, let candidate = candidates[sessionID],
+          candidate.initialized, !candidate.locked
+        else { return nil }
+        return candidate.client
+      }
+
+      func completedStrictCreatesForFixture() -> Int? {
+        guard Self.fixtureHostAllowed else { return nil }
+        return fixtureCompletedCreates
+      }
+    #endif
   #endif
 
   var isAvailable: Bool {
@@ -364,6 +397,10 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
       let lockGeneration = candidate.generation
       candidate.locked = true
       candidate.writable = false
+      #if ARCUSIS_NATIVE_BITWARDEN_STRICT_SDK
+        candidate.strictGeneration = nil
+        candidate.strictPreparation = nil
+      #endif
       candidate.cipherRepository.revoke()
       _ = candidate.fillAccess.revoke()
       candidates[sessionID] = candidate
@@ -407,6 +444,10 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
       let repository = NativeBitwardenCipherRepository()
       candidate.cipherRepository = repository
       candidate.writable = false
+      #if ARCUSIS_NATIVE_BITWARDEN_STRICT_SDK
+        candidate.strictGeneration = nil
+        candidate.strictPreparation = nil
+      #endif
       let ticket: NativeBitwardenSyncTicket
       do {
         ticket = try candidate.fillAccess.beginSync()
@@ -520,6 +561,9 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
         else { throw NativeBitwardenBackendError.staleSession }
         try current.fillAccess.publish(
           ticket: ticket, snapshot: snapshot, items: items, organizationIDs: organizationIDs)
+        #if ARCUSIS_NATIVE_BITWARDEN_STRICT_SDK
+          current.strictGeneration = paired.generation
+        #endif
         // Writable limits are independent of the already validated read snapshot.
         // A failed replacement must never expose a partial writable repository.
         do {
@@ -621,7 +665,16 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
       defer { candidate.cipherRepository.revoke() }
       do {
         let result = try await candidate.client.vault().ciphers().create(request: request)
-        return try writeReceipt(result, candidate: candidate, access: access, operation: operation)
+        #if ARCUSIS_NATIVE_BITWARDEN_STRICT_SDK
+          _ = result
+          #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_FIXTURE
+            fixtureCompletedCreates += 1
+          #endif
+          throw NativeBitwardenWriteError.unconfirmed
+        #else
+          return try writeReceipt(
+            result, candidate: candidate, access: access, operation: operation)
+        #endif
       } catch { throw NativeBitwardenWriteError.unconfirmed }
     #else
       _ = (access, context, input)
@@ -636,6 +689,94 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
     // SDK does not expose verified strict decryption or lossless revision tokens.
     _ = (access, context, cipherID, revision, input)
     throw NativeBitwardenWriteError.sdkUpdateUnavailable
+  }
+
+  func prepareStrictUpdate(
+    access: NativeBitwardenFillAccess, context: PasswordFillContext, cipherID: UUID
+  ) async throws -> NativeBitwardenStrictUpdateHandle {
+    #if ARCUSIS_NATIVE_BITWARDEN_STRICT_SDK && canImport(ArcusisBitwardenSDK)
+      let (candidate, operation) = try beginWrite(access: access, context: context)
+      defer { finishWrite(sessionID: access.sessionID, operation: operation) }
+      if var current = candidates[access.sessionID] {
+        current.strictPreparation = nil
+        candidates[access.sessionID] = current
+      }
+      try await validateWrite(candidate: candidate, access: access, operation: operation)
+      guard var current = candidates[access.sessionID], let generation = current.strictGeneration,
+        generation > 0
+      else { throw NativeBitwardenWriteError.staleAccess }
+      _ = try current.fillAccess.item(access: access, id: cipherID)
+      guard
+        let value = current.client.strictPreparePersonalLogin(
+          cipherId: cipherID.uuidString.lowercased(), expectedGeneration: generation),
+        UUID(uuidString: value.cipherId()) == cipherID, value.generation() == generation
+      else { throw NativeBitwardenWriteError.ineligibleCipher }
+      let revision = value.revisionToken()
+      guard !revision.isEmpty else { throw NativeBitwardenWriteError.ineligibleCipher }
+      try Task.checkCancellation()
+      let handle = NativeBitwardenStrictUpdateHandle()
+      current.strictPreparation = StrictPreparation(
+        handle: handle, access: access, context: context, cipherID: cipherID,
+        generation: generation, revision: revision, client: current.client, value: value)
+      candidates[access.sessionID] = current
+      return handle
+    #else
+      _ = (access, context, cipherID)
+      throw NativeBitwardenWriteError.sdkUpdateUnavailable
+    #endif
+  }
+
+  func cancelStrictUpdate(sessionID: UUID, handle: NativeBitwardenStrictUpdateHandle) async {
+    #if ARCUSIS_NATIVE_BITWARDEN_STRICT_SDK && canImport(ArcusisBitwardenSDK)
+      guard var current = candidates[sessionID], current.strictPreparation?.handle == handle else {
+        return
+      }
+      current.strictPreparation = nil
+      candidates[sessionID] = current
+    #else
+      _ = (sessionID, handle)
+    #endif
+  }
+
+  func strictUpdate(
+    access: NativeBitwardenFillAccess, context: PasswordFillContext,
+    handle: NativeBitwardenStrictUpdateHandle, input: NativeBitwardenStrictUpdateInput
+  ) async throws {
+    #if ARCUSIS_NATIVE_BITWARDEN_STRICT_SDK && canImport(ArcusisBitwardenSDK)
+      guard candidates[access.sessionID]?.strictPreparation?.handle == handle else {
+        throw NativeBitwardenWriteError.staleAccess
+      }
+      defer {
+        if var current = candidates[access.sessionID], current.strictPreparation?.handle == handle {
+          current.strictPreparation = nil
+          candidates[access.sessionID] = current
+        }
+      }
+      try input.validate()
+      let (candidate, operation) = try beginWrite(access: access, context: context)
+      defer { finishWrite(sessionID: access.sessionID, operation: operation) }
+      try await validateWrite(candidate: candidate, access: access, operation: operation)
+      guard let current = candidates[access.sessionID], let prepared = current.strictPreparation,
+        prepared.handle == handle, prepared.access == access, prepared.context == context,
+        prepared.client === current.client, current.strictGeneration == prepared.generation,
+        prepared.value.generation() == prepared.generation,
+        UUID(uuidString: prepared.value.cipherId()) == prepared.cipherID,
+        prepared.value.revisionToken() == prepared.revision
+      else { throw NativeBitwardenWriteError.staleAccess }
+      _ = try current.fillAccess.item(access: access, id: prepared.cipherID)
+      try markDispatched(access: access, operation: operation)
+      current.cipherRepository.revoke()
+      let outcome = await current.client.strictPersonalUpdate(
+        preparation: prepared.value, username: input.username, password: input.password)
+      switch outcome {
+      case .rejectedBeforeDispatch: throw NativeBitwardenWriteError.ineligibleCipher
+      case .unconfirmed: throw NativeBitwardenWriteError.unconfirmed
+      @unknown default: throw NativeBitwardenWriteError.unconfirmed
+      }
+    #else
+      _ = (access, context, handle, input)
+      throw NativeBitwardenWriteError.sdkUpdateUnavailable
+    #endif
   }
 
   #if ARCUSIS_NATIVE_BITWARDEN_REFRESH_FIXTURE && canImport(ArcusisBitwardenSDK)
@@ -738,6 +879,10 @@ actor NativeBitwardenSDKBackend: NativeBitwardenBackend, NativeBitwardenFillCred
       try current.fillAccess.validate(access)
       _ = current.fillAccess.revoke()
       current.writable = false
+      #if ARCUSIS_NATIVE_BITWARDEN_STRICT_SDK
+        current.strictGeneration = nil
+        current.strictPreparation = nil
+      #endif
       candidates[access.sessionID] = current
     }
 

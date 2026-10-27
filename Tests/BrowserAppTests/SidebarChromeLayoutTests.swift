@@ -112,19 +112,30 @@ final class SidebarChromeLayoutTests: XCTestCase {
     for capture in captures {
       let path = root.appending(path: capture.name)
       let measurements = CaptureMeasurements()
-      let view = BrowserSidebar(
-        store: capture.store,
-        previewRecentDownloads: capture.showsDownloads ? [download] : nil,
-        previewFolderDraft: capture.draft
-      )
-      .frame(width: capture.width, height: capture.height)
+      // The production hover card extends into the page beside the sidebar.
+      let surroundingWidth: CGFloat = capture.showsDownloads ? 320 : 0
+      let canvasWidth = capture.width + surroundingWidth
+      let view = HStack(spacing: 0) {
+        BrowserSidebar(
+          store: capture.store,
+          previewRecentDownloads: capture.showsDownloads ? [download] : nil,
+          previewFolderDraft: capture.draft
+        )
+        .frame(width: capture.width, height: capture.height)
+        .zIndex(1)
+        if capture.showsDownloads {
+          Color(nsColor: .windowBackgroundColor)
+            .frame(width: surroundingWidth, height: capture.height)
+        }
+      }
+      .frame(width: canvasWidth, height: capture.height)
       .background(Color(nsColor: .windowBackgroundColor))
       .environment(\.colorScheme, capture.colorScheme)
       .onPreferenceChange(SidebarFooterBoundsPreferenceKey.self) {
         measurements.footerFrame = $0
       }
       let bounds = try await captureView(
-        view, size: NSSize(width: capture.width, height: capture.height),
+        view, size: NSSize(width: canvasWidth, height: capture.height),
         appearance: capture.appearance, to: path, measurements: measurements,
         requiredText: requiredText(for: capture.scenario))
       let footer = try XCTUnwrap(measurements.footerFrame, "Footer bounds missing: \(capture.name)")
@@ -141,15 +152,16 @@ final class SidebarChromeLayoutTests: XCTestCase {
         selectedSpace.tabs.filter { !$0.isPinned }.count, capture.scenario == "populated" ? 240 : 0)
       XCTAssertEqual(
         selectedSpace.tabs.filter(\.isPinned).count, capture.scenario == "populated" ? 4 : 0)
-      XCTAssertGreaterThanOrEqual(bounds.width, Int(capture.width))
+      XCTAssertGreaterThanOrEqual(bounds.width, Int(canvasWidth))
       XCTAssertGreaterThanOrEqual(bounds.height, Int(capture.height))
-      XCTAssertLessThanOrEqual(bounds.width, Int(capture.width * 3))
+      XCTAssertLessThanOrEqual(bounds.width, Int(canvasWidth * 3))
       XCTAssertLessThanOrEqual(bounds.height, Int(capture.height * 3))
       captureIndex.append([
         "name": capture.name,
         "path": path.lastPathComponent,
         "scenario": capture.scenario,
-        "width": capture.width,
+        "width": canvasWidth,
+        "sidebarWidth": capture.width,
         "height": capture.height,
         "colorScheme": capture.colorScheme == .dark ? "dark" : "light",
         "appearance": capture.appearance == .darkAqua ? "dark" : "light",
@@ -490,7 +502,7 @@ final class SidebarChromeLayoutTests: XCTestCase {
     case "empty", "empty-minimum": ["Personal", "New tab"]
     case "populated": ["Research", "New tab"]
     case "inline-folder-draft": ["Untitled"]
-    case "recent-downloads": ["recent"]
+    case "recent-downloads": ["recent", "final.pdf"]
     default: []
     }
   }

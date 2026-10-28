@@ -69,7 +69,7 @@ struct SpaceEditor: View {
       HStack(spacing: 10) {
         if route.spaceID != nil {
           Button("Delete…", role: .destructive) { deleteIsPresented = true }
-            .buttonStyle(.plain).foregroundStyle(.secondary)
+            .buttonStyle(.plain).foregroundStyle(.red)
             .disabled(store.session.spaces.count == 1)
         }
         Spacer(minLength: 8)

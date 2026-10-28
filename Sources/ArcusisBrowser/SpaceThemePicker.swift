@@ -1,23 +1,18 @@
-import AppKit
 import BrowserCore
 import SwiftUI
 
 struct SpaceThemePicker: View {
   @Binding var appearance: SpaceAppearanceDraft
-  @Environment(\.colorScheme) private var colorScheme
-  @State private var preview: Preview = .automatic
-  @FocusState private var canvasFocused: Bool
   var focusOnAppear = false
+  @State private var hsb: SpaceHSBColor
+  @State private var hexDraft: String
+  @FocusState private var fieldFocused: Bool
 
-  private enum Preview: String, CaseIterable {
-    case automatic, light, dark
-    var symbol: String {
-      switch self {
-      case .automatic: "sparkles"
-      case .light: "sun.max.fill"
-      case .dark: "moon.fill"
-      }
-    }
+  init(appearance: Binding<SpaceAppearanceDraft>, focusOnAppear: Bool = false) {
+    _appearance = appearance
+    self.focusOnAppear = focusOnAppear
+    _hsb = State(initialValue: SpaceHSBColor(rgb: appearance.wrappedValue.color))
+    _hexDraft = State(initialValue: appearance.wrappedValue.color.hex)
   }
 
   private let extraColors: [(String, SpaceRGBColor)] = [
@@ -32,143 +27,189 @@ struct SpaceThemePicker: View {
     ("Slate", .init(red: 103, green: 105, blue: 143)),
   ]
 
-  private var nsColor: NSColor {
-    let c = appearance.color
-    return NSColor(
-      srgbRed: CGFloat(c.red) / 255, green: CGFloat(c.green) / 255,
-      blue: CGFloat(c.blue) / 255, alpha: 1)
-  }
-
   var body: some View {
     VStack(spacing: 12) {
-      HStack(spacing: 4) {
-        ForEach(Preview.allCases, id: \.self) { mode in
-          Button {
-            preview = mode
-          } label: {
-            Image(systemName: mode.symbol)
-              .frame(width: 32, height: 28)
-              .background(
-                preview == mode ? Color.primary.opacity(0.12) : .clear,
-                in: RoundedRectangle(cornerRadius: 7))
-          }
-          .buttonStyle(.plain)
-          .accessibilityLabel("\(mode.rawValue.capitalized) appearance preview")
-          .accessibilityAddTraits(preview == mode ? .isSelected : [])
-        }
-      }
-      GeometryReader { geometry in
-        let color = Color(nsColor: nsColor)
-        let x = CGFloat(nsColor.hueComponent) * geometry.size.width
-        let y = (1 - CGFloat(nsColor.saturationComponent)) * geometry.size.height
-        ZStack(alignment: .topLeading) {
-          RoundedRectangle(cornerRadius: 12)
-            .fill(
-              LinearGradient(
-                colors: [
-                  color.opacity(0.85), color.opacity(0.35),
-                  (preview == .light || (preview == .automatic && colorScheme == .light))
-                    ? .white.opacity(0.65) : .black.opacity(0.35),
-                ],
-                startPoint: .topLeading, endPoint: .bottomTrailing))
-          Canvas { context, size in
-            for x in stride(from: 5.0, through: size.width, by: 6) {
-              for y in stride(from: 5.0, through: size.height, by: 6) {
-                context.fill(
-                  Path(ellipseIn: CGRect(x: x, y: y, width: 1, height: 1)),
-                  with: .color(.white.opacity(0.28)))
-              }
-            }
-          }
-          .clipShape(RoundedRectangle(cornerRadius: 12))
-          Circle().fill(color).frame(width: 24, height: 24)
-            .overlay(Circle().strokeBorder(.white, lineWidth: 3))
-            .shadow(radius: 3)
-            .position(
-              x: min(max(12, x), geometry.size.width - 12),
-              y: min(max(12, y), geometry.size.height - 12))
-        }
-        .contentShape(Rectangle())
-        .gesture(
-          DragGesture(minimumDistance: 0).onChanged { value in
-            let hue = min(1, max(0, value.location.x / geometry.size.width))
-            let saturation = 1 - min(1, max(0, value.location.y / geometry.size.height))
-            setColor(
-              NSColor(
-                hue: hue, saturation: saturation, brightness: nsColor.brightnessComponent, alpha: 1)
-            )
-          })
-      }
-      .frame(height: 200)
-      .focusable()
-      .focused($canvasFocused)
-      .accessibilityLabel("Theme color field")
-      .accessibilityValue(
-        "Hue \(Int(nsColor.hueComponent * 360)) degrees, saturation \(Int(nsColor.saturationComponent * 100)) percent"
-      )
-      .accessibilityAdjustableAction { direction in
-        let delta: CGFloat = direction == .increment ? 0.02 : -0.02
-        setColor(
-          NSColor(
-            hue: min(1, max(0, nsColor.hueComponent + delta)),
-            saturation: nsColor.saturationComponent, brightness: nsColor.brightnessComponent,
-            alpha: 1))
-      }
-      ScrollView(.horizontal, showsIndicators: false) {
-        HStack(spacing: 1) {
-          ForEach(SpaceTint.allCases, id: \.self) { tint in
-            swatch(
-              name: tint.rawValue.capitalized,
-              color: SpaceAppearanceDraft(tint: tint, customRGB: nil).color,
-              selected: appearance.tint == tint && appearance.customRGB == nil
-            ) { appearance.selectPreset(tint) }
-          }
-          ForEach(extraColors, id: \.0) { item in
-            swatch(name: item.0, color: item.1, selected: appearance.customRGB == item.1) {
-              appearance.setCustom(item.1)
-            }
-          }
-        }.padding(3)
-      }
-      HStack {
-        Image(systemName: "circle.lefthalf.filled").foregroundStyle(.secondary)
-        Slider(
-          value: Binding(
-            get: { Double(nsColor.brightnessComponent) },
-            set: { value in
-              setColor(
-                NSColor(
-                  hue: nsColor.hueComponent, saturation: nsColor.saturationComponent,
-                  brightness: value, alpha: 1))
-            }), in: 0...1
-        )
-        .accessibilityLabel("Theme intensity")
+      SpaceColorField(hsb: hsb) { update($0) }
+        .frame(height: 200)
+        .focusable()
+        .focused($fieldFocused)
+      SpaceHueSlider(hsb: hsb) { update($0) }
+        .frame(height: 28)
+      HStack(spacing: 10) {
+        swatches
+        hexField
       }
     }
-    .onAppear { if focusOnAppear { canvasFocused = true } }
+    .onAppear { if focusOnAppear { fieldFocused = true } }
+    .onChange(of: appearance.color) { _, color in syncFromAppearance(color) }
+  }
+
+  private var swatches: some View {
+    ScrollView(.horizontal, showsIndicators: false) {
+      HStack(spacing: 1) {
+        ForEach(SpaceTint.allCases, id: \.self) { tint in
+          swatch(
+            name: tint.rawValue.capitalized,
+            color: SpaceAppearanceDraft(tint: tint, customRGB: nil).color,
+            selected: appearance.tint == tint && appearance.customRGB == nil
+          ) { appearance.selectPreset(tint) }
+        }
+        ForEach(extraColors, id: \.0) { item in
+          swatch(name: item.0, color: item.1, selected: appearance.customRGB == item.1) {
+            appearance.setCustom(item.1)
+          }
+        }
+      }
+      .padding(3)
+    }
+  }
+
+  private var hexField: some View {
+    HStack(spacing: 6) {
+      Circle().fill(Color(spaceRGB: hsb.rgb)).frame(width: 14, height: 14)
+      TextField("Hex", text: $hexDraft)
+        .textFieldStyle(.plain)
+        .font(.system(size: 12, design: .monospaced))
+        .frame(width: 64)
+        .onSubmit { commitHex() }
+        .accessibilityLabel("Hex color")
+    }
+    .padding(.horizontal, 8)
+    .frame(height: 26)
+    .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 7))
+    .overlay(
+      RoundedRectangle(cornerRadius: 7)
+        .strokeBorder(appearance.canSubmit ? .clear : .red, lineWidth: 1))
   }
 
   private func swatch(
     name: String, color: SpaceRGBColor, selected: Bool, action: @escaping () -> Void
   ) -> some View {
     Button(action: action) {
-      Circle().fill(
-        Color(
-          .sRGB, red: Double(color.red) / 255, green: Double(color.green) / 255,
-          blue: Double(color.blue) / 255)
-      )
-      .frame(width: 18, height: 18).padding(3)
-      .overlay(Circle().strokeBorder(selected ? Color.primary : .clear, lineWidth: 1.5))
-    }.buttonStyle(.plain).accessibilityLabel("\(name) sidebar color")
-      .accessibilityAddTraits(selected ? .isSelected : [])
+      Circle().fill(Color(spaceRGB: color))
+        .frame(width: 18, height: 18).padding(3)
+        .overlay(Circle().strokeBorder(selected ? Color.primary : .clear, lineWidth: 1.5))
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel("\(name) sidebar color")
+    .accessibilityAddTraits(selected ? .isSelected : [])
   }
 
-  private func setColor(_ color: NSColor) {
-    guard let rgb = color.usingColorSpace(.sRGB) else {
-      appearance.rejectColorInput()
-      return
+  private func update(_ value: SpaceHSBColor) {
+    hsb = value
+    hexDraft = value.rgb.hex
+    appearance.setCustom(value.rgb)
+  }
+
+  /// Swatches and hex edits change the color from outside the field; keep the edited hue when
+  /// the color already matches what the field wrote.
+  private func syncFromAppearance(_ color: SpaceRGBColor) {
+    guard color != hsb.rgb else { return }
+    hsb = SpaceHSBColor(rgb: color)
+    hexDraft = color.hex
+  }
+
+  private func commitHex() {
+    if !appearance.setHexDraft(hexDraft) { hexDraft = appearance.hexValue }
+  }
+}
+
+/// Saturation left to right, brightness bottom to top, for the current hue.
+private struct SpaceColorField: View {
+  let hsb: SpaceHSBColor
+  let onChange: (SpaceHSBColor) -> Void
+
+  var body: some View {
+    GeometryReader { geometry in
+      let size = geometry.size
+      let handle = hsb.fieldPosition(in: size)
+      ZStack(alignment: .topLeading) {
+        Color(hue: hsb.hue, saturation: 1, brightness: 1)
+        LinearGradient(colors: [.white, .white.opacity(0)], startPoint: .leading, endPoint: .trailing)
+        LinearGradient(colors: [.black.opacity(0), .black], startPoint: .top, endPoint: .bottom)
+        dotGrid
+        Circle().fill(Color(spaceRGB: hsb.rgb)).frame(width: 26, height: 26)
+          .overlay(Circle().strokeBorder(.white, lineWidth: 3))
+          .shadow(color: .black.opacity(0.35), radius: 3)
+          .position(
+            x: min(max(13, handle.x), size.width - 13),
+            y: min(max(13, handle.y), size.height - 13))
+      }
+      .clipShape(RoundedRectangle(cornerRadius: 12))
+      .contentShape(RoundedRectangle(cornerRadius: 12))
+      .gesture(
+        DragGesture(minimumDistance: 0).onChanged { value in
+          onChange(hsb.movingField(to: value.location, in: size))
+        })
     }
-    _ = appearance.setCustomComponents(
-      red: rgb.redComponent, green: rgb.greenComponent, blue: rgb.blueComponent)
+    .accessibilityElement()
+    .accessibilityLabel("Theme color field")
+    .accessibilityValue(
+      "Saturation \(Int(hsb.saturation * 100)) percent, brightness \(Int(hsb.brightness * 100)) percent"
+    )
+    .accessibilityAdjustableAction { direction in
+      let delta = direction == .increment ? 0.05 : -0.05
+      onChange(
+        SpaceHSBColor(hue: hsb.hue, saturation: hsb.saturation, brightness: hsb.brightness + delta))
+    }
+  }
+
+  private var dotGrid: some View {
+    Canvas { context, size in
+      for x in stride(from: 5.0, through: size.width, by: 7) {
+        for y in stride(from: 5.0, through: size.height, by: 7) {
+          context.fill(
+            Path(ellipseIn: CGRect(x: x, y: y, width: 1, height: 1)),
+            with: .color(.white.opacity(0.18)))
+        }
+      }
+    }
+    .allowsHitTesting(false)
+  }
+}
+
+/// Rainbow track with a large pill thumb, as in Arc's theme picker.
+private struct SpaceHueSlider: View {
+  let hsb: SpaceHSBColor
+  let onChange: (SpaceHSBColor) -> Void
+  private let hues = stride(from: 0.0, through: 1.0, by: 1.0 / 6).map {
+    Color(hue: $0, saturation: 1, brightness: 1)
+  }
+
+  var body: some View {
+    GeometryReader { geometry in
+      let width = geometry.size.width
+      ZStack(alignment: .leading) {
+        Capsule()
+          .fill(LinearGradient(colors: hues, startPoint: .leading, endPoint: .trailing))
+          .frame(height: 12)
+        Capsule().fill(Color(hue: hsb.hue, saturation: 1, brightness: 1))
+          .frame(width: 18, height: 28)
+          .overlay(Capsule().strokeBorder(.white, lineWidth: 3))
+          .shadow(color: .black.opacity(0.35), radius: 3)
+          .offset(x: min(max(0, hsb.hue * width - 9), width - 18))
+      }
+      .frame(maxHeight: .infinity)
+      .contentShape(Rectangle())
+      .gesture(
+        DragGesture(minimumDistance: 0).onChanged { value in
+          guard width > 0 else { return }
+          onChange(hsb.withHue(value.location.x / width))
+        })
+    }
+    .accessibilityElement()
+    .accessibilityLabel("Theme hue")
+    .accessibilityValue("\(Int(hsb.hue * 360)) degrees")
+    .accessibilityAdjustableAction { direction in
+      onChange(hsb.withHue(hsb.hue + (direction == .increment ? 0.02 : -0.02)))
+    }
+  }
+}
+
+extension Color {
+  init(spaceRGB color: SpaceRGBColor) {
+    self.init(
+      .sRGB, red: Double(color.red) / 255, green: Double(color.green) / 255,
+      blue: Double(color.blue) / 255)
   }
 }

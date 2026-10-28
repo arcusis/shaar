@@ -89,7 +89,7 @@ struct BrowserSettingsView: View {
         case .profiles:
           profilesContent
         case .shortcuts:
-          shortcutsContent
+          SettingsShortcutsPane()
         }
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

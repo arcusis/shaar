@@ -61,6 +61,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   private var claimedPrimary = false
   private var started = false
   private var startupFailed = false
+  private var shortcutMonitor: Any?
   private var previousMenu: NSMenu?
   private var previousServicesMenu: NSMenu?
   private var previousWindowsMenu: NSMenu?
@@ -274,6 +275,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   }
 
   func detach() {
+    if let shortcutMonitor { NSEvent.removeMonitor(shortcutMonitor) }
+    shortcutMonitor = nil
     privateHost?.detach()
     privateHost = nil
     events.onWindowRequest = nil
@@ -749,6 +752,12 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     NSApp.windowsMenu = main.items.first(where: { $0.submenu?.title == "Window" })?.submenu
     NSApp.helpMenu = main.items.first(where: { $0.submenu?.title == "Help" })?.submenu
     NSApp.mainMenu = main
+    shortcutMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+      guard let self, let menu = self.menu, NSApp.mainMenu === menu,
+        ShortcutPageRouting.route(event, menu: menu, responder: event.window?.firstResponder)
+      else { return event }
+      return nil
+    }
   }
 
   static func run(frameworkURL: URL) -> Int32 {

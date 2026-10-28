@@ -94,7 +94,6 @@ struct BrowserWindow: View {
     }
     .coordinateSpace(name: "browser-window")
     .onPreferenceChange(WebContentFramePreferenceKey.self) { webContentFrame = $0 }
-    .background { SpaceSwipeNavigation(store: store) }
     .frame(minWidth: 760, minHeight: 520)
     .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: store.commandIsOpen)
     .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: store.sidebarIsVisible)

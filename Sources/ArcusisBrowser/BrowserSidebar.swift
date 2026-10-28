@@ -61,6 +61,7 @@ struct BrowserSidebar: View {
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
   @Environment(\.browserChromeAccessibilityOverrides) private var accessibilityOverrides
+  @State private var pagerState = SpacePagerState()
   @State private var targetedTab: UUID?
   @State private var targetedSpace: UUID?
   @State private var targetedSection: String?
@@ -200,7 +201,9 @@ struct BrowserSidebar: View {
           Text(notice).font(.caption).fixedSize(horizontal: false, vertical: true)
         }
       }
-      tabList
+      SpacePager(store: store, state: pagerState, reduceMotion: sidebarReduceMotion) { space in
+        tabList(space)
+      }
       Spacer(minLength: 0)
       Divider()
       HStack(spacing: 8) {
@@ -232,6 +235,7 @@ struct BrowserSidebar: View {
     .padding(.horizontal, 14)
     .padding(.top, 4)
     .padding(.bottom, 10)
+    .background { SpaceSwipeNavigation(store: store, pager: pagerState) }
     .coordinateSpace(name: "sidebarBounds")
     .background {
       SpaceChromeTint(space: store.session.selectedSpace).color(for: colorScheme)
@@ -239,6 +243,7 @@ struct BrowserSidebar: View {
           sidebarReduceMotion ? nil : .easeOut(duration: 0.18),
           value: SpaceChromeTint(space: store.session.selectedSpace))
     }
+    .animation(sidebarReduceMotion ? .easeOut(duration: 0.12) : .easeInOut(duration: 0.22), value: store.session.selectedSpaceID)
     .zIndex(1)
     .onChange(of: store.session.selectedSpaceID) { _, _ in folderDraft = nil }
     .onAppear {
@@ -246,16 +251,16 @@ struct BrowserSidebar: View {
     }
   }
 
-  private var tabList: some View {
-    let tabIndex = SidebarTabIndex(tabs: store.session.selectedSpace.tabs)
+  private func tabList(_ space: BrowserSpace) -> some View {
+    let tabIndex = SidebarTabIndex(tabs: space.tabs)
     return ScrollViewReader { tabScroll in
       ScrollView {
         LazyVStack(alignment: .leading, spacing: 4) {
           sectionDropTarget(
             pinned: true,
-            height: store.session.selectedSpace.pinnedItems().isEmpty ? 8 : 12)
+            height: space.pinnedItems().isEmpty ? 8 : 12)
           if let folderDraft, folderDraft.parentID == nil { folderDraftRow(depth: 0) }
-          ForEach(store.session.selectedSpace.pinnedItems()) { item in
+          ForEach(space.pinnedItems()) { item in
             switch item {
             case .folder(let folder, let depth):
               folderRow(folder, depth: depth)
@@ -279,8 +284,8 @@ struct BrowserSidebar: View {
                 }
             }
           }
-          if store.session.selectedSpace.tabs.contains(where: \.isPinned)
-            || !store.session.selectedSpace.folders.isEmpty
+          if space.tabs.contains(where: \.isPinned)
+            || !space.folders.isEmpty
           {
             Divider().padding(.vertical, 6)
           }
@@ -315,7 +320,7 @@ struct BrowserSidebar: View {
             Button("Recently closed…") { store.showRecentlyClosed() }
           }
           sectionDropTarget(pinned: false)
-          ForEach(store.session.selectedSpace.tabs.filter { !$0.isPinned }) { tab in
+          ForEach(space.tabs.filter { !$0.isPinned }) { tab in
             tabRow(tab, index: tabIndex)
               .id(tab.id)
               .background {

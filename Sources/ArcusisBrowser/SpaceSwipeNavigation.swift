@@ -3,15 +3,18 @@ import SwiftUI
 
 struct SpaceSwipeNavigation: NSViewRepresentable {
   let store: BrowserStore
+  let pager: SpacePagerState
 
   func makeNSView(context: Context) -> SpaceSwipeMonitorView {
     let view = SpaceSwipeMonitorView()
     view.store = store
+    view.pager = pager
     return view
   }
 
   func updateNSView(_ view: SpaceSwipeMonitorView, context: Context) {
     view.store = store
+    view.pager = pager
   }
 
   static func dismantleNSView(_ view: SpaceSwipeMonitorView, coordinator: ()) {
@@ -22,6 +25,7 @@ struct SpaceSwipeNavigation: NSViewRepresentable {
 @MainActor
 final class SpaceSwipeMonitorView: NSView {
   weak var store: BrowserStore?
+  weak var pager: SpacePagerState?
   private var owner: SpaceSwipeWindowMonitor?
   private var ownerWindowID: ObjectIdentifier?
 
@@ -71,6 +75,11 @@ final class SpaceSwipeWindowMonitor {
   private weak var window: NSWindow?
   private let windowID: ObjectIdentifier
   private weak var store: BrowserStore?
+  private weak var clientView: SpaceSwipeMonitorView?
+  private var tracking = false
+  private var gestureActive = false
+  private var consumeMomentum = false
+  private var rejected = false
   private var monitor: Any?
   private var closeObserver: NSObjectProtocol?
   private lazy var ownership = SpaceSwipeMonitorOwnership(
@@ -118,6 +127,7 @@ final class SpaceSwipeWindowMonitor {
 
   func attach(_ client: AnyObject, store: BrowserStore) {
     self.store = store
+    clientView = client as? SpaceSwipeMonitorView
     ownership.attach(client)
   }
 
@@ -128,7 +138,7 @@ final class SpaceSwipeWindowMonitor {
 
   private func installMonitor() {
     guard monitor == nil else { return }
-    monitor = NSEvent.addLocalMonitorForEvents(matching: .swipe) { [weak self] event in
+    monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
       guard let self else { return event }
       return self.route(event)
     }
@@ -142,7 +152,51 @@ final class SpaceSwipeWindowMonitor {
   }
 
   func route(_ event: NSEvent) -> NSEvent? {
-    route(event, deltaX: event.deltaX, deltaY: event.deltaY)
+    guard let store, let window, let view = clientView, let pager = view.pager else { return event }
+    let modalOwnsInput = store.commandIsOpen || store.sheet != nil || !store.installationRequests.isEmpty
+      || !store.websiteMediaRequests.isEmpty || store.libraryDrawerSection != nil
+      || window.attachedSheet != nil || NSApp.modalWindow != nil
+    guard event.window === window, !modalOwnsInput, !event.modifierFlags.contains(.command) else {
+      if tracking { pager.finish(store: store, cancelled: true) }
+      tracking = false
+      gestureActive = false
+      rejected = true
+      return event
+    }
+    if event.phase.contains(.began) {
+      tracking = false
+      gestureActive = true
+      consumeMomentum = false
+      rejected = !event.hasPreciseScrollingDeltas || !view.bounds.contains(view.convert(event.locationInWindow, from: nil))
+      pager.begin()
+    }
+    if !event.momentumPhase.isEmpty {
+      let consumed = consumeMomentum
+      if event.momentumPhase.contains(.ended) || event.momentumPhase.contains(.cancelled) {
+        consumeMomentum = false
+      }
+      return consumed ? nil : event
+    }
+    if event.phase.contains(.cancelled) || event.phase.contains(.ended) {
+      gestureActive = false
+      guard tracking else { rejected = false; return event }
+      pager.finish(store: store, cancelled: event.phase.contains(.cancelled))
+      tracking = false
+      consumeMomentum = true
+      rejected = false
+      return nil
+    }
+    guard gestureActive, !rejected, !event.phase.isEmpty else { return event }
+    if !tracking {
+      guard abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY), event.scrollingDeltaX != 0 else {
+        if event.scrollingDeltaY != 0 { rejected = true }
+        return event
+      }
+      tracking = true
+    }
+    let index = store.session.spaces.firstIndex(where: { $0.id == store.session.selectedSpaceID }) ?? 0
+    pager.move(delta: event.scrollingDeltaX, timestamp: event.timestamp, index: index, count: store.session.spaces.count)
+    return nil
   }
 
   func route(_ event: NSEvent, deltaX: CGFloat, deltaY: CGFloat) -> NSEvent? {

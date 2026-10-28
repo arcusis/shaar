@@ -715,9 +715,7 @@ struct BrowserSidebar: View {
     let space = store.session.selectedSpace
     let boundary = index.boundary(for: tab.id)
     return tabRowContent(tab, in: space)
-    .draggable(
-      SidebarTransfer.tab(sessionID: store.dragSessionID, sourceSpaceID: space.id, tabID: tab.id)
-    )
+    .draggable(store.beginTabDrag(tab.id, spaceID: space.id, fromSplitPane: false))
     .dropDestination(for: SidebarTransfer.self) { items, point in
       guard items.count == 1, let item = items.first else { return false }
       let sourceID: UUID

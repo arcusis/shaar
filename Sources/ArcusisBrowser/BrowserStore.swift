@@ -29,6 +29,7 @@ final class BrowserStore {
   var session: BrowserSession
   var splitTabRecency: [UUID] = []
   var pendingSplitPlacement: SplitPlacement?
+  var tabDrag: TabDrag?
   let dragSessionID = UUID()
   let library = BrowserLibraryModel()
   private(set) var sidebarNotice: String?
@@ -796,6 +797,7 @@ final class BrowserStore {
     switch item {
     case .tab(let sessionID, let source, let tab):
       guard sessionID == dragSessionID else { return false }
+      separateDraggedPane(tab)
       return moveTab(
         tab, from: source, to: space, before: targetTab, pinned: pinned, folderID: folderID)
     case .space(let sessionID, let id):

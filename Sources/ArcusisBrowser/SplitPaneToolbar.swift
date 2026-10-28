@@ -63,6 +63,15 @@ struct SplitPaneToolbar: View {
     }
     .help(tab?.url.absoluteString ?? "")
     .accessibilityLabel("Address \(tab?.url.host() ?? "")")
+    .draggable(
+      store.beginTabDrag(tabID, spaceID: store.session.selectedSpaceID, fromSplitPane: true)
+    ) {
+      Label(tab?.title ?? "", systemImage: "link")
+        .font(.system(size: 12))
+        .padding(.horizontal, 10)
+        .frame(height: 26)
+        .background(.regularMaterial, in: Capsule())
+    }
   }
 
   private var paneMenu: some View {

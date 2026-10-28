@@ -2,13 +2,16 @@ import AppKit
 import BrowserCore
 import SwiftUI
 
-/// One sidebar row for a split: a segment per tab, each with its own close button.
+/// One sidebar row for a split: a segment per tab. Hovering a segment swaps its icon for a
+/// close button; the focused pane's segment is raised.
 struct SidebarSplitRow: View {
   struct Segment: Identifiable {
     let id: UUID
     let title: String
     let favicon: NSImage?
   }
+
+  static let titleMinimumWidth: CGFloat = 64
 
   let segments: [Segment]
   let focusedID: UUID?
@@ -18,73 +21,83 @@ struct SidebarSplitRow: View {
   @State private var hoveredID: UUID?
 
   var body: some View {
-    HStack(spacing: 0) {
-      ForEach(Array(segments.enumerated()), id: \.element.id) { index, segment in
-        if index > 0 {
-          Rectangle().fill(Color.primary.opacity(0.12)).frame(width: 1, height: 18)
+    GeometryReader { geometry in
+      let segmentWidth = geometry.size.width / CGFloat(max(segments.count, 1))
+      HStack(spacing: 2) {
+        ForEach(segments) { segment in
+          segmentView(segment, showsTitle: segmentWidth >= Self.titleMinimumWidth)
         }
-        segmentView(segment)
       }
+      .padding(3)
     }
-    .padding(.horizontal, 4)
-    .frame(height: 34)
+    .frame(height: 36)
     .background(
-      .white.opacity(isSelected ? 0.12 : 0),
-      in: RoundedRectangle(cornerRadius: 8)
+      Color.primary.opacity(isSelected ? 0.10 : 0.05), in: RoundedRectangle(cornerRadius: 10)
     )
+    .overlay(
+      RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+    )
+    .animation(.easeOut(duration: 0.12), value: hoveredID)
     .accessibilityElement(children: .contain)
     .accessibilityLabel("Split View, \(segments.count) tabs")
   }
 
-  private var showsTitles: Bool { segments.count <= 2 }
-
-  private func segmentView(_ segment: Segment) -> some View {
+  private func segmentView(_ segment: Segment, showsTitle: Bool) -> some View {
+    let raised = isSelected && focusedID == segment.id
     let hovered = hoveredID == segment.id
     return HStack(spacing: 6) {
-      Button { onSelect(segment.id) } label: {
-        HStack(spacing: 7) {
-          favicon(segment.favicon)
-          if showsTitles {
-            Text(segment.title).font(.system(size: 13)).lineLimit(1).truncationMode(.tail)
-          }
-          Spacer(minLength: 0)
-        }
-        .contentShape(Rectangle())
+      leadingControl(segment, hovered: hovered)
+      if showsTitle {
+        Text(segment.title)
+          .font(.system(size: 12.5, weight: raised ? .medium : .regular))
+          .foregroundStyle(raised ? .primary : .secondary)
+          .lineLimit(1)
+          .truncationMode(.tail)
       }
-      .buttonStyle(.plain)
-      .accessibilityLabel(segment.title)
-      .accessibilityAddTraits(isSelected && focusedID == segment.id ? .isSelected : [])
-      .accessibilityAction(named: Text("Close tab")) { onClose(segment.id) }
-
-      Button { onClose(segment.id) } label: {
-        Image(systemName: "xmark").font(.system(size: 9, weight: .medium))
-          .frame(width: 16, height: 16)
-          .contentShape(Rectangle())
-      }
-      .buttonStyle(.plain)
-      .opacity(hovered ? 1 : 0)
-      .allowsHitTesting(hovered)
-      .accessibilityLabel("Close \(segment.title)")
-      .help("Close \(segment.title)")
     }
-    .padding(.horizontal, 6)
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(
-      Color.primary.opacity(isSelected && focusedID == segment.id ? 0.08 : 0),
-      in: RoundedRectangle(cornerRadius: 6)
-    )
-    .help(segment.title)
+    .padding(.horizontal, 7)
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: showsTitle ? .leading : .center)
+    .background {
+      RoundedRectangle(cornerRadius: 7)
+        .fill(Color.primary.opacity(segmentFill(raised: raised, hovered: hovered)))
+        .shadow(color: .black.opacity(raised ? 0.18 : 0), radius: 2, y: 1)
+    }
+    .contentShape(RoundedRectangle(cornerRadius: 7))
+    .onTapGesture { onSelect(segment.id) }
     .onHover { inside in
       hoveredID = inside ? segment.id : hoveredID == segment.id ? nil : hoveredID
     }
+    .help(segment.title)
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(segment.title)
+    .accessibilityAddTraits(raised ? [.isButton, .isSelected] : .isButton)
+    .accessibilityAction { onSelect(segment.id) }
+    .accessibilityAction(named: Text("Close tab")) { onClose(segment.id) }
+  }
+
+  private func segmentFill(raised: Bool, hovered: Bool) -> Double {
+    if raised { return 0.14 }
+    return hovered ? 0.06 : 0
   }
 
   @ViewBuilder
-  private func favicon(_ image: NSImage?) -> some View {
-    if let image {
-      Image(nsImage: image).resizable().scaledToFit().frame(width: 16, height: 16)
+  private func leadingControl(_ segment: Segment, hovered: Bool) -> some View {
+    if hovered {
+      Button { onClose(segment.id) } label: {
+        Image(systemName: "xmark")
+          .font(.system(size: 9, weight: .bold))
+          .frame(width: 16, height: 16)
+          .background(Color.primary.opacity(0.12), in: Circle())
+          .contentShape(Circle())
+      }
+      .buttonStyle(.plain)
+      .help("Close \(segment.title)")
+      .accessibilityLabel("Close \(segment.title)")
+    } else if let favicon = segment.favicon {
+      Image(nsImage: favicon).resizable().scaledToFit().frame(width: 16, height: 16)
     } else {
       Image(systemName: "globe").font(.system(size: 12)).foregroundStyle(.secondary)
+        .frame(width: 16, height: 16)
     }
   }
 }

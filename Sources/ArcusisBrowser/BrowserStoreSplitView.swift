@@ -1,3 +1,4 @@
+import AppKit
 import BrowserCore
 import Foundation
 
@@ -82,6 +83,56 @@ extension BrowserStore {
     session.unsplitTab(id, in: session.selectedSpaceID)
     save()
   }
+
+  /// Records the drag so page drop zones can appear; cleared once the mouse button is up.
+  func beginTabDrag(_ tabID: UUID, spaceID: UUID, fromSplitPane: Bool) -> SidebarTransfer {
+    let drag = TabDrag(tabID: tabID, fromSplitPane: fromSplitPane)
+    if tabDrag != drag {
+      tabDrag = drag
+      Task { @MainActor [weak self] in
+        while NSEvent.pressedMouseButtons & 1 != 0 {
+          try? await Task.sleep(for: .milliseconds(80))
+        }
+        // AppKit delivers the drop just after the button comes up; let it land first.
+        try? await Task.sleep(for: .milliseconds(300))
+        if self?.tabDrag == drag { self?.tabDrag = nil }
+      }
+    }
+    return .tab(sessionID: dragSessionID, sourceSpaceID: spaceID, tabID: tabID)
+  }
+
+  /// Whether dropping the dragged tab beside `target` would change anything.
+  func canDropTab(beside target: UUID) -> Bool {
+    guard let drag = tabDrag, drag.tabID != target,
+      session.selectedSpace.tabs.contains(where: { $0.id == drag.tabID })
+    else { return false }
+    let split = session.selectedSpace.splits.first { $0.tabIDs.contains(target) }
+    let joining = split?.tabIDs.contains(drag.tabID) != true
+    return !joining || (split?.tabIDs.count ?? 1) < BrowserSplit.maxPanes
+  }
+
+  @discardableResult
+  func dropTab(beside target: UUID, edge: SplitEdge) -> Bool {
+    guard canDropTab(beside: target), let drag = tabDrag else { return false }
+    tabDrag = nil
+    guard session.addToSplit(drag.tabID, beside: target, edge: edge, in: session.selectedSpaceID)
+    else { return false }
+    save()
+    return true
+  }
+
+  /// A pane dragged into the sidebar leaves its split.
+  func separateDraggedPane(_ tabID: UUID) {
+    guard tabDrag?.tabID == tabID, tabDrag?.fromSplitPane == true else { return }
+    tabDrag = nil
+    session.unsplitTab(tabID, in: session.selectedSpaceID)
+  }
+}
+
+/// A tab being dragged from the sidebar or from a split pane's toolbar.
+struct TabDrag: Equatable {
+  let tabID: UUID
+  let fromSplitPane: Bool
 }
 
 struct SplitPlacement: Equatable {

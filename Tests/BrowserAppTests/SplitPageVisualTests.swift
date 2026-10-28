@@ -51,16 +51,18 @@ final class SplitPageVisualTests: XCTestCase {
 
   func testSidebarSplitRowCapture() async throws {
     try XCTSkipUnless(SidebarVisualCaptureSupport.enabled, "Visual capture requires explicit opt-in")
-    let segments = ["Docs", "Mail"].map { SidebarSplitRow.Segment(id: UUID(), title: $0, favicon: nil) }
+    let segments = ["Jira Board", "Google", "Naza"].map {
+      SidebarSplitRow.Segment(id: UUID(), title: $0, favicon: nil)
+    }
     let view = SidebarSplitRow(
-      segments: segments, focusedID: segments[0].id, isSelected: true,
+      segments: segments, focusedID: segments[1].id, isSelected: true,
       onSelect: { _ in }, onClose: { _ in }
     )
-    .padding(.horizontal, 20)
-    .frame(width: 300, height: 90)
-    .background(Color(red: 0.42, green: 0.40, blue: 0.55))
+    .padding(.horizontal, 12)
+    .frame(width: 260, height: 90)
+    .background(Color(red: 0.12, green: 0.12, blue: 0.13))
     let mounted = try MountedChromeSidebar(
-      view: view, size: NSSize(width: 300, height: 90), appearance: .darkAqua)
+      view: view, size: NSSize(width: 260, height: 90), appearance: .darkAqua)
     defer { mounted.close() }
     _ = try await mounted.capture(
       to: URL(fileURLWithPath: "/tmp/split-sidebar-row.png"), requiredText: [])

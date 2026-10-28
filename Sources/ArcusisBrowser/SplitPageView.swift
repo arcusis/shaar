@@ -50,51 +50,72 @@ struct SplitPageView<Pane: View, Header: View>: View {
 }
 
 /// Children of one group laid out along its axis, separated by draggable dividers.
+/// A drag resizes from local state and commits once on release, so the session is not
+/// rewritten on every frame.
 private struct SplitGroupView: View {
-  static let dividerThickness: CGFloat = 6
+  static let dividerThickness: CGFloat = 8
   static let minimumPane: CGFloat = 160
 
   let axis: SplitAxis
   let weights: [Double]
   let onWeightsChange: ([Double]) -> Void
   let child: (Int) -> AnyView
-  @State private var dragStart: [Double]?
+  @State private var liveWeights: [Double]?
+  @State private var activeDivider: Int?
+  @State private var hoveredDivider: Int?
 
   var body: some View {
+    let shown = liveWeights ?? weights
     GeometryReader { geometry in
       let total = axis == .columns ? geometry.size.width : geometry.size.height
-      let available = max(0, total - Self.dividerThickness * CGFloat(weights.count - 1))
+      let available = max(0, total - Self.dividerThickness * CGFloat(shown.count - 1))
       let layout =
         axis == .columns ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
       layout {
-        ForEach(weights.indices, id: \.self) { index in
+        ForEach(shown.indices, id: \.self) { index in
           if index > 0 { divider(after: index - 1, available: available) }
           child(index)
             .frame(
-              width: axis == .columns ? available * weights[index] : nil,
-              height: axis == .rows ? available * weights[index] : nil)
+              width: axis == .columns ? available * shown[index] : nil,
+              height: axis == .rows ? available * shown[index] : nil)
         }
       }
+      .transaction { if liveWeights != nil { $0.animation = nil } }
     }
   }
 
   private func divider(after index: Int, available: CGFloat) -> some View {
-    Color.clear
-      .frame(
-        width: axis == .columns ? Self.dividerThickness : nil,
-        height: axis == .rows ? Self.dividerThickness : nil)
-      .contentShape(Rectangle())
-      .pointerStyle(axis == .columns ? .columnResize : .rowResize)
-      .gesture(
-        DragGesture(minimumDistance: 1)
-          .onChanged { value in
-            let start = dragStart ?? weights
-            if dragStart == nil { dragStart = start }
-            let delta = axis == .columns ? value.translation.width : value.translation.height
-            onWeightsChange(Self.resized(start, at: index, by: delta, available: available))
-          }
-          .onEnded { _ in dragStart = nil })
-      .accessibilityLabel("Split divider")
+    let highlighted = activeDivider == index || hoveredDivider == index
+    return ZStack {
+      Capsule()
+        .fill(Color.primary.opacity(highlighted ? 0.35 : 0))
+        .frame(
+          width: axis == .columns ? 3 : 36,
+          height: axis == .rows ? 3 : 36)
+    }
+    .frame(
+      width: axis == .columns ? Self.dividerThickness : nil,
+      height: axis == .rows ? Self.dividerThickness : nil)
+    .frame(maxWidth: axis == .rows ? .infinity : nil, maxHeight: axis == .columns ? .infinity : nil)
+    .contentShape(Rectangle())
+    .pointerStyle(axis == .columns ? .columnResize : .rowResize)
+    .onHover { inside in
+      hoveredDivider = inside ? index : hoveredDivider == index ? nil : hoveredDivider
+    }
+    .gesture(
+      DragGesture(minimumDistance: 0, coordinateSpace: .global)
+        .onChanged { value in
+          activeDivider = index
+          let delta = axis == .columns ? value.translation.width : value.translation.height
+          liveWeights = Self.resized(weights, at: index, by: delta, available: available)
+        }
+        .onEnded { _ in
+          if let liveWeights { onWeightsChange(liveWeights) }
+          liveWeights = nil
+          activeDivider = nil
+        })
+    .animation(.easeOut(duration: 0.12), value: highlighted)
+    .accessibilityLabel("Split divider")
   }
 
   /// Moves the divider after `index`, keeping both neighbours above the minimum size.
@@ -116,6 +137,7 @@ struct BrowserSplitPageView: View {
   let store: BrowserStore
   let engine: BrowserEngine
   let split: BrowserSplit
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   var body: some View {
     SplitPageView(
@@ -129,11 +151,13 @@ struct BrowserSplitPageView: View {
         FailedPageView(store: store, failure: failure)
       } else if engine.pages[id] != nil {
         ChromiumPage(engine: engine, tabID: id, autofocus: id == store.session.selectedSpace.selectedTabID)
+          .overlay { SplitDropZone(store: store, targetID: id) }
       } else {
         ProgressView("Loading profile…")
       }
     }
     .padding(2)
+    .animation(reduceMotion ? nil : .smooth(duration: 0.28), value: split.root)
   }
 
   private func focus(_ id: UUID) {

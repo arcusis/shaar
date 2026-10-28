@@ -147,7 +147,6 @@ struct BrowserSidebar: View {
         Spacer(minLength: 0)
       }
       .font(.system(size: 13))
-      SidebarAddressField(store: store)
       profileFavorites
       VStack(alignment: .leading, spacing: 4) {
         HStack(spacing: 7) {

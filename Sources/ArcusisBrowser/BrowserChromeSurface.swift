@@ -37,6 +37,11 @@ struct BrowserChromeSurface: View {
         .frame(height: 24)
       pageActions
     }
+    .overlay {
+      PageAddressField(store: store)
+        .frame(maxWidth: 520)
+        .padding(.horizontal, 120)
+    }
     .padding(.horizontal, 6)
     .frame(height: 34)
     .background(SpaceChromeTint(space: store.session.selectedSpace).color(for: colorScheme))

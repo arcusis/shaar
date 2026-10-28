@@ -1,6 +1,7 @@
 import SwiftUI
 
-struct SidebarAddressField: View {
+/// Arc-style address shown centered in the page card's top bar.
+struct PageAddressField: View {
   @Bindable var store: BrowserStore
 
   var body: some View {
@@ -9,19 +10,17 @@ struct SidebarAddressField: View {
       store.showCommand()
       store.commandQuery = url?.absoluteString ?? ""
     } label: {
-      HStack(spacing: 8) {
-        Image(systemName: "magnifyingglass")
+      HStack(spacing: 6) {
+        Image(systemName: url == nil ? "magnifyingglass" : "link")
         Text(url?.host() ?? "Search or enter address")
           .lineLimit(1)
           .truncationMode(.middle)
-        Spacer(minLength: 0)
       }
-      .font(.system(size: 12))
+      .font(.system(size: 13))
       .foregroundStyle(.secondary)
       .padding(.horizontal, 10)
-      .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
-      .background(.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
-      .contentShape(RoundedRectangle(cornerRadius: 8))
+      .frame(height: 26)
+      .contentShape(Rectangle())
     }
     .accessibilityLabel("Search or enter address")
     .help(url?.absoluteString ?? "Search or enter address")

@@ -168,7 +168,7 @@ final class BrowserStore {
       closeLibraryDrawer()
       return true
     }
-    return showLibraryDrawer(.spaces)
+    return showLibraryDrawer(.downloads)
   }
 
   @discardableResult

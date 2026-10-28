@@ -23,42 +23,70 @@ struct BrowserWindow: View {
   var body: some View {
     ZStack(alignment: .top) {
       SpaceChromeTint(space: store.session.selectedSpace).color(for: colorScheme)
-      HStack(spacing: 0) {
-        Color.clear.frame(width: store.sidebarIsVisible ? BrowserChromeLayout.sidebarWidth : 0)
-        page
-          .padding(BrowserChromeLayout.pageCardInset)
-      }
-      if !store.sidebarIsVisible {
+      GeometryReader { geometry in
+        let libraryIsOpen = store.libraryDrawerSection != nil && store.canUseLibraryDrawer
+        let leadingWidth =
+          libraryIsOpen
+          ? BrowserChromeLayout.libraryWidth(
+            windowWidth: geometry.size.width, spaces: store.libraryDrawerSection == .spaces)
+          : (store.sidebarIsVisible ? BrowserChromeLayout.sidebarWidth : 0)
+        let pageWidth = max(
+          0,
+          geometry.size.width
+            - (store.sidebarIsVisible ? BrowserChromeLayout.sidebarWidth : 0))
         HStack(spacing: 0) {
-          Color.clear
-            .contentShape(Rectangle())
-            .frame(width: 6)
+          ZStack(alignment: .leading) {
+            if libraryIsOpen {
+              BrowserLibraryDrawer(store: store)
+                .transition(.opacity)
+            }
+          }
+          .animation(
+            reduceMotion ? .easeOut(duration: 0.12) : nil, value: store.libraryDrawerSection
+          )
+          .frame(width: leadingWidth)
+          page
+            .padding(BrowserChromeLayout.pageCardInset)
+            .frame(width: pageWidth)
+        }
+        .frame(width: geometry.size.width, height: geometry.size.height, alignment: .leading)
+        .clipped()
+        .animation(reduceMotion ? nil : .spring(duration: 0.3), value: store.libraryDrawerSection)
+      }
+      if store.libraryDrawerSection == nil {
+        if !store.sidebarIsVisible {
+          HStack(spacing: 0) {
+            Color.clear
+              .contentShape(Rectangle())
+              .frame(width: 6)
+              .onHover { inside in
+                if inside { sidebarVisibility.pointerEnteredEdge() }
+              }
+            Spacer(minLength: 0)
+          }
+        }
+        HStack(spacing: 0) {
+          BrowserSidebar(store: store)
+            .frame(width: BrowserChromeLayout.sidebarWidth)
+            .offset(x: sidebarVisibility == .hidden ? -BrowserChromeLayout.sidebarWidth : 0)
+            .allowsHitTesting(sidebarVisibility != .hidden)
+            .accessibilityHidden(sidebarVisibility == .hidden)
             .onHover { inside in
-              if inside { sidebarVisibility.pointerEnteredEdge() }
+              if !inside { sidebarVisibility.pointerLeftSidebar() }
             }
           Spacer(minLength: 0)
         }
-      }
-      HStack(spacing: 0) {
-        BrowserSidebar(store: store)
-          .frame(width: BrowserChromeLayout.sidebarWidth)
-          .offset(x: sidebarVisibility == .hidden ? -BrowserChromeLayout.sidebarWidth : 0)
-          .allowsHitTesting(sidebarVisibility != .hidden)
-          .accessibilityHidden(sidebarVisibility == .hidden)
-          .onHover { inside in
-            if !inside { sidebarVisibility.pointerLeftSidebar() }
-          }
-        Spacer(minLength: 0)
-      }
-      if store.sidebarIsVisible {
-        TitlebarSidebarToggle(store: store)
+        if store.sidebarIsVisible {
+          TitlebarSidebarToggle(store: store)
+        }
       }
       if store.commandIsOpen {
         Color.black.opacity(0.16)
           .ignoresSafeArea()
           .onTapGesture { store.dismissCommand() }
         GeometryReader { geometry in
-          let contentLeft = (store.sidebarIsVisible ? BrowserChromeLayout.sidebarWidth : 0)
+          let contentLeft =
+            (store.sidebarIsVisible ? BrowserChromeLayout.sidebarWidth : 0)
             + BrowserChromeLayout.pageCardInset
           let contentTop: CGFloat = store.pageFind == nil ? 45 : 95
           let initialContentFrame = CGRect(
@@ -89,28 +117,7 @@ struct BrowserWindow: View {
         PasswordFillOverlay(coordinator: coordinator)
           .zIndex(3)
       }
-      if store.libraryDrawerSection != nil, store.canUseLibraryDrawer {
-        GeometryReader { geometry in
-          let leading: CGFloat = 10
-          let availableWidth = max(0, geometry.size.width - leading - 20)
-          let isSpaces = store.libraryDrawerSection == .spaces
-          let width = isSpaces ? availableWidth : min(480, availableWidth)
-          let height = max(0, geometry.size.height - 32)
-          ZStack(alignment: .bottomLeading) {
-            Color.clear
-              .contentShape(Rectangle())
-              .onTapGesture { dismissLibraryDrawerAndFocusPage() }
-            BrowserLibraryDrawer(store: store)
-              .frame(width: width, height: height)
-              .padding(.leading, leading)
-              .padding(.bottom, 20)
-          }
-          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-        }
-        .allowsHitTesting(store.libraryDrawerSection != nil && store.canUseLibraryDrawer)
-        .transition(.opacity)
-        .zIndex(2)
-      }
+
     }
     .overlay { TabSwitcherPanel(store: store) }
     .coordinateSpace(name: "browser-window")

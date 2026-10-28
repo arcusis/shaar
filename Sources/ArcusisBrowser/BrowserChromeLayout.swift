@@ -2,6 +2,14 @@ import CoreGraphics
 
 enum BrowserChromeLayout {
   static let sidebarWidth: CGFloat = 240
+  static let libraryRailWidth: CGFloat = 88
+  static let libraryPanelWidth: CGFloat = 300
+  static let libraryPageSliver: CGFloat = 24
+
+  static func libraryWidth(windowWidth: CGFloat, spaces: Bool) -> CGFloat {
+    let available = max(0, windowWidth - libraryPageSliver)
+    return spaces ? available : min(libraryRailWidth + libraryPanelWidth, available)
+  }
   static let pageCardInset: CGFloat = 8
   static let pageCardRadius: CGFloat = 10
   /// Titlebar space after the traffic lights kept clickable for the sidebar toggle.

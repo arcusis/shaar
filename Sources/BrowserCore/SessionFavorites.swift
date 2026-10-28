@@ -1,6 +1,8 @@
 import Foundation
 
 extension BrowserSession {
+  public static let maximumFavoritesPerProfile = 16
+
   public var selectedFavorite: BrowserFavorite? {
     guard let id = selectedSpace.selectedFavoriteID else { return nil }
     return favorites.first { $0.id == id }
@@ -42,7 +44,8 @@ extension BrowserSession {
     profileID: UUID, originalURL: URL, title: String? = nil, id: UUID = UUID()
   ) -> UUID? {
     let cleanTitle = title?.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard profiles.contains(where: { $0.id == profileID }),
+    guard favorites(for: profileID).count < Self.maximumFavoritesPerProfile,
+      profiles.contains(where: { $0.id == profileID }),
       spaces.contains(where: { $0.profileID == profileID }),
       Self.isPersistableURL(originalURL), cleanTitle.map({ !$0.isEmpty }) ?? true,
       !favorites.contains(where: { $0.id == id })
@@ -61,6 +64,9 @@ extension BrowserSession {
     guard let spaceIndex = spaces.firstIndex(where: { $0.id == spaceID }),
       let tabIndex = spaces[spaceIndex].tabs.firstIndex(where: { $0.id == tabID })
     else { return nil }
+    guard favorites(for: spaces[spaceIndex].profileID).count < Self.maximumFavoritesPerProfile else {
+      return nil
+    }
     let source = spaces[spaceIndex].tabs[tabIndex]
     guard !favorites.contains(where: { $0.id == tabID }) else { return nil }
     let favoriteID = UUID()

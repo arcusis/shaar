@@ -10,6 +10,7 @@ final class BrowserWorkspaceStore {
   @ObservationIgnored private(set) var stores: [UUID: BrowserStore] = [:]
   @ObservationIgnored private let file: WorkspaceFile?
   @ObservationIgnored private var maySave = true
+  @ObservationIgnored private let snapshotScheduler = SnapshotSaveScheduler()
 
   init(file: WorkspaceFile? = nil, initialSession: BrowserSession = .fresh()) throws {
     self.file = file
@@ -79,11 +80,11 @@ final class BrowserWorkspaceStore {
 
   private func attach(_ window: WorkspaceWindow) {
     stores[window.id] = BrowserStore(managedSession: window.session, notice: storageNotice) {
-      [weak self] session in
+      [weak self] session, deferred in
       guard let self else {
         return ManagedSessionSaveResult(session: session, notice: "The workspace is unavailable.")
       }
-      return self.changed(window.id, session: session)
+      return self.changed(window.id, session: session, deferred: deferred)
     }
     stores[window.id]?.onSpaceRemovalImpact = { [weak self] id in
       let spaces =
@@ -110,7 +111,7 @@ final class BrowserWorkspaceStore {
     }
   }
 
-  private func changed(_ id: UUID, session: BrowserSession) -> ManagedSessionSaveResult {
+  private func changed(_ id: UUID, session: BrowserSession, deferred: Bool) -> ManagedSessionSaveResult {
     guard stores[id] != nil, let previous = workspace.window(id) else {
       return ManagedSessionSaveResult(
         session: session, notice: "This window is closed; its changes will not be saved.")
@@ -123,8 +124,12 @@ final class BrowserWorkspaceStore {
         session: previous.session,
         notice: "The window change was rejected. \(error.localizedDescription)")
     }
-    writeSnapshot()
-    broadcast(excluding: id)
+    if deferred {
+      scheduleSnapshot()
+    } else {
+      writeSnapshot()
+      broadcast(excluding: id)
+    }
     return ManagedSessionSaveResult(session: workspace.window(id)!.session, notice: storageNotice)
   }
 
@@ -132,12 +137,25 @@ final class BrowserWorkspaceStore {
   private func writeSnapshot() -> Bool {
     guard maySave else { return false }
     do {
-      try file?.save(workspace)
+      let snapshot = workspace
+      try snapshotScheduler.writeNow { try file?.save(snapshot) }
       storageNotice = nil
       return true
     } catch {
       storageNotice = "Window changes could not be saved. \(error.localizedDescription)"
       return false
+    }
+  }
+
+  private func scheduleSnapshot() {
+    guard maySave, let file else { return }
+    let snapshot = workspace
+    snapshotScheduler.schedule({ try file.save(snapshot) }) { [weak self] error in
+      guard let self else { return }
+      let notice = error.map { "Window changes could not be saved. \($0)" }
+      guard self.storageNotice != notice else { return }
+      self.storageNotice = notice
+      self.broadcast(excluding: nil)
     }
   }
 

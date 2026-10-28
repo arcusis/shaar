@@ -79,12 +79,16 @@ struct ProfileFavoritesGrid: View {
       count: Self.columnCount(for: favorites.count))
   }
 
-  private var tileHeight: CGFloat {
-    switch Self.columnCount(for: favorites.count) {
+  static func tileHeight(columns: Int) -> CGFloat {
+    switch columns {
     case 2: 54
     case 3: 48
     default: 44
     }
+  }
+
+  private var tileHeight: CGFloat {
+    Self.tileHeight(columns: Self.columnCount(for: favorites.count))
   }
 
   var body: some View {

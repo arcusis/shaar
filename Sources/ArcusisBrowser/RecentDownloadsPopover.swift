@@ -88,7 +88,7 @@ struct RecentDownloadsPopover: View {
         Text(item.filename)
           .font(.system(size: 14, weight: .medium))
           .lineLimit(1)
-          .truncationMode(.tail)
+          .truncationMode(.middle)
         if isPlainFinished {
           Text(relativeAge(item))
             .font(.system(size: 12))

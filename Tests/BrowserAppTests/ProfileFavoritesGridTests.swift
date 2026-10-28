@@ -63,7 +63,10 @@ final class ProfileFavoritesGridTests: XCTestCase {
       XCTAssertLessThanOrEqual(measurements.hostHeight, count == 0 ? 24 : 282)
       if count > 0 {
         XCTAssertNil(measurements.scrollViewHeight)
-        let expectedHeight = CGFloat((count + 3) / 4) * 62 + CGFloat((count - 1) / 4) * 8 + 2
+        let columns = ProfileFavoritesGrid.columnCount(for: count)
+        let rows = (count + columns - 1) / columns
+        let expectedHeight =
+          CGFloat(rows) * ProfileFavoritesGrid.tileHeight(columns: columns) + CGFloat(rows - 1) * 8 + 2
         XCTAssertEqual(measurements.fittingHeight, expectedHeight, accuracy: 1)
       }
       if includesLongValue {

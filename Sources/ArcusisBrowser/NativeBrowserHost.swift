@@ -105,6 +105,11 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   func restore() throws {
     guard !started else { throw WorkspaceError.invalidState }
     started = true
+    if presentation == .visible && UserDefaults.standard.bool(forKey: "settingsStartFresh") {
+      let oldWindows = workspace.workspace.windows.map(\.id)
+      _ = try workspace.newWindow(from: workspace.workspace.focusedWindowID)
+      for id in oldWindows { try workspace.removeWindow(id) }
+    }
     if workspace.workspace.windows.isEmpty { try workspace.newWindow() }
     workspace.persistSnapshot()
     let focused = workspace.workspace.focusedWindowID
@@ -130,7 +135,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       self?.prepareNewTab(tab, profile: profile, opener: opener)
     }
     settingsController = BrowserSettingsController(
-      workspace: workspace, preferences: preferences,
+      workspace: workspace, preferences: preferences, runtime: events.runtime,
       presentation: presentation == .visible ? .visible : .hiddenProbe)
     if presentation == .visible, let controller = settingsController?.nativeBitwardenController {
       for context in contexts.values { context.engine.attachPasswordFill(controller) }
@@ -194,6 +199,14 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   func perform(_ command: BrowserMenuCommand) {
     guard canPerform(command) else { return }
     if command == .quit {
+      if UserDefaults.standard.bool(forKey: "settingsWarnBeforeQuit") && presentation == .visible {
+        let alert = NSAlert()
+        alert.messageText = "Quit Arcusis Browser?"
+        alert.informativeText = "Your windows and tabs will be saved."
+        alert.addButton(withTitle: "Quit")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+      }
       flushGeometry()
       workspace.persistSnapshot()
       events.runtime.quit()
@@ -762,6 +775,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
           legacySessionURL: directory.appending(path: "session.json")))
       let preferences = BrowserPreferencesStore(
         fileURL: directory.appending(path: "preferences.json"))
+      BrowserSettingsAppearance.apply(UserDefaults.standard.string(forKey: "settingsAppearance") ?? "system")
       let runtime = try ARCChromiumRuntime(frameworkURL: frameworkURL)
       let host = NativeBrowserHost(
         events: BrowserRuntimeEvents(runtime: runtime), workspace: workspace,

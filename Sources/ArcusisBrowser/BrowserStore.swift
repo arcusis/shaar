@@ -878,25 +878,28 @@ final class BrowserStore {
   @discardableResult
   func createSpace(
     name: String, sharingProfile profileID: UUID?, tint: SpaceTint,
-    customRGB: SpaceRGBColor? = nil
+    customRGB: SpaceRGBColor? = nil, symbol: String? = nil
   ) -> Bool {
     guard
-      session.addSpace(
-        name: name, sharingProfile: profileID, tint: tint, customRGB: customRGB) != nil
+      let id = session.addSpace(
+        name: name, sharingProfile: profileID, tint: tint, customRGB: customRGB)
     else {
       return false
     }
+    if let symbol { _ = session.updateSpaceSymbol(id, symbol: symbol) }
     save()
     return true
   }
 
   @discardableResult
   func updateSpace(
-    _ id: UUID, name: String, tint: SpaceTint, customRGB: SpaceRGBColor? = nil
+    _ id: UUID, name: String, tint: SpaceTint, customRGB: SpaceRGBColor? = nil,
+    symbol: String? = nil
   ) -> Bool {
     guard session.updateSpace(id, name: name, tint: tint, customRGB: customRGB) else {
       return false
     }
+    if let symbol { _ = session.updateSpaceSymbol(id, symbol: symbol) }
     save()
     return true
   }

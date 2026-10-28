@@ -11,7 +11,7 @@ struct LibrarySpacesOverview: View {
   let onCreateSpace: () -> Void
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
-  @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+  @Environment(\.colorScheme) private var colorScheme
 
   init(
     store: BrowserStore,
@@ -30,48 +30,31 @@ struct LibrarySpacesOverview: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 14) {
-      HStack(spacing: 10) {
-        Image(systemName: "square.grid.2x2")
-          .font(.system(size: 17, weight: .medium))
-          .foregroundStyle(.secondary)
-        Text("Spaces")
-          .font(.title3.weight(.semibold))
-        Spacer(minLength: 0)
-        Text("\(visibleSpaces.count)")
-          .font(.caption.monospacedDigit())
-          .foregroundStyle(.secondary)
-          .accessibilityLabel("\(visibleSpaces.count) Spaces")
-      }
-      .padding(.horizontal, 20)
-      .padding(.top, 18)
-
-      GeometryReader { geometry in
-        let width = min(max(geometry.size.width * 0.5, 220), 260)
-        ScrollView(.horizontal) {
-          LazyHStack(spacing: 14) {
-            ForEach(visibleSpaces) { space in
-              spaceCard(space)
-                .frame(width: width, height: max(0, geometry.size.height - 4))
-            }
+    GeometryReader { geometry in
+      ScrollView(.horizontal) {
+        LazyHStack(spacing: 24) {
+          ForEach(visibleSpaces) { space in
+            spaceCard(space)
+              .id("\(space.id)-\(query)")
+              .frame(width: 280, height: max(0, geometry.size.height - 24))
           }
-          .padding(.horizontal, 20)
-          .padding(.vertical, 2)
+          Button(action: onCreateSpace) {
+            Label("New Space", systemImage: "plus")
+              .font(.system(size: 14, weight: .semibold))
+              .foregroundStyle(.secondary)
+              .frame(maxWidth: .infinity, maxHeight: .infinity)
+              .contentShape(Rectangle())
+          }
+          .buttonStyle(.plain)
+          .accessibilityLabel("New Space")
+          .frame(width: 280, height: max(0, geometry.size.height - 24))
+          .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 14))
         }
-        .scrollIndicators(.hidden)
-        .accessibilityLabel("Spaces")
+        .padding(.horizontal, 24)
+        .padding(.vertical, 8)
       }
-
-      HStack {
-        Spacer()
-        Button(action: onCreateSpace) {
-          Label("Add Space", systemImage: "plus")
-        }
-        .buttonStyle(.bordered)
-        .controlSize(.regular)
-        .padding(.trailing, 20)
-        .padding(.bottom, 14)
-      }
+      .scrollIndicators(.visible)
+      .accessibilityLabel("Spaces")
     }
     .background(Color(nsColor: .windowBackgroundColor))
   }
@@ -84,7 +67,7 @@ struct LibrarySpacesOverview: View {
     LibrarySpaceCardView(
       store: store, card: card, onSelectSpace: onSelectSpace,
       onSelectTab: onSelectTab, onEditSpace: onEditSpace,
-      reduceMotion: reduceMotion, reduceTransparency: reduceTransparency)
+      reduceMotion: reduceMotion, colorScheme: colorScheme)
   }
 }
 
@@ -95,7 +78,7 @@ private struct LibrarySpaceCardView: View {
   let onSelectTab: (UUID, UUID) -> Void
   let onEditSpace: (UUID) -> Void
   let reduceMotion: Bool
-  let reduceTransparency: Bool
+  let colorScheme: ColorScheme
 
   private var tint: Color { card.space.themeColor }
   private var isSelected: Bool { store.session.selectedSpaceID == card.space.id }
@@ -103,12 +86,10 @@ private struct LibrarySpaceCardView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       header
-      divider
       content
+      footer
     }
     .background(cardBackground)
-    .overlay(cardOutline)
-    .shadow(color: .black.opacity(reduceTransparency ? 0 : 0.07), radius: 10, y: 3)
     .accessibilityElement(children: .contain)
     .accessibilityAddTraits(isSelected ? .isSelected : [])
     .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: isSelected)
@@ -137,26 +118,40 @@ private struct LibrarySpaceCardView: View {
     }
   }
 
-  private var divider: some View {
-    Rectangle().fill(tint.opacity(0.24)).frame(height: 1).padding(.horizontal, 15)
+  private var footer: some View {
+    HStack {
+      Image(systemName: "arrow.up.and.down.and.arrow.left.and.right")
+        .accessibilityHidden(true)
+      Spacer()
+      Menu {
+        Button("Edit Space") {
+          guard
+            LibrarySpacesOverviewModel.canEdit(
+              spaceID: card.space.id, profileID: card.space.profileID, in: store.session)
+          else { return }
+          onEditSpace(card.space.id)
+        }
+      } label: {
+        Image(systemName: "ellipsis")
+      }
+      .menuStyle(.borderlessButton)
+      .fixedSize()
+      .accessibilityLabel("Space options for \(card.space.name)")
+    }
+    .font(.system(size: 13, weight: .medium))
+    .foregroundStyle(.secondary)
+    .padding(.horizontal, 16)
+    .padding(.vertical, 12)
   }
 
   private var cardBackground: some View {
-    RoundedRectangle(cornerRadius: 18)
+    RoundedRectangle(cornerRadius: 14)
       .fill(
-        reduceTransparency
-          ? AnyShapeStyle(Color(nsColor: .controlBackgroundColor))
-          : AnyShapeStyle(.regularMaterial)
-      )
-      .overlay(RoundedRectangle(cornerRadius: 18).fill(tint.opacity(0.35)))
+        isSelected
+          ? SpaceChromeTint(space: card.space).color(for: colorScheme)
+          : Color.primary.opacity(colorScheme == .dark ? 0.06 : 0.05))
   }
 
-  private var cardOutline: some View {
-    RoundedRectangle(cornerRadius: 18)
-      .strokeBorder(
-        isSelected ? tint.opacity(0.82) : Color.primary.opacity(0.08),
-        lineWidth: isSelected ? 1.5 : 1)
-  }
 }
 
 private struct LibrarySpaceCardHeader: View {
@@ -168,7 +163,7 @@ private struct LibrarySpaceCardHeader: View {
   let onEditSpace: (UUID) -> Void
 
   var body: some View {
-    HStack(alignment: .top, spacing: 11) {
+    HStack(spacing: 8) {
       Button {
         guard
           LibrarySpacesOverviewModel.canSelectSpace(
@@ -176,35 +171,26 @@ private struct LibrarySpaceCardHeader: View {
         else { return }
         onSelectSpace(space.id)
       } label: {
-        HStack(alignment: .top, spacing: 11) {
+        HStack(spacing: 8) {
           Image(systemName: space.symbol)
-            .font(.system(size: 19, weight: .medium))
-            .foregroundStyle(tint)
-            .frame(width: 36, height: 36)
-            .background(tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+            .frame(width: 16)
             .accessibilityHidden(true)
-          VStack(alignment: .leading, spacing: 5) {
-            Text(space.name)
-              .font(.headline)
-              .lineLimit(2)
-              .fixedSize(horizontal: false, vertical: true)
-              .accessibilityLabel("Space: \(space.name)")
-            Text(profileName)
-              .font(.caption)
-              .foregroundStyle(.secondary)
-              .lineLimit(1)
-              .padding(.horizontal, 7)
-              .padding(.vertical, 3)
-              .background(.quaternary, in: Capsule())
-              .accessibilityLabel("Profile: \(profileName)")
-          }
+          Text(space.name)
+            .font(.system(size: 14, weight: .semibold))
+            .lineLimit(1)
+          Spacer(minLength: 0)
+          Label(profileName, systemImage: "person.fill")
+            .font(.system(size: 10, weight: .medium))
+            .lineLimit(1)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
+            .background(Color.primary.opacity(0.08), in: Capsule())
         }
         .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
       .help("Select \(space.name)")
       .accessibilityLabel("Select Space \(space.name), Profile \(profileName)")
-      Spacer(minLength: 2)
       Button {
         guard
           LibrarySpacesOverviewModel.canEdit(
@@ -212,18 +198,19 @@ private struct LibrarySpaceCardHeader: View {
         else { return }
         onEditSpace(space.id)
       } label: {
-        Image(systemName: "ellipsis")
-          .font(.system(size: 14, weight: .semibold))
-          .frame(width: 30, height: 30)
+        Image(systemName: "pencil")
+          .font(.system(size: 12))
+          .frame(width: 22, height: 24)
           .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
+      .foregroundStyle(.secondary)
       .help("Edit \(space.name)")
       .accessibilityLabel("Edit \(space.name)")
     }
-    .padding(.horizontal, 15)
-    .padding(.top, 15)
-    .padding(.bottom, 12)
+    .padding(.horizontal, 16)
+    .padding(.top, 16)
+    .padding(.bottom, 10)
   }
 }
 
@@ -232,11 +219,19 @@ private struct LibrarySpaceItemsView: View {
   let card: LibrarySpaceCard
   let tint: Color
   let onSelectTab: (UUID, UUID) -> Void
+  @State private var collapsedFolders: Set<UUID> = []
 
   var body: some View {
     ScrollView(.vertical) {
       LazyVStack(alignment: .leading, spacing: 3) {
-        ForEach(card.items) { item in row(item) }
+        ForEach(visibleItems) { item in
+          if case .tab(let tab, _) = item, !tab.isPinned,
+            item.id == firstTodayID
+          {
+            Divider().padding(.vertical, 5)
+          }
+          row(item)
+        }
       }
       .padding(.horizontal, 9)
       .padding(.vertical, 8)
@@ -245,22 +240,56 @@ private struct LibrarySpaceItemsView: View {
     .accessibilityLabel("Tabs and folders in \(card.space.name)")
   }
 
+  private var firstTodayID: String? {
+    card.items.first { item in
+      if case .tab(let tab, _) = item { return !tab.isPinned }
+      return false
+    }?.id
+  }
+
+  private var visibleItems: [LibrarySpaceCardItem] {
+    var hiddenDepth: Int?
+    return card.items.filter { item in
+      let depth: Int
+      switch item {
+      case .folder(_, let value), .tab(_, let value): depth = value
+      }
+      if let hidden = hiddenDepth {
+        if depth > hidden { return false }
+        hiddenDepth = nil
+      }
+      if case .folder(let folder, _) = item, collapsedFolders.contains(folder.id) {
+        hiddenDepth = depth
+      }
+      return true
+    }
+  }
+
   @ViewBuilder
   private func row(_ item: LibrarySpaceCardItem) -> some View {
     switch item {
     case .folder(let folder, let depth):
-      HStack(spacing: 8) {
-        Image(systemName: "folder.fill").foregroundStyle(tint).frame(width: 16)
-        Text(folder.name)
-          .font(.system(size: 12, weight: .semibold))
-          .lineLimit(2)
-          .fixedSize(horizontal: false, vertical: true)
-        Spacer(minLength: 0)
+      Button {
+        if collapsedFolders.contains(folder.id) {
+          collapsedFolders.remove(folder.id)
+        } else {
+          collapsedFolders.insert(folder.id)
+        }
+      } label: {
+        HStack(spacing: 8) {
+          Image(systemName: collapsedFolders.contains(folder.id) ? "folder" : "folder.fill")
+            .frame(width: 16)
+          Text(folder.name).font(.system(size: 14, weight: .medium)).lineLimit(1)
+          Spacer(minLength: 0)
+        }
+        .padding(.leading, min(CGFloat(depth) * 13, 52))
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+        .contentShape(Rectangle())
       }
-      .padding(.leading, min(CGFloat(depth) * 13, 52))
-      .padding(.horizontal, 9)
-      .padding(.vertical, 7)
+      .buttonStyle(.plain)
       .accessibilityLabel("Folder: \(folder.name)")
+      .accessibilityValue(collapsedFolders.contains(folder.id) ? "Collapsed" : "Expanded")
     case .tab(let tab, let depth):
       tabButton(tab, depth: depth)
     }
@@ -290,7 +319,7 @@ private struct LibrarySpaceItemsView: View {
             tab.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
               ? tab.url.absoluteString : tab.title
           )
-          .font(.system(size: 12)).lineLimit(1)
+          .font(.system(size: 14)).lineLimit(1)
         }
         Spacer(minLength: 0)
         if selected {

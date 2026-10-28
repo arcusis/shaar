@@ -221,9 +221,9 @@ struct BrowserSidebar: View {
           store.spaceEditor = .create
         } label: {
           Image(systemName: "plus")
-            .font(.system(size: 13, weight: .medium))
+            .font(.system(size: 16))
+            .foregroundStyle(.white.opacity(0.55))
             .frame(width: 30, height: 30)
-            .background(.white.opacity(0.2), in: RoundedRectangle(cornerRadius: 8))
         }
         .help("Create a space")
         .accessibilityLabel("Add Space")
@@ -365,7 +365,7 @@ struct BrowserSidebar: View {
     ScrollViewReader { spaceScroll in
       GeometryReader { geometry in
         ScrollView(.horizontal) {
-          HStack(spacing: 6) {
+          HStack(spacing: 0) {
             ForEach(store.session.spaces) { space in
               spaceSelector(space)
             }
@@ -395,14 +395,19 @@ struct BrowserSidebar: View {
     Button {
       store.perform(.space(space.id))
     } label: {
-      Image(systemName: space.symbol)
-        .font(.system(size: 14))
-        .frame(width: 32, height: 30)
-        .foregroundStyle(space.id == store.session.selectedSpaceID ? space.themeColor : Color.primary)
-        .background(
-          .white.opacity(space.id == store.session.selectedSpaceID ? 0.5 : 0),
-          in: RoundedRectangle(cornerRadius: 8)
-        )
+      Group {
+        if space.id == store.session.selectedSpaceID {
+          Image(systemName: space.symbol)
+            .font(.system(size: 14))
+            .foregroundStyle(.white)
+        } else {
+          Circle()
+            .fill(.white.opacity(0.35))
+            .frame(width: 6, height: 6)
+        }
+      }
+      .frame(width: 22, height: 30)
+      .contentShape(Rectangle())
     }
     .help(space.name)
     .accessibilityLabel("Switch to \(space.name)")
@@ -482,37 +487,19 @@ struct BrowserSidebar: View {
     let profileID = store.session.selectedSpace.profileID
     let downloads = store.engine?.downloads
     let epoch = recentDownloads.epoch
-    return HStack(spacing: 2) {
-      Button(action: toggleLibraryDrawerFromButton) {
-        Image(systemName: "books.vertical")
-          .frame(width: 30, height: 30)
-      }
-      .contextMenu {
-        Button("Bookmarks…") { store.showLibrary(.bookmarks) }
-        Button("History…") { store.showLibrary(.history) }
-      }
-      .accessibilityLabel("Library")
-      .help("Library")
-
-      Button {
-        guard downloadsProfileIsCurrent(profileID), recentDownloads.epoch == epoch,
-          store.libraryDrawerSection == nil,
-          !store.commandIsOpen, store.sheet == nil
-        else { return }
-        recentDownloadsCloseTask?.cancel()
-        recentDownloads.toggle(profileID: profileID, epoch: epoch)
-      } label: {
-        Image(systemName: "arrow.down.circle")
-          .frame(width: 24, height: 30)
-      }
-      .disabled(previewRecentDownloads == nil && downloads == nil)
-      .accessibilityLabel("Recent downloads")
-      .accessibilityHint(
-        recentDownloads.isPinned
-          ? "Hide recent downloads" : "Show recent downloads for this profile"
-      )
-      .help("Recent downloads")
+    return Button(action: toggleLibraryDrawerFromButton) {
+      Image(systemName: "archivebox")
+        .font(.system(size: 16))
+        .foregroundStyle(.white.opacity(0.55))
+        .frame(width: 30, height: 30)
     }
+    .contextMenu {
+      Button("Bookmarks…") { store.showLibrary(.bookmarks) }
+      Button("History…") { store.showLibrary(.history) }
+    }
+    .accessibilityLabel("Library")
+    .accessibilityHint("Open Library; hover to see recent downloads")
+    .help("Library")
     .buttonStyle(.plain)
     .onHover {
       recentDownloadsHoverChanged(.anchor, inside: $0, profileID: profileID, epoch: epoch)

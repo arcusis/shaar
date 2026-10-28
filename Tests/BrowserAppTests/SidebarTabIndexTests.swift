@@ -6,6 +6,21 @@ import Testing
 
 @Suite
 struct SidebarTabIndexTests {
+  @Test func dropSlotsStayWithinTargetGroupAndSkipMovingTab() {
+    let folder = uuid(100)
+    let index = SidebarTabIndex(tabs: [
+      tab(1, pinned: true, folderID: folder), tab(2),
+      tab(3, pinned: true, folderID: folder), tab(4, pinned: true),
+      tab(5, pinned: true, folderID: folder),
+    ])
+    #expect(index.dropSlot(targetID: uuid(1), sourceID: uuid(5), after: false) == .before(uuid(1)))
+    #expect(index.dropSlot(targetID: uuid(1), sourceID: uuid(3), after: true) == .before(uuid(5)))
+    #expect(index.dropSlot(targetID: uuid(3), sourceID: uuid(5), after: true) == .end)
+    #expect(index.dropSlot(targetID: uuid(2), sourceID: uuid(1), after: true) == .end)
+    #expect(index.dropSlot(targetID: uuid(1), sourceID: uuid(1), after: false) == nil)
+    #expect(index.dropSlot(targetID: uuid(99), sourceID: uuid(1), after: true) == nil)
+  }
+
   @Test func mixedGroupsKeepOriginalSiblingOrderAndEdges() {
     let folderA = uuid(100)
     let folderB = uuid(101)

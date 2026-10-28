@@ -22,6 +22,7 @@ struct BrowserChromeSurface: View {
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+  @Environment(\.colorScheme) private var colorScheme
   @Environment(\.browserChromeAccessibilityOverrides) private var accessibilityOverrides
 
   var body: some View {
@@ -45,6 +46,11 @@ struct BrowserChromeSurface: View {
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     .frame(height: 34)
+    .background(SpaceChromeTint(space: store.session.selectedSpace).color(for: colorScheme))
+    .animation(
+      (accessibilityOverrides.reduceMotion ?? reduceMotion) ? nil : .easeOut(duration: 0.18),
+      value: SpaceChromeTint(space: store.session.selectedSpace)
+    )
     .buttonStyle(.plain)
   }
 

@@ -15,12 +15,13 @@ extension SpaceTint {
 struct BrowserWindow: View {
   @Bindable var store: BrowserStore
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.colorScheme) private var colorScheme
   @FocusState private var pageIsFocused: Bool
   @State private var webContentFrame: CGRect = .zero
 
   var body: some View {
     ZStack(alignment: .top) {
-      Color(nsColor: .windowBackgroundColor)
+      SpaceChromeTint(space: store.session.selectedSpace).color(for: colorScheme)
       HStack(spacing: 0) {
         if store.sidebarIsVisible {
           BrowserSidebar(store: store)
@@ -96,6 +97,10 @@ struct BrowserWindow: View {
     .frame(minWidth: 760, minHeight: 520)
     .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: store.commandIsOpen)
     .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: store.sidebarIsVisible)
+    .animation(
+      reduceMotion ? nil : .easeOut(duration: 0.18),
+      value: SpaceChromeTint(space: store.session.selectedSpace)
+    )
     .sheet(
       item: store.engine?.presentsNativePanels == false ? .constant(nil) : $store.sheet,
       onDismiss: { store.sheetDidDismiss() }

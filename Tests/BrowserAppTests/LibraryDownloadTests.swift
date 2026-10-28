@@ -146,7 +146,8 @@ struct LibraryDownloadTests {
         record(olderID, filename: "Yesterday.pdf", start: start - 86_400),
       ], profileID: profile)
 
-    let groups = LibraryDownloadQuery.dateGroups(model.items(in: profile), calendar: calendar)
+    let groups = LibraryDownloadQuery.dateGroups(
+      model.items(in: profile), calendar: calendar, now: base)
     #expect(groups.count == 2)
     #expect(groups[0].items.map(\.id) == [newestID, sameDayID])
     #expect(groups[1].items.map(\.id) == [olderID])
@@ -159,26 +160,35 @@ struct LibraryDownloadTests {
       LibraryDownloadQuery.filtered(
         model.items(in: profile), search: "example.test", profileID: profile,
         currentProfileID: profile, downloads: model
-      ).count == 3)
+      ).isEmpty)
   }
 
-  @Test func statusFiltersMatchProgressAndSafeCompletion() {
+  @Test func fileTypeFiltersAndRelativeDates() throws {
     let profile = UUID()
     let model = DownloadsModel()
-    let downloadingID = UUID().uuidString.lowercased()
-    let finishedID = UUID().uuidString.lowercased()
-    let blockedID = UUID().uuidString.lowercased()
     model.restore(
       [
-        record(downloadingID, filename: "active.zip", state: "downloading"),
-        record(finishedID, filename: "done.zip"),
-        record(blockedID, filename: "blocked.zip", dangerous: true),
+        record(filename: "photo.png"), record(filename: "clip.mp4"),
+        record(filename: "report.pdf"), record(filename: "bundle.zip"),
       ], profileID: profile)
     let items = model.items(in: profile)
-    #expect(items.filter(LibraryDownloadStatusFilter.all.includes).count == 3)
     #expect(
-      items.filter(LibraryDownloadStatusFilter.inProgress.includes).map(\.id) == [downloadingID])
-    #expect(items.filter(LibraryDownloadStatusFilter.complete.includes).map(\.id) == [finishedID])
+      items.filter(LibraryDownloadTypeFilter.images.includes).map(\.filename) == ["photo.png"])
+    #expect(items.filter(LibraryDownloadTypeFilter.videos.includes).map(\.filename) == ["clip.mp4"])
+    #expect(
+      items.filter(LibraryDownloadTypeFilter.documents.includes).map(\.filename) == ["report.pdf"])
+    #expect(
+      items.filter(LibraryDownloadTypeFilter.archives.includes).map(\.filename) == ["bundle.zip"])
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    for (days, label) in [
+      (0, "Today"), (1, "Yesterday"), (3, "3 days ago"),
+      (7, "1 week ago"), (60, "2 months ago"),
+    ] {
+      let date = try #require(calendar.date(byAdding: .day, value: -days, to: now))
+      #expect(LibraryDownloadQuery.relativeDay(date, now: now, calendar: calendar) == label)
+    }
   }
 
   @Test func capturesActualDownloadsAndMediaComponentsAcrossStates() async throws {
@@ -216,12 +226,12 @@ struct LibraryDownloadTests {
     try await capture(
       LibraryDownloadsView(
         store: store, profileID: currentProfile.id, mediaOnly: false, downloads: downloads),
-      size: NSSize(width: 760, height: 520), appearance: .aqua,
+      size: NSSize(width: 300, height: 520), appearance: .aqua,
       to: captureRoot.appending(path: "populated-downloads.png"))
     let mediaCapture = try await capture(
       LibraryDownloadsView(
         store: store, profileID: currentProfile.id, mediaOnly: true, downloads: downloads),
-      size: NSSize(width: 760, height: 520), appearance: .aqua,
+      size: NSSize(width: 300, height: 520), appearance: .aqua,
       to: captureRoot.appending(path: "populated-media.png"),
       ready: { blueThumbnailSampleCount($0) > 200 })
     let blueSamples = blueThumbnailSampleCount(mediaCapture)
@@ -229,14 +239,14 @@ struct LibraryDownloadTests {
     try await capture(
       LibraryDownloadsView(
         store: store, profileID: currentProfile.id, mediaOnly: false, downloads: DownloadsModel()),
-      size: NSSize(width: 760, height: 520), appearance: .aqua,
+      size: NSSize(width: 300, height: 520), appearance: .aqua,
       to: captureRoot.appending(path: "empty-downloads.png"))
     try await capture(
       LibraryDownloadsView(
         store: store, profileID: currentProfile.id, mediaOnly: true, downloads: downloads
       )
       .environment(\.colorScheme, .dark),
-      size: NSSize(width: 760, height: 520), appearance: .darkAqua,
+      size: NSSize(width: 300, height: 520), appearance: .darkAqua,
       to: captureRoot.appending(path: "dark-media.png"), settleMilliseconds: 1200)
     try await capture(
       LibraryDownloadsView(
@@ -248,7 +258,7 @@ struct LibraryDownloadTests {
     try await capture(
       LibraryDownloadsView(
         store: store, profileID: currentProfile.id, mediaOnly: true, downloads: downloads),
-      size: NSSize(width: 760, height: 520), appearance: .aqua,
+      size: NSSize(width: 300, height: 520), appearance: .aqua,
       to: captureRoot.appending(path: "stale-profile.png"))
 
     for name in [

@@ -143,30 +143,7 @@ struct BrowserSidebar: View {
           Image(systemName: "sidebar.left")
         }
         .help("Hide sidebar (Command-S)")
-        if let engine = store.engine, let id = store.session.selectedPage?.tab.id {
-          let state = engine.pages[id]
-          Button {
-            engine.runtime.goBack(inTabID: id.uuidString)
-          } label: {
-            Image(systemName: "chevron.left")
-          }
-          .disabled(state?.canGoBack != true)
-          .help("Back")
-          Button {
-            engine.runtime.goForward(inTabID: id.uuidString)
-          } label: {
-            Image(systemName: "chevron.right")
-          }
-          .disabled(state?.canGoForward != true)
-          .help("Forward")
-          Button {
-            store.reloadCurrentPage()
-          } label: {
-            Image(systemName: "arrow.clockwise")
-          }
-          .disabled(!store.canReloadCurrentPage)
-          .help("Reload (Command-R)")
-        }
+        .accessibilityLabel("Hide sidebar (Command-S)")
         Spacer(minLength: 0)
       }
       .font(.system(size: 13))

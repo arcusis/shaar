@@ -7,12 +7,9 @@ import XCTest
 
 @MainActor
 final class PageChromeLayoutTests: XCTestCase {
-  func testMinimumPageWidthKeepsCenteredAddressAndDraggableGaps() {
-    XCTAssertEqual(BrowserChromeSurfaceLayout.laneWidth, 123)
-    XCTAssertEqual(BrowserChromeSurfaceLayout.addressWidth(in: 510), 236)
-    XCTAssertEqual(BrowserChromeSurfaceLayout.dragGapWidth(in: 510), 14)
-    XCTAssertGreaterThanOrEqual(BrowserChromeSurfaceLayout.dragGapWidth(in: 510), 12)
-    XCTAssertEqual(BrowserChromeSurfaceLayout.addressWidth(in: 350), 80)
+  func testPageCardUsesArcInsetsAndCornerRadius() {
+    XCTAssertEqual(BrowserChromeLayout.pageCardInset, 8)
+    XCTAssertEqual(BrowserChromeLayout.pageCardRadius, 10)
   }
 
   func testCapturesActualBrowserWindowChromeAcrossAccessibilityModes() async throws {

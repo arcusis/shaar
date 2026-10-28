@@ -26,10 +26,7 @@ struct BrowserWindow: View {
       HStack(spacing: 0) {
         Color.clear.frame(width: store.sidebarIsVisible ? BrowserChromeLayout.sidebarWidth : 0)
         page
-          .padding(.top, 10)
-          .padding(.trailing, 10)
-          .padding(.bottom, 10)
-          .padding(.leading, store.sidebarIsVisible ? 0 : 10)
+          .padding(BrowserChromeLayout.pageCardInset)
       }
       if !store.sidebarIsVisible {
         HStack(spacing: 0) {
@@ -58,12 +55,13 @@ struct BrowserWindow: View {
           .ignoresSafeArea()
           .onTapGesture { store.dismissCommand() }
         GeometryReader { geometry in
-          let contentLeft = store.sidebarIsVisible ? BrowserChromeLayout.sidebarWidth : 10
+          let contentLeft = (store.sidebarIsVisible ? BrowserChromeLayout.sidebarWidth : 0)
+            + BrowserChromeLayout.pageCardInset
           let contentTop: CGFloat = store.pageFind == nil ? 45 : 95
           let initialContentFrame = CGRect(
             x: contentLeft, y: contentTop,
-            width: max(0, geometry.size.width - contentLeft - 10),
-            height: max(0, geometry.size.height - contentTop - 10))
+            width: max(0, geometry.size.width - contentLeft - BrowserChromeLayout.pageCardInset),
+            height: max(0, geometry.size.height - contentTop - BrowserChromeLayout.pageCardInset))
           let frame = BrowserChromeLayout.commandPanelFrame(
             in: webContentFrame.isEmpty ? initialContentFrame : webContentFrame,
             resultCount: store.results.count
@@ -258,8 +256,11 @@ struct BrowserWindow: View {
       }
     }
     .background(Color(nsColor: .textBackgroundColor))
-    .clipShape(RoundedRectangle(cornerRadius: 13))
-    .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(.black.opacity(0.07)))
+    .clipShape(RoundedRectangle(cornerRadius: BrowserChromeLayout.pageCardRadius))
+    .overlay(
+      RoundedRectangle(cornerRadius: BrowserChromeLayout.pageCardRadius)
+        .strokeBorder(.black.opacity(0.07))
+    )
     .shadow(color: .black.opacity(0.08), radius: 8, y: 3)
   }
 

@@ -2,6 +2,8 @@ import CoreGraphics
 
 enum BrowserChromeLayout {
   static let sidebarWidth: CGFloat = 240
+  static let pageCardInset: CGFloat = 8
+  static let pageCardRadius: CGFloat = 10
   static let preferredCommandWidth: CGFloat = 580
   static let commandChromeHeight: CGFloat = 112
   static let preferredResultsHeight: CGFloat = 330

@@ -21,30 +21,23 @@ struct BrowserChromeSurface: View {
   let engine: BrowserEngine?
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
-  @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.browserChromeAccessibilityOverrides) private var accessibilityOverrides
 
   var body: some View {
-    GeometryReader { geometry in
-      let addressWidth = BrowserChromeSurfaceLayout.addressWidth(in: geometry.size.width)
-
-      HStack(spacing: 0) {
-        leadingLane
-          .frame(width: BrowserChromeSurfaceLayout.laneWidth, alignment: .leading)
-        WindowDragRegion()
-          .frame(maxWidth: .infinity)
-          .frame(height: 24)
-        addressControl
-          .frame(width: addressWidth, height: 24)
-        WindowDragRegion()
-          .frame(maxWidth: .infinity)
-          .frame(height: 24)
-        trailingLane
-          .frame(width: BrowserChromeSurfaceLayout.laneWidth, alignment: .trailing)
+    HStack(spacing: 4) {
+      if !store.sidebarIsVisible {
+        chromeButton("sidebar.left", label: "Toggle sidebar (Command-S)") {
+          store.sidebarIsVisible.toggle()
+        }
       }
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      PageNavigationButtons(store: store, engine: engine)
+      WindowDragRegion()
+        .frame(maxWidth: .infinity)
+        .frame(height: 24)
+      pageActions
     }
+    .padding(.horizontal, 6)
     .frame(height: 34)
     .background(SpaceChromeTint(space: store.session.selectedSpace).color(for: colorScheme))
     .animation(
@@ -52,92 +45,6 @@ struct BrowserChromeSurface: View {
       value: SpaceChromeTint(space: store.session.selectedSpace)
     )
     .buttonStyle(.plain)
-  }
-
-  @ViewBuilder
-  private var leadingLane: some View {
-    if store.sidebarIsVisible {
-      WindowDragRegion()
-        .frame(maxWidth: .infinity)
-        .frame(height: 24)
-    } else {
-      navigationControls
-    }
-  }
-
-  @ViewBuilder
-  private var trailingLane: some View {
-    if engine == nil {
-      WindowDragRegion()
-        .frame(maxWidth: .infinity)
-        .frame(height: 24)
-    } else {
-      pageActions
-    }
-  }
-
-  private var navigationControls: some View {
-    HStack(spacing: 4) {
-      chromeButton("sidebar.left", label: "Toggle sidebar (Command-S)") {
-        store.sidebarIsVisible.toggle()
-      }
-
-      if let engine, let id = store.session.selectedPage?.tab.id {
-        let state = engine.pages[id]
-        chromeButton("chevron.left", label: "Back") {
-          engine.runtime.goBack(inTabID: id.uuidString)
-        }
-        .disabled(state?.canGoBack != true)
-
-        chromeButton("chevron.right", label: "Forward") {
-          engine.runtime.goForward(inTabID: id.uuidString)
-        }
-        .disabled(state?.canGoForward != true)
-
-        chromeButton("arrow.clockwise", label: "Reload (Command-R)") {
-          store.reloadCurrentPage()
-        }
-        .disabled(!store.canReloadCurrentPage)
-      }
-    }
-  }
-
-  private var addressControl: some View {
-    let host = store.session.selectedPage?.tab.url.host()
-    let title = host ?? "Search or enter address"
-    let shouldReduceTransparency = accessibilityOverrides.reduceTransparency ?? reduceTransparency
-    let shouldReduceMotion = accessibilityOverrides.reduceMotion ?? reduceMotion
-
-    return Button {
-      store.showCommand()
-    } label: {
-      HStack(spacing: 7) {
-        Image(systemName: "magnifyingglass")
-          .font(.system(size: 10, weight: .medium))
-        Text(title)
-          .font(.system(size: 12, weight: .medium))
-          .lineLimit(1)
-          .truncationMode(.middle)
-          .contentTransition(.opacity)
-      }
-      .foregroundStyle(.secondary)
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .background {
-        if shouldReduceTransparency {
-          Capsule().fill(Color(nsColor: .controlBackgroundColor))
-            .overlay(Capsule().strokeBorder(.quaternary.opacity(0.75)))
-        } else {
-          Capsule()
-            .fill(.clear)
-            .glassEffect(.regular, in: Capsule())
-        }
-      }
-      .contentShape(Capsule())
-    }
-    .buttonStyle(.plain)
-    .help("Search or enter address (Command-L)")
-    .accessibilityLabel(host.map { "Address: \($0)" } ?? "Search or enter address")
-    .animation(shouldReduceMotion ? nil : .easeOut(duration: 0.14), value: title)
   }
 
   @ViewBuilder
@@ -166,27 +73,6 @@ struct BrowserChromeSurface: View {
     }
     .help(label)
     .accessibilityLabel(label)
-  }
-}
-
-enum BrowserChromeSurfaceLayout {
-  static let laneWidth: CGFloat = 123
-  static let minimumDragGap: CGFloat = 12
-  static let minimumAddressWidth: CGFloat = 80
-  static let maximumAddressWidth: CGFloat = 236
-
-  static func addressWidth(in availableWidth: CGFloat) -> CGFloat {
-    min(
-      maximumAddressWidth,
-      max(
-        minimumAddressWidth,
-        availableWidth - laneWidth * 2 - minimumDragGap * 2
-      )
-    )
-  }
-
-  static func dragGapWidth(in availableWidth: CGFloat) -> CGFloat {
-    (availableWidth - laneWidth * 2 - addressWidth(in: availableWidth)) / 2
   }
 }
 

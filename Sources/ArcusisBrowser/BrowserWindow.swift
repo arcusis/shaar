@@ -111,6 +111,7 @@ struct BrowserWindow: View {
         .zIndex(2)
       }
     }
+    .overlay { TabSwitcherPanel(store: store) }
     .coordinateSpace(name: "browser-window")
     .onPreferenceChange(WebContentFramePreferenceKey.self) { webContentFrame = $0 }
     .frame(minWidth: 760, minHeight: 520)

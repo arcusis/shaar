@@ -22,13 +22,55 @@ extension BrowserStore {
     splitTabRecency.removeAll { !existing.contains($0) }
   }
 
+  /// Adds the most recently used other tab beside the selected one.
   func splitSelectedTab() {
     guard session.selectedSpace.selectedFavoriteID == nil,
       let selected = session.selectedSpace.selectedTabID else { return }
-    let ids = Set(session.selectedSpace.tabs.map(\.id))
-    let recent = splitTabRecency.reversed().first { $0 != selected && ids.contains($0) }
-    guard let other = recent ?? session.selectedSpace.tabs.last(where: { $0.id != selected })?.id else { return }
-    splitTabs(selected, other)
+    let inSplit = Set(selectedSplit?.tabIDs ?? [selected])
+    let ids = Set(session.selectedSpace.tabs.map(\.id)).subtracting(inSplit)
+    let recent = splitTabRecency.reversed().first { ids.contains($0) }
+    guard let other = recent ?? session.selectedSpace.tabs.last(where: { ids.contains($0.id) })?.id
+    else { return }
+    if inSplit.count > 1 {
+      addToSplit(other, beside: selected, edge: .right)
+    } else {
+      splitTabs(selected, other)
+    }
+  }
+
+  var selectedSplitIsFull: Bool {
+    (selectedSplit?.tabIDs.count ?? 1) >= BrowserSplit.maxPanes
+  }
+
+  func addToSplit(_ tabID: UUID, beside target: UUID, edge: SplitEdge) {
+    guard session.addToSplit(tabID, beside: target, edge: edge, in: session.selectedSpaceID)
+    else { return }
+    save()
+  }
+
+  /// Opens the command bar; the page it opens joins the split beside `target`.
+  func openSplitPane(beside target: UUID, edge: SplitEdge) {
+    guard !selectedSplitIsFull else { return }
+    showCommand()
+    pendingSplitPlacement = SplitPlacement(target: target, edge: edge)
+  }
+
+  func placePendingSplitPane(_ id: UUID) {
+    guard let placement = pendingSplitPlacement else { return }
+    pendingSplitPlacement = nil
+    session.addToSplit(id, beside: placement.target, edge: placement.edge, in: session.selectedSpaceID)
+  }
+
+  func applySplitLayout(_ preset: SplitLayoutPreset) {
+    guard let split = selectedSplit,
+      session.applySplitLayout(preset, splitID: split.id, in: session.selectedSpaceID)
+    else { return }
+    save()
+  }
+
+  func setSplitWeights(_ weights: [Double], at path: [Int], splitID: UUID) {
+    session.setSplitWeights(weights, at: path, splitID: splitID, in: session.selectedSpaceID)
+    save(deferred: true)
   }
 
   func focusSplitTab(_ id: UUID) {
@@ -40,9 +82,9 @@ extension BrowserStore {
     session.unsplitTab(id, in: session.selectedSpaceID)
     save()
   }
+}
 
-  func setSplitRatio(_ ratio: Double, splitID: UUID) {
-    session.setSplitRatio(ratio, splitID: splitID, in: session.selectedSpaceID)
-    save(deferred: true)
-  }
+struct SplitPlacement: Equatable {
+  let target: UUID
+  let edge: SplitEdge
 }

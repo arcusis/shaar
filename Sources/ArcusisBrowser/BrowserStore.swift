@@ -28,6 +28,7 @@ struct SpaceRemovalImpact {
 final class BrowserStore {
   var session: BrowserSession
   var splitTabRecency: [UUID] = []
+  var pendingSplitPlacement: SplitPlacement?
   let dragSessionID = UUID()
   let library = BrowserLibraryModel()
   private(set) var sidebarNotice: String?
@@ -157,10 +158,14 @@ final class BrowserStore {
     commandEditsCurrentURL = false
     commandQuery = ""
     commandSelection = 0
+    pendingSplitPlacement = nil
     commandIsOpen = true
   }
 
-  func dismissCommand() { commandIsOpen = false }
+  func dismissCommand() {
+    commandIsOpen = false
+    pendingSplitPlacement = nil
+  }
 
   var canUseLibraryDrawer: Bool {
     sheet == nil && !commandIsOpen && consentRequests.isEmpty
@@ -383,7 +388,8 @@ final class BrowserStore {
   func perform(_ action: CommandAction) {
     sidebarNotice = nil
     switch action {
-    case .open(let url): session.open(url)
+    case .open(let url):
+      if let id = session.open(url) { placePendingSplitPane(id) }
     case .space(let id):
       closeLibraryDrawer()
       let signpost = OSSignpostID(log: switchLog)

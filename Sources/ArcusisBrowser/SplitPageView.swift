@@ -2,62 +2,113 @@ import AppKit
 import BrowserCore
 import SwiftUI
 
-struct SplitPageView<Pane: View>: View {
+/// Renders a split layout tree: each pane gets its own toolbar, groups get draggable dividers.
+struct SplitPageView<Pane: View, Header: View>: View {
   let split: BrowserSplit
   let focusedID: UUID?
   let onFocus: (UUID) -> Void
-  let onUnsplit: (UUID) -> Void
-  let onRatioChange: (Double) -> Void
+  let onWeightsChange: ([Double], [Int]) -> Void
+  @ViewBuilder let header: (UUID) -> Header
   @ViewBuilder let pane: (UUID) -> Pane
-  @State private var dragStart: Double?
 
   var body: some View {
-    GeometryReader { geometry in
-      let width = max(0, geometry.size.width - 6)
-      let minimum = min(240, width / 2)
-      let left = min(max(width * split.ratio, minimum), width - minimum)
-      HStack(spacing: 0) {
-        paneView(split.tabIDs[0]).frame(width: left)
-        Rectangle()
-          .fill(Color.secondary.opacity(0.25))
-          .frame(width: 6)
-          .contentShape(Rectangle())
-          .gesture(DragGesture(minimumDistance: 0)
-            .onChanged { value in
-              let start = dragStart ?? split.ratio
-              if dragStart == nil { dragStart = start }
-              guard width > 0 else { return }
-              let next = min(max(width * start + value.translation.width, minimum), width - minimum)
-              onRatioChange(next / width)
-            }
-            .onEnded { _ in dragStart = nil })
-          .accessibilityLabel("Split divider")
-        paneView(split.tabIDs[1]).frame(width: max(0, width - left))
-      }
+    node(split.root, path: [])
+  }
+
+  private func node(_ node: SplitNode, path: [Int]) -> AnyView {
+    switch node {
+    case .pane(let id):
+      return AnyView(paneView(id))
+    case .group(let axis, let children, let weights):
+      return AnyView(
+        SplitGroupView(
+          axis: axis, weights: weights,
+          onWeightsChange: { onWeightsChange($0, path) }
+        ) { index in
+          self.node(children[index], path: path + [index])
+        })
     }
   }
 
   private func paneView(_ id: UUID) -> some View {
-    pane(id)
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .background { SplitPaneFocusObserver(onFocus: { onFocus(id) }) }
-      .contentShape(Rectangle())
-      .simultaneousGesture(TapGesture().onEnded { onFocus(id) })
-      .overlay {
-        Rectangle().strokeBorder(id == focusedID ? Color.accentColor : .clear, lineWidth: 2)
-          .allowsHitTesting(false)
-      }
-      .overlay(alignment: .topTrailing) {
-        Button { onUnsplit(id) } label: {
-          Image(systemName: "xmark")
-            .font(.system(size: 10, weight: .semibold))
-            .padding(6)
-            .background(.regularMaterial, in: Circle())
+    VStack(spacing: 0) {
+      header(id)
+      Divider().opacity(0.4)
+      pane(id)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    .background { SplitPaneFocusObserver(onFocus: { onFocus(id) }) }
+    .contentShape(Rectangle())
+    .simultaneousGesture(TapGesture().onEnded { onFocus(id) })
+    .clipShape(RoundedRectangle(cornerRadius: 8))
+    .overlay {
+      RoundedRectangle(cornerRadius: 8)
+        .strokeBorder(id == focusedID ? Color.accentColor.opacity(0.85) : .clear, lineWidth: 2)
+        .allowsHitTesting(false)
+    }
+  }
+}
+
+/// Children of one group laid out along its axis, separated by draggable dividers.
+private struct SplitGroupView: View {
+  static let dividerThickness: CGFloat = 6
+  static let minimumPane: CGFloat = 160
+
+  let axis: SplitAxis
+  let weights: [Double]
+  let onWeightsChange: ([Double]) -> Void
+  let child: (Int) -> AnyView
+  @State private var dragStart: [Double]?
+
+  var body: some View {
+    GeometryReader { geometry in
+      let total = axis == .columns ? geometry.size.width : geometry.size.height
+      let available = max(0, total - Self.dividerThickness * CGFloat(weights.count - 1))
+      let layout =
+        axis == .columns ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
+      layout {
+        ForEach(weights.indices, id: \.self) { index in
+          if index > 0 { divider(after: index - 1, available: available) }
+          child(index)
+            .frame(
+              width: axis == .columns ? available * weights[index] : nil,
+              height: axis == .rows ? available * weights[index] : nil)
         }
-        .buttonStyle(.plain)
-        .padding(6)
-        .help("Remove pane from split")
       }
+    }
+  }
+
+  private func divider(after index: Int, available: CGFloat) -> some View {
+    Color.clear
+      .frame(
+        width: axis == .columns ? Self.dividerThickness : nil,
+        height: axis == .rows ? Self.dividerThickness : nil)
+      .contentShape(Rectangle())
+      .pointerStyle(axis == .columns ? .columnResize : .rowResize)
+      .gesture(
+        DragGesture(minimumDistance: 1)
+          .onChanged { value in
+            let start = dragStart ?? weights
+            if dragStart == nil { dragStart = start }
+            let delta = axis == .columns ? value.translation.width : value.translation.height
+            onWeightsChange(Self.resized(start, at: index, by: delta, available: available))
+          }
+          .onEnded { _ in dragStart = nil })
+      .accessibilityLabel("Split divider")
+  }
+
+  /// Moves the divider after `index`, keeping both neighbours above the minimum size.
+  static func resized(_ weights: [Double], at index: Int, by delta: CGFloat, available: CGFloat)
+    -> [Double]
+  {
+    guard available > 0, weights.indices.contains(index + 1) else { return weights }
+    let pair = weights[index] + weights[index + 1]
+    let minimum = min(Double(minimumPane / available), pair / 2)
+    let leading = min(max(weights[index] + Double(delta / available), minimum), pair - minimum)
+    var next = weights
+    next[index] = leading
+    next[index + 1] = pair - leading
+    return next
   }
 }
 
@@ -69,9 +120,11 @@ struct BrowserSplitPageView: View {
   var body: some View {
     SplitPageView(
       split: split, focusedID: store.session.selectedSpace.selectedTabID,
-      onFocus: { store.focusSplitTab($0) }, onUnsplit: { store.unsplitTab($0) },
-      onRatioChange: { store.setSplitRatio($0, splitID: split.id) }
+      onFocus: { focus($0) },
+      onWeightsChange: { store.setSplitWeights($0, at: $1, splitID: split.id) }
     ) { id in
+      SplitPaneToolbar(store: store, engine: engine, tabID: id)
+    } pane: { id in
       if let failure = store.rendererFailures[id] {
         FailedPageView(store: store, failure: failure)
       } else if engine.pages[id] != nil {
@@ -80,6 +133,12 @@ struct BrowserSplitPageView: View {
         ProgressView("Loading profile…")
       }
     }
+    .padding(2)
+  }
+
+  private func focus(_ id: UUID) {
+    guard store.session.selectedSpace.selectedTabID != id else { return }
+    store.focusSplitTab(id)
   }
 }
 

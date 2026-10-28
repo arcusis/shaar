@@ -652,6 +652,60 @@ struct BrowserSidebar: View {
       profileID: store.session.selectedSpace.profileID, epoch: recentDownloads.epoch)
   }
 
+  @ViewBuilder
+  private func tabRowContent(_ tab: BrowserTab, in space: BrowserSpace) -> some View {
+    if let split = space.splits.first(where: { $0.tabIDs.first == tab.id }) {
+      SidebarSplitRow(
+        segments: split.tabIDs.compactMap { id in
+          space.tabs.first { $0.id == id }.map {
+            SidebarSplitRow.Segment(id: $0.id, title: $0.title, favicon: store.engine?.favicons[$0.id])
+          }
+        },
+        focusedID: space.selectedTabID,
+        isSelected: store.session.selectedPage.map { split.tabIDs.contains($0.tab.id) } ?? false,
+        onSelect: { store.perform(.tab(space: space.id, tab: $0)) },
+        onClose: { store.closeTab($0) }
+      )
+    } else {
+      SidebarTabRow(
+        tabID: tab.id,
+        title: tab.title,
+        favicon: store.engine?.favicons[tab.id],
+        isPinned: tab.isPinned,
+        isSelected: store.session.selectedPage?.tab.id == tab.id,
+        closeIsVisible: hoveredTabID == tab.id,
+        onSelect: { store.perform(.tab(space: space.id, tab: tab.id)) },
+        onClose: { store.closeTab(tab.id) },
+        onHoverChanged: { isHovered in
+          hoveredTabID = isHovered ? tab.id : hoveredTabID == tab.id ? nil : hoveredTabID
+        }
+      )
+    }
+  }
+
+  /// Arc-style: add this tab to the open split on any side, or start a new split.
+  @ViewBuilder
+  private func splitMenu(for tab: BrowserTab, in space: BrowserSpace) -> some View {
+    if let selected = store.selectedSplit, !selected.tabIDs.contains(tab.id),
+      let focused = space.selectedTabID
+    {
+      Menu("Add to Split View") {
+        ForEach(SplitEdge.allCases, id: \.self) { edge in
+          Button(edge.menuTitle) { store.addToSplit(tab.id, beside: focused, edge: edge) }
+        }
+      }
+      .disabled(store.selectedSplitIsFull)
+    }
+    Menu("Split View with…") {
+      ForEach(space.tabs.filter { $0.id != tab.id }) { candidate in
+        Button(candidate.title) { store.splitTabs(tab.id, candidate.id) }
+      }
+    }
+    if space.splits.contains(where: { $0.tabIDs.contains(tab.id) }) {
+      Button("Separate from Split") { store.unsplitTab(tab.id) }
+    }
+  }
+
   private func isSplitRowLeader(_ tab: BrowserTab, in space: BrowserSpace) -> Bool {
     guard let split = space.splits.first(where: { $0.tabIDs.contains(tab.id) }) else { return true }
     return split.tabIDs.first == tab.id
@@ -660,36 +714,7 @@ struct BrowserSidebar: View {
   private func tabRow(_ tab: BrowserTab, index: SidebarTabIndex) -> some View {
     let space = store.session.selectedSpace
     let boundary = index.boundary(for: tab.id)
-    let split = space.splits.first { $0.tabIDs.first == tab.id }
-    let other = split.flatMap { $0.tabIDs.dropFirst().first }.flatMap { id in
-      space.tabs.first { $0.id == id }
-    }
-    let isSelected = store.session.selectedPage.map { page in
-      split?.tabIDs.contains(page.tab.id) ?? (page.tab.id == tab.id)
-    } ?? false
-    return SidebarTabRow(
-      tabID: tab.id,
-      title: other.map { "\(tab.title) / \($0.title)" } ?? tab.title,
-      favicon: store.engine?.favicons[tab.id],
-      secondaryFavicon: other.flatMap { store.engine?.favicons[$0.id] },
-      hasSecondaryFavicon: other != nil,
-      isPinned: tab.isPinned,
-      isSelected: isSelected,
-      closeIsVisible: hoveredTabID == tab.id,
-      onSelect: {
-        if let selected = space.selectedTabID, split?.tabIDs.contains(selected) == true {
-          store.perform(.tab(space: space.id, tab: selected))
-        } else {
-          store.perform(.tab(space: space.id, tab: tab.id))
-        }
-      },
-      onClose: {
-        store.closeTab(tab.id)
-      },
-      onHoverChanged: { isHovered in
-        hoveredTabID = isHovered ? tab.id : hoveredTabID == tab.id ? nil : hoveredTabID
-      }
-    )
+    return tabRowContent(tab, in: space)
     .draggable(
       SidebarTransfer.tab(sessionID: store.dragSessionID, sourceSpaceID: space.id, tabID: tab.id)
     )
@@ -724,11 +749,7 @@ struct BrowserSidebar: View {
         urls[0], space: space, before: tab.id, pinned: tab.isPinned, folderID: tab.folderID)
     }
     .contextMenu {
-      Menu("Split View with…") {
-        ForEach(space.tabs.filter { $0.id != tab.id }) { candidate in
-          Button(candidate.title) { store.splitTabs(tab.id, candidate.id) }
-        }
-      }
+      splitMenu(for: tab, in: space)
       Button("Add to Favorites") {
         addToFavorites(tabID: tab.id, spaceID: space.id, profileID: space.profileID)
       }

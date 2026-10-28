@@ -33,14 +33,51 @@ public struct BrowserTab: Codable, Identifiable, Equatable, Sendable {
 }
 
 public struct BrowserSplit: Codable, Identifiable, Equatable, Sendable {
+  /// Arc's limit: up to four tabs in one split.
+  public static let maxPanes = 4
+
   public let id: UUID
-  public var tabIDs: [UUID]
-  public var ratio: Double
+  public internal(set) var root: SplitNode
+  public var tabIDs: [UUID] { root.paneIDs }
+
+  public init(id: UUID = UUID(), root: SplitNode) {
+    self.id = id
+    self.root = root
+  }
 
   public init(id: UUID = UUID(), tabIDs: [UUID], ratio: Double = 0.5) {
-    self.id = id
-    self.tabIDs = tabIDs
-    self.ratio = ratio
+    let weights = tabIDs.count == 2 ? [ratio, 1 - ratio] : nil
+    let panes = tabIDs.map(SplitNode.pane)
+    self.init(
+      id: id,
+      root: weights.map { .group(.columns, panes, $0) } ?? .evenly(.columns, panes))
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case id, root, tabIDs, ratio
+  }
+
+  /// Older sessions stored two side-by-side tabs and a divider ratio.
+  public init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    let id = try c.decode(UUID.self, forKey: .id)
+    if let root = try c.decodeIfPresent(SplitNode.self, forKey: .root) {
+      self.init(id: id, root: root)
+    } else {
+      self.init(
+        id: id, tabIDs: try c.decode([UUID].self, forKey: .tabIDs),
+        ratio: try c.decodeIfPresent(Double.self, forKey: .ratio) ?? 0.5)
+    }
+  }
+
+  public func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    try c.encode(id, forKey: .id)
+    try c.encode(root, forKey: .root)
+  }
+
+  var isValid: Bool {
+    (2...Self.maxPanes).contains(tabIDs.count) && root.isValid
   }
 }
 
@@ -97,10 +134,12 @@ public struct BrowserSpace: Codable, Identifiable, Equatable, Sendable {
 
   public mutating func reconcileSplits() {
     let ids = Set(tabs.map(\.id))
-    for index in splits.indices {
-      splits[index].tabIDs.removeAll { !ids.contains($0) }
+    splits = splits.compactMap { split in
+      var root: SplitNode? = split.root
+      for id in split.tabIDs where !ids.contains(id) { root = root?.removing(id) }
+      guard let root, root.paneIDs.count >= 2 else { return nil }
+      return BrowserSplit(id: split.id, root: root)
     }
-    splits.removeAll { $0.tabIDs.count < 2 }
   }
 
   public var selectedTab: BrowserTab? { tabs.first { $0.id == selectedTabID } }
@@ -256,7 +295,7 @@ public struct BrowserSession: Codable, Equatable, Sendable {
       let splitIDs = space.splits.flatMap(\.tabIDs)
       guard Set(splitIDs).count == splitIDs.count,
         Set(space.splits.map(\.id)).count == space.splits.count,
-        space.splits.allSatisfy({ $0.tabIDs.count >= 2 && $0.ratio.isFinite && (0...1).contains($0.ratio) }),
+        space.splits.allSatisfy(\.isValid),
         Set(splitIDs).isSubset(of: Set(space.tabs.map(\.id)))
       else { throw SessionError.invalidState }
       let localIDs = Set(space.folders.map(\.id))

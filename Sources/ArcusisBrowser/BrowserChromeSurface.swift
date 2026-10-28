@@ -31,16 +31,22 @@ struct BrowserChromeSurface: View {
           store.sidebarIsVisible.toggle()
         }
       }
-      PageNavigationButtons(store: store, engine: engine)
+      if store.selectedSplit == nil {
+        PageNavigationButtons(store: store, engine: engine)
+      }
       WindowDragRegion()
         .frame(maxWidth: .infinity)
         .frame(height: 24)
       pageActions
     }
     .overlay {
-      PageAddressField(store: store)
-        .frame(maxWidth: 520)
-        .padding(.horizontal, 120)
+      if let split = store.selectedSplit {
+        SplitLayoutControls(store: store, split: split)
+      } else {
+        PageAddressField(store: store)
+          .frame(maxWidth: 520)
+          .padding(.horizontal, 120)
+      }
     }
     .padding(.horizontal, 6)
     .frame(height: 34)

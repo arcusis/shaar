@@ -7,21 +7,62 @@ import XCTest
 
 @MainActor
 final class SplitPageVisualTests: XCTestCase {
-  func testTwoPaneCapture() async throws {
+  func testMixedLayoutCapture() async throws {
     try XCTSkipUnless(SidebarVisualCaptureSupport.enabled, "Visual capture requires explicit opt-in")
-    let first = UUID()
-    let second = UUID()
-    let view = SplitPageView(
-      split: BrowserSplit(tabIDs: [first, second]), focusedID: first,
-      onFocus: { _ in }, onUnsplit: { _ in }, onRatioChange: { _ in }
-    ) { id in
-      ZStack {
-        id == first ? Color(red: 0.90, green: 0.94, blue: 0.99) : Color(red: 0.96, green: 0.92, blue: 0.86)
-        Text(id == first ? "First page" : "Second page").foregroundStyle(.black)
+    var session = BrowserSession.fresh()
+    let hosts = ["first.example", "second.example", "third.example"]
+    let ids = try hosts.map { try XCTUnwrap(session.open(URL(string: "https://\($0)")!)) }
+    let space = session.selectedSpaceID
+    XCTAssertTrue(session.splitTabs(ids[0], ids[1], in: space))
+    XCTAssertTrue(session.addToSplit(ids[2], beside: ids[1], edge: .bottom, in: space))
+    let store = BrowserStore(session: session)
+    let split = try XCTUnwrap(store.selectedSplit)
+    let colors = [
+      Color(red: 0.90, green: 0.94, blue: 0.99), Color(red: 0.96, green: 0.92, blue: 0.86),
+      Color(red: 0.90, green: 0.97, blue: 0.91),
+    ]
+    let view = VStack(spacing: 0) {
+      HStack {
+        Spacer()
+        SplitLayoutControls(store: store, split: split)
+        Spacer()
+      }
+      .frame(height: 34)
+      SplitPageView(
+        split: split, focusedID: store.session.selectedSpace.selectedTabID,
+        onFocus: { _ in }, onWeightsChange: { _, _ in }
+      ) { id in
+        SplitPaneToolbar(store: store, engine: nil, tabID: id)
+      } pane: { id in
+        let index = ids.firstIndex(of: id) ?? 0
+        ZStack {
+          colors[index]
+          Text("Page \(index + 1)").foregroundStyle(.black)
+        }
       }
     }
-    let mounted = try MountedChromeSidebar(view: view, size: NSSize(width: 800, height: 500), appearance: .aqua)
+    let mounted = try MountedChromeSidebar(
+      view: view, size: NSSize(width: 900, height: 560), appearance: .aqua)
     defer { mounted.close() }
-    _ = try await mounted.capture(to: URL(fileURLWithPath: "/tmp/split-page-view.png"), requiredText: ["First page", "Second page"])
+    _ = try await mounted.capture(
+      to: URL(fileURLWithPath: "/tmp/split-page-view.png"),
+      requiredText: ["Page 1", "Page 2", "Page 3"])
+  }
+
+  func testSidebarSplitRowCapture() async throws {
+    try XCTSkipUnless(SidebarVisualCaptureSupport.enabled, "Visual capture requires explicit opt-in")
+    let segments = ["Docs", "Mail"].map { SidebarSplitRow.Segment(id: UUID(), title: $0, favicon: nil) }
+    let view = SidebarSplitRow(
+      segments: segments, focusedID: segments[0].id, isSelected: true,
+      onSelect: { _ in }, onClose: { _ in }
+    )
+    .padding(.horizontal, 20)
+    .frame(width: 300, height: 90)
+    .background(Color(red: 0.42, green: 0.40, blue: 0.55))
+    let mounted = try MountedChromeSidebar(
+      view: view, size: NSSize(width: 300, height: 90), appearance: .darkAqua)
+    defer { mounted.close() }
+    _ = try await mounted.capture(
+      to: URL(fileURLWithPath: "/tmp/split-sidebar-row.png"), requiredText: [])
   }
 }

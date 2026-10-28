@@ -269,6 +269,58 @@ struct LibraryDownloadTests {
     }
   }
 
+  @Test func folderFilesMergeAndCapture() async throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let image = root.appending(path: "image.png")
+    let pdf = root.appending(path: "report.pdf")
+    try makePNGFixture().write(to: image)
+    try makePDFFixture().write(to: pdf)
+    try Data().write(to: root.appending(path: ".hidden"))
+    try Data().write(to: root.appending(path: "partial.crdownload"))
+    try Data().write(to: root.appending(path: "partial.download"))
+    let profile = BrowserProfile(name: "Current")
+    let space = BrowserSpace(profileID: profile.id, name: "Current", symbol: "circle", tint: .ocean)
+    let session = try BrowserSession(
+      profiles: [profile], spaces: [space], selectedSpaceID: space.id)
+    let store = BrowserStore(sessionFile: nil, session: session)
+    let source = DownloadsFolderSource(directory: root)
+    let model = DownloadsModel(folder: source)
+    #expect(model.libraryItems(in: profile.id).count == 2)
+    let id = UUID().uuidString.lowercased()
+    model.restore([record(id, filename: "image.png", path: image.path)], profileID: profile.id)
+    let merged = model.libraryItems(in: profile.id)
+    #expect(merged.count == 2)
+    #expect(merged.contains { $0.id == id })
+    #expect(
+      LibraryDownloadQuery.filtered(
+        merged, kind: .pdf, profileID: profile.id,
+        currentProfileID: profile.id, downloads: model
+      ).count == 1)
+    let folderItem = try #require(merged.first { $0.filename == "report.pdf" })
+    #expect(model.isFolderItem(folderItem, profileID: profile.id))
+    #expect(
+      model.fileForDrag(
+        id: folderItem.id, profileID: profile.id,
+        selectedProfileID: profile.id) != nil)
+    try await capture(
+      LibraryDownloadsView(
+        store: store, profileID: profile.id,
+        mediaOnly: false, downloads: model), size: NSSize(width: 300, height: 520),
+      appearance: .aqua, to: URL(filePath: "/tmp/folder-downloads.png"))
+    try await capture(
+      LibraryDownloadsView(
+        store: store, profileID: profile.id,
+        mediaOnly: true, downloads: model), size: NSSize(width: 300, height: 520),
+      appearance: .aqua, to: URL(filePath: "/tmp/folder-media.png"), settleMilliseconds: 1200)
+    try FileManager.default.removeItem(at: pdf)
+    for _ in 0..<40 where model.libraryItems(in: profile.id).count != 1 {
+      try await Task.sleep(for: .milliseconds(50))
+    }
+    #expect(model.libraryItems(in: profile.id).count == 1)
+  }
+
   private func makePNGFixture() throws -> Data {
     let bitmap = NSBitmapImageRep(
       bitmapDataPlanes: nil, pixelsWide: 24, pixelsHigh: 24, bitsPerSample: 8,

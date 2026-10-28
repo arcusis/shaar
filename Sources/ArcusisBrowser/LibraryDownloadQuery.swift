@@ -64,7 +64,7 @@ enum LibraryDownloadQuery {
   ) -> LibraryMediaFile? {
     guard profileID == currentProfileID, item.profileID == profileID,
       item.state == .finished, item.canOpen,
-      downloads.records[profileID]?[item.id] == item,
+      downloads.libraryItem(id: item.id, profileID: profileID) == item,
       let url = downloads.fileForDrag(
         id: item.id, profileID: profileID, selectedProfileID: currentProfileID),
       let type = UTType(filenameExtension: url.pathExtension.lowercased())

@@ -5,6 +5,10 @@ import Observation
 @MainActor @Observable
 final class DownloadsModel {
   private(set) var records: [UUID: [String: BrowserDownload]] = [:]
+  let folder: DownloadsFolderSource?
+
+  init(folder: DownloadsFolderSource? = nil) { self.folder = folder }
+
   private(set) var notices: [UUID: String] = [:]
   @ObservationIgnored var onCommand:
     ((DownloadAction, String, UUID, @escaping @MainActor @Sendable (String?) -> Void) -> Void)?
@@ -13,6 +17,27 @@ final class DownloadsModel {
     (records[profileID] ?? [:]).values.sorted {
       $0.startTime == $1.startTime ? $0.id < $1.id : $0.startTime > $1.startTime
     }
+  }
+
+  func libraryItems(in profileID: UUID) -> [BrowserDownload] {
+    let browserItems = items(in: profileID)
+    let paths = Set(
+      browserItems.compactMap { $0.fileURL?.standardizedFileURL.resolvingSymlinksInPath() })
+    let folderItems = (folder?.items(profileID: profileID) ?? []).filter {
+      guard let url = $0.fileURL else { return false }
+      return !paths.contains(url.standardizedFileURL.resolvingSymlinksInPath())
+    }
+    return (browserItems + folderItems).sorted {
+      $0.startTime == $1.startTime ? $0.id < $1.id : $0.startTime > $1.startTime
+    }
+  }
+
+  func libraryItem(id: String, profileID: UUID) -> BrowserDownload? {
+    libraryItems(in: profileID).first { $0.id == id }
+  }
+
+  func isFolderItem(_ item: BrowserDownload, profileID: UUID) -> Bool {
+    records[profileID]?[item.id] == nil && libraryItem(id: item.id, profileID: profileID) == item
   }
 
   func restore(_ rows: [[String: Any]], profileID: UUID) {
@@ -53,7 +78,7 @@ final class DownloadsModel {
   }
 
   func fileForDrag(id: String, profileID: UUID, selectedProfileID: UUID) -> URL? {
-    guard selectedProfileID == profileID, let item = records[profileID]?[id],
+    guard selectedProfileID == profileID, let item = libraryItem(id: id, profileID: profileID),
       item.profileID == profileID, item.canOpen, let url = item.fileURL
     else { return nil }
     let resolvedURL = url.resolvingSymlinksInPath()

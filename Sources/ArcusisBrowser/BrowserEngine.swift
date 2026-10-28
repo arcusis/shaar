@@ -37,7 +37,7 @@ final class BrowserEngine {
   private let callbacks: BrowserRuntimeClient
   private(set) var isClosed = false
   var onClosed: ((Bool) -> Void)?
-  let downloads = DownloadsModel()
+  let downloads = DownloadsModel(folder: DownloadsFolderSource())
   private(set) var pages: [UUID: PageState] = [:]
   private(set) var notice: String?
   private(set) var mediaAccess: [UUID: MediaAccessState] = [:]

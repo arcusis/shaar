@@ -496,7 +496,7 @@ struct BrowserSidebar: View {
       Group {
         if recentDownloads.isOpen || previewRecentDownloads != nil,
           downloadsProfileIsCurrent(profileID),
-          let items = previewRecentDownloads ?? downloads?.items(in: profileID)
+          let items = previewRecentDownloads ?? downloads?.libraryItems(in: profileID)
         {
           RecentDownloadsPopover(
             items: items, profileID: profileID,

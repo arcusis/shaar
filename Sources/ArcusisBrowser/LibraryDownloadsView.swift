@@ -40,7 +40,7 @@ struct LibraryDownloadsView: View {
   private var items: [BrowserDownload] {
     guard profileIsCurrent, let downloads else { return [] }
     let results = LibraryDownloadQuery.filtered(
-      downloads.items(in: profileID), search: search,
+      downloads.libraryItems(in: profileID), search: search,
       mediaOnly: mediaOnly, kind: mediaKind, profileID: profileID,
       currentProfileID: currentProfileID,
       downloads: downloads)
@@ -184,7 +184,10 @@ struct LibraryDownloadsView: View {
           Button("Show in Finder") { open(item, inFinder: true) }.disabled(!canUseFileActions)
           Button("Open") { open(item, inFinder: false) }.disabled(!canUseFileActions)
         }
-        ForEach(item.actions, id: \.rawValue) { action in
+        ForEach(
+          downloads?.isFolderItem(item, profileID: profileID) == true ? [] : item.actions,
+          id: \.rawValue
+        ) { action in
           Button(actionLabel(action)) {
             guard canUseDownloadActions, let downloads else { return }
             downloads.perform(
@@ -219,7 +222,18 @@ struct LibraryDownloadsView: View {
 
   private func open(_ item: BrowserDownload, inFinder: Bool) {
     guard canUseFileActions, item.canOpen else { return }
-    store.engine?.revealDownload(item.id, profileID: profileID, open: !inFinder)
+    if downloads?.isFolderItem(item, profileID: profileID) == true,
+      let url = downloads?.fileForDrag(
+        id: item.id, profileID: profileID, selectedProfileID: currentProfileID)
+    {
+      if inFinder {
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+      } else {
+        NSWorkspace.shared.open(url)
+      }
+    } else {
+      store.engine?.revealDownload(item.id, profileID: profileID, open: !inFinder)
+    }
   }
 
   private func dragProvider(_ item: BrowserDownload) -> NSItemProvider {
@@ -261,7 +275,7 @@ struct LibraryDownloadsView: View {
   }
 
   private var canUseFileActions: Bool {
-    canUseDownloadActions && store.engine != nil
+    canUseDownloadActions && downloads != nil
   }
 
   private func mediaCard(
@@ -390,7 +404,7 @@ private final class LibraryThumbnailLoader {
       let result = await generate(request)?.representation,
       !Task.isCancelled,
       store.session.selectedSpace.profileID == profileID,
-      downloads.records[profileID]?[item.id] == item,
+      downloads.libraryItem(id: item.id, profileID: profileID) == item,
       LibraryDownloadQuery.mediaFile(
         for: item, profileID: profileID, currentProfileID: store.session.selectedSpace.profileID,
         downloads: downloads) == media

@@ -5,6 +5,26 @@ import XCTest
 
 @MainActor
 final class ChromiumPageLayoutTests: XCTestCase {
+  func testSelectedPagesStayMountedUntilNoLongerLive() {
+    let container = ChromiumPageContainerView(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
+    let firstID = UUID()
+    let secondID = UUID()
+    let first = NSView(frame: .zero)
+    let second = NSView(frame: .zero)
+    let both: Set<UUID> = [firstID, secondID]
+
+    XCTAssertTrue(container.select(first, tabID: firstID, liveTabs: both))
+    XCTAssertTrue(container.select(second, tabID: secondID, liveTabs: both))
+    XCTAssertTrue(first.superview === container)
+    XCTAssertTrue(first.isHidden)
+    XCTAssertFalse(second.isHidden)
+    XCTAssertTrue(container.select(first, tabID: firstID, liveTabs: both))
+    XCTAssertFalse(first.isHidden)
+    XCTAssertTrue(second.isHidden)
+    XCTAssertFalse(container.select(first, tabID: firstID, liveTabs: [firstID]))
+    XCTAssertNil(second.superview)
+  }
+
   func testAttachedPageTracksInitialBoundsAndSubsequentResizes() throws {
     let container = ChromiumPageContainerView(frame: NSRect(x: 0, y: 0, width: 720, height: 480))
     let page = LayoutColorView(frame: .zero, color: .systemBlue)

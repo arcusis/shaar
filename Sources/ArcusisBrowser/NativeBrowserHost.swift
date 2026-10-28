@@ -4,10 +4,11 @@ import ChromiumBridge
 import SwiftUI
 
 enum BrowserMenuCommand: String, CaseIterable {
-  case newWindow, newPrivateWindow, newTab, search, newSpace, editSpace, closeTab, closeWindow,
+  case newWindow, newPrivateWindow, newMiniWindow, newTab, search, newSpace, editSpace, closeTab,
+    closeWindow,
     addFavorite
   case reopenClosed, recentlyClosed, bookmarkPage, bookmarks, history, downloads
-  case find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload
+  case find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload, splitView
   case extensions, help, minimizeWindow, zoomWindow, bringAllToFront, settings, quit
 }
 
@@ -41,7 +42,7 @@ final class NativeBrowserContext {
 
 /// The same host manages production windows and hidden disposable test windows.
 @MainActor
-final class NativeBrowserHost: NSObject, NSMenuItemValidation {
+final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   enum Presentation { case visible, hiddenProbe }
 
   let events: BrowserRuntimeEvents
@@ -56,9 +57,12 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
   let preferences: BrowserPreferencesStore
   private(set) var settingsController: BrowserSettingsController?
   private var privateHost: PrivateBrowserHost?
+  private var miniWindows: [String: MiniBrowserController] = [:]
+  private var pendingURLs: [URL] = []
   private var claimedPrimary = false
   private var started = false
   private var startupFailed = false
+  private var shortcutMonitor: Any?
   private var previousMenu: NSMenu?
   private var previousServicesMenu: NSMenu?
   private var previousWindowsMenu: NSMenu?
@@ -103,6 +107,11 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
   func restore() throws {
     guard !started else { throw WorkspaceError.invalidState }
     started = true
+    if presentation == .visible && UserDefaults.standard.bool(forKey: "settingsStartFresh") {
+      let oldWindows = workspace.workspace.windows.map(\.id)
+      _ = try workspace.newWindow(from: workspace.workspace.focusedWindowID)
+      for id in oldWindows { try workspace.removeWindow(id) }
+    }
     if workspace.workspace.windows.isEmpty { try workspace.newWindow() }
     workspace.persistSnapshot()
     let focused = workspace.workspace.focusedWindowID
@@ -128,7 +137,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
       self?.prepareNewTab(tab, profile: profile, opener: opener)
     }
     settingsController = BrowserSettingsController(
-      workspace: workspace, preferences: preferences,
+      workspace: workspace, preferences: preferences, runtime: events.runtime,
       presentation: presentation == .visible ? .visible : .hiddenProbe)
     if presentation == .visible, let controller = settingsController?.nativeBitwardenController {
       for context in contexts.values { context.engine.attachPasswordFill(controller) }
@@ -138,6 +147,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
       for context in contexts.values where context.id != focused { context.window.orderFront(nil) }
       (focused.flatMap { contexts[$0] } ?? contexts.values.first)?.window.makeKeyAndOrderFront(nil)
     }
+    for url in pendingURLs { openExternalURL(url) }
+    pendingURLs.removeAll()
   }
 
   @discardableResult
@@ -158,7 +169,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
 
   func canPerform(_ command: BrowserMenuCommand) -> Bool {
     guard !events.runtime.isQuitting else { return false }
-    if command == .newWindow || command == .quit { return true }
+    if command == .newWindow || command == .newMiniWindow || command == .quit { return true }
     if command == .newPrivateWindow {
       return activeContext != nil || privateHost?.hasActiveWindow == true
     }
@@ -179,6 +190,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     case .find: return context.store.canFindCurrentPage
     case .findNext, .findPrevious: return context.store.pageFind?.canMove == true
     case .reload: return context.store.canReloadCurrentPage
+    case .splitView: return context.store.session.selectedSpace.tabs.count >= 2
     case .reopenClosed: return context.store.canReopenClosedTab
     case .bookmarkPage: return context.store.canBookmarkCurrentPage
     case .addFavorite: return context.store.canFavoriteCurrentPage
@@ -189,9 +201,21 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
   func perform(_ command: BrowserMenuCommand) {
     guard canPerform(command) else { return }
     if command == .quit {
+      if UserDefaults.standard.bool(forKey: "settingsWarnBeforeQuit") && presentation == .visible {
+        let alert = NSAlert()
+        alert.messageText = "Quit Arcusis Browser?"
+        alert.informativeText = "Your windows and tabs will be saved."
+        alert.addButton(withTitle: "Quit")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+      }
       flushGeometry()
       workspace.persistSnapshot()
       events.runtime.quit()
+      return
+    }
+    if command == .newMiniWindow {
+      openMiniWindow(url: nil)
       return
     }
     if command == .newWindow {
@@ -217,7 +241,13 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     guard let context = activeContext else { return }
     let store = context.store
     switch command {
-    case .newTab, .search: store.showCommand()
+    case .newTab:
+      store.showCommand()
+      store.commandEditsCurrentURL = false
+    case .search:
+      store.showCommand()
+      store.commandEditsCurrentURL = true
+      store.commandQuery = store.session.selectedPage?.tab.url.absoluteString ?? ""
     case .newSpace: store.spaceEditor = .create
     case .editSpace: store.spaceEditor = .edit(store.session.selectedSpaceID)
     case .closeTab:
@@ -241,6 +271,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     case .nextSpace: store.cycleSpace(by: 1)
     case .previousSpace: store.cycleSpace(by: -1)
     case .reload: store.reloadCurrentPage()
+    case .splitView: store.splitSelectedTab()
     case .extensions: context.engine.showExtensionList()
     case .help:
       if let url = URL(string: "https://github.com/arcusis/browser") { store.perform(.open(url)) }
@@ -249,7 +280,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     case .bringAllToFront:
       for browser in contexts.values { browser.window.orderFront(nil) }
       context.window.makeKeyAndOrderFront(nil)
-    case .newWindow, .newPrivateWindow, .settings, .quit: break
+    case .newWindow, .newPrivateWindow, .newMiniWindow, .settings, .quit: break
     }
   }
 
@@ -258,6 +289,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
   }
 
   func detach() {
+    if let shortcutMonitor { NSEvent.removeMonitor(shortcutMonitor) }
+    shortcutMonitor = nil
     privateHost?.detach()
     privateHost = nil
     events.onWindowRequest = nil
@@ -281,6 +314,62 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     }
     if NSApp.helpMenu === menu?.items.first(where: { $0.submenu?.title == "Help" })?.submenu {
       NSApp.helpMenu = previousHelpMenu
+    }
+  }
+
+  @objc func handleURL(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) {
+    guard let text = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue,
+      let url = URL(string: text), NavigationInput.isWebURL(url)
+    else { return }
+    if !started {
+      pendingURLs.append(url)
+      return
+    }
+    openExternalURL(url)
+  }
+
+  private func openExternalURL(_ url: URL) {
+    guard
+      let context = activeContext ?? workspace.workspace.focusedWindowID.flatMap({ contexts[$0] })
+        ?? contexts.values.first
+    else { return }
+    switch MiniLinkRoute.route(
+      url, inMainWindow: UserDefaults.standard.bool(forKey: "externalLinksInMainWindow"))
+    {
+    case .main(let url):
+      context.store.perform(.open(url))
+      context.window.makeKeyAndOrderFront(nil)
+    case .mini(let url):
+      openMiniWindow(url: url, context: context)
+    case nil: break
+    }
+  }
+
+  @discardableResult
+  private func openMiniWindow(
+    url: URL?, context: NativeBrowserContext? = nil, destination: UUID? = nil
+  ) -> Bool {
+    guard
+      let target = context ?? activeContext ?? workspace.workspace.focusedWindowID.flatMap({
+        contexts[$0]
+      })
+        ?? contexts.values.first
+    else { return false }
+    do {
+      let mini = try MiniBrowserController(
+        events: events, target: target.store, targetWindow: target.window, url: url,
+        destination: destination)
+      let id = mini.engine.windowID
+      miniWindows[id] = mini
+      mini.onClosed = { [weak self] in self?.miniWindows[id] = nil }
+      mini.onProfileChange = { [weak self, weak target] destination, url in
+        guard let self, let target else { return false }
+        return self.openMiniWindow(url: url, context: target, destination: destination)
+      }
+      return true
+    } catch {
+      report(error)
+      return false
     }
   }
 
@@ -512,6 +601,14 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
   }
 
   func validateMenuItem(_ item: NSMenuItem) -> Bool {
+    if let id = item.representedObject as? UUID {
+      guard canPerform(.nextSpace), let store = activeContext?.store else { return false }
+      item.state = store.session.selectedSpaceID == id ? .on : .off
+      return store.session.spaces.contains { $0.id == id }
+    }
+    if item.action == #selector(copyCurrentURL(_:)) {
+      return canPerform(.nextSpace) && activeContext?.store.session.selectedPage != nil
+    }
     guard let raw = item.representedObject as? String,
       let command = BrowserMenuCommand(rawValue: raw)
     else { return false }
@@ -571,6 +668,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     let file = section("File")
     add(.newWindow, "New window", "n", to: file)
     add(.newPrivateWindow, "New Private Window", "n", to: file, modifiers: [.command, .shift])
+    add(.newMiniWindow, "New Mini Window", "n", to: file, modifiers: [.command, .option])
     add(.newTab, "New tab", "t", to: file)
     add(.search, "Search or enter address", "l", to: file)
     add(.closeWindow, "Close window", "w", to: file, modifiers: [.command, .shift])
@@ -591,9 +689,19 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     let spaces = section("Spaces")
     add(.newSpace, "New space…", "", to: spaces)
     add(.editSpace, "Edit current space…", "", to: spaces)
-    add(.nextSpace, "Next space", "]", to: spaces, modifiers: [.control, .option])
-    add(.previousSpace, "Previous space", "[", to: spaces, modifiers: [.control, .option])
+    add(
+      .nextSpace, "Next space", String(Character(UnicodeScalar(NSRightArrowFunctionKey)!)),
+      to: spaces, modifiers: [.command, .option])
+    add(
+      .previousSpace, "Previous space", String(Character(UnicodeScalar(NSLeftArrowFunctionKey)!)),
+      to: spaces, modifiers: [.command, .option])
+    let copyURL = NSMenuItem(
+      title: "Copy URL", action: #selector(copyCurrentURL(_:)), keyEquivalent: "c")
+    copyURL.target = target
+    copyURL.keyEquivalentModifierMask = [.command, .shift]
+    spaces.addItem(copyURL)
     let tabs = section("Tabs")
+    add(.splitView, "Split View", "=", to: tabs, modifiers: [.control, .shift])
     add(.closeTab, "Close tab", "w", to: tabs)
     add(.addFavorite, "Add to Favorites", "", to: tabs, modifiers: [])
     add(.reopenClosed, "Reopen last closed tab", "t", to: tabs, modifiers: [.command, .shift])
@@ -621,6 +729,44 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     (sender.target as? NativeBrowserHost)?.perform(command)
   }
 
+  @objc private func copyCurrentURL(_ sender: NSMenuItem) {
+    guard canPerform(.nextSpace), let url = activeContext?.store.session.selectedPage?.tab.url
+    else {
+      return
+    }
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(url.absoluteString, forType: .string)
+  }
+
+  @objc private func selectMenuSpace(_ sender: NSMenuItem) {
+    guard canPerform(.nextSpace), let id = sender.representedObject as? UUID,
+      let store = activeContext?.store,
+      store.session.spaces.contains(where: { $0.id == id })
+    else { return }
+    store.perform(.space(id))
+  }
+
+  func menuNeedsUpdate(_ menu: NSMenu) {
+    guard menu.title == "Spaces" else { return }
+    while let item = menu.items.first(where: { $0.representedObject is UUID || $0.tag == 91827 }) {
+      menu.removeItem(item)
+    }
+    guard canPerform(.nextSpace), let store = activeContext?.store else { return }
+    let separator = NSMenuItem.separator()
+    separator.tag = 91827
+    menu.addItem(separator)
+    for (index, space) in store.session.spaces.enumerated() {
+      let key = SpaceShortcut.key(forIndex: index).map(String.init) ?? ""
+      let item = NSMenuItem(
+        title: space.name, action: #selector(selectMenuSpace(_:)), keyEquivalent: key)
+      item.target = self
+      item.representedObject = space.id
+      item.keyEquivalentModifierMask = .control
+      item.state = space.id == store.session.selectedSpaceID ? .on : .off
+      menu.addItem(item)
+    }
+  }
+
   private func installMenus() {
     previousMenu = NSApp.mainMenu
     previousServicesMenu = NSApp.servicesMenu
@@ -628,6 +774,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     previousHelpMenu = NSApp.helpMenu
     let main = Self.makeMenu(target: self)
     menu = main
+    if let spaces = main.items.first(where: { $0.submenu?.title == "Spaces" })?.submenu {
+      spaces.delegate = self
+      menuNeedsUpdate(spaces)
+    }
     NSApp.servicesMenu =
       main.items.first?.submenu?.items.first(where: {
         $0.submenu?.title == "Services"
@@ -635,6 +785,12 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     NSApp.windowsMenu = main.items.first(where: { $0.submenu?.title == "Window" })?.submenu
     NSApp.helpMenu = main.items.first(where: { $0.submenu?.title == "Help" })?.submenu
     NSApp.mainMenu = main
+    shortcutMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+      guard let self, let menu = self.menu, NSApp.mainMenu === menu,
+        ShortcutPageRouting.route(event, menu: menu, responder: event.window?.firstResponder)
+      else { return event }
+      return nil
+    }
   }
 
   static func run(frameworkURL: URL) -> Int32 {
@@ -649,9 +805,14 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
       let preferences = BrowserPreferencesStore(
         fileURL: directory.appending(path: "preferences.json"))
       let runtime = try ARCChromiumRuntime(frameworkURL: frameworkURL)
+      BrowserSettingsAppearance.apply(
+        UserDefaults.standard.string(forKey: "settingsAppearance") ?? "system")
       let host = NativeBrowserHost(
         events: BrowserRuntimeEvents(runtime: runtime), workspace: workspace,
         preferences: preferences)
+      NSAppleEventManager.shared().setEventHandler(
+        host, andSelector: #selector(handleURL(_:reply:)),
+        forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))
       runtime.onReady = { [weak host] in
         do { try host?.restore() } catch {
           host?.startupFailed = true

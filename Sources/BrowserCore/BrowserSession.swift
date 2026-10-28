@@ -32,9 +32,58 @@ public struct BrowserTab: Codable, Identifiable, Equatable, Sendable {
   }
 }
 
+public struct BrowserSplit: Codable, Identifiable, Equatable, Sendable {
+  /// Arc's limit: up to four tabs in one split.
+  public static let maxPanes = 4
+
+  public let id: UUID
+  public internal(set) var root: SplitNode
+  public var tabIDs: [UUID] { root.paneIDs }
+
+  public init(id: UUID = UUID(), root: SplitNode) {
+    self.id = id
+    self.root = root
+  }
+
+  public init(id: UUID = UUID(), tabIDs: [UUID], ratio: Double = 0.5) {
+    let weights = tabIDs.count == 2 ? [ratio, 1 - ratio] : nil
+    let panes = tabIDs.map(SplitNode.pane)
+    self.init(
+      id: id,
+      root: weights.map { .group(.columns, panes, $0) } ?? .evenly(.columns, panes))
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case id, root, tabIDs, ratio
+  }
+
+  /// Older sessions stored two side-by-side tabs and a divider ratio.
+  public init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    let id = try c.decode(UUID.self, forKey: .id)
+    if let root = try c.decodeIfPresent(SplitNode.self, forKey: .root) {
+      self.init(id: id, root: root)
+    } else {
+      self.init(
+        id: id, tabIDs: try c.decode([UUID].self, forKey: .tabIDs),
+        ratio: try c.decodeIfPresent(Double.self, forKey: .ratio) ?? 0.5)
+    }
+  }
+
+  public func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    try c.encode(id, forKey: .id)
+    try c.encode(root, forKey: .root)
+  }
+
+  var isValid: Bool {
+    (2...Self.maxPanes).contains(tabIDs.count) && root.isValid
+  }
+}
+
 public struct BrowserSpace: Codable, Identifiable, Equatable, Sendable {
   public let id: UUID
-  public let profileID: UUID
+  public internal(set) var profileID: UUID
   public var name: String
   public var symbol: String
   public var tint: SpaceTint
@@ -43,12 +92,13 @@ public struct BrowserSpace: Codable, Identifiable, Equatable, Sendable {
   public var selectedTabID: UUID?
   public var selectedFavoriteID: UUID?
   public var folders: [BrowserFolder]
+  public var splits: [BrowserSplit]
 
   public init(
     id: UUID = UUID(), profileID: UUID, name: String, symbol: String,
     tint: SpaceTint, customRGB: SpaceRGBColor? = nil, tabs: [BrowserTab] = [],
     selectedTabID: UUID? = nil, selectedFavoriteID: UUID? = nil,
-    folders: [BrowserFolder] = []
+    folders: [BrowserFolder] = [], splits: [BrowserSplit] = []
   ) {
     self.id = id
     self.profileID = profileID
@@ -60,6 +110,37 @@ public struct BrowserSpace: Codable, Identifiable, Equatable, Sendable {
     self.selectedTabID = selectedTabID ?? tabs.first?.id
     self.selectedFavoriteID = selectedFavoriteID
     self.folders = folders
+    self.splits = splits
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case id, profileID, name, symbol, tint, customRGB, tabs, selectedTabID, selectedFavoriteID,
+      folders, splits
+  }
+
+  public init(from decoder: any Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    id = try c.decode(UUID.self, forKey: .id)
+    profileID = try c.decode(UUID.self, forKey: .profileID)
+    name = try c.decode(String.self, forKey: .name)
+    symbol = try c.decode(String.self, forKey: .symbol)
+    tint = try c.decode(SpaceTint.self, forKey: .tint)
+    customRGB = try c.decodeIfPresent(SpaceRGBColor.self, forKey: .customRGB)
+    tabs = try c.decode([BrowserTab].self, forKey: .tabs)
+    selectedTabID = try c.decodeIfPresent(UUID.self, forKey: .selectedTabID)
+    selectedFavoriteID = try c.decodeIfPresent(UUID.self, forKey: .selectedFavoriteID)
+    folders = try c.decode([BrowserFolder].self, forKey: .folders)
+    splits = try c.decodeIfPresent([BrowserSplit].self, forKey: .splits) ?? []
+  }
+
+  public mutating func reconcileSplits() {
+    let ids = Set(tabs.map(\.id))
+    splits = splits.compactMap { split in
+      var root: SplitNode? = split.root
+      for id in split.tabIDs where !ids.contains(id) { root = root?.removing(id) }
+      guard let root, root.paneIDs.count >= 2 else { return nil }
+      return BrowserSplit(id: split.id, root: root)
+    }
   }
 
   public var selectedTab: BrowserTab? { tabs.first { $0.id == selectedTabID } }
@@ -212,6 +293,12 @@ public struct BrowserSession: Codable, Equatable, Sendable {
       })
     else { throw SessionError.invalidState }
     for space in spaces {
+      let splitIDs = space.splits.flatMap(\.tabIDs)
+      guard Set(splitIDs).count == splitIDs.count,
+        Set(space.splits.map(\.id)).count == space.splits.count,
+        space.splits.allSatisfy(\.isValid),
+        Set(splitIDs).isSubset(of: Set(space.tabs.map(\.id)))
+      else { throw SessionError.invalidState }
       let localIDs = Set(space.folders.map(\.id))
       guard
         space.folders.allSatisfy({
@@ -285,6 +372,7 @@ public struct BrowserSession: Codable, Equatable, Sendable {
       && spaces[source].selectedFavoriteID == nil && spaces[source].selectedTabID == id
     var updated = spaces
     updated[source].tabs.remove(at: position)
+    if source != destination { updated[source].reconcileSplits() }
     let tabs = updated[destination].tabs
     let insertion =
       targetID.flatMap { target in tabs.firstIndex { $0.id == target } }
@@ -346,6 +434,33 @@ public struct BrowserSession: Codable, Equatable, Sendable {
     spaces[index].name = name
     spaces[index].tint = tint
     spaces[index].customRGB = customRGB
+    return true
+  }
+
+  @discardableResult
+  public mutating func createProfile(name: String) -> UUID? {
+    let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !cleanName.isEmpty else { return nil }
+    let profile = BrowserProfile(name: cleanName)
+    profiles.append(profile)
+    return profile.id
+  }
+
+  /// Explicitly reassign a Space; profile-owned Favorites stay with their original profile.
+  @discardableResult
+  public mutating func setSpaceProfile(_ id: UUID, to profileID: UUID) -> Bool {
+    guard profiles.contains(where: { $0.id == profileID }),
+      let index = spaces.firstIndex(where: { $0.id == id })
+    else { return false }
+    let oldProfile = spaces[index].profileID
+    guard oldProfile != profileID else { return true }
+    spaces[index].profileID = profileID
+    spaces[index].selectedFavoriteID = nil
+    closedTabs.removeAll { $0.spaceID == id }
+    if !spaces.contains(where: { $0.profileID == oldProfile }) {
+      let oldFavorites = Set(favorites.filter { $0.profileID == oldProfile }.map(\.id))
+      favoritePages.removeAll { oldFavorites.contains($0.favoriteID) }
+    }
     return true
   }
 
@@ -427,6 +542,9 @@ public struct BrowserSession: Codable, Equatable, Sendable {
     guard let index = spaces.firstIndex(where: { $0.tabs.contains { $0.id == tabID } }),
       let tabIndex = spaces[index].tabs.firstIndex(where: { $0.id == tabID })
     else { return }
+    let splitPeer = spaces[index].splits.first { $0.tabIDs.contains(tabID) }?.tabIDs.first {
+      $0 != tabID
+    }
     closedTabs.append(
       ClosedBrowserTab(
         tab: spaces[index].tabs[tabIndex], spaceID: spaces[index].id,
@@ -437,9 +555,11 @@ public struct BrowserSession: Codable, Equatable, Sendable {
       closedTabs.remove(at: oldest)
     }
     spaces[index].tabs.remove(at: tabIndex)
+    spaces[index].reconcileSplits()
     if spaces[index].selectedTabID == tabID {
       let tabs = spaces[index].tabs
-      spaces[index].selectedTabID = tabs.isEmpty ? nil : tabs[min(tabIndex, tabs.count - 1)].id
+      spaces[index].selectedTabID =
+        splitPeer ?? (tabs.isEmpty ? nil : tabs[min(tabIndex, tabs.count - 1)].id)
     }
   }
 

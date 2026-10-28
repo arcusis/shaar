@@ -60,8 +60,8 @@ final class SpaceEditorVisualTests: XCTestCase {
           let original = store.session
           let route: SpaceEditorRoute =
             scenario.create ? .create : .edit(store.session.selectedSpaceID)
-          let width: CGFloat = scenario.compact ? 380 : 440
-          let size = NSSize(width: width + 24, height: 520)
+          let width: CGFloat = 380
+          let size = NSSize(width: width + 24, height: 600)
           let measurements = Measurements()
           let view = SpaceEditor(store: store, route: route)
             .environment(\.colorScheme, scheme)
@@ -84,9 +84,8 @@ final class SpaceEditorVisualTests: XCTestCase {
           defer { mounted.close() }
           let hasBounds = await mounted.waitUntil({ !measurements.bounds.isEmpty })
           let image = root.appendingPathComponent(file)
-          let action = scenario.create ? "Create" : "Save"
-          let title = scenario.create ? "Create Space" : "Edit Space"
-          _ = try await mounted.capture(to: image, requiredText: [title, "Cancel", action])
+          let action = scenario.create ? "Create" : "Done"
+          _ = try await mounted.capture(to: image, requiredText: ["Cancel", action])
           let bounds = measurements.bounds
           let fits =
             hasBounds && bounds.minX >= 0 && bounds.minY >= 0

@@ -86,6 +86,7 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
       spaces: session.spaces.map { source in
         var space = source
         space.tabs = source.tabs.filter(\.isPinned)
+        space.splits = []
         space.selectedTabID = nil
         space.selectedFavoriteID = nil
         space.folders = source.folders.map(Self.sharedFolder)
@@ -214,6 +215,25 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
     return true
   }
 
+  /// Reassigns shared Space metadata and every window in one validated transaction.
+  @discardableResult
+  public mutating func setSpaceProfile(_ spaceID: UUID, to profileID: UUID) throws -> Bool {
+    guard catalog.profiles.contains(where: { $0.id == profileID }),
+      let index = catalog.spaces.firstIndex(where: { $0.id == spaceID })
+    else { return false }
+    guard catalog.spaces[index].profileID != profileID else { return true }
+    var draft = self
+    draft.catalog.spaces[index].profileID = profileID
+    for windowIndex in draft.windows.indices {
+      guard draft.windows[windowIndex].session.setSpaceProfile(spaceID, to: profileID) else {
+        throw WorkspaceError.invalidState
+      }
+    }
+    try draft.validate()
+    self = draft
+    return true
+  }
+
   public func validate() throws {
     guard version == Self.currentVersion else { throw WorkspaceError.unsupportedVersion }
     guard let first = catalog.spaces.first else { throw WorkspaceError.invalidState }
@@ -297,6 +317,7 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
       spaces: catalog.spaces.map { definition in
         var space = definition
         space.tabs = []
+        space.splits = []
         space.selectedTabID = nil
         space.selectedFavoriteID = nil
         return space
@@ -348,6 +369,28 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
       var allocated = draft.allocatedIDs
       draft.windows[windowIndex] = try draft.project(
         draft.windows[windowIndex], allocated: &allocated)
+    }
+    try draft.validate()
+    self = draft
+  }
+
+  /// Deletes a profile and moves its Spaces to an existing profile atomically.
+  public mutating func deleteProfile(_ id: UUID, movingSpacesTo destinationID: UUID) throws {
+    guard catalog.profiles.count > 1, id != destinationID,
+      catalog.profiles.contains(where: { $0.id == id }),
+      catalog.profiles.contains(where: { $0.id == destinationID })
+    else { throw WorkspaceError.invalidState }
+    var draft = self
+    for space in draft.catalog.spaces.filter({ $0.profileID == id }) {
+      guard try draft.setSpaceProfile(space.id, to: destinationID) else {
+        throw WorkspaceError.invalidState
+      }
+    }
+    draft.catalog.favorites.removeAll { $0.profileID == id }
+    draft.catalog.profiles.removeAll { $0.id == id }
+    var allocated = draft.allocatedIDs
+    for index in draft.windows.indices {
+      draft.windows[index] = try draft.project(draft.windows[index], allocated: &allocated)
     }
     try draft.validate()
     self = draft
@@ -421,6 +464,7 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
       space.selectedTabID = nil
       space.selectedFavoriteID = nil
       space.folders = source.folders.map(Self.sharedFolder)
+      space.splits = []
       space.tabs = source.tabs.filter(\.isPinned).map { tab in
         let pinID = oldBindings[tab.id] ?? Self.allocate(&allocated)
         references.append(WorkspacePinReference(tabID: tab.id, pinID: pinID))
@@ -500,6 +544,8 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
         tab.folderID = nil
         return tab
       }
+      space.splits = prior?.splits ?? []
+      space.reconcileSplits()
       space.selectedTabID = prior?.selectedTabID.flatMap { id in
         space.tabs.contains { $0.id == id } ? id : nil
       }
@@ -584,6 +630,7 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
   private static func spaceMetadata(_ source: BrowserSpace) -> BrowserSpace {
     var space = source
     space.tabs = []
+    space.splits = []
     space.selectedTabID = nil
     space.selectedFavoriteID = nil
     space.folders = source.folders.map(sharedFolder)

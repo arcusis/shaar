@@ -15,35 +15,85 @@ extension SpaceTint {
 struct BrowserWindow: View {
   @Bindable var store: BrowserStore
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.colorScheme) private var colorScheme
   @FocusState private var pageIsFocused: Bool
   @State private var webContentFrame: CGRect = .zero
+  @State private var sidebarVisibility: SidebarVisibility = .pinned
+  @State private var isFullScreen = false
 
   var body: some View {
     ZStack(alignment: .top) {
-      Color(nsColor: .windowBackgroundColor)
-      HStack(spacing: 0) {
-        if store.sidebarIsVisible {
+      SpaceChromeTint(space: store.session.selectedSpace).color(for: colorScheme)
+      GeometryReader { geometry in
+        let libraryIsOpen = store.libraryDrawerSection != nil && store.canUseLibraryDrawer
+        let leadingWidth =
+          libraryIsOpen
+          ? BrowserChromeLayout.libraryWidth(
+            windowWidth: geometry.size.width, spaces: store.libraryDrawerSection == .spaces)
+          : (store.sidebarIsVisible ? BrowserChromeLayout.sidebarWidth : 0)
+        let pageWidth = max(
+          0,
+          geometry.size.width
+            - (store.sidebarIsVisible ? BrowserChromeLayout.sidebarWidth : 0))
+        HStack(spacing: 0) {
+          ZStack(alignment: .leading) {
+            if libraryIsOpen {
+              BrowserLibraryDrawer(store: store)
+                .transition(.opacity)
+            }
+          }
+          .animation(
+            reduceMotion ? .easeOut(duration: 0.12) : nil, value: store.libraryDrawerSection
+          )
+          .frame(width: leadingWidth)
+          page
+            .padding(BrowserChromeLayout.pageCardInset)
+            .frame(width: pageWidth)
+        }
+        .frame(width: geometry.size.width, height: geometry.size.height, alignment: .leading)
+        .clipped()
+        .animation(reduceMotion ? nil : .spring(duration: 0.3), value: store.libraryDrawerSection)
+      }
+      if store.libraryDrawerSection == nil {
+        if !store.sidebarIsVisible {
+          HStack(spacing: 0) {
+            Color.clear
+              .contentShape(Rectangle())
+              .frame(width: 6)
+              .onHover { inside in
+                if inside { sidebarVisibility.pointerEnteredEdge() }
+              }
+            Spacer(minLength: 0)
+          }
+        }
+        HStack(spacing: 0) {
           BrowserSidebar(store: store)
             .frame(width: BrowserChromeLayout.sidebarWidth)
-            .transition(.move(edge: .leading).combined(with: .opacity))
+            .offset(x: sidebarVisibility == .hidden ? -BrowserChromeLayout.sidebarWidth : 0)
+            .allowsHitTesting(sidebarVisibility != .hidden)
+            .accessibilityHidden(sidebarVisibility == .hidden)
+            .onHover { inside in
+              if !inside { sidebarVisibility.pointerLeftSidebar() }
+            }
+          Spacer(minLength: 0)
         }
-        page
-          .padding(.top, 10)
-          .padding(.trailing, 10)
-          .padding(.bottom, 10)
-          .padding(.leading, store.sidebarIsVisible ? 0 : 10)
+        if store.sidebarIsVisible {
+          TitlebarSidebarToggle(store: store)
+        }
       }
       if store.commandIsOpen {
         Color.black.opacity(0.16)
           .ignoresSafeArea()
           .onTapGesture { store.dismissCommand() }
         GeometryReader { geometry in
-          let contentLeft = store.sidebarIsVisible ? BrowserChromeLayout.sidebarWidth : 10
+          let contentLeft =
+            (store.sidebarIsVisible ? BrowserChromeLayout.sidebarWidth : 0)
+            + BrowserChromeLayout.pageCardInset
           let contentTop: CGFloat = store.pageFind == nil ? 45 : 95
           let initialContentFrame = CGRect(
             x: contentLeft, y: contentTop,
-            width: max(0, geometry.size.width - contentLeft - 10),
-            height: max(0, geometry.size.height - contentTop - 10))
+            width: max(0, geometry.size.width - contentLeft - BrowserChromeLayout.pageCardInset),
+            height: max(0, geometry.size.height - contentTop - BrowserChromeLayout.pageCardInset))
           let frame = BrowserChromeLayout.commandPanelFrame(
             in: webContentFrame.isEmpty ? initialContentFrame : webContentFrame,
             resultCount: store.results.count
@@ -68,34 +118,25 @@ struct BrowserWindow: View {
         PasswordFillOverlay(coordinator: coordinator)
           .zIndex(3)
       }
-      if store.libraryDrawerSection != nil, store.canUseLibraryDrawer {
-        GeometryReader { geometry in
-          let leading: CGFloat = 10
-          let availableWidth = max(0, geometry.size.width - leading - 20)
-          let isSpaces = store.libraryDrawerSection == .spaces
-          let width = isSpaces ? availableWidth : min(480, availableWidth)
-          let height = max(0, geometry.size.height - 32)
-          ZStack(alignment: .bottomLeading) {
-            Color.clear
-              .contentShape(Rectangle())
-              .onTapGesture { dismissLibraryDrawerAndFocusPage() }
-            BrowserLibraryDrawer(store: store)
-              .frame(width: width, height: height)
-              .padding(.leading, leading)
-              .padding(.bottom, 20)
-          }
-          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-        }
-        .transition(.opacity)
-        .zIndex(2)
-      }
+
     }
+    .overlay { TabSwitcherPanel(store: store) }
+    .background { WindowFullScreenObserver(isFullScreen: $isFullScreen) }
+    .environment(\.browserWindowIsFullScreen, isFullScreen)
     .coordinateSpace(name: "browser-window")
     .onPreferenceChange(WebContentFramePreferenceKey.self) { webContentFrame = $0 }
-    .background { SpaceSwipeNavigation(store: store) }
     .frame(minWidth: 760, minHeight: 520)
     .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: store.commandIsOpen)
     .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: store.sidebarIsVisible)
+    .animation(
+      reduceMotion ? nil : .easeOut(duration: 0.18),
+      value: SpaceChromeTint(space: store.session.selectedSpace)
+    )
+    .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: sidebarVisibility)
+    .onAppear { sidebarVisibility.setPinned(store.sidebarIsVisible) }
+    .onChange(of: store.sidebarIsVisible) { _, pinned in
+      sidebarVisibility.setPinned(pinned)
+    }
     .sheet(
       item: store.engine?.presentsNativePanels == false ? .constant(nil) : $store.sheet,
       onDismiss: { store.sheetDidDismiss() }
@@ -123,7 +164,7 @@ struct BrowserWindow: View {
       }
       if !isOpen && store.pageFind == nil {
         if let engine = store.engine, let id = store.session.selectedPage?.tab.id {
-          engine.runtime.focusTabID(id.uuidString)
+          DispatchQueue.main.async { engine.focusPage(id) }
         } else {
           pageIsFocused = true
         }
@@ -161,10 +202,13 @@ struct BrowserWindow: View {
       ZStack {
         Color(nsColor: .textBackgroundColor)
         if let engine = store.engine, let id = store.session.selectedPage?.tab.id {
-          if let failure = store.rendererFailures[id] {
+          if let split = store.selectedSplit {
+            BrowserSplitPageView(store: store, engine: engine, split: split)
+          } else if let failure = store.rendererFailures[id] {
             FailedPageView(store: store, failure: failure)
           } else if engine.pages[id] != nil {
             ChromiumPage(engine: engine, tabID: id)
+              .overlay { SplitDropZone(store: store, targetID: id) }
           } else {
             ProgressView("Loading profile…")
           }
@@ -228,8 +272,11 @@ struct BrowserWindow: View {
       }
     }
     .background(Color(nsColor: .textBackgroundColor))
-    .clipShape(RoundedRectangle(cornerRadius: 13))
-    .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(.black.opacity(0.07)))
+    .clipShape(RoundedRectangle(cornerRadius: BrowserChromeLayout.pageCardRadius))
+    .overlay(
+      RoundedRectangle(cornerRadius: BrowserChromeLayout.pageCardRadius)
+        .strokeBorder(.black.opacity(0.07))
+    )
     .shadow(color: .black.opacity(0.08), radius: 8, y: 3)
   }
 

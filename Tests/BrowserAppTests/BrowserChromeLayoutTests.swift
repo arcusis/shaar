@@ -4,6 +4,13 @@ import XCTest
 @testable import ArcusisBrowser
 
 final class BrowserChromeLayoutTests: XCTestCase {
+  func testLibraryWidthsPreservePageSliver() {
+    XCTAssertEqual(BrowserChromeLayout.libraryWidth(windowWidth: 1200, spaces: false), 388)
+    XCTAssertEqual(BrowserChromeLayout.libraryWidth(windowWidth: 1200, spaces: true), 1176)
+    XCTAssertEqual(BrowserChromeLayout.libraryWidth(windowWidth: 300, spaces: false), 276)
+    XCTAssertEqual(BrowserChromeLayout.libraryWidth(windowWidth: 10, spaces: true), 0)
+  }
+
   func testLauncherCentersOverWebContentWithSidebarVisible() {
     let content = CGRect(x: 240, y: 55, width: 950, height: 715)
     let frame = BrowserChromeLayout.commandPanelFrame(in: content, resultCount: 8)

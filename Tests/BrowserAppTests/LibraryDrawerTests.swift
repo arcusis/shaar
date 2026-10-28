@@ -7,12 +7,35 @@ import XCTest
 
 @MainActor
 final class LibraryDrawerTests: XCTestCase {
+  func testRepeatedSectionChangesAndCloseClearDrawerState() {
+    let store = BrowserStore()
+    for section in LibraryDrawerSection.allCases {
+      XCTAssertTrue(store.showLibraryDrawer(section))
+      XCTAssertEqual(store.libraryDrawerSection, section)
+      store.closeLibraryDrawer()
+      XCTAssertNil(store.libraryDrawerSection)
+      XCTAssertNil(store.libraryDrawerProfileID)
+    }
+  }
+
+  func testSelectingEverySectionUpdatesDrawerAndProfile() {
+    let store = BrowserStore()
+    XCTAssertTrue(store.toggleLibraryDrawer())
+    for section in LibraryDrawerSection.allCases {
+      XCTAssertTrue(store.selectLibraryDrawerSection(section))
+      XCTAssertEqual(store.libraryDrawerSection, section)
+      XCTAssertEqual(
+        store.libraryDrawerProfileID,
+        section == .spaces ? nil : store.session.selectedSpace.profileID)
+    }
+  }
+
   func testDrawerToggleAndPresentationStateBelongToEachWindow() {
     let first = BrowserStore()
     let second = BrowserStore()
 
     XCTAssertTrue(first.toggleLibraryDrawer())
-    XCTAssertEqual(first.libraryDrawerSection, .spaces)
+    XCTAssertEqual(first.libraryDrawerSection, .downloads)
     XCTAssertNil(second.libraryDrawerSection)
 
     XCTAssertTrue(first.selectLibraryDrawerSection(.downloads))
@@ -110,6 +133,16 @@ final class LibraryDrawerTests: XCTestCase {
       try await capture(
         view, size: NSSize(width: width, height: height), appearance: appearance,
         to: root.appending(path: name))
+    }
+
+    for section in [LibraryDrawerSection.downloads, .media] {
+      let (session, _) = makeFixtureSession()
+      let store = BrowserStore(sessionFile: nil, session: session)
+      XCTAssertTrue(store.showLibraryDrawer(section))
+      try await capture(
+        BrowserWindow(store: store).environment(\.colorScheme, .dark),
+        size: NSSize(width: 1200, height: 780), appearance: .darkAqua,
+        to: root.appending(path: "library-drawer-\(section.rawValue.lowercased()).png"))
     }
 
     for (name, _, _, _, _) in cases {

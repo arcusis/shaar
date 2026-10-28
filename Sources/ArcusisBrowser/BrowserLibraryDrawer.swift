@@ -2,9 +2,9 @@ import BrowserCore
 import SwiftUI
 
 enum LibraryDrawerSection: String, CaseIterable, Identifiable {
-  case spaces = "Spaces"
-  case downloads = "Downloads"
   case media = "Media"
+  case downloads = "Downloads"
+  case spaces = "Spaces"
 
   var id: Self { self }
 
@@ -20,17 +20,15 @@ enum LibraryDrawerSection: String, CaseIterable, Identifiable {
 struct BrowserLibraryDrawer: View {
   @Bindable var store: BrowserStore
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
-  @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
   @State private var spacesQuery = ""
   @FocusState private var spacesSearchIsFocused: Bool
 
-  private var section: LibraryDrawerSection { store.libraryDrawerSection ?? .spaces }
+  private var section: LibraryDrawerSection { store.libraryDrawerSection ?? .downloads }
 
   var body: some View {
     GeometryReader { geometry in
-      let railWidth = min(max(geometry.size.width * 0.18, 82), 92)
       HStack(spacing: 0) {
-        rail.frame(maxHeight: .infinity, alignment: .topLeading).frame(width: railWidth)
+        rail.frame(maxHeight: .infinity).frame(width: BrowserChromeLayout.libraryRailWidth)
 
         Rectangle().fill(Color.primary.opacity(0.09)).frame(width: 1)
 
@@ -55,10 +53,6 @@ struct BrowserLibraryDrawer: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       }
       .frame(width: geometry.size.width, height: geometry.size.height)
-      .background(Color(nsColor: .windowBackgroundColor))
-      .clipShape(RoundedRectangle(cornerRadius: 15))
-      .overlay(RoundedRectangle(cornerRadius: 15).strokeBorder(Color.primary.opacity(0.1)))
-      .shadow(color: .black.opacity(reduceTransparency ? 0 : 0.16), radius: 20, y: 8)
     }
     .accessibilityElement(children: .contain)
     .accessibilityLabel("Library")
@@ -70,65 +64,47 @@ struct BrowserLibraryDrawer: View {
   }
 
   private var rail: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      HStack(spacing: 2) {
-        if section != .spaces { backButton }
-        Spacer(minLength: 0)
-        closeButton
+    ZStack(alignment: .bottomLeading) {
+      VStack(spacing: 8) {
+        ForEach(LibraryDrawerSection.allCases) { item in sectionButton(item) }
+      }
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+      Button(action: closeAndFocusPage) {
+        Image(systemName: "arrow.left")
+          .font(.system(size: 16, weight: .medium))
+          .frame(width: 36, height: 36)
+          .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
-      .padding(.bottom, 8)
-      ForEach(LibraryDrawerSection.allCases) { item in sectionButton(item) }
-      Spacer(minLength: 0)
+      .help("Close Library")
+      .accessibilityLabel("Close Library")
+      .padding(8)
     }
-    .padding(8)
-  }
-
-  private var backButton: some View {
-    Button {
-      _ = store.selectLibraryDrawerSection(.spaces)
-    } label: {
-      VStack(spacing: 2) {
-        Image(systemName: "chevron.left")
-        Text("Back").font(.system(size: 9))
-      }
-      .frame(width: 30, height: 34)
-    }
-    .help("Back to Spaces")
-    .accessibilityLabel("Back to Spaces")
-  }
-
-  private var closeButton: some View {
-    Button(action: closeAndFocusPage) {
-      VStack(spacing: 2) {
-        Image(systemName: "xmark")
-        Text("Close").font(.system(size: 9))
-      }
-      .frame(width: 34, height: 34)
-    }
-    .help("Close Library")
-    .accessibilityLabel("Close Library")
+    .padding(.horizontal, 8)
   }
 
   private func sectionButton(_ item: LibraryDrawerSection) -> some View {
     let isSelected = item == section
-    let labelWeight: Font.Weight = isSelected ? .semibold : .regular
     return Button {
       _ = store.selectLibraryDrawerSection(item)
     } label: {
       VStack(spacing: 5) {
-        Image(systemName: item.symbol).font(.system(size: 17, weight: .medium))
+        Image(systemName: item.symbol).font(.system(size: 22, weight: .medium))
         Text(item.rawValue)
-          .font(.system(size: 10, weight: labelWeight))
+          .font(.system(size: 12, weight: .semibold))
           .lineLimit(1)
           .minimumScaleFactor(0.8)
       }
-      .frame(maxWidth: .infinity, minHeight: 54)
+      .frame(maxWidth: .infinity, minHeight: 72)
       .background(
-        isSelected ? Color.primary.opacity(0.08) : Color.clear,
-        in: RoundedRectangle(cornerRadius: 8))
+        isSelected ? Color.primary.opacity(0.1) : Color.clear,
+        in: RoundedRectangle(cornerRadius: 12)
+      )
+      .contentShape(RoundedRectangle(cornerRadius: 12))
     }
     .buttonStyle(.plain)
+    .foregroundStyle(isSelected ? Color.primary : Color.secondary)
     .accessibilityAddTraits(isSelected ? .isSelected : [])
   }
 
@@ -144,17 +120,11 @@ struct BrowserLibraryDrawer: View {
 
   private var spacesContent: some View {
     VStack(spacing: 0) {
-      TextField("Search Spaces", text: $spacesQuery)
-        .textFieldStyle(.roundedBorder)
-        .accessibilityLabel("Search Spaces")
-        .focused($spacesSearchIsFocused)
-        .padding(.horizontal, 14)
-        .padding(.top, 14)
       let expectedProfiles = Dictionary(
         uniqueKeysWithValues: store.session.spaces.map { ($0.id, $0.profileID) })
       LibrarySpacesOverview(
         store: store,
-        query: spacesQuery,
+        query: "",
         onSelectSpace: { id in
           guard let profile = expectedProfiles[id] else { return }
           _ = store.selectLibrarySpace(id, expectedProfileID: profile)

@@ -2,6 +2,22 @@ import CoreGraphics
 
 enum BrowserChromeLayout {
   static let sidebarWidth: CGFloat = 240
+  static let libraryRailWidth: CGFloat = 88
+  static let libraryPanelWidth: CGFloat = 300
+  static let libraryPageSliver: CGFloat = 24
+
+  static func libraryWidth(windowWidth: CGFloat, spaces: Bool) -> CGFloat {
+    let available = max(0, windowWidth - libraryPageSliver)
+    return spaces ? available : min(libraryRailWidth + libraryPanelWidth, available)
+  }
+  static let pageCardInset: CGFloat = 8
+  static let pageCardRadius: CGFloat = 10
+  /// Titlebar space after the traffic lights kept clickable for the sidebar toggle.
+  static let titlebarAccessoryWidth: CGFloat = 36
+  static let titlebarToggleLeading: CGFloat = 84
+  /// Full screen has no titlebar: the toggle gets its own row at the sidebar's top-left.
+  static let fullScreenToggleRowHeight: CGFloat = 36
+  static let fullScreenToggleLeading: CGFloat = 12
   static let preferredCommandWidth: CGFloat = 580
   static let commandChromeHeight: CGFloat = 112
   static let preferredResultsHeight: CGFloat = 330

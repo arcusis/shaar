@@ -21,7 +21,9 @@ struct WindowDragRegion: NSViewRepresentable {
     guard top > 0 else { return nil }
     guard let trafficLightsFrame else { return nil }
     let originY = isFlipped ? contentBounds.minY : contentLayoutRect.maxY
-    let startX = max(contentBounds.minX, trafficLightsFrame.maxX + 8)
+    let startX = max(
+      contentBounds.minX,
+      trafficLightsFrame.maxX + 8 + BrowserChromeLayout.titlebarAccessoryWidth)
     guard startX < contentBounds.maxX else { return nil }
     return NSRect(x: startX, y: originY, width: contentBounds.maxX - startX, height: top)
   }

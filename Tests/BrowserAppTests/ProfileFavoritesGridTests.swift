@@ -17,7 +17,7 @@ final class ProfileFavoritesGridTests: XCTestCase {
       ("zero-light", 0, .light, false, false, false),
       ("one-light", 1, .light, false, false, true),
       ("nine-light", 9, .light, false, false, false),
-      ("fifty-light", 50, .light, false, false, false),
+      ("sixteen-light", 16, .light, false, false, false),
       ("nine-long-title-url", 9, .light, false, false, true),
       ("nine-dark", 9, .dark, false, false, false),
       ("nine-reduced-motion", 9, .light, true, false, false),
@@ -50,7 +50,7 @@ final class ProfileFavoritesGridTests: XCTestCase {
         ? AnyView(view.frame(width: 212, height: 24, alignment: .topLeading))
         : AnyView(view)
       let measurements = try await capture(
-        captureView, fittingSize: naturalFittingSize, hostHeight: count == 0 ? 24 : 212,
+        captureView, fittingSize: naturalFittingSize, hostHeight: count == 0 ? 24 : 282,
         to: imageURL)
       XCTAssertEqual(measurements.hostWidth, 212, accuracy: 0.5)
       XCTAssertLessThanOrEqual(measurements.fittingWidth, 212.5)
@@ -58,12 +58,17 @@ final class ProfileFavoritesGridTests: XCTestCase {
         XCTAssertLessThanOrEqual(measurements.fittingHeight, 1)
       } else {
         XCTAssertGreaterThan(measurements.fittingHeight, 0)
-        XCTAssertLessThanOrEqual(measurements.fittingHeight, 212)
+        XCTAssertLessThanOrEqual(measurements.fittingHeight, 282)
       }
-      XCTAssertLessThanOrEqual(measurements.hostHeight, count == 0 ? 24 : 212)
+      XCTAssertLessThanOrEqual(measurements.hostHeight, count == 0 ? 24 : 282)
       if count > 0 {
-        XCTAssertNotNil(measurements.scrollViewHeight)
-        XCTAssertLessThanOrEqual(measurements.scrollViewHeight ?? .infinity, 164)
+        XCTAssertNil(measurements.scrollViewHeight)
+        let columns = ProfileFavoritesGrid.columnCount(for: count)
+        let rows = (count + columns - 1) / columns
+        let expectedHeight =
+          CGFloat(rows) * ProfileFavoritesGrid.tileHeight(columns: columns) + CGFloat(rows - 1) * 8
+          + 2
+        XCTAssertEqual(measurements.fittingHeight, expectedHeight, accuracy: 1)
       }
       if includesLongValue {
         XCTAssertGreaterThan(favorites[0].title.count, 100)

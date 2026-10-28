@@ -13,6 +13,29 @@ extension BrowserSpace {
   }
 }
 
+struct SpaceChromeTint: Equatable {
+  let rgb: SpaceRGBColor
+
+  init(space: BrowserSpace) {
+    rgb = space.customRGB ?? SpaceTintRGB.color(for: space.tint)
+  }
+
+  func components(for scheme: ColorScheme) -> (red: Double, green: Double, blue: Double) {
+    let base = scheme == .dark ? 0.08 : 0.88
+    let strength = scheme == .dark ? 0.14 : 0.12
+    return (
+      base + strength * Double(rgb.red) / 255,
+      base + strength * Double(rgb.green) / 255,
+      base + strength * Double(rgb.blue) / 255
+    )
+  }
+
+  func color(for scheme: ColorScheme) -> Color {
+    let value = components(for: scheme)
+    return Color(.sRGB, red: value.red, green: value.green, blue: value.blue, opacity: 1)
+  }
+}
+
 struct SpaceAppearanceDraft: Equatable {
   var tint: SpaceTint
   var customRGB: SpaceRGBColor?

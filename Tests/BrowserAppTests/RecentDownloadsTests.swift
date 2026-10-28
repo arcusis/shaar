@@ -124,7 +124,8 @@ struct RecentDownloadsTests {
   ) throws {
     let view = RecentDownloadsPopover(
       items: items, profileID: profile, selectedProfileID: { profile },
-      dragURL: { _ in nil }, dismiss: {}, referenceDate: referenceDate
+      dragURL: { _ in nil }, dismiss: {}, referenceDate: referenceDate,
+      animatesReveal: false
     )
     .environment(\.colorScheme, scheme)
     let host = NSHostingView(rootView: view)

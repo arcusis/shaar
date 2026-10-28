@@ -42,6 +42,18 @@ import Testing
     settings.close()
   }
 
+  @Test func profileListAndSpaceNamesReflectSameCatalog() throws {
+    let workspace = try BrowserWorkspaceStore(initialSession: .fresh())
+    let settings = BrowserSettingsController(
+      workspace: workspace, preferences: BrowserPreferencesStore(), presentation: .hiddenProbe)
+    for profile in settings.profiles {
+      let expected = workspace.workspace.catalog.spaces.filter { $0.profileID == profile.id }.map(
+        \.name)
+      #expect(profile.spaceNames == expected)
+      #expect(profile.spaceCount == expected.count)
+    }
+  }
+
   @Test func capturedRenameIDTargetsOriginalProfileAndStaleIDLeavesWorkspaceUntouched() throws {
     let workspace = try BrowserWorkspaceStore(initialSession: .fresh())
     let personalID = workspace.workspace.catalog.profiles[0].id
@@ -121,6 +133,7 @@ import Testing
     #expect(createdSpace.profileID == newProfileID)
     #expect(browserStore.session.selectedSpaceID == createdSpace.id)
     #expect(settings.profiles.first { $0.id == newProfileID }?.spaceCount == 1)
+    #expect(settings.profiles.first { $0.id == newProfileID }?.spaceNames == ["Project"])
     for (spaceID, profileID) in originalAssignments {
       #expect(workspace.workspace.catalog.spaces.first { $0.id == spaceID }?.profileID == profileID)
     }

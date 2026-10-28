@@ -98,6 +98,7 @@ extension BrowserSession {
     if source != destination {
       let oldPosition = spaces[source].tabs.firstIndex { $0.id == selected } ?? 0
       updated[source].tabs.removeAll { memberIDs.contains($0.id) }
+      updated[source].reconcileSplits()
       updated[destination].tabs += members
       if selected.map(memberIDs.contains) == true {
         let remaining = updated[source].tabs

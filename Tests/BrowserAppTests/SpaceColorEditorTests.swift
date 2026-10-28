@@ -65,8 +65,8 @@ final class SpaceColorEditorLayoutTests: XCTestCase {
     let custom = SpaceRGBColor(red: 0x12, green: 0x84, blue: 0xD6)
 
     for (schemeName, scheme, sizeClass, width) in [
-      ("normal", ColorScheme.light, UserInterfaceSizeClass.regular, CGFloat(440)),
-      ("dark", ColorScheme.dark, UserInterfaceSizeClass.regular, CGFloat(440)),
+      ("normal", ColorScheme.light, UserInterfaceSizeClass.regular, CGFloat(380)),
+      ("dark", ColorScheme.dark, UserInterfaceSizeClass.regular, CGFloat(380)),
       ("compact", ColorScheme.light, UserInterfaceSizeClass.compact, CGFloat(380)),
     ] {
       for (stateName, route) in [("create", SpaceEditorRoute.create), ("edit", .edit(editID))] {
@@ -75,7 +75,7 @@ final class SpaceColorEditorLayoutTests: XCTestCase {
           .environment(\.horizontalSizeClass, sizeClass)
         let name = "\(schemeName)-\(stateName)"
         try capture(
-          view, size: NSSize(width: width + 24, height: 520),
+          view, size: NSSize(width: width + 24, height: 600),
           to: output.appending(path: "\(name).png"))
         // Closing hidden host without Save must leave committed session untouched.
         XCTAssertEqual(store.session, initialSession)
@@ -91,7 +91,7 @@ final class SpaceColorEditorLayoutTests: XCTestCase {
       .environment(\.colorScheme, .light)
       .environment(\.horizontalSizeClass, .regular)
     try capture(
-      editView, size: NSSize(width: 464, height: 520), to: output.appending(path: "custom-edit.png")
+      editView, size: NSSize(width: 404, height: 600), to: output.appending(path: "custom-edit.png")
     )
     XCTAssertEqual(editStore.session.spaces.first { $0.id == editID }?.customRGB, custom)
     XCTAssertTrue(
@@ -113,7 +113,7 @@ final class SpaceColorEditorLayoutTests: XCTestCase {
       .environment(\.colorScheme, .light)
       .environment(\.horizontalSizeClass, .regular)
     try capture(
-      longNameView, size: NSSize(width: 464, height: 520),
+      longNameView, size: NSSize(width: 404, height: 600),
       to: output.appending(path: "long-name-edit.png"))
     XCTAssertEqual(longNameStore.session, longNamed)
   }
@@ -159,4 +159,16 @@ private func capture<V: View>(_ view: V, size: NSSize, to url: URL) throws {
 private enum ScreenshotError: Error {
   case bitmapCreation
   case encoding
+}
+
+@MainActor
+@Test func spaceSymbolPersistsThroughCreateAndUpdate() {
+  let store = BrowserStore(sessionFile: nil, session: .fresh())
+  #expect(store.createSpace(name: "Design", sharingProfile: nil, tint: .rose, symbol: "star.fill"))
+  let id = store.session.selectedSpaceID
+  #expect(store.session.selectedSpace.symbol == "star.fill")
+  #expect(store.updateSpace(id, name: "Design", tint: .ocean, symbol: "globe"))
+  #expect(store.session.selectedSpace.symbol == "globe")
+  #expect(store.updateSpace(id, name: "Design", tint: .forest))
+  #expect(store.session.selectedSpace.symbol == "globe")
 }

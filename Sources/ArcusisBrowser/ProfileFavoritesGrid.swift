@@ -34,6 +34,7 @@ struct ProfileFavoritesGrid: View {
   let onReset: (UUID) -> Void
   let onRemove: (UUID) -> Void
   let onMoveBefore: (UUID, UUID?) -> Void
+  let onTabDrop: (SidebarTransfer, UUID?) -> Bool
   let accessibilityOverrides: ProfileFavoritesAccessibilityOverrides?
   @State private var currentSelectionID: UUID?
 
@@ -50,6 +51,7 @@ struct ProfileFavoritesGrid: View {
     onReset: @escaping (UUID) -> Void,
     onRemove: @escaping (UUID) -> Void,
     onMoveBefore: @escaping (UUID, UUID?) -> Void,
+    onTabDrop: @escaping (SidebarTransfer, UUID?) -> Bool = { _, _ in false },
     accessibilityOverrides: ProfileFavoritesAccessibilityOverrides? = nil
   ) {
     self.favorites = favorites
@@ -60,14 +62,34 @@ struct ProfileFavoritesGrid: View {
     self.onReset = onReset
     self.onRemove = onRemove
     self.onMoveBefore = onMoveBefore
+    self.onTabDrop = onTabDrop
     self.accessibilityOverrides = accessibilityOverrides
     _currentSelectionID = State(initialValue: selectedID)
   }
 
-  private static let columns = Array(
-    repeating: GridItem(.flexible(minimum: 0, maximum: .infinity), spacing: 6), count: 3)
-  private static let tileHeight: CGFloat = 50
-  private static let maximumRows = 3
+  /// Arc widens the grid as favorites are added: 2 per row, then 3, then 4 (up to 4 x 4).
+  static func columnCount(for count: Int) -> Int {
+    if count <= 4 { return 2 }
+    return count <= 9 ? 3 : 4
+  }
+
+  private var columns: [GridItem] {
+    Array(
+      repeating: GridItem(.flexible(minimum: 0, maximum: .infinity), spacing: 8),
+      count: Self.columnCount(for: favorites.count))
+  }
+
+  static func tileHeight(columns: Int) -> CGFloat {
+    switch columns {
+    case 2: 54
+    case 3: 48
+    default: 44
+    }
+  }
+
+  private var tileHeight: CGFloat {
+    Self.tileHeight(columns: Self.columnCount(for: favorites.count))
+  }
 
   var body: some View {
     let motionReduced = reduceMotion || accessibilityOverrides?.reduceMotion == true
@@ -75,57 +97,27 @@ struct ProfileFavoritesGrid: View {
       reduceTransparency || accessibilityOverrides?.reduceTransparency == true
     Group {
       if !favorites.isEmpty {
-        ScrollViewReader { favoriteScroll in
-          ScrollView(.vertical) {
-            LazyVGrid(columns: Self.columns, alignment: .leading, spacing: 6) {
-              ForEach(favorites, id: \.id) { favorite in
-                tile(favorite, reduceMotion: motionReduced, reduceTransparency: transparencyReduced)
-                  .id(favorite.id)
-              }
-            }
-            .padding(.vertical, 1)
+        LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
+          ForEach(favorites, id: \.id) { favorite in
+            tile(favorite, reduceMotion: motionReduced, reduceTransparency: transparencyReduced)
+              .id(favorite.id)
           }
-          .scrollIndicators(.hidden)
-          .frame(height: gridHeight)
-          .accessibilityLabel("Favorite pages")
-          .coordinateSpace(name: "sidebarFavoriteViewport")
-          .background {
-            GeometryReader { geometry in
-              Color.clear.preference(
-                key: SidebarFavoriteRevealFramesPreferenceKey.self,
-                value: SidebarRevealFrames(
-                  viewport: CGRect(origin: .zero, size: geometry.size)))
-            }
-          }
-          .onAppear {
-            if let selectedID, favorites.contains(where: { $0.id == selectedID }) {
-              favoriteScroll.scrollTo(selectedID)
-            }
-          }
-          .onChange(of: selectedID) { _, id in
-            currentSelectionID = id
-            guard let id, favorites.contains(where: { $0.id == id }) else { return }
-            DispatchQueue.main.async {
-              guard currentSelectionID == id,
-                favorites.contains(where: { $0.id == id })
-              else { return }
-              if motionReduced {
-                favoriteScroll.scrollTo(id)
-              } else {
-                withAnimation(.easeOut(duration: 0.12)) { favoriteScroll.scrollTo(id) }
-              }
-            }
+        }
+        .padding(.vertical, 1)
+        .accessibilityLabel("Favorite pages")
+        .coordinateSpace(name: "sidebarFavoriteViewport")
+        .background {
+          GeometryReader { geometry in
+            Color.clear.preference(
+              key: SidebarFavoriteRevealFramesPreferenceKey.self,
+              value: SidebarRevealFrames(viewport: CGRect(origin: .zero, size: geometry.size)))
           }
         }
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .animation(motionReduced ? nil : .easeOut(duration: 0.12), value: hoveredID)
-  }
-
-  private var gridHeight: CGFloat {
-    let rows = min((favorites.count + 2) / 3, Self.maximumRows)
-    return CGFloat(rows) * Self.tileHeight + CGFloat(max(rows - 1, 0)) * 6 + 2
+    .animation(motionReduced ? nil : .smooth(duration: 0.25), value: favorites.count)
   }
 
   private func tile(
@@ -145,13 +137,9 @@ struct ProfileFavoritesGrid: View {
             tileBackground(
               isSelected: isSelected, isHovered: isHovered,
               reduceTransparency: reduceTransparency),
-            in: RoundedRectangle(cornerRadius: 9)
+            in: RoundedRectangle(cornerRadius: 12)
           )
-          .overlay {
-            RoundedRectangle(cornerRadius: 9)
-              .strokeBorder(isSelected ? Color.accentColor.opacity(0.62) : .clear, lineWidth: 1)
-          }
-          .contentShape(RoundedRectangle(cornerRadius: 9))
+          .contentShape(RoundedRectangle(cornerRadius: 12))
       }
       .buttonStyle(ProfileFavoriteTileButtonStyle(reduceMotion: reduceMotion))
       .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -172,6 +160,14 @@ struct ProfileFavoritesGrid: View {
         onMoveBefore(payload.favoriteID, beforeID)
         return true
       }
+      .dropDestination(for: SidebarTransfer.self) { items, point in
+        guard items.count == 1, let item = items.first else { return false }
+        return onTabDrop(
+          item,
+          Self.dropTargetBefore(
+            targetID: favorite.id, dropX: point.x, tileWidth: geometry.size.width,
+            favorites: favorites))
+      }
       .onHover { isHovered in
         if isHovered {
           hoveredID = favorite.id
@@ -189,7 +185,7 @@ struct ProfileFavoritesGrid: View {
         Button("Remove Favorite (keeps page)", role: .destructive) { onRemove(favorite.id) }
       }
     }
-    .frame(height: Self.tileHeight)
+    .frame(height: tileHeight)
     .background {
       GeometryReader { geometry in
         if isSelected {
@@ -234,9 +230,9 @@ struct ProfileFavoritesGrid: View {
       return AnyShapeStyle(Color(nsColor: .controlBackgroundColor))
     }
     if isSelected {
-      return AnyShapeStyle(Color.accentColor.opacity(0.12))
+      return AnyShapeStyle(Color.primary.opacity(0.12))
     }
-    return AnyShapeStyle(Color.primary.opacity(isHovered ? 0.085 : 0.045))
+    return AnyShapeStyle(Color.primary.opacity(isHovered ? 0.12 : 0.08))
   }
 
   private func dragPayload(for favorite: FavoriteTile) -> ProfileFavoriteDrag {
@@ -302,7 +298,7 @@ private struct ProfileFavoriteTileButtonStyle: ButtonStyle {
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
       .background {
-        RoundedRectangle(cornerRadius: 9)
+        RoundedRectangle(cornerRadius: 12)
           .fill(Color.primary.opacity(configuration.isPressed ? 0.13 : 0))
       }
       .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)

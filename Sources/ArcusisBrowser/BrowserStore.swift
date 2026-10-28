@@ -1,6 +1,7 @@
 import BrowserCore
 import Foundation
 import Observation
+import os
 
 struct ManagedSessionSaveResult {
   let session: BrowserSession
@@ -25,12 +26,16 @@ struct SpaceRemovalImpact {
 
 @MainActor @Observable
 final class BrowserStore {
-  private(set) var session: BrowserSession
+  var session: BrowserSession
+  var splitTabRecency: [UUID] = []
+  var pendingSplitPlacement: SplitPlacement?
+  var tabDrag: TabDrag?
   let dragSessionID = UUID()
   let library = BrowserLibraryModel()
   private(set) var sidebarNotice: String?
   var commandIsOpen = false
   var commandQuery = ""
+  var commandEditsCurrentURL = false
   var commandSelection = 0
   var sidebarIsVisible = true
   private(set) var pageFind: PageFindState?
@@ -42,6 +47,7 @@ final class BrowserStore {
   }
   private(set) var libraryDrawerSection: LibraryDrawerSection?
   private(set) var libraryDrawerProfileID: UUID?
+  var spaceEditorFocus: SpaceEditorFocus = .name
   var spaceEditor: SpaceEditorRoute? {
     get {
       if case .space(let route) = sheet { return route }
@@ -76,7 +82,10 @@ final class BrowserStore {
 
   @ObservationIgnored private let sessionFile: SessionFile?
   @ObservationIgnored var preferences = BrowserPreferencesStore()
-  @ObservationIgnored private var managedSave: ((BrowserSession) -> ManagedSessionSaveResult)?
+  @ObservationIgnored private var managedSave: ((BrowserSession, Bool) -> ManagedSessionSaveResult)?
+  @ObservationIgnored private let snapshotScheduler = SnapshotSaveScheduler()
+  @ObservationIgnored private let switchLog = OSLog(
+    subsystem: "com.arcusis.browser", category: "SpaceSwitch")
   @ObservationIgnored private var maySave = true
   @ObservationIgnored var engine: BrowserEngine?
   @ObservationIgnored var onSessionChanged: (() -> Void)?
@@ -87,6 +96,8 @@ final class BrowserStore {
   @ObservationIgnored var onFindRequest: ((PageFindState, Bool) -> Bool)?
   @ObservationIgnored var onStopFinding: ((UUID) -> Void)?
   @ObservationIgnored var onReloadPage: ((UUID, UUID) -> Bool)?
+  @ObservationIgnored var onSetSpaceProfile: ((UUID, UUID) -> Bool)?
+  @ObservationIgnored var onCreateProfile: ((String) -> UUID?)?
   @ObservationIgnored var onSpaceRemovalImpact: ((UUID) -> SpaceRemovalImpact)?
   @ObservationIgnored private var presentedConsentID: String?
 
@@ -108,7 +119,7 @@ final class BrowserStore {
 
   init(
     managedSession: BrowserSession, notice: String?,
-    save: @escaping (BrowserSession) -> ManagedSessionSaveResult
+    save: @escaping (BrowserSession, Bool) -> ManagedSessionSaveResult
   ) {
     sessionFile = nil
     session = managedSession
@@ -120,6 +131,7 @@ final class BrowserStore {
   func applyManagedSession(_ value: BrowserSession, notice: String?) {
     guard managedSave != nil else { return }
     let changed = session != value
+    discardReassignedSpacePages(from: session, to: value)
     session = value
     storageNotice = notice
     reconcileTransientState()
@@ -145,12 +157,17 @@ final class BrowserStore {
   func showCommand() {
     closeLibraryDrawer()
     dismissPageFind()
+    commandEditsCurrentURL = false
     commandQuery = ""
     commandSelection = 0
+    pendingSplitPlacement = nil
     commandIsOpen = true
   }
 
-  func dismissCommand() { commandIsOpen = false }
+  func dismissCommand() {
+    commandIsOpen = false
+    pendingSplitPlacement = nil
+  }
 
   var canUseLibraryDrawer: Bool {
     sheet == nil && !commandIsOpen && consentRequests.isEmpty
@@ -163,7 +180,7 @@ final class BrowserStore {
       closeLibraryDrawer()
       return true
     }
-    return showLibraryDrawer(.spaces)
+    return showLibraryDrawer(.downloads)
   }
 
   @discardableResult
@@ -199,8 +216,11 @@ final class BrowserStore {
         spaceID: spaceID, profileID: expectedProfileID, in: session)
     else { return false }
     closeLibraryDrawer()
+    let signpost = OSSignpostID(log: switchLog)
+    os_signpost(.begin, log: switchLog, name: "SpaceSwitch", signpostID: signpost)
+    defer { os_signpost(.end, log: switchLog, name: "SpaceSwitch", signpostID: signpost) }
     session.selectSpace(spaceID)
-    save()
+    save(deferred: true)
     return true
   }
 
@@ -370,10 +390,17 @@ final class BrowserStore {
   func perform(_ action: CommandAction) {
     sidebarNotice = nil
     switch action {
-    case .open(let url): session.open(url)
+    case .open(let url):
+      if let id = session.open(url) { placePendingSplitPane(id) }
     case .space(let id):
       closeLibraryDrawer()
+      let signpost = OSSignpostID(log: switchLog)
+      os_signpost(.begin, log: switchLog, name: "SpaceSwitch", signpostID: signpost)
       session.selectSpace(id)
+      commandIsOpen = false
+      save(deferred: true)
+      os_signpost(.end, log: switchLog, name: "SpaceSwitch", signpostID: signpost)
+      return
     case .folder(let space, let folder): session.selectFolder(folder, in: space)
     case .favorite(let profile, let id):
       guard commandIsOpen, sheet == nil, session.selectedSpace.profileID == profile,
@@ -411,9 +438,12 @@ final class BrowserStore {
   }
 
   func cycleSpace(by offset: Int) {
+    let signpost = OSSignpostID(log: switchLog)
+    os_signpost(.begin, log: switchLog, name: "SpaceSwitch", signpostID: signpost)
+    defer { os_signpost(.end, log: switchLog, name: "SpaceSwitch", signpostID: signpost) }
     sidebarNotice = nil
     session.cycleSpace(by: offset)
-    save()
+    save(deferred: true)
   }
 
   func closeTab(_ id: UUID) {
@@ -450,6 +480,10 @@ final class BrowserStore {
   func addCurrentPageAsFavorite() -> Bool {
     guard canFavoriteCurrentPage, case .tab(let tab) = session.selectedPage else { return false }
     let tabID = tab.id
+    guard profileFavorites.count < BrowserSession.maximumFavoritesPerProfile else {
+      sidebarNotice = "A profile can have up to 16 favorites."
+      return false
+    }
     guard session.promoteTabToFavorite(tabID, in: session.selectedSpaceID) != nil else {
       return false
     }
@@ -768,6 +802,7 @@ final class BrowserStore {
     switch item {
     case .tab(let sessionID, let source, let tab):
       guard sessionID == dragSessionID else { return false }
+      separateDraggedPane(tab)
       return moveTab(
         tab, from: source, to: space, before: targetTab, pinned: pinned, folderID: folderID)
     case .space(let sessionID, let id):
@@ -857,27 +892,61 @@ final class BrowserStore {
   @discardableResult
   func createSpace(
     name: String, sharingProfile profileID: UUID?, tint: SpaceTint,
-    customRGB: SpaceRGBColor? = nil
+    customRGB: SpaceRGBColor? = nil, symbol: String? = nil
   ) -> Bool {
     guard
-      session.addSpace(
-        name: name, sharingProfile: profileID, tint: tint, customRGB: customRGB) != nil
+      let id = session.addSpace(
+        name: name, sharingProfile: profileID, tint: tint, customRGB: customRGB)
     else {
       return false
     }
+    if let symbol { _ = session.updateSpaceSymbol(id, symbol: symbol) }
     save()
     return true
   }
 
   @discardableResult
   func updateSpace(
-    _ id: UUID, name: String, tint: SpaceTint, customRGB: SpaceRGBColor? = nil
+    _ id: UUID, name: String, tint: SpaceTint, customRGB: SpaceRGBColor? = nil,
+    symbol: String? = nil
   ) -> Bool {
     guard session.updateSpace(id, name: name, tint: tint, customRGB: customRGB) else {
       return false
     }
+    if let symbol { _ = session.updateSpaceSymbol(id, symbol: symbol) }
     save()
     return true
+  }
+
+  @discardableResult
+  func setSpaceProfile(_ spaceID: UUID, to profileID: UUID) -> Bool {
+    if let onSetSpaceProfile { return onSetSpaceProfile(spaceID, profileID) }
+    var updated = session
+    guard updated.setSpaceProfile(spaceID, to: profileID) else { return false }
+    discardReassignedSpacePages(from: session, to: updated)
+    session = updated
+    save()
+    return true
+  }
+
+  @discardableResult
+  func createProfileAndAssign(_ spaceID: UUID, name: String) -> Bool {
+    guard session.spaces.contains(where: { $0.id == spaceID }) else { return false }
+    if let onCreateProfile {
+      guard let id = onCreateProfile(name) else { return false }
+      return setSpaceProfile(spaceID, to: id)
+    }
+    guard let id = session.createProfile(name: name) else { return false }
+    return setSpaceProfile(spaceID, to: id)
+  }
+
+  private func discardReassignedSpacePages(from old: BrowserSession, to new: BrowserSession) {
+    for space in old.spaces {
+      guard let replacement = new.spaces.first(where: { $0.id == space.id }),
+        replacement.profileID != space.profileID
+      else { continue }
+      engine?.discardReassignedTabs(Set(space.tabs.map(\.id)))
+    }
   }
 
   @discardableResult
@@ -904,19 +973,36 @@ final class BrowserStore {
       }()
   }
 
-  private func save() {
+  func updateMiniSession(_ update: (inout BrowserSession) -> Bool) -> Bool {
+    guard update(&session) else { return false }
+    save()
+    return true
+  }
+
+  func save(deferred: Bool = false) {
+    recordSplitTabSelection()
     reconcileTransientState()
     defer { onSessionChanged?() }
     if let managedSave {
-      let result = managedSave(session)
+      let result = managedSave(session, deferred)
       session = result.session
       storageNotice = result.notice
       reconcileTransientState()
       return
     }
     guard maySave else { return }
+    guard let sessionFile else { return }
+    let snapshot = session
+    if deferred {
+      snapshotScheduler.schedule(
+        { try sessionFile.save(snapshot) },
+        completion: { [weak self] error in
+          self?.storageNotice = error.map { "Changes could not be saved. \($0)" }
+        })
+      return
+    }
     do {
-      try sessionFile?.save(session)
+      try snapshotScheduler.writeNow { try sessionFile.save(snapshot) }
       storageNotice = nil
     } catch {
       storageNotice = "Changes could not be saved. \(error.localizedDescription)"

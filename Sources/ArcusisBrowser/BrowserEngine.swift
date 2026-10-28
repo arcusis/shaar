@@ -37,7 +37,7 @@ final class BrowserEngine {
   private let callbacks: BrowserRuntimeClient
   private(set) var isClosed = false
   var onClosed: ((Bool) -> Void)?
-  let downloads = DownloadsModel()
+  let downloads = DownloadsModel(folder: DownloadsFolderSource())
   private(set) var pages: [UUID: PageState] = [:]
   private(set) var notice: String?
   private(set) var mediaAccess: [UUID: MediaAccessState] = [:]
@@ -55,7 +55,7 @@ final class BrowserEngine {
   @ObservationIgnored private var loadedProfiles: Set<UUID> = []
   @ObservationIgnored private var loadingProfiles: Set<UUID> = []
   @ObservationIgnored private var failedProfiles: Set<UUID> = []
-  @ObservationIgnored private var liveTabs: Set<UUID> = []
+  @ObservationIgnored fileprivate var liveTabs: Set<UUID> = []
   @ObservationIgnored private var failedTabs: Set<UUID> = []
   @ObservationIgnored private var reconciling = false
   @ObservationIgnored private var receivingNativeSelection = false
@@ -69,6 +69,33 @@ final class BrowserEngine {
   @ObservationIgnored private var fillInputMonitor: PasswordFillInputMonitor?
   @ObservationIgnored private var fillSelection: FillSelection?
   private(set) var favicons: [UUID: NSImage] = [:]
+
+  func seedFavicon(_ image: NSImage, for tabID: UUID) {
+    favicons[tabID] = image
+  }
+
+  func focusPage(_ tabID: UUID) {
+    guard !isClosed, let store, !store.commandIsOpen, store.sheet == nil,
+      store.pageFind == nil, store.libraryDrawerSection == nil,
+      store.session.selectedPage?.tab.id == tabID,
+      runtime.windowID(forTabID: tabID.uuidString) == windowID,
+      let view = runtime.view(forTabID: tabID.uuidString), let window = view.window,
+      window.isKeyWindow
+    else { return }
+    runtime.focusTabID(tabID.uuidString)
+    window.makeFirstResponder(view)
+  }
+
+  func navigateCurrentPage(to url: URL) -> Bool {
+    guard !isClosed, let store, let page = store.session.selectedPage,
+      let profile = store.session.profileID(forTabID: page.tab.id),
+      liveTabs.contains(page.tab.id),
+      runtime.windowID(forTabID: page.tab.id.uuidString) == windowID
+    else { return false }
+    return runtime.navigateTabID(
+      page.tab.id.uuidString, profileID: profile.uuidString, windowID: windowID,
+      url: url.absoluteString)
+  }
 
   init(
     events: BrowserRuntimeEvents, windowID: String? = nil, store: BrowserStore,
@@ -455,6 +482,20 @@ final class BrowserEngine {
     passwordFill = nil
   }
 
+  /// Drop documents before their saved tabs acquire a different engine profile.
+  func discardReassignedTabs(_ ids: Set<UUID>) {
+    for id in ids {
+      failedTabs.remove(id)
+      guard liveTabs.remove(id) != nil else { continue }
+      events.router.forgetTab(id.uuidString, windowID: windowID)
+      pages[id] = nil
+      mediaAccess[id] = nil
+      favicons[id] = nil
+      runtime.discardTabID(id.uuidString)
+    }
+    passwordFill?.cancel()
+  }
+
   func reconcile() {
     guard !isClosed, !reconciling, !receivingNativeSelection, let store else { return }
     reconciling = true
@@ -511,7 +552,9 @@ final class BrowserEngine {
     for space in session.spaces where loadedProfiles.contains(space.profileID) {
       for tab in space.tabs where !failedTabs.contains(tab.id) {
         let decision = TabMaterializationPolicy.decision(
-          isSelected: space.id == session.selectedSpaceID && session.selectedPage?.tab.id == tab.id,
+          isSelected: space.id == session.selectedSpaceID
+            && (session.selectedPage?.tab.id == tab.id
+              || store.selectedSplit?.tabIDs.contains(tab.id) == true),
           isLive: liveTabs.contains(tab.id), lazy: lazyPinnedTabs)
         guard decision == .materialize else { continue }
         guard events.router.bindTab(tab.id.uuidString, windowID: windowID) else {
@@ -773,29 +816,85 @@ final class BrowserEngine {
 struct ChromiumPage: NSViewRepresentable {
   let engine: BrowserEngine
   let tabID: UUID
+  var autofocus = true
 
   func makeNSView(context: Context) -> ChromiumPageContainerView {
     ChromiumPageContainerView()
   }
 
   func updateNSView(_ container: ChromiumPageContainerView, context: Context) {
-    if container.attach(engine.runtime.view(forTabID: tabID.uuidString)),
-      container.window?.isKeyWindow == true
+    if container.select(
+      engine.runtime.view(forTabID: tabID.uuidString), tabID: tabID, liveTabs: engine.liveTabs),
+      container.window?.isKeyWindow == true, autofocus
     {
-      engine.runtime.focusTabID(tabID.uuidString)
+      engine.focusPage(tabID)
     }
   }
 
   static func dismantleNSView(_ view: ChromiumPageContainerView, coordinator: ()) {
-    view.attach(nil)
+    view.dismantle()
   }
 }
 
 final class ChromiumPageContainerView: NSView {
+  /// Containers on screen. During split animations an outgoing container can briefly hold a
+  /// page that a newer container also shows; on teardown the page is handed back.
+  private static let live = NSHashTable<ChromiumPageContainerView>.weakObjects()
+
   private(set) weak var pageView: NSView?
+  private var retainedPages: [UUID: NSView] = [:]
+  private var shownTabID: UUID?
+
+  @discardableResult
+  func select(_ page: NSView?, tabID: UUID, liveTabs: Set<UUID>) -> Bool {
+    Self.live.add(self)
+    shownTabID = page == nil ? nil : tabID
+    wantsLayer = true
+    layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+    for id in retainedPages.keys.filter({ !liveTabs.contains($0) }) {
+      if let view = retainedPages.removeValue(forKey: id), view.superview === self {
+        view.removeFromSuperview()
+      }
+    }
+    guard let page else { return attach(nil) }
+    let changed = pageView !== page || page.superview !== self
+    for view in retainedPages.values where view.superview === self {
+      view.isHidden = view !== page
+    }
+    if let previous = retainedPages.updateValue(page, forKey: tabID), previous !== page,
+      previous.superview === self
+    {
+      previous.removeFromSuperview()
+    }
+    pageView = page
+    if page.superview !== self {
+      page.removeFromSuperview()
+      page.translatesAutoresizingMaskIntoConstraints = true
+      page.frame = bounds
+      page.autoresizingMask = [.width, .height]
+      addSubview(page)
+    }
+    page.isHidden = false
+    layoutSubtreeIfNeeded()
+    return changed
+  }
+
+  func dismantle() {
+    let owned = retainedPages.filter { $0.value.superview === self }
+    Self.live.remove(self)
+    shownTabID = nil
+    attach(nil)
+    for (tabID, page) in owned {
+      Self.live.allObjects.first { $0.shownTabID == tabID }?.attach(page)
+    }
+  }
 
   @discardableResult
   func attach(_ page: NSView?) -> Bool {
+    if page == nil {
+      for view in retainedPages.values where view.superview === self { view.removeFromSuperview() }
+      retainedPages.removeAll()
+    }
     if pageView === page, page?.superview === self { return false }
     if let pageView, pageView !== page, pageView.superview === self {
       pageView.removeFromSuperview()

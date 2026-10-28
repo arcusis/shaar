@@ -820,7 +820,12 @@ final class NativeHostProbe {
       throw HostProbeFailure("Native window frame view is missing.")
     }
     let drag = context.titlebarDragView
-    let points = [CGFloat(100), frame.bounds.midX, frame.bounds.maxX - 20].map {
+    // The sidebar toggle sits right of the traffic lights; blank titlebar starts after it.
+    let zoom = context.window.standardWindowButton(.zoomButton)
+    let accessoriesEnd =
+      (zoom.map { $0.convert($0.bounds, to: frame).maxX } ?? 70) + 8
+      + BrowserChromeLayout.titlebarAccessoryWidth
+    let points = [accessoriesEnd + 12, frame.bounds.midX, frame.bounds.maxX - 20].map {
       NSPoint(x: $0, y: frame.isFlipped ? 16 : frame.bounds.maxY - 16)
     }
     let hits: [[String: Any]] = points.map { point in
@@ -907,9 +912,10 @@ final class NativeHostProbe {
     let pageFrame = page.frame
     let containerFrame = container.convert(containerBounds, to: context.hosting)
     let visibleHostingBounds = context.hosting.convert(context.window.contentLayoutRect, from: nil)
-    let leadingInset = context.store.sidebarIsVisible ? BrowserChromeLayout.sidebarWidth : 10
-    let expectedMinX = visibleHostingBounds.minX + leadingInset
-    let expectedMaxX = visibleHostingBounds.maxX - 10
+    let inset = BrowserChromeLayout.pageCardInset
+    let sidebar = context.store.sidebarIsVisible ? BrowserChromeLayout.sidebarWidth : 0
+    let expectedMinX = visibleHostingBounds.minX + sidebar + inset
+    let expectedMaxX = visibleHostingBounds.maxX - inset
     let expectedWidth = max(0, expectedMaxX - expectedMinX)
     let tolerance: CGFloat = 1
     let containerWithinVisibleHosting =

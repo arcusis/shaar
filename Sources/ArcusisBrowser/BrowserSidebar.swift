@@ -168,6 +168,7 @@ struct BrowserSidebar: View {
         Spacer(minLength: 0)
       }
       .font(.system(size: 13))
+      SidebarAddressField(store: store)
       profileFavorites
       VStack(alignment: .leading, spacing: 4) {
         Menu {
@@ -182,17 +183,23 @@ struct BrowserSidebar: View {
         } label: {
           HStack(spacing: 7) {
             Label(store.session.selectedSpace.name, systemImage: store.session.selectedSpace.symbol)
-              .font(.system(size: 14, weight: .semibold))
+              .font(.system(size: 11, weight: .semibold))
+              .foregroundStyle(store.session.selectedSpace.themeColor)
               .lineLimit(1)
               .truncationMode(.tail)
-            Image(systemName: "chevron.down")
-              .font(.system(size: 9, weight: .semibold))
-              .foregroundStyle(.secondary)
             Spacer(minLength: 0)
           }
           .contentShape(Rectangle())
         }
         .menuStyle(.borderlessButton)
+        .contextMenu {
+          Button("New Folder", systemImage: "folder.badge.plus") {
+            beginFolderDraft(parentID: nil)
+          }
+          Button("Edit Space…", systemImage: "slider.horizontal.3") {
+            store.spaceEditor = .edit(store.session.selectedSpaceID)
+          }
+        }
         .accessibilityLabel("\(store.session.selectedSpace.name), Profile: \(store.profileName)")
         .help("Space: \(store.session.selectedSpace.name) · Profile: \(store.profileName)")
         if let notice = store.sidebarNotice {
@@ -353,11 +360,14 @@ struct BrowserSidebar: View {
 
   private var spaceSelectors: some View {
     ScrollViewReader { spaceScroll in
-      ScrollView(.horizontal) {
-        HStack(spacing: 6) {
-          ForEach(store.session.spaces) { space in
-            spaceSelector(space)
+      GeometryReader { geometry in
+        ScrollView(.horizontal) {
+          HStack(spacing: 6) {
+            ForEach(store.session.spaces) { space in
+              spaceSelector(space)
+            }
           }
+          .frame(minWidth: geometry.size.width)
         }
       }
       .scrollIndicators(.hidden)
@@ -385,6 +395,7 @@ struct BrowserSidebar: View {
       Image(systemName: space.symbol)
         .font(.system(size: 14))
         .frame(width: 32, height: 30)
+        .foregroundStyle(space.id == store.session.selectedSpaceID ? space.themeColor : Color.primary)
         .background(
           .white.opacity(space.id == store.session.selectedSpaceID ? 0.5 : 0),
           in: RoundedRectangle(cornerRadius: 8)

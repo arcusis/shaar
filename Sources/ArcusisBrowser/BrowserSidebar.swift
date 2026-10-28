@@ -153,7 +153,7 @@ struct BrowserSidebar: View {
         HStack(spacing: 7) {
           Label(store.session.selectedSpace.name, systemImage: store.session.selectedSpace.symbol)
             .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(.white.opacity(0.55))
+            .foregroundStyle(Color.primary.opacity(0.55))
             .lineLimit(1)
             .truncationMode(.tail)
           Spacer(minLength: 0)
@@ -188,7 +188,7 @@ struct BrowserSidebar: View {
         } label: {
           Image(systemName: "plus")
             .font(.system(size: 16))
-            .foregroundStyle(.white.opacity(0.55))
+            .foregroundStyle(Color.primary.opacity(0.55))
             .frame(width: 30, height: 30)
         }
         .help("Create a space")
@@ -377,10 +377,10 @@ struct BrowserSidebar: View {
         if space.id == store.session.selectedSpaceID {
           Image(systemName: space.symbol)
             .font(.system(size: 14))
-            .foregroundStyle(.white)
+            .foregroundStyle(Color.primary)
         } else {
           Circle()
-            .fill(.white.opacity(0.35))
+            .fill(Color.primary.opacity(0.35))
             .frame(width: 6, height: 6)
         }
       }
@@ -496,7 +496,7 @@ struct BrowserSidebar: View {
     return Button(action: toggleLibraryDrawerFromButton) {
       Image(systemName: "archivebox")
         .font(.system(size: 16))
-        .foregroundStyle(.white.opacity(0.55))
+        .foregroundStyle(Color.primary.opacity(0.55))
         .frame(width: 30, height: 30)
     }
     .contextMenu {

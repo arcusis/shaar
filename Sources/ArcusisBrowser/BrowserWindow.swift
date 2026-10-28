@@ -86,6 +86,7 @@ struct BrowserWindow: View {
           }
           .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
         }
+        .allowsHitTesting(store.libraryDrawerSection != nil && store.canUseLibraryDrawer)
         .transition(.opacity)
         .zIndex(2)
       }

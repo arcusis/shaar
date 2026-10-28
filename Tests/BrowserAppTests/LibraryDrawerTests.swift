@@ -7,6 +7,17 @@ import XCTest
 
 @MainActor
 final class LibraryDrawerTests: XCTestCase {
+  func testRepeatedSectionChangesAndCloseClearDrawerState() {
+    let store = BrowserStore()
+    for section in LibraryDrawerSection.allCases {
+      XCTAssertTrue(store.showLibraryDrawer(section))
+      XCTAssertEqual(store.libraryDrawerSection, section)
+      store.closeLibraryDrawer()
+      XCTAssertNil(store.libraryDrawerSection)
+      XCTAssertNil(store.libraryDrawerProfileID)
+    }
+  }
+
   func testDrawerToggleAndPresentationStateBelongToEachWindow() {
     let first = BrowserStore()
     let second = BrowserStore()

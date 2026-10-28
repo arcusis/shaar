@@ -95,6 +95,16 @@ struct LibraryDownloadTests {
         == [imageID, videoID, pdfID].sorted())
     #expect(
       LibraryDownloadQuery.filtered(
+        model.items(in: profile), search: "report", mediaOnly: true, kind: .image,
+        profileID: profile, currentProfileID: profile, downloads: model
+      ).isEmpty)
+    #expect(
+      LibraryDownloadQuery.filtered(
+        model.items(in: profile), search: "report", mediaOnly: true, kind: .pdf,
+        profileID: profile, currentProfileID: profile, downloads: model
+      ).map(\.id) == [pdfID])
+    #expect(
+      LibraryDownloadQuery.filtered(
         model.items(in: profile), kind: .image, profileID: profile,
         currentProfileID: profile, downloads: model
       ).map(\.id) == [imageID])

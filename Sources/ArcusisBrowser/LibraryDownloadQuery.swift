@@ -78,18 +78,19 @@ enum LibraryDownloadQuery {
 
   static func filtered(
     _ items: [BrowserDownload], search: String, mediaOnly: Bool = false,
+    kind: LibraryMediaKind? = nil,
     profileID: UUID, currentProfileID: UUID, downloads: DownloadsModel
   ) -> [BrowserDownload] {
     guard profileID == currentProfileID else { return [] }
     let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
     return items.filter { item in
       guard item.profileID == profileID else { return false }
-      if mediaOnly,
-        mediaFile(
-          for: item, profileID: profileID, currentProfileID: currentProfileID,
-          downloads: downloads) == nil
-      {
-        return false
+      if mediaOnly {
+        guard
+          let media = mediaFile(
+            for: item, profileID: profileID, currentProfileID: currentProfileID,
+            downloads: downloads), kind == nil || media.kind == kind
+        else { return false }
       }
       guard !query.isEmpty else { return true }
       return item.filename.localizedCaseInsensitiveContains(query)

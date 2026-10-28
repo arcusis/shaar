@@ -40,17 +40,15 @@ struct LibraryDownloadsView: View {
     guard profileIsCurrent, let downloads else { return [] }
     let results = LibraryDownloadQuery.filtered(
       downloads.items(in: profileID), search: search,
-      mediaOnly: mediaOnly, profileID: profileID, currentProfileID: currentProfileID,
+      mediaOnly: mediaOnly, kind: mediaKind, profileID: profileID,
+      currentProfileID: currentProfileID,
       downloads: downloads)
-    if mediaOnly {
-      return LibraryDownloadQuery.filtered(
-        results, kind: mediaKind, profileID: profileID, currentProfileID: currentProfileID,
-        downloads: downloads)
-    }
+    if mediaOnly { return results }
     return results.filter(statusFilter.includes)
   }
 
   var body: some View {
+    let visibleItems = items
     VStack(alignment: .leading, spacing: 12) {
       HStack(spacing: 12) {
         TextField(mediaOnly ? "Search Media" : "Search Downloads", text: $search)
@@ -84,7 +82,7 @@ struct LibraryDownloadsView: View {
       } else if downloads == nil {
         ContentUnavailableView("Downloads unavailable", systemImage: "arrow.down.circle")
           .frame(maxWidth: .infinity, maxHeight: .infinity)
-      } else if items.isEmpty {
+      } else if visibleItems.isEmpty {
         ContentUnavailableView(
           filtersAreActive ? "No matches" : emptyTitle,
           systemImage: mediaOnly ? "photo.on.rectangle.angled" : "arrow.down.circle",
@@ -92,9 +90,9 @@ struct LibraryDownloadsView: View {
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else if mediaOnly {
-        mediaGrid
+        mediaGrid(visibleItems)
       } else {
-        downloadList
+        downloadList(visibleItems)
       }
 
       if profileIsCurrent, let notice = downloads?.notices[profileID] {
@@ -124,11 +122,11 @@ struct LibraryDownloadsView: View {
       : "Downloads for this profile appear here."
   }
 
-  private var downloadList: some View {
+  private func downloadList(_ items: [BrowserDownload]) -> some View {
     ScrollView {
       LazyVStack(alignment: .leading, spacing: 16) {
         ForEach(LibraryDownloadQuery.dateGroups(items)) { group in
-          VStack(alignment: .leading, spacing: 0) {
+          LazyVStack(alignment: .leading, spacing: 0) {
             Text(group.date.formatted(date: .complete, time: .omitted))
               .font(.headline)
               .padding(.bottom, 4)
@@ -211,7 +209,7 @@ struct LibraryDownloadsView: View {
     .padding(.vertical, 9)
   }
 
-  private var mediaGrid: some View {
+  private func mediaGrid(_ items: [BrowserDownload]) -> some View {
     let columns = [GridItem(.adaptive(minimum: 140, maximum: 220), spacing: 12)]
     return ScrollView {
       LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {

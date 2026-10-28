@@ -34,6 +34,7 @@ struct ProfileFavoritesGrid: View {
   let onReset: (UUID) -> Void
   let onRemove: (UUID) -> Void
   let onMoveBefore: (UUID, UUID?) -> Void
+  let onTabDrop: (SidebarTransfer, UUID?) -> Bool
   let accessibilityOverrides: ProfileFavoritesAccessibilityOverrides?
   @State private var currentSelectionID: UUID?
 
@@ -50,6 +51,7 @@ struct ProfileFavoritesGrid: View {
     onReset: @escaping (UUID) -> Void,
     onRemove: @escaping (UUID) -> Void,
     onMoveBefore: @escaping (UUID, UUID?) -> Void,
+    onTabDrop: @escaping (SidebarTransfer, UUID?) -> Bool = { _, _ in false },
     accessibilityOverrides: ProfileFavoritesAccessibilityOverrides? = nil
   ) {
     self.favorites = favorites
@@ -60,14 +62,15 @@ struct ProfileFavoritesGrid: View {
     self.onReset = onReset
     self.onRemove = onRemove
     self.onMoveBefore = onMoveBefore
+    self.onTabDrop = onTabDrop
     self.accessibilityOverrides = accessibilityOverrides
     _currentSelectionID = State(initialValue: selectedID)
   }
 
   private static let columns = Array(
-    repeating: GridItem(.flexible(minimum: 0, maximum: .infinity), spacing: 6), count: 3)
-  private static let tileHeight: CGFloat = 50
-  private static let maximumRows = 3
+    repeating: GridItem(.flexible(minimum: 0, maximum: .infinity), spacing: 8), count: 2)
+  private static let tileHeight: CGFloat = 62
+  private static let maximumRows = 2
 
   var body: some View {
     let motionReduced = reduceMotion || accessibilityOverrides?.reduceMotion == true
@@ -77,7 +80,7 @@ struct ProfileFavoritesGrid: View {
       if !favorites.isEmpty {
         ScrollViewReader { favoriteScroll in
           ScrollView(.vertical) {
-            LazyVGrid(columns: Self.columns, alignment: .leading, spacing: 6) {
+            LazyVGrid(columns: Self.columns, alignment: .leading, spacing: 8) {
               ForEach(favorites, id: \.id) { favorite in
                 tile(favorite, reduceMotion: motionReduced, reduceTransparency: transparencyReduced)
                   .id(favorite.id)
@@ -124,8 +127,8 @@ struct ProfileFavoritesGrid: View {
   }
 
   private var gridHeight: CGFloat {
-    let rows = min((favorites.count + 2) / 3, Self.maximumRows)
-    return CGFloat(rows) * Self.tileHeight + CGFloat(max(rows - 1, 0)) * 6 + 2
+    let rows = min((favorites.count + 1) / 2, Self.maximumRows)
+    return CGFloat(rows) * Self.tileHeight + CGFloat(max(rows - 1, 0)) * 8 + 2
   }
 
   private func tile(
@@ -145,13 +148,9 @@ struct ProfileFavoritesGrid: View {
             tileBackground(
               isSelected: isSelected, isHovered: isHovered,
               reduceTransparency: reduceTransparency),
-            in: RoundedRectangle(cornerRadius: 9)
+            in: RoundedRectangle(cornerRadius: 12)
           )
-          .overlay {
-            RoundedRectangle(cornerRadius: 9)
-              .strokeBorder(isSelected ? Color.accentColor.opacity(0.62) : .clear, lineWidth: 1)
-          }
-          .contentShape(RoundedRectangle(cornerRadius: 9))
+          .contentShape(RoundedRectangle(cornerRadius: 12))
       }
       .buttonStyle(ProfileFavoriteTileButtonStyle(reduceMotion: reduceMotion))
       .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -171,6 +170,14 @@ struct ProfileFavoritesGrid: View {
         else { return false }
         onMoveBefore(payload.favoriteID, beforeID)
         return true
+      }
+      .dropDestination(for: SidebarTransfer.self) { items, point in
+        guard items.count == 1, let item = items.first else { return false }
+        return onTabDrop(
+          item,
+          Self.dropTargetBefore(
+            targetID: favorite.id, dropX: point.x, tileWidth: geometry.size.width,
+            favorites: favorites))
       }
       .onHover { isHovered in
         if isHovered {
@@ -234,9 +241,9 @@ struct ProfileFavoritesGrid: View {
       return AnyShapeStyle(Color(nsColor: .controlBackgroundColor))
     }
     if isSelected {
-      return AnyShapeStyle(Color.accentColor.opacity(0.12))
+      return AnyShapeStyle(Color.primary.opacity(0.12))
     }
-    return AnyShapeStyle(Color.primary.opacity(isHovered ? 0.085 : 0.045))
+    return AnyShapeStyle(Color.primary.opacity(isHovered ? 0.12 : 0.08))
   }
 
   private func dragPayload(for favorite: FavoriteTile) -> ProfileFavoriteDrag {
@@ -302,7 +309,7 @@ private struct ProfileFavoriteTileButtonStyle: ButtonStyle {
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
       .background {
-        RoundedRectangle(cornerRadius: 9)
+        RoundedRectangle(cornerRadius: 12)
           .fill(Color.primary.opacity(configuration.isPressed ? 0.13 : 0))
       }
       .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)

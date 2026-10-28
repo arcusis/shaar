@@ -19,7 +19,7 @@ struct SidebarTabRow: View {
   @FocusState private var focusedControl: Control?
 
   private var showsClose: Bool {
-    closeIsVisible || isSelected || focusedControl != nil
+    closeIsVisible || focusedControl != nil
   }
 
   var body: some View {
@@ -30,7 +30,7 @@ struct SidebarTabRow: View {
             Image(nsImage: favicon)
               .resizable()
               .scaledToFit()
-              .frame(width: 14, height: 14)
+              .frame(width: 16, height: 16)
           } else {
             Image(systemName: isPinned ? "pin" : "globe")
               .font(.system(size: 12))
@@ -62,9 +62,10 @@ struct SidebarTabRow: View {
       .help("Close \(title)")
       .accessibilityIdentifier("sidebar-tab-close-\(tabID.uuidString)")
     }
-    .padding(10)
+    .padding(.horizontal, 10)
+    .frame(height: 34)
     .background(
-      .white.opacity(isSelected ? 0.43 : 0),
+      .white.opacity(isSelected ? 0.12 : 0),
       in: RoundedRectangle(cornerRadius: 8)
     )
     .onHover(perform: onHoverChanged)

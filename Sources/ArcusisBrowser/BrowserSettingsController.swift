@@ -103,6 +103,14 @@ private final class BrowserSettingsState {
       return true
     } catch { return false }
   }
+  func deleteProfile(_ id: UUID, movingSpacesTo destinationID: UUID) -> Bool {
+    do {
+      try workspace.deleteProfile(id, movingSpacesTo: destinationID)
+      if selectedProfileID == id { _ = selectProfile(destinationID) }
+      return true
+    } catch { return false }
+  }
+
 }
 
 private struct BrowserSettingsRoot: View {
@@ -120,6 +128,7 @@ private struct BrowserSettingsRoot: View {
       storageNotice: state.storageNotice,
       onCreateProfile: { state.createProfile(name: $0) },
       onRenameProfile: { state.renameProfile($0, name: $1) },
+      onDeleteProfile: { state.deleteProfile($0, movingSpacesTo: $1) },
       nativeBitwardenController: state.nativeBitwardenController)
   }
 }

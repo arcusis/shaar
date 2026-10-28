@@ -15,24 +15,30 @@ struct BrowserSettingsChoice: Identifiable {
 
 enum BrowserSettingsSection: String, CaseIterable, Identifiable {
   case general
+  case search
   case profiles
   case shortcuts
+  case about
 
   var id: Self { self }
 
   var title: String {
     switch self {
     case .general: "General"
+    case .search: "Search"
     case .profiles: "Profiles"
     case .shortcuts: "Shortcuts"
+    case .about: "About"
     }
   }
 
   var symbol: String {
     switch self {
     case .general: "gearshape"
+    case .search: "magnifyingglass"
     case .profiles: "person.crop.circle"
     case .shortcuts: "command"
+    case .about: "info.circle"
     }
   }
 }
@@ -48,6 +54,9 @@ struct BrowserSettingsView: View {
   let storageNotice: String?
   let onCreateProfile: (String) -> UUID?
   let onRenameProfile: (UUID, String) -> Bool
+  let onDeleteProfile: (UUID, UUID) -> Bool
+  @State private var deletingProfile: BrowserSettingsProfile?
+  @State private var destinationID: UUID?
   @State private var selectedSection: BrowserSettingsSection
   @State private var profileEditor: ProfileEditorTarget?
 
@@ -63,6 +72,7 @@ struct BrowserSettingsView: View {
     selectedSearchEngine: Binding<String>, storageNotice: String? = nil,
     onCreateProfile: @escaping (String) -> UUID? = { _ in nil },
     onRenameProfile: @escaping (UUID, String) -> Bool = { _, _ in false },
+    onDeleteProfile: @escaping (UUID, UUID) -> Bool = { _, _ in false },
     nativeBitwardenController: NativeBitwardenController? = nil,
     initialSection: BrowserSettingsSection = .general
   ) {
@@ -75,21 +85,26 @@ struct BrowserSettingsView: View {
     self.storageNotice = storageNotice
     self.onCreateProfile = onCreateProfile
     self.onRenameProfile = onRenameProfile
+    self.onDeleteProfile = onDeleteProfile
     _selectedSection = State(initialValue: initialSection)
   }
 
   var body: some View {
-    VStack(spacing: 0) {
+    HStack(spacing: 0) {
       categoryBar
       Divider()
       Group {
         switch selectedSection {
         case .general:
           generalContent
+        case .search:
+          searchContent
         case .profiles:
           profilesContent
         case .shortcuts:
           shortcutsContent
+        case .about:
+          aboutContent
         }
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -97,6 +112,26 @@ struct BrowserSettingsView: View {
     .frame(minWidth: 600, minHeight: 440)
     .background(Color(nsColor: .windowBackgroundColor))
     .foregroundStyle(.primary)
+    .sheet(item: $deletingProfile) { profile in
+      VStack(alignment: .leading, spacing: 16) {
+        Text("Delete \(profile.name)?").font(.headline)
+        Text("Its Spaces move to the selected profile. Its favorites will be removed.")
+        Picker("Move Spaces to", selection: $destinationID) {
+          ForEach(profiles.filter { $0.id != profile.id }) { candidate in
+            Text(candidate.name).tag(Optional(candidate.id))
+          }
+        }
+        HStack {
+          Spacer()
+          Button("Cancel") { deletingProfile = nil }
+          Button("Delete", role: .destructive) {
+            if let destinationID, onDeleteProfile(profile.id, destinationID) {
+              deletingProfile = nil
+            }
+          }.disabled(destinationID == nil)
+        }
+      }.padding(24).frame(width: 420)
+    }
     .sheet(item: $profileEditor) { target in
       ProfileNameEditor(
         title: target.profileID == nil ? "New Profile" : "Rename Profile",
@@ -112,39 +147,52 @@ struct BrowserSettingsView: View {
   }
 
   private var categoryBar: some View {
-    HStack(spacing: 8) {
+    VStack(alignment: .leading, spacing: 3) {
       ForEach(BrowserSettingsSection.allCases) { section in
         Button {
           selectedSection = section
         } label: {
-          VStack(spacing: 7) {
-            Image(systemName: section.symbol)
-              .font(.system(size: 18, weight: .regular))
-              .frame(height: 21)
-            Text(section.title)
-              .font(.caption.weight(.medium))
-              .lineLimit(1)
-          }
-          .frame(width: 70)
-          .foregroundStyle(selectedSection == section ? Color.accentColor : Color.secondary)
-          .contentShape(Rectangle())
-          .padding(.vertical, 11)
-          .background {
-            if selectedSection == section {
-              RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(Color.primary.opacity(0.07))
+          Label(section.title, systemImage: section.symbol)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 10).padding(.vertical, 8)
+            .background {
+              if selectedSection == section {
+                RoundedRectangle(cornerRadius: 7).fill(Color.accentColor.opacity(0.18))
+              }
             }
-          }
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selectedSection == section ? .isSelected : [])
       }
+      Spacer()
     }
-    .padding(.horizontal, 20)
-    .padding(.top, 10)
-    .padding(.bottom, 9)
-    .frame(maxWidth: 460)
-    .frame(maxWidth: .infinity)
+    .padding(12)
+    .frame(width: 155)
+    .frame(maxHeight: .infinity, alignment: .topLeading)
+    .background(.regularMaterial)
+  }
+
+  private var searchContent: some View {
+    VStack(alignment: .leading, spacing: 16) {
+      Text("Search").font(.title2.weight(.semibold))
+      Text("Search engine is configured per profile.").foregroundStyle(.secondary)
+      ForEach(searchEngines) { engine in Text(engine.title) }
+      Button("Open Profiles") { selectedSection = .profiles }
+      Spacer()
+    }.padding(24).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+  }
+
+  private var aboutContent: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      Text("About Arcusis Browser").font(.title2.weight(.semibold))
+      Text(
+        "Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown")"
+      )
+      Text(
+        "Build \(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown")"
+      )
+      Spacer()
+    }.padding(24).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
   }
 
   private var generalContent: some View {
@@ -226,6 +274,7 @@ struct BrowserSettingsView: View {
       }
       .padding(.horizontal, 14)
       .padding(.top, 20)
+      .padding(.bottom, 16)
       .frame(width: 205)
       .frame(maxHeight: .infinity, alignment: .topLeading)
       .background(Color.primary.opacity(0.025))
@@ -250,6 +299,11 @@ struct BrowserSettingsView: View {
             profileEditor = ProfileEditorTarget(profileID: profile.id, name: profile.name)
           }
           .accessibilityIdentifier("settings.renameProfile")
+          Button("Delete", role: .destructive) {
+            destinationID = profiles.first(where: { $0.id != profile.id })?.id
+            deletingProfile = profile
+          }.disabled(profiles.count < 2)
+            .accessibilityIdentifier("settings.deleteProfile")
         }
         settingsGroup {
           HStack(spacing: 12) {

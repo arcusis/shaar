@@ -64,6 +64,12 @@ final class BrowserWorkspaceStore {
     broadcast(excluding: nil)
   }
 
+  func deleteProfile(_ id: UUID, movingSpacesTo destinationID: UUID) throws {
+    try workspace.deleteProfile(id, movingSpacesTo: destinationID)
+    _ = writeSnapshot()
+    broadcast(excluding: nil)
+  }
+
   func setGeometry(_ geometry: WorkspaceWindowGeometry, for id: UUID) throws {
     guard workspace.window(id)?.geometry != geometry else { return }
     try workspace.setGeometry(geometry, for: id)

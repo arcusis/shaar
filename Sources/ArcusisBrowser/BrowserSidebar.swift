@@ -136,17 +136,6 @@ struct BrowserSidebar: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
-      HStack(spacing: 12) {
-        Button {
-          store.sidebarIsVisible = false
-        } label: {
-          Image(systemName: "sidebar.left")
-        }
-        .help("Hide sidebar (Command-S)")
-        .accessibilityLabel("Hide sidebar (Command-S)")
-        Spacer(minLength: 0)
-      }
-      .font(.system(size: 13))
       profileFavorites
       VStack(alignment: .leading, spacing: 4) {
         HStack(spacing: 7) {
@@ -495,8 +484,11 @@ struct BrowserSidebar: View {
     return Button(action: toggleLibraryDrawerFromButton) {
       Image(systemName: "archivebox")
         .font(.system(size: 16))
-        .foregroundStyle(Color.primary.opacity(0.55))
+        .foregroundStyle(Color.primary.opacity(recentDownloads.isOpen ? 0.9 : 0.55))
         .frame(width: 30, height: 30)
+        .background(
+          Color.primary.opacity(recentDownloads.isOpen ? 0.1 : 0),
+          in: RoundedRectangle(cornerRadius: 8))
     }
     .contextMenu {
       Button("Bookmarks…") { store.showLibrary(.bookmarks) }
@@ -532,13 +524,14 @@ struct BrowserSidebar: View {
               else { return }
               recentDownloadsCloseTask?.cancel()
               recentDownloads.dismiss(profileID: profileID, epoch: epoch)
-            }
+            },
+            backdrop: SpaceChromeTint(space: store.session.selectedSpace).color(for: colorScheme)
           )
-          .offset(y: -26)
+          .offset(y: -40)
           .onHover {
             recentDownloadsHoverChanged(.card, inside: $0, profileID: profileID, epoch: epoch)
           }
-          .transition(.opacity.combined(with: .move(edge: .bottom)))
+          .transition(.opacity)
         }
       }
       .animation(

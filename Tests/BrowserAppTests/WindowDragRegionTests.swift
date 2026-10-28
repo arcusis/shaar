@@ -14,7 +14,7 @@ final class WindowDragRegionTests: XCTestCase {
       WindowDragRegion.titlebarDragFrame(
         contentBounds: bounds, contentLayoutRect: layout, trafficLightsFrame: trafficLights))
 
-    XCTAssertEqual(frame, NSRect(x: 88, y: 772, width: 1112, height: 28))
+    XCTAssertEqual(frame, NSRect(x: 124, y: 772, width: 1076, height: 28))
     XCTAssertFalse(frame.intersects(trafficLights))
     try capture(bounds: bounds, trafficLights: trafficLights, dragFrame: frame)
   }
@@ -42,7 +42,7 @@ final class WindowDragRegionTests: XCTestCase {
       WindowDragRegion.titlebarDragFrame(
         contentBounds: bounds, contentLayoutRect: layout, trafficLightsFrame: trafficLights,
         isFlipped: true))
-    XCTAssertEqual(frame, NSRect(x: 88, y: 0, width: 812, height: 28))
+    XCTAssertEqual(frame, NSRect(x: 124, y: 0, width: 776, height: 28))
   }
 
   private func capture(bounds: NSRect, trafficLights: NSRect, dragFrame: NSRect) throws {

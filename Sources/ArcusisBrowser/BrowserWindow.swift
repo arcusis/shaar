@@ -50,6 +50,9 @@ struct BrowserWindow: View {
           }
         Spacer(minLength: 0)
       }
+      if store.sidebarIsVisible {
+        TitlebarSidebarToggle(store: store)
+      }
       if store.commandIsOpen {
         Color.black.opacity(0.16)
           .ignoresSafeArea()

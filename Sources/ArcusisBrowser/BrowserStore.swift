@@ -959,6 +959,12 @@ final class BrowserStore {
       }()
   }
 
+  func updateMiniSession(_ update: (inout BrowserSession) -> Bool) -> Bool {
+    guard update(&session) else { return false }
+    save()
+    return true
+  }
+
   private func save(deferred: Bool = false) {
     reconcileTransientState()
     defer { onSessionChanged?() }

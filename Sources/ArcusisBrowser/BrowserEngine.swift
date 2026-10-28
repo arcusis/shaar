@@ -70,6 +70,10 @@ final class BrowserEngine {
   @ObservationIgnored private var fillSelection: FillSelection?
   private(set) var favicons: [UUID: NSImage] = [:]
 
+  func seedFavicon(_ image: NSImage, for tabID: UUID) {
+    favicons[tabID] = image
+  }
+
   func focusPage(_ tabID: UUID) {
     guard !isClosed, let store, !store.commandIsOpen, store.sheet == nil,
       store.pageFind == nil, store.libraryDrawerSection == nil,

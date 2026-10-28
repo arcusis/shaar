@@ -4,7 +4,7 @@ import ChromiumBridge
 import SwiftUI
 
 enum BrowserMenuCommand: String, CaseIterable {
-  case newWindow, newPrivateWindow, newTab, search, newSpace, editSpace, closeTab, closeWindow,
+  case newWindow, newPrivateWindow, newMiniWindow, newTab, search, newSpace, editSpace, closeTab, closeWindow,
     addFavorite
   case reopenClosed, recentlyClosed, bookmarkPage, bookmarks, history, downloads
   case find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload
@@ -56,6 +56,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   let preferences: BrowserPreferencesStore
   private(set) var settingsController: BrowserSettingsController?
   private var privateHost: PrivateBrowserHost?
+  private var miniWindows: [String: MiniBrowserController] = [:]
+  private var pendingURLs: [URL] = []
   private var claimedPrimary = false
   private var started = false
   private var startupFailed = false
@@ -138,6 +140,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       for context in contexts.values where context.id != focused { context.window.orderFront(nil) }
       (focused.flatMap { contexts[$0] } ?? contexts.values.first)?.window.makeKeyAndOrderFront(nil)
     }
+    for url in pendingURLs { openExternalURL(url) }
+    pendingURLs.removeAll()
   }
 
   @discardableResult
@@ -158,7 +162,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
 
   func canPerform(_ command: BrowserMenuCommand) -> Bool {
     guard !events.runtime.isQuitting else { return false }
-    if command == .newWindow || command == .quit { return true }
+    if command == .newWindow || command == .newMiniWindow || command == .quit { return true }
     if command == .newPrivateWindow {
       return activeContext != nil || privateHost?.hasActiveWindow == true
     }
@@ -192,6 +196,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       flushGeometry()
       workspace.persistSnapshot()
       events.runtime.quit()
+      return
+    }
+    if command == .newMiniWindow {
+      openMiniWindow(url: nil)
       return
     }
     if command == .newWindow {
@@ -255,7 +263,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .bringAllToFront:
       for browser in contexts.values { browser.window.orderFront(nil) }
       context.window.makeKeyAndOrderFront(nil)
-    case .newWindow, .newPrivateWindow, .settings, .quit: break
+    case .newWindow, .newPrivateWindow, .newMiniWindow, .settings, .quit: break
     }
   }
 
@@ -288,6 +296,43 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     if NSApp.helpMenu === menu?.items.first(where: { $0.submenu?.title == "Help" })?.submenu {
       NSApp.helpMenu = previousHelpMenu
     }
+  }
+
+  @objc func handleURL(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) {
+    guard let text = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue,
+      let url = URL(string: text), NavigationInput.isWebURL(url) else { return }
+    if !started { pendingURLs.append(url); return }
+    openExternalURL(url)
+  }
+
+  private func openExternalURL(_ url: URL) {
+    guard let context = activeContext ?? workspace.workspace.focusedWindowID.flatMap({ contexts[$0] })
+      ?? contexts.values.first else { return }
+    switch MiniLinkRoute.route(url, inMainWindow: UserDefaults.standard.bool(forKey: "externalLinksInMainWindow")) {
+    case .main(let url):
+      context.store.perform(.open(url))
+      context.window.makeKeyAndOrderFront(nil)
+    case .mini(let url):
+      openMiniWindow(url: url, context: context)
+    case nil: break
+    }
+  }
+
+  @discardableResult
+  private func openMiniWindow(url: URL?, context: NativeBrowserContext? = nil, destination: UUID? = nil) -> Bool {
+    guard let target = context ?? activeContext ?? workspace.workspace.focusedWindowID.flatMap({ contexts[$0] })
+      ?? contexts.values.first else { return false }
+    do {
+      let mini = try MiniBrowserController(events: events, target: target.store, targetWindow: target.window, url: url, destination: destination)
+      let id = mini.engine.windowID
+      miniWindows[id] = mini
+      mini.onClosed = { [weak self] in self?.miniWindows[id] = nil }
+      mini.onProfileChange = { [weak self, weak target] destination, url in
+        guard let self, let target else { return false }
+        return self.openMiniWindow(url: url, context: target, destination: destination)
+      }
+      return true
+    } catch { report(error); return false }
   }
 
   private func attach(_ id: UUID, source: NSRect?, reconcile: Bool = true) throws {
@@ -585,6 +630,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     let file = section("File")
     add(.newWindow, "New window", "n", to: file)
     add(.newPrivateWindow, "New Private Window", "n", to: file, modifiers: [.command, .shift])
+    add(.newMiniWindow, "New Mini Window", "n", to: file, modifiers: [.command, .option])
     add(.newTab, "New tab", "t", to: file)
     add(.search, "Search or enter address", "l", to: file)
     add(.closeWindow, "Close window", "w", to: file, modifiers: [.command, .shift])
@@ -603,7 +649,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     add(.sidebar, "Toggle sidebar", "s", to: view)
     add(.reload, "Reload", "r", to: view)
     let spaces = section("Spaces")
-    add(.newSpace, "New space…", "n", to: spaces, modifiers: [.command, .option])
+    add(.newSpace, "New space…", "", to: spaces)
     add(.editSpace, "Edit current space…", "", to: spaces)
     add(
       .nextSpace, "Next space", String(Character(UnicodeScalar(NSRightArrowFunctionKey)!)),
@@ -717,6 +763,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       let host = NativeBrowserHost(
         events: BrowserRuntimeEvents(runtime: runtime), workspace: workspace,
         preferences: preferences)
+      NSAppleEventManager.shared().setEventHandler(host, andSelector: #selector(handleURL(_:reply:)), forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))
       runtime.onReady = { [weak host] in
         do { try host?.restore() } catch {
           host?.startupFailed = true

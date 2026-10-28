@@ -146,6 +146,10 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
   <key>CFBundleExecutable</key><string>ArcusisBrowser</string>
   <key>CFBundleIdentifier</key><string>com.arcusis.browser</string>
   <key>CFBundleName</key><string>Arcusis Browser</string>
+  <key>CFBundleURLTypes</key><array><dict>
+    <key>CFBundleURLName</key><string>Web URLs</string>
+    <key>CFBundleURLSchemes</key><array><string>http</string><string>https</string></array>
+  </dict></array>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleIconFile</key><string>Arcusis.icns</string>
   <key>CFBundleShortVersionString</key><string>0.1.0</string>

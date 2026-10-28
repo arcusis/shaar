@@ -42,6 +42,7 @@ struct BrowserSettingsView: View {
   let searchEngines: [BrowserSettingsChoice]
   let nativeBitwardenController: NativeBitwardenController?
   @Binding var selectedProfileID: UUID?
+  @AppStorage("externalLinksInMainWindow") private var externalLinksInMainWindow = false
   @Binding var sidebarInitiallyVisible: Bool
   @Binding var selectedSearchEngine: String
   let storageNotice: String?
@@ -160,6 +161,8 @@ struct BrowserSettingsView: View {
             .accessibilityHint("Sets whether newly opened windows show the sidebar.")
         }
       }
+      Toggle("Open external links in main window", isOn: $externalLinksInMainWindow)
+        .toggleStyle(.switch)
       if let storageNotice {
         Text(storageNotice)
           .font(.callout)

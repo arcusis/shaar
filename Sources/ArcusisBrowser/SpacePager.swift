@@ -34,8 +34,11 @@ final class SpacePagerState {
       offset = 0
       return
     }
-    let target = cancelled ? index : SpacePagerDecision.targetIndex(
-      index: index, count: spaces.count, offset: rawOffset, velocity: velocity, width: width)
+    let target =
+      cancelled
+      ? index
+      : SpacePagerDecision.targetIndex(
+        index: index, count: spaces.count, offset: rawOffset, velocity: velocity, width: width)
     let animation: Animation? = reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.85)
     withAnimation(animation) {
       offset = 0
@@ -59,7 +62,9 @@ enum SpacePagerDecision {
     width * 0.55 * distance / (width + 0.55 * distance)
   }
 
-  static func targetIndex(index: Int, count: Int, offset: CGFloat, velocity: CGFloat, width: CGFloat) -> Int {
+  static func targetIndex(
+    index: Int, count: Int, offset: CGFloat, velocity: CGFloat, width: CGFloat
+  ) -> Int {
     guard count > 0, width > 0 else { return index }
     let projected = offset + velocity * 0.12
     let step = Int((-projected / width).rounded())
@@ -87,7 +92,10 @@ struct SpacePager<Content: View>: View {
       }
       .offset(x: -CGFloat(index) * geometry.size.width + state.offset)
       .frame(width: geometry.size.width, alignment: .leading)
-      .animation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.85), value: store.session.selectedSpaceID)
+      .animation(
+        reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.85),
+        value: store.session.selectedSpaceID
+      )
       .clipped()
       .onAppear { update(geometry.size.width) }
       .onChange(of: geometry.size.width) { _, width in update(width) }

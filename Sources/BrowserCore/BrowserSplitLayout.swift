@@ -95,7 +95,8 @@ public indirect enum SplitNode: Equatable, Sendable {
 
   static func evenly(_ axis: SplitAxis, _ children: [SplitNode]) -> SplitNode {
     if children.count == 1 { return children[0] }
-    return .group(axis, children, Array(repeating: 1 / Double(children.count), count: children.count))
+    return .group(
+      axis, children, Array(repeating: 1 / Double(children.count), count: children.count))
   }
 
   static func normalized(_ weights: [Double]) -> [Double] {
@@ -180,10 +181,12 @@ public enum SplitLayoutPreset: String, CaseIterable, Identifiable, Sendable {
     switch self {
     case .columns: return .evenly(.columns, panes)
     case .rows: return .evenly(.rows, panes)
-    case .mainLeading: return .evenly(.columns, [panes[0], .evenly(.rows, Array(panes.dropFirst()))])
+    case .mainLeading:
+      return .evenly(.columns, [panes[0], .evenly(.rows, Array(panes.dropFirst()))])
     case .mainTop: return .evenly(.rows, [panes[0], .evenly(.columns, Array(panes.dropFirst()))])
     case .grid:
-      return .evenly(.rows, [.evenly(.columns, Array(panes[0..<2])), .evenly(.columns, Array(panes[2...]))])
+      return .evenly(
+        .rows, [.evenly(.columns, Array(panes[0..<2])), .evenly(.columns, Array(panes[2...]))])
     }
   }
 

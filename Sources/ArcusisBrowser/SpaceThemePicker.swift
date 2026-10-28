@@ -125,7 +125,8 @@ private struct SpaceColorField: View {
       let handle = hsb.fieldPosition(in: size)
       ZStack(alignment: .topLeading) {
         Color(hue: hsb.hue, saturation: 1, brightness: 1)
-        LinearGradient(colors: [.white, .white.opacity(0)], startPoint: .leading, endPoint: .trailing)
+        LinearGradient(
+          colors: [.white, .white.opacity(0)], startPoint: .leading, endPoint: .trailing)
         LinearGradient(colors: [.black.opacity(0), .black], startPoint: .top, endPoint: .bottom)
         dotGrid
         Circle().fill(Color(spaceRGB: hsb.rgb)).frame(width: 26, height: 26)

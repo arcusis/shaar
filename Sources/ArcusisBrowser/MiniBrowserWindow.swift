@@ -15,22 +15,29 @@ final class MiniBrowserController {
   var onClosed: (() -> Void)?
   var onProfileChange: ((UUID, URL?) -> Bool)?
 
-  init(events: BrowserRuntimeEvents, target: BrowserStore, targetWindow: NSWindow, url: URL?, destination: UUID? = nil) throws {
+  init(
+    events: BrowserRuntimeEvents, target: BrowserStore, targetWindow: NSWindow, url: URL?,
+    destination: UUID? = nil
+  ) throws {
     self.target = target
     self.targetWindow = targetWindow
-    let selected = target.session.spaces.first { $0.id == destination } ?? target.session.selectedSpace
+    let selected =
+      target.session.spaces.first { $0.id == destination } ?? target.session.selectedSpace
     profileID = selected.profileID
     destinationID = selected.id
     let tabs = url.map { [BrowserTab(url: $0)] } ?? []
-    let space = BrowserSpace(profileID: selected.profileID, name: selected.name,
+    let space = BrowserSpace(
+      profileID: selected.profileID, name: selected.name,
       symbol: selected.symbol, tint: selected.tint, tabs: tabs)
-    store = BrowserStore(session: try BrowserSession(
-      profiles: target.session.profiles.filter { $0.id == selected.profileID },
-      spaces: [space], selectedSpaceID: space.id))
+    store = BrowserStore(
+      session: try BrowserSession(
+        profiles: target.session.profiles.filter { $0.id == selected.profileID },
+        spaces: [space], selectedSpaceID: space.id))
     let id = UUID().uuidString
     try events.runtime.createWindowID(id)
     guard let window = events.runtime.window(forID: id),
-      let content = events.runtime.hostView(forWindowID: id) else { throw WorkspaceError.invalidState }
+      let content = events.runtime.hostView(forWindowID: id)
+    else { throw WorkspaceError.invalidState }
     self.window = window
     engine = try BrowserEngine(events: events, windowID: id, store: store)
     let hosting = NSHostingView(rootView: MiniBrowserWindow(controller: self))
@@ -42,9 +49,12 @@ final class MiniBrowserController {
     window.minSize = NSSize(width: 440, height: 320)
     engine.onClosed = { [weak self] _ in
       guard let self else { return }
-      if !self.moved, let tab = self.store.session.selectedSpace.selectedTab
-        ?? self.store.session.closedTabs.last?.tab {
-        _ = self.target.receiveMiniTab(tab, in: self.destinationID, profileID: self.profileID, archive: true)
+      if !self.moved,
+        let tab = self.store.session.selectedSpace.selectedTab
+          ?? self.store.session.closedTabs.last?.tab
+      {
+        _ = self.target.receiveMiniTab(
+          tab, in: self.destinationID, profileID: self.profileID, archive: true)
       }
       self.onClosed?()
     }
@@ -59,7 +69,10 @@ final class MiniBrowserController {
 
   func chooseDestination(_ id: UUID) {
     guard let space = target.session.spaces.first(where: { $0.id == id }) else { return }
-    if space.profileID == profileID { destinationID = id; return }
+    if space.profileID == profileID {
+      destinationID = id
+      return
+    }
     if onProfileChange?(id, store.session.selectedSpace.selectedTab?.url) == true {
       moved = true
       engine.runtime.closeWindowID(engine.windowID)
@@ -68,7 +81,8 @@ final class MiniBrowserController {
 
   func openInSpace() {
     guard let tab = store.session.selectedSpace.selectedTab,
-      target.receiveMiniTab(tab, in: destinationID, profileID: profileID, archive: false) else { return }
+      target.receiveMiniTab(tab, in: destinationID, profileID: profileID, archive: false)
+    else { return }
     if let image = engine.favicons[tab.id], let newID = target.session.selectedSpace.selectedTabID {
       target.engine?.seedFavicon(image, for: newID)
     }
@@ -82,8 +96,11 @@ final class MiniBrowserController {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     let address = trimmed.contains("://") ? trimmed : "https://" + trimmed
     guard let url = URL(string: address), NavigationInput.isWebURL(url) else { return }
-    if store.session.selectedPage == nil { store.perform(.open(url)) }
-    else { _ = engine.navigateCurrentPage(to: url) }
+    if store.session.selectedPage == nil {
+      store.perform(.open(url))
+    } else {
+      _ = engine.navigateCurrentPage(to: url)
+    }
   }
 }
 
@@ -98,15 +115,18 @@ struct MiniBrowserWindow: View {
   @State private var destination: UUID
 
   init(controller: MiniBrowserController) {
-    self.init(store: controller.store, engine: controller.engine,
+    self.init(
+      store: controller.store, engine: controller.engine,
       destinations: controller.destinations, destination: controller.destinationID,
       onNavigate: controller.navigate, onDestination: controller.chooseDestination,
       onOpen: controller.openInSpace)
   }
 
-  init(store: BrowserStore, engine: BrowserEngine?, destinations: [BrowserSpace], destination: UUID,
+  init(
+    store: BrowserStore, engine: BrowserEngine?, destinations: [BrowserSpace], destination: UUID,
     onNavigate: @escaping (String) -> Void, onDestination: @escaping (UUID) -> Void,
-    onOpen: @escaping () -> Void) {
+    onOpen: @escaping () -> Void
+  ) {
     self.store = store
     self.engine = engine
     self.destinations = destinations
@@ -114,7 +134,8 @@ struct MiniBrowserWindow: View {
     self.onDestination = onDestination
     self.onOpen = onOpen
     _destination = State(initialValue: destination)
-    _address = State(initialValue: store.session.selectedSpace.selectedTab?.url.absoluteString ?? "")
+    _address = State(
+      initialValue: store.session.selectedSpace.selectedTab?.url.absoluteString ?? "")
   }
 
   var body: some View {

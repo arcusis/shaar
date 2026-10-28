@@ -83,7 +83,9 @@ struct SidebarSplitRow: View {
   @ViewBuilder
   private func leadingControl(_ segment: Segment, hovered: Bool) -> some View {
     if hovered {
-      Button { onClose(segment.id) } label: {
+      Button {
+        onClose(segment.id)
+      } label: {
         Image(systemName: "xmark")
           .font(.system(size: 9, weight: .bold))
           .frame(width: 16, height: 16)

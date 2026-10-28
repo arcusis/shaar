@@ -553,7 +553,8 @@ final class BrowserEngine {
       for tab in space.tabs where !failedTabs.contains(tab.id) {
         let decision = TabMaterializationPolicy.decision(
           isSelected: space.id == session.selectedSpaceID
-            && (session.selectedPage?.tab.id == tab.id || store.selectedSplit?.tabIDs.contains(tab.id) == true),
+            && (session.selectedPage?.tab.id == tab.id
+              || store.selectedSplit?.tabIDs.contains(tab.id) == true),
           isLive: liveTabs.contains(tab.id), lazy: lazyPinnedTabs)
         guard decision == .materialize else { continue }
         guard events.router.bindTab(tab.id.uuidString, windowID: windowID) else {

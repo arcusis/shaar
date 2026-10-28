@@ -23,7 +23,9 @@ final class ChromiumPageContainerHandoffTests: XCTestCase {
 
   func testFavoritingASplitTabKeepsTheRestOfTheSplit() throws {
     var session = BrowserSession.fresh()
-    let ids = try (0..<3).map { try XCTUnwrap(session.open(URL(string: "https://f\($0).example")!)) }
+    let ids = try (0..<3).map {
+      try XCTUnwrap(session.open(URL(string: "https://f\($0).example")!))
+    }
     let space = session.selectedSpaceID
     XCTAssertTrue(session.splitTabs(ids[0], ids[1], in: space))
     XCTAssertTrue(session.addToSplit(ids[2], beside: ids[1], edge: .right, in: space))

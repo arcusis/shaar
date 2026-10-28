@@ -46,7 +46,8 @@ struct SplitDropZone: View {
       .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.accentColor, lineWidth: 2))
       .frame(
         width: horizontal ? size.width / 2 : size.width,
-        height: horizontal ? size.height : size.height / 2)
+        height: horizontal ? size.height : size.height / 2
+      )
       .padding(6)
       .allowsHitTesting(false)
       .transition(.opacity)

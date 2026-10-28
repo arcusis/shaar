@@ -3,6 +3,7 @@ import BrowserCore
 import SwiftUI
 import Testing
 import XCTest
+
 @testable import ArcusisBrowser
 
 @Suite @MainActor
@@ -33,10 +34,12 @@ struct MiniBrowserTests {
     let store = BrowserStore()
     let space = store.session.selectedSpace
     store.perform(.open(URL(string: "https://example.com")!))
-    let view = MiniBrowserWindow(store: store, engine: nil, destinations: [space],
+    let view = MiniBrowserWindow(
+      store: store, engine: nil, destinations: [space],
       destination: space.id, onNavigate: { _ in }, onDestination: { _ in }, onOpen: {})
     let host = NSHostingView(rootView: view.frame(width: 680, height: 520))
-    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 680, height: 520),
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 680, height: 520),
       styleMask: [.borderless], backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
     window.appearance = NSAppearance(named: .aqua)

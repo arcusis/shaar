@@ -37,7 +37,8 @@ struct WindowFullScreenObserver: NSViewRepresentable {
       observers = []
       guard let window else { return }
       let center = NotificationCenter.default
-      for name in [NSWindow.didEnterFullScreenNotification, NSWindow.didExitFullScreenNotification] {
+      for name in [NSWindow.didEnterFullScreenNotification, NSWindow.didExitFullScreenNotification]
+      {
         observers.append(
           center.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
             self?.report()

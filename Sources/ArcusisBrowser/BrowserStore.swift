@@ -84,7 +84,8 @@ final class BrowserStore {
   @ObservationIgnored var preferences = BrowserPreferencesStore()
   @ObservationIgnored private var managedSave: ((BrowserSession, Bool) -> ManagedSessionSaveResult)?
   @ObservationIgnored private let snapshotScheduler = SnapshotSaveScheduler()
-  @ObservationIgnored private let switchLog = OSLog(subsystem: "com.arcusis.browser", category: "SpaceSwitch")
+  @ObservationIgnored private let switchLog = OSLog(
+    subsystem: "com.arcusis.browser", category: "SpaceSwitch")
   @ObservationIgnored private var maySave = true
   @ObservationIgnored var engine: BrowserEngine?
   @ObservationIgnored var onSessionChanged: (() -> Void)?
@@ -993,9 +994,11 @@ final class BrowserStore {
     guard let sessionFile else { return }
     let snapshot = session
     if deferred {
-      snapshotScheduler.schedule({ try sessionFile.save(snapshot) }) { [weak self] error in
-        self?.storageNotice = error.map { "Changes could not be saved. \($0)" }
-      }
+      snapshotScheduler.schedule(
+        { try sessionFile.save(snapshot) },
+        completion: { [weak self] error in
+          self?.storageNotice = error.map { "Changes could not be saved. \($0)" }
+        })
       return
     }
     do {

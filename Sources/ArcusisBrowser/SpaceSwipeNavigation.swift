@@ -153,7 +153,8 @@ final class SpaceSwipeWindowMonitor {
 
   func route(_ event: NSEvent) -> NSEvent? {
     guard let store, let window, let view = clientView, let pager = view.pager else { return event }
-    let modalOwnsInput = store.commandIsOpen || store.sheet != nil || !store.installationRequests.isEmpty
+    let modalOwnsInput =
+      store.commandIsOpen || store.sheet != nil || !store.installationRequests.isEmpty
       || !store.websiteMediaRequests.isEmpty || store.libraryDrawerSection != nil
       || window.attachedSheet != nil || NSApp.modalWindow != nil
     guard event.window === window, !modalOwnsInput, !event.modifierFlags.contains(.command) else {
@@ -167,7 +168,9 @@ final class SpaceSwipeWindowMonitor {
       tracking = false
       gestureActive = true
       consumeMomentum = false
-      rejected = !event.hasPreciseScrollingDeltas || !view.bounds.contains(view.convert(event.locationInWindow, from: nil))
+      rejected =
+        !event.hasPreciseScrollingDeltas
+        || !view.bounds.contains(view.convert(event.locationInWindow, from: nil))
       pager.begin()
     }
     if !event.momentumPhase.isEmpty {
@@ -179,7 +182,10 @@ final class SpaceSwipeWindowMonitor {
     }
     if event.phase.contains(.cancelled) || event.phase.contains(.ended) {
       gestureActive = false
-      guard tracking else { rejected = false; return event }
+      guard tracking else {
+        rejected = false
+        return event
+      }
       pager.finish(store: store, cancelled: event.phase.contains(.cancelled))
       tracking = false
       consumeMomentum = true
@@ -188,14 +194,18 @@ final class SpaceSwipeWindowMonitor {
     }
     guard gestureActive, !rejected, !event.phase.isEmpty else { return event }
     if !tracking {
-      guard abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY), event.scrollingDeltaX != 0 else {
+      guard abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY), event.scrollingDeltaX != 0
+      else {
         if event.scrollingDeltaY != 0 { rejected = true }
         return event
       }
       tracking = true
     }
-    let index = store.session.spaces.firstIndex(where: { $0.id == store.session.selectedSpaceID }) ?? 0
-    pager.move(delta: event.scrollingDeltaX, timestamp: event.timestamp, index: index, count: store.session.spaces.count)
+    let index =
+      store.session.spaces.firstIndex(where: { $0.id == store.session.selectedSpaceID }) ?? 0
+    pager.move(
+      delta: event.scrollingDeltaX, timestamp: event.timestamp, index: index,
+      count: store.session.spaces.count)
     return nil
   }
 

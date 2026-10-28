@@ -6,11 +6,19 @@ import Testing
 @Suite
 struct SpacePagerTests {
   @Test func snapUsesDistanceVelocityAndBounds() {
-    #expect(SpacePagerDecision.targetIndex(index: 1, count: 3, offset: -60, velocity: 0, width: 100) == 2)
-    #expect(SpacePagerDecision.targetIndex(index: 1, count: 3, offset: -20, velocity: -300, width: 100) == 2)
-    #expect(SpacePagerDecision.targetIndex(index: 1, count: 3, offset: 20, velocity: 0, width: 100) == 1)
-    #expect(SpacePagerDecision.targetIndex(index: 0, count: 3, offset: 100, velocity: 500, width: 100) == 0)
-    #expect(SpacePagerDecision.targetIndex(index: 2, count: 3, offset: -200, velocity: -500, width: 100) == 2)
+    #expect(
+      SpacePagerDecision.targetIndex(index: 1, count: 3, offset: -60, velocity: 0, width: 100) == 2)
+    #expect(
+      SpacePagerDecision.targetIndex(index: 1, count: 3, offset: -20, velocity: -300, width: 100)
+        == 2)
+    #expect(
+      SpacePagerDecision.targetIndex(index: 1, count: 3, offset: 20, velocity: 0, width: 100) == 1)
+    #expect(
+      SpacePagerDecision.targetIndex(index: 0, count: 3, offset: 100, velocity: 500, width: 100)
+        == 0)
+    #expect(
+      SpacePagerDecision.targetIndex(index: 2, count: 3, offset: -200, velocity: -500, width: 100)
+        == 2)
   }
 
   @Test func rubberBandResistsBeyondEdges() {

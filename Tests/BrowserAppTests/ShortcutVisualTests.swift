@@ -13,7 +13,8 @@ import XCTest
       .background(Color(nsColor: .windowBackgroundColor))
     let mounted = try MountedChromeSidebar(view: view, size: size, appearance: .aqua)
     defer { mounted.close() }
-    _ = try await mounted.capture(to: URL(fileURLWithPath: "/tmp/shortcuts-pane.png"),
+    _ = try await mounted.capture(
+      to: URL(fileURLWithPath: "/tmp/shortcuts-pane.png"),
       requiredText: ["Shortcuts", "Search shortcuts", "New window"])
   }
 }

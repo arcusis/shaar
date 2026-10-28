@@ -27,7 +27,9 @@ final class BrowserSplitStoreTests: XCTestCase {
 
   func testDroppingTabsBuildsAndSeparatesSplits() throws {
     var session = BrowserSession.fresh()
-    let ids = try (0..<5).map { try XCTUnwrap(session.open(URL(string: "https://t\($0).example")!)) }
+    let ids = try (0..<5).map {
+      try XCTUnwrap(session.open(URL(string: "https://t\($0).example")!))
+    }
     let store = BrowserStore(session: session)
     let space = store.session.selectedSpaceID
     store.perform(.tab(space: space, tab: ids[0]))
@@ -46,8 +48,9 @@ final class BrowserSplitStoreTests: XCTestCase {
 
     _ = store.beginTabDrag(ids[2], spaceID: space, fromSplitPane: true)
     XCTAssertTrue(store.canDropTab(beside: ids[0]), "panes can rearrange inside a full split")
-    XCTAssertTrue(store.acceptSidebarDrop(
-      .tab(sessionID: store.dragSessionID, sourceSpaceID: space, tabID: ids[2]), into: space))
+    XCTAssertTrue(
+      store.acceptSidebarDrop(
+        .tab(sessionID: store.dragSessionID, sourceSpaceID: space, tabID: ids[2]), into: space))
     XCTAssertEqual(Set(try XCTUnwrap(store.selectedSplit).tabIDs), [ids[0], ids[1], ids[3]])
   }
 

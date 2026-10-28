@@ -43,7 +43,8 @@ struct SplitPaneToolbar: View {
     .frame(height: 30)
     .background(
       SpaceChromeTint(space: store.session.selectedSpace).color(for: colorScheme)
-        .opacity(isFocused ? 1 : 0.6))
+        .opacity(isFocused ? 1 : 0.6)
+    )
     .buttonStyle(.plain)
   }
 

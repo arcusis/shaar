@@ -29,8 +29,10 @@ struct ShortcutCatalog {
   init(menu: NSMenu) {
     entries = menu.items.compactMap(\.submenu).flatMap { section in
       section.items.compactMap { item in
-        guard !item.isSeparatorItem, !item.keyEquivalent.isEmpty || item.representedObject is String else { return nil }
-        return Entry(menu: section.title, title: item.title, key: item.keyEquivalent,
+        guard !item.isSeparatorItem, !item.keyEquivalent.isEmpty || item.representedObject is String
+        else { return nil }
+        return Entry(
+          menu: section.title, title: item.title, key: item.keyEquivalent,
           modifiers: item.keyEquivalentModifierMask)
       }
     }
@@ -52,8 +54,11 @@ enum ShortcutPageRouting {
     let matches = menu.items.compactMap(\.submenu).contains { section in
       section.items.contains { item in
         guard item.representedObject is String || section.title != "Edit" else { return false }
-        let itemFlags = item.keyEquivalentModifierMask.intersection([.command, .option, .control, .shift])
-        return !item.keyEquivalent.isEmpty && item.keyEquivalent.lowercased() == key && itemFlags == flags
+        let itemFlags = item.keyEquivalentModifierMask.intersection([
+          .command, .option, .control, .shift,
+        ])
+        return !item.keyEquivalent.isEmpty && item.keyEquivalent.lowercased() == key
+          && itemFlags == flags
       }
     }
     return matches && menu.performKeyEquivalent(with: event)

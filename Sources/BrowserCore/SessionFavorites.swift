@@ -64,7 +64,8 @@ extension BrowserSession {
     guard let spaceIndex = spaces.firstIndex(where: { $0.id == spaceID }),
       let tabIndex = spaces[spaceIndex].tabs.firstIndex(where: { $0.id == tabID })
     else { return nil }
-    guard favorites(for: spaces[spaceIndex].profileID).count < Self.maximumFavoritesPerProfile else {
+    guard favorites(for: spaces[spaceIndex].profileID).count < Self.maximumFavoritesPerProfile
+    else {
       return nil
     }
     let source = spaces[spaceIndex].tabs[tabIndex]

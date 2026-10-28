@@ -33,7 +33,8 @@ struct SpaceHSBColor: Equatable {
     let (red, green, blue) = Self.channels(sector: Int(sector), chroma: chroma, second: second)
     let offset = brightness - chroma
     return SpaceRGBColor(
-      red: Self.byte(red + offset), green: Self.byte(green + offset), blue: Self.byte(blue + offset))
+      red: Self.byte(red + offset), green: Self.byte(green + offset), blue: Self.byte(blue + offset)
+    )
   }
 
   /// Color field: saturation runs left to right, brightness bottom to top.

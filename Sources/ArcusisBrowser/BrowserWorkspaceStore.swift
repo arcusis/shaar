@@ -132,7 +132,9 @@ final class BrowserWorkspaceStore {
     }
   }
 
-  private func changed(_ id: UUID, session: BrowserSession, deferred: Bool) -> ManagedSessionSaveResult {
+  private func changed(_ id: UUID, session: BrowserSession, deferred: Bool)
+    -> ManagedSessionSaveResult
+  {
     guard stores[id] != nil, let previous = workspace.window(id) else {
       return ManagedSessionSaveResult(
         session: session, notice: "This window is closed; its changes will not be saved.")
@@ -171,13 +173,15 @@ final class BrowserWorkspaceStore {
   private func scheduleSnapshot() {
     guard maySave, let file else { return }
     let snapshot = workspace
-    snapshotScheduler.schedule({ try file.save(snapshot) }) { [weak self] error in
-      guard let self else { return }
-      let notice = error.map { "Window changes could not be saved. \($0)" }
-      guard self.storageNotice != notice else { return }
-      self.storageNotice = notice
-      self.broadcast(excluding: nil)
-    }
+    snapshotScheduler.schedule(
+      { try file.save(snapshot) },
+      completion: { [weak self] error in
+        guard let self else { return }
+        let notice = error.map { "Window changes could not be saved. \($0)" }
+        guard self.storageNotice != notice else { return }
+        self.storageNotice = notice
+        self.broadcast(excluding: nil)
+      })
   }
 
   private func broadcast(excluding sourceID: UUID?) {

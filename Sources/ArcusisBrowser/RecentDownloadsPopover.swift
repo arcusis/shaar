@@ -202,7 +202,8 @@ private enum RecentDownloadThumbnail {
     return await withTaskCancellationHandler {
       await withCheckedContinuation { continuation in
         QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { representation, _ in
-          continuation.resume(returning: representation.map { NSImage(cgImage: $0.cgImage, size: .zero) })
+          continuation.resume(
+            returning: representation.map { NSImage(cgImage: $0.cgImage, size: .zero) })
         }
       }
     } onCancel: {

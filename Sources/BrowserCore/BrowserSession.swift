@@ -114,7 +114,8 @@ public struct BrowserSpace: Codable, Identifiable, Equatable, Sendable {
   }
 
   private enum CodingKeys: String, CodingKey {
-    case id, profileID, name, symbol, tint, customRGB, tabs, selectedTabID, selectedFavoriteID, folders, splits
+    case id, profileID, name, symbol, tint, customRGB, tabs, selectedTabID, selectedFavoriteID,
+      folders, splits
   }
 
   public init(from decoder: any Decoder) throws {
@@ -541,7 +542,9 @@ public struct BrowserSession: Codable, Equatable, Sendable {
     guard let index = spaces.firstIndex(where: { $0.tabs.contains { $0.id == tabID } }),
       let tabIndex = spaces[index].tabs.firstIndex(where: { $0.id == tabID })
     else { return }
-    let splitPeer = spaces[index].splits.first { $0.tabIDs.contains(tabID) }?.tabIDs.first { $0 != tabID }
+    let splitPeer = spaces[index].splits.first { $0.tabIDs.contains(tabID) }?.tabIDs.first {
+      $0 != tabID
+    }
     closedTabs.append(
       ClosedBrowserTab(
         tab: spaces[index].tabs[tabIndex], spaceID: spaces[index].id,
@@ -555,7 +558,8 @@ public struct BrowserSession: Codable, Equatable, Sendable {
     spaces[index].reconcileSplits()
     if spaces[index].selectedTabID == tabID {
       let tabs = spaces[index].tabs
-      spaces[index].selectedTabID = splitPeer ?? (tabs.isEmpty ? nil : tabs[min(tabIndex, tabs.count - 1)].id)
+      spaces[index].selectedTabID =
+        splitPeer ?? (tabs.isEmpty ? nil : tabs[min(tabIndex, tabs.count - 1)].id)
     }
   }
 

@@ -15,7 +15,8 @@ final class SessionSplitTests: XCTestCase {
     for index in spaces.indices { spaces[index].removeValue(forKey: "splits") }
     object["spaces"] = spaces
     let old = try JSONSerialization.data(withJSONObject: object)
-    XCTAssertTrue(try JSONDecoder().decode(BrowserSession.self, from: old).selectedSpace.splits.isEmpty)
+    XCTAssertTrue(
+      try JSONDecoder().decode(BrowserSession.self, from: old).selectedSpace.splits.isEmpty)
   }
 
   func testWorkspaceProjectionPreservesWindowSplits() throws {
@@ -28,7 +29,9 @@ final class SessionSplitTests: XCTestCase {
     let otherWindow = try workspace.addWindow(from: firstWindow)
     XCTAssertTrue(try XCTUnwrap(workspace.window(otherWindow)).session.selectedSpace.splits.isEmpty)
     _ = try workspace.createProfile(name: "Another")
-    XCTAssertEqual(try XCTUnwrap(workspace.window(firstWindow)).session.selectedSpace.splits.first?.tabIDs, [first, second])
+    XCTAssertEqual(
+      try XCTUnwrap(workspace.window(firstWindow)).session.selectedSpace.splits.first?.tabIDs,
+      [first, second])
     try workspace.validate()
   }
 
@@ -42,7 +45,8 @@ final class SessionSplitTests: XCTestCase {
     XCTAssertTrue(session.selectedSpace.splits.isEmpty)
     let third = try XCTUnwrap(session.open(URL(string: "https://three.example")!))
     XCTAssertTrue(session.splitTabs(second, third, in: spaceID))
-    let destination = try XCTUnwrap(session.addSpace(name: "Other", sharingProfile: session.selectedSpace.profileID))
+    let destination = try XCTUnwrap(
+      session.addSpace(name: "Other", sharingProfile: session.selectedSpace.profileID))
     XCTAssertTrue(session.moveTab(second, from: spaceID, to: destination))
     XCTAssertTrue(try XCTUnwrap(session.spaces.first { $0.id == spaceID }).splits.isEmpty)
     try session.validate()
@@ -66,7 +70,9 @@ final class SplitLayoutTests: XCTestCase {
     let split = try XCTUnwrap(session.selectedSpace.splits.first)
     XCTAssertEqual(
       split.root,
-      .group(.columns, [.pane(ids[0]), .group(.rows, [.pane(ids[1]), .pane(ids[2])], [0.5, 0.5])], [0.5, 0.5]))
+      .group(
+        .columns, [.pane(ids[0]), .group(.rows, [.pane(ids[1]), .pane(ids[2])], [0.5, 0.5])],
+        [0.5, 0.5]))
     XCTAssertEqual(SplitLayoutPreset.matching(split.root), .mainLeading)
     XCTAssertTrue(session.addToSplit(ids[3], beside: ids[0], edge: .left, in: space))
     XCTAssertEqual(session.selectedSpace.splits.first?.tabIDs, [ids[3], ids[0], ids[1], ids[2]])
@@ -80,7 +86,8 @@ final class SplitLayoutTests: XCTestCase {
     XCTAssertTrue(session.splitTabs(ids[0], ids[1], in: space))
     XCTAssertTrue(session.addToSplit(ids[2], beside: ids[1], edge: .right, in: space))
     let splitID = try XCTUnwrap(session.selectedSpace.splits.first?.id)
-    XCTAssertEqual(SplitLayoutPreset.matching(try XCTUnwrap(session.selectedSpace.splits.first).root), .columns)
+    XCTAssertEqual(
+      SplitLayoutPreset.matching(try XCTUnwrap(session.selectedSpace.splits.first).root), .columns)
     for preset in SplitLayoutPreset.available(paneCount: 3) {
       XCTAssertTrue(session.applySplitLayout(preset, splitID: splitID, in: space))
       let root = try XCTUnwrap(session.selectedSpace.splits.first).root

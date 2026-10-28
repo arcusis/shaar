@@ -95,7 +95,8 @@ private struct SplitGroupView: View {
     }
     .frame(
       width: axis == .columns ? Self.dividerThickness : nil,
-      height: axis == .rows ? Self.dividerThickness : nil)
+      height: axis == .rows ? Self.dividerThickness : nil
+    )
     .frame(maxWidth: axis == .rows ? .infinity : nil, maxHeight: axis == .columns ? .infinity : nil)
     .contentShape(Rectangle())
     .pointerStyle(axis == .columns ? .columnResize : .rowResize)
@@ -113,7 +114,8 @@ private struct SplitGroupView: View {
           if let liveWeights { onWeightsChange(liveWeights) }
           liveWeights = nil
           activeDivider = nil
-        })
+        }
+    )
     .animation(.easeOut(duration: 0.12), value: highlighted)
     .accessibilityLabel("Split divider")
   }
@@ -150,8 +152,10 @@ struct BrowserSplitPageView: View {
       if let failure = store.rendererFailures[id] {
         FailedPageView(store: store, failure: failure)
       } else if engine.pages[id] != nil {
-        ChromiumPage(engine: engine, tabID: id, autofocus: id == store.session.selectedSpace.selectedTabID)
-          .overlay { SplitDropZone(store: store, targetID: id) }
+        ChromiumPage(
+          engine: engine, tabID: id, autofocus: id == store.session.selectedSpace.selectedTabID
+        )
+        .overlay { SplitDropZone(store: store, targetID: id) }
       } else {
         ProgressView("Loading profile…")
       }
@@ -186,11 +190,15 @@ private final class SplitPaneFocusView: NSView {
 
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
-    if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
+    if let monitor {
+      NSEvent.removeMonitor(monitor)
+      self.monitor = nil
+    }
     guard window != nil else { return }
     monitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
       guard let self, event.window === self.window,
-        self.bounds.contains(self.convert(event.locationInWindow, from: nil)) else { return event }
+        self.bounds.contains(self.convert(event.locationInWindow, from: nil))
+      else { return event }
       self.onFocus?()
       return event
     }

@@ -4,7 +4,8 @@ import ChromiumBridge
 import SwiftUI
 
 enum BrowserMenuCommand: String, CaseIterable {
-  case newWindow, newPrivateWindow, newMiniWindow, newTab, search, newSpace, editSpace, closeTab, closeWindow,
+  case newWindow, newPrivateWindow, newMiniWindow, newTab, search, newSpace, editSpace, closeTab,
+    closeWindow,
     addFavorite
   case reopenClosed, recentlyClosed, bookmarkPage, bookmarks, history, downloads
   case find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload, splitView
@@ -318,15 +319,23 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
 
   @objc func handleURL(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) {
     guard let text = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue,
-      let url = URL(string: text), NavigationInput.isWebURL(url) else { return }
-    if !started { pendingURLs.append(url); return }
+      let url = URL(string: text), NavigationInput.isWebURL(url)
+    else { return }
+    if !started {
+      pendingURLs.append(url)
+      return
+    }
     openExternalURL(url)
   }
 
   private func openExternalURL(_ url: URL) {
-    guard let context = activeContext ?? workspace.workspace.focusedWindowID.flatMap({ contexts[$0] })
-      ?? contexts.values.first else { return }
-    switch MiniLinkRoute.route(url, inMainWindow: UserDefaults.standard.bool(forKey: "externalLinksInMainWindow")) {
+    guard
+      let context = activeContext ?? workspace.workspace.focusedWindowID.flatMap({ contexts[$0] })
+        ?? contexts.values.first
+    else { return }
+    switch MiniLinkRoute.route(
+      url, inMainWindow: UserDefaults.standard.bool(forKey: "externalLinksInMainWindow"))
+    {
     case .main(let url):
       context.store.perform(.open(url))
       context.window.makeKeyAndOrderFront(nil)
@@ -337,11 +346,19 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   }
 
   @discardableResult
-  private func openMiniWindow(url: URL?, context: NativeBrowserContext? = nil, destination: UUID? = nil) -> Bool {
-    guard let target = context ?? activeContext ?? workspace.workspace.focusedWindowID.flatMap({ contexts[$0] })
-      ?? contexts.values.first else { return false }
+  private func openMiniWindow(
+    url: URL?, context: NativeBrowserContext? = nil, destination: UUID? = nil
+  ) -> Bool {
+    guard
+      let target = context ?? activeContext ?? workspace.workspace.focusedWindowID.flatMap({
+        contexts[$0]
+      })
+        ?? contexts.values.first
+    else { return false }
     do {
-      let mini = try MiniBrowserController(events: events, target: target.store, targetWindow: target.window, url: url, destination: destination)
+      let mini = try MiniBrowserController(
+        events: events, target: target.store, targetWindow: target.window, url: url,
+        destination: destination)
       let id = mini.engine.windowID
       miniWindows[id] = mini
       mini.onClosed = { [weak self] in self?.miniWindows[id] = nil }
@@ -350,7 +367,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
         return self.openMiniWindow(url: url, context: target, destination: destination)
       }
       return true
-    } catch { report(error); return false }
+    } catch {
+      report(error)
+      return false
+    }
   }
 
   private func attach(_ id: UUID, source: NSRect?, reconcile: Bool = true) throws {
@@ -785,11 +805,14 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       let preferences = BrowserPreferencesStore(
         fileURL: directory.appending(path: "preferences.json"))
       let runtime = try ARCChromiumRuntime(frameworkURL: frameworkURL)
-      BrowserSettingsAppearance.apply(UserDefaults.standard.string(forKey: "settingsAppearance") ?? "system")
+      BrowserSettingsAppearance.apply(
+        UserDefaults.standard.string(forKey: "settingsAppearance") ?? "system")
       let host = NativeBrowserHost(
         events: BrowserRuntimeEvents(runtime: runtime), workspace: workspace,
         preferences: preferences)
-      NSAppleEventManager.shared().setEventHandler(host, andSelector: #selector(handleURL(_:reply:)), forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))
+      NSAppleEventManager.shared().setEventHandler(
+        host, andSelector: #selector(handleURL(_:reply:)),
+        forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))
       runtime.onReady = { [weak host] in
         do { try host?.restore() } catch {
           host?.startupFailed = true

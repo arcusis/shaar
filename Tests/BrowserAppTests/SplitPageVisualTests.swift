@@ -8,7 +8,8 @@ import XCTest
 @MainActor
 final class SplitPageVisualTests: XCTestCase {
   func testMixedLayoutCapture() async throws {
-    try XCTSkipUnless(SidebarVisualCaptureSupport.enabled, "Visual capture requires explicit opt-in")
+    try XCTSkipUnless(
+      SidebarVisualCaptureSupport.enabled, "Visual capture requires explicit opt-in")
     var session = BrowserSession.fresh()
     let hosts = ["first.example", "second.example", "third.example"]
     let ids = try hosts.map { try XCTUnwrap(session.open(URL(string: "https://\($0)")!)) }
@@ -50,7 +51,8 @@ final class SplitPageVisualTests: XCTestCase {
   }
 
   func testSidebarSplitRowCapture() async throws {
-    try XCTSkipUnless(SidebarVisualCaptureSupport.enabled, "Visual capture requires explicit opt-in")
+    try XCTSkipUnless(
+      SidebarVisualCaptureSupport.enabled, "Visual capture requires explicit opt-in")
     let segments = ["Jira Board", "Google", "Naza"].map {
       SidebarSplitRow.Segment(id: UUID(), title: $0, favicon: nil)
     }

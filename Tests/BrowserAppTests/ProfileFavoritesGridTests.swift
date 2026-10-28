@@ -66,7 +66,8 @@ final class ProfileFavoritesGridTests: XCTestCase {
         let columns = ProfileFavoritesGrid.columnCount(for: count)
         let rows = (count + columns - 1) / columns
         let expectedHeight =
-          CGFloat(rows) * ProfileFavoritesGrid.tileHeight(columns: columns) + CGFloat(rows - 1) * 8 + 2
+          CGFloat(rows) * ProfileFavoritesGrid.tileHeight(columns: columns) + CGFloat(rows - 1) * 8
+          + 2
         XCTAssertEqual(measurements.fittingHeight, expectedHeight, accuracy: 1)
       }
       if includesLongValue {

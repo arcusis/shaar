@@ -5,7 +5,8 @@ import Foundation
 extension BrowserStore {
   var selectedSplit: BrowserSplit? {
     guard session.selectedSpace.selectedFavoriteID == nil,
-      let id = session.selectedSpace.selectedTabID else { return nil }
+      let id = session.selectedSpace.selectedTabID
+    else { return nil }
     return session.selectedSpace.splits.first { $0.tabIDs.contains(id) }
   }
 
@@ -16,7 +17,8 @@ extension BrowserStore {
 
   func recordSplitTabSelection() {
     guard session.selectedSpace.selectedFavoriteID == nil,
-      let id = session.selectedSpace.selectedTabID else { return }
+      let id = session.selectedSpace.selectedTabID
+    else { return }
     splitTabRecency.removeAll { $0 == id }
     splitTabRecency.append(id)
     let existing = Set(session.spaces.flatMap { $0.tabs.map(\.id) })
@@ -26,7 +28,8 @@ extension BrowserStore {
   /// Adds the most recently used other tab beside the selected one.
   func splitSelectedTab() {
     guard session.selectedSpace.selectedFavoriteID == nil,
-      let selected = session.selectedSpace.selectedTabID else { return }
+      let selected = session.selectedSpace.selectedTabID
+    else { return }
     let inSplit = Set(selectedSplit?.tabIDs ?? [selected])
     let ids = Set(session.selectedSpace.tabs.map(\.id)).subtracting(inSplit)
     let recent = splitTabRecency.reversed().first { ids.contains($0) }
@@ -59,7 +62,8 @@ extension BrowserStore {
   func placePendingSplitPane(_ id: UUID) {
     guard let placement = pendingSplitPlacement else { return }
     pendingSplitPlacement = nil
-    session.addToSplit(id, beside: placement.target, edge: placement.edge, in: session.selectedSpaceID)
+    session.addToSplit(
+      id, beside: placement.target, edge: placement.edge, in: session.selectedSpaceID)
   }
 
   func applySplitLayout(_ preset: SplitLayoutPreset) {

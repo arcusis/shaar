@@ -70,6 +70,9 @@ struct SpaceEditor: View {
     .frame(width: horizontalSizeClass == .compact ? 380 : 440)
     .background(Color(nsColor: .windowBackgroundColor))
     .onAppear { nameIsFocused = true }
+    .onDisappear {
+      if NSColorPanel.sharedColorPanelExists { NSColorPanel.shared.close() }
+    }
     .confirmationDialog("Delete \(name)?", isPresented: $deleteIsPresented) {
       Button("Delete space", role: .destructive) {
         if let id = route.spaceID, store.removeSpace(id) { dismiss() }

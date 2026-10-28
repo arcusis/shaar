@@ -58,6 +58,7 @@ struct SidebarSpaceRevealFramesPreferenceKey: PreferenceKey {
 struct BrowserSidebar: View {
   @Bindable var store: BrowserStore
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.colorScheme) private var colorScheme
   @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
   @Environment(\.browserChromeAccessibilityOverrides) private var accessibilityOverrides
   @State private var targetedTab: UUID?
@@ -233,13 +234,10 @@ struct BrowserSidebar: View {
     .padding(.bottom, 10)
     .coordinateSpace(name: "sidebarBounds")
     .background {
-      LinearGradient(
-        colors: [
-          store.session.selectedSpace.themeColor.opacity(0.50),
-          Color(nsColor: .windowBackgroundColor),
-        ],
-        startPoint: .topLeading, endPoint: .bottomTrailing
-      )
+      SpaceChromeTint(space: store.session.selectedSpace).color(for: colorScheme)
+        .animation(
+          sidebarReduceMotion ? nil : .easeOut(duration: 0.18),
+          value: SpaceChromeTint(space: store.session.selectedSpace))
     }
     .zIndex(1)
     .onChange(of: store.session.selectedSpaceID) { _, _ in folderDraft = nil }

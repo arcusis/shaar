@@ -121,6 +121,7 @@ import Testing
     #expect(createdSpace.profileID == newProfileID)
     #expect(browserStore.session.selectedSpaceID == createdSpace.id)
     #expect(settings.profiles.first { $0.id == newProfileID }?.spaceCount == 1)
+    #expect(settings.profiles.first { $0.id == newProfileID }?.spaceNames == ["Project"])
     for (spaceID, profileID) in originalAssignments {
       #expect(workspace.workspace.catalog.spaces.first { $0.id == spaceID }?.profileID == profileID)
     }

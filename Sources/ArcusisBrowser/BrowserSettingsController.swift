@@ -25,9 +25,10 @@ private final class BrowserSettingsState {
 
   var profiles: [BrowserSettingsProfile] {
     workspace.workspace.catalog.profiles.map { profile in
-      let spaces = Set(
-        workspace.workspace.catalog.spaces.filter { $0.profileID == profile.id }.map(\.id))
-      return BrowserSettingsProfile(id: profile.id, name: profile.name, spaceCount: spaces.count)
+      let spaces = workspace.workspace.catalog.spaces.filter { $0.profileID == profile.id }
+      return BrowserSettingsProfile(
+        id: profile.id, name: profile.name, spaceCount: spaces.count,
+        spaceNames: spaces.map(\.name))
     }
   }
 

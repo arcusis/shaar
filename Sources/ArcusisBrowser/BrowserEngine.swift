@@ -55,7 +55,7 @@ final class BrowserEngine {
   @ObservationIgnored private var loadedProfiles: Set<UUID> = []
   @ObservationIgnored private var loadingProfiles: Set<UUID> = []
   @ObservationIgnored private var failedProfiles: Set<UUID> = []
-  @ObservationIgnored private var liveTabs: Set<UUID> = []
+  @ObservationIgnored fileprivate var liveTabs: Set<UUID> = []
   @ObservationIgnored private var failedTabs: Set<UUID> = []
   @ObservationIgnored private var reconciling = false
   @ObservationIgnored private var receivingNativeSelection = false
@@ -802,7 +802,8 @@ struct ChromiumPage: NSViewRepresentable {
   }
 
   func updateNSView(_ container: ChromiumPageContainerView, context: Context) {
-    if container.attach(engine.runtime.view(forTabID: tabID.uuidString)),
+    if container.select(
+      engine.runtime.view(forTabID: tabID.uuidString), tabID: tabID, liveTabs: engine.liveTabs),
       container.window?.isKeyWindow == true
     {
       engine.focusPage(tabID)
@@ -816,9 +817,46 @@ struct ChromiumPage: NSViewRepresentable {
 
 final class ChromiumPageContainerView: NSView {
   private(set) weak var pageView: NSView?
+  private var retainedPages: [UUID: NSView] = [:]
+
+  @discardableResult
+  func select(_ page: NSView?, tabID: UUID, liveTabs: Set<UUID>) -> Bool {
+    wantsLayer = true
+    layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+    for id in retainedPages.keys.filter({ !liveTabs.contains($0) }) {
+      if let view = retainedPages.removeValue(forKey: id), view.superview === self {
+        view.removeFromSuperview()
+      }
+    }
+    guard let page else { return attach(nil) }
+    let changed = pageView !== page || page.superview !== self
+    for view in retainedPages.values where view.superview === self {
+      view.isHidden = view !== page
+    }
+    if let previous = retainedPages.updateValue(page, forKey: tabID), previous !== page,
+      previous.superview === self
+    {
+      previous.removeFromSuperview()
+    }
+    pageView = page
+    if page.superview !== self {
+      page.removeFromSuperview()
+      page.translatesAutoresizingMaskIntoConstraints = true
+      page.frame = bounds
+      page.autoresizingMask = [.width, .height]
+      addSubview(page)
+    }
+    page.isHidden = false
+    layoutSubtreeIfNeeded()
+    return changed
+  }
 
   @discardableResult
   func attach(_ page: NSView?) -> Bool {
+    if page == nil {
+      for view in retainedPages.values where view.superview === self { view.removeFromSuperview() }
+      retainedPages.removeAll()
+    }
     if pageView === page, page?.superview === self { return false }
     if let pageView, pageView !== page, pageView.superview === self {
       pageView.removeFromSuperview()

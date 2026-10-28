@@ -150,27 +150,16 @@ struct BrowserSidebar: View {
       SidebarAddressField(store: store)
       profileFavorites
       VStack(alignment: .leading, spacing: 4) {
-        Menu {
-          Text("Profile: \(store.profileName)")
-          Divider()
-          Button("New Folder", systemImage: "folder.badge.plus") {
-            beginFolderDraft(parentID: nil)
-          }
-          Button("Edit Space…", systemImage: "slider.horizontal.3") {
-            store.spaceEditor = .edit(store.session.selectedSpaceID)
-          }
-        } label: {
-          HStack(spacing: 7) {
-            Label(store.session.selectedSpace.name, systemImage: store.session.selectedSpace.symbol)
-              .font(.system(size: 11, weight: .semibold))
-              .foregroundStyle(store.session.selectedSpace.themeColor)
-              .lineLimit(1)
-              .truncationMode(.tail)
-            Spacer(minLength: 0)
-          }
-          .contentShape(Rectangle())
+        HStack(spacing: 7) {
+          Label(store.session.selectedSpace.name, systemImage: store.session.selectedSpace.symbol)
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(.white.opacity(0.55))
+            .lineLimit(1)
+            .truncationMode(.tail)
+          Spacer(minLength: 0)
         }
-        .menuStyle(.borderlessButton)
+        .frame(height: 34)
+        .contentShape(Rectangle())
         .contextMenu {
           Button("New Folder", systemImage: "folder.badge.plus") {
             beginFolderDraft(parentID: nil)
@@ -271,7 +260,19 @@ struct BrowserSidebar: View {
           if space.tabs.contains(where: \.isPinned)
             || !space.folders.isEmpty
           {
-            Divider().padding(.vertical, 6)
+            HStack(spacing: 8) {
+              Rectangle().fill(Color.primary.opacity(0.12)).frame(height: 1)
+              Button("Clear") {
+                guard store.session.selectedSpaceID == space.id else { return }
+                let ids = space.tabs.filter { !$0.isPinned }.map(\.id)
+                for id in ids { store.closeTab(id) }
+              }
+              .font(.system(size: 11, weight: .semibold))
+              .foregroundStyle(.secondary)
+              .disabled(!space.tabs.contains { !$0.isPinned })
+              .help("Close today's tabs")
+            }
+            .padding(.vertical, 6)
           }
           Button {
             store.showCommand()
@@ -446,12 +447,40 @@ struct BrowserSidebar: View {
           onReset: { _ = store.resetFavorite($0) },
           onRemove: { _ = store.removeFavorite($0) },
           onMoveBefore: { _ = store.moveFavorite($0, before: $1) },
+          onTabDrop: { item, before in
+            guard case .tab(let sessionID, let source, let tabID) = item,
+              sessionID == store.dragSessionID, source == store.session.selectedSpaceID
+            else { return false }
+            addToFavorites(tabID: tabID, spaceID: source, profileID: profileID)
+            guard
+              let favoriteID = store.session.favoritePages.first(where: { $0.tab.id == tabID })?
+                .favoriteID
+            else { return false }
+            if let before { _ = store.moveFavorite(favoriteID, before: before) }
+            return true
+          },
           accessibilityOverrides: ProfileFavoritesAccessibilityOverrides(
             reduceMotion: sidebarReduceMotion,
             reduceTransparency: reduceTransparency
               || accessibilityOverrides.reduceTransparency == true)
         )
+      } else {
+        Color.clear.frame(height: 8).contentShape(Rectangle())
       }
+    }
+    .dropDestination(for: SidebarTransfer.self) { items, _ in
+      guard items.count == 1, case .tab(let sessionID, let source, let tabID) = items[0],
+        sessionID == store.dragSessionID, source == store.session.selectedSpaceID
+      else { return false }
+      addToFavorites(tabID: tabID, spaceID: source, profileID: profileID)
+      return store.session.favoritePages.contains { $0.tab.id == tabID }
+    }
+    .dropDestination(for: URL.self) { urls, _ in
+      guard urls.count == 1, NavigationInput.isWebURL(urls[0]), store.sheet == nil,
+        !store.commandIsOpen
+      else { return false }
+      store.perform(.open(urls[0]))
+      return store.addCurrentPageAsFavorite()
     }
   }
 
@@ -674,15 +703,35 @@ struct BrowserSidebar: View {
     .draggable(
       SidebarTransfer.tab(sessionID: store.dragSessionID, sourceSpaceID: space.id, tabID: tab.id)
     )
-    .dropDestination(for: SidebarTransfer.self) { items, _ in
+    .dropDestination(for: SidebarTransfer.self) { items, point in
       guard items.count == 1, let item = items.first else { return false }
+      let sourceID: UUID
+      if case .tab(_, _, let id) = item { sourceID = id } else { return false }
+      guard let slot = index.dropSlot(targetID: tab.id, sourceID: sourceID, after: point.y >= 17)
+      else { return false }
+      let before: UUID?
+      switch slot {
+      case .before(let id): before = id
+      case .end: before = nil
+      }
       return store.acceptSidebarDrop(
-        item, into: space.id, before: tab.id, pinned: tab.isPinned, folderID: tab.folderID)
+        item, into: space.id, before: before, pinned: tab.isPinned, folderID: tab.folderID)
     } isTargeted: { targeted in
       targetedTab = targeted ? tab.id : targetedTab == tab.id ? nil : targetedTab
     }
     .overlay(alignment: .top) {
-      if targetedTab == tab.id { Rectangle().fill(Color.accentColor).frame(height: 2) }
+      if targetedTab == tab.id { Capsule().fill(Color.accentColor).frame(height: 2) }
+    }
+    .animation(sidebarReduceMotion ? nil : .easeOut(duration: 0.12), value: targetedTab)
+    .dropDestination(for: ProfileFavoriteDrag.self) { items, _ in
+      guard items.count == 1 else { return false }
+      return moveFavoriteDrop(
+        items[0], space: space, before: tab.id, pinned: tab.isPinned, folderID: tab.folderID)
+    }
+    .dropDestination(for: URL.self) { urls, _ in
+      guard urls.count == 1 else { return false }
+      return openDroppedURL(
+        urls[0], space: space, before: tab.id, pinned: tab.isPinned, folderID: tab.folderID)
     }
     .contextMenu {
       Button("Add to Favorites") {
@@ -755,7 +804,44 @@ struct BrowserSidebar: View {
       } isTargeted: { targeted in
         targetedSection = targeted ? zone : targetedSection == zone ? nil : targetedSection
       }
+      .dropDestination(for: ProfileFavoriteDrag.self) { items, _ in
+        guard items.count == 1 else { return false }
+        return moveFavoriteDrop(items[0], space: store.session.selectedSpace, pinned: pinned)
+      }
+      .dropDestination(for: URL.self) { urls, _ in
+        guard urls.count == 1 else { return false }
+        return openDroppedURL(urls[0], space: store.session.selectedSpace, pinned: pinned)
+      }
+      .animation(sidebarReduceMotion ? nil : .easeOut(duration: 0.12), value: targetedSection)
       .accessibilityHidden(true)
+  }
+
+  private func moveFavoriteDrop(
+    _ payload: ProfileFavoriteDrag, space: BrowserSpace, before: UUID? = nil,
+    pinned: Bool, folderID: UUID? = nil
+  ) -> Bool {
+    guard payload.dragSessionID == store.dragSessionID, payload.profileID == space.profileID,
+      payload.favoriteIDs == store.profileFavorites.map(\.id),
+      payload.favoriteIDs.contains(payload.favoriteID),
+      store.session.selectedSpaceID == space.id, store.selectFavorite(payload.favoriteID),
+      let tabID = store.session.favoritePages.first(where: { $0.favoriteID == payload.favoriteID })?
+        .tab.id,
+      store.removeFavorite(payload.favoriteID)
+    else { return false }
+    return store.moveTab(
+      tabID, from: space.id, to: space.id, before: before, pinned: pinned, folderID: folderID)
+  }
+
+  private func openDroppedURL(
+    _ url: URL, space: BrowserSpace, before: UUID? = nil, pinned: Bool, folderID: UUID? = nil
+  ) -> Bool {
+    guard NavigationInput.isWebURL(url), store.session.selectedSpaceID == space.id,
+      store.sheet == nil, !store.commandIsOpen
+    else { return false }
+    store.perform(.open(url))
+    guard case .tab(let tab) = store.session.selectedPage else { return false }
+    return store.moveTab(
+      tab.id, from: space.id, to: space.id, before: before, pinned: pinned, folderID: folderID)
   }
 
   private func shiftTab(_ tab: BrowserTab, in space: BrowserSpace, by offset: Int) {
@@ -811,6 +897,14 @@ struct BrowserSidebar: View {
       return store.acceptSidebarDrop(item, into: space.id, pinned: true, folderID: folder.id)
     } isTargeted: { targeted in
       targetedFolder = targeted ? folder.id : targetedFolder == folder.id ? nil : targetedFolder
+    }
+    .dropDestination(for: ProfileFavoriteDrag.self) { items, _ in
+      guard items.count == 1 else { return false }
+      return moveFavoriteDrop(items[0], space: space, pinned: true, folderID: folder.id)
+    }
+    .dropDestination(for: URL.self) { urls, _ in
+      guard urls.count == 1 else { return false }
+      return openDroppedURL(urls[0], space: space, pinned: true, folderID: folder.id)
     }
     .background(
       targetedFolder == folder.id ? Color.accentColor.opacity(0.16) : .clear,

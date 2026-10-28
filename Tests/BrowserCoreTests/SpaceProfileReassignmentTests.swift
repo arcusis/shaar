@@ -32,4 +32,30 @@ import Testing
     #expect(!rejected)
     #expect(workspace == beforeInvalid)
   }
+  @Test func deletingProfileReassignsSpacesAndRejectsInvalidDestinations() throws {
+    var workspace = try BrowserWorkspace(session: .fresh())
+    let source = workspace.catalog.profiles[0].id
+    let destination = workspace.catalog.profiles[1].id
+    let spaces = workspace.catalog.spaces.filter { $0.profileID == source }.map(\.id)
+    _ = try workspace.addWindow(from: workspace.windows[0].id)
+    let original = workspace
+    #expect(throws: (any Error).self) {
+      try workspace.deleteProfile(source, movingSpacesTo: UUID())
+    }
+    #expect(workspace == original)
+    try workspace.deleteProfile(source, movingSpacesTo: destination)
+    #expect(!workspace.catalog.profiles.contains { $0.id == source })
+    for id in spaces {
+      #expect(workspace.catalog.spaces.first { $0.id == id }?.profileID == destination)
+      for window in workspace.windows {
+        #expect(window.session.spaces.first { $0.id == id }?.profileID == destination)
+      }
+    }
+    try workspace.validate()
+    let after = workspace
+    #expect(throws: (any Error).self) {
+      try workspace.deleteProfile(destination, movingSpacesTo: source)
+    }
+    #expect(workspace == after)
+  }
 }

@@ -374,6 +374,28 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
     self = draft
   }
 
+  /// Deletes a profile and moves its Spaces to an existing profile atomically.
+  public mutating func deleteProfile(_ id: UUID, movingSpacesTo destinationID: UUID) throws {
+    guard catalog.profiles.count > 1, id != destinationID,
+      catalog.profiles.contains(where: { $0.id == id }),
+      catalog.profiles.contains(where: { $0.id == destinationID })
+    else { throw WorkspaceError.invalidState }
+    var draft = self
+    for space in draft.catalog.spaces.filter({ $0.profileID == id }) {
+      guard try draft.setSpaceProfile(space.id, to: destinationID) else {
+        throw WorkspaceError.invalidState
+      }
+    }
+    draft.catalog.favorites.removeAll { $0.profileID == id }
+    draft.catalog.profiles.removeAll { $0.id == id }
+    var allocated = draft.allocatedIDs
+    for index in draft.windows.indices {
+      draft.windows[index] = try draft.project(draft.windows[index], allocated: &allocated)
+    }
+    try draft.validate()
+    self = draft
+  }
+
   public mutating func setGeometry(_ geometry: WorkspaceWindowGeometry, for id: UUID) throws {
     guard geometry.isValid else { throw WorkspaceError.invalidState }
     guard let index = windows.firstIndex(where: { $0.id == id }) else {

@@ -1,5 +1,6 @@
 import AppKit
 import BrowserCore
+import ChromiumBridge
 import Observation
 import SwiftUI
 
@@ -8,16 +9,19 @@ private final class BrowserSettingsState {
   let workspace: BrowserWorkspaceStore
   let preferences: BrowserPreferencesStore
   let nativeBitwardenController: NativeBitwardenController
+  let runtime: ARCChromiumRuntime?
   private(set) var selectedProfileID: UUID?
   private var didPresent = false
 
   init(
     workspace: BrowserWorkspaceStore, preferences: BrowserPreferencesStore,
+    runtime: ARCChromiumRuntime? = nil,
     nativeBitwardenBackend: any NativeBitwardenBackend = NativeBitwardenSDKBackend(),
     credentialStore: PasswordCredentialStore = PasswordCredentialStore()
   ) {
     self.workspace = workspace
     self.preferences = preferences
+    self.runtime = runtime
     nativeBitwardenController = NativeBitwardenController(
       preferences: preferences, backend: nativeBitwardenBackend,
       credentialStore: credentialStore)
@@ -103,6 +107,14 @@ private final class BrowserSettingsState {
       return true
     } catch { return false }
   }
+  func deleteProfile(_ id: UUID, movingSpacesTo destinationID: UUID) -> Bool {
+    do {
+      try workspace.deleteProfile(id, movingSpacesTo: destinationID)
+      if selectedProfileID == id { _ = selectProfile(destinationID) }
+      return true
+    } catch { return false }
+  }
+
 }
 
 private struct BrowserSettingsRoot: View {
@@ -120,6 +132,10 @@ private struct BrowserSettingsRoot: View {
       storageNotice: state.storageNotice,
       onCreateProfile: { state.createProfile(name: $0) },
       onRenameProfile: { state.renameProfile($0, name: $1) },
+      onDeleteProfile: { state.deleteProfile($0, movingSpacesTo: $1) },
+      clearHistory: state.runtime.map { runtime in
+        { profileID in try await SettingsHistory.clear(runtime: runtime, profileID: profileID) }
+      },
       nativeBitwardenController: state.nativeBitwardenController)
   }
 }
@@ -149,12 +165,13 @@ final class BrowserSettingsController: NSObject {
 
   init(
     workspace: BrowserWorkspaceStore, preferences: BrowserPreferencesStore,
+    runtime: ARCChromiumRuntime? = nil,
     presentation: Presentation = .visible,
     nativeBitwardenBackend: any NativeBitwardenBackend = NativeBitwardenSDKBackend(),
     credentialStore: PasswordCredentialStore = PasswordCredentialStore()
   ) {
     state = BrowserSettingsState(
-      workspace: workspace, preferences: preferences,
+      workspace: workspace, preferences: preferences, runtime: runtime,
       nativeBitwardenBackend: nativeBitwardenBackend, credentialStore: credentialStore)
     self.presentation = presentation
     super.init()
@@ -200,7 +217,7 @@ final class BrowserSettingsController: NSObject {
   private func makeWindowIfNeeded() -> NSWindow {
     if let window { return window }
     let settingsWindow = NSWindow(
-      contentRect: NSRect(x: 0, y: 0, width: 720, height: 650),
+      contentRect: NSRect(x: 0, y: 0, width: 720, height: 560),
       styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered,
       defer: false)
     settingsWindow.title = "Settings"

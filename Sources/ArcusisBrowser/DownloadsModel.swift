@@ -33,11 +33,12 @@ final class DownloadsModel {
   }
 
   func libraryItem(id: String, profileID: UUID) -> BrowserDownload? {
-    libraryItems(in: profileID).first { $0.id == id }
+    records[profileID]?[id] ?? folder?.item(id: id, profileID: profileID)
   }
 
   func isFolderItem(_ item: BrowserDownload, profileID: UUID) -> Bool {
-    records[profileID]?[item.id] == nil && libraryItem(id: item.id, profileID: profileID) == item
+    records[profileID]?[item.id] == nil
+      && folder?.item(id: item.id, profileID: profileID) == item
   }
 
   func restore(_ rows: [[String: Any]], profileID: UUID) {

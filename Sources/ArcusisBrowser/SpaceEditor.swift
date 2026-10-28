@@ -12,6 +12,13 @@ enum SpaceEditorRoute: Hashable, Identifiable {
   }
 }
 
+/// Part of the Space editor to bring forward when it opens from a menu item.
+enum SpaceEditorFocus: Hashable {
+  case name
+  case icon
+  case theme
+}
+
 struct SpaceEditor: View {
   let store: BrowserStore
   let route: SpaceEditorRoute

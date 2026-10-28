@@ -44,6 +44,7 @@ final class BrowserStore {
   }
   private(set) var libraryDrawerSection: LibraryDrawerSection?
   private(set) var libraryDrawerProfileID: UUID?
+  var spaceEditorFocus: SpaceEditorFocus = .name
   var spaceEditor: SpaceEditorRoute? {
     get {
       if case .space(let route) = sheet { return route }

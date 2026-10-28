@@ -1,6 +1,7 @@
 import BrowserCore
 import Foundation
 import Observation
+import os
 
 struct ManagedSessionSaveResult {
   let session: BrowserSession
@@ -76,7 +77,9 @@ final class BrowserStore {
 
   @ObservationIgnored private let sessionFile: SessionFile?
   @ObservationIgnored var preferences = BrowserPreferencesStore()
-  @ObservationIgnored private var managedSave: ((BrowserSession) -> ManagedSessionSaveResult)?
+  @ObservationIgnored private var managedSave: ((BrowserSession, Bool) -> ManagedSessionSaveResult)?
+  @ObservationIgnored private let snapshotScheduler = SnapshotSaveScheduler()
+  @ObservationIgnored private let switchLog = OSLog(subsystem: "com.arcusis.browser", category: "SpaceSwitch")
   @ObservationIgnored private var maySave = true
   @ObservationIgnored var engine: BrowserEngine?
   @ObservationIgnored var onSessionChanged: (() -> Void)?
@@ -108,7 +111,7 @@ final class BrowserStore {
 
   init(
     managedSession: BrowserSession, notice: String?,
-    save: @escaping (BrowserSession) -> ManagedSessionSaveResult
+    save: @escaping (BrowserSession, Bool) -> ManagedSessionSaveResult
   ) {
     sessionFile = nil
     session = managedSession
@@ -199,8 +202,11 @@ final class BrowserStore {
         spaceID: spaceID, profileID: expectedProfileID, in: session)
     else { return false }
     closeLibraryDrawer()
+    let signpost = OSSignpostID(log: switchLog)
+    os_signpost(.begin, log: switchLog, name: "SpaceSwitch", signpostID: signpost)
+    defer { os_signpost(.end, log: switchLog, name: "SpaceSwitch", signpostID: signpost) }
     session.selectSpace(spaceID)
-    save()
+    save(deferred: true)
     return true
   }
 
@@ -373,7 +379,13 @@ final class BrowserStore {
     case .open(let url): session.open(url)
     case .space(let id):
       closeLibraryDrawer()
+      let signpost = OSSignpostID(log: switchLog)
+      os_signpost(.begin, log: switchLog, name: "SpaceSwitch", signpostID: signpost)
       session.selectSpace(id)
+      commandIsOpen = false
+      save(deferred: true)
+      os_signpost(.end, log: switchLog, name: "SpaceSwitch", signpostID: signpost)
+      return
     case .folder(let space, let folder): session.selectFolder(folder, in: space)
     case .favorite(let profile, let id):
       guard commandIsOpen, sheet == nil, session.selectedSpace.profileID == profile,
@@ -411,9 +423,12 @@ final class BrowserStore {
   }
 
   func cycleSpace(by offset: Int) {
+    let signpost = OSSignpostID(log: switchLog)
+    os_signpost(.begin, log: switchLog, name: "SpaceSwitch", signpostID: signpost)
+    defer { os_signpost(.end, log: switchLog, name: "SpaceSwitch", signpostID: signpost) }
     sidebarNotice = nil
     session.cycleSpace(by: offset)
-    save()
+    save(deferred: true)
   }
 
   func closeTab(_ id: UUID) {
@@ -904,19 +919,27 @@ final class BrowserStore {
       }()
   }
 
-  private func save() {
+  private func save(deferred: Bool = false) {
     reconcileTransientState()
     defer { onSessionChanged?() }
     if let managedSave {
-      let result = managedSave(session)
+      let result = managedSave(session, deferred)
       session = result.session
       storageNotice = result.notice
       reconcileTransientState()
       return
     }
     guard maySave else { return }
+    guard let sessionFile else { return }
+    let snapshot = session
+    if deferred {
+      snapshotScheduler.schedule({ try sessionFile.save(snapshot) }) { [weak self] error in
+        self?.storageNotice = error.map { "Changes could not be saved. \($0)" }
+      }
+      return
+    }
     do {
-      try sessionFile?.save(session)
+      try snapshotScheduler.writeNow { try sessionFile.save(snapshot) }
       storageNotice = nil
     } catch {
       storageNotice = "Changes could not be saved. \(error.localizedDescription)"

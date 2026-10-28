@@ -32,6 +32,9 @@ struct SpaceCommands: Commands {
       }
     }
     CommandMenu("Page") {
+      Button("Split View") { store.splitSelectedTab() }
+        .keyboardShortcut("=", modifiers: [.control, .shift])
+        .disabled(store.session.selectedSpace.tabs.count < 2)
       Button("Copy URL") {
         guard let url = store.session.selectedPage?.tab.url else { return }
         NSPasteboard.general.clearContents()

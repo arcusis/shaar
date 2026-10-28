@@ -7,7 +7,7 @@ enum BrowserMenuCommand: String, CaseIterable {
   case newWindow, newPrivateWindow, newTab, search, newSpace, editSpace, closeTab, closeWindow,
     addFavorite
   case reopenClosed, recentlyClosed, bookmarkPage, bookmarks, history, downloads
-  case find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload
+  case find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload, splitView
   case extensions, help, minimizeWindow, zoomWindow, bringAllToFront, settings, quit
 }
 
@@ -179,6 +179,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .find: return context.store.canFindCurrentPage
     case .findNext, .findPrevious: return context.store.pageFind?.canMove == true
     case .reload: return context.store.canReloadCurrentPage
+    case .splitView: return context.store.session.selectedSpace.tabs.count >= 2
     case .reopenClosed: return context.store.canReopenClosedTab
     case .bookmarkPage: return context.store.canBookmarkCurrentPage
     case .addFavorite: return context.store.canFavoriteCurrentPage
@@ -247,6 +248,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .nextSpace: store.cycleSpace(by: 1)
     case .previousSpace: store.cycleSpace(by: -1)
     case .reload: store.reloadCurrentPage()
+    case .splitView: store.splitSelectedTab()
     case .extensions: context.engine.showExtensionList()
     case .help:
       if let url = URL(string: "https://github.com/arcusis/browser") { store.perform(.open(url)) }
@@ -617,6 +619,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     copyURL.keyEquivalentModifierMask = [.command, .shift]
     spaces.addItem(copyURL)
     let tabs = section("Tabs")
+    add(.splitView, "Split View", "=", to: tabs, modifiers: [.control, .shift])
     add(.closeTab, "Close tab", "w", to: tabs)
     add(.addFavorite, "Add to Favorites", "", to: tabs, modifiers: [])
     add(.reopenClosed, "Reopen last closed tab", "t", to: tabs, modifiers: [.command, .shift])

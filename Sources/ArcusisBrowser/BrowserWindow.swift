@@ -202,7 +202,9 @@ struct BrowserWindow: View {
       ZStack {
         Color(nsColor: .textBackgroundColor)
         if let engine = store.engine, let id = store.session.selectedPage?.tab.id {
-          if let failure = store.rendererFailures[id] {
+          if let split = store.selectedSplit {
+            BrowserSplitPageView(store: store, engine: engine, split: split)
+          } else if let failure = store.rendererFailures[id] {
             FailedPageView(store: store, failure: failure)
           } else if engine.pages[id] != nil {
             ChromiumPage(engine: engine, tabID: id)

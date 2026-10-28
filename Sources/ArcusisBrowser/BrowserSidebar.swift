@@ -225,20 +225,22 @@ struct BrowserSidebar: View {
                 folderDraftRow(depth: depth + 1)
               }
             case .tab(let tab, let depth):
-              tabRow(tab, index: tabIndex)
-                .padding(.leading, indentation(depth))
-                .id(tab.id)
-                .background {
-                  if tab.id == activeSidebarPageID {
-                    GeometryReader { geometry in
-                      Color.clear.preference(
-                        key: SidebarOrdinaryRevealFramesPreferenceKey.self,
-                        value: SidebarRevealFrames(
-                          selected: geometry.frame(in: .named("sidebarOrdinaryViewport")),
-                          selectedID: tab.id))
+              if isSplitRowLeader(tab, in: space) {
+                tabRow(tab, index: tabIndex)
+                  .padding(.leading, indentation(depth))
+                  .id(tab.id)
+                  .background {
+                    if tab.id == activeSidebarPageID {
+                      GeometryReader { geometry in
+                        Color.clear.preference(
+                          key: SidebarOrdinaryRevealFramesPreferenceKey.self,
+                          value: SidebarRevealFrames(
+                            selected: geometry.frame(in: .named("sidebarOrdinaryViewport")),
+                            selectedID: tab.id))
+                      }
                     }
                   }
-                }
+              }
             }
           }
           if space.tabs.contains(where: \.isPinned)
@@ -289,7 +291,7 @@ struct BrowserSidebar: View {
             Button("Recently closed…") { store.showRecentlyClosed() }
           }
           sectionDropTarget(pinned: false)
-          ForEach(space.tabs.filter { !$0.isPinned }) { tab in
+          ForEach(space.tabs.filter { !$0.isPinned && isSplitRowLeader($0, in: space) }) { tab in
             tabRow(tab, index: tabIndex)
               .id(tab.id)
               .background {
@@ -650,18 +652,36 @@ struct BrowserSidebar: View {
       profileID: store.session.selectedSpace.profileID, epoch: recentDownloads.epoch)
   }
 
+  private func isSplitRowLeader(_ tab: BrowserTab, in space: BrowserSpace) -> Bool {
+    guard let split = space.splits.first(where: { $0.tabIDs.contains(tab.id) }) else { return true }
+    return split.tabIDs.first == tab.id
+  }
+
   private func tabRow(_ tab: BrowserTab, index: SidebarTabIndex) -> some View {
     let space = store.session.selectedSpace
     let boundary = index.boundary(for: tab.id)
+    let split = space.splits.first { $0.tabIDs.first == tab.id }
+    let other = split.flatMap { $0.tabIDs.dropFirst().first }.flatMap { id in
+      space.tabs.first { $0.id == id }
+    }
+    let isSelected = store.session.selectedPage.map { page in
+      split?.tabIDs.contains(page.tab.id) ?? (page.tab.id == tab.id)
+    } ?? false
     return SidebarTabRow(
       tabID: tab.id,
-      title: tab.title,
+      title: other.map { "\(tab.title) / \($0.title)" } ?? tab.title,
       favicon: store.engine?.favicons[tab.id],
+      secondaryFavicon: other.flatMap { store.engine?.favicons[$0.id] },
+      hasSecondaryFavicon: other != nil,
       isPinned: tab.isPinned,
-      isSelected: tab.id == store.session.selectedPage?.tab.id,
+      isSelected: isSelected,
       closeIsVisible: hoveredTabID == tab.id,
       onSelect: {
-        store.perform(.tab(space: space.id, tab: tab.id))
+        if let selected = space.selectedTabID, split?.tabIDs.contains(selected) == true {
+          store.perform(.tab(space: space.id, tab: selected))
+        } else {
+          store.perform(.tab(space: space.id, tab: tab.id))
+        }
       },
       onClose: {
         store.closeTab(tab.id)
@@ -704,6 +724,11 @@ struct BrowserSidebar: View {
         urls[0], space: space, before: tab.id, pinned: tab.isPinned, folderID: tab.folderID)
     }
     .contextMenu {
+      Menu("Split View with…") {
+        ForEach(space.tabs.filter { $0.id != tab.id }) { candidate in
+          Button(candidate.title) { store.splitTabs(tab.id, candidate.id) }
+        }
+      }
       Button("Add to Favorites") {
         addToFavorites(tabID: tab.id, spaceID: space.id, profileID: space.profileID)
       }

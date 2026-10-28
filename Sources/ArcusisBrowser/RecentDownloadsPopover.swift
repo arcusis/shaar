@@ -1,5 +1,6 @@
 import AppKit
 import BrowserCore
+import QuickLookThumbnailing
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -9,81 +10,93 @@ struct RecentDownloadsPopover: View {
   let selectedProfileID: () -> UUID
   let dragURL: (BrowserDownload) -> URL?
   let dismiss: () -> Void
+  let backdrop: Color
   private let referenceDate: Date
+
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @State private var revealed = false
+  @State private var thumbnails: [String: NSImage] = [:]
 
   init(
     items: [BrowserDownload], profileID: UUID, selectedProfileID: @escaping () -> UUID,
     dragURL: @escaping (BrowserDownload) -> URL?, dismiss: @escaping () -> Void,
-    referenceDate: Date = .now
+    backdrop: Color = Color(nsColor: .windowBackgroundColor),
+    referenceDate: Date = .now, animatesReveal: Bool = true
   ) {
     self.items = items
     self.profileID = profileID
     self.selectedProfileID = selectedProfileID
     self.dragURL = dragURL
     self.dismiss = dismiss
+    self.backdrop = backdrop
     self.referenceDate = referenceDate
+    _revealed = State(initialValue: !animatesReveal)
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      if items.isEmpty {
+    // Arc lists the newest download closest to the footer.
+    let shown = Array(items.prefix(5).reversed())
+    VStack(alignment: .leading, spacing: 10) {
+      if shown.isEmpty {
         Text("No recent downloads").font(.callout).foregroundStyle(.secondary)
           .padding(.vertical, 8)
-          .padding(.trailing, 24)
       } else {
-        ForEach(items.prefix(5)) { item in
-          row(item).padding(.trailing, item.id == items.first?.id ? 24 : 0)
+        ForEach(Array(shown.enumerated()), id: \.element.id) { index, item in
+          row(item)
+            .opacity(revealed ? 1 : 0)
+            .offset(y: revealed || reduceMotion ? 0 : 16)
+            .animation(revealAnimation(stepsFromFooter: shown.count - 1 - index), value: revealed)
         }
       }
     }
-    .padding(12)
-    .frame(width: 300, alignment: .leading)
-    .overlay(alignment: .topTrailing) {
-      Button(action: dismiss) {
-        Image(systemName: "xmark").font(.caption.weight(.semibold))
-          .frame(width: 24, height: 24)
-          .contentShape(Rectangle())
-      }
-      .buttonStyle(.plain)
-      .accessibilityLabel("Close recent downloads")
-      .padding(6)
-    }
-    .background(
-      Color(nsColor: .windowBackgroundColor).opacity(0.97),
-      in: RoundedRectangle(cornerRadius: 12)
-    )
-    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary))
-    .shadow(color: .black.opacity(0.15), radius: 12, y: 5)
+    .padding(.horizontal, 2)
+    .padding(.top, 36)
+    .padding(.bottom, 6)
+    .frame(width: 212, alignment: .leading)
+    .background { fadingBackdrop }
+    .onAppear { revealed = true }
+    .onExitCommand(perform: dismiss)
     .accessibilityElement(children: .contain)
     .accessibilityLabel("Recent downloads for current profile")
   }
 
+  /// Tabs above the list fade out behind it, as in Arc.
+  private var fadingBackdrop: some View {
+    LinearGradient(
+      stops: [
+        .init(color: backdrop.opacity(0), location: 0),
+        .init(color: backdrop, location: 0.16),
+      ],
+      startPoint: .top, endPoint: .bottom
+    )
+    .padding(.horizontal, -14)
+  }
+
+  private func revealAnimation(stepsFromFooter: Int) -> Animation {
+    if reduceMotion { return .easeOut(duration: 0.12) }
+    return .spring(response: 0.32, dampingFraction: 0.82)
+      .delay(Double(stepsFromFooter) * 0.035)
+  }
+
   private func row(_ item: BrowserDownload) -> some View {
     let stateLabel = status(item)
-    return HStack(alignment: .center, spacing: 9) {
-      if item.dangerous {
-        Image(systemName: "exclamationmark.shield")
-          .foregroundStyle(.secondary)
-          .frame(width: 20, height: 24)
-      } else {
-        Image(nsImage: fileIcon(for: item))
-          .resizable()
-          .interpolation(.high)
-          .frame(width: 20, height: 20)
-      }
-      VStack(alignment: .leading, spacing: item.state == .finished && !item.dangerous ? 0 : 3) {
+    let isPlainFinished = item.state == .finished && !item.dangerous
+    return HStack(alignment: .center, spacing: 12) {
+      preview(item)
+        .frame(width: 44, height: 44)
+      VStack(alignment: .leading, spacing: 2) {
         Text(item.filename)
-          .font(.callout.weight(.medium))
+          .font(.system(size: 14, weight: .medium))
           .lineLimit(1)
-          .truncationMode(.middle)
-        if item.state == .finished && !item.dangerous {
+          .truncationMode(.tail)
+        if isPlainFinished {
           Text(relativeAge(item))
-            .font(.caption)
+            .font(.system(size: 12))
             .foregroundStyle(.secondary)
             .lineLimit(1)
         } else {
           Text(stateLabel)
-            .font(.caption)
+            .font(.system(size: 12))
             .foregroundStyle(.primary)
             .lineLimit(1)
           if item.state == .downloading && !item.dangerous {
@@ -98,20 +111,53 @@ struct RecentDownloadsPopover: View {
       }
       Spacer(minLength: 0)
     }
-    .padding(.vertical, 3)
     .contentShape(Rectangle())
     .accessibilityElement(children: .combine)
     .accessibilityLabel(
-      item.state == .finished && !item.dangerous
+      isPlainFinished
         ? "\(item.filename), \(relativeAge(item))"
         : accessibilityLabel(for: item, stateLabel: stateLabel)
     )
+    .task(id: item.id) { await loadThumbnail(item) }
     .onDrag {
       guard selectedProfileID() == profileID, let url = dragURL(item) else {
         return NSItemProvider()
       }
       return NSItemProvider(contentsOf: url) ?? NSItemProvider()
     }
+  }
+
+  @ViewBuilder
+  private func preview(_ item: BrowserDownload) -> some View {
+    if item.dangerous {
+      Image(systemName: "exclamationmark.shield")
+        .font(.system(size: 20))
+        .foregroundStyle(.secondary)
+    } else if let thumbnail = thumbnails[item.id] {
+      Image(nsImage: thumbnail)
+        .resizable()
+        .interpolation(.high)
+        .aspectRatio(contentMode: .fit)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+    } else {
+      Image(nsImage: fileIcon(for: item))
+        .resizable()
+        .interpolation(.high)
+        .aspectRatio(contentMode: .fit)
+    }
+  }
+
+  private func loadThumbnail(_ item: BrowserDownload) async {
+    guard item.state == .finished, !item.dangerous, thumbnails[item.id] == nil,
+      let url = dragURL(item)
+    else { return }
+    let request = QLThumbnailGenerator.Request(
+      fileAt: url, size: CGSize(width: 44, height: 44),
+      scale: NSScreen.main?.backingScaleFactor ?? 2, representationTypes: .all)
+    guard let image = await RecentDownloadThumbnail.generate(request), !Task.isCancelled,
+      selectedProfileID() == profileID
+    else { return }
+    thumbnails[item.id] = image
   }
 
   private func accessibilityLabel(for item: BrowserDownload, stateLabel: String) -> String {
@@ -121,7 +167,7 @@ struct RecentDownloadsPopover: View {
 
   private func relativeAge(_ item: BrowserDownload) -> String {
     let formatter = RelativeDateTimeFormatter()
-    formatter.unitsStyle = .abbreviated
+    formatter.unitsStyle = .full
     return formatter.localizedString(
       for: Date(timeIntervalSince1970: item.startTime), relativeTo: referenceDate)
   }
@@ -148,4 +194,27 @@ struct RecentDownloadsPopover: View {
     guard let total = item.totalBytes else { return received }
     return "\(received) of \(ByteCountFormatter.string(fromByteCount: total, countStyle: .file))"
   }
+}
+
+private enum RecentDownloadThumbnail {
+  static func generate(_ request: QLThumbnailGenerator.Request) async -> NSImage? {
+    let handle = RecentDownloadThumbnailRequest(request)
+    return await withTaskCancellationHandler {
+      await withCheckedContinuation { continuation in
+        QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { representation, _ in
+          continuation.resume(returning: representation.map { NSImage(cgImage: $0.cgImage, size: .zero) })
+        }
+      }
+    } onCancel: {
+      handle.cancel()
+    }
+  }
+}
+
+private final class RecentDownloadThumbnailRequest: @unchecked Sendable {
+  private let request: QLThumbnailGenerator.Request
+
+  init(_ request: QLThumbnailGenerator.Request) { self.request = request }
+
+  func cancel() { QLThumbnailGenerator.shared.cancel(request) }
 }

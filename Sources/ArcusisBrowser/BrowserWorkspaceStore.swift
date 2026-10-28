@@ -86,6 +86,21 @@ final class BrowserWorkspaceStore {
       }
       return self.changed(window.id, session: session, deferred: deferred)
     }
+    stores[window.id]?.onSetSpaceProfile = { [weak self] spaceID, profileID in
+      guard let self else { return false }
+      do {
+        guard try self.workspace.setSpaceProfile(spaceID, to: profileID) else { return false }
+        _ = self.writeSnapshot()
+        self.broadcast(excluding: nil)
+        return true
+      } catch {
+        return false
+      }
+    }
+    stores[window.id]?.onCreateProfile = { [weak self] name in
+      guard let self else { return nil }
+      return try? self.createProfile(name: name)
+    }
     stores[window.id]?.onSpaceRemovalImpact = { [weak self] id in
       let spaces =
         self?.workspace.windows.compactMap { $0.session.spaces.first { $0.id == id } } ?? []

@@ -478,6 +478,20 @@ final class BrowserEngine {
     passwordFill = nil
   }
 
+  /// Drop documents before their saved tabs acquire a different engine profile.
+  func discardReassignedTabs(_ ids: Set<UUID>) {
+    for id in ids {
+      failedTabs.remove(id)
+      guard liveTabs.remove(id) != nil else { continue }
+      events.router.forgetTab(id.uuidString, windowID: windowID)
+      pages[id] = nil
+      mediaAccess[id] = nil
+      favicons[id] = nil
+      runtime.discardTabID(id.uuidString)
+    }
+    passwordFill?.cancel()
+  }
+
   func reconcile() {
     guard !isClosed, !reconciling, !receivingNativeSelection, let store else { return }
     reconciling = true

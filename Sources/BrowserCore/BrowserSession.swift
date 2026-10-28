@@ -34,7 +34,7 @@ public struct BrowserTab: Codable, Identifiable, Equatable, Sendable {
 
 public struct BrowserSpace: Codable, Identifiable, Equatable, Sendable {
   public let id: UUID
-  public let profileID: UUID
+  public internal(set) var profileID: UUID
   public var name: String
   public var symbol: String
   public var tint: SpaceTint
@@ -346,6 +346,33 @@ public struct BrowserSession: Codable, Equatable, Sendable {
     spaces[index].name = name
     spaces[index].tint = tint
     spaces[index].customRGB = customRGB
+    return true
+  }
+
+  @discardableResult
+  public mutating func createProfile(name: String) -> UUID? {
+    let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !cleanName.isEmpty else { return nil }
+    let profile = BrowserProfile(name: cleanName)
+    profiles.append(profile)
+    return profile.id
+  }
+
+  /// Explicitly reassign a Space; profile-owned Favorites stay with their original profile.
+  @discardableResult
+  public mutating func setSpaceProfile(_ id: UUID, to profileID: UUID) -> Bool {
+    guard profiles.contains(where: { $0.id == profileID }),
+      let index = spaces.firstIndex(where: { $0.id == id })
+    else { return false }
+    let oldProfile = spaces[index].profileID
+    guard oldProfile != profileID else { return true }
+    spaces[index].profileID = profileID
+    spaces[index].selectedFavoriteID = nil
+    closedTabs.removeAll { $0.spaceID == id }
+    if !spaces.contains(where: { $0.profileID == oldProfile }) {
+      let oldFavorites = Set(favorites.filter { $0.profileID == oldProfile }.map(\.id))
+      favoritePages.removeAll { oldFavorites.contains($0.favoriteID) }
+    }
     return true
   }
 

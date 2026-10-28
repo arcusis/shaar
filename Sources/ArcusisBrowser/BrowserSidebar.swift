@@ -150,12 +150,7 @@ struct BrowserSidebar: View {
         .frame(height: 34)
         .contentShape(Rectangle())
         .contextMenu {
-          Button("New Folder", systemImage: "folder.badge.plus") {
-            beginFolderDraft(parentID: nil)
-          }
-          Button("Edit Space…", systemImage: "slider.horizontal.3") {
-            store.spaceEditor = .edit(store.session.selectedSpaceID)
-          }
+          SpaceMenuContent(store: store, space: store.session.selectedSpace)
         }
         .accessibilityLabel("\(store.session.selectedSpace.name), Profile: \(store.profileName)")
         .help("Space: \(store.session.selectedSpace.name) · Profile: \(store.profileName)")
@@ -413,12 +408,7 @@ struct BrowserSidebar: View {
         targetedSpace == space.id ? Color.accentColor : .clear, lineWidth: 2)
     )
     .contextMenu {
-      Button("Edit space…") { store.spaceEditor = .edit(space.id) }
-      Divider()
-      Button("Move left") { shiftSpace(space.id, by: -1) }
-        .disabled(store.session.spaces.first?.id == space.id)
-      Button("Move right") { shiftSpace(space.id, by: 1) }
-        .disabled(store.session.spaces.last?.id == space.id)
+      SpaceMenuContent(store: store, space: space)
     }
   }
 

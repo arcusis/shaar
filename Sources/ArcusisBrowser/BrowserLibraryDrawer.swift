@@ -120,17 +120,11 @@ struct BrowserLibraryDrawer: View {
 
   private var spacesContent: some View {
     VStack(spacing: 0) {
-      TextField("Search Spaces", text: $spacesQuery)
-        .textFieldStyle(.roundedBorder)
-        .accessibilityLabel("Search Spaces")
-        .focused($spacesSearchIsFocused)
-        .padding(.horizontal, 14)
-        .padding(.top, 14)
       let expectedProfiles = Dictionary(
         uniqueKeysWithValues: store.session.spaces.map { ($0.id, $0.profileID) })
       LibrarySpacesOverview(
         store: store,
-        query: spacesQuery,
+        query: "",
         onSelectSpace: { id in
           guard let profile = expectedProfiles[id] else { return }
           _ = store.selectLibrarySpace(id, expectedProfileID: profile)

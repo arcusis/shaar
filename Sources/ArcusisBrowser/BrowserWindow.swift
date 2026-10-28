@@ -19,6 +19,7 @@ struct BrowserWindow: View {
   @FocusState private var pageIsFocused: Bool
   @State private var webContentFrame: CGRect = .zero
   @State private var sidebarVisibility: SidebarVisibility = .pinned
+  @State private var isFullScreen = false
 
   var body: some View {
     ZStack(alignment: .top) {
@@ -120,6 +121,8 @@ struct BrowserWindow: View {
 
     }
     .overlay { TabSwitcherPanel(store: store) }
+    .background { WindowFullScreenObserver(isFullScreen: $isFullScreen) }
+    .environment(\.browserWindowIsFullScreen, isFullScreen)
     .coordinateSpace(name: "browser-window")
     .onPreferenceChange(WebContentFramePreferenceKey.self) { webContentFrame = $0 }
     .frame(minWidth: 760, minHeight: 520)

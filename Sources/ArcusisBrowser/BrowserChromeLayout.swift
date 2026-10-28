@@ -15,6 +15,9 @@ enum BrowserChromeLayout {
   /// Titlebar space after the traffic lights kept clickable for the sidebar toggle.
   static let titlebarAccessoryWidth: CGFloat = 36
   static let titlebarToggleLeading: CGFloat = 84
+  /// Full screen has no titlebar: the toggle gets its own row at the sidebar's top-left.
+  static let fullScreenToggleRowHeight: CGFloat = 36
+  static let fullScreenToggleLeading: CGFloat = 12
   static let preferredCommandWidth: CGFloat = 580
   static let commandChromeHeight: CGFloat = 112
   static let preferredResultsHeight: CGFloat = 330

@@ -59,6 +59,7 @@ struct BrowserSidebar: View {
   @Bindable var store: BrowserStore
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.colorScheme) private var colorScheme
+  @Environment(\.browserWindowIsFullScreen) private var isFullScreen
   @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
   @Environment(\.browserChromeAccessibilityOverrides) private var accessibilityOverrides
   @State private var pagerState = SpacePagerState()
@@ -194,7 +195,7 @@ struct BrowserSidebar: View {
     }
     .buttonStyle(.plain)
     .padding(.horizontal, 14)
-    .padding(.top, 4)
+    .padding(.top, isFullScreen ? BrowserChromeLayout.fullScreenToggleRowHeight : 4)
     .padding(.bottom, 10)
     .background { SpaceSwipeNavigation(store: store, pager: pagerState) }
     .coordinateSpace(name: "sidebarBounds")

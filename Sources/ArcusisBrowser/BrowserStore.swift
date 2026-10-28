@@ -92,6 +92,8 @@ final class BrowserStore {
   @ObservationIgnored var onFindRequest: ((PageFindState, Bool) -> Bool)?
   @ObservationIgnored var onStopFinding: ((UUID) -> Void)?
   @ObservationIgnored var onReloadPage: ((UUID, UUID) -> Bool)?
+  @ObservationIgnored var onSetSpaceProfile: ((UUID, UUID) -> Bool)?
+  @ObservationIgnored var onCreateProfile: ((String) -> UUID?)?
   @ObservationIgnored var onSpaceRemovalImpact: ((UUID) -> SpaceRemovalImpact)?
   @ObservationIgnored private var presentedConsentID: String?
 
@@ -125,6 +127,7 @@ final class BrowserStore {
   func applyManagedSession(_ value: BrowserSession, notice: String?) {
     guard managedSave != nil else { return }
     let changed = session != value
+    discardReassignedSpacePages(from: session, to: value)
     session = value
     storageNotice = notice
     reconcileTransientState()
@@ -896,6 +899,37 @@ final class BrowserStore {
     }
     save()
     return true
+  }
+
+  @discardableResult
+  func setSpaceProfile(_ spaceID: UUID, to profileID: UUID) -> Bool {
+    if let onSetSpaceProfile { return onSetSpaceProfile(spaceID, profileID) }
+    var updated = session
+    guard updated.setSpaceProfile(spaceID, to: profileID) else { return false }
+    discardReassignedSpacePages(from: session, to: updated)
+    session = updated
+    save()
+    return true
+  }
+
+  @discardableResult
+  func createProfileAndAssign(_ spaceID: UUID, name: String) -> Bool {
+    guard session.spaces.contains(where: { $0.id == spaceID }) else { return false }
+    if let onCreateProfile {
+      guard let id = onCreateProfile(name) else { return false }
+      return setSpaceProfile(spaceID, to: id)
+    }
+    guard let id = session.createProfile(name: name) else { return false }
+    return setSpaceProfile(spaceID, to: id)
+  }
+
+  private func discardReassignedSpacePages(from old: BrowserSession, to new: BrowserSession) {
+    for space in old.spaces {
+      guard let replacement = new.spaces.first(where: { $0.id == space.id }),
+        replacement.profileID != space.profileID
+      else { continue }
+      engine?.discardReassignedTabs(Set(space.tabs.map(\.id)))
+    }
   }
 
   @discardableResult

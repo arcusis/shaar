@@ -214,6 +214,25 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
     return true
   }
 
+  /// Reassigns shared Space metadata and every window in one validated transaction.
+  @discardableResult
+  public mutating func setSpaceProfile(_ spaceID: UUID, to profileID: UUID) throws -> Bool {
+    guard catalog.profiles.contains(where: { $0.id == profileID }),
+      let index = catalog.spaces.firstIndex(where: { $0.id == spaceID })
+    else { return false }
+    guard catalog.spaces[index].profileID != profileID else { return true }
+    var draft = self
+    draft.catalog.spaces[index].profileID = profileID
+    for windowIndex in draft.windows.indices {
+      guard draft.windows[windowIndex].session.setSpaceProfile(spaceID, to: profileID) else {
+        throw WorkspaceError.invalidState
+      }
+    }
+    try draft.validate()
+    self = draft
+    return true
+  }
+
   public func validate() throws {
     guard version == Self.currentVersion else { throw WorkspaceError.unsupportedVersion }
     guard let first = catalog.spaces.first else { throw WorkspaceError.invalidState }

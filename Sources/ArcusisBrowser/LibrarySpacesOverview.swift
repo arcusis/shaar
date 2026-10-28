@@ -124,13 +124,7 @@ private struct LibrarySpaceCardView: View {
         .accessibilityHidden(true)
       Spacer()
       Menu {
-        Button("Edit Space") {
-          guard
-            LibrarySpacesOverviewModel.canEdit(
-              spaceID: card.space.id, profileID: card.space.profileID, in: store.session)
-          else { return }
-          onEditSpace(card.space.id)
-        }
+        SpaceMenuContent(store: store, space: card.space)
       } label: {
         Image(systemName: "ellipsis")
       }

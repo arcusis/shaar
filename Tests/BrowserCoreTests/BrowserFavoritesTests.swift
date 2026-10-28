@@ -437,3 +437,21 @@ extension BrowserSelectedPage {
     return page
   }
 }
+
+@Test func favoritesLimitIsPerProfileAndPromotionDoesNotLoseTab() throws {
+  var session = BrowserSession.fresh()
+  let profile = session.selectedSpace.profileID
+  let url = URL(string: "https://example.com")!
+  for _ in 0..<BrowserSession.maximumFavoritesPerProfile {
+    let added = session.addFavorite(profileID: profile, originalURL: url)
+    #expect(added != nil)
+  }
+  let overflow = session.addFavorite(profileID: profile, originalURL: url)
+  #expect(overflow == nil)
+  let opened = session.open(url)
+  let tab = try #require(opened)
+  let promoted = session.promoteTabToFavorite(tab, in: session.selectedSpaceID)
+  #expect(promoted == nil)
+  #expect(session.selectedSpace.tabs.contains { $0.id == tab })
+  try session.validate()
+}

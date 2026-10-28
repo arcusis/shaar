@@ -72,6 +72,8 @@ struct BrowserSidebar: View {
   @State private var recentDownloads: RecentDownloadsPresentation
   @State private var recentDownloadsCloseTask: Task<Void, Never>?
   @State private var folderDraft: SidebarFolderDraft?
+  @State private var clearSpaceID: UUID?
+  @State private var tidyInProgress = false
   @FocusState private var folderNameIsFocused: Bool
   let previewRecentDownloads: [BrowserDownload]?
 
@@ -167,16 +169,17 @@ struct BrowserSidebar: View {
         recentDownloadsControls
           .frame(height: 30)
         spaceSelectors
-        Button {
-          store.spaceEditor = .create
+        Menu {
+          Button("New Folder") { beginFolderDraft(parentID: nil) }
+          Button("New Space") { store.spaceEditor = .create }
         } label: {
           Image(systemName: "plus")
             .font(.system(size: 16))
             .foregroundStyle(Color.primary.opacity(0.55))
             .frame(width: 30, height: 30)
         }
-        .help("Create a space")
-        .accessibilityLabel("Add Space")
+        .help("Create a folder or space")
+        .accessibilityLabel("Add Folder or Space")
       }
       .frame(height: 32)
       .background {
@@ -243,15 +246,16 @@ struct BrowserSidebar: View {
               }
             }
           }
-          if space.tabs.contains(where: \.isPinned)
-            || !space.folders.isEmpty
-          {
+          if !space.tabs.isEmpty || !space.folders.isEmpty {
             HStack(spacing: 8) {
               Rectangle().fill(Color.primary.opacity(0.12)).frame(height: 1)
+              Button("Tidy") { tidyTabs(in: space) }
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .disabled(tidyInProgress || !space.tabs.contains { !$0.isPinned })
+                .help("Group today's tabs by topic")
               Button("Clear") {
-                guard store.session.selectedSpaceID == space.id else { return }
-                let ids = space.tabs.filter { !$0.isPinned }.map(\.id)
-                for id in ids { store.closeTab(id) }
+                clearSpaceID = space.id
               }
               .font(.system(size: 11, weight: .semibold))
               .foregroundStyle(.secondary)
@@ -286,6 +290,7 @@ struct BrowserSidebar: View {
           .onHover { newTabIsHovered = $0 }
           .animation(sidebarReduceMotion ? nil : .easeOut(duration: 0.12), value: newTabIsHovered)
           .contextMenu {
+            Button("New Folder") { beginFolderDraft(parentID: nil) }
             Button("Reopen last closed tab") { store.reopenLastClosedTab() }
               .disabled(!store.canReopenClosedTab)
             Button("Recently closed…") { store.showRecentlyClosed() }
@@ -308,6 +313,23 @@ struct BrowserSidebar: View {
           }
           sectionDropTarget(pinned: false, isFooter: true)
         }
+      }
+      .contextMenu {
+        Button("New Folder") { beginFolderDraft(parentID: nil) }
+      }
+      .confirmationDialog(
+        "Close today's tabs?", isPresented: Binding(
+          get: { clearSpaceID == space.id },
+          set: { if !$0 { clearSpaceID = nil } }
+        ), titleVisibility: .visible
+      ) {
+        Button("Close Tabs", role: .destructive) {
+          guard store.session.selectedSpaceID == space.id else { return }
+          for tab in store.session.selectedSpace.tabs where !tab.isPinned { store.closeTab(tab.id) }
+          clearSpaceID = nil
+        }
+      } message: {
+        Text("Pinned tabs and favorites will be kept.")
       }
       .coordinateSpace(name: "sidebarOrdinaryViewport")
       .background {
@@ -782,6 +804,22 @@ struct BrowserSidebar: View {
       }
       Divider()
       Button("Close tab") { store.closeTab(tab.id) }
+    }
+  }
+
+  private func tidyTabs(in space: BrowserSpace) {
+    let tabs = space.tabs.filter { !$0.isPinned }
+    guard !tabs.isEmpty, !tidyInProgress else { return }
+    tidyInProgress = true
+    Task { @MainActor in
+      let groups = await SidebarTopicGrouping().groups(for: tabs)
+      defer { tidyInProgress = false }
+      guard store.session.selectedSpaceID == space.id,
+        store.session.selectedSpace.tabs.filter({ !$0.isPinned }) == tabs
+      else { return }
+      for id in groups.flatMap(\.tabIDs) {
+        _ = store.moveTab(id, from: space.id, to: space.id, pinned: false)
+      }
     }
   }
 

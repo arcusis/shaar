@@ -68,9 +68,8 @@ struct ProfileFavoritesGrid: View {
   }
 
   private static let columns = Array(
-    repeating: GridItem(.flexible(minimum: 0, maximum: .infinity), spacing: 8), count: 2)
+    repeating: GridItem(.flexible(minimum: 0, maximum: .infinity), spacing: 8), count: 4)
   private static let tileHeight: CGFloat = 62
-  private static let maximumRows = 2
 
   var body: some View {
     let motionReduced = reduceMotion || accessibilityOverrides?.reduceMotion == true
@@ -78,57 +77,26 @@ struct ProfileFavoritesGrid: View {
       reduceTransparency || accessibilityOverrides?.reduceTransparency == true
     Group {
       if !favorites.isEmpty {
-        ScrollViewReader { favoriteScroll in
-          ScrollView(.vertical) {
-            LazyVGrid(columns: Self.columns, alignment: .leading, spacing: 8) {
-              ForEach(favorites, id: \.id) { favorite in
-                tile(favorite, reduceMotion: motionReduced, reduceTransparency: transparencyReduced)
-                  .id(favorite.id)
-              }
-            }
-            .padding(.vertical, 1)
+        LazyVGrid(columns: Self.columns, alignment: .leading, spacing: 8) {
+          ForEach(favorites, id: \.id) { favorite in
+            tile(favorite, reduceMotion: motionReduced, reduceTransparency: transparencyReduced)
+              .id(favorite.id)
           }
-          .scrollIndicators(.hidden)
-          .frame(height: gridHeight)
-          .accessibilityLabel("Favorite pages")
-          .coordinateSpace(name: "sidebarFavoriteViewport")
-          .background {
-            GeometryReader { geometry in
-              Color.clear.preference(
-                key: SidebarFavoriteRevealFramesPreferenceKey.self,
-                value: SidebarRevealFrames(
-                  viewport: CGRect(origin: .zero, size: geometry.size)))
-            }
-          }
-          .onAppear {
-            if let selectedID, favorites.contains(where: { $0.id == selectedID }) {
-              favoriteScroll.scrollTo(selectedID)
-            }
-          }
-          .onChange(of: selectedID) { _, id in
-            currentSelectionID = id
-            guard let id, favorites.contains(where: { $0.id == id }) else { return }
-            DispatchQueue.main.async {
-              guard currentSelectionID == id,
-                favorites.contains(where: { $0.id == id })
-              else { return }
-              if motionReduced {
-                favoriteScroll.scrollTo(id)
-              } else {
-                withAnimation(.easeOut(duration: 0.12)) { favoriteScroll.scrollTo(id) }
-              }
-            }
+        }
+        .padding(.vertical, 1)
+        .accessibilityLabel("Favorite pages")
+        .coordinateSpace(name: "sidebarFavoriteViewport")
+        .background {
+          GeometryReader { geometry in
+            Color.clear.preference(
+              key: SidebarFavoriteRevealFramesPreferenceKey.self,
+              value: SidebarRevealFrames(viewport: CGRect(origin: .zero, size: geometry.size)))
           }
         }
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .animation(motionReduced ? nil : .easeOut(duration: 0.12), value: hoveredID)
-  }
-
-  private var gridHeight: CGFloat {
-    let rows = min((favorites.count + 1) / 2, Self.maximumRows)
-    return CGFloat(rows) * Self.tileHeight + CGFloat(max(rows - 1, 0)) * 8 + 2
   }
 
   private func tile(

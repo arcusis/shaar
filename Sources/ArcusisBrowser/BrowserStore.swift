@@ -479,6 +479,10 @@ final class BrowserStore {
   func addCurrentPageAsFavorite() -> Bool {
     guard canFavoriteCurrentPage, case .tab(let tab) = session.selectedPage else { return false }
     let tabID = tab.id
+    guard profileFavorites.count < BrowserSession.maximumFavoritesPerProfile else {
+      sidebarNotice = "A profile can have up to 16 favorites."
+      return false
+    }
     guard session.promoteTabToFavorite(tabID, in: session.selectedSpaceID) != nil else {
       return false
     }

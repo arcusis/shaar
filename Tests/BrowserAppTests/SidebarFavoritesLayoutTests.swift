@@ -22,7 +22,7 @@ final class SidebarFavoritesLayoutTests: XCTestCase {
     let appearances: [(String, NSAppearance.Name, ColorScheme)] = [
       ("light", .aqua, .light), ("dark", .darkAqua, .dark),
     ]
-    let favoriteCounts = [0, 1, 9, 50]
+    let favoriteCounts = [0, 1, 9, 16]
     var captures: [[String: Any]] = []
 
     for count in favoriteCounts {
@@ -88,7 +88,7 @@ final class SidebarFavoritesLayoutTests: XCTestCase {
   }
 
   func testProgrammaticSelectionRevealsLastOwnedFavoriteWithBeforeAfterCaptures() async throws {
-    let store = try makeStore(favoriteCount: 50, selectedFavoriteIndex: 49)
+    let store = try makeStore(favoriteCount: 16, selectedFavoriteIndex: 15)
     let lastFavorite = try XCTUnwrap(store.profileFavorites.last)
     let firstFavorite = try XCTUnwrap(store.profileFavorites.first)
     let retainedTabID = try XCTUnwrap(store.session.selectedSpace.selectedTabID)
@@ -159,15 +159,15 @@ final class SidebarFavoritesLayoutTests: XCTestCase {
     let captures: [[String: Any]] = [
       [
         "phase": "initial-restored-last", "path": initialPath.path,
-        "selectedFavoriteID": lastFavorite.id.uuidString, "favoriteCount": 50,
+        "selectedFavoriteID": lastFavorite.id.uuidString, "favoriteCount": 16,
       ],
       [
         "phase": "programmatic-first", "path": firstPath.path,
-        "selectedFavoriteID": firstFavorite.id.uuidString, "favoriteCount": 50,
+        "selectedFavoriteID": firstFavorite.id.uuidString, "favoriteCount": 16,
       ],
       [
         "phase": "programmatic-last", "path": lastPath.path,
-        "selectedFavoriteID": lastFavorite.id.uuidString, "favoriteCount": 50,
+        "selectedFavoriteID": lastFavorite.id.uuidString, "favoriteCount": 16,
       ],
     ]
     let index = try JSONSerialization.data(

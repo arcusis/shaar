@@ -5,6 +5,7 @@ struct BrowserSettingsProfile: Identifiable {
   let id: UUID
   let name: String
   let spaceCount: Int
+  var spaceNames: [String] = []
 }
 
 struct BrowserSettingsChoice: Identifiable {
@@ -268,6 +269,18 @@ struct BrowserSettingsView: View {
             }
           }
         }
+        VStack(alignment: .leading, spacing: 6) {
+          Text("Spaces").font(.callout.weight(.medium))
+          if profile.spaceNames.isEmpty {
+            Text("No Spaces assigned")
+              .foregroundStyle(.secondary)
+          } else {
+            ForEach(Array(profile.spaceNames.enumerated()), id: \.offset) { _, name in
+              Text(name).lineLimit(1)
+            }
+          }
+        }
+        .font(.callout)
         if let nativeBitwardenController {
           PasswordManagerSettingsView(controller: nativeBitwardenController)
         }

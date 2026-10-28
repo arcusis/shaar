@@ -41,7 +41,7 @@ final class NativeBrowserContext {
 
 /// The same host manages production windows and hidden disposable test windows.
 @MainActor
-final class NativeBrowserHost: NSObject, NSMenuItemValidation {
+final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   enum Presentation { case visible, hiddenProbe }
 
   let events: BrowserRuntimeEvents
@@ -518,6 +518,14 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
   }
 
   func validateMenuItem(_ item: NSMenuItem) -> Bool {
+    if let id = item.representedObject as? UUID {
+      guard canPerform(.nextSpace), let store = activeContext?.store else { return false }
+      item.state = store.session.selectedSpaceID == id ? .on : .off
+      return store.session.spaces.contains { $0.id == id }
+    }
+    if item.action == #selector(copyCurrentURL(_:)) {
+      return canPerform(.nextSpace) && activeContext?.store.session.selectedPage != nil
+    }
     guard let raw = item.representedObject as? String,
       let command = BrowserMenuCommand(rawValue: raw)
     else { return false }
@@ -595,10 +603,19 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     add(.sidebar, "Toggle sidebar", "s", to: view)
     add(.reload, "Reload", "r", to: view)
     let spaces = section("Spaces")
-    add(.newSpace, "New space…", "", to: spaces)
+    add(.newSpace, "New space…", "n", to: spaces, modifiers: [.command, .option])
     add(.editSpace, "Edit current space…", "", to: spaces)
-    add(.nextSpace, "Next space", "]", to: spaces, modifiers: [.control, .option])
-    add(.previousSpace, "Previous space", "[", to: spaces, modifiers: [.control, .option])
+    add(
+      .nextSpace, "Next space", String(Character(UnicodeScalar(NSRightArrowFunctionKey)!)),
+      to: spaces, modifiers: [.command, .option])
+    add(
+      .previousSpace, "Previous space", String(Character(UnicodeScalar(NSLeftArrowFunctionKey)!)),
+      to: spaces, modifiers: [.command, .option])
+    let copyURL = NSMenuItem(
+      title: "Copy URL", action: #selector(copyCurrentURL(_:)), keyEquivalent: "c")
+    copyURL.target = target
+    copyURL.keyEquivalentModifierMask = [.command, .shift]
+    spaces.addItem(copyURL)
     let tabs = section("Tabs")
     add(.closeTab, "Close tab", "w", to: tabs)
     add(.addFavorite, "Add to Favorites", "", to: tabs, modifiers: [])
@@ -627,6 +644,44 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     (sender.target as? NativeBrowserHost)?.perform(command)
   }
 
+  @objc private func copyCurrentURL(_ sender: NSMenuItem) {
+    guard canPerform(.nextSpace), let url = activeContext?.store.session.selectedPage?.tab.url
+    else {
+      return
+    }
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(url.absoluteString, forType: .string)
+  }
+
+  @objc private func selectMenuSpace(_ sender: NSMenuItem) {
+    guard canPerform(.nextSpace), let id = sender.representedObject as? UUID,
+      let store = activeContext?.store,
+      store.session.spaces.contains(where: { $0.id == id })
+    else { return }
+    store.perform(.space(id))
+  }
+
+  func menuNeedsUpdate(_ menu: NSMenu) {
+    guard menu.title == "Spaces" else { return }
+    while let item = menu.items.first(where: { $0.representedObject is UUID || $0.tag == 91827 }) {
+      menu.removeItem(item)
+    }
+    guard canPerform(.nextSpace), let store = activeContext?.store else { return }
+    let separator = NSMenuItem.separator()
+    separator.tag = 91827
+    menu.addItem(separator)
+    for (index, space) in store.session.spaces.enumerated() {
+      let key = SpaceShortcut.key(forIndex: index).map(String.init) ?? ""
+      let item = NSMenuItem(
+        title: space.name, action: #selector(selectMenuSpace(_:)), keyEquivalent: key)
+      item.target = self
+      item.representedObject = space.id
+      item.keyEquivalentModifierMask = .control
+      item.state = space.id == store.session.selectedSpaceID ? .on : .off
+      menu.addItem(item)
+    }
+  }
+
   private func installMenus() {
     previousMenu = NSApp.mainMenu
     previousServicesMenu = NSApp.servicesMenu
@@ -634,6 +689,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     previousHelpMenu = NSApp.helpMenu
     let main = Self.makeMenu(target: self)
     menu = main
+    if let spaces = main.items.first(where: { $0.submenu?.title == "Spaces" })?.submenu {
+      spaces.delegate = self
+      menuNeedsUpdate(spaces)
+    }
     NSApp.servicesMenu =
       main.items.first?.submenu?.items.first(where: {
         $0.submenu?.title == "Services"

@@ -267,6 +267,7 @@ private struct BrowserApplication: App {
     .defaultSize(width: 1200, height: 780)
     .windowStyle(.hiddenTitleBar)
     .commands {
+      SpaceCommands(store: store)
       CommandGroup(replacing: .newItem) {
         Button("New tab") { store.showCommand() }.keyboardShortcut("t")
         Button("Search or enter address") {
@@ -274,8 +275,6 @@ private struct BrowserApplication: App {
           store.commandEditsCurrentURL = true
           store.commandQuery = store.session.selectedPage?.tab.url.absoluteString ?? ""
         }.keyboardShortcut("l")
-        Button("New space…") { store.spaceEditor = .create }
-        Button("Edit current space…") { store.spaceEditor = .edit(store.session.selectedSpaceID) }
         Button("Downloads") { store.showDownloads() }.keyboardShortcut(
           "j", modifiers: [.command, .shift])
       }
@@ -292,11 +291,6 @@ private struct BrowserApplication: App {
           .disabled(!store.canReopenClosedTab)
         Button("Recently closed…") { store.showRecentlyClosed() }.disabled(store.sheet != nil)
         Button("Toggle sidebar") { store.sidebarIsVisible.toggle() }.keyboardShortcut("s")
-        Divider()
-        Button("Next space") { store.cycleSpace(by: 1) }.keyboardShortcut(
-          "]", modifiers: [.control, .option])
-        Button("Previous space") { store.cycleSpace(by: -1) }.keyboardShortcut(
-          "[", modifiers: [.control, .option])
       }
       CommandMenu("Bookmarks") {
         Button("Bookmark this page") { store.bookmarkCurrentPage() }.keyboardShortcut("d")

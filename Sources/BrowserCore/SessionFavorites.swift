@@ -72,6 +72,7 @@ extension BrowserSession {
     tab.folderID = nil
 
     spaces[spaceIndex].tabs.remove(at: tabIndex)
+    spaces[spaceIndex].reconcileSplits()
     if spaces[spaceIndex].selectedTabID == tabID {
       let ordinary = spaces[spaceIndex].tabs.filter { !$0.isPinned }
       spaces[spaceIndex].selectedTabID = ordinary.first?.id

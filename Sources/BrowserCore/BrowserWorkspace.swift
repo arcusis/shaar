@@ -86,6 +86,7 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
       spaces: session.spaces.map { source in
         var space = source
         space.tabs = source.tabs.filter(\.isPinned)
+        space.splits = []
         space.selectedTabID = nil
         space.selectedFavoriteID = nil
         space.folders = source.folders.map(Self.sharedFolder)
@@ -316,6 +317,7 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
       spaces: catalog.spaces.map { definition in
         var space = definition
         space.tabs = []
+        space.splits = []
         space.selectedTabID = nil
         space.selectedFavoriteID = nil
         return space
@@ -440,6 +442,7 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
       space.selectedTabID = nil
       space.selectedFavoriteID = nil
       space.folders = source.folders.map(Self.sharedFolder)
+      space.splits = []
       space.tabs = source.tabs.filter(\.isPinned).map { tab in
         let pinID = oldBindings[tab.id] ?? Self.allocate(&allocated)
         references.append(WorkspacePinReference(tabID: tab.id, pinID: pinID))
@@ -519,6 +522,8 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
         tab.folderID = nil
         return tab
       }
+      space.splits = prior?.splits ?? []
+      space.reconcileSplits()
       space.selectedTabID = prior?.selectedTabID.flatMap { id in
         space.tabs.contains { $0.id == id } ? id : nil
       }
@@ -603,6 +608,7 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
   private static func spaceMetadata(_ source: BrowserSpace) -> BrowserSpace {
     var space = source
     space.tabs = []
+    space.splits = []
     space.selectedTabID = nil
     space.selectedFavoriteID = nil
     space.folders = source.folders.map(sharedFolder)

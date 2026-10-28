@@ -10,6 +10,8 @@ struct SidebarTabRow: View {
   let tabID: UUID
   let title: String
   let favicon: NSImage?
+  var secondaryFavicon: NSImage? = nil
+  var hasSecondaryFavicon = false
   let isPinned: Bool
   let isSelected: Bool
   let closeIsVisible: Bool
@@ -35,6 +37,13 @@ struct SidebarTabRow: View {
             Image(systemName: isPinned ? "pin" : "globe")
               .font(.system(size: 12))
               .foregroundStyle(.secondary)
+          }
+          if hasSecondaryFavicon {
+            if let secondaryFavicon {
+              Image(nsImage: secondaryFavicon).resizable().scaledToFit().frame(width: 16, height: 16)
+            } else {
+              Image(systemName: "globe").font(.system(size: 12)).foregroundStyle(.secondary)
+            }
           }
           Text(title).font(.system(size: 13)).lineLimit(1).truncationMode(.tail)
           Spacer(minLength: 0)

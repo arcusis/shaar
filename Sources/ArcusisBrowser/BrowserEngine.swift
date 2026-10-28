@@ -548,7 +548,8 @@ final class BrowserEngine {
     for space in session.spaces where loadedProfiles.contains(space.profileID) {
       for tab in space.tabs where !failedTabs.contains(tab.id) {
         let decision = TabMaterializationPolicy.decision(
-          isSelected: space.id == session.selectedSpaceID && session.selectedPage?.tab.id == tab.id,
+          isSelected: space.id == session.selectedSpaceID
+            && (session.selectedPage?.tab.id == tab.id || store.selectedSplit?.tabIDs.contains(tab.id) == true),
           isLive: liveTabs.contains(tab.id), lazy: lazyPinnedTabs)
         guard decision == .materialize else { continue }
         guard events.router.bindTab(tab.id.uuidString, windowID: windowID) else {
@@ -810,6 +811,7 @@ final class BrowserEngine {
 struct ChromiumPage: NSViewRepresentable {
   let engine: BrowserEngine
   let tabID: UUID
+  var autofocus = true
 
   func makeNSView(context: Context) -> ChromiumPageContainerView {
     ChromiumPageContainerView()
@@ -818,7 +820,7 @@ struct ChromiumPage: NSViewRepresentable {
   func updateNSView(_ container: ChromiumPageContainerView, context: Context) {
     if container.select(
       engine.runtime.view(forTabID: tabID.uuidString), tabID: tabID, liveTabs: engine.liveTabs),
-      container.window?.isKeyWindow == true
+      container.window?.isKeyWindow == true, autofocus
     {
       engine.focusPage(tabID)
     }

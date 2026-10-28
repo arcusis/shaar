@@ -26,7 +26,8 @@ struct SpaceRemovalImpact {
 
 @MainActor @Observable
 final class BrowserStore {
-  private(set) var session: BrowserSession
+  var session: BrowserSession
+  var splitTabRecency: [UUID] = []
   let dragSessionID = UUID()
   let library = BrowserLibraryModel()
   private(set) var sidebarNotice: String?
@@ -959,7 +960,8 @@ final class BrowserStore {
       }()
   }
 
-  private func save(deferred: Bool = false) {
+  func save(deferred: Bool = false) {
+    recordSplitTabSelection()
     reconcileTransientState()
     defer { onSessionChanged?() }
     if let managedSave {

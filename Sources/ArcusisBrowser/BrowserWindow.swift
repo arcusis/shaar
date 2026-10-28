@@ -18,21 +18,40 @@ struct BrowserWindow: View {
   @Environment(\.colorScheme) private var colorScheme
   @FocusState private var pageIsFocused: Bool
   @State private var webContentFrame: CGRect = .zero
+  @State private var sidebarVisibility: SidebarVisibility = .pinned
 
   var body: some View {
     ZStack(alignment: .top) {
       SpaceChromeTint(space: store.session.selectedSpace).color(for: colorScheme)
       HStack(spacing: 0) {
-        if store.sidebarIsVisible {
-          BrowserSidebar(store: store)
-            .frame(width: BrowserChromeLayout.sidebarWidth)
-            .transition(.move(edge: .leading).combined(with: .opacity))
-        }
+        Color.clear.frame(width: store.sidebarIsVisible ? BrowserChromeLayout.sidebarWidth : 0)
         page
           .padding(.top, 10)
           .padding(.trailing, 10)
           .padding(.bottom, 10)
           .padding(.leading, store.sidebarIsVisible ? 0 : 10)
+      }
+      if !store.sidebarIsVisible {
+        HStack(spacing: 0) {
+          Color.clear
+            .contentShape(Rectangle())
+            .frame(width: 6)
+            .onHover { inside in
+              if inside { sidebarVisibility.pointerEnteredEdge() }
+            }
+          Spacer(minLength: 0)
+        }
+      }
+      HStack(spacing: 0) {
+        BrowserSidebar(store: store)
+          .frame(width: BrowserChromeLayout.sidebarWidth)
+          .offset(x: sidebarVisibility == .hidden ? -BrowserChromeLayout.sidebarWidth : 0)
+          .allowsHitTesting(sidebarVisibility != .hidden)
+          .accessibilityHidden(sidebarVisibility == .hidden)
+          .onHover { inside in
+            if !inside { sidebarVisibility.pointerLeftSidebar() }
+          }
+        Spacer(minLength: 0)
       }
       if store.commandIsOpen {
         Color.black.opacity(0.16)
@@ -101,6 +120,11 @@ struct BrowserWindow: View {
       reduceMotion ? nil : .easeOut(duration: 0.18),
       value: SpaceChromeTint(space: store.session.selectedSpace)
     )
+    .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: sidebarVisibility)
+    .onAppear { sidebarVisibility.setPinned(store.sidebarIsVisible) }
+    .onChange(of: store.sidebarIsVisible) { _, pinned in
+      sidebarVisibility.setPinned(pinned)
+    }
     .sheet(
       item: store.engine?.presentsNativePanels == false ? .constant(nil) : $store.sheet,
       onDismiss: { store.sheetDidDismiss() }

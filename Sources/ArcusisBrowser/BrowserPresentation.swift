@@ -1,6 +1,24 @@
 import BrowserCore
 import Foundation
 
+enum SidebarVisibility: Equatable {
+  case pinned
+  case hidden
+  case revealed
+
+  mutating func setPinned(_ pinned: Bool) {
+    self = pinned ? .pinned : .hidden
+  }
+
+  mutating func pointerEnteredEdge() {
+    if self == .hidden { self = .revealed }
+  }
+
+  mutating func pointerLeftSidebar() {
+    if self == .revealed { self = .hidden }
+  }
+}
+
 enum BrowserSheet: Identifiable {
   case space(SpaceEditorRoute)
   case extensionInstall(ExtensionInstallRequest)

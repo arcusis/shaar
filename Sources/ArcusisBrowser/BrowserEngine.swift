@@ -70,6 +70,29 @@ final class BrowserEngine {
   @ObservationIgnored private var fillSelection: FillSelection?
   private(set) var favicons: [UUID: NSImage] = [:]
 
+  func focusPage(_ tabID: UUID) {
+    guard !isClosed, let store, !store.commandIsOpen, store.sheet == nil,
+      store.pageFind == nil, store.libraryDrawerSection == nil,
+      store.session.selectedPage?.tab.id == tabID,
+      runtime.windowID(forTabID: tabID.uuidString) == windowID,
+      let view = runtime.view(forTabID: tabID.uuidString), let window = view.window,
+      window.isKeyWindow
+    else { return }
+    runtime.focusTabID(tabID.uuidString)
+    window.makeFirstResponder(view)
+  }
+
+  func navigateCurrentPage(to url: URL) -> Bool {
+    guard !isClosed, let store, let page = store.session.selectedPage,
+      let profile = store.session.profileID(forTabID: page.tab.id),
+      liveTabs.contains(page.tab.id),
+      runtime.windowID(forTabID: page.tab.id.uuidString) == windowID
+    else { return false }
+    return runtime.navigateTabID(
+      page.tab.id.uuidString, profileID: profile.uuidString, windowID: windowID,
+      url: url.absoluteString)
+  }
+
   init(
     events: BrowserRuntimeEvents, windowID: String? = nil, store: BrowserStore,
     presentsNativePanels: Bool = true, lazyPinnedTabs: Bool = false
@@ -782,7 +805,7 @@ struct ChromiumPage: NSViewRepresentable {
     if container.attach(engine.runtime.view(forTabID: tabID.uuidString)),
       container.window?.isKeyWindow == true
     {
-      engine.runtime.focusTabID(tabID.uuidString)
+      engine.focusPage(tabID)
     }
   }
 

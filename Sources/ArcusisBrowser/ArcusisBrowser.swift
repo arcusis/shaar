@@ -269,7 +269,11 @@ private struct BrowserApplication: App {
     .commands {
       CommandGroup(replacing: .newItem) {
         Button("New tab") { store.showCommand() }.keyboardShortcut("t")
-        Button("Search or enter address") { store.showCommand() }.keyboardShortcut("l")
+        Button("Search or enter address") {
+          store.showCommand()
+          store.commandEditsCurrentURL = true
+          store.commandQuery = store.session.selectedPage?.tab.url.absoluteString ?? ""
+        }.keyboardShortcut("l")
         Button("New space…") { store.spaceEditor = .create }
         Button("Edit current space…") { store.spaceEditor = .edit(store.session.selectedSpaceID) }
         Button("Downloads") { store.showDownloads() }.keyboardShortcut(

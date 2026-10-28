@@ -33,6 +33,10 @@ struct SplitPaneToolbar: View {
         store.reloadCurrentPage()
       }
       address
+      toolbarButton("plus", label: "New Tab in Split") {
+        store.openSplitPane(beside: tabID, edge: .right)
+      }
+      .disabled(store.selectedSplitIsFull)
       paneMenu
     }
     .padding(.horizontal, 4)

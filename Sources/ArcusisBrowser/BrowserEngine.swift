@@ -831,16 +831,23 @@ struct ChromiumPage: NSViewRepresentable {
   }
 
   static func dismantleNSView(_ view: ChromiumPageContainerView, coordinator: ()) {
-    view.attach(nil)
+    view.dismantle()
   }
 }
 
 final class ChromiumPageContainerView: NSView {
+  /// Containers on screen. During split animations an outgoing container can briefly hold a
+  /// page that a newer container also shows; on teardown the page is handed back.
+  private static let live = NSHashTable<ChromiumPageContainerView>.weakObjects()
+
   private(set) weak var pageView: NSView?
   private var retainedPages: [UUID: NSView] = [:]
+  private var shownTabID: UUID?
 
   @discardableResult
   func select(_ page: NSView?, tabID: UUID, liveTabs: Set<UUID>) -> Bool {
+    Self.live.add(self)
+    shownTabID = page == nil ? nil : tabID
     wantsLayer = true
     layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
     for id in retainedPages.keys.filter({ !liveTabs.contains($0) }) {
@@ -869,6 +876,16 @@ final class ChromiumPageContainerView: NSView {
     page.isHidden = false
     layoutSubtreeIfNeeded()
     return changed
+  }
+
+  func dismantle() {
+    let owned = retainedPages.filter { $0.value.superview === self }
+    Self.live.remove(self)
+    shownTabID = nil
+    attach(nil)
+    for (tabID, page) in owned {
+      Self.live.allObjects.first { $0.shownTabID == tabID }?.attach(page)
+    }
   }
 
   @discardableResult

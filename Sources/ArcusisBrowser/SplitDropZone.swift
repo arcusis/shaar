@@ -14,16 +14,19 @@ struct SplitDropZone: View {
       GeometryReader { geometry in
         ZStack(alignment: alignment) {
           SplitDropCatcher(
-            onHover: { point in edge = point.map { Self.edge(at: $0, in: geometry.size) } },
+            onHover: { point in
+              edge = point.map { Self.edge(at: $0, in: geometry.size, keeping: edge) }
+            },
             onDrop: { point in
-              store.dropTab(beside: targetID, edge: Self.edge(at: point, in: geometry.size))
+              store.dropTab(
+                beside: targetID, edge: Self.edge(at: point, in: geometry.size, keeping: edge))
             })
           if let edge {
             preview(edge, in: geometry.size)
           }
         }
       }
-      .animation(.smooth(duration: 0.16), value: edge)
+      .animation(.spring(response: 0.22, dampingFraction: 0.86), value: edge)
     }
   }
 
@@ -49,14 +52,21 @@ struct SplitDropZone: View {
       .transition(.opacity)
   }
 
-  /// The edge closest to the pointer.
-  static func edge(at point: CGPoint, in size: CGSize) -> SplitEdge {
+  /// The edge closest to the pointer. The current edge is kept until another is clearly
+  /// closer, so the preview does not flip back and forth near a corner.
+  static func edge(at point: CGPoint, in size: CGSize, keeping current: SplitEdge? = nil)
+    -> SplitEdge
+  {
     guard size.width > 0, size.height > 0 else { return .right }
-    let distances: [(SplitEdge, CGFloat)] = [
-      (.left, point.x / size.width), (.right, 1 - point.x / size.width),
-      (.top, point.y / size.height), (.bottom, 1 - point.y / size.height),
+    let distances: [SplitEdge: CGFloat] = [
+      .left: point.x / size.width, .right: 1 - point.x / size.width,
+      .top: point.y / size.height, .bottom: 1 - point.y / size.height,
     ]
-    return distances.min { $0.1 < $1.1 }?.0 ?? .right
+    let nearest = distances.min { $0.value < $1.value }?.key ?? .right
+    guard let current, let kept = distances[current], let best = distances[nearest] else {
+      return nearest
+    }
+    return kept - best < 0.08 ? current : nearest
   }
 }
 

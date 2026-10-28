@@ -4,11 +4,13 @@ import Foundation
 
 @MainActor
 enum BrowserSettingsAppearance {
+  /// Needs the application object, which the Chromium runtime creates.
   static func apply(_ value: String) {
+    guard let app = NSApp else { return }
     switch value {
-    case "light": NSApp.appearance = NSAppearance(named: .aqua)
-    case "dark": NSApp.appearance = NSAppearance(named: .darkAqua)
-    default: NSApp.appearance = nil
+    case "light": app.appearance = NSAppearance(named: .aqua)
+    case "dark": app.appearance = NSAppearance(named: .darkAqua)
+    default: app.appearance = nil
     }
   }
 }

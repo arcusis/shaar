@@ -784,8 +784,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
           legacySessionURL: directory.appending(path: "session.json")))
       let preferences = BrowserPreferencesStore(
         fileURL: directory.appending(path: "preferences.json"))
-      BrowserSettingsAppearance.apply(UserDefaults.standard.string(forKey: "settingsAppearance") ?? "system")
       let runtime = try ARCChromiumRuntime(frameworkURL: frameworkURL)
+      BrowserSettingsAppearance.apply(UserDefaults.standard.string(forKey: "settingsAppearance") ?? "system")
       let host = NativeBrowserHost(
         events: BrowserRuntimeEvents(runtime: runtime), workspace: workspace,
         preferences: preferences)

@@ -6,6 +6,7 @@ struct CommandPanel: View {
   @Bindable var store: BrowserStore
   let resultsHeight: CGFloat
   @FocusState private var searchIsFocused: Bool
+  @State private var movedSelection = false
 
   var body: some View {
     VStack(spacing: 0) {
@@ -17,7 +18,7 @@ struct CommandPanel: View {
           .textFieldStyle(.plain)
           .font(.system(size: 21))
           .focused($searchIsFocused)
-          .onSubmit { store.acceptCommand() }
+          .onSubmit { acceptCommand() }
           .accessibilityIdentifier("command-search")
         Text("esc")
           .font(.system(size: 11))
@@ -124,18 +125,64 @@ struct CommandPanel: View {
       await Task.yield()
       guard !Task.isCancelled, store.commandIsOpen else { return }
       searchIsFocused = true
+      if store.commandEditsCurrentURL {
+        await Task.yield()
+        if searchIsFocused, let editor = NSApp.keyWindow?.firstResponder as? NSTextView {
+          editor.selectAll(nil)
+        }
+      }
     }
-    .onChange(of: store.commandQuery) { _, _ in store.commandSelection = 0 }
+    .onChange(of: store.commandQuery) { _, _ in
+      store.commandSelection = 0
+      movedSelection = false
+    }
     .onKeyPress(.upArrow) {
+      movedSelection = true
       store.moveCommandSelection(by: -1)
       return .handled
     }
     .onKeyPress(.downArrow) {
+      movedSelection = true
       store.moveCommandSelection(by: 1)
+      return .handled
+    }
+    .onKeyPress(.return, phases: .down) { press in
+      guard press.modifiers.contains(.command) else { return .ignored }
+      acceptCommandInNewTab()
       return .handled
     }
     .onExitCommand { store.dismissCommand() }
     .accessibilityLabel("Search tabs, spaces, or the web")
+  }
+
+  private func acceptCommand() {
+    if store.commandEditsCurrentURL, !movedSelection,
+      let url = NavigationInput.destination(
+        for: store.commandQuery,
+        searchEngine: store.preferences.searchEngine(for: store.session.selectedSpace.profileID)),
+      store.engine?.navigateCurrentPage(to: url) == true
+    {
+      store.dismissCommand()
+      return
+    }
+    store.acceptCommand()
+  }
+
+  private func acceptCommandInNewTab() {
+    let results = store.results
+    guard results.indices.contains(store.commandSelection) else { return }
+    let action = results[store.commandSelection].action
+    if case .tab(_, let tabID) = action, let page = store.session.page(forTabID: tabID) {
+      store.perform(.open(page.tab.url))
+    } else if store.commandEditsCurrentURL, !movedSelection,
+      let url = NavigationInput.destination(
+        for: store.commandQuery,
+        searchEngine: store.preferences.searchEngine(for: store.session.selectedSpace.profileID))
+    {
+      store.perform(.open(url))
+    } else {
+      store.perform(action)
+    }
   }
 
   private func favicon(for action: CommandAction) -> NSImage? {

@@ -31,6 +31,7 @@ final class BrowserStore {
   private(set) var sidebarNotice: String?
   var commandIsOpen = false
   var commandQuery = ""
+  var commandEditsCurrentURL = false
   var commandSelection = 0
   var sidebarIsVisible = true
   private(set) var pageFind: PageFindState?
@@ -145,6 +146,7 @@ final class BrowserStore {
   func showCommand() {
     closeLibraryDrawer()
     dismissPageFind()
+    commandEditsCurrentURL = false
     commandQuery = ""
     commandSelection = 0
     commandIsOpen = true

@@ -217,7 +217,13 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation {
     guard let context = activeContext else { return }
     let store = context.store
     switch command {
-    case .newTab, .search: store.showCommand()
+    case .newTab:
+      store.showCommand()
+      store.commandEditsCurrentURL = false
+    case .search:
+      store.showCommand()
+      store.commandEditsCurrentURL = true
+      store.commandQuery = store.session.selectedPage?.tab.url.absoluteString ?? ""
     case .newSpace: store.spaceEditor = .create
     case .editSpace: store.spaceEditor = .edit(store.session.selectedSpaceID)
     case .closeTab:

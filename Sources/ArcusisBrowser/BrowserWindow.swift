@@ -123,7 +123,7 @@ struct BrowserWindow: View {
       }
       if !isOpen && store.pageFind == nil {
         if let engine = store.engine, let id = store.session.selectedPage?.tab.id {
-          engine.runtime.focusTabID(id.uuidString)
+          DispatchQueue.main.async { engine.focusPage(id) }
         } else {
           pageIsFocused = true
         }

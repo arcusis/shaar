@@ -1,45 +1,47 @@
 import AppKit
 import SwiftUI
 
+/// Every menu shortcut, grouped by menu, read from the same menu definitions the app installs.
 struct SettingsShortcutsPane: View {
   @State private var search = ""
+  @State private var catalog = ShortcutCatalog(
+    menu: NativeBrowserHost.makeMenu(target: NSApplication.shared))
 
   private var entries: [ShortcutCatalog.Entry] {
-    let menu = NativeBrowserHost.makeMenu(target: NSApplication.shared)
-    let all = ShortcutCatalog(menu: menu).entries
-    guard !search.isEmpty else { return all }
-    return all.filter {
+    guard !search.isEmpty else { return catalog.entries }
+    return catalog.entries.filter {
       $0.title.localizedCaseInsensitiveContains(search)
         || $0.menu.localizedCaseInsensitiveContains(search)
         || $0.displayKeys.localizedCaseInsensitiveContains(search)
     }
   }
 
+  private var menus: [String] {
+    var seen = Set<String>()
+    return entries.map(\.menu).filter { seen.insert($0).inserted }
+  }
+
   var body: some View {
-    VStack(alignment: .leading, spacing: 16) {
-      Text("Shortcuts").font(.title2.weight(.semibold))
-      TextField("Search shortcuts", text: $search)
-        .textFieldStyle(.roundedBorder)
-      ScrollView {
-        LazyVStack(alignment: .leading, spacing: 18) {
-          ForEach(Array(NSOrderedSet(array: entries.map(\.menu))) as? [String] ?? [], id: \.self) { menu in
-            VStack(alignment: .leading, spacing: 8) {
-              Text(menu).font(.headline)
-              ForEach(entries.filter { $0.menu == menu }) { entry in
-                HStack {
-                  Text(entry.title)
-                  Spacer()
-                  Text(entry.displayKeys).foregroundStyle(.secondary)
-                }
-                .padding(.vertical, 3)
-              }
+    Form {
+      Section {
+        TextField("Search shortcuts", text: $search, prompt: Text("Search shortcuts"))
+          .labelsHidden()
+      }
+      ForEach(menus, id: \.self) { menu in
+        Section(menu) {
+          ForEach(entries.filter { $0.menu == menu }) { entry in
+            LabeledContent(entry.title) {
+              Text(entry.displayKeys)
+                .font(.system(.body, design: .rounded).monospacedDigit())
+                .foregroundStyle(.secondary)
             }
           }
         }
       }
+      if entries.isEmpty {
+        Section { Text("No shortcuts match \"\(search)\".").foregroundStyle(.secondary) }
+      }
     }
-    .padding(24)
-    .frame(maxWidth: 680, maxHeight: .infinity, alignment: .topLeading)
-    .frame(maxWidth: .infinity, alignment: .leading)
+    .formStyle(.grouped)
   }
 }

@@ -218,7 +218,8 @@ struct BrowserSidebar: View {
         LazyVStack(alignment: .leading, spacing: 4) {
           sectionDropTarget(
             pinned: true,
-            height: space.pinnedItems().isEmpty ? 8 : 12)
+            height: space.pinnedItems().isEmpty ? 8 : 12,
+            hint: space.pinnedItems().isEmpty ? "Drop to pin in this Space" : nil)
           if let folderDraft, folderDraft.parentID == nil { folderDraftRow(depth: 0) }
           ForEach(space.pinnedItems()) { item in
             switch item {
@@ -472,16 +473,24 @@ struct BrowserSidebar: View {
             reduceTransparency: reduceTransparency
               || accessibilityOverrides.reduceTransparency == true)
         )
+      } else if store.tabDrag != nil {
+        SidebarDropHint(
+          title: "Drop to add to Favorites", symbol: "star",
+          isTargeted: targetedSection == "favorites")
       } else {
         Color.clear.frame(height: 8).contentShape(Rectangle())
       }
     }
+    .animation(sidebarReduceMotion ? nil : .smooth(duration: 0.2), value: store.tabDrag != nil)
     .dropDestination(for: SidebarTransfer.self) { items, _ in
       guard items.count == 1, case .tab(let sessionID, let source, let tabID) = items[0],
         sessionID == store.dragSessionID, source == store.session.selectedSpaceID
       else { return false }
+      store.separateDraggedPane(tabID)
       addToFavorites(tabID: tabID, spaceID: source, profileID: profileID)
       return store.session.favoritePages.contains { $0.tab.id == tabID }
+    } isTargeted: { targeted in
+      targetedSection = targeted ? "favorites" : targetedSection == "favorites" ? nil : targetedSection
     }
     .dropDestination(for: URL.self) { urls, _ in
       guard urls.count == 1, NavigationInput.isWebURL(urls[0]), store.sheet == nil,
@@ -837,13 +846,19 @@ struct BrowserSidebar: View {
   }
 
   private func sectionDropTarget(
-    pinned: Bool, isFooter: Bool = false, height: CGFloat = 12
+    pinned: Bool, isFooter: Bool = false, height: CGFloat = 12, hint: String? = nil
   ) -> some View {
     let space = store.session.selectedSpace.id
     let zone = isFooter ? "end" : pinned ? "pinned" : "tabs"
+    let showsHint = hint != nil && store.tabDrag != nil
     return Color.clear
       .frame(maxWidth: .infinity)
-      .frame(height: isFooter ? 32 : height)
+      .frame(height: showsHint ? 40 : isFooter ? 32 : height)
+      .overlay {
+        if showsHint, let hint {
+          SidebarDropHint(title: hint, symbol: "pin", isTargeted: targetedSection == zone)
+        }
+      }
       .contentShape(Rectangle())
       .overlay(alignment: .center) {
         if targetedSection == zone {
@@ -865,6 +880,7 @@ struct BrowserSidebar: View {
         return openDroppedURL(urls[0], space: store.session.selectedSpace, pinned: pinned)
       }
       .animation(sidebarReduceMotion ? nil : .easeOut(duration: 0.12), value: targetedSection)
+      .animation(sidebarReduceMotion ? nil : .smooth(duration: 0.2), value: showsHint)
       .accessibilityHidden(true)
   }
 

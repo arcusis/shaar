@@ -67,9 +67,25 @@ struct ProfileFavoritesGrid: View {
     _currentSelectionID = State(initialValue: selectedID)
   }
 
-  private static let columns = Array(
-    repeating: GridItem(.flexible(minimum: 0, maximum: .infinity), spacing: 8), count: 4)
-  private static let tileHeight: CGFloat = 62
+  /// Arc widens the grid as favorites are added: 2 per row, then 3, then 4 (up to 4 x 4).
+  static func columnCount(for count: Int) -> Int {
+    if count <= 4 { return 2 }
+    return count <= 9 ? 3 : 4
+  }
+
+  private var columns: [GridItem] {
+    Array(
+      repeating: GridItem(.flexible(minimum: 0, maximum: .infinity), spacing: 8),
+      count: Self.columnCount(for: favorites.count))
+  }
+
+  private var tileHeight: CGFloat {
+    switch Self.columnCount(for: favorites.count) {
+    case 2: 54
+    case 3: 48
+    default: 44
+    }
+  }
 
   var body: some View {
     let motionReduced = reduceMotion || accessibilityOverrides?.reduceMotion == true
@@ -77,7 +93,7 @@ struct ProfileFavoritesGrid: View {
       reduceTransparency || accessibilityOverrides?.reduceTransparency == true
     Group {
       if !favorites.isEmpty {
-        LazyVGrid(columns: Self.columns, alignment: .leading, spacing: 8) {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
           ForEach(favorites, id: \.id) { favorite in
             tile(favorite, reduceMotion: motionReduced, reduceTransparency: transparencyReduced)
               .id(favorite.id)
@@ -97,6 +113,7 @@ struct ProfileFavoritesGrid: View {
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .animation(motionReduced ? nil : .easeOut(duration: 0.12), value: hoveredID)
+    .animation(motionReduced ? nil : .smooth(duration: 0.25), value: favorites.count)
   }
 
   private func tile(
@@ -164,7 +181,7 @@ struct ProfileFavoritesGrid: View {
         Button("Remove Favorite (keeps page)", role: .destructive) { onRemove(favorite.id) }
       }
     }
-    .frame(height: Self.tileHeight)
+    .frame(height: tileHeight)
     .background {
       GeometryReader { geometry in
         if isSelected {

@@ -70,14 +70,13 @@ jobs:
         timeout-minutes: 20
         env:
           ARCUSIS_PRIVATE_WINDOW_CI: '1'
-          TMPDIR: ${{ runner.temp }}/engine-probe
         run: |
-          mkdir -p "$TMPDIR"
+          set -o pipefail
           test "$GITHUB_ACTIONS" = 'true'
           test "$RUNNER_OS" = 'macOS'
           test "$ARCUSIS_PRIVATE_WINDOW_CI" = '1'
           rm -rf build/private-window-evidence
-          bash scripts/test-engine.sh --private-window
+          bash scripts/test-engine.sh --private-window 2>&1 | tee "$RUNNER_TEMP/private-window-fixture.log"
 
       - name: Upload redacted private window evidence
         if: always() && steps.private_window.outcome != 'skipped'
@@ -87,12 +86,19 @@ jobs:
           path: build/private-window-evidence/
           if-no-files-found: warn
 
+      - name: Collect private window probe logs
+        if: failure() && steps.private_window.outcome == 'failure'
+        run: |
+          mkdir -p "$RUNNER_TEMP/probe-logs"
+          sed -n 's/^Probe evidence: //p' "$RUNNER_TEMP/private-window-fixture.log" \
+            | while read -r root; do cp "$root"/*.log "$RUNNER_TEMP/probe-logs/" || true; done
+
       - name: Upload private window probe logs
         if: failure() && steps.private_window.outcome == 'failure'
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: private-window-probe-logs
-          path: ${{ runner.temp }}/engine-probe/arcusis-engine-probe-*/*.log
+          path: ${{ runner.temp }}/probe-logs/
           if-no-files-found: warn
 
       - name: Capture native Bitwarden settings visuals

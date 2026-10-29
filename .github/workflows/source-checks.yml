@@ -39,6 +39,7 @@ jobs:
           uv python install 3.13
           python_path="$(uv python find --managed-python 3.13)"
           echo "python-path=$python_path" >> "$GITHUB_OUTPUT"
+          dirname "$python_path" >> "$GITHUB_PATH"
 
       - name: Report toolchain
         env:

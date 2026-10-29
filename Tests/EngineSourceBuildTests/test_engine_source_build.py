@@ -347,7 +347,7 @@ class SourceBuildTests(unittest.TestCase):
             (output / "logs").mkdir(mode=0o700)
             log = output / "logs/05-build.attempt-03.log"
             log.write_text("interrupted incremental build\n")
-            lock_bytes = b'{"pid": 23456, "uid": 501}'
+            lock_bytes = json.dumps({"pid": 23456, "uid": os.getuid()}).encode()
             lock = output / BUILD.LOCK_FILE
             lock.write_bytes(lock_bytes)
             os.chmod(lock, 0o600)

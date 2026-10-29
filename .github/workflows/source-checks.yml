@@ -17,7 +17,7 @@ permissions:
 jobs:
   source-checks:
     name: Swift and Python source checks
-    runs-on: macos-26
+    runs-on: [self-hosted, macOS, arcusis-macos]
     timeout-minutes: 30
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
@@ -92,7 +92,7 @@ jobs:
 
   hosted-sidebar-visual:
     name: Hosted sidebar component visuals
-    runs-on: macos-26
+    runs-on: [self-hosted, macOS, arcusis-macos]
     timeout-minutes: 20
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer

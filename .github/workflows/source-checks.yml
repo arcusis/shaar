@@ -70,7 +70,9 @@ jobs:
         timeout-minutes: 20
         env:
           ARCUSIS_PRIVATE_WINDOW_CI: '1'
+          TMPDIR: ${{ runner.temp }}/engine-probe
         run: |
+          mkdir -p "$TMPDIR"
           test "$GITHUB_ACTIONS" = 'true'
           test "$RUNNER_OS" = 'macOS'
           test "$ARCUSIS_PRIVATE_WINDOW_CI" = '1'
@@ -83,6 +85,14 @@ jobs:
         with:
           name: private-window-evidence
           path: build/private-window-evidence/
+          if-no-files-found: warn
+
+      - name: Upload private window probe logs
+        if: failure() && steps.private_window.outcome == 'failure'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: private-window-probe-logs
+          path: ${{ runner.temp }}/engine-probe/arcusis-engine-probe-*/*.log
           if-no-files-found: warn
 
       - name: Capture native Bitwarden settings visuals

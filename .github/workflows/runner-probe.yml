@@ -1,0 +1,28 @@
+name: Runner probe
+
+on:
+  pull_request:
+    branches:
+      - production
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: [self-hosted, macOS, arcusis-macos]
+    timeout-minutes: 5
+    steps:
+      - name: Report runner toolchain
+        run: |
+          set +e
+          sw_vers; uname -m; whoami; id
+          echo "--- xcode"; ls -d /Applications/Xcode*.app; xcode-select -p; xcodebuild -version; swift --version
+          echo "--- python"; which -a python3 python3.13; python3 --version; ls /opt/homebrew/bin/python3* 2>/dev/null
+          echo "--- brew"; which brew; brew --version 2>/dev/null | head -1
+          echo "--- rust"; which rustup cargo
+          echo "--- sudo"; sudo -n true && echo "passwordless sudo: yes" || echo "passwordless sudo: no"
+          echo "--- toolcache"; echo "RUNNER_TOOL_CACHE=$RUNNER_TOOL_CACHE AGENT_TOOLSDIRECTORY=$AGENT_TOOLSDIRECTORY"; ls -la "$RUNNER_TOOL_CACHE" 2>&1 | head
+          echo "--- gui session"; launchctl managername; who; stat -f %Su /dev/console
+          echo "--- screen"; system_profiler SPDisplaysDataType 2>/dev/null | grep -E "Resolution|Display Type|Online" | head
+          echo "--- disk"; df -h "$GITHUB_WORKSPACE" | tail -1; sysctl -n hw.ncpu hw.memsize

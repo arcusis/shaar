@@ -2,7 +2,6 @@ import AppKit
 import CoreGraphics
 import Foundation
 import SwiftUI
-import Vision
 import XCTest
 
 /// Component-only CI evidence. No user profiles, physical input, or screen capture.
@@ -147,11 +146,7 @@ final class MountedChromeSidebar {
       guard alpha["transparent"] == 0, alpha["translucent"] == 0 else {
         throw SidebarVisualCaptureError.nonOpaqueImage
       }
-      let request = VNRecognizeTextRequest()
-      request.recognitionLevel = .accurate
-      request.recognitionLanguages = ["en-US"]
-      try VNImageRequestHandler(url: url).perform([request])
-      let lines = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+      let lines = try VisualTextRecognition.lines(in: url)
       entry["visibleText"] = lines
       entry["requiredText"] = requiredText
       let visible = lines.joined(separator: " ")

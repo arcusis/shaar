@@ -144,7 +144,7 @@ final class CommandPanelVisualTests: XCTestCase {
       let hasBounds = await mounted.waitUntil({ !measurements.panel.isEmpty })
       let image = root.appendingPathComponent(file)
       let queryToken = longQuery ? "research" : "Atlas"
-      let resultToken = longQuery ? "Search Web" : "Notes"
+      let resultToken = longQuery ? "Open in Atlas Space" : "Notes"
       _ = try await mounted.capture(to: image, requiredText: [queryToken, resultToken])
       let actual = measurements.panel
       let fits =

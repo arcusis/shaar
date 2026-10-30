@@ -17,10 +17,10 @@ permissions:
 jobs:
   source-checks:
     name: Swift and Python source checks
-    runs-on: macos-26
+    runs-on: [self-hosted, macOS, arcusis-macos]
     timeout-minutes: 30
     env:
-      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
 
     steps:
       - name: Check out source
@@ -29,17 +29,25 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Install uv
+        # astral-sh/setup-uv v10.3.3
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
+
       - name: Set up Python
-        # actions/setup-python v6.3.0
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
-        with:
-          python-version: '3.13'
+        id: python
+        run: |
+          uv python install 3.13
+          python_path="$(uv python find --managed-python 3.13)"
+          echo "python-path=$python_path" >> "$GITHUB_OUTPUT"
+          dirname "$python_path" >> "$GITHUB_PATH"
 
       - name: Report toolchain
+        env:
+          PYTHON: ${{ steps.python.outputs.python-path }}
         run: |
           xcodebuild -version
           swift --version
-          python --version
+          "$PYTHON" --version
 
       - name: Run Swift build and tests
         run: swift test --jobs 2
@@ -48,8 +56,10 @@ jobs:
         run: swift format lint --strict --recursive Package.swift Sources Tests
 
       - name: Install Python test dependencies
+        env:
+          PYTHON: ${{ steps.python.outputs.python-path }}
         run: |
-          python -m venv .venv
+          "$PYTHON" -m venv .venv
           .venv/bin/python -m pip install --require-hashes --only-binary=:all: -r ThirdParty/VaultwardenFixture/requirements.txt
 
       - name: Run Python tests
@@ -61,11 +71,12 @@ jobs:
         env:
           ARCUSIS_PRIVATE_WINDOW_CI: '1'
         run: |
+          set -o pipefail
           test "$GITHUB_ACTIONS" = 'true'
           test "$RUNNER_OS" = 'macOS'
           test "$ARCUSIS_PRIVATE_WINDOW_CI" = '1'
           rm -rf build/private-window-evidence
-          bash scripts/test-engine.sh --private-window
+          bash scripts/test-engine.sh --private-window 2>&1 | tee "$RUNNER_TEMP/private-window-fixture.log"
 
       - name: Upload redacted private window evidence
         if: always() && steps.private_window.outcome != 'skipped'
@@ -73,6 +84,21 @@ jobs:
         with:
           name: private-window-evidence
           path: build/private-window-evidence/
+          if-no-files-found: warn
+
+      - name: Collect private window probe logs
+        if: failure() && steps.private_window.outcome == 'failure'
+        run: |
+          mkdir -p "$RUNNER_TEMP/probe-logs"
+          sed -n 's/^Probe evidence: //p' "$RUNNER_TEMP/private-window-fixture.log" \
+            | while read -r root; do cp "$root"/*.log "$RUNNER_TEMP/probe-logs/" || true; done
+
+      - name: Upload private window probe logs
+        if: failure() && steps.private_window.outcome == 'failure'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: private-window-probe-logs
+          path: ${{ runner.temp }}/probe-logs/
           if-no-files-found: warn
 
       - name: Capture native Bitwarden settings visuals
@@ -92,10 +118,10 @@ jobs:
 
   hosted-sidebar-visual:
     name: Hosted sidebar component visuals
-    runs-on: macos-26
+    runs-on: [self-hosted, macOS, arcusis-macos]
     timeout-minutes: 20
     env:
-      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
 
     steps:
       - name: Check out source

@@ -144,7 +144,7 @@ final class CommandPanelVisualTests: XCTestCase {
       let hasBounds = await mounted.waitUntil({ !measurements.panel.isEmpty })
       let image = root.appendingPathComponent(file)
       let queryToken = longQuery ? "research" : "Atlas"
-      let resultToken = longQuery ? "Search Web" : "Notes"
+      let resultToken = longQuery ? "Open in Atlas Space" : "Notes"
       _ = try await mounted.capture(to: image, requiredText: [queryToken, resultToken])
       let actual = measurements.panel
       let fits =
@@ -206,13 +206,9 @@ final class CommandPanelVisualTests: XCTestCase {
   private func queryAndResultVisible(
     _ url: URL, size: NSSize, panel: CGRect, queryToken: String, resultToken: String
   ) throws -> Bool {
-    let request = VNRecognizeTextRequest()
-    request.recognitionLevel = .accurate
-    request.recognitionLanguages = ["en-US"]
-    try VNImageRequestHandler(url: url).perform([request])
     var queryVisible = false
     var resultVisible = false
-    for observation in request.results ?? [] {
+    for observation in try VisualTextRecognition.observations(in: url) {
       guard let text = observation.topCandidates(1).first?.string else { continue }
       if text.localizedCaseInsensitiveContains("contact team") {
         throw CommandPanelCaptureError.unexpectedContactResult

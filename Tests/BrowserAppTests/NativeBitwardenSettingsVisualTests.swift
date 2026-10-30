@@ -5,7 +5,6 @@ import Foundation
 import SwiftUI
 import Synchronization
 import Testing
-import Vision
 
 @testable import ArcusisBrowser
 @testable import BrowserCore
@@ -52,7 +51,7 @@ struct NativeBitwardenSettingsVisualTests {
         do {
           capture = try await captureOwnedWindow(
             controller: controller, appearance: appearance, to: imageURL)
-          recognized = try recognizeText(in: imageURL)
+          recognized = try VisualTextRecognition.lines(in: imageURL)
           guard let capture, capture.alpha.translucentPixels == 0,
             capture.alpha.transparentPixels == 0
           else { throw NativeSettingsCaptureError.nonOpaqueImage }
@@ -149,7 +148,7 @@ struct NativeBitwardenSettingsVisualTests {
           capture = try await captureOwnedView(
             rootView: FillCapturePage(coordinator: coordinator, page: page),
             appearance: appearance, to: imageURL)
-          recognized = try recognizeText(in: imageURL)
+          recognized = try VisualTextRecognition.lines(in: imageURL)
           guard let capture, capture.alpha.translucentPixels == 0,
             capture.alpha.transparentPixels == 0
           else { throw NativeSettingsCaptureError.nonOpaqueImage }
@@ -230,7 +229,7 @@ struct NativeBitwardenSettingsVisualTests {
           capture = try await captureOwnedView(
             rootView: SaveCapturePage(coordinator: coordinator, page: page),
             appearance: appearance, to: imageURL)
-          recognized = try recognizeText(in: imageURL)
+          recognized = try VisualTextRecognition.lines(in: imageURL)
           let visibleText = recognized.joined(separator: " ")
           if visibleText.range(of: "document-query-marker", options: .caseInsensitive) != nil
             || visibleText.range(of: "synthetic-secret-marker", options: .caseInsensitive) != nil
@@ -360,7 +359,8 @@ private func captureOwnedView<Content: View>(
   window.contentView = view
   window.orderFrontRegardless()
 
-  let deadline = ContinuousClock.now + .seconds(5)
+  // The first window after a cold build can take several seconds to settle.
+  let deadline = ContinuousClock.now + .seconds(15)
   let minimumSettle = ContinuousClock.now + .milliseconds(250)
   var settledFrames = 0
   while ContinuousClock.now < deadline, settledFrames < 3 {
@@ -441,14 +441,6 @@ private func alphaProof(for image: CGImage) throws -> NativeSettingsAlphaProof {
     transparentPixels: transparentPixels,
     translucentPixels: translucentPixels,
     opaquePixels: opaquePixels)
-}
-
-private func recognizeText(in url: URL) throws -> [String] {
-  let request = VNRecognizeTextRequest()
-  request.recognitionLevel = .accurate
-  request.recognitionLanguages = ["en-US"]
-  try VNImageRequestHandler(url: url).perform([request])
-  return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
 }
 
 private final class InMemoryCredentialItems: PasswordCredentialItemStorage, Sendable {

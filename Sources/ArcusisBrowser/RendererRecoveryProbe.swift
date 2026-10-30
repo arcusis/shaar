@@ -181,8 +181,11 @@ final class RendererRecoveryProbe {
       try await wait("background recovery commit") { self.store.rendererFailures[tab] == nil }
       _ = try await document(tab)
     }
+    let sessionFile = SessionFile(url: root.appending(path: "session.json"))
+    // Session saves are debounced; let the latest snapshot reach disk before comparing.
+    try? await wait("saved session snapshot") { (try? sessionFile.load()) == self.store.session }
     try expect(
-      try SessionFile(url: root.appending(path: "session.json")).load() == store.session,
+      try sessionFile.load() == store.session,
       "renderer failures do not corrupt or replace saved live-tab records")
     store.perform(.space(bases[0].id))
   }

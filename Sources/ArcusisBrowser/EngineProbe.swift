@@ -305,6 +305,18 @@ final class EngineProbe {
     checks.append(name)
   }
 
+  /// Restored background tabs keep committing titles after launch; wait for the model to stop changing.
+  private func waitForSessionToSettle() async throws {
+    var previous = store.session
+    var stablePolls = 0
+    for _ in 0..<100 where stablePolls < 5 {
+      try await Task.sleep(for: .milliseconds(100))
+      let loading = browserEngine?.pages.values.contains { $0.loading } ?? false
+      stablePolls = !loading && store.session == previous ? stablePolls + 1 : 0
+      previous = store.session
+    }
+  }
+
   private func exercise() async {
     do {
       if let capacity = savedTabCapacityFixture, let browserEngine {
@@ -416,6 +428,7 @@ final class EngineProbe {
         }
         try expect(
           nativeAlphaSelected, "store selects live normal Alpha WebContents before private fixture")
+        try await waitForSessionToSettle()
         let before = store.session
         let privateProbe = PrivateWindowProbe(
           runtime: runtime, root: root, fixture: fixture, phase: phase,

@@ -150,12 +150,8 @@ final class SpaceEditorVisualTests: XCTestCase {
   private func visibleActionLabels(in url: URL, editorBounds: CGRect, windowHeight: CGFloat) throws
     -> Set<String>
   {
-    let request = VNRecognizeTextRequest()
-    request.recognitionLevel = .accurate
-    request.recognitionLanguages = ["en-US"]
-    try VNImageRequestHandler(url: url).perform([request])
     var labels: Set<String> = []
-    for observation in request.results ?? [] {
+    for observation in try VisualTextRecognition.observations(in: url) {
       let pointY = (1 - observation.boundingBox.midY) * windowHeight
       guard pointY >= editorBounds.minY + editorBounds.height * 0.65,
         pointY <= editorBounds.maxY + 0.5,

@@ -2769,7 +2769,18 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
     [self advanceDocumentGenerationForTabID:identity];
     [self invalidateExternalRequestsForTabID:identity windowID:nil];
   }
+  [self hideWebStoreBrowserPromptInTab:tab];
   if (identity && profile && !tab.closed && _onDocumentCommitted) _onDocumentCommitted(identity, profile);
+}
+/// The Chrome Web Store asks every non-Chrome browser to switch. Hide only that dialog, on that host.
+- (void)hideWebStoreBrowserPromptInTab:(ArdiaCoreTab *)tab {
+  NSURLComponents *components = [NSURLComponents componentsWithString:tab.url ?: @""];
+  if (tab.closed || ![components.host.lowercaseString isEqualToString:@"chromewebstore.google.com"]) return;
+  NSString *script =
+    @"(()=>{const hide=()=>{for(const e of document.querySelectorAll('dialog,[role=dialog]')){"
+     "if((e.innerText||'').includes('Switch to Chrome?'))e.style.setProperty('display','none','important');}};"
+     "hide();new MutationObserver(hide).observe(document.documentElement,{childList:true,subtree:true});})()";
+  [self evaluateTab:tab script:script completion:^(NSString *ignored) {}];
 }
 - (void)tab:(ArdiaCoreTab *)tab didFindMatches:(int)count active:(int)active final:(BOOL)final {
   NSString *identity = [self identityForTab:tab];

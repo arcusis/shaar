@@ -94,6 +94,7 @@ final class NativeWindowProbe {
       tabA.uuidString, profileID: a.uuidString, windowID: second, url: fixture.absoluteString)
     runtime.activateTabID(tabA.uuidString)
     try attach(tabA, to: second)
+    try checkPageResizes(tabA, windowID: second)
     let alpha = try await document(tabA)
     try expect(
       alpha["cookie"] as? String == "account=alpha" && alpha["local"] as? String == "alpha"
@@ -311,6 +312,25 @@ final class NativeWindowProbe {
     page.frame = host.bounds
     page.autoresizingMask = [.width, .height]
     host.addSubview(page)
+  }
+
+  private func checkPageResizes(_ tab: UUID, windowID: String) throws {
+    guard let window = runtime.window(forID: windowID),
+      let host = runtime.hostView(forWindowID: windowID),
+      let page = runtime.view(forTabID: tab.uuidString)
+    else { throw NativeWindowFailure("Native window page missing for resize check.") }
+    let original = window.frame
+    var resized = original
+    resized.size.width += 137
+    resized.size.height += 83
+    window.setFrame(resized, display: false)
+    host.layoutSubtreeIfNeeded()
+    page.layoutSubtreeIfNeeded()
+    try expect(
+      page.frame == host.bounds,
+      "live Chromium page frame follows resized native window host bounds")
+    window.setFrame(original, display: false)
+    host.layoutSubtreeIfNeeded()
   }
 
   private func popupID(in window: String) throws -> String {

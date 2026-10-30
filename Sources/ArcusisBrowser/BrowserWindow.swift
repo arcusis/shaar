@@ -31,10 +31,8 @@ struct BrowserWindow: View {
           ? BrowserChromeLayout.libraryWidth(
             windowWidth: geometry.size.width, spaces: store.libraryDrawerSection == .spaces)
           : (store.sidebarIsVisible ? BrowserChromeLayout.sidebarWidth : 0)
-        let pageWidth = max(
-          0,
-          geometry.size.width
-            - (store.sidebarIsVisible ? BrowserChromeLayout.sidebarWidth : 0))
+        let pageWidth = BrowserChromeLayout.pageWidth(
+          windowWidth: geometry.size.width, leadingWidth: leadingWidth)
         HStack(spacing: 0) {
           ZStack(alignment: .leading) {
             if libraryIsOpen {

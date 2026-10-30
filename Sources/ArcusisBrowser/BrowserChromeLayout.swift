@@ -24,6 +24,10 @@ enum BrowserChromeLayout {
   static let minimumResultsHeight: CGFloat = 76
   static let resultRowHeight: CGFloat = 59
 
+  static func pageWidth(windowWidth: CGFloat, leadingWidth: CGFloat) -> CGFloat {
+    max(0, windowWidth - leadingWidth)
+  }
+
   static func commandPanelFrame(
     in webContent: CGRect,
     resultCount: Int = 0

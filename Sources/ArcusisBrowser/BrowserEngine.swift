@@ -42,6 +42,11 @@ final class BrowserEngine {
   private(set) var notice: String?
   private(set) var mediaAccess: [UUID: MediaAccessState] = [:]
   private(set) var extensions: [BrowserExtension] = []
+  /// Installed extensions with their on/off state, including disabled ones, for the manager panel.
+  private(set) var managedExtensions: [ManagedExtension] = []
+  private(set) var extensionIcons: [String: NSImage] = [:]
+  private(set) var pinnedExtensionIDs: [String] = []
+  @ObservationIgnored private var managedProfileID: UUID?
   private(set) var extensionPopupSize = CGSize(width: 480, height: 560)
   let presentsNativePanels: Bool
   let lazyPinnedTabs: Bool
@@ -297,6 +302,7 @@ final class BrowserEngine {
             do { try await Task.sleep(for: .milliseconds(500)) } catch { return }
             guard let self else { return }
             self.refreshExtensions()
+            self.refreshManagedExtensions()
           }
         }
       }
@@ -629,6 +635,7 @@ final class BrowserEngine {
       runtime.clearActiveTab(inWindowID: windowID)
     }
     refreshExtensions()
+    if managedProfileID != session.selectedSpace.profileID { refreshManagedExtensions() }
   }
 
   func refreshExtensions() {
@@ -647,6 +654,83 @@ final class BrowserEngine {
   }
 
   func reportNotice(_ message: String) { notice = message }
+
+  func refreshManagedExtensions() {
+    guard !isClosed, let profile = store?.session.selectedSpace.profileID,
+      loadedProfiles.contains(profile)
+    else {
+      managedExtensions = []
+      pinnedExtensionIDs = []
+      managedProfileID = nil
+      return
+    }
+    if managedProfileID != profile {
+      managedProfileID = profile
+      managedExtensions = []
+    }
+    pinnedExtensionIDs = store?.preferences.pinnedExtensionIDs(for: profile) ?? []
+    runtime.manageExtensions(
+      forProfileID: profile.uuidString, expression: ExtensionManagementScript.list
+    ) { [weak self] json in
+      guard let self, self.store?.session.selectedSpace.profileID == profile,
+        case .value(let data)? = ExtensionManagementResult(json: json),
+        let list = try? JSONDecoder().decode([ManagedExtension].self, from: data)
+      else { return }
+      self.managedExtensions = list.sorted {
+        $0.name.localizedStandardCompare($1.name) == .orderedAscending
+      }
+      self.loadExtensionIcons(profile: profile)
+    }
+  }
+
+  var pinnedExtensions: [ManagedExtension] {
+    pinnedExtensionIDs.compactMap { id in managedExtensions.first { $0.id == id && $0.enabled } }
+  }
+
+  func setExtension(_ id: String, pinned: Bool) {
+    guard let store else { return }
+    let profile = store.session.selectedSpace.profileID
+    store.preferences.setExtension(id, pinned: pinned, for: profile)
+    pinnedExtensionIDs = store.preferences.pinnedExtensionIDs(for: profile)
+  }
+
+  func setExtension(_ id: String, enabled: Bool) {
+    runExtensionManagement(
+      ExtensionManagementScript.setEnabled(id, enabled),
+      failure: enabled
+        ? "The extension could not be turned on." : "The extension could not be turned off.")
+  }
+
+  func removeExtension(_ id: String) {
+    setExtension(id, pinned: false)
+    runExtensionManagement(
+      ExtensionManagementScript.uninstall(id), failure: "The extension could not be removed.")
+  }
+
+  private func runExtensionManagement(_ expression: String?, failure: String) {
+    guard let expression, let profile = store?.session.selectedSpace.profileID else { return }
+    runtime.manageExtensions(forProfileID: profile.uuidString, expression: expression) {
+      [weak self] json in
+      guard let self else { return }
+      switch ExtensionManagementResult(json: json) {
+      case .failure(let message)?: self.notice = "\(failure) \(message)"
+      case nil: self.notice = failure
+      case .value?: break
+      }
+      self.refreshExtensions()
+      self.refreshManagedExtensions()
+    }
+  }
+
+  private func loadExtensionIcons(profile: UUID) {
+    guard let directory = runtime.extensionsDirectory(forProfileID: profile.uuidString) else {
+      return
+    }
+    for item in managedExtensions where extensionIcons[item.id] == nil {
+      extensionIcons[item.id] = ExtensionIconLoader.icon(
+        for: item.id, version: item.version, in: directory)
+    }
+  }
 
   func revealDownload(_ id: String, profileID: UUID, open: Bool) {
     guard let selected = store?.session.selectedSpace.profileID,
@@ -670,6 +754,7 @@ final class BrowserEngine {
     extensionPanel = nil
     store.dismissCommand()
     refreshExtensions()
+    refreshManagedExtensions()
     extensionPanel = .list(
       profileID: store.session.selectedSpace.profileID,
       tabID: store.session.selectedPage?.tab.id)

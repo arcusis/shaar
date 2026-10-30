@@ -11,6 +11,7 @@ public final class BrowserPreferencesStore {
   private let syncDirectory: (URL) throws -> Void
   private var profileSearchEngines: [UUID: BrowserSearchEngine] = [:]
   private var nativeVaultProfiles: [UUID: NativeVaultProfilePreferences] = [:]
+  private var pinnedExtensions: [UUID: [String]] = [:]
   private var preservesExistingFile = false
 
   public private(set) var sidebarInitiallyVisible = true
@@ -41,6 +42,18 @@ public final class BrowserPreferencesStore {
 
   public func setSearchEngine(_ value: BrowserSearchEngine, for profileID: UUID) {
     profileSearchEngines[profileID] = value
+    save()
+  }
+
+  /// Extensions pinned to the toolbar, in pin order, for one profile.
+  public func pinnedExtensionIDs(for profileID: UUID) -> [String] {
+    pinnedExtensions[profileID] ?? []
+  }
+
+  public func setExtension(_ id: String, pinned: Bool, for profileID: UUID) {
+    var ids = pinnedExtensionIDs(for: profileID).filter { $0 != id }
+    if pinned { ids.append(id) }
+    pinnedExtensions[profileID] = ids.isEmpty ? nil : ids
     save()
   }
 
@@ -177,6 +190,7 @@ public final class BrowserPreferencesStore {
       sidebarInitiallyVisible = document.sidebarInitiallyVisible
       profileSearchEngines = document.profileSearchEngines
       nativeVaultProfiles = document.nativeVaultProfiles
+      pinnedExtensions = document.pinnedExtensions
     } catch {
       preserveWithNotice("Saved preferences are invalid or unreadable; original file preserved.")
     }
@@ -200,7 +214,8 @@ public final class BrowserPreferencesStore {
       }
       let document = PreferencesDocument(
         version: 2, sidebarInitiallyVisible: sidebarInitiallyVisible,
-        profileSearchEngines: profileSearchEngines, nativeVaultProfiles: nativeVaultProfiles)
+        profileSearchEngines: profileSearchEngines, nativeVaultProfiles: nativeVaultProfiles,
+        pinnedExtensions: pinnedExtensions)
       let encoder = JSONEncoder()
       encoder.outputFormatting = [.sortedKeys]
       let data = try encoder.encode(document)
@@ -224,23 +239,27 @@ private struct PreferencesDocument: Codable {
   let sidebarInitiallyVisible: Bool
   let profileSearchEngines: [UUID: BrowserSearchEngine]
   let nativeVaultProfiles: [UUID: NativeVaultProfilePreferences]
+  let pinnedExtensions: [UUID: [String]]
 
   private enum CodingKeys: String, CodingKey {
     case version
     case sidebarInitiallyVisible
     case profileSearchEngines
     case nativeVaultProfiles
+    case pinnedExtensions
   }
 
   init(
     version: Int, sidebarInitiallyVisible: Bool,
     profileSearchEngines: [UUID: BrowserSearchEngine],
-    nativeVaultProfiles: [UUID: NativeVaultProfilePreferences]
+    nativeVaultProfiles: [UUID: NativeVaultProfilePreferences],
+    pinnedExtensions: [UUID: [String]] = [:]
   ) {
     self.version = version
     self.sidebarInitiallyVisible = sidebarInitiallyVisible
     self.profileSearchEngines = profileSearchEngines
     self.nativeVaultProfiles = nativeVaultProfiles
+    self.pinnedExtensions = pinnedExtensions
   }
 
   init(from decoder: Decoder) throws {
@@ -252,6 +271,8 @@ private struct PreferencesDocument: Codable {
     nativeVaultProfiles =
       try values.decodeIfPresent(
         [UUID: NativeVaultProfilePreferences].self, forKey: .nativeVaultProfiles) ?? [:]
+    pinnedExtensions =
+      try values.decodeIfPresent([UUID: [String]].self, forKey: .pinnedExtensions) ?? [:]
   }
 }
 

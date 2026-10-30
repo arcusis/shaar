@@ -26,6 +26,71 @@ struct ShortcutCatalog {
 
   let entries: [Entry]
 
+  /// macOS leaves these standard items without shortcuts; web pages keep those keys.
+  static let unassignedTitles: Set<String> = [
+    "About Arcusis Browser", "Show All", "Bring All to Front",
+  ]
+
+  static func shortcut(for command: BrowserMenuCommand) -> (
+    key: String, modifiers: NSEvent.ModifierFlags
+  )? {
+    switch command {
+    case .newWindow: ("n", .command)
+    case .newPrivateWindow: ("n", [.command, .shift])
+    case .newMiniWindow: ("n", [.command, .option])
+    case .newTab: ("t", .command)
+    case .search: ("l", .command)
+    case .closeWindow: ("w", [.command, .shift])
+    case .find: ("f", .command)
+    case .findNext: ("g", .command)
+    case .findPrevious: ("g", [.command, .shift])
+    case .sidebar: ("s", .command)
+    case .reload: ("r", .command)
+    case .newSpace: ("S", [.command, .shift])
+    case .editSpace: ("s", [.command, .option])
+    case .addFavorite: ("k", [.command, .option])
+    // Command-Control-N avoids Command-Shift-N (Private Window) and Command-Option-N (Mini Window).
+    case .createFolder: ("n", [.command, .control])
+    case .nextSpace:
+      (String(Character(UnicodeScalar(NSRightArrowFunctionKey)!)), [.command, .option])
+    case .previousSpace:
+      (String(Character(UnicodeScalar(NSLeftArrowFunctionKey)!)), [.command, .option])
+    case .splitView: ("=", [.control, .shift])
+    case .closeTab: ("w", .command)
+    case .reopenClosed: ("t", [.command, .shift])
+    case .recentlyClosed: ("y", [.command, .option])
+    case .bookmarkPage: ("d", .command)
+    // Command-B stays with web editors for bold.
+    case .bookmarks: ("b", [.command, .option])
+    case .history: ("y", .command)
+    case .downloads: ("j", [.command, .shift])
+    case .extensions: ("e", [.command, .shift])
+    case .zoomWindow: ("m", [.command, .control])
+    case .bringAllToFront: nil
+    case .help: ("?", .command)
+    case .minimizeWindow: ("m", .command)
+    case .settings: (",", .command)
+    case .quit: ("q", .command)
+    }
+  }
+
+  static func standardShortcut(for title: String) -> (
+    key: String, modifiers: NSEvent.ModifierFlags
+  )? {
+    switch title {
+    case "Hide Arcusis Browser": ("h", .command)
+    case "Hide Others": ("h", [.command, .option])
+    case "Undo": ("z", .command)
+    case "Redo": ("Z", .command)
+    case "Cut": ("x", .command)
+    case "Copy": ("c", .command)
+    case "Paste": ("v", .command)
+    case "Select All": ("a", .command)
+    case "Copy URL": ("c", [.command, .shift])
+    default: nil
+    }
+  }
+
   init(menu: NSMenu) {
     entries = menu.items.compactMap(\.submenu).flatMap { section in
       section.items.compactMap { item in

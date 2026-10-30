@@ -153,13 +153,21 @@ private struct SettingsPreview: View {
 
   private let profiles = [
     BrowserSettingsProfile(
-      id: UUID(uuidString: "0A3126F1-683D-4F4F-9C48-7B7C6E741250")!, name: "Work", spaceCount: 3),
+      id: UUID(uuidString: "0A3126F1-683D-4F4F-9C48-7B7C6E741250")!, name: "Work",
+      spaces: [
+        BrowserSettingsSpace(id: UUID(), name: "Clients", symbol: "square.stack.3d.up"),
+        BrowserSettingsSpace(id: UUID(), name: "Research", symbol: "square.stack.3d.up"),
+        BrowserSettingsSpace(id: UUID(), name: "Admin", symbol: "square.stack.3d.up"),
+      ]),
     BrowserSettingsProfile(
       id: UUID(uuidString: "C992DA8B-4547-4218-A2CE-4E22B2D4FE88")!, name: "Personal",
-      spaceCount: 1),
+      spaces: [BrowserSettingsSpace(id: UUID(), name: "Home", symbol: "square.stack.3d.up")]),
     BrowserSettingsProfile(
       id: UUID(uuidString: "5FEA8AA6-47B6-4270-880C-FF565FFAC16D")!, name: "Research",
-      spaceCount: 2),
+      spaces: [
+        BrowserSettingsSpace(id: UUID(), name: "Papers", symbol: "square.stack.3d.up"),
+        BrowserSettingsSpace(id: UUID(), name: "Notes", symbol: "square.stack.3d.up"),
+      ]),
   ]
   private let searchEngines = [
     BrowserSettingsChoice(id: "google", title: "Google"),

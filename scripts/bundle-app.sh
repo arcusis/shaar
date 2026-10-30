@@ -154,6 +154,7 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
   <key>CFBundleIconFile</key><string>Arcusis.icns</string>
   <key>CFBundleShortVersionString</key><string>0.1.0</string>
   <key>CFBundleVersion</key><string>1</string>
+  <key>NSHumanReadableCopyright</key><string>© 2026 Arcusis. All rights reserved.</string>
   <key>LSMinimumSystemVersion</key><string>26.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>UTExportedTypeDeclarations</key><array><dict>

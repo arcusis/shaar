@@ -12,6 +12,7 @@ private final class BrowserSettingsState {
   let runtime: ARCChromiumRuntime?
   private(set) var selectedProfileID: UUID?
   private var didPresent = false
+  var onOpenSpace: (UUID) -> Void = { _ in }
 
   init(
     workspace: BrowserWorkspaceStore, preferences: BrowserPreferencesStore,
@@ -31,8 +32,9 @@ private final class BrowserSettingsState {
     workspace.workspace.catalog.profiles.map { profile in
       let spaces = workspace.workspace.catalog.spaces.filter { $0.profileID == profile.id }
       return BrowserSettingsProfile(
-        id: profile.id, name: profile.name, spaceCount: spaces.count,
-        spaceNames: spaces.map(\.name))
+        id: profile.id, name: profile.name,
+        spaces: spaces.map { BrowserSettingsSpace(id: $0.id, name: $0.name, symbol: $0.symbol) },
+        extensionCount: runtime?.extensions(forProfileID: profile.id.uuidString).count ?? 0)
     }
   }
 
@@ -133,6 +135,7 @@ private struct BrowserSettingsRoot: View {
       onCreateProfile: { state.createProfile(name: $0) },
       onRenameProfile: { state.renameProfile($0, name: $1) },
       onDeleteProfile: { state.deleteProfile($0, movingSpacesTo: $1) },
+      onOpenSpace: state.onOpenSpace,
       clearHistory: state.runtime.map { runtime in
         { profileID in try await SettingsHistory.clear(runtime: runtime, profileID: profileID) }
       },
@@ -182,6 +185,10 @@ final class BrowserSettingsController: NSObject {
   var nativeBitwardenController: NativeBitwardenController { state.nativeBitwardenController }
   var selectedSearchEngine: String { state.selectedSearchEngine }
   var sidebarInitiallyVisible: Bool { state.sidebarInitiallyVisible }
+
+  func setOpenSpaceHandler(_ handler: @escaping (UUID) -> Void) {
+    state.onOpenSpace = handler
+  }
 
   @discardableResult
   func selectProfile(_ id: UUID?) -> Bool { state.selectProfile(id) }

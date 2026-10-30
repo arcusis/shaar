@@ -103,7 +103,7 @@ fi
 mkdir -p "$app/Contents/Resources/ArdiaCore"
 cp ThirdParty/ArdiaCore/LICENSE ThirdParty/ArdiaCore/NOTICE ThirdParty/ArdiaCore/pin.json \
   "$app/Contents/Resources/ArdiaCore/"
-cp Resources/Branding/Arcusis.icns "$app/Contents/Resources/Arcusis.icns"
+cp Resources/Branding/Shaar.icns "$app/Contents/Resources/Shaar.icns"
 if $with_native_bitwarden_sdk; then
   source_dylib="$sdk_package/Frameworks/BitwardenSDK.xcframework/macos-arm64/libbitwarden_uniffi.dylib"
   if [[ ! -f "$source_dylib" ]]; then
@@ -151,7 +151,7 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
     <key>CFBundleURLSchemes</key><array><string>http</string><string>https</string></array>
   </dict></array>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleIconFile</key><string>Arcusis.icns</string>
+  <key>CFBundleIconFile</key><string>Shaar.icns</string>
   <key>CFBundleShortVersionString</key><string>0.1.0</string>
   <key>CFBundleVersion</key><string>1</string>
   <key>NSHumanReadableCopyright</key><string>© 2026 Arcusis. All rights reserved.</string>

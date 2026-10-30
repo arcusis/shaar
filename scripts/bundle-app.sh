@@ -91,6 +91,8 @@ fi
 if [[ "$configuration" == debug ]]; then
   app="${app%.app} Debug.app"
 fi
+# Start from an empty bundle so files from earlier builds, such as an old icon, never linger.
+rm -rf "$app"
 mkdir -p "$app/Contents/MacOS"
 cp "$binary_dir/ArcusisBrowser" "$app/Contents/MacOS/ArcusisBrowser"
 "${PYTHON:-python3}" scripts/stage-browser-resources.py \

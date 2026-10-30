@@ -46,3 +46,17 @@ struct ProfileAccountsTests {
     #expect(reloaded.accounts(for: UUID()).isEmpty)
   }
 }
+
+extension ProfileAccountsTests {
+  @Test @MainActor func durableVaultSavesKeepConnectedAccounts() throws {
+    let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")
+    defer { try? FileManager.default.removeItem(at: file) }
+    let profile = UUID()
+    let store = BrowserPreferencesStore(fileURL: file)
+    store.setAccount(ConnectedAccount(provider: .google, email: "alex@example.com"), for: profile)
+    let expected = store.nativeVaultPreferences(for: profile)
+    try store.persistNativeVaultAccountID(UUID(), for: profile, expected: expected)
+
+    #expect(BrowserPreferencesStore(fileURL: file).accounts(for: profile).map(\.email) == ["alex@example.com"])
+  }
+}

@@ -143,7 +143,8 @@ public final class BrowserPreferencesStore {
       }
       let document = PreferencesDocument(
         version: 2, sidebarInitiallyVisible: sidebarInitiallyVisible,
-        profileSearchEngines: profileSearchEngines, nativeVaultProfiles: profiles)
+        profileSearchEngines: profileSearchEngines, nativeVaultProfiles: profiles,
+        connectedAccounts: connectedAccounts)
       let encoder = JSONEncoder()
       encoder.outputFormatting = [.sortedKeys]
       let data = try encoder.encode(document)

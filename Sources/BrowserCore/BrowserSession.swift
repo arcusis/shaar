@@ -299,19 +299,25 @@ public struct BrowserSession: Codable, Equatable, Sendable {
         space.splits.allSatisfy(\.isValid),
         Set(splitIDs).isSubset(of: Set(space.tabs.map(\.id)))
       else { throw SessionError.invalidState }
-      let localIDs = Set(space.folders.map(\.id))
       guard
-        space.folders.allSatisfy({
-          !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && ($0.parentID == nil || localIDs.contains($0.parentID!))
+        space.folders.allSatisfy({ folder in
+          !folder.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && (folder.parentID == nil
+              || space.folders.contains(where: {
+                $0.id == folder.parentID && $0.isPinned == folder.isPinned
+              }))
         }),
-        space.tabs.allSatisfy({
-          $0.folderID == nil || ($0.isPinned && localIDs.contains($0.folderID!))
+        space.tabs.allSatisfy({ tab in
+          tab.folderID == nil
+            || space.folders.contains(where: {
+              $0.id == tab.folderID && $0.isPinned == tab.isPinned
+            })
         }),
-        space.pinnedItems(includingCollapsed: true).filter({
-          if case .folder = $0 { return true }
-          return false
-        }).count == space.folders.count
+        (space.items(isPinned: true, includingCollapsed: true)
+          + space.items(isPinned: false, includingCollapsed: true)).filter({
+            if case .folder = $0 { return true }
+            return false
+          }).count == space.folders.count
       else { throw SessionError.invalidState }
     }
   }
@@ -354,10 +360,11 @@ public struct BrowserSession: Codable, Equatable, Sendable {
     else { return false }
     var tab = spaces[source].tabs[position]
     if let folderID {
-      guard pinned != false, spaces[destination].folders.contains(where: { $0.id == folderID })
+      guard let folder = spaces[destination].folders.first(where: { $0.id == folderID }),
+        pinned == nil || pinned == folder.isPinned
       else { return false }
       tab.folderID = folderID
-      tab.isPinned = true
+      tab.isPinned = folder.isPinned
     } else if source != destination || pinned != nil {
       tab.folderID = nil
       tab.isPinned = pinned ?? tab.isPinned

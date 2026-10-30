@@ -134,12 +134,7 @@ public enum CommandSearch {
         }
         return false
       }
-      for item in space.pinnedItems(includingCollapsed: true) {
-        if case .tab(let tab, _) = item, appendTabResult(tab) {
-          break search
-        }
-      }
-      for tab in space.tabs where !tab.isPinned {
+      for tab in space.orderedTabs {
         if appendTabResult(tab) { break search }
       }
       for folder in space.folders {

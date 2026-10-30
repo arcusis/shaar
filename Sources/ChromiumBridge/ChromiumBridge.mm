@@ -2425,9 +2425,12 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   [_pendingMedia removeObjectForKey:requestID];
   NSString *tabID = request[@"tabID"];
   NSArray *kinds = request[@"permissions"];
-  BOOL supported = [kinds isKindOfClass:NSArray.class] && kinds.count > 0 && kinds.count <= 2;
+  // Matches WebsitePermissionKind; any other kind the engine forwards stays denied.
+  NSArray *known = @[@"camera", @"microphone", @"location", @"notifications", @"clipboard", @"midi",
+                     @"multipleDownloads", @"windowManagement", @"localFonts", @"storageAccess"];
+  BOOL supported = [kinds isKindOfClass:NSArray.class] && kinds.count > 0 && kinds.count <= known.count;
   if (supported) {
-    for (NSString *kind in kinds) supported &= [@[@"camera", @"microphone"] containsObject:kind];
+    for (NSString *kind in kinds) supported &= [known containsObject:kind];
   }
   BOOL current = [self isSelectedTabID:tabID] &&
     [_tabWindows[tabID] isEqualToString:request[@"windowID"]] &&

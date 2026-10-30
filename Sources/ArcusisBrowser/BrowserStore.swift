@@ -66,9 +66,9 @@ final class BrowserStore {
       return nil
     }
   }
-  var websiteMediaRequests: [WebsiteMediaRequest] {
+  var websitePermissionRequests: [WebsitePermissionRequest] {
     consentRequests.compactMap {
-      if case .websiteMedia(let request) = $0 { return request }
+      if case .websitePermission(let request) = $0 { return request }
       return nil
     }
   }
@@ -91,7 +91,7 @@ final class BrowserStore {
   @ObservationIgnored var onSessionChanged: (() -> Void)?
   @ObservationIgnored var onCloseTab: ((UUID) -> Void)?
   @ObservationIgnored var onInstallDecision: ((String, Bool) -> Void)?
-  @ObservationIgnored var onWebsiteMediaDecision: ((String, Bool) -> Void)?
+  @ObservationIgnored var onWebsitePermissionDecision: ((String, Bool) -> Void)?
   @ObservationIgnored var onExternalAppDecision: ((String, Bool) -> Void)?
   @ObservationIgnored var onFindRequest: ((PageFindState, Bool) -> Bool)?
   @ObservationIgnored var onStopFinding: ((UUID) -> Void)?
@@ -699,12 +699,12 @@ final class BrowserStore {
   }
 
   @discardableResult
-  func requestWebsiteMedia(_ request: WebsiteMediaRequest) -> Bool {
-    enqueueConsent(.websiteMedia(request))
+  func requestWebsitePermission(_ request: WebsitePermissionRequest) -> Bool {
+    enqueueConsent(.websitePermission(request))
   }
 
-  func resolveWebsiteMedia(_ id: String, accepted: Bool) {
-    resolveConsent("media-\(id)", accepted: accepted)
+  func resolveWebsitePermission(_ id: String, accepted: Bool) {
+    resolveConsent("permission-\(id)", accepted: accepted)
   }
 
   @discardableResult
@@ -739,7 +739,7 @@ final class BrowserStore {
     if case .externalApp(let external) = request { allow = allow && external.canOpen }
     switch request {
     case .extensionInstall(let request): onInstallDecision?(request.id, allow)
-    case .websiteMedia(let request): onWebsiteMediaDecision?(request.id, allow)
+    case .websitePermission(let request): onWebsitePermissionDecision?(request.id, allow)
     case .externalApp(let request): onExternalAppDecision?(request.id, allow)
     case .space, .downloads, .folder, .recentlyClosed, .library, .bookmarkEditor: break
     }

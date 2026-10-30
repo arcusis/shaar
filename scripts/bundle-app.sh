@@ -163,6 +163,8 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
   </dict></array>
   <key>NSCameraUsageDescription</key><string>Allow websites you approve to use your camera for video calls.</string>
   <key>NSMicrophoneUsageDescription</key><string>Allow websites you approve to use your microphone for calls.</string>
+  <key>NSLocationUsageDescription</key><string>Allow websites you approve to use your location, such as maps and delivery sites.</string>
+  <key>NSLocationWhenInUseUsageDescription</key><string>Allow websites you approve to use your location, such as maps and delivery sites.</string>
 </dict></plist>
 PLIST
 codesign --force --timestamp=none --sign - "$app"

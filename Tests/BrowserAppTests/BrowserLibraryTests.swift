@@ -123,13 +123,13 @@ struct BrowserLibraryTests {
     store.perform(.open(URL(string: "https://example.com")!))
     let page = store.session.selectedSpace.selectedTab!
     let consent = try #require(
-      WebsiteMediaRequest(
+      WebsitePermissionRequest(
         id: "library-media", profileID: a, tabID: page.id,
         pageURL: page.url, requestingOrigin: page.url, kinds: [.camera]))
-    #expect(store.requestWebsiteMedia(consent))
+    #expect(store.requestWebsitePermission(consent))
     store.showLibrary(.history)
     store.bookmarkCurrentPage()
-    #expect(store.sheet?.id == "media-library-media")
+    #expect(store.sheet?.id == "permission-library-media")
     #expect(!store.deleteBookmark(id, profileID: a) && !store.openBookmark(id, profileID: a))
   }
 

@@ -149,7 +149,7 @@ struct BrowserWindow: View {
         LibraryPanel(store: store, profileID: profile, section: section)
       case .bookmarkEditor(let route): BookmarkEditor(store: store, route: route)
       case .extensionInstall(let request): ExtensionConsent(store: store, request: request)
-      case .websiteMedia(let request): WebsiteMediaConsent(store: store, request: request)
+      case .websitePermission(let request): WebsitePermissionConsent(store: store, request: request)
       case .externalApp(let request): ExternalAppConsent(store: store, request: request)
       case .downloads(let profile):
         if let engine = store.engine {

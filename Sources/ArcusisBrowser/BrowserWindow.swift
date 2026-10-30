@@ -83,31 +83,13 @@ struct BrowserWindow: View {
         Color.black.opacity(0.16)
           .ignoresSafeArea()
           .onTapGesture { store.dismissCommand() }
-        GeometryReader { geometry in
-          let contentLeft =
-            (store.sidebarIsVisible ? BrowserChromeLayout.sidebarWidth : 0)
-            + BrowserChromeLayout.pageCardInset
-          let contentTop: CGFloat = store.pageFind == nil ? 45 : 95
-          let initialContentFrame = CGRect(
-            x: contentLeft, y: contentTop,
-            width: max(0, geometry.size.width - contentLeft - BrowserChromeLayout.pageCardInset),
-            height: max(0, geometry.size.height - contentTop - BrowserChromeLayout.pageCardInset))
-          let frame = BrowserChromeLayout.commandPanelFrame(
-            in: webContentFrame.isEmpty ? initialContentFrame : webContentFrame,
-            resultCount: store.results.count
-          )
-          CommandPanel(
-            store: store,
-            resultsHeight: BrowserChromeLayout.commandResultsHeight(
-              resultCount: store.results.count,
-              availableHeight: frame.height
-            )
-          )
-          .frame(width: frame.width)
-          .fixedSize(horizontal: false, vertical: true)
-          .position(x: frame.midX, y: frame.midY)
+          .transition(.opacity)
+      }
+      // The panel is inserted inside the reader so its scale transition anchors on the panel.
+      GeometryReader { geometry in
+        if store.commandIsOpen {
+          commandPanel(in: geometry.size)
         }
-        .transition(.opacity.combined(with: .scale(scale: 0.98)))
       }
       if let coordinator = store.engine?.passwordFill,
         BrowserEngine.passwordFillInputAvailable(in: store),
@@ -124,7 +106,9 @@ struct BrowserWindow: View {
     .coordinateSpace(name: "browser-window")
     .onPreferenceChange(WebContentFramePreferenceKey.self) { webContentFrame = $0 }
     .frame(minWidth: 760, minHeight: 520)
-    .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: store.commandIsOpen)
+    .animation(
+      reduceMotion ? nil : .spring(duration: 0.18, bounce: 0.15), value: store.commandIsOpen
+    )
     .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: store.sidebarIsVisible)
     .animation(
       reduceMotion ? nil : .easeOut(duration: 0.18),
@@ -277,6 +261,34 @@ struct BrowserWindow: View {
         .strokeBorder(.black.opacity(0.07))
     )
     .shadow(color: .black.opacity(0.08), radius: 8, y: 3)
+  }
+
+  private func commandPanel(in size: CGSize) -> some View {
+    let contentLeft =
+      (store.sidebarIsVisible ? BrowserChromeLayout.sidebarWidth : 0)
+      + BrowserChromeLayout.pageCardInset
+    let contentTop: CGFloat = store.pageFind == nil ? 45 : 95
+    let initialContentFrame = CGRect(
+      x: contentLeft, y: contentTop,
+      width: max(0, size.width - contentLeft - BrowserChromeLayout.pageCardInset),
+      height: max(0, size.height - contentTop - BrowserChromeLayout.pageCardInset))
+    let sections = store.commandSections
+    let frame = BrowserChromeLayout.commandPanelFrame(
+      in: webContentFrame.isEmpty ? initialContentFrame : webContentFrame,
+      resultCount: sections.results.count, headerCount: sections.headerCount
+    )
+    let resultsHeight = BrowserChromeLayout.commandResultsHeight(
+      resultCount: sections.results.count, headerCount: sections.headerCount,
+      availableHeight: frame.height
+    )
+    let anchor = UnitPoint(
+      x: frame.midX / max(size.width, 1), y: frame.midY / max(size.height, 1))
+    return CommandPanel(store: store, resultsHeight: resultsHeight)
+      .frame(width: frame.width)
+      .fixedSize(horizontal: false, vertical: true)
+      .position(x: frame.midX, y: frame.midY)
+      .animation(reduceMotion ? nil : .spring(duration: 0.24, bounce: 0.1), value: resultsHeight)
+      .transition(.scale(scale: 0.94, anchor: anchor).combined(with: .opacity))
   }
 
   private func dismissLibraryDrawerAndFocusPage() {

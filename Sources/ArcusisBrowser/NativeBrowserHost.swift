@@ -467,6 +467,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       id: id, nativeID: nativeID, window: window, store: store, engine: engine, hosting: hosting,
       contentView: content, titlebarDragView: titlebarDragView)
     contexts[id] = context
+    store.onMenuCommand = { [weak self] name in
+      guard let command = BrowserMenuCommand(rawValue: name) else { return }
+      self?.perform(command)
+    }
     engine.onClosed = { [weak self] quitting in self?.closed(id, quitting: quitting) }
     observe(context)
     if reconcile { engine.reconcile() }

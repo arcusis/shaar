@@ -46,6 +46,8 @@ public enum CommandAction: Hashable, Sendable {
   case reopen(space: UUID, tab: UUID)
   case bookmark(profile: UUID, id: UUID)
   case history(profile: UUID, address: String)
+  /// A host menu command, identified by its menu command name.
+  case command(String)
 }
 
 public struct CommandResult: Identifiable, Equatable, Sendable {
@@ -54,21 +56,77 @@ public struct CommandResult: Identifiable, Equatable, Sendable {
   public let subtitle: String
   public let symbol: String
   public let action: CommandAction
+
+  public var isOpen: Bool {
+    if case .open = action { return true }
+    return false
+  }
+}
+
+extension CommandResult {
+  static func tab(_ tab: BrowserTab, space: UUID, subtitle: String) -> CommandResult {
+    CommandResult(
+      title: tab.title, subtitle: subtitle, symbol: "rectangle.on.rectangle",
+      action: .tab(space: space, tab: tab.id))
+  }
+
+  static func favorite(_ favorite: BrowserFavorite, subtitle: String) -> CommandResult {
+    CommandResult(
+      title: favorite.title, subtitle: subtitle, symbol: "star.fill",
+      action: .favorite(profile: favorite.profileID, id: favorite.id))
+  }
+
+  static func reopen(_ entry: ClosedBrowserTab, subtitle: String) -> CommandResult {
+    CommandResult(
+      title: entry.tab.title, subtitle: subtitle, symbol: "arrow.uturn.backward",
+      action: .reopen(space: entry.spaceID, tab: entry.id))
+  }
+
+  static func bookmark(_ item: BrowserBookmark, subtitle: String) -> CommandResult {
+    CommandResult(
+      title: item.title, subtitle: subtitle, symbol: "star",
+      action: .bookmark(profile: item.profileID, id: item.id))
+  }
+
+  static func history(_ entry: BrowserHistoryEntry, subtitle: String) -> CommandResult {
+    CommandResult(
+      title: entry.title, subtitle: subtitle, symbol: "clock",
+      action: .history(profile: entry.profileID, address: entry.address))
+  }
+
+  static func command(_ command: LauncherCommand) -> CommandResult {
+    CommandResult(
+      title: command.title, subtitle: command.detail, symbol: command.symbol,
+      action: .command(command.id))
+  }
 }
 
 public enum CommandSearch {
+  static let resultLimit = 10
+
   public static func results(
     for query: String, in session: BrowserSession,
     bookmarks: [BrowserBookmark] = [], history: [BrowserHistoryEntry] = [],
     searchEngine: BrowserSearchEngine = .google
   ) -> [CommandResult] {
+    results(
+      for: query, in: session, bookmarks: bookmarks, history: history,
+      searchEngine: searchEngine, limit: resultLimit)
+  }
+
+  /// `limit` counts every row, including the final Open row when input can navigate.
+  static func results(
+    for query: String, in session: BrowserSession,
+    bookmarks: [BrowserBookmark], history: [BrowserHistoryEntry],
+    searchEngine: BrowserSearchEngine, limit: Int
+  ) -> [CommandResult] {
     let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
     let openURL = NavigationInput.destination(for: query, searchEngine: searchEngine)
-    let resultLimit = openURL == nil ? 10 : 9
+    let candidateLimit = openURL == nil ? limit : limit - 1
     var results: [CommandResult] = []
     func append(_ result: CommandResult) -> Bool {
       results.append(result)
-      return results.count == resultLimit
+      return results.count >= candidateLimit
     }
 
     let orderedSpaces = session.spaces.sorted {
@@ -89,15 +147,13 @@ public enum CommandSearch {
       guard query.isEmpty || searchable.localizedCaseInsensitiveContains(query) else { continue }
       let currentURL = page?.tab.url ?? favorite.originalURL
       if append(
-        CommandResult(
-          title: favorite.title,
-          subtitle: "Favorite · \(profileName) profile · \(currentURL.host() ?? "")",
-          symbol: "star.fill", action: .favorite(profile: profileID, id: favorite.id)))
+        .favorite(
+          favorite, subtitle: "Favorite · \(profileName) profile · \(currentURL.host() ?? "")"))
       {
         break
       }
     }
-    search: for space in orderedSpaces where results.count < resultLimit {
+    search: for space in orderedSpaces where results.count < candidateLimit {
       let foldersByID = Dictionary(
         space.folders.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
       var folderPaths: [UUID?: String] = [nil: ""]
@@ -124,12 +180,7 @@ public enum CommandSearch {
               query)
         else { return false }
         let context = path.isEmpty ? space.name : "\(space.name) · \(path)"
-        if append(
-          CommandResult(
-            title: tab.title, subtitle: "\(context) · \(tab.url.host() ?? "")",
-            symbol: "rectangle.on.rectangle", action: .tab(space: space.id, tab: tab.id)
-          ))
-        {
+        if append(.tab(tab, space: space.id, subtitle: "\(context) · \(tab.url.host() ?? "")")) {
           return true
         }
         return false
@@ -168,10 +219,7 @@ public enum CommandSearch {
         {
           let profile = session.profiles.first { $0.id == space.profileID }?.name ?? ""
           if append(
-            CommandResult(
-              title: entry.tab.title,
-              subtitle: "Reopen closed tab · \(space.name) · \(profile) profile",
-              symbol: "arrow.uturn.backward", action: .reopen(space: space.id, tab: entry.id)))
+            .reopen(entry, subtitle: "Reopen closed tab · \(space.name) · \(profile) profile"))
           {
             break search
           }
@@ -186,11 +234,7 @@ public enum CommandSearch {
                 .localizedCaseInsensitiveContains(query)
           else { continue }
           bookmarked.insert(item.address!)
-          if append(
-            CommandResult(
-              title: item.title, subtitle: "Bookmark · \(profileName) profile · \(item.path)",
-              symbol: "star", action: .bookmark(profile: profile, id: item.id)))
-          {
+          if append(.bookmark(item, subtitle: "Bookmark · \(profileName) profile · \(item.path)")) {
             break search
           }
         }
@@ -203,11 +247,11 @@ public enum CommandSearch {
               || "\(entry.title) \(entry.address)".localizedCaseInsensitiveContains(query)
           else { continue }
           if append(
-            CommandResult(
-              title: entry.title,
+            .history(
+              entry,
               subtitle:
-                "History · \(profileName) profile · \(entry.lastVisit.formatted(date: .abbreviated, time: .omitted))",
-              symbol: "clock", action: .history(profile: profile, address: entry.address)))
+                "History · \(profileName) profile · \(entry.lastVisit.formatted(date: .abbreviated, time: .omitted))"
+            ))
           {
             break search
           }

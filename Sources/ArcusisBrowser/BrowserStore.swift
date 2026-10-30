@@ -37,6 +37,9 @@ final class BrowserStore {
   var commandQuery = ""
   var commandEditsCurrentURL = false
   var commandSelection = 0
+  var commandFilter: CommandFilter? {
+    didSet { commandSelection = 0 }
+  }
   var sidebarIsVisible = true
   private(set) var pageFind: PageFindState?
   private(set) var rendererFailures: [UUID: RendererFailure] = [:]
@@ -94,6 +97,8 @@ final class BrowserStore {
   @ObservationIgnored var engine: BrowserEngine?
   @ObservationIgnored var onSessionChanged: (() -> Void)?
   @ObservationIgnored var onCloseTab: ((UUID) -> Void)?
+  /// Runs a host menu command chosen from the launcher's Actions; nil hides Actions.
+  @ObservationIgnored var onMenuCommand: ((String) -> Void)?
   @ObservationIgnored var onInstallDecision: ((String, Bool) -> Void)?
   @ObservationIgnored var onWebsitePermissionDecision: ((String, Bool) -> Void)?
   @ObservationIgnored var onExternalAppDecision: ((String, Bool) -> Void)?
@@ -142,13 +147,17 @@ final class BrowserStore {
     if changed { onSessionChanged?() }
   }
 
-  var results: [CommandResult] {
+  var commandSections: [CommandSection] {
     let profile = session.selectedSpace.profileID
-    return CommandSearch.results(
-      for: commandQuery, in: session,
+    let sources = CommandSources(
       bookmarks: library.bookmarks[profile]?.items ?? [], history: library.history[profile] ?? [],
+      commands: onMenuCommand == nil ? [] : LauncherCommands.catalog,
       searchEngine: preferences.searchEngine(for: profile))
+    return CommandLauncher.sections(
+      for: commandQuery, filter: commandFilter, in: session, sources: sources)
   }
+
+  var results: [CommandResult] { commandSections.results }
   func usePreferences(_ value: BrowserPreferencesStore) {
     preferences = value
     sidebarIsVisible = value.sidebarInitiallyVisible
@@ -164,6 +173,7 @@ final class BrowserStore {
     commandEditsCurrentURL = false
     commandQuery = ""
     commandSelection = 0
+    commandFilter = nil
     pendingSplitPlacement = nil
     commandIsOpen = true
   }
@@ -385,6 +395,10 @@ final class BrowserStore {
     commandSelection = min(max(commandSelection + amount, 0), results.count - 1)
   }
 
+  func cycleCommandFilter(by offset: Int) {
+    commandFilter = CommandFilter.cycled(from: commandFilter, by: offset)
+  }
+
   func acceptCommand() {
     let results = results
     guard results.indices.contains(commandSelection) else { return }
@@ -435,6 +449,10 @@ final class BrowserStore {
       return
     case .history(let profile, let address):
       openHistoryEntry(address, profileID: profile)
+      return
+    case .command(let name):
+      dismissCommand()
+      onMenuCommand?(name)
       return
     }
     commandIsOpen = false

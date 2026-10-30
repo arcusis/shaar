@@ -1,5 +1,13 @@
 import Foundation
 
+public enum SidebarSection: Sendable, Equatable {
+  case pinned, today
+  public var isPinned: Bool {
+    if case .pinned = self { return true }
+    return false
+  }
+}
+
 extension BrowserSession {
   public mutating func selectFolder(_ id: UUID, in spaceID: UUID) {
     guard let index = spaces.firstIndex(where: { $0.id == spaceID }),
@@ -11,11 +19,21 @@ extension BrowserSession {
 
   @discardableResult
   public mutating func addFolder(name: String, in spaceID: UUID, parentID: UUID? = nil) -> UUID? {
+    addFolder(name: name, in: spaceID, section: .pinned, parentID: parentID)
+  }
+
+  @discardableResult
+  public mutating func addFolder(
+    name: String, in spaceID: UUID, section: SidebarSection, parentID: UUID? = nil
+  ) -> UUID? {
     let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !name.isEmpty, let index = spaces.firstIndex(where: { $0.id == spaceID }),
-      parentID == nil || spaces[index].folders.contains(where: { $0.id == parentID })
+      parentID == nil
+        || spaces[index].folders.contains(where: {
+          $0.id == parentID && $0.isPinned == section.isPinned
+        })
     else { return nil }
-    let folder = BrowserFolder(name: name, parentID: parentID)
+    let folder = BrowserFolder(name: name, parentID: parentID, isPinned: section.isPinned)
     spaces[index].folders.append(folder)
     spaces[index].expandFolderPath(parentID)
     spaces[index].normalizeFolders()

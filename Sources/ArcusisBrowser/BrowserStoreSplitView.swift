@@ -88,6 +88,18 @@ extension BrowserStore {
     save()
   }
 
+  @discardableResult
+  func dropTabIntoSidebarSplit(_ item: SidebarTransfer, target: UUID) -> Bool {
+    guard case .tab(let sessionID, let source, let tabID) = item,
+      sessionID == dragSessionID, source == session.selectedSpaceID,
+      session.selectedSpace.tabs.contains(where: { $0.id == target }),
+      session.addToSplit(tabID, beside: target, edge: .right, in: session.selectedSpaceID)
+    else { return false }
+    tabDrag = nil
+    save()
+    return true
+  }
+
   /// Records the drag so page drop zones can appear; cleared once the mouse button is up.
   func beginTabDrag(_ tabID: UUID, spaceID: UUID, fromSplitPane: Bool) -> SidebarTransfer {
     let drag = TabDrag(tabID: tabID, fromSplitPane: fromSplitPane)
@@ -126,10 +138,12 @@ extension BrowserStore {
   }
 
   /// A pane dragged into the sidebar leaves its split.
-  func separateDraggedPane(_ tabID: UUID) {
-    guard tabDrag?.tabID == tabID, tabDrag?.fromSplitPane == true else { return }
+  @discardableResult
+  func separateDraggedPane(_ tabID: UUID) -> Bool {
+    guard tabDrag?.tabID == tabID, tabDrag?.fromSplitPane == true else { return false }
     tabDrag = nil
     session.unsplitTab(tabID, in: session.selectedSpaceID)
+    return true
   }
 }
 

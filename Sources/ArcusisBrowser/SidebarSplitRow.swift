@@ -18,6 +18,7 @@ struct SidebarSplitRow: View {
   let isSelected: Bool
   let onSelect: (UUID) -> Void
   let onClose: (UUID) -> Void
+  let onDrag: (UUID) -> SidebarTransfer
   @State private var hoveredID: UUID?
 
   var body: some View {
@@ -73,6 +74,7 @@ struct SidebarSplitRow: View {
     .accessibilityAddTraits(raised ? [.isButton, .isSelected] : .isButton)
     .accessibilityAction { onSelect(segment.id) }
     .accessibilityAction(named: Text("Close tab")) { onClose(segment.id) }
+    .draggable(onDrag(segment.id))
   }
 
   private func segmentFill(raised: Bool, hovered: Bool) -> Double {

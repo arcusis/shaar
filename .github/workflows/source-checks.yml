@@ -76,14 +76,6 @@ jobs:
           test "$RUNNER_OS" = 'macOS'
           test "$ARCUSIS_PRIVATE_WINDOW_CI" = '1'
           rm -rf build/private-window-evidence
-          mkdir -p "$RUNNER_TEMP/probe-logs"
-          python3 -c "import ctypes; cg = ctypes.CDLL('/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics'); ids = (ctypes.c_uint32 * 16)(); n = ctypes.c_uint32(); cg.CGGetActiveDisplayList(16, ids, ctypes.byref(n)); print('Active displays:', n.value)" \
-            | tee "$RUNNER_TEMP/probe-logs/displays.txt"
-          ( sleep 150
-            for pid in $(pgrep -U "$(id -u)" -f -- '--engine-probe|--type=gpu-process|--type=renderer'); do
-              ps -o pid=,etime=,command= -p "$pid" | cut -c1-240 >> "$RUNNER_TEMP/probe-logs/processes.txt"
-              sample "$pid" 3 -file "$RUNNER_TEMP/probe-logs/sample-$pid.txt" > /dev/null 2>&1 || true
-            done ) &
           bash scripts/test-engine.sh --private-window 2>&1 | tee "$RUNNER_TEMP/private-window-fixture.log"
 
       - name: Upload redacted private window evidence
@@ -99,10 +91,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/probe-logs"
           sed -n 's/^Probe evidence: //p' "$RUNNER_TEMP/private-window-fixture.log" \
-            | while read -r root; do
-                ls -la "$root" > "$RUNNER_TEMP/probe-logs/root-listing.txt"
-                cp "$root"/*.log "$root"/*.json "$RUNNER_TEMP/probe-logs/" || true
-              done
+            | while read -r root; do cp "$root"/*.log "$RUNNER_TEMP/probe-logs/" || true; done
 
       - name: Upload private window probe logs
         if: failure() && steps.private_window.outcome == 'failure'

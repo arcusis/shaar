@@ -1,4 +1,5 @@
 import AppKit
+import BrowserCore
 import SwiftUI
 
 struct BrowserSettingsProfile: Identifiable {
@@ -361,7 +362,8 @@ struct BrowserSettingsView: View {
 
   private var aboutContent: some View {
     Form {
-      Section("Arcusis Browser") {
+      Section(ProductIdentity.name) {
+        Text(ProductIdentity.meaning)
         Text("© 2026 Arcusis. All rights reserved.")
         LabeledContent(
           "Version",

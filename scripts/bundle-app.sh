@@ -84,9 +84,9 @@ else
   binary_dir=$(ARCUSIS_NATIVE_BITWARDEN_SDK=0 swift build --manifest-cache none --scratch-path "$scratch_path" -c "$configuration" --show-bin-path)
 fi
 if $with_engine; then
-  app="build/Arcusis Browser.app"
+  app="build/Shaar.app"
 else
-  app="build/Arcusis Browser Shell.app"
+  app="build/Shaar Shell.app"
 fi
 if [[ "$configuration" == debug ]]; then
   app="${app%.app} Debug.app"
@@ -145,7 +145,7 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 <plist version="1.0"><dict>
   <key>CFBundleExecutable</key><string>ArcusisBrowser</string>
   <key>CFBundleIdentifier</key><string>com.arcusis.browser</string>
-  <key>CFBundleName</key><string>Arcusis Browser</string>
+  <key>CFBundleName</key><string>Shaar</string>
   <key>CFBundleURLTypes</key><array><dict>
     <key>CFBundleURLName</key><string>Web URLs</string>
     <key>CFBundleURLSchemes</key><array><string>http</string><string>https</string></array>

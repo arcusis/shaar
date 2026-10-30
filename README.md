@@ -1,6 +1,6 @@
-# Arcusis Browser
+# Shaar
 
-Native macOS 26+ browser with SwiftUI/AppKit controls, an Arc-style sidebar, profile-isolated Spaces and a Spotlight-style Command-T launcher. Uses pinned Chromium through ArdiaCore.
+Shaar (Hebrew שער, "gateway") is Arcusis's native macOS 26+ browser with SwiftUI/AppKit controls, an Arc-style sidebar, profile-isolated Spaces and a Spotlight-style Command-T launcher. Uses pinned Chromium through ArdiaCore.
 
 Project knowledge lives in [Notebook](Notebook/_INDEX_Main.md): [build/run](Notebook/Build_And_Run.md), [architecture](Notebook/_INDEX_Browser.md), [verification](Notebook/_INDEX_Verification.md), and [acceptance gates](Notebook/Project_State.md).
 

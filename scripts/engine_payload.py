@@ -875,7 +875,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--archive", type=Path, default=Path("build/EngineCache/ArdiaCore-0fd438ac5e78.tar.xz"))
     parser.add_argument("--framework", type=Path,
-                        default=Path("build/Arcusis Browser Candidate.app/Contents/Frameworks") / FRAMEWORK_NAME)
+                        default=Path("build/Shaar Candidate.app/Contents/Frameworks") / FRAMEWORK_NAME)
     parser.add_argument("--pin", type=Path, default=Path("ThirdParty/ArdiaCore/pin.json"))
     args = parser.parse_args(argv)
     try:

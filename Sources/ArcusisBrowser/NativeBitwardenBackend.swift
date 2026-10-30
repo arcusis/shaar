@@ -26,8 +26,8 @@ enum NativeBitwardenBackendError: Error, Equatable, Sendable {
 enum NativeBitwardenLoginRequestMetadata {
   static let clientID = "desktop"
   static let clientVersion = "0.1.0"
-  static let userAgent = "Arcusis Browser"
-  static let deviceName = "Arcusis Browser"
+  static let userAgent = ProductIdentity.name
+  static let deviceName = ProductIdentity.name
 }
 
 enum NativeBitwardenMFAProvider: String, CaseIterable, Sendable, Identifiable {

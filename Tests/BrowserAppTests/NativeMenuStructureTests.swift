@@ -9,7 +9,7 @@ import Testing
   let groups = menu.items.compactMap(\.submenu)
   #expect(
     groups.map(\.title) == [
-      "Arcusis Browser", "File", "Edit", "View", "Spaces", "Tabs", "Archive",
+      "Shaar", "File", "Edit", "View", "Spaces", "Tabs", "Archive",
       "Extensions", "Window", "Help",
     ])
 

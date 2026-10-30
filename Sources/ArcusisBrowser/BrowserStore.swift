@@ -454,6 +454,34 @@ final class BrowserStore {
     nativeTabClosed(id)
   }
 
+  func clearTodayTabs(in spaceID: UUID) {
+    guard session.selectedSpaceID == spaceID,
+      let space = session.spaces.first(where: { $0.id == spaceID })
+    else { return }
+    for tab in space.tabs where !tab.isPinned { closeTab(tab.id) }
+  }
+
+  func applyTidyGroups(_ groups: [SidebarTidyGroup], in spaceID: UUID) {
+    guard session.selectedSpaceID == spaceID, sheet == nil,
+      let space = session.spaces.first(where: { $0.id == spaceID })
+    else { return }
+    let todayIDs = Set(space.tabs.filter { !$0.isPinned }.map(\.id))
+    for tab in space.tabs where !tab.isPinned && tab.folderID != nil {
+      _ = moveTab(tab.id, from: spaceID, to: spaceID, pinned: false)
+    }
+    var handled: Set<UUID> = []
+    for group in groups where group.tabIDs.count > 1 {
+      let ids = Set(group.tabIDs)
+      guard ids.isSubset(of: todayIDs), ids.isDisjoint(with: handled),
+        let folder = createFolder(name: group.topic, in: spaceID, section: .today)
+      else { continue }
+      for id in group.tabIDs {
+        _ = moveTab(id, from: spaceID, to: spaceID, folderID: folder)
+      }
+      handled.formUnion(ids)
+    }
+  }
+
   func nativeTabClosed(_ id: UUID) {
     rendererFailures[id] = nil
     if let favoritePage = session.favoritePages.first(where: { $0.tab.id == id }) {
@@ -511,6 +539,29 @@ final class BrowserStore {
         $0.id == id && $0.profileID == session.selectedSpace.profileID
       }), session.removeFavorite(id, disposition: .preserveAsTab)
     else { return false }
+    save()
+    return true
+  }
+
+  @discardableResult
+  func restoreFavoriteAsTab(
+    _ id: UUID, in spaceID: UUID, before tabID: UUID? = nil,
+    pinned: Bool, folderID: UUID? = nil
+  ) -> Bool {
+    guard sheet == nil, !commandIsOpen, session.selectedSpaceID == spaceID,
+      let space = session.spaces.first(where: { $0.id == spaceID }),
+      session.favorites.contains(where: { $0.id == id && $0.profileID == space.profileID }),
+      let pageID = session.favoritePages.first(where: { $0.favoriteID == id })?.tab.id,
+      session.selectFavorite(id, in: spaceID),
+      session.removeFavorite(id, disposition: .preserveAsTab)
+    else { return false }
+    let restoredTab = session.selectedSpace.tabs.first { $0.id == pageID }
+    if folderID != nil || restoredTab?.isPinned != pinned {
+      guard
+        session.moveTab(
+          pageID, from: spaceID, to: spaceID, before: tabID, pinned: pinned, folderID: folderID)
+      else { return false }
+    }
     save()
     return true
   }
@@ -802,9 +853,15 @@ final class BrowserStore {
     switch item {
     case .tab(let sessionID, let source, let tab):
       guard sessionID == dragSessionID else { return false }
-      separateDraggedPane(tab)
-      return moveTab(
+      let separated = separateDraggedPane(tab)
+      if moveTab(
         tab, from: source, to: space, before: targetTab, pinned: pinned, folderID: folderID)
+      {
+        return true
+      }
+      guard separated else { return false }
+      save()
+      return true
     case .space(let sessionID, let id):
       guard sessionID == dragSessionID, targetTab == nil, pinned == nil, folderID == nil,
         beforeFolder == nil
@@ -834,6 +891,16 @@ final class BrowserStore {
   func createFolder(name: String, in space: UUID, parentID: UUID? = nil) -> UUID? {
     guard mayEditFolders(in: space),
       let id = session.addFolder(name: name, in: space, parentID: parentID)
+    else { return nil }
+    save()
+    return id
+  }
+
+  func createFolder(name: String, in space: UUID, section: SidebarSection, parentID: UUID? = nil)
+    -> UUID?
+  {
+    guard mayEditFolders(in: space),
+      let id = session.addFolder(name: name, in: space, section: section, parentID: parentID)
     else { return nil }
     save()
     return id

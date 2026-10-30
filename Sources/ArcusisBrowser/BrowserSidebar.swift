@@ -67,6 +67,7 @@ struct BrowserSidebar: View {
   @State private var targetedSpace: UUID?
   @State private var targetedSection: String?
   @State private var targetedFolder: UUID?
+  @State private var targetedTabIntent: SidebarTabDropIntent?
   @State private var hoveredTabID: UUID?
   @State private var newTabIsHovered = false
   @State private var recentDownloads: RecentDownloadsPresentation
@@ -223,7 +224,9 @@ struct BrowserSidebar: View {
             pinned: true,
             height: space.pinnedItems().isEmpty ? 8 : 12,
             hint: space.pinnedItems().isEmpty ? "Drop to pin in this Space" : nil)
-          if let folderDraft, folderDraft.parentID == nil { folderDraftRow(depth: 0) }
+          if let folderDraft, folderDraft.section == .pinned, folderDraft.parentID == nil {
+            folderDraftRow(depth: 0)
+          }
           ForEach(space.pinnedItems()) { item in
             switch item {
             case .folder(let folder, let depth):
@@ -294,32 +297,44 @@ struct BrowserSidebar: View {
           .onHover { newTabIsHovered = $0 }
           .animation(sidebarReduceMotion ? nil : .easeOut(duration: 0.12), value: newTabIsHovered)
           .contextMenu {
-            Button("New Folder") { beginFolderDraft(parentID: nil) }
+            Button("New Folder") { beginFolderDraft(parentID: nil, section: .today) }
             Button("Reopen last closed tab") { store.reopenLastClosedTab() }
               .disabled(!store.canReopenClosedTab)
             Button("Recently closed…") { store.showRecentlyClosed() }
           }
           sectionDropTarget(pinned: false)
-          ForEach(space.tabs.filter { !$0.isPinned && isSplitRowLeader($0, in: space) }) { tab in
-            tabRow(tab, index: tabIndex)
-              .id(tab.id)
-              .background {
-                if tab.id == activeSidebarPageID {
-                  GeometryReader { geometry in
-                    Color.clear.preference(
-                      key: SidebarOrdinaryRevealFramesPreferenceKey.self,
-                      value: SidebarRevealFrames(
-                        selected: geometry.frame(in: .named("sidebarOrdinaryViewport")),
-                        selectedID: tab.id))
-                  }
-                }
+          if let folderDraft, folderDraft.section == .today, folderDraft.parentID == nil {
+            folderDraftRow(depth: 0)
+          }
+          ForEach(space.items(isPinned: false)) { item in
+            switch item {
+            case .folder(let folder, let depth):
+              folderRow(folder, depth: depth)
+              if let folderDraft, folderDraft.parentID == folder.id {
+                folderDraftRow(depth: depth + 1)
               }
+            case .tab(let tab, _):
+              if isSplitRowLeader(tab, in: space) {
+                tabRow(tab, index: tabIndex).id(tab.id)
+                  .background {
+                    if tab.id == activeSidebarPageID {
+                      GeometryReader { geometry in
+                        Color.clear.preference(
+                          key: SidebarOrdinaryRevealFramesPreferenceKey.self,
+                          value: SidebarRevealFrames(
+                            selected: geometry.frame(in: .named("sidebarOrdinaryViewport")),
+                            selectedID: tab.id))
+                      }
+                    }
+                  }
+              }
+            }
           }
           sectionDropTarget(pinned: false, isFooter: true)
         }
       }
       .contextMenu {
-        Button("New Folder") { beginFolderDraft(parentID: nil) }
+        Button("New Folder") { beginFolderDraft(parentID: nil, section: .today) }
       }
       .confirmationDialog(
         "Close today's tabs?",
@@ -330,7 +345,7 @@ struct BrowserSidebar: View {
       ) {
         Button("Close Tabs", role: .destructive) {
           guard store.session.selectedSpaceID == space.id else { return }
-          for tab in store.session.selectedSpace.tabs where !tab.isPinned { store.closeTab(tab.id) }
+          store.clearTodayTabs(in: space.id)
           clearSpaceID = nil
         }
       } message: {
@@ -598,16 +613,36 @@ struct BrowserSidebar: View {
     }
   }
 
-  private func beginFolderDraft(parentID: UUID?) {
+  @ViewBuilder
+  private func tabDropIndicator(_ intent: SidebarTabDropIntent) -> some View {
+    switch intent {
+    case .reorderBefore:
+      Capsule().fill(Color.accentColor).frame(height: 2)
+    case .reorderAfter:
+      Capsule().fill(Color.accentColor).frame(height: 2)
+        .frame(maxHeight: .infinity, alignment: .bottom)
+    case .split, .addToSplit:
+      Text(intent == .addToSplit ? "Add to Split" : "Split with")
+        .font(.system(size: 10, weight: .medium))
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(Color.accentColor.opacity(0.18), in: Capsule())
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+  }
+
+  private func beginFolderDraft(parentID: UUID?, section: SidebarSection = .pinned) {
     let route = FolderEditorRoute.create(spaceID: store.session.selectedSpaceID, parentID: parentID)
     guard route.matches(store.session) else { return }
-    folderDraft = SidebarFolderDraft(route: route)
+    folderDraft = SidebarFolderDraft(route: route, section: section)
     folderNameIsFocused = true
   }
 
   private func commitFolderDraft() {
     guard let draft = folderDraft, draft.isValid(in: store.session),
-      store.createFolder(name: draft.name, in: draft.spaceID, parentID: draft.parentID) != nil
+      store.createFolder(
+        name: draft.name, in: draft.spaceID, section: draft.section, parentID: draft.parentID)
+        != nil
     else { return }
     folderDraft = nil
   }
@@ -701,7 +736,8 @@ struct BrowserSidebar: View {
         focusedID: space.selectedTabID,
         isSelected: store.session.selectedPage.map { split.tabIDs.contains($0.tab.id) } ?? false,
         onSelect: { store.perform(.tab(space: space.id, tab: $0)) },
-        onClose: { store.closeTab($0) }
+        onClose: { store.closeTab($0) },
+        onDrag: { store.beginTabDrag($0, spaceID: space.id, fromSplitPane: true) }
       )
     } else {
       SidebarTabRow(
@@ -752,11 +788,27 @@ struct BrowserSidebar: View {
     let space = store.session.selectedSpace
     let boundary = index.boundary(for: tab.id)
     return tabRowContent(tab, in: space)
-      .draggable(store.beginTabDrag(tab.id, spaceID: space.id, fromSplitPane: false))
+      .draggable(
+        store.beginTabDrag(
+          tab.id, spaceID: space.id,
+          fromSplitPane: space.splits.contains(where: { $0.tabIDs.contains(tab.id) }))
+      )
       .dropDestination(for: SidebarTransfer.self) { items, point in
         guard items.count == 1, let item = items.first else { return false }
         let sourceID: UUID
         if case .tab(_, _, let id) = item { sourceID = id } else { return false }
+        if let split = space.splits.first(where: { $0.tabIDs.contains(tab.id) }),
+          split.tabIDs.contains(sourceID), sourceID != tab.id
+        {
+          return false
+        }
+        let joinsSplit = space.splits.contains(where: { $0.tabIDs.contains(tab.id) })
+        let intent = SidebarTabDropIntent.at(point.y, joinsSplit: joinsSplit)
+        if sourceID != tab.id, intent.combinesTabs,
+          space.tabs.contains(where: { $0.id == sourceID })
+        {
+          return store.dropTabIntoSidebarSplit(item, target: tab.id)
+        }
         guard let slot = index.dropSlot(targetID: tab.id, sourceID: sourceID, after: point.y >= 17)
         else { return false }
         let before: UUID?
@@ -768,9 +820,20 @@ struct BrowserSidebar: View {
           item, into: space.id, before: before, pinned: tab.isPinned, folderID: tab.folderID)
       } isTargeted: { targeted in
         targetedTab = targeted ? tab.id : targetedTab == tab.id ? nil : targetedTab
+        if !targeted { targetedTabIntent = nil }
+      }
+      .onContinuousHover { phase in
+        guard targetedTab == tab.id else { return }
+        switch phase {
+        case .active(let location):
+          targetedTabIntent = SidebarTabDropIntent.at(
+            location.y, joinsSplit: space.splits.contains(where: { $0.tabIDs.contains(tab.id) }))
+        case .ended:
+          targetedTabIntent = nil
+        }
       }
       .overlay(alignment: .top) {
-        if targetedTab == tab.id { Capsule().fill(Color.accentColor).frame(height: 2) }
+        if targetedTab == tab.id { tabDropIndicator(targetedTabIntent ?? .reorderBefore) }
       }
       .animation(sidebarReduceMotion ? nil : .easeOut(duration: 0.12), value: targetedTab)
       .dropDestination(for: ProfileFavoriteDrag.self) { items, _ in
@@ -832,9 +895,7 @@ struct BrowserSidebar: View {
       guard store.session.selectedSpaceID == space.id,
         store.session.selectedSpace.tabs.filter({ !$0.isPinned }) == tabs
       else { return }
-      for id in groups.flatMap(\.tabIDs) {
-        _ = store.moveTab(id, from: space.id, to: space.id, pinned: false)
-      }
+      store.applyTidyGroups(groups, in: space.id)
     }
   }
 
@@ -897,13 +958,10 @@ struct BrowserSidebar: View {
     guard payload.dragSessionID == store.dragSessionID, payload.profileID == space.profileID,
       payload.favoriteIDs == store.profileFavorites.map(\.id),
       payload.favoriteIDs.contains(payload.favoriteID),
-      store.session.selectedSpaceID == space.id, store.selectFavorite(payload.favoriteID),
-      let tabID = store.session.favoritePages.first(where: { $0.favoriteID == payload.favoriteID })?
-        .tab.id,
-      store.removeFavorite(payload.favoriteID)
+      store.session.selectedSpaceID == space.id
     else { return false }
-    return store.moveTab(
-      tabID, from: space.id, to: space.id, before: before, pinned: pinned, folderID: folderID)
+    return store.restoreFavoriteAsTab(
+      payload.favoriteID, in: space.id, before: before, pinned: pinned, folderID: folderID)
   }
 
   private func openDroppedURL(
@@ -968,7 +1026,8 @@ struct BrowserSidebar: View {
     )
     .dropDestination(for: SidebarTransfer.self) { items, _ in
       guard items.count == 1, let item = items.first else { return false }
-      return store.acceptSidebarDrop(item, into: space.id, pinned: true, folderID: folder.id)
+      return store.acceptSidebarDrop(
+        item, into: space.id, pinned: folder.isPinned, folderID: folder.id)
     } isTargeted: { targeted in
       targetedFolder = targeted ? folder.id : targetedFolder == folder.id ? nil : targetedFolder
     }
@@ -988,7 +1047,9 @@ struct BrowserSidebar: View {
       Button("Edit folder…") {
         store.showFolderEditor(.edit(spaceID: space.id, folderID: folder.id))
       }
-      Button("New Folder Inside") { beginFolderDraft(parentID: folder.id) }
+      Button("New Folder Inside") {
+        beginFolderDraft(parentID: folder.id, section: folder.isPinned ? .pinned : .today)
+      }
       Divider()
       Button("Move up") { shiftFolder(folder, in: space, by: -1) }.disabled(
         siblings.first?.id == folder.id)
@@ -1034,4 +1095,18 @@ struct BrowserSidebar: View {
       ? spaces[index - 1].id : spaces.indices.contains(index + 2) ? spaces[index + 2].id : nil
     store.moveSpace(id, before: before)
   }
+}
+
+/// What dropping a dragged tab onto a sidebar tab row does.
+enum SidebarTabDropIntent: Equatable {
+  case reorderBefore, reorderAfter, split, addToSplit
+
+  /// The middle band of a row combines tabs; its top and bottom edges reorder.
+  static func at(_ y: CGFloat, joinsSplit: Bool) -> Self {
+    if y < 8 { return .reorderBefore }
+    if y > 28 { return .reorderAfter }
+    return joinsSplit ? .addToSplit : .split
+  }
+
+  var combinesTabs: Bool { self == .split || self == .addToSplit }
 }

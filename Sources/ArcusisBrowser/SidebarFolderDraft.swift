@@ -3,7 +3,13 @@ import Foundation
 
 struct SidebarFolderDraft: Equatable {
   let route: FolderEditorRoute
+  let section: SidebarSection
   var name = "Untitled"
+
+  init(route: FolderEditorRoute, section: SidebarSection = .pinned) {
+    self.route = route
+    self.section = section
+  }
 
   var spaceID: UUID { route.spaceID }
   var parentID: UUID? {

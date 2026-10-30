@@ -58,7 +58,8 @@ final class SplitPageVisualTests: XCTestCase {
     }
     let view = SidebarSplitRow(
       segments: segments, focusedID: segments[1].id, isSelected: true,
-      onSelect: { _ in }, onClose: { _ in }
+      onSelect: { _ in }, onClose: { _ in },
+      onDrag: { .tab(sessionID: UUID(), sourceSpaceID: UUID(), tabID: $0) }
     )
     .padding(.horizontal, 12)
     .frame(width: 260, height: 90)

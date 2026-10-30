@@ -82,9 +82,11 @@ final class ProfileAccountSignIn {
     } else if url.host() == GoogleAccountList.url.host(),
       url.path() == GoogleAccountList.url.path(),
       let body = await evaluate("document.body ? document.body.innerText : ''"),
-      let account = GoogleAccountList.primaryAccount(fromBody: body)
+      let accounts = GoogleAccountList.accounts(fromBody: body)
     {
-      finish(account)
+      if let account = accounts.first { return finish(account) }
+      // Google left sign-in without a session; return to sign-in instead of showing the raw list.
+      if engine.navigateCurrentPage(to: provider.signInURL) { requestedAccountList = false }
     }
   }
 

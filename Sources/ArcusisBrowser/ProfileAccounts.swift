@@ -33,11 +33,12 @@ enum AccountProvider: String, Codable, CaseIterable, Identifiable, Sendable {
     }
   }
 
-  /// The provider redirects here once sign-in has finished.
+  /// The provider redirects here once sign-in has finished. Google may land on any of its pages
+  /// (for example www.google.com after an error), so anything off the sign-in host counts.
   func isSignedInPage(_ url: URL) -> Bool {
     let host = url.host()?.lowercased() ?? ""
     switch self {
-    case .google: return host == "myaccount.google.com"
+    case .google: return host.hasSuffix(".google.com") && host != "accounts.google.com"
     case .microsoft:
       return [
         "www.microsoft365.com", "m365.cloud.microsoft", "www.office.com", "outlook.live.com",
@@ -84,19 +85,21 @@ enum GoogleAccountList {
     string: "https://accounts.google.com/ListAccounts?gpsia=1&source=ChromiumBrowser&json=standard")!
 
   /// Entries look like `["gaia.l.a", 1, name, email, photo, …]`; the first is the primary account.
-  static func primaryAccount(fromBody text: String) -> ConnectedAccount? {
+  /// Returns nil until the body is the account list, and an empty array when no one is signed in.
+  static func accounts(fromBody text: String) -> [ConnectedAccount]? {
     guard
       let root = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [Any],
       root.count > 1, let entries = root[1] as? [[Any]]
     else { return nil }
-    for entry in entries where entry.count > 4 {
-      guard let email = entry[3] as? String, email.contains("@") else { continue }
+    return entries.compactMap { entry in
+      guard entry.count > 4, let email = entry[3] as? String, email.contains("@") else {
+        return nil
+      }
       let photo = (entry[4] as? String).flatMap(URL.init(string:))
       return ConnectedAccount(
         provider: .google, email: email, name: entry[2] as? String,
         photoURL: photo?.scheme == "https" ? photo : nil)
     }
-    return nil
   }
 }
 

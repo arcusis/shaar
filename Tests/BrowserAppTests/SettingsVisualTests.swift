@@ -21,6 +21,9 @@ final class SettingsVisualTests: XCTestCase {
               id: profileID, name: "Personal",
               spaces: [
                 BrowserSettingsSpace(id: UUID(), name: "Personal", symbol: "square.stack.3d.up")
+              ],
+              accounts: [
+                ConnectedAccount(provider: .google, email: "alex@example.com", name: "Alex Example")
               ])
           ],
           searchEngines: [BrowserSettingsChoice(id: "google", title: "Google")],

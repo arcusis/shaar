@@ -6,14 +6,19 @@ struct BrowserSettingsProfile: Identifiable {
   let name: String
   let spaces: [BrowserSettingsSpace]
   let extensionCount: Int
+  let accounts: [ConnectedAccount]
   var spaceCount: Int { spaces.count }
   var spaceNames: [String] { spaces.map(\.name) }
 
-  init(id: UUID, name: String, spaces: [BrowserSettingsSpace], extensionCount: Int = 0) {
+  init(
+    id: UUID, name: String, spaces: [BrowserSettingsSpace], extensionCount: Int = 0,
+    accounts: [ConnectedAccount] = []
+  ) {
     self.id = id
     self.name = name
     self.spaces = spaces
     self.extensionCount = extensionCount
+    self.accounts = accounts
   }
 
 }
@@ -86,6 +91,8 @@ struct BrowserSettingsView: View {
   let onRenameProfile: (UUID, String) -> Bool
   let onDeleteProfile: (UUID, UUID) -> Bool
   let onOpenSpace: (UUID) -> Void
+  let onConnectAccount: (UUID, AccountProvider) -> Void
+  let onDisconnectAccount: (UUID, AccountProvider) -> Void
   let clearHistory: ((UUID) async throws -> Void)?
   @State private var deletingProfile: BrowserSettingsProfile?
   @State private var destinationID: UUID?
@@ -107,6 +114,8 @@ struct BrowserSettingsView: View {
     onRenameProfile: @escaping (UUID, String) -> Bool = { _, _ in false },
     onDeleteProfile: @escaping (UUID, UUID) -> Bool = { _, _ in false },
     onOpenSpace: @escaping (UUID) -> Void = { _ in },
+    onConnectAccount: @escaping (UUID, AccountProvider) -> Void = { _, _ in },
+    onDisconnectAccount: @escaping (UUID, AccountProvider) -> Void = { _, _ in },
     clearHistory: ((UUID) async throws -> Void)? = nil,
     nativeBitwardenController: NativeBitwardenController? = nil,
     initialSection: BrowserSettingsSection = .general
@@ -122,6 +131,8 @@ struct BrowserSettingsView: View {
     self.onRenameProfile = onRenameProfile
     self.onDeleteProfile = onDeleteProfile
     self.onOpenSpace = onOpenSpace
+    self.onConnectAccount = onConnectAccount
+    self.onDisconnectAccount = onDisconnectAccount
     self.clearHistory = clearHistory
     _selectedSection = State(initialValue: initialSection)
   }
@@ -455,6 +466,34 @@ struct BrowserSettingsView: View {
           }
         }
       }
+      Section {
+        ForEach(AccountProvider.allCases) { provider in
+          if let account = profile.accounts.first(where: { $0.provider == provider }) {
+            ConnectedAccountRow(account: account) { onDisconnectAccount(profile.id, provider) }
+          } else {
+            Button {
+              onConnectAccount(profile.id, provider)
+            } label: {
+              HStack(spacing: 10) {
+                if let logo = provider.logo {
+                  Image(nsImage: logo).resizable().frame(width: 18, height: 18)
+                }
+                Text("Connect \(provider.title)")
+                Spacer(minLength: 0)
+              }
+              .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("settings.connect.\(provider.rawValue)")
+          }
+        }
+      } header: {
+        Text("Accounts")
+      } footer: {
+        Text(
+          "Sign in with the provider's own page. Gmail, Drive, Outlook, and Teams then open signed in for every Space using this profile."
+        )
+      }
       Section("Extensions") {
         LabeledContent("Installed extensions", value: "\(profile.extensionCount)")
       }
@@ -494,4 +533,30 @@ struct BrowserSettingsView: View {
     "\(count) \(count == 1 ? "Space" : "Spaces")"
   }
 
+}
+
+private struct ConnectedAccountRow: View {
+  let account: ConnectedAccount
+  let disconnect: () -> Void
+
+  var body: some View {
+    HStack(spacing: 10) {
+      AsyncImage(url: account.photoURL) { image in
+        image.resizable().scaledToFill()
+      } placeholder: {
+        if let logo = account.provider.logo {
+          Image(nsImage: logo).resizable().padding(5)
+        }
+      }
+      .frame(width: 28, height: 28)
+      .clipShape(Circle())
+      VStack(alignment: .leading, spacing: 1) {
+        Text(account.name ?? account.email).lineLimit(1)
+        Text(account.name == nil ? account.provider.title : account.email)
+          .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+      }
+      Spacer(minLength: 0)
+      Button("Disconnect", action: disconnect)
+    }
+  }
 }

@@ -77,3 +77,18 @@ struct ExtensionManagementTests {
     return try #require(bitmap.representation(using: .png, properties: [:]))
   }
 }
+
+extension ExtensionManagementTests {
+  @Test @MainActor func durableVaultSavesKeepPinnedExtensions() throws {
+    let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")
+    defer { try? FileManager.default.removeItem(at: file) }
+    let profile = UUID()
+    let store = BrowserPreferencesStore(fileURL: file)
+    store.setExtension(String(repeating: "d", count: 32), pinned: true, for: profile)
+    let expected = store.nativeVaultPreferences(for: profile)
+    try store.persistNativeVaultAccountID(UUID(), for: profile, expected: expected)
+
+    let reloaded = BrowserPreferencesStore(fileURL: file)
+    #expect(reloaded.pinnedExtensionIDs(for: profile) == [String(repeating: "d", count: 32)])
+  }
+}

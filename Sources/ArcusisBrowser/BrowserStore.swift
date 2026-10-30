@@ -1114,7 +1114,7 @@ final class BrowserStore {
     for address in ["https://github.com", "https://linear.app", "https://developer.apple.com"] {
       if let url = URL(string: address), let id = session.open(url) { session.togglePin(id) }
     }
-    if let url = URL(string: "https://github.com/arcusis/browser") { session.open(url) }
+    if let url = URL(string: "https://github.com/arcusis/shaar") { session.open(url) }
     let store = BrowserStore(session: session)
     store.commandIsOpen = showCommand
     return store

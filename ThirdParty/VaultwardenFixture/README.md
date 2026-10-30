@@ -10,7 +10,7 @@ With the named Rust toolchain installed, build using the project Python environm
 .venv/bin/python scripts/build_vault_fixture.py
 ```
 
-The builder never starts the server. A fixture run must use a marked disposable data directory and loopback binding. Passing this server's workflows cannot establish Bitwarden Cloud, company SSO, native messaging, passkeys or Touch ID acceptance. Tracking: [issue #9](https://github.com/arcusis/browser/issues/9).
+The builder never starts the server. A fixture run must use a marked disposable data directory and loopback binding. Passing this server's workflows cannot establish Bitwarden Cloud, company SSO, native messaging, passkeys or Touch ID acceptance. Tracking: [issue #9](https://github.com/arcusis/shaar/issues/9).
 
 ## Synthetic account data
 

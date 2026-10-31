@@ -178,6 +178,99 @@ struct BrowserLibraryTests {
   }
 }
 
+extension BrowserLibraryTests {
+  @Test func bookmarkingABookmarkedPageEditsTheExistingBookmark() {
+    let store = BrowserStore()
+    let profile = store.session.selectedSpace.profileID
+    let id = UUID()
+    store.library.onLoad = { _, _, done in done(.success(tree(title: "Example", id: id))) }
+    store.library.refresh(profile, section: .bookmarks)
+    var operations: [[String: Any]] = []
+    store.library.onMutation = { _, mutation, done in
+      if case .bookmark(let operation) = mutation { operations.append(operation) }
+      done(nil)
+    }
+    store.perform(.open(URL(string: "https://example.com")!))
+    store.bookmarkCurrentPage()
+    guard case .bookmarkEditor(let route) = store.sheet else {
+      Issue.record("Expected the bookmark editor")
+      return
+    }
+    #expect(route.itemID == id)
+    #expect(!store.saveBookmark(route, title: "Renamed", address: "not a url", parentID: nil))
+    #expect(
+      store.saveBookmark(
+        route, title: " Renamed ", address: "https://example.com/new", parentID: nil))
+    #expect(operations.first?["op"] as? String == "update")
+    #expect(operations.first?["t"] as? String == "Renamed")
+    #expect(operations.first?["u"] as? String == "https://example.com/new")
+    #expect(store.sheet == nil)
+  }
+
+  @Test func deletingTheEditedBookmarkClosesItsEditor() throws {
+    let store = BrowserStore()
+    let profile = store.session.selectedSpace.profileID
+    let id = UUID()
+    store.library.onLoad = { _, _, done in done(.success(tree(title: "Example", id: id))) }
+    store.library.refresh(profile, section: .bookmarks)
+    var removed: [String] = []
+    store.library.onMutation = { _, mutation, done in
+      if case .bookmark(let operation) = mutation, operation["op"] as? String == "remove" {
+        removed.append(operation["id"] as? String ?? "")
+      }
+      done(nil)
+    }
+    store.showBookmarkEditor(BookmarkEditorRoute(profileID: profile, mode: .edit(id)))
+    #expect(store.deleteBookmark(id, profileID: profile))
+    #expect(removed == [id.uuidString.lowercased()])
+    #expect(store.sheet == nil)
+    let bar = try #require(store.library.bookmarks[profile]?.barID)
+    #expect(!store.deleteBookmark(bar, profileID: profile))
+  }
+
+  @Test func bookmarksMoveOnlyIntoFoldersAndPermanentFoldersStayPut() throws {
+    let store = BrowserStore()
+    let profile = store.session.selectedSpace.profileID
+    let id = UUID()
+    store.library.onLoad = { _, _, done in done(.success(tree(title: "Example", id: id))) }
+    store.library.refresh(profile, section: .bookmarks)
+    var moves: [String] = []
+    store.library.onMutation = { _, mutation, done in
+      if case .bookmark(let operation) = mutation {
+        moves.append(operation["parent"] as? String ?? "")
+      }
+      done(nil)
+    }
+    let other = try #require(store.library.bookmarks[profile]?.otherID)
+    #expect(!store.moveBookmark(id, profileID: profile, to: id))
+    #expect(!store.moveBookmark(other, profileID: profile, to: other))
+    #expect(store.moveBookmark(id, profileID: profile, to: other))
+    #expect(moves == [other.uuidString.lowercased()])
+  }
+
+  @Test func historyEntriesOpenInTheCurrentSpaceAndCanBeDeleted() {
+    let store = BrowserStore()
+    let profile = store.session.selectedSpace.profileID
+    let address = "https://history.example/page"
+    store.library.onLoad = { _, _, done in
+      done(.success([["u": address, "t": "Visited", "n": 2, "v": [1000]] as [String: Any]]))
+    }
+    var deleted: [String] = []
+    store.library.onMutation = { _, mutation, done in
+      if case .deleteHistory(let value) = mutation { deleted.append(value) }
+      done(nil)
+    }
+    store.showLibrary(.history)
+    #expect(!store.deleteHistoryEntry("https://unknown.example/", profileID: profile))
+    #expect(store.deleteHistoryEntry(address, profileID: profile))
+    #expect(deleted == [address])
+    #expect(!store.openHistoryEntry(address, profileID: UUID()))
+    #expect(store.openHistoryEntry(address, profileID: profile))
+    #expect(store.sheet == nil)
+    #expect(store.session.selectedSpace.selectedTab?.url.absoluteString == address)
+  }
+}
+
 private func tree(title: String, id: UUID = UUID()) -> [String: Any] {
   [
     "bar": [

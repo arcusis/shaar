@@ -59,3 +59,20 @@ import Testing
     BrowserWorkspace.self, from: JSONSerialization.data(withJSONObject: wire))
   #expect(decoded.windows[0].geometry == nil && decoded.windows[0].session == session)
 }
+
+@Test func workspaceLockRejectsHardLinkedLockFiles() throws {
+  let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: root) }
+  try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+  let original = root.appending(path: "original")
+  try Data().write(to: original)
+  try FileManager.default.linkItem(at: original, to: root.appending(path: "workspace.lock"))
+  #expect(throws: WorkspaceLockError.invalidFile) {
+    _ = try WorkspaceProcessLock(directory: root)
+  }
+}
+
+@Test func workspaceLockErrorsDescribeTheConflict() {
+  #expect(WorkspaceLockError.inUse.errorDescription?.contains(ProductIdentity.name) == true)
+  #expect(WorkspaceLockError.invalidFile.errorDescription == "The workspace lock file is invalid.")
+}

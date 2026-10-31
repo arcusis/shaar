@@ -37,3 +37,46 @@ import Testing
   #expect(item(state: .downloading, dangerous: true)?.actions == [.cancel])
   #expect(item(dangerous: true)?.actions == [.remove])
 }
+
+@Test func downloadSourcesNameTheOriginWithoutExposingTheAddress() {
+  func source(_ address: String) -> String? {
+    BrowserDownload(
+      id: "9b948ba6-d386-4e34-acdf-b2fb92fdb34b", profileID: UUID(), filename: "",
+      path: "/tmp/file", sourceURL: address, state: .finished, paused: false,
+      dangerous: false, offTheRecord: false, received: 1, total: 1, startTime: 0)?.source
+  }
+  #expect(source("chrome-extension://abcdefghijklmnopabcdefghijklmnop/file") == "Extension")
+  #expect(source("ftp://files.example.com/file") == "Download")
+  #expect(source("not a url") == "Download")
+  #expect(source("https://" + String(repeating: "a", count: 8200) + ".example") == "Download")
+}
+
+@Test func downloadActionsFollowStateAndPause() {
+  func actions(_ state: DownloadState, paused: Bool = false) -> [DownloadAction]? {
+    BrowserDownload(
+      id: "9b948ba6-d386-4e34-acdf-b2fb92fdb34b", profileID: UUID(), filename: "file",
+      path: "/tmp/file", sourceURL: "https://example.com", state: state, paused: paused,
+      dangerous: false, offTheRecord: false, received: 0, total: 0, startTime: 0)?.actions
+  }
+  #expect(actions(.downloading) == [.pause, .cancel])
+  #expect(actions(.downloading, paused: true) == [.resume, .cancel])
+  #expect(actions(.failed) == [.resume, .remove])
+  #expect(actions(.cancelled) == [.remove])
+  #expect(actions(.finished) == [.remove])
+}
+
+@Test func downloadsWithoutNameOrTotalUseSafeDefaults() throws {
+  let item = try #require(
+    BrowserDownload(
+      id: "9b948ba6-d386-4e34-acdf-b2fb92fdb34b", profileID: UUID(), filename: "", path: "",
+      sourceURL: "https://example.com", state: .downloading, paused: false, dangerous: false,
+      offTheRecord: false, received: 5, total: 0, startTime: 0))
+  #expect(item.filename == "Download")
+  #expect(item.fileURL == nil)
+  #expect(item.progress == nil)
+  #expect(
+    BrowserDownload(
+      id: "not-a-uuid", profileID: UUID(), filename: "file", path: "/tmp/file",
+      sourceURL: "https://example.com", state: .finished, paused: false, dangerous: false,
+      offTheRecord: false, received: 0, total: 0, startTime: 0) == nil)
+}

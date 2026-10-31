@@ -65,3 +65,57 @@ import Testing
       == "https://open.spotify.com/track/id?foo=bar"
   )
 }
+
+@Test func cleanLinkCleansRegionalAmazonQueryAndReferralPath() {
+  let input = URL(
+    string:
+      "https://www.amazon.co.uk/Desk-Lamp/dp/B0/ref=sr_1_1?keywords=lamp&ref_=nav&pf_rd_p=x&qid=1")!
+  #expect(
+    CleanLink.clean(input).absoluteString
+      == "https://www.amazon.co.uk/Desk-Lamp/dp/B0?keywords=lamp&qid=1")
+}
+
+@Test func cleanLinkMatchesTrackingKeysCaseInsensitivelyAndKeepsFragments() {
+  #expect(
+    CleanLink.clean(URL(string: "https://example.com/a?UTM_Source=x&FBCLID=y&id=7")!)
+      .absoluteString == "https://example.com/a?id=7")
+  #expect(
+    CleanLink.clean(URL(string: "https://example.com/page?utm_medium=mail#section")!)
+      .absoluteString == "https://example.com/page#section")
+}
+
+@Test func cleanLinkRemovesEveryAdvertisingClickIdentifier() {
+  let input = URL(
+    string:
+      "https://shop.example/item?gclid=1&msclkid=2&mc_cid=3&mc_eid=4&dclid=5&gbraid=6&wbraid=7&color=red"
+  )!
+  #expect(CleanLink.clean(input).absoluteString == "https://shop.example/item?color=red")
+}
+
+@Test func cleanLinkKeepsSiteSpecificKeysOnOtherSites() {
+  for address in [
+    "https://example.com/search?s=shoes&t=2",
+    "https://box.com/file?s=1",
+    "https://example.com/watch?si=1",
+    "https://example.com/item?tag=blue&ref=home",
+  ] {
+    let url = URL(string: address)!
+    #expect(CleanLink.clean(url) == url)
+  }
+  #expect(
+    CleanLink.clean(URL(string: "https://mobile.twitter.com/user/status/1?s=20")!)
+      .absoluteString == "https://mobile.twitter.com/user/status/1")
+}
+
+@Test func cleanLinkUnwrapsOnlyGoogleRedirectsToWebPages() {
+  #expect(
+    CleanLink.clean(URL(string: "https://www.google.com/url?q=javascript:alert(1)&utm_source=x")!)
+      .absoluteString == "https://www.google.com/url?q=javascript:alert(1)")
+  let search = URL(string: "https://www.google.com/search?q=https://example.com")!
+  #expect(CleanLink.clean(search) == search)
+  #expect(
+    CleanLink.clean(
+      URL(string: "https://google.com/url?q=https%3A%2F%2Fexample.com%2F%3Fgclid%3D1")!
+    )
+    .absoluteString == "https://example.com/")
+}

@@ -99,3 +99,76 @@ struct DownloadsTests {
     #expect(store.sheet?.id == "permission-p1")
   }
 }
+
+extension DownloadsTests {
+  @Test func commandsWithoutAnEngineExplainWhyNothingHappened() {
+    let model = DownloadsModel()
+    let profile = UUID()
+    model.changed(record(), profileID: profile)
+    #expect(!model.perform(.pause, id: id, profileID: profile, selectedProfileID: profile))
+    #expect(model.notices[profile] == "Download controls are unavailable.")
+    model.fileActionFailed(profileID: profile)
+    #expect(model.notices[profile] == "The downloaded file is no longer available.")
+  }
+
+  @Test func itemsListNewestFirstWithStableOrderForEqualTimes() {
+    let model = DownloadsModel()
+    let profile = UUID()
+    let ids = [
+      "00000000-0000-4000-8000-000000000002", "00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000003",
+    ]
+    for (index, itemID) in ids.enumerated() {
+      var row = record()
+      row["id"] = itemID
+      row["startTime"] = index == 2 ? 5.0 : 1.0
+      model.changed(row, profileID: profile)
+    }
+    #expect(
+      model.items(in: profile).map(\.id) == [
+        "00000000-0000-4000-8000-000000000003", "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-4000-8000-000000000002",
+      ])
+  }
+
+  @Test func dragOffersOnlyReadableRegularFilesOfTheSelectedProfile() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let file = root.appending(path: "file.txt")
+    try Data("contents".utf8).write(to: file)
+    let model = DownloadsModel()
+    let profile = UUID()
+    var finished = record(state: "finished")
+    finished["path"] = file.path
+    model.changed(finished, profileID: profile)
+
+    #expect(
+      model.fileForDrag(id: id, profileID: profile, selectedProfileID: profile)?.path
+        == file.resolvingSymlinksInPath().path)
+    #expect(model.fileForDrag(id: id, profileID: profile, selectedProfileID: UUID()) == nil)
+    try FileManager.default.removeItem(at: file)
+    try FileManager.default.createDirectory(at: file, withIntermediateDirectories: true)
+    #expect(model.fileForDrag(id: id, profileID: profile, selectedProfileID: profile) == nil)
+    try FileManager.default.removeItem(at: file)
+    #expect(model.fileForDrag(id: id, profileID: profile, selectedProfileID: profile) == nil)
+  }
+
+  @Test func libraryStatusNamesEveryDownloadState() {
+    let profile = UUID()
+    func status(_ state: String, paused: Bool = false, dangerous: Bool = false) -> String? {
+      let model = DownloadsModel()
+      var row = record(state: state, paused: paused)
+      row["dangerous"] = dangerous
+      model.changed(row, profileID: profile)
+      return model.items(in: profile).first.map(LibraryDownloadQuery.status)
+    }
+    #expect(status("downloading") == "Downloading")
+    #expect(status("downloading", paused: true) == "Paused")
+    #expect(status("finished") == "Complete")
+    #expect(status("failed") == "Interrupted")
+    #expect(status("cancelled") == "Cancelled")
+    #expect(status("finished", dangerous: true) == "Blocked")
+    #expect(Set(LibraryMediaKind.allCases.map(\.symbol)).count == LibraryMediaKind.allCases.count)
+  }
+}

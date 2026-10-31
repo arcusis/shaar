@@ -61,4 +61,14 @@ final class BrowserSplitStoreTests: XCTestCase {
     XCTAssertEqual(SplitDropZone.edge(at: CGPoint(x: 200, y: 10), in: size), .top)
     XCTAssertEqual(SplitDropZone.edge(at: CGPoint(x: 200, y: 290), in: size), .bottom)
   }
+
+  func testDropEdgeHoldsNearCornersAndDefaultsForEmptyPages() {
+    let size = CGSize(width: 400, height: 400)
+    let nearCorner = CGPoint(x: 30, y: 25)
+    XCTAssertEqual(SplitDropZone.edge(at: nearCorner, in: size), .top)
+    XCTAssertEqual(SplitDropZone.edge(at: nearCorner, in: size, keeping: .left), .left)
+    XCTAssertEqual(
+      SplitDropZone.edge(at: CGPoint(x: 200, y: 10), in: size, keeping: .left), .top)
+    XCTAssertEqual(SplitDropZone.edge(at: .zero, in: .zero), .right)
+  }
 }

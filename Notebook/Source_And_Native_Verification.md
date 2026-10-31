@@ -27,7 +27,7 @@ The engine test starts an authored HTTP fixture on an ephemeral loopback port an
 
 The runner writes JSON reports, logs, and offscreen native/page/popup images to a fresh temporary directory. It never opens an existing browser profile, orders a window onscreen, enables a debugging socket, changes VPN/DNS/network settings, or signs into real services. Chromium helpers retain their sandbox. Disposable test profiles enable extension error diagnostics and use a mock keychain; they do not verify release keychain/signing behavior.
 
-Offscreen SwiftUI/AppKit images verify native layout. Chromium's remote rendering surface may be absent from an AppKit bitmap; the test captures the authored page separately through the engine's in-process API. These images do not verify live keyboard focus, window shortcuts, Google Workspace, Bitwarden, Cloudflare Access, or a signed company installation.
+Offscreen SwiftUI/AppKit images verify native layout. Chromium's remote rendering surface may be absent from an AppKit bitmap; the test captures the authored page separately through the engine's in-process API. These images do not verify live keyboard focus, window shortcuts, external services or a signed distribution.
 
 The hidden native host fixture also invokes real Settings menu target actions with an injected owned key-window identity. It checks exact shortcut registration, modal guards, window reuse, account/session preservation and Settings-only close routing. This is programmatic native evidence; physical keyboard/focus acceptance remains separate.
 

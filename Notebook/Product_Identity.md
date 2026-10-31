@@ -1,6 +1,6 @@
 # Product identity: Shaar
 
-The browser is **Shaar** (Hebrew שער, "gateway"): a browser is a gateway to the internet. Arcusis is the company; it appears as the copyright holder ("© 2026 Arcusis. All rights reserved."), not in the product name. The browser was called "Arcusis Browser" until October 2026.
+The browser is **Shaar** (Hebrew שער, "gateway"): a browser is a gateway to the internet. Arcusis is the company; it appears as the copyright holder ("© 2026 Arcusis. All rights reserved."), not in the product name.
 
 ## What carries the name
 
@@ -9,7 +9,7 @@ The browser is **Shaar** (Hebrew שער, "gateway"): a browser is a gateway to t
 ## What deliberately keeps the old identity
 
 - Bundle identifier `com.arcusis.browser`.
-- Data folder `~/Library/Application Support/Arcusis Browser` (`ProductIdentity.dataFolderName`).
+- Data folder name `Arcusis Browser` (`ProductIdentity.dataFolderName`) under the user-level Application Support directory.
 - Swift target and executable names (`ArcusisBrowser`).
 
 macOS keys LaunchServices, privacy permissions (camera, microphone, location), the default-browser setting, and Keychain items to the bundle identifier. The app finds profiles, sessions, and saved passwords through the data folder. Renaming either would make Shaar a new app to macOS and lose that state. Change them only with a migration.

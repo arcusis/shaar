@@ -8,6 +8,6 @@ Objective-C++ is an implementation choice, not a requirement for every browser f
 
 The repository's four JavaScript files are authored MV3 test-extension fixtures under Tests/Fixtures/ProfileExtension. They test browser behavior; the application shell is not a JavaScript UI. Swift probe code also evaluates page/extension expressions for diagnostics. A native browser still renders websites containing JavaScript, and native autofill can require renderer-side form handling.
 
-Verification scaffolding currently shares application/bridge compilation with product code. Preserve the ownership and credential-safety checks, but separate probe-only responsibilities from normal product paths before company release. A password-manager SDK would be a separate vendor integration and would not replace the browser-engine adapter.
+Verification scaffolding currently shares application/bridge compilation with product code. Preserve the ownership and credential-safety checks, but separate probe-only responsibilities from normal product paths before distribution. A password-manager SDK would be a separate vendor integration and would not replace the browser-engine adapter.
 
 Related: [[Browser_Architecture]], [[Native_Window_Ownership]], [[Native_Password_Manager_Options]], [[Source_And_Native_Verification]].

@@ -98,6 +98,11 @@ final class CommandPanelVisualTests: XCTestCase {
     XCTAssertTrue(failures.isEmpty, "Command panel capture failures: \(failures)")
   }
 
+  /// Words text recognition reads reliably on every runner. Requiring the proper noun inside the
+  /// truncated long-query row failed on GitHub-hosted machines, which read "Atlas" as "Allas".
+  private func textTokens(longQuery: Bool) -> (query: String, result: String) {
+    longQuery ? ("research", "Open in") : ("Atlas", "Notes")
+  }
   private func capture(
     root: URL, key: String, page: String, scheme: ColorScheme, minimum: Bool,
     sidebar: Bool, longQuery: Bool
@@ -150,9 +155,8 @@ final class CommandPanelVisualTests: XCTestCase {
       defer { mounted.close() }
       let hasBounds = await mounted.waitUntil({ !measurements.panel.isEmpty })
       let image = root.appendingPathComponent(file)
-      let queryToken = longQuery ? "research" : "Atlas"
-      let resultToken = longQuery ? "Open in Atlas Space" : "Notes"
-      _ = try await mounted.capture(to: image, requiredText: [queryToken, resultToken])
+      let tokens = textTokens(longQuery: longQuery)
+      _ = try await mounted.capture(to: image, requiredText: [tokens.query, tokens.result])
       let actual = measurements.panel
       let fits =
         hasBounds && actual.minX >= viewport.minX - 0.5
@@ -161,7 +165,7 @@ final class CommandPanelVisualTests: XCTestCase {
         && abs(actual.midX - viewport.midX) <= 0.5 && abs(actual.midY - viewport.midY) <= 0.5
         && (!sidebar || actual.midX > size.width / 2 + 10)
       let visible = try queryAndResultVisible(
-        image, size: size, panel: actual, queryToken: queryToken, resultToken: resultToken)
+        image, size: size, panel: actual, queryToken: tokens.query, resultToken: tokens.result)
       let unchanged = store.session == initial
       let passed = fits && visible && unchanged
       try SidebarVisualCaptureSupport.record(

@@ -95,6 +95,9 @@ final class NativeWindowProbe {
     runtime.activateTabID(tabA.uuidString)
     try attach(tabA, to: second)
     try checkPageResizes(tabA, windowID: second)
+    try await checkWebStoreFit(windowID: second, profileID: b)
+    runtime.activateTabID(tabA.uuidString)
+    try attach(tabA, to: second)
     let alpha = try await document(tabA)
     try expect(
       alpha["cookie"] as? String == "account=alpha" && alpha["local"] as? String == "alpha"
@@ -331,6 +334,68 @@ final class NativeWindowProbe {
       "live Chromium page frame follows resized native window host bounds")
     window.setFrame(original, display: false)
     host.layoutSubtreeIfNeeded()
+  }
+
+  /// The fixture fixes its body at 1280 px, like the Chrome Web Store.
+  private func checkWebStoreFit(windowID: String, profileID: UUID) async throws {
+    var components = URLComponents(url: fixture, resolvingAgainstBaseURL: false)!
+    components.path = "/web-store-fit"
+    let tab = UUID()
+    try runtime.openTabID(
+      tab.uuidString, profileID: profileID.uuidString, windowID: windowID,
+      url: components.url!.absoluteString)
+    runtime.activateTabID(tab.uuidString)
+    try attach(tab, to: windowID)
+    guard let page = runtime.view(forTabID: tab.uuidString) else {
+      throw NativeWindowFailure("Web Store fit page missing.")
+    }
+    let height = page.frame.height
+    page.setFrameSize(NSSize(width: 1000, height: height))
+    let narrow = try await fitLayout(tab, "narrow") { $0.width >= 1280 && $0.overflow == 0 }
+    try expect(
+      narrow.width <= 1282,
+      "a narrow page card zooms the fixed-width store out just enough to fit without overflow")
+    page.setFrameSize(NSSize(width: 600, height: height))
+    let clamped = try await fitLayout(tab, "clamped") { (894...897).contains($0.width) }
+    try expect(
+      clamped.overflow > 0,
+      "the store fit zoom stops at its readable minimum on a very narrow page card")
+    page.setFrameSize(NSSize(width: 1400, height: height))
+    _ = try await fitLayout(tab, "wide") { $0.width == 1400 && $0.overflow == 0 }
+    try expect(true, "a page card wide enough for the store restores full zoom")
+    runtime.closeTabID(tab.uuidString)
+    try await wait("Web Store fit tab close") {
+      self.runtime.nativeTabID(forID: tab.uuidString) == -1
+    }
+  }
+
+  private func fitLayout(
+    _ tab: UUID, _ label: String, until ready: ((width: Int, overflow: Int)) -> Bool
+  ) async throws -> (width: Int, overflow: Int) {
+    var last: [String: Any] = [:]
+    for _ in 0..<50 {
+      let json: String? = await withCheckedContinuation { continuation in
+        runtime.evaluate(
+          inTabID: tab.uuidString,
+          script:
+            "({fixture:document.documentElement.dataset.arcusisFixture,width:innerWidth,overflow:document.documentElement.scrollWidth-document.documentElement.clientWidth})"
+        ) { continuation.resume(returning: $0) }
+      }
+      if let data = json?.data(using: .utf8),
+        let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+      {
+        last = value
+      }
+      if last["fixture"] as? String == "web-store-fit", let width = last["width"] as? Int,
+        let overflow = last["overflow"] as? Int, ready((width, overflow))
+      {
+        observations["webStoreFit:\(label)"] = last
+        return (width, overflow)
+      }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    observations["webStoreFit:\(label)"] = last
+    throw NativeWindowFailure("Web Store fit did not settle: \(label).")
   }
 
   private func popupID(in window: String) throws -> String {

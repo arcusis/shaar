@@ -33,7 +33,7 @@ jobs:
 
       - name: Cache SwiftPM products and pinned engine
         # actions/cache v4.2.3
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: |
             .build
@@ -132,7 +132,7 @@ jobs:
 
       - name: Cache SwiftPM products
         # actions/cache v4.2.3
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: .build
           key: macos-26-swiftpm-visuals-${{ hashFiles('Package.swift', '**/Package.resolved') }}
@@ -179,7 +179,7 @@ jobs:
 
       - name: Cache SwiftPM products and pinned engine
         # actions/cache v4.2.3
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: |
             build/swiftpm/verification
@@ -224,7 +224,7 @@ jobs:
 
       - name: Cache SwiftPM products and pinned engine
         # actions/cache v4.2.3
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: |
             build/swiftpm/default

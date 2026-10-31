@@ -5,7 +5,7 @@
 import CoreGraphics
 
 enum BrowserChromeLayout {
-  static let sidebarWidth: CGFloat = 240
+  static let sidebarWidth: CGFloat = 200
   static let libraryRailWidth: CGFloat = 88
   static let libraryPanelWidth: CGFloat = 300
   static let libraryPageSliver: CGFloat = 24

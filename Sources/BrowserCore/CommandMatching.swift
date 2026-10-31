@@ -1,17 +1,21 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 import Foundation
 
 /// Text helpers shared by typed launcher search and the filter chips, so both match the same
 /// fields and show the same domains.
-public enum CommandText {
+enum CommandText {
   /// The grey secondary text on a row: the host without a leading "www.".
-  public static func domain(of url: URL?) -> String {
+  static func domain(of url: URL?) -> String {
     guard let url else { return "" }
     let host = url.host() ?? url.absoluteString
     return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
   }
 
   /// True when the query is empty or any field contains it, ignoring case.
-  public static func matches(_ query: String, _ fields: [String]) -> Bool {
+  static func matches(_ query: String, _ fields: [String]) -> Bool {
     query.isEmpty || fields.contains { $0.localizedCaseInsensitiveContains(query) }
   }
 }

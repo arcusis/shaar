@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 import AppKit
 import BrowserCore
 import ChromiumBridge
@@ -206,7 +210,7 @@ final class FolderProbe {
       runtime: runtime, engine: engine, store: store, root: root, phase: "\(phase)-folders"
     )
     .verifyNativeOrder(
-      ordered, profile: base.profileID, label: "folder projection matches native order")
+      ordered, label: "folder projection matches native order")
     try expect(
       true, "extension-visible order, pins, profile, and active target match the folder projection")
     try await capture(

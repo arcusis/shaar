@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 import BrowserCore
 import Foundation
 import Observation
@@ -14,11 +18,13 @@ struct SpaceRemovalImpact {
   var favoritePages: Int = 0
   var tabDescription: String { "\(tabs) \(tabs == 1 ? "tab" : "tabs")" }
 
+  private var favoriteImpact: String {
+    guard favoritePages > 0 else { return "" }
+    return " and \(favoritePages) Favorite \(favoritePages == 1 ? "page" : "pages")"
+  }
+
   var message: String {
-    let favoriteImpact =
-      favoritePages == 0
-      ? "" : " and \(favoritePages) Favorite \(favoritePages == 1 ? "page" : "pages")"
-    return windows > 1
+    windows > 1
       ? "This space will be deleted from all \(windows) windows, closing \(tabDescription)\(favoriteImpact). Its profile is kept."
       : "Tabs in this space will close\(favoriteImpact). Its profile is kept."
   }
@@ -106,6 +112,7 @@ final class BrowserStore {
   @ObservationIgnored var onExternalAppDecision: ((String, Bool) -> Void)?
   @ObservationIgnored var onFindRequest: ((PageFindState, Bool) -> Bool)?
   @ObservationIgnored var onStopFinding: ((UUID) -> Void)?
+  @ObservationIgnored var onNavigatePage: ((UUID, UUID, URL) -> Bool)?
   @ObservationIgnored var onReloadPage: ((UUID, UUID) -> Bool)?
   @ObservationIgnored var onSetSpaceProfile: ((UUID, UUID) -> Bool)?
   /// Opens New Profile onboarding for a Space; nil when no host can present it.
@@ -245,11 +252,10 @@ final class BrowserStore {
         spaceID: spaceID, profileID: expectedProfileID, in: session)
     else { return false }
     closeLibraryDrawer()
-    let signpost = OSSignpostID(log: switchLog)
-    os_signpost(.begin, log: switchLog, name: "SpaceSwitch", signpostID: signpost)
-    defer { os_signpost(.end, log: switchLog, name: "SpaceSwitch", signpostID: signpost) }
-    session.selectSpace(spaceID)
-    save(deferred: true)
+    measureSpaceSwitch {
+      session.selectSpace(spaceID)
+      save(deferred: true)
+    }
     return true
   }
 
@@ -293,52 +299,6 @@ final class BrowserStore {
     engine?.extensionPanel = nil
     sheet = .downloads(profileID: session.selectedSpace.profileID)
     engine?.runtime.refreshDownloads(forProfileID: session.selectedSpace.profileID.uuidString)
-  }
-
-  var canReopenClosedTab: Bool {
-    mayUseClosedTabs(in: session.selectedSpaceID)
-      && !session.recentlyClosedTabs(in: session.selectedSpaceID).isEmpty
-  }
-
-  func showRecentlyClosed() {
-    guard sheet == nil else { return }
-    dismissCommand()
-    dismissPageFind()
-    engine?.extensionPanel = nil
-    sheet = .recentlyClosed(spaceID: session.selectedSpaceID)
-  }
-
-  private func mayUseClosedTabs(in spaceID: UUID) -> Bool {
-    guard session.selectedSpaceID == spaceID else { return false }
-    if case .recentlyClosed(let owner) = sheet { return owner == spaceID }
-    return sheet == nil
-  }
-
-  @discardableResult
-  func reopenLastClosedTab() -> Bool {
-    guard let entry = session.recentlyClosedTabs(in: session.selectedSpaceID).first else {
-      return false
-    }
-    return reopenClosedTab(entry.id, in: session.selectedSpaceID)
-  }
-
-  @discardableResult
-  func reopenClosedTab(_ id: UUID, in spaceID: UUID) -> Bool {
-    guard mayUseClosedTabs(in: spaceID), session.reopenClosedTab(id, in: spaceID) != nil
-    else { return false }
-    dismissCommand()
-    dismissPageFind()
-    engine?.extensionPanel = nil
-    if case .recentlyClosed = sheet { sheet = nil }
-    save()
-    return true
-  }
-
-  @discardableResult
-  func clearClosedTabs(in spaceID: UUID) -> Bool {
-    guard mayUseClosedTabs(in: spaceID), session.clearClosedTabs(in: spaceID) else { return false }
-    save()
-    return true
   }
 
   var canFindCurrentPage: Bool {
@@ -439,12 +399,11 @@ final class BrowserStore {
       if let id = session.open(url) { placePendingSplitPane(id) }
     case .space(let id):
       closeLibraryDrawer()
-      let signpost = OSSignpostID(log: switchLog)
-      os_signpost(.begin, log: switchLog, name: "SpaceSwitch", signpostID: signpost)
-      session.selectSpace(id)
-      commandIsOpen = false
-      save(deferred: true)
-      os_signpost(.end, log: switchLog, name: "SpaceSwitch", signpostID: signpost)
+      measureSpaceSwitch {
+        session.selectSpace(id)
+        commandIsOpen = false
+        save(deferred: true)
+      }
       return
     case .folder(let space, let folder): session.selectFolder(folder, in: space)
     case .favorite(let profile, let id):
@@ -487,12 +446,19 @@ final class BrowserStore {
   }
 
   func cycleSpace(by offset: Int) {
+    measureSpaceSwitch {
+      sidebarNotice = nil
+      session.cycleSpace(by: offset)
+      save(deferred: true)
+    }
+  }
+
+  /// Brackets a Space switch with a signpost so Instruments can time it.
+  private func measureSpaceSwitch(_ change: () -> Void) {
     let signpost = OSSignpostID(log: switchLog)
     os_signpost(.begin, log: switchLog, name: "SpaceSwitch", signpostID: signpost)
     defer { os_signpost(.end, log: switchLog, name: "SpaceSwitch", signpostID: signpost) }
-    sidebarNotice = nil
-    session.cycleSpace(by: offset)
-    save(deferred: true)
+    change()
   }
 
   func closeTab(_ id: UUID) {
@@ -617,8 +583,6 @@ final class BrowserStore {
     save()
     return true
   }
-
-  @ObservationIgnored var onNavigatePage: ((UUID, UUID, URL) -> Bool)?
 
   @discardableResult
   func resetFavorite(_ id: UUID) -> Bool {
@@ -1142,13 +1106,6 @@ final class BrowserStore {
     for request in consentRequests where !request.matches(session) {
       resolveConsent(request.id, accepted: false)
     }
-  }
-
-  static func persistent() -> BrowserStore {
-    let support = URL.applicationSupportDirectory
-      .appending(path: ProductIdentity.dataFolderName, directoryHint: .isDirectory)
-      .appending(path: "session.json")
-    return BrowserStore(sessionFile: SessionFile(url: support))
   }
 
   static func preview(showCommand: Bool) -> BrowserStore {

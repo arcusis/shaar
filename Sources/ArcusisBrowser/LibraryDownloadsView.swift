@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 import AppKit
 import BrowserCore
 import Observation
@@ -329,15 +333,6 @@ struct LibraryDownloadsView: View {
     let received = ByteCountFormatter.string(fromByteCount: item.receivedBytes, countStyle: .file)
     guard let total = item.totalBytes else { return received }
     return "\(received) of \(ByteCountFormatter.string(fromByteCount: total, countStyle: .file))"
-  }
-
-  private func symbol(_ action: DownloadAction) -> String {
-    switch action {
-    case .pause: "pause.fill"
-    case .resume: "play.fill"
-    case .cancel: "xmark"
-    case .remove: "minus.circle"
-    }
   }
 
   private func actionLabel(_ action: DownloadAction) -> String {

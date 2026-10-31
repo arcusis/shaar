@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
@@ -36,7 +40,6 @@ struct ProfileFavoritesGrid: View {
   let onMoveBefore: (UUID, UUID?) -> Void
   let onTabDrop: (SidebarTransfer, UUID?) -> Bool
   let accessibilityOverrides: ProfileFavoritesAccessibilityOverrides?
-  @State private var currentSelectionID: UUID?
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -64,7 +67,6 @@ struct ProfileFavoritesGrid: View {
     self.onMoveBefore = onMoveBefore
     self.onTabDrop = onTabDrop
     self.accessibilityOverrides = accessibilityOverrides
-    _currentSelectionID = State(initialValue: selectedID)
   }
 
   /// Arc widens the grid as favorites are added: 2 per row, then 3, then 4 (up to 4 x 4).

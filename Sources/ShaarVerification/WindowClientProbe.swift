@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 import AppKit
 import BrowserCore
 import ChromiumBridge.Verification
@@ -289,7 +293,7 @@ final class WindowClientProbe {
         "passed": error == nil, "checks": checks,
         "error": error?.localizedDescription as Any? ?? NSNull(),
         "scope":
-          "Two hidden application stores/clients with one event dispatcher and a shared normal profile. No Cmd-N, per-window session manifest/restoration, menus/focus, company accounts, or physical input acceptance.",
+          "Two hidden application stores/clients with one event dispatcher and a shared normal profile. No Cmd-N, per-window session manifest/restoration, menus/focus, real accounts or physical input.",
       ], options: [.prettyPrinted, .sortedKeys]
     ).write(to: root.appending(path: "\(phase)-window-clients.json"), options: .atomic)
   }

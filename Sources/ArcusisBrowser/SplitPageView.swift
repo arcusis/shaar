@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 import AppKit
 import BrowserCore
 import SwiftUI
@@ -101,7 +105,7 @@ private struct SplitGroupView: View {
     .contentShape(Rectangle())
     .pointerStyle(axis == .columns ? .columnResize : .rowResize)
     .onHover { inside in
-      hoveredDivider = inside ? index : hoveredDivider == index ? nil : hoveredDivider
+      hoveredDivider = hoveredDivider.updatingTarget(index, isActive: inside)
     }
     .gesture(
       DragGesture(minimumDistance: 0, coordinateSpace: .global)

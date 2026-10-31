@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 import AppKit
 import BrowserCore
 import Darwin
@@ -1355,7 +1359,7 @@ final class NativeHostProbe {
           uniqueKeysWithValues: closures.map { ($0.key.uuidString, $0.value) }),
         "error": error?.localizedDescription as Any? ?? NSNull(),
         "scope":
-          "Production host class with hidden native windows, actual NSMenu target actions, injected owned key-window identity and notifications, real native ordinary closures, managed restoration/geometry, cross-process lock, and engine-quit audit. Engine-requested normal-profile windows have a separate report. Physical input/focus, native close-cancellation dialogs, primary/last-engine-window macOS reopen policy, private sessions and company/vendor window flows remain unverified.",
+          "Production host class with hidden native windows, actual NSMenu target actions, injected owned key-window identity and notifications, real native ordinary closures, managed restoration/geometry, cross-process lock, and engine-quit audit. Engine-requested normal-profile windows have a separate report. Physical input/focus, native close-cancellation dialogs, primary/last-engine-window macOS reopen policy, private sessions and third-party window flows are not covered.",
       ], options: [.prettyPrinted, .sortedKeys]
     ).write(to: root.appending(path: "\(phase)-native-host.json"), options: .atomic)
   }

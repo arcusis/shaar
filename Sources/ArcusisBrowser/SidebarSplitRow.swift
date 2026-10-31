@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 import AppKit
 import BrowserCore
 import SwiftUI
@@ -66,7 +70,7 @@ struct SidebarSplitRow: View {
     .contentShape(RoundedRectangle(cornerRadius: 7))
     .onTapGesture { onSelect(segment.id) }
     .onHover { inside in
-      hoveredID = inside ? segment.id : hoveredID == segment.id ? nil : hoveredID
+      hoveredID = hoveredID.updatingTarget(segment.id, isActive: inside)
     }
     .help(segment.title)
     .accessibilityElement(children: .combine)

@@ -1,59 +1,9 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 import BrowserCore
 import SwiftUI
-
-struct SidebarFooterBoundsPreferenceKey: PreferenceKey {
-  static let defaultValue: CGRect = .zero
-
-  static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
-    let next = nextValue()
-    if !next.isEmpty { value = next }
-  }
-}
-
-struct SidebarRevealFrames: Equatable {
-  var selected: CGRect = .zero
-  var selectedID: UUID?
-  var viewport: CGRect = .zero
-}
-
-struct SidebarOrdinaryRevealFramesPreferenceKey: PreferenceKey {
-  static let defaultValue = SidebarRevealFrames()
-
-  static func reduce(value: inout SidebarRevealFrames, nextValue: () -> SidebarRevealFrames) {
-    let next = nextValue()
-    if !next.selected.isEmpty {
-      value.selected = next.selected
-      value.selectedID = next.selectedID
-    }
-    if !next.viewport.isEmpty { value.viewport = next.viewport }
-  }
-}
-
-struct SidebarFavoriteRevealFramesPreferenceKey: PreferenceKey {
-  static let defaultValue = SidebarRevealFrames()
-
-  static func reduce(value: inout SidebarRevealFrames, nextValue: () -> SidebarRevealFrames) {
-    let next = nextValue()
-    if !next.selected.isEmpty {
-      value.selected = next.selected
-      value.selectedID = next.selectedID
-    }
-    if !next.viewport.isEmpty { value.viewport = next.viewport }
-  }
-}
-
-struct SidebarSpaceRevealFramesPreferenceKey: PreferenceKey {
-  static let defaultValue = SidebarRevealFrames()
-
-  static func reduce(value: inout SidebarRevealFrames, nextValue: () -> SidebarRevealFrames) {
-    let next = nextValue()
-    if !next.selected.isEmpty {
-      value.selected = next.selected
-      value.selectedID = next.selectedID
-    }
-    if !next.viewport.isEmpty { value.viewport = next.viewport }
-  }
-}
 
 struct BrowserSidebar: View {
   @Bindable var store: BrowserStore
@@ -444,8 +394,7 @@ struct BrowserSidebar: View {
         item, into: space.id,
         beforeSpace: point.x < 16 ? space.id : next)
     } isTargeted: { targeted in
-      targetedSpace =
-        targeted ? space.id : targetedSpace == space.id ? nil : targetedSpace
+      targetedSpace = targetedSpace.updatingTarget(space.id, isActive: targeted)
     }
     .overlay(
       RoundedRectangle(cornerRadius: 8).strokeBorder(
@@ -509,8 +458,7 @@ struct BrowserSidebar: View {
       addToFavorites(tabID: tabID, spaceID: source, profileID: profileID)
       return store.session.favoritePages.contains { $0.tab.id == tabID }
     } isTargeted: { targeted in
-      targetedSection =
-        targeted ? "favorites" : targetedSection == "favorites" ? nil : targetedSection
+      targetedSection = targetedSection.updatingTarget("favorites", isActive: targeted)
     }
     .dropDestination(for: URL.self) { urls, _ in
       guard urls.count == 1, NavigationInput.isWebURL(urls[0]), store.sheet == nil,
@@ -750,7 +698,7 @@ struct BrowserSidebar: View {
         onSelect: { store.perform(.tab(space: space.id, tab: tab.id)) },
         onClose: { store.closeTab(tab.id) },
         onHoverChanged: { isHovered in
-          hoveredTabID = isHovered ? tab.id : hoveredTabID == tab.id ? nil : hoveredTabID
+          hoveredTabID = hoveredTabID.updatingTarget(tab.id, isActive: isHovered)
         }
       )
     }
@@ -819,7 +767,7 @@ struct BrowserSidebar: View {
         return store.acceptSidebarDrop(
           item, into: space.id, before: before, pinned: tab.isPinned, folderID: tab.folderID)
       } isTargeted: { targeted in
-        targetedTab = targeted ? tab.id : targetedTab == tab.id ? nil : targetedTab
+        targetedTab = targetedTab.updatingTarget(tab.id, isActive: targeted)
         if !targeted { targetedTabIntent = nil }
       }
       .onContinuousHover { phase in
@@ -916,11 +864,11 @@ struct BrowserSidebar: View {
     pinned: Bool, isFooter: Bool = false, height: CGFloat = 12, hint: String? = nil
   ) -> some View {
     let space = store.session.selectedSpace.id
-    let zone = isFooter ? "end" : pinned ? "pinned" : "tabs"
+    let zone = sectionZone(pinned: pinned, isFooter: isFooter)
     let showsHint = hint != nil && store.tabDrag != nil
     return Color.clear
       .frame(maxWidth: .infinity)
-      .frame(height: showsHint ? 40 : isFooter ? 32 : height)
+      .frame(height: sectionDropHeight(showsHint: showsHint, isFooter: isFooter, height: height))
       .overlay {
         if showsHint, let hint {
           SidebarDropHint(title: hint, symbol: "pin", isTargeted: targetedSection == zone)
@@ -936,7 +884,7 @@ struct BrowserSidebar: View {
         guard items.count == 1, let item = items.first else { return false }
         return store.acceptSidebarDrop(item, into: space, pinned: pinned)
       } isTargeted: { targeted in
-        targetedSection = targeted ? zone : targetedSection == zone ? nil : targetedSection
+        targetedSection = targetedSection.updatingTarget(zone, isActive: targeted)
       }
       .dropDestination(for: ProfileFavoriteDrag.self) { items, _ in
         guard items.count == 1 else { return false }
@@ -981,10 +929,18 @@ struct BrowserSidebar: View {
     guard let index = group.firstIndex(where: { $0.id == tab.id }),
       group.indices.contains(index + offset)
     else { return }
-    let before =
-      offset < 0
-      ? group[index - 1].id : group.indices.contains(index + 2) ? group[index + 2].id : nil
+    let before = group.insertionAnchor(movingIndex: index, by: offset)
     store.moveTab(tab.id, from: space.id, to: space.id, before: before, folderID: tab.folderID)
+  }
+
+  private func sectionZone(pinned: Bool, isFooter: Bool) -> String {
+    if isFooter { return "end" }
+    return pinned ? "pinned" : "tabs"
+  }
+
+  private func sectionDropHeight(showsHint: Bool, isFooter: Bool, height: CGFloat) -> CGFloat {
+    if showsHint { return 40 }
+    return isFooter ? 32 : height
   }
 
   private func indentation(_ depth: Int) -> CGFloat { CGFloat(min(depth, 12)) * 10 }
@@ -1029,7 +985,7 @@ struct BrowserSidebar: View {
       return store.acceptSidebarDrop(
         item, into: space.id, pinned: folder.isPinned, folderID: folder.id)
     } isTargeted: { targeted in
-      targetedFolder = targeted ? folder.id : targetedFolder == folder.id ? nil : targetedFolder
+      targetedFolder = targetedFolder.updatingTarget(folder.id, isActive: targeted)
     }
     .dropDestination(for: ProfileFavoriteDrag.self) { items, _ in
       guard items.count == 1 else { return false }
@@ -1078,22 +1034,9 @@ struct BrowserSidebar: View {
     guard let index = siblings.firstIndex(where: { $0.id == folder.id }),
       siblings.indices.contains(index + offset)
     else { return }
-    let before =
-      offset < 0
-      ? siblings[index - 1].id : siblings.indices.contains(index + 2) ? siblings[index + 2].id : nil
+    let before = siblings.insertionAnchor(movingIndex: index, by: offset)
     store.moveFolder(
       folder.id, from: space.id, to: space.id, parentID: folder.parentID, before: before)
-  }
-
-  private func shiftSpace(_ id: UUID, by offset: Int) {
-    let spaces = store.session.spaces
-    guard let index = spaces.firstIndex(where: { $0.id == id }),
-      spaces.indices.contains(index + offset)
-    else { return }
-    let before =
-      offset < 0
-      ? spaces[index - 1].id : spaces.indices.contains(index + 2) ? spaces[index + 2].id : nil
-    store.moveSpace(id, before: before)
   }
 }
 

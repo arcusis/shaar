@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 import AppKit
 import BrowserCore
 import ChromiumBridge.Verification
@@ -10,7 +14,7 @@ import SwiftUI
 final class ExternalAppConsentProbe {
   static let mode = "external-app-consent-only"
   static let scope =
-    "Owned loopback external-app consent with native no-launch resolver; no operating-system handler launch, company account or release claim."
+    "Owned loopback external-app consent with native no-launch resolver; no operating-system handler launch and no real account."
   static let checkNames = [
     "handlerAvailable", "noLaunchGuardEnabled", "profileAApproved", "profileBApproved",
     "denyWithoutLaunch", "replayIgnored", "unpresentedDenied", "profileSwitchDenied",
@@ -384,7 +388,7 @@ final class ExternalAppConsentProbe {
     second.reconcile()
     try await readySecondary(isolated.selectedTabID!, engine: second)
     let request = try await triggerSecondary(
-      isolated.selectedTabID!, target: target, engine: second, store: secondaryStore)
+      isolated.selectedTabID!, target: target, store: secondaryStore)
     for _ in 0..<100 {
       if secondaryStore.sheet?.id == "external-\(request.id)" { break }
       try await Task.sleep(for: .milliseconds(50))
@@ -505,7 +509,7 @@ final class ExternalAppConsentProbe {
   }
 
   private func triggerSecondary(
-    _ tab: UUID, target: String, engine: BrowserEngine, store: BrowserStore
+    _ tab: UUID, target: String, store: BrowserStore
   ) async throws -> ExternalAppRequest {
     try await clickLink(tab, target: target)
     for _ in 0..<100 {

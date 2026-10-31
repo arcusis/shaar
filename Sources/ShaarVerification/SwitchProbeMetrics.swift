@@ -1,10 +1,14 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 import Darwin
 import Foundation
 
 struct SwitchProbeMetrics: Codable {
   static let expectedSwitchCount = 20
   static let measurementScope =
-    "Host-plus-IPC time from native store selection through verified authored JavaScript snapshot completion; excludes physical paint, energy, and real account acceptance. Resident memory measures the main browser process only, excluding renderer, GPU, and other helper processes."
+    "Host-plus-IPC time from native store selection through verified authored JavaScript snapshot completion; excludes physical paint, energy and real accounts. Resident memory measures the main browser process only, excluding renderer, GPU, and other helper processes."
 
   struct Sample: Codable {
     let iteration: Int

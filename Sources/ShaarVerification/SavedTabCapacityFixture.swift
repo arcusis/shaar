@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 import BrowserCore
 import Foundation
 
@@ -95,7 +99,7 @@ struct SavedTabCapacityFixture {
   static let expectedTabCount = spaceCount * tabsPerSpace
   static let mode = "saved-tab-capacity-only"
   static let scope =
-    "Owned managed workspace with authored loopback fixture; 1440 saved tabs, four profiles, eight visited Spaces, at most eight live tabs; no user profile or external host. No hundreds-renderer or process-memory claim."
+    "Owned managed workspace with authored loopback fixture; 1440 saved tabs, four profiles, eight visited Spaces, at most eight live tabs; no user profile or external host. Does not measure hundreds of renderers or process memory."
 
   let workspaceStore: BrowserWorkspaceStore
   let store: BrowserStore

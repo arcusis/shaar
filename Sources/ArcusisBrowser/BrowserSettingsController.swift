@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 import AppKit
 import BrowserCore
 import ChromiumBridge
@@ -31,7 +35,6 @@ private final class BrowserSettingsState {
       return BrowserSettingsProfile(
         id: profile.id, name: profile.name, color: ProfileColorChoice(profile: profile),
         spaces: spaces.map { BrowserSettingsSpace(id: $0.id, name: $0.name, symbol: $0.symbol) },
-        extensionCount: runtime?.extensions(forProfileID: profile.id.uuidString).count ?? 0,
         accounts: preferences.accounts(for: profile.id))
     }
   }
@@ -206,12 +209,7 @@ final class BrowserSettingsController: NSObject {
   }
 
   var profiles: [BrowserSettingsProfile] { state.profiles }
-  func extensionManager(for profileID: UUID) -> ExtensionManagerModel? {
-    state.extensionManager(for: profileID)
-  }
-  func openExtensions(for profileID: UUID) { state.openExtensions(for: profileID) }
   var selectedProfileID: UUID? { state.selectedProfileID }
-  var selectedSearchEngine: String { state.selectedSearchEngine }
   var sidebarInitiallyVisible: Bool { state.sidebarInitiallyVisible }
 
   func setOpenSpaceHandler(_ handler: @escaping (UUID) -> Void) {

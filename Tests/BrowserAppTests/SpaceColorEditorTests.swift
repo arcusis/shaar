@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 import AppKit
 import BrowserCore
 import SwiftUI
@@ -140,11 +144,6 @@ private func capture<V: View>(_ view: V, size: NSSize, to url: URL) throws {
   XCTAssertLessThanOrEqual(host.fittingSize.width, size.width)
   XCTAssertLessThanOrEqual(host.fittingSize.height, size.height)
   _ = try VisualCapture.render(host, to: url)
-}
-
-private enum ScreenshotError: Error {
-  case bitmapCreation
-  case encoding
 }
 
 @MainActor

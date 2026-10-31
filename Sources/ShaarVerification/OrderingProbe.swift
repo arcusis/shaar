@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 import AppKit
 import BrowserCore
 import ChromiumBridge.Verification
@@ -154,7 +158,7 @@ final class OrderingProbe {
     }
     let expected = orderedTabs(base.profileID)
     try await verifyNativeOrder(
-      expected, profile: base.profileID, label: "Chromium extension API sees model order and pins")
+      expected, label: "Chromium extension API sees model order and pins")
     // Exercise the multi-unpin transition independently of per-click UI updates.
     let native = expected.map { $0.id.uuidString }
     try expect(
@@ -166,8 +170,7 @@ final class OrderingProbe {
         profileID: base.profileID.uuidString),
       "native bridge restores mixed pin states without scrambling indices")
     try await verifyNativeOrder(
-      expected, profile: base.profileID,
-      label: "native order remains correct after unpinning several tabs together")
+      expected, label: "native order remains correct after unpinning several tabs together")
     try expect(
       !runtime.placeTabIDs(
         [ids[2].uuidString], pinnedIDs: [], profileID: other.profileID.uuidString),
@@ -214,7 +217,7 @@ final class OrderingProbe {
     throw OrderingFailure("Ordering document was not ready.")
   }
 
-  func verifyNativeOrder(_ expected: [BrowserTab], profile: UUID, label: String)
+  func verifyNativeOrder(_ expected: [BrowserTab], label: String)
     async throws
   {
     engine.refreshExtensions()

@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 import AppKit
 import BrowserCore
 import ChromiumBridge.Verification
@@ -340,7 +344,7 @@ final class NativeSelectionProbe {
         "passed": error == nil, "checks": checks, "observations": observations,
         "error": error?.localizedDescription as Any? ?? NSNull(),
         "scope":
-          "Authored MV3 tabs.update activation with two hidden application clients. No native physical input/focus, company accounts, Cmd-N, saved-window manifest/restoration, or engine-requested new windows.",
+          "Authored MV3 tabs.update activation with two hidden application clients. No native physical input/focus, real accounts, Cmd-N, saved-window manifest/restoration, or engine-requested new windows.",
       ], options: [.prettyPrinted, .sortedKeys]
     ).write(to: root.appending(path: "\(phase)-activation.json"), options: .atomic)
   }

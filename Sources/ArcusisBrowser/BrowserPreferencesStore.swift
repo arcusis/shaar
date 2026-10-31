@@ -1,56 +1,44 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 import BrowserCore
-import Darwin
 import Foundation
 import Observation
 
 @MainActor @Observable
-public final class BrowserPreferencesStore {
+final class BrowserPreferencesStore {
   private static let maximumFileSize = 4 * 1024 * 1024
 
   private let fileURL: URL?
-  private let syncDirectory: (URL) throws -> Void
   private var profileSearchEngines: [UUID: BrowserSearchEngine] = [:]
   private var connectedAccounts: [UUID: [ConnectedAccount]] = [:]
   private var pinnedExtensions: [UUID: [String]] = [:]
   private var preservesExistingFile = false
 
-  public private(set) var sidebarInitiallyVisible = true
-  public private(set) var storageNotice: String?
+  private(set) var sidebarInitiallyVisible = true
+  private(set) var storageNotice: String?
 
-  public init(fileURL: URL? = nil) {
+  init(fileURL: URL? = nil) {
     self.fileURL = fileURL
-    self.syncDirectory = Self.syncDirectory
     load()
   }
 
-  init(fileURL: URL?, syncDirectory: @escaping (URL) throws -> Void) {
-    self.fileURL = fileURL
-    self.syncDirectory = syncDirectory
-    load()
-  }
-
-  private static func syncDirectory(_ directory: URL) throws {
-    let descriptor = open(directory.path, O_RDONLY | O_DIRECTORY)
-    guard descriptor >= 0 else { throw CocoaError(.fileWriteUnknown) }
-    defer { close(descriptor) }
-    guard fsync(descriptor) == 0 else { throw CocoaError(.fileWriteUnknown) }
-  }
-
-  public func searchEngine(for profileID: UUID) -> BrowserSearchEngine {
+  func searchEngine(for profileID: UUID) -> BrowserSearchEngine {
     profileSearchEngines[profileID] ?? .google
   }
 
-  public func setSearchEngine(_ value: BrowserSearchEngine, for profileID: UUID) {
+  func setSearchEngine(_ value: BrowserSearchEngine, for profileID: UUID) {
     profileSearchEngines[profileID] = value
     save()
   }
 
   /// Extensions pinned to the toolbar, in pin order, for one profile.
-  public func pinnedExtensionIDs(for profileID: UUID) -> [String] {
+  func pinnedExtensionIDs(for profileID: UUID) -> [String] {
     pinnedExtensions[profileID] ?? []
   }
 
-  public func setExtension(_ id: String, pinned: Bool, for profileID: UUID) {
+  func setExtension(_ id: String, pinned: Bool, for profileID: UUID) {
     var ids = pinnedExtensionIDs(for: profileID).filter { $0 != id }
     if pinned { ids.append(id) }
     pinnedExtensions[profileID] = ids.isEmpty ? nil : ids
@@ -74,7 +62,7 @@ public final class BrowserPreferencesStore {
     save()
   }
 
-  public func setSidebarInitiallyVisible(_ value: Bool) {
+  func setSidebarInitiallyVisible(_ value: Bool) {
     sidebarInitiallyVisible = value
     save()
   }

@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 import AppKit
 import BrowserCore
 import ChromiumBridge
@@ -151,11 +155,6 @@ final class PrivateBrowserHost {
     case .reload: owner.store.reload()
     default: break
     }
-  }
-
-  func privateWindow(for window: NSWindow?) -> Bool {
-    guard let window else { return false }
-    return owners.values.contains { $0.window === window }
   }
 
   private func createWindow(

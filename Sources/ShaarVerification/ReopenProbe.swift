@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 import AppKit
 import BrowserCore
 import ChromiumBridge
@@ -197,7 +201,7 @@ final class ReopenProbe {
       runtime: runtime, engine: engine, store: store, root: root, phase: "\(phase)-reopen"
     )
     .verifyNativeOrder(
-      profileTabs.filter(\.isPinned) + profileTabs.filter { !$0.isPinned }, profile: base.profileID,
+      profileTabs.filter(\.isPinned) + profileTabs.filter { !$0.isPinned },
       label: "restored tabs match native profile order")
     try expect(true, "extension-visible order and active target match the restored page")
     for (index, id) in untouched.enumerated() {

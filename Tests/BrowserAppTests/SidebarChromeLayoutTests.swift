@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 import AppKit
 import BrowserCore
 import SwiftUI
@@ -233,7 +237,7 @@ final class SidebarChromeLayoutTests: XCTestCase {
       )
       .background(Color(nsColor: .windowBackgroundColor))
       let size = NSSize(width: BrowserChromeLayout.sidebarWidth, height: 48)
-      let required = isPinned ? "Pinned" : (name == "long-label-ordinary" ? "Long" : "Ordinary")
+      let required = requiredRowText(name: name, isPinned: isPinned)
       let pixels = try await captureRow(row, size: size, to: path, requiredText: [required])
       XCTAssertGreaterThanOrEqual(pixels.width, Int(size.width))
       XCTAssertGreaterThanOrEqual(pixels.height, Int(size.height))
@@ -463,7 +467,7 @@ final class SidebarChromeLayoutTests: XCTestCase {
           id: stableID(1_000 + index),
           url: URL(string: "https://ordinary-\(index).example/research")!,
           title: "\(index): "
-            + (index == 0 ? "First " : index == 239 ? "Last " : "")
+            + edgeMarker(index: index, count: 240)
             + String(repeating: "Long ordinary tab title with useful context ", count: 3))
       }
       : []
@@ -549,6 +553,19 @@ final class SidebarChromeLayoutTests: XCTestCase {
       view: view.frame(width: size.width, height: size.height), size: size, appearance: .aqua)
     defer { mounted.close() }
     return try await mounted.capture(to: url, requiredText: requiredText)
+  }
+
+  private func requiredRowText(name: String, isPinned: Bool) -> String {
+    if isPinned { return "Pinned" }
+    return name == "long-label-ordinary" ? "Long" : "Ordinary"
+  }
+
+  private func edgeMarker(index: Int, count: Int) -> String {
+    switch index {
+    case 0: "First "
+    case count - 1: "Last "
+    default: ""
+    }
   }
 }
 

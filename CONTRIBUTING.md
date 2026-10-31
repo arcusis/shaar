@@ -17,6 +17,7 @@ swift build
 swift test --jobs 2
 .venv/bin/python scripts/test-python.py
 swift format lint --strict --recursive Package.swift Sources Tests
+python3 scripts/check-license-headers.py
 bash scripts/test-engine.sh
 ```
 
@@ -33,6 +34,9 @@ Follow nearby Swift style and keep functions small and named for their purpose.
 Add comments to explain why behavior is required, not to restate code. Keep
 documentation accurate and free of personal data. Preserve upstream license and
 notice files when changing bundled components.
+
+Start every new source file with the MPL-2.0 header used across the repository;
+`scripts/check-license-headers.py` enforces it.
 
 ## Changes and commits
 

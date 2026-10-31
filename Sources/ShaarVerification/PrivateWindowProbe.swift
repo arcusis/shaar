@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 import AppKit
 import BrowserCore
 import ChromiumBridge.Verification
@@ -250,7 +254,7 @@ final class PrivateWindowProbe {
       && runtime.privateProbeAudit(forContextID: contextA)?["allWindowsDisplayOwnedWebContents"]
         as? Bool == true
     let secret = UUID().uuidString.lowercased()
-    try await setPrivate(t1, cookie: secret, storage: secret, session: secret)
+    try await setPrivate(t1, cookie: secret, storage: secret)
     try await waitUntil(t2) { $0["local"] as? String == secret }
     let shared = try await readPrivate(t2)
     checks["sameSourceWindowsShareCookiesAndLocalStorage"] =
@@ -682,9 +686,7 @@ final class PrivateWindowProbe {
     return value
   }
 
-  private func setPrivate(_ tab: String, cookie: String, storage: String, session: String)
-    async throws
-  {
+  private func setPrivate(_ tab: String, cookie: String, storage: String) async throws {
     let literal = try JSONEncoder().encode(storage)
     guard let value = String(data: literal, encoding: .utf8) else {
       throw PrivateWindowFailure("Marker encoding failed.")
@@ -923,7 +925,7 @@ final class PrivateWindowProbe {
           && productLifecycleBlocker == "",
       ],
       "scope":
-        "Owned hidden native product and engine windows on synthetic loopback origin. No real accounts, vendor endpoints, physical input, or company acceptance tested.",
+        "Owned hidden native product and engine windows on synthetic loopback origin. No real accounts, third-party endpoints or physical input.",
     ]
     try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
       .write(to: root.appending(path: "\(phase)-private-window.json"), options: .atomic)

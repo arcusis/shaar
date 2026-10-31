@@ -1,3 +1,7 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 # shellcheck shell=bash disable=SC2034 # Sourced: the scripts that source this file read every value.
 # Release constants shared by bundle-app.sh, release.sh, release_feed.py and the Release workflow.
 # Keep plain KEY=value lines: Python reads this file without running it.

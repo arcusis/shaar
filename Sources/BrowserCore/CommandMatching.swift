@@ -8,14 +8,14 @@ import Foundation
 /// fields and show the same domains.
 enum CommandText {
   /// The grey secondary text on a row: the host without a leading "www.".
-  public static func domain(of url: URL?) -> String {
+  static func domain(of url: URL?) -> String {
     guard let url else { return "" }
     let host = url.host() ?? url.absoluteString
     return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
   }
 
   /// True when the query is empty or any field contains it, ignoring case.
-  public static func matches(_ query: String, _ fields: [String]) -> Bool {
+  static func matches(_ query: String, _ fields: [String]) -> Bool {
     query.isEmpty || fields.contains { $0.localizedCaseInsensitiveContains(query) }
   }
 }

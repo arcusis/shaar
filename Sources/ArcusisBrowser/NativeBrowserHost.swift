@@ -775,7 +775,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       return
     }
     NSPasteboard.general.clearContents()
-    NSPasteboard.general.setString(url.absoluteString, forType: .string)
+    NSPasteboard.general.setString(CleanLink.clean(url).absoluteString, forType: .string)
   }
 
   @objc private func selectMenuSpace(_ sender: NSMenuItem) {

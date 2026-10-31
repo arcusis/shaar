@@ -102,7 +102,13 @@ private struct LibrarySpaceCardView: View {
   private var header: some View {
     LibrarySpaceCardHeader(
       store: store, space: card.space, profileName: card.profileName,
-      tint: tint, onSelectSpace: onSelectSpace, onEditSpace: onEditSpace)
+      profileSymbol: card.profileSymbol, profileTint: profileTint, onSelectSpace: onSelectSpace,
+      onEditSpace: onEditSpace)
+  }
+
+  /// Uncolored profiles take the Space's tint so the badge still reads as part of the card.
+  private var profileTint: Color {
+    card.profileRGB.map(Color.init(spaceRGB:)) ?? tint
   }
 
   @ViewBuilder
@@ -157,7 +163,8 @@ private struct LibrarySpaceCardHeader: View {
   let store: BrowserStore
   let space: BrowserSpace
   let profileName: String
-  let tint: Color
+  let profileSymbol: String
+  let profileTint: Color
   let onSelectSpace: (UUID) -> Void
   let onEditSpace: (UUID) -> Void
 
@@ -178,12 +185,12 @@ private struct LibrarySpaceCardHeader: View {
             .font(.system(size: 14, weight: .semibold))
             .lineLimit(1)
           Spacer(minLength: 0)
-          Label(profileName, systemImage: "person.fill")
+          Label(profileName, systemImage: profileSymbol)
             .font(.system(size: 10, weight: .medium))
             .lineLimit(1)
             .padding(.horizontal, 6)
             .padding(.vertical, 4)
-            .background(tint.opacity(0.28), in: Capsule())
+            .background(profileTint.opacity(0.28), in: Capsule())
         }
         .contentShape(Rectangle())
       }
@@ -356,20 +363,23 @@ enum LibrarySpaceCardItem: Identifiable {
 
 struct LibrarySpaceCard: Identifiable {
   let space: BrowserSpace
-  let profileName: String
+  let profile: BrowserProfile?
   let items: [LibrarySpaceCardItem]
 
   var id: UUID { space.id }
+  var profileName: String { profile?.name ?? "Profile" }
+  var profileSymbol: String { profile?.displaySymbol ?? BrowserProfile.defaultSymbol }
+  var profileRGB: SpaceRGBColor? { profile.flatMap { ProfileColorChoice(profile: $0).rgb } }
 }
 
 enum LibrarySpacesOverviewModel {
   static func cards(in session: BrowserSession, query: String) -> [LibrarySpaceCard] {
     let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
-    let profiles = Dictionary(uniqueKeysWithValues: session.profiles.map { ($0.id, $0.name) })
+    let profiles = Dictionary(uniqueKeysWithValues: session.profiles.map { ($0.id, $0) })
     return session.spaces.compactMap { space in
-      let profileName = profiles[space.profileID] ?? "Profile"
+      let profile = profiles[space.profileID]
       let spaceMatches =
-        needle.isEmpty || contains(space.name, needle) || contains(profileName, needle)
+        needle.isEmpty || contains(space.name, needle) || contains(profile?.name ?? "", needle)
       var items = space.pinnedItems(includingCollapsed: true).compactMap {
         item -> LibrarySpaceCardItem? in
         switch item {
@@ -391,7 +401,7 @@ enum LibrarySpacesOverviewModel {
         }
       }
       if !spaceMatches && items.isEmpty { return nil }
-      return LibrarySpaceCard(space: space, profileName: profileName, items: items)
+      return LibrarySpaceCard(space: space, profile: profile, items: items)
     }
   }
 

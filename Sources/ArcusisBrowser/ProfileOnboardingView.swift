@@ -6,7 +6,8 @@ import AppKit
 import BrowserCore
 import SwiftUI
 
-/// New Profile onboarding: name and color, optional Google and Microsoft sign-in, then done.
+/// New Profile onboarding: name, icon and color, an optional Google or Microsoft sign-in, then
+/// done.
 struct ProfileOnboardingView: View {
   let model: ProfileOnboardingModel
 
@@ -27,7 +28,7 @@ struct ProfileOnboardingView: View {
     .background(Color(nsColor: .windowBackgroundColor))
   }
 
-  static let size = NSSize(width: 500, height: 430)
+  static let size = NSSize(width: 500, height: 560)
 
   @ViewBuilder private var stepContent: some View {
     switch model.step {
@@ -69,23 +70,23 @@ private struct OnboardingStepHeader: View {
 private struct ProfileDetailsStep: View {
   @Bindable var model: ProfileOnboardingModel
   @FocusState private var nameFocused: Bool
+  @State private var symbolPickerIsPresented = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
       Text("A profile keeps its own sign-ins, cookies, history and extensions.")
         .foregroundStyle(.secondary)
       HStack(spacing: 12) {
-        ProfileBadge(color: model.color.rgb, size: 36)
+        SymbolPickerButton(
+          symbol: $model.symbol, isPresented: $symbolPickerIsPresented,
+          accessibilityLabel: "Change Profile Icon")
         TextField("Profile name", text: $model.name)
           .textFieldStyle(.roundedBorder)
           .focused($nameFocused)
           .onSubmit { model.continueToNext() }
           .accessibilityIdentifier("onboarding.name")
       }
-      VStack(alignment: .leading, spacing: 8) {
-        Text("Color").font(.headline)
-        ProfileColorPicker(color: $model.color)
-      }
+      ProfileColorPicker(color: $model.color)
     }
     .onAppear { nameFocused = true }
   }
@@ -110,9 +111,11 @@ private struct AccountConnectStep: View {
       } else {
         ProviderConnectButton(provider: provider) { model.connect(provider) }
       }
-      Text("Optional. You can also connect accounts later in Settings > Profiles.")
-        .font(.caption)
-        .foregroundStyle(.secondary)
+      Text(
+        "Optional. A profile connects one account, Google or Microsoft. You can also connect it later in Settings > Profiles."
+      )
+      .font(.caption)
+      .foregroundStyle(.secondary)
     }
   }
 }
@@ -143,11 +146,11 @@ private struct ProfileSummaryStep: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
       HStack(spacing: 12) {
-        ProfileBadge(color: model.color.rgb, size: 36)
+        ProfileBadge(color: model.color.rgb, symbol: model.symbol, size: 36)
         Text(model.trimmedName).font(.headline).lineLimit(1)
       }
       if model.connectedAccounts.isEmpty {
-        Text("No accounts connected. You can connect them later in Settings > Profiles.")
+        Text("No account connected. You can connect one later in Settings > Profiles.")
           .foregroundStyle(.secondary)
       } else {
         ForEach(model.connectedAccounts, id: \.provider) { ConnectedAccountRow(account: $0) }

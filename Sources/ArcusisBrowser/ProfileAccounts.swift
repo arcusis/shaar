@@ -50,6 +50,11 @@ enum AccountProvider: String, Codable, CaseIterable, Identifiable, Sendable {
     }
   }
 
+  /// A profile connects one account at a time; both providers return once it disconnects.
+  static func connectable(alongside accounts: [ConnectedAccount]) -> [AccountProvider] {
+    accounts.isEmpty ? allCases : []
+  }
+
   var logo: NSImage? { NSImage(data: Data(logoSVG.utf8)) }
 
   /// Official provider marks, used unmodified on the connect buttons.
@@ -110,11 +115,20 @@ enum GoogleAccountList {
       guard entry.count > 4, let email = entry[3] as? String, email.contains("@") else {
         return nil
       }
-      let photo = (entry[4] as? String).flatMap(URL.init(string:))
       return ConnectedAccount(
         provider: .google, email: email, name: entry[2] as? String,
-        photoURL: photo?.scheme == "https" ? photo : nil)
+        photoURL: (entry[4] as? String).flatMap(photoURL(from:)))
     }
+  }
+
+  /// Google writes photo addresses either in full or scheme-relative (`//lh3.…`); only secure
+  /// addresses are kept.
+  static func photoURL(from value: String) -> URL? {
+    let address = value.hasPrefix("//") ? "https:" + value : value
+    guard let url = URL(string: address), url.scheme == "https", url.host() != nil else {
+      return nil
+    }
+    return url
   }
 }
 

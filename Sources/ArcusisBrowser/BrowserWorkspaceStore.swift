@@ -66,7 +66,8 @@ final class BrowserWorkspaceStore {
   {
     var updated = workspace
     let id = try updated.createProfile(
-      name: profile.name, tint: profile.tint, customRGB: profile.customRGB, id: profile.id)
+      name: profile.name, tint: profile.tint, customRGB: profile.customRGB, symbol: profile.symbol,
+      id: profile.id)
     if let spaceID, try !updated.setSpaceProfile(spaceID, to: id) {
       throw WorkspaceError.invalidState
     }
@@ -82,6 +83,11 @@ final class BrowserWorkspaceStore {
 
   func setProfileColor(_ id: UUID, tint: SpaceTint?, customRGB: SpaceRGBColor?) throws {
     try workspace.setProfileColor(id, tint: tint, customRGB: customRGB)
+    saveAndBroadcast()
+  }
+
+  func setProfileSymbol(_ id: UUID, symbol: String) throws {
+    try workspace.setProfileSymbol(id, symbol: symbol)
     saveAndBroadcast()
   }
 

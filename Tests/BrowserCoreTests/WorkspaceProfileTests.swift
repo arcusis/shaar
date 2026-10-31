@@ -175,6 +175,27 @@ import Testing
     #expect(try file.load() == workspace)
   }
 
+  @Test func profileSymbolsPersistThroughTheCatalogAndRejectEmptyValues() throws {
+    var workspace = try BrowserWorkspace(session: .fresh())
+    let chosenID = UUID()
+    try workspace.createProfile(name: "Work", symbol: "briefcase", id: chosenID)
+    #expect(workspace.catalog.profiles.first { $0.id == chosenID }?.symbol == "briefcase")
+    #expect(workspace.catalog.profiles[0].symbol == nil)
+
+    try workspace.setProfileSymbol(workspace.catalog.profiles[0].id, symbol: "house")
+    #expect(workspace.catalog.profiles[0].symbol == "house")
+    #expect(workspace.windows[0].session.profiles == workspace.catalog.profiles)
+
+    let beforeInvalid = workspace
+    #expect(throws: WorkspaceError.self) { try workspace.setProfileSymbol(chosenID, symbol: "") }
+    #expect(throws: WorkspaceError.self) { try workspace.setProfileSymbol(UUID(), symbol: "star") }
+    #expect(workspace == beforeInvalid)
+
+    let decoded = try JSONDecoder().decode(
+      BrowserWorkspace.self, from: JSONEncoder().encode(workspace))
+    #expect(decoded == workspace)
+  }
+
   @Test func profileCreationRejectsAnIdentityAlreadyInUse() throws {
     var workspace = try BrowserWorkspace(session: .fresh())
     let original = workspace

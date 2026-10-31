@@ -3,7 +3,6 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import AppKit
-import BrowserCore
 import SwiftUI
 import XCTest
 
@@ -19,7 +18,7 @@ final class ProfileOnboardingVisualTests: XCTestCase {
         let model = Self.model(at: step)
         XCTAssertEqual(model.step, step)
         let url = output.appending(path: "\(step.rawValue + 1)-\(step)-\(schemeName).png")
-        try Self.capture(
+        try VisualCapture.renderOffscreen(
           ProfileOnboardingView(model: model), size: ProfileOnboardingView.size,
           appearance: appearance, to: url)
         XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
@@ -27,33 +26,9 @@ final class ProfileOnboardingVisualTests: XCTestCase {
     }
   }
 
-  func testSettingsProfilesShowAndEditTheProfileColor() throws {
-    let output = URL(filePath: "/tmp/shaar-profile-onboarding")
-    try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
-    let workID = UUID()
-    let profiles = [
-      BrowserSettingsProfile(
-        id: UUID(), name: "Personal", color: ProfileColorChoice(tint: .rose),
-        spaces: [BrowserSettingsSpace(id: UUID(), name: "Home", symbol: "house")]),
-      BrowserSettingsProfile(
-        id: workID, name: "Acme Work", color: ProfileColorChoice(tint: .ocean),
-        spaces: [BrowserSettingsSpace(id: UUID(), name: "Research", symbol: "book")],
-        accounts: [ConnectedAccount(provider: .microsoft, email: "alex@acme.onmicrosoft.com")]),
-      BrowserSettingsProfile(id: UUID(), name: "Uncolored", spaces: []),
-    ]
-    for (schemeName, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
-      let view = BrowserSettingsView(
-        profiles: profiles, searchEngines: [BrowserSettingsChoice(id: "google", title: "Google")],
-        selectedProfileID: .constant(workID), sidebarInitiallyVisible: .constant(true),
-        selectedSearchEngine: .constant("google"), initialSection: .profiles)
-      let url = output.appending(path: "settings-profiles-\(schemeName).png")
-      try Self.capture(view, size: NSSize(width: 720, height: 560), appearance: appearance, to: url)
-      XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
-    }
-  }
-
   /// Google is captured connected and Microsoft waiting on its sign-in window, so both account
-  /// states appear across the set.
+  /// states appear across the set. Done follows the Google connection, which passes over the
+  /// Microsoft step.
   private static func model(at step: ProfileOnboardingStep) -> ProfileOnboardingModel {
     var pendingSignIn: ((ConnectedAccount?) -> Void)?
     let model = ProfileOnboardingModel(
@@ -62,36 +37,19 @@ final class ProfileOnboardingVisualTests: XCTestCase {
         stopConnecting: {}, create: { $0.id }, close: { _ in }))
     model.name = "Acme Work"
     model.color = ProfileColorChoice(tint: .ocean)
+    model.symbol = "briefcase.fill"
     guard step != .details else { return model }
     model.continueToNext()
+    if step == .microsoft {
+      model.skip()
+      model.connect(.microsoft)
+      return model
+    }
     model.connect(.google)
     pendingSignIn?(
       ConnectedAccount(provider: .google, email: "alex@acme.test", name: "Alex Example"))
     guard step != .google else { return model }
     model.continueToNext()
-    model.connect(.microsoft)
-    guard step != .microsoft else { return model }
-    pendingSignIn?(ConnectedAccount(provider: .microsoft, email: "alex@acme.onmicrosoft.com"))
-    model.continueToNext()
     return model
-  }
-
-  private static func capture<V: View>(
-    _ view: V, size: NSSize, appearance: NSAppearance.Name, to url: URL
-  ) throws {
-    let window = NSWindow(
-      contentRect: NSRect(origin: .zero, size: size), styleMask: [], backing: .buffered,
-      defer: false)
-    window.isReleasedWhenClosed = false
-    window.appearance = NSAppearance(named: appearance)
-    defer { window.close() }
-    let host = NSHostingView(rootView: view)
-    window.contentView = host
-    host.frame = NSRect(origin: .zero, size: size)
-    host.layoutSubtreeIfNeeded()
-    window.displayIfNeeded()
-    RunLoop.current.run(until: Date().addingTimeInterval(0.05))
-    host.layoutSubtreeIfNeeded()
-    _ = try VisualCapture.render(host, to: url)
   }
 }

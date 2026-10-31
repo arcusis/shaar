@@ -20,13 +20,13 @@ struct FolderStoreTests {
     store.perform(.open(URL(string: "https://example.com")!))
     let tab = try #require(store.session.selectedSpace.selectedTab)
     let request = try #require(
-      WebsiteMediaRequest(
+      WebsitePermissionRequest(
         id: "p1", profileID: store.session.selectedSpace.profileID,
         tabID: tab.id, pageURL: tab.url, requestingOrigin: URL(string: "https://example.com")!,
         kinds: [.camera]))
-    #expect(store.requestWebsiteMedia(request))
+    #expect(store.requestWebsitePermission(request))
     store.showFolderEditor(.create(spaceID: store.session.selectedSpaceID, parentID: nil))
-    #expect(store.sheet?.id == "media-p1")
+    #expect(store.sheet?.id == "permission-p1")
     #expect(store.createFolder(name: "Unseen", in: store.session.selectedSpaceID) == nil)
   }
 

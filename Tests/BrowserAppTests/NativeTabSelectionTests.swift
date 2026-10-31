@@ -76,17 +76,17 @@ struct NativeTabSelectionTests {
     #expect(stopped == [first.id] && store.pageFind == nil)
     store.perform(.tab(space: space, tab: first.id))
     let consent = try #require(
-      WebsiteMediaRequest(
+      WebsitePermissionRequest(
         id: "native-selection", profileID: profile, tabID: first.id,
         pageURL: first.url, requestingOrigin: URL(string: "https://example.com")!, kinds: [.camera])
     )
     var decisions: [Bool] = []
-    store.onWebsiteMediaDecision = { _, accepted in decisions.append(accepted) }
-    #expect(store.requestWebsiteMedia(consent))
+    store.onWebsitePermissionDecision = { _, accepted in decisions.append(accepted) }
+    #expect(store.requestWebsitePermission(consent))
     #expect(store.nativeTabActivated(second, profileID: profile))
-    store.resolveWebsiteMedia(consent.id, accepted: true)
+    store.resolveWebsitePermission(consent.id, accepted: true)
     #expect(decisions == [false])
-    #expect(store.websiteMediaRequests.isEmpty && store.sheet == nil)
+    #expect(store.websitePermissionRequests.isEmpty && store.sheet == nil)
     store.closeTab(second)
     let closed = store.session
     #expect(!store.nativeTabActivated(second, profileID: profile))

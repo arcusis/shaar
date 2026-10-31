@@ -658,6 +658,10 @@ final class EngineProbe {
   }
 
   private var timeoutSeconds: Double {
+    baseTimeoutSeconds * ProbeTimeout.scale
+  }
+
+  private var baseTimeoutSeconds: Double {
     if externalAppConsentMode || savedTabCapacityMode { return 180 }
     if includeBitwarden { return 150 }
     return privateWindowMode ? 210 : 75
@@ -765,4 +769,14 @@ private struct ProbeFailure: LocalizedError {
   let message: String
   init(_ message: String) { self.message = message }
   var errorDescription: String? { message }
+}
+
+/// Slower machines, such as GPU-less CI virtual machines, stretch every probe deadline by
+/// `SHAAR_PROBE_TIMEOUT_SCALE` (at least 1) so a slow run is not reported as a hang.
+enum ProbeTimeout {
+  static var scale: Double {
+    let value = ProcessInfo.processInfo.environment["SHAAR_PROBE_TIMEOUT_SCALE"].flatMap(
+      Double.init)
+    return max(1, value ?? 1)
+  }
 }

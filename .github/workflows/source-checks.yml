@@ -14,6 +14,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: source-checks-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   source-checks:
     name: Swift and Python source checks
@@ -160,3 +164,94 @@ jobs:
           name: sidebar-chrome-ci
           path: build/Verification/sidebar-chrome-ci/
           if-no-files-found: warn
+
+  engine-probes:
+    name: Engine probes against the pinned Chromium engine
+    runs-on: macos-26
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out source
+        # actions/checkout v5.1.0
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+
+      - name: Cache SwiftPM products and pinned engine
+        # actions/cache v4.2.3
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+          path: |
+            build/swiftpm/verification
+            build/EngineCache
+          key: macos-26-verification-engine-${{ hashFiles('Package.swift', '**/Package.resolved', 'ThirdParty/ArdiaCore/pin.json') }}
+
+      - name: Run account isolation probes (initial and restart)
+        id: engine_probes
+        env:
+          # Hosted virtual machines have no GPU and run the engine about three times slower.
+          SHAAR_PROBE_TIMEOUT_SCALE: '3'
+        run: |
+          set -o pipefail
+          bash scripts/test-engine.sh 2>&1 | tee "$RUNNER_TEMP/engine-probes.log"
+
+      - name: Collect engine probe logs
+        if: failure() && steps.engine_probes.outcome == 'failure'
+        run: |
+          mkdir -p "$RUNNER_TEMP/engine-probe-logs"
+          sed -n 's/^Probe evidence: //p' "$RUNNER_TEMP/engine-probes.log" \
+            | while read -r root; do cp "$root"/*.log "$root"/*.json "$RUNNER_TEMP/engine-probe-logs/" || true; done
+
+      - name: Upload engine probe logs
+        if: failure() && steps.engine_probes.outcome == 'failure'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: engine-probe-logs
+          path: ${{ runner.temp }}/engine-probe-logs/
+          if-no-files-found: warn
+
+  release-bundle:
+    name: Release bundle builds without verification code
+    runs-on: macos-26
+    timeout-minutes: 40
+
+    steps:
+      - name: Check out source
+        # actions/checkout v5.1.0
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+
+      - name: Cache SwiftPM products and pinned engine
+        # actions/cache v4.2.3
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+          path: |
+            build/swiftpm/default
+            build/EngineCache
+          key: macos-26-release-engine-${{ hashFiles('Package.swift', '**/Package.resolved', 'ThirdParty/ArdiaCore/pin.json') }}
+
+      - name: Build the shipping app with the engine
+        # bundle-app.sh fails when verification symbols or probe flags reach the executable.
+        run: bash scripts/bundle-app.sh --with-engine
+
+      - name: Verify the bundle signature
+        run: codesign --verify --deep --strict --verbose=2 build/Shaar.app
+
+  workflow-lint:
+    name: Workflow lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out source
+        # actions/checkout v5.1.0
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+
+      - name: Run actionlint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash \
+            | bash -s -- 1.7.12 "$RUNNER_TEMP"
+          "$RUNNER_TEMP/actionlint" -color

@@ -5,60 +5,6 @@
 import BrowserCore
 import SwiftUI
 
-struct SidebarFooterBoundsPreferenceKey: PreferenceKey {
-  static let defaultValue: CGRect = .zero
-
-  static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
-    let next = nextValue()
-    if !next.isEmpty { value = next }
-  }
-}
-
-struct SidebarRevealFrames: Equatable {
-  var selected: CGRect = .zero
-  var selectedID: UUID?
-  var viewport: CGRect = .zero
-}
-
-struct SidebarOrdinaryRevealFramesPreferenceKey: PreferenceKey {
-  static let defaultValue = SidebarRevealFrames()
-
-  static func reduce(value: inout SidebarRevealFrames, nextValue: () -> SidebarRevealFrames) {
-    let next = nextValue()
-    if !next.selected.isEmpty {
-      value.selected = next.selected
-      value.selectedID = next.selectedID
-    }
-    if !next.viewport.isEmpty { value.viewport = next.viewport }
-  }
-}
-
-struct SidebarFavoriteRevealFramesPreferenceKey: PreferenceKey {
-  static let defaultValue = SidebarRevealFrames()
-
-  static func reduce(value: inout SidebarRevealFrames, nextValue: () -> SidebarRevealFrames) {
-    let next = nextValue()
-    if !next.selected.isEmpty {
-      value.selected = next.selected
-      value.selectedID = next.selectedID
-    }
-    if !next.viewport.isEmpty { value.viewport = next.viewport }
-  }
-}
-
-struct SidebarSpaceRevealFramesPreferenceKey: PreferenceKey {
-  static let defaultValue = SidebarRevealFrames()
-
-  static func reduce(value: inout SidebarRevealFrames, nextValue: () -> SidebarRevealFrames) {
-    let next = nextValue()
-    if !next.selected.isEmpty {
-      value.selected = next.selected
-      value.selectedID = next.selectedID
-    }
-    if !next.viewport.isEmpty { value.viewport = next.viewport }
-  }
-}
-
 struct BrowserSidebar: View {
   @Bindable var store: BrowserStore
   @Environment(\.accessibilityReduceMotion) private var reduceMotion

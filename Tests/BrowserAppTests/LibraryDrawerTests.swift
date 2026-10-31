@@ -104,13 +104,13 @@ final class LibraryDrawerTests: XCTestCase {
     store.sheet = nil
 
     let request = try XCTUnwrap(
-      WebsiteMediaRequest(
+      WebsitePermissionRequest(
         id: "drawer-consent", profileID: ids.primaryProfile, tabID: ids.primaryTab,
         pageURL: URL(string: "https://example.test/notes")!,
         requestingOrigin: URL(string: "https://example.test")!, kinds: [.camera]))
-    XCTAssertTrue(store.requestWebsiteMedia(request))
+    XCTAssertTrue(store.requestWebsitePermission(request))
     XCTAssertFalse(store.showLibraryDrawer(.spaces))
-    XCTAssertEqual(store.sheet?.id, "media-drawer-consent")
+    XCTAssertEqual(store.sheet?.id, "permission-drawer-consent")
   }
 
   func testCapturesActualWindowDrawerAtStandardMinimumDarkAndHiddenSidebarSizes() async throws {

@@ -89,20 +89,20 @@ struct RendererRecoveryTests {
     store.nativeDocumentCommitted(tab.id, profileID: space.profileID)
     let requests = try (0..<2).map { index in
       try #require(
-        WebsiteMediaRequest(
+        WebsitePermissionRequest(
           id: "crash-media-\(index)", profileID: space.profileID, tabID: tab.id,
           pageURL: tab.url, requestingOrigin: URL(string: "https://example.com")!, kinds: [.camera])
       )
     }
     var decisions: [Bool] = []
-    store.onWebsiteMediaDecision = { _, accepted in decisions.append(accepted) }
-    for request in requests { #expect(store.requestWebsiteMedia(request)) }
+    store.onWebsitePermissionDecision = { _, accepted in decisions.append(accepted) }
+    for request in requests { #expect(store.requestWebsitePermission(request)) }
     store.nativeRendererGone(tab.id, profileID: space.profileID, status: "crashed", exitCode: 1)
     #expect(
-      store.websiteMediaRequests.isEmpty && store.sheet == nil && decisions == [false, false])
-    store.resolveWebsiteMedia(requests[0].id, accepted: true)
+      store.websitePermissionRequests.isEmpty && store.sheet == nil && decisions == [false, false])
+    store.resolveWebsitePermission(requests[0].id, accepted: true)
     #expect(decisions == [false, false])
-    #expect(!store.requestWebsiteMedia(requests[0]))
+    #expect(!store.requestWebsitePermission(requests[0]))
   }
 
   @Test func failureIsTransientAndRemovalNeverArchivesCrashState() throws {

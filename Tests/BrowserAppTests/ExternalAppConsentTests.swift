@@ -180,7 +180,7 @@ struct ExternalAppConsentTests {
     let store = store()
     let external = try request(store)
     let media = try #require(
-      WebsiteMediaRequest(
+      WebsitePermissionRequest(
         id: external.id, profileID: external.profileID, tabID: external.tabID,
         pageURL: external.pageURL, requestingOrigin: URL(string: "https://example.com")!,
         kinds: [.microphone]))
@@ -193,10 +193,10 @@ struct ExternalAppConsentTests {
         permissions: []))
     var accepted: [String] = []
     store.onExternalAppDecision = { id, allow in accepted.append("external:\(id):\(allow)") }
-    store.onWebsiteMediaDecision = { id, allow in accepted.append("media:\(id):\(allow)") }
+    store.onWebsitePermissionDecision = { id, allow in accepted.append("media:\(id):\(allow)") }
     store.onInstallDecision = { id, allow in accepted.append("install:\(id):\(allow)") }
     #expect(store.requestExternalApp(external))
-    #expect(store.requestWebsiteMedia(media))
+    #expect(store.requestWebsitePermission(media))
     #expect(store.requestInstallation(install))
     store.nativeRendererGone(
       external.tabID, profileID: external.profileID, status: "crashed", exitCode: 1)

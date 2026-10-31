@@ -92,10 +92,7 @@ final class CommandPanelSurfaceTests: XCTestCase {
     try await Task.sleep(for: .milliseconds(100))
     host.layoutSubtreeIfNeeded()
     XCTAssertEqual(host.bounds.size, size)
-    let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
-    host.cacheDisplay(in: host.bounds, to: bitmap)
-    try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(
-      to: url, options: .atomic)
+    let bitmap = try VisualCapture.render(host, to: url)
     return bitmap
   }
 

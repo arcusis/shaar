@@ -46,10 +46,7 @@ struct MiniBrowserTests {
     window.contentView = host
     host.layoutSubtreeIfNeeded()
     RunLoop.main.run(until: Date().addingTimeInterval(0.2))
-    let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
-    host.cacheDisplay(in: host.bounds, to: bitmap)
-    let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
-    try png.write(to: URL(fileURLWithPath: "/tmp/mini-browser.png"))
+    let _ = try VisualCapture.render(host, to: URL(fileURLWithPath: "/tmp/mini-browser.png"))
     window.close()
   }
 }

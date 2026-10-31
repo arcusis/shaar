@@ -139,21 +139,7 @@ private func capture<V: View>(_ view: V, size: NSSize, to url: URL) throws {
   XCTAssertGreaterThan(bounds.height, 0)
   XCTAssertLessThanOrEqual(host.fittingSize.width, size.width)
   XCTAssertLessThanOrEqual(host.fittingSize.height, size.height)
-  let scale = 2.0
-  let width = Int(bounds.width * scale)
-  let height = Int(bounds.height * scale)
-  guard
-    let bitmap = NSBitmapImageRep(
-      bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height, bitsPerSample: 8,
-      samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
-      bytesPerRow: 0, bitsPerPixel: 0)
-  else { throw ScreenshotError.bitmapCreation }
-  bitmap.size = bounds.size
-  host.cacheDisplay(in: bounds, to: bitmap)
-  guard let png = bitmap.representation(using: .png, properties: [:]) else {
-    throw ScreenshotError.encoding
-  }
-  try png.write(to: url)
+  _ = try VisualCapture.render(host, to: url)
 }
 
 private enum ScreenshotError: Error {

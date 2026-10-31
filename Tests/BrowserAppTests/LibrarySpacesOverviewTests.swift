@@ -168,11 +168,5 @@ private func capture<V: View>(_ view: V, size: NSSize, to url: URL) throws {
   host.layoutSubtreeIfNeeded()
   let bounds = host.bounds
   XCTAssertEqual(bounds.size, size)
-  let bitmap = NSBitmapImageRep(
-    bitmapDataPlanes: nil, pixelsWide: Int(size.width * 2), pixelsHigh: Int(size.height * 2),
-    bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
-    colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
-  bitmap.size = size
-  host.cacheDisplay(in: bounds, to: bitmap)
-  try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(to: url)
+  _ = try VisualCapture.render(host, to: url)
 }

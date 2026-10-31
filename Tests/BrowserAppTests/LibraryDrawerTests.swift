@@ -192,10 +192,7 @@ final class LibraryDrawerTests: XCTestCase {
     try await Task.sleep(for: .milliseconds(80))
     host.layoutSubtreeIfNeeded()
     XCTAssertEqual(host.bounds.size, size)
-    let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
-    host.cacheDisplay(in: host.bounds, to: bitmap)
-    try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(
-      to: url, options: .atomic)
+    _ = try VisualCapture.render(host, to: url)
   }
 }
 

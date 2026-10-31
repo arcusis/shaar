@@ -92,12 +92,9 @@ final class PageChromeLayoutTests: XCTestCase {
     try await Task.sleep(for: .milliseconds(300))
     host.layoutSubtreeIfNeeded()
     XCTAssertEqual(host.bounds.size, NSSize(width: 760, height: 520))
-    let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
-    XCTAssertEqual(bitmap.pixelsWide, 760)
-    XCTAssertEqual(bitmap.pixelsHigh, 520)
-    host.cacheDisplay(in: host.bounds, to: bitmap)
-    let image = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
-    try image.write(to: url, options: .atomic)
-    return (bitmap.pixelsWide, bitmap.pixelsHigh)
+    let rendered = try VisualCapture.render(host, to: url)
+    XCTAssertEqual(rendered.pixelsWide, Int(host.bounds.width))
+    XCTAssertEqual(rendered.pixelsHigh, Int(host.bounds.height))
+    return (rendered.pixelsWide, rendered.pixelsHigh)
   }
 }

@@ -157,11 +157,6 @@ final class PrivateBrowserHost {
     }
   }
 
-  func privateWindow(for window: NSWindow?) -> Bool {
-    guard let window else { return false }
-    return owners.values.contains { $0.window === window }
-  }
-
   private func createWindow(
     context: String, source: String, window: String, tab: String, url: String
   ) {

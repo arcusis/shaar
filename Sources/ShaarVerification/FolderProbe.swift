@@ -210,7 +210,7 @@ final class FolderProbe {
       runtime: runtime, engine: engine, store: store, root: root, phase: "\(phase)-folders"
     )
     .verifyNativeOrder(
-      ordered, profile: base.profileID, label: "folder projection matches native order")
+      ordered, label: "folder projection matches native order")
     try expect(
       true, "extension-visible order, pins, profile, and active target match the folder projection")
     try await capture(

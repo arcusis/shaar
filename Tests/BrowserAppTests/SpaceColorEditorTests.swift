@@ -146,11 +146,6 @@ private func capture<V: View>(_ view: V, size: NSSize, to url: URL) throws {
   _ = try VisualCapture.render(host, to: url)
 }
 
-private enum ScreenshotError: Error {
-  case bitmapCreation
-  case encoding
-}
-
 @MainActor
 @Test func spaceSymbolPersistsThroughCreateAndUpdate() {
   let store = BrowserStore(sessionFile: nil, session: .fresh())

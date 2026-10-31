@@ -29,7 +29,6 @@ OWNER_FILE = ".engine-source-owner.json"
 RECEIPT_FILE = "receipt.json"
 LOCK_FILE = ".lock"
 OWNER_VERSION = 1
-GIB = 1024**3
 PIN_RE = re.compile(r"^[0-9a-f]{40}$")
 EXECUTION_STAGE_NAMES = [
     "01-sync.sh", "03-ungoogled.py", "04-domain-substitution.sh",
@@ -1173,8 +1172,8 @@ class Runner:
         self.save()
         self.clone_pinned("depot_tools", self.config["depotTools"]["repository"],
                           self.config["depotTools"]["commit"])
-        ug = self.clone_pinned("ungoogled", self.config["ungoogled"]["repository"],
-                               self.config["ungoogled"]["commit"])
+        self.clone_pinned("ungoogled", self.config["ungoogled"]["repository"],
+                          self.config["ungoogled"]["commit"])
         ugmac = self.clone_pinned("ungoogled-macos", self.config["ungoogled"]["macosRepository"],
                                   self.config["ungoogled"]["macosCommit"])
         self.receipt["sources"]["ungoogled"]["tag"] = self.config["ungoogled"]["tag"]

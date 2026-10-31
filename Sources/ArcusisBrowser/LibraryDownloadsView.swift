@@ -335,15 +335,6 @@ struct LibraryDownloadsView: View {
     return "\(received) of \(ByteCountFormatter.string(fromByteCount: total, countStyle: .file))"
   }
 
-  private func symbol(_ action: DownloadAction) -> String {
-    switch action {
-    case .pause: "pause.fill"
-    case .resume: "play.fill"
-    case .cancel: "xmark"
-    case .remove: "minus.circle"
-    }
-  }
-
   private func actionLabel(_ action: DownloadAction) -> String {
     switch action {
     case .pause: "Pause"

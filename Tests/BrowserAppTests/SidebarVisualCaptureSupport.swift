@@ -54,7 +54,7 @@ enum SidebarVisualCaptureSupport {
 }
 
 private enum SidebarVisualCaptureError: Error {
-  case captureDisabled, layoutTimeout, bitmapUnavailable, emptyImage, pixelReadFailed
+  case captureDisabled, layoutTimeout, emptyImage, pixelReadFailed
   case nonOpaqueImage, requiredTextMissing, invalidManifest, unexpectedPixelSize
 }
 

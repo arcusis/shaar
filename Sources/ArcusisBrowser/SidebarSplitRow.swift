@@ -70,7 +70,7 @@ struct SidebarSplitRow: View {
     .contentShape(RoundedRectangle(cornerRadius: 7))
     .onTapGesture { onSelect(segment.id) }
     .onHover { inside in
-      hoveredID = inside ? segment.id : hoveredID == segment.id ? nil : hoveredID
+      hoveredID = hoveredID.updatingTarget(segment.id, isActive: inside)
     }
     .help(segment.title)
     .accessibilityElement(children: .combine)

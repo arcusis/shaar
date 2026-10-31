@@ -24,7 +24,6 @@ enum LibraryDrawerSection: String, CaseIterable, Identifiable {
 struct BrowserLibraryDrawer: View {
   @Bindable var store: BrowserStore
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
-  @State private var spacesQuery = ""
   @FocusState private var spacesSearchIsFocused: Bool
 
   private var section: LibraryDrawerSection { store.libraryDrawerSection ?? .downloads }

@@ -40,6 +40,10 @@ struct BookmarkEditor: View {
     if case .newFolder = route.mode { return true }
     return item?.isFolder == true
   }
+  private var heading: String {
+    guard route.itemID == nil else { return "Edit bookmark" }
+    return isFolder ? "New bookmark folder" : "Add bookmark"
+  }
   private var busy: Bool {
     store.library.mutating.contains(LibraryKey(profileID: route.profileID, section: .bookmarks))
   }
@@ -55,7 +59,7 @@ struct BookmarkEditor: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 18) {
       Label(
-        route.itemID == nil ? (isFolder ? "New bookmark folder" : "Add bookmark") : "Edit bookmark",
+        heading,
         systemImage: isFolder ? "folder" : "star"
       ).font(.title2.weight(.semibold))
       Text("\(store.profileName) profile").font(.callout).foregroundStyle(.secondary)

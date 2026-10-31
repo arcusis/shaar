@@ -201,7 +201,7 @@ final class ReopenProbe {
       runtime: runtime, engine: engine, store: store, root: root, phase: "\(phase)-reopen"
     )
     .verifyNativeOrder(
-      profileTabs.filter(\.isPinned) + profileTabs.filter { !$0.isPinned }, profile: base.profileID,
+      profileTabs.filter(\.isPinned) + profileTabs.filter { !$0.isPinned },
       label: "restored tabs match native profile order")
     try expect(true, "extension-visible order and active target match the restored page")
     for (index, id) in untouched.enumerated() {

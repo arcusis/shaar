@@ -3,7 +3,6 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import AppKit
-import BrowserCore
 import Foundation
 
 /// Web accounts a profile can be signed in to. Sign-in runs on the provider's own page inside the

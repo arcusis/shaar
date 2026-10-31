@@ -6,7 +6,6 @@ import BrowserCore
 import Foundation
 import Testing
 
-@testable import ArcusisBrowser
 @testable import ShaarVerification
 
 @Suite struct AbruptCheckpointTests {

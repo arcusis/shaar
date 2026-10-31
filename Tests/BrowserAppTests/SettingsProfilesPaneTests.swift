@@ -15,8 +15,7 @@ import Testing
     profiles: [
       BrowserSettingsProfile(
         id: id, name: "Work",
-        spaces: [BrowserSettingsSpace(id: UUID(), name: "Research", symbol: "book")],
-        extensionCount: 2)
+        spaces: [BrowserSettingsSpace(id: UUID(), name: "Research", symbol: "book")])
     ],
     searchEngines: [BrowserSettingsChoice(id: "google", title: "Google")],
     selectedProfileID: selectedProfileID,

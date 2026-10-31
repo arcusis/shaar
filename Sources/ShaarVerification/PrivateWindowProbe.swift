@@ -254,7 +254,7 @@ final class PrivateWindowProbe {
       && runtime.privateProbeAudit(forContextID: contextA)?["allWindowsDisplayOwnedWebContents"]
         as? Bool == true
     let secret = UUID().uuidString.lowercased()
-    try await setPrivate(t1, cookie: secret, storage: secret, session: secret)
+    try await setPrivate(t1, cookie: secret, storage: secret)
     try await waitUntil(t2) { $0["local"] as? String == secret }
     let shared = try await readPrivate(t2)
     checks["sameSourceWindowsShareCookiesAndLocalStorage"] =
@@ -686,9 +686,7 @@ final class PrivateWindowProbe {
     return value
   }
 
-  private func setPrivate(_ tab: String, cookie: String, storage: String, session: String)
-    async throws
-  {
+  private func setPrivate(_ tab: String, cookie: String, storage: String) async throws {
     let literal = try JSONEncoder().encode(storage)
     guard let value = String(data: literal, encoding: .utf8) else {
       throw PrivateWindowFailure("Marker encoding failed.")

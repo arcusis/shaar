@@ -30,7 +30,6 @@ def macho(signature_size=24, code=b"verified code"):
     linkedit_size = 72
     signature_command_size = 16
     commands_size = text_size + linkedit_size + signature_command_size
-    commands_end = 32 + commands_size
     signature_offset = 256
     header = struct.pack("<IiiIIIII", 0xFEEDFACF, payload.CPU_TYPE_ARM64, 0, 6, 3,
                          commands_size, 0, 0)

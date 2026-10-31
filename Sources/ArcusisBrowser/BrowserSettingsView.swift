@@ -11,23 +11,20 @@ struct BrowserSettingsProfile: Identifiable {
   let name: String
   let color: ProfileColorChoice
   let spaces: [BrowserSettingsSpace]
-  let extensionCount: Int
   let accounts: [ConnectedAccount]
   var spaceCount: Int { spaces.count }
   var spaceNames: [String] { spaces.map(\.name) }
 
   init(
     id: UUID, name: String, color: ProfileColorChoice = .none, spaces: [BrowserSettingsSpace],
-    extensionCount: Int = 0, accounts: [ConnectedAccount] = []
+    accounts: [ConnectedAccount] = []
   ) {
     self.id = id
     self.name = name
     self.color = color
     self.spaces = spaces
-    self.extensionCount = extensionCount
     self.accounts = accounts
   }
-
 }
 
 struct BrowserSettingsSpace: Identifiable {

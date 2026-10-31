@@ -6,7 +6,7 @@ import Foundation
 
 /// Text helpers shared by typed launcher search and the filter chips, so both match the same
 /// fields and show the same domains.
-public enum CommandText {
+enum CommandText {
   /// The grey secondary text on a row: the host without a leading "www.".
   public static func domain(of url: URL?) -> String {
     guard let url else { return "" }

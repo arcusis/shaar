@@ -62,12 +62,9 @@ public enum BrowserLaunch {
     // Render only this view hierarchy; never capture or activate the desktop.
     let application = NSApplication.shared
     application.setActivationPolicy(.prohibited)
-    let size =
-      showExtensionConsent
-      ? NSSize(width: 516, height: 480)
-      : showSpaceEditor
-        ? NSSize(width: 496, height: 430)
-        : compact ? NSSize(width: 760, height: 520) : NSSize(width: 1200, height: 780)
+    let size = previewSize(
+      compact: compact, showSpaceEditor: showSpaceEditor, showExtensionConsent: showExtensionConsent
+    )
     let store = BrowserStore.preview(showCommand: showCommand)
     store.sidebarIsVisible = !hideSidebar
     if showCommand {
@@ -99,6 +96,19 @@ public enum BrowserLaunch {
   }
 
   /// Gives the launcher closed tabs, a Favorite, history and Actions to show without an engine.
+  private static func previewSize(
+    compact: Bool, showSpaceEditor: Bool, showExtensionConsent: Bool
+  ) -> NSSize {
+    if showExtensionConsent { return NSSize(width: 516, height: 480) }
+    if showSpaceEditor { return NSSize(width: 496, height: 430) }
+    return compact ? NSSize(width: 760, height: 520) : NSSize(width: 1200, height: 780)
+  }
+
+  private static func settingsPreviewSize(compact: Bool, withProfileEditor: Bool) -> NSSize {
+    if withProfileEditor { return NSSize(width: 440, height: 220) }
+    return compact ? NSSize(width: 620, height: 500) : NSSize(width: 720, height: 650)
+  }
+
   @MainActor private static func stageCommandPreview(
     _ store: BrowserStore, query: String, filter: CommandFilter?
   ) {
@@ -151,10 +161,7 @@ public enum BrowserLaunch {
     application.setActivationPolicy(.prohibited)
     let dark = CommandLine.arguments.contains("--settings-dark")
     application.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
-    let size =
-      withProfileEditor
-      ? NSSize(width: 440, height: 220)
-      : compact ? NSSize(width: 620, height: 500) : NSSize(width: 720, height: 650)
+    let size = settingsPreviewSize(compact: compact, withProfileEditor: withProfileEditor)
     let view = Group {
       if withProfileEditor {
         ProfileNameEditor(

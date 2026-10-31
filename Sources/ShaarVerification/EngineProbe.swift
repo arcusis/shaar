@@ -197,17 +197,7 @@ final class EngineProbe {
         }
       }
       // A bounded test must fail even if a renderer never calls its completion.
-      DispatchQueue.main.asyncAfter(
-        deadline: .now()
-          + (externalAppConsentMode
-            ? 180
-            : includeBitwarden
-              ? 150
-              : savedTabCapacityMode
-                ? 180
-                : privateWindowMode ? 210 : 75)
-      ) {
-        [weak probe] in
+      DispatchQueue.main.asyncAfter(deadline: .now() + probe.timeoutSeconds) { [weak probe] in
         probe?.finish(error: ProbeFailure("Engine probe timed out."))
       }
       let code = probe.runtime.run(
@@ -667,6 +657,18 @@ final class EngineProbe {
     writeReport()
   }
 
+  private var timeoutSeconds: Double {
+    if externalAppConsentMode || savedTabCapacityMode { return 180 }
+    if includeBitwarden { return 150 }
+    return privateWindowMode ? 210 : 75
+  }
+
+  private var probeMode: String {
+    if privateWindowMode { return PrivateWindowProbe.mode }
+    if externalAppConsentMode { return ExternalAppConsentProbe.mode }
+    return savedTabCapacityMode ? SavedTabCapacityFixture.mode : "full-fixture"
+  }
+
   private func writeReport() {
     let metricsURL = root.appending(path: "\(phase)-switch-metrics.json")
     let errorReport: Any
@@ -679,11 +681,7 @@ final class EngineProbe {
     errorReport = resultError.map { $0.localizedDescription } ?? NSNull()
     let report: [String: Any] = [
       "phase": phase, "passed": passed, "chromiumVersion": runtime.chromiumVersion,
-      "probeMode": privateWindowMode
-        ? PrivateWindowProbe.mode
-        : externalAppConsentMode
-          ? ExternalAppConsentProbe.mode
-          : savedTabCapacityMode ? SavedTabCapacityFixture.mode : "full-fixture",
+      "probeMode": probeMode,
       "savedTabCapacityOnly": savedTabCapacityMode,
       "savedTabCapacityProbe": savedTabCapacityMode,
       "savedTabCapacityRunID": capacityRunID,

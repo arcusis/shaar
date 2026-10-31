@@ -60,7 +60,7 @@ public struct BookmarkTree: Equatable, Sendable {
         ids.insert(id).inserted, let title = node["t"] as? String,
         let kind = node["k"] as? String, ["f", "u"].contains(kind)
       else { throw LibraryDataError.invalidBookmarks }
-      let text = title.isEmpty ? (kind == "f" ? "Untitled folder" : "Untitled bookmark") : title
+      let text = title.isEmpty ? Self.untitledBookmarkTitle(kind: kind) : title
       let ownPath = path.isEmpty ? text : "\(path) / \(text)"
       let address: String?
       if kind == "u" {
@@ -91,6 +91,10 @@ public struct BookmarkTree: Equatable, Sendable {
       current = node.parentID
     }
     return false
+  }
+
+  private static func untitledBookmarkTitle(kind: String) -> String {
+    kind == "f" ? "Untitled folder" : "Untitled bookmark"
   }
 }
 

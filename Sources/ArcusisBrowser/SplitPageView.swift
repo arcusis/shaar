@@ -105,7 +105,7 @@ private struct SplitGroupView: View {
     .contentShape(Rectangle())
     .pointerStyle(axis == .columns ? .columnResize : .rowResize)
     .onHover { inside in
-      hoveredDivider = inside ? index : hoveredDivider == index ? nil : hoveredDivider
+      hoveredDivider = hoveredDivider.updatingTarget(index, isActive: inside)
     }
     .gesture(
       DragGesture(minimumDistance: 0, coordinateSpace: .global)

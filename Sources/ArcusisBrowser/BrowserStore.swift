@@ -18,11 +18,13 @@ struct SpaceRemovalImpact {
   var favoritePages: Int = 0
   var tabDescription: String { "\(tabs) \(tabs == 1 ? "tab" : "tabs")" }
 
+  private var favoriteImpact: String {
+    guard favoritePages > 0 else { return "" }
+    return " and \(favoritePages) Favorite \(favoritePages == 1 ? "page" : "pages")"
+  }
+
   var message: String {
-    let favoriteImpact =
-      favoritePages == 0
-      ? "" : " and \(favoritePages) Favorite \(favoritePages == 1 ? "page" : "pages")"
-    return windows > 1
+    windows > 1
       ? "This space will be deleted from all \(windows) windows, closing \(tabDescription)\(favoriteImpact). Its profile is kept."
       : "Tabs in this space will close\(favoriteImpact). Its profile is kept."
   }
@@ -1146,13 +1148,6 @@ final class BrowserStore {
     for request in consentRequests where !request.matches(session) {
       resolveConsent(request.id, accepted: false)
     }
-  }
-
-  static func persistent() -> BrowserStore {
-    let support = URL.applicationSupportDirectory
-      .appending(path: ProductIdentity.dataFolderName, directoryHint: .isDirectory)
-      .appending(path: "session.json")
-    return BrowserStore(sessionFile: SessionFile(url: support))
   }
 
   static func preview(showCommand: Bool) -> BrowserStore {

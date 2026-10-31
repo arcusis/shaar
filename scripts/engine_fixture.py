@@ -969,7 +969,7 @@ def main(argv=None):
     shutil.copytree("Tests/Fixtures/ProfileExtension", root / "Extension")
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Fixture)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    executable = Path("build/Arcusis Browser.app/Contents/MacOS/ArcusisBrowser").resolve()
+    executable = Path("build/Shaar.app/Contents/MacOS/ArcusisBrowser").resolve()
     (root / 'Downloads').mkdir(mode=0o700)
     probe_env = dict(os.environ, ARDIA_DOWNLOADS_DIR=str(root / 'Downloads'))
     print(f"Probe evidence: {root}", flush=True)

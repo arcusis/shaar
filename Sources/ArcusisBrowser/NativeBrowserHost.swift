@@ -9,7 +9,7 @@ enum BrowserMenuCommand: String, CaseIterable {
     addFavorite
   case reopenClosed, recentlyClosed, bookmarkPage, bookmarks, history, downloads
   case find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload, splitView
-  case extensions, help, minimizeWindow, zoomWindow, bringAllToFront, settings, quit
+  case extensions, help, minimizeWindow, zoomWindow, bringAllToFront, settings, quit, createFolder
 }
 
 @MainActor
@@ -58,6 +58,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   private(set) var settingsController: BrowserSettingsController?
   private var privateHost: PrivateBrowserHost?
   private var miniWindows: [String: MiniBrowserController] = [:]
+  private var accountSignIns: [String: ProfileAccountSignIn] = [:]
   private var pendingURLs: [URL] = []
   private var claimedPrimary = false
   private var started = false
@@ -139,6 +140,22 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     settingsController = BrowserSettingsController(
       workspace: workspace, preferences: preferences, runtime: events.runtime,
       presentation: presentation == .visible ? .visible : .hiddenProbe)
+    settingsController?.setOpenSpaceHandler { [weak self] spaceID in
+      guard let self,
+        let context = self.contexts.values.first(where: {
+          $0.store.session.spaces.contains { $0.id == spaceID }
+        })
+      else { return }
+      context.store.perform(.space(spaceID))
+      context.window.makeKeyAndOrderFront(nil)
+    }
+    settingsController?.setAccountHandlers(
+      connect: { [weak self] profile, provider in
+        self?.runAccountSignIn(profile, provider: provider, purpose: .signIn)
+      },
+      disconnect: { [weak self] profile, provider in
+        self?.runAccountSignIn(profile, provider: provider, purpose: .signOut)
+      })
     if presentation == .visible, let controller = settingsController?.nativeBitwardenController {
       for context in contexts.values { context.engine.attachPasswordFill(controller) }
     }
@@ -203,7 +220,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     if command == .quit {
       if UserDefaults.standard.bool(forKey: "settingsWarnBeforeQuit") && presentation == .visible {
         let alert = NSAlert()
-        alert.messageText = "Quit Arcusis Browser?"
+        alert.messageText = "Quit \(ProductIdentity.name)?"
         alert.informativeText = "Your windows and tabs will be saved."
         alert.addButton(withTitle: "Quit")
         alert.addButton(withTitle: "Cancel")
@@ -250,6 +267,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       store.commandQuery = store.session.selectedPage?.tab.url.absoluteString ?? ""
     case .newSpace: store.spaceEditor = .create
     case .editSpace: store.spaceEditor = .edit(store.session.selectedSpaceID)
+    case .createFolder:
+      store.showFolderEditor(.create(spaceID: store.session.selectedSpaceID, parentID: nil))
     case .closeTab:
       if store.session.selectedPage != nil {
         store.closeCurrentPage()
@@ -274,7 +293,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .splitView: store.splitSelectedTab()
     case .extensions: context.engine.showExtensionList()
     case .help:
-      if let url = URL(string: "https://github.com/arcusis/browser") { store.perform(.open(url)) }
+      if let url = URL(string: "https://github.com/arcusis/shaar") { store.perform(.open(url)) }
     case .minimizeWindow: context.window.performMiniaturize(nil)
     case .zoomWindow: context.window.zoom(nil)
     case .bringAllToFront:
@@ -314,6 +333,32 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     }
     if NSApp.helpMenu === menu?.items.first(where: { $0.submenu?.title == "Help" })?.submenu {
       NSApp.helpMenu = previousHelpMenu
+    }
+  }
+
+  /// Connect or disconnect a provider account inside the profile's own engine storage.
+  private func runAccountSignIn(
+    _ profileID: UUID, provider: AccountProvider, purpose: ProfileAccountSignIn.Purpose
+  ) {
+    guard
+      let profile = workspace.workspace.catalog.profiles.first(where: { $0.id == profileID })
+    else { return }
+    do {
+      let flow = try ProfileAccountSignIn(
+        events: events, profile: profile, provider: provider, purpose: purpose)
+      let id = flow.engine.windowID
+      accountSignIns[id] = flow
+      flow.onFinished = { [weak self] account in
+        guard let self else { return }
+        switch (purpose, account) {
+        case (.signIn, let account?): self.preferences.setAccount(account, for: profileID)
+        case (.signOut, _): self.preferences.removeAccount(provider, for: profileID)
+        default: break
+        }
+        self.accountSignIns[id] = nil
+      }
+    } catch {
+      report(error)
     }
   }
 
@@ -400,7 +445,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       engine.attachPasswordFill(controller)
     }
     let hosting = NSHostingView(rootView: BrowserWindow(store: store))
-    window.title = "Arcusis Browser"
+    window.title = ProductIdentity.name
     window.titleVisibility = .hidden
     window.titlebarAppearsTransparent = true
     window.styleMask.insert(.fullSizeContentView)
@@ -629,96 +674,91 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       main.addItem(item)
       return result
     }
-    func add(
-      _ command: BrowserMenuCommand, _ title: String, _ key: String, to menu: NSMenu,
-      modifiers: NSEvent.ModifierFlags = .command
-    ) {
-      let item = NSMenuItem(title: title, action: #selector(menuAction(_:)), keyEquivalent: key)
+    // Every shortcut comes from ShortcutCatalog so the menus and the Shortcuts pane agree.
+    func add(_ command: BrowserMenuCommand, _ title: String, to menu: NSMenu) {
+      let shortcut = ShortcutCatalog.shortcut(for: command)
+      let item = NSMenuItem(
+        title: title, action: #selector(menuAction(_:)), keyEquivalent: shortcut?.key ?? "")
       item.target = target
       item.representedObject = command.rawValue
-      item.keyEquivalentModifierMask = modifiers
+      item.keyEquivalentModifierMask = shortcut?.modifiers ?? []
       menu.addItem(item)
     }
-    let app = section("Arcusis Browser")
-    app.addItem(
-      withTitle: "About Arcusis Browser",
-      action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+    func addStandard(_ title: String, _ action: Selector, to menu: NSMenu) {
+      let shortcut = ShortcutCatalog.standardShortcut(for: title)
+      let item = NSMenuItem(title: title, action: action, keyEquivalent: shortcut?.key ?? "")
+      item.keyEquivalentModifierMask = shortcut?.modifiers ?? []
+      menu.addItem(item)
+    }
+    let app = section(ProductIdentity.name)
+    addStandard(
+      "About \(ProductIdentity.name)", #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
+      to: app)
     app.addItem(.separator())
     let services = NSMenu(title: "Services")
     let servicesItem = NSMenuItem(title: "Services", action: nil, keyEquivalent: "")
     servicesItem.submenu = services
     app.addItem(servicesItem)
     app.addItem(.separator())
-    add(.settings, "Settings…", ",", to: app)
-    app.addItem(
-      NSMenuItem(
-        title: "Hide Arcusis Browser", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h"
-      ))
-    app.addItem(
-      NSMenuItem(
-        title: "Hide Others", action: #selector(NSApplication.hideOtherApplications(_:)),
-        keyEquivalent: "h"))
-    app.items.last?.keyEquivalentModifierMask = [.command, .option]
-    app.addItem(
-      NSMenuItem(
-        title: "Show All", action: #selector(NSApplication.unhideAllApplications(_:)),
-        keyEquivalent: ""))
+    add(.settings, "Settings…", to: app)
+    addStandard("Hide \(ProductIdentity.name)", #selector(NSApplication.hide(_:)), to: app)
+    addStandard("Hide Others", #selector(NSApplication.hideOtherApplications(_:)), to: app)
+    addStandard("Show All", #selector(NSApplication.unhideAllApplications(_:)), to: app)
     app.addItem(.separator())
-    add(.quit, "Quit Arcusis Browser", "q", to: app)
+    add(.quit, "Quit \(ProductIdentity.name)", to: app)
     let file = section("File")
-    add(.newWindow, "New window", "n", to: file)
-    add(.newPrivateWindow, "New Private Window", "n", to: file, modifiers: [.command, .shift])
-    add(.newMiniWindow, "New Mini Window", "n", to: file, modifiers: [.command, .option])
-    add(.newTab, "New tab", "t", to: file)
-    add(.search, "Search or enter address", "l", to: file)
-    add(.closeWindow, "Close window", "w", to: file, modifiers: [.command, .shift])
+    add(.newWindow, "New window", to: file)
+    add(.newPrivateWindow, "New Private Window", to: file)
+    add(.newMiniWindow, "New Mini Window", to: file)
+    add(.newTab, "New tab", to: file)
+    add(.search, "Search or enter address", to: file)
+    add(.closeWindow, "Close window", to: file)
     let edit = section("Edit")
-    for (title, action, key) in [
-      ("Undo", "undo:", "z"), ("Redo", "redo:", "Z"), ("Cut", "cut:", "x"),
-      ("Copy", "copy:", "c"), ("Paste", "paste:", "v"), ("Select All", "selectAll:", "a"),
+    for (title, action) in [
+      ("Undo", "undo:"), ("Redo", "redo:"), ("Cut", "cut:"),
+      ("Copy", "copy:"), ("Paste", "paste:"), ("Select All", "selectAll:"),
     ] {
-      edit.addItem(withTitle: title, action: NSSelectorFromString(action), keyEquivalent: key)
+      addStandard(title, NSSelectorFromString(action), to: edit)
     }
     edit.addItem(.separator())
-    add(.find, "Find in Page…", "f", to: edit)
-    add(.findNext, "Find Next", "g", to: edit)
-    add(.findPrevious, "Find Previous", "g", to: edit, modifiers: [.command, .shift])
+    add(.find, "Find in Page…", to: edit)
+    add(.findNext, "Find Next", to: edit)
+    add(.findPrevious, "Find Previous", to: edit)
     let view = section("View")
-    add(.sidebar, "Toggle sidebar", "s", to: view)
-    add(.reload, "Reload", "r", to: view)
+    add(.sidebar, "Toggle sidebar", to: view)
+    add(.reload, "Reload", to: view)
     let spaces = section("Spaces")
-    add(.newSpace, "New space…", "", to: spaces)
-    add(.editSpace, "Edit current space…", "", to: spaces)
-    add(
-      .nextSpace, "Next space", String(Character(UnicodeScalar(NSRightArrowFunctionKey)!)),
-      to: spaces, modifiers: [.command, .option])
-    add(
-      .previousSpace, "Previous space", String(Character(UnicodeScalar(NSLeftArrowFunctionKey)!)),
-      to: spaces, modifiers: [.command, .option])
+    add(.newSpace, "New space…", to: spaces)
+    add(.editSpace, "Edit current space…", to: spaces)
+    add(.nextSpace, "Next space", to: spaces)
+    add(.previousSpace, "Previous space", to: spaces)
+    let copyURLShortcut = ShortcutCatalog.standardShortcut(for: "Copy URL")
     let copyURL = NSMenuItem(
-      title: "Copy URL", action: #selector(copyCurrentURL(_:)), keyEquivalent: "c")
+      title: "Copy URL", action: #selector(copyCurrentURL(_:)),
+      keyEquivalent: copyURLShortcut?.key ?? "")
     copyURL.target = target
-    copyURL.keyEquivalentModifierMask = [.command, .shift]
+    copyURL.keyEquivalentModifierMask = copyURLShortcut?.modifiers ?? []
     spaces.addItem(copyURL)
     let tabs = section("Tabs")
-    add(.splitView, "Split View", "=", to: tabs, modifiers: [.control, .shift])
-    add(.closeTab, "Close tab", "w", to: tabs)
-    add(.addFavorite, "Add to Favorites", "", to: tabs, modifiers: [])
-    add(.reopenClosed, "Reopen last closed tab", "t", to: tabs, modifiers: [.command, .shift])
+    add(.splitView, "Split View", to: tabs)
+    add(.closeTab, "Close tab", to: tabs)
+    add(.addFavorite, "Add to Favorites", to: tabs)
+    add(.createFolder, "New Folder", to: tabs)
+    add(.reopenClosed, "Reopen last closed tab", to: tabs)
     let archive = section("Archive")
-    add(.recentlyClosed, "Recently closed…", "", to: archive)
-    add(.bookmarkPage, "Bookmark this page", "d", to: archive)
-    add(.bookmarks, "Bookmarks…", "", to: archive)
-    add(.history, "History…", "y", to: archive)
-    add(.downloads, "Downloads", "j", to: archive, modifiers: [.command, .shift])
+    add(.recentlyClosed, "Recently closed…", to: archive)
+    add(.bookmarkPage, "Bookmark this page", to: archive)
+    add(.bookmarks, "Bookmarks…", to: archive)
+    add(.history, "History…", to: archive)
+    add(.downloads, "Downloads", to: archive)
     let extensions = section("Extensions")
-    add(.extensions, "Manage Extensions…", "", to: extensions)
+    add(.extensions, "Manage Extensions…", to: extensions)
     let window = section("Window")
-    add(.minimizeWindow, "Minimize", "m", to: window)
-    add(.zoomWindow, "Zoom", "", to: window)
-    add(.bringAllToFront, "Bring All to Front", "", to: window)
+    add(.minimizeWindow, "Minimize", to: window)
+    add(.zoomWindow, "Zoom", to: window)
+    add(.bringAllToFront, "Bring All to Front", to: window)
     let help = section("Help")
-    add(.help, "Arcusis Browser Support", "", to: help)
+    add(.help, "\(ProductIdentity.name) Support", to: help)
     return main
   }
 
@@ -796,7 +836,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   static func run(frameworkURL: URL) -> Int32 {
     do {
       let directory = URL.applicationSupportDirectory.appending(
-        path: "Arcusis Browser", directoryHint: .isDirectory)
+        path: ProductIdentity.dataFolderName, directoryHint: .isDirectory)
       let lock = try WorkspaceProcessLock(directory: directory)
       let workspace = try BrowserWorkspaceStore(
         file: WorkspaceFile(

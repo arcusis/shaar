@@ -10,6 +10,6 @@ Run the exclusive authored acceptance mode with `.venv/bin/python scripts/engine
 
 At source checkpoint `691fb9b`, actual initial/restart feature reports each passed 15 checks with two guarded approval records and nine denied requests. A separate full browsing baseline passed 458 initial and 480 restart checks. Source checks passed 232 Swift tests, 113 Python tests and strict Swift formatting. Authored normal, compact and dark sheet captures were inspected through Orca. Local receipts are in `build/Verification/external-consent-691fb9b/`; generated artifacts are not published source.
 
-These results cover owned synthetic inputs and the native no-launch resolver, not physical keyboard/sheet-focus acceptance, all operating-system handlers, company accounts or signed distribution. Live issue: [#70](https://github.com/arcusis/browser/issues/70).
+These results cover owned synthetic inputs and the native no-launch resolver, not physical keyboard/sheet-focus acceptance, all operating-system handlers, company accounts or signed distribution. Live issue: [#70](https://github.com/arcusis/shaar/issues/70).
 
 Related: [[Media_Consent]], [[Native_Window_Ownership]], [[Source_And_Native_Verification]].

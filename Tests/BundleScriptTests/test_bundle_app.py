@@ -11,7 +11,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "scripts" / "bundle-app.sh"
-ICON = REPO / "Resources" / "Branding" / "Arcusis.icns"
+ICON = REPO / "Resources" / "Branding" / "Shaar.icns"
 PSL = REPO / "Sources" / "BrowserCore" / "Resources" / "public_suffix_list.dat"
 
 
@@ -27,7 +27,7 @@ class BundleAppTests(unittest.TestCase):
         shutil.copy2(SCRIPT, self.root / "scripts" / "bundle-app.sh")
         shutil.copy2(REPO / "scripts" / "stage-browser-resources.py", self.root / "scripts")
         shutil.copytree(REPO / "ThirdParty" / "PublicSuffix", self.root / "ThirdParty" / "PublicSuffix")
-        icon = self.root / "Resources" / "Branding" / "Arcusis.icns"
+        icon = self.root / "Resources" / "Branding" / "Shaar.icns"
         icon.parent.mkdir(parents=True)
         shutil.copy2(ICON, icon)
         engine_script = self.root / "scripts" / "fetch-engine.sh"
@@ -141,20 +141,20 @@ class BundleAppTests(unittest.TestCase):
         self._assert_staged_resources(contents)
         with (contents / "Info.plist").open("rb") as plist_file:
             plist = plistlib.load(plist_file)
-        self.assertEqual(plist["CFBundleIconFile"], "Arcusis.icns")
+        self.assertEqual(plist["CFBundleIconFile"], "Shaar.icns")
         self.assertIn("passkey", plist["NSBluetoothAlwaysUsageDescription"])
-        self.assertEqual((contents / "Resources" / "Arcusis.icns").read_bytes(), ICON.read_bytes())
+        self.assertEqual((contents / "Resources" / "Shaar.icns").read_bytes(), ICON.read_bytes())
 
     def test_default_build_remains_release_shell_bundle(self):
         result = self._run()
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("swift sdk=0 build --manifest-cache none --scratch-path build/swiftpm/default -c release", self._log())
-        self.assertIn("Built build/Arcusis Browser Shell.app", result.stdout)
+        self.assertIn("Built build/Shaar Shell.app", result.stdout)
         self.assertIn("not notarized", result.stdout)
-        self._assert_icon_bundle("build/Arcusis Browser Shell.app")
+        self._assert_icon_bundle("build/Shaar Shell.app")
         self.assertTrue(
-            (self.root / "build/Arcusis Browser Shell.app/Contents/Resources/ArdiaCore/pin.json").is_file()
+            (self.root / "build/Shaar Shell.app/Contents/Resources/ArdiaCore/pin.json").is_file()
         )
         self.assertIn("codesign --force --timestamp=none --sign -", self._log())
         self.assertIn("codesign --verify --deep --strict", self._log())
@@ -165,10 +165,10 @@ class BundleAppTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("swift sdk=0 build --manifest-cache none --scratch-path build/swiftpm/default -c release", self._log())
         self.assertIn("fetch-engine", self._log())
-        self.assertIn("Built build/Arcusis Browser.app", result.stdout)
-        self._assert_icon_bundle("build/Arcusis Browser.app")
+        self.assertIn("Built build/Shaar.app", result.stdout)
+        self._assert_icon_bundle("build/Shaar.app")
         self.assertTrue(
-            (self.root / "build/Arcusis Browser.app/Contents/Frameworks/Chromium Framework.framework/Versions/Current/Libraries/libengine.dylib").is_file()
+            (self.root / "build/Shaar.app/Contents/Frameworks/Chromium Framework.framework/Versions/Current/Libraries/libengine.dylib").is_file()
         )
         self.assertIn("codesign --verify --deep --strict", self._log())
 
@@ -177,9 +177,9 @@ class BundleAppTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("swift sdk=0 build --manifest-cache none --scratch-path build/swiftpm/default -c debug", self._log())
-        self.assertIn("Built build/Arcusis Browser Shell Debug.app", result.stdout)
+        self.assertIn("Built build/Shaar Shell Debug.app", result.stdout)
         self.assertIn("not notarized or release-ready", result.stdout)
-        self._assert_icon_bundle("build/Arcusis Browser Shell Debug.app")
+        self._assert_icon_bundle("build/Shaar Shell Debug.app")
         self.assertIn("codesign --force --timestamp=none --sign -", self._log())
         self.assertNotIn("release-ready", self._log())
         self.assertIn("codesign --verify --deep --strict", self._log())
@@ -190,12 +190,12 @@ class BundleAppTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("swift sdk=0 build --manifest-cache none --scratch-path build/swiftpm/default -c debug", self._log())
         self.assertIn("fetch-engine", self._log())
-        self.assertIn("Built build/Arcusis Browser Debug.app", result.stdout)
+        self.assertIn("Built build/Shaar Debug.app", result.stdout)
         self.assertIn("not notarized or release-ready", result.stdout)
-        self._assert_icon_bundle("build/Arcusis Browser Debug.app")
+        self._assert_icon_bundle("build/Shaar Debug.app")
 
     def test_sdk_free_rebundle_removes_stale_sdk_payload(self):
-        app = self.root / "build/Arcusis Browser Shell Debug.app/Contents"
+        app = self.root / "build/Shaar Shell Debug.app/Contents"
         stale_library = app / "Frameworks/libbitwarden_uniffi.dylib"
         stale_notice = app / "Resources/NativeBitwardenSDK/ThirdPartyNotices/LICENSE_SDK.txt"
         stale_library.parent.mkdir(parents=True)
@@ -210,7 +210,7 @@ class BundleAppTests(unittest.TestCase):
         self.assertFalse((app / "Resources/NativeBitwardenSDK").exists())
 
     def test_bundle_mode_owns_sdk_flag_and_removes_stale_payload(self):
-        app = self.root / "build/Arcusis Browser Shell Debug.app/Contents"
+        app = self.root / "build/Shaar Shell Debug.app/Contents"
         stale_library = app / "Frameworks/libbitwarden_uniffi.dylib"
         stale_notice = app / "Resources/NativeBitwardenSDK/ThirdPartyNotices/LICENSE_SDK.txt"
         stale_library.parent.mkdir(parents=True)
@@ -257,7 +257,7 @@ class BundleAppTests(unittest.TestCase):
         )
         package = self.root / "build/NativeBitwardenSDK/Package"
         package.mkdir(parents=True)
-        app = self.root / "build/Arcusis Browser Shell.app/Contents"
+        app = self.root / "build/Shaar Shell.app/Contents"
         sentinel = app / "Frameworks/libbitwarden_uniffi.dylib"
         sentinel.parent.mkdir(parents=True)
         sentinel.write_bytes(b"existing payload")
@@ -309,7 +309,7 @@ class BundleAppTests(unittest.TestCase):
         self.assertEqual(final.returncode, 0, final.stderr)
         self.assertTrue(default_marker.is_file())
         self.assertTrue(sdk_marker.is_file())
-        app = self.root / "build/Arcusis Browser Shell Debug.app/Contents"
+        app = self.root / "build/Shaar Shell Debug.app/Contents"
         self.assertFalse((app / "Frameworks/libbitwarden_uniffi.dylib").exists())
         self.assertFalse((app / "Resources/NativeBitwardenSDK").exists())
         log = self._log()
@@ -345,7 +345,7 @@ class BundleAppTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("not notarized or release-ready", result.stdout)
-        app = self.root / "build/Arcusis Browser Shell Debug.app/Contents"
+        app = self.root / "build/Shaar Shell Debug.app/Contents"
         self._assert_staged_resources(app)
         bundled_library = app / "Frameworks/libbitwarden_uniffi.dylib"
         self.assertEqual(bundled_library.read_bytes(), b"validated sdk dylib")

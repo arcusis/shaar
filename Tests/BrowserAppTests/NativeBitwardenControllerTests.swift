@@ -219,7 +219,7 @@ struct NativeBitwardenControllerTests {
         tokenProvider: NativeBitwardenTokenProvider(),
         settings: ClientSettings(
           identityUrl: "https://identity.example.test", apiUrl: "https://api.example.test",
-          userAgent: "Arcusis Browser development smoke", deviceType: .sdk,
+          userAgent: "Shaar development smoke", deviceType: .sdk,
           deviceIdentifier: UUID().uuidString, bitwardenClientVersion: "0.1.0",
           bitwardenPackageType: "desktop"),
         managedSettings: ManagedSettingsBindingClient())
@@ -463,8 +463,8 @@ struct NativeBitwardenControllerTests {
 
   @Test func loginMetadataUsesRegisteredDesktopClientTypeAndArcusisIdentity() {
     #expect(NativeBitwardenLoginRequestMetadata.clientID == "desktop")
-    #expect(NativeBitwardenLoginRequestMetadata.userAgent == "Arcusis Browser")
-    #expect(NativeBitwardenLoginRequestMetadata.deviceName == "Arcusis Browser")
+    #expect(NativeBitwardenLoginRequestMetadata.userAgent == "Shaar")
+    #expect(NativeBitwardenLoginRequestMetadata.deviceName == "Shaar")
   }
 
   @Test func profileSessionsRemainIndependentAndSettingsCloseClearsSecrets() async {

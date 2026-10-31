@@ -28,7 +28,7 @@ else:
 
 REPO = Path(__file__).resolve().parents[1]
 VAULT_BINARY = REPO / 'build/VaultFixture/target/ci/vaultwarden'
-BROWSER_BINARY = REPO / 'build/Arcusis Browser.app/Contents/MacOS/ArcusisBrowser'
+BROWSER_BINARY = REPO / 'build/Shaar.app/Contents/MacOS/ArcusisBrowser'
 PHASES = ('initial', 'restart')
 VAULT_STAGE_LABELS = (
     'store-consent', 'onboarding-control', 'signed-out-alpha', 'signed-out-beta',

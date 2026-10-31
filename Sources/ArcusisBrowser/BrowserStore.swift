@@ -48,6 +48,10 @@ final class BrowserStore {
   private(set) var libraryDrawerSection: LibraryDrawerSection?
   private(set) var libraryDrawerProfileID: UUID?
   var spaceEditorFocus: SpaceEditorFocus = .name
+  /// Space a menu asked to delete; the window shows the confirmation.
+  var spacePendingDeletion: UUID?
+  /// Space a menu asked to give a new profile; the window shows the name prompt.
+  var spacePendingNewProfile: UUID?
   var spaceEditor: SpaceEditorRoute? {
     get {
       if case .space(let route) = sheet { return route }
@@ -1104,7 +1108,7 @@ final class BrowserStore {
 
   static func persistent() -> BrowserStore {
     let support = URL.applicationSupportDirectory
-      .appending(path: "Arcusis Browser", directoryHint: .isDirectory)
+      .appending(path: ProductIdentity.dataFolderName, directoryHint: .isDirectory)
       .appending(path: "session.json")
     return BrowserStore(sessionFile: SessionFile(url: support))
   }
@@ -1114,7 +1118,7 @@ final class BrowserStore {
     for address in ["https://github.com", "https://linear.app", "https://developer.apple.com"] {
       if let url = URL(string: address), let id = session.open(url) { session.togglePin(id) }
     }
-    if let url = URL(string: "https://github.com/arcusis/browser") { session.open(url) }
+    if let url = URL(string: "https://github.com/arcusis/shaar") { session.open(url) }
     let store = BrowserStore(session: session)
     store.commandIsOpen = showCommand
     return store

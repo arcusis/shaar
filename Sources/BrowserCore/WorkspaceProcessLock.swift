@@ -6,7 +6,7 @@ public enum WorkspaceLockError: Error, LocalizedError {
 
   public var errorDescription: String? {
     switch self {
-    case .inUse: "Another Arcusis Browser process is using this workspace."
+    case .inUse: "Another \(ProductIdentity.name) process is using this workspace."
     case .invalidFile: "The workspace lock file is invalid."
     }
   }

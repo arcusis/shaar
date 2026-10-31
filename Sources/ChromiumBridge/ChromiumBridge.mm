@@ -139,7 +139,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
         (result != 0 && errno != ENOENT)) return 1;
   }
   _externalAppProbeTesting = externalProbeRequested;
-  // Never forward arbitrary launch flags into company profiles.
+  // Never forward arbitrary launch flags into user profiles.
   std::vector<std::string> strings = {
     NSProcessInfo.processInfo.arguments.firstObject.UTF8String,
     "--user-data-dir=" + std::string(directory.fileSystemRepresentation),

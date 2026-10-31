@@ -706,7 +706,7 @@ final class EngineProbe {
         : externalAppConsentMode
           ? ExternalAppConsentProbe.scope
           : privateWindowMode
-            ? "Owned private-window fixture composed with normal engine fixture. No real account or vendor service acceptance."
+            ? "Owned private-window fixture composed with normal engine fixture. No real account or third-party service."
             : includeBitwarden
               ? "Disposable fixtures plus a Bitwarden extension store probe. No account credentials entered."
               : "Disposable account and component-loaded MV3 fixtures. Store installation, Google Workspace and Bitwarden are not tested."

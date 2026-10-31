@@ -8,7 +8,7 @@ import Foundation
 struct SwitchProbeMetrics: Codable {
   static let expectedSwitchCount = 20
   static let measurementScope =
-    "Host-plus-IPC time from native store selection through verified authored JavaScript snapshot completion; excludes physical paint, energy, and real account acceptance. Resident memory measures the main browser process only, excluding renderer, GPU, and other helper processes."
+    "Host-plus-IPC time from native store selection through verified authored JavaScript snapshot completion; excludes physical paint, energy and real accounts. Resident memory measures the main browser process only, excluding renderer, GPU, and other helper processes."
 
   struct Sample: Codable {
     let iteration: Int

@@ -344,7 +344,7 @@ final class NativeSelectionProbe {
         "passed": error == nil, "checks": checks, "observations": observations,
         "error": error?.localizedDescription as Any? ?? NSNull(),
         "scope":
-          "Authored MV3 tabs.update activation with two hidden application clients. No native physical input/focus, company accounts, Cmd-N, saved-window manifest/restoration, or engine-requested new windows.",
+          "Authored MV3 tabs.update activation with two hidden application clients. No native physical input/focus, real accounts, Cmd-N, saved-window manifest/restoration, or engine-requested new windows.",
       ], options: [.prettyPrinted, .sortedKeys]
     ).write(to: root.appending(path: "\(phase)-activation.json"), options: .atomic)
   }

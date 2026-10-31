@@ -460,7 +460,7 @@ final class EngineRequestedWindowProbe {
         "rollback": rollback,
         "error": error?.localizedDescription as Any? ?? NSNull(),
         "scope":
-          "Authored page window.open and MV3 chrome.windows.create in hidden managed normal-profile windows. No real company authentication, physical focus, private sessions, or vendor window flows verified.",
+          "Authored page window.open and MV3 chrome.windows.create in hidden managed normal-profile windows. Does not cover real sign-in, physical focus, private sessions or third-party window flows.",
       ], options: [.prettyPrinted, .sortedKeys]
     ).write(
       to: root.appending(path: "\(phase)-engine-requested-windows.json"), options: .atomic)

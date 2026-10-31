@@ -14,7 +14,7 @@ import SwiftUI
 final class ExternalAppConsentProbe {
   static let mode = "external-app-consent-only"
   static let scope =
-    "Owned loopback external-app consent with native no-launch resolver; no operating-system handler launch, company account or release claim."
+    "Owned loopback external-app consent with native no-launch resolver; no operating-system handler launch and no real account."
   static let checkNames = [
     "handlerAvailable", "noLaunchGuardEnabled", "profileAApproved", "profileBApproved",
     "denyWithoutLaunch", "replayIgnored", "unpresentedDenied", "profileSwitchDenied",

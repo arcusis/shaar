@@ -1,4 +1,4 @@
-# Verification and acceptance
+# Verification
 
 - [[Source_And_Native_Verification]]
 - [[Test_Coverage]]

@@ -925,7 +925,7 @@ final class PrivateWindowProbe {
           && productLifecycleBlocker == "",
       ],
       "scope":
-        "Owned hidden native product and engine windows on synthetic loopback origin. No real accounts, vendor endpoints, physical input, or company acceptance tested.",
+        "Owned hidden native product and engine windows on synthetic loopback origin. No real accounts, third-party endpoints or physical input.",
     ]
     try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
       .write(to: root.appending(path: "\(phase)-private-window.json"), options: .atomic)

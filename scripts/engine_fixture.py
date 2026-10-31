@@ -400,12 +400,12 @@ SAVED_TAB_CAPACITY_MODE = 'saved-tab-capacity-only'
 SAVED_TAB_CAPACITY_SCOPE = (
     'Owned managed workspace with authored loopback fixture; 1440 saved tabs, '
     'four profiles, eight visited Spaces, at most eight live tabs; no user profile '
-    'or external host. No hundreds-renderer or process-memory claim.'
+    'or external host. Does not measure hundreds of renderers or process memory.'
 )
 EXTERNAL_APP_CONSENT_MODE = 'external-app-consent-only'
 EXTERNAL_APP_CONSENT_SCOPE = (
-    'Owned loopback external-app consent with native no-launch resolver; no operating-system handler launch, '
-    'company account or release claim.'
+    'Owned loopback external-app consent with native no-launch resolver; no operating-system handler launch '
+    'and no real account.'
 )
 EXTERNAL_APP_CONSENT_CHECKS = (
     'handlerAvailable', 'noLaunchGuardEnabled', 'profileAApproved', 'profileBApproved',
@@ -429,7 +429,7 @@ EXTERNAL_APP_CONSENT_CLEANUP_KEYS = {
 PRIVATE_WINDOW_MODE = 'private-window-owned-engine-fixture'
 PRIVATE_WINDOW_SCOPE = (
     'Owned hidden native product and engine windows on synthetic loopback origin. No real accounts, '
-    'vendor endpoints, physical input, or company acceptance tested.'
+    'third-party endpoints or physical input.'
 )
 PRIVATE_WINDOW_CHECKS = (
     'freshMarkedRoot', 'sourceProfileAccepted', 'unknownSourceRejected', 'otrSourceRejected',

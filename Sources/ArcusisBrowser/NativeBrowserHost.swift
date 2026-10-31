@@ -960,7 +960,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       let workspace = try BrowserWorkspaceStore(
         file: WorkspaceFile(
           url: directory.appending(path: "workspace.json"),
-          legacySessionURL: directory.appending(path: "session.json")))
+          legacySessionURL: directory.appending(path: "session.json")),
+        faviconCache: FaviconCache(
+          directory: directory.appending(path: "favicons", directoryHint: .isDirectory)))
       let preferences = BrowserPreferencesStore(
         fileURL: directory.appending(path: "preferences.json"))
       let runtime = try ARCChromiumRuntime(frameworkURL: frameworkURL)

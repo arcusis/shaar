@@ -341,6 +341,7 @@ final class BrowserEngine {
           forTabID: identity, profileID: profile.uuidString, windowID: self.windowID)
       {
         self.favicons[id] = icon
+        self.store?.rememberFavicon(icon, forTab: id)
       } else {
         self.favicons[id] = nil
       }

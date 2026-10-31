@@ -102,6 +102,9 @@ final class BrowserStore {
     subsystem: "com.arcusis.browser", category: "SpaceSwitch")
   @ObservationIgnored private var maySave = true
   @ObservationIgnored var engine: BrowserEngine?
+  @ObservationIgnored var faviconCache: FaviconCache?
+  /// Maps a window-local pinned tab to the shared pin definition every window restores.
+  @ObservationIgnored var sharedPinID: ((UUID) -> UUID?)?
   @ObservationIgnored var onSessionChanged: (() -> Void)?
   @ObservationIgnored var onCloseTab: ((UUID) -> Void)?
   /// The host's menu commands for the launcher's Actions; nil hides Actions.

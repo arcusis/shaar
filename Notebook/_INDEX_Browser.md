@@ -3,6 +3,7 @@
 - [[Browser_Architecture]]
 - [[Profile_Space_Isolation]]
 - [[Profile_Favorites]]
+- [[Favicon_Cache]]
 - [[Native_Window_Ownership]]
 - [[Managed_Workspace_Persistence]]
 - [[Sidebar_Tab_Organization]]

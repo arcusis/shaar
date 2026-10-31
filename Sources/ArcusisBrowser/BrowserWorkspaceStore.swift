@@ -15,9 +15,14 @@ final class BrowserWorkspaceStore {
   @ObservationIgnored private let file: WorkspaceFile?
   @ObservationIgnored private var maySave = true
   @ObservationIgnored private let snapshotScheduler = SnapshotSaveScheduler()
+  @ObservationIgnored private let faviconCache: FaviconCache?
 
-  init(file: WorkspaceFile? = nil, initialSession: BrowserSession = .fresh()) throws {
+  init(
+    file: WorkspaceFile? = nil, initialSession: BrowserSession = .fresh(),
+    faviconCache: FaviconCache? = nil
+  ) throws {
     self.file = file
+    self.faviconCache = faviconCache
     workspace = try BrowserWorkspace(session: initialSession)
     var isNew = true
     do {
@@ -124,6 +129,10 @@ final class BrowserWorkspaceStore {
       }
       return self.changed(window.id, session: session, deferred: deferred)
     }
+    stores[window.id]?.faviconCache = faviconCache
+    stores[window.id]?.sharedPinID = { [weak self] tabID in
+      self?.workspace.window(window.id)?.pins.first { $0.tabID == tabID }?.pinID
+    }
     stores[window.id]?.onSetSpaceProfile = { [weak self] spaceID, profileID in
       (try? self?.setSpaceProfile(spaceID, to: profileID)) ?? false
     }
@@ -184,6 +193,7 @@ final class BrowserWorkspaceStore {
   @discardableResult
   private func writeSnapshot() -> Bool {
     guard maySave else { return false }
+    faviconCache?.retain(workspace.faviconItemIDs)
     do {
       let snapshot = workspace
       try snapshotScheduler.writeNow { try file?.save(snapshot) }
@@ -216,5 +226,17 @@ final class BrowserWorkspaceStore {
       guard let current = workspace.window(id) else { continue }
       stores[id]?.applyManagedSession(current.session, notice: storageNotice)
     }
+  }
+}
+
+extension BrowserWorkspace {
+  /// Favorite and shared pin IDs by profile: the sidebar items whose icons survive a restart.
+  fileprivate var faviconItemIDs: [UUID: Set<UUID>] {
+    var itemIDs = Dictionary(grouping: catalog.favorites, by: \.profileID)
+      .mapValues { Set($0.map(\.id)) }
+    for space in catalog.spaces {
+      itemIDs[space.profileID, default: []].formUnion(space.tabs.map(\.id))
+    }
+    return itemIDs
   }
 }

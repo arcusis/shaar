@@ -5,6 +5,7 @@ swift build
 swift test --jobs 2
 .venv/bin/python scripts/test-python.py
 swift format lint --strict --recursive Package.swift Sources Tests
+python3 scripts/check-license-headers.py
 bash scripts/test-engine.sh
 ```
 

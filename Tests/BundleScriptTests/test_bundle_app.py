@@ -11,7 +11,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "scripts" / "bundle-app.sh"
-ICON = REPO / "Resources" / "Branding" / "Arcusis.icns"
+ICON = REPO / "Resources" / "Branding" / "Shaar.icns"
 PSL = REPO / "Sources" / "BrowserCore" / "Resources" / "public_suffix_list.dat"
 
 
@@ -27,7 +27,7 @@ class BundleAppTests(unittest.TestCase):
         shutil.copy2(SCRIPT, self.root / "scripts" / "bundle-app.sh")
         shutil.copy2(REPO / "scripts" / "stage-browser-resources.py", self.root / "scripts")
         shutil.copytree(REPO / "ThirdParty" / "PublicSuffix", self.root / "ThirdParty" / "PublicSuffix")
-        icon = self.root / "Resources" / "Branding" / "Arcusis.icns"
+        icon = self.root / "Resources" / "Branding" / "Shaar.icns"
         icon.parent.mkdir(parents=True)
         shutil.copy2(ICON, icon)
         engine_script = self.root / "scripts" / "fetch-engine.sh"
@@ -141,8 +141,8 @@ class BundleAppTests(unittest.TestCase):
         self._assert_staged_resources(contents)
         with (contents / "Info.plist").open("rb") as plist_file:
             plist = plistlib.load(plist_file)
-        self.assertEqual(plist["CFBundleIconFile"], "Arcusis.icns")
-        self.assertEqual((contents / "Resources" / "Arcusis.icns").read_bytes(), ICON.read_bytes())
+        self.assertEqual(plist["CFBundleIconFile"], "Shaar.icns")
+        self.assertEqual((contents / "Resources" / "Shaar.icns").read_bytes(), ICON.read_bytes())
 
     def test_default_build_remains_release_shell_bundle(self):
         result = self._run()

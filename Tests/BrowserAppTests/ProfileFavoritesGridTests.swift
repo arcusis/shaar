@@ -239,10 +239,7 @@ final class ProfileFavoritesGridTests: XCTestCase {
     host.layoutSubtreeIfNeeded()
     let scrollView = findScrollView(in: host)
     scrollView?.layoutSubtreeIfNeeded()
-    let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
-    host.cacheDisplay(in: host.bounds, to: bitmap)
-    try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(
-      to: imageURL, options: .atomic)
+    _ = try VisualCapture.render(host, to: imageURL)
     return (
       host.bounds.width, host.bounds.height, fittingSize.width, fittingSize.height,
       scrollView?.frame.height

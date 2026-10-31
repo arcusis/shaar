@@ -117,18 +117,12 @@ final class MountedChromeSidebar {
         try await Task.sleep(for: .milliseconds(16))
       }
       guard settled == 3 else { throw SidebarVisualCaptureError.layoutTimeout }
-      guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else {
-        throw SidebarVisualCaptureError.bitmapUnavailable
-      }
-      host.cacheDisplay(in: host.bounds, to: bitmap)
-      guard let png = bitmap.representation(using: .png, properties: [:]), png.count > 100,
-        let image = bitmap.cgImage
-      else { throw SidebarVisualCaptureError.emptyImage }
-      try png.write(to: url, options: .atomic)
-      let backingBounds = host.convertToBacking(host.bounds)
-      let expectedWidth = Int(backingBounds.width.rounded())
-      let expectedHeight = Int(backingBounds.height.rounded())
+      let bitmap = try VisualCapture.render(host, to: url)
+      guard let image = bitmap.cgImage else { throw SidebarVisualCaptureError.emptyImage }
+      let expectedWidth = Int(size.width * VisualCapture.scale)
+      let expectedHeight = Int(size.height * VisualCapture.scale)
       entry["backingScaleFactor"] = window.backingScaleFactor
+      entry["captureScale"] = VisualCapture.scale
       entry["expectedPixelWidth"] = expectedWidth
       entry["expectedPixelHeight"] = expectedHeight
       entry["fittingWidth"] = Double(host.fittingSize.width)

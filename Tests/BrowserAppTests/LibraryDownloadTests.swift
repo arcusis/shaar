@@ -391,17 +391,14 @@ struct LibraryDownloadTests {
     window.displayIfNeeded()
     try await Task.sleep(for: .milliseconds(settleMilliseconds))
     host.layoutSubtreeIfNeeded()
-    var bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
-    host.cacheDisplay(in: host.bounds, to: bitmap)
+    var bitmap = try VisualCapture.render(host, to: url)
     let deadline = ContinuousClock.now.advanced(by: .seconds(8))
     while let ready, !ready(bitmap), ContinuousClock.now < deadline {
       try await Task.sleep(for: .milliseconds(25))
       host.layoutSubtreeIfNeeded()
       window.displayIfNeeded()
-      bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
-      host.cacheDisplay(in: host.bounds, to: bitmap)
+      bitmap = try VisualCapture.render(host, to: url)
     }
-    try #require(bitmap.representation(using: .png, properties: [:])).write(to: url)
     return bitmap
   }
 }

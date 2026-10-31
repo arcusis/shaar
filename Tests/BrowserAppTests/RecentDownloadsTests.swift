@@ -131,16 +131,8 @@ struct RecentDownloadsTests {
     let host = NSHostingView(rootView: view)
     host.frame = NSRect(x: 0, y: 0, width: width, height: 420)
     host.layoutSubtreeIfNeeded()
-    guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else {
-      Issue.record("Could not allocate recent-download capture: \(name)")
-      return
-    }
-    host.cacheDisplay(in: host.bounds, to: bitmap)
-    guard let data = bitmap.representation(using: .png, properties: [:]) else {
-      Issue.record("Could not encode recent-download capture: \(name)")
-      return
-    }
-    try data.write(to: output.appendingPathComponent("\(name).png"), options: .atomic)
+    _ = try VisualCapture.render(
+      host, to: output.appendingPathComponent("\(name).png"))
   }
 
   private func download(

@@ -263,12 +263,9 @@ final class SidebarFavoritesLayoutTests: XCTestCase {
     try await Task.sleep(for: .milliseconds(100))
     host.layoutSubtreeIfNeeded()
     XCTAssertEqual(host.bounds.size, size)
-    let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+    let bitmap = try VisualCapture.render(host, to: url)
     XCTAssertEqual(bitmap.pixelsWide, Int(size.width))
     XCTAssertEqual(bitmap.pixelsHigh, Int(size.height))
-    host.cacheDisplay(in: host.bounds, to: bitmap)
-    try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(
-      to: url, options: .atomic)
     XCTAssertNotNil(measurements.footerFrame)
     return (bitmap.pixelsWide, bitmap.pixelsHigh)
   }
@@ -301,10 +298,7 @@ private final class MountedFavoritesSidebar {
 
   func capture(to url: URL) throws {
     host.layoutSubtreeIfNeeded()
-    let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
-    host.cacheDisplay(in: host.bounds, to: bitmap)
-    try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(
-      to: url, options: .atomic)
+    _ = try VisualCapture.render(host, to: url)
   }
 
   func close() { window.close() }

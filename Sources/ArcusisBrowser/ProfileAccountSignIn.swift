@@ -81,7 +81,7 @@ final class ProfileAccountSignIn {
       requestedAccountList = engine.navigateCurrentPage(to: GoogleAccountList.url)
     } else if url.host() == GoogleAccountList.url.host(),
       url.path() == GoogleAccountList.url.path(),
-      let body = await evaluate("document.body ? document.body.innerText : ''"),
+      let body = await evaluate(GoogleAccountList.readScript),
       let accounts = GoogleAccountList.accounts(fromBody: body)
     {
       if let account = accounts.first { return finish(account) }

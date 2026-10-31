@@ -14,6 +14,7 @@ struct ProfileAccountsTests {
     #expect(account?.photoURL?.host() == "lh3.googleusercontent.com")
     #expect(GoogleAccountList.accounts(fromBody: #"["gaia.l.a.r",[]]"#) == [])
     #expect(GoogleAccountList.accounts(fromBody: "") == nil)
+    #expect(GoogleAccountList.readScript.contains("open('POST', location.href"))
     #expect(GoogleAccountList.accounts(fromBody: "<html>Sign in</html>") == nil)
   }
 

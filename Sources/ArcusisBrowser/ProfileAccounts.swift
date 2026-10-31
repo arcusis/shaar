@@ -84,6 +84,18 @@ enum GoogleAccountList {
   static let url = URL(
     string: "https://accounts.google.com/ListAccounts?gpsia=1&source=ChromiumBrowser&json=standard")!
 
+  /// Google answers the list only to POST; a plain visit shows a 400 page. Opening the URL puts
+  /// the page on the accounts origin, and this same-origin POST then reads the list with its
+  /// cookies.
+  static let readScript = """
+    (() => {
+      const request = new XMLHttpRequest();
+      request.open('POST', location.href, false);
+      request.send('');
+      return request.status === 200 ? request.responseText : '';
+    })()
+    """
+
   /// Entries look like `["gaia.l.a", 1, name, email, photo, …]`; the first is the primary account.
   /// Returns nil until the body is the account list, and an empty array when no one is signed in.
   static func accounts(fromBody text: String) -> [ConnectedAccount]? {

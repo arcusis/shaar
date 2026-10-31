@@ -1,6 +1,7 @@
-#import "include/ChromiumBridge.h"
+#import "include/ChromiumBridgeVerification.h"
 #import "ChromiumDownloads.h"
 #import "ChromiumLibrary.h"
+#import "ChromiumProbeRoot.h"
 #import "ChromiumWebStoreFit.h"
 #import "../../ThirdParty/ArdiaCore/ArdiaCore.h"
 #import <dlfcn.h>
@@ -42,7 +43,7 @@ static void ClickProbeTarget(ArdiaCoreTab *tab, NSString *expression, BOOL (^cur
   }];
 }
 
-static NSString *ProbeButtonExpression(NSString *literal, BOOL diagnostic) {
+static NSString *ProbeButtonExpression(NSString *literal) {
   return [NSString stringWithFormat:
     @"(()=>{const title=%@;const excluded=e=>{for(let n=e;n&&n.nodeType===1;n=n.parentElement){"
      "if(n.hidden||n.inert||n.getAttribute('aria-hidden')?.toLowerCase()==='true')return true;"
@@ -52,24 +53,14 @@ static NSString *ProbeButtonExpression(NSString *literal, BOOL diagnostic) {
      "const label=e=>(e.getAttribute('aria-label')||text(e)).trim().replace(/\\s+/g,' ');"
      "const candidates=[...document.querySelectorAll('button,a,[role=button]')],exact=candidates.filter(e=>label(e)===title),"
      "visible=exact.filter(e=>!excluded(e)),sized=visible.filter(e=>{const r=e.getBoundingClientRect();return r.width>0&&r.height>0;}),"
-     "eligible=sized.filter(e=>!e.disabled&&e.getAttribute('aria-disabled')?.toLowerCase()!=='true');const cap=n=>Math.min(n,999),viewportHasArea=innerWidth>0&&innerHeight>0;"
+     "eligible=sized.filter(e=>!e.disabled&&e.getAttribute('aria-disabled')?.toLowerCase()!=='true');"
      "const hit=(e,x,y)=>{const top=document.elementFromPoint(x,y);return !!top&&(top===e||e.contains(top));};"
      "const point=e=>{const r=e.getBoundingClientRect();if(r.width<=0||r.height<=0)return null;const x=r.x+r.width/2,y=r.y+r.height/2;"
      "if(x>=0&&y>=0&&x<innerWidth&&y<innerHeight&&hit(e,x,y))return {x,y};const l=Math.max(0,r.left),t=Math.max(0,r.top),"
      "rr=Math.min(innerWidth,r.right),bb=Math.min(innerHeight,r.bottom);if(rr<=l||bb<=t)return null;"
      "for(const fx of [.1,.5,.9])for(const fy of [.1,.5,.9]){const px=l+(rr-l)*fx,py=t+(bb-t)*fy;if(hit(e,px,py))return {x:px,y:py};}return null;};"
-     "let reason='none';if(!candidates.length)reason='no_candidate';else if(!exact.length)reason='no_exact_label';"
-     "else if(!visible.length)reason='hidden';else if(!sized.length)reason='no_area';else if(!eligible.length)reason='disabled';"
-     "else if(eligible.length!==1)reason='ambiguous';const button=eligible.length===1?eligible[0]:null;"
-     "const r=button?.getBoundingClientRect(),cx=r?r.x+r.width/2:0,cy=r?r.y+r.height/2:0,"
-     "centerHit=!!button&&cx>=0&&cy>=0&&cx<innerWidth&&cy<innerHeight&&hit(button,cx,cy),"
-     "visiblePointHit=!!button&&!!point(button),scrollNeeded=!!button&&!centerHit&&!visiblePointHit;"
-     "if(reason==='none'&&scrollNeeded)reason='scroll-needed';"
-     "if(%@)return {candidateCount:cap(candidates.length),exactEligibleLabelCount:cap(eligible.length),"
-     "uniqueEligibleMatch:eligible.length===1,matchIsNativeButton:!!button&&button.tagName==='BUTTON',viewportHasArea,"
-     "centerHit,visiblePointHit,scrollNeeded,rejectionReason:reason};"
-     "if(!button)return null;let visiblePoint=point(button);if(!visiblePoint){button.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});visiblePoint=point(button);}return visiblePoint;})()",
-    literal, diagnostic ? @"true" : @"false"];
+     "if(eligible.length!==1)return null;const button=eligible[0];let visiblePoint=point(button);if(!visiblePoint){button.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});visiblePoint=point(button);}return visiblePoint;})()",
+    literal];
 }
 
 static BOOL ValidID(NSString *value) {
@@ -138,35 +129,8 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 - (BOOL)privateOwnerForTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID
                          tab:(ArdiaCoreTab * _Nullable * _Nullable)tabOut window:(ArdiaCoreWindow * _Nullable * _Nullable)windowOut;
 - (NSDictionary * _Nullable)privateEntryForTab:(ArdiaCoreTab *)tab identity:(NSString * _Nullable * _Nullable)identityOut;
-- (ArdiaCoreTab *)probeVisibilityTargetForID:(NSString *)identity;
 - (BOOL)ownedProbePopupID:(NSString *)popupID state:(ARCNativeWindowState * _Nullable * _Nullable)stateOut;
 @end
-
-static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
-  NSArray<NSString *> *booleans = @[
-    @"uniqueEligibleMatch", @"matchIsNativeButton", @"viewportHasArea", @"centerHit",
-    @"visiblePointHit", @"scrollNeeded",
-  ];
-  NSMutableDictionary *result = [NSMutableDictionary dictionary];
-  NSDictionary *source = [value isKindOfClass:NSDictionary.class] ? value : @{};
-  for (NSString *key in booleans) {
-    id value = source[key];
-    result[key] = [value isKindOfClass:NSNumber.class] &&
-      CFGetTypeID((__bridge CFTypeRef)value) == CFBooleanGetTypeID() ? @([value boolValue]) : @NO;
-  }
-  for (NSString *key in @[@"candidateCount", @"exactEligibleLabelCount"]) {
-    NSNumber *number = [source[key] isKindOfClass:NSNumber.class] ? source[key] : @0;
-    result[key] = @(MIN(999, MAX(0, number.integerValue)));
-  }
-  NSSet *reasons = [NSSet setWithArray:@[
-    @"invalid_context", @"no_candidate", @"no_exact_label", @"hidden", @"no_area",
-    @"disabled", @"ambiguous", @"scroll-needed", @"none",
-  ]];
-  NSString *reason = reasonOverride ?: ([source[@"rejectionReason"] isKindOfClass:NSString.class]
-    ? source[@"rejectionReason"] : @"invalid_context");
-  result[@"rejectionReason"] = [reasons containsObject:reason] ? reason : @"invalid_context";
-  return result;
-}
 
 @implementation ARCChromiumRuntime {
   void *_library;
@@ -196,7 +160,6 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   NSString *_openingWindowID;
   BOOL _testing;
   BOOL _externalAppProbeTesting;
-  BOOL _probeTLS;
   NSURL *_probeRoot;
   NSMutableDictionary<NSString *, NSDictionary *> *_pendingInstalls;
   NSMutableDictionary<NSString *, NSDictionary *> *_pendingMedia;
@@ -206,7 +169,6 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   NSMutableArray<NSDictionary *> *_probeDiagnostics;
   NSMutableSet<NSString *> *_pendingHostClosures;
   NSMutableDictionary<NSString *, NSMutableDictionary<NSString *, id> *> *_detachedTabSelections;
-  NSMutableDictionary<NSString *, NSString *> *_probeVisibilityLeases;
   BOOL _closingBrowser;
   ARCDownloadService *_downloadService;
   ARCEngineServices *_services;
@@ -284,15 +246,8 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
 }
 
 - (int)runWithDataDirectory:(NSURL *)directory testing:(BOOL)testing {
-  return [self runWithDataDirectory:directory testing:testing probeTLSFingerprint:nil];
-}
-- (int)runWithDataDirectory:(NSURL *)directory testing:(BOOL)testing probeTLSFingerprint:(NSString *)fingerprint {
   NSAssert(NSThread.isMainThread, @"Chromium must start on the main thread");
-  NSError *configurationError = nil;
-  NSString *tlsArgument = ARCProbeTLSArgument(directory, fingerprint, testing, &configurationError);
-  if (configurationError) return 1;
   _testing = testing;
-  _probeTLS = tlsArgument != nil;
   if (testing) _probeRoot = directory.URLByDeletingLastPathComponent.URLByResolvingSymlinksInPath;
   __weak ARCChromiumRuntime *weakSelf = self;
   _webStoreFit = [[ARCWebStoreFit alloc] initWithTesting:testing
@@ -330,7 +285,6 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
     strings.push_back("--mute-audio");
     strings.push_back("--use-fake-device-for-media-stream");
     strings.push_back("--ardia-test-system-media-permission=granted");
-    if (tlsArgument) strings.push_back(tlsArgument.UTF8String);
   }
   if (_externalAppProbeTesting) strings.push_back(externalProbeSwitch.UTF8String);
   std::vector<const char *> arguments;
@@ -341,7 +295,7 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
 - (void)engineDidStart {
   _engine = [_engineClass sharedEngine];
   [_services start];
-  if (_testing && !_probeTLS) {
+  if (_testing) {
     // Diagnostics only for the empty Bitwarden store-probe profile. No credential entry occurs.
     _engine.pageScript = @"(function(post){"
       "if(location.protocol==='chrome-extension:' && location.host==='nngceckbapebfimnlniiiahkandclblb'){"
@@ -709,27 +663,6 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   });
 }
 
-- (void)beginPrivateProbeContextID:(NSString *)contextID sourceProfileID:(NSString *)sourceProfileID
-                        completion:(void (^)(BOOL, NSError *))completion {
-  if (![self privateProbeEnabled]) {
-    completion(NO, BridgeError(@"Private probe context requires an owned testing root."));
-    return;
-  }
-  [self createPrivateContextID:contextID sourceProfileID:sourceProfileID completion:completion];
-}
-
-- (BOOL)openPrivateProbeWindowID:(NSString *)windowID contextID:(NSString *)contextID
-                            tabID:(NSString *)tabID url:(NSString *)url error:(NSError **)error {
-  NSURLComponents *components = [NSURLComponents componentsWithString:url ?: @""];
-  if (![self privateProbeEnabled] || ![components.scheme.lowercaseString isEqualToString:@"http"] ||
-      ![@[@"127.0.0.1", @"::1", @"localhost"] containsObject:components.host.lowercaseString] ||
-      !components.port) {
-    if (error) *error = BridgeError(@"Private probe navigation requires the owned loopback fixture.");
-    return NO;
-  }
-  return [self createPrivateWindowID:windowID contextID:contextID tabID:tabID url:url error:error];
-}
-
 - (BOOL)createPrivateWindowID:(NSString *)windowID contextID:(NSString *)contextID
                          tabID:(NSString *)tabID url:(NSString *)url error:(NSError **)error {
   NSAssert(NSThread.isMainThread, @"Private windows require the UI thread");
@@ -1076,13 +1009,6 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   if (completion) completion(YES);
 }
 
-- (void)closePrivateProbeWindowID:(NSString *)windowID completion:(void (^)(BOOL))completion {
-  NSDictionary *entry = _privateProbeWindows[windowID];
-  NSString *contextID = entry[@"contextID"];
-  if (![self privateProbeEnabled]) { completion(NO); return; }
-  [self closePrivateWindowID:windowID contextID:contextID completion:completion];
-}
-
 - (void)closePrivateWindowID:(NSString *)windowID contextID:(NSString *)contextID
                   completion:(void (^)(BOOL))completion {
   NSMutableDictionary *entry = _privateProbeWindows[windowID];
@@ -1265,11 +1191,6 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
            @"selectedViewAttached": @(attached), @"selectedViewVisible": @(visible),
            @"visibleNativeViewCount": @(visibleTabViewCount),
            @"nativeTabToken": tab ? [NSString stringWithFormat:@"%p", tab] : @"missing"};
-}
-
-- (BOOL)releasePrivateProbeContextID:(NSString *)contextID {
-  if (![self privateProbeEnabled]) return NO;
-  return [self releasePrivateContextID:contextID];
 }
 
 - (NSDictionary *)privateQuitCDPHoldAuditForTabID:(NSString *)tabID {
@@ -1990,77 +1911,6 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   if (!_testing) { completion(nil); return; }
   [self evaluateTab:_tabs[tabID] script:script userGesture:YES completion:completion];
 }
-- (ArdiaCoreTab *)probeVisibilityTargetForID:(NSString *)identity {
-  if (!_testing || !_probeTLS) return nil;
-  ArdiaCoreTab *tab = _tabs[identity];
-  ARCNativeWindowState *state = [self stateForPopupID:identity];
-  BOOL popup = !tab && state && !state.closed && !state.closing &&
-    [state.popupExtensionID isEqualToString:@"nngceckbapebfimnlniiiahkandclblb"] &&
-    state.popupOwnerTabID.length > 0 &&
-    [self isSelectedTabID:state.popupOwnerTabID];
-  if (popup) tab = state.popup;
-  if (!tab || tab.closed || (!popup && ![self isSelectedTabID:identity])) return nil;
-  NSURL *url = [NSURL URLWithString:tab.url];
-  if (url.user || url.password || url.port) return nil;
-  BOOL allowed = popup
-    ? [url.scheme isEqualToString:@"chrome-extension"] && [url.host isEqualToString:state.popupExtensionID] &&
-      tab.profile == state.native.activeProfile
-    : [url.scheme isEqualToString:@"https"] && [url.host isEqualToString:@"chromewebstore.google.com"] &&
-      [url.path hasPrefix:@"/detail/"];
-  return allowed ? tab : nil;
-}
-- (void)beginProbeVisibilityControlForID:(NSString *)tabID completion:(void (^)(BOOL))completion {
-  ArdiaCoreTab *tab = [self probeVisibilityTargetForID:tabID];
-  if (!tab) {
-    completion(NO);
-    return;
-  }
-  if (_probeVisibilityLeases[tabID]) { completion(YES); return; }
-  if (!_probeVisibilityLeases) _probeVisibilityLeases = [NSMutableDictionary dictionary];
-  NSString *event = [@"arcusis-probe-visibility-" stringByAppendingString:NSUUID.UUID.UUIDString];
-  _probeVisibilityLeases[tabID] = event;
-  // The pinned engine detaches idle CDP clients. Keep this control's client alive
-  // with a bounded, cancelable promise; no vendor DOM, routes or storage are changed.
-  NSString *expression = [NSString stringWithFormat:
-    @"new Promise(resolve=>{const end=()=>{clearTimeout(timer);removeEventListener('%@',end);resolve(true);};"
-     "const timer=setTimeout(end,90000);addEventListener('%@',end,{once:true});})", event, event];
-  __weak ARCChromiumRuntime *weakSelf = self;
-  [tab devToolsCall:@"Runtime.evaluate" params:@{@"expression": expression, @"awaitPromise": @YES}
-           timeout:95 completion:^(NSDictionary *result, NSString *error) {
-    ARCChromiumRuntime *owner = weakSelf;
-    if (owner && [owner->_probeVisibilityLeases[tabID] isEqualToString:event]) {
-      [owner endProbeVisibilityControlForID:tabID];
-    }
-  }];
-  [tab devToolsCall:@"Emulation.setFocusEmulationEnabled" params:@{@"enabled": @YES}
-           timeout:5 completion:^(NSDictionary *result, NSString *error) {
-    ARCChromiumRuntime *owner = weakSelf;
-    BOOL current = owner && [owner probeVisibilityTargetForID:tabID] == tab &&
-      [owner->_probeVisibilityLeases[tabID] isEqualToString:event];
-    if (error || !current) {
-      if (owner && [owner->_probeVisibilityLeases[tabID] isEqualToString:event]) {
-        [owner endProbeVisibilityControlForID:tabID];
-      }
-      completion(NO);
-    } else {
-      completion(YES);
-    }
-  }];
-}
-- (void)endProbeVisibilityControlForID:(NSString *)tabID {
-  if (!_testing) return;
-  NSString *event = _probeVisibilityLeases[tabID];
-  if (!event) return;
-  [_probeVisibilityLeases removeObjectForKey:tabID];
-  ArdiaCoreTab *tab = _tabs[tabID] ?: [self stateForPopupID:tabID].popup;
-  if (!tab || tab.closed) return;
-  [tab devToolsCall:@"Emulation.setFocusEmulationEnabled" params:@{@"enabled": @NO}
-           timeout:5 completion:^(NSDictionary *result, NSString *error) {
-    [tab devToolsCall:@"Runtime.evaluate"
-              params:@{@"expression": [NSString stringWithFormat:@"dispatchEvent(new Event('%@'))", event]}
-             timeout:5 completion:^(NSDictionary *result, NSString *error) {}];
-  }];
-}
 - (void)evaluateTab:(ArdiaCoreTab *)tab script:(NSString *)script userGesture:(BOOL)userGesture completion:(void (^)(NSString *))completion {
   if (!tab || tab.closed) { completion(nil); return; }
   __block BOOL answered = NO;
@@ -2401,7 +2251,6 @@ static NSString *ARCJSONLiteral(id value) {
   ARCNativeWindowState *state = _windows[windowID];
   ArdiaCoreTab *tab = state.popup;
   NSString *identity = state.popupID;
-  if (identity) [self endProbeVisibilityControlForID:identity];
   state.popup = nil;
   state.popupID = nil;
   state.popupOwnerTabID = nil;
@@ -2465,75 +2314,10 @@ static NSString *ARCJSONLiteral(id value) {
   NSData *encoded = [NSJSONSerialization dataWithJSONObject:title options:NSJSONWritingFragmentsAllowed error:nil];
   NSString *literal = encoded ? [[NSString alloc] initWithData:encoded encoding:NSUTF8StringEncoding] : nil;
   if (!literal) { completion(NO); return; }
-  NSString *expression = ProbeButtonExpression(literal, NO);
+  NSString *expression = ProbeButtonExpression(literal);
   ArdiaCoreTab *popup = state.popup;
   ClickProbeTarget(popup, expression, ^BOOL {
     return [self ownedProbePopupID:popupID state:nil] && state.popup == popup;
-  }, completion);
-}
-- (void)diagnoseProbePopupID:(NSString *)popupID buttonTitle:(NSString *)title
-                  completion:(void (^)(NSDictionary *))completion {
-  ARCNativeWindowState *state = nil;
-  if (![self ownedProbePopupID:popupID state:&state] || ![title isKindOfClass:NSString.class] ||
-      title.length == 0 || title.length > 256) {
-    completion(ProbeButtonDiagnostic(nil, @"invalid_context")); return;
-  }
-  NSData *encoded = [NSJSONSerialization dataWithJSONObject:title options:NSJSONWritingFragmentsAllowed error:nil];
-  NSString *literal = encoded ? [[NSString alloc] initWithData:encoded encoding:NSUTF8StringEncoding] : nil;
-  if (!literal) { completion(ProbeButtonDiagnostic(nil, @"invalid_context")); return; }
-  ArdiaCoreTab *popup = state.popup;
-  [popup devToolsCall:@"Runtime.evaluate" params:@{
-    @"expression": ProbeButtonExpression(literal, YES), @"returnByValue": @YES,
-  } timeout:5 completion:^(NSDictionary *response, NSString *error) {
-    if (error || ![self ownedProbePopupID:popupID state:nil] || state.popup != popup) {
-      completion(ProbeButtonDiagnostic(nil, @"invalid_context")); return;
-    }
-    completion(ProbeButtonDiagnostic(response[@"result"][@"value"], nil));
-  }];
-}
-- (void)clickProbePopupID:(NSString *)popupID elementTestID:(NSString *)elementTestID
-               completion:(void (^)(BOOL))completion {
-  ARCNativeWindowState *state = [self stateForPopupID:popupID];
-  NSString *ownerTabID = state ? state.popupOwnerTabID : nil;
-  ArdiaCoreTab *owner = ownerTabID ? _tabs[ownerTabID] : nil;
-  ArdiaCoreTab *popup = state.popup;
-  NSURL *popupURL = [NSURL URLWithString:popup.url ?: @""];
-  BOOL validPopup = _testing && state && !state.closed && !state.closing && !_closingBrowser &&
-    popup && !popup.closed && [state.popupID isEqualToString:popupID] &&
-    [state.popupExtensionID isEqualToString:@"nngceckbapebfimnlniiiahkandclblb"] &&
-    [popupURL.scheme isEqualToString:@"chrome-extension"] &&
-    [popupURL.host isEqualToString:state.popupExtensionID] && !popupURL.user && !popupURL.password && !popupURL.port &&
-    ownerTabID.length > 0 && owner && !owner.closed && [self stateForTabID:ownerTabID] == state &&
-    [self isSelectedTabID:ownerTabID] && popup.profile == owner.profile &&
-    popup.profile == state.native.activeProfile && elementTestID.length > 0 && elementTestID.length <= 128;
-  if (!validPopup) {
-    completion(NO);
-    return;
-  }
-  NSData *encoded = [NSJSONSerialization dataWithJSONObject:elementTestID
-                                                   options:NSJSONWritingFragmentsAllowed error:nil];
-  NSString *literal = encoded ? [[NSString alloc] initWithData:encoded encoding:NSUTF8StringEncoding] : nil;
-  if (!literal) { completion(NO); return; }
-  NSString *expression = [NSString stringWithFormat:
-    @"(()=>{const id=%@;const matches=[...document.querySelectorAll('[data-testid]')].filter(e=>e.getAttribute('data-testid')===id);"
-     "if(matches.length!==1)return null;const button=matches[0];if(button.tagName!=='BUTTON'||button.disabled||"
-     "button.getAttribute('aria-disabled')?.toLowerCase()==='true')return null;"
-     "for(let n=button;n&&n.nodeType===1;n=n.parentElement){if(n.hidden||n.inert||n.getAttribute('aria-hidden')?.toLowerCase()==='true')return null;"
-     "const s=getComputedStyle(n);if(s.display==='none'||s.visibility==='hidden'||s.visibility==='collapse'||s.opacity==='0')return null;}"
-     "const r=button.getBoundingClientRect(),x=r.x+r.width/2,y=r.y+r.height/2;"
-     "if(r.width<=0||r.height<=0||x<0||y<0||x>=innerWidth||y>=innerHeight)return null;return {x,y};})()", literal];
-  ClickProbeTarget(popup, expression, ^BOOL {
-    NSURL *currentPopupURL = [NSURL URLWithString:popup.url ?: @""];
-    return !self->_closingBrowser && !state.closed && !state.closing && !popup.closed &&
-      state.popup == popup && [state.popupID isEqualToString:popupID] &&
-      [state.popupOwnerTabID isEqualToString:ownerTabID] &&
-      [state.popupExtensionID isEqualToString:@"nngceckbapebfimnlniiiahkandclblb"] &&
-      [currentPopupURL.scheme isEqualToString:@"chrome-extension"] &&
-      [currentPopupURL.host isEqualToString:state.popupExtensionID] &&
-      !currentPopupURL.user && !currentPopupURL.password && !currentPopupURL.port &&
-      self->_tabs[ownerTabID] == owner && [self stateForTabID:ownerTabID] == state &&
-      [self isSelectedTabID:ownerTabID] && popup.profile == owner.profile &&
-      popup.profile == state.native.activeProfile;
   }, completion);
 }
 - (void)clickProbeElementInTabID:(NSString *)tabID elementID:(NSString *)elementID completion:(void (^)(BOOL))completion {
@@ -2556,57 +2340,6 @@ static NSString *ARCJSONLiteral(id value) {
   ARCNativeWindowState *state = [self stateForPopupID:popupID];
   if (!state || state.closed) { completion(nil); return; }
   [self captureProbeTab:state.popup completion:completion];
-}
-- (void)probeTLSResourceURL:(NSURL *)url tabID:(NSString *)tabID completion:(void (^)(NSDictionary *))completion {
-  ArdiaCoreTab *tab = _tabs[tabID];
-  if (!_testing || !_probeTLS || !tab || tab.closed || ![self isSelectedTabID:tabID] ||
-      ![url.scheme isEqualToString:@"https"] || ![url.host isEqualToString:@"127.0.0.1"] ||
-      !url.port || url.port.integerValue < 1 || url.port.integerValue > 65535 ||
-      url.user || url.password || url.query || url.fragment ||
-      ![@[@"/alive", @"/icons/arcusis-fixture.invalid/icon.png"] containsObject:url.path]) {
-    completion(@{@"failureStage": @"context", @"testing": @(_testing), @"tlsEnabled": @(_probeTLS),
-                 @"tabAvailable": @(tab && !tab.closed), @"selected": @([self isSelectedTabID:tabID])});
-    return;
-  }
-  [tab devToolsCall:@"Page.getFrameTree" params:@{} timeout:5 completion:^(NSDictionary *tree, NSString *error) {
-    NSString *frame = tree[@"frameTree"][@"frame"][@"id"];
-    if (error || ![frame isKindOfClass:NSString.class] || tab.closed || ![self isSelectedTabID:tabID]) {
-      completion(@{@"failureStage": @"frame", @"commandFailed": @(error != nil),
-                   @"frameAvailable": @([frame isKindOfClass:NSString.class])});
-      return;
-    }
-    [tab devToolsCall:@"Network.loadNetworkResource"
-      params:@{@"frameId": frame, @"url": url.absoluteString,
-               @"options": @{@"disableCache": @YES, @"includeCredentials": @NO}}
-      timeout:5 completion:^(NSDictionary *result, NSString *loadError) {
-        NSDictionary *resource = result[@"resource"];
-        if (loadError || ![resource isKindOfClass:NSDictionary.class] || tab.closed || ![self isSelectedTabID:tabID]) {
-          completion(@{@"failureStage": @"resource", @"commandFailed": @(loadError != nil),
-                       @"commandTimedOut": @([loadError isEqualToString:@"timed out"]),
-                       @"attachmentRejected": @([loadError isEqualToString:@"can't attach to the tab"]),
-                       @"targetClosed": @([loadError isEqualToString:@"the tab is gone"] ||
-                                           [loadError isEqualToString:@"the tab's DevTools target closed"]),
-                       @"resourceAvailable": @([resource isKindOfClass:NSDictionary.class])});
-          return;
-        }
-        NSMutableDictionary *safe = [NSMutableDictionary dictionary];
-        for (NSString *key in @[@"success", @"netError", @"netErrorName", @"httpStatusCode"]) {
-          id value = resource[key];
-          if ([value isKindOfClass:NSNumber.class] || [value isKindOfClass:NSString.class]) safe[key] = value;
-        }
-        NSString *stream = resource[@"stream"];
-        if ([stream isKindOfClass:NSString.class]) {
-          [tab devToolsCall:@"IO.close" params:@{@"handle": stream} timeout:5
-            completion:^(NSDictionary *ignored, NSString *closeError) {
-              // Ardia detaches an idle CDP client before delivering its reply. Chromium
-              // discards that client's streams; a later close can confirm it is gone.
-              BOOL released = !closeError || [closeError isEqualToString:@"Invalid stream handle"];
-              completion(!released || tab.closed || ![self isSelectedTabID:tabID]
-                ? @{@"failureStage": @"stream-close"} : safe);
-            }];
-        } else completion(safe);
-      }];
-  }];
 }
 - (int)nativeTabIDForID:(NSString *)tabID { return _tabs[tabID] ? _tabs[tabID].tabId : -1; }
 - (BOOL)crashProbeTabID:(NSString *)tabID {

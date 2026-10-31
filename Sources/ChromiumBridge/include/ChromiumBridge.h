@@ -4,16 +4,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// Exact modifier matching keeps extension shortcuts such as Command-Shift-L available.
 FOUNDATION_EXPORT BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers);
-/// Returns a single certificate-key exception only for an owned, marked disposable test root.
-FOUNDATION_EXPORT NSString * _Nullable ARCProbeTLSArgument(NSURL *directory,
-  NSString * _Nullable fingerprint, BOOL testing, NSError **error);
 /// Zoom that fits a page needing `requiredWidth` CSS pixels into `viewportWidth` points, clamped to 67%.
 FOUNDATION_EXPORT double ARCWebStoreFitZoom(double viewportWidth, double requiredWidth);
-/// Test-only gate for the marked disposable probe root.
-FOUNDATION_EXPORT BOOL ARCProbeRootIsOwned(NSURL *root);
-/// Test-only sanitizer for external-app audit fixtures; returns fixed primitive fields only.
-FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeExternalAppLaunchAuditForTesting(
-  NSString *url, NSArray *launches, NSURL *root, BOOL enabled);
 
 /// Fixed extension-management operations; the bridge builds each script from a constant template.
 typedef NS_ENUM(NSInteger, ARCExtensionManagementOperation) {
@@ -88,14 +80,10 @@ typedef NS_ENUM(NSInteger, ARCExtensionManagementOperation) {
 
 - (nullable instancetype)initWithFrameworkURL:(NSURL *)url error:(NSError **)error;
 - (int)runWithDataDirectory:(NSURL *)directory testing:(BOOL)testing;
-- (int)runWithDataDirectory:(NSURL *)directory testing:(BOOL)testing
-       probeTLSFingerprint:(nullable NSString *)fingerprint;
 - (void)loadProfileID:(NSString *)profileID completion:(void (^)(NSError * _Nullable))completion;
 - (BOOL)openTabID:(NSString *)tabID profileID:(NSString *)profileID url:(NSString *)url
            error:(NSError **)error;
 - (nullable NSView *)viewForTabID:(NSString *)tabID;
-/// Test-only bounded audit. Requires explicit external-probe switch, testing mode, and owned marked root.
-- (nullable NSDictionary *)probeExternalAppLaunchAuditForURL:(NSString *)url;
 - (void)activateTabID:(NSString *)tabID;
 - (void)focusTabID:(NSString *)tabID;
 - (void)activateProfileID:(NSString *)profileID;
@@ -139,29 +127,6 @@ typedef NS_ENUM(NSInteger, ARCExtensionManagementOperation) {
 /// Callers must serialize all dynamic values as JSON literals before constructing the script.
 - (void)evaluateInTabID:(NSString *)tabID script:(NSString *)script
             completion:(void (^)(NSString * _Nullable))completion;
-/// Captures only the disposable probe's own tab, without a remote debugging socket.
-- (void)captureProbeTabID:(NSString *)tabID completion:(void (^)(NSData * _Nullable))completion;
-/// Fixture-only OTR ownership. Requires testing mode and an owned marked disposable root.
-- (void)beginPrivateProbeContextID:(NSString *)contextID sourceProfileID:(NSString *)sourceProfileID
-                        completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL, NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
-- (BOOL)openPrivateProbeWindowID:(NSString *)windowID contextID:(NSString *)contextID
-                            tabID:(NSString *)tabID url:(NSString *)url error:(NSError **)error;
-- (void)evaluatePrivateProbeTabID:(NSString *)tabID script:(NSString *)script
-                       completion:(void (^)(NSString * _Nullable))completion;
-- (void)closePrivateProbeWindowID:(NSString *)windowID
-                       completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion NS_SWIFT_UI_ACTOR;
-- (BOOL)attemptCancelledPrivateProbeCloseID:(NSString *)windowID;
-- (nullable NSDictionary *)privateProbeAuditForContextID:(NSString *)contextID;
-- (void)capturePrivateProbeTabID:(NSString *)tabID windowID:(NSString *)windowID
-                       contextID:(NSString *)contextID
-                      completion:(void (^)(NSData * _Nullable, NSString * _Nullable))completion;
-- (NSDictionary *)normalProbeSelectionAuditForTabID:(NSString *)tabID;
-- (nullable NSDictionary *)privateQuitCDPHoldAuditForTabID:(NSString *)tabID;
-- (void)preparePrivateQuitCancellationProbeTabID:(NSString *)tabID
-                                      completion:(void (^)(BOOL))completion;
-- (void)cancelPrivateQuitDialogForProbeTabID:(NSString *)tabID
-                                  completion:(void (^)(BOOL))completion;
-- (BOOL)releasePrivateProbeContextID:(NSString *)contextID;
 - (NSArray<NSDictionary<NSString *, id> *> *)extensionsForProfileID:(NSString *)profileID;
 - (void)resolveInstallRequestID:(NSString *)requestID accepted:(BOOL)accepted;
 - (void)resolveWebsiteMediaRequestID:(NSString *)requestID accepted:(BOOL)accepted;
@@ -179,34 +144,8 @@ typedef NS_ENUM(NSInteger, ARCExtensionManagementOperation) {
 - (nullable NSURL *)extensionsDirectoryForProfileID:(NSString *)profileID;
 - (nullable NSView *)viewForExtensionPopupID:(NSString *)popupID;
 - (void)closeExtensionPopup;
-/// Test-only component loader. Requires a path below the marked disposable probe root.
-- (nullable NSString *)loadProbeExtensionAtURL:(NSURL *)url profileID:(NSString *)profileID error:(NSError **)error;
-- (void)evaluateProbePopupID:(NSString *)popupID script:(NSString *)script
-                 completion:(void (^)(NSString * _Nullable))completion;
 - (int)nativeTabIDForID:(NSString *)tabID;
-- (void)captureProbePopupID:(NSString *)popupID completion:(void (^)(NSData * _Nullable))completion;
-- (void)evaluateProbeUserGestureInTabID:(NSString *)tabID script:(NSString *)script
-                           completion:(void (^)(NSString * _Nullable))completion;
-/// Bounded offscreen control for a selected disposable CWS tab or its owned Bitwarden popup.
-- (void)beginProbeVisibilityControlForID:(NSString *)identity
-                              completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion NS_SWIFT_UI_ACTOR;
-- (void)endProbeVisibilityControlForID:(NSString *)identity NS_SWIFT_UI_ACTOR;
 - (void)quit;
-/// Sends trusted renderer input only to the current disposable probe popup.
-- (void)clickProbePopupID:(NSString *)popupID buttonTitle:(NSString *)title
-              completion:(void (^)(BOOL clicked))completion;
-/// Test-only selector diagnostics; returns bounded flags, counts, and a fixed reason enum.
-- (void)diagnoseProbePopupID:(NSString *)popupID buttonTitle:(NSString *)title
-                  completion:(void (^)(NSDictionary *diagnostic))completion;
-- (void)clickProbePopupID:(NSString *)popupID elementTestID:(NSString *)elementTestID
-               completion:(void (^)(BOOL clicked))completion;
-- (void)clickProbeElementInTabID:(NSString *)tabID elementID:(NSString *)elementID
-                    completion:(void (^)(BOOL clicked))completion;
-/// Intentionally terminates only an authored loopback page in a disposable probe profile.
-- (BOOL)crashProbeTabID:(NSString *)tabID;
-/// Test-only loopback HTTPS request; response contains transport status, never body/headers.
-- (void)probeTLSResourceURL:(NSURL *)url tabID:(NSString *)tabID
-                completion:(void (NS_SWIFT_UI_ACTOR ^)(NSDictionary * _Nullable))completion NS_SWIFT_UI_ACTOR;
 @end
 
 NS_ASSUME_NONNULL_END

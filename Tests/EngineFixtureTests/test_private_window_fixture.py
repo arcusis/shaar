@@ -24,7 +24,7 @@ class PrivateWindowFixtureTests(unittest.TestCase):
         return dict(phase=phase, passed=True, probeMode=fixture.PRIVATE_WINDOW_MODE,
                     privateWindowOnly=True, privateWindowProbe=True,
                     savedTabCapacityOnly=False, externalAppConsentOnly=False,
-                    bitwardenStoreProbe=False, fixtureTLSProbe=False,
+                    bitwardenStoreProbe=False,
                     localFixturesPassed=True, error=None, fixtureStage="normal-fixtures-complete",
                     checkCount=1, checks=["normal fixture completed"], exitCode=0)
 
@@ -71,7 +71,7 @@ class PrivateWindowFixtureTests(unittest.TestCase):
                 fixture.argument_parser().parse_args(['--private-window', other])
         for phase in ('initial', 'restart'):
             args = fixture.build_engine_probe_arguments(
-                '/tmp/ArcusisBrowser', self.root, 'http://127.0.0.1:43123/account', phase,
+                '/tmp/ShaarVerification', self.root, 'http://127.0.0.1:43123/account', phase,
                 include_bitwarden=False, onboarding_control=False, abrupt=False,
                 saved_tab_capacity=False, private_window=True,
                 private_window_run_id=self.run_id)

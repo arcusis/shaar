@@ -31,7 +31,6 @@ class SavedTabCapacityRunnerTests(unittest.TestCase):
                     savedTabCapacityRunID=self.run_id, scope=fixture.SAVED_TAB_CAPACITY_SCOPE,
                     localFixturesPassed=False, bitwardenStoreProbe=False,
                     bitwardenOnboardingControl=False,
-                    fixtureTLSProbe=False,
                     abruptRecoveryProbe=False, error=None)
 
     def capacity_report(self, phase):
@@ -78,9 +77,10 @@ class SavedTabCapacityRunnerTests(unittest.TestCase):
     def test_public_capacity_mode_forwards_to_both_child_phases(self):
         for phase in ('initial', 'restart'):
             arguments = fixture.build_engine_probe_arguments(
-                '/tmp/ArcusisBrowser', self.root, 'http://127.0.0.1:43123/account', phase,
+                '/tmp/ShaarVerification', self.root, 'http://127.0.0.1:43123/account', phase,
                 include_bitwarden=False, onboarding_control=False, abrupt=False,
                 saved_tab_capacity=True)
+            self.assertEqual(arguments[:2], ['/tmp/ShaarVerification', '--probe-data-dir'])
             self.assertIn('--probe-saved-tab-capacity', arguments)
             self.assertEqual(arguments[arguments.index('--probe-phase') + 1], phase)
             self.assertNotIn('--bitwarden', arguments)
@@ -430,7 +430,7 @@ class ExternalAppConsentRunnerTests(unittest.TestCase):
                     externalAppConsentRunID=self.run_id, savedTabCapacityOnly=False,
                     savedTabCapacityProbe=False, bitwardenStoreProbe=False,
                     bitwardenOnboardingControl=False,
-                    abruptRecoveryProbe=False, fixtureTLSProbe=False,
+                    abruptRecoveryProbe=False,
                     scope=fixture.EXTERNAL_APP_CONSENT_SCOPE,
                     localFixturesPassed=False, error=None,
                     checks=['native external-app consent evidence'], chromiumVersion='test')
@@ -464,7 +464,7 @@ class ExternalAppConsentRunnerTests(unittest.TestCase):
                 fixture.argument_parser().parse_args(['--external-app-consent', other])
         for phase in ('initial', 'restart'):
             args = fixture.build_engine_probe_arguments(
-                '/tmp/ArcusisBrowser', self.root, 'http://127.0.0.1:43123/account', phase,
+                '/tmp/ShaarVerification', self.root, 'http://127.0.0.1:43123/account', phase,
                 include_bitwarden=False, onboarding_control=False, abrupt=False,
                 saved_tab_capacity=False, external_app_consent=True)
             self.assertIn('--probe-external-app-consent', args)
@@ -510,7 +510,6 @@ class ExternalAppConsentRunnerTests(unittest.TestCase):
         cases = (
             ('main phase', lambda main, item: main.update(phase='restart')),
             ('main mode', lambda main, item: main.update(probeMode='full-fixture')),
-            ('main TLS mixed mode', lambda main, item: main.update(fixtureTLSProbe=True)),
             ('main wrong scope', lambda main, item: main.update(scope='wrong scope')),
             ('main missing scope', lambda main, item: main.pop('scope')),
             ('evidence phase', lambda main, item: item.update(phase='restart')),

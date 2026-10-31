@@ -492,7 +492,7 @@ def build_engine_probe_arguments(executable, root, fixture_url, phase, *, includ
                                  onboarding_control, abrupt, saved_tab_capacity,
                                  external_app_consent=False, private_window=False,
                                  private_window_run_id=None):
-    arguments = [str(executable), "--engine-probe", "--probe-data-dir", str(root),
+    arguments = [str(executable), "--probe-data-dir", str(root),
                  "--probe-url", fixture_url, "--probe-phase", phase,
                  "--probe-output", str(root / f"{phase}.json")]
     if include_bitwarden:
@@ -555,7 +555,6 @@ def validate_private_window_report(root, phase, report, exit_code):
             or report.get('savedTabCapacityOnly') is not False
             or report.get('externalAppConsentOnly') is not False
             or report.get('bitwardenStoreProbe') is not False
-            or report.get('fixtureTLSProbe') is not False
             or type(evidence.get('schema')) is not int or evidence['schema'] != 1
             or evidence.get('mode') != PRIVATE_WINDOW_MODE or evidence.get('phase') != phase
             or not canonical_run or evidence.get('passed') is not True
@@ -654,7 +653,7 @@ def record_private_window_summary(root, *, listener_closed, child_receipts, proo
                       'savedTabCapacityProbe', 'bitwardenStoreProbe',
                       'bitwardenOnboardingControl', 'externalAppConsentOnly',
                       'externalAppConsentProbe', 'privateWindowOnly', 'privateWindowProbe',
-                      'fixtureTLSProbe', 'abruptRecoveryProbe', 'localFixturesPassed',
+                      'abruptRecoveryProbe', 'localFixturesPassed',
                       'nativeFavoritesPassed', 'bootstrapStage', 'fixtureStage', 'checkCount',
                       'checks', 'exitCode', 'scope')
             redacted = {key: main[key] for key in fields if key in main}
@@ -740,7 +739,6 @@ def validate_external_app_consent_report(root, phase, report, exit_code):
             or report.get('bitwardenStoreProbe') is not False
             or report.get('bitwardenOnboardingControl') is not False
             or report.get('abruptRecoveryProbe') is not False
-            or report.get('fixtureTLSProbe') is not False
             or report.get('scope') != EXTERNAL_APP_CONSENT_SCOPE
             or report.get('passed') is not True
             or report.get('localFixturesPassed') is not False
@@ -842,7 +840,6 @@ def validate_saved_tab_capacity_report(root, phase, report, exit_code):
             or report.get('localFixturesPassed') is not False
             or report.get('bitwardenStoreProbe') is not False
             or report.get('bitwardenOnboardingControl') is not False
-            or report.get('fixtureTLSProbe') is not False
             or report.get('abruptRecoveryProbe') is not False
             or report.get('externalAppConsentOnly') is not False
             or report.get('externalAppConsentProbe') is not False
@@ -975,7 +972,7 @@ def main(argv=None):
     shutil.copytree("Tests/Fixtures/ProfileExtension", root / "Extension")
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Fixture)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    executable = Path("build/Shaar.app/Contents/MacOS/ArcusisBrowser").resolve()
+    executable = Path("build/Shaar Verification.app/Contents/MacOS/ShaarVerification").resolve()
     (root / 'Downloads').mkdir(mode=0o700)
     probe_env = dict(os.environ, ARDIA_DOWNLOADS_DIR=str(root / 'Downloads'))
     print(f"Probe evidence: {root}", flush=True)

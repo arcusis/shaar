@@ -2,13 +2,9 @@ import AppKit
 import BrowserCore
 import SwiftUI
 
-@main
-enum ArcusisBrowserMain {
-  @MainActor static func main() {
+public enum BrowserLaunch {
+  @MainActor public static func run() {
     let arguments = CommandLine.arguments
-    if arguments.contains("--engine-probe") {
-      exit(EngineProbe.run(arguments: arguments))
-    }
     if let index = arguments.firstIndex(of: "--render-preview"),
       arguments.indices.contains(index + 1)
     {

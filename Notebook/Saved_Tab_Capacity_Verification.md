@@ -1,6 +1,6 @@
 # Saved-tab capacity verification
 
-Run the dedicated authored native mode with `bash scripts/test-engine.sh --saved-tab-capacity`. This builds the default development bundle. The runner creates fresh marked temporary profiles and executes initial/restart phases against loopback HTTP fixtures. It does not use external accounts or existing browser data.
+Run the dedicated authored native mode with `bash scripts/test-engine.sh --saved-tab-capacity`. This builds the [[Verification_Harness]] bundle. The runner creates fresh marked temporary profiles and executes initial/restart phases against loopback HTTP fixtures. It does not use external accounts or existing browser data.
 
 The managed fixture contains 12 Spaces with 120 pinned/ordinary tabs each (1,440 saved tabs), four profile UUIDs deliberately shared across three Spaces each, nested folders, collapse state and stable selections. It starts one selected native document and visits eight Spaces. Every visited tab keeps its original Chromium tab ID, native view, window owner and authored document instance; every unvisited ID has no native view or owner. Native live count stays at most eight throughout visits, revisits and final selection restoration.
 

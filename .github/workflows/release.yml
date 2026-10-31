@@ -1,0 +1,160 @@
+name: Release
+
+# Validates a published Shaar release against its tagged source, then deploys its appcast.xml
+# to GitHub Pages, where Sparkle reads the feed (SHAAR_FEED_URL in scripts/release-config.sh).
+#
+# scripts/release.sh --notarize --upload creates the draft release with the DMG, the Sparkle ZIP
+# and appcast.xml, after running the same appcast and ZIP checks locally. Publishing the draft
+# runs this workflow, so the feed only changes once the update download is public.
+#
+# To re-validate or re-deploy by hand, dispatch the workflow on the release tag itself, for
+# example `gh workflow run release.yml --ref v0.1.0`. A run on a branch fails: the tag ref
+# selects the tagged source and satisfies the github-pages environment's tag rule. A run never
+# replaces the live feed with an equal or older build.
+
+on:
+  release:
+    types: [released]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-pages
+  cancel-in-progress: false
+
+jobs:
+  validate-release:
+    name: Validate release tag, assets and appcast
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: read
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+
+    steps:
+      - name: Check tag ref and format
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF_TYPE" != tag ]; then
+            echo "::error::Run this workflow on a release tag ref, not $GITHUB_REF"
+            exit 1
+          fi
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "::error::Release tag must be v followed by Major.Minor.Patch: $RELEASE_TAG"
+            exit 1
+          }
+
+      - name: Check out tagged source
+        # actions/checkout v5.1.0
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+
+      - name: Install pinned release check dependencies
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/python" -m pip install --quiet --require-hashes --only-binary=:all: \
+            -r scripts/release-requirements.txt
+          echo "PYTHON=$RUNNER_TEMP/venv/bin/python" >> "$GITHUB_ENV"
+
+      - name: Load tagged release contract
+        run: |
+          set -euo pipefail
+          names=$("$PYTHON" scripts/release_feed.py describe)
+          read -r tag dmg zip appcast <<< "$names"
+          if [ "$tag" != "$RELEASE_TAG" ]; then
+            echo "::error::Tagged release-config.sh describes $tag, not $RELEASE_TAG"
+            exit 1
+          fi
+          "$PYTHON" scripts/release_feed.py check-key
+          source scripts/release-config.sh
+          if [ "$SHAAR_RELEASE_REPOSITORY" != "$GITHUB_REPOSITORY" ]; then
+            echo "::error::release-config.sh names $SHAAR_RELEASE_REPOSITORY, not $GITHUB_REPOSITORY"
+            exit 1
+          fi
+          {
+            echo "EXPECTED_DMG=$dmg"
+            echo "EXPECTED_ZIP=$zip"
+            echo "EXPECTED_APPCAST=$appcast"
+            echo "FEED_URL=$SHAAR_FEED_URL"
+          } >> "$GITHUB_ENV"
+
+      - name: Require exact release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          release=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG")
+          if [ "$(jq -r '.draft or .prerelease' <<< "$release")" != false ]; then
+            echo "::error::Release $RELEASE_TAG must be published and not a prerelease"
+            exit 1
+          fi
+          assets=$'\n'"$(jq -r '.assets[].name' <<< "$release")"$'\n'
+          missing=0
+          for asset in "$EXPECTED_DMG" "$EXPECTED_ZIP" "$EXPECTED_APPCAST"; do
+            if [[ "$assets" == *$'\n'"$asset"$'\n'* ]]; then
+              echo "Found required asset: $asset"
+            else
+              echo "::error::Release $RELEASE_TAG is missing exact asset $asset"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Validate appcast, update signature and public download
+        run: |
+          set -euo pipefail
+          # Download without credentials, exactly as Sparkle clients do.
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG"
+          mkdir -p "$RUNNER_TEMP/pages"
+          curl --fail --silent --show-error --location "$base/$EXPECTED_APPCAST" \
+            --output "$RUNNER_TEMP/pages/appcast.xml"
+          curl --fail --silent --show-error --location "$base/$EXPECTED_ZIP" \
+            --output "$RUNNER_TEMP/$EXPECTED_ZIP"
+          "$PYTHON" scripts/release_feed.py validate \
+            --appcast "$RUNNER_TEMP/pages/appcast.xml" --zip "$RUNNER_TEMP/$EXPECTED_ZIP"
+
+      - name: Require a newer build than the live feed
+        # Only HTTP 404 (nothing published yet) passes without a newer build number.
+        run: '"$PYTHON" scripts/release_feed.py check-newer'
+
+      - name: Check Pages serves the configured feed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          site=$(gh api "repos/$GITHUB_REPOSITORY/pages" --jq .html_url)
+          if [ "${site%/}/appcast.xml" != "$FEED_URL" ]; then
+            echo "::error::Pages would serve ${site%/}/appcast.xml but installed apps read $FEED_URL"
+            exit 1
+          fi
+
+      - name: Upload validated appcast for Pages
+        # actions/upload-pages-artifact v5.0.0
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
+        with:
+          path: ${{ runner.temp }}/pages
+
+  deploy-appcast:
+    name: Deploy appcast to GitHub Pages
+    needs: validate-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}appcast.xml
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        # actions/deploy-pages v5.0.1
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346

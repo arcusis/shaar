@@ -31,7 +31,7 @@ struct ShortcutCatalog {
 
   /// macOS leaves these standard items without shortcuts; web pages keep those keys.
   static let unassignedTitles: Set<String> = [
-    "About \(ProductIdentity.name)", "Show All", "Bring All to Front",
+    "About \(ProductIdentity.name)", "Check for Updates…", "Show All", "Bring All to Front",
   ]
 
   static func shortcut(for command: BrowserMenuCommand) -> (
@@ -69,7 +69,7 @@ struct ShortcutCatalog {
     case .downloads: ("j", [.command, .shift])
     case .extensions: ("e", [.command, .shift])
     case .zoomWindow: ("m", [.command, .control])
-    case .bringAllToFront: nil
+    case .bringAllToFront, .checkForUpdates: nil
     case .help: ("?", .command)
     case .minimizeWindow: ("m", .command)
     case .settings: (",", .command)

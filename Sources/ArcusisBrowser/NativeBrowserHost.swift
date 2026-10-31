@@ -10,6 +10,7 @@ enum BrowserMenuCommand: String, CaseIterable {
   case reopenClosed, recentlyClosed, bookmarkPage, bookmarks, history, downloads
   case find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload, splitView
   case extensions, help, minimizeWindow, zoomWindow, bringAllToFront, settings, quit, createFolder
+  case checkForUpdates
 }
 
 @MainActor
@@ -69,6 +70,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   private var previousWindowsMenu: NSMenu?
   private var previousHelpMenu: NSMenu?
   private var engineRequestedWindows: Set<String> = []
+  /// Set only by the production entry point; probes and tests never check for updates.
+  var updater: AppUpdater?
   var onClosed: ((UUID, Bool) -> Void)?
 
   init(
@@ -184,6 +187,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   func canPerform(_ command: BrowserMenuCommand) -> Bool {
     guard !events.runtime.isQuitting else { return false }
     if command == .newWindow || command == .newMiniWindow || command == .quit { return true }
+    if command == .checkForUpdates { return canCheckForUpdates }
     if command == .newPrivateWindow {
       return activeContext != nil || privateHost?.hasActiveWindow == true
     }
@@ -256,10 +260,14 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       do { try newWindow(from: source?.id) } catch { report(error) }
     case .newPrivateWindow:
       do { try privateHost?.openWindow() } catch { report(error) }
+    case .checkForUpdates: updater?.checkForUpdates()
     default: return false
     }
     return true
   }
+
+  /// Development bundles carry no update feed, so their updater never exists.
+  private var canCheckForUpdates: Bool { updater?.canCheckForUpdates == true }
 
   private func quit() {
     if UserDefaults.standard.bool(forKey: "settingsWarnBeforeQuit") && presentation == .visible {
@@ -307,6 +315,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   ) -> Bool {
     guard !events.runtime.isQuitting, !context.engine.isClosed else { return false }
     if Self.appCommands.contains(command) { return true }
+    if command == .checkForUpdates { return canCheckForUpdates }
     return windowCanPerform(command, in: context, afterLauncher: true)
   }
 
@@ -359,7 +368,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .bringAllToFront:
       for browser in contexts.values { browser.window.orderFront(nil) }
       context.window.makeKeyAndOrderFront(nil)
-    case .newWindow, .newPrivateWindow, .newMiniWindow, .settings, .quit: break
+    case .newWindow, .newPrivateWindow, .newMiniWindow, .settings, .quit, .checkForUpdates: break
     }
   }
 
@@ -743,6 +752,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     addStandard(
       "About \(ProductIdentity.name)", #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
       to: app)
+    add(.checkForUpdates, "Check for Updates…", to: app)
     app.addItem(.separator())
     let services = NSMenu(title: "Services")
     let servicesItem = NSMenuItem(title: "Services", action: nil, keyEquivalent: "")
@@ -903,6 +913,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
         host, andSelector: #selector(handleURL(_:reply:)),
         forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))
       runtime.onReady = { [weak host] in
+        host?.updater = AppUpdater.forMainBundle()
         do { try host?.restore() } catch {
           host?.startupFailed = true
           host?.report(error)

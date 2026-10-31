@@ -66,6 +66,7 @@ enum LauncherCommands {
     case .splitView: "rectangle.split.2x1"
     case .extensions: "puzzlepiece.extension"
     case .settings: "gearshape"
+    case .checkForUpdates: "arrow.triangle.2.circlepath"
     default: "command"
     }
   }

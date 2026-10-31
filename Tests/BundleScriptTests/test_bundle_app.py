@@ -1,3 +1,4 @@
+import importlib.util
 import os
 import plistlib
 import shutil
@@ -10,6 +11,11 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "scripts" / "bundle-app.sh"
+RELEASE_CONFIG = REPO / "scripts" / "release-config.sh"
+FEED_SPEC = importlib.util.spec_from_file_location("release_feed", REPO / "scripts" / "release_feed.py")
+release_feed = importlib.util.module_from_spec(FEED_SPEC)
+sys.modules[FEED_SPEC.name] = release_feed
+FEED_SPEC.loader.exec_module(release_feed)
 ICON = REPO / "Resources" / "Branding" / "Shaar.icns"
 PSL = REPO / "Sources" / "BrowserCore" / "Resources" / "public_suffix_list.dat"
 
@@ -24,6 +30,8 @@ class BundleAppTests(unittest.TestCase):
 
         (self.root / "scripts").mkdir()
         shutil.copy2(SCRIPT, self.root / "scripts" / "bundle-app.sh")
+        for name in ("release-config.sh", "release_feed.py", "engine-signing.sh"):
+            shutil.copy2(REPO / "scripts" / name, self.root / "scripts" / name)
         shutil.copy2(REPO / "scripts" / "stage-browser-resources.py", self.root / "scripts")
         shutil.copytree(REPO / "ThirdParty" / "PublicSuffix", self.root / "ThirdParty" / "PublicSuffix")
         icon = self.root / "Resources" / "Branding" / "Shaar.icns"
@@ -49,6 +57,9 @@ class BundleAppTests(unittest.TestCase):
         (resource_bundle / "Resources").mkdir(parents=True)
         shutil.copyfile(PSL, resource_bundle / "Resources" / "public_suffix_list.dat")
         (resource_bundle / "Info.plist").write_text("fixture plist")
+        sparkle = self.binary_dir / "Sparkle.framework" / "Versions" / "B"
+        (sparkle / "XPCServices" / "Installer.xpc").mkdir(parents=True)
+        (sparkle / "Sparkle").write_text("stub sparkle")
         self.framework = self.root / "engine" / "Chromium Framework.framework"
         libraries = self.framework / "Versions" / "Current" / "Libraries"
         helpers = self.framework / "Versions" / "Current" / "Helpers"
@@ -63,7 +74,10 @@ class BundleAppTests(unittest.TestCase):
         self._tool(
             "swift",
             "printf 'swift %s\\n' \"$*\" >> \"$BUNDLE_TEST_LOG\"\n"
-            "if [[ \"$*\" == *--show-bin-path* ]]; then printf '%s\\n' \"$BUNDLE_TEST_BIN\"; fi\n",
+            "if [[ \"$*\" == *--show-bin-path* ]]; then printf '%s\\n' \"$BUNDLE_TEST_BIN\"; fi\n"
+            "arguments=\"$*\"; scratch=${arguments#*--scratch-path }; scratch=${scratch%% *}\n"
+            "mkdir -p \"$scratch/artifacts/sparkle/Sparkle\"\n"
+            "printf 'sparkle license' > \"$scratch/artifacts/sparkle/Sparkle/LICENSE\"\n",
         )
         self._tool(
             "codesign",
@@ -73,6 +87,8 @@ class BundleAppTests(unittest.TestCase):
             "else printf 'unexpected codesign arguments\\n' >&2; exit 97; fi\n",
         )
         self._tool("security", "printf 'unexpected security invocation\\n' >&2; exit 97\n")
+        self._tool("install_name_tool", "printf 'install_name_tool %s\\n' \"$*\" >> \"$BUNDLE_TEST_LOG\"\n")
+        self._tool("otool", "printf '         path %s/PackageFrameworks (offset 12)\\n' \"$BUNDLE_TEST_BIN\"\n")
         self._tool(
             "ditto",
             "printf 'ditto %s\\n' \"$*\" >> \"$BUNDLE_TEST_LOG\"\n"
@@ -130,6 +146,69 @@ class BundleAppTests(unittest.TestCase):
         self.assertEqual((contents / "Resources" / "Shaar.icns").read_bytes(), ICON.read_bytes())
         manager = contents / "Resources" / "ExtensionManager" / "manifest.json"
         self.assertEqual(manager.read_bytes(), (REPO / "Resources" / "ExtensionManager" / "manifest.json").read_bytes())
+
+    def _info_plist(self, app_path):
+        with (self.root / app_path / "Contents" / "Info.plist").open("rb") as plist_file:
+            return plistlib.load(plist_file)
+
+    def test_every_bundle_embeds_sparkle_without_update_feed(self):
+        for args, app_path in (((), "build/Shaar Shell.app"), (("--with-engine",), "build/Shaar.app")):
+            with self.subTest(args=args):
+                result = self._run(*args)
+
+                self.assertEqual(result.returncode, 0, result.stderr)
+                sparkle = self.root / app_path / "Contents/Frameworks/Sparkle.framework/Versions/B"
+                self.assertEqual((sparkle / "Sparkle").read_text(), "stub sparkle")
+                self.assertTrue((sparkle / "XPCServices/Installer.xpc").is_dir())
+                license_path = self.root / app_path / "Contents/Resources/Sparkle/LICENSE"
+                self.assertEqual(license_path.read_text(), "sparkle license")
+                self.assertNotIn("Sparkle.framework", "".join(
+                    line for line in self._log().splitlines(keepends=True) if line.startswith("codesign --force")
+                ))
+                plist = self._info_plist(app_path)
+                self.assertFalse({key for key in plist if key.startswith("SU")})
+                config = release_feed.load_config(RELEASE_CONFIG)
+                self.assertEqual(plist["CFBundleIdentifier"], config.bundle_identifier)
+                self.assertEqual(plist["CFBundleShortVersionString"], config.bundle_version)
+                self.assertEqual(plist["CFBundleVersion"], str(config.build_version))
+                self.assertEqual(plist["LSMinimumSystemVersion"], config.minimum_system_version)
+                self.assertIn(f"install_name_tool -delete_rpath {self.binary_dir}/PackageFrameworks", self._log())
+
+    def test_with_updates_writes_sparkle_feed_keys_from_release_config(self):
+        result = self._run("--with-engine", "--with-updates")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        plist = self._info_plist("build/Shaar.app")
+        config = release_feed.load_config(RELEASE_CONFIG)
+        self.assertEqual(plist["SUFeedURL"], config.feed_url)
+        self.assertEqual(plist["SUPublicEDKey"], config.public_ed_key)
+        self.assertIs(plist["SUEnableAutomaticChecks"], True)
+        self.assertIs(plist["SUEnableInstallerLauncherService"], True)
+
+    def test_with_updates_is_rejected_outside_release_engine_bundles(self):
+        for args in (
+            ("--with-updates",),
+            ("--with-updates", "--configuration", "debug"),
+            ("--with-engine", "--with-updates", "--configuration", "debug"),
+        ):
+            with self.subTest(args=args):
+                result = self._run(*args)
+
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("--with-updates requires --configuration release and --with-engine", result.stderr)
+                self.assertEqual(self._log(), "")
+                self.assertFalse((self.root / "build").exists())
+
+    def test_unsafe_release_config_is_rejected_before_bash_sources_it(self):
+        config = self.root / "scripts" / "release-config.sh"
+        config.write_text(config.read_text().replace("SHAAR_BUILD_VERSION=1", "SHAAR_BUILD_VERSION=1;touch pwned"))
+
+        result = self._run("--with-engine")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("SHAAR_KEY=value", result.stderr)
+        self.assertFalse((self.root / "pwned").exists())
+        self.assertEqual(self._log(), "")
 
     def test_default_build_remains_release_shell_bundle(self):
         result = self._run()
@@ -197,6 +276,7 @@ class BundleAppTests(unittest.TestCase):
             ("--configuration", "fast"),
             ("--configuration", "debug", "--configuration", "release"),
             ("--with-engine", "--with-engine"),
+            ("--with-updates", "--with-updates"),
             ("--configuration", "--with-engine"),
         )
         for args in invalid_arguments:

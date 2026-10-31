@@ -34,6 +34,8 @@ import Testing
   #expect(item(.extensions)?.menu?.title == "Extensions")
   #expect(item(.minimizeWindow)?.menu?.title == "Window")
   #expect(item(.help)?.menu?.title == "Help")
+  #expect(item(.checkForUpdates)?.menu?.title == "Shaar")
+  #expect(item(.checkForUpdates)?.title == "Check for Updates…")
 }
 
 @Test @MainActor func nativeMenuRetainsKeyEquivalentsAndEditResponderChain() {

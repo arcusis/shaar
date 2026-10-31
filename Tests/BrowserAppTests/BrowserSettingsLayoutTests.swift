@@ -6,6 +6,10 @@ import XCTest
 
 @MainActor
 final class BrowserSettingsLayoutTests: XCTestCase {
+  func testSearchSettingsSectionRemoved() {
+    XCTAssertFalse(BrowserSettingsSection.allCases.contains { $0.rawValue == "search" })
+  }
+
   func testCompactProfileLayoutWithPopulatedFixturesFitsWindow() {
     let profileID = UUID()
     let selectedProfileID = Binding<UUID?>(get: { profileID }, set: { _ in })

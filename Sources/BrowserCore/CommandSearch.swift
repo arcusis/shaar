@@ -25,15 +25,10 @@ public enum NavigationInput {
     {
       return url
     }
-    let endpoint: String
-    switch searchEngine {
-    case .google: endpoint = "https://www.google.com/search"
-    case .duckDuckGo: endpoint = "https://duckduckgo.com/"
-    case .bing: endpoint = "https://www.bing.com/search"
-    }
-    var search = URLComponents(string: endpoint)!
-    search.queryItems = [URLQueryItem(name: "q", value: input)]
-    return search.url
+    let endpoint = searchEngine.searchEndpoint
+    var search = URLComponents(string: endpoint.url)
+    search?.queryItems = [URLQueryItem(name: endpoint.queryName, value: input)]
+    return search?.url
   }
 }
 

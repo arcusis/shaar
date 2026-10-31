@@ -12,7 +12,7 @@ final class SettingsVisualTests: XCTestCase {
     let size = NSSize(width: 720, height: 560)
     for scheme in [ColorScheme.light, .dark] {
       for section in [
-        BrowserSettingsSection.general, .appearance, .search, .profiles, .shortcuts, .about,
+        BrowserSettingsSection.general, .appearance, .profiles, .shortcuts, .about,
         .privacy,
       ] {
         let view = BrowserSettingsView(

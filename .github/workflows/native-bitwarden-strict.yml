@@ -12,15 +12,22 @@ permissions:
 
 jobs:
   strict-controller:
-    runs-on: [self-hosted, macOS, arcusis-macos]
+    runs-on: macos-26
     timeout-minutes: 120
-    env:
-      DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
     steps:
       - name: Check out exact workflow revision
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
           persist-credentials: false
+      - name: Cache SwiftPM build products
+        # actions/cache v4.2.3
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+          path: |
+            build/NativeBitwardenStrictSDK10/swift-cache
+            build/NativeBitwardenStrictSDK10/swift-release
+            build/NativeBitwardenStrictSDK10/swift-debug
+          key: macos-26-strict-swiftpm-${{ hashFiles('Package.swift', '**/Package.resolved', 'ThirdParty/ArdiaCore/pin.json') }}
       - name: Install uv
         # astral-sh/setup-uv v10.3.3
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2

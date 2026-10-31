@@ -17,10 +17,8 @@ permissions:
 jobs:
   source-checks:
     name: Swift and Python source checks
-    runs-on: [self-hosted, macOS, arcusis-macos]
+    runs-on: macos-26
     timeout-minutes: 30
-    env:
-      DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
 
     steps:
       - name: Check out source
@@ -28,6 +26,15 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
           persist-credentials: false
+
+      - name: Cache SwiftPM products and pinned engine
+        # actions/cache v4.2.3
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+          path: |
+            .build
+            build/EngineCache
+          key: macos-26-swiftpm-engine-${{ hashFiles('Package.swift', '**/Package.resolved', 'ThirdParty/ArdiaCore/pin.json') }}
 
       - name: Install uv
         # astral-sh/setup-uv v10.3.3
@@ -118,10 +125,8 @@ jobs:
 
   hosted-sidebar-visual:
     name: Hosted sidebar component visuals
-    runs-on: [self-hosted, macOS, arcusis-macos]
+    runs-on: macos-26
     timeout-minutes: 20
-    env:
-      DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
 
     steps:
       - name: Check out source
@@ -129,6 +134,13 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
           persist-credentials: false
+
+      - name: Cache SwiftPM products
+        # actions/cache v4.2.3
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+          path: .build
+          key: macos-26-swiftpm-visuals-${{ hashFiles('Package.swift', '**/Package.resolved') }}
 
       - name: Build visual test targets
         run: swift build --build-tests --jobs 2

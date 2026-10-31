@@ -1,5 +1,9 @@
-Shaar includes or can bundle third-party components. Each component remains
-under its own license; this notice does not select or grant a license for Shaar.
+Shaar
+Copyright © 2026 Arcusis LTD.
+Licensed under the Mozilla Public License 2.0; see LICENSE.
+
+Shaar includes or can bundle the third-party components below. Each component
+remains under its own license.
 
 Chromium engine
   Source: pinned ArdiaCore engine archive described in

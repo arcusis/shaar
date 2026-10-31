@@ -1,4 +1,5 @@
 import AppKit
+import BrowserCore
 
 struct ShortcutCatalog {
   struct Entry: Identifiable {
@@ -28,7 +29,7 @@ struct ShortcutCatalog {
 
   /// macOS leaves these standard items without shortcuts; web pages keep those keys.
   static let unassignedTitles: Set<String> = [
-    "About Arcusis Browser", "Show All", "Bring All to Front",
+    "About \(ProductIdentity.name)", "Show All", "Bring All to Front",
   ]
 
   static func shortcut(for command: BrowserMenuCommand) -> (
@@ -78,7 +79,7 @@ struct ShortcutCatalog {
     key: String, modifiers: NSEvent.ModifierFlags
   )? {
     switch title {
-    case "Hide Arcusis Browser": ("h", .command)
+    case "Hide \(ProductIdentity.name)": ("h", .command)
     case "Hide Others": ("h", [.command, .option])
     case "Undo": ("z", .command)
     case "Redo": ("Z", .command)

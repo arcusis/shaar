@@ -1104,7 +1104,7 @@ final class BrowserStore {
 
   static func persistent() -> BrowserStore {
     let support = URL.applicationSupportDirectory
-      .appending(path: "Arcusis Browser", directoryHint: .isDirectory)
+      .appending(path: ProductIdentity.dataFolderName, directoryHint: .isDirectory)
       .appending(path: "session.json")
     return BrowserStore(sessionFile: SessionFile(url: support))
   }

@@ -173,7 +173,7 @@ final class PrivateBrowserHost {
       }
       return
     }
-    nativeWindow.title = "Arcusis Browser"
+    nativeWindow.title = ProductIdentity.name
     nativeWindow.titleVisibility = .hidden
     nativeWindow.titlebarAppearsTransparent = true
     nativeWindow.styleMask.insert(.fullSizeContentView)

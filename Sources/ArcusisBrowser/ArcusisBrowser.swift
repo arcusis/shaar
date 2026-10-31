@@ -269,7 +269,7 @@ private struct BrowserApplication: App {
   @State private var store = BrowserStore.preview(showCommand: false)
 
   var body: some Scene {
-    Window("Arcusis Browser", id: "browser") {
+    Window(ProductIdentity.name, id: "browser") {
       BrowserWindow(store: store)
     }
     .defaultSize(width: 1200, height: 780)

@@ -212,7 +212,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     if command == .quit {
       if UserDefaults.standard.bool(forKey: "settingsWarnBeforeQuit") && presentation == .visible {
         let alert = NSAlert()
-        alert.messageText = "Quit Arcusis Browser?"
+        alert.messageText = "Quit \(ProductIdentity.name)?"
         alert.informativeText = "Your windows and tabs will be saved."
         alert.addButton(withTitle: "Quit")
         alert.addButton(withTitle: "Cancel")
@@ -411,7 +411,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       engine.attachPasswordFill(controller)
     }
     let hosting = NSHostingView(rootView: BrowserWindow(store: store))
-    window.title = "Arcusis Browser"
+    window.title = ProductIdentity.name
     window.titleVisibility = .hidden
     window.titlebarAppearsTransparent = true
     window.styleMask.insert(.fullSizeContentView)
@@ -656,9 +656,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       item.keyEquivalentModifierMask = shortcut?.modifiers ?? []
       menu.addItem(item)
     }
-    let app = section("Arcusis Browser")
+    let app = section(ProductIdentity.name)
     addStandard(
-      "About Arcusis Browser", #selector(NSApplication.orderFrontStandardAboutPanel(_:)), to: app)
+      "About \(ProductIdentity.name)", #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
+      to: app)
     app.addItem(.separator())
     let services = NSMenu(title: "Services")
     let servicesItem = NSMenuItem(title: "Services", action: nil, keyEquivalent: "")
@@ -666,11 +667,11 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     app.addItem(servicesItem)
     app.addItem(.separator())
     add(.settings, "Settings…", to: app)
-    addStandard("Hide Arcusis Browser", #selector(NSApplication.hide(_:)), to: app)
+    addStandard("Hide \(ProductIdentity.name)", #selector(NSApplication.hide(_:)), to: app)
     addStandard("Hide Others", #selector(NSApplication.hideOtherApplications(_:)), to: app)
     addStandard("Show All", #selector(NSApplication.unhideAllApplications(_:)), to: app)
     app.addItem(.separator())
-    add(.quit, "Quit Arcusis Browser", to: app)
+    add(.quit, "Quit \(ProductIdentity.name)", to: app)
     let file = section("File")
     add(.newWindow, "New window", to: file)
     add(.newPrivateWindow, "New Private Window", to: file)
@@ -723,7 +724,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     add(.zoomWindow, "Zoom", to: window)
     add(.bringAllToFront, "Bring All to Front", to: window)
     let help = section("Help")
-    add(.help, "Arcusis Browser Support", to: help)
+    add(.help, "\(ProductIdentity.name) Support", to: help)
     return main
   }
 
@@ -801,7 +802,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   static func run(frameworkURL: URL) -> Int32 {
     do {
       let directory = URL.applicationSupportDirectory.appending(
-        path: "Arcusis Browser", directoryHint: .isDirectory)
+        path: ProductIdentity.dataFolderName, directoryHint: .isDirectory)
       let lock = try WorkspaceProcessLock(directory: directory)
       let workspace = try BrowserWorkspaceStore(
         file: WorkspaceFile(

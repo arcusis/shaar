@@ -3,10 +3,34 @@ import Foundation
 public struct BrowserProfile: Codable, Identifiable, Equatable, Sendable {
   public let id: UUID
   public var name: String
+  public var tint: SpaceTint?
+  public var customRGB: SpaceRGBColor?
 
-  public init(id: UUID = UUID(), name: String) {
+  public init(
+    id: UUID = UUID(), name: String, tint: SpaceTint? = nil, customRGB: SpaceRGBColor? = nil
+  ) {
     self.id = id
     self.name = name
+    self.tint = tint
+    self.customRGB = customRGB
+  }
+
+  private enum CodingKeys: String, CodingKey { case id, name, tint, customRGB }
+
+  public init(from decoder: Decoder) throws {
+    let values = try decoder.container(keyedBy: CodingKeys.self)
+    id = try values.decode(UUID.self, forKey: .id)
+    name = try values.decode(String.self, forKey: .name)
+    tint = try values.decodeIfPresent(SpaceTint.self, forKey: .tint)
+    customRGB = try values.decodeIfPresent(SpaceRGBColor.self, forKey: .customRGB)
+  }
+
+  public func encode(to encoder: Encoder) throws {
+    var values = encoder.container(keyedBy: CodingKeys.self)
+    try values.encode(id, forKey: .id)
+    try values.encode(name, forKey: .name)
+    try values.encodeIfPresent(tint, forKey: .tint)
+    try values.encodeIfPresent(customRGB, forKey: .customRGB)
   }
 }
 

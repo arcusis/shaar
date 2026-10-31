@@ -118,11 +118,38 @@ enum GoogleAccountList {
 /// Reads the account name Microsoft shows while signing in; the landing page does not expose it.
 enum MicrosoftSignInPage {
   static let emailScript = """
-    ((document.querySelector('#displayName') || {}).textContent
-      || (document.querySelector('input[type=email]') || {}).value || '').trim()
+    (() => {
+      const displayName = document.querySelector('#displayName')?.textContent || '';
+      const emailInput = document.querySelector('input[type=email], input[name=loginfmt], input[name=login]')?.value || '';
+      const accountLink = document.querySelector('[data-bind*="userPrincipalName"], #userName')?.textContent || '';
+      return [emailInput, accountLink, displayName].map(value => value.trim()).find(value => value.includes('@')) || '';
+    })()
     """
 
   static func isSignInPage(_ url: URL) -> Bool {
     ["login.microsoftonline.com", "login.live.com"].contains(url.host()?.lowercased() ?? "")
+  }
+
+  static func email(in url: URL, pageText: String? = nil) -> String? {
+    let queryEmail = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
+      .first(where: { ["login_hint", "username", "email"].contains($0.name.lowercased()) })?.value
+    return [queryEmail, pageText].compactMap { $0 }.first(where: isEmail)
+  }
+
+  static func isIdentityProviderPage(_ url: URL) -> Bool {
+    guard let host = url.host()?.lowercased(), url.scheme?.lowercased() == "https" else {
+      return false
+    }
+    let microsoftHosts = [
+      "login.microsoftonline.com", "login.live.com", "microsoft.com", "microsoft365.com",
+      "office.com", "office365.com",
+    ]
+    return !microsoftHosts.contains(where: { host == $0 || host.hasSuffix("." + $0) })
+  }
+
+  private static func isEmail(_ value: String) -> Bool {
+    let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    let parts = value.split(separator: "@")
+    return parts.count == 2 && !parts[0].isEmpty && parts[1].contains(".")
   }
 }

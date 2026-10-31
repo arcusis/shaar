@@ -35,6 +35,25 @@ struct ProfileAccountsTests {
     #expect(AccountProvider.allCases.allSatisfy { $0.logo != nil })
   }
 
+  @Test func microsoftWorkAccountRedirectsCaptureEmailFromExternalIdentityProvider() {
+    let microsoft = URL(
+      string: "https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize")!
+    let okta = URL(string: "https://acme.okta.com/login/login.htm?login_hint=worker%40acme.test")!
+    let adfs = URL(string: "https://sso.acme.test/adfs/ls/?username=worker%40acme.test")!
+    let ping = URL(string: "https://id.acme.test/as/authorization.oauth2?email=worker%40acme.test")!
+
+    #expect(MicrosoftSignInPage.isSignInPage(microsoft))
+    #expect(MicrosoftSignInPage.isIdentityProviderPage(okta))
+    #expect(MicrosoftSignInPage.isIdentityProviderPage(adfs))
+    #expect(MicrosoftSignInPage.isIdentityProviderPage(ping))
+    #expect(MicrosoftSignInPage.email(in: okta) == "worker@acme.test")
+    #expect(MicrosoftSignInPage.email(in: adfs) == "worker@acme.test")
+    #expect(MicrosoftSignInPage.email(in: ping) == "worker@acme.test")
+    #expect(
+      MicrosoftSignInPage.email(in: okta, pageText: "worker@acme.test") == "worker@acme.test")
+    #expect(MicrosoftSignInPage.email(in: okta, pageText: "Continue") == "worker@acme.test")
+  }
+
   @Test @MainActor func accountsPersistPerProfileWithOnePerProvider() {
     let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")
     defer { try? FileManager.default.removeItem(at: file) }

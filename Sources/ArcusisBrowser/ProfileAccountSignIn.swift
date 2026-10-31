@@ -15,6 +15,7 @@ final class ProfileAccountSignIn {
   private let purpose: Purpose
   private var capturedEmail: String?
   private var requestedAccountList = false
+  private var microsoftFlowStarted = false
   private var finished = false
   private var watcher: Task<Void, Never>?
   var onFinished: ((ConnectedAccount?) -> Void)?
@@ -91,12 +92,21 @@ final class ProfileAccountSignIn {
   }
 
   private func watchMicrosoft(_ url: URL) async {
-    if MicrosoftSignInPage.isSignInPage(url),
-      let email = await evaluate(MicrosoftSignInPage.emailScript), email.contains("@")
-    {
-      capturedEmail = email
-    } else if provider.isSignedInPage(url), let email = capturedEmail {
-      finish(ConnectedAccount(provider: .microsoft, email: email))
+    if MicrosoftSignInPage.isSignInPage(url) {
+      microsoftFlowStarted = true
+    }
+    if provider.isSignedInPage(url) {
+      let email = capturedEmail ?? MicrosoftSignInPage.email(in: url)
+      if let email { finish(ConnectedAccount(provider: .microsoft, email: email)) }
+      return
+    }
+    guard microsoftFlowStarted, MicrosoftSignInPage.isIdentityProviderPage(url),
+      let pageText = await evaluate(MicrosoftSignInPage.emailScript),
+      let email = MicrosoftSignInPage.email(in: url, pageText: pageText)
+    else { return }
+    capturedEmail = email
+    if url.host()?.lowercased() == "login.microsoftonline.com" {
+      return
     }
   }
 

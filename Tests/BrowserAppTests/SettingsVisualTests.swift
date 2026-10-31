@@ -18,7 +18,10 @@ final class SettingsVisualTests: XCTestCase {
         let view = BrowserSettingsView(
           profiles: [
             BrowserSettingsProfile(
-              id: profileID, name: "Personal", spaceCount: 1, spaceNames: ["Personal"])
+              id: profileID, name: "Personal",
+              spaces: [
+                BrowserSettingsSpace(id: UUID(), name: "Personal", symbol: "square.stack.3d.up")
+              ])
           ],
           searchEngines: [BrowserSettingsChoice(id: "google", title: "Google")],
           selectedProfileID: .constant(profileID), sidebarInitiallyVisible: .constant(true),

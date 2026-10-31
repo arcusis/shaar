@@ -11,6 +11,7 @@ public final class BrowserPreferencesStore {
   private let syncDirectory: (URL) throws -> Void
   private var profileSearchEngines: [UUID: BrowserSearchEngine] = [:]
   private var nativeVaultProfiles: [UUID: NativeVaultProfilePreferences] = [:]
+  private var connectedAccounts: [UUID: [ConnectedAccount]] = [:]
   private var pinnedExtensions: [UUID: [String]] = [:]
   private var preservesExistingFile = false
 
@@ -54,6 +55,23 @@ public final class BrowserPreferencesStore {
     var ids = pinnedExtensionIDs(for: profileID).filter { $0 != id }
     if pinned { ids.append(id) }
     pinnedExtensions[profileID] = ids.isEmpty ? nil : ids
+    save()
+  }
+
+  /// Google and Microsoft accounts signed in inside a profile, at most one per provider.
+  func accounts(for profileID: UUID) -> [ConnectedAccount] {
+    connectedAccounts[profileID] ?? []
+  }
+
+  func setAccount(_ account: ConnectedAccount, for profileID: UUID) {
+    connectedAccounts[profileID] =
+      accounts(for: profileID).filter { $0.provider != account.provider } + [account]
+    save()
+  }
+
+  func removeAccount(_ provider: AccountProvider, for profileID: UUID) {
+    let remaining = accounts(for: profileID).filter { $0.provider != provider }
+    connectedAccounts[profileID] = remaining.isEmpty ? nil : remaining
     save()
   }
 
@@ -139,7 +157,7 @@ public final class BrowserPreferencesStore {
       let document = PreferencesDocument(
         version: 2, sidebarInitiallyVisible: sidebarInitiallyVisible,
         profileSearchEngines: profileSearchEngines, nativeVaultProfiles: profiles,
-        pinnedExtensions: pinnedExtensions)
+        pinnedExtensions: pinnedExtensions, connectedAccounts: connectedAccounts)
       let encoder = JSONEncoder()
       encoder.outputFormatting = [.sortedKeys]
       let data = try encoder.encode(document)
@@ -191,6 +209,7 @@ public final class BrowserPreferencesStore {
       sidebarInitiallyVisible = document.sidebarInitiallyVisible
       profileSearchEngines = document.profileSearchEngines
       nativeVaultProfiles = document.nativeVaultProfiles
+      connectedAccounts = document.connectedAccounts
       pinnedExtensions = document.pinnedExtensions
     } catch {
       preserveWithNotice("Saved preferences are invalid or unreadable; original file preserved.")
@@ -216,7 +235,7 @@ public final class BrowserPreferencesStore {
       let document = PreferencesDocument(
         version: 2, sidebarInitiallyVisible: sidebarInitiallyVisible,
         profileSearchEngines: profileSearchEngines, nativeVaultProfiles: nativeVaultProfiles,
-        pinnedExtensions: pinnedExtensions)
+        pinnedExtensions: pinnedExtensions, connectedAccounts: connectedAccounts)
       let encoder = JSONEncoder()
       encoder.outputFormatting = [.sortedKeys]
       let data = try encoder.encode(document)
@@ -240,6 +259,7 @@ private struct PreferencesDocument: Codable {
   let sidebarInitiallyVisible: Bool
   let profileSearchEngines: [UUID: BrowserSearchEngine]
   let nativeVaultProfiles: [UUID: NativeVaultProfilePreferences]
+  let connectedAccounts: [UUID: [ConnectedAccount]]
   let pinnedExtensions: [UUID: [String]]
 
   private enum CodingKeys: String, CodingKey {
@@ -247,6 +267,7 @@ private struct PreferencesDocument: Codable {
     case sidebarInitiallyVisible
     case profileSearchEngines
     case nativeVaultProfiles
+    case connectedAccounts
     case pinnedExtensions
   }
 
@@ -254,12 +275,14 @@ private struct PreferencesDocument: Codable {
     version: Int, sidebarInitiallyVisible: Bool,
     profileSearchEngines: [UUID: BrowserSearchEngine],
     nativeVaultProfiles: [UUID: NativeVaultProfilePreferences],
-    pinnedExtensions: [UUID: [String]] = [:]
+    pinnedExtensions: [UUID: [String]] = [:],
+    connectedAccounts: [UUID: [ConnectedAccount]] = [:]
   ) {
     self.version = version
     self.sidebarInitiallyVisible = sidebarInitiallyVisible
     self.profileSearchEngines = profileSearchEngines
     self.nativeVaultProfiles = nativeVaultProfiles
+    self.connectedAccounts = connectedAccounts
     self.pinnedExtensions = pinnedExtensions
   }
 
@@ -272,6 +295,8 @@ private struct PreferencesDocument: Codable {
     nativeVaultProfiles =
       try values.decodeIfPresent(
         [UUID: NativeVaultProfilePreferences].self, forKey: .nativeVaultProfiles) ?? [:]
+    connectedAccounts =
+      try values.decodeIfPresent([UUID: [ConnectedAccount]].self, forKey: .connectedAccounts) ?? [:]
     pinnedExtensions =
       try values.decodeIfPresent([UUID: [String]].self, forKey: .pinnedExtensions) ?? [:]
   }

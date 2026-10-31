@@ -26,7 +26,7 @@ class EngineBundleVerifierTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         self.repo = self.root / "repo"
-        self.app = self.root / "Arcusis Browser.app"
+        self.app = self.root / "Shaar.app"
         self.framework = self.app / "Contents/Frameworks/Chromium Framework.framework"
         self.versioned = self.framework / "Versions/155.0.8059.84"
         self.helpers = self.versioned / "Helpers"

@@ -1,11 +1,33 @@
 import AppKit
+import BrowserCore
 import SwiftUI
 
 struct BrowserSettingsProfile: Identifiable {
   let id: UUID
   let name: String
-  let spaceCount: Int
-  var spaceNames: [String] = []
+  let spaces: [BrowserSettingsSpace]
+  let extensionCount: Int
+  let accounts: [ConnectedAccount]
+  var spaceCount: Int { spaces.count }
+  var spaceNames: [String] { spaces.map(\.name) }
+
+  init(
+    id: UUID, name: String, spaces: [BrowserSettingsSpace], extensionCount: Int = 0,
+    accounts: [ConnectedAccount] = []
+  ) {
+    self.id = id
+    self.name = name
+    self.spaces = spaces
+    self.extensionCount = extensionCount
+    self.accounts = accounts
+  }
+
+}
+
+struct BrowserSettingsSpace: Identifiable {
+  let id: UUID
+  let name: String
+  let symbol: String
 }
 
 struct BrowserSettingsChoice: Identifiable {
@@ -69,11 +91,15 @@ struct BrowserSettingsView: View {
   let onCreateProfile: (String) -> UUID?
   let onRenameProfile: (UUID, String) -> Bool
   let onDeleteProfile: (UUID, UUID) -> Bool
+  let onOpenSpace: (UUID) -> Void
+  let onConnectAccount: (UUID, AccountProvider) -> Void
+  let onDisconnectAccount: (UUID, AccountProvider) -> Void
   let clearHistory: ((UUID) async throws -> Void)?
   @State private var deletingProfile: BrowserSettingsProfile?
   @State private var destinationID: UUID?
   @State private var selectedSection: BrowserSettingsSection
   @State private var profileEditor: ProfileEditorTarget?
+  @State private var profileNameEdits: [UUID: String] = [:]
 
   private struct ProfileEditorTarget: Identifiable {
     let id = UUID()
@@ -88,6 +114,9 @@ struct BrowserSettingsView: View {
     onCreateProfile: @escaping (String) -> UUID? = { _ in nil },
     onRenameProfile: @escaping (UUID, String) -> Bool = { _, _ in false },
     onDeleteProfile: @escaping (UUID, UUID) -> Bool = { _, _ in false },
+    onOpenSpace: @escaping (UUID) -> Void = { _ in },
+    onConnectAccount: @escaping (UUID, AccountProvider) -> Void = { _, _ in },
+    onDisconnectAccount: @escaping (UUID, AccountProvider) -> Void = { _, _ in },
     clearHistory: ((UUID) async throws -> Void)? = nil,
     nativeBitwardenController: NativeBitwardenController? = nil,
     initialSection: BrowserSettingsSection = .general
@@ -102,6 +131,9 @@ struct BrowserSettingsView: View {
     self.onCreateProfile = onCreateProfile
     self.onRenameProfile = onRenameProfile
     self.onDeleteProfile = onDeleteProfile
+    self.onOpenSpace = onOpenSpace
+    self.onConnectAccount = onConnectAccount
+    self.onDisconnectAccount = onDisconnectAccount
     self.clearHistory = clearHistory
     _selectedSection = State(initialValue: initialSection)
   }
@@ -341,7 +373,9 @@ struct BrowserSettingsView: View {
 
   private var aboutContent: some View {
     Form {
-      Section("Arcusis Browser") {
+      Section(ProductIdentity.name) {
+        Text(ProductIdentity.meaning)
+        Text("© 2026 Arcusis. All rights reserved.")
         LabeledContent(
           "Version",
           value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
@@ -355,62 +389,176 @@ struct BrowserSettingsView: View {
   }
 
   private var profilesContent: some View {
-    Form {
-      Section("Profiles") {
+    HStack(spacing: 0) {
+      VStack(alignment: .leading, spacing: 8) {
+        HStack {
+          Text("Profiles").font(.headline)
+          Spacer()
+          Button {
+            profileEditor = ProfileEditorTarget(profileID: nil, name: "")
+          } label: {
+            Image(systemName: "plus")
+          }
+          .accessibilityLabel("Add Profile")
+          .accessibilityIdentifier("settings.addProfile")
+        }
         ForEach(profiles) { profile in
           Button {
             selectedProfileID = profile.id
           } label: {
-            HStack {
-              Label(profile.name, systemImage: "person.crop.circle")
-              Spacer()
-              Text(spaceCountLabel(profile.spaceNames.count)).foregroundStyle(.secondary)
-              if selectedProfileID == profile.id { Image(systemName: "checkmark") }
-            }.contentShape(Rectangle())
+            HStack(spacing: 9) {
+              Image(systemName: "person.crop.circle").foregroundStyle(.secondary)
+                .frame(width: 22)
+              VStack(alignment: .leading, spacing: 2) {
+                Text(profile.name).lineLimit(1)
+                Text(spaceCountLabel(profile.spaces.count)).font(.caption).foregroundStyle(
+                  .secondary)
+              }
+              Spacer(minLength: 0)
+              if selectedProfileID == profile.id { Image(systemName: "checkmark").font(.caption) }
+            }
+            .padding(8)
+            .background(
+              selectedProfileID == profile.id ? Color.accentColor.opacity(0.14) : .clear,
+              in: RoundedRectangle(cornerRadius: 8)
+            )
+            .contentShape(Rectangle())
           }.buttonStyle(.plain)
         }
-        Button("Add Profile") { profileEditor = ProfileEditorTarget(profileID: nil, name: "") }
-          .accessibilityIdentifier("settings.addProfile")
+        Spacer()
       }
+      .padding(14)
+      .frame(width: 205)
+      .frame(maxHeight: .infinity)
+      .background(.regularMaterial)
+      Divider()
       if let profile = profiles.first(where: { $0.id == selectedProfileID }) {
-        Section(profile.name) {
-          LabeledContent("Name", value: profile.name)
-          Button("Rename") {
-            profileEditor = ProfileEditorTarget(profileID: profile.id, name: profile.name)
-          }
-          .accessibilityIdentifier("settings.renameProfile")
-          Picker("Search engine", selection: $selectedSearchEngine) {
-            ForEach(searchEngines) { Text($0.title).tag($0.id) }
-          }
-          Button("Delete Profile…", role: .destructive) {
-            destinationID = profiles.first(where: { $0.id != profile.id })?.id
-            deletingProfile = profile
-          }.foregroundStyle(.red).disabled(profiles.count < 2)
-            .accessibilityIdentifier("settings.deleteProfile")
+        profileDetails(profile)
+      } else {
+        ContentUnavailableView("No Profile Selected", systemImage: "person.crop.circle")
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+      }
+    }
+  }
+
+  private func profileDetails(_ profile: BrowserSettingsProfile) -> some View {
+    return Form {
+      Section("Profile") {
+        HStack {
+          TextField("Name", text: profileNameBinding(profile))
+            .accessibilityIdentifier("settings.renameProfile")
+            .onSubmit { saveProfileName(profile) }
+          Button("Save") { saveProfileName(profile) }
+            .disabled(profileNameEdits[profile.id] == nil)
         }
-        Section {
-          if profile.spaceNames.isEmpty {
-            Text("No Spaces assigned").foregroundStyle(.secondary)
-          } else {
-            ForEach(Array(profile.spaceNames.enumerated()), id: \.offset) { _, name in
-              Label(name, systemImage: "square.stack.3d.up")
+        Picker("Search engine", selection: $selectedSearchEngine) {
+          ForEach(searchEngines) { Text($0.title).tag($0.id) }
+        }
+      }
+      Section("Spaces using this profile") {
+        if profile.spaces.isEmpty {
+          Text("No Spaces assigned").foregroundStyle(.secondary)
+        } else {
+          ForEach(profile.spaces) { space in
+            HStack {
+              Label(space.name, systemImage: space.symbol)
+              Spacer()
+              Button("Open") { onOpenSpace(space.id) }
             }
           }
-        } header: {
-          Text("Spaces")
-        } footer: {
-          Text("Spaces assigned to this profile share its browser data.")
-        }
-        if let nativeBitwardenController {
-          Section("Passwords") {
-            PasswordManagerSettingsView(controller: nativeBitwardenController)
-          }
         }
       }
-    }.formStyle(.grouped)
+      Section {
+        ForEach(AccountProvider.allCases) { provider in
+          if let account = profile.accounts.first(where: { $0.provider == provider }) {
+            ConnectedAccountRow(account: account) { onDisconnectAccount(profile.id, provider) }
+          } else {
+            Button {
+              onConnectAccount(profile.id, provider)
+            } label: {
+              HStack(spacing: 10) {
+                if let logo = provider.logo {
+                  Image(nsImage: logo).resizable().frame(width: 18, height: 18)
+                }
+                Text("Connect \(provider.title)")
+                Spacer(minLength: 0)
+              }
+              .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("settings.connect.\(provider.rawValue)")
+          }
+        }
+      } header: {
+        Text("Accounts")
+      } footer: {
+        Text(
+          "Sign in with the provider's own page. Gmail, Drive, Outlook, and Teams then open signed in for every Space using this profile."
+        )
+      }
+      Section("Extensions") {
+        LabeledContent("Installed extensions", value: "\(profile.extensionCount)")
+      }
+      if let nativeBitwardenController {
+        Section("Passwords") { PasswordManagerSettingsView(controller: nativeBitwardenController) }
+      }
+      Section {
+        Button("Delete Profile…", role: .destructive) {
+          destinationID = profiles.first(where: { $0.id != profile.id })?.id
+          deletingProfile = profile
+        }
+        .disabled(profiles.count < 2)
+        .accessibilityIdentifier("settings.deleteProfile")
+      }
+    }
+    .formStyle(.grouped)
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+
+  private func profileNameBinding(_ profile: BrowserSettingsProfile) -> Binding<String> {
+    Binding(
+      get: {
+        profileNameEdits[profile.id] ?? profiles.first(where: { $0.id == profile.id })?.name
+          ?? profile.name
+      },
+      set: { profileNameEdits[profile.id] = $0 })
+  }
+
+  private func saveProfileName(_ profile: BrowserSettingsProfile) {
+    guard let name = profileNameEdits[profile.id],
+      name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    else { return }
+    if onRenameProfile(profile.id, name) { profileNameEdits[profile.id] = nil }
   }
 
   private func spaceCountLabel(_ count: Int) -> String {
     "\(count) \(count == 1 ? "Space" : "Spaces")"
+  }
+
+}
+
+private struct ConnectedAccountRow: View {
+  let account: ConnectedAccount
+  let disconnect: () -> Void
+
+  var body: some View {
+    HStack(spacing: 10) {
+      AsyncImage(url: account.photoURL) { image in
+        image.resizable().scaledToFill()
+      } placeholder: {
+        if let logo = account.provider.logo {
+          Image(nsImage: logo).resizable().padding(5)
+        }
+      }
+      .frame(width: 28, height: 28)
+      .clipShape(Circle())
+      VStack(alignment: .leading, spacing: 1) {
+        Text(account.name ?? account.email).lineLimit(1)
+        Text(account.name == nil ? account.provider.title : account.email)
+          .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+      }
+      Spacer(minLength: 0)
+      Button("Disconnect", action: disconnect)
+    }
   }
 }

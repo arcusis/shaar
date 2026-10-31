@@ -22,6 +22,6 @@ Work order:
 
 Screenshots establish static layout, not animation duration/easing or physical input quality. Official videos/GIFs can supply motion references; exact parity requires measurement and runtime review. Current UI is not accepted as complete or perfected.
 
-Tracking: [Settings #51](https://github.com/arcusis/browser/issues/51), [Arc UI #5](https://github.com/arcusis/browser/issues/5), [existing chrome corrections #24](https://github.com/arcusis/browser/issues/24).
+Tracking: [Settings #51](https://github.com/arcusis/shaar/issues/51), [Arc UI #5](https://github.com/arcusis/shaar/issues/5), [existing chrome corrections #24](https://github.com/arcusis/shaar/issues/24).
 
 Related: [[Profile_Space_Isolation]], [[Native_Password_Manager_Options]], [[Arc_Reference_Library]], [[Project_State]].

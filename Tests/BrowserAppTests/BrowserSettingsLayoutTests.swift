@@ -12,7 +12,11 @@ final class BrowserSettingsLayoutTests: XCTestCase {
     let sidebarInitiallyVisible = Binding<Bool>(get: { true }, set: { _ in })
     let selectedSearchEngine = Binding<String>(get: { "duckDuckGo" }, set: { _ in })
     let view = BrowserSettingsView(
-      profiles: [BrowserSettingsProfile(id: profileID, name: "Work", spaceCount: 1)],
+      profiles: [
+        BrowserSettingsProfile(
+          id: profileID, name: "Work",
+          spaces: [BrowserSettingsSpace(id: UUID(), name: "Work", symbol: "square.stack.3d.up")])
+      ],
       searchEngines: [
         BrowserSettingsChoice(id: "google", title: "Google"),
         BrowserSettingsChoice(id: "duckDuckGo", title: "DuckDuckGo"),
@@ -53,7 +57,14 @@ final class BrowserSettingsLayoutTests: XCTestCase {
     let sidebarInitiallyVisible = Binding<Bool>(get: { true }, set: { _ in })
     let selectedSearchEngine = Binding<String>(get: { "bing" }, set: { _ in })
     let view = BrowserSettingsView(
-      profiles: [BrowserSettingsProfile(id: UUID(), name: "Work", spaceCount: 2)],
+      profiles: [
+        BrowserSettingsProfile(
+          id: UUID(), name: "Work",
+          spaces: [
+            BrowserSettingsSpace(id: UUID(), name: "Work", symbol: "square.stack.3d.up"),
+            BrowserSettingsSpace(id: UUID(), name: "Clients", symbol: "square.stack.3d.up"),
+          ])
+      ],
       searchEngines: [BrowserSettingsChoice(id: "google", title: "Google")],
       selectedProfileID: selectedProfileID, sidebarInitiallyVisible: sidebarInitiallyVisible,
       selectedSearchEngine: selectedSearchEngine, initialSection: .profiles)

@@ -9,7 +9,7 @@ import Testing
   let groups = menu.items.compactMap(\.submenu)
   #expect(
     groups.map(\.title) == [
-      "Arcusis Browser", "File", "Edit", "View", "Spaces", "Tabs", "Archive",
+      "Shaar", "File", "Edit", "View", "Spaces", "Tabs", "Archive",
       "Extensions", "Window", "Help",
     ])
 
@@ -53,7 +53,8 @@ import Testing
   #expect(item("Next space")?.keyEquivalentModifierMask == [.command, .option])
   #expect(item("New Mini Window")?.keyEquivalent == "n")
   #expect(item("New Mini Window")?.keyEquivalentModifierMask == [.command, .option])
-  #expect(item("New space…")?.keyEquivalent == "")
+  #expect(item("New space…")?.keyEquivalent == "S")
+  #expect(item("New Folder")?.keyEquivalentModifierMask == [.command, .control])
   #expect(item("Copy URL")?.keyEquivalentModifierMask == [.command, .shift])
   #expect(item("Downloads")?.keyEquivalentModifierMask == [.command, .shift])
   #expect(item("Undo")?.action == NSSelectorFromString("undo:"))

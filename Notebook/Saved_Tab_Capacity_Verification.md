@@ -8,6 +8,6 @@ Persistent authored cookies and localStorage markers differ across profiles and 
 
 Reports bind mode, phase, run identity, counts and cleanup. Capacity-only evidence cannot satisfy the full account/MV3 baseline. Timings are observations, not latency thresholds or total-process memory measurements. This fixture verifies many saved tabs with bounded live documents; hundreds of simultaneous live renderers, physical interaction and company workflows remain separate acceptance gates.
 
-Tracking: [capacity #61](https://github.com/arcusis/browser/issues/61), [Spaces #3](https://github.com/arcusis/browser/issues/3), [native performance/distribution #8](https://github.com/arcusis/browser/issues/8).
+Tracking: [capacity #61](https://github.com/arcusis/shaar/issues/61), [Spaces #3](https://github.com/arcusis/shaar/issues/3), [native performance/distribution #8](https://github.com/arcusis/shaar/issues/8).
 
 Related: [[Profile_Space_Isolation]], [[Managed_Workspace_Persistence]], [[Source_And_Native_Verification]].

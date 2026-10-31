@@ -84,13 +84,15 @@ else
   binary_dir=$(ARCUSIS_NATIVE_BITWARDEN_SDK=0 swift build --manifest-cache none --scratch-path "$scratch_path" -c "$configuration" --show-bin-path)
 fi
 if $with_engine; then
-  app="build/Arcusis Browser.app"
+  app="build/Shaar.app"
 else
-  app="build/Arcusis Browser Shell.app"
+  app="build/Shaar Shell.app"
 fi
 if [[ "$configuration" == debug ]]; then
   app="${app%.app} Debug.app"
 fi
+# Start from an empty bundle so files from earlier builds, such as an old icon, never linger.
+rm -rf "$app"
 mkdir -p "$app/Contents/MacOS"
 cp "$binary_dir/ArcusisBrowser" "$app/Contents/MacOS/ArcusisBrowser"
 "${PYTHON:-python3}" scripts/stage-browser-resources.py \
@@ -103,7 +105,7 @@ fi
 mkdir -p "$app/Contents/Resources/ArdiaCore"
 cp ThirdParty/ArdiaCore/LICENSE ThirdParty/ArdiaCore/NOTICE ThirdParty/ArdiaCore/pin.json \
   "$app/Contents/Resources/ArdiaCore/"
-cp Resources/Branding/Arcusis.icns "$app/Contents/Resources/Arcusis.icns"
+cp Resources/Branding/Shaar.icns "$app/Contents/Resources/Shaar.icns"
 cp -R Resources/ExtensionManager "$app/Contents/Resources/ExtensionManager"
 if $with_native_bitwarden_sdk; then
   source_dylib="$sdk_package/Frameworks/BitwardenSDK.xcframework/macos-arm64/libbitwarden_uniffi.dylib"
@@ -146,15 +148,16 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 <plist version="1.0"><dict>
   <key>CFBundleExecutable</key><string>ArcusisBrowser</string>
   <key>CFBundleIdentifier</key><string>com.arcusis.browser</string>
-  <key>CFBundleName</key><string>Arcusis Browser</string>
+  <key>CFBundleName</key><string>Shaar</string>
   <key>CFBundleURLTypes</key><array><dict>
     <key>CFBundleURLName</key><string>Web URLs</string>
     <key>CFBundleURLSchemes</key><array><string>http</string><string>https</string></array>
   </dict></array>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleIconFile</key><string>Arcusis.icns</string>
+  <key>CFBundleIconFile</key><string>Shaar.icns</string>
   <key>CFBundleShortVersionString</key><string>0.1.0</string>
   <key>CFBundleVersion</key><string>1</string>
+  <key>NSHumanReadableCopyright</key><string>© 2026 Arcusis. All rights reserved.</string>
   <key>LSMinimumSystemVersion</key><string>26.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>UTExportedTypeDeclarations</key><array><dict>

@@ -10,7 +10,7 @@ let bundleFrameworksLinkerSettings: [LinkerSetting] = [
 let package = Package(
   name: "ArcusisBrowser",
   platforms: [.macOS("26.0")],
-  products: [.executable(name: "ArcusisBrowser", targets: ["ArcusisBrowser"])],
+  products: [.executable(name: "ArcusisBrowser", targets: ["Shaar"])],
   dependencies: [.package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.1")],
   targets: [
     .target(name: "BrowserCore", resources: [.process("Resources/public_suffix_list.dat")]),
@@ -20,15 +20,26 @@ let package = Package(
       cxxSettings: [.unsafeFlags(["-fobjc-arc"])],
       linkerSettings: [.linkedFramework("AppKit")]
     ),
-    .executableTarget(
+    .target(
       name: "ArcusisBrowser",
       dependencies: [
         "BrowserCore", "ChromiumBridge", .product(name: "Sparkle", package: "Sparkle"),
-      ],
+      ]),
+    .executableTarget(
+      name: "Shaar", dependencies: ["ArcusisBrowser"],
+      linkerSettings: bundleFrameworksLinkerSettings),
+    // Engine probes. They use app internals through @testable import, so release builds of this
+    // target need -enable-testing: build it with `bundle-app.sh --with-engine --verification`.
+    .executableTarget(
+      name: "ShaarVerification",
+      dependencies: ["ArcusisBrowser", "BrowserCore", "ChromiumBridge"],
       linkerSettings: bundleFrameworksLinkerSettings),
     .testTarget(name: "BrowserCoreTests", dependencies: ["BrowserCore"]),
     .testTarget(
       name: "BrowserAppTests",
       dependencies: ["ArcusisBrowser", "BrowserCore"]),
+    .testTarget(
+      name: "ShaarVerificationTests",
+      dependencies: ["ArcusisBrowser", "BrowserCore", "ChromiumBridge", "ShaarVerification"]),
   ]
 )

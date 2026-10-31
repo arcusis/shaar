@@ -17,6 +17,6 @@ The script verifies the engine archive's pinned SHA-256 and compares the extract
 
 All bundles include the Shaar app icon, `Resources/Branding/Shaar.icns`, generated from `Branding/shaar-app-icon.svg` with `bash scripts/generate-app-icon.sh`; see [[Product_Identity]] and `Branding/DESIGN.md`. Every bundle embeds Sparkle, but development bundles carry no update feed and never check for updates; release builds and the update feed are in [[Releasing]].
 
-`bash scripts/bundle-app.sh` without `--with-engine` builds `build/Shaar Shell.app`, a separate UI-only preview. `swift run ArcusisBrowser` also runs that preview without webpage rendering.
+`bash scripts/bundle-app.sh` without `--with-engine` builds `build/Shaar Shell.app`, a separate UI-only preview. `swift run ArcusisBrowser` also runs that preview without webpage rendering. `--with-engine --verification` builds the probe harness instead; see [[Verification_Harness]].
 
 Related: [[Source_And_Native_Verification]], [[Releasing]].

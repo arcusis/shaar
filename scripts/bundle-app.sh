@@ -7,17 +7,26 @@ source scripts/release-config.sh
 source scripts/engine-signing.sh
 # Development bundles are signed ad hoc for local use only.
 adhoc_sign() { codesign --force --timestamp=none --sign - "$1"; }
+# Probes live only in the ShaarVerification harness; a shipped executable must not contain them.
+assert_no_verification_code() {
+  if LC_ALL=C grep -a -F -q -e ShaarVerification -e EngineProbe -e --engine-probe -e --probe-data-dir "$1"; then
+    echo "Verification code found in $1." >&2
+    exit 1
+  fi
+}
 configuration=release
 with_engine=false
 with_updates=false
+with_verification=false
 seen_configuration=false
 seen_engine=false
 seen_updates=false
+seen_verification=false
 while (($#)); do
   case "$1" in
     --configuration)
       if $seen_configuration || (($# < 2)) || [[ "$2" == --* ]]; then
-        echo 'Usage: bundle-app.sh [--configuration release|debug] [--with-engine] [--with-updates]' >&2
+        echo 'Usage: bundle-app.sh [--configuration release|debug] [--with-engine] [--with-updates] [--verification]' >&2
         exit 2
       fi
       case "$2" in
@@ -45,6 +54,15 @@ while (($#)); do
       with_updates=true
       shift
       ;;
+    --verification)
+      if $seen_verification; then
+        echo 'Duplicate option: --verification' >&2
+        exit 2
+      fi
+      seen_verification=true
+      with_verification=true
+      shift
+      ;;
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
 done
@@ -53,29 +71,53 @@ if $with_updates && { [[ "$configuration" != release ]] || ! $with_engine; }; th
   echo '--with-updates requires --configuration release and --with-engine.' >&2
   exit 2
 fi
+# The verification harness drives the real engine and never ships, so it never carries a feed.
+if $with_verification && { ! $with_engine || $with_updates; }; then
+  echo '--verification requires --with-engine and excludes --with-updates.' >&2
+  exit 2
+fi
 
-scratch_path="build/swiftpm/default"
-mkdir -p "$scratch_path"
-swift build --manifest-cache none --scratch-path "$scratch_path" -c "$configuration"
-binary_dir=$(swift build --manifest-cache none --scratch-path "$scratch_path" -c "$configuration" --show-bin-path)
-if $with_engine; then
+if $with_verification; then
+  executable=ShaarVerification
+  scratch_path="build/swiftpm/verification"
+  app="build/Shaar Verification.app"
+elif $with_engine; then
+  executable=ArcusisBrowser
+  scratch_path="build/swiftpm/default"
   app="build/Shaar.app"
 else
+  executable=ArcusisBrowser
+  scratch_path="build/swiftpm/default"
   app="build/Shaar Shell.app"
 fi
+swift_build() {
+  swift build --manifest-cache none --scratch-path "$scratch_path" -c "$configuration" "$@"
+}
+mkdir -p "$scratch_path"
+if $with_verification; then
+  # ShaarVerification imports the app module with @testable. Its own scratch path keeps
+  # testing-enabled objects out of the shipping build, which never passes -enable-testing.
+  swift_build --product "$executable" -Xswiftc -enable-testing
+else
+  swift_build --product "$executable"
+fi
+binary_dir=$(swift_build --show-bin-path)
 if [[ "$configuration" == debug ]]; then
   app="${app%.app} Debug.app"
 fi
 # Start from an empty bundle so files from earlier builds, such as an old icon, never linger.
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS"
-cp "$binary_dir/ArcusisBrowser" "$app/Contents/MacOS/ArcusisBrowser"
+cp "$binary_dir/$executable" "$app/Contents/MacOS/$executable"
+if ! $with_verification; then
+  assert_no_verification_code "$app/Contents/MacOS/$executable"
+fi
 # SwiftPM can add its package Frameworks directory as an absolute build rpath.
 # Remove it so runtime resolves only the app's relative Frameworks directory.
 package_rpath="$binary_dir/PackageFrameworks"
-load_commands=$(otool -l "$app/Contents/MacOS/ArcusisBrowser")
+load_commands=$(otool -l "$app/Contents/MacOS/$executable")
 if [[ "$load_commands" == *"path $package_rpath "* ]]; then
-  install_name_tool -delete_rpath "$package_rpath" "$app/Contents/MacOS/ArcusisBrowser"
+  install_name_tool -delete_rpath "$package_rpath" "$app/Contents/MacOS/$executable"
 fi
 "${PYTHON:-python3}" scripts/stage-browser-resources.py \
   "$binary_dir" "$app/Contents/Resources"
@@ -108,7 +150,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>CFBundleExecutable</key><string>ArcusisBrowser</string>
+  <key>CFBundleExecutable</key><string>$executable</string>
   <key>CFBundleIdentifier</key><string>$SHAAR_BUNDLE_IDENTIFIER</string>
   <key>CFBundleName</key><string>Shaar</string>
   <key>CFBundleURLTypes</key><array><dict>
@@ -137,7 +179,9 @@ $update_keys
 PLIST
 adhoc_sign "$app"
 codesign --verify --deep --strict "$app"
-if [[ "$configuration" == debug ]]; then
+if $with_verification; then
+  printf 'Built %s (verification harness; local ad-hoc signature; never distributed).\n' "$app"
+elif [[ "$configuration" == debug ]]; then
   printf 'Built %s (debug development bundle; local ad-hoc signature; not notarized or release-ready).\n' "$app"
 else
   printf 'Built %s (local ad-hoc signature; not notarized).\n' "$app"

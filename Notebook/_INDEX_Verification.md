@@ -2,6 +2,7 @@
 
 - [[Source_And_Native_Verification]]
 - [[Test_Coverage]]
+- [[Verification_Harness]]
 - [[Saved_Tab_Capacity_Verification]]
 - [[Extension_Storage_Verification]]
 - [[External_App_Consent]]

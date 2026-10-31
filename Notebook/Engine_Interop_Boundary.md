@@ -8,6 +8,6 @@ Objective-C++ is an implementation choice, not a requirement for every browser f
 
 The repository's four JavaScript files are authored MV3 test-extension fixtures under Tests/Fixtures/ProfileExtension. They test browser behavior; the application shell is not a JavaScript UI. Swift probe code also evaluates page/extension expressions for diagnostics. A native browser still renders websites containing JavaScript,.
 
-Verification scaffolding currently shares application/bridge compilation with product code. Keep probe-only responsibilities separate from normal product paths before distribution.
+Probe code lives in the separate `ShaarVerification` executable, and test-only engine entry points in the `ChromiumBridge.Verification` submodule that the app never imports; see [[Verification_Harness]].
 
 Related: [[Browser_Architecture]], [[Native_Window_Ownership]], [[Source_And_Native_Verification]].

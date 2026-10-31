@@ -53,6 +53,7 @@ class BundleAppTests(unittest.TestCase):
         self.binary_dir = self.root / "swift-bin"
         self.binary_dir.mkdir()
         (self.binary_dir / "ArcusisBrowser").write_text("stub binary")
+        (self.binary_dir / "ShaarVerification").write_text("stub ShaarVerification EngineProbe --engine-probe")
         resource_bundle = self.binary_dir / "ArcusisBrowser_BrowserCore.bundle" / "Contents"
         (resource_bundle / "Resources").mkdir(parents=True)
         shutil.copyfile(PSL, resource_bundle / "Resources" / "public_suffix_list.dat")
@@ -259,6 +260,56 @@ class BundleAppTests(unittest.TestCase):
         self.assertIn("not notarized or release-ready", result.stdout)
         self._assert_icon_bundle("build/Shaar Debug.app")
 
+    def test_shipping_builds_never_enable_testing_or_build_the_harness(self):
+        for args in ((), ("--with-engine",), ("--with-engine", "--with-updates")):
+            with self.subTest(args=args):
+                self.log.unlink(missing_ok=True)
+                result = self._run(*args)
+
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("-c release --product ArcusisBrowser\n", self._log())
+                self.assertNotIn("enable-testing", self._log())
+                self.assertNotIn("ShaarVerification", self._log())
+
+    def test_shipping_bundle_rejects_executable_with_verification_code(self):
+        for marker in ("ShaarVerification", "EngineProbe", "--engine-probe", "--probe-data-dir"):
+            with self.subTest(marker=marker):
+                self.log.unlink(missing_ok=True)
+                (self.binary_dir / "ArcusisBrowser").write_text(f"stub binary {marker}")
+                result = self._run("--with-engine")
+
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("Verification code found", result.stderr)
+                self.assertNotIn("codesign", self._log())
+
+    def test_verification_builds_separate_testable_harness_bundle(self):
+        result = self._run("--with-engine", "--verification")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(
+            "swift build --manifest-cache none --scratch-path build/swiftpm/verification -c release "
+            "--product ShaarVerification -Xswiftc -enable-testing",
+            self._log(),
+        )
+        self.assertNotIn("build/swiftpm/default", self._log())
+        self.assertIn("Built build/Shaar Verification.app", result.stdout)
+        self.assertEqual(self._info_plist("build/Shaar Verification.app")["CFBundleExecutable"], "ShaarVerification")
+        self.assertTrue((self.root / "build/Shaar Verification.app/Contents/MacOS/ShaarVerification").is_file())
+        self.assertFalse((self.root / "build/Shaar Verification.app/Contents/MacOS/ArcusisBrowser").exists())
+        self.assertTrue(
+            (self.root / "build/Shaar Verification.app/Contents/Frameworks/Chromium Framework.framework").is_dir()
+        )
+        self.assertFalse((self.root / "build/Shaar.app").exists())
+
+    def test_verification_requires_engine_and_never_carries_updates(self):
+        for args in (("--verification",), ("--with-engine", "--with-updates", "--verification")):
+            with self.subTest(args=args):
+                result = self._run(*args)
+
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("--verification requires --with-engine and excludes --with-updates", result.stderr)
+                self.assertEqual(self._log(), "")
+
     def test_resource_corruption_stops_bundle_before_signing(self):
         data = self.binary_dir / "ArcusisBrowser_BrowserCore.bundle/Contents/Resources/public_suffix_list.dat"
         data.write_text("corrupt")
@@ -277,6 +328,7 @@ class BundleAppTests(unittest.TestCase):
             ("--configuration", "debug", "--configuration", "release"),
             ("--with-engine", "--with-engine"),
             ("--with-updates", "--with-updates"),
+            ("--verification", "--verification"),
             ("--configuration", "--with-engine"),
         )
         for args in invalid_arguments:

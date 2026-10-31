@@ -18,8 +18,7 @@ SHAAR_MINIMUM_SYSTEM_VERSION=26.0
 SHAAR_RELEASE_REPOSITORY=arcusis/shaar
 SHAAR_FEED_URL=https://arcusis.github.io/shaar/appcast.xml
 
-# Replace with the public key printed by Sparkle's `generate_keys --account shaar`.
-# Bundles carrying the placeholder never start the updater, and release.sh refuses to
-# notarize or upload them.
-SHAAR_SPARKLE_PUBLIC_ED_KEY=SHAAR_SPARKLE_PUBLIC_ED_KEY_PLACEHOLDER
+# Public half of the Sparkle EdDSA key (`generate_keys --account shaar -p`). The private key
+# lives in the release Mac's login keychain; release.sh checks that the two match.
+SHAAR_SPARKLE_PUBLIC_ED_KEY=mAZzywTpmIBYZQRU9LERPRlNASVCm8X31EF9ZmDYX9Y=
 SHAAR_SPARKLE_KEY_ACCOUNT=shaar

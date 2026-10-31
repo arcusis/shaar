@@ -138,12 +138,13 @@ private struct LibrarySpaceCardView: View {
     .padding(.vertical, 12)
   }
 
+  private var cardShape: RoundedRectangle { RoundedRectangle(cornerRadius: 14) }
+
+  /// Every card carries its Space's theme color; the selected one is outlined in it.
   private var cardBackground: some View {
-    RoundedRectangle(cornerRadius: 14)
-      .fill(
-        isSelected
-          ? SpaceChromeTint(space: card.space).color(for: colorScheme)
-          : Color.primary.opacity(colorScheme == .dark ? 0.06 : 0.05))
+    cardShape
+      .fill(tint.opacity(colorScheme == .dark ? 0.22 : 0.16))
+      .overlay { cardShape.strokeBorder(tint.opacity(isSelected ? 0.9 : 0), lineWidth: 2) }
   }
 
 }
@@ -178,7 +179,7 @@ private struct LibrarySpaceCardHeader: View {
             .lineLimit(1)
             .padding(.horizontal, 6)
             .padding(.vertical, 4)
-            .background(Color.primary.opacity(0.08), in: Capsule())
+            .background(tint.opacity(0.28), in: Capsule())
         }
         .contentShape(Rectangle())
       }

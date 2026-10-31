@@ -476,15 +476,16 @@ final class PrivateProductHostProbe {
     throw PrivateWindowFailure("Private product native window ownership timed out.")
   }
 
+  /// Window teardown runs on the engine's schedule; slower machines stretch this wait.
   private func waitForOwnerDeallocation() async throws {
-    for _ in 0..<100 {
+    for _ in 0..<Int(100 * ProbeTimeout.scale) {
       if lifecycleStore == nil && lifecycleHosting == nil { return }
       try await Task.sleep(for: .milliseconds(50))
     }
   }
 
   private func waitForQuitCancellation(_ cancelled: () -> Bool) async throws {
-    for _ in 0..<100 {
+    for _ in 0..<Int(100 * ProbeTimeout.scale) {
       if cancelled() { return }
       try await Task.sleep(for: .milliseconds(50))
     }

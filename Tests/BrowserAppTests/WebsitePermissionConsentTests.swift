@@ -12,7 +12,8 @@ struct WebsitePermissionConsentTests {
     return store
   }
 
-  private func request(_ store: BrowserStore, id: String = "p1") throws -> WebsitePermissionRequest {
+  private func request(_ store: BrowserStore, id: String = "p1") throws -> WebsitePermissionRequest
+  {
     let tab = try #require(store.session.selectedSpace.selectedTab)
     return try #require(
       WebsitePermissionRequest(

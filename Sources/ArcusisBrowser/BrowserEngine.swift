@@ -267,7 +267,9 @@ final class BrowserEngine {
       guard let self else { return }
       self.events.resolveMedia(id, windowID: self.windowID, accepted: accepted)
     }
-    callbacks.onWebsiteMediaRequest = { [weak self] payload in self?.requestWebsitePermission(payload) }
+    callbacks.onWebsiteMediaRequest = { [weak self] payload in
+      self?.requestWebsitePermission(payload)
+    }
     callbacks.onWebsiteMediaDismissed = { [weak self] id in
       self?.store?.resolveWebsitePermission(id, accepted: false)
     }

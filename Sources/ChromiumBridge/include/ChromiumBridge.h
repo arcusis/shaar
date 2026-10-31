@@ -15,6 +15,14 @@ FOUNDATION_EXPORT BOOL ARCProbeRootIsOwned(NSURL *root);
 FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeExternalAppLaunchAuditForTesting(
   NSString *url, NSArray *launches, NSURL *root, BOOL enabled);
 
+/// Fixed extension-management operations; the bridge builds each script from a constant template.
+typedef NS_ENUM(NSInteger, ARCExtensionManagementOperation) {
+  ARCExtensionManagementOperationList,
+  ARCExtensionManagementOperationSetEnabled,
+  ARCExtensionManagementOperationUninstall,
+  ARCExtensionManagementOperationDetails,
+};
+
 /// All methods and callbacks run on the main thread. The engine owns the AppKit run loop.
 @interface ARCChromiumRuntime : NSObject
 @property(copy, nullable) void (^onReady)(void);
@@ -127,7 +135,8 @@ FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeExternalAppLaunchAuditForTest
 - (void)closePrivateWindowID:(NSString *)windowID contextID:(NSString *)contextID
                   completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion NS_SWIFT_UI_ACTOR;
 - (BOOL)releasePrivateContextID:(NSString *)contextID;
-/// Evaluates a JavaScript expression and returns its JSON value through ArdiaCore's post callback.
+/// Evaluates a constant JavaScript script and returns its JSON value through ArdiaCore's post callback.
+/// Callers must serialize all dynamic values as JSON literals before constructing the script.
 - (void)evaluateInTabID:(NSString *)tabID script:(NSString *)script
             completion:(void (^)(NSString * _Nullable))completion;
 /// Captures only the disposable probe's own tab, without a remote debugging socket.
@@ -158,11 +167,14 @@ FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeExternalAppLaunchAuditForTest
 - (void)resolveWebsiteMediaRequestID:(NSString *)requestID accepted:(BOOL)accepted;
 - (void)resolveExternalAppRequestID:(NSString *)requestID accepted:(BOOL)accepted;
 - (BOOL)executeExtensionID:(NSString *)extensionID tabID:(NSString *)tabID error:(NSError **)error;
-/// Evaluates an expression against `chrome.developerPrivate` and `chrome.management` in a hidden
-/// extensions page owned by the profile. The expression may return a promise; completion receives
-/// its JSON, `{"error": …}` when it throws, or nil when the profile or page is unavailable.
-- (void)manageExtensionsForProfileID:(NSString *)profileID expression:(NSString *)expression
+/// Runs one fixed extension-management operation against a validated extension ID and profile.
+- (void)manageExtensionsForProfileID:(NSString *)profileID
+                           operation:(ARCExtensionManagementOperation)operation
+                         extensionID:(nullable NSString *)extensionID
+                             enabled:(BOOL)enabled
                           completion:(void (^)(NSString * _Nullable json))completion;
+/// Canonical browser-managed download directory for a regular profile.
+- (nullable NSURL *)downloadsDirectoryForProfileID:(NSString *)profileID;
 /// The profile's installed-extensions folder, for reading extension manifests and icons.
 - (nullable NSURL *)extensionsDirectoryForProfileID:(NSString *)profileID;
 - (nullable NSView *)viewForExtensionPopupID:(NSString *)popupID;

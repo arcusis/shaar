@@ -1,5 +1,6 @@
 import AppKit
 import BrowserCore
+import ChromiumBridge
 import Foundation
 
 /// An installed extension as `chrome.management` reports it for one profile.
@@ -14,23 +15,53 @@ struct ManagedExtension: Identifiable, Equatable, Decodable {
   let hostPermissions: [String]
 }
 
-/// Expressions run by Shaar's bundled manager extension. Only validated IDs reach them.
-enum ExtensionManagementScript {
-  static let list = """
-    chrome.management.getAll().then(all => all.filter(e => e.type === 'extension').map(e => ({
-      id: e.id, name: e.name, version: e.version, description: e.description || '',
-      enabled: e.enabled, mayDisable: e.mayDisable, permissions: e.permissions || [],
-      hostPermissions: e.hostPermissions || []})))
-    """
+enum ExtensionManagementOperation: Equatable {
+  case list
+  case setEnabled(id: String, enabled: Bool)
+  case uninstall(id: String)
+  case details(id: String)
 
-  static func setEnabled(_ id: String, _ enabled: Bool) -> String? {
-    guard BrowserExtension.isValidID(id) else { return nil }
-    return "chrome.management.setEnabled('\(id)', \(enabled)).then(() => true)"
+  var extensionID: String? {
+    switch self {
+    case .list: nil
+    case .setEnabled(let id, _), .uninstall(let id), .details(let id): id
+    }
   }
 
-  static func uninstall(_ id: String) -> String? {
-    guard BrowserExtension.isValidID(id) else { return nil }
-    return "chrome.management.uninstall('\(id)', {showConfirmDialog: false}).then(() => true)"
+  var bridgeOperation: ARCExtensionManagementOperation {
+    switch self {
+    case .list: .list
+    case .setEnabled: .setEnabled
+    case .uninstall: .uninstall
+    case .details: .details
+    }
+  }
+
+  var enabled: Bool {
+    guard case .setEnabled(_, let enabled) = self else { return false }
+    return enabled
+  }
+
+  static func isValidProfileID(_ value: String) -> Bool {
+    guard let id = UUID(uuidString: value) else { return false }
+    return id.uuidString.caseInsensitiveCompare(value) == .orderedSame
+  }
+}
+
+enum ExtensionConsentPermissions {
+  static let unknownAccess = "Unknown access"
+
+  static func displayValues(
+    permissions: [String], hostPermissions: [String]?, complete: Bool
+  ) -> [String] {
+    var values = permissions
+    if let hostPermissions {
+      values += hostPermissions.map { "Site access: \($0)" }
+    }
+    if !complete || hostPermissions == nil {
+      values.append(unknownAccess)
+    }
+    return values
   }
 }
 
@@ -82,5 +113,17 @@ enum ExtensionIconLoader {
       }
     }
     return nil
+  }
+}
+
+extension ARCChromiumRuntime {
+  /// Runs one extension-management operation; the bridge builds the script from fixed templates.
+  func manageExtensions(
+    _ operation: ExtensionManagementOperation, profileID: UUID,
+    completion: @escaping (String?) -> Void
+  ) {
+    manageExtensions(
+      forProfileID: profileID.uuidString, operation: operation.bridgeOperation,
+      extensionID: operation.extensionID, enabled: operation.enabled, completion: completion)
   }
 }

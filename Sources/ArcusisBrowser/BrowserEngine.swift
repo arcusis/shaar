@@ -551,6 +551,7 @@ final class BrowserEngine {
 
   func refreshExtensions() {
     guard !isClosed, let profile = store?.session.selectedSpace.profileID,
+      ExtensionManagementOperation.isValidProfileID(profile.uuidString),
       loadedProfiles.contains(profile)
     else {
       extensions = []
@@ -581,16 +582,18 @@ final class BrowserEngine {
     }
     pinnedExtensionIDs = store?.preferences.pinnedExtensionIDs(for: profile) ?? []
     runtime.manageExtensions(
-      forProfileID: profile.uuidString, expression: ExtensionManagementScript.list
+      forProfileID: profile.uuidString, operation: .list, extensionID: nil, enabled: false
     ) { [weak self] json in
-      guard let self, self.store?.session.selectedSpace.profileID == profile,
-        case .value(let data)? = ExtensionManagementResult(json: json),
-        let list = try? JSONDecoder().decode([ManagedExtension].self, from: data)
-      else { return }
-      self.managedExtensions = list.sorted {
-        $0.name.localizedStandardCompare($1.name) == .orderedAscending
+      Task { @MainActor [weak self] in
+        guard let self, self.store?.session.selectedSpace.profileID == profile,
+          case .value(let data)? = ExtensionManagementResult(json: json),
+          let list = try? JSONDecoder().decode([ManagedExtension].self, from: data)
+        else { return }
+        self.managedExtensions = list.sorted {
+          $0.name.localizedStandardCompare($1.name) == .orderedAscending
+        }
+        self.loadExtensionIcons(profile: profile)
       }
-      self.loadExtensionIcons(profile: profile)
     }
   }
 
@@ -607,7 +610,7 @@ final class BrowserEngine {
 
   func setExtension(_ id: String, enabled: Bool) {
     runExtensionManagement(
-      ExtensionManagementScript.setEnabled(id, enabled),
+      .setEnabled(id: id, enabled: enabled),
       failure: enabled
         ? "The extension could not be turned on." : "The extension could not be turned off.")
   }
@@ -615,21 +618,26 @@ final class BrowserEngine {
   func removeExtension(_ id: String) {
     setExtension(id, pinned: false)
     runExtensionManagement(
-      ExtensionManagementScript.uninstall(id), failure: "The extension could not be removed.")
+      .uninstall(id: id), failure: "The extension could not be removed.")
   }
 
-  private func runExtensionManagement(_ expression: String?, failure: String) {
-    guard let expression, let profile = store?.session.selectedSpace.profileID else { return }
-    runtime.manageExtensions(forProfileID: profile.uuidString, expression: expression) {
-      [weak self] json in
-      guard let self else { return }
-      switch ExtensionManagementResult(json: json) {
-      case .failure(let message)?: self.notice = "\(failure) \(message)"
-      case nil: self.notice = failure
-      case .value?: break
+  private func runExtensionManagement(
+    _ operation: ExtensionManagementOperation, failure: String
+  ) {
+    guard let profile = store?.session.selectedSpace.profileID,
+      ExtensionManagementOperation.isValidProfileID(profile.uuidString)
+    else { return }
+    runtime.manageExtensions(operation, profileID: profile) { [weak self] json in
+      Task { @MainActor [weak self] in
+        guard let self, self.store?.session.selectedSpace.profileID == profile else { return }
+        switch ExtensionManagementResult(json: json) {
+        case .failure(let message)?: self.notice = "\(failure) \(message)"
+        case nil: self.notice = failure
+        case .value?: break
+        }
+        self.refreshExtensions()
+        self.refreshManagedExtensions()
       }
-      self.refreshExtensions()
-      self.refreshManagedExtensions()
     }
   }
 
@@ -644,11 +652,14 @@ final class BrowserEngine {
   }
 
   func revealDownload(_ id: String, profileID: UUID, open: Bool) {
-    guard let selected = store?.session.selectedSpace.profileID,
-      let url = downloads.fileToOpen(id: id, profileID: profileID, selectedProfileID: selected)
-    else { return }
-    guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey]),
-      values.isRegularFile == true, values.isSymbolicLink != true
+    guard let selected = store?.session.selectedSpace.profileID, selected == profileID else {
+      return
+    }
+    guard
+      let candidate = downloads.fileToOpen(
+        id: id, profileID: profileID, selectedProfileID: selected),
+      let directory = runtime.downloadsDirectory(forProfileID: profileID.uuidString),
+      let url = Self.validatedDownloadURL(candidate, in: directory)
     else {
       downloads.fileActionFailed(profileID: profileID)
       return
@@ -658,6 +669,17 @@ final class BrowserEngine {
     } else {
       NSWorkspace.shared.activateFileViewerSelecting([url])
     }
+  }
+
+  static func validatedDownloadURL(_ candidate: URL, in directory: URL) -> URL? {
+    guard candidate.isFileURL, directory.isFileURL else { return nil }
+    let root = directory.resolvingSymlinksInPath().standardizedFileURL
+    let file = candidate.resolvingSymlinksInPath().standardizedFileURL
+    guard file.path.hasPrefix(root.path + "/"),
+      let values = try? file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey]),
+      values.isRegularFile == true, values.isSymbolicLink != true
+    else { return nil }
+    return file
   }
 
   func showExtensionList() {
@@ -702,6 +724,8 @@ final class BrowserEngine {
 
   private func requestInstallation(_ payload: [String: Any]) {
     guard let id = payload["requestId"] as? String else { return }
+    let permissions = payload["permissions"] as? [String]
+    let hostPermissions = payload["hostPermissions"] as? [String]
     guard payload["windowID"] as? String == windowID else {
       events.resolveInstall(id, windowID: windowID, accepted: false)
       return
@@ -713,12 +737,16 @@ final class BrowserEngine {
       let source = (payload["sourceURL"] as? String).flatMap(URL.init(string:)),
       let extensionID = payload["id"] as? String, let name = payload["name"] as? String,
       let version = payload["version"] as? String,
-      let permissions = payload["permissions"] as? [String],
+      permissions?.allSatisfy({ $0.utf8.count <= 8192 }) != false,
       let kind = (payload["type"] as? String).flatMap(ExtensionInstallKind.init(rawValue:)),
+      hostPermissions?.allSatisfy({ $0.utf8.count <= 8192 }) != false,
       let browserExtension = BrowserExtension(id: extensionID, name: name, version: version),
       let request = ExtensionInstallRequest(
         id: id, profileID: profile, tabID: tab, sourceURL: source,
-        browserExtension: browserExtension, kind: kind, permissions: permissions),
+        browserExtension: browserExtension, kind: kind,
+        permissions: ExtensionConsentPermissions.displayValues(
+          permissions: permissions ?? [], hostPermissions: hostPermissions,
+          complete: permissions != nil && payload["permissionsComplete"] as? Bool == true)),
       store.requestInstallation(request)
     else {
       events.resolveInstall(id, windowID: windowID, accepted: false)

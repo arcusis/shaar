@@ -4,7 +4,7 @@ The browser is **Shaar** (Hebrew שער, "gateway"): a browser is a gateway to t
 
 ## What carries the name
 
-`ProductIdentity.name` in `Sources/BrowserCore/ProductIdentity.swift` is the only place the name is spelled. Menus, window titles, the quit dialog, Settings About, the process-lock message, and the Bitwarden device name read it. The bundle is `build/Shaar.app` (`build/Shaar Shell.app` for the UI-only preview).
+`ProductIdentity.name` in `Sources/BrowserCore/ProductIdentity.swift` is the only place the name is spelled. Menus, window titles, the quit dialog, Settings About, the process-lock message read it. The bundle is `build/Shaar.app` (`build/Shaar Shell.app` for the UI-only preview).
 
 ## What deliberately keeps the old identity
 

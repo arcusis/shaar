@@ -4,7 +4,6 @@
 - [[Profile_Space_Isolation]]
 - [[Profile_Favorites]]
 - [[Native_Window_Ownership]]
-- [[Native_Password_Manager_Options]]
 - [[Managed_Workspace_Persistence]]
 - [[Sidebar_Tab_Organization]]
 - [[Closed_Tab_Recovery]]
@@ -20,5 +19,3 @@
 - [[Keyboard_Commands]]
 - [[Engine_Interop_Boundary]]
 - [[Arc_Settings_Design]]
-- [[Native_Password_Manager_Options]]
-- [[Native_Vault_Session_Boundary]]

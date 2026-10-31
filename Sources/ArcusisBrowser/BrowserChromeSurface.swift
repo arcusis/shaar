@@ -62,9 +62,6 @@ struct BrowserChromeSurface: View {
   private var pageActions: some View {
     if let engine {
       HStack(spacing: 4) {
-        if engine.passwordFillAvailable, let coordinator = engine.passwordFill {
-          PasswordFillAction(coordinator: coordinator)
-        }
         MediaCaptureIndicator(store: store, engine: engine)
           .fixedSize()
         ExtensionToolbar(engine: engine, store: store)
@@ -84,74 +81,5 @@ struct BrowserChromeSurface: View {
     }
     .help(label)
     .accessibilityLabel(label)
-  }
-}
-
-private struct PasswordFillAction: View {
-  @Bindable var coordinator: NativePasswordFillCoordinator
-
-  var body: some View {
-    Button {
-      coordinator.request()
-    } label: {
-      Image(systemName: "key.fill")
-        .font(.system(size: 13, weight: .medium))
-        .frame(width: 28, height: 28)
-        .contentShape(Rectangle())
-    }
-    .help("Fill password")
-    .accessibilityLabel("Fill password")
-  }
-}
-
-struct PasswordFillPicker: View {
-  @Bindable var coordinator: NativePasswordFillCoordinator
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      if let message = coordinator.message {
-        Text(message)
-      } else {
-        Text("Choose a vault entry").font(.headline)
-        Text("Entries may not match this form and can be refused.").font(.caption)
-        if coordinator.entries.isEmpty { Text("No logins available.") }
-        ScrollView {
-          LazyVStack(alignment: .leading) {
-            ForEach(coordinator.entries) { entry in
-              Button {
-                coordinator.choose(entry.id)
-              } label: {
-                VStack(alignment: .leading) {
-                  Text(entry.name)
-                  if let username = entry.username {
-                    Text(username).font(.caption).foregroundStyle(.secondary)
-                  }
-                }.frame(maxWidth: .infinity, alignment: .leading)
-              }.disabled(coordinator.busy)
-            }
-          }
-        }.frame(maxHeight: 240)
-      }
-      Button("Cancel") { coordinator.cancel() }.keyboardShortcut(.cancelAction)
-    }
-    .padding(12)
-    .frame(width: 280)
-    .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
-    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary))
-    .shadow(radius: 12)
-  }
-}
-
-/// Same-window presentation used by the browser and guarded component captures.
-struct PasswordFillOverlay: View {
-  @Bindable var coordinator: NativePasswordFillCoordinator
-
-  var body: some View {
-    ZStack(alignment: .topTrailing) {
-      Color.clear.contentShape(Rectangle()).onTapGesture { coordinator.cancel() }
-      PasswordFillPicker(coordinator: coordinator)
-        .padding(.top, 46)
-        .padding(.trailing, 20)
-    }
   }
 }

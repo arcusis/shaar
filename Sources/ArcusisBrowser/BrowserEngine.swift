@@ -52,7 +52,6 @@ final class BrowserEngine {
   let lazyPinnedTabs: Bool
   var extensionPanel: ExtensionPanelRoute? {
     didSet {
-      if extensionPanel != nil { passwordFill?.cancel() }
       if extensionPanel == nil { runtime.closeExtensionPopup(forWindowID: windowID) }
     }
   }
@@ -67,12 +66,6 @@ final class BrowserEngine {
   @ObservationIgnored private var lastSpaceID: UUID?
   @ObservationIgnored private var lastTabID: UUID?
   @ObservationIgnored private var lastTabOrders: [UUID: [NativeTabPlacement]] = [:]
-  private(set) var passwordFill: NativePasswordFillCoordinator?
-  private(set) var passwordWindowKey = false
-  @ObservationIgnored private weak var fillController: NativeBitwardenController?
-  @ObservationIgnored private var fillObserver: UUID?
-  @ObservationIgnored private var fillInputMonitor: PasswordFillInputMonitor?
-  @ObservationIgnored private var fillSelection: FillSelection?
   private(set) var favicons: [UUID: NSImage] = [:]
 
   func seedFavicon(_ image: NSImage, for tabID: UUID) {
@@ -139,7 +132,6 @@ final class BrowserEngine {
       for request in self.store?.externalAppRequests ?? [] {
         self.store?.resolveExternalApp(request.id, accepted: false)
       }
-      self.detachPasswordFill()
       self.isClosed = true
       self.extensionPanel = nil
       self.store?.dismissPageFind()
@@ -153,7 +145,6 @@ final class BrowserEngine {
       guard let self, self.runtime.windowID(forTabID: identity) == self.windowID,
         let tab = UUID(uuidString: identity), let profile = UUID(uuidString: owner)
       else { return }
-      if self.store?.session.selectedPage?.tab.id == tab { self.passwordFill?.cancel() }
       self.pages[tab]?.loading = false
       self.mediaAccess[tab] = nil
       if case .popup(let popup) = self.extensionPanel, popup.tabID == tab {
@@ -167,7 +158,6 @@ final class BrowserEngine {
       else {
         return
       }
-      if self.store?.session.selectedPage?.tab.id == tab { self.passwordFill?.cancel() }
       self.store?.nativeDocumentCommitted(tab, profileID: profile)
     }
     store.library.onLoad = { [weak self] key, limit, completion in
@@ -325,15 +315,8 @@ final class BrowserEngine {
         width: min(max(size.width, 200), 800),
         height: min(max(size.height, 100), 600))
     }
-    fillSelection = currentFillSelection()
     store.onSessionChanged = { [weak self] in
-      guard let self else { return }
-      let selection = self.currentFillSelection()
-      if selection != self.fillSelection {
-        self.fillSelection = selection
-        self.passwordFill?.cancel()
-      }
-      self.reconcile()
+      self?.reconcile()
     }
     store.onCloseTab = { [weak self] id in
       guard let self else { return }
@@ -347,11 +330,6 @@ final class BrowserEngine {
       guard let self, self.runtime.windowID(forTabID: identity) == self.windowID,
         let id = UUID(uuidString: identity)
       else { return }
-      if loading && self.pages[id]?.loading != true
-        && self.store?.session.selectedPage?.tab.id == id
-      {
-        self.passwordFill?.cancel()
-      }
       if loading && self.pages[id]?.loading != true && self.store?.pageFind?.tabID == id {
         self.store?.dismissPageFind()
       }
@@ -379,7 +357,6 @@ final class BrowserEngine {
       guard let self, let id = UUID(uuidString: identity),
         self.liveTabs.contains(id) || self.pages[id] != nil
       else { return }
-      if self.store?.session.selectedPage?.tab.id == id { self.passwordFill?.cancel() }
       self.liveTabs.remove(id)
       self.pages[id] = nil
       self.mediaAccess[id] = nil
@@ -390,7 +367,6 @@ final class BrowserEngine {
       guard let self, self.runtime.windowID(forTabID: identity) == self.windowID,
         let id = UUID(uuidString: identity)
       else { return }
-      if self.store?.session.selectedPage?.tab.id != id { self.passwordFill?.cancel() }
       guard !self.isClosed, !self.receivingNativeSelection, !self.reconciling,
         self.liveTabs.contains(id), let profile = UUID(uuidString: owner),
         self.store?.session.profileID(forTabID: id) == profile
@@ -424,72 +400,6 @@ final class BrowserEngine {
     }
   }
 
-  private func currentFillSelection() -> FillSelection? {
-    guard let store else { return nil }
-    return FillSelection(
-      space: store.session.selectedSpaceID,
-      profile: store.session.selectedSpace.profileID, tab: store.session.selectedPage?.tab.id)
-  }
-
-  static func passwordFillInputAvailable(in store: BrowserStore) -> Bool {
-    !store.commandIsOpen && store.sheet == nil && store.libraryDrawerSection == nil
-      && store.pageFind == nil
-  }
-
-  private func passwordBinding() -> PasswordFillBinding? {
-    fillInputMonitor?.arm()
-    guard !isClosed, let store, let window = runtime.window(forID: windowID), window.isKeyWindow,
-      Self.passwordFillInputAvailable(in: store), extensionPanel == nil,
-      let windowUUID = UUID(uuidString: windowID), let tab = store.session.selectedPage?.tab.id,
-      store.session.profileID(forTabID: tab) == store.session.selectedSpace.profileID,
-      runtime.windowID(forTabID: tab.uuidString) == windowID, liveTabs.contains(tab)
-    else { return nil }
-    return PasswordFillBinding(
-      windowID: windowUUID, profileID: store.session.selectedSpace.profileID, tabID: tab)
-  }
-
-  var passwordFillAvailable: Bool {
-    _ = passwordWindowKey
-    guard let binding = passwordBinding(), let controller = fillController else { return false }
-    return runtime.supportsPasswordFill(inWindowID: windowID)
-      && controller.fillHandle(profileID: binding.profileID) != nil
-  }
-
-  func attachPasswordFill(_ controller: NativeBitwardenController) {
-    detachPasswordFill()
-    fillController = controller
-    let form = NativePasswordFormSession(backend: ChromiumPasswordFormBackend(runtime: runtime)) {
-      [weak self] in self?.passwordBinding()
-    }
-    let coordinator = NativePasswordFillCoordinator(form: form, vault: controller) {
-      [weak self] in self?.passwordBinding()
-    }
-    passwordFill = coordinator
-    if let store {
-      fillInputMonitor = PasswordFillInputMonitor(store: store) { [weak coordinator] in
-        coordinator?.cancel()
-      }
-      fillInputMonitor?.arm()
-    }
-    fillObserver = controller.observeFillChanges { [weak coordinator] profile in
-      coordinator?.vaultDidChange(profileID: profile)
-    }
-  }
-
-  func passwordWindowKeyChanged(_ isKey: Bool) {
-    passwordWindowKey = isKey
-    if !isKey { passwordFill?.cancel() }
-  }
-
-  func detachPasswordFill() {
-    passwordFill?.cancel()
-    if let fillObserver { fillController?.removeFillObserver(fillObserver) }
-    fillObserver = nil
-    fillInputMonitor = nil
-    fillController = nil
-    passwordFill = nil
-  }
-
   /// Drop documents before their saved tabs acquire a different engine profile.
   func discardReassignedTabs(_ ids: Set<UUID>) {
     for id in ids {
@@ -501,7 +411,6 @@ final class BrowserEngine {
       favicons[id] = nil
       runtime.discardTabID(id.uuidString)
     }
-    passwordFill?.cancel()
   }
 
   func reconcile() {

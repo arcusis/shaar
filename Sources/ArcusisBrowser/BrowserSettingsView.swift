@@ -71,7 +71,6 @@ enum BrowserSettingsSection: String, CaseIterable, Identifiable {
 struct BrowserSettingsView: View {
   let profiles: [BrowserSettingsProfile]
   let searchEngines: [BrowserSettingsChoice]
-  let nativeBitwardenController: NativeBitwardenController?
   @Binding var selectedProfileID: UUID?
   @AppStorage("externalLinksInMainWindow") private var externalLinksInMainWindow = false
   @AppStorage("settingsStartFresh") private var startFresh = false
@@ -115,12 +114,10 @@ struct BrowserSettingsView: View {
     onConnectAccount: @escaping (UUID, AccountProvider) -> Void = { _, _ in },
     onDisconnectAccount: @escaping (UUID, AccountProvider) -> Void = { _, _ in },
     clearHistory: ((UUID) async throws -> Void)? = nil,
-    nativeBitwardenController: NativeBitwardenController? = nil,
     initialSection: BrowserSettingsSection = .general
   ) {
     self.profiles = profiles
     self.searchEngines = searchEngines
-    self.nativeBitwardenController = nativeBitwardenController
     _selectedProfileID = selectedProfileID
     _sidebarInitiallyVisible = sidebarInitiallyVisible
     _selectedSearchEngine = selectedSearchEngine
@@ -471,9 +468,6 @@ struct BrowserSettingsView: View {
       }
       Section("Extensions") {
         LabeledContent("Installed extensions", value: "\(profile.extensionCount)")
-      }
-      if let nativeBitwardenController {
-        Section("Passwords") { PasswordManagerSettingsView(controller: nativeBitwardenController) }
       }
       Section {
         Button("Delete Profile…", role: .destructive) {

@@ -62,13 +62,6 @@ jobs:
       - name: Check Swift formatting
         run: swift format lint --strict --recursive Package.swift Sources Tests
 
-      - name: Install Python test dependencies
-        env:
-          PYTHON: ${{ steps.python.outputs.python-path }}
-        run: |
-          "$PYTHON" -m venv .venv
-          .venv/bin/python -m pip install --require-hashes --only-binary=:all: -r ThirdParty/VaultwardenFixture/requirements.txt
-
       - name: Run Python tests
         run: .venv/bin/python scripts/test-python.py
 
@@ -106,21 +99,6 @@ jobs:
         with:
           name: private-window-probe-logs
           path: ${{ runner.temp }}/probe-logs/
-          if-no-files-found: warn
-
-      - name: Capture native Bitwarden settings visuals
-        id: native_settings_visual
-        if: success() || (failure() && steps.private_window.outcome == 'failure')
-        env:
-          ARCUSIS_NATIVE_SETTINGS_VISUAL_CI: '1'
-        run: swift test --jobs 2 --filter NativeBitwardenSettingsVisualTests
-
-      - name: Upload native Bitwarden settings visual evidence
-        if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
-        with:
-          name: native-settings-visual-ci
-          path: build/Verification/native-settings-visual-ci/
           if-no-files-found: warn
 
   hosted-sidebar-visual:

@@ -8,7 +8,6 @@ import SwiftUI
 private final class BrowserSettingsState {
   let workspace: BrowserWorkspaceStore
   let preferences: BrowserPreferencesStore
-  let nativeBitwardenController: NativeBitwardenController
   let runtime: ARCChromiumRuntime?
   private(set) var selectedProfileID: UUID?
   private var didPresent = false
@@ -18,16 +17,11 @@ private final class BrowserSettingsState {
 
   init(
     workspace: BrowserWorkspaceStore, preferences: BrowserPreferencesStore,
-    runtime: ARCChromiumRuntime? = nil,
-    nativeBitwardenBackend: any NativeBitwardenBackend = NativeBitwardenSDKBackend(),
-    credentialStore: PasswordCredentialStore = PasswordCredentialStore()
+    runtime: ARCChromiumRuntime? = nil
   ) {
     self.workspace = workspace
     self.preferences = preferences
     self.runtime = runtime
-    nativeBitwardenController = NativeBitwardenController(
-      preferences: preferences, backend: nativeBitwardenBackend,
-      credentialStore: credentialStore)
   }
 
   var profiles: [BrowserSettingsProfile] {
@@ -64,11 +58,9 @@ private final class BrowserSettingsState {
       workspace.workspace.catalog.profiles.contains(where: { $0.id == profileID })
     else {
       selectedProfileID = nil
-      nativeBitwardenController.selectProfile(nil)
       return
     }
     selectedProfileID = profileID
-    nativeBitwardenController.selectProfile(profileID)
   }
 
   @discardableResult
@@ -77,7 +69,6 @@ private final class BrowserSettingsState {
       return false
     }
     selectedProfileID = id
-    nativeBitwardenController.selectProfile(id)
     return true
   }
 
@@ -100,7 +91,6 @@ private final class BrowserSettingsState {
     do {
       let id = try workspace.createProfile(name: name)
       selectedProfileID = id
-      nativeBitwardenController.selectProfile(id)
       return id
     } catch { return nil }
   }
@@ -143,8 +133,7 @@ private struct BrowserSettingsRoot: View {
       onDisconnectAccount: state.onDisconnectAccount,
       clearHistory: state.runtime.map { runtime in
         { profileID in try await SettingsHistory.clear(runtime: runtime, profileID: profileID) }
-      },
-      nativeBitwardenController: state.nativeBitwardenController)
+      })
   }
 }
 
@@ -174,20 +163,16 @@ final class BrowserSettingsController: NSObject {
   init(
     workspace: BrowserWorkspaceStore, preferences: BrowserPreferencesStore,
     runtime: ARCChromiumRuntime? = nil,
-    presentation: Presentation = .visible,
-    nativeBitwardenBackend: any NativeBitwardenBackend = NativeBitwardenSDKBackend(),
-    credentialStore: PasswordCredentialStore = PasswordCredentialStore()
+    presentation: Presentation = .visible
   ) {
     state = BrowserSettingsState(
-      workspace: workspace, preferences: preferences, runtime: runtime,
-      nativeBitwardenBackend: nativeBitwardenBackend, credentialStore: credentialStore)
+      workspace: workspace, preferences: preferences, runtime: runtime)
     self.presentation = presentation
     super.init()
   }
 
   var profiles: [BrowserSettingsProfile] { state.profiles }
   var selectedProfileID: UUID? { state.selectedProfileID }
-  var nativeBitwardenController: NativeBitwardenController { state.nativeBitwardenController }
   var selectedSearchEngine: String { state.selectedSearchEngine }
   var sidebarInitiallyVisible: Bool { state.sidebarInitiallyVisible }
 
@@ -230,7 +215,6 @@ final class BrowserSettingsController: NSObject {
   }
 
   func close() {
-    state.nativeBitwardenController.closeSettings()
     window?.orderOut(nil)
   }
 

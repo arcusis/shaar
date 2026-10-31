@@ -1,9 +1,0 @@
-{
-  "version": "1.37.4",
-  "sourceCommit": "7c188967e7a467b19b2757bc3326f9cf3ccae327",
-  "archiveURL": "https://codeload.github.com/dani-garcia/vaultwarden/tar.gz/7c188967e7a467b19b2757bc3326f9cf3ccae327",
-  "sha256": "3ad33348747b787a797d5a9b3ebcf5fdd19485fc1dd5877e99050234071be5d6",
-  "rustToolchain": "1.97.1",
-  "features": ["sqlite", "vendored_openssl"],
-  "license": "AGPL-3.0-only"
-}

@@ -4,7 +4,6 @@
 #import "ChromiumWebStoreFit.h"
 #import "../../ThirdParty/ArdiaCore/ArdiaCore.h"
 #import <dlfcn.h>
-#include <arpa/inet.h>
 #include <string>
 #include <vector>
 #include <cmath>
@@ -101,113 +100,6 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   }
   return chord == (NSEventModifierFlagControl | NSEventModifierFlagOption) &&
     [@[@"[", @"]"] containsObject:key];
-}
-
-// These declarations mirror only the candidate public API. No candidate symbols are linked.
-@protocol ARCNativePasswordRequest <NSObject>
-@property(nonatomic, readonly, copy) NSString *origin;
-@optional
-@property(nonatomic, readonly, copy, nullable) NSString *documentURL;
-@end
-@protocol ARCNativePasswordWindow <NSObject>
-- (void)requestPasswordFillForTab:(ArdiaCoreTab *)tab
-  completion:(void (^)(id<ARCNativePasswordRequest> _Nullable))completion;
-- (void)fillPasswordRequest:(id<ARCNativePasswordRequest>)request username:(NSString *)username
-  password:(NSString *)password completion:(void (^)(BOOL))completion;
-- (void)cancelPasswordRequest:(id<ARCNativePasswordRequest>)request;
-@end
-
-@interface ARCPasswordFillContext ()
-@property(nonatomic, readwrite, copy) NSString *requestID;
-@property(nonatomic, readwrite, copy) NSString *windowID;
-@property(nonatomic, readwrite, copy) NSString *profileID;
-@property(nonatomic, readwrite, copy) NSString *tabID;
-@property(nonatomic, readwrite, copy) NSString *origin;
-@property(nonatomic, readwrite, copy, nullable) NSString *documentURL;
-- (instancetype)initWithRequestID:(NSString *)requestID windowID:(NSString *)windowID
-  profileID:(NSString *)profileID tabID:(NSString *)tabID origin:(NSString *)origin
-  documentURL:(NSString * _Nullable)documentURL;
-@end
-@implementation ARCPasswordFillContext
-- (instancetype)initWithRequestID:(NSString *)requestID windowID:(NSString *)windowID
-  profileID:(NSString *)profileID tabID:(NSString *)tabID origin:(NSString *)origin
-  documentURL:(NSString *)documentURL {
-  if ((self = [super init])) {
-    _requestID = [requestID copy]; _windowID = [windowID copy];
-    _profileID = [profileID copy]; _tabID = [tabID copy]; _origin = [origin copy];
-    _documentURL = [documentURL copy];
-  }
-  return self;
-}
-@end
-
-@interface ARCPasswordFillRecord : NSObject
-@property(copy) NSString *requestID;
-@property(copy) NSString *windowID;
-@property(copy) NSString *profileID;
-@property(copy) NSString *tabID;
-@property(strong) ArdiaCoreWindow *window;
-@property(strong) ArdiaCoreTab *tab;
-@property(strong) id<ARCNativePasswordRequest> nativeRequest;
-@property(strong) ARCPasswordFillContext *context;
-@property(copy) void (^requestCompletion)(ARCPasswordFillContext * _Nullable);
-@property(copy) void (^fillCompletion)(BOOL);
-@property NSTimeInterval deadline;
-@property BOOL consumed;
-@end
-@implementation ARCPasswordFillRecord
-@end
-
-static BOOL ARCCanonicalIPHost(NSString *host) {
-  if ([host hasPrefix:@"["] && [host hasSuffix:@"]"]) {
-    NSString *address = [host substringWithRange:NSMakeRange(1, host.length - 2)];
-    struct in6_addr binary;
-    char output[INET6_ADDRSTRLEN];
-    return inet_pton(AF_INET6, address.UTF8String, &binary) == 1 &&
-      inet_ntop(AF_INET6, &binary, output, sizeof(output)) &&
-      [host isEqualToString:[NSString stringWithFormat:@"[%s]", output]];
-  }
-  NSString *candidateHost = [host hasSuffix:@"."] ? [host substringToIndex:host.length - 1] : host;
-  NSString *last = candidateHost.pathExtension.length ? candidateHost.pathExtension : candidateHost;
-  BOOL decimal = last.length > 0;
-  for (NSUInteger i = 0; i < last.length; i++) {
-    unichar c = [last characterAtIndex:i];
-    if (c < '0' || c > '9') { decimal = NO; break; }
-  }
-  BOOL hexadecimal = [last hasPrefix:@"0x"];
-  for (NSUInteger i = 2; hexadecimal && i < last.length; i++) {
-    unichar c = [last characterAtIndex:i];
-    if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) hexadecimal = NO;
-  }
-  if (!decimal && !hexadecimal) return YES;
-  struct in_addr binary;
-  char output[INET_ADDRSTRLEN];
-  return inet_pton(AF_INET, host.UTF8String, &binary) == 1 &&
-    inet_ntop(AF_INET, &binary, output, sizeof(output)) &&
-    [host isEqualToString:[NSString stringWithUTF8String:output]];
-}
-
-static BOOL ARCCanonicalHTTPSOrigin(NSString *origin) {
-  if (![origin isKindOfClass:NSString.class] || ![origin hasPrefix:@"https://"]) return NO;
-  NSURLComponents *parts = [NSURLComponents componentsWithString:origin];
-  if (!parts || ![parts.scheme isEqualToString:@"https"] || !parts.host.length ||
-      parts.user || parts.password || parts.query || parts.fragment || parts.path.length ||
-      (parts.port && (parts.port.integerValue <= 0 || parts.port.integerValue > 65535 ||
-                      parts.port.integerValue == 443))) return NO;
-  NSString *port = parts.port ? [NSString stringWithFormat:@":%@", parts.port] : @"";
-  NSString *authority = [origin substringFromIndex:@"https://".length];
-  if (![authority hasSuffix:port] || authority.length <= port.length) return NO;
-  NSString *host = [authority substringToIndex:authority.length - port.length];
-  for (NSUInteger i = 0; i < host.length; i++) {
-    unichar c = [host characterAtIndex:i];
-    if (c < 33 || c > 126 || c == '%') return NO;
-  }
-  NSString *canonical = [NSString stringWithFormat:@"https://%@", host];
-  NSURL *normalizedHost = [NSURL URLWithString:[NSString stringWithFormat:@"https://%@", parts.host]];
-  return [host isEqualToString:host.lowercaseString] && ARCCanonicalIPHost(host) &&
-    [normalizedHost.absoluteString isEqualToString:canonical] &&
-    [parts.URL.absoluteString isEqualToString:origin] &&
-    [[canonical stringByAppendingString:port] isEqualToString:origin];
 }
 
 @interface ARCNativeWindowState : NSObject
@@ -315,8 +207,6 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   NSMutableSet<NSString *> *_pendingHostClosures;
   NSMutableDictionary<NSString *, NSMutableDictionary<NSString *, id> *> *_detachedTabSelections;
   NSMutableDictionary<NSString *, NSString *> *_probeVisibilityLeases;
-  NSMutableDictionary<NSString *, ARCPasswordFillRecord *> *_passwordRequests;
-  NSMutableDictionary<NSString *, ARCPasswordFillRecord *> *_passwordFills;
   BOOL _closingBrowser;
   ARCDownloadService *_downloadService;
   ARCEngineServices *_services;
@@ -337,8 +227,6 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
     if (error) *error = BridgeError(@"The framework does not expose the pinned ArdiaCore API.");
     return nil;
   }
-  _passwordRequests = [NSMutableDictionary dictionary];
-  _passwordFills = [NSMutableDictionary dictionary];
   _profiles = [NSMutableDictionary dictionary];
   _primaryWindowID = NSUUID.UUID.UUIDString;
   _windows = [NSMutableDictionary dictionary];
@@ -540,7 +428,6 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   ARCNativeWindowState *state = _windows[identity];
   if (!state || state.closing || state.closed || _closingBrowser) return NO;
   state.closing = YES;
-  [self invalidatePasswordRequestsForTabID:nil windowID:identity];
   [state.native close];
   return YES;
 }
@@ -583,7 +470,6 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   });
 }
 - (void)dealloc {
-  [self invalidatePasswordRequestsForTabID:nil windowID:nil];
   for (id observer in _windowCloseObservers.allValues) [NSNotificationCenter.defaultCenter removeObserver:observer];
   for (NSDictionary *entry in _privateProbeWindows.allValues) {
     id observer = entry[@"observer"];
@@ -613,7 +499,6 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
 }
 
 - (void)invalidateExternalRequestsForTabID:(NSString *)tabID windowID:(NSString *)windowID {
-  [self invalidatePasswordRequestsForTabID:tabID windowID:windowID];
   for (NSString *requestID in [_pendingExternal.allKeys copy]) {
     NSDictionary *request = _pendingExternal[requestID];
     if ((tabID && ![request[@"tabID"] isEqualToString:tabID]) ||
@@ -622,143 +507,6 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
     [_engineClass resolveExternalApp:requestID open:NO remember:NO];
     if (_onExternalAppDismissed) _onExternalAppDismissed(requestID);
   }
-}
-
-- (BOOL)passwordRecordIsCurrent:(ARCPasswordFillRecord *)record {
-  ARCNativeWindowState *state = _windows[record.windowID];
-  ArdiaCoreProfile *profile = _profiles[record.profileID];
-  ArdiaCoreTab *tab = _tabs[record.tabID];
-  return !_closingBrowser && state && !state.closed && !state.closing &&
-    state.native == record.window && state.native.window && state.native.window.isKeyWindow &&
-    profile && !profile.offTheRecord && !profile.destroyed && tab == record.tab && !tab.closed &&
-    tab.profile == profile && state.native.activeProfile == profile &&
-    [state.selectedTabID isEqualToString:record.tabID] &&
-    [_owners[record.tabID] isEqualToString:record.profileID] &&
-    [_tabWindows[record.tabID] isEqualToString:record.windowID] &&
-    [[state.native tabsForProfile:profile] containsObject:tab] &&
-    NSProcessInfo.processInfo.systemUptime < record.deadline;
-}
-
-- (void)finishPasswordRecord:(ARCPasswordFillRecord *)record cancelNative:(BOOL)cancelNative {
-  if (_passwordRequests[record.requestID] != record && _passwordFills[record.requestID] != record) return;
-  [_passwordRequests removeObjectForKey:record.requestID];
-  [_passwordFills removeObjectForKey:record.requestID];
-  void (^requestCompletion)(ARCPasswordFillContext *) = record.requestCompletion;
-  void (^fillCompletion)(BOOL) = record.fillCompletion;
-  record.requestCompletion = nil; record.fillCompletion = nil;
-  if (cancelNative && record.nativeRequest)
-    [(id<ARCNativePasswordWindow>)record.window cancelPasswordRequest:record.nativeRequest];
-  if (requestCompletion) requestCompletion(nil);
-  if (fillCompletion) fillCompletion(NO);
-}
-
-- (void)invalidatePasswordRequestsForTabID:(NSString *)tabID windowID:(NSString *)windowID {
-  NSArray *records = [_passwordRequests.allValues arrayByAddingObjectsFromArray:_passwordFills.allValues];
-  for (ARCPasswordFillRecord *record in records) {
-    if ((tabID && ![record.tabID isEqualToString:tabID]) ||
-        (windowID && ![record.windowID isEqualToString:windowID])) continue;
-    [self finishPasswordRecord:record cancelNative:YES];
-  }
-}
-
-- (BOOL)supportsPasswordFillInWindowID:(NSString *)windowID {
-  NSAssert(NSThread.isMainThread, @"Password feature queries require the UI thread");
-  ARCNativeWindowState *state = _windows[windowID];
-  ArdiaCoreWindow *window = state.native;
-  return ValidID(windowID) && !_closingBrowser && state && !state.closed && !state.closing &&
-    window && window.window &&
-    [window respondsToSelector:@selector(requestPasswordFillForTab:completion:)] &&
-    [window respondsToSelector:@selector(fillPasswordRequest:username:password:completion:)] &&
-    [window respondsToSelector:@selector(cancelPasswordRequest:)];
-}
-
-- (void)requestPasswordFillForRequestID:(NSString *)requestID windowID:(NSString *)windowID
-  profileID:(NSString *)profileID tabID:(NSString *)tabID
-  completion:(void (^)(ARCPasswordFillContext *))completion {
-  NSAssert(NSThread.isMainThread, @"Password requests require the UI thread");
-  ARCNativeWindowState *state = _windows[windowID];
-  ArdiaCoreWindow *window = state.native;
-  if (!ValidID(requestID) || !ValidID(windowID) || !ValidID(profileID) || !ValidID(tabID) ||
-      _passwordRequests[requestID] || _passwordFills[requestID] ||
-      _passwordRequests.count + _passwordFills.count >= 32 ||
-      ![self supportsPasswordFillInWindowID:windowID]) { completion(nil); return; }
-  ARCPasswordFillRecord *record = [ARCPasswordFillRecord new];
-  record.requestID = requestID; record.windowID = windowID; record.profileID = profileID;
-  record.tabID = tabID; record.window = window; record.tab = _tabs[tabID];
-  record.deadline = NSProcessInfo.processInfo.systemUptime + 30;
-  record.requestCompletion = completion;
-  if (![self passwordRecordIsCurrent:record]) { completion(nil); return; }
-  _passwordRequests[requestID] = record;
-  __weak ARCChromiumRuntime *weakSelf = self;
-  __weak ARCPasswordFillRecord *weakRecord = record;
-  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 30 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-    ARCChromiumRuntime *owner = weakSelf;
-    ARCPasswordFillRecord *pending = weakRecord;
-    if (owner && pending) [owner finishPasswordRecord:pending cancelNative:YES];
-  });
-  [(id<ARCNativePasswordWindow>)window requestPasswordFillForTab:record.tab completion:^(id<ARCNativePasswordRequest> request) {
-    ARCChromiumRuntime *owner = weakSelf;
-    if (!owner || owner->_passwordRequests[record.requestID] != record) {
-      if (request) [(id<ARCNativePasswordWindow>)window cancelPasswordRequest:request];
-      return;
-    }
-    if (!record.requestCompletion) {
-      if (request && request != record.nativeRequest) [(id<ARCNativePasswordWindow>)window cancelPasswordRequest:request];
-      return;
-    }
-    if (!request || ![owner passwordRecordIsCurrent:record] || !ARCCanonicalHTTPSOrigin(request.origin)) {
-      if (request) [(id<ARCNativePasswordWindow>)window cancelPasswordRequest:request];
-      [owner finishPasswordRecord:record cancelNative:NO];
-      return;
-    }
-    NSString *documentURL = nil;
-    if ([request respondsToSelector:@selector(documentURL)]) {
-      documentURL = request.documentURL;
-      if (![documentURL isKindOfClass:NSString.class] || documentURL.length == 0 || documentURL.length > 8192) {
-        [(id<ARCNativePasswordWindow>)window cancelPasswordRequest:request];
-        [owner finishPasswordRecord:record cancelNative:NO];
-        return;
-      }
-    }
-    record.nativeRequest = request;
-    record.context = [[ARCPasswordFillContext alloc] initWithRequestID:requestID windowID:windowID
-      profileID:profileID tabID:tabID origin:request.origin documentURL:documentURL];
-    void (^reply)(ARCPasswordFillContext *) = record.requestCompletion;
-    record.requestCompletion = nil;
-    if (reply) reply(record.context);
-  }];
-}
-
-- (void)fillPasswordContext:(ARCPasswordFillContext *)context username:(NSString *)username
-  password:(NSString *)password completion:(void (^)(BOOL))completion {
-  NSAssert(NSThread.isMainThread, @"Password fills require the UI thread");
-  ARCPasswordFillRecord *record = _passwordRequests[context.requestID];
-  if (!record || record.context != context || record.consumed || !record.nativeRequest ||
-      ![self passwordRecordIsCurrent:record]) {
-    if (record && record.context == context && !record.consumed) [self finishPasswordRecord:record cancelNative:YES];
-    completion(NO); return;
-  }
-  record.consumed = YES;
-  [_passwordRequests removeObjectForKey:record.requestID];
-  _passwordFills[record.requestID] = record;
-  record.fillCompletion = completion;
-  __weak ARCChromiumRuntime *weakSelf = self;
-  [(id<ARCNativePasswordWindow>)record.window fillPasswordRequest:record.nativeRequest
-    username:username password:password completion:^(BOOL filled) {
-      ARCChromiumRuntime *owner = weakSelf;
-      if (!owner || owner->_passwordFills[record.requestID] != record) return;
-      BOOL current = [owner passwordRecordIsCurrent:record];
-      void (^reply)(BOOL) = record.fillCompletion;
-      record.fillCompletion = nil;
-      [owner->_passwordFills removeObjectForKey:record.requestID];
-      if (reply) reply(filled && current);
-    }];
-}
-
-- (void)cancelPasswordRequestID:(NSString *)requestID {
-  NSAssert(NSThread.isMainThread, @"Password cancellation requires the UI thread");
-  ARCPasswordFillRecord *record = _passwordRequests[requestID] ?: _passwordFills[requestID];
-  if (record) [self finishPasswordRecord:record cancelNative:YES];
 }
 
 - (BOOL)respondsToSelector:(SEL)selector {

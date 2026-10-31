@@ -22,11 +22,3 @@ Public Suffix List data
   Source: Chromium source tree, pinned commit and path in
   ThirdParty/PublicSuffix/pin.json.
   License: Mozilla Public License 2.0. See ThirdParty/PublicSuffix/LICENSE.
-
-Optional Bitwarden SDK build
-  Source: https://github.com/bitwarden/sdk-internal at the commit recorded in
-  ThirdParty/BitwardenLifecycleProbe/pin.json.
-  License and distribution terms: unresolved. SDK-enabled local builds stage
-  upstream LICENSE, LICENSE_GPL.txt, LICENSE_SDK.txt, and DISCLAIMER.md files
-  in the generated package's ThirdPartyNotices directory. Review those files
-  before distributing an SDK-enabled build. The SDK is not in the default app.

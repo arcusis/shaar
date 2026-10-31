@@ -30,7 +30,7 @@ class SavedTabCapacityRunnerTests(unittest.TestCase):
                     externalAppConsentOnly=False, externalAppConsentProbe=False,
                     savedTabCapacityRunID=self.run_id, scope=fixture.SAVED_TAB_CAPACITY_SCOPE,
                     localFixturesPassed=False, bitwardenStoreProbe=False,
-                    bitwardenVaultProbe=False, bitwardenOnboardingControl=False,
+                    bitwardenOnboardingControl=False,
                     fixtureTLSProbe=False,
                     abruptRecoveryProbe=False, error=None)
 
@@ -235,24 +235,6 @@ class BitwardenSummaryTests(unittest.TestCase):
                     fixture.record_bitwarden_summary(self.root, False)
                 self.assertFalse(summary_path.exists())
 
-    def test_vault_probe_requires_control_and_rejects_mixed_clean_claim(self):
-        self.reports()
-        host_path = self.root / 'initial.json'
-        host = json.loads(host_path.read_text())
-        host['bitwardenVaultProbe'] = True
-        host_path.write_text(json.dumps(host))
-        with self.assertRaises(RuntimeError):
-            fixture.record_bitwarden_summary(self.root, False)
-        self.assertFalse((self.root / 'bitwarden-onboarding-summary.json').exists())
-
-        self.reports(control=True)
-        host_path = self.root / 'initial.json'
-        host = json.loads(host_path.read_text())
-        host['bitwardenVaultProbe'] = 'true'
-        host_path.write_text(json.dumps(host))
-        with self.assertRaises(RuntimeError):
-            fixture.record_bitwarden_summary(self.root, True)
-
     def test_passed_control_vendor_report_must_explicitly_deny_acceptance(self):
         self.reports(control=True)
         path = self.root / 'initial-bitwarden.json'
@@ -447,7 +429,7 @@ class ExternalAppConsentRunnerTests(unittest.TestCase):
                     externalAppConsentOnly=True, externalAppConsentProbe=True,
                     externalAppConsentRunID=self.run_id, savedTabCapacityOnly=False,
                     savedTabCapacityProbe=False, bitwardenStoreProbe=False,
-                    bitwardenVaultProbe=False, bitwardenOnboardingControl=False,
+                    bitwardenOnboardingControl=False,
                     abruptRecoveryProbe=False, fixtureTLSProbe=False,
                     scope=fixture.EXTERNAL_APP_CONSENT_SCOPE,
                     localFixturesPassed=False, error=None,

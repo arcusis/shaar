@@ -411,7 +411,7 @@ struct BrowserSidebar: View {
       let page = store.session.favoritePages.first { $0.favoriteID == favorite.id }
       return FavoriteTile(
         id: favorite.id, title: favorite.title, url: page?.tab.url ?? favorite.originalURL,
-        image: page.flatMap { store.engine?.favicons[$0.tab.id] })
+        image: store.favicon(for: favorite))
     }
     return Group {
       if !favorites.isEmpty {
@@ -678,7 +678,8 @@ struct BrowserSidebar: View {
         segments: split.tabIDs.compactMap { id in
           space.tabs.first { $0.id == id }.map {
             SidebarSplitRow.Segment(
-              id: $0.id, title: $0.title, favicon: store.engine?.favicons[$0.id])
+              id: $0.id, title: $0.title,
+              favicon: store.favicon(for: $0, profileID: space.profileID))
           }
         },
         focusedID: space.selectedTabID,
@@ -691,7 +692,7 @@ struct BrowserSidebar: View {
       SidebarTabRow(
         tabID: tab.id,
         title: tab.title,
-        favicon: store.engine?.favicons[tab.id],
+        favicon: store.favicon(for: tab, profileID: space.profileID),
         isPinned: tab.isPinned,
         isSelected: store.session.selectedPage?.tab.id == tab.id,
         closeIsVisible: hoveredTabID == tab.id,

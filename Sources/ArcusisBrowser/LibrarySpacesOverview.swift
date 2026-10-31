@@ -307,7 +307,7 @@ private struct LibrarySpaceItemsView: View {
       onSelectTab(space.id, tab.id)
     } label: {
       HStack(spacing: 9) {
-        if let favicon = store.engine?.favicons[tab.id] {
+        if let favicon = store.favicon(for: tab, profileID: space.profileID) {
           Image(nsImage: favicon).resizable().scaledToFit().frame(width: 16, height: 16)
         } else {
           Image(systemName: tab.isPinned ? "pin.fill" : "globe")

@@ -87,6 +87,8 @@ jobs:
         timeout-minutes: 20
         env:
           ARCUSIS_PRIVATE_WINDOW_CI: '1'
+          # Hosted virtual machines have no GPU; engine teardown and probes run slower.
+          SHAAR_PROBE_TIMEOUT_SCALE: '3'
         run: |
           set -o pipefail
           test "$GITHUB_ACTIONS" = 'true'

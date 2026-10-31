@@ -142,6 +142,7 @@ class BundleAppTests(unittest.TestCase):
         with (contents / "Info.plist").open("rb") as plist_file:
             plist = plistlib.load(plist_file)
         self.assertEqual(plist["CFBundleIconFile"], "Shaar.icns")
+        self.assertIn("passkey", plist["NSBluetoothAlwaysUsageDescription"])
         self.assertEqual((contents / "Resources" / "Shaar.icns").read_bytes(), ICON.read_bytes())
 
     def test_default_build_remains_release_shell_bundle(self):

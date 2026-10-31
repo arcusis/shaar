@@ -80,7 +80,6 @@ typedef NS_ENUM(NSInteger, ARCExtensionManagementOperation) {
 - (BOOL)navigateTabID:(NSString *)tabID profileID:(NSString *)profileID windowID:(NSString *)windowID url:(NSString *)url
   NS_SWIFT_NAME(navigateTabID(_:profileID:windowID:url:));
 - (BOOL)placeTabIDs:(NSArray<NSString *> *)tabIDs pinnedIDs:(NSArray<NSString *> *)pinnedIDs profileID:(NSString *)profileID windowID:(NSString *)windowID;
-- (void)closeExtensionPopupForWindowID:(NSString *)windowID;
 
 - (nullable instancetype)initWithFrameworkURL:(NSURL *)url error:(NSError **)error;
 - (int)runWithDataDirectory:(NSURL *)directory testing:(BOOL)testing;
@@ -106,7 +105,37 @@ typedef NS_ENUM(NSInteger, ARCExtensionManagementOperation) {
 - (void)refreshDownloadsForProfileID:(NSString *)profileID;
 - (BOOL)placeTabIDs:(NSArray<NSString *> *)tabIDs pinnedIDs:(NSArray<NSString *> *)pinnedIDs
          profileID:(NSString *)profileID;
+/// Evaluates a constant JavaScript script and returns its JSON value through ArdiaCore's post callback.
+/// Callers must serialize all dynamic values as JSON literals before constructing the script.
+- (void)evaluateInTabID:(NSString *)tabID script:(NSString *)script
+            completion:(void (^)(NSString * _Nullable))completion;
+- (void)resolveInstallRequestID:(NSString *)requestID accepted:(BOOL)accepted;
+- (void)resolveWebsiteMediaRequestID:(NSString *)requestID accepted:(BOOL)accepted;
+- (void)resolveExternalAppRequestID:(NSString *)requestID accepted:(BOOL)accepted;
+/// Canonical browser-managed download directory for a regular profile.
+- (nullable NSURL *)downloadsDirectoryForProfileID:(NSString *)profileID;
+- (int)nativeTabIDForID:(NSString *)tabID;
+- (void)quit;
+@end
+
+@interface ARCChromiumRuntime (Extensions)
+- (NSArray<NSDictionary<NSString *, id> *> *)extensionsForProfileID:(NSString *)profileID;
+- (BOOL)executeExtensionID:(NSString *)extensionID tabID:(NSString *)tabID error:(NSError **)error;
+/// Runs one fixed extension-management operation against a validated extension ID and profile.
+- (void)manageExtensionsForProfileID:(NSString *)profileID
+                           operation:(ARCExtensionManagementOperation)operation
+                         extensionID:(nullable NSString *)extensionID
+                             enabled:(BOOL)enabled
+                          completion:(void (^)(NSString * _Nullable json))completion;
+/// The profile's installed-extensions folder, for reading extension manifests and icons.
+- (nullable NSURL *)extensionsDirectoryForProfileID:(NSString *)profileID;
+- (nullable NSView *)viewForExtensionPopupID:(NSString *)popupID;
+- (void)closeExtensionPopup;
+- (void)closeExtensionPopupForWindowID:(NSString *)windowID;
+@end
+
 /// Product private browsing API. Contexts bind to an already-loaded regular Profile.
+@interface ARCChromiumRuntime (PrivateBrowsing)
 - (void)createPrivateContextID:(NSString *)contextID sourceProfileID:(NSString *)sourceProfileID
                     completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL, NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
 - (BOOL)createPrivateWindowID:(NSString *)windowID contextID:(NSString *)contextID tabID:(NSString *)tabID
@@ -127,29 +156,6 @@ typedef NS_ENUM(NSInteger, ARCExtensionManagementOperation) {
 - (void)closePrivateWindowID:(NSString *)windowID contextID:(NSString *)contextID
                   completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion NS_SWIFT_UI_ACTOR;
 - (BOOL)releasePrivateContextID:(NSString *)contextID;
-/// Evaluates a constant JavaScript script and returns its JSON value through ArdiaCore's post callback.
-/// Callers must serialize all dynamic values as JSON literals before constructing the script.
-- (void)evaluateInTabID:(NSString *)tabID script:(NSString *)script
-            completion:(void (^)(NSString * _Nullable))completion;
-- (NSArray<NSDictionary<NSString *, id> *> *)extensionsForProfileID:(NSString *)profileID;
-- (void)resolveInstallRequestID:(NSString *)requestID accepted:(BOOL)accepted;
-- (void)resolveWebsiteMediaRequestID:(NSString *)requestID accepted:(BOOL)accepted;
-- (void)resolveExternalAppRequestID:(NSString *)requestID accepted:(BOOL)accepted;
-- (BOOL)executeExtensionID:(NSString *)extensionID tabID:(NSString *)tabID error:(NSError **)error;
-/// Runs one fixed extension-management operation against a validated extension ID and profile.
-- (void)manageExtensionsForProfileID:(NSString *)profileID
-                           operation:(ARCExtensionManagementOperation)operation
-                         extensionID:(nullable NSString *)extensionID
-                             enabled:(BOOL)enabled
-                          completion:(void (^)(NSString * _Nullable json))completion;
-/// Canonical browser-managed download directory for a regular profile.
-- (nullable NSURL *)downloadsDirectoryForProfileID:(NSString *)profileID;
-/// The profile's installed-extensions folder, for reading extension manifests and icons.
-- (nullable NSURL *)extensionsDirectoryForProfileID:(NSString *)profileID;
-- (nullable NSView *)viewForExtensionPopupID:(NSString *)popupID;
-- (void)closeExtensionPopup;
-- (int)nativeTabIDForID:(NSString *)tabID;
-- (void)quit;
 @end
 
 NS_ASSUME_NONNULL_END

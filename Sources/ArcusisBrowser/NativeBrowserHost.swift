@@ -293,7 +293,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .splitView: store.splitSelectedTab()
     case .extensions: context.engine.showExtensionList()
     case .help:
-      if let url = URL(string: "https://github.com/arcusis/browser") { store.perform(.open(url)) }
+      if let url = URL(string: "https://github.com/arcusis/shaar") { store.perform(.open(url)) }
     case .minimizeWindow: context.window.performMiniaturize(nil)
     case .zoomWindow: context.window.zoom(nil)
     case .bringAllToFront:

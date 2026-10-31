@@ -12,4 +12,4 @@ bash scripts/bundle-app.sh --with-engine
 
 The engine bundle requires macOS 26+, Xcode 26+ and Apple silicon. `swift run ArcusisBrowser` provides a UI-only preview. Development bundles are ad hoc signed; company daily use and signed/notarized distribution remain unaccepted.
 
-[Milestone and issues](https://github.com/arcusis/browser/milestone/1) track remaining work. Engine inputs and upstream notices: [ThirdParty/ArdiaCore](ThirdParty/ArdiaCore/README.md).
+[Milestone and issues](https://github.com/arcusis/shaar/milestone/1) track remaining work. Engine inputs and upstream notices: [ThirdParty/ArdiaCore](ThirdParty/ArdiaCore/README.md).

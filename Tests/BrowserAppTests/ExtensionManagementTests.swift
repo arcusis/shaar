@@ -7,14 +7,23 @@ import Testing
 struct ExtensionManagementTests {
   private let validID = String(repeating: "b", count: 32)
 
-  @Test func scriptsOnlyAcceptValidExtensionIDs() {
-    #expect(ExtensionManagementScript.setEnabled(validID, false)?.contains(validID) == true)
-    #expect(
-      ExtensionManagementScript.uninstall(validID)?.contains("showConfirmDialog: false") == true)
-    for invalid in ["", "abc", String(repeating: "z", count: 32), "'); alert(1); ('"] {
-      #expect(ExtensionManagementScript.setEnabled(invalid, true) == nil)
-      #expect(ExtensionManagementScript.uninstall(invalid) == nil)
-    }
+  @Test func operationsMapToBridgeOperationsWithTheirArguments() {
+    let enable = ExtensionManagementOperation.setEnabled(id: validID, enabled: true)
+    #expect(enable.bridgeOperation == .setEnabled)
+    #expect(enable.extensionID == validID)
+    #expect(enable.enabled)
+    #expect(!ExtensionManagementOperation.setEnabled(id: validID, enabled: false).enabled)
+    #expect(ExtensionManagementOperation.uninstall(id: validID).bridgeOperation == .uninstall)
+    #expect(ExtensionManagementOperation.details(id: validID).bridgeOperation == .details)
+    #expect(ExtensionManagementOperation.list.bridgeOperation == .list)
+    #expect(ExtensionManagementOperation.list.extensionID == nil)
+    #expect(!ExtensionManagementOperation.uninstall(id: validID).enabled)
+  }
+
+  @Test func profileIDsMustBeCanonicalUUIDs() {
+    #expect(ExtensionManagementOperation.isValidProfileID(UUID().uuidString))
+    #expect(!ExtensionManagementOperation.isValidProfileID("profile';alert(1)"))
+    #expect(!ExtensionManagementOperation.isValidProfileID(""))
   }
 
   @Test func resultsSeparateErrorsFromValues() throws {

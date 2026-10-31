@@ -12,6 +12,23 @@ struct ExtensionConsentTests {
     return store
   }
 
+  @Test func consentShowsEffectiveHostAccessAndKnownScope() {
+    let values = ExtensionConsentPermissions.displayValues(
+      permissions: ["storage"], hostPermissions: ["https://example.com/*"], complete: true)
+    #expect(values == ["storage", "Site access: https://example.com/*"])
+    #expect(!values.contains(ExtensionConsentPermissions.unknownAccess))
+  }
+
+  @Test func consentMarksMissingOrIncompleteHostScopeAsUnknown() {
+    let missing = ExtensionConsentPermissions.displayValues(
+      permissions: [], hostPermissions: nil, complete: false)
+    #expect(missing == [ExtensionConsentPermissions.unknownAccess])
+    let incomplete = ExtensionConsentPermissions.displayValues(
+      permissions: [], hostPermissions: ["<all_urls>"], complete: false)
+    #expect(incomplete.contains("Site access: <all_urls>"))
+    #expect(incomplete.contains(ExtensionConsentPermissions.unknownAccess))
+  }
+
   private func request(_ store: BrowserStore, id: String = "install1", profile: UUID? = nil) throws
     -> ExtensionInstallRequest
   {

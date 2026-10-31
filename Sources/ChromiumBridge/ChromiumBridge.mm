@@ -2250,6 +2250,29 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
 
 static NSString *const ARCExtensionManagerID = @"bphhlegomeaogfihjcipdbcfbgkcfafp";
 
+static NSString *ARCValidatedProfileID(NSString *profileID) {
+  if (![profileID isKindOfClass:NSString.class] ||
+      ![profileID rangeOfString:@"^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$"
+                       options:NSRegularExpressionSearch].length) return nil;
+  NSUUID *identity = [[NSUUID alloc] initWithUUIDString:profileID];
+  return identity.UUIDString;
+}
+
+static BOOL ARCExtensionIDIsValid(NSString *extensionID) {
+  if (![extensionID isKindOfClass:NSString.class] || extensionID.length != 32) return NO;
+  for (NSUInteger index = 0; index < extensionID.length; index++) {
+    unichar character = [extensionID characterAtIndex:index];
+    if (character < 'a' || character > 'p') return NO;
+  }
+  return YES;
+}
+
+static NSString *ARCJSONLiteral(id value) {
+  NSError *error = nil;
+  NSData *data = [NSJSONSerialization dataWithJSONObject:value options:NSJSONWritingFragmentsAllowed error:&error];
+  return data && !error ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
+}
+
 /// Shaar's bundled manager extension holds the management APIs. Its page opens as an extension
 /// view, not a tab, so it never joins the tab strip or the session model.
 - (ArdiaCoreTab *)extensionManagerForProfileID:(NSString *)profileID {
@@ -2271,20 +2294,67 @@ static NSString *const ARCExtensionManagerID = @"bphhlegomeaogfihjcipdbcfbgkcfaf
   return manager;
 }
 
-- (void)manageExtensionsForProfileID:(NSString *)profileID expression:(NSString *)expression
+- (void)manageExtensionsForProfileID:(NSString *)profileID
+                           operation:(ARCExtensionManagementOperation)operation
+                         extensionID:(NSString *)extensionID
+                             enabled:(BOOL)enabled
                           completion:(void (^)(NSString *))completion {
-  [self manageExtensionsForProfileID:profileID expression:expression attempts:50 completion:completion];
+  NSString *validatedProfileID = ARCValidatedProfileID(profileID);
+  BOOL needsExtensionID = operation != ARCExtensionManagementOperationList;
+  if (!validatedProfileID || (needsExtensionID && !ARCExtensionIDIsValid(extensionID))) {
+    completion(nil);
+    return;
+  }
+  NSString *script = nil;
+  switch (operation) {
+    case ARCExtensionManagementOperationList:
+      script = @"chrome.management.getAll().then(all=>all.filter(e=>e.type==='extension').map(e=>({id:e.id,name:e.name,version:e.version,description:e.description||'',enabled:e.enabled,mayDisable:e.mayDisable,permissions:e.permissions||[],hostPermissions:e.hostPermissions||[]})))";
+      break;
+    case ARCExtensionManagementOperationSetEnabled: {
+      NSString *literal = ARCJSONLiteral(extensionID);
+      if (literal) script = [NSString stringWithFormat:@"chrome.management.setEnabled(%@,%@).then(()=>true)", literal, enabled ? @"true" : @"false"];
+      break;
+    }
+    case ARCExtensionManagementOperationUninstall: {
+      NSString *literal = ARCJSONLiteral(extensionID);
+      if (literal) script = [NSString stringWithFormat:@"chrome.management.uninstall(%@,{showConfirmDialog:false}).then(()=>true)", literal];
+      break;
+    }
+    case ARCExtensionManagementOperationDetails: {
+      NSString *literal = ARCJSONLiteral(extensionID);
+      if (literal) script = [NSString stringWithFormat:@"chrome.management.get(%@)", literal];
+      break;
+    }
+    default:
+      completion(nil);
+      return;
+  }
+  if (!script) { completion(nil); return; }
+  ArdiaCoreProfile *profile = _profiles[validatedProfileID];
+  ArdiaCoreTab *manager = [self extensionManagerForProfileID:validatedProfileID];
+  if (!profile || profile.destroyed || profile.offTheRecord || !manager || manager.profile != profile) {
+    completion(nil);
+    return;
+  }
+  BOOL mutates = operation == ARCExtensionManagementOperationSetEnabled ||
+    operation == ARCExtensionManagementOperationUninstall;
+  [self runExtensionManagementScript:script mutates:mutates profileID:validatedProfileID
+                             profile:profile manager:manager attempts:50 completion:completion];
 }
 
-- (void)manageExtensionsForProfileID:(NSString *)profileID expression:(NSString *)expression
+/// Mutating operations run with a user gesture, which chrome.management requires for them.
+- (void)runExtensionManagementScript:(NSString *)script mutates:(BOOL)mutates profileID:(NSString *)profileID
+                             profile:(ArdiaCoreProfile *)profile manager:(ArdiaCoreTab *)manager
                             attempts:(int)attempts completion:(void (^)(NSString *))completion {
-  ArdiaCoreTab *manager = [self extensionManagerForProfileID:profileID];
-  if (!manager) { completion(nil); return; }
+  if (_profiles[profileID] != profile || profile.destroyed || manager.closed || manager.profile != profile) {
+    completion(nil);
+    return;
+  }
   if (manager.loading) {
-    // A result posted before the manager page commits would be lost with the old document.
     if (attempts <= 0) { completion(nil); return; }
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
-      [self manageExtensionsForProfileID:profileID expression:expression attempts:attempts - 1 completion:completion];
+      [self runExtensionManagementScript:script mutates:mutates profileID:profileID profile:profile
+                                 manager:manager attempts:attempts - 1 completion:completion];
     });
     return;
   }
@@ -2297,14 +2367,20 @@ static NSString *const ARCExtensionManagerID = @"bphhlegomeaogfihjcipdbcfbgkcfaf
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
     reply(nil);
   });
-  // The page binds its APIs while loading, so wait for them before running the expression.
-  NSString *script = [NSString stringWithFormat:
+  NSString *wrapped = [NSString stringWithFormat:
     @"(async()=>{for(let i=0;i<80&&!(window.chrome&&chrome.management);i++)"
      "await new Promise(r=>setTimeout(r,100));"
      "try{post('result',JSON.stringify(await (%@)));}catch(e){post('result',JSON.stringify({error:String(e&&e.message||e)}));}})();",
-    expression];
-  // Enabling and removing extensions require a user gesture; these calls come from user actions.
-  [manager evaluate:script userGesture:YES completion:reply];
+    script];
+  [manager evaluate:wrapped userGesture:mutates completion:reply];
+}
+
+- (NSURL *)downloadsDirectoryForProfileID:(NSString *)profileID {
+  NSString *validatedProfileID = ARCValidatedProfileID(profileID);
+  ArdiaCoreProfile *profile = validatedProfileID ? _profiles[validatedProfileID] : nil;
+  if (!profile || profile.destroyed || profile.offTheRecord || !profile.path.length) return nil;
+  return [[NSURL fileURLWithPath:profile.path isDirectory:YES]
+      URLByAppendingPathComponent:@"Downloads" isDirectory:YES];
 }
 
 - (NSURL *)extensionsDirectoryForProfileID:(NSString *)profileID {

@@ -187,21 +187,20 @@ final class ExtensionProbe {
     let tabsBefore = store.session.spaces.flatMap { $0.tabs.map(\.id) }
     let nativeBefore = tabsBefore.map { runtime.nativeTabID(forID: $0.uuidString) }
     var listed = false
-    if case .value(let data)? = await manage(profile, ExtensionManagementScript.list) {
+    if case .value(let data)? = await manage(profile, .list) {
       listed = (try? JSONDecoder().decode([ManagedExtension].self, from: data)) != nil
     }
     try expect(listed, "bundled extension manager lists the profile's extensions")
     let missing = await manage(
-      profile, ExtensionManagementScript.setEnabled(String(repeating: "a", count: 32), false)!)
+      profile, .setEnabled(id: String(repeating: "a", count: 32), enabled: false))
     guard case .failure(let message)? = missing else {
       throw ExtensionProbeFailure("Extension manager accepted an unknown extension.")
     }
     try expect(
       message.contains("Failed to find extension"),
       "extension manager reports unknown extensions instead of changing state")
-    try expect(
-      ExtensionManagementScript.setEnabled("not-an-extension-id", true) == nil,
-      "extension manager refuses invalid extension IDs before reaching the engine")
+    let invalid = await manage(profile, .setEnabled(id: "not-an-extension-id", enabled: true))
+    try expect(invalid == nil, "the bridge refuses invalid extension IDs before running a script")
     let tabsAfter = store.session.spaces.flatMap { $0.tabs.map(\.id) }
     try expect(
       tabsAfter == tabsBefore
@@ -209,9 +208,11 @@ final class ExtensionProbe {
       "hidden extension manager page adds no tabs to the session or native windows")
   }
 
-  private func manage(_ profile: UUID, _ expression: String) async -> ExtensionManagementResult? {
+  private func manage(
+    _ profile: UUID, _ operation: ExtensionManagementOperation
+  ) async -> ExtensionManagementResult? {
     await withCheckedContinuation { continuation in
-      runtime.manageExtensions(forProfileID: profile.uuidString, expression: expression) {
+      runtime.manageExtensions(operation, profileID: profile) {
         continuation.resume(returning: ExtensionManagementResult(json: $0))
       }
     }

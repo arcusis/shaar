@@ -5,6 +5,11 @@ struct ExtensionConsent: View {
   let store: BrowserStore
   let request: ExtensionInstallRequest
   @Environment(\.dismiss) private var dismiss
+  @State private var acknowledgedUnknownAccess = false
+
+  private var hasUnknownAccess: Bool {
+    request.permissions.contains(ExtensionConsentPermissions.unknownAccess)
+  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 20) {
@@ -37,6 +42,20 @@ struct ExtensionConsent: View {
         .frame(maxWidth: .infinity, alignment: .leading)
       }
       .frame(minHeight: 75, maxHeight: 200)
+      if hasUnknownAccess {
+        VStack(alignment: .leading, spacing: 8) {
+          Label("Unknown access", systemImage: "exclamationmark.triangle.fill")
+            .font(.headline).foregroundStyle(.orange)
+          Text(
+            "Browser engine did not provide a complete site access list. Extension may access sites not listed above."
+          )
+          .font(.callout)
+          Toggle("I understand and want to continue", isOn: $acknowledgedUnknownAccess)
+            .font(.callout)
+        }
+        .padding(12)
+        .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+      }
       Text("Applies to all spaces sharing the \(profileName) profile.")
         .font(.caption).foregroundStyle(.secondary)
       HStack {
@@ -44,13 +63,15 @@ struct ExtensionConsent: View {
           .keyboardShortcut(.cancelAction)
         Spacer()
         Button(request.kind.actionTitle) { resolve(accepted: true) }
-          .disabled(!request.matches(store.session))
+          .disabled(
+            !request.matches(store.session) || (hasUnknownAccess && !acknowledgedUnknownAccess))
       }
     }
     .padding(28)
     .frame(width: 460)
     .background(Color(nsColor: .windowBackgroundColor))
     .interactiveDismissDisabled()
+    .onChange(of: request.id) { _, _ in acknowledgedUnknownAccess = false }
   }
 
   private var profileName: String {

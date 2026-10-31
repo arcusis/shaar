@@ -63,12 +63,14 @@ final class ExtensionManagerModel {
   }
 
   func refresh() {
-    guard let runtime, let preferences else { return }
+    guard let runtime, let preferences,
+      ExtensionManagementOperation.isValidProfileID(profileID.uuidString)
+    else { return }
     let request = UUID()
     requestID = request
     pinnedIDs = preferences.pinnedExtensionIDs(for: profileID)
     runtime.manageExtensions(
-      forProfileID: profileID.uuidString, expression: ExtensionManagementScript.list
+      forProfileID: profileID.uuidString, operation: .list, extensionID: nil, enabled: false
     ) { [weak self] json in
       Task { @MainActor [weak self] in
         guard let self, self.requestID == request,
@@ -90,20 +92,19 @@ final class ExtensionManagerModel {
   }
 
   func setEnabled(_ id: String, enabled: Bool) {
-    guard let expression = ExtensionManagementScript.setEnabled(id, enabled) else { return }
-    mutate(expression)
+    mutate(.setEnabled(id: id, enabled: enabled))
   }
 
   func remove(_ id: String) {
     setPinned(id, pinned: false)
-    guard let expression = ExtensionManagementScript.uninstall(id) else { return }
-    mutate(expression)
+    mutate(.uninstall(id: id))
   }
 
-  private func mutate(_ expression: String) {
-    guard let runtime else { return }
-    runtime.manageExtensions(forProfileID: profileID.uuidString, expression: expression) {
-      [weak self] _ in
+  private func mutate(_ operation: ExtensionManagementOperation) {
+    guard let runtime, ExtensionManagementOperation.isValidProfileID(profileID.uuidString) else {
+      return
+    }
+    runtime.manageExtensions(operation, profileID: profileID) { [weak self] _ in
       Task { @MainActor [weak self] in self?.refresh() }
     }
   }

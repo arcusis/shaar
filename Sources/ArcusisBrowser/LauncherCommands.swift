@@ -1,12 +1,31 @@
 import AppKit
 import BrowserCore
 
+/// The host side of launcher Actions, bound to the window that owns the launcher.
+struct LauncherActions {
+  /// Commands the owning window can run right now, with their current titles.
+  let available: @MainActor () -> [LauncherCommand]
+  let run: @MainActor (String) -> Void
+}
+
+/// Everything launcher sections are computed from; equal keys give equal sections.
+struct CommandSectionsKey: Equatable {
+  let query: String
+  let filter: CommandFilter?
+  let session: BrowserSession
+  let sources: CommandSources
+}
+
+struct CommandSectionsCache {
+  let key: CommandSectionsKey
+  let sections: [CommandSection]
+}
+
 /// Menu commands the launcher lists as Actions, read from the same menu definitions the app
 /// installs so titles and shortcuts stay in sync with the menu bar.
 @MainActor
 enum LauncherCommands {
-  static let catalog: [LauncherCommand] =
-    ShortcutCatalog(menu: NativeBrowserHost.makeMenu(target: NSApplication.shared)).entries
+  static let catalog: [LauncherCommand] = ShortcutCatalog.installed().entries
     .compactMap { command(for: $0) }
 
   /// The launcher itself, window chrome and repeat commands make no sense as Actions.

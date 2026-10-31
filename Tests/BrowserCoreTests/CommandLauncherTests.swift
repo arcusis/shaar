@@ -151,9 +151,107 @@ import Testing
 }
 
 @Test func domainDropsLeadingWWW() {
-  #expect(CommandLauncher.domain(of: URL(string: "https://www.apple.com/mac")) == "apple.com")
-  #expect(CommandLauncher.domain(of: URL(string: "https://docs.swift.org")) == "docs.swift.org")
-  #expect(CommandLauncher.domain(of: nil) == "")
+  #expect(CommandText.domain(of: URL(string: "https://www.apple.com/mac")) == "apple.com")
+  #expect(CommandText.domain(of: URL(string: "https://docs.swift.org")) == "docs.swift.org")
+  #expect(CommandText.domain(of: nil) == "")
+}
+
+@Test func typedSearchAndChipsShowTheSameDomain() throws {
+  var fixture = try LauncherFixture()
+  let opened = fixture.session.open(URL(string: "https://www.domain-check.example/a")!)
+  let tab = try #require(opened)
+
+  let typed = CommandLauncher.sections(
+    for: "domain-check", filter: nil, in: fixture.session, sources: fixture.sources)
+  let chip = CommandLauncher.sections(
+    for: "domain-check", filter: .tabs, in: fixture.session, sources: fixture.sources)
+
+  let typedTab = try #require(
+    typed.results.first { $0.action == .tab(space: fixture.spaceID, tab: tab) })
+  #expect(typedTab.subtitle == "Main · domain-check.example")
+  #expect(chip.results.first?.subtitle == "domain-check.example")
+}
+
+@Test func plainWordsWithNoHitsKeepWebSearchAsTheDefaultRow() throws {
+  let fixture = try LauncherFixture()
+
+  let sections = CommandLauncher.sections(
+    for: "new", filter: nil, in: fixture.session, sources: fixture.sources)
+
+  #expect(sections.map(\.id) == ["open", "actions"])
+  #expect(sections.results.first?.isOpen == true)
+  #expect(sections.results.map(\.action).contains(.command("newSpace")))
+}
+
+@Test func emptyStateCapsFavoritesAndPinnedTabsSeparately() throws {
+  var fixture = try LauncherFixture()
+  for index in 0..<CommandLauncher.suggestedFavoriteLimit {
+    fixture.session.addFavorite(
+      profileID: fixture.profileID, originalURL: URL(string: "https://fav-\(index).example")!,
+      title: "Favorite \(index)")
+  }
+
+  let sections = CommandLauncher.sections(
+    for: "", filter: nil, in: fixture.session, sources: fixture.sources)
+  let favorites = try #require(sections.first { $0.id == "favorites" })
+
+  #expect(favorites.results.count == CommandLauncher.suggestedFavoriteLimit + 1)
+  #expect(favorites.results.last?.action == .tab(space: fixture.spaceID, tab: fixture.pinnedTabID))
+}
+
+@Test func tabsChipListsRecentlyClosedUpToTheFilteredLimit() throws {
+  var fixture = try LauncherFixture()
+  for index in 0..<5 {
+    let opened = fixture.session.open(URL(string: "https://gone-\(index).example")!)
+    let id = try #require(opened)
+    fixture.session.closeTab(id)
+  }
+
+  let sections = CommandLauncher.sections(
+    for: "gone", filter: .tabs, in: fixture.session, sources: fixture.sources)
+
+  #expect(sections.first { $0.id == "recently-closed" }?.results.count == 5)
+}
+
+@Test func duplicateFavoritePagesDoNotTrapSearch() throws {
+  var fixture = try LauncherFixture()
+  let page = try #require(fixture.session.favoritePages.first)
+  fixture.session.favoritePages.append(page)
+
+  let results = CommandSearch.results(for: "favorite", in: fixture.session)
+
+  #expect(
+    results.contains { $0.action == .favorite(profile: fixture.profileID, id: fixture.favoriteID) })
+}
+
+@Test func mostVisitedKeepsTheTopFewInRankOrder() throws {
+  let fixture = try LauncherFixture()
+  let history = try (1...9).map {
+    try entry("https://visits-\($0).example/", visits: $0 * 7 % 10, profile: fixture.profileID)
+  }
+
+  let results = CommandLauncher.mostVisited(in: fixture.session, history: history)
+  let expected = history.sorted { $0.visitCount > $1.visitCount }
+    .prefix(CommandLauncher.mostVisitedLimit)
+    .map { CommandAction.history(profile: fixture.profileID, address: $0.address) }
+
+  #expect(results.map(\.action) == expected)
+}
+
+@Test func selectionFollowsItsRowAndClampsWhenTheRowIsGone() {
+  let rows = ["a", "b", "c"].map(row)
+  var selection = CommandSelection(index: 1, in: rows)
+  #expect(selection.id == row("b").id)
+
+  #expect(selection.index(in: [row("x")] + rows) == 2)
+  #expect(selection.index(in: [row("a")]) == 0)
+  selection = CommandSelection(index: 9, in: rows)
+  #expect(selection.index(in: rows) == 2)
+  #expect(CommandSelection(index: 0, in: []).index(in: []) == 0)
+}
+
+private func row(_ name: String) -> CommandResult {
+  .command(LauncherCommand(id: name, title: name, detail: "", symbol: "square"))
 }
 
 private struct LauncherFixture {

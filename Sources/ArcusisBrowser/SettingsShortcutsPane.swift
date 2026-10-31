@@ -4,8 +4,7 @@ import SwiftUI
 /// Every menu shortcut, grouped by menu, read from the same menu definitions the app installs.
 struct SettingsShortcutsPane: View {
   @State private var search = ""
-  @State private var catalog = ShortcutCatalog(
-    menu: NativeBrowserHost.makeMenu(target: NSApplication.shared))
+  @State private var catalog = ShortcutCatalog.installed()
 
   private var entries: [ShortcutCatalog.Entry] {
     guard !search.isEmpty else { return catalog.entries }

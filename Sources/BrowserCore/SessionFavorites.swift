@@ -10,7 +10,12 @@ extension BrowserSession {
 
   public var selectedFavoritePage: BrowserFavoritePage? {
     guard let id = selectedSpace.selectedFavoriteID else { return nil }
-    return favoritePages.first { $0.favoriteID == id }
+    return favoritePage(for: id)
+  }
+
+  /// The live page for a favorite in this window; the first page wins if there are two.
+  public func favoritePage(for favoriteID: UUID) -> BrowserFavoritePage? {
+    favoritePages.first { $0.favoriteID == favoriteID }
   }
 
   /// Favorite selection takes precedence; ordinary tab selection remains stored as fallback.

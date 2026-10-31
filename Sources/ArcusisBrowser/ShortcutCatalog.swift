@@ -94,6 +94,11 @@ struct ShortcutCatalog {
     }
   }
 
+  /// The catalog of the menu the app installs.
+  @MainActor static func installed() -> ShortcutCatalog {
+    ShortcutCatalog(menu: NativeBrowserHost.makeMenu(target: NSApplication.shared))
+  }
+
   init(menu: NSMenu) {
     entries = menu.items.compactMap(\.submenu).flatMap { section in
       section.items.compactMap { item in

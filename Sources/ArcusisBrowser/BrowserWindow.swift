@@ -85,12 +85,6 @@ struct BrowserWindow: View {
           .onTapGesture { store.dismissCommand() }
           .transition(.opacity)
       }
-      // The panel is inserted inside the reader so its scale transition anchors on the panel.
-      GeometryReader { geometry in
-        if store.commandIsOpen {
-          commandPanel(in: geometry.size)
-        }
-      }
       if let coordinator = store.engine?.passwordFill,
         BrowserEngine.passwordFillInputAvailable(in: store),
         coordinator.showingPicker || coordinator.message != nil
@@ -100,6 +94,7 @@ struct BrowserWindow: View {
       }
 
     }
+    .overlay { commandPanelLayer }
     .overlay { TabSwitcherPanel(store: store) }
     .background { WindowFullScreenObserver(isFullScreen: $isFullScreen) }
     .environment(\.browserWindowIsFullScreen, isFullScreen)
@@ -261,6 +256,18 @@ struct BrowserWindow: View {
         .strokeBorder(.black.opacity(0.07))
     )
     .shadow(color: .black.opacity(0.08), radius: 8, y: 3)
+  }
+
+  /// An overlay, so it never affects window layout, that takes no clicks while the launcher is
+  /// closed. The panel is inserted inside the reader so its scale transition anchors on the panel.
+  private var commandPanelLayer: some View {
+    GeometryReader { geometry in
+      if store.commandIsOpen {
+        commandPanel(in: geometry.size)
+      }
+    }
+    .allowsHitTesting(store.commandIsOpen)
+    .accessibilityHidden(!store.commandIsOpen)
   }
 
   private func commandPanel(in size: CGSize) -> some View {

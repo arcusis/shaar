@@ -152,7 +152,7 @@ enum ArcusisBrowserMain {
     }
     store.library.refresh(profileID, section: .history)
     store.library.refresh(profileID, section: .bookmarks)
-    store.onMenuCommand = { _ in }
+    store.launcherActions = LauncherActions(available: { LauncherCommands.catalog }, run: { _ in })
     store.commandQuery = query
     store.commandFilter = filter
   }

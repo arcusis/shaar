@@ -200,49 +200,38 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     if let settingsWindow = settingsController?.window, keyWindow() === settingsWindow {
       return command == .closeTab || command == .closeWindow
     }
-    guard let context = activeContext, context.store.sheet == nil,
-      context.window.attachedSheet == nil
-    else { return false }
+    guard let context = activeContext else { return false }
+    return windowCanPerform(command, in: context, afterLauncher: false)
+  }
+
+  /// Enablement inside one browser window. `afterLauncher` asks whether a launcher Action may
+  /// run once the launcher closes, so the open launcher itself does not disable it.
+  private func windowCanPerform(
+    _ command: BrowserMenuCommand, in context: NativeBrowserContext, afterLauncher: Bool
+  ) -> Bool {
+    let store = context.store
+    guard store.sheet == nil, context.window.attachedSheet == nil else { return false }
     switch command {
-    case .find: return context.store.canFindCurrentPage
-    case .findNext, .findPrevious: return context.store.pageFind?.canMove == true
-    case .reload: return context.store.canReloadCurrentPage
-    case .splitView: return context.store.session.selectedSpace.tabs.count >= 2
-    case .reopenClosed: return context.store.canReopenClosedTab
-    case .bookmarkPage: return context.store.canBookmarkCurrentPage
-    case .addFavorite: return context.store.canFavoriteCurrentPage
+    case .find: return store.canFindCurrentPage
+    case .findNext, .findPrevious: return store.pageFind?.canMove == true
+    case .reload: return afterLauncher ? store.currentPageAllowsReload : store.canReloadCurrentPage
+    case .splitView: return store.session.selectedSpace.tabs.count >= 2
+    case .reopenClosed: return store.canReopenClosedTab
+    case .bookmarkPage: return store.canBookmarkCurrentPage
+    case .addFavorite:
+      return afterLauncher ? store.currentPageAllowsFavorite : store.canFavoriteCurrentPage
     default: return true
     }
   }
 
+  /// Commands that act on the app rather than one window and need no window to be enabled.
+  private static let appCommands: Set<BrowserMenuCommand> = [
+    .newWindow, .newPrivateWindow, .newMiniWindow, .quit,
+  ]
+
   func perform(_ command: BrowserMenuCommand) {
     guard canPerform(command) else { return }
-    if command == .quit {
-      if UserDefaults.standard.bool(forKey: "settingsWarnBeforeQuit") && presentation == .visible {
-        let alert = NSAlert()
-        alert.messageText = "Quit \(ProductIdentity.name)?"
-        alert.informativeText = "Your windows and tabs will be saved."
-        alert.addButton(withTitle: "Quit")
-        alert.addButton(withTitle: "Cancel")
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-      }
-      flushGeometry()
-      workspace.persistSnapshot()
-      events.runtime.quit()
-      return
-    }
-    if command == .newMiniWindow {
-      openMiniWindow(url: nil)
-      return
-    }
-    if command == .newWindow {
-      do { try newWindow(from: activeContext?.id) } catch { report(error) }
-      return
-    }
-    if command == .newPrivateWindow {
-      do { try privateHost?.openWindow() } catch { report(error) }
-      return
-    }
+    if performAppCommand(command, from: activeContext) { return }
     if privateHost?.hasActiveWindow == true {
       privateHost?.perform(command)
       return
@@ -256,6 +245,80 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       return
     }
     guard let context = activeContext else { return }
+    perform(command, in: context)
+  }
+
+  /// Runs app-wide commands; returns false for commands that belong to a window.
+  private func performAppCommand(
+    _ command: BrowserMenuCommand, from source: NativeBrowserContext?
+  ) -> Bool {
+    switch command {
+    case .quit: quit()
+    case .newMiniWindow: openMiniWindow(url: nil)
+    case .newWindow:
+      do { try newWindow(from: source?.id) } catch { report(error) }
+    case .newPrivateWindow:
+      do { try privateHost?.openWindow() } catch { report(error) }
+    default: return false
+    }
+    return true
+  }
+
+  private func quit() {
+    if UserDefaults.standard.bool(forKey: "settingsWarnBeforeQuit") && presentation == .visible {
+      let alert = NSAlert()
+      alert.messageText = "Quit \(ProductIdentity.name)?"
+      alert.informativeText = "Your windows and tabs will be saved."
+      alert.addButton(withTitle: "Quit")
+      alert.addButton(withTitle: "Cancel")
+      guard alert.runModal() == .alertFirstButtonReturn else { return }
+    }
+    flushGeometry()
+    workspace.persistSnapshot()
+    events.runtime.quit()
+  }
+
+  // MARK: Launcher Actions
+
+  /// Launcher Actions the window can run now, titled as its menu would show them.
+  func launcherCommands(inWindow id: UUID) -> [LauncherCommand] {
+    guard let context = contexts[id] else { return [] }
+    return LauncherCommands.catalog.compactMap { item in
+      guard let command = BrowserMenuCommand(rawValue: item.id),
+        canPerformLauncherCommand(command, in: context)
+      else { return nil }
+      guard command == .closeTab else { return item }
+      return item.retitled(Self.closeTabTitle(for: context.store))
+    }
+  }
+
+  /// Runs a launcher Action in the window that owns the launcher, whichever window is key now.
+  func performLauncherCommand(_ name: String, inWindow id: UUID) {
+    guard let command = BrowserMenuCommand(rawValue: name), let context = contexts[id],
+      canPerformLauncherCommand(command, in: context)
+    else { return }
+    if performAppCommand(command, from: context) { return }
+    if command == .settings {
+      settingsController?.show(for: context.store.session.selectedSpace.profileID)
+      return
+    }
+    perform(command, in: context)
+  }
+
+  private func canPerformLauncherCommand(
+    _ command: BrowserMenuCommand, in context: NativeBrowserContext
+  ) -> Bool {
+    guard !events.runtime.isQuitting, !context.engine.isClosed else { return false }
+    if Self.appCommands.contains(command) { return true }
+    return windowCanPerform(command, in: context, afterLauncher: true)
+  }
+
+  /// Close Tab closes the window when no page is selected, and says so.
+  static func closeTabTitle(for store: BrowserStore) -> String {
+    store.session.selectedPage == nil ? "Close window" : "Close tab"
+  }
+
+  private func perform(_ command: BrowserMenuCommand, in context: NativeBrowserContext) {
     let store = context.store
     switch command {
     case .newTab:
@@ -467,10 +530,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       id: id, nativeID: nativeID, window: window, store: store, engine: engine, hosting: hosting,
       contentView: content, titlebarDragView: titlebarDragView)
     contexts[id] = context
-    store.onMenuCommand = { [weak self] name in
-      guard let command = BrowserMenuCommand(rawValue: name) else { return }
-      self?.perform(command)
-    }
+    store.launcherActions = LauncherActions(
+      available: { [weak self] in self?.launcherCommands(inWindow: id) ?? [] },
+      run: { [weak self] name in self?.performLauncherCommand(name, inWindow: id) })
     engine.onClosed = { [weak self] quitting in self?.closed(id, quitting: quitting) }
     observe(context)
     if reconcile { engine.reconcile() }
@@ -662,9 +724,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       let command = BrowserMenuCommand(rawValue: raw)
     else { return false }
     if command == .closeTab {
-      item.title =
-        activeContext?.store.session.selectedPage == nil
-        ? "Close window" : "Close tab"
+      item.title = activeContext.map { Self.closeTabTitle(for: $0.store) } ?? "Close window"
     }
     return canPerform(command)
   }

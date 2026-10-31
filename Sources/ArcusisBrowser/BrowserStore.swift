@@ -34,11 +34,13 @@ final class BrowserStore {
   let library = BrowserLibraryModel()
   private(set) var sidebarNotice: String?
   var commandIsOpen = false
-  var commandQuery = ""
+  var commandQuery = "" {
+    didSet { resetCommandSelection() }
+  }
   var commandEditsCurrentURL = false
-  var commandSelection = 0
+  private(set) var commandSelectedRow = CommandSelection()
   var commandFilter: CommandFilter? {
-    didSet { commandSelection = 0 }
+    didSet { resetCommandSelection() }
   }
   var sidebarIsVisible = true
   private(set) var pageFind: PageFindState?
@@ -97,8 +99,9 @@ final class BrowserStore {
   @ObservationIgnored var engine: BrowserEngine?
   @ObservationIgnored var onSessionChanged: (() -> Void)?
   @ObservationIgnored var onCloseTab: ((UUID) -> Void)?
-  /// Runs a host menu command chosen from the launcher's Actions; nil hides Actions.
-  @ObservationIgnored var onMenuCommand: ((String) -> Void)?
+  /// The host's menu commands for the launcher's Actions; nil hides Actions.
+  @ObservationIgnored var launcherActions: LauncherActions?
+  @ObservationIgnored private var commandSectionsCache: CommandSectionsCache?
   @ObservationIgnored var onInstallDecision: ((String, Bool) -> Void)?
   @ObservationIgnored var onWebsitePermissionDecision: ((String, Bool) -> Void)?
   @ObservationIgnored var onExternalAppDecision: ((String, Bool) -> Void)?
@@ -147,17 +150,30 @@ final class BrowserStore {
     if changed { onSessionChanged?() }
   }
 
+  /// Computed once per change of query, filter, session or library, not on every read.
   var commandSections: [CommandSection] {
+    let key = commandSectionsKey()
+    if let cache = commandSectionsCache, cache.key == key { return cache.sections }
+    let sections = CommandLauncher.sections(
+      for: key.query, filter: key.filter, in: key.session, sources: key.sources)
+    commandSectionsCache = CommandSectionsCache(key: key, sections: sections)
+    return sections
+  }
+
+  private func commandSectionsKey() -> CommandSectionsKey {
     let profile = session.selectedSpace.profileID
     let sources = CommandSources(
       bookmarks: library.bookmarks[profile]?.items ?? [], history: library.history[profile] ?? [],
-      commands: onMenuCommand == nil ? [] : LauncherCommands.catalog,
+      commands: launcherActions?.available() ?? [],
       searchEngine: preferences.searchEngine(for: profile))
-    return CommandLauncher.sections(
-      for: commandQuery, filter: commandFilter, in: session, sources: sources)
+    return CommandSectionsKey(
+      query: commandQuery, filter: commandFilter, session: session, sources: sources)
   }
 
   var results: [CommandResult] { commandSections.results }
+
+  /// Index of the selected row in the current results, following the row if it moved.
+  var commandSelection: Int { commandSelectedRow.index(in: results) }
   func usePreferences(_ value: BrowserPreferencesStore) {
     preferences = value
     sidebarIsVisible = value.sidebarInitiallyVisible
@@ -172,7 +188,6 @@ final class BrowserStore {
     dismissPageFind()
     commandEditsCurrentURL = false
     commandQuery = ""
-    commandSelection = 0
     commandFilter = nil
     pendingSplitPlacement = nil
     commandIsOpen = true
@@ -391,8 +406,15 @@ final class BrowserStore {
   }
 
   func moveCommandSelection(by amount: Int) {
+    let results = results
     guard !results.isEmpty else { return }
-    commandSelection = min(max(commandSelection + amount, 0), results.count - 1)
+    let index = commandSelectedRow.index(in: results) + amount
+    commandSelectedRow = CommandSelection(index: index, in: results)
+  }
+
+  /// Selects the default row: the first row of the current results.
+  private func resetCommandSelection() {
+    commandSelectedRow = CommandSelection(index: 0, in: results)
   }
 
   func cycleCommandFilter(by offset: Int) {
@@ -400,9 +422,14 @@ final class BrowserStore {
   }
 
   func acceptCommand() {
+    guard let result = selectedCommandResult else { return }
+    perform(result.action)
+  }
+
+  var selectedCommandResult: CommandResult? {
     let results = results
-    guard results.indices.contains(commandSelection) else { return }
-    perform(results[commandSelection].action)
+    let index = commandSelectedRow.index(in: results)
+    return results.indices.contains(index) ? results[index] : nil
   }
 
   func perform(_ action: CommandAction) {
@@ -452,7 +479,7 @@ final class BrowserStore {
       return
     case .command(let name):
       dismissCommand()
-      onMenuCommand?(name)
+      launcherActions?.run(name)
       return
     }
     commandIsOpen = false
@@ -519,10 +546,13 @@ final class BrowserStore {
     session.favorites(for: session.selectedSpace.profileID)
   }
 
-  var canFavoriteCurrentPage: Bool {
-    guard sheet == nil, !commandIsOpen, let page = session.selectedPage,
-      case .tab(let tab) = page
-    else { return false }
+  var canFavoriteCurrentPage: Bool { !commandIsOpen && currentPageAllowsFavorite }
+
+  /// Whether the page could become a Favorite, ignoring the open launcher.
+  var currentPageAllowsFavorite: Bool {
+    guard sheet == nil, let page = session.selectedPage, case .tab(let tab) = page else {
+      return false
+    }
     return NavigationInput.isWebURL(tab.url)
   }
 
@@ -661,10 +691,11 @@ final class BrowserStore {
     rendererFailures[id] = failure
   }
 
-  var canReloadCurrentPage: Bool {
-    guard sheet == nil, !commandIsOpen, let tab = session.selectedPage?.tab else {
-      return false
-    }
+  var canReloadCurrentPage: Bool { !commandIsOpen && currentPageAllowsReload }
+
+  /// Whether the page could reload, ignoring the open launcher.
+  var currentPageAllowsReload: Bool {
+    guard sheet == nil, let tab = session.selectedPage?.tab else { return false }
     return rendererFailures[tab.id]?.reloading != true && onReloadPage != nil
   }
 

@@ -38,7 +38,6 @@ struct CommandPanel: View {
       }
     }
     .onChange(of: store.commandQuery) { _, _ in
-      store.commandSelection = 0
       movedSelection = false
     }
     .onChange(of: store.commandFilter) { _, _ in
@@ -123,7 +122,8 @@ struct CommandPanel: View {
   }
 
   private var emptyMessage: String {
-    if store.commandQuery.isEmpty, store.commandFilter == nil { return "No suggestions yet" }
+    let query = store.commandQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+    if query.isEmpty, store.commandFilter == nil { return "No suggestions yet" }
     return "No matching results"
   }
 
@@ -182,9 +182,7 @@ struct CommandPanel: View {
   }
 
   private func acceptCommandInNewTab() {
-    let results = store.results
-    guard results.indices.contains(store.commandSelection) else { return }
-    let action = results[store.commandSelection].action
+    guard let action = store.selectedCommandResult?.action else { return }
     if case .tab(_, let tabID) = action, let page = store.session.page(forTabID: tabID) {
       store.perform(.open(page.tab.url))
     } else if store.commandEditsCurrentURL, !movedSelection,
@@ -209,7 +207,7 @@ struct CommandPanel: View {
       guard
         store.session.favorites.contains(where: { $0.id == favoriteID && $0.profileID == profileID }
         ),
-        let page = store.session.favoritePages.first(where: { $0.favoriteID == favoriteID }),
+        let page = store.session.favoritePage(for: favoriteID),
         store.session.profileID(forTabID: page.tab.id) == profileID
       else { return nil }
       tabID = page.tab.id

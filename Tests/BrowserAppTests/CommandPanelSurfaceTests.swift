@@ -16,14 +16,16 @@ final class CommandPanelSurfaceTests: XCTestCase {
     }
     store.showCommand()
     let layoutContent = CGRect(x: 240, y: 45, width: 510, height: 465)
+    let sections = store.commandSections
     let panelFrame = BrowserChromeLayout.commandPanelFrame(
-      in: layoutContent, resultCount: store.results.count)
+      in: layoutContent, resultCount: sections.results.count, headerCount: sections.headerCount)
     XCTAssertEqual(panelFrame.midX, layoutContent.midX)
     XCTAssertEqual(panelFrame.midY, layoutContent.midY)
     XCTAssertLessThanOrEqual(panelFrame.width, layoutContent.width)
     XCTAssertLessThanOrEqual(panelFrame.height, layoutContent.height)
     let resultsHeight = BrowserChromeLayout.commandResultsHeight(
-      resultCount: store.results.count, availableHeight: panelFrame.height)
+      resultCount: sections.results.count, headerCount: sections.headerCount,
+      availableHeight: panelFrame.height)
 
     let bright = try await capture(
       canvas(
@@ -49,9 +51,10 @@ final class CommandPanelSurfaceTests: XCTestCase {
     XCTAssertNotEqual(try interiorPixel(bright), try interiorPixel(darkAppearance))
 
     store.commandQuery = String(repeating: "長い検索語🌿界", count: 18)
-    store.commandSelection = 0
+    let longSections = store.commandSections
     let longResultHeight = BrowserChromeLayout.commandResultsHeight(
-      resultCount: store.results.count, availableHeight: panelFrame.height)
+      resultCount: longSections.results.count, headerCount: longSections.headerCount,
+      availableHeight: panelFrame.height)
     _ = try await capture(
       canvas(
         panel(store: store, width: panelFrame.width, resultsHeight: longResultHeight),

@@ -14,6 +14,7 @@ private final class BrowserSettingsState {
   var onOpenSpace: (UUID) -> Void = { _ in }
   var onConnectAccount: (UUID, AccountProvider) -> Void = { _, _ in }
   var onDisconnectAccount: (UUID, AccountProvider) -> Void = { _, _ in }
+  var onAddProfile: () -> Void = {}
 
   init(
     workspace: BrowserWorkspaceStore, preferences: BrowserPreferencesStore,
@@ -28,7 +29,7 @@ private final class BrowserSettingsState {
     workspace.workspace.catalog.profiles.map { profile in
       let spaces = workspace.workspace.catalog.spaces.filter { $0.profileID == profile.id }
       return BrowserSettingsProfile(
-        id: profile.id, name: profile.name,
+        id: profile.id, name: profile.name, color: ProfileColorChoice(profile: profile),
         spaces: spaces.map { BrowserSettingsSpace(id: $0.id, name: $0.name, symbol: $0.symbol) },
         extensionCount: runtime?.extensions(forProfileID: profile.id.uuidString).count ?? 0,
         accounts: preferences.accounts(for: profile.id))
@@ -123,6 +124,15 @@ private final class BrowserSettingsState {
       return true
     } catch { return false }
   }
+
+  @discardableResult
+  func setProfileColor(_ id: UUID, to color: ProfileColorChoice) -> Bool {
+    do {
+      try workspace.setProfileColor(id, tint: color.tint, customRGB: color.customRGB)
+      return true
+    } catch { return false }
+  }
+
   func deleteProfile(_ id: UUID, movingSpacesTo destinationID: UUID) -> Bool {
     do {
       try workspace.deleteProfile(id, movingSpacesTo: destinationID)
@@ -146,8 +156,9 @@ private struct BrowserSettingsRoot: View {
       selectedSearchEngine: Binding(
         get: { state.selectedSearchEngine }, set: { _ = state.selectSearchEngine($0) }),
       storageNotice: state.storageNotice,
-      onCreateProfile: { state.createProfile(name: $0) },
+      onAddProfile: state.onAddProfile,
       onRenameProfile: { state.renameProfile($0, name: $1) },
+      onSetProfileColor: { state.setProfileColor($0, to: $1) },
       onDeleteProfile: { state.deleteProfile($0, movingSpacesTo: $1) },
       onOpenSpace: state.onOpenSpace,
       onConnectAccount: state.onConnectAccount,
@@ -215,6 +226,10 @@ final class BrowserSettingsController: NSObject {
     state.onDisconnectAccount = disconnect
   }
 
+  func setAddProfileHandler(_ handler: @escaping () -> Void) {
+    state.onAddProfile = handler
+  }
+
   @discardableResult
   func selectProfile(_ id: UUID?) -> Bool { state.selectProfile(id) }
 
@@ -230,6 +245,11 @@ final class BrowserSettingsController: NSObject {
 
   @discardableResult
   func renameProfile(_ id: UUID, name: String) -> Bool { state.renameProfile(id, name: name) }
+
+  @discardableResult
+  func setProfileColor(_ id: UUID, to color: ProfileColorChoice) -> Bool {
+    state.setProfileColor(id, to: color)
+  }
 
   func show(for profileID: UUID? = nil) {
     state.prepareFirstPresentation(for: profileID)

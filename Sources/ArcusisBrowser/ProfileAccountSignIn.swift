@@ -12,10 +12,10 @@ final class ProfileAccountSignIn {
   let engine: BrowserEngine
   let window: NSWindow
   let provider: AccountProvider
+  let profileID: UUID
   private let purpose: Purpose
   private var capturedEmail: String?
   private var requestedAccountList = false
-  private var microsoftFlowStarted = false
   private var finished = false
   private var watcher: Task<Void, Never>?
   var onFinished: ((ConnectedAccount?) -> Void)?
@@ -26,6 +26,7 @@ final class ProfileAccountSignIn {
   ) throws {
     self.provider = provider
     self.purpose = purpose
+    profileID = profile.id
     let url = purpose == .signIn ? provider.signInURL : provider.signOutURL
     let space = BrowserSpace(
       profileID: profile.id, name: provider.title, symbol: "person.crop.circle", tint: .ocean,
@@ -42,7 +43,7 @@ final class ProfileAccountSignIn {
     let hosting = NSHostingView(
       rootView: ProfileAccountSignInView(
         store: store, engine: engine, title: "Sign in to \(provider.title) for \(profile.name)"
-      ) { [weak self] in self?.finish(nil) })
+      ) { [weak self] in self?.cancel() })
     hosting.frame = content.bounds
     hosting.autoresizingMask = [.width, .height]
     content.addSubview(hosting)
@@ -91,23 +92,21 @@ final class ProfileAccountSignIn {
     }
   }
 
+  /// Work and school accounts may leave Microsoft for the company's identity provider and come
+  /// back; the email is read wherever the account is entered and kept until the landing page.
   private func watchMicrosoft(_ url: URL) async {
-    if MicrosoftSignInPage.isSignInPage(url) {
-      microsoftFlowStarted = true
-    }
     if provider.isSignedInPage(url) {
-      let email = capturedEmail ?? MicrosoftSignInPage.email(in: url)
-      if let email { finish(ConnectedAccount(provider: .microsoft, email: email)) }
+      let pageText = capturedEmail == nil ? await evaluate(MicrosoftSignInPage.emailScript) : nil
+      if let email = capturedEmail ?? MicrosoftSignInPage.email(in: url, pageText: pageText) {
+        finish(ConnectedAccount(provider: .microsoft, email: email))
+      }
       return
     }
-    guard microsoftFlowStarted, MicrosoftSignInPage.isIdentityProviderPage(url),
-      let pageText = await evaluate(MicrosoftSignInPage.emailScript),
-      let email = MicrosoftSignInPage.email(in: url, pageText: pageText)
+    guard MicrosoftSignInPage.mayShowAccountEmail(url),
+      let email = MicrosoftSignInPage.email(
+        in: url, pageText: await evaluate(MicrosoftSignInPage.emailScript))
     else { return }
     capturedEmail = email
-    if url.host()?.lowercased() == "login.microsoftonline.com" {
-      return
-    }
   }
 
   private func evaluate(_ script: String) async -> String? {
@@ -120,6 +119,9 @@ final class ProfileAccountSignIn {
     guard let data = json?.data(using: .utf8) else { return nil }
     return try? JSONDecoder().decode(String.self, from: data)
   }
+
+  /// Abandons the flow, as the window's own Cancel button does.
+  func cancel() { finish(nil) }
 
   private func finish(_ account: ConnectedAccount?) {
     guard !finished else { return }

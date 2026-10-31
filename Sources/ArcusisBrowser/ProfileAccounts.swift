@@ -115,41 +115,57 @@ enum GoogleAccountList {
   }
 }
 
-/// Reads the account name Microsoft shows while signing in; the landing page does not expose it.
+/// Reads the account email while a Microsoft sign-in runs: on Microsoft's own pages, on a
+/// company identity provider (Okta, ADFS, Ping and similar) it redirects to, and in the account
+/// menu of the landing page.
 enum MicrosoftSignInPage {
   static let emailScript = """
     (() => {
-      const displayName = document.querySelector('#displayName')?.textContent || '';
-      const emailInput = document.querySelector('input[type=email], input[name=loginfmt], input[name=login]')?.value || '';
-      const accountLink = document.querySelector('[data-bind*="userPrincipalName"], #userName')?.textContent || '';
-      return [emailInput, accountLink, displayName].map(value => value.trim()).find(value => value.includes('@')) || '';
+      const selectors = [
+        'input[type=email]', 'input[name=loginfmt]', 'input[name=login]', 'input[name=username]',
+        'input[name=identifier]', '#userNameInput', 'input[autocomplete=username]',
+        '[data-bind*="userPrincipalName"]', '#userName', '#displayName',
+        '#mectrl_currentAccount_secondary'
+      ];
+      return selectors
+        .map(selector => document.querySelector(selector))
+        .map(element => (element?.value || element?.textContent || '').trim())
+        .find(value => value.includes('@')) || '';
     })()
     """
+
+  private static let microsoftDomains = [
+    "microsoftonline.com", "live.com", "microsoft.com", "microsoft365.com", "cloud.microsoft",
+    "office.com", "office365.com",
+  ]
 
   static func isSignInPage(_ url: URL) -> Bool {
     ["login.microsoftonline.com", "login.live.com"].contains(url.host()?.lowercased() ?? "")
   }
 
-  static func email(in url: URL, pageText: String? = nil) -> String? {
-    let queryEmail = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
-      .first(where: { ["login_hint", "username", "email"].contains($0.name.lowercased()) })?.value
-    return [queryEmail, pageText].compactMap { $0 }.first(where: isEmail)
-  }
-
+  /// A secure page outside Microsoft during sign-in is the organization's identity provider.
   static func isIdentityProviderPage(_ url: URL) -> Bool {
     guard let host = url.host()?.lowercased(), url.scheme?.lowercased() == "https" else {
       return false
     }
-    let microsoftHosts = [
-      "login.microsoftonline.com", "login.live.com", "microsoft.com", "microsoft365.com",
-      "office.com", "office365.com",
-    ]
-    return !microsoftHosts.contains(where: { host == $0 || host.hasSuffix("." + $0) })
+    return !microsoftDomains.contains(where: { host == $0 || host.hasSuffix("." + $0) })
+  }
+
+  static func mayShowAccountEmail(_ url: URL) -> Bool {
+    isSignInPage(url) || isIdentityProviderPage(url)
+  }
+
+  /// Prefers the hint Microsoft passes along in the address over text read from the page.
+  static func email(in url: URL, pageText: String? = nil) -> String? {
+    let queryEmail = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
+      .first(where: { ["login_hint", "username", "email"].contains($0.name.lowercased()) })?.value
+    return [queryEmail, pageText].compactMap { $0 }
+      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+      .first(where: isEmail)
   }
 
   private static func isEmail(_ value: String) -> Bool {
-    let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
-    let parts = value.split(separator: "@")
+    let parts = value.split(separator: "@", omittingEmptySubsequences: false)
     return parts.count == 2 && !parts[0].isEmpty && parts[1].contains(".")
   }
 }

@@ -5,6 +5,7 @@ import SwiftUI
 struct BrowserSettingsProfile: Identifiable {
   let id: UUID
   let name: String
+  let color: ProfileColorChoice
   let spaces: [BrowserSettingsSpace]
   let extensionCount: Int
   let accounts: [ConnectedAccount]
@@ -12,11 +13,12 @@ struct BrowserSettingsProfile: Identifiable {
   var spaceNames: [String] { spaces.map(\.name) }
 
   init(
-    id: UUID, name: String, spaces: [BrowserSettingsSpace], extensionCount: Int = 0,
-    accounts: [ConnectedAccount] = []
+    id: UUID, name: String, color: ProfileColorChoice = .none, spaces: [BrowserSettingsSpace],
+    extensionCount: Int = 0, accounts: [ConnectedAccount] = []
   ) {
     self.id = id
     self.name = name
+    self.color = color
     self.spaces = spaces
     self.extensionCount = extensionCount
     self.accounts = accounts
@@ -84,8 +86,9 @@ struct BrowserSettingsView: View {
   @Binding var sidebarInitiallyVisible: Bool
   @Binding var selectedSearchEngine: String
   let storageNotice: String?
-  let onCreateProfile: (String) -> UUID?
+  let onAddProfile: () -> Void
   let onRenameProfile: (UUID, String) -> Bool
+  let onSetProfileColor: (UUID, ProfileColorChoice) -> Bool
   let onDeleteProfile: (UUID, UUID) -> Bool
   let onOpenSpace: (UUID) -> Void
   let onConnectAccount: (UUID, AccountProvider) -> Void
@@ -96,21 +99,15 @@ struct BrowserSettingsView: View {
   @State private var deletingProfile: BrowserSettingsProfile?
   @State private var destinationID: UUID?
   @State private var selectedSection: BrowserSettingsSection
-  @State private var profileEditor: ProfileEditorTarget?
   @State private var profileNameEdits: [UUID: String] = [:]
-
-  private struct ProfileEditorTarget: Identifiable {
-    let id = UUID()
-    let profileID: UUID?
-    let name: String
-  }
 
   init(
     profiles: [BrowserSettingsProfile], searchEngines: [BrowserSettingsChoice],
     selectedProfileID: Binding<UUID?>, sidebarInitiallyVisible: Binding<Bool>,
     selectedSearchEngine: Binding<String>, storageNotice: String? = nil,
-    onCreateProfile: @escaping (String) -> UUID? = { _ in nil },
+    onAddProfile: @escaping () -> Void = {},
     onRenameProfile: @escaping (UUID, String) -> Bool = { _, _ in false },
+    onSetProfileColor: @escaping (UUID, ProfileColorChoice) -> Bool = { _, _ in false },
     onDeleteProfile: @escaping (UUID, UUID) -> Bool = { _, _ in false },
     onOpenSpace: @escaping (UUID) -> Void = { _ in },
     onConnectAccount: @escaping (UUID, AccountProvider) -> Void = { _, _ in },
@@ -126,8 +123,9 @@ struct BrowserSettingsView: View {
     _sidebarInitiallyVisible = sidebarInitiallyVisible
     _selectedSearchEngine = selectedSearchEngine
     self.storageNotice = storageNotice
-    self.onCreateProfile = onCreateProfile
+    self.onAddProfile = onAddProfile
     self.onRenameProfile = onRenameProfile
+    self.onSetProfileColor = onSetProfileColor
     self.onDeleteProfile = onDeleteProfile
     self.onOpenSpace = onOpenSpace
     self.onConnectAccount = onConnectAccount
@@ -184,18 +182,6 @@ struct BrowserSettingsView: View {
           }.disabled(destinationID == nil)
         }
       }.padding(24).frame(width: 420)
-    }
-    .sheet(item: $profileEditor) { target in
-      ProfileNameEditor(
-        title: target.profileID == nil ? "New Profile" : "Rename Profile",
-        initialName: target.name,
-        onCancel: { profileEditor = nil },
-        onSave: { name in
-          let saved =
-            target.profileID.map { onRenameProfile($0, name) } ?? (onCreateProfile(name) != nil)
-          if saved { profileEditor = nil }
-          return saved
-        })
     }
   }
 
@@ -370,9 +356,7 @@ struct BrowserSettingsView: View {
         HStack {
           Text("Profiles").font(.headline)
           Spacer()
-          Button {
-            profileEditor = ProfileEditorTarget(profileID: nil, name: "")
-          } label: {
+          Button(action: onAddProfile) {
             Image(systemName: "plus")
           }
           .accessibilityLabel("Add Profile")
@@ -383,8 +367,7 @@ struct BrowserSettingsView: View {
             selectedProfileID = profile.id
           } label: {
             HStack(spacing: 9) {
-              Image(systemName: "person.crop.circle").foregroundStyle(.secondary)
-                .frame(width: 22)
+              ProfileBadge(color: profile.color.rgb)
               VStack(alignment: .leading, spacing: 2) {
                 Text(profile.name).lineLimit(1)
                 Text(spaceCountLabel(profile.spaces.count)).font(.caption).foregroundStyle(
@@ -427,6 +410,11 @@ struct BrowserSettingsView: View {
           Button("Save") { saveProfileName(profile) }
             .disabled(profileNameEdits[profile.id] == nil)
         }
+        VStack(alignment: .leading, spacing: 8) {
+          Text("Color")
+          ProfileColorPicker(color: profileColorBinding(profile))
+        }
+        .accessibilityIdentifier("settings.profileColor")
         Picker("Search engine", selection: $selectedSearchEngine) {
           ForEach(searchEngines) { Text($0.title).tag($0.id) }
         }
@@ -499,6 +487,13 @@ struct BrowserSettingsView: View {
       set: { profileNameEdits[profile.id] = $0 })
   }
 
+  private func profileColorBinding(_ profile: BrowserSettingsProfile) -> Binding<ProfileColorChoice>
+  {
+    Binding(
+      get: { profiles.first(where: { $0.id == profile.id })?.color ?? profile.color },
+      set: { _ = onSetProfileColor(profile.id, $0) })
+  }
+
   private func saveProfileName(_ profile: BrowserSettingsProfile) {
     guard let name = profileNameEdits[profile.id],
       name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
@@ -512,9 +507,9 @@ struct BrowserSettingsView: View {
 
 }
 
-private struct ConnectedAccountRow: View {
+struct ConnectedAccountRow: View {
   let account: ConnectedAccount
-  let disconnect: () -> Void
+  var disconnect: (() -> Void)?
 
   var body: some View {
     HStack(spacing: 10) {
@@ -533,7 +528,7 @@ private struct ConnectedAccountRow: View {
           .font(.caption).foregroundStyle(.secondary).lineLimit(1)
       }
       Spacer(minLength: 0)
-      Button("Disconnect", action: disconnect)
+      if let disconnect { Button("Disconnect", action: disconnect) }
     }
   }
 }

@@ -54,6 +54,34 @@ struct ProfileAccountsTests {
     #expect(MicrosoftSignInPage.email(in: okta, pageText: "Continue") == "worker@acme.test")
   }
 
+  @Test func microsoftSignInReadsEmailOnItsOwnPagesAndOnCompanyIdentityProviders() {
+    let pages = [
+      "https://login.live.com/oauth20_authorize.srf",
+      "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+      "https://acme.okta.com/app/office365/sso/wsfed/passive",
+      "https://sts.acme.test/adfs/ls/",
+      "https://sso.connect.pingidentity.com/sso/as/authorization.oauth2",
+    ]
+    for page in pages {
+      #expect(MicrosoftSignInPage.mayShowAccountEmail(URL(string: page)!), "\(page)")
+    }
+    let notIdentityProviders = [
+      "https://m365.cloud.microsoft/login", "https://www.microsoft365.com/login",
+      "https://account.live.com/", "https://www.office.com/", "http://sso.acme.test/adfs/ls/",
+    ]
+    for page in notIdentityProviders {
+      #expect(!MicrosoftSignInPage.isIdentityProviderPage(URL(string: page)!), "\(page)")
+    }
+    let signIn = URL(string: "https://login.microsoftonline.com/common/login")!
+    #expect(
+      MicrosoftSignInPage.email(in: signIn, pageText: "  person@outlook.com\n")
+        == "person@outlook.com")
+    #expect(MicrosoftSignInPage.email(in: signIn, pageText: "Sign in") == nil)
+    #expect(MicrosoftSignInPage.email(in: signIn, pageText: "a@b@c.test") == nil)
+    #expect(MicrosoftSignInPage.emailScript.contains("#mectrl_currentAccount_secondary"))
+    #expect(MicrosoftSignInPage.emailScript.contains("#userNameInput"))
+  }
+
   @Test @MainActor func accountsPersistPerProfileWithOnePerProvider() {
     let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")
     defer { try? FileManager.default.removeItem(at: file) }

@@ -23,7 +23,8 @@ struct SpaceMenuContent: View {
         }
       }
       Divider()
-      Button("New Profile…") { store.spacePendingNewProfile = space.id }
+      Button("New Profile…") { store.onNewProfile?(space.id) }
+        .disabled(store.onNewProfile == nil)
     }
     Divider()
     Button("New Folder") {
@@ -45,7 +46,6 @@ struct SpaceMenuContent: View {
 /// views, and any dialog attached to them, as soon as it closes.
 struct SpaceMenuDialogs: ViewModifier {
   let store: BrowserStore
-  @State private var profileName = ""
 
   func body(content: Content) -> some View {
     content
@@ -58,15 +58,6 @@ struct SpaceMenuDialogs: ViewModifier {
       } message: { id in
         Text(store.spaceRemovalImpact(id).message)
       }
-      .alert(
-        "New Profile", isPresented: isPending(\.spacePendingNewProfile),
-        presenting: store.spacePendingNewProfile
-      ) { id in
-        TextField("Profile name", text: $profileName)
-        Button("Cancel", role: .cancel) {}
-        Button("Create") { _ = store.createProfileAndAssign(id, name: profileName) }
-      }
-      .onChange(of: store.spacePendingNewProfile) { profileName = "" }
   }
 
   private func space(_ id: UUID?) -> BrowserSpace? {

@@ -52,45 +52,12 @@ struct BrowserWindow: View {
         .clipped()
         .animation(reduceMotion ? nil : .spring(duration: 0.3), value: store.libraryDrawerSection)
       }
-      if store.libraryDrawerSection == nil {
-        if !store.sidebarIsVisible {
-          HStack(spacing: 0) {
-            Color.clear
-              .contentShape(Rectangle())
-              .frame(width: 6)
-              .onHover { inside in
-                if inside { sidebarVisibility.pointerEnteredEdge() }
-              }
-            Spacer(minLength: 0)
-          }
-        }
-        HStack(spacing: 0) {
-          BrowserSidebar(store: store)
-            .frame(width: BrowserChromeLayout.sidebarWidth)
-            .offset(x: sidebarVisibility == .hidden ? -BrowserChromeLayout.sidebarWidth : 0)
-            .allowsHitTesting(sidebarVisibility != .hidden)
-            .accessibilityHidden(sidebarVisibility == .hidden)
-            .onHover { inside in
-              if !inside { sidebarVisibility.pointerLeftSidebar() }
-            }
-          Spacer(minLength: 0)
-        }
-        if store.sidebarIsVisible {
-          TitlebarSidebarToggle(store: store)
-        }
-      }
+      sidebarLayer
       if store.commandIsOpen {
         Color.black.opacity(0.16)
           .ignoresSafeArea()
           .onTapGesture { store.dismissCommand() }
           .transition(.opacity)
-      }
-      if let coordinator = store.engine?.passwordFill,
-        BrowserEngine.passwordFillInputAvailable(in: store),
-        coordinator.showingPicker || coordinator.message != nil
-      {
-        PasswordFillOverlay(coordinator: coordinator)
-          .zIndex(3)
       }
 
     }
@@ -137,7 +104,6 @@ struct BrowserWindow: View {
     }
     .onChange(of: store.commandIsOpen) { _, isOpen in
       if isOpen {
-        store.engine?.passwordFill?.cancel()
         store.engine?.extensionPanel = nil
       }
       if !isOpen && store.pageFind == nil {
@@ -148,22 +114,13 @@ struct BrowserWindow: View {
         }
       }
     }
-    .onChange(of: store.sheet?.id) { _, newValue in
-      if newValue != nil { store.engine?.passwordFill?.cancel() }
-    }
     .onChange(of: store.pageFind?.id) { _, newValue in
       if newValue != nil {
-        store.engine?.passwordFill?.cancel()
         store.engine?.extensionPanel = nil
       }
     }
-    .onChange(of: store.libraryDrawerSection) { _, newValue in
-      if newValue != nil { store.engine?.passwordFill?.cancel() }
-    }
     .onExitCommand {
-      if let fill = store.engine?.passwordFill, fill.showingPicker || fill.message != nil {
-        fill.cancel()
-      } else if store.libraryDrawerSection != nil {
+      if store.libraryDrawerSection != nil {
         dismissLibraryDrawerAndFocusPage()
       }
     }
@@ -260,6 +217,40 @@ struct BrowserWindow: View {
 
   /// An overlay, so it never affects window layout, that takes no clicks while the launcher is
   /// closed. The panel is inserted inside the reader so its scale transition anchors on the panel.
+  private var sidebarLayer: AnyView {
+    AnyView(
+      Group {
+        if store.libraryDrawerSection == nil {
+          if !store.sidebarIsVisible {
+            HStack(spacing: 0) {
+              Color.clear
+                .contentShape(Rectangle())
+                .frame(width: 6)
+                .onHover { inside in
+                  if inside { sidebarVisibility.pointerEnteredEdge() }
+                }
+              Spacer(minLength: 0)
+            }
+          }
+          HStack(spacing: 0) {
+            BrowserSidebar(store: store)
+              .frame(width: BrowserChromeLayout.sidebarWidth)
+              .offset(x: sidebarVisibility == .hidden ? -BrowserChromeLayout.sidebarWidth : 0)
+              .allowsHitTesting(sidebarVisibility != .hidden)
+              .accessibilityHidden(sidebarVisibility == .hidden)
+              .onHover { inside in
+                if !inside { sidebarVisibility.pointerLeftSidebar() }
+              }
+            Spacer(minLength: 0)
+          }
+          if store.sidebarIsVisible {
+            TitlebarSidebarToggle(store: store)
+          }
+        }
+      }
+    )
+  }
+
   private var commandPanelLayer: some View {
     GeometryReader { geometry in
       if store.commandIsOpen {

@@ -1,19 +1,11 @@
-# Bitwarden compatibility boundaries
+# Bitwarden extension compatibility
 
-The extension and native password-manager integrations are separate. Extension tests do not establish native SDK, Keychain, form-fill, or vendor compatibility. See [[Native_Password_Manager_Options]].
-
-An opt-in fixture installs the signed Chrome Web Store extension into a disposable Profile and exercises its fresh-install onboarding and restart behavior:
+Bitwarden is supported as a regular Chromium extension through Shaar's global extension support. The compatibility probe installs the signed Chrome Web Store extension into a disposable Profile and checks its onboarding and restart behavior:
 
 ```sh
 bash scripts/test-engine.sh --bitwarden
 ```
 
-The fixture does not enter credentials or access an existing vault. A separate timing control delays its first onboarding input:
+The probe does not enter vault credentials or access an existing account. Results cover this extension flow only; they do not establish every Bitwarden feature or vendor support commitment.
 
-```sh
-bash scripts/test-engine.sh --bitwarden-onboarding-control
-```
-
-The control is diagnostic only; its result cannot satisfy clean first-click acceptance. Synthetic vault fixtures cover login, lock/unlock, Profile binding, and restart in isolated test accounts. They do not establish vendor autofill/save/update, passkeys, native messaging, Touch ID, side panels, company authentication, or real-service compatibility.
-
-Related: [[Extension_Consent]], [[Native_Vault_Session_Boundary]], [[Project_State]].
+Related: [[Extension_Consent]], [[Extension_Storage_Verification]], [[Project_State]].

@@ -15,7 +15,6 @@ final class EngineProbe {
   private let includeBitwarden: Bool
   private let bitwardenOnboardingControl: Bool
   private let probeTLS: ProbeTLSConfiguration?
-  private let bitwardenVaultCredentials: VaultProbeCredentials?
   private let awaitAbruptTermination: Bool
   private let savedTabCapacityMode: Bool
   private let externalAppConsentMode: Bool
@@ -55,7 +54,6 @@ final class EngineProbe {
   private init(
     root: URL, fixture: URL, phase: String, output: URL, includeBitwarden: Bool,
     bitwardenOnboardingControl: Bool, probeTLS: ProbeTLSConfiguration?,
-    bitwardenVaultCredentials: VaultProbeCredentials?,
     awaitAbruptTermination: Bool, expectAbruptRecovery: Bool, savedTabCapacityMode: Bool,
     externalAppConsentMode: Bool, privateWindowMode: Bool, privateWindowRunID: String?
   ) throws {
@@ -65,7 +63,6 @@ final class EngineProbe {
     self.includeBitwarden = includeBitwarden
     self.bitwardenOnboardingControl = bitwardenOnboardingControl
     self.probeTLS = probeTLS
-    self.bitwardenVaultCredentials = bitwardenVaultCredentials
     self.awaitAbruptTermination = awaitAbruptTermination
     self.savedTabCapacityMode = savedTabCapacityMode
     self.externalAppConsentMode = externalAppConsentMode
@@ -144,7 +141,6 @@ final class EngineProbe {
       }
       let includeBitwarden = arguments.contains("--bitwarden")
       let bitwardenOnboardingControl = arguments.contains("--bitwarden-onboarding-control")
-      let bitwardenVault = arguments.contains("--bitwarden-vault")
       let probeTLS =
         arguments.contains("--probe-fixture-tls")
         ? try ProbeTLSConfiguration.load(root: root) : nil
@@ -162,7 +158,7 @@ final class EngineProbe {
       }
       let noLaunchGuard = arguments.contains("--ardia-test-external-protocol-no-launch")
       let conflictingFlags = [
-        "--bitwarden", "--bitwarden-onboarding-control", "--bitwarden-vault",
+        "--bitwarden", "--bitwarden-onboarding-control",
         "--probe-fixture-tls", "--probe-await-abrupt-termination", "--probe-expect-abrupt-recovery",
         "--probe-saved-tab-capacity",
         "--probe-private-window",
@@ -181,20 +177,12 @@ final class EngineProbe {
         !expectAbruptRecovery || (phase == "restart" && !includeBitwarden),
         !savedTabCapacityMode
           || (!includeBitwarden && probeTLS == nil
-            && !awaitAbruptTermination && !expectAbruptRecovery && !bitwardenVault),
-        BitwardenVaultFlags.valid(
-          enabled: bitwardenVault, bitwarden: includeBitwarden,
-          onboardingControl: bitwardenOnboardingControl, fixtureTLS: probeTLS != nil,
-          awaitAbruptTermination: awaitAbruptTermination,
-          expectAbruptRecovery: expectAbruptRecovery)
+            && !awaitAbruptTermination && !expectAbruptRecovery)
       else { throw ProbeFailure("Invalid engine probe mode flags.") }
-      let bitwardenVaultCredentials: VaultProbeCredentials? =
-        bitwardenVault
-        ? try VaultProbeCredentials.load(root: root, tls: probeTLS!) : nil
       let probe = try EngineProbe(
         root: root, fixture: fixture, phase: phase, output: output,
         includeBitwarden: includeBitwarden, bitwardenOnboardingControl: bitwardenOnboardingControl,
-        probeTLS: probeTLS, bitwardenVaultCredentials: bitwardenVaultCredentials,
+        probeTLS: probeTLS,
         awaitAbruptTermination: awaitAbruptTermination,
         expectAbruptRecovery: expectAbruptRecovery, savedTabCapacityMode: savedTabCapacityMode,
         externalAppConsentMode: externalAppConsentMode, privateWindowMode: privateWindowMode,
@@ -215,13 +203,11 @@ final class EngineProbe {
         deadline: .now()
           + (externalAppConsentMode
             ? 180
-            : bitwardenVault
-              ? 900
-              : includeBitwarden
-                ? 150
-                : savedTabCapacityMode
-                  ? 180
-                  : privateWindowMode ? 210 : 75)
+            : includeBitwarden
+              ? 150
+              : savedTabCapacityMode
+                ? 180
+                : privateWindowMode ? 210 : 75)
       ) {
         [weak probe] in
         probe?.finish(error: ProbeFailure("Engine probe timed out."))
@@ -232,10 +218,7 @@ final class EngineProbe {
       probe.auditNativeHostShutdown()
       return probe.passed ? code : 1
     } catch {
-      let message =
-        arguments.contains("--bitwarden-vault")
-        ? "Engine probe failed during redacted vault UI control."
-        : "Engine probe failed: \(error.localizedDescription)"
+      let message = "Engine probe failed: \(error.localizedDescription)"
       FileHandle.standardError.write(
         Data("\(message)\n".utf8))
       return 1
@@ -349,10 +332,8 @@ final class EngineProbe {
       bootstrapStage = .openingBeta
       try runtime.openTabID(tabB, profileID: profileB, url: fixture.absoluteString)
       bootstrapStage = .readingAlpha
-      try activateRestoredVaultFixture(tabA, profileID: profileA)
       let firstA = try await snapshot(tabA)
       bootstrapStage = .readingBeta
-      try activateRestoredVaultFixture(tabB, profileID: profileB)
       let firstB = try await snapshot(tabB)
       bootstrapStage = .ready
       if let expectedAfterTermination {
@@ -558,9 +539,6 @@ final class EngineProbe {
         checks += try await NativeSelectionProbe(
           primary: browserEngine, store: store, root: root, fixture: fixture, phase: phase
         ).run()
-        for (tab, profile) in [(tabA, profileA), (tabB, profileB), (sharedA, profileA)] {
-          try activateRestoredVaultFixture(tab, profileID: profile)
-        }
         fixtureStage = "Workspace"
         checks += try await WorkspaceProbe(
           primary: browserEngine, store: store, root: root, fixture: fixture, phase: phase
@@ -586,9 +564,7 @@ final class EngineProbe {
             runtime: runtime, engine: browserEngine, store: store,
             root: root, fixture: fixture, phase: phase,
             onboardingControl: bitwardenOnboardingControl,
-            spaceName: bitwardenVaultCredentials == nil
-              ? "Bitwarden store probe" : "Bitwarden vault probe",
-            vaultCredentials: bitwardenVaultCredentials
+            spaceName: "Bitwarden store probe"
           ).run()
         }
       }
@@ -621,26 +597,14 @@ final class EngineProbe {
     try png.write(to: root.appending(path: name), options: .atomic)
   }
 
-  private func activateRestoredVaultFixture(_ tabID: String, profileID: String) throws {
-    guard phase == "restart", bitwardenVaultCredentials != nil else { return }
-    guard let id = UUID(uuidString: tabID),
-      let space = store.session.spaces.first(where: { $0.tabs.contains(where: { $0.id == id }) }),
-      space.profileID.uuidString == profileID
-    else { throw ProbeFailure("Restored fixture tab lost its owning profile.") }
-    store.perform(.tab(space: space.id, tab: id))
-  }
-
   private func finish(error: Error?) {
     guard !finished else { return }
     finished = true
-    resultError =
-      bitwardenVaultCredentials == nil
-      ? error : error.map { _ in ProbeFailure("Vault UI stage failed.") }
+    resultError = error
     do { try nativeHostProbe?.prepareForQuit() } catch {
       resultError = ProbeFailure(
-        bitwardenVaultCredentials == nil
-          ? "\(resultError?.localizedDescription ?? "") Host quit snapshot: \(error.localizedDescription)"
-          : "Vault UI stage failed.")
+        "\(resultError?.localizedDescription ?? "") Host quit snapshot: \(error.localizedDescription)"
+      )
       localFixturesPassed = false
     }
     do { try nativeFavoritesProbe?.prepareForQuit() } catch {
@@ -695,9 +659,7 @@ final class EngineProbe {
     guard localFixturesPassed else { return }
     do { checks += try nativeHostProbe?.auditAfterQuit() ?? [] } catch {
       resultError = ProbeFailure(
-        bitwardenVaultCredentials == nil
-          ? "\(resultError?.localizedDescription ?? "") Host shutdown audit: \(error.localizedDescription)"
-          : "Vault UI stage failed."
+        "\(resultError?.localizedDescription ?? "") Host shutdown audit: \(error.localizedDescription)"
       )
       passed = false
       localFixturesPassed = false
@@ -721,11 +683,7 @@ final class EngineProbe {
     } else {
       capacityRunID = NSNull()
     }
-    if bitwardenVaultCredentials == nil {
-      errorReport = resultError.map { $0.localizedDescription } ?? NSNull()
-    } else {
-      errorReport = resultError == nil ? NSNull() : "Vault UI stage failed."
-    }
+    errorReport = resultError.map { $0.localizedDescription } ?? NSNull()
     let report: [String: Any] = [
       "phase": phase, "passed": passed, "chromiumVersion": runtime.chromiumVersion,
       "probeMode": privateWindowMode
@@ -737,7 +695,6 @@ final class EngineProbe {
       "savedTabCapacityProbe": savedTabCapacityMode,
       "savedTabCapacityRunID": capacityRunID,
       "bitwardenStoreProbe": includeBitwarden,
-      "bitwardenVaultProbe": bitwardenVaultCredentials != nil,
       "bitwardenOnboardingControl": bitwardenOnboardingControl,
       "externalAppConsentOnly": externalAppConsentMode,
       "externalAppConsentProbe": externalAppConsentMode,
@@ -751,8 +708,7 @@ final class EngineProbe {
       "bootstrapStage": bootstrapStage.rawValue,
       "fixtureStage": fixtureStage,
       "checkCount": checks.count,
-      "checks": bitwardenVaultCredentials == nil
-        ? checks : [],
+      "checks": checks,
       "error": errorReport,
       "scope":
         savedTabCapacityMode
@@ -762,9 +718,7 @@ final class EngineProbe {
           : privateWindowMode
             ? "Owned private-window fixture composed with normal engine fixture. No real account or vendor service acceptance."
             : includeBitwarden
-              ? (bitwardenVaultCredentials == nil
-                ? "Disposable fixtures plus a real Bitwarden store probe. See separate Bitwarden reports for passed and failed stages. No vault or Workspace credentials entered."
-                : "Redacted Bitwarden vault control probe. firstClickAcceptancePassed remains false.")
+              ? "Disposable fixtures plus a Bitwarden extension store probe. No account credentials entered."
               : "Disposable account and component-loaded MV3 fixtures. Store installation, Google Workspace and Bitwarden are not tested."
         ,
     ]
@@ -786,10 +740,7 @@ final class EngineProbe {
         }
       }
       resultError = ProbeFailure("Probe report write failed.")
-      let message =
-        bitwardenVaultCredentials == nil
-        ? "Probe report failed: \(error.localizedDescription)"
-        : "Vault probe report failed."
+      let message = "Probe report failed: \(error.localizedDescription)"
       FileHandle.standardError.write(
         Data(
           "\(message)\(staleReceiptRemains ? " Prior successful receipt could not be removed." : "")\n"

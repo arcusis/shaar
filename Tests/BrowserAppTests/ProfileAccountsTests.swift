@@ -53,18 +53,15 @@ struct ProfileAccountsTests {
 }
 
 extension ProfileAccountsTests {
-  @Test @MainActor func durableVaultSavesKeepConnectedAccounts() throws {
+  @Test @MainActor func profileAccountPreferencesPersistAcrossReload() throws {
     let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")
     defer { try? FileManager.default.removeItem(at: file) }
     let profile = UUID()
+    let account = ConnectedAccount(provider: .google, email: "member@example.test")
     let store = BrowserPreferencesStore(fileURL: file)
-    store.setAccount(ConnectedAccount(provider: .google, email: "alex@example.com"), for: profile)
-    let expected = store.nativeVaultPreferences(for: profile)
-    try store.persistNativeVaultAccountID(UUID(), for: profile, expected: expected)
+    store.setAccount(account, for: profile)
 
-    #expect(
-      BrowserPreferencesStore(fileURL: file).accounts(for: profile).map(\.email) == [
-        "alex@example.com"
-      ])
+    let reloaded = BrowserPreferencesStore(fileURL: file)
+    #expect(reloaded.accounts(for: profile) == [account])
   }
 }

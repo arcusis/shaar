@@ -22,7 +22,7 @@ Shaar is an independent project. It is not affiliated with, sponsored, or endors
 - [Chromium](https://www.chromium.org/): browser engine and web platform implementation.
 - [ungoogled-chromium](https://github.com/ungoogled-software/ungoogled-chromium): Chromium-derived project used as an upstream source for privacy-oriented Chromium changes and references.
 - [ArdiaCore](https://github.com/mantrakp04/ardia): pinned Chromium framework and native engine interfaces used by Shaar.
-- [Bitwarden](https://bitwarden.com/): password-manager compatibility and optional integration work. Third-party SDK components retain their own license and distribution terms.
+- [Bitwarden](https://bitwarden.com/): extension compatibility.
 - [Public Suffix List](https://publicsuffix.org/): public domain-boundary data used for registrable-domain decisions.
 - [Sparkle](https://sparkle-project.org/): software update framework.
 

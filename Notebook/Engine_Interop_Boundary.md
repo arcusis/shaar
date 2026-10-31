@@ -6,8 +6,8 @@ The adapter loads the framework, owns engine/profile/tab/window objects, returns
 
 Objective-C++ is an implementation choice, not a requirement for every browser feature. The upstream API is substantially Objective-C/C; a stable Swift-importable module could reduce wrapping. That alternative needs ABI, lifecycle and update evaluation before a rewrite. Keep feature state/UI in Swift and the engine adapter narrow.
 
-The repository's four JavaScript files are authored MV3 test-extension fixtures under Tests/Fixtures/ProfileExtension. They test browser behavior; the application shell is not a JavaScript UI. Swift probe code also evaluates page/extension expressions for diagnostics. A native browser still renders websites containing JavaScript, and native autofill can require renderer-side form handling.
+The repository's four JavaScript files are authored MV3 test-extension fixtures under Tests/Fixtures/ProfileExtension. They test browser behavior; the application shell is not a JavaScript UI. Swift probe code also evaluates page/extension expressions for diagnostics. A native browser still renders websites containing JavaScript,.
 
-Verification scaffolding currently shares application/bridge compilation with product code. Preserve the ownership and credential-safety checks, but separate probe-only responsibilities from normal product paths before distribution. A password-manager SDK would be a separate vendor integration and would not replace the browser-engine adapter.
+Verification scaffolding currently shares application/bridge compilation with product code. Keep probe-only responsibilities separate from normal product paths before distribution.
 
-Related: [[Browser_Architecture]], [[Native_Window_Ownership]], [[Native_Password_Manager_Options]], [[Source_And_Native_Verification]].
+Related: [[Browser_Architecture]], [[Native_Window_Ownership]], [[Source_And_Native_Verification]].

@@ -57,10 +57,6 @@ def record_bitwarden_summary(root, control_only):
                 or type(vendor.get('passed')) is not bool
                 or type(vendor.get('firstClickAcceptancePassed')) is not bool):
             raise RuntimeError('Bitwarden summary has missing or mismatched phase/mode evidence')
-        vault_probe = host.get('bitwardenVaultProbe')
-        if (('bitwardenVaultProbe' in host and type(vault_probe) is not bool)
-                or (vault_probe is True and not control_only)):
-            raise RuntimeError('Vault probe evidence requires explicit control mode')
         for report in (host, vendor):
             checks = report.get('checks')
             error = report.get('error')
@@ -77,7 +73,7 @@ def record_bitwarden_summary(root, control_only):
     summary = dict(schema=1, controlOnly=control_only, phases=observations,
                    firstClickAcceptancePassed=(not control_only and all(
                        p['passed'] and p['localFixturesPassed'] for p in observations)),
-                   scope='Signed-out onboarding only. No vault or company credentials tested.')
+                   scope='Signed-out extension onboarding only. No account credentials tested.')
     payload = json.dumps(summary, indent=2)
     temporary_path = None
     try:
@@ -655,7 +651,7 @@ def record_private_window_summary(root, *, listener_closed, child_receipts, proo
         if isinstance(main, dict):
             # Keep authored check descriptions and bounded stage, never raw error text.
             fields = ('phase', 'passed', 'chromiumVersion', 'probeMode', 'savedTabCapacityOnly',
-                      'savedTabCapacityProbe', 'bitwardenStoreProbe', 'bitwardenVaultProbe',
+                      'savedTabCapacityProbe', 'bitwardenStoreProbe',
                       'bitwardenOnboardingControl', 'externalAppConsentOnly',
                       'externalAppConsentProbe', 'privateWindowOnly', 'privateWindowProbe',
                       'fixtureTLSProbe', 'abruptRecoveryProbe', 'localFixturesPassed',
@@ -742,7 +738,6 @@ def validate_external_app_consent_report(root, phase, report, exit_code):
             or report.get('savedTabCapacityOnly') is not False
             or report.get('savedTabCapacityProbe') is not False
             or report.get('bitwardenStoreProbe') is not False
-            or report.get('bitwardenVaultProbe') is not False
             or report.get('bitwardenOnboardingControl') is not False
             or report.get('abruptRecoveryProbe') is not False
             or report.get('fixtureTLSProbe') is not False
@@ -846,7 +841,6 @@ def validate_saved_tab_capacity_report(root, phase, report, exit_code):
             or report.get('scope') != SAVED_TAB_CAPACITY_SCOPE
             or report.get('localFixturesPassed') is not False
             or report.get('bitwardenStoreProbe') is not False
-            or report.get('bitwardenVaultProbe') is not False
             or report.get('bitwardenOnboardingControl') is not False
             or report.get('fixtureTLSProbe') is not False
             or report.get('abruptRecoveryProbe') is not False

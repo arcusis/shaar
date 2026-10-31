@@ -4,8 +4,7 @@ Arc's macOS Settings window informs Shaar's native settings layout. The referenc
 
 Settings controls must correspond to implemented behavior. Profile owns browser and account data and preferences; Space owns tab organization and theme, and references a Profile. Spaces that intentionally share a Profile also share its account data and Profile preferences. Changing the selected Profile in Settings changes the preference target without switching any browser window's active account.
 
-Password-manager controls belong to the selected Profile. Show only providers with a supported integration. Turning integration off must leave ordinary browsing available. See [[Native_Password_Manager_Options]] for provider boundaries.
 
 Screenshots can establish static layout, not animation timing, keyboard focus, or physical input behavior. Verify those separately on supported macOS versions.
 
-Related: [[Profile_Space_Isolation]], [[Native_Password_Manager_Options]], [[Arc_Reference_Library]], [[Project_State]].
+Related: [[Profile_Space_Isolation]], [[Arc_Reference_Library]], [[Project_State]].

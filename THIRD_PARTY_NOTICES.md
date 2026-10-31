@@ -34,19 +34,3 @@ upstream license texts here; follow the listed source notices.
   [Public Suffix pin](ThirdParty/PublicSuffix/pin.json).
 - **License:** MPL-2.0.
 - **License text:** [ThirdParty/PublicSuffix/LICENSE](ThirdParty/PublicSuffix/LICENSE).
-
-## Optional native Bitwarden SDK build
-
-The standard `Package.swift` configuration does not link the native Bitwarden
-SDK. An opt-in local build can include a generated SDK package and its dynamic
-library.
-
-- **Component:** Bitwarden SDK internal source and generated native SDK.
-- **Source:** [Bitwarden SDK internal repository](https://github.com/bitwarden/sdk-internal),
-  commit `5cf919837e83b71c2508bf99344ea57cf5f84e88`, recorded in
-  [the lifecycle pin](ThirdParty/BitwardenLifecycleProbe/pin.json).
-- **License and terms:** unresolved for distribution. The generated package
-  stages upstream `LICENSE`, `LICENSE_GPL.txt`, `LICENSE_SDK.txt`, and
-  `DISCLAIMER.md` in `ThirdPartyNotices`; review and retain those exact files
-  before distributing an SDK-enabled build. The SDK is experimental and is not
-  part of the default app bundle.

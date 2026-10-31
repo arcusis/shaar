@@ -1,4 +1,5 @@
 import AppKit
+import BrowserCore
 import SwiftUI
 
 enum SpaceShortcut {
@@ -38,7 +39,7 @@ struct SpaceCommands: Commands {
       Button("Copy URL") {
         guard let url = store.session.selectedPage?.tab.url else { return }
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(url.absoluteString, forType: .string)
+        NSPasteboard.general.setString(CleanLink.clean(url).absoluteString, forType: .string)
       }
       .keyboardShortcut("c", modifiers: [.command, .shift])
       .disabled(store.session.selectedPage == nil)

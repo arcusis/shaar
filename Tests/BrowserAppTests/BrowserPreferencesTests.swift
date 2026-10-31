@@ -152,3 +152,42 @@ struct BrowserPreferencesTests {
     #expect(profiles.allSatisfy { reloaded.searchEngine(for: $0) == .duckDuckGo })
   }
 }
+
+extension BrowserPreferencesTests {
+  @Test func oversizedFilesArePreservedWithoutBeingParsed() throws {
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let fileURL = directory.appending(path: "preferences.json")
+    let original = Data(repeating: 0x20, count: 4 * 1024 * 1024 + 1)
+    try original.write(to: fileURL)
+
+    let store = BrowserPreferencesStore(fileURL: fileURL)
+    store.setSidebarInitiallyVisible(false)
+    #expect(store.storageNotice?.contains("exceed the supported size") == true)
+    #expect(try Data(contentsOf: fileURL) == original)
+  }
+
+  @Test func repinningAnExtensionMovesItToTheEnd() {
+    let store = BrowserPreferencesStore()
+    let profile = UUID()
+    let first = String(repeating: "a", count: 32)
+    let second = String(repeating: "b", count: 32)
+    store.setExtension(first, pinned: true, for: profile)
+    store.setExtension(second, pinned: true, for: profile)
+    store.setExtension(first, pinned: true, for: profile)
+    #expect(store.pinnedExtensionIDs(for: profile) == [second, first])
+    store.setExtension(first, pinned: false, for: profile)
+    store.setExtension(second, pinned: false, for: profile)
+    #expect(store.pinnedExtensionIDs(for: profile).isEmpty)
+  }
+
+  @Test func searchEnginesStayScopedToTheirProfile() {
+    let store = BrowserPreferencesStore()
+    let work = UUID()
+    store.setSearchEngine(.kagi, for: work)
+    store.setSearchEngine(.startpage, for: work)
+    #expect(store.searchEngine(for: work) == .startpage)
+    #expect(store.searchEngine(for: UUID()) == .google)
+  }
+}

@@ -24,3 +24,22 @@ import Testing
     browserExtension: browserExtension, kind: .install, permissions: [])
   #expect(unsafe == nil)
 }
+
+@Test func installKindsMapEngineValuesToConsentActions() {
+  #expect(ExtensionInstallKind(rawValue: "re-enable") == .reenable)
+  #expect(ExtensionInstallKind.install.actionTitle == "Add extension")
+  #expect(ExtensionInstallKind.permissions.actionTitle == "Allow permissions")
+  #expect(ExtensionInstallKind.reenable.actionTitle == "Enable extension")
+  #expect(ExtensionInstallKind.repair.actionTitle == "Repair extension")
+}
+
+@Test func extensionIDsUseChromiumAlphabetAndLength() {
+  #expect(BrowserExtension.isValidID("abcdefghijklmnopabcdefghijklmnop"))
+  #expect(!BrowserExtension.isValidID("ABCDEFGHIJKLMNOPABCDEFGHIJKLMNOP"))
+  #expect(!BrowserExtension.isValidID(String(repeating: "q", count: 32)))
+  #expect(!BrowserExtension.isValidID(String(repeating: "a", count: 33)))
+  #expect(
+    BrowserExtension(
+      id: String(repeating: "a", count: 32), name: "Example",
+      version: String(repeating: "1", count: 129)) == nil)
+}

@@ -123,3 +123,9 @@ private func bookmarkPayload(children: [[String: Any]]) -> [String: Any] {
     ],
   ]
 }
+
+@Test func librarySectionsAndErrorsHaveReadableTitles() {
+  #expect(LibrarySection.allCases.map(\.title) == ["Bookmarks", "History"])
+  #expect(LibraryDataError.invalidBookmarks.errorDescription?.contains("bookmark") == true)
+  #expect(LibraryDataError.invalidHistory.errorDescription?.contains("history") == true)
+}

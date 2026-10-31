@@ -187,3 +187,40 @@ private let legacySession = Data(
   #expect(session.selectedSpace.folderPath(to: child).allSatisfy { !$0.isCollapsed })
   #expect(session.spaces.flatMap(\.tabs).count == beforeCount)
 }
+
+@Test func renamingFolderTrimsNameAndRejectsBlankOrUnknownTargets() {
+  var session = BrowserSession.fresh()
+  let space = session.selectedSpaceID
+  let folder = session.addFolder(name: "Draft", in: space)!
+  let renamed = session.renameFolder(folder, in: space, name: "  Research \n")
+  #expect(renamed)
+  #expect(session.selectedSpace.folders.first?.name == "Research")
+  let before = session
+  let rejected = [
+    session.renameFolder(folder, in: space, name: "   "),
+    session.renameFolder(UUID(), in: space, name: "Missing"),
+    session.renameFolder(folder, in: UUID(), name: "Elsewhere"),
+  ]
+  #expect(rejected == [false, false, false])
+  #expect(session == before)
+}
+
+@Test func folderMoveBeforeTargetRequiresSiblingOutsideTheMovedSubtree() throws {
+  var session = BrowserSession.fresh()
+  let space = session.selectedSpaceID
+  let first = session.addFolder(name: "First", in: space)!
+  let second = session.addFolder(name: "Second", in: space)!
+  let child = session.addFolder(name: "Child", in: space, parentID: first)!
+  let before = session
+  let rejected = [
+    session.moveFolder(first, from: space, to: space, before: child),
+    session.moveFolder(second, from: space, to: space, before: child),
+    session.moveFolder(second, from: space, to: space, before: UUID()),
+  ]
+  #expect(rejected == [false, false, false])
+  #expect(session == before)
+  let moved = session.moveFolder(second, from: space, to: space, before: first)
+  #expect(moved)
+  #expect(session.selectedSpace.folders.filter { $0.parentID == nil }.map(\.id) == [second, first])
+  try session.validate()
+}

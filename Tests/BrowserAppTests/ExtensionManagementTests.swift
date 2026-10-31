@@ -86,3 +86,60 @@ struct ExtensionManagementTests {
     return try #require(bitmap.representation(using: .png, properties: [:]))
   }
 }
+
+extension ExtensionManagementTests {
+  @Test @MainActor func iconLoaderFallsBackToTheToolbarActionIcon() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let folder = root.appending(path: "\(validID)/1.0_0")
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    try png(size: 48).write(to: folder.appending(path: "action.png"))
+
+    try Data(#"{"action":{"default_icon":"action.png"}}"#.utf8)
+      .write(to: folder.appending(path: "manifest.json"))
+    #expect(ExtensionIconLoader.icon(for: validID, version: "1.0", in: root) != nil)
+
+    try Data(#"{"browser_action":{"default_icon":{"19":"missing.png","48":"action.png"}}}"#.utf8)
+      .write(to: folder.appending(path: "manifest.json"))
+    #expect(
+      ExtensionIconLoader.icon(for: validID, version: "1.0", in: root)?.representations.first?
+        .pixelsWide == 48)
+
+    try Data(#"{"name":"No icons"}"#.utf8).write(to: folder.appending(path: "manifest.json"))
+    #expect(ExtensionIconLoader.icon(for: validID, version: "1.0", in: root) == nil)
+    #expect(ExtensionIconLoader.icon(for: "../\(validID)", version: "1.0", in: root) == nil)
+  }
+
+  @Test func consentListsSiteAccessAndFlagsIncompletePermissions() {
+    #expect(
+      ExtensionConsentPermissions.displayValues(
+        permissions: ["storage"], hostPermissions: ["https://example.com/*"], complete: true)
+        == ["storage", "Site access: https://example.com/*"])
+    #expect(
+      ExtensionConsentPermissions.displayValues(
+        permissions: ["tabs"], hostPermissions: nil, complete: true)
+        == ["tabs", ExtensionConsentPermissions.unknownAccess])
+    #expect(
+      ExtensionConsentPermissions.displayValues(
+        permissions: [], hostPermissions: [], complete: false)
+        == [ExtensionConsentPermissions.unknownAccess])
+  }
+
+  @Test @MainActor func previewManagerListsEnabledPinsAndKeepsThemReadOnly() {
+    let profile = UUID()
+    let enabled = managed(id: String(repeating: "c", count: 32), enabled: true)
+    let disabled = managed(id: String(repeating: "d", count: 32), enabled: false)
+    let model = ExtensionManagerModel(
+      profileID: profile, extensions: [enabled, disabled],
+      pinnedIDs: [disabled.id, enabled.id, String(repeating: "e", count: 32)])
+    #expect(model.pinnedExtensions == [enabled])
+    model.setPinned(enabled.id, pinned: false)
+    #expect(model.pinnedIDs.contains(enabled.id))
+  }
+
+  private func managed(id: String, enabled: Bool) -> ManagedExtension {
+    ManagedExtension(
+      id: id, name: "Extension \(id.prefix(1))", version: "1.0", description: "",
+      enabled: enabled, mayDisable: true, permissions: [], hostPermissions: [])
+  }
+}

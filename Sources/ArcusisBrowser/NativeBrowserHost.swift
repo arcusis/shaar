@@ -60,6 +60,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   private var privateHost: PrivateBrowserHost?
   private var miniWindows: [String: MiniBrowserController] = [:]
   private var accountSignIns: [String: ProfileAccountSignIn] = [:]
+  private(set) var profileOnboarding: ProfileOnboardingWindow?
   private var pendingURLs: [URL] = []
   private var claimedPrimary = false
   private var started = false
@@ -154,11 +155,12 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     }
     settingsController?.setAccountHandlers(
       connect: { [weak self] profile, provider in
-        self?.runAccountSignIn(profile, provider: provider, purpose: .signIn)
+        self?.runSavedProfileSignIn(profile, provider: provider, purpose: .signIn)
       },
       disconnect: { [weak self] profile, provider in
-        self?.runAccountSignIn(profile, provider: provider, purpose: .signOut)
+        self?.runSavedProfileSignIn(profile, provider: provider, purpose: .signOut)
       })
+    settingsController?.setAddProfileHandler { [weak self] in self?.presentNewProfile() }
     installMenus()
     if presentation == .visible {
       for context in contexts.values where context.id != focused { context.window.orderFront(nil) }
@@ -381,6 +383,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     shortcutMonitor = nil
     privateHost?.detach()
     privateHost = nil
+    profileOnboarding?.close()
+    profileOnboarding = nil
     events.onWindowRequest = nil
     events.onWindowShowRequest = nil
     events.onNewTabWillAdopt = nil
@@ -404,35 +408,86 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     }
   }
 
-  /// Connect or disconnect a provider account inside the profile's own engine storage.
-  private func runAccountSignIn(
+  /// Connect or disconnect a provider account of a saved profile from Settings.
+  private func runSavedProfileSignIn(
     _ profileID: UUID, provider: AccountProvider, purpose: ProfileAccountSignIn.Purpose
   ) {
     guard
       let profile = workspace.workspace.catalog.profiles.first(where: { $0.id == profileID })
     else { return }
+    runAccountSignIn(profile, provider: provider, purpose: purpose) { [weak self] account in
+      guard let self else { return }
+      switch (purpose, account) {
+      case (.signIn, let account?): self.preferences.setAccount(account, for: profileID)
+      case (.signOut, _): self.preferences.removeAccount(provider, for: profileID)
+      default: break
+      }
+    }
+  }
+
+  /// Runs sign-in or sign-out inside the profile's own engine storage. The profile need not be
+  /// saved yet, so onboarding can connect accounts before it creates the profile.
+  private func runAccountSignIn(
+    _ profile: BrowserProfile, provider: AccountProvider, purpose: ProfileAccountSignIn.Purpose,
+    completion: @escaping (ConnectedAccount?) -> Void
+  ) {
     do {
       let flow = try ProfileAccountSignIn(
         events: events, profile: profile, provider: provider, purpose: purpose)
       let id = flow.engine.windowID
       accountSignIns[id] = flow
       flow.onFinished = { [weak self] account in
-        guard let self else { return }
-        switch (purpose, account) {
-        case (.signIn, let account?): self.preferences.setAccount(account, for: profileID)
-        case (.signOut, _): self.preferences.removeAccount(provider, for: profileID)
-        default: break
-        }
-        self.accountSignIns[id] = nil
+        self?.accountSignIns[id] = nil
+        completion(account)
       }
     } catch {
       report(error)
+      completion(nil)
     }
+  }
+
+  /// The single entry point for New Profile, from Settings or from a Space's profile menu. A
+  /// Space that asks gets the new profile once it is created.
+  func presentNewProfile(assigningSpace spaceID: UUID? = nil) {
+    if let profileOnboarding {
+      if presentation == .visible { profileOnboarding.show() }
+      return
+    }
+    let model = ProfileOnboardingModel(spaceID: spaceID, actions: profileOnboardingActions())
+    let onboarding = ProfileOnboardingWindow(model: model)
+    profileOnboarding = onboarding
+    if presentation == .visible { onboarding.show() }
+  }
+
+  private func profileOnboardingActions() -> ProfileOnboardingActions {
+    ProfileOnboardingActions(
+      connect: { [weak self] profile, provider, completion in
+        self?.runAccountSignIn(
+          profile, provider: provider, purpose: .signIn, completion: completion)
+      },
+      stopConnecting: { [weak self] in
+        guard let profileID = self?.profileOnboarding?.model.profileID else { return }
+        self?.cancelAccountSignIns(for: profileID)
+      },
+      create: { [workspace, preferences] draft in
+        try draft.create(in: workspace, preferences: preferences)
+      },
+      close: { [weak self] outcome in self?.profileOnboardingClosed(outcome) })
+  }
+
+  private func cancelAccountSignIns(for profileID: UUID) {
+    for flow in accountSignIns.values where flow.profileID == profileID { flow.cancel() }
+  }
+
+  private func profileOnboardingClosed(_ outcome: ProfileOnboardingModel.Outcome) {
+    profileOnboarding?.close()
+    profileOnboarding = nil
+    if case .created(let id) = outcome { settingsController?.selectProfile(id) }
   }
 
   @objc func handleURL(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) {
     guard let text = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue,
-      let url = URL(string: text), NavigationInput.isWebURL(url)
+      let url = IncomingURLPolicy.url(from: text)
     else { return }
     if !started {
       pendingURLs.append(url)
@@ -535,6 +590,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     store.launcherActions = LauncherActions(
       available: { [weak self] in self?.launcherCommands(inWindow: id) ?? [] },
       run: { [weak self] name in self?.performLauncherCommand(name, inWindow: id) })
+    store.onNewProfile = { [weak self] spaceID in self?.presentNewProfile(assigningSpace: spaceID) }
     engine.onClosed = { [weak self] quitting in self?.closed(id, quitting: quitting) }
     observe(context)
     if reconcile { engine.reconcile() }
@@ -927,8 +983,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
         return host.startupFailed ? 1 : code
       }
     } catch {
-      FileHandle.standardError.write(
-        Data("Browser startup failed: \(error.localizedDescription)\n".utf8))
+      FileHandle.standardError.write(Data("\(StartupFailureMessage.text(for: error))\n".utf8))
       return 1
     }
   }

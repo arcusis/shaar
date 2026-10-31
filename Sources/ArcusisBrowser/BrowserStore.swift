@@ -56,7 +56,6 @@ final class BrowserStore {
   /// Space a menu asked to delete; the window shows the confirmation.
   var spacePendingDeletion: UUID?
   /// Space a menu asked to give a new profile; the window shows the name prompt.
-  var spacePendingNewProfile: UUID?
   var spaceEditor: SpaceEditorRoute? {
     get {
       if case .space(let route) = sheet { return route }
@@ -109,7 +108,8 @@ final class BrowserStore {
   @ObservationIgnored var onStopFinding: ((UUID) -> Void)?
   @ObservationIgnored var onReloadPage: ((UUID, UUID) -> Bool)?
   @ObservationIgnored var onSetSpaceProfile: ((UUID, UUID) -> Bool)?
-  @ObservationIgnored var onCreateProfile: ((String) -> UUID?)?
+  /// Opens New Profile onboarding for a Space; nil when no host can present it.
+  @ObservationIgnored var onNewProfile: ((UUID) -> Void)?
   @ObservationIgnored var onSpaceRemovalImpact: ((UUID) -> SpaceRemovalImpact)?
   @ObservationIgnored private var presentedConsentID: String?
 
@@ -1047,17 +1047,6 @@ final class BrowserStore {
     session = updated
     save()
     return true
-  }
-
-  @discardableResult
-  func createProfileAndAssign(_ spaceID: UUID, name: String) -> Bool {
-    guard session.spaces.contains(where: { $0.id == spaceID }) else { return false }
-    if let onCreateProfile {
-      guard let id = onCreateProfile(name) else { return false }
-      return setSpaceProfile(spaceID, to: id)
-    }
-    guard let id = session.createProfile(name: name) else { return false }
-    return setSpaceProfile(spaceID, to: id)
   }
 
   private func discardReassignedSpacePages(from old: BrowserSession, to new: BrowserSession) {

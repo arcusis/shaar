@@ -144,3 +144,71 @@ import Testing
     #expect(workspace == beforeStaleRename)
   }
 }
+
+@Suite struct WorkspaceProfileColorTests {
+  @Test func createdAndUpdatedProfileColorsPersistThroughTheCatalog() throws {
+    var workspace = try BrowserWorkspace(session: .fresh())
+    let chosenID = UUID()
+    let custom = SpaceRGBColor(red: 18, green: 52, blue: 86)
+    let created = try workspace.createProfile(name: "Work", tint: .ocean, id: chosenID)
+    #expect(created == chosenID)
+    try workspace.setProfileColor(workspace.catalog.profiles[0].id, tint: nil, customRGB: custom)
+
+    let work = try #require(workspace.catalog.profiles.first { $0.id == chosenID })
+    #expect(work.tint == .ocean && work.customRGB == nil)
+    #expect(workspace.catalog.profiles[0].customRGB == custom)
+    #expect(workspace.windows[0].session.profiles == workspace.catalog.profiles)
+
+    try workspace.setProfileColor(chosenID, tint: nil, customRGB: nil)
+    #expect(workspace.catalog.profiles.first { $0.id == chosenID }?.tint == nil)
+
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let file = WorkspaceFile(
+      url: root.appending(path: "workspace.json"),
+      legacySessionURL: root.appending(path: "session.json"))
+    try file.save(workspace)
+    #expect(try file.load() == workspace)
+  }
+
+  @Test func profileCreationRejectsAnIdentityAlreadyInUse() throws {
+    var workspace = try BrowserWorkspace(session: .fresh())
+    let original = workspace
+    let existing = workspace.catalog.profiles[0].id
+    #expect(throws: WorkspaceError.self) {
+      try workspace.createProfile(name: "Duplicate", id: existing)
+    }
+    #expect(throws: WorkspaceError.self) {
+      try workspace.setProfileColor(UUID(), tint: .rose, customRGB: nil)
+    }
+    #expect(workspace == original)
+  }
+
+  @Test func catalogSavedBeforeProfileColorsDecodesWithoutColor() throws {
+    var workspace = try BrowserWorkspace(session: .fresh())
+    try workspace.setProfileColor(workspace.catalog.profiles[0].id, tint: .forest, customRGB: nil)
+    let object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(workspace))
+    var root = try #require(object as? [String: Any])
+    var catalog = try #require(root["catalog"] as? [String: Any])
+    catalog["profiles"] = try Self.withoutColors(catalog["profiles"])
+    root["catalog"] = catalog
+    let windows = try #require(root["windows"] as? [[String: Any]])
+    root["windows"] = try windows.map { window in
+      var window = window
+      var session = try #require(window["session"] as? [String: Any])
+      session["profiles"] = try Self.withoutColors(session["profiles"])
+      window["session"] = session
+      return window
+    }
+
+    let older = try JSONSerialization.data(withJSONObject: root)
+    let decoded = try JSONDecoder().decode(BrowserWorkspace.self, from: older)
+    #expect(decoded.catalog.profiles.allSatisfy { $0.tint == nil && $0.customRGB == nil })
+    #expect(decoded.catalog.profiles.map(\.id) == workspace.catalog.profiles.map(\.id))
+  }
+
+  private static func withoutColors(_ profiles: Any?) throws -> [[String: Any]] {
+    let profiles = try #require(profiles as? [[String: Any]])
+    return profiles.map { $0.filter { !["tint", "customRGB"].contains($0.key) } }
+  }
+}

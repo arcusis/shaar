@@ -101,7 +101,7 @@ enum SpaceEditorSavePolicy {
   }
 }
 
-private enum SpaceTintRGB {
+enum SpaceTintRGB {
   static func color(for tint: SpaceTint) -> SpaceRGBColor {
     switch tint {
     case .lavender: SpaceRGBColor(red: 0xA8, green: 0x99, blue: 0xD4)
@@ -110,4 +110,19 @@ private enum SpaceTintRGB {
     case .forest: SpaceRGBColor(red: 0x70, green: 0xA6, blue: 0x85)
     }
   }
+}
+
+/// Named colors offered next to the preset tints wherever a Space or profile color is picked.
+enum SpaceColorPalette {
+  static let extras: [(name: String, color: SpaceRGBColor)] = [
+    ("White", .init(red: 240, green: 234, blue: 228)),
+    ("Pink", .init(red: 237, green: 152, blue: 180)),
+    ("Purple", .init(red: 166, green: 112, blue: 160)),
+    ("Red", .init(red: 238, green: 83, blue: 100)),
+    ("Orange", .init(red: 255, green: 133, blue: 83)),
+    ("Yellow", .init(red: 255, green: 215, blue: 90)),
+    ("Green", .init(red: 54, green: 217, blue: 144)),
+    ("Blue", .init(red: 109, green: 188, blue: 215)),
+    ("Slate", .init(red: 103, green: 105, blue: 143)),
+  ]
 }

@@ -338,40 +338,60 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
     focusedWindowID = id
   }
 
-  /// Adds an unused account profile without changing any live window session state.
+  /// Adds an unused account profile without changing any live window session state. A caller
+  /// may choose the identity up front so engine storage prepared before creation stays attached.
   @discardableResult
-  public mutating func createProfile(name: String) throws -> UUID {
+  public mutating func createProfile(
+    name: String, tint: SpaceTint? = nil, customRGB: SpaceRGBColor? = nil, id: UUID = UUID()
+  ) throws -> UUID {
     let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !cleanName.isEmpty else { throw WorkspaceError.invalidState }
-    var draft = self
-    let profile = BrowserProfile(name: cleanName)
-    draft.catalog.profiles.append(profile)
-    var allocated = draft.allocatedIDs
-    for index in draft.windows.indices {
-      draft.windows[index] = try draft.project(draft.windows[index], allocated: &allocated)
+    guard !cleanName.isEmpty, !catalog.profiles.contains(where: { $0.id == id }) else {
+      throw WorkspaceError.invalidState
     }
-    try draft.validate()
+    var draft = self
+    draft.catalog.profiles.append(
+      BrowserProfile(id: id, name: cleanName, tint: tint, customRGB: customRGB))
+    try draft.projectAllWindows()
     self = draft
-    return profile.id
+    return id
   }
 
   /// Renames shared profile metadata while retaining its immutable identity.
   public mutating func renameProfile(_ id: UUID, name: String) throws {
     let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !cleanName.isEmpty, let index = catalog.profiles.firstIndex(where: { $0.id == id })
-    else { throw WorkspaceError.invalidState }
-    var draft = self
-    draft.catalog.profiles[index].name = cleanName
-    for windowIndex in draft.windows.indices {
-      guard draft.windows[windowIndex].session.profiles.contains(where: { $0.id == id }) else {
-        throw WorkspaceError.invalidState
-      }
-      var allocated = draft.allocatedIDs
-      draft.windows[windowIndex] = try draft.project(
-        draft.windows[windowIndex], allocated: &allocated)
+    guard !cleanName.isEmpty else { throw WorkspaceError.invalidState }
+    try updateProfile(id) { $0.name = cleanName }
+  }
+
+  /// Sets or clears a profile's color; a custom color takes precedence over the preset tint.
+  public mutating func setProfileColor(
+    _ id: UUID, tint: SpaceTint?, customRGB: SpaceRGBColor?
+  ) throws {
+    try updateProfile(id) { profile in
+      profile.tint = tint
+      profile.customRGB = customRGB
     }
-    try draft.validate()
+  }
+
+  private mutating func updateProfile(_ id: UUID, change: (inout BrowserProfile) -> Void) throws {
+    guard let index = catalog.profiles.firstIndex(where: { $0.id == id }) else {
+      throw WorkspaceError.invalidState
+    }
+    var draft = self
+    change(&draft.catalog.profiles[index])
+    guard draft.windows.allSatisfy({ $0.session.profiles.contains(where: { $0.id == id }) }) else {
+      throw WorkspaceError.invalidState
+    }
+    try draft.projectAllWindows()
     self = draft
+  }
+
+  private mutating func projectAllWindows() throws {
+    var allocated = allocatedIDs
+    for index in windows.indices {
+      windows[index] = try project(windows[index], allocated: &allocated)
+    }
+    try validate()
   }
 
   /// Deletes a profile and moves its Spaces to an existing profile atomically.
@@ -388,11 +408,7 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
     }
     draft.catalog.favorites.removeAll { $0.profileID == id }
     draft.catalog.profiles.removeAll { $0.id == id }
-    var allocated = draft.allocatedIDs
-    for index in draft.windows.indices {
-      draft.windows[index] = try draft.project(draft.windows[index], allocated: &allocated)
-    }
-    try draft.validate()
+    try draft.projectAllWindows()
     self = draft
   }
 

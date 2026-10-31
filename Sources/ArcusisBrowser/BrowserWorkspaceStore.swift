@@ -52,22 +52,44 @@ final class BrowserWorkspaceStore {
 
   @discardableResult
   func createProfile(name: String) throws -> UUID {
-    let id = try workspace.createProfile(name: name)
-    _ = writeSnapshot()
-    broadcast(excluding: nil)
+    try createProfile(BrowserProfile(name: name))
+  }
+
+  /// Creates the profile with its chosen identity and color, and optionally gives it a Space, as
+  /// one saved change.
+  @discardableResult
+  func createProfile(_ profile: BrowserProfile, assigningSpace spaceID: UUID? = nil) throws -> UUID
+  {
+    var updated = workspace
+    let id = try updated.createProfile(
+      name: profile.name, tint: profile.tint, customRGB: profile.customRGB, id: profile.id)
+    if let spaceID, try !updated.setSpaceProfile(spaceID, to: id) {
+      throw WorkspaceError.invalidState
+    }
+    workspace = updated
+    saveAndBroadcast()
     return id
   }
 
   func renameProfile(_ id: UUID, name: String) throws {
     try workspace.renameProfile(id, name: name)
-    _ = writeSnapshot()
-    broadcast(excluding: nil)
+    saveAndBroadcast()
+  }
+
+  func setProfileColor(_ id: UUID, tint: SpaceTint?, customRGB: SpaceRGBColor?) throws {
+    try workspace.setProfileColor(id, tint: tint, customRGB: customRGB)
+    saveAndBroadcast()
+  }
+
+  func setSpaceProfile(_ spaceID: UUID, to profileID: UUID) throws -> Bool {
+    guard try workspace.setSpaceProfile(spaceID, to: profileID) else { return false }
+    saveAndBroadcast()
+    return true
   }
 
   func deleteProfile(_ id: UUID, movingSpacesTo destinationID: UUID) throws {
     try workspace.deleteProfile(id, movingSpacesTo: destinationID)
-    _ = writeSnapshot()
-    broadcast(excluding: nil)
+    saveAndBroadcast()
   }
 
   func setGeometry(_ geometry: WorkspaceWindowGeometry, for id: UUID) throws {
@@ -93,19 +115,7 @@ final class BrowserWorkspaceStore {
       return self.changed(window.id, session: session, deferred: deferred)
     }
     stores[window.id]?.onSetSpaceProfile = { [weak self] spaceID, profileID in
-      guard let self else { return false }
-      do {
-        guard try self.workspace.setSpaceProfile(spaceID, to: profileID) else { return false }
-        _ = self.writeSnapshot()
-        self.broadcast(excluding: nil)
-        return true
-      } catch {
-        return false
-      }
-    }
-    stores[window.id]?.onCreateProfile = { [weak self] name in
-      guard let self else { return nil }
-      return try? self.createProfile(name: name)
+      (try? self?.setSpaceProfile(spaceID, to: profileID)) ?? false
     }
     stores[window.id]?.onSpaceRemovalImpact = { [weak self] id in
       let spaces =
@@ -154,6 +164,11 @@ final class BrowserWorkspaceStore {
       broadcast(excluding: id)
     }
     return ManagedSessionSaveResult(session: workspace.window(id)!.session, notice: storageNotice)
+  }
+
+  private func saveAndBroadcast() {
+    _ = writeSnapshot()
+    broadcast(excluding: nil)
   }
 
   @discardableResult

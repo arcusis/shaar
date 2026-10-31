@@ -15,18 +15,6 @@ struct SpaceThemePicker: View {
     _hexDraft = State(initialValue: appearance.wrappedValue.color.hex)
   }
 
-  private let extraColors: [(String, SpaceRGBColor)] = [
-    ("White", .init(red: 240, green: 234, blue: 228)),
-    ("Pink", .init(red: 237, green: 152, blue: 180)),
-    ("Purple", .init(red: 166, green: 112, blue: 160)),
-    ("Red", .init(red: 238, green: 83, blue: 100)),
-    ("Orange", .init(red: 255, green: 133, blue: 83)),
-    ("Yellow", .init(red: 255, green: 215, blue: 90)),
-    ("Green", .init(red: 54, green: 217, blue: 144)),
-    ("Blue", .init(red: 109, green: 188, blue: 215)),
-    ("Slate", .init(red: 103, green: 105, blue: 143)),
-  ]
-
   var body: some View {
     VStack(spacing: 12) {
       SpaceColorField(hsb: hsb) { update($0) }
@@ -54,9 +42,9 @@ struct SpaceThemePicker: View {
             selected: appearance.tint == tint && appearance.customRGB == nil
           ) { appearance.selectPreset(tint) }
         }
-        ForEach(extraColors, id: \.0) { item in
-          swatch(name: item.0, color: item.1, selected: appearance.customRGB == item.1) {
-            appearance.setCustom(item.1)
+        ForEach(SpaceColorPalette.extras, id: \.name) { item in
+          swatch(name: item.name, color: item.color, selected: appearance.customRGB == item.color) {
+            appearance.setCustom(item.color)
           }
         }
       }

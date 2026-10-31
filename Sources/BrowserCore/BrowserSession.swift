@@ -9,17 +9,21 @@ public struct BrowserProfile: Codable, Identifiable, Equatable, Sendable {
   public var name: String
   public var tint: SpaceTint?
   public var customRGB: SpaceRGBColor?
+  /// SF Symbol shown for the profile; nil uses the default person glyph.
+  public var symbol: String?
 
   public init(
-    id: UUID = UUID(), name: String, tint: SpaceTint? = nil, customRGB: SpaceRGBColor? = nil
+    id: UUID = UUID(), name: String, tint: SpaceTint? = nil, customRGB: SpaceRGBColor? = nil,
+    symbol: String? = nil
   ) {
     self.id = id
     self.name = name
     self.tint = tint
     self.customRGB = customRGB
+    self.symbol = symbol
   }
 
-  private enum CodingKeys: String, CodingKey { case id, name, tint, customRGB }
+  private enum CodingKeys: String, CodingKey { case id, name, tint, customRGB, symbol }
 
   public init(from decoder: Decoder) throws {
     let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -27,6 +31,7 @@ public struct BrowserProfile: Codable, Identifiable, Equatable, Sendable {
     name = try values.decode(String.self, forKey: .name)
     tint = try values.decodeIfPresent(SpaceTint.self, forKey: .tint)
     customRGB = try values.decodeIfPresent(SpaceRGBColor.self, forKey: .customRGB)
+    symbol = try values.decodeIfPresent(String.self, forKey: .symbol)
   }
 
   public func encode(to encoder: Encoder) throws {
@@ -35,6 +40,7 @@ public struct BrowserProfile: Codable, Identifiable, Equatable, Sendable {
     try values.encode(name, forKey: .name)
     try values.encodeIfPresent(tint, forKey: .tint)
     try values.encodeIfPresent(customRGB, forKey: .customRGB)
+    try values.encodeIfPresent(symbol, forKey: .symbol)
   }
 }
 

@@ -5,27 +5,40 @@
 import BrowserCore
 import SwiftUI
 
-struct SpaceThemePicker: View {
-  @Binding var appearance: SpaceAppearanceDraft
+/// A leading swatch for subjects whose color is optional, such as profiles.
+struct ThemeColorClearOption {
+  let isSelected: Bool
+  let select: () -> Void
+}
+
+/// Color field, hue slider, named swatches and a hex field, shared by the Space and profile
+/// editors.
+struct ThemeColorPicker: View {
+  @Binding var color: ThemeColorDraft
+  var clearOption: ThemeColorClearOption?
   var focusOnAppear = false
-  @State private var hsb: SpaceHSBColor
+  @State private var hsb: HSBColor
   @State private var hexDraft: String
   @FocusState private var fieldFocused: Bool
 
-  init(appearance: Binding<SpaceAppearanceDraft>, focusOnAppear: Bool = false) {
-    _appearance = appearance
+  init(
+    color: Binding<ThemeColorDraft>, clearOption: ThemeColorClearOption? = nil,
+    focusOnAppear: Bool = false
+  ) {
+    _color = color
+    self.clearOption = clearOption
     self.focusOnAppear = focusOnAppear
-    _hsb = State(initialValue: SpaceHSBColor(rgb: appearance.wrappedValue.color))
-    _hexDraft = State(initialValue: appearance.wrappedValue.color.hex)
+    _hsb = State(initialValue: HSBColor(rgb: color.wrappedValue.color))
+    _hexDraft = State(initialValue: color.wrappedValue.color.hex)
   }
 
   var body: some View {
     VStack(spacing: 12) {
-      SpaceColorField(hsb: hsb) { update($0) }
+      ThemeColorField(hsb: hsb) { update($0) }
         .frame(height: 200)
         .focusable()
         .focused($fieldFocused)
-      SpaceHueSlider(hsb: hsb) { update($0) }
+      ThemeHueSlider(hsb: hsb) { update($0) }
         .frame(height: 28)
       HStack(spacing: 10) {
         swatches
@@ -33,33 +46,48 @@ struct SpaceThemePicker: View {
       }
     }
     .onAppear { if focusOnAppear { fieldFocused = true } }
-    .onChange(of: appearance.color) { _, color in syncFromAppearance(color) }
+    .onChange(of: color.color) { _, value in syncFromDraft(value) }
   }
+
+  private var isCleared: Bool { clearOption?.isSelected == true }
 
   private var swatches: some View {
     ScrollView(.horizontal, showsIndicators: false) {
       HStack(spacing: 1) {
+        if let clearOption {
+          ThemeColorSwatch(
+            label: "No color", selected: clearOption.isSelected, action: clearOption.select
+          ) { NoColorMark() }
+        }
         ForEach(SpaceTint.allCases, id: \.self) { tint in
           swatch(
-            name: tint.rawValue.capitalized,
-            color: SpaceAppearanceDraft(tint: tint, customRGB: nil).color,
-            selected: appearance.tint == tint && appearance.customRGB == nil
-          ) { appearance.selectPreset(tint) }
+            name: tint.rawValue.capitalized, rgb: SpaceTintRGB.color(for: tint),
+            selected: isPresetSelected(tint)
+          ) { color.selectPreset(tint) }
         }
-        ForEach(SpaceColorPalette.extras, id: \.name) { item in
-          swatch(name: item.name, color: item.color, selected: appearance.customRGB == item.color) {
-            appearance.setCustom(item.color)
+        ForEach(ThemeColorPalette.extras, id: \.name) { item in
+          swatch(name: item.name, rgb: item.color, selected: isCustomSelected(item.color)) {
+            color.setCustom(item.color)
           }
         }
       }
       .padding(3)
     }
+    .mask(trailingFade)
+  }
+
+  /// Fades the last swatches so a row wider than its container reads as scrollable.
+  private var trailingFade: some View {
+    LinearGradient(
+      stops: [.init(color: .black, location: 0.85), .init(color: .clear, location: 1)],
+      startPoint: .leading, endPoint: .trailing)
   }
 
   private var hexField: some View {
     HStack(spacing: 6) {
       Circle().fill(Color(spaceRGB: hsb.rgb)).frame(width: 14, height: 14)
       TextField("Hex", text: $hexDraft)
+        .labelsHidden()
         .textFieldStyle(.plain)
         .font(.system(size: 12, design: .monospaced))
         .frame(width: 64)
@@ -71,45 +99,74 @@ struct SpaceThemePicker: View {
     .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 7))
     .overlay(
       RoundedRectangle(cornerRadius: 7)
-        .strokeBorder(appearance.canSubmit ? .clear : .red, lineWidth: 1))
+        .strokeBorder(color.canSubmit ? .clear : .red, lineWidth: 1))
+  }
+
+  private func isPresetSelected(_ tint: SpaceTint) -> Bool {
+    !isCleared && color.tint == tint && color.customRGB == nil
+  }
+
+  private func isCustomSelected(_ rgb: SpaceRGBColor) -> Bool {
+    !isCleared && color.customRGB == rgb
   }
 
   private func swatch(
-    name: String, color: SpaceRGBColor, selected: Bool, action: @escaping () -> Void
+    name: String, rgb: SpaceRGBColor, selected: Bool, action: @escaping () -> Void
   ) -> some View {
-    Button(action: action) {
-      Circle().fill(Color(spaceRGB: color))
-        .frame(width: 18, height: 18).padding(3)
-        .overlay(Circle().strokeBorder(selected ? Color.primary : .clear, lineWidth: 1.5))
+    ThemeColorSwatch(label: "\(name) color", selected: selected, action: action) {
+      Circle().fill(Color(spaceRGB: rgb))
     }
-    .buttonStyle(.plain)
-    .accessibilityLabel("\(name) sidebar color")
-    .accessibilityAddTraits(selected ? .isSelected : [])
   }
 
-  private func update(_ value: SpaceHSBColor) {
+  private func update(_ value: HSBColor) {
     hsb = value
     hexDraft = value.rgb.hex
-    appearance.setCustom(value.rgb)
+    color.setCustom(value.rgb)
   }
 
   /// Swatches and hex edits change the color from outside the field; keep the edited hue when
   /// the color already matches what the field wrote.
-  private func syncFromAppearance(_ color: SpaceRGBColor) {
-    guard color != hsb.rgb else { return }
-    hsb = SpaceHSBColor(rgb: color)
-    hexDraft = color.hex
+  private func syncFromDraft(_ value: SpaceRGBColor) {
+    guard value != hsb.rgb else { return }
+    hsb = HSBColor(rgb: value)
+    hexDraft = value.hex
   }
 
   private func commitHex() {
-    if !appearance.setHexDraft(hexDraft) { hexDraft = appearance.hexValue }
+    if !color.setHexDraft(hexDraft) { hexDraft = color.hexValue }
+  }
+}
+
+private struct ThemeColorSwatch<Mark: View>: View {
+  let label: String
+  let selected: Bool
+  let action: () -> Void
+  @ViewBuilder let mark: () -> Mark
+
+  var body: some View {
+    Button(action: action) {
+      mark()
+        .frame(width: 18, height: 18).padding(3)
+        .overlay(Circle().strokeBorder(selected ? Color.primary : .clear, lineWidth: 1.5))
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel(label)
+    .accessibilityAddTraits(selected ? .isSelected : [])
+  }
+}
+
+private struct NoColorMark: View {
+  var body: some View {
+    Circle().strokeBorder(Color.secondary, lineWidth: 1)
+      .overlay(Rectangle().fill(Color.secondary).frame(width: 1).rotationEffect(.degrees(45)))
+      .clipShape(Circle())
   }
 }
 
 /// Saturation left to right, brightness bottom to top, for the current hue.
-private struct SpaceColorField: View {
-  let hsb: SpaceHSBColor
-  let onChange: (SpaceHSBColor) -> Void
+private struct ThemeColorField: View {
+  let hsb: HSBColor
+  let onChange: (HSBColor) -> Void
 
   var body: some View {
     GeometryReader { geometry in
@@ -143,7 +200,7 @@ private struct SpaceColorField: View {
     .accessibilityAdjustableAction { direction in
       let delta = direction == .increment ? 0.05 : -0.05
       onChange(
-        SpaceHSBColor(hue: hsb.hue, saturation: hsb.saturation, brightness: hsb.brightness + delta))
+        HSBColor(hue: hsb.hue, saturation: hsb.saturation, brightness: hsb.brightness + delta))
     }
   }
 
@@ -162,9 +219,9 @@ private struct SpaceColorField: View {
 }
 
 /// Rainbow track with a large pill thumb, as in Arc's theme picker.
-private struct SpaceHueSlider: View {
-  let hsb: SpaceHSBColor
-  let onChange: (SpaceHSBColor) -> Void
+private struct ThemeHueSlider: View {
+  let hsb: HSBColor
+  let onChange: (HSBColor) -> Void
   private let hues = stride(from: 0.0, through: 1.0, by: 1.0 / 6).map {
     Color(hue: $0, saturation: 1, brightness: 1)
   }

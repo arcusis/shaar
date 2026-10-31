@@ -20,7 +20,7 @@ final class SpaceIconPickerVisualTests: XCTestCase {
   func testPickerShowsEveryColumnInLightAndDark() async throws {
     let root = try SidebarVisualCaptureSupport.prepare()
     for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
-      let picker = SpaceIconPicker(symbol: .constant("house"))
+      let picker = SymbolPicker(symbol: .constant("house"))
       let mounted = try MountedChromeSidebar(
         view: picker, size: NSSize(width: 330, height: 380), appearance: appearance)
       defer { mounted.close() }

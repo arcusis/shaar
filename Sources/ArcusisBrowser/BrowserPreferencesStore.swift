@@ -45,14 +45,15 @@ final class BrowserPreferencesStore {
     save()
   }
 
-  /// Google and Microsoft accounts signed in inside a profile, at most one per provider.
+  /// The Google or Microsoft account signed in inside a profile. Older preferences may list one
+  /// account per provider; new connections keep at most one.
   func accounts(for profileID: UUID) -> [ConnectedAccount] {
     connectedAccounts[profileID] ?? []
   }
 
+  /// Replaces any account the profile was connected to, whichever provider it came from.
   func setAccount(_ account: ConnectedAccount, for profileID: UUID) {
-    connectedAccounts[profileID] =
-      accounts(for: profileID).filter { $0.provider != account.provider } + [account]
+    connectedAccounts[profileID] = [account]
     save()
   }
 

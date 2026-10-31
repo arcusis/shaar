@@ -2,7 +2,6 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-import AppKit
 import BrowserCore
 import SwiftUI
 
@@ -27,103 +26,66 @@ struct ProfileColorChoice: Equatable {
     if let customRGB { return customRGB }
     return tint.map(SpaceTintRGB.color(for:))
   }
+
+  /// The picker always edits a concrete color, so an uncolored profile starts from the first
+  /// preset.
+  var draft: ThemeColorDraft {
+    ThemeColorDraft(tint: tint ?? .lavender, customRGB: customRGB)
+  }
+
+  /// Takes the picker's color unless its hex text does not parse; the field then returns to the
+  /// profile's current color.
+  mutating func apply(_ draft: ThemeColorDraft) {
+    guard draft.canSubmit else { return }
+    self = ProfileColorChoice(tint: draft.tint, customRGB: draft.customRGB)
+  }
 }
 
-/// The profile's person glyph, filled with its color when it has one.
+extension BrowserProfile {
+  static let defaultSymbol = "person.fill"
+
+  var displaySymbol: String { symbol ?? Self.defaultSymbol }
+}
+
+/// The profile's symbol, white on its color, or muted when it has no color.
 struct ProfileBadge: View {
   let color: SpaceRGBColor?
+  var symbol = BrowserProfile.defaultSymbol
   var size: CGFloat = 22
 
   var body: some View {
     if let color {
-      Image(systemName: "person.fill")
-        .font(.system(size: size * 0.5, weight: .semibold))
+      glyph
         .foregroundStyle(.white)
-        .frame(width: size, height: size)
         .background(Color(spaceRGB: color), in: Circle())
     } else {
-      Image(systemName: "person.crop.circle")
-        .font(.system(size: size * 0.85))
+      glyph
         .foregroundStyle(.secondary)
-        .frame(width: size, height: size)
+        .background(Color.primary.opacity(0.08), in: Circle())
     }
+  }
+
+  private var glyph: some View {
+    SymbolImage(symbol: symbol)
+      .font(.system(size: size * 0.5, weight: .semibold))
+      .frame(width: size, height: size)
   }
 }
 
-/// Swatches for no color, the preset tints and the named palette, plus a custom color well.
+/// The Space theme picker with a leading No color swatch, since a profile's color is optional.
 struct ProfileColorPicker: View {
   @Binding var color: ProfileColorChoice
-  /// Fixed columns keep the picker narrow enough for the Settings detail column.
-  private let columns = Array(repeating: GridItem(.fixed(24), spacing: 4), count: 8)
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      LazyVGrid(columns: columns, alignment: .leading, spacing: 4) {
-        noColorSwatch
-        ForEach(SpaceTint.allCases, id: \.self) { tint in
-          swatch(
-            name: tint.rawValue.capitalized, rgb: SpaceTintRGB.color(for: tint),
-            choice: ProfileColorChoice(tint: tint))
-        }
-        ForEach(SpaceColorPalette.extras, id: \.name) { item in
-          swatch(
-            name: item.name, rgb: item.color, choice: ProfileColorChoice(customRGB: item.color))
-        }
-      }
-      HStack(spacing: 8) {
-        Text("Custom color").foregroundStyle(.secondary)
-        ColorPicker("Custom color", selection: customColor, supportsOpacity: false)
-          .labelsHidden()
-          .frame(width: 44, height: 22)
-      }
-    }
+    ThemeColorPicker(
+      color: draft,
+      clearOption: ThemeColorClearOption(isSelected: color == .none) { color = .none }
+    )
     .accessibilityElement(children: .contain)
     .accessibilityLabel("Profile color")
   }
 
-  private var noColorSwatch: some View {
-    let mark = Circle().strokeBorder(Color.secondary, lineWidth: 1)
-      .overlay(Rectangle().fill(Color.secondary).frame(width: 1).rotationEffect(.degrees(45)))
-      .clipShape(Circle())
-    return selectableSwatch(name: "No color", mark: mark, selected: color == .none) {
-      color = .none
-    }
-  }
-
-  private func swatch(name: String, rgb: SpaceRGBColor, choice: ProfileColorChoice) -> some View {
-    let mark = Circle().fill(Color(spaceRGB: rgb))
-    return selectableSwatch(name: name, mark: mark, selected: color == choice) { color = choice }
-  }
-
-  private func selectableSwatch<Mark: View>(
-    name: String, mark: Mark, selected: Bool, action: @escaping () -> Void
-  ) -> some View {
-    Button(action: action) {
-      mark
-        .frame(width: 18, height: 18)
-        .padding(3)
-        .overlay(Circle().strokeBorder(selected ? Color.primary : .clear, lineWidth: 1.5))
-    }
-    .buttonStyle(.plain)
-    .accessibilityLabel(name)
-    .accessibilityAddTraits(selected ? .isSelected : [])
-  }
-
-  private var customColor: Binding<Color> {
-    Binding(
-      get: { color.rgb.map(Color.init(spaceRGB:)) ?? .gray },
-      set: { value in
-        if let rgb = SpaceRGBColor(color: value) { color = ProfileColorChoice(customRGB: rgb) }
-      })
-  }
-}
-
-extension SpaceRGBColor {
-  init?(color: Color) {
-    guard let srgb = NSColor(color).usingColorSpace(.sRGB) else { return nil }
-    let channel = { (value: CGFloat) in UInt8((min(1, max(0, value)) * 255).rounded()) }
-    self.init(
-      red: channel(srgb.redComponent), green: channel(srgb.greenComponent),
-      blue: channel(srgb.blueComponent))
+  private var draft: Binding<ThemeColorDraft> {
+    Binding(get: { color.draft }, set: { color.apply($0) })
   }
 }

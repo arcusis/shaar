@@ -12,7 +12,7 @@ import XCTest
 
 @MainActor
 @Test func appearanceDraftRejectsInvalidHexAndPickerComponents() {
-  var draft = SpaceAppearanceDraft(
+  var draft = ThemeColorDraft(
     tint: .lavender, customRGB: SpaceRGBColor(red: 18, green: 52, blue: 86))
   let accepted = draft.setHexDraft("#123ABC")
   #expect(accepted)
@@ -45,7 +45,7 @@ import XCTest
 
 @MainActor
 @Test func pickerClampsFiniteComponentsBeforeByteConversion() {
-  var draft = SpaceAppearanceDraft(tint: .lavender, customRGB: nil)
+  var draft = ThemeColorDraft(tint: .lavender, customRGB: nil)
   let accepted = draft.setCustomComponents(red: -0.5, green: 1.5, blue: 0.5)
   #expect(accepted)
   #expect(draft.color == SpaceRGBColor(red: 0, green: 255, blue: 128))

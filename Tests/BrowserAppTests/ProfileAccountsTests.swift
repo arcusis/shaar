@@ -86,20 +86,30 @@ struct ProfileAccountsTests {
     #expect(MicrosoftSignInPage.emailScript.contains("#userNameInput"))
   }
 
-  @Test @MainActor func accountsPersistPerProfileWithOnePerProvider() {
+  @Test @MainActor func aProfileKeepsOneAccountWhicheverProviderConnectsLast() {
     let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")
     defer { try? FileManager.default.removeItem(at: file) }
     let profile = UUID()
     let store = BrowserPreferencesStore(fileURL: file)
     store.setAccount(ConnectedAccount(provider: .google, email: "old@example.com"), for: profile)
     store.setAccount(ConnectedAccount(provider: .google, email: "new@example.com"), for: profile)
+    #expect(store.accounts(for: profile).map(\.email) == ["new@example.com"])
     store.setAccount(
       ConnectedAccount(provider: .microsoft, email: "work@example.com"), for: profile)
-    store.removeAccount(.microsoft, for: profile)
 
     let reloaded = BrowserPreferencesStore(fileURL: file)
-    #expect(reloaded.accounts(for: profile).map(\.email) == ["new@example.com"])
+    #expect(reloaded.accounts(for: profile).map(\.email) == ["work@example.com"])
     #expect(reloaded.accounts(for: UUID()).isEmpty)
+    reloaded.removeAccount(.microsoft, for: profile)
+    #expect(reloaded.accounts(for: profile).isEmpty)
+  }
+
+  @Test func connectButtonsHideOnceAnyProviderIsConnected() {
+    let google = ConnectedAccount(provider: .google, email: "alex@example.com")
+    let microsoft = ConnectedAccount(provider: .microsoft, email: "alex@example.org")
+    #expect(AccountProvider.connectable(alongside: []) == [.google, .microsoft])
+    #expect(AccountProvider.connectable(alongside: [google]).isEmpty)
+    #expect(AccountProvider.connectable(alongside: [microsoft]).isEmpty)
   }
 }
 

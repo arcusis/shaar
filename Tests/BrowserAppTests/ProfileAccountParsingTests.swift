@@ -19,6 +19,20 @@ struct ProfileAccountParsingTests {
     #expect(accounts.first?.provider == .google)
   }
 
+  @Test func googleAccountPhotosAcceptFullAndSchemeRelativeSecureAddresses() throws {
+    let body = """
+      ["gaia.l.a.r",[["gaia.l.a",1,"Alex","alex@example.com","//lh3.googleusercontent.com/a/alex=s48-c",1]]]
+      """
+    let account = try #require(GoogleAccountList.accounts(fromBody: body)?.first)
+    #expect(account.photoURL?.absoluteString == "https://lh3.googleusercontent.com/a/alex=s48-c")
+    #expect(
+      GoogleAccountList.photoURL(from: "https://lh3.googleusercontent.com/a/photo")?.host()
+        == "lh3.googleusercontent.com")
+    for rejected in ["", "http://lh3.googleusercontent.com/a/photo", "photo.jpg", "https://"] {
+      #expect(GoogleAccountList.photoURL(from: rejected) == nil, "\(rejected)")
+    }
+  }
+
   @Test func googleAccountListRejectsBodiesThatAreNotTheList() {
     for body in [#"{"error":"denied"}"#, #"["gaia.l.a.r"]"#, #"["gaia.l.a.r","entries"]"#, "[]"] {
       #expect(GoogleAccountList.accounts(fromBody: body) == nil)

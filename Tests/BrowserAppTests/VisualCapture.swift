@@ -39,6 +39,28 @@ enum VisualCapture {
     try data.write(to: url, options: options)
     return bitmap
   }
+
+  /// Lays the view out in a window that is never ordered on screen, then renders it.
+  @MainActor
+  @discardableResult
+  static func renderOffscreen<V: View>(
+    _ view: V, size: NSSize, appearance: NSAppearance.Name, to url: URL
+  ) throws -> NSBitmapImageRep {
+    let window = NSWindow(
+      contentRect: NSRect(origin: .zero, size: size), styleMask: [], backing: .buffered,
+      defer: false)
+    window.isReleasedWhenClosed = false
+    window.appearance = NSAppearance(named: appearance)
+    defer { window.close() }
+    let host = NSHostingView(rootView: view)
+    window.contentView = host
+    host.frame = NSRect(origin: .zero, size: size)
+    host.layoutSubtreeIfNeeded()
+    window.displayIfNeeded()
+    RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+    host.layoutSubtreeIfNeeded()
+    return try render(host, to: url)
+  }
 }
 
 enum VisualCaptureError: Error {

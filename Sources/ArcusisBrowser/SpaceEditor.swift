@@ -28,7 +28,7 @@ struct SpaceEditor: View {
   @Environment(\.dismiss) private var dismiss
   @State private var name: String
   @State private var symbol: String
-  @State private var appearance: SpaceAppearanceDraft
+  @State private var appearance: ThemeColorDraft
   @State private var sharedProfileID: UUID?
   @State private var deleteIsPresented = false
   @State private var iconIsPresented = false
@@ -45,29 +45,21 @@ struct SpaceEditor: View {
     _name = State(initialValue: space?.name ?? "")
     _symbol = State(initialValue: space?.symbol ?? "square.stack")
     _appearance = State(
-      initialValue: SpaceAppearanceDraft(
+      initialValue: ThemeColorDraft(
         tint: space?.tint ?? .lavender, customRGB: space?.customRGB))
   }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 14) {
       HStack(spacing: 12) {
-        Button {
-          iconIsPresented = true
-        } label: {
-          SpaceIcon(symbol: symbol).font(.system(size: 22, weight: .medium))
-            .frame(width: 48, height: 48)
-            .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Change Space Icon")
-        .popover(isPresented: $iconIsPresented) { SpaceIconPicker(symbol: $symbol) }
+        SymbolPickerButton(
+          symbol: $symbol, isPresented: $iconIsPresented, accessibilityLabel: "Change Space Icon")
         TextField("Space name", text: $name)
           .textFieldStyle(.plain).font(.title3.weight(.semibold))
           .focused($nameIsFocused).onSubmit { submit() }
           .accessibilityLabel("Space name")
       }
-      SpaceThemePicker(appearance: $appearance, focusOnAppear: store.spaceEditorFocus == .theme)
+      ThemeColorPicker(color: $appearance, focusOnAppear: store.spaceEditorFocus == .theme)
       if route.spaceID == nil { profileSection }
       if let error { Text(error).font(.caption).foregroundStyle(.red) }
       HStack(spacing: 10) {
@@ -116,7 +108,9 @@ struct SpaceEditor: View {
     VStack(alignment: .leading, spacing: 6) {
       Picker("Profile", selection: $sharedProfileID) {
         Text("New profile").tag(Optional<UUID>.none)
-        ForEach(store.session.profiles) { profile in Text(profile.name).tag(Optional(profile.id)) }
+        ForEach(store.session.profiles) { profile in
+          Label(profile.name, systemImage: profile.displaySymbol).tag(Optional(profile.id))
+        }
       }
       Text(
         sharedProfileID == nil

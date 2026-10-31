@@ -34,6 +34,7 @@ private final class BrowserSettingsState {
       let spaces = workspace.workspace.catalog.spaces.filter { $0.profileID == profile.id }
       return BrowserSettingsProfile(
         id: profile.id, name: profile.name, color: ProfileColorChoice(profile: profile),
+        symbol: profile.displaySymbol,
         spaces: spaces.map { BrowserSettingsSpace(id: $0.id, name: $0.name, symbol: $0.symbol) },
         accounts: preferences.accounts(for: profile.id))
     }
@@ -136,6 +137,14 @@ private final class BrowserSettingsState {
     } catch { return false }
   }
 
+  @discardableResult
+  func setProfileSymbol(_ id: UUID, to symbol: String) -> Bool {
+    do {
+      try workspace.setProfileSymbol(id, symbol: symbol)
+      return true
+    } catch { return false }
+  }
+
   func deleteProfile(_ id: UUID, movingSpacesTo destinationID: UUID) -> Bool {
     do {
       try workspace.deleteProfile(id, movingSpacesTo: destinationID)
@@ -162,6 +171,7 @@ private struct BrowserSettingsRoot: View {
       onAddProfile: state.onAddProfile,
       onRenameProfile: { state.renameProfile($0, name: $1) },
       onSetProfileColor: { state.setProfileColor($0, to: $1) },
+      onSetProfileSymbol: { state.setProfileSymbol($0, to: $1) },
       onDeleteProfile: { state.deleteProfile($0, movingSpacesTo: $1) },
       onOpenSpace: state.onOpenSpace,
       onConnectAccount: state.onConnectAccount,
@@ -247,6 +257,11 @@ final class BrowserSettingsController: NSObject {
   @discardableResult
   func setProfileColor(_ id: UUID, to color: ProfileColorChoice) -> Bool {
     state.setProfileColor(id, to: color)
+  }
+
+  @discardableResult
+  func setProfileSymbol(_ id: UUID, to symbol: String) -> Bool {
+    state.setProfileSymbol(id, to: symbol)
   }
 
   func show(for profileID: UUID? = nil) {

@@ -7,7 +7,7 @@ import CoreGraphics
 
 /// Hue, saturation and brightness kept separately while editing, so dark or gray colors keep
 /// the hue the user chose instead of collapsing to red.
-struct SpaceHSBColor: Equatable {
+struct HSBColor: Equatable {
   private(set) var hue: Double
   private(set) var saturation: Double
   private(set) var brightness: Double

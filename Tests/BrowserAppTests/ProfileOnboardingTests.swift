@@ -97,13 +97,49 @@ private struct CreationFailure: Error {}
     #expect(model.connecting == nil)
     #expect(model.stepAccount == workspaceAccount)
     #expect(model.canContinue && !model.canSkip)
+    #expect(recorder.drafts.isEmpty)
+  }
+
+  @Test func aConnectedAccountPassesOverTheOtherProvidersStep() {
+    let recorder = OnboardingRecorder()
+    let model = recorder.model()
+    model.name = "Work"
+    model.continueToNext()
+    model.connect(.google)
+    recorder.finishSignIn(ConnectedAccount(provider: .google, email: "alex@acme.test"))
 
     model.continueToNext()
-    model.connect(.microsoft)
+    #expect(model.step == .done)
+    model.back()
+    #expect(model.step == .google)
+    model.back()
+    #expect(model.step == .details)
+
+    let abandoned = recorder.model()
+    abandoned.name = "Client"
+    abandoned.continueToNext()
+    abandoned.skip()
+    abandoned.connect(.microsoft)
     recorder.finishSignIn(nil)
-    #expect(model.stepAccount == nil)
-    #expect(model.canSkip)
-    #expect(recorder.drafts.isEmpty)
+    #expect(abandoned.step == .microsoft)
+    #expect(abandoned.stepAccount == nil && abandoned.canSkip)
+    abandoned.back()
+    #expect(abandoned.step == .google)
+  }
+
+  @Test func doneCreatesTheProfileWithItsChosenSymbol() {
+    let recorder = OnboardingRecorder()
+    let model = recorder.model()
+    #expect(model.symbol == BrowserProfile.defaultSymbol)
+    model.name = "Studio"
+    model.symbol = "paintpalette"
+    model.continueToNext()
+    model.skip()
+    model.skip()
+    model.continueToNext()
+
+    #expect(recorder.drafts.map(\.symbol) == ["paintpalette"])
+    #expect(recorder.drafts.first?.profile.symbol == "paintpalette")
   }
 
   @Test func cancelCreatesNothingAndStopsARunningSignIn() {
@@ -235,6 +271,20 @@ private struct CreationFailure: Error {}
     #expect(settings.profiles.first?.color.rgb == SpaceRGBColor(red: 1, green: 2, blue: 3))
     #expect(!settings.setProfileColor(UUID(), to: custom))
     #expect(try file.load()?.catalog.profiles.first?.customRGB == custom.customRGB)
+  }
+
+  @Test func settingsShowAndEditTheProfileSymbol() throws {
+    let workspace = try BrowserWorkspaceStore(initialSession: .fresh())
+    let settings = BrowserSettingsController(
+      workspace: workspace, preferences: BrowserPreferencesStore(), presentation: .hiddenProbe)
+    let profileID = try #require(settings.profiles.first?.id)
+
+    #expect(settings.profiles.first?.symbol == BrowserProfile.defaultSymbol)
+    #expect(settings.setProfileSymbol(profileID, to: "star.fill"))
+    #expect(settings.profiles.first?.symbol == "star.fill")
+    #expect(!settings.setProfileSymbol(profileID, to: ""))
+    #expect(!settings.setProfileSymbol(UUID(), to: "star"))
+    #expect(workspace.workspace.catalog.profiles.first?.symbol == "star.fill")
   }
 
   @Test func presetColorResolvesToItsTintAndCustomColorWins() {

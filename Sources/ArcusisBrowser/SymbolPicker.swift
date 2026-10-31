@@ -5,7 +5,28 @@
 import AppKit
 import SwiftUI
 
-struct SpaceIconPicker: View {
+/// The editor's icon well; opens the symbol picker.
+struct SymbolPickerButton: View {
+  @Binding var symbol: String
+  @Binding var isPresented: Bool
+  let accessibilityLabel: String
+
+  var body: some View {
+    Button {
+      isPresented = true
+    } label: {
+      SymbolImage(symbol: symbol).font(.system(size: 22, weight: .medium))
+        .frame(width: 48, height: 48)
+        .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel(accessibilityLabel)
+    .popover(isPresented: $isPresented) { SymbolPicker(symbol: $symbol) }
+  }
+}
+
+/// Searchable grid of SF Symbols shared by the Space and profile editors.
+struct SymbolPicker: View {
   @Binding var symbol: String
   @Environment(\.dismiss) private var dismiss
   @State private var query = ""
@@ -23,7 +44,7 @@ struct SpaceIconPicker: View {
       .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
       ScrollView {
         LazyVStack(alignment: .leading, spacing: 12) {
-          ForEach(SpaceIconCatalog.sections(matching: query), id: \.name) { section in
+          ForEach(SymbolCatalog.sections(matching: query), id: \.name) { section in
             Text(section.name).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 34), spacing: 4)], spacing: 4) {
               ForEach(section.symbols, id: \.self) { value in iconButton(value) }
@@ -60,8 +81,8 @@ struct SpaceIconPicker: View {
   }
 }
 
-/// SF Symbols offered for Spaces, grouped like a small emoji picker.
-enum SpaceIconCatalog {
+/// SF Symbols offered for Spaces and profiles, grouped like a small emoji picker.
+enum SymbolCatalog {
   struct Section {
     let name: String
     let symbols: [String]
@@ -241,7 +262,7 @@ enum SpaceIconCatalog {
   }
 }
 
-struct SpaceIcon: View {
+struct SymbolImage: View {
   let symbol: String
   var body: some View {
     if NSImage(systemSymbolName: symbol, accessibilityDescription: nil) != nil {

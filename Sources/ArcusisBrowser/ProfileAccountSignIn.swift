@@ -4,6 +4,7 @@
 
 import AppKit
 import BrowserCore
+import Observation
 import SwiftUI
 
 /// Signs a profile in to, or out of, a Google or Microsoft account in a window that uses that
@@ -18,8 +19,8 @@ final class ProfileAccountSignIn {
   let provider: AccountProvider
   let profileID: UUID
   private let purpose: Purpose
+  private let presentation = ProfileAccountSignInPresentation()
   private var capturedEmail: String?
-  private var requestedAccountList = false
   private var finished = false
   private var watcher: Task<Void, Never>?
   var onFinished: ((ConnectedAccount?) -> Void)?
@@ -46,7 +47,8 @@ final class ProfileAccountSignIn {
     engine = try BrowserEngine(events: events, windowID: id, store: store)
     let hosting = NSHostingView(
       rootView: ProfileAccountSignInView(
-        store: store, engine: engine, title: "Sign in to \(provider.title) for \(profile.name)"
+        store: store, engine: engine, presentation: presentation,
+        title: "Sign in to \(provider.title) for \(profile.name)"
       ) { [weak self] in self?.cancel() })
     hosting.frame = content.bounds
     hosting.autoresizingMask = [.width, .height]
@@ -83,8 +85,8 @@ final class ProfileAccountSignIn {
   }
 
   private func watchGoogle(_ url: URL) async {
-    if provider.isSignedInPage(url), !requestedAccountList {
-      requestedAccountList = engine.navigateCurrentPage(to: GoogleAccountList.url)
+    if provider.isSignedInPage(url), !presentation.readsAccountList {
+      presentation.readsAccountList = engine.navigateCurrentPage(to: GoogleAccountList.url)
     } else if url.host() == GoogleAccountList.url.host(),
       url.path() == GoogleAccountList.url.path(),
       let body = await evaluate(GoogleAccountList.readScript),
@@ -92,7 +94,9 @@ final class ProfileAccountSignIn {
     {
       if let account = accounts.first { return finish(account) }
       // Google left sign-in without a session; return to sign-in instead of showing the raw list.
-      if engine.navigateCurrentPage(to: provider.signInURL) { requestedAccountList = false }
+      if engine.navigateCurrentPage(to: provider.signInURL) {
+        presentation.readsAccountList = false
+      }
     }
   }
 
@@ -136,9 +140,17 @@ final class ProfileAccountSignIn {
   }
 }
 
+/// Google answers a plain visit to its account list with a 400 page, so the page stays covered
+/// from that request until the window closes or sign-in starts over.
+@MainActor @Observable
+private final class ProfileAccountSignInPresentation {
+  var readsAccountList = false
+}
+
 private struct ProfileAccountSignInView: View {
   let store: BrowserStore
   let engine: BrowserEngine
+  let presentation: ProfileAccountSignInPresentation
   let title: String
   let cancel: () -> Void
 
@@ -156,7 +168,9 @@ private struct ProfileAccountSignInView: View {
       Divider()
       ZStack {
         Color(nsColor: .textBackgroundColor)
-        if let id = store.session.selectedSpace.selectedTabID, engine.pages[id] != nil {
+        if presentation.readsAccountList {
+          ProgressView("Finishing sign-in…")
+        } else if let id = store.session.selectedSpace.selectedTabID, engine.pages[id] != nil {
           ChromiumPage(engine: engine, tabID: id)
         } else {
           ProgressView()

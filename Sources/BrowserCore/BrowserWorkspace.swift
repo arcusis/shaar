@@ -346,7 +346,8 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
   /// may choose the identity up front so engine storage prepared before creation stays attached.
   @discardableResult
   public mutating func createProfile(
-    name: String, tint: SpaceTint? = nil, customRGB: SpaceRGBColor? = nil, id: UUID = UUID()
+    name: String, tint: SpaceTint? = nil, customRGB: SpaceRGBColor? = nil, symbol: String? = nil,
+    id: UUID = UUID()
   ) throws -> UUID {
     let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !cleanName.isEmpty, !catalog.profiles.contains(where: { $0.id == id }) else {
@@ -354,7 +355,7 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
     }
     var draft = self
     draft.catalog.profiles.append(
-      BrowserProfile(id: id, name: cleanName, tint: tint, customRGB: customRGB))
+      BrowserProfile(id: id, name: cleanName, tint: tint, customRGB: customRGB, symbol: symbol))
     try draft.projectAllWindows()
     self = draft
     return id
@@ -375,6 +376,11 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
       profile.tint = tint
       profile.customRGB = customRGB
     }
+  }
+
+  public mutating func setProfileSymbol(_ id: UUID, symbol: String) throws {
+    guard !symbol.isEmpty else { throw WorkspaceError.invalidState }
+    try updateProfile(id) { $0.symbol = symbol }
   }
 
   private mutating func updateProfile(_ id: UUID, change: (inout BrowserProfile) -> Void) throws {

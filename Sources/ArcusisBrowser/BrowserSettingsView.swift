@@ -10,18 +10,21 @@ struct BrowserSettingsProfile: Identifiable {
   let id: UUID
   let name: String
   let color: ProfileColorChoice
+  let symbol: String
   let spaces: [BrowserSettingsSpace]
   let accounts: [ConnectedAccount]
   var spaceCount: Int { spaces.count }
   var spaceNames: [String] { spaces.map(\.name) }
 
   init(
-    id: UUID, name: String, color: ProfileColorChoice = .none, spaces: [BrowserSettingsSpace],
+    id: UUID, name: String, color: ProfileColorChoice = .none,
+    symbol: String = BrowserProfile.defaultSymbol, spaces: [BrowserSettingsSpace],
     accounts: [ConnectedAccount] = []
   ) {
     self.id = id
     self.name = name
     self.color = color
+    self.symbol = symbol
     self.spaces = spaces
     self.accounts = accounts
   }
@@ -90,6 +93,7 @@ struct BrowserSettingsView: View {
   let onAddProfile: () -> Void
   let onRenameProfile: (UUID, String) -> Bool
   let onSetProfileColor: (UUID, ProfileColorChoice) -> Bool
+  let onSetProfileSymbol: (UUID, String) -> Bool
   let onDeleteProfile: (UUID, UUID) -> Bool
   let onOpenSpace: (UUID) -> Void
   let onConnectAccount: (UUID, AccountProvider) -> Void
@@ -101,6 +105,7 @@ struct BrowserSettingsView: View {
   @State private var destinationID: UUID?
   @State private var selectedSection: BrowserSettingsSection
   @State private var profileNameEdits: [UUID: String] = [:]
+  @State private var profileSymbolPickerIsPresented = false
 
   init(
     profiles: [BrowserSettingsProfile], searchEngines: [BrowserSettingsChoice],
@@ -109,6 +114,7 @@ struct BrowserSettingsView: View {
     onAddProfile: @escaping () -> Void = {},
     onRenameProfile: @escaping (UUID, String) -> Bool = { _, _ in false },
     onSetProfileColor: @escaping (UUID, ProfileColorChoice) -> Bool = { _, _ in false },
+    onSetProfileSymbol: @escaping (UUID, String) -> Bool = { _, _ in false },
     onDeleteProfile: @escaping (UUID, UUID) -> Bool = { _, _ in false },
     onOpenSpace: @escaping (UUID) -> Void = { _ in },
     onConnectAccount: @escaping (UUID, AccountProvider) -> Void = { _, _ in },
@@ -127,6 +133,7 @@ struct BrowserSettingsView: View {
     self.onAddProfile = onAddProfile
     self.onRenameProfile = onRenameProfile
     self.onSetProfileColor = onSetProfileColor
+    self.onSetProfileSymbol = onSetProfileSymbol
     self.onDeleteProfile = onDeleteProfile
     self.onOpenSpace = onOpenSpace
     self.onConnectAccount = onConnectAccount
@@ -368,7 +375,7 @@ struct BrowserSettingsView: View {
             selectedProfileID = profile.id
           } label: {
             HStack(spacing: 9) {
-              ProfileBadge(color: profile.color.rgb)
+              ProfileBadge(color: profile.color.rgb, symbol: profile.symbol)
               VStack(alignment: .leading, spacing: 2) {
                 Text(profile.name).lineLimit(1)
                 Text(spaceCountLabel(profile.spaces.count)).font(.caption).foregroundStyle(
@@ -404,18 +411,18 @@ struct BrowserSettingsView: View {
   private func profileDetails(_ profile: BrowserSettingsProfile) -> some View {
     return Form {
       Section("Profile") {
-        HStack {
+        HStack(spacing: 12) {
+          SymbolPickerButton(
+            symbol: profileSymbolBinding(profile), isPresented: $profileSymbolPickerIsPresented,
+            accessibilityLabel: "Change Profile Icon")
           TextField("Name", text: profileNameBinding(profile))
             .accessibilityIdentifier("settings.renameProfile")
             .onSubmit { saveProfileName(profile) }
           Button("Save") { saveProfileName(profile) }
             .disabled(profileNameEdits[profile.id] == nil)
         }
-        VStack(alignment: .leading, spacing: 8) {
-          Text("Color")
-          ProfileColorPicker(color: profileColorBinding(profile))
-        }
-        .accessibilityIdentifier("settings.profileColor")
+        ProfileColorPicker(color: profileColorBinding(profile))
+          .accessibilityIdentifier("settings.profileColor")
         Picker("Search engine", selection: $selectedSearchEngine) {
           ForEach(searchEngines) { Text($0.title).tag($0.id) }
         }
@@ -434,25 +441,26 @@ struct BrowserSettingsView: View {
         }
       }
       Section {
-        ForEach(AccountProvider.allCases) { provider in
-          if let account = profile.accounts.first(where: { $0.provider == provider }) {
-            ConnectedAccountRow(account: account) { onDisconnectAccount(profile.id, provider) }
-          } else {
-            Button {
-              onConnectAccount(profile.id, provider)
-            } label: {
-              HStack(spacing: 10) {
-                if let logo = provider.logo {
-                  Image(nsImage: logo).resizable().frame(width: 18, height: 18)
-                }
-                Text("Connect \(provider.title)")
-                Spacer(minLength: 0)
-              }
-              .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("settings.connect.\(provider.rawValue)")
+        ForEach(profile.accounts, id: \.provider) { account in
+          ConnectedAccountRow(account: account) {
+            onDisconnectAccount(profile.id, account.provider)
           }
+        }
+        ForEach(AccountProvider.connectable(alongside: profile.accounts)) { provider in
+          Button {
+            onConnectAccount(profile.id, provider)
+          } label: {
+            HStack(spacing: 10) {
+              if let logo = provider.logo {
+                Image(nsImage: logo).resizable().frame(width: 18, height: 18)
+              }
+              Text("Connect \(provider.title)")
+              Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+          }
+          .buttonStyle(.plain)
+          .accessibilityIdentifier("settings.connect.\(provider.rawValue)")
         }
       } header: {
         Text("Accounts")
@@ -495,6 +503,12 @@ struct BrowserSettingsView: View {
       set: { _ = onSetProfileColor(profile.id, $0) })
   }
 
+  private func profileSymbolBinding(_ profile: BrowserSettingsProfile) -> Binding<String> {
+    Binding(
+      get: { profiles.first(where: { $0.id == profile.id })?.symbol ?? profile.symbol },
+      set: { _ = onSetProfileSymbol(profile.id, $0) })
+  }
+
   private func saveProfileName(_ profile: BrowserSettingsProfile) {
     guard let name = profileNameEdits[profile.id],
       name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
@@ -514,15 +528,7 @@ struct ConnectedAccountRow: View {
 
   var body: some View {
     HStack(spacing: 10) {
-      AsyncImage(url: account.photoURL) { image in
-        image.resizable().scaledToFill()
-      } placeholder: {
-        if let logo = account.provider.logo {
-          Image(nsImage: logo).resizable().padding(5)
-        }
-      }
-      .frame(width: 28, height: 28)
-      .clipShape(Circle())
+      AccountAvatar(account: account)
       VStack(alignment: .leading, spacing: 1) {
         Text(account.name ?? account.email).lineLimit(1)
         Text(account.name == nil ? account.provider.title : account.email)
@@ -531,6 +537,24 @@ struct ConnectedAccountRow: View {
       Spacer(minLength: 0)
       if let disconnect { Button("Disconnect", action: disconnect) }
     }
+  }
+}
+
+/// The account's photo, or the provider's mark while it loads, when it fails, or when the
+/// provider has none.
+private struct AccountAvatar: View {
+  let account: ConnectedAccount
+
+  var body: some View {
+    AsyncImage(url: account.photoURL) { phase in
+      if let image = phase.image {
+        image.resizable().scaledToFill()
+      } else if let logo = account.provider.logo {
+        Image(nsImage: logo).resizable().padding(5)
+      }
+    }
+    .frame(width: 28, height: 28)
+    .clipShape(Circle())
   }
 }
 

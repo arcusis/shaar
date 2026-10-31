@@ -19,7 +19,7 @@ enum ProfileOnboardingStep: Int, CaseIterable {
 
   var title: String {
     switch self {
-    case .details: "Name and color"
+    case .details: "Name, icon and color"
     case .google: "Connect Google"
     case .microsoft: "Connect Microsoft"
     case .done: "Ready"
@@ -35,11 +35,13 @@ struct ProfileDraft: Equatable {
   let id: UUID
   let name: String
   let color: ProfileColorChoice
+  var symbol = BrowserProfile.defaultSymbol
   let accounts: [ConnectedAccount]
   let spaceID: UUID?
 
   var profile: BrowserProfile {
-    BrowserProfile(id: id, name: name, tint: color.tint, customRGB: color.customRGB)
+    BrowserProfile(
+      id: id, name: name, tint: color.tint, customRGB: color.customRGB, symbol: symbol)
   }
 
   /// Creates the profile with the identity its sign-ins already used, records those accounts,
@@ -78,6 +80,7 @@ final class ProfileOnboardingModel {
   let spaceID: UUID?
   var name = ""
   var color = ProfileColorChoice.none
+  var symbol = BrowserProfile.defaultSymbol
   private(set) var step = ProfileOnboardingStep.details
   private(set) var accounts: [AccountProvider: ConnectedAccount] = [:]
   private(set) var connecting: AccountProvider?
@@ -122,7 +125,7 @@ final class ProfileOnboardingModel {
   }
 
   func back() {
-    guard canGoBack, let previous = step.previous else { return }
+    guard canGoBack, let previous = reachableStep(from: step, moving: \.previous) else { return }
     failure = nil
     step = previous
   }
@@ -144,9 +147,25 @@ final class ProfileOnboardingModel {
   }
 
   private func advance() {
-    guard let next = step.next else { return }
+    guard let next = reachableStep(from: step, moving: \.next) else { return }
     failure = nil
     step = next
+  }
+
+  /// A profile has one account, so once a provider is connected the other provider's step is
+  /// passed over in both directions.
+  private func reachableStep(
+    from start: ProfileOnboardingStep,
+    moving move: (ProfileOnboardingStep) -> ProfileOnboardingStep?
+  ) -> ProfileOnboardingStep? {
+    var candidate = move(start)
+    while let current = candidate, isPassedOver(current) { candidate = move(current) }
+    return candidate
+  }
+
+  private func isPassedOver(_ step: ProfileOnboardingStep) -> Bool {
+    guard let provider = step.provider, let connected = accounts.keys.first else { return false }
+    return provider != connected
   }
 
   private func connectionFinished(_ provider: AccountProvider, account: ConnectedAccount?) {
@@ -157,8 +176,8 @@ final class ProfileOnboardingModel {
 
   private func create() {
     let draft = ProfileDraft(
-      id: profileID, name: trimmedName, color: color, accounts: connectedAccounts,
-      spaceID: spaceID)
+      id: profileID, name: trimmedName, color: color, symbol: symbol,
+      accounts: connectedAccounts, spaceID: spaceID)
     do {
       let id = try actions.create(draft)
       outcome = .created(id)

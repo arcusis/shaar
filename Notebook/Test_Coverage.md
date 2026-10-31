@@ -61,7 +61,7 @@ App tests live in `Tests/BrowserAppTests`, core tests in `Tests/BrowserCoreTests
 | Feature | Unit tests | Native probe |
 | --- | --- | --- |
 | Profiles and Spaces, shared profiles, profile reassignment | `WorkspaceProfileTests`, `SpaceProfileReassignmentTests`, `SpaceProfileStoreTests`, `SessionLifecycleTests`, `BrowserSettingsProfileTests`, `SettingsProfilesPaneTests` | `WorkspaceProbe`, `NativeHostProbe` |
-| Space editor: name, symbol, colour, theme | `SpaceColorTests`, `SpaceHSBColorTests`, `SpaceColorEditorTests`, `SpaceChromeTintTests`, `SpaceIconCatalogTests`, `SpaceEditorVisualTests`, `SpaceIconPickerVisualTests` | — |
+| Space and profile editors: name, symbol, colour, theme | `SpaceColorTests`, `HSBColorTests`, `SpaceColorEditorTests`, `SpaceChromeTintTests`, `SymbolCatalogTests`, `ThemeColorPickerModelTests`, `SpaceEditorVisualTests`, `SpaceIconPickerVisualTests`, `ProfileEditorVisualTests` | — |
 | Switching Spaces: pager, shortcuts, swipe | `SpacePagerTests`, `SpaceShortcutTests`, `SpaceSwipeNavigationTests`, `SpaceScaleTests` | — |
 | Sidebar tabs: pin, order, drag and drop, visibility | `SessionOrderingTests`, `SidebarOrganizationTests`, `SidebarTabIndexTests`, `SidebarDropTests`, `SidebarTransferTests`, `SidebarVisibilityTests`, `SidebarChromeLayoutTests` | `OrderingProbe` |
 | Sidebar folders | `SessionFolderTests`, `FolderStoreTests`, `SidebarFoldersVisualTests` | `FolderProbe` |

@@ -13,6 +13,8 @@ private final class BrowserSettingsState {
   private(set) var selectedProfileID: UUID?
   private var didPresent = false
   var onOpenSpace: (UUID) -> Void = { _ in }
+  var onConnectAccount: (UUID, AccountProvider) -> Void = { _, _ in }
+  var onDisconnectAccount: (UUID, AccountProvider) -> Void = { _, _ in }
 
   init(
     workspace: BrowserWorkspaceStore, preferences: BrowserPreferencesStore,
@@ -34,7 +36,8 @@ private final class BrowserSettingsState {
       return BrowserSettingsProfile(
         id: profile.id, name: profile.name,
         spaces: spaces.map { BrowserSettingsSpace(id: $0.id, name: $0.name, symbol: $0.symbol) },
-        extensionCount: runtime?.extensions(forProfileID: profile.id.uuidString).count ?? 0)
+        extensionCount: runtime?.extensions(forProfileID: profile.id.uuidString).count ?? 0,
+        accounts: preferences.accounts(for: profile.id))
     }
   }
 
@@ -136,6 +139,8 @@ private struct BrowserSettingsRoot: View {
       onRenameProfile: { state.renameProfile($0, name: $1) },
       onDeleteProfile: { state.deleteProfile($0, movingSpacesTo: $1) },
       onOpenSpace: state.onOpenSpace,
+      onConnectAccount: state.onConnectAccount,
+      onDisconnectAccount: state.onDisconnectAccount,
       clearHistory: state.runtime.map { runtime in
         { profileID in try await SettingsHistory.clear(runtime: runtime, profileID: profileID) }
       },
@@ -188,6 +193,14 @@ final class BrowserSettingsController: NSObject {
 
   func setOpenSpaceHandler(_ handler: @escaping (UUID) -> Void) {
     state.onOpenSpace = handler
+  }
+
+  func setAccountHandlers(
+    connect: @escaping (UUID, AccountProvider) -> Void,
+    disconnect: @escaping (UUID, AccountProvider) -> Void
+  ) {
+    state.onConnectAccount = connect
+    state.onDisconnectAccount = disconnect
   }
 
   @discardableResult

@@ -58,6 +58,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   private(set) var settingsController: BrowserSettingsController?
   private var privateHost: PrivateBrowserHost?
   private var miniWindows: [String: MiniBrowserController] = [:]
+  private var accountSignIns: [String: ProfileAccountSignIn] = [:]
   private var pendingURLs: [URL] = []
   private var claimedPrimary = false
   private var started = false
@@ -148,6 +149,13 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       context.store.perform(.space(spaceID))
       context.window.makeKeyAndOrderFront(nil)
     }
+    settingsController?.setAccountHandlers(
+      connect: { [weak self] profile, provider in
+        self?.runAccountSignIn(profile, provider: provider, purpose: .signIn)
+      },
+      disconnect: { [weak self] profile, provider in
+        self?.runAccountSignIn(profile, provider: provider, purpose: .signOut)
+      })
     if presentation == .visible, let controller = settingsController?.nativeBitwardenController {
       for context in contexts.values { context.engine.attachPasswordFill(controller) }
     }
@@ -325,6 +333,32 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     }
     if NSApp.helpMenu === menu?.items.first(where: { $0.submenu?.title == "Help" })?.submenu {
       NSApp.helpMenu = previousHelpMenu
+    }
+  }
+
+  /// Connect or disconnect a provider account inside the profile's own engine storage.
+  private func runAccountSignIn(
+    _ profileID: UUID, provider: AccountProvider, purpose: ProfileAccountSignIn.Purpose
+  ) {
+    guard
+      let profile = workspace.workspace.catalog.profiles.first(where: { $0.id == profileID })
+    else { return }
+    do {
+      let flow = try ProfileAccountSignIn(
+        events: events, profile: profile, provider: provider, purpose: purpose)
+      let id = flow.engine.windowID
+      accountSignIns[id] = flow
+      flow.onFinished = { [weak self] account in
+        guard let self else { return }
+        switch (purpose, account) {
+        case (.signIn, let account?): self.preferences.setAccount(account, for: profileID)
+        case (.signOut, _): self.preferences.removeAccount(provider, for: profileID)
+        default: break
+        }
+        self.accountSignIns[id] = nil
+      }
+    } catch {
+      report(error)
     }
   }
 

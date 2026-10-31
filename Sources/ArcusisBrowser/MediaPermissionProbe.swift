@@ -44,22 +44,22 @@ final class MediaPermissionProbe {
     let tabB = b.selectedTabID!
     store.perform(.space(a.id))
     try await start(tabA)
-    var kinds: Set<WebsiteMediaKind> = []
+    var kinds: Set<WebsitePermissionKind> = []
     var capturedConsent = false
     var result: [String: Any] = [:]
     for _ in 0..<100 {
-      if let request = store.websiteMediaRequests.first {
+      if let request = store.websitePermissionRequests.first {
         try expect(
           request.profileID == a.profileID && request.tabID == tabA,
           "media request is bound to profile A and its selected tab")
         kinds.formUnion(request.kinds)
         if !capturedConsent {
           try await capture(
-            WebsiteMediaConsent(store: store, request: request),
+            WebsitePermissionConsent(store: store, request: request),
             size: NSSize(width: 496, height: 360), name: "\(phase)-media-consent.png")
           capturedConsent = true
         }
-        store.resolveWebsiteMedia(request.id, accepted: true)
+        store.resolveWebsitePermission(request.id, accepted: true)
         store.sheetDidDismiss()
       }
       result = await state(tabA) ?? [:]
@@ -83,7 +83,7 @@ final class MediaPermissionProbe {
     let denied = try await waitForRequest(tabB)
     try expect(
       denied.profileID == b.profileID, "profile B asks independently after profile A was allowed")
-    store.resolveWebsiteMedia(denied.id, accepted: false)
+    store.resolveWebsitePermission(denied.id, accepted: false)
     store.sheetDidDismiss()
     let denial = try await waitForResult(tabB)
     try expect(
@@ -113,14 +113,14 @@ final class MediaPermissionProbe {
     try await start(staleTab)
     let stale = try await waitForRequest(staleTab)
     store.perform(.space(a.id))
-    store.resolveWebsiteMedia(stale.id, accepted: true)
+    store.resolveWebsitePermission(stale.id, accepted: true)
     store.sheetDidDismiss()
     let canceled = try await waitForResult(staleTab)
     try expect(
       canceled["error"] as? String == "NotAllowedError",
       "switching profile cancels the pending media grant")
     try expect(
-      !store.websiteMediaRequests.contains { $0.id == stale.id },
+      !store.websitePermissionRequests.contains { $0.id == stale.id },
       "late approval cannot revive stale media consent")
 
     try await capture(
@@ -172,9 +172,9 @@ final class MediaPermissionProbe {
     await evaluate(tab, "window.arcusisMediaResult")
   }
 
-  private func waitForRequest(_ tab: UUID) async throws -> WebsiteMediaRequest {
+  private func waitForRequest(_ tab: UUID) async throws -> WebsitePermissionRequest {
     for _ in 0..<80 {
-      if let request = store.websiteMediaRequests.first(where: { $0.tabID == tab }) {
+      if let request = store.websitePermissionRequests.first(where: { $0.tabID == tab }) {
         return request
       }
       if let response = await state(tab), response["error"] != nil || response["allowed"] != nil {

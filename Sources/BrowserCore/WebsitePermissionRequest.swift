@@ -1,20 +1,30 @@
 import Foundation
 
-public enum WebsiteMediaKind: String, Sendable, CaseIterable {
-  case camera, microphone
+/// Website permissions the engine forwards for a decision, named as the engine reports them.
+public enum WebsitePermissionKind: String, Sendable, CaseIterable {
+  case camera, microphone, location, notifications, clipboard, midi
+  case multipleDownloads, windowManagement, localFonts, storageAccess
+
+  /// Chromium can grant these for the current visit only; the rest are remembered when allowed.
+  public var supportsOneTimeGrant: Bool {
+    switch self {
+    case .camera, .microphone, .location: true
+    default: false
+    }
+  }
 }
 
-public struct WebsiteMediaRequest: Identifiable, Equatable, Sendable {
+public struct WebsitePermissionRequest: Identifiable, Equatable, Sendable {
   public let id: String
   public let profileID: UUID
   public let tabID: UUID
   public let pageURL: URL
   public let requestingOrigin: URL
-  public let kinds: [WebsiteMediaKind]
+  public let kinds: [WebsitePermissionKind]
 
   public init?(
     id: String, profileID: UUID, tabID: UUID, pageURL: URL,
-    requestingOrigin: URL, kinds: [WebsiteMediaKind]
+    requestingOrigin: URL, kinds: [WebsitePermissionKind]
   ) {
     let scheme = requestingOrigin.scheme?.lowercased()
     let secureOrigin =
@@ -27,14 +37,14 @@ public struct WebsiteMediaRequest: Identifiable, Equatable, Sendable {
       requestingOrigin.password == nil, requestingOrigin.query == nil,
       requestingOrigin.fragment == nil,
       requestingOrigin.path.isEmpty || requestingOrigin.path == "/",
-      secureOrigin, !kinds.isEmpty, kinds.count <= 2, Set(kinds).count == kinds.count
+      secureOrigin, !kinds.isEmpty, Set(kinds).count == kinds.count
     else { return nil }
     self.id = id
     self.profileID = profileID
     self.tabID = tabID
     self.pageURL = pageURL
     self.requestingOrigin = requestingOrigin
-    self.kinds = WebsiteMediaKind.allCases.filter(kinds.contains)
+    self.kinds = WebsitePermissionKind.allCases.filter(kinds.contains)
   }
 
   public func matches(_ session: BrowserSession) -> Bool {

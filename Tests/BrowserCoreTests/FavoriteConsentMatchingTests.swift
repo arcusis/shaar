@@ -24,8 +24,8 @@ import Testing
   }
   func mediaRequest(
     profileID: UUID = profileID, tabID: UUID = page.tab.id, pageURL: URL = source
-  ) -> WebsiteMediaRequest {
-    WebsiteMediaRequest(
+  ) -> WebsitePermissionRequest {
+    WebsitePermissionRequest(
       id: "media1", profileID: profileID, tabID: tabID, pageURL: pageURL,
       requestingOrigin: URL(string: "https://favorite.example")!, kinds: [.camera])!
   }
@@ -84,7 +84,7 @@ import Testing
       id: "install1", profileID: profile.id, tabID: tab.id, sourceURL: pageURL,
       browserExtension: extensionInfo, kind: .install, permissions: []))
   let media = try #require(
-    WebsiteMediaRequest(
+    WebsitePermissionRequest(
       id: "media1", profileID: profile.id, tabID: tab.id, pageURL: pageURL,
       requestingOrigin: URL(string: "https://ordinary.example")!, kinds: [.microphone]))
   let external = try #require(

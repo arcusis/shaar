@@ -105,15 +105,15 @@ struct PageFindTests {
     store.showPageFind()
     #expect(!store.commandIsOpen)
     let request = try #require(
-      WebsiteMediaRequest(
+      WebsitePermissionRequest(
         id: "p1", profileID: store.session.selectedSpace.profileID, tabID: tab.id,
         pageURL: store.session.selectedSpace.selectedTab!.url,
         requestingOrigin: URL(string: "https://example.com")!, kinds: [.microphone]))
-    #expect(store.requestWebsiteMedia(request))
+    #expect(store.requestWebsitePermission(request))
     #expect(store.pageFind == nil)
     store.showPageFind()
     #expect(store.pageFind == nil)
-    store.resolveWebsiteMedia(request.id, accepted: false)
+    store.resolveWebsitePermission(request.id, accepted: false)
     store.sheetDidDismiss()
     store.showPageFind()
     store.nativeTabClosed(tab.id)

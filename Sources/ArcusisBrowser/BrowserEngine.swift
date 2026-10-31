@@ -263,13 +263,15 @@ final class BrowserEngine {
       store?.receiveFindResult(
         tabID: tabID, requestID: requestID, count: Int(count), active: Int(active), final: final)
     }
-    store.onWebsiteMediaDecision = { [weak self] id, accepted in
+    store.onWebsitePermissionDecision = { [weak self] id, accepted in
       guard let self else { return }
       self.events.resolveMedia(id, windowID: self.windowID, accepted: accepted)
     }
-    callbacks.onWebsiteMediaRequest = { [weak self] payload in self?.requestWebsiteMedia(payload) }
+    callbacks.onWebsiteMediaRequest = { [weak self] payload in
+      self?.requestWebsitePermission(payload)
+    }
     callbacks.onWebsiteMediaDismissed = { [weak self] id in
-      self?.store?.resolveWebsiteMedia(id, accepted: false)
+      self?.store?.resolveWebsitePermission(id, accepted: false)
     }
     store.onExternalAppDecision = { [weak self] id, accepted in
       guard let self else { return }
@@ -731,7 +733,7 @@ final class BrowserEngine {
     }
   }
 
-  private func requestWebsiteMedia(_ payload: [String: Any]) {
+  private func requestWebsitePermission(_ payload: [String: Any]) {
     guard let id = payload["id"] as? String else { return }
     guard payload["windowID"] as? String == windowID else {
       events.resolveMedia(id, windowID: windowID, accepted: false)
@@ -744,12 +746,12 @@ final class BrowserEngine {
       let page = (payload["pageURL"] as? String).flatMap(URL.init(string:)),
       let origin = (payload["origin"] as? String).flatMap(URL.init(string:)),
       let rawKinds = payload["permissions"] as? [String],
-      rawKinds.allSatisfy({ WebsiteMediaKind(rawValue: $0) != nil }),
-      let request = WebsiteMediaRequest(
+      rawKinds.allSatisfy({ WebsitePermissionKind(rawValue: $0) != nil }),
+      let request = WebsitePermissionRequest(
         id: id, profileID: profile, tabID: tab,
         pageURL: page, requestingOrigin: origin,
-        kinds: rawKinds.compactMap(WebsiteMediaKind.init(rawValue:))),
-      store.requestWebsiteMedia(request)
+        kinds: rawKinds.compactMap(WebsitePermissionKind.init(rawValue:))),
+      store.requestWebsitePermission(request)
     else {
       events.resolveMedia(id, windowID: windowID, accepted: false)
       notice = "This permission request is unavailable for the current page and profile."

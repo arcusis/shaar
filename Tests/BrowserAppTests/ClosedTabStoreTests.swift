@@ -50,16 +50,16 @@ struct ClosedTabStoreTests {
     store.perform(.open(URL(string: "https://example.com/media")!))
     let tab = try #require(store.session.selectedSpace.selectedTab)
     let request = try #require(
-      WebsiteMediaRequest(
+      WebsitePermissionRequest(
         id: "reopen-media", profileID: store.session.selectedSpace.profileID,
         tabID: tab.id, pageURL: tab.url, requestingOrigin: URL(string: "https://example.com")!,
         kinds: [.camera]))
-    #expect(store.requestWebsiteMedia(request))
+    #expect(store.requestWebsitePermission(request))
     store.showRecentlyClosed()
     let consent = store.sheet?.id
     #expect(!store.reopenLastClosedTab() && !store.clearClosedTabs(in: source))
     #expect(store.sheet?.id == consent && store.session.closedTabs.map(\.id) == [closed])
-    store.resolveWebsiteMedia(request.id, accepted: false)
+    store.resolveWebsitePermission(request.id, accepted: false)
     store.showRecentlyClosed()
     #expect(store.reopenLastClosedTab())
     #expect(store.sheet == nil && store.session.selectedSpace.selectedTab?.url.path() == "/closed")

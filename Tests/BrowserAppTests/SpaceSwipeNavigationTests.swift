@@ -51,11 +51,11 @@ struct SpaceSwipeNavigationTests {
     store.perform(.space(selectedSpace.id))
     let afterSwipeSpaceID = store.session.selectedSpaceID
     let request = try #require(
-      WebsiteMediaRequest(
+      WebsitePermissionRequest(
         id: "swipe-consent", profileID: profile.id,
         tabID: tab.id, pageURL: pageURL,
         requestingOrigin: URL(string: "https://example.test")!, kinds: [.camera]))
-    #expect(store.requestWebsiteMedia(request))
+    #expect(store.requestWebsitePermission(request))
     #expect(monitor.route(authoredEvent, deltaX: 2, deltaY: 0) === authoredEvent)
     #expect(store.session.selectedSpaceID == afterSwipeSpaceID)
   }

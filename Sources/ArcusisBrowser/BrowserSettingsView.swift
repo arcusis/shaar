@@ -274,13 +274,15 @@ struct BrowserSettingsView: View {
     .onAppear { refreshDefaultStatus() }
   }
 
+  /// LaunchServices stores the default browser by bundle identifier, so compare that rather than
+  /// the path; development builds can exist at several paths with the same identifier.
   private func refreshDefaultStatus() {
-    let app = Bundle.main.bundleURL.standardizedFileURL
+    let identifier = Bundle.main.bundleIdentifier
     defaultStatus = ["http", "https"].allSatisfy { scheme in
-      guard let url = URL(string: "\(scheme)://example.com"),
+      guard let identifier, let url = URL(string: "\(scheme)://example.com"),
         let current = NSWorkspace.shared.urlForApplication(toOpen: url)
       else { return false }
-      return current.standardizedFileURL == app
+      return Bundle(url: current)?.bundleIdentifier == identifier
     }
   }
 
@@ -355,6 +357,7 @@ struct BrowserSettingsView: View {
       } footer: {
         Text("Removes history for the selected profile. Cookies and cached files are not removed.")
       }
+      MacPermissionsSection()
     }.formStyle(.grouped)
       .confirmationDialog("Clear all history for this profile?", isPresented: $confirmHistory) {
         Button("Clear History", role: .destructive) {
@@ -559,6 +562,43 @@ private struct ConnectedAccountRow: View {
       }
       Spacer(minLength: 0)
       Button("Disconnect", action: disconnect)
+    }
+  }
+}
+
+/// Shows what macOS allows Shaar to use, refreshed whenever the app becomes active again.
+private struct MacPermissionsSection: View {
+  @State private var statuses: [MacPermission: MacPermissionStatus] = [:]
+
+  var body: some View {
+    Section {
+      ForEach(MacPermission.allCases) { permission in
+        LabeledContent {
+          HStack(spacing: 10) {
+            Text(statuses[permission]?.label ?? "Checking…").foregroundStyle(.secondary)
+            if let url = permission.settingsURL {
+              Button("Open Settings") { NSWorkspace.shared.open(url) }
+            }
+          }
+        } label: {
+          Label(permission.title, systemImage: permission.symbol)
+        }
+      }
+    } header: {
+      Text("macOS Permissions")
+    } footer: {
+      Text(
+        "Websites can only use what macOS allows. If a site's request is blocked here, change it in System Settings."
+      )
+    }
+    .task { await refresh() }
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
+    { _ in Task { await refresh() } }
+  }
+
+  private func refresh() async {
+    for permission in MacPermission.allCases {
+      statuses[permission] = await MacPermissionStatusReader.status(of: permission)
     }
   }
 }

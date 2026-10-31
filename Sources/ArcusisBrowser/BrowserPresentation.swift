@@ -22,7 +22,7 @@ enum SidebarVisibility: Equatable {
 enum BrowserSheet: Identifiable {
   case space(SpaceEditorRoute)
   case extensionInstall(ExtensionInstallRequest)
-  case websiteMedia(WebsiteMediaRequest)
+  case websitePermission(WebsitePermissionRequest)
   case externalApp(ExternalAppRequest)
   case downloads(profileID: UUID)
   case folder(FolderEditorRoute)
@@ -34,7 +34,7 @@ enum BrowserSheet: Identifiable {
     switch self {
     case .space(let route): "space-\(route)"
     case .extensionInstall(let request): "install-\(request.id)"
-    case .websiteMedia(let request): "media-\(request.id)"
+    case .websitePermission(let request): "permission-\(request.id)"
     case .externalApp(let request): "external-\(request.id)"
     case .downloads(let profile): "downloads-\(profile)"
     case .folder(let route): "folder-\(route)"
@@ -47,14 +47,14 @@ enum BrowserSheet: Identifiable {
   var isConsent: Bool {
     switch self {
     case .space, .downloads, .folder, .recentlyClosed, .library, .bookmarkEditor: false
-    case .extensionInstall, .websiteMedia, .externalApp: true
+    case .extensionInstall, .websitePermission, .externalApp: true
     }
   }
 
   var tabID: UUID? {
     switch self {
     case .extensionInstall(let request): request.tabID
-    case .websiteMedia(let request): request.tabID
+    case .websitePermission(let request): request.tabID
     case .externalApp(let request): request.tabID
     default: nil
     }
@@ -64,7 +64,7 @@ enum BrowserSheet: Identifiable {
     switch self {
     case .space, .downloads, .folder, .recentlyClosed, .library, .bookmarkEditor: false
     case .extensionInstall(let request): request.matches(session)
-    case .websiteMedia(let request): request.matches(session)
+    case .websitePermission(let request): request.matches(session)
     case .externalApp(let request): request.matches(session)
     }
   }

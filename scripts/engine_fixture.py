@@ -145,7 +145,17 @@ def verify_host_lock_if_ready(root, pid, phase):
     os.replace(temporary, receipt)
 
 
+def probe_timeout(seconds):
+    """Stretch a probe deadline on slower machines; SHAAR_PROBE_TIMEOUT_SCALE is at least 1."""
+    try:
+        scale = float(os.environ.get('SHAAR_PROBE_TIMEOUT_SCALE', '1'))
+    except ValueError:
+        scale = 1.0
+    return seconds * max(1.0, scale)
+
+
 def wait_for_probe(process, root, phase, timeout):
+    timeout = probe_timeout(timeout)
     deadline = time.monotonic() + timeout
     while process.poll() is None:
         verify_host_lock_if_ready(root, process.pid, phase)
@@ -195,7 +205,7 @@ def process_group_exists(pgid):
 def terminate_at_checkpoint(process, root, timeout, settle_seconds=0):
     """SIGKILL only the new process group created for this disposable native probe."""
     checkpoint = root / 'ready-for-abrupt-termination.json'
-    deadline = time.monotonic() + timeout
+    deadline = time.monotonic() + probe_timeout(timeout)
     while process.poll() is None:
         verify_host_lock_if_ready(root, process.pid, 'initial')
         if checkpoint.exists():

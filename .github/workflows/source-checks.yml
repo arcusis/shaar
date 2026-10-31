@@ -188,6 +188,9 @@ jobs:
 
       - name: Run account isolation probes (initial and restart)
         id: engine_probes
+        env:
+          # Hosted virtual machines have no GPU and run the engine about three times slower.
+          SHAAR_PROBE_TIMEOUT_SCALE: '3'
         run: |
           set -o pipefail
           bash scripts/test-engine.sh 2>&1 | tee "$RUNNER_TEMP/engine-probes.log"

@@ -7,6 +7,8 @@ struct ShortcutCatalog {
     let title: String
     let key: String
     let modifiers: NSEvent.ModifierFlags
+    /// The `BrowserMenuCommand` name for app commands; nil for standard AppKit items.
+    var command: String?
     var id: String { "\(menu):\(title):\(key):\(modifiers.rawValue)" }
 
     var displayKeys: String {
@@ -92,6 +94,11 @@ struct ShortcutCatalog {
     }
   }
 
+  /// The catalog of the menu the app installs.
+  @MainActor static func installed() -> ShortcutCatalog {
+    ShortcutCatalog(menu: NativeBrowserHost.makeMenu(target: NSApplication.shared))
+  }
+
   init(menu: NSMenu) {
     entries = menu.items.compactMap(\.submenu).flatMap { section in
       section.items.compactMap { item in
@@ -99,7 +106,7 @@ struct ShortcutCatalog {
         else { return nil }
         return Entry(
           menu: section.title, title: item.title, key: item.keyEquivalent,
-          modifiers: item.keyEquivalentModifierMask)
+          modifiers: item.keyEquivalentModifierMask, command: item.representedObject as? String)
       }
     }
   }

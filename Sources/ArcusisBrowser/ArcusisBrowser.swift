@@ -28,6 +28,9 @@ enum ArcusisBrowserMain {
       do {
         try renderPreview(
           to: URL(filePath: arguments[index + 1]), showCommand: arguments.contains("--command"),
+          commandQuery: value(after: "--command-query", in: arguments),
+          commandFilter: value(after: "--command-filter", in: arguments)
+            .flatMap(CommandFilter.init(rawValue:)),
           compact: arguments.contains("--compact"),
           hideSidebar: arguments.contains("--hide-sidebar"),
           showSpaceEditor: arguments.contains("--space-editor"),
@@ -51,8 +54,15 @@ enum ArcusisBrowserMain {
     BrowserApplication.main()
   }
 
+  private static func value(after flag: String, in arguments: [String]) -> String? {
+    guard let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1)
+    else { return nil }
+    return arguments[index + 1]
+  }
+
   @MainActor private static func renderPreview(
-    to url: URL, showCommand: Bool, compact: Bool, hideSidebar: Bool, showSpaceEditor: Bool,
+    to url: URL, showCommand: Bool, commandQuery: String?, commandFilter: CommandFilter?,
+    compact: Bool, hideSidebar: Bool, showSpaceEditor: Bool,
     showExtensionConsent: Bool, showRecentDownloads: Bool, showSettings: Bool,
     showSettingsProfiles: Bool, showSettingsProfileEditor: Bool
   ) throws {
@@ -73,6 +83,9 @@ enum ArcusisBrowserMain {
         : compact ? NSSize(width: 760, height: 520) : NSSize(width: 1200, height: 780)
     let store = BrowserStore.preview(showCommand: showCommand)
     store.sidebarIsVisible = !hideSidebar
+    if showCommand {
+      stageCommandPreview(store, query: commandQuery ?? "", filter: commandFilter)
+    }
     let view = NativePreview(
       store: store, showSpaceEditor: showSpaceEditor,
       showExtensionConsent: showExtensionConsent, showRecentDownloads: showRecentDownloads
@@ -96,6 +109,52 @@ enum ArcusisBrowserMain {
       throw CocoaError(.fileWriteUnknown)
     }
     try png.write(to: url, options: .atomic)
+  }
+
+  /// Gives the launcher closed tabs, a Favorite, history and Actions to show without an engine.
+  @MainActor private static func stageCommandPreview(
+    _ store: BrowserStore, query: String, filter: CommandFilter?
+  ) {
+    let profileID = store.session.selectedSpace.profileID
+    for address in ["https://news.ycombinator.com", "https://www.figma.com/files"] {
+      if let url = URL(string: address) { store.session.open(url) }
+    }
+    if let url = URL(string: "https://www.wikipedia.org"), let id = store.session.open(url) {
+      store.session.closeTab(id)
+    }
+    if let url = URL(string: "https://mail.google.com") {
+      store.session.addFavorite(profileID: profileID, originalURL: url, title: "Mail")
+    }
+    let now = Date().timeIntervalSince1970 * 1000
+    let history: [[String: Any]] = [
+      ("https://swift.org/documentation", "Swift Documentation", 42),
+      ("https://www.apple.com/macos", "macOS - Apple", 31),
+      ("https://developer.apple.com/design", "Design - Apple Developer", 18),
+      ("https://github.com/arcusis/shaar/pulls", "Pull requests · arcusis/shaar", 12),
+    ].map { ["u": $0.0, "t": $0.1, "n": $0.2, "v": [now - Double($0.2) * 60_000]] }
+    let bookmarks: [String: Any] = [
+      "bar": [
+        "id": UUID().uuidString, "k": "f", "t": "Bookmarks bar",
+        "c": [
+          [
+            "id": UUID().uuidString, "k": "u", "t": "Swift Forums", "u": "https://forums.swift.org",
+          ],
+          [
+            "id": UUID().uuidString, "k": "u", "t": "SF Symbols",
+            "u": "https://developer.apple.com/sf-symbols",
+          ],
+        ],
+      ],
+      "other": ["id": UUID().uuidString, "k": "f", "t": "Other bookmarks", "c": []],
+    ]
+    store.library.onLoad = { key, _, done in
+      done(.success(key.section == .history ? history : bookmarks))
+    }
+    store.library.refresh(profileID, section: .history)
+    store.library.refresh(profileID, section: .bookmarks)
+    store.launcherActions = LauncherActions(available: { LauncherCommands.catalog }, run: { _ in })
+    store.commandQuery = query
+    store.commandFilter = filter
   }
 
   @MainActor private static func renderSettingsPreview(

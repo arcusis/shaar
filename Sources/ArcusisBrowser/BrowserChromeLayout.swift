@@ -19,10 +19,12 @@ enum BrowserChromeLayout {
   static let fullScreenToggleRowHeight: CGFloat = 36
   static let fullScreenToggleLeading: CGFloat = 12
   static let preferredCommandWidth: CGFloat = 580
-  static let commandChromeHeight: CGFloat = 112
-  static let preferredResultsHeight: CGFloat = 330
+  /// Search field, filter chips and footer.
+  static let commandChromeHeight: CGFloat = 146
+  static let preferredResultsHeight: CGFloat = 396
   static let minimumResultsHeight: CGFloat = 76
-  static let resultRowHeight: CGFloat = 59
+  static let resultRowHeight: CGFloat = 38
+  static let resultSectionHeaderHeight: CGFloat = 26
 
   static func pageWidth(windowWidth: CGFloat, leadingWidth: CGFloat) -> CGFloat {
     max(0, windowWidth - leadingWidth)
@@ -30,11 +32,12 @@ enum BrowserChromeLayout {
 
   static func commandPanelFrame(
     in webContent: CGRect,
-    resultCount: Int = 0
+    resultCount: Int = 0,
+    headerCount: Int = 0
   ) -> CGRect {
     let width = min(preferredCommandWidth, webContent.width)
     let resultsHeight = commandResultsHeight(
-      resultCount: resultCount, availableHeight: webContent.height)
+      resultCount: resultCount, headerCount: headerCount, availableHeight: webContent.height)
     let height = min(commandChromeHeight + resultsHeight, webContent.height)
 
     return CGRect(
@@ -45,10 +48,14 @@ enum BrowserChromeLayout {
     )
   }
 
-  static func commandResultsHeight(resultCount: Int, availableHeight: CGFloat) -> CGFloat {
+  static func commandResultsHeight(
+    resultCount: Int, headerCount: Int = 0, availableHeight: CGFloat
+  ) -> CGFloat {
     let availableResultsHeight = max(0, availableHeight - commandChromeHeight)
+    let contentHeight =
+      CGFloat(resultCount) * resultRowHeight + CGFloat(headerCount) * resultSectionHeaderHeight
     let naturalHeight = min(
-      max(CGFloat(resultCount) * resultRowHeight + 16, minimumResultsHeight),
+      max(contentHeight + 16, minimumResultsHeight),
       preferredResultsHeight
     )
     return min(naturalHeight, availableResultsHeight)

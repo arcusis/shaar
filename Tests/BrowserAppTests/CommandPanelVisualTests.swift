@@ -102,7 +102,8 @@ final class CommandPanelVisualTests: XCTestCase {
     do {
       let store = try makeStore(longQuery: longQuery)
       let initial = store.session
-      let results = store.results
+      let sections = store.commandSections
+      let results = sections.results
       if !longQuery {
         guard results.contains(where: { if case .tab = $0.action { true } else { false } }),
           results.contains(where: { if case .space = $0.action { true } else { false } })
@@ -113,9 +114,11 @@ final class CommandPanelVisualTests: XCTestCase {
       let size = minimum ? NSSize(width: 760, height: 520) : NSSize(width: 1_100, height: 720)
       let left = sidebar ? BrowserChromeLayout.sidebarWidth : 10
       let viewport = CGRect(x: left, y: 45, width: size.width - left - 10, height: size.height - 55)
-      let expected = BrowserChromeLayout.commandPanelFrame(in: viewport, resultCount: results.count)
+      let expected = BrowserChromeLayout.commandPanelFrame(
+        in: viewport, resultCount: results.count, headerCount: sections.headerCount)
       let resultsHeight = BrowserChromeLayout.commandResultsHeight(
-        resultCount: results.count, availableHeight: expected.height)
+        resultCount: results.count, headerCount: sections.headerCount,
+        availableHeight: expected.height)
       let measurements = Measurements()
       let view = ZStack(alignment: .topLeading) {
         Color(nsColor: .windowBackgroundColor)

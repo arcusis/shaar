@@ -62,7 +62,9 @@ final class BrowserChromeLayoutTests: XCTestCase {
     let content = CGRect(x: 10, y: 55, width: 1180, height: 1135)
     let frame = BrowserChromeLayout.commandPanelFrame(in: content, resultCount: 100)
 
-    XCTAssertEqual(frame.height, BrowserChromeLayout.commandChromeHeight + 330)
+    XCTAssertEqual(
+      frame.height,
+      BrowserChromeLayout.commandChromeHeight + BrowserChromeLayout.preferredResultsHeight)
     XCTAssertEqual(frame.midY, content.midY)
   }
 

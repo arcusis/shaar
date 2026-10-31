@@ -11,7 +11,6 @@ set -euo pipefail
 #                                   # dry run without the Sparkle EdDSA key
 # Versions, feed and release repository: scripts/release-config.sh. Process: Notebook/Releasing.md.
 cd "$(dirname "$0")/.."
-source scripts/release-config.sh
 
 usage() {
   echo 'Usage: release.sh --notes <notes.html> [--notarize] [--upload] [--allow-unsigned-update]' >&2
@@ -57,22 +56,31 @@ if $upload && $allow_unsigned; then
 fi
 [[ -s "$notes" ]] || { echo "error: release notes file is missing or empty: $notes" >&2; exit 1; }
 
-python="${PYTHON:-python3}"
+# release_feed.py verifies the update signature with the hash-pinned scripts/release-requirements.txt.
+python="${PYTHON:-.venv/bin/python}"
+if [[ ! -x "$python" ]]; then
+  echo "error: $python not found; create .venv and install scripts/release-requirements.txt." >&2
+  exit 1
+fi
 feed() { "$python" scripts/release_feed.py "$@"; }
+# Validate the shared release constants before bash sources them.
+release_names=$(feed describe)
+source scripts/release-config.sh
+source scripts/engine-signing.sh
 sign_identity="${SIGN_IDENTITY:-Developer ID Application: Arcusis LTD (F9Z784RA6D)}"
 team_id="${TEAM_ID:-F9Z784RA6D}"
 notary_profile="${NOTARY_PROFILE:-shaar-notary}"
 sparkle_bin=build/swiftpm/default/artifacts/sparkle/Sparkle/bin
 out=build/release
 app="$out/Shaar.app"
-release_names=$(feed describe)
 read -r release_tag dmg_name zip_name appcast_name <<< "$release_names"
 dmg="$out/$dmg_name"
 update_zip="$out/$zip_name"
 appcast="$out/$appcast_name"
 
 echo "==> Releasing Shaar $SHAAR_BUNDLE_VERSION ($SHAAR_BUILD_VERSION) as $release_tag"
-if ! security find-identity -v -p codesigning | grep -Fq "\"$sign_identity\""; then
+identities=$(security find-identity -v -p codesigning) || identities=''
+if [[ "$identities" != *"\"$sign_identity\""* ]]; then
   echo "error: signing identity not found in the keychain: $sign_identity" >&2
   exit 1
 fi
@@ -101,11 +109,8 @@ fi
 rm -rf "$out"
 mkdir -p "$out/entitlements"
 # Sparkle orders updates by build number. Refuse a build the live feed would never offer.
-if curl --fail --silent --show-error --location "$SHAAR_FEED_URL" --output "$out/published-appcast.xml"; then
-  feed check-newer --published "$out/published-appcast.xml"
-else
-  echo "    no published feed at $SHAAR_FEED_URL; treating this as the first release"
-fi
+# Only HTTP 404 counts as a first release; any other failure stops the release.
+feed check-newer
 
 echo '==> Building engine bundle with the update feed'
 bash scripts/bundle-app.sh --with-engine --with-updates
@@ -136,15 +141,13 @@ sign_like_upstream() {
 echo '==> Signing nested code inside out (Developer ID + hardened runtime)'
 upstream_engine=$(bash scripts/fetch-engine.sh)
 engine="$app/Contents/Frameworks/Chromium Framework.framework"
-for library in "$engine"/Versions/Current/Libraries/*.dylib; do
-  sign "$library"
-done
-for helper in "$engine"/Versions/Current/Helpers/*; do
-  if [[ -d "$helper" && "$helper" == *.app ]] || [[ -f "$helper" && -x "$helper" ]]; then
-    sign_like_upstream "$helper" "$upstream_engine/Versions/Current/Helpers/$(basename "$helper")"
-  fi
-done
-sign "$engine"
+sign_engine_item() {
+  case "$1" in
+    "$engine"/Versions/Current/Helpers/*) sign_like_upstream "$1" "$upstream_engine${1#"$engine"}" ;;
+    *) sign "$1" ;;
+  esac
+}
+sign_engine_framework "$engine" sign_engine_item
 # Order and flags follow Sparkle's documentation for re-signing its framework.
 sparkle="$app/Contents/Frameworks/Sparkle.framework"
 sign "$sparkle/Versions/B/XPCServices/Installer.xpc"
@@ -169,7 +172,7 @@ while IFS= read -r -d '' item; do
   fi
 done < <(
   find "$app" \( -name '*.app' -o -name '*.xpc' -o -name '*.framework' \) -print0
-  find "$app" -type f -exec sh -c 'file -b "$1" | grep -q Mach-O' _ {} \; -print0
+  find "$app" -type f -exec sh -c 'case "$(file -b "$1")" in *Mach-O*) exit 0 ;; esac; exit 1' _ {} \; -print0
 )
 ((unsigned == 0)) || { echo 'error: not all bundled code is release signed.' >&2; exit 1; }
 

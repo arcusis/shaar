@@ -1,12 +1,17 @@
 import base64
+import http.server
 import importlib.util
 import plistlib
 import sys
 import tempfile
+import threading
 import unittest
 import zipfile
 from dataclasses import replace
 from pathlib import Path
+
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -15,7 +20,10 @@ release_feed = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = release_feed
 SPEC.loader.exec_module(release_feed)
 
-KEY = base64.b64encode(bytes(range(32))).decode()
+PRIVATE_KEY = Ed25519PrivateKey.generate()
+KEY = base64.b64encode(
+    PRIVATE_KEY.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+).decode()
 CONFIG_TEXT = f"""# comment
 SHAAR_BUNDLE_IDENTIFIER=com.arcusis.browser
 SHAAR_BUNDLE_VERSION=1.2.3
@@ -83,10 +91,19 @@ class ReleaseFeedTests(unittest.TestCase):
             "SHAAR_RELEASE_REPOSITORY=arcusis/shaar": "SHAAR_RELEASE_REPOSITORY=shaar",
             "SHAAR_FEED_URL=https://": "SHAAR_FEED_URL=http://",
             "SHAAR_BUNDLE_IDENTIFIER=com.arcusis.browser": "SHAAR_BUNDLE_IDENTIFIER=$(id)",
+            "SHAAR_BUNDLE_VERSION=1.2.3\n": "SHAAR_BUNDLE_VERSION=1.2.3;id\n",
+            "SHAAR_RELEASE_REPOSITORY=arcusis/shaar\n": "SHAAR_RELEASE_REPOSITORY=arcusis/shaar|id\n",
+            "SHAAR_MINIMUM_SYSTEM_VERSION=26.0": "SHAAR_MINIMUM_SYSTEM_VERSION=26",
         }
         for old, new in cases.items():
+            self.assertIn(old, CONFIG_TEXT)
             with self.subTest(new=new), self.assertRaises(release_feed.ReleaseError):
                 release_feed.parse_config(CONFIG_TEXT.replace(old, new))
+        for identifier in ("browser", "com..arcusis"):
+            with self.subTest(identifier=identifier), self.assertRaisesRegex(release_feed.ReleaseError, "reverse-DNS"):
+                release_feed.parse_config(
+                    CONFIG_TEXT.replace("SHAAR_BUNDLE_IDENTIFIER=com.arcusis.browser", f"SHAAR_BUNDLE_IDENTIFIER={identifier}")
+                )
         with self.assertRaisesRegex(release_feed.ReleaseError, "missing SHAAR_FEED_URL"):
             release_feed.parse_config(
                 "\n".join(line for line in CONFIG_TEXT.splitlines() if "FEED_URL" not in line)
@@ -174,6 +191,71 @@ class ReleaseFeedTests(unittest.TestCase):
                     self.config, self._appcast(replace(self.config, build_version=build))
                 )
 
+    def test_update_signature_must_verify_over_zip_bytes_with_public_key(self):
+        archive = self._zip()
+        signature = base64.b64encode(PRIVATE_KEY.sign(archive.read_bytes())).decode()
+        other_key = base64.b64encode(
+            Ed25519PrivateKey.generate().public_key().public_bytes(
+                serialization.Encoding.Raw, serialization.PublicFormat.Raw
+            )
+        ).decode()
+
+        release_feed.verify_update_signature(archive, signature, KEY)
+        for bad_signature, key in (
+            (signature, other_key),
+            (base64.b64encode(bytes(64)).decode(), KEY),
+            ("not base64!", KEY),
+            (signature, "SHAAR_SPARKLE_PUBLIC_ED_KEY_PLACEHOLDER"),
+        ):
+            with self.subTest(key=key[:8], signature=bad_signature[:8]), self.assertRaises(release_feed.ReleaseError):
+                release_feed.verify_update_signature(archive, bad_signature, key)
+        archive.write_bytes(archive.read_bytes() + b"tampered")
+        with self.assertRaisesRegex(release_feed.ReleaseError, "EdDSA"):
+            release_feed.verify_update_signature(archive, signature, KEY)
+
+    def _serve(self, status, body=b""):
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(status)
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *_):
+                pass
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        return f"http://127.0.0.1:{server.server_port}/appcast.xml"
+
+    def _check_newer(self, url):
+        config_path = self.root / "release-config.sh"
+        config_path.write_text(CONFIG_TEXT)
+        return release_feed.main(["--config", str(config_path), "check-newer", "--feed-url", url])
+
+    def test_live_feed_check_treats_only_404_as_first_release(self):
+        self.assertEqual(self._check_newer(self._serve(404)), 0)
+        older = self._appcast(replace(self.config, build_version=6)).encode()
+        self.assertEqual(self._check_newer(self._serve(200, older)), 0)
+        for status, body in ((200, self._appcast().encode()), (500, b""), (403, b""), (200, b"<html>")):
+            with self.subTest(status=status, body=body[:10]):
+                self.assertEqual(self._check_newer(self._serve(status, body)), 1)
+        self.assertEqual(self._check_newer("http://127.0.0.1:9/appcast.xml"), 1)
+
+    def test_cli_rejects_appcast_whose_signature_does_not_match_zip(self):
+        config_path = self.root / "release-config.sh"
+        config_path.write_text(CONFIG_TEXT)
+        archive = self._zip()
+        appcast = self.root / "appcast.xml"
+        forged = base64.b64encode(Ed25519PrivateKey.generate().sign(archive.read_bytes())).decode()
+        appcast.write_text(self._appcast(length=archive.stat().st_size, signature=forged))
+
+        self.assertEqual(
+            release_feed.main(["--config", str(config_path), "validate", "--appcast", str(appcast), "--zip", str(archive)]),
+            1,
+        )
+
     def test_cli_writes_then_validates_appcast(self):
         config_path = self.root / "release-config.sh"
         config_path.write_text(CONFIG_TEXT)
@@ -185,7 +267,8 @@ class ReleaseFeedTests(unittest.TestCase):
         self.assertEqual(
             release_feed.main([
                 "--config", str(config_path), "write", "--zip", str(archive), "--notes", str(notes),
-                "--signature", "c2lnbmF0dXJl", "--output", str(appcast),
+                "--signature", base64.b64encode(PRIVATE_KEY.sign(archive.read_bytes())).decode(),
+                "--output", str(appcast),
             ]),
             0,
         )

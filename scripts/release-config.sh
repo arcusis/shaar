@@ -1,3 +1,4 @@
+# shellcheck shell=bash disable=SC2034 # Sourced: the scripts that source this file read every value.
 # Release constants shared by bundle-app.sh, release.sh, release_feed.py and the Release workflow.
 # Keep plain KEY=value lines: Python reads this file without running it.
 

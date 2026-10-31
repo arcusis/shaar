@@ -1,5 +1,6 @@
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -25,8 +26,8 @@ class ReleaseScriptOptionTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def _run(self, *args):
-        environment = os.environ | {"PATH": f"{self.tools}:{os.environ['PATH']}"}
+    def _run(self, *args, python=sys.executable):
+        environment = os.environ | {"PATH": f"{self.tools}:{os.environ['PATH']}", "PYTHON": python}
         return subprocess.run(
             ["bash", str(SCRIPT), *args], cwd=REPO, env=environment, capture_output=True, text=True
         )
@@ -53,6 +54,13 @@ class ReleaseScriptOptionTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 1)
         self.assertIn("release notes file is missing", result.stderr)
+        self.assertNotIn("unexpected", result.stderr)
+
+    def test_missing_release_python_stops_before_any_tool_runs(self):
+        result = self._run("--notes", str(self.notes), python=str(self.tools / "missing-python"))
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("release-requirements.txt", result.stderr)
         self.assertNotIn("unexpected", result.stderr)
 
     def test_missing_signing_identity_stops_before_build(self):

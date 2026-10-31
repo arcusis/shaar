@@ -1,7 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# Validate the shared release constants before bash sources them.
+"${PYTHON:-python3}" scripts/release_feed.py describe >/dev/null
 source scripts/release-config.sh
+source scripts/engine-signing.sh
+# Development bundles are signed ad hoc for local use only.
+adhoc_sign() { codesign --force --timestamp=none --sign - "$1"; }
 configuration=release
 with_engine=false
 with_updates=false
@@ -43,6 +48,11 @@ while (($#)); do
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
 done
+# The update feed belongs only in release engine bundles; release.sh is its one caller.
+if $with_updates && { [[ "$configuration" != release ]] || ! $with_engine; }; then
+  echo '--with-updates requires --configuration release and --with-engine.' >&2
+  exit 2
+fi
 
 scratch_path="build/swiftpm/default"
 mkdir -p "$scratch_path"
@@ -63,7 +73,8 @@ cp "$binary_dir/ArcusisBrowser" "$app/Contents/MacOS/ArcusisBrowser"
 # SwiftPM can add its package Frameworks directory as an absolute build rpath.
 # Remove it so runtime resolves only the app's relative Frameworks directory.
 package_rpath="$binary_dir/PackageFrameworks"
-if otool -l "$app/Contents/MacOS/ArcusisBrowser" | grep -Fq "path $package_rpath "; then
+load_commands=$(otool -l "$app/Contents/MacOS/ArcusisBrowser")
+if [[ "$load_commands" == *"path $package_rpath "* ]]; then
   install_name_tool -delete_rpath "$package_rpath" "$app/Contents/MacOS/ArcusisBrowser"
 fi
 "${PYTHON:-python3}" scripts/stage-browser-resources.py \
@@ -83,16 +94,7 @@ if $with_engine; then
   framework=$(bash scripts/fetch-engine.sh)
   # Keep version symlinks and upstream resources. Re-sign nested code inside out.
   ditto "$framework" "$app/Contents/Frameworks/Chromium Framework.framework"
-  staged="$app/Contents/Frameworks/Chromium Framework.framework"
-  for library in "$staged"/Versions/Current/Libraries/*.dylib; do
-    codesign --force --timestamp=none --sign - "$library"
-  done
-  for helper in "$staged"/Versions/Current/Helpers/*; do
-    if [[ -d "$helper" && "$helper" == *.app ]] || [[ -f "$helper" && -x "$helper" ]]; then
-      codesign --force --timestamp=none --sign - "$helper"
-    fi
-  done
-  codesign --force --timestamp=none --sign - "$staged"
+  sign_engine_framework "$app/Contents/Frameworks/Chromium Framework.framework" adhoc_sign
 fi
 # Only release bundles carry the update feed; without it the app never starts Sparkle.
 update_keys=''
@@ -133,7 +135,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
 $update_keys
 </dict></plist>
 PLIST
-codesign --force --timestamp=none --sign - "$app"
+adhoc_sign "$app"
 codesign --verify --deep --strict "$app"
 if [[ "$configuration" == debug ]]; then
   printf 'Built %s (debug development bundle; local ad-hoc signature; not notarized or release-ready).\n' "$app"

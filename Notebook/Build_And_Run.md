@@ -19,4 +19,4 @@ All bundles include the Shaar app icon, `Resources/Branding/Shaar.icns`, generat
 
 `bash scripts/bundle-app.sh` without `--with-engine` builds `build/Shaar Shell.app`, a separate UI-only preview. `swift run ArcusisBrowser` also runs that preview without webpage rendering.
 
-Related: [[Source_And_Native_Verification]].
+Related: [[Source_And_Native_Verification]], [[Releasing]].

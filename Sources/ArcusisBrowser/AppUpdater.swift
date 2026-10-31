@@ -17,9 +17,7 @@ final class AppUpdater {
 
   /// Create after the engine's application object exists; Sparkle touches `NSApp`.
   static func forMainBundle() -> AppUpdater {
-    let configuration = UpdateFeedConfiguration(
-      infoDictionary: Bundle.main.infoDictionary ?? [:])
-    return AppUpdater(enabled: configuration != nil)
+    AppUpdater(enabled: UpdateFeed.isConfigured(in: Bundle.main.infoDictionary ?? [:]))
   }
 
   var canCheckForUpdates: Bool { controller?.updater.canCheckForUpdates ?? false }

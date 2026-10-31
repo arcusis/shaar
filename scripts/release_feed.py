@@ -14,6 +14,8 @@ import email.utils
 import plistlib
 import re
 import sys
+import urllib.error
+import urllib.request
 import xml.etree.ElementTree as ET
 import zipfile
 from dataclasses import dataclass
@@ -23,8 +25,11 @@ from pathlib import Path
 CONFIG_PATH = Path(__file__).resolve().with_name("release-config.sh")
 SPARKLE_NAMESPACE = "http://www.andymatuschak.org/xml-namespaces/sparkle"
 APP_NAME = "Shaar.app"
-CONFIG_LINE = re.compile(r"(SHAAR_[A-Z_]+)=([^\s\"'$`]+)")
+# bash sources the config, so every value is limited to characters with no shell meaning.
+CONFIG_LINE = re.compile(r"(SHAAR_[A-Z_]+)=([A-Za-z0-9._:/+=-]+)")
+BUNDLE_IDENTIFIER = re.compile(r"[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+")
 BUNDLE_VERSION = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+")
+SYSTEM_VERSION = re.compile(r"[0-9]+\.[0-9]+(\.[0-9]+)?")
 BUILD_VERSION = re.compile(r"[1-9][0-9]*")
 REPOSITORY = re.compile(r"[A-Za-z0-9-]+/[A-Za-z0-9._-]+")
 REQUIRED_KEYS = (
@@ -103,7 +108,9 @@ def parse_config(text: str) -> ReleaseConfig:
             continue
         match = CONFIG_LINE.fullmatch(line)
         if match is None:
-            raise ReleaseError(f"release config line {number} is not a plain SHAAR_KEY=value: {raw!r}")
+            raise ReleaseError(
+                f"release config line {number} must be SHAAR_KEY=value using only A-Z a-z 0-9 . _ : / + = -: {raw!r}"
+            )
         values[match.group(1)] = match.group(2)
     missing = [key for key in REQUIRED_KEYS if key not in values]
     if missing:
@@ -117,6 +124,10 @@ def parse_config(text: str) -> ReleaseConfig:
         feed_url=values["SHAAR_FEED_URL"],
         public_ed_key=values["SHAAR_SPARKLE_PUBLIC_ED_KEY"],
     )
+    if not BUNDLE_IDENTIFIER.fullmatch(config.bundle_identifier):
+        raise ReleaseError(f"bundle identifier {config.bundle_identifier!r} must be reverse-DNS")
+    if not SYSTEM_VERSION.fullmatch(config.minimum_system_version):
+        raise ReleaseError(f"minimum system version {config.minimum_system_version!r} must be Major.Minor")
     if not BUNDLE_VERSION.fullmatch(config.bundle_version):
         raise ReleaseError(f"bundle version {config.bundle_version!r} must be Major.Minor.Patch")
     if not REPOSITORY.fullmatch(config.repository):
@@ -183,14 +194,15 @@ def parse_appcast(text: str) -> AppcastItem:
     enclosure = item.find("enclosure")
     if enclosure is None:
         raise ReleaseError("appcast item has no enclosure")
-    def text(tag: str) -> str:
+
+    def field(tag: str) -> str:
         return (item.findtext(tag) or "").strip()
 
     return AppcastItem(
-        title=text("title"),
-        bundle_version=text(_sparkle("shortVersionString")),
-        build_version=_build_number(text(_sparkle("version")), "appcast build"),
-        minimum_system_version=text(_sparkle("minimumSystemVersion")),
+        title=field("title"),
+        bundle_version=field(_sparkle("shortVersionString")),
+        build_version=_build_number(field(_sparkle("version")), "appcast build"),
+        minimum_system_version=field(_sparkle("minimumSystemVersion")),
         url=enclosure.get("url", ""),
         length=_build_number(enclosure.get("length", ""), "appcast enclosure length"),
         signature=enclosure.get(_sparkle("edSignature")),
@@ -236,6 +248,38 @@ def validate_update_zip(path: Path, config: ReleaseConfig, *, expected_length: i
             raise ReleaseError(f"update ZIP {key} {actual!r} does not match {value!r}")
 
 
+def verify_update_signature(path: Path, signature: str, public_key: str) -> None:
+    """Checks the appcast's Ed25519 signature over the ZIP bytes, as Sparkle does before installing."""
+    try:
+        from cryptography.exceptions import InvalidSignature
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+    except ModuleNotFoundError:
+        raise ReleaseError(
+            "signature checks need the pinned packages in scripts/release-requirements.txt"
+        ) from None
+
+    if not is_ed25519_public_key(public_key):
+        raise ReleaseError("SUPublicEDKey is not a real Ed25519 public key")
+    try:
+        signature_bytes = base64.b64decode(signature, validate=True)
+        Ed25519PublicKey.from_public_bytes(base64.b64decode(public_key)).verify(signature_bytes, path.read_bytes())
+    except (binascii.Error, ValueError, InvalidSignature):
+        raise ReleaseError("update ZIP does not match the appcast's EdDSA signature for SUPublicEDKey") from None
+
+
+def fetch_published_appcast(url: str) -> str | None:
+    """Returns the live feed, or None only when it does not exist yet (HTTP 404)."""
+    try:
+        with urllib.request.urlopen(url, timeout=30) as response:
+            return response.read().decode("utf-8")
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            return None
+        raise ReleaseError(f"published feed {url} returned HTTP {error.code}") from None
+    except urllib.error.URLError as error:
+        raise ReleaseError(f"cannot read published feed {url}: {error.reason}") from None
+
+
 def ensure_newer_than_published(config: ReleaseConfig, published_appcast: str) -> int:
     published = parse_appcast(published_appcast).build_version
     if config.build_version <= published:
@@ -259,7 +303,12 @@ def _check_key(config: ReleaseConfig, _: argparse.Namespace) -> None:
 
 
 def _check_newer(config: ReleaseConfig, arguments: argparse.Namespace) -> None:
-    published = ensure_newer_than_published(config, arguments.published.read_text(encoding="utf-8"))
+    url = arguments.feed_url or config.feed_url
+    published_appcast = fetch_published_appcast(url)
+    if published_appcast is None:
+        print(f"No feed at {url} yet (HTTP 404); this is the first release.")
+        return
+    published = ensure_newer_than_published(config, published_appcast)
     print(f"Build {config.build_version} is newer than published build {published}.")
 
 
@@ -279,6 +328,8 @@ def _validate(config: ReleaseConfig, arguments: argparse.Namespace) -> None:
         arguments.appcast.read_text(encoding="utf-8"), config, require_signature=not arguments.allow_unsigned
     )
     validate_update_zip(arguments.zip, config, expected_length=item.length)
+    if item.signature:
+        verify_update_signature(arguments.zip, item.signature, config.public_ed_key)
     print(f"Validated {config.tag}: bundle {config.bundle_version}, build {config.build_version}.")
 
 
@@ -286,10 +337,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=CONFIG_PATH)
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("describe", help="print tag and the DMG, ZIP and appcast asset names").set_defaults(run=_describe)
+    describe = commands.add_parser("describe", help="print tag and the DMG, ZIP and appcast asset names")
+    describe.set_defaults(run=_describe)
     commands.add_parser("check-key", help="require a real Sparkle public key").set_defaults(run=_check_key)
-    newer = commands.add_parser("check-newer", help="require a build above the published feed")
-    newer.add_argument("--published", type=Path, required=True)
+    newer = commands.add_parser("check-newer", help="require a build above the live feed (404 = first release)")
+    newer.add_argument("--feed-url", help="feed to check instead of SHAAR_FEED_URL")
     newer.set_defaults(run=_check_newer)
     write = commands.add_parser("write", help="write the single-item appcast")
     write.add_argument("--zip", type=Path, required=True)

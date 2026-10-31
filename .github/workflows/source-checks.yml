@@ -62,6 +62,13 @@ jobs:
       - name: Check Swift formatting
         run: swift format lint --strict --recursive Package.swift Sources Tests
 
+      - name: Install Python test dependencies
+        env:
+          PYTHON: ${{ steps.python.outputs.python-path }}
+        run: |
+          "$PYTHON" -m venv .venv
+          .venv/bin/python -m pip install --require-hashes --only-binary=:all: -r scripts/release-requirements.txt
+
       - name: Run Python tests
         run: .venv/bin/python scripts/test-python.py
 

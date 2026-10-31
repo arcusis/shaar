@@ -2,6 +2,8 @@
 
 Shaar (Hebrew שער, “gateway”) is a native macOS web browser built with Swift 6.2, SwiftUI, and AppKit. It combines profile-isolated browsing spaces with a Chromium rendering engine supplied through ArdiaCore.
 
+> **Beta.** Shaar is in early public beta. It is usable day to day, but expect rough edges and missing features. Please report problems in [GitHub Issues](https://github.com/arcusis/shaar/issues).
+
 ## Requirements
 
 - macOS 26 or later

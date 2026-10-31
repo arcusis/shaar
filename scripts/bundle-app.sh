@@ -1,15 +1,18 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+source scripts/release-config.sh
 configuration=release
 with_engine=false
+with_updates=false
 seen_configuration=false
 seen_engine=false
+seen_updates=false
 while (($#)); do
   case "$1" in
     --configuration)
       if $seen_configuration || (($# < 2)) || [[ "$2" == --* ]]; then
-        echo 'Usage: bundle-app.sh [--configuration release|debug] [--with-engine]' >&2
+        echo 'Usage: bundle-app.sh [--configuration release|debug] [--with-engine] [--with-updates]' >&2
         exit 2
       fi
       case "$2" in
@@ -26,6 +29,15 @@ while (($#)); do
       fi
       seen_engine=true
       with_engine=true
+      shift
+      ;;
+    --with-updates)
+      if $seen_updates; then
+        echo 'Duplicate option: --with-updates' >&2
+        exit 2
+      fi
+      seen_updates=true
+      with_updates=true
       shift
       ;;
     *) echo "Unknown option: $1" >&2; exit 2 ;;
@@ -48,6 +60,12 @@ fi
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS"
 cp "$binary_dir/ArcusisBrowser" "$app/Contents/MacOS/ArcusisBrowser"
+# SwiftPM can add its package Frameworks directory as an absolute build rpath.
+# Remove it so runtime resolves only the app's relative Frameworks directory.
+package_rpath="$binary_dir/PackageFrameworks"
+if otool -l "$app/Contents/MacOS/ArcusisBrowser" | grep -Fq "path $package_rpath "; then
+  install_name_tool -delete_rpath "$package_rpath" "$app/Contents/MacOS/ArcusisBrowser"
+fi
 "${PYTHON:-python3}" scripts/stage-browser-resources.py \
   "$binary_dir" "$app/Contents/Resources"
 cp Resources/Branding/Shaar.icns "$app/Contents/Resources/Shaar.icns"
@@ -55,9 +73,14 @@ cp -R Resources/ExtensionManager "$app/Contents/Resources/ExtensionManager"
 mkdir -p "$app/Contents/Resources/ArdiaCore"
 cp ThirdParty/ArdiaCore/LICENSE ThirdParty/ArdiaCore/NOTICE ThirdParty/ArdiaCore/pin.json \
   "$app/Contents/Resources/ArdiaCore/"
+# The executable links Sparkle, so every bundle embeds it. Copy the pinned SwiftPM artifact
+# unchanged: its own signatures and entitlements stay intact for release re-signing.
+mkdir -p "$app/Contents/Frameworks"
+ditto "$binary_dir/Sparkle.framework" "$app/Contents/Frameworks/Sparkle.framework"
+mkdir -p "$app/Contents/Resources/Sparkle"
+cp "$scratch_path/artifacts/sparkle/Sparkle/LICENSE" "$app/Contents/Resources/Sparkle/LICENSE"
 if $with_engine; then
   framework=$(bash scripts/fetch-engine.sh)
-  mkdir -p "$app/Contents/Frameworks"
   # Keep version symlinks and upstream resources. Re-sign nested code inside out.
   ditto "$framework" "$app/Contents/Frameworks/Chromium Framework.framework"
   staged="$app/Contents/Frameworks/Chromium Framework.framework"
@@ -71,12 +94,20 @@ if $with_engine; then
   done
   codesign --force --timestamp=none --sign - "$staged"
 fi
-cat > "$app/Contents/Info.plist" <<'PLIST'
+# Only release bundles carry the update feed; without it the app never starts Sparkle.
+update_keys=''
+if $with_updates; then
+  update_keys="  <key>SUFeedURL</key><string>$SHAAR_FEED_URL</string>
+  <key>SUPublicEDKey</key><string>$SHAAR_SPARKLE_PUBLIC_ED_KEY</string>
+  <key>SUEnableAutomaticChecks</key><true/>
+  <key>SUEnableInstallerLauncherService</key><true/>"
+fi
+cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>CFBundleExecutable</key><string>ArcusisBrowser</string>
-  <key>CFBundleIdentifier</key><string>com.arcusis.browser</string>
+  <key>CFBundleIdentifier</key><string>$SHAAR_BUNDLE_IDENTIFIER</string>
   <key>CFBundleName</key><string>Shaar</string>
   <key>CFBundleURLTypes</key><array><dict>
     <key>CFBundleURLName</key><string>Web URLs</string>
@@ -84,10 +115,10 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
   </dict></array>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleIconFile</key><string>Shaar.icns</string>
-  <key>CFBundleShortVersionString</key><string>0.1.0</string>
-  <key>CFBundleVersion</key><string>1</string>
+  <key>CFBundleShortVersionString</key><string>$SHAAR_BUNDLE_VERSION</string>
+  <key>CFBundleVersion</key><string>$SHAAR_BUILD_VERSION</string>
   <key>NSHumanReadableCopyright</key><string>© 2026 Arcusis. All rights reserved.</string>
-  <key>LSMinimumSystemVersion</key><string>26.0</string>
+  <key>LSMinimumSystemVersion</key><string>$SHAAR_MINIMUM_SYSTEM_VERSION</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>UTExportedTypeDeclarations</key><array><dict>
     <key>UTTypeIdentifier</key><string>com.arcusis.browser.sidebar-item</string>
@@ -99,6 +130,7 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
   <key>NSLocationUsageDescription</key><string>Allow websites you approve to use your location, such as maps and delivery sites.</string>
   <key>NSLocationWhenInUseUsageDescription</key><string>Allow websites you approve to use your location, such as maps and delivery sites.</string>
   <key>NSBluetoothAlwaysUsageDescription</key><string>Allow websites you approve to connect to Bluetooth devices, such as security keys and phones used for passkey sign-in.</string>
+$update_keys
 </dict></plist>
 PLIST
 codesign --force --timestamp=none --sign - "$app"

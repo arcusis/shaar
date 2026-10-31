@@ -6,6 +6,24 @@ import Testing
 
 @Suite @MainActor
 struct BrowserSettingsIntegrationTests {
+  @Test func unknownStoredSearchEngineFallsBackWithoutLosingPreferences() throws {
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let fileURL = directory.appending(path: "preferences.json")
+    let profileID = UUID()
+    let old = """
+      {"version":1,"sidebarInitiallyVisible":false,"profileSearchEngines":["\(profileID.uuidString)","unknown-engine"]}
+      """
+    try Data(old.utf8).write(to: fileURL)
+
+    let store = BrowserPreferencesStore(fileURL: fileURL)
+
+    #expect(store.searchEngine(for: profileID) == .google)
+    #expect(!store.sidebarInitiallyVisible)
+    #expect(store.storageNotice == nil)
+  }
+
   @Test func profileSearchChoicesReachIndependentAndSharedStores() throws {
     let fixture = fixture()
     let manager = try BrowserWorkspaceStore(initialSession: fixture.session)

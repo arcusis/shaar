@@ -38,7 +38,6 @@ struct BrowserSettingsChoice: Identifiable {
 enum BrowserSettingsSection: String, CaseIterable, Identifiable {
   case general
   case appearance
-  case search
   case privacy
   case profiles
   case shortcuts
@@ -50,7 +49,6 @@ enum BrowserSettingsSection: String, CaseIterable, Identifiable {
     switch self {
     case .general: "General"
     case .appearance: "Appearance"
-    case .search: "Search"
     case .privacy: "Privacy & Security"
     case .profiles: "Profiles"
     case .shortcuts: "Shortcuts"
@@ -62,7 +60,6 @@ enum BrowserSettingsSection: String, CaseIterable, Identifiable {
     switch self {
     case .general: "gearshape"
     case .appearance: "paintbrush"
-    case .search: "magnifyingglass"
     case .privacy: "hand.raised"
     case .profiles: "person.crop.circle"
     case .shortcuts: "command"
@@ -148,8 +145,6 @@ struct BrowserSettingsView: View {
           generalContent
         case .appearance:
           appearanceContent
-        case .search:
-          searchContent
         case .privacy:
           privacyContent
         case .profiles:
@@ -237,7 +232,6 @@ struct BrowserSettingsView: View {
     switch section {
     case .general: .gray
     case .appearance: .blue
-    case .search: .orange
     case .privacy: .blue
     case .profiles: .purple
     case .shortcuts: .indigo
@@ -315,30 +309,6 @@ struct BrowserSettingsView: View {
     }
     .formStyle(.grouped)
     .onChange(of: appearance) { _, value in BrowserSettingsAppearance.apply(value) }
-  }
-
-  private var searchContent: some View {
-    Form {
-      Section {
-        Picker("Profile", selection: $selectedProfileID) {
-          ForEach(profiles) { Text($0.name).tag(Optional($0.id)) }
-        }
-        Picker("Search engine", selection: $selectedSearchEngine) {
-          ForEach(searchEngines) { Text($0.title).tag($0.id) }
-        }.disabled(selectedProfileID == nil)
-      } header: {
-        Text("Default Search Engine")
-      } footer: {
-        Text("Each profile uses its own search engine.")
-      }
-      Section("Available Engines") {
-        ForEach(searchEngines) { engine in
-          LabeledContent(engine.title) {
-            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-          }
-        }
-      }
-    }.formStyle(.grouped)
   }
 
   private var privacyContent: some View {

@@ -48,13 +48,11 @@ struct CommandPanel: View {
       movedSelection = true
     }
     .onKeyPress(.upArrow) {
-      movedSelection = true
-      store.moveCommandSelection(by: -1)
+      moveSelection(by: -1)
       return .handled
     }
     .onKeyPress(.downArrow) {
-      movedSelection = true
-      store.moveCommandSelection(by: 1)
+      moveSelection(by: 1)
       return .handled
     }
     .onKeyPress(.tab, phases: .down) { press in
@@ -96,9 +94,10 @@ struct CommandPanel: View {
   private var resultsList: some View {
     let sections = store.commandSections
     let results = sections.results
+    let selection = store.commandSelection
     return ScrollViewReader { proxy in
       ScrollView {
-        VStack(spacing: 2) {
+        LazyVStack(spacing: 2) {
           if results.isEmpty {
             Text(emptyMessage)
               .foregroundStyle(.secondary)
@@ -109,16 +108,16 @@ struct CommandPanel: View {
               CommandSectionHeader(title: item.section.title)
             }
             ForEach(Array(item.section.results.enumerated()), id: \.element.id) { offset, result in
-              row(result, index: item.start + offset)
+              row(result, isSelected: item.start + offset == selection)
             }
           }
         }
         .padding(8)
-        .animation(
-          reduceMotion ? nil : .spring(duration: 0.2, bounce: 0.1), value: store.commandSelection)
+        // New results replace the rows in place; only the panel's resize animates.
+        .transaction(value: results.map(\.id)) { $0.animation = nil }
       }
       .frame(height: resultsHeight)
-      .onChange(of: store.commandSelection) { _, index in
+      .onChange(of: selection) { _, index in
         guard results.indices.contains(index) else { return }
         proxy.scrollTo(results[index].id)
       }
@@ -131,33 +130,23 @@ struct CommandPanel: View {
     return "No matching results"
   }
 
-  private func row(_ result: CommandResult, index: Int) -> some View {
-    let isSelected = index == store.commandSelection
-    return Button {
-      store.perform(result.action)
-    } label: {
-      CommandResultRow(
-        result: result, subtitle: subtitle(for: result), favicon: favicon(for: result.action),
-        actionHint: isSelected ? actionLabel(for: result) : nil
-      )
-      .background {
-        if isSelected { selectionHighlight }
-      }
-    }
-    .buttonStyle(.plain)
-    .accessibilityAddTraits(isSelected ? .isSelected : [])
+  private func row(_ result: CommandResult, isSelected: Bool) -> some View {
+    CommandResultButton(
+      store: store, result: result, subtitle: subtitle(for: result),
+      favicon: favicon(for: result.action),
+      actionHint: isSelected ? actionLabel(for: result) : nil, isSelected: isSelected,
+      selectionNamespace: selectionNamespace
+    )
     .id(result.id)
   }
 
-  /// One shared highlight that slides between rows as the selection moves.
-  private var selectionHighlight: some View {
-    RoundedRectangle(cornerRadius: 8)
-      .fill(Color.accentColor.opacity(0.15))
-      .overlay {
-        RoundedRectangle(cornerRadius: 8)
-          .strokeBorder(Color.accentColor.opacity(0.38), lineWidth: 1)
-      }
-      .matchedGeometryEffect(id: "selection", in: selectionNamespace)
+  /// Only keyboard moves animate, so the highlight slides between rows without animating the
+  /// rows themselves.
+  private func moveSelection(by amount: Int) {
+    movedSelection = true
+    withAnimation(reduceMotion ? nil : .spring(duration: 0.2, bounce: 0.1)) {
+      store.moveCommandSelection(by: amount)
+    }
   }
 
   private var footer: some View {
@@ -257,6 +246,44 @@ struct CommandPanel: View {
     default:
       false
     }
+  }
+}
+
+/// A launcher row built from values, so moving the selection re-renders only the rows it leaves
+/// and enters.
+private struct CommandResultButton: View {
+  let store: BrowserStore
+  let result: CommandResult
+  let subtitle: String
+  let favicon: NSImage?
+  let actionHint: String?
+  let isSelected: Bool
+  let selectionNamespace: Namespace.ID
+
+  var body: some View {
+    Button {
+      store.perform(result.action)
+    } label: {
+      CommandResultRow(
+        result: result, subtitle: subtitle, favicon: favicon, actionHint: actionHint
+      )
+      .background {
+        if isSelected { selectionHighlight }
+      }
+    }
+    .buttonStyle(.plain)
+    .accessibilityAddTraits(isSelected ? .isSelected : [])
+  }
+
+  /// One shared highlight that slides between rows as the selection moves.
+  private var selectionHighlight: some View {
+    RoundedRectangle(cornerRadius: 8)
+      .fill(Color.accentColor.opacity(0.15))
+      .overlay {
+        RoundedRectangle(cornerRadius: 8)
+          .strokeBorder(Color.accentColor.opacity(0.38), lineWidth: 1)
+      }
+      .matchedGeometryEffect(id: "selection", in: selectionNamespace)
   }
 }
 

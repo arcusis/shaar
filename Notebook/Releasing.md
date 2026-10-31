@@ -1,6 +1,6 @@
 # Releasing
 
-Shaar updates itself with Sparkle 2 (pinned in `Package.swift`), the same way as Zerm: an appcast on GitHub Pages and the update download on GitHub Releases. `arcusis/shaar` is internal, so Sparkle cannot read its Pages or assets without credentials. The feed and downloads live in the public repository `arcusis/shaar-releases`: Pages serves `docs/appcast.xml` from its default branch, and its Releases hold `Shaar_<version>_aarch64.dmg` and `Shaar-<version>-macos.zip`.
+Shaar updates itself with Sparkle 2 (pinned in `Package.swift`), the same way as Zerm: an appcast on GitHub Pages and the update download on GitHub Releases, both in `arcusis/shaar`. Sparkle reads both without credentials, so the repository must be public before the first release. Each release holds three assets: `Shaar_<version>_aarch64.dmg`, the Sparkle enclosure `Shaar-<version>-macos.zip`, and `appcast.xml`. Pages serves the feed at `https://arcusis.github.io/shaar/appcast.xml` from an Actions deployment, not from a branch or directory.
 
 Versions, bundle id, feed URL, release repository and the Sparkle public key are constants in `scripts/release-config.sh`. `bundle-app.sh`, `release.sh`, `release_feed.py` and the Release workflow all read that file.
 
@@ -10,7 +10,7 @@ Every bundle embeds `Sparkle.framework`, because the executable links it, plus i
 
 ## One-time setup
 
-1. Create the public repository `arcusis/shaar-releases` and enable Pages from `/docs` on its default branch.
+1. Make `arcusis/shaar` public. Set Settings → Pages → Source to **GitHub Actions**. In Settings → Environments → `github-pages`, add a deployment tag rule `v*`: releases run the workflow on the tag ref, and the default rule only allows the default branch.
 2. Build once so SwiftPM fetches Sparkle's tools, then run `build/swiftpm/default/artifacts/sparkle/Sparkle/bin/generate_keys --account shaar`. Put the printed public key in `SHAAR_SPARKLE_PUBLIC_ED_KEY`. The private key stays in the login keychain. Back it up privately with `generate_keys --account shaar -x <file>`. Without it, existing installs cannot accept any later update.
 3. Store notarization credentials as the keychain profile `shaar-notary`:
    `xcrun notarytool store-credentials shaar-notary --key <AuthKey.p8> --key-id <KEY-ID> --issuer <ISSUER-UUID>`.
@@ -21,10 +21,11 @@ Every bundle embeds `Sparkle.framework`, because the executable links it, plus i
 1. Raise `SHAAR_BUNDLE_VERSION` (Major.Minor.Patch, which also sets the tag `v<version>`). Raise `SHAAR_BUILD_VERSION` too: Sparkle orders updates by it, and `release.sh` refuses a build that is not above the live feed's.
 2. Write the release notes as `<li>` lines in an HTML file.
 3. Dry run: `bash scripts/release.sh --notes notes.html`. Add `--allow-unsigned-update` when the EdDSA key is not on this Mac.
-4. Real run: `bash scripts/release.sh --notes notes.html --notarize --upload`. This notarizes and staples both the app and the DMG, then creates a **draft** release in `shaar-releases` with both assets.
-5. Tag the source in `arcusis/shaar` with the same `v<version>`, then publish the draft.
-6. Commit `build/release/appcast.xml` to `shaar-releases` as `docs/appcast.xml`. Publish the release first. Otherwise clients see the update before its download exists.
-7. Run the Release workflow (`workflow_dispatch`, input `tag`) in `arcusis/shaar`. It checks the tag format and the exact assets. It downloads the live feed and the ZIP without credentials, then checks them against the tagged `release-config.sh`: title, versions, minimum system, enclosure URL and length, EdDSA signature, and the ZIP's bundle id, versions, feed and key.
+4. Merge the version bump, then tag `v<version>` and push the tag.
+5. Real run, from a clean checkout of that tag: `bash scripts/release.sh --notes notes.html --notarize --upload`. It notarizes and staples the app and the DMG. Then it creates a **draft** release on the existing tag (`--verify-tag`) with all three assets.
+6. Publish the draft. That runs the Release workflow, which checks the tag format, that the release is published, and the exact assets. It downloads `appcast.xml` and the ZIP without credentials and checks them against the tagged `release-config.sh`: title, versions, minimum system, enclosure URL and length, EdDSA signature, and the ZIP's bundle id, versions, feed and key. Only then does it deploy that `appcast.xml` to Pages and confirm the deployed URL is the configured feed. Clients therefore never see an update whose download is not public yet.
+
+Run the workflow by hand (`workflow_dispatch`, input `tag`) to re-validate or re-deploy a release.
 
 Only `--notarize` contacts Apple, and only `--upload` writes to GitHub. `--upload` requires `--notarize` and a signed update.
 

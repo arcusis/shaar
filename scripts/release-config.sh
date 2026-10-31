@@ -8,10 +8,10 @@ SHAAR_BUNDLE_VERSION=0.1.0
 SHAAR_BUILD_VERSION=1
 SHAAR_MINIMUM_SYSTEM_VERSION=26.0
 
-# arcusis/shaar is internal, so the feed and update downloads live in a public repository:
-# GitHub Pages serves docs/appcast.xml from its default branch; its Releases hold the DMG and ZIP.
-SHAAR_RELEASE_REPOSITORY=arcusis/shaar-releases
-SHAAR_FEED_URL=https://arcusis.github.io/shaar-releases/appcast.xml
+# GitHub Releases in this repository hold the DMG, the Sparkle ZIP and appcast.xml. The Release
+# workflow deploys the validated appcast.xml to this repository's GitHub Pages at the feed URL.
+SHAAR_RELEASE_REPOSITORY=arcusis/shaar
+SHAAR_FEED_URL=https://arcusis.github.io/shaar/appcast.xml
 
 # Replace with the public key printed by Sparkle's `generate_keys --account shaar`.
 # Bundles carrying the placeholder never start the updater, and release.sh refuses to

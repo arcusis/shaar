@@ -65,6 +65,10 @@ class ReleaseConfig:
         return f"Shaar-{self.bundle_version}-macos.zip"
 
     @property
+    def appcast_name(self) -> str:
+        return "appcast.xml"
+
+    @property
     def zip_url(self) -> str:
         return f"https://github.com/{self.repository}/releases/download/{self.tag}/{self.zip_name}"
 
@@ -243,7 +247,7 @@ def ensure_newer_than_published(config: ReleaseConfig, published_appcast: str) -
 
 
 def _describe(config: ReleaseConfig, _: argparse.Namespace) -> None:
-    print(config.tag, config.dmg_name, config.zip_name)
+    print(config.tag, config.dmg_name, config.zip_name, config.appcast_name)
 
 
 def _check_key(config: ReleaseConfig, _: argparse.Namespace) -> None:
@@ -282,7 +286,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=CONFIG_PATH)
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("describe", help="print tag, DMG name and ZIP name").set_defaults(run=_describe)
+    commands.add_parser("describe", help="print tag and the DMG, ZIP and appcast asset names").set_defaults(run=_describe)
     commands.add_parser("check-key", help="require a real Sparkle public key").set_defaults(run=_check_key)
     newer = commands.add_parser("check-newer", help="require a build above the published feed")
     newer.add_argument("--published", type=Path, required=True)

@@ -6,6 +6,7 @@ set -euo pipefail
 #   bash scripts/release.sh --notes notes.html                      # build + sign + verify
 #   bash scripts/release.sh --notes notes.html --notarize           # + notarize and staple
 #   bash scripts/release.sh --notes notes.html --notarize --upload  # + draft GitHub Release
+#                                   # (run from a clean checkout of the pushed release tag)
 #   bash scripts/release.sh --notes notes.html --allow-unsigned-update
 #                                   # dry run without the Sparkle EdDSA key
 # Versions, feed and release repository: scripts/release-config.sh. Process: Notebook/Releasing.md.
@@ -65,9 +66,10 @@ sparkle_bin=build/swiftpm/default/artifacts/sparkle/Sparkle/bin
 out=build/release
 app="$out/Shaar.app"
 release_names=$(feed describe)
-read -r release_tag dmg_name zip_name <<< "$release_names"
+read -r release_tag dmg_name zip_name appcast_name <<< "$release_names"
 dmg="$out/$dmg_name"
 update_zip="$out/$zip_name"
+appcast="$out/$appcast_name"
 
 echo "==> Releasing Shaar $SHAAR_BUNDLE_VERSION ($SHAAR_BUILD_VERSION) as $release_tag"
 if ! security find-identity -v -p codesigning | grep -Fq "\"$sign_identity\""; then
@@ -85,7 +87,11 @@ if $notarize; then
   fi
 fi
 if $upload; then
-  gh repo view "$SHAAR_RELEASE_REPOSITORY" --json name >/dev/null
+  # The Release workflow validates assets against the tagged source, so build exactly that.
+  if ! git diff --quiet HEAD || [[ "$(git rev-parse HEAD)" != "$(git rev-parse -q --verify "refs/tags/$release_tag^{commit}")" ]]; then
+    echo "error: --upload needs a clean checkout of tag $release_tag." >&2
+    exit 1
+  fi
   if gh release view "$release_tag" --repo "$SHAAR_RELEASE_REPOSITORY" >/dev/null 2>&1; then
     echo "error: $SHAAR_RELEASE_REPOSITORY already has release $release_tag." >&2
     exit 1
@@ -214,26 +220,26 @@ else
   fi
   signature=$("$sparkle_bin/sign_update" --account "$SHAAR_SPARKLE_KEY_ACCOUNT" -p "$update_zip")
 fi
-feed write --zip "$update_zip" --notes "$notes" --output "$out/appcast.xml" \
+feed write --zip "$update_zip" --notes "$notes" --output "$appcast" \
   ${signature:+--signature "$signature"}
 if $allow_unsigned; then
-  feed validate --appcast "$out/appcast.xml" --zip "$update_zip" --allow-unsigned
+  feed validate --appcast "$appcast" --zip "$update_zip" --allow-unsigned
 else
-  feed validate --appcast "$out/appcast.xml" --zip "$update_zip"
+  feed validate --appcast "$appcast" --zip "$update_zip"
 fi
 
 if $upload; then
   echo "==> Creating draft release $release_tag in $SHAAR_RELEASE_REPOSITORY"
-  gh release create "$release_tag" "$dmg" "$update_zip" --repo "$SHAAR_RELEASE_REPOSITORY" \
-    --draft --title "Shaar $SHAAR_BUNDLE_VERSION" --notes-file "$notes"
+  gh release create "$release_tag" "$dmg" "$update_zip" "$appcast" --repo "$SHAAR_RELEASE_REPOSITORY" \
+    --verify-tag --draft --title "Shaar $SHAAR_BUNDLE_VERSION" --notes-file "$notes"
 fi
 
 echo ''
 echo "DMG:      $dmg"
 echo "Update:   $update_zip"
-echo "Appcast:  $out/appcast.xml"
+echo "Appcast:  $appcast"
 if $upload; then
-  echo "Next: publish the draft, then commit the appcast to $SHAAR_RELEASE_REPOSITORY docs/appcast.xml."
+  echo 'Next: publish the draft. The Release workflow validates it and deploys the appcast to Pages.'
 else
   echo 'Dry run: nothing was notarized or uploaded.'
 fi

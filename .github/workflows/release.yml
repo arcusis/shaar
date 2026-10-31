@@ -1,14 +1,16 @@
 name: Release
 
-# Verifies a published Shaar release against its tagged source.
+# Validates a published Shaar release against its tagged source, then deploys its appcast.xml
+# to GitHub Pages, where Sparkle reads the feed (SHAAR_FEED_URL in scripts/release-config.sh).
 #
-# arcusis/shaar is internal, so the update feed and downloads live in the public repository
-# named by SHAAR_RELEASE_REPOSITORY in scripts/release-config.sh. Releases there cannot
-# trigger this workflow, so run it by hand after publishing the GitHub Release and pushing
-# docs/appcast.xml to that repository. scripts/release.sh runs the same appcast and ZIP checks
-# locally before upload. See Notebook/Releasing.md.
+# scripts/release.sh --notarize --upload creates the draft release with the DMG, the Sparkle ZIP
+# and appcast.xml, after running the same appcast and ZIP checks locally. Publishing the draft
+# runs this workflow, so the feed only changes once the update download is public. Run it by
+# hand with a tag to re-validate or re-deploy. See Notebook/Releasing.md.
 
 on:
+  release:
+    types: [released]
   workflow_dispatch:
     inputs:
       tag:
@@ -19,13 +21,19 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: release-pages
+  cancel-in-progress: false
+
 jobs:
   validate-release:
     name: Validate release tag, assets and appcast
-    runs-on: [self-hosted, macOS, arcusis-macos]
+    runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      feed-url: ${{ steps.contract.outputs.feed-url }}
     env:
-      RELEASE_TAG: ${{ inputs.tag }}
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.release.tag_name }}
 
     steps:
       - name: Check tag format
@@ -40,51 +48,98 @@ jobs:
         # actions/checkout v5.1.0
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
-          ref: refs/tags/${{ inputs.tag }}
+          ref: refs/tags/${{ env.RELEASE_TAG }}
           persist-credentials: false
 
       - name: Load tagged release contract
+        id: contract
         run: |
           set -euo pipefail
           names=$(python3 scripts/release_feed.py describe)
-          read -r tag dmg zip <<< "$names"
+          read -r tag dmg zip appcast <<< "$names"
           if [ "$tag" != "$RELEASE_TAG" ]; then
             echo "::error::Tagged release-config.sh describes $tag, not $RELEASE_TAG"
             exit 1
           fi
           python3 scripts/release_feed.py check-key
           source scripts/release-config.sh
+          if [ "$SHAAR_RELEASE_REPOSITORY" != "$GITHUB_REPOSITORY" ]; then
+            echo "::error::release-config.sh names $SHAAR_RELEASE_REPOSITORY, not $GITHUB_REPOSITORY"
+            exit 1
+          fi
           {
             echo "EXPECTED_DMG=$dmg"
             echo "EXPECTED_ZIP=$zip"
-            echo "RELEASE_REPOSITORY=$SHAAR_RELEASE_REPOSITORY"
-            echo "FEED_URL=$SHAAR_FEED_URL"
+            echo "EXPECTED_APPCAST=$appcast"
           } >> "$GITHUB_ENV"
+          echo "feed-url=$SHAAR_FEED_URL" >> "$GITHUB_OUTPUT"
 
       - name: Require exact release assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          assets=$(gh api "repos/$RELEASE_REPOSITORY/releases/tags/$RELEASE_TAG" --jq '.assets[].name')
+          release=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG")
+          if [ "$(jq -r '.draft or .prerelease' <<< "$release")" != false ]; then
+            echo "::error::Release $RELEASE_TAG must be published and not a prerelease"
+            exit 1
+          fi
+          assets=$(jq -r '.assets[].name' <<< "$release")
           missing=0
-          for asset in "$EXPECTED_DMG" "$EXPECTED_ZIP"; do
+          for asset in "$EXPECTED_DMG" "$EXPECTED_ZIP" "$EXPECTED_APPCAST"; do
             if printf '%s\n' "$assets" | grep -Fxq "$asset"; then
               echo "Found required asset: $asset"
             else
-              echo "::error::Release $RELEASE_TAG in $RELEASE_REPOSITORY is missing exact asset $asset"
+              echo "::error::Release $RELEASE_TAG is missing exact asset $asset"
               missing=1
             fi
           done
           exit "$missing"
 
-      - name: Validate live appcast and public update download
+      - name: Validate appcast and public update download
         run: |
           set -euo pipefail
-          # Fetch both without credentials, exactly as Sparkle clients do.
-          curl --fail --silent --show-error --location "$FEED_URL" --output "$RUNNER_TEMP/appcast.xml"
-          curl --fail --silent --show-error --location \
-            "https://github.com/$RELEASE_REPOSITORY/releases/download/$RELEASE_TAG/$EXPECTED_ZIP" \
+          # Download without credentials, exactly as Sparkle clients do.
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG"
+          mkdir -p "$RUNNER_TEMP/pages"
+          curl --fail --silent --show-error --location "$base/$EXPECTED_APPCAST" \
+            --output "$RUNNER_TEMP/pages/appcast.xml"
+          curl --fail --silent --show-error --location "$base/$EXPECTED_ZIP" \
             --output "$RUNNER_TEMP/$EXPECTED_ZIP"
           python3 scripts/release_feed.py validate \
-            --appcast "$RUNNER_TEMP/appcast.xml" --zip "$RUNNER_TEMP/$EXPECTED_ZIP"
+            --appcast "$RUNNER_TEMP/pages/appcast.xml" --zip "$RUNNER_TEMP/$EXPECTED_ZIP"
+
+      - name: Upload validated appcast for Pages
+        # actions/upload-pages-artifact v5.0.0
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
+        with:
+          path: ${{ runner.temp }}/pages
+
+  deploy-appcast:
+    name: Deploy appcast to GitHub Pages
+    needs: validate-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}appcast.xml
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        # actions/deploy-pages v5.0.1
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346
+
+      - name: Check the deployed URL is the configured feed
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+          FEED_URL: ${{ needs.validate-release.outputs.feed-url }}
+        run: |
+          set -euo pipefail
+          if [ "${PAGE_URL}appcast.xml" != "$FEED_URL" ]; then
+            echo "::error::Pages serves ${PAGE_URL}appcast.xml but installed apps read $FEED_URL"
+            exit 1
+          fi

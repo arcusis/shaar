@@ -3,7 +3,7 @@ import Testing
 
 @testable import BrowserCore
 
-private let feed = "https://arcusis.github.io/shaar-releases/appcast.xml"
+private let feed = "https://arcusis.github.io/shaar/appcast.xml"
 private let key = Data(repeating: 7, count: 32).base64EncodedString()
 
 @Test func releaseBundleKeysEnableUpdateFeed() throws {
@@ -31,7 +31,7 @@ private let key = Data(repeating: 7, count: 32).base64EncodedString()
 }
 
 @Test func insecureOrMalformedFeedKeepsUpdaterInert() {
-  for candidate in ["http://arcusis.github.io/shaar-releases/appcast.xml", "appcast.xml", ""] {
+  for candidate in ["http://arcusis.github.io/shaar/appcast.xml", "appcast.xml", ""] {
     #expect(
       UpdateFeedConfiguration(infoDictionary: ["SUFeedURL": candidate, "SUPublicEDKey": key])
         == nil)

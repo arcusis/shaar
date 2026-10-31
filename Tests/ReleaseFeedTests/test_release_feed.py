@@ -21,8 +21,8 @@ SHAAR_BUNDLE_IDENTIFIER=com.arcusis.browser
 SHAAR_BUNDLE_VERSION=1.2.3
 SHAAR_BUILD_VERSION=7
 SHAAR_MINIMUM_SYSTEM_VERSION=26.0
-SHAAR_RELEASE_REPOSITORY=arcusis/shaar-releases
-SHAAR_FEED_URL=https://arcusis.github.io/shaar-releases/appcast.xml
+SHAAR_RELEASE_REPOSITORY=arcusis/shaar
+SHAAR_FEED_URL=https://arcusis.github.io/shaar/appcast.xml
 SHAAR_SPARKLE_PUBLIC_ED_KEY={KEY}
 SHAAR_SPARKLE_KEY_ACCOUNT=shaar
 """
@@ -49,7 +49,7 @@ class ReleaseFeedTests(unittest.TestCase):
             "CFBundleIdentifier": "com.arcusis.browser",
             "CFBundleShortVersionString": "1.2.3",
             "CFBundleVersion": "7",
-            "SUFeedURL": "https://arcusis.github.io/shaar-releases/appcast.xml",
+            "SUFeedURL": "https://arcusis.github.io/shaar/appcast.xml",
             "SUPublicEDKey": KEY,
         } | (info or {})
         path = self.root / "Shaar-1.2.3-macos.zip"
@@ -62,24 +62,25 @@ class ReleaseFeedTests(unittest.TestCase):
         config = release_feed.load_config()
 
         self.assertEqual(config.bundle_identifier, "com.arcusis.browser")
-        self.assertEqual(config.repository, "arcusis/shaar-releases")
-        self.assertEqual(config.feed_url, "https://arcusis.github.io/shaar-releases/appcast.xml")
+        self.assertEqual(config.repository, "arcusis/shaar")
+        self.assertEqual(config.feed_url, "https://arcusis.github.io/shaar/appcast.xml")
         self.assertFalse(config.public_key_is_ready)
 
     def test_names_follow_tag_and_asset_contract(self):
         self.assertEqual(self.config.tag, "v1.2.3")
+        self.assertEqual(self.config.appcast_name, "appcast.xml")
         self.assertEqual(self.config.dmg_name, "Shaar_1.2.3_aarch64.dmg")
         self.assertEqual(self.config.zip_name, "Shaar-1.2.3-macos.zip")
         self.assertEqual(
             self.config.zip_url,
-            "https://github.com/arcusis/shaar-releases/releases/download/v1.2.3/Shaar-1.2.3-macos.zip",
+            "https://github.com/arcusis/shaar/releases/download/v1.2.3/Shaar-1.2.3-macos.zip",
         )
 
     def test_config_rejects_bad_versions_repository_feed_and_shell_syntax(self):
         cases = {
             "SHAAR_BUNDLE_VERSION=1.2.3": "SHAAR_BUNDLE_VERSION=1.2",
             "SHAAR_BUILD_VERSION=7": "SHAAR_BUILD_VERSION=07",
-            "SHAAR_RELEASE_REPOSITORY=arcusis/shaar-releases": "SHAAR_RELEASE_REPOSITORY=shaar-releases",
+            "SHAAR_RELEASE_REPOSITORY=arcusis/shaar": "SHAAR_RELEASE_REPOSITORY=shaar",
             "SHAAR_FEED_URL=https://": "SHAAR_FEED_URL=http://",
             "SHAAR_BUNDLE_IDENTIFIER=com.arcusis.browser": "SHAAR_BUNDLE_IDENTIFIER=$(id)",
         }
@@ -119,7 +120,7 @@ class ReleaseFeedTests(unittest.TestCase):
             replace(self.config, bundle_version="1.2.4"),
             replace(self.config, build_version=8),
             replace(self.config, minimum_system_version="15.0"),
-            replace(self.config, repository="arcusis/shaar"),
+            replace(self.config, repository="arcusis/other"),
         )
         for other in cases:
             with self.subTest(other=other), self.assertRaises(release_feed.ReleaseError):

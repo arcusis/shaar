@@ -306,6 +306,13 @@ def stop_probe(process):
         process.wait(timeout=10)
 
 
+# Stands in for the Chrome Web Store, which fixes its body minimum width at 1280 px.
+WEB_STORE_FIT_PAGE = b"""<!doctype html><html data-arcusis-fixture="web-store-fit"><meta charset="utf-8">
+<title>Web Store fit fixture</title>
+<style>body{margin:0;min-width:1280px;font:18px system-ui}</style>
+<p>Fixed minimum width, like the Chrome Web Store.</p></html>"""
+
+
 class Fixture(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
@@ -334,14 +341,19 @@ class Fixture(http.server.BaseHTTPRequestHandler):
         if path.startswith('/download/'):
             self.download(path.rsplit('/', 1)[-1])
             return
-        body = b"""<!doctype html><html data-arcusis-fixture="v1"><meta charset="utf-8">
+        if path == '/web-store-fit':
+            self.html(WEB_STORE_FIT_PAGE)
+            return
+        self.html(b"""<!doctype html><html data-arcusis-fixture="v1"><meta charset="utf-8">
 <title>Arcusis account isolation fixture</title>
 <style>body{font:18px system-ui;padding:60px;color:#293445;background:#f0f4f8}</style>
 <h1>Local account isolation fixture</h1><p>Disposable test data only.</p>
 <p>OrbitFindMarker OrbitFindMarker OrbitFindMarker</p>
 <form><label>Username <input id="username" autocomplete="username"></label>
 <label>Password <input id="password" type="password" autocomplete="current-password"></label></form>
-<script>window.arcusisInstance=crypto.randomUUID();</script></html>"""
+<script>window.arcusisInstance=crypto.randomUUID();</script></html>""")
+
+    def html(self, body):
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Cache-Control", "no-store")

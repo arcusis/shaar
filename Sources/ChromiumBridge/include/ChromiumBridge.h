@@ -7,6 +7,8 @@ FOUNDATION_EXPORT BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifier
 /// Returns a single certificate-key exception only for an owned, marked disposable test root.
 FOUNDATION_EXPORT NSString * _Nullable ARCProbeTLSArgument(NSURL *directory,
   NSString * _Nullable fingerprint, BOOL testing, NSError **error);
+/// Zoom that fits a page needing `requiredWidth` CSS pixels into `viewportWidth` points, clamped to 67%.
+FOUNDATION_EXPORT double ARCWebStoreFitZoom(double viewportWidth, double requiredWidth);
 /// Test-only gate for the marked disposable probe root.
 FOUNDATION_EXPORT BOOL ARCProbeRootIsOwned(NSURL *root);
 /// Test-only sanitizer for external-app audit fixtures; returns fixed primitive fields only.

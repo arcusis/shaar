@@ -1,6 +1,7 @@
 #import "include/ChromiumBridge.h"
 #import "ChromiumDownloads.h"
 #import "ChromiumLibrary.h"
+#import "ChromiumWebStoreFit.h"
 #import "../../ThirdParty/ArdiaCore/ArdiaCore.h"
 #import <dlfcn.h>
 #include <arpa/inet.h>
@@ -320,6 +321,7 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   ARCDownloadService *_downloadService;
   ARCEngineServices *_services;
   ARCLibraryService *_libraryService;
+  ARCWebStoreFit *_webStoreFit;
 }
 
 - (instancetype)initWithFrameworkURL:(NSURL *)url error:(NSError **)error {
@@ -404,6 +406,13 @@ static NSDictionary *ProbeButtonDiagnostic(id value, NSString *reasonOverride) {
   _testing = testing;
   _probeTLS = tlsArgument != nil;
   if (testing) _probeRoot = directory.URLByDeletingLastPathComponent.URLByResolvingSymlinksInPath;
+  __weak ARCChromiumRuntime *weakSelf = self;
+  _webStoreFit = [[ARCWebStoreFit alloc] initWithTesting:testing
+      evaluator:^(ArdiaCoreTab *tab, NSString *script, void (^completion)(NSString *)) {
+    ARCChromiumRuntime *owner = weakSelf;
+    if (owner) [owner evaluateTab:tab script:script completion:completion];
+    else completion(nil);
+  }];
   static NSString *const externalProbeSwitch = @"--ardia-test-external-protocol-no-launch";
   BOOL externalProbeRequested = [NSProcessInfo.processInfo.arguments containsObject:externalProbeSwitch];
   if (externalProbeRequested) {
@@ -2806,6 +2815,7 @@ static NSString *const ARCExtensionManagerID = @"bphhlegomeaogfihjcipdbcfbgkcfaf
 - (void)tabDidChangeURL:(ArdiaCoreTab *)tab {
   NSString *identity = [self identityForTab:tab];
   if (identity) [self invalidateExternalRequestsForTabID:identity windowID:nil];
+  [_webStoreFit tabDidNavigate:tab];
   [self publish:tab];
 }
 - (void)tabDidChangeLoading:(ArdiaCoreTab *)tab {
@@ -2814,6 +2824,7 @@ static NSString *const ARCExtensionManagerID = @"bphhlegomeaogfihjcipdbcfbgkcfaf
     [self advanceDocumentGenerationForTabID:identity];
     [self invalidateExternalRequestsForTabID:identity windowID:nil];
   }
+  [_webStoreFit tabDidChangeLoading:tab];
   [self publish:tab];
 }
 - (void)tabDidChangeNavigationState:(ArdiaCoreTab *)tab { [self publish:tab]; }
@@ -2840,6 +2851,7 @@ static NSString *const ARCExtensionManagerID = @"bphhlegomeaogfihjcipdbcfbgkcfaf
     [self invalidateExternalRequestsForTabID:identity windowID:nil];
   }
   [self hideWebStoreBrowserPromptInTab:tab];
+  [_webStoreFit tabDidNavigate:tab];
   if (identity && profile && !tab.closed && _onDocumentCommitted) _onDocumentCommitted(identity, profile);
 }
 /// The Chrome Web Store asks every non-Chrome browser to switch. Hide only that dialog, on that host.
@@ -2852,6 +2864,7 @@ static NSString *const ARCExtensionManagerID = @"bphhlegomeaogfihjcipdbcfbgkcfaf
      "hide();new MutationObserver(hide).observe(document.documentElement,{childList:true,subtree:true});})()";
   [self evaluateTab:tab script:script completion:^(NSString *ignored) {}];
 }
+- (void)tabDidChangeZoom:(ArdiaCoreTab *)tab { [_webStoreFit tabDidChangeZoom:tab]; }
 - (void)tab:(ArdiaCoreTab *)tab didFindMatches:(int)count active:(int)active final:(BOOL)final {
   NSString *identity = [self identityForTab:tab];
   ARCNativeWindowState *state = [self stateForTabID:identity];
@@ -2879,6 +2892,7 @@ static NSString *const ARCExtensionManagerID = @"bphhlegomeaogfihjcipdbcfbgkcfaf
   [report writeToURL:[_probeRoot URLByAppendingPathComponent:@"bitwarden-renderer-errors.json"] atomically:YES];
 }
 - (void)tabWillClose:(ArdiaCoreTab *)tab {
+  [_webStoreFit tabWillClose:tab];
   ARCNativeWindowState *popupState = [self stateForPopupTab:tab];
   if (popupState) {
     NSString *identity = popupState.popupID;

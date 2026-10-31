@@ -135,6 +135,7 @@ struct BrowserWindow: View {
     .onChange(of: store.sidebarIsVisible) { _, pinned in
       sidebarVisibility.setPinned(pinned)
     }
+    .modifier(SpaceMenuDialogs(store: store))
     .sheet(
       item: store.engine?.presentsNativePanels == false ? .constant(nil) : $store.sheet,
       onDismiss: { store.sheetDidDismiss() }

@@ -48,6 +48,10 @@ final class BrowserStore {
   private(set) var libraryDrawerSection: LibraryDrawerSection?
   private(set) var libraryDrawerProfileID: UUID?
   var spaceEditorFocus: SpaceEditorFocus = .name
+  /// Space a menu asked to delete; the window shows the confirmation.
+  var spacePendingDeletion: UUID?
+  /// Space a menu asked to give a new profile; the window shows the name prompt.
+  var spacePendingNewProfile: UUID?
   var spaceEditor: SpaceEditorRoute? {
     get {
       if case .space(let route) = sheet { return route }

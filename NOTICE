@@ -1,0 +1,28 @@
+Shaar includes or can bundle third-party components. Each component remains
+under its own license; this notice does not select or grant a license for Shaar.
+
+Chromium engine
+  Source: pinned ArdiaCore engine archive described in
+  ThirdParty/ArdiaCore/pin.json; Chromium version 155.0.8059.84.
+  License: BSD-style licenses and other licenses. The complete notices for
+  bundled Chromium dependencies are provided by the engine at chrome://credits.
+  Keep those notices with any redistribution of the engine.
+
+ArdiaCore native API and engine distribution metadata
+  Source: https://github.com/mantrakp04/ardia, pinned source commit and engine
+  archive in ThirdParty/ArdiaCore/pin.json.
+  License: Apache License 2.0. See ThirdParty/ArdiaCore/LICENSE and
+  ThirdParty/ArdiaCore/NOTICE.
+
+Public Suffix List data
+  Source: Chromium source tree, pinned commit and path in
+  ThirdParty/PublicSuffix/pin.json.
+  License: Mozilla Public License 2.0. See ThirdParty/PublicSuffix/LICENSE.
+
+Optional Bitwarden SDK build
+  Source: https://github.com/bitwarden/sdk-internal at the commit recorded in
+  ThirdParty/BitwardenLifecycleProbe/pin.json.
+  License and distribution terms: unresolved. SDK-enabled local builds stage
+  upstream LICENSE, LICENSE_GPL.txt, LICENSE_SDK.txt, and DISCLAIMER.md files
+  in the generated package's ThirdPartyNotices directory. Review those files
+  before distributing an SDK-enabled build. The SDK is not in the default app.

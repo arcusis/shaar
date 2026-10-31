@@ -487,7 +487,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
 
   @objc func handleURL(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) {
     guard let text = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue,
-      let url = URL(string: text), NavigationInput.isWebURL(url)
+      let url = IncomingURLPolicy.url(from: text)
     else { return }
     if !started {
       pendingURLs.append(url)
@@ -983,8 +983,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
         return host.startupFailed ? 1 : code
       }
     } catch {
-      FileHandle.standardError.write(
-        Data("Browser startup failed: \(error.localizedDescription)\n".utf8))
+      FileHandle.standardError.write(Data("\(StartupFailureMessage.text(for: error))\n".utf8))
       return 1
     }
   }

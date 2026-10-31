@@ -41,4 +41,4 @@ See [CREDITS.md](CREDITS.md) for project and upstream acknowledgements. Chromium
 
 ## License
 
-Shaar's project license has not yet been chosen and will be announced here. Until then, no license for Shaar project code is granted by this repository. Third-party components remain subject to their own licenses; see [NOTICE](NOTICE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Shaar is licensed under the [Mozilla Public License 2.0](LICENSE). Copyright © 2026 Arcusis LTD. Third-party components remain subject to their own licenses; see [NOTICE](NOTICE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Shaar Extension Manager",
+  "version": "1.0",
+  "description": "Built into Shaar so the toolbar can list, enable, disable, pin, and remove installed extensions.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqkR51L7iI5vSY2CRFes3y6UgALAlbULl8kdCes9FySMC+lIG2CppyxgaiPUre2FyQCYpZ/AnsArCBiYniW5FFID2MgJ8AWNFb0E8PbX+17E6UeK5ZpsKqjq+Ljbho9+ikVQknu+iou3owB6XTDLkkTGyoYF9q7PsYMjeqACbi1bSImXcObaxLY9FQ0bpLYds0r6HoZS4tEGhSTewbsJO2039NLg3pcSARPb3PQvwgCeZjUrUl3ceV8wJcg4+UY15Y+Sl6x2lnj44M1xVjBZD0k7AOZnGt7vQCcutNHnTx/iJ5HONd077hsnwTfJvZZolBjzpB5YzOhPhx/uLoqShFQIDAQAB",
+  "permissions": [
+    "management",
+    "developerPrivate"
+  ]
+}

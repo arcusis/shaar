@@ -1,0 +1,162 @@
+name: Source checks
+
+on:
+  pull_request:
+    branches:
+      - production
+      - 'feat/native-*'
+  push:
+    branches:
+      - production
+      - 'feat/native-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-checks:
+    name: Swift and Python source checks
+    runs-on: macos-26
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        # actions/checkout v5.1.0
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+
+      - name: Cache SwiftPM products and pinned engine
+        # actions/cache v4.2.3
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+          path: |
+            .build
+            build/EngineCache
+          key: macos-26-swiftpm-engine-${{ hashFiles('Package.swift', '**/Package.resolved', 'ThirdParty/ArdiaCore/pin.json') }}
+
+      - name: Install uv
+        # astral-sh/setup-uv v10.3.3
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
+
+      - name: Set up Python
+        id: python
+        run: |
+          uv python install 3.13
+          python_path="$(uv python find --managed-python 3.13)"
+          echo "python-path=$python_path" >> "$GITHUB_OUTPUT"
+          dirname "$python_path" >> "$GITHUB_PATH"
+
+      - name: Report toolchain
+        env:
+          PYTHON: ${{ steps.python.outputs.python-path }}
+        run: |
+          xcodebuild -version
+          swift --version
+          "$PYTHON" --version
+
+      - name: Check license headers
+        env:
+          PYTHON: ${{ steps.python.outputs.python-path }}
+        run: |
+          "$PYTHON" scripts/check-license-headers.py
+
+      - name: Run Swift build and tests
+        run: swift test --jobs 2
+
+      - name: Check Swift formatting
+        run: swift format lint --strict --recursive Package.swift Sources Tests
+
+      - name: Install Python test dependencies
+        env:
+          PYTHON: ${{ steps.python.outputs.python-path }}
+        run: |
+          "$PYTHON" -m venv .venv
+          .venv/bin/python -m pip install --require-hashes --only-binary=:all: -r scripts/release-requirements.txt
+
+      - name: Run Python tests
+        run: .venv/bin/python scripts/test-python.py
+
+      - name: Run private window initial and restart fixture
+        id: private_window
+        timeout-minutes: 20
+        env:
+          ARCUSIS_PRIVATE_WINDOW_CI: '1'
+        run: |
+          set -o pipefail
+          test "$GITHUB_ACTIONS" = 'true'
+          test "$RUNNER_OS" = 'macOS'
+          test "$ARCUSIS_PRIVATE_WINDOW_CI" = '1'
+          rm -rf build/private-window-evidence
+          bash scripts/test-engine.sh --private-window 2>&1 | tee "$RUNNER_TEMP/private-window-fixture.log"
+
+      - name: Upload redacted private window evidence
+        if: always() && steps.private_window.outcome != 'skipped'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: private-window-evidence
+          path: build/private-window-evidence/
+          if-no-files-found: warn
+
+      - name: Collect private window probe logs
+        if: failure() && steps.private_window.outcome == 'failure'
+        run: |
+          mkdir -p "$RUNNER_TEMP/probe-logs"
+          sed -n 's/^Probe evidence: //p' "$RUNNER_TEMP/private-window-fixture.log" \
+            | while read -r root; do cp "$root"/*.log "$RUNNER_TEMP/probe-logs/" || true; done
+
+      - name: Upload private window probe logs
+        if: failure() && steps.private_window.outcome == 'failure'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: private-window-probe-logs
+          path: ${{ runner.temp }}/probe-logs/
+          if-no-files-found: warn
+
+  hosted-sidebar-visual:
+    name: Hosted sidebar component visuals
+    runs-on: macos-26
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out source
+        # actions/checkout v5.1.0
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+
+      - name: Cache SwiftPM products
+        # actions/cache v4.2.3
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+          path: .build
+          key: macos-26-swiftpm-visuals-${{ hashFiles('Package.swift', '**/Package.resolved') }}
+
+      - name: Build visual test targets
+        run: swift build --build-tests --jobs 2
+
+      - name: Capture hosted sidebar component visuals
+        id: sidebar_visual
+        env:
+          ARCUSIS_SIDEBAR_VISUAL_CI: '1'
+        run: |
+          test "$GITHUB_ACTIONS" = 'true'
+          test "$RUNNER_OS" = 'macOS'
+          test "$ARCUSIS_SIDEBAR_VISUAL_CI" = '1'
+          capture_status=0
+          swift test --jobs 2 --filter SidebarChromeLayoutTests || capture_status=1
+          swift test --jobs 2 --filter SpaceEditorVisualTests || capture_status=1
+          swift test --jobs 2 --filter ExtensionManagerVisualTests || capture_status=1
+          swift test --jobs 2 --filter SpaceIconPickerVisualTests || capture_status=1
+          swift test --jobs 2 --filter SidebarFoldersVisualTests || capture_status=1
+          swift test --jobs 2 --filter CommandPanelVisualTests || capture_status=1
+          exit "$capture_status"
+
+      - name: Upload hosted sidebar component visuals
+        if: always() && steps.sidebar_visual.outcome != 'skipped'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: sidebar-chrome-ci
+          path: build/Verification/sidebar-chrome-ci/
+          if-no-files-found: warn

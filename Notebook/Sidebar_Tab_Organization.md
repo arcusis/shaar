@@ -1,0 +1,7 @@
+# Sidebar tab and folder organization
+
+The sidebar supports native drag/drop and context-menu ordering for tabs and spaces. Drop a tab before another row, into the Pinned/Tabs section, or onto a space using the same profile. Moving the selected tab follows it into its destination space; moving an inactive tab preserves the active document. Moving a live tab to a different profile is rejected. Space controls also offer Move left/right; tab menus offer Move up/down and Move to Space. Ordering, pins, and per-space selection persist. Chromium's profile-local tab strip follows the same order and pin state, retaining existing native tab objects. Transfer payloads contain local IDs and a per-launch token, with process-only visibility. Live native drag/menu input still requires interactive acceptance.
+
+Pinned tabs can be grouped in nested, per-space folders. The sidebar offers native folder creation/editing, collapse, reordering, and moves between spaces sharing the same profile. Dropping a tab into a folder pins it; unpinning removes its folder membership. Removing a folder keeps its pages and promotes its immediate contents to its parent. Collapsing folders retains live documents and engine ordering. Command-T searches folder paths and hidden tabs; selecting a result reveals its ancestors. Folder moves reject ancestry cycles and different profiles.
+
+Related: [[Tab_Order_Verification]], [[Profile_Space_Isolation]].

@@ -1,0 +1,9 @@
+{
+  "source_repository": "https://chromium.googlesource.com/chromium/src",
+  "commit": "5869fe313571d75152b77813cf0a4ee26a4e6df0",
+  "source_path": "net/base/registry_controlled_domains/effective_tld_names.dat",
+  "sha256": "4155611645690529d1bbea0cfe653b0c45f63b028e0ba039de29a97edc3204ca",
+  "license": "MPL-2.0",
+  "license_source": "https://www.mozilla.org/media/MPL/2.0/index.815ca599c9df.txt",
+  "license_sha256": "fab3dd6bdab226f1c08630b1dd917e11fcb4ec5e1e020e2c16f83a0a13863e85"
+}

@@ -70,13 +70,13 @@ class ReleaseFeedTests(unittest.TestCase):
             archive.writestr(f"{prefix}/Contents/MacOS/ArcusisBrowser", b"binary")
         return path
 
-    def test_checked_in_config_parses_with_placeholder_key(self):
+    def test_checked_in_config_carries_the_release_public_key(self):
         config = release_feed.load_config()
 
         self.assertEqual(config.bundle_identifier, "com.arcusis.browser")
         self.assertEqual(config.repository, "arcusis/shaar")
         self.assertEqual(config.feed_url, "https://arcusis.github.io/shaar/appcast.xml")
-        self.assertFalse(config.public_key_is_ready)
+        self.assertTrue(config.public_key_is_ready)
 
     def test_names_follow_tag_and_asset_contract(self):
         self.assertEqual(self.config.tag, "v1.2.3")

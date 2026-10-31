@@ -6,6 +6,5 @@ Downloads and Media capture the active Profile. Search and status/type filters o
 
 Command-T, native sheets and consent dismiss the drawer. Profile changes invalidate captured file context. Escape/outside click closes the drawer; normal sidebar visibility is retained. Space tint is confined to the sidebar, and the Space editor previews its draft color without saving before confirmation.
 
-Implementation and acceptance are tracked in [PR #90](https://github.com/arcusis/shaar/pull/90), [drawer #86](https://github.com/arcusis/shaar/issues/86), [Downloads/Media #87](https://github.com/arcusis/shaar/issues/87) and [Spaces overview #88](https://github.com/arcusis/shaar/issues/88). Source tests, rendered captures, real thumbnails and physical input remain distinct acceptance evidence.
 
 Related: [[Download_Library]], [[Profile_Space_Isolation]], [[Profile_Favorites]], [[Keyboard_Commands]], [[Arc_Reference_Library]].

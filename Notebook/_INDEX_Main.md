@@ -1,7 +1,5 @@
 # Shaar notebook
 
-Shaar (שער, "gateway") is Arcusis's native macOS browser. Name, preserved identifiers, and brand assets: [[Product_Identity]].
+Shaar (שער, “gateway”) is an independent native macOS browser. See [[Product_Identity]] and [[Project_State]].
 
-Start with [[Project_State]] for scope and acceptance gates, then [[Build_And_Run]] and [[Source_And_Native_Verification]]. Live work: [GitHub milestone](https://github.com/arcusis/shaar/milestone/1).
-
-Architecture and behavior: [[_INDEX_Browser]]. Verification and known limits: [[_INDEX_Verification]].
+Start with [[Build_And_Run]] and [[Source_And_Native_Verification]]. Architecture and behavior: [[_INDEX_Browser]]. Verification boundaries: [[_INDEX_Verification]]. Third-party acknowledgements: [CREDITS](../CREDITS.md).

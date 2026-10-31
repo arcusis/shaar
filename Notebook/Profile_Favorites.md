@@ -6,6 +6,5 @@ Adding an ordinary or pinned tab to Favorites promotes its existing page identit
 
 Shared definitions and ordering live in the workspace catalog; live page state and selection belong to each window. Session v4 and workspace v2 retain legacy migration support and reject incomplete modern Favorite state. Grid reordering rejects foreign or stale drag payloads. The grid scrolls beyond three visible rows without limiting the number of Favorites.
 
-Implementation and acceptance: [issue #78](https://github.com/arcusis/shaar/issues/78), [PR #85](https://github.com/arcusis/shaar/pull/85). Source tests, native engine fixtures and physical input checks remain distinct evidence.
 
 Related: [[Profile_Space_Isolation]], [[Native_Window_Ownership]], [[Managed_Workspace_Persistence]], [[Sidebar_Tab_Organization]].

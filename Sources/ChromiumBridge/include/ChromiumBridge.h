@@ -178,6 +178,13 @@ FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeExternalAppLaunchAuditForTest
 - (void)resolveWebsiteMediaRequestID:(NSString *)requestID accepted:(BOOL)accepted;
 - (void)resolveExternalAppRequestID:(NSString *)requestID accepted:(BOOL)accepted;
 - (BOOL)executeExtensionID:(NSString *)extensionID tabID:(NSString *)tabID error:(NSError **)error;
+/// Evaluates an expression against `chrome.developerPrivate` and `chrome.management` in a hidden
+/// extensions page owned by the profile. The expression may return a promise; completion receives
+/// its JSON, `{"error": …}` when it throws, or nil when the profile or page is unavailable.
+- (void)manageExtensionsForProfileID:(NSString *)profileID expression:(NSString *)expression
+                          completion:(void (^)(NSString * _Nullable json))completion;
+/// The profile's installed-extensions folder, for reading extension manifests and icons.
+- (nullable NSURL *)extensionsDirectoryForProfileID:(NSString *)profileID;
 - (nullable NSView *)viewForExtensionPopupID:(NSString *)popupID;
 - (void)closeExtensionPopup;
 /// Test-only component loader. Requires a path below the marked disposable probe root.

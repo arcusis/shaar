@@ -30,6 +30,7 @@ class BundleAppTests(unittest.TestCase):
         icon = self.root / "Resources" / "Branding" / "Shaar.icns"
         icon.parent.mkdir(parents=True)
         shutil.copy2(ICON, icon)
+        shutil.copytree(REPO / "Resources" / "ExtensionManager", self.root / "Resources" / "ExtensionManager")
         engine_script = self.root / "scripts" / "fetch-engine.sh"
         engine_script.write_text(
             "#!/bin/bash\n"
@@ -144,6 +145,8 @@ class BundleAppTests(unittest.TestCase):
         self.assertEqual(plist["CFBundleIconFile"], "Shaar.icns")
         self.assertIn("passkey", plist["NSBluetoothAlwaysUsageDescription"])
         self.assertEqual((contents / "Resources" / "Shaar.icns").read_bytes(), ICON.read_bytes())
+        manager = contents / "Resources" / "ExtensionManager" / "manifest.json"
+        self.assertEqual(manager.read_bytes(), (REPO / "Resources" / "ExtensionManager" / "manifest.json").read_bytes())
 
     def test_default_build_remains_release_shell_bundle(self):
         result = self._run()

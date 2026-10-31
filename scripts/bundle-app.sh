@@ -106,6 +106,7 @@ mkdir -p "$app/Contents/Resources/ArdiaCore"
 cp ThirdParty/ArdiaCore/LICENSE ThirdParty/ArdiaCore/NOTICE ThirdParty/ArdiaCore/pin.json \
   "$app/Contents/Resources/ArdiaCore/"
 cp Resources/Branding/Shaar.icns "$app/Contents/Resources/Shaar.icns"
+cp -R Resources/ExtensionManager "$app/Contents/Resources/ExtensionManager"
 if $with_native_bitwarden_sdk; then
   source_dylib="$sdk_package/Frameworks/BitwardenSDK.xcframework/macos-arm64/libbitwarden_uniffi.dylib"
   if [[ ! -f "$source_dylib" ]]; then

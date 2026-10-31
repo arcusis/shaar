@@ -32,6 +32,7 @@ final class ExtensionProbe {
     let profileB = spaces[1].profileID
     let fixtureURL = root.appending(path: "Extension")
     let extensionA = try runtime.loadProbeExtension(at: fixtureURL, profileID: profileA.uuidString)
+    try await checkExtensionManager(profileA)
     store.perform(.space(spaces[0].id))
     engine.refreshExtensions()
     try expect(
@@ -178,6 +179,41 @@ final class ExtensionProbe {
     }
     return json.flatMap { $0.data(using: .utf8) }.flatMap {
       try? JSONSerialization.jsonObject(with: $0, options: .fragmentsAllowed)
+    }
+  }
+
+  /// The bundled manager extension answers chrome.management without adding tabs or windows.
+  private func checkExtensionManager(_ profile: UUID) async throws {
+    let tabsBefore = store.session.spaces.flatMap { $0.tabs.map(\.id) }
+    let nativeBefore = tabsBefore.map { runtime.nativeTabID(forID: $0.uuidString) }
+    var listed = false
+    if case .value(let data)? = await manage(profile, ExtensionManagementScript.list) {
+      listed = (try? JSONDecoder().decode([ManagedExtension].self, from: data)) != nil
+    }
+    try expect(listed, "bundled extension manager lists the profile's extensions")
+    let missing = await manage(
+      profile, ExtensionManagementScript.setEnabled(String(repeating: "a", count: 32), false)!)
+    guard case .failure(let message)? = missing else {
+      throw ExtensionProbeFailure("Extension manager accepted an unknown extension.")
+    }
+    try expect(
+      message.contains("Failed to find extension"),
+      "extension manager reports unknown extensions instead of changing state")
+    try expect(
+      ExtensionManagementScript.setEnabled("not-an-extension-id", true) == nil,
+      "extension manager refuses invalid extension IDs before reaching the engine")
+    let tabsAfter = store.session.spaces.flatMap { $0.tabs.map(\.id) }
+    try expect(
+      tabsAfter == tabsBefore
+        && tabsAfter.map { runtime.nativeTabID(forID: $0.uuidString) } == nativeBefore,
+      "hidden extension manager page adds no tabs to the session or native windows")
+  }
+
+  private func manage(_ profile: UUID, _ expression: String) async -> ExtensionManagementResult? {
+    await withCheckedContinuation { continuation in
+      runtime.manageExtensions(forProfileID: profile.uuidString, expression: expression) {
+        continuation.resume(returning: ExtensionManagementResult(json: $0))
+      }
     }
   }
 

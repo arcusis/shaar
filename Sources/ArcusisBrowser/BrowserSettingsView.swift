@@ -90,6 +90,8 @@ struct BrowserSettingsView: View {
   let onOpenSpace: (UUID) -> Void
   let onConnectAccount: (UUID, AccountProvider) -> Void
   let onDisconnectAccount: (UUID, AccountProvider) -> Void
+  let extensionManager: (UUID) -> ExtensionManagerModel?
+  let onAddExtensions: (UUID) -> Void
   let clearHistory: ((UUID) async throws -> Void)?
   @State private var deletingProfile: BrowserSettingsProfile?
   @State private var destinationID: UUID?
@@ -113,6 +115,8 @@ struct BrowserSettingsView: View {
     onOpenSpace: @escaping (UUID) -> Void = { _ in },
     onConnectAccount: @escaping (UUID, AccountProvider) -> Void = { _, _ in },
     onDisconnectAccount: @escaping (UUID, AccountProvider) -> Void = { _, _ in },
+    extensionManager: @escaping (UUID) -> ExtensionManagerModel? = { _ in nil },
+    onAddExtensions: @escaping (UUID) -> Void = { _ in },
     clearHistory: ((UUID) async throws -> Void)? = nil,
     initialSection: BrowserSettingsSection = .general
   ) {
@@ -128,6 +132,8 @@ struct BrowserSettingsView: View {
     self.onOpenSpace = onOpenSpace
     self.onConnectAccount = onConnectAccount
     self.onDisconnectAccount = onDisconnectAccount
+    self.extensionManager = extensionManager
+    self.onAddExtensions = onAddExtensions
     self.clearHistory = clearHistory
     _selectedSection = State(initialValue: initialSection)
   }
@@ -467,7 +473,9 @@ struct BrowserSettingsView: View {
         )
       }
       Section("Extensions") {
-        LabeledContent("Installed extensions", value: "\(profile.extensionCount)")
+        ProfileExtensionsSection(
+          model: extensionManager(profile.id),
+          onAddExtensions: { onAddExtensions(profile.id) })
       }
       Section {
         Button("Delete Profile…", role: .destructive) {

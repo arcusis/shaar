@@ -26,13 +26,19 @@ struct ExtensionToolbar: View {
   @Bindable var engine: BrowserEngine
   let store: BrowserStore
 
+  private var extensionModel: ExtensionManagerModel {
+    ExtensionManagerModel.shared(
+      runtime: engine.runtime, preferences: store.preferences,
+      profileID: store.session.selectedSpace.profileID)
+  }
+
   var body: some View {
     HStack(spacing: 6) {
-      ForEach(engine.pinnedExtensions) { pinned in
+      ForEach(extensionModel.pinnedExtensions) { pinned in
         Button {
           engine.executeExtension(pinned.id)
         } label: {
-          ExtensionIcon(image: engine.extensionIcons[pinned.id], size: 16)
+          ExtensionIcon(image: extensionModel.icons[pinned.id], size: 16)
         }
         .buttonStyle(.plain)
         .help(pinned.name)
@@ -73,6 +79,7 @@ struct ExtensionToolbar: View {
         }
       }
     }
+    .task(id: store.session.selectedSpace.profileID) { extensionModel.refresh() }
   }
 }
 
@@ -82,15 +89,22 @@ struct ExtensionManagerPanel: View {
   let store: BrowserStore
   @State private var detailID: String?
 
+  private var model: ExtensionManagerModel {
+    ExtensionManagerModel.shared(
+      runtime: engine.runtime, preferences: store.preferences,
+      profileID: store.session.selectedSpace.profileID)
+  }
+
   var body: some View {
     Group {
-      if let detail = engine.managedExtensions.first(where: { $0.id == detailID }) {
-        ExtensionDetailView(engine: engine, item: detail) { detailID = nil }
+      if let detail = model.extensions.first(where: { $0.id == detailID }) {
+        ExtensionDetails(model: model, item: detail) { detailID = nil }
       } else {
         list
       }
     }
     .frame(width: 320)
+    .task { model.refresh() }
   }
 
   private var list: some View {
@@ -102,32 +116,9 @@ struct ExtensionManagerPanel: View {
       .padding([.horizontal, .top], 16)
       .padding(.bottom, 10)
       Divider()
-      if engine.managedExtensions.isEmpty {
-        ContentUnavailableView(
-          "No Extensions", systemImage: "puzzlepiece.extension",
-          description: Text("Extensions you add appear here for this profile.")
-        )
-        .padding(.vertical, 12)
-      } else {
-        ScrollView {
-          VStack(spacing: 2) {
-            ForEach(engine.managedExtensions) { item in
-              ExtensionRow(
-                item: item, icon: engine.extensionIcons[item.id],
-                pinned: engine.pinnedExtensionIDs.contains(item.id),
-                canRun: store.session.selectedPage != nil,
-                actions: ExtensionRowActions(
-                  run: { engine.executeExtension(item.id) },
-                  setPinned: { engine.setExtension(item.id, pinned: $0) },
-                  setEnabled: { engine.setExtension(item.id, enabled: $0) },
-                  showDetails: { detailID = item.id }))
-            }
-          }
-          .padding(8)
-        }
-        .frame(maxHeight: 360)
-        .fixedSize(horizontal: false, vertical: true)
-      }
+      ExtensionManagerList(
+        model: model, canRun: store.session.selectedPage != nil,
+        run: { engine.executeExtension($0) }, showDetails: { detailID = $0 })
       Divider()
       Button {
         engine.extensionPanel = nil
@@ -206,62 +197,6 @@ struct ExtensionRow: View {
       Color.primary.opacity(isHovered ? 0.06 : 0), in: RoundedRectangle(cornerRadius: 8)
     )
     .onHover { isHovered = $0 }
-  }
-}
-
-private struct ExtensionDetailView: View {
-  let engine: BrowserEngine
-  let item: ManagedExtension
-  let back: () -> Void
-  @State private var confirmsRemoval = false
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Button(action: back) {
-        Label("Extensions", systemImage: "chevron.left")
-      }
-      .buttonStyle(.plain)
-      .foregroundStyle(.secondary)
-      HStack(spacing: 12) {
-        ExtensionIcon(image: engine.extensionIcons[item.id], size: 40)
-        VStack(alignment: .leading, spacing: 2) {
-          Text(item.name).font(.headline).lineLimit(2)
-          Text("Version \(item.version)").font(.caption).foregroundStyle(.secondary)
-        }
-      }
-      if !item.description.isEmpty {
-        Text(item.description).font(.callout).foregroundStyle(.secondary)
-          .fixedSize(horizontal: false, vertical: true)
-      }
-      detailSection("Permissions", values: item.permissions)
-      detailSection("Site access", values: item.hostPermissions)
-      Divider()
-      Button("Remove Extension…", role: .destructive) { confirmsRemoval = true }
-        .disabled(!item.mayDisable)
-    }
-    .padding(16)
-    .confirmationDialog(
-      "Remove \(item.name)?", isPresented: $confirmsRemoval, titleVisibility: .visible
-    ) {
-      Button("Remove", role: .destructive) {
-        engine.removeExtension(item.id)
-        back()
-      }
-    } message: {
-      Text("Its data in this profile is deleted. You can add it again from the Chrome Web Store.")
-    }
-  }
-
-  @ViewBuilder
-  private func detailSection(_ title: String, values: [String]) -> some View {
-    if !values.isEmpty {
-      VStack(alignment: .leading, spacing: 4) {
-        Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-        ForEach(values, id: \.self) { value in
-          Text(value).font(.caption).lineLimit(1).truncationMode(.middle)
-        }
-      }
-    }
   }
 }
 

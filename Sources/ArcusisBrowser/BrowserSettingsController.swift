@@ -35,6 +35,27 @@ private final class BrowserSettingsState {
     }
   }
 
+  func extensionManager(for profileID: UUID) -> ExtensionManagerModel? {
+    guard let runtime,
+      workspace.workspace.catalog.profiles.contains(where: { $0.id == profileID })
+    else { return nil }
+    return ExtensionManagerModel.shared(
+      runtime: runtime, preferences: preferences, profileID: profileID)
+  }
+
+  func openExtensions(for profileID: UUID) {
+    guard
+      let store = workspace.stores.values.first(where: {
+        $0.session.spaces.contains { $0.profileID == profileID }
+      }), let spaceID = store.session.spaces.first(where: { $0.profileID == profileID })?.id,
+      let url = URL(string: "https://chromewebstore.google.com/category/extensions")
+    else {
+      return
+    }
+    if store.session.selectedSpaceID != spaceID { store.perform(.space(spaceID)) }
+    store.perform(.open(url))
+  }
+
   var searchEngines: [BrowserSettingsChoice] {
     BrowserSearchEngine.allCases.map {
       BrowserSettingsChoice(id: $0.rawValue, title: $0.displayName)
@@ -131,6 +152,8 @@ private struct BrowserSettingsRoot: View {
       onOpenSpace: state.onOpenSpace,
       onConnectAccount: state.onConnectAccount,
       onDisconnectAccount: state.onDisconnectAccount,
+      extensionManager: state.extensionManager(for:),
+      onAddExtensions: { state.openExtensions(for: $0) },
       clearHistory: state.runtime.map { runtime in
         { profileID in try await SettingsHistory.clear(runtime: runtime, profileID: profileID) }
       })
@@ -172,6 +195,10 @@ final class BrowserSettingsController: NSObject {
   }
 
   var profiles: [BrowserSettingsProfile] { state.profiles }
+  func extensionManager(for profileID: UUID) -> ExtensionManagerModel? {
+    state.extensionManager(for: profileID)
+  }
+  func openExtensions(for profileID: UUID) { state.openExtensions(for: profileID) }
   var selectedProfileID: UUID? { state.selectedProfileID }
   var selectedSearchEngine: String { state.selectedSearchEngine }
   var sidebarInitiallyVisible: Bool { state.sidebarInitiallyVisible }

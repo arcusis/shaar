@@ -56,6 +56,12 @@ jobs:
           swift --version
           "$PYTHON" --version
 
+      - name: Check license headers
+        env:
+          PYTHON: ${{ steps.python.outputs.python-path }}
+        run: |
+          "$PYTHON" scripts/check-license-headers.py
+
       - name: Run Swift build and tests
         run: swift test --jobs 2
 

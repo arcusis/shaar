@@ -1,3 +1,7 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 # shellcheck shell=bash
 # Sourced by bundle-app.sh and release.sh so both sign the Chromium framework in one order.
 # sign_engine_framework <framework> <command> runs `<command> <path>` for each library, then

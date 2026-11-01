@@ -13,30 +13,51 @@ import XCTest
 @MainActor
 final class SidebarMediaPlayerVisualTests: XCTestCase {
   private let root = URL(fileURLWithPath: "/tmp/shaar-sidebar-media-player", isDirectory: true)
+  private let siteColor = NSColor(srgbRed: 0.86, green: 0.18, blue: 0.18, alpha: 1)
 
   override func setUpWithError() throws {
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
   }
 
   func testSidebarFooterShowsPlayerForHiddenPlayingTab() throws {
+    let support = FileManager.default.temporaryDirectory.appending(
+      path: "media-player-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: support) }
     var session = BrowserSession.fresh()
     let music = try XCTUnwrap(session.open(URL(string: "https://music.example")!))
+    session.togglePin(music)
     _ = try XCTUnwrap(session.open(URL(string: "https://reading.example")!))
-    let store = BrowserStore(session: session)
+    let manager = try BrowserWorkspaceStore(
+      file: WorkspaceFile(
+        url: support.appending(path: "workspace.json"),
+        legacySessionURL: support.appending(path: "session.json")),
+      initialSession: session,
+      faviconCache: FaviconCache(directory: support.appending(path: "icons")))
+    let store = try XCTUnwrap(manager.stores[manager.workspace.windows[0].id])
+    store.rememberFavicon(FaviconFixture.icon(siteColor), forTab: music)
     store.media.update(
       music,
       state: MediaSessionState(
         playbackState: .playing, title: "Night Drive", artist: "Arcusis Trio",
         actions: [.play, .pause, .previousTrack, .nextTrack]))
-    let url = root.appending(path: "sidebar-footer.png")
-    for appearance in [NSAppearance.Name.aqua, .darkAqua] {
-      let target = appearance == .aqua ? url : root.appending(path: "sidebar-footer-dark.png")
+    XCTAssertNotNil(store.miniPlayerItem?.favicon, "the player uses the tab's site icon")
+
+    let size = NSSize(width: 200, height: 520)
+    let light = root.appending(path: "sidebar-footer.png")
+    let bitmaps = try [
+      (NSAppearance.Name.aqua, light), (.darkAqua, root.appending(path: "sidebar-footer-dark.png")),
+    ]
+    .map { appearance, url in
       try VisualCapture.renderOffscreen(
-        BrowserSidebar(store: store).frame(width: 200, height: 520)
+        BrowserSidebar(store: store).frame(width: size.width, height: size.height)
           .background(Color(nsColor: .windowBackgroundColor)),
-        size: NSSize(width: 200, height: 520), appearance: appearance, to: target)
+        size: size, appearance: appearance, to: url)
     }
-    let lines = try VisualTextRecognition.lines(in: url)
+    for bitmap in bitmaps {
+      XCTAssertGreaterThan(
+        sitePixels(in: bitmap, fromBottom: 140), 150, "site icon missing from the player")
+    }
+    let lines = try VisualTextRecognition.lines(in: light)
     XCTAssertTrue(lines.contains { $0.contains("Night Drive") }, "title missing: \(lines)")
     XCTAssertTrue(lines.contains { $0.contains("Arcusis Trio") }, "artist missing: \(lines)")
   }
@@ -58,7 +79,7 @@ final class SidebarMediaPlayerVisualTests: XCTestCase {
     SidebarMediaPlayer(
       item: MiniPlayerItem(
         tabID: UUID(), pageTitle: "Page",
-        favicon: FaviconFixture.icon(NSColor(srgbRed: 0.86, green: 0.18, blue: 0.18, alpha: 1)),
+        favicon: FaviconFixture.icon(siteColor),
         state: MediaSessionState(
           playbackState: .playing, title: "Night Drive", artist: "Arcusis Trio",
           actions: actions, muted: muted)),
@@ -72,5 +93,22 @@ final class SidebarMediaPlayerVisualTests: XCTestCase {
       state.supports(.previousTrack), state.playPauseAction != nil, state.supports(.nextTrack),
       true,
     ].filter { $0 }.count
+  }
+
+  /// Pixels of the site icon's color in the bottom rows, where the player sits.
+  private func sitePixels(in bitmap: NSBitmapImageRep, fromBottom rows: Int) -> Int {
+    guard let wanted = siteColor.usingColorSpace(.sRGB) else { return 0 }
+    var count = 0
+    for y in (bitmap.pixelsHigh - rows)..<bitmap.pixelsHigh {
+      for x in 0..<bitmap.pixelsWide {
+        guard let pixel = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
+        let distance = max(
+          abs(pixel.redComponent - wanted.redComponent),
+          abs(pixel.greenComponent - wanted.greenComponent),
+          abs(pixel.blueComponent - wanted.blueComponent))
+        if distance < 0.08 { count += 1 }
+      }
+    }
+    return count
   }
 }

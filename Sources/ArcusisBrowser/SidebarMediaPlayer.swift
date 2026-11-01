@@ -8,6 +8,7 @@ import SwiftUI
 /// Compact controls for media playing in a tab that is not on screen. Track and play/pause
 /// buttons appear only for actions the page supports; mute uses the engine's tab mute.
 struct SidebarMediaPlayer: View {
+  @Environment(\.colorScheme) private var colorScheme
   let item: MiniPlayerItem
   let onSelect: () -> Void
   let onCommand: (MediaCommand) -> Void
@@ -23,7 +24,7 @@ struct SidebarMediaPlayer: View {
       pageButton
       HStack(spacing: 2) {
         if state.supports(.previousTrack) {
-          control("backward.fill", label: "Previous track", id: "previous") {
+          control("backward.end.fill", label: "Previous track", id: "previous") {
             onCommand(.perform(.previousTrack))
           }
         }
@@ -36,7 +37,7 @@ struct SidebarMediaPlayer: View {
           }
         }
         if state.supports(.nextTrack) {
-          control("forward.fill", label: "Next track", id: "next") {
+          control("forward.end.fill", label: "Next track", id: "next") {
             onCommand(.perform(.nextTrack))
           }
         }
@@ -51,10 +52,16 @@ struct SidebarMediaPlayer: View {
     }
     .padding(.horizontal, 8)
     .padding(.vertical, 6)
-    .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+    .background(cardFill, in: RoundedRectangle(cornerRadius: 10))
+    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.06)))
     .accessibilityElement(children: .contain)
     .accessibilityLabel("Now playing: \(title)")
     .accessibilityIdentifier("sidebar-media-player")
+  }
+
+  /// A raised card on the tinted sidebar in both appearances.
+  private var cardFill: Color {
+    colorScheme == .dark ? .white.opacity(0.1) : .white.opacity(0.7)
   }
 
   private var pageButton: some View {

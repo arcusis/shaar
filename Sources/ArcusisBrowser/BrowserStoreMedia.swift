@@ -43,7 +43,7 @@ extension BrowserStore {
       let state = media.sessions[tabID], let page = session.page(forTabID: tabID)
     else { return nil }
     return MiniPlayerItem(
-      tabID: tabID, pageTitle: page.tab.title, favicon: engine?.favicons[tabID], state: state)
+      tabID: tabID, pageTitle: page.tab.title, favicon: favicon(forPage: tabID), state: state)
   }
 
   @discardableResult

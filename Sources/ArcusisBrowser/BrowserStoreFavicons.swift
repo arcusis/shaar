@@ -23,6 +23,22 @@ extension BrowserStore {
     return faviconCache?.icon(for: favorite.id, profileID: favorite.profileID)
   }
 
+  /// The icon for any page by its tab: live, or saved for its Favorite or pinned tab.
+  func favicon(forPage tabID: UUID) -> NSImage? {
+    switch session.page(forTabID: tabID) {
+    case .tab(let tab):
+      guard let profileID = session.profileID(forTabID: tabID) else { return nil }
+      return favicon(for: tab, profileID: profileID)
+    case .favorite(let page):
+      guard let favorite = session.favorites.first(where: { $0.id == page.favoriteID }) else {
+        return nil
+      }
+      return favicon(for: favorite)
+    case nil:
+      return nil
+    }
+  }
+
   /// Saves a page icon reported by the engine when the page is a Favorite or a pinned tab.
   func rememberFavicon(_ image: NSImage, forTab tabID: UUID) {
     guard let itemID = faviconItemID(forTab: tabID),

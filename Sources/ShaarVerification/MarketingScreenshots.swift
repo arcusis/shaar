@@ -72,7 +72,7 @@ final class MarketingScreenshots {
     }
   }
 
-  private func seed() throws -> BrowserSession {
+  static func seed() throws -> BrowserSession {
     let profiles = [
       BrowserProfile(name: "Work", tint: .forest, symbol: "briefcase"),
       BrowserProfile(name: "Personal", customRGB: SpaceRGBColor(hex: "#DCA34B"), symbol: "person"),
@@ -100,7 +100,7 @@ final class MarketingScreenshots {
 
   private func captureAll() async throws {
     NSApp.appearance = NSAppearance(named: .aqua)
-    let workspace = try BrowserWorkspaceStore(initialSession: seed())
+    let workspace = try BrowserWorkspaceStore(initialSession: Self.seed())
     let host = NativeBrowserHost(
       events: BrowserRuntimeEvents(runtime: runtime), workspace: workspace,
       presentation: .hiddenProbe,

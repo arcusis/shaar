@@ -75,7 +75,7 @@ h2,
 h3 {
   margin: 0;
   font-family: var(--display);
-  font-weight: 650;
+  font-weight: 500;
   color: var(--ink);
   text-wrap: balance;
 }
@@ -185,10 +185,8 @@ p {
   align-items: center;
   padding: 0 16px;
   border-left: 1px solid rgb(255 255 255 / 0.16);
-  font: 500 11px / 1 var(--mono);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: rgb(255 255 255 / 0.6);
+  font: 400 13px / 1 var(--text);
+  color: rgb(255 255 255 / 0.7);
 }
 
 .text-link {
@@ -349,7 +347,7 @@ p {
 .hero-copy h1 {
   max-width: 9.5em;
   font-size: clamp(56px, 8.2vw, 124px);
-  font-weight: 700;
+  font-weight: 600;
   line-height: 0.94;
   letter-spacing: -0.048em;
 }
@@ -403,139 +401,13 @@ p {
   letter-spacing: -0.04em;
 }
 
-.section-head p:not(.kicker) {
+.section-head p {
   margin-top: 16px;
   font-size: 19px;
   color: var(--ink-2);
 }
 
-.kicker {
-  margin-bottom: 18px;
-  color: var(--ink-3);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-}
-
 /* Story: sticky window with a step rail */
-
-.story {
-  padding: 160px 0 80px;
-}
-
-.story-grid {
-  display: grid;
-  grid-template-columns: 56px minmax(260px, 340px) minmax(0, 1fr);
-  gap: 0 56px;
-  max-width: 1400px;
-  margin: 96px auto 0;
-  padding: 0 24px;
-}
-
-.step-rail {
-  position: sticky;
-  top: 30vh;
-  align-self: start;
-  display: grid;
-  gap: 10px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.step-rail li {
-  display: grid;
-  place-items: center;
-  width: 48px;
-  height: 34px;
-  border-radius: 8px;
-  background: var(--surface);
-  box-shadow: inset 0 0 0 1px var(--line);
-  color: var(--ink-3);
-  transition:
-    box-shadow 0.2s,
-    color 0.2s;
-}
-
-.story-steps {
-  display: grid;
-}
-
-.step {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-height: 78vh;
-  transition: opacity 0.35s var(--ease);
-}
-
-.step-number {
-  color: var(--forest);
-}
-
-.step h3 {
-  margin-top: 14px;
-  font-size: clamp(26px, 2.6vw, 34px);
-  line-height: 1.08;
-  letter-spacing: -0.03em;
-}
-
-.step p:not(.mono) {
-  margin-top: 14px;
-  font-size: 17px;
-  color: var(--ink-2);
-}
-
-.step-keys {
-  align-self: flex-start;
-  margin-top: 20px;
-  padding: 6px 10px;
-  border-radius: 8px;
-  background: var(--surface);
-  box-shadow:
-    inset 0 0 0 1px var(--line),
-    0 1px 0 var(--line);
-  color: var(--ink-2);
-}
-
-.story-stage {
-  min-width: 0;
-}
-
-.story-sticky {
-  position: sticky;
-  top: calc(50vh - min(30vw, 330px));
-  display: grid;
-}
-
-.story-window {
-  grid-area: 1 / 1;
-  transition:
-    opacity 0.45s var(--ease),
-    transform 0.45s var(--ease);
-}
-
-[data-enhanced] .story-window {
-  opacity: 0;
-  transform: translateY(14px) scale(0.985);
-}
-
-[data-enhanced] .story-grid[data-active="0"] [data-step="0"],
-[data-enhanced] .story-grid[data-active="1"] [data-step="1"],
-[data-enhanced] .story-grid[data-active="2"] [data-step="2"],
-[data-enhanced] .story-grid[data-active="3"] [data-step="3"],
-[data-enhanced] .story-grid[data-active="4"] [data-step="4"] {
-  opacity: 1;
-  transform: none;
-}
-
-.story-grid[data-active="0"] .step-rail [data-step="0"],
-.story-grid[data-active="1"] .step-rail [data-step="1"],
-.story-grid[data-active="2"] .step-rail [data-step="2"],
-.story-grid[data-active="3"] .step-rail [data-step="3"],
-.story-grid[data-active="4"] .step-rail [data-step="4"] {
-  color: var(--ink);
-  box-shadow: inset 0 0 0 1.5px var(--ink);
-}
 
 /* Finale */
 
@@ -558,7 +430,7 @@ p {
   letter-spacing: -0.045em;
 }
 
-.finale > p:not(.mono) {
+.finale > p:not(.finale-meta) {
   font-size: 19px;
   color: var(--ink-2);
   margin-bottom: 10px;
@@ -598,9 +470,7 @@ p {
 
 .footer-group h2 {
   margin-bottom: 4px;
-  font: 500 11px / 1 var(--mono);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font: 500 13px / 1 var(--text);
   color: var(--ink-3);
 }
 
@@ -641,13 +511,6 @@ p {
 
 .document-heading {
   margin-bottom: 48px;
-}
-
-.eyebrow {
-  font: 500 12px / 1 var(--mono);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--forest);
 }
 
 .document-heading h1 {
@@ -854,31 +717,6 @@ p {
     margin-top: -90px;
   }
 
-  .story-grid {
-    grid-template-columns: 1fr;
-    margin-top: 48px;
-  }
-
-  .step-rail {
-    display: none;
-  }
-
-  .story-stage {
-    grid-row: 1;
-    position: sticky;
-    top: 64px;
-    z-index: 1;
-    padding: 12px 0;
-  }
-
-  .story-sticky {
-    position: static;
-  }
-
-  .step {
-    min-height: 60vh;
-  }
-
   .footer-grid {
     grid-template-columns: 1fr 1fr;
   }
@@ -1054,7 +892,6 @@ p {
 }
 
 .hero-frame[data-night] .hero-lede,
-.hero-frame[data-night] .hero-eyebrow,
 .hero-frame[data-night] .hero-meta,
 .hero-frame[data-night] .hero-bottom,
 .hero-frame[data-night] .hero-nav-links a {
@@ -1069,29 +906,10 @@ p {
 
 .hero-frame h1,
 .hero-lede,
-.hero-eyebrow,
 .hero-meta,
 .hero-nav .wordmark,
 .hero-nav-links a {
   transition: color 1.2s;
-}
-
-.hero-eyebrow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 22px;
-  color: var(--ink-2);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-}
-
-.status-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--leaf);
-  box-shadow: 0 0 0 3px rgb(69 188 82 / 0.22);
 }
 
 .hero-bottom {
@@ -1152,10 +970,6 @@ p {
   margin-top: -170px;
 }
 
-.story-window {
-  margin: 0;
-}
-
 .beta-strip {
   display: flex;
   flex-wrap: wrap;
@@ -1214,23 +1028,6 @@ p {
   margin-top: 18px;
 }
 
-.open-facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin: 48px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.open-facts li {
-  padding: 8px 14px;
-  border-radius: 999px;
-  background: var(--surface);
-  box-shadow: inset 0 0 0 1px var(--line);
-  color: var(--ink-2);
-}
-
 @media (max-width: 960px) {
   .open-source-grid {
     grid-template-columns: 1fr;
@@ -1258,4 +1055,143 @@ p {
 .hero-bottom [lang="he"] {
   font-family: var(--text);
   font-size: 13px;
+}
+
+/* Feature story: a sticky screenshot stage beside short steps. The active step
+   gets a filled line on its left edge; the stage crossfades to its screenshot. */
+
+.story {
+  padding: 144px 0 96px;
+}
+
+.story-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 380px) minmax(0, 1fr);
+  gap: 0 64px;
+  max-width: 1320px;
+  margin: 72px auto 0;
+  padding: 0 32px;
+}
+
+.story-steps {
+  display: grid;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 64vh;
+  padding-left: 24px;
+  border-left: 2px solid var(--line);
+  transition: border-color 0.3s var(--ease);
+}
+
+.step h3 {
+  font-size: clamp(24px, 2.3vw, 30px);
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  transition: color 0.3s var(--ease);
+}
+
+.step > p {
+  margin-top: 12px;
+  font-size: 17px;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+
+.step-keys {
+  display: flex;
+  gap: 4px;
+  margin-top: 20px;
+}
+
+kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow:
+    inset 0 0 0 1px var(--line-strong),
+    0 1px 0 var(--line-strong);
+  font: 500 13px / 1 var(--text);
+  color: var(--ink);
+}
+
+.step-shot {
+  display: none;
+  margin: 24px 0 0;
+}
+
+.story-stage {
+  min-width: 0;
+}
+
+.story-sticky {
+  position: sticky;
+  top: calc(50vh - min(24vw, 300px));
+  display: grid;
+  padding: 28px;
+  border-radius: 24px;
+  background: #e7ebe3;
+}
+
+.story-window {
+  grid-area: 1 / 1;
+  align-self: center;
+  margin: 0;
+  transition: opacity 0.4s var(--ease);
+}
+
+.story-window .screenshot {
+  border-radius: 12px;
+}
+
+[data-enhanced] .story-window {
+  opacity: 0;
+}
+
+[data-enhanced] .step:not([data-current]) h3 {
+  color: var(--ink-3);
+}
+
+[data-enhanced] .step[data-current] {
+  border-left-color: var(--ink);
+}
+
+.story-grid[data-active="0"] .story-window[data-step="0"],
+.story-grid[data-active="1"] .story-window[data-step="1"],
+.story-grid[data-active="2"] .story-window[data-step="2"],
+.story-grid[data-active="3"] .story-window[data-step="3"],
+.story-grid[data-active="4"] .story-window[data-step="4"] {
+  opacity: 1;
+}
+
+@media (max-width: 960px) {
+  .story-grid {
+    grid-template-columns: 1fr;
+    margin-top: 48px;
+    padding: 0 24px;
+  }
+
+  .story-stage {
+    display: none;
+  }
+
+  .step {
+    min-height: 0;
+    padding: 32px 0 32px 20px;
+  }
+
+  .step-shot {
+    display: block;
+  }
+
+  [data-enhanced] .step:not([data-current]) h3 {
+    color: var(--ink);
+  }
 }

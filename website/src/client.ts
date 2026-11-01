@@ -62,12 +62,17 @@ function initializeStory(): void {
       for (const entry of entries) {
         if (entry.isIntersecting && entry.target instanceof HTMLElement) {
           grid.dataset.active = entry.target.dataset.step ?? "0";
+          for (const step of grid.querySelectorAll<HTMLElement>(".step")) {
+            step.toggleAttribute("data-current", step === entry.target);
+          }
         }
       }
     },
     { rootMargin: "-45% 0px -45% 0px" },
   );
-  for (const step of grid.querySelectorAll(".step")) observer.observe(step);
+  const steps = grid.querySelectorAll<HTMLElement>(".step");
+  steps[0]?.setAttribute("data-current", "");
+  for (const step of steps) observer.observe(step);
 }
 
 document.addEventListener("DOMContentLoaded", () => {

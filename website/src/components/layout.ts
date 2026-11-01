@@ -7,7 +7,7 @@ import { escapeHtml } from "../html";
 import { Footer, Navigation } from "./navigation";
 
 export function Layout(page: SitePage, content: string): string {
-  const title = page.path === "/" ? page.title : `${page.title} — Shaar`;
+  const title = page.path === "/" ? page.title : `${page.title} · Shaar`;
   return `<!doctype html>
 <!-- This Source Code Form is subject to the terms of the Mozilla Public
 License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -25,6 +25,6 @@ file, You can obtain one at https://mozilla.org/MPL/2.0/. -->
 export function DocumentPage(page: SitePage): string {
   return Layout(
     page,
-    `<header class="document-heading"><p class="eyebrow">${escapeHtml(page.eyebrow)}</p><h1>${escapeHtml(page.heading)}</h1><p class="document-intro">${escapeHtml(page.description)}</p></header><div class="prose">${page.body}</div>`,
+    `<header class="document-heading"><h1>${escapeHtml(page.heading)}</h1><p class="document-intro">${escapeHtml(page.description)}</p></header><div class="prose">${page.body}</div>`,
   );
 }

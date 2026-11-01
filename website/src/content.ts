@@ -71,7 +71,6 @@ export interface SitePage {
   path: string;
   title: string;
   description: string;
-  eyebrow: string;
   heading: string;
   body: string;
 }

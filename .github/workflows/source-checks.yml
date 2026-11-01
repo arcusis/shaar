@@ -2,282 +2,50 @@ name: Source checks
 
 on:
   pull_request:
-    branches:
-      - production
-      - 'feat/native-*'
+    branches: [production, 'feat/native-*']
   push:
-    branches:
-      - production
-      - 'feat/native-*'
+    branches: [production, 'feat/native-*']
+  merge_group:
+    types: [checks_requested]
+    branches: [production]
+  schedule:
+    - cron: '23 1 * * *'
   workflow_dispatch:
+    inputs:
+      probe_iterations:
+        description: Repetitions per mode (1-10; private/Quit minimum 3; no retries)
+        type: number
+        default: 1
 
 permissions:
   contents: read
 
 concurrency:
-  group: source-checks-${{ github.ref }}
+  group: source-checks-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  source-checks:
-    name: Swift and Python source checks
-    runs-on: macos-26
-    timeout-minutes: 45
-
+  plan:
+    name: Select CI stages
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      full: ${{ steps.plan.outputs.full }}
+      base: ${{ steps.plan.outputs.base }}
+      iterations: ${{ steps.plan.outputs.iterations }}
     steps:
-      - name: Check out source
-        # actions/checkout v5.1.0
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          fetch-depth: 0
           persist-credentials: false
-
-      - name: Cache SwiftPM products and pinned engine
-        # actions/cache v4.2.3
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: |
-            .build
-            build/EngineCache
-          key: macos-26-swiftpm-engine-${{ hashFiles('Package.swift', '**/Package.resolved', 'ThirdParty/ArdiaCore/pin.json') }}
-
-      - name: Install uv
-        # astral-sh/setup-uv v10.3.3
-        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
-
-      - name: Set up Python
-        id: python
-        run: |
-          uv python install 3.13
-          python_path="$(uv python find --managed-python 3.13)"
-          echo "python-path=$python_path" >> "$GITHUB_OUTPUT"
-          dirname "$python_path" >> "$GITHUB_PATH"
-
-      - name: Report toolchain
-        env:
-          PYTHON: ${{ steps.python.outputs.python-path }}
-        run: |
-          xcodebuild -version
-          swift --version
-          "$PYTHON" --version
-
-      - name: Check license headers
-        env:
-          PYTHON: ${{ steps.python.outputs.python-path }}
-        run: |
-          "$PYTHON" scripts/check-license-headers.py
-
-      - name: Check Notebook index links
-        env:
-          PYTHON: ${{ steps.python.outputs.python-path }}
-        run: '"$PYTHON" scripts/check-notebook-links.py'
-
-      - name: Run Swift build and tests
-        run: swift test --jobs 2
-
-      - name: Check Swift formatting
-        run: swift format lint --strict --recursive Package.swift Sources Tests
-
-      - name: Install Python test dependencies
-        env:
-          PYTHON: ${{ steps.python.outputs.python-path }}
-        run: |
-          "$PYTHON" -m venv .venv
-          .venv/bin/python -m pip install --require-hashes --only-binary=:all: -r scripts/release-requirements.txt
-
-      - name: Run Python tests
-        run: .venv/bin/python scripts/test-python.py
-
-      - name: Run three independent private window initial and restart fixtures
-        id: private_window
-        timeout-minutes: 30
-        env:
-          ARCUSIS_PRIVATE_WINDOW_CI: '1'
-          # Hosted virtual machines have no GPU; engine teardown and probes run slower.
-          SHAAR_PROBE_TIMEOUT_SCALE: '3'
-        run: |
-          set -o pipefail
-          test "$GITHUB_ACTIONS" = 'true'
-          test "$RUNNER_OS" = 'macOS'
-          test "$ARCUSIS_PRIVATE_WINDOW_CI" = '1'
-          rm -rf build/private-window-evidence
-          bash scripts/bundle-app.sh --with-engine --verification
-          status=0
-          for iteration in 1 2 3; do
-            echo "Independent private-window repetition $iteration"
-            if ! .venv/bin/python scripts/engine_fixture.py --private-window 2>&1 | tee -a "$RUNNER_TEMP/private-window-fixture.log"; then
-              status=1
-            fi
-          done
-          exit "$status"
-
-      - name: Upload redacted private window evidence
-        if: always() && steps.private_window.outcome != 'skipped'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        with:
-          name: private-window-evidence
-          path: build/private-window-evidence/
-          if-no-files-found: warn
-
-      - name: Collect private window probe logs
-        if: failure() && steps.private_window.outcome == 'failure'
-        run: |
-          mkdir -p "$RUNNER_TEMP/probe-logs"
-          sed -n 's/^Probe evidence: //p' "$RUNNER_TEMP/private-window-fixture.log" \
-            | while read -r root; do cp "$root"/*.log "$RUNNER_TEMP/probe-logs/" || true; done
-
-      - name: Upload private window probe logs
-        if: failure() && steps.private_window.outcome == 'failure'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        with:
-          name: private-window-probe-logs
-          path: ${{ runner.temp }}/probe-logs/
-          if-no-files-found: warn
-
-  hosted-sidebar-visual:
-    name: Hosted sidebar component visuals
-    runs-on: macos-26
-    timeout-minutes: 20
-
-    steps:
-      - name: Check out source
-        # actions/checkout v5.1.0
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-
-      - name: Cache SwiftPM products
-        # actions/cache v4.2.3
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: .build
-          key: macos-26-swiftpm-visuals-${{ hashFiles('Package.swift', '**/Package.resolved') }}
-
-      - name: Build visual test targets
-        run: swift build --build-tests --jobs 2
-
-      - name: Capture hosted sidebar component visuals
-        id: sidebar_visual
-        env:
-          ARCUSIS_SIDEBAR_VISUAL_CI: '1'
-        run: |
-          test "$GITHUB_ACTIONS" = 'true'
-          test "$RUNNER_OS" = 'macOS'
-          test "$ARCUSIS_SIDEBAR_VISUAL_CI" = '1'
-          capture_status=0
-          swift test --jobs 2 --filter SidebarChromeLayoutTests || capture_status=1
-          swift test --jobs 2 --filter SpaceEditorVisualTests || capture_status=1
-          swift test --jobs 2 --filter ExtensionManagerVisualTests || capture_status=1
-          swift test --jobs 2 --filter SpaceIconPickerVisualTests || capture_status=1
-          swift test --jobs 2 --filter SidebarFoldersVisualTests || capture_status=1
-          swift test --jobs 2 --filter CommandPanelVisualTests || capture_status=1
-          exit "$capture_status"
-
-      - name: Upload hosted sidebar component visuals
-        if: always() && steps.sidebar_visual.outcome != 'skipped'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        with:
-          name: sidebar-chrome-ci
-          path: build/Verification/sidebar-chrome-ci/
-          if-no-files-found: warn
-
-  engine-probes:
-    name: Engine probes against the pinned Chromium engine
-    runs-on: macos-26
-    timeout-minutes: 60
-
-    steps:
-      - name: Check out source
-        # actions/checkout v5.1.0
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-
-      - name: Cache SwiftPM products and pinned engine
-        # actions/cache v4.2.3
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: |
-            build/swiftpm/verification
-            build/EngineCache
-          key: macos-26-verification-engine-${{ hashFiles('Package.swift', '**/Package.resolved', 'ThirdParty/ArdiaCore/pin.json') }}
-
-      - name: Run account isolation probes (initial and restart)
-        id: engine_probes
-        env:
-          # Hosted virtual machines have no GPU and run the engine about three times slower.
-          SHAAR_PROBE_TIMEOUT_SCALE: '3'
-        run: |
-          set -o pipefail
-          bash scripts/test-engine.sh 2>&1 | tee "$RUNNER_TEMP/engine-probes.log"
-
-      - name: Run three independent Quit exit probes (initial and restart)
-        id: quit_exit_probe
-        env:
-          SHAAR_PROBE_TIMEOUT_SCALE: '3'
-        run: |
-          set -o pipefail
-          status=0
-          for iteration in 1 2 3; do
-            echo "Independent Quit repetition $iteration"
-            if ! .venv/bin/python scripts/engine_fixture.py --quit-exit 2>&1 | tee -a "$RUNNER_TEMP/engine-probes.log"; then
-              status=1
-            fi
-          done
-          exit "$status"
-
-      - name: Run session recovery probe (SIGKILL during saves, then restore)
-        id: session_recovery
-        env:
-          SHAAR_PROBE_TIMEOUT_SCALE: '3'
-        run: |
-          set -o pipefail
-          .venv/bin/python scripts/engine_fixture.py --session-recovery 2>&1 | tee -a "$RUNNER_TEMP/engine-probes.log"
-
-      - name: Collect engine probe logs
-        if: failure() && (steps.engine_probes.outcome == 'failure' || steps.quit_exit_probe.outcome == 'failure' || steps.session_recovery.outcome == 'failure')
-        run: |
-          mkdir -p "$RUNNER_TEMP/engine-probe-logs"
-          sed -n 's/^Probe evidence: //p' "$RUNNER_TEMP/engine-probes.log" \
-            | while read -r root; do cp "$root"/*.log "$root"/*.json "$RUNNER_TEMP/engine-probe-logs/" || true; done
-
-      - name: Upload engine probe logs
-        if: failure() && (steps.engine_probes.outcome == 'failure' || steps.quit_exit_probe.outcome == 'failure' || steps.session_recovery.outcome == 'failure')
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        with:
-          name: engine-probe-logs
-          path: ${{ runner.temp }}/engine-probe-logs/
-          if-no-files-found: warn
-
-  release-bundle:
-    name: Release bundle builds without verification code
-    runs-on: macos-26
-    timeout-minutes: 40
-
-    steps:
-      - name: Check out source
-        # actions/checkout v5.1.0
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-
-      - name: Cache SwiftPM products and pinned engine
-        # actions/cache v4.2.3
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: |
-            build/swiftpm/default
-            build/EngineCache
-          key: macos-26-release-engine-${{ hashFiles('Package.swift', '**/Package.resolved', 'ThirdParty/ArdiaCore/pin.json') }}
-
-      - name: Build the shipping app with the engine
-        # bundle-app.sh fails when verification symbols or probe flags reach the executable.
-        run: bash scripts/bundle-app.sh --with-engine
-
-      - name: Verify the bundle signature
-        run: codesign --verify --deep --strict --verbose=2 build/Shaar.app
+      - name: Classify only proven documentation-only diffs
+        id: plan
+        run: python3 scripts/ci-plan.py
 
   inspector-contracts:
     name: Headless Inspector renderer contracts
+    needs: plan
+    if: needs.plan.outputs.full == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -313,20 +81,193 @@ jobs:
           path: build/Verification/inspector-contracts.json
           if-no-files-found: error
 
-  workflow-lint:
-    name: Workflow lint
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-
+  fast:
+    name: Fast gates
+    needs: plan
+    runs-on: macos-26
+    timeout-minutes: 15
     steps:
-      - name: Check out source
-        # actions/checkout v5.1.0
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - uses: ./.github/actions/ci-setup
+        with:
+          mode: fast
+          tools: 'true'
+      - name: Format, lint, licenses, Notebook, pins, secrets and Python tests
+        run: .venv/bin/python scripts/ci-checks.py
+      - uses: ./.github/actions/ci-evidence
+        if: always()
+        with:
+          stage: fast
 
-      - name: Run actionlint
+  dependency-review:
+    name: Dependency review
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch'
+        with:
+          base-ref: ${{ needs.plan.outputs.base }}
+          head-ref: ${{ github.sha }}
+          fail-on-severity: high
+      - name: Report review scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: echo "Dependency review event $EVENT_NAME; diff checks run for PR, merge-group and manual validation events." >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    name: Build and unit tests
+    needs: [plan, fast, dependency-review]
+    if: needs.plan.outputs.full == 'true'
+    uses: ./.github/workflows/ci-build.yml
+
+  coverage:
+    name: Coverage no regression
+    needs: [plan, build]
+    if: needs.plan.outputs.full == 'true'
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/ci-setup
+        with:
+          mode: coverage-base
+          products: build/swiftpm/coverage-base
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: ci-unit-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/ci/unit
+      - name: Build immutable base and compare module line coverage
+        env:
+          CI_BASE_SHA: ${{ needs.plan.outputs.base }}
+        run: .venv/bin/python scripts/ci-stage.py coverage
+      - uses: ./.github/actions/ci-evidence
+        if: always()
+        with:
+          stage: coverage
+          extra-path: build/ci/coverage-base
+
+  visuals:
+    name: Hosted sidebar component visuals
+    needs: [plan, build]
+    if: needs.plan.outputs.full == 'true'
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/ci-setup
+        with:
+          mode: visual
+      - name: Run all existing hosted visual filters
+        run: .venv/bin/python scripts/ci-stage.py visual
+      - uses: ./.github/actions/ci-evidence
+        if: always()
+        with:
+          stage: visual
+          extra-path: build/Verification/sidebar-chrome-ci
+
+  engine:
+    name: Engine simulations
+    needs: [plan, build]
+    if: needs.plan.outputs.full == 'true'
+    uses: ./.github/workflows/ci-engine.yml
+    with:
+      iterations: ${{ fromJSON(needs.plan.outputs.iterations || '1') }}
+
+  shipping:
+    name: Shipping bundle
+    needs: [plan, engine, coverage, visuals]
+    if: needs.plan.outputs.full == 'true'
+    permissions:
+      contents: read
+      attestations: write
+      id-token: write
+    uses: ./.github/workflows/ci-shipping.yml
+
+  codeql:
+    name: CodeQL
+    needs: [plan, fast]
+    if: needs.plan.outputs.full == 'true'
+    permissions:
+      contents: read
+      security-events: write
+    uses: ./.github/workflows/ci-codeql.yml
+
+  sanitizers:
+    name: Nightly ${{ matrix.sanitizer }} sanitizer
+    needs: [fast, build]
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: macos-26
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [address, thread]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/ci-setup
+        with:
+          mode: sanitizer-${{ matrix.sanitizer }}
+          products: build/swiftpm/${{ matrix.sanitizer }}
+      - name: Run tests with sanitizer findings fatal
+        env:
+          CI_SANITIZER: ${{ matrix.sanitizer }}
+        run: .venv/bin/python scripts/ci-stage.py sanitize --sanitizer "$CI_SANITIZER"
+      - uses: ./.github/actions/ci-evidence
+        if: always()
+        with:
+          stage: sanitize-${{ matrix.sanitizer }}
+
+  dead-code:
+    name: Nightly dead-code report
+    needs: [fast, build]
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/ci-setup
+        with:
+          mode: dead-code
+      - name: Install pinned dead-code scanner
         run: |
-          curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash \
-            | bash -s -- 1.7.12 "$RUNNER_TEMP"
-          "$RUNNER_TEMP/actionlint" -color
+          .venv/bin/python scripts/install-ci-tools.py --include-periphery
+          echo "$PWD/build/ci-tools" >> "$GITHUB_PATH"
+      - name: Analyze unused declarations with runtime entry points retained
+        run: .venv/bin/python scripts/ci-stage.py dead-code
+      - uses: ./.github/actions/ci-evidence
+        if: always()
+        with:
+          stage: dead-code
+
+  required:
+    name: CI required
+    if: always()
+    needs: [plan, fast, dependency-review, build, coverage, visuals, engine, shipping, codeql, inspector-contracts, sanitizers, dead-code]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Require every selected stage to pass
+        env:
+          CI_NEEDS: ${{ toJSON(needs) }}
+          CI_FULL: ${{ needs.plan.outputs.full }}
+          CI_NIGHTLY: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+        run: python3 scripts/ci-gate.py

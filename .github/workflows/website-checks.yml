@@ -1,0 +1,102 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+name: Website checks
+
+on:
+  pull_request:
+    paths:
+      - 'website/**'
+      - '.github/workflows/website-*.yml'
+      - 'scripts/check-license-headers.py'
+      - 'Tests/LicenseHeaderTests/**'
+      - 'Branding/**'
+      - '.github/assets/**'
+      - 'LICENSE'
+      - 'NOTICE'
+      - 'THIRD_PARTY_NOTICES.md'
+  push:
+    branches: [production]
+    paths:
+      - 'website/**'
+      - '.github/workflows/website-*.yml'
+      - 'scripts/check-license-headers.py'
+      - 'Tests/LicenseHeaderTests/**'
+      - 'Branding/**'
+      - '.github/assets/**'
+      - 'LICENSE'
+      - 'NOTICE'
+      - 'THIRD_PARTY_NOTICES.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: website-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  website:
+    name: Website build, typecheck, lint and links
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5.1.0
+        with:
+          persist-credentials: false
+      - name: Set up pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          package_json_file: website/package.json
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: website/pnpm-lock.yaml
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Test link checker
+        run: pnpm test
+      - name: Lint and format
+        run: pnpm lint
+      - name: Check source licenses
+        working-directory: .
+        run: |
+          python3 scripts/check-license-headers.py
+          python3 -m unittest discover -s Tests/LicenseHeaderTests
+      - name: Build static pages
+        run: pnpm build
+      - name: Check internal links and assets
+        run: pnpm check:links
+      - name: Check Wrangler HTTP serving
+        run: |
+          pnpm wrangler dev --port 8787 --show-interactive-dev-session=false > "$RUNNER_TEMP/shaar-website.log" 2>&1 &
+          server_pid=$!
+          echo "Wrangler launcher PID: $server_pid"
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          ready=false
+          for _attempt in $(seq 1 60); do
+            if curl -fsS http://localhost:8787/ > /dev/null; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then
+            cat "$RUNNER_TEMP/shaar-website.log"
+            exit 1
+          fi
+          pnpm check:served
+      - name: Upload built site
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: shaar-website
+          path: website/dist/
+          retention-days: 7

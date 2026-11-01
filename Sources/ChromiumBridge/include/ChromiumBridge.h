@@ -19,6 +19,17 @@ typedef NS_ENUM(NSInteger, ARCExtensionManagementOperation) {
   ARCExtensionManagementOperationDetails,
 };
 
+/// Media Session actions sent to the frame that reports a tab's playback.
+typedef NS_ENUM(NSInteger, ARCMediaSessionAction) {
+  ARCMediaSessionActionPlay,
+  ARCMediaSessionActionPause,
+  ARCMediaSessionActionPreviousTrack,
+  ARCMediaSessionActionNextTrack,
+  ARCMediaSessionActionSeekBackward,
+  ARCMediaSessionActionSeekForward,
+  ARCMediaSessionActionSeekTo,
+};
+
 /// All methods and callbacks run on the main thread. The engine owns the AppKit run loop.
 @interface ARCChromiumRuntime : NSObject
 @property(copy, nullable) void (^onReady)(void);
@@ -36,6 +47,9 @@ typedef NS_ENUM(NSInteger, ARCExtensionManagementOperation) {
 @property(copy, nullable) void (^onExternalAppRequest)(NSDictionary<NSString *, id> *request);
 @property(copy, nullable) void (^onExternalAppDismissed)(NSString *requestID);
 @property(copy, nullable) void (^onMediaAccess)(NSString *tabID, NSDictionary<NSString *, NSNumber *> *access);
+/// A tab's validated Media Session state changed; `state` is nil when the tab has no media.
+@property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onMediaSessionChanged)(NSString *tabID,
+    NSDictionary<NSString *, id> * _Nullable state);
 @property(copy, nullable) void (^onFindResult)(NSString *tabID, NSString *requestID, int count, int active, BOOL final);
 @property(copy, nullable) void (^onDownloadChanged)(NSString *profileID, NSDictionary<NSString *, id> *download);
 @property(copy, nullable) void (^onDownloadRemoved)(NSString *profileID, NSString *downloadID);
@@ -132,6 +146,21 @@ typedef NS_ENUM(NSInteger, ARCExtensionManagementOperation) {
 - (nullable NSView *)viewForExtensionPopupID:(NSString *)popupID;
 - (void)closeExtensionPopup;
 - (void)closeExtensionPopupForWindowID:(NSString *)windowID;
+@end
+
+/// Media Session state reported by a tab's pages, and actions sent back to them.
+@interface ARCChromiumRuntime (MediaSession)
+/// Keys: playbackState (none, paused, playing), title, artist, album, artwork (http or https URL
+/// or empty), actions (supported Media Session action names), hasVideo, canSeek and muted (the
+/// tab's native audio mute).
+- (nullable NSDictionary<NSString *, id> *)mediaSessionStateForTabID:(NSString *)tabID;
+/// `seconds` is the offset for seeking backward or forward and the position for seeking to.
+/// Returns NO when the tab has no media state or does not support the action.
+- (BOOL)sendMediaSessionAction:(ARCMediaSessionAction)action seconds:(double)seconds
+                         tabID:(NSString *)tabID
+  NS_SWIFT_NAME(sendMediaSessionAction(_:seconds:tabID:));
+/// Mutes the tab's audio output in the engine, independently of the page's own volume.
+- (BOOL)setMuted:(BOOL)muted tabID:(NSString *)tabID;
 @end
 
 /// Product private browsing API. Contexts bind to an already-loaded regular Profile.

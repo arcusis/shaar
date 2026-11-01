@@ -87,6 +87,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   _detachedTabSelections = [NSMutableDictionary dictionary];
   _probeExtensions = [NSMutableDictionary dictionary];
   _probeDiagnostics = [NSMutableArray array];
+  _mediaSessions = [[ARCMediaSessionTracker alloc] init];
   _services = [[ARCEngineServices alloc] initWithLibrary:_library error:error];
   if (!_services) return nil;
   _downloadService = [[ARCDownloadService alloc] initWithServices:_services];
@@ -166,16 +167,18 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 - (void)engineDidStart {
   _engine = [_engineClass sharedEngine];
   [_services start];
+  NSMutableArray<NSString *> *pageScripts = [NSMutableArray arrayWithObject:ARCMediaSessionPageScript()];
   if (_testing) {
     // Diagnostics only for the empty Bitwarden store-probe profile. No credential entry occurs.
-    _engine.pageScript = @"(function(post){"
+    [pageScripts addObject:@"(function(post){"
       "if(location.protocol==='chrome-extension:' && location.host==='nngceckbapebfimnlniiiahkandclblb'){"
       "const report=(kind,value)=>post('arcusisProbeDiagnostic',JSON.stringify({kind,message:String(value).slice(0,8192),url:location.href}));"
       "addEventListener('error',e=>report('error',e.message+' '+(e.error?.stack||'')));"
       "addEventListener('unhandledrejection',e=>report('rejection',e.reason?.stack||e.reason));"
       "const original=console.error;console.error=(...args)=>{report('console',args.map(String).join(' '));return original.apply(console,args);};"
-      "}return function(){};})";
+      "}return function(){};})"];
   }
+  _engine.pageScript = ARCComposedPageScript(pageScripts);
   if (_testing) [NSApp setActivationPolicy:NSApplicationActivationPolicyProhibited];
   [self createWindowID:_primaryWindowID error:nil];
   if (_onReady) _onReady();
@@ -786,6 +789,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   [_owners removeObjectForKey:tabID];
   [_tabWindows removeObjectForKey:tabID];
   [_documentGenerations removeObjectForKey:tabID];
+  [self resetMediaSessionForTabID:tabID notify:NO];
   [tab closeNow];
 }
 - (void)activateProfileID:(NSString *)profileID {
@@ -1092,6 +1096,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   if (!identity || !profile || tab.closed) return;
   [self invalidateExternalRequestsForTabID:identity windowID:nil];
   [self stopFindingInTabID:identity];
+  [self resetMediaSessionForTabID:identity notify:YES];
   if (_onRendererGone) _onRendererGone(identity, profile, status, code);
 }
 - (void)tabDidCommitDocument:(ArdiaCoreTab *)tab {
@@ -1100,6 +1105,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   if (identity) {
     [self advanceDocumentGenerationForTabID:identity];
     [self invalidateExternalRequestsForTabID:identity windowID:nil];
+    [self resetMediaSessionForTabID:identity notify:YES];
   }
   [self hideWebStoreBrowserPromptInTab:tab];
   [_webStoreFit tabDidNavigate:tab];
@@ -1116,6 +1122,10 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   [self evaluateTab:tab script:script completion:^(NSString *ignored) {}];
 }
 - (void)tabDidChangeZoom:(ArdiaCoreTab *)tab { [_webStoreFit tabDidChangeZoom:tab]; }
+- (void)tabDidChangeAudio:(ArdiaCoreTab *)tab {
+  NSString *identity = [self identityForTab:tab];
+  if (identity && [self mediaSessionStateForTabID:identity]) [self publishMediaSessionForTabID:identity];
+}
 - (void)tab:(ArdiaCoreTab *)tab didFindMatches:(int)count active:(int)active final:(BOOL)final {
   NSString *identity = [self identityForTab:tab];
   ARCNativeWindowState *state = [self stateForTabID:identity];
@@ -1132,8 +1142,13 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   ARCNativeWindowState *state = [self stateForPopupTab:tab];
   if (state.popupID && !state.closed && _onExtensionPopupSize) _onExtensionPopupSize(state.popupID, size);
 }
-- (void)tab:(ArdiaCoreTab *)tab didReceivePageMessage:(NSString *)kind json:(NSString *)json {
-  if (!_testing || ![kind isEqualToString:@"arcusisProbeDiagnostic"] || _probeDiagnostics.count >= 100 ||
+- (void)tab:(ArdiaCoreTab *)tab didReceivePageMessage:(NSString *)kind json:(NSString *)json
+         frame:(NSString *)frameID main:(BOOL)main {
+  if ([kind isEqualToString:ARCMediaSessionMessage]) {
+    [self receiveMediaSessionJSON:json frameID:frameID tab:tab];
+    return;
+  }
+  if (!main || !_testing || ![kind isEqualToString:@"arcusisProbeDiagnostic"] || _probeDiagnostics.count >= 100 ||
       ![tab.url hasPrefix:@"chrome-extension://nngceckbapebfimnlniiiahkandclblb/"]) return;
   NSData *data = [json dataUsingEncoding:NSUTF8StringEncoding];
   id event = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
@@ -1188,6 +1203,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   [_owners removeObjectForKey:identity];
   [_tabWindows removeObjectForKey:identity];
   [_documentGenerations removeObjectForKey:identity];
+  [self resetMediaSessionForTabID:identity notify:NO];
   dispatch_async(dispatch_get_main_queue(), ^{
     if (notify && self->_onTabClosed) self->_onTabClosed(identity);
     if (notify && state.closeWhenEmpty && !state.closing && !state.closed &&

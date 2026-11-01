@@ -487,6 +487,11 @@ final class EngineProbe {
           runtime: runtime, engine: browserEngine, store: store,
           root: root, phase: phase
         ).run()
+        fixtureStage = "MediaSession"
+        checks += try await MediaSessionProbe(
+          runtime: runtime, engine: browserEngine, store: store, root: root, fixture: fixture,
+          phase: phase
+        ).run()
         fixtureStage = "Download"
         checks += try await DownloadProbe(
           runtime: runtime, engine: browserEngine, store: store, root: root, phase: phase

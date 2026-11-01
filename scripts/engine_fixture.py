@@ -323,6 +323,27 @@ WEB_STORE_FIT_PAGE = b"""<!doctype html><html data-arcusis-fixture="web-store-fi
 <p>Fixed minimum width, like the Chrome Web Store.</p></html>"""
 
 
+# A silent canvas stream: no media file, network or audio device. The handlers log each
+# Media Session action so the probe can confirm what reached the page.
+MEDIA_SESSION_PAGE = b"""<!doctype html><html data-arcusis-fixture="media"><meta charset="utf-8">
+<title>Media session fixture</title>
+<canvas id="canvas" width="320" height="180"></canvas>
+<video id="video" width="320" height="180" playsinline></video>
+<script>
+const canvas=document.getElementById('canvas'),video=document.getElementById('video');
+const context=canvas.getContext('2d');let hue=0;
+setInterval(()=>{context.fillStyle=`hsl(${hue=(hue+9)%360} 60% 50%)`;context.fillRect(0,0,320,180);},50);
+video.srcObject=canvas.captureStream(20);
+window.arcusisMediaLog=[];
+navigator.mediaSession.metadata=new MediaMetadata({title:'Fixture Song',artist:'Fixture Artist',
+  album:'Fixture Album',artwork:[{src:'/favicon-initial.png',sizes:'64x48',type:'image/png'}]});
+for(const action of ['play','pause','previoustrack','nexttrack']){
+  navigator.mediaSession.setActionHandler(action,()=>{window.arcusisMediaLog.push(action);
+    if(action==='play')video.play();if(action==='pause')video.pause();});
+}
+</script></html>"""
+
+
 class Fixture(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
@@ -353,6 +374,9 @@ class Fixture(http.server.BaseHTTPRequestHandler):
             return
         if path == '/web-store-fit':
             self.html(WEB_STORE_FIT_PAGE)
+            return
+        if path == '/media':
+            self.html(MEDIA_SESSION_PAGE)
             return
         self.html(b"""<!doctype html><html data-arcusis-fixture="v1"><meta charset="utf-8">
 <title>Arcusis account isolation fixture</title>

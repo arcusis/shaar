@@ -20,6 +20,7 @@ final class BrowserRuntimeClient {
   var onExternalAppRequest: (([String: Any]) -> Void)?
   var onExternalAppDismissed: ((String) -> Void)?
   var onMediaAccess: ((String, [String: NSNumber]) -> Void)?
+  var onMediaSessionChanged: ((String, [String: Any]?) -> Void)?
   var onFindResult: ((String, String, Int32, Int32, Bool) -> Void)?
   var onDownloadChanged: ((String, [String: Any]) -> Void)?
   var onDownloadRemoved: ((String, String) -> Void)?

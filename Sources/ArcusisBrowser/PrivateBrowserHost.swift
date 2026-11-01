@@ -79,14 +79,14 @@ final class PrivateBrowserHost {
 
   /// Retire SwiftUI bindings before AppKit or its field editor can keep them alive.
   static func retireHostingContent<Content: View>(_ hosting: NSHostingView<Content?>) {
-    hosting.window?.endEditing(for: nil)
-    _ = hosting.window?.makeFirstResponder(nil)
     hosting.rootView = nil
     hosting.layoutSubtreeIfNeeded()
     hosting.removeFromSuperview()
   }
 
   private func retire(_ owner: Owner) {
+    owner.window.endEditing(for: nil)
+    _ = owner.window.makeFirstResponder(nil)
     Self.retireHostingContent(owner.hosting)
     owner.titlebarDragView.removeFromSuperview()
     owner.store.clear()

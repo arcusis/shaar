@@ -56,7 +56,7 @@ Files raised by the #252 tests:
 
 ## Feature to test map
 
-App tests live in `Tests/BrowserAppTests`, core tests in `Tests/BrowserCoreTests`, harness tests in `Tests/ShaarVerificationTests`, and tooling/release/packaging tests in the Python suites under `Tests/`. Native probes run inside the engine fixture. Pending site-control tests are described in [[Site_Control_Center]]; they are not part of this branch's map.
+App tests live in `Tests/BrowserAppTests`, core tests in `Tests/BrowserCoreTests`, harness tests in `Tests/ShaarVerificationTests`, and tooling/release/packaging tests in the Python suites under `Tests/`. Native probes run inside the engine fixture. Site-control tests and `SiteControlsProbe` are described in [[Site_Control_Center]].
 
 | Feature | Unit tests | Native probe |
 | --- | --- | --- |

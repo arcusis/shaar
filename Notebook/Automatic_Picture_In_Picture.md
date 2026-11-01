@@ -8,6 +8,6 @@ The setting is per site (lowercased http or https host) and per profile, on by d
 
 Muted, zero-volume, paused and audio-only media do not qualify. The automatic request covers main-frame videos; cross-origin iframe videos and switching to another application are outside its scope. Back to Tab selects the owning tab and Space. Private tabs keep their own activation path.
 
-`AutoPictureInPictureTests` and `SiteSettingKeyTests` cover state and host-key normalization. `MediaSessionProbe` checks tab/Space departure and return, per-site opt-out, and engine PiP events against silent loopback media. The visible setting toggle is pending in [[Site_Control_Center]].
+`AutoPictureInPictureTests` and `SiteSettingKeyTests` cover state and host-key normalization. `MediaSessionProbe` checks tab/Space departure and return, per-site opt-out, and engine PiP events against silent loopback media. The visible per-site toggle lives in [[Site_Control_Center]].
 
 Related: [[Media_Playback]], [[Picture_In_Picture_Controls]], [[Profile_Space_Isolation]].

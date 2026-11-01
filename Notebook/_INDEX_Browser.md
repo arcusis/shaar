@@ -27,7 +27,3 @@
 - [[Engine_Source_Build]]
 - [[Quit_Exit_Verification]]
 - [[Arc_Settings_Design]]
-
-Pending features (open PRs; each note records its status):
-
-- [[Site_Control_Center]]

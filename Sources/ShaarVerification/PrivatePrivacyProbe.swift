@@ -28,26 +28,15 @@ struct PrivatePrivacyProbe {
     do {
       let prefs = runtime.privatePrivacyPreferences(forContextID: contextID) ?? [:]
       observations["preferences"] = prefs
-      checks["privateAutofillAndPasswordSavingOff"] = [
-        "credentials_enable_service", "autofill.profile_enabled", "autofill.credit_card_enabled",
-      ].allSatisfy { (prefs[$0] as? [String: Any])?["private"] as? Bool == false }
-      checks["normalAutofillPreferencesUnchanged"] = [
-        "credentials_enable_service", "autofill.profile_enabled", "autofill.credit_card_enabled",
-      ].allSatisfy { (prefs[$0] as? [String: Any])?["normal"] as? Bool == true }
-      checks["wildcardCookieDefaultUnavailable"] =
-        (prefs["wildcardCookieSetting"] as? [String: Any])?["error"] as? String
-        == "origin must be an http(s) origin"
+      checks.merge(PrivatePrivacyEvidence.preferences(prefs)) { _, value in value }
       let normal = try await evaluate(normalTabID, storageScript)
       observations["normalStorage"] = normal
       checks["normalStoragePositiveControl"] =
-        normal["cookie"] as? Bool == true
-        && normal["local"] as? Bool == true && normal["session"] as? Bool == true
+        PrivatePrivacyEvidence.storage(normal, allowed: true, includesIndexedDB: false)
       let blocked = try await evaluate(tabID, storageScript)
       observations["blockedStorage"] = blocked
       checks["privateFirstPartyCookieAndStorageBlocked"] =
-        blocked["cookie"] as? Bool == false
-        && blocked["local"] as? Bool == false && blocked["session"] as? Bool == false
-        && blocked["indexedDB"] as? Bool == false
+        PrivatePrivacyEvidence.storage(blocked, allowed: false, includesIndexedDB: true)
       let normalNetwork = try await evaluate(normalTabID, networkScript)
       let acknowledged: Bool = await withCheckedContinuation { continuation in
         runtime.probePrivateNetworkControls(forTabID: tabID) { continuation.resume(returning: $0) }
@@ -78,13 +67,7 @@ struct PrivatePrivacyProbe {
         r.notificationRequest=await Notification.requestPermission();return r})()
         """)
       observations["permissions"] = permissions
-      checks["privatePermissionsDenied"] = ["camera", "microphone", "geolocation", "notifications"]
-        .allSatisfy { permissions[$0] as? String == "denied" }
-      checks["privatePermissionRequestsRejected"] =
-        permissions["cameraRequest"] as? String == "NotAllowedError"
-        && permissions["microphoneRequest"] as? String == "NotAllowedError"
-        && permissions["locationRequest"] as? Int == 1
-        && permissions["notificationRequest"] as? String == "denied"
+      checks.merge(PrivatePrivacyEvidence.permissions(permissions)) { _, value in value }
       let store = PrivateBrowserStore(
         contextID: contextID, windowID: windowID, tabID: tabID,
         url: fixture.absoluteString)
@@ -107,9 +90,7 @@ struct PrivatePrivacyProbe {
       let allowed = try await evaluate(tabID, storageScript)
       observations["allowedStorage"] = allowed
       checks["privatePerSiteAllowEnablesCookieAndStorage"] =
-        allowed["cookie"] as? Bool == true
-        && allowed["local"] as? Bool == true && allowed["session"] as? Bool == true
-        && allowed["indexedDB"] as? Bool == true
+        PrivatePrivacyEvidence.storage(allowed, allowed: true, includesIndexedDB: true)
       let networkAllowed = try await evaluate(tabID, networkScript)
       checks["privatePerSiteAllowEnablesNetworkCookies"] =
         networkAllowed["cookieReturned"] as? Bool == true
@@ -120,8 +101,7 @@ struct PrivatePrivacyProbe {
       let revoked = try await evaluate(tabID, storageScript)
       observations["revokedStorage"] = revoked
       checks["privatePerSiteRevokeBlocksStorageAgain"] =
-        revoked["cookie"] as? Bool == false
-        && revoked["local"] as? Bool == false && revoked["session"] as? Bool == false
+        PrivatePrivacyEvidence.storage(revoked, allowed: false, includesIndexedDB: false)
       let passed = !checks.isEmpty && checks.values.allSatisfy { $0 }
       try report(checks, observations, error: nil)
       guard passed else {

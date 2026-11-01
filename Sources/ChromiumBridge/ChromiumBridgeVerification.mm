@@ -67,7 +67,7 @@ static BOOL ProbeViewIsVisibleInWindow(NSView *view, NSWindow *window) {
   NSURLComponents *url = [NSURLComponents componentsWithString:tab.url ?: @""];
   BOOL local = [url.scheme isEqual:@"http"] && [url.host isEqual:@"inspector.localhost"];
   BOOL publicPage = [url.scheme isEqual:@"https"] &&
-    [@[@"developer.mozilla.org", @"www.w3.org"] containsObject:url.host];
+    [@[@"developer.mozilla.org", @"www.w3.org", @"react.dev"] containsObject:url.host];
   return _testing && ARCProbeRootIsOwned(_probeRoot) && tab &&
     [self isSelectedTabID:identity] && (local || publicPage);
 }

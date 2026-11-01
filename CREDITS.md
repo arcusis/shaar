@@ -26,5 +26,6 @@ Shaar is an independent project. It is not affiliated with, sponsored, or endors
 - [Public Suffix List](https://publicsuffix.org/): public domain-boundary data used for registrable-domain decisions.
 - [Sparkle](https://sparkle-project.org/): software update framework.
 - [Playwright](https://playwright.dev/): Apache-2.0 test-only browser automation for Inspector renderer contracts; not bundled in the app.
+- [React](https://github.com/facebook/react), [Vue](https://github.com/vuejs/core), [Svelte](https://github.com/sveltejs/svelte) and [esbuild](https://github.com/evanw/esbuild): MIT-licensed test-only framework fixtures and their build tool. Pinned versions and upstream licenses are in `ThirdParty/InspectorFixtures`; these fixtures are not bundled in the app.
 
 Each project retains its own trademarks and licensing. See the relevant upstream project and bundled third-party notices for license terms.

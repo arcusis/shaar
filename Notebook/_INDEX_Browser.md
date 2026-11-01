@@ -17,6 +17,7 @@
 - [[Site_Control_Center]]
 - [[Shaar_Inspector]]
 - [[Shaar_Inspector_CSS]]
+- [[Shaar_Inspector_Details]]
 - [[External_App_Consent]]
 - [[Find_In_Page]]
 - [[Renderer_Recovery]]

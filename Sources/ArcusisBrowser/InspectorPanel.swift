@@ -29,6 +29,8 @@ struct InspectorPanel: View {
         Divider()
         if model.tab == .styles {
           InspectorStylesView(inspector: model, model: model.styles)
+        } else if [.component, .accessibility, .assets].contains(model.tab) {
+          InspectorDetailsView(inspector: model, model: model.details)
         } else {
           ScrollView {
             VStack(spacing: 0) {
@@ -226,18 +228,33 @@ struct InspectorPanel: View {
 
 struct InspectorSection<Content: View>: View {
   let title: String
+  let copy: (() -> Void)?
   @ViewBuilder let content: () -> Content
-  init(_ title: String, @ViewBuilder content: @escaping () -> Content) {
+  @State private var hovered = false
+  @FocusState private var copyFocused: Bool
+  init(_ title: String, copy: (() -> Void)? = nil, @ViewBuilder content: @escaping () -> Content) {
     self.title = title
+    self.copy = copy
     self.content = content
   }
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
-      Text(title).font(.system(size: 11, weight: .semibold))
+      HStack {
+        Text(title).font(.system(size: 11, weight: .semibold))
+        Spacer()
+        if let copy {
+          Button(action: copy) {
+            Image(systemName: "doc.on.doc").font(.system(size: 11)).frame(width: 16, height: 16)
+          }
+          .buttonStyle(.plain).focused($copyFocused).opacity(hovered || copyFocused ? 1 : 0)
+          .help("Copy \(title)").accessibilityLabel("Copy \(title)")
+        }
+      }
       content()
     }
     .frame(maxWidth: .infinity, alignment: .leading).padding(12)
     .overlay(alignment: .bottom) { Divider() }
+    .onHover { hovered = $0 }
   }
 }
 

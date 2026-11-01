@@ -34,6 +34,11 @@ FOUNDATION_EXPORT BOOL ARCDisableBackgroundMode(NSURL *userDataDirectory);
 - (void)captureProbeTabID:(NSString *)tabID completion:(void (^)(NSData * _Nullable))completion;
 - (void)evaluatePrivateProbeTabID:(NSString *)tabID script:(NSString *)script
                        completion:(void (^)(NSString * _Nullable))completion;
+- (void)probePrivateNetworkControlsForTabID:(NSString *)tabID completion:(void (^)(BOOL))completion;
+- (nullable NSDictionary *)privatePrivacyStatusForProbeTabID:(NSString *)tabID;
+- (nullable NSDictionary *)privatePrivacyPreferencesForContextID:(NSString *)contextID;
+- (void)evaluatePrivacyProbeTabID:(NSString *)tabID script:(NSString *)script
+                          completion:(void (^)(NSString * _Nullable))completion;
 - (BOOL)attemptCancelledPrivateProbeCloseID:(NSString *)windowID;
 - (nullable NSDictionary *)privateProbeAuditForContextID:(NSString *)contextID;
 /// The selected owned loopback tab is loaded and attached; does not start a capture.

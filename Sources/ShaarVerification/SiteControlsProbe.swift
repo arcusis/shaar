@@ -57,7 +57,23 @@ final class SiteControlsProbe {
     try await checkAutoPictureInPicture(model)
     try await capture(model)
     try await checkActions(tab)
+    try await removeFixtureSpace(returningTo: returnSpace)
+  }
+
+  /// Leaves no extra live tab behind, so the restart phase restores the same load it would
+  /// without this probe. Site settings stay in the profile, so persistence is still checked.
+  private func removeFixtureSpace(returningTo returnSpace: UUID) async throws {
+    let space = try require(
+      store.session.spaces.first { $0.name == Self.spaceName }, "fixture space exists")
+    let tabs = Set(space.tabs.map(\.id))
     store.perform(.space(returnSpace))
+    try expect(store.removeSpace(space.id), "the site controls fixture space can be removed")
+    for _ in 0..<Int(50 * ProbeTimeout.scale) {
+      if engine.liveTabs.isDisjoint(with: tabs) { break }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    try expect(
+      engine.liveTabs.isDisjoint(with: tabs), "removing the fixture space closes its live tab")
   }
 
   private func openFixtureSpace() async throws -> UUID {

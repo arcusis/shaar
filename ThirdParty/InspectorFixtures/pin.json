@@ -1,0 +1,22 @@
+{
+  "testOnly": true,
+  "versions": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "vue": "3.5.42",
+    "svelte": "4.2.20",
+    "esbuild": "0.25.12"
+  },
+  "sourceSHA256": {
+    "Tests/InspectorContractTests/build-fixtures.cjs": "68acc6e84bee95421108072c46147ae735dbb9cba93027e956240c7c3d334fee",
+    "Tests/InspectorContractTests/fixtures/InspectorChild.svelte": "16a8fbfe69f52bc0dd713588de6120ce19d7ed8d3f0be708e2f881ad649a69c0",
+    "Tests/InspectorContractTests/fixtures/InspectorCounter.svelte": "07d5ae56ab4a854cdf3001382897607be1f786202ec9f123179f4ddf6e016f7f",
+    "Tests/InspectorContractTests/fixtures/ReactCounter.jsx": "942b99c66abd94ccc96ec80da7213dd3fcc83b709f1703961f444b4b6155357e",
+    "Tests/InspectorContractTests/fixtures/index.js": "e268b1b1a91f5a9c83c4fafd14c174c373051c3c345e9a4537d5e80b1e78b520",
+    "Tests/InspectorContractTests/fixtures/vue.js": "7503b061b9fe120a67a82d9f14371afedc3878b8d636222b6e9c1c47e2d9f50f"
+  },
+  "sha256": {
+    "frameworks.js.LEGAL.txt": "89f0d9b4239a0fee4219b61033c7f2630498350545371b582da5e7523b5d10e6",
+    "frameworks.js": "91f5a115d3253b704e67b3ef205594156e7b7e7daf314667bf929b064f864385"
+  }
+}

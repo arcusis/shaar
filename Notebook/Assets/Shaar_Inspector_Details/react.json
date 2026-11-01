@@ -1,0 +1,1426 @@
+{
+  "accessibility" : null,
+  "assets" : null,
+  "componentData" : {
+    "hooks" : "[]",
+    "id" : 10,
+    "name" : "a",
+    "note" : "Raw hook state slots; custom hook structure and hook names are not inferred.",
+    "props" : "{\n  \"as\": \"h1\",\n  \"className\": \"mt-0 text-primary dark:text-primary-dark -mx-.5 break-words text-5xl font-display font-bold leading-tight\",\n  \"children\": [\n    \"Quick Start\",\n    false,\n    false,\n    false,\n    \"\"\n  ]\n}",
+    "state" : "null",
+    "truncated" : false
+  },
+  "componentTree" : {
+    "framework" : "React",
+    "limit" : "Tree limited to 250 components and 4,000 runtime nodes",
+    "nodes" : [
+      {
+        "id" : 1,
+        "name" : "es"
+      },
+      {
+        "id" : 2,
+        "name" : "$",
+        "parent" : 1
+      },
+      {
+        "id" : 3,
+        "name" : "z",
+        "parent" : 2
+      },
+      {
+        "id" : 4,
+        "name" : "p",
+        "parent" : 3
+      },
+      {
+        "id" : 5,
+        "name" : "r",
+        "parent" : 4
+      },
+      {
+        "id" : 6,
+        "name" : "d",
+        "parent" : 5
+      },
+      {
+        "id" : 7,
+        "name" : "tR",
+        "parent" : 6
+      },
+      {
+        "id" : 8,
+        "name" : "K",
+        "parent" : 7
+      },
+      {
+        "id" : 9,
+        "name" : "d",
+        "parent" : 8
+      },
+      {
+        "id" : 10,
+        "name" : "a",
+        "parent" : 9
+      },
+      {
+        "id" : 11,
+        "name" : "Z",
+        "parent" : 1
+      },
+      {
+        "id" : 12,
+        "name" : "t",
+        "parent" : 7
+      },
+      {
+        "id" : 13,
+        "name" : "Anonymous component",
+        "parent" : 12
+      },
+      {
+        "id" : 14,
+        "name" : "m",
+        "parent" : 13
+      },
+      {
+        "id" : 15,
+        "name" : "i",
+        "parent" : 14
+      },
+      {
+        "id" : 16,
+        "name" : "tN",
+        "parent" : 7
+      },
+      {
+        "id" : 17,
+        "name" : "ti",
+        "parent" : 16
+      },
+      {
+        "id" : 18,
+        "name" : "m",
+        "parent" : 17
+      },
+      {
+        "id" : 19,
+        "name" : "i",
+        "parent" : 18
+      },
+      {
+        "id" : 20,
+        "name" : "Anonymous component",
+        "parent" : 16
+      },
+      {
+        "id" : 21,
+        "name" : "tf",
+        "parent" : 16
+      },
+      {
+        "id" : 22,
+        "name" : "rc",
+        "parent" : 21
+      },
+      {
+        "id" : 23,
+        "name" : "ContextMenuProvider",
+        "parent" : 22
+      },
+      {
+        "id" : 24,
+        "name" : "n5",
+        "parent" : 23
+      },
+      {
+        "id" : 25,
+        "name" : "ts",
+        "parent" : 24
+      },
+      {
+        "id" : 26,
+        "name" : "PopperProvider",
+        "parent" : 25
+      },
+      {
+        "id" : 27,
+        "name" : "MenuProvider",
+        "parent" : 26
+      },
+      {
+        "id" : 28,
+        "name" : "MenuProvider",
+        "parent" : 27
+      },
+      {
+        "id" : 29,
+        "name" : "Primitive.span",
+        "parent" : 28
+      },
+      {
+        "id" : 30,
+        "name" : "b",
+        "parent" : 29
+      },
+      {
+        "id" : 31,
+        "name" : "m",
+        "parent" : 30
+      },
+      {
+        "id" : 32,
+        "name" : "i",
+        "parent" : 31
+      },
+      {
+        "id" : 33,
+        "name" : "er",
+        "parent" : 29
+      },
+      {
+        "id" : 34,
+        "name" : "rd",
+        "parent" : 28
+      },
+      {
+        "id" : 35,
+        "name" : "n7",
+        "parent" : 34
+      },
+      {
+        "id" : 36,
+        "name" : "MenuPortalProvider",
+        "parent" : 35
+      },
+      {
+        "id" : 37,
+        "name" : "Presence",
+        "parent" : 36
+      },
+      {
+        "id" : 38,
+        "name" : "Anonymous component",
+        "parent" : 16
+      },
+      {
+        "id" : 39,
+        "name" : "t_",
+        "parent" : 16
+      },
+      {
+        "id" : 40,
+        "name" : "t_",
+        "parent" : 16
+      },
+      {
+        "id" : 41,
+        "name" : "t_",
+        "parent" : 16
+      },
+      {
+        "id" : 42,
+        "name" : "tk",
+        "parent" : 16
+      },
+      {
+        "id" : 43,
+        "name" : "tw",
+        "parent" : 42
+      },
+      {
+        "id" : 44,
+        "name" : "tk",
+        "parent" : 16
+      },
+      {
+        "id" : 45,
+        "name" : "tw",
+        "parent" : 44
+      },
+      {
+        "id" : 46,
+        "name" : "tk",
+        "parent" : 16
+      },
+      {
+        "id" : 47,
+        "name" : "tw",
+        "parent" : 46
+      },
+      {
+        "id" : 48,
+        "name" : "tk",
+        "parent" : 16
+      },
+      {
+        "id" : 49,
+        "name" : "tw",
+        "parent" : 48
+      },
+      {
+        "id" : 50,
+        "name" : "Anonymous component",
+        "parent" : 16
+      },
+      {
+        "id" : 51,
+        "name" : "tw",
+        "parent" : 16
+      },
+      {
+        "id" : 52,
+        "name" : "tw",
+        "parent" : 16
+      },
+      {
+        "id" : 53,
+        "name" : "y",
+        "parent" : 7
+      },
+      {
+        "id" : 54,
+        "name" : "j",
+        "parent" : 53
+      },
+      {
+        "id" : 55,
+        "name" : "f",
+        "parent" : 54
+      },
+      {
+        "id" : 56,
+        "name" : "Anonymous component",
+        "parent" : 55
+      },
+      {
+        "id" : 57,
+        "name" : "C",
+        "parent" : 54
+      },
+      {
+        "id" : 58,
+        "name" : "j",
+        "parent" : 57
+      },
+      {
+        "id" : 59,
+        "name" : "f",
+        "parent" : 58
+      },
+      {
+        "id" : 60,
+        "name" : "f",
+        "parent" : 58
+      },
+      {
+        "id" : 61,
+        "name" : "f",
+        "parent" : 54
+      },
+      {
+        "id" : 62,
+        "name" : "Anonymous component",
+        "parent" : 61
+      },
+      {
+        "id" : 63,
+        "name" : "C",
+        "parent" : 54
+      },
+      {
+        "id" : 64,
+        "name" : "j",
+        "parent" : 63
+      },
+      {
+        "id" : 65,
+        "name" : "f",
+        "parent" : 64
+      },
+      {
+        "id" : 66,
+        "name" : "f",
+        "parent" : 64
+      },
+      {
+        "id" : 67,
+        "name" : "f",
+        "parent" : 64
+      },
+      {
+        "id" : 68,
+        "name" : "f",
+        "parent" : 54
+      },
+      {
+        "id" : 69,
+        "name" : "Anonymous component",
+        "parent" : 68
+      },
+      {
+        "id" : 70,
+        "name" : "C",
+        "parent" : 54
+      },
+      {
+        "id" : 71,
+        "name" : "j",
+        "parent" : 70
+      },
+      {
+        "id" : 72,
+        "name" : "f",
+        "parent" : 71
+      },
+      {
+        "id" : 73,
+        "name" : "f",
+        "parent" : 71
+      },
+      {
+        "id" : 74,
+        "name" : "f",
+        "parent" : 71
+      },
+      {
+        "id" : 75,
+        "name" : "f",
+        "parent" : 54
+      },
+      {
+        "id" : 76,
+        "name" : "Anonymous component",
+        "parent" : 75
+      },
+      {
+        "id" : 77,
+        "name" : "C",
+        "parent" : 54
+      },
+      {
+        "id" : 78,
+        "name" : "j",
+        "parent" : 77
+      },
+      {
+        "id" : 79,
+        "name" : "f",
+        "parent" : 78
+      },
+      {
+        "id" : 80,
+        "name" : "f",
+        "parent" : 78
+      },
+      {
+        "id" : 81,
+        "name" : "f",
+        "parent" : 78
+      },
+      {
+        "id" : 82,
+        "name" : "f",
+        "parent" : 78
+      },
+      {
+        "id" : 83,
+        "name" : "f",
+        "parent" : 54
+      },
+      {
+        "id" : 84,
+        "name" : "Anonymous component",
+        "parent" : 83
+      },
+      {
+        "id" : 85,
+        "name" : "C",
+        "parent" : 54
+      },
+      {
+        "id" : 86,
+        "name" : "j",
+        "parent" : 85
+      },
+      {
+        "id" : 87,
+        "name" : "f",
+        "parent" : 86
+      },
+      {
+        "id" : 88,
+        "name" : "f",
+        "parent" : 86
+      },
+      {
+        "id" : 89,
+        "name" : "f",
+        "parent" : 86
+      },
+      {
+        "id" : 90,
+        "name" : "f",
+        "parent" : 86
+      },
+      {
+        "id" : 91,
+        "name" : "f",
+        "parent" : 86
+      },
+      {
+        "id" : 92,
+        "name" : "f",
+        "parent" : 86
+      },
+      {
+        "id" : 93,
+        "name" : "f",
+        "parent" : 86
+      },
+      {
+        "id" : 94,
+        "name" : "f",
+        "parent" : 86
+      },
+      {
+        "id" : 95,
+        "name" : "f",
+        "parent" : 86
+      },
+      {
+        "id" : 96,
+        "name" : "f",
+        "parent" : 54
+      },
+      {
+        "id" : 97,
+        "name" : "Anonymous component",
+        "parent" : 96
+      },
+      {
+        "id" : 98,
+        "name" : "C",
+        "parent" : 54
+      },
+      {
+        "id" : 99,
+        "name" : "j",
+        "parent" : 98
+      },
+      {
+        "id" : 100,
+        "name" : "f",
+        "parent" : 99
+      },
+      {
+        "id" : 101,
+        "name" : "f",
+        "parent" : 99
+      },
+      {
+        "id" : 102,
+        "name" : "f",
+        "parent" : 99
+      },
+      {
+        "id" : 103,
+        "name" : "f",
+        "parent" : 99
+      },
+      {
+        "id" : 104,
+        "name" : "f",
+        "parent" : 99
+      },
+      {
+        "id" : 105,
+        "name" : "f",
+        "parent" : 99
+      },
+      {
+        "id" : 106,
+        "name" : "f",
+        "parent" : 99
+      },
+      {
+        "id" : 107,
+        "name" : "f",
+        "parent" : 54
+      },
+      {
+        "id" : 108,
+        "name" : "Anonymous component",
+        "parent" : 107
+      },
+      {
+        "id" : 109,
+        "name" : "C",
+        "parent" : 54
+      },
+      {
+        "id" : 110,
+        "name" : "j",
+        "parent" : 109
+      },
+      {
+        "id" : 111,
+        "name" : "f",
+        "parent" : 110
+      },
+      {
+        "id" : 112,
+        "name" : "f",
+        "parent" : 110
+      },
+      {
+        "id" : 113,
+        "name" : "f",
+        "parent" : 110
+      },
+      {
+        "id" : 114,
+        "name" : "f",
+        "parent" : 110
+      },
+      {
+        "id" : 115,
+        "name" : "f",
+        "parent" : 110
+      },
+      {
+        "id" : 116,
+        "name" : "f",
+        "parent" : 110
+      },
+      {
+        "id" : 117,
+        "name" : "f",
+        "parent" : 110
+      },
+      {
+        "id" : 118,
+        "name" : "f",
+        "parent" : 54
+      },
+      {
+        "id" : 119,
+        "name" : "Anonymous component",
+        "parent" : 118
+      },
+      {
+        "id" : 120,
+        "name" : "C",
+        "parent" : 54
+      },
+      {
+        "id" : 121,
+        "name" : "j",
+        "parent" : 120
+      },
+      {
+        "id" : 122,
+        "name" : "f",
+        "parent" : 121
+      },
+      {
+        "id" : 123,
+        "name" : "f",
+        "parent" : 121
+      },
+      {
+        "id" : 124,
+        "name" : "f",
+        "parent" : 121
+      },
+      {
+        "id" : 125,
+        "name" : "f",
+        "parent" : 121
+      },
+      {
+        "id" : 126,
+        "name" : "f",
+        "parent" : 121
+      },
+      {
+        "id" : 127,
+        "name" : "f",
+        "parent" : 121
+      },
+      {
+        "id" : 128,
+        "name" : "f",
+        "parent" : 121
+      },
+      {
+        "id" : 129,
+        "name" : "f",
+        "parent" : 121
+      },
+      {
+        "id" : 130,
+        "name" : "B",
+        "parent" : 8
+      },
+      {
+        "id" : 131,
+        "name" : "q",
+        "parent" : 8
+      },
+      {
+        "id" : 132,
+        "name" : "i",
+        "parent" : 131
+      },
+      {
+        "id" : 133,
+        "name" : "Anonymous component",
+        "parent" : 132
+      },
+      {
+        "id" : 134,
+        "name" : "MaxWidth",
+        "parent" : 7
+      },
+      {
+        "id" : 135,
+        "name" : "Intro",
+        "parent" : 134
+      },
+      {
+        "id" : 136,
+        "name" : "p",
+        "parent" : 135
+      },
+      {
+        "id" : 137,
+        "name" : "YouWillLearn",
+        "parent" : 134
+      },
+      {
+        "id" : 138,
+        "name" : "U",
+        "parent" : 137
+      },
+      {
+        "id" : 139,
+        "name" : "h",
+        "parent" : 138
+      },
+      {
+        "id" : 140,
+        "name" : "a",
+        "parent" : 139
+      },
+      {
+        "id" : 141,
+        "name" : "eR",
+        "parent" : 138
+      },
+      {
+        "id" : 142,
+        "name" : "eL",
+        "parent" : 141
+      },
+      {
+        "id" : 143,
+        "name" : "eL",
+        "parent" : 141
+      },
+      {
+        "id" : 144,
+        "name" : "eL",
+        "parent" : 141
+      },
+      {
+        "id" : 145,
+        "name" : "eL",
+        "parent" : 141
+      },
+      {
+        "id" : 146,
+        "name" : "eL",
+        "parent" : 141
+      },
+      {
+        "id" : 147,
+        "name" : "eL",
+        "parent" : 141
+      },
+      {
+        "id" : 148,
+        "name" : "m",
+        "parent" : 134
+      },
+      {
+        "id" : 149,
+        "name" : "a",
+        "parent" : 148
+      },
+      {
+        "id" : 150,
+        "name" : "p",
+        "parent" : 134
+      },
+      {
+        "id" : 151,
+        "name" : "p",
+        "parent" : 134
+      },
+      {
+        "id" : 152,
+        "name" : "Anonymous component",
+        "parent" : 134
+      },
+      {
+        "id" : 153,
+        "name" : "f",
+        "parent" : 152
+      },
+      {
+        "id" : 154,
+        "name" : "p",
+        "parent" : 134
+      },
+      {
+        "id" : 155,
+        "name" : "M",
+        "parent" : 154
+      },
+      {
+        "id" : 156,
+        "name" : "Anonymous component",
+        "parent" : 134
+      },
+      {
+        "id" : 157,
+        "name" : "f",
+        "parent" : 156
+      },
+      {
+        "id" : 158,
+        "name" : "p",
+        "parent" : 134
+      },
+      {
+        "id" : 159,
+        "name" : "M",
+        "parent" : 158
+      },
+      {
+        "id" : 160,
+        "name" : "p",
+        "parent" : 134
+      },
+      {
+        "id" : 161,
+        "name" : "Anonymous component",
+        "parent" : 7
+      },
+      {
+        "id" : 162,
+        "name" : "h",
+        "parent" : 161
+      },
+      {
+        "id" : 163,
+        "name" : "e$",
+        "parent" : 162
+      },
+      {
+        "id" : 164,
+        "name" : "el",
+        "parent" : 163
+      },
+      {
+        "id" : 165,
+        "name" : "ef",
+        "parent" : 164
+      },
+      {
+        "id" : 166,
+        "name" : "Anonymous component",
+        "parent" : 165
+      },
+      {
+        "id" : 167,
+        "name" : "Anonymous component",
+        "parent" : 166
+      },
+      {
+        "id" : 168,
+        "name" : "N",
+        "parent" : 167
+      },
+      {
+        "id" : 169,
+        "name" : "ListboxContext",
+        "parent" : 168
+      },
+      {
+        "id" : 170,
+        "name" : "j",
+        "parent" : 169
+      },
+      {
+        "id" : 171,
+        "name" : "OpenClosedContext",
+        "parent" : 170
+      },
+      {
+        "id" : 172,
+        "name" : "eW",
+        "parent" : 171
+      },
+      {
+        "id" : 173,
+        "name" : "j",
+        "parent" : 168
+      },
+      {
+        "id" : 174,
+        "name" : "Anonymous component",
+        "parent" : 173
+      },
+      {
+        "id" : 175,
+        "name" : "x",
+        "parent" : 168
+      },
+      {
+        "id" : 176,
+        "name" : "Anonymous component",
+        "parent" : 175
+      },
+      {
+        "id" : 177,
+        "name" : "f",
+        "parent" : 168
+      },
+      {
+        "id" : 178,
+        "name" : "Anonymous component",
+        "parent" : 177
+      },
+      {
+        "id" : 179,
+        "name" : "u",
+        "parent" : 168
+      },
+      {
+        "id" : 180,
+        "name" : "nb",
+        "parent" : 179
+      },
+      {
+        "id" : 181,
+        "name" : "Anonymous component",
+        "parent" : 180
+      },
+      {
+        "id" : 182,
+        "name" : "Anonymous component",
+        "parent" : 167
+      },
+      {
+        "id" : 183,
+        "name" : "eK",
+        "parent" : 182
+      },
+      {
+        "id" : 184,
+        "name" : "q",
+        "parent" : 167
+      },
+      {
+        "id" : 185,
+        "name" : "eK",
+        "parent" : 184
+      },
+      {
+        "id" : 186,
+        "name" : "O",
+        "parent" : 185
+      },
+      {
+        "id" : 187,
+        "name" : "_",
+        "parent" : 185
+      },
+      {
+        "id" : 188,
+        "name" : "Anonymous component",
+        "parent" : 167
+      },
+      {
+        "id" : 189,
+        "name" : "MaxWidth",
+        "parent" : 7
+      },
+      {
+        "id" : 190,
+        "name" : "p",
+        "parent" : 189
+      },
+      {
+        "id" : 191,
+        "name" : "M",
+        "parent" : 190
+      },
+      {
+        "id" : 192,
+        "name" : "h",
+        "parent" : 190
+      },
+      {
+        "id" : 193,
+        "name" : "s",
+        "parent" : 192
+      },
+      {
+        "id" : 194,
+        "name" : "h",
+        "parent" : 190
+      },
+      {
+        "id" : 195,
+        "name" : "s",
+        "parent" : 194
+      },
+      {
+        "id" : 196,
+        "name" : "m",
+        "parent" : 189
+      },
+      {
+        "id" : 197,
+        "name" : "a",
+        "parent" : 196
+      },
+      {
+        "id" : 198,
+        "name" : "p",
+        "parent" : 189
+      },
+      {
+        "id" : 199,
+        "name" : "h",
+        "parent" : 198
+      },
+      {
+        "id" : 200,
+        "name" : "p",
+        "parent" : 189
+      },
+      {
+        "id" : 201,
+        "name" : "M",
+        "parent" : 200
+      },
+      {
+        "id" : 202,
+        "name" : "M",
+        "parent" : 200
+      },
+      {
+        "id" : 203,
+        "name" : "M",
+        "parent" : 200
+      },
+      {
+        "id" : 204,
+        "name" : "Anonymous component",
+        "parent" : 189
+      },
+      {
+        "id" : 205,
+        "name" : "f",
+        "parent" : 204
+      },
+      {
+        "id" : 206,
+        "name" : "p",
+        "parent" : 189
+      },
+      {
+        "id" : 207,
+        "name" : "h",
+        "parent" : 206
+      },
+      {
+        "id" : 208,
+        "name" : "s",
+        "parent" : 207
+      },
+      {
+        "id" : 209,
+        "name" : "m",
+        "parent" : 189
+      },
+      {
+        "id" : 210,
+        "name" : "a",
+        "parent" : 209
+      },
+      {
+        "id" : 211,
+        "name" : "p",
+        "parent" : 189
+      },
+      {
+        "id" : 212,
+        "name" : "M",
+        "parent" : 211
+      },
+      {
+        "id" : 213,
+        "name" : "h",
+        "parent" : 211
+      },
+      {
+        "id" : 214,
+        "name" : "s",
+        "parent" : 213
+      },
+      {
+        "id" : 215,
+        "name" : "M",
+        "parent" : 214
+      },
+      {
+        "id" : 216,
+        "name" : "Anonymous component",
+        "parent" : 189
+      },
+      {
+        "id" : 217,
+        "name" : "f",
+        "parent" : 216
+      },
+      {
+        "id" : 218,
+        "name" : "p",
+        "parent" : 189
+      },
+      {
+        "id" : 219,
+        "name" : "Anonymous component",
+        "parent" : 189
+      },
+      {
+        "id" : 220,
+        "name" : "f",
+        "parent" : 219
+      },
+      {
+        "id" : 221,
+        "name" : "p",
+        "parent" : 189
+      },
+      {
+        "id" : 222,
+        "name" : "h",
+        "parent" : 221
+      },
+      {
+        "id" : 223,
+        "name" : "s",
+        "parent" : 222
+      },
+      {
+        "id" : 224,
+        "name" : "M",
+        "parent" : 223
+      },
+      {
+        "id" : 225,
+        "name" : "m",
+        "parent" : 189
+      },
+      {
+        "id" : 226,
+        "name" : "a",
+        "parent" : 225
+      },
+      {
+        "id" : 227,
+        "name" : "p",
+        "parent" : 189
+      },
+      {
+        "id" : 228,
+        "name" : "M",
+        "parent" : 227
+      },
+      {
+        "id" : 229,
+        "name" : "Anonymous component",
+        "parent" : 189
+      },
+      {
+        "id" : 230,
+        "name" : "f",
+        "parent" : 229
+      },
+      {
+        "id" : 231,
+        "name" : "p",
+        "parent" : 189
+      },
+      {
+        "id" : 232,
+        "name" : "M",
+        "parent" : 231
+      },
+      {
+        "id" : 233,
+        "name" : "M",
+        "parent" : 231
+      },
+      {
+        "id" : 234,
+        "name" : "M",
+        "parent" : 231
+      },
+      {
+        "id" : 235,
+        "name" : "M",
+        "parent" : 231
+      },
+      {
+        "id" : 236,
+        "name" : "M",
+        "parent" : 231
+      },
+      {
+        "id" : 237,
+        "name" : "Anonymous component",
+        "parent" : 189
+      },
+      {
+        "id" : 238,
+        "name" : "f",
+        "parent" : 237
+      },
+      {
+        "id" : 239,
+        "name" : "p",
+        "parent" : 189
+      },
+      {
+        "id" : 240,
+        "name" : "h",
+        "parent" : 239
+      },
+      {
+        "id" : 241,
+        "name" : "s",
+        "parent" : 240
+      },
+      {
+        "id" : 242,
+        "name" : "Anonymous component",
+        "parent" : 7
+      },
+      {
+        "id" : 243,
+        "name" : "h",
+        "parent" : 242
+      },
+      {
+        "id" : 244,
+        "name" : "e$",
+        "parent" : 243
+      },
+      {
+        "id" : 245,
+        "name" : "el",
+        "parent" : 244
+      },
+      {
+        "id" : 246,
+        "name" : "ef",
+        "parent" : 245
+      },
+      {
+        "id" : 247,
+        "name" : "Anonymous component",
+        "parent" : 246
+      },
+      {
+        "id" : 248,
+        "name" : "Anonymous component",
+        "parent" : 247
+      },
+      {
+        "id" : 249,
+        "name" : "N",
+        "parent" : 248
+      },
+      {
+        "id" : 250,
+        "name" : "ListboxContext",
+        "parent" : 249
+      }
+    ],
+    "selected" : 10
+  },
+  "computedStyles" : [
+
+  ],
+  "matchedRules" : [
+
+  ],
+  "pageFonts" : [
+    ".",
+    "Source Code Pro"
+  ],
+  "renderedFonts" : [
+    "."
+  ],
+  "state" : {
+    "closed" : false,
+    "revision" : 4,
+    "selection" : {
+      "ancestors" : [
+        {
+          "id" : 11,
+          "label" : "html.dark.platform-mac"
+        },
+        {
+          "id" : 10,
+          "label" : "body.font-text.font-medium"
+        },
+        {
+          "id" : 9,
+          "label" : "div"
+        },
+        {
+          "id" : 8,
+          "label" : "div.grid.grid-cols-only-content"
+        },
+        {
+          "id" : 7,
+          "label" : "main.min-w-0.isolate"
+        },
+        {
+          "id" : 6,
+          "label" : "article.font-normal.break-words"
+        },
+        {
+          "id" : 5,
+          "label" : "div.ps-0"
+        },
+        {
+          "id" : 4,
+          "label" : "div"
+        },
+        {
+          "id" : 3,
+          "label" : "div.px-5.sm:px-12"
+        },
+        {
+          "id" : 2,
+          "label" : "div.max-w-4xl.ms-0"
+        },
+        {
+          "id" : 1,
+          "label" : "h1.mdx-heading.mt-0"
+        }
+      ],
+      "backdrop" : {
+        "css" : "composited background",
+        "rgba" : [
+          0.13725490196078433,
+          0.15294117647058825,
+          0.18431372549019609,
+          1
+        ]
+      },
+      "box" : {
+        "border" : [
+          "0px",
+          "0px",
+          "0px",
+          "0px"
+        ],
+        "contentHeight" : 50,
+        "contentWidth" : 512,
+        "height" : 50,
+        "margin" : [
+          "0px",
+          "0px",
+          "0px",
+          "0px"
+        ],
+        "padding" : [
+          "0px",
+          "40px",
+          "0px",
+          "0px"
+        ],
+        "width" : 552
+      },
+      "colors" : [
+        {
+          "label" : "Text",
+          "value" : {
+            "css" : "rgb(246, 247, 249)",
+            "rgba" : [
+              0.96470588235294119,
+              0.96862745098039216,
+              0.97647058823529409,
+              1
+            ]
+          }
+        },
+        {
+          "label" : "Background",
+          "value" : {
+            "css" : "rgba(0, 0, 0, 0)",
+            "rgba" : [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "component" : "a",
+      "contrastLimit" : null,
+      "css" : "h1",
+      "foreground" : {
+        "css" : "rgb(246, 247, 249)",
+        "rgba" : [
+          0.96470588235294119,
+          0.96862745098039216,
+          0.97647058823529409,
+          1
+        ]
+      },
+      "frames" : [
+
+      ],
+      "id" : 1,
+      "jsPath" : "document.querySelector(\"h1\")",
+      "label" : "h1.mdx-heading.mt-0",
+      "locked" : true,
+      "playwright" : "page.locator(\"h1\")",
+      "revision" : 4,
+      "tag" : "h1",
+      "typography" : {
+        "family" : "\"Optimistic Display\", -apple-system, ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+        "letterSpacing" : "normal",
+        "lineHeight" : "50px",
+        "preview" : "Quick Start",
+        "size" : "40px",
+        "weight" : "700"
+      },
+      "xpath" : "\/*[local-name()='html'][1]\/*[local-name()='body'][1]\/*[local-name()='div'][1]\/*[local-name()='div'][3]\/*[local-name()='main'][1]\/*[local-name()='article'][1]\/*[local-name()='div'][1]\/*[local-name()='div'][1]\/*[local-name()='div'][1]\/*[local-name()='div'][1]\/*[local-name()='h1'][1]"
+    }
+  },
+  "tab" : "Component",
+  "url" : "https:\/\/react.dev\/learn"
+}

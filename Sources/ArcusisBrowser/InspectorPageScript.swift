@@ -109,6 +109,7 @@ enum InspectorPageScript {
       };
       const component=node=>{
         for(let el=node,depth=0;el&&depth++<64;el=el.parentElement){
+          const svelte=globalThis.__shaarInspectorDetails?.componentName?.(el);if(svelte)return {framework:'Svelte',name:String(svelte).slice(0,160)};
           const key=Object.keys(el).find(k=>k.startsWith('__reactFiber$')||k.startsWith('__reactInternalInstance$'));
           if(key){for(let fiber=el[key],steps=0;fiber&&steps++<64;fiber=fiber.return){
             const type=fiber.type,componentName=typeof type==='function'?type.displayName||type.name:type?.displayName||type?.render?.displayName||type?.render?.name;

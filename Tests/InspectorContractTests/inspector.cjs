@@ -13,6 +13,8 @@ const source = fs.readFileSync(path.join(root, 'Sources/ArcusisBrowser/Inspector
 const script = source.match(/static let install = #"""([\s\S]*?)"""#/)[1];
 const styleSource = fs.readFileSync(path.join(root, 'Sources/ArcusisBrowser/InspectorStyleScript.swift'), 'utf8');
 const styleScript = styleSource.match(/static let install = #"""([\s\S]*?)"""#/)[1];
+const detailsSource = fs.readFileSync(path.join(root, 'Sources/ArcusisBrowser/InspectorDetailsScript.swift'), 'utf8');
+const detailsScript = detailsSource.match(/static let install = #"""([\s\S]*?)"""#/)[1];
 const output = path.join(root, 'build/Verification/inspector-contracts.json');
 fs.rmSync(output, { force: true });
 let server, browser;
@@ -34,6 +36,10 @@ async function serve() {
 }
 
 (async () => {
+  const fixturePin = JSON.parse(fs.readFileSync(path.join(root, 'ThirdParty/InspectorFixtures/pin.json'), 'utf8'));
+  for (const [file, expected] of Object.entries(fixturePin.sourceSHA256)) {
+    assert.equal(require('node:crypto').createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex'), expected, 'Rebuild stale framework fixture: ' + file);
+  }
   const url = await serve();
   browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1100, height: 850 } });
@@ -121,11 +127,87 @@ async function serve() {
   await page.keyboard.press('Escape');
   assert.equal((await state()).closed, true);
   assert.equal(await page.locator('[data-shaar-inspector]').count(), 0);
+  await page.goto(new URL('/inspector-components', url).href);
+  await page.locator('#react-counter').waitFor();
+  await page.locator('#vue-counter').waitFor();
+  await page.evaluate(script);
+  await page.evaluate(styleScript);
+  await page.evaluate(detailsScript);
+  await page.evaluate(() => globalThis.mountInspectorSvelte());
+  await page.locator('#svelte-counter').waitFor();
+  const componentData = () => page.evaluate(() => {
+    const tree = globalThis.__shaarInspectorDetails.components();
+    return { tree, data: globalThis.__shaarInspectorDetails.componentData(tree.selected) };
+  });
+  const pick = async selector => {
+    await page.evaluate(() => globalThis.__shaarInspectorV2.pick());
+    await page.locator(selector).click({ force: true });
+    await page.waitForFunction(id => {
+      const element = globalThis.__shaarInspectorV2.element();
+      return (element?.id === id || element?.closest('svg')?.id === id) && globalThis.__shaarInspectorV2.read().selection.locked;
+    }, selector.slice(1));
+  };
+  await pick('#react-counter');
+  let component = await componentData();
+  assert.equal(component.tree.framework, 'React');
+  assert.equal(component.data.name, 'ReactCounter');
+  assert.equal(JSON.parse(component.data.props).label, 'React counter');
+  assert.equal(JSON.parse(component.data.props).accessorProbe.danger, '[Accessor]');
+  assert.equal(JSON.parse(component.data.props).accessorProbe.self, '[Circular]');
+  assert.equal(await page.evaluate(() => globalThis.inspectorGetterCalls || 0), 0);
+  assert.equal(JSON.parse(component.data.hooks)[0].value, 2);
+  assert.match(component.data.source, /ReactCounter.jsx:8:3/);
+  await page.locator('#react-counter').click();
+  await page.waitForFunction(() => document.querySelector('#react-counter').textContent.endsWith(': 3'));
+  component = await componentData();
+  assert.equal(JSON.parse(component.data.hooks)[0].value, 3);
+  await page.keyboard.press('Tab');
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'vue-counter');
+  await pick('#vue-counter');
+  component = await componentData();
+  assert.equal(component.tree.framework, 'Vue');
+  assert.equal(component.data.name, 'VueCounter');
+  assert.equal(JSON.parse(component.data.state).data.count, 3);
+  await page.locator('#vue-counter').click();
+  await page.waitForFunction(() => document.querySelector('#vue-counter').textContent.endsWith(': 4'));
+  assert.equal(JSON.parse((await componentData()).data.state).data.count, 4);
+  assert.equal((await page.evaluate(() => globalThis.__shaarInspectorDetails.accessibility())).tabOrder, 2);
+  await pick('#svelte-counter');
+  component = await componentData();
+  assert.equal(component.tree.framework, 'Svelte');
+  assert.equal(component.data.name, 'InspectorCounter');
+  assert.equal(JSON.parse(component.data.props).label, 'Svelte counter');
+  assert.equal(JSON.parse(component.data.state).count, 4);
+  assert.match(component.data.source, /InspectorCounter.svelte:9:1/);
+  await page.locator('#svelte-counter').click();
+  await page.waitForFunction(() => document.querySelector('#svelte-counter').textContent.endsWith(': 5'));
+  assert.equal(JSON.parse((await componentData()).data.state).count, 5);
+  await pick('#svelte-child-one');
+  component = await componentData();
+  assert.equal(component.data.name, 'InspectorChild');
+  assert.equal(component.data.state, 'null');
+  assert.match(component.data.note, /source metadata only/);
+  await pick('#asset');
+  let asset = (await page.evaluate(() => globalThis.__shaarInspectorDetails.assets())).images[0];
+  assert.equal(asset.naturalWidth, 64);
+  assert.equal(asset.naturalHeight, 48);
+  assert.equal(asset.renderedWidth, 128);
+  assert.equal(asset.renderedHeight, 96);
+  await pick('#vector');
+  assert.match((await page.evaluate(() => globalThis.__shaarInspectorDetails.assets())).svg, /<svg.*Fixture vector/);
+  await pick('#missing-alt');
+  assert.match((await page.evaluate(() => globalThis.__shaarInspectorDetails.accessibility())).warnings.join(' '), /no alt/);
+  await pick('#hidden-focus');
+  assert.match((await page.evaluate(() => globalThis.__shaarInspectorDetails.accessibility())).warnings.join(' '), /hidden from the accessibility tree/);
+  await page.keyboard.press('Escape');
+  assert.equal((await state()).closed, true);
   fs.mkdirSync(path.dirname(output), { recursive: true });
   fs.writeFileSync(output, JSON.stringify({
     passed: true, headless: true, browserVersion: browser.version(),
     sourceSHA256: require('node:crypto').createHash('sha256').update(source).digest('hex'),
     styleSourceSHA256: require('node:crypto').createHash('sha256').update(styleSource).digest('hex'),
+    detailsSourceSHA256: require('node:crypto').createHash('sha256').update(detailsSource).digest('hex'),
+    frameworks: JSON.parse(fs.readFileSync(path.join(root, 'ThirdParty/InspectorFixtures/pin.json'), 'utf8')),
     checks: ['hover regions', 'lock interception', 'arrow navigation', 'breadcrumb', 'unique CSS/XPath/JS/Playwright', 'CSS edit and exact undo', 'CSS validation', 'Option measurement and release', 'conflicting page edit preserves page changes', 'alpha precision', 'gradient limit', 'same-origin iframe', 'iframe reload listeners', 'Escape cleanup'],
   }, null, 2));
   console.log('Passed Inspector renderer contracts.');

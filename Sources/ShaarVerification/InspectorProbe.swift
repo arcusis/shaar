@@ -159,11 +159,16 @@ final class InspectorProbe {
       NSApp.keyWindow === keyWindow
         && engine.runtime.window(forID: engine.windowID)?.isVisible == false,
       "Inspector never orders a window or changes desktop focus")
+    try await componentDetails()
     if phase == "initial"
       && ProcessInfo.processInfo.environment["SHAAR_INSPECTOR_PUBLIC_CAPTURE"] == "1"
     {
       try await publicCaptures()
     }
+    try expect(
+      NSApp.keyWindow === keyWindow
+        && engine.runtime.window(forID: engine.windowID)?.isVisible == false,
+      "all Inspector feature captures preserve desktop focus and remain offscreen")
     store.perform(.space(returning))
     try expect(store.removeSpace(space), "Inspector fixture tabs close")
     try await wait("closing tab releases its Inspector") {
@@ -205,6 +210,23 @@ final class InspectorProbe {
         model.styles.rules.contains { $0.source.hasPrefix("https://") },
         "public CSS resolves a real source URL and generated line")
       try await capture(model, stem: "public-\(name)-css")
+      model.tab = .accessibility
+      await model.details.refresh(force: true)
+      try expect(
+        model.details.accessibility?.role == "heading",
+        "public heading has a Chromium accessibility role")
+      try await capture(model, stem: "public-\(name)-a11y")
+      model.pick()
+      try expect(
+        await pointer(model, selector: "main img", click: true),
+        "public image selected with trusted input")
+      try await wait("public image details arrive") { model.selection?.tag == "img" }
+      model.tab = .assets
+      await model.details.refresh(force: true)
+      try expect(
+        model.details.assets?.images.first?.naturalWidth ?? 0 > 0,
+        "public asset has real natural dimensions")
+      try await capture(model, stem: "public-\(name)-assets")
       let image: Data? = await withCheckedContinuation { continuation in
         engine.runtime.captureProbeTabID(target.tabID.uuidString) {
           continuation.resume(returning: $0)
@@ -212,6 +234,144 @@ final class InspectorProbe {
       }
       try image?.write(to: root.appending(path: "public-\(name)-page.png"))
       model.close()
+    }
+    store.perform(.open(URL(string: "https://react.dev/learn")!))
+    try await loaded(host: "react.dev")
+    let target = try require(engine.siteControlTarget, "React page has owned target")
+    engine.toggleInspector(for: target)
+    let model = try require(engine.inspectors[target.tabID], "React Inspector exists")
+    try await wait("React Inspector installs") {
+      try await model.evaluate("!!globalThis.__shaarInspectorDetails") as? Bool == true
+    }
+    try expect(await pointer(model, selector: "h1", click: true), "public React heading selected")
+    try await wait("public React heading locks") { model.selection?.locked == true }
+    model.tab = .component
+    await model.details.refresh(force: true)
+    try expect(
+      model.details.tree?.framework == "React", "public React runtime exposes a real component tree"
+    )
+    try await capture(model, stem: "public-react-component")
+    model.close()
+  }
+
+  private func componentDetails() async throws {
+    var address = URLComponents(url: fixture, resolvingAgainstBaseURL: false)!
+    address.host = "inspector.localhost"
+    address.path = "/inspector-components"
+    address.query = nil
+    store.perform(.open(address.url!))
+    try await loaded(host: "inspector.localhost")
+    let target = try require(engine.siteControlTarget, "component fixture has an owned target")
+    engine.toggleInspector(for: target)
+    let model = try require(engine.inspectors[target.tabID], "component Inspector exists")
+    try await wait("component scripts and real runtimes install") {
+      try await model.evaluate(
+        "!!globalThis.__shaarInspectorDetails && !!document.querySelector('#react-counter') && !!document.querySelector('#vue-counter')"
+      ) as? Bool == true
+    }
+    _ = try await model.evaluate("mountInspectorSvelte(); true")
+    for (selector, framework, name, count) in [
+      ("#react-counter", "React", "ReactCounter", 2), ("#vue-counter", "Vue", "VueCounter", 3),
+      ("#svelte-counter", "Svelte", "InspectorCounter", 4),
+    ] {
+      try await selectDetail(model, selector: selector)
+      model.tab = .component
+      await model.details.refresh(force: true)
+      let details = model.details
+      try expect(
+        details.tree?.framework == framework && details.component?.name == name,
+        "real \(framework) component name resolves")
+      if framework == "Svelte" {
+        try expect(
+          model.selection?.component == "InspectorCounter",
+          "Svelte header uses exposed component name")
+      }
+      try expect(
+        details.component?.source?.isEmpty == false, "\(framework) dev source metadata is preserved"
+      )
+      func currentCount() -> Int? {
+        guard let component = details.component else { return nil }
+        if framework == "React",
+          let slots = try? JSONSerialization.jsonObject(with: Data(component.hooks.utf8))
+            as? [[String: Any]]
+        {
+          return slots.first?["value"] as? Int
+        }
+        guard
+          let state = try? JSONSerialization.jsonObject(with: Data(component.state.utf8))
+            as? [String: Any]
+        else { return nil }
+        return framework == "Vue"
+          ? (state["data"] as? [String: Any])?["count"] as? Int : state["count"] as? Int
+      }
+      try expect(currentCount() == count, "\(framework) state reflects actual runtime value")
+      try expect(
+        await pointer(model, selector: selector, click: true),
+        "locked \(framework) control remains usable")
+      try await wait("\(framework) live state updates") {
+        await details.refresh(force: true)
+        return currentCount() == count + 1
+      }
+      try await capture(model, stem: "\(phase)-inspector-\(framework.lowercased())")
+    }
+    try expect(
+      try await model.evaluate("globalThis.inspectorGetterCalls||0") as? Int == 0,
+      "component snapshot does not invoke application getters")
+    try await selectDetail(model, selector: "#react-counter")
+    model.tab = .accessibility
+    await model.details.refresh(force: true)
+    try expect(
+      model.details.accessibility?.role == "button"
+        && model.details.accessibility?.name == "React counter: 3",
+      "Chromium supplies actual role and accessible name")
+    try expect(
+      model.details.accessibility?.tabOrder == 1,
+      "document tab-order estimate matches fixture order")
+    try await capture(model, stem: "\(phase)-inspector-a11y")
+    try await selectDetail(model, selector: "#missing-alt")
+    await model.details.refresh(force: true)
+    try expect(
+      model.details.accessibility?.warnings.contains(where: { $0.contains("no alt") }) == true,
+      "missing image alt produces a warning")
+    try await selectDetail(model, selector: "#hidden-focus")
+    await model.details.refresh(force: true)
+    try expect(
+      model.details.accessibility?.warnings.contains(where: { $0.contains("hidden from") }) == true,
+      "aria-hidden focus target produces a warning")
+    try await selectDetail(model, selector: "#asset")
+    model.tab = .assets
+    await model.details.refresh(force: true)
+    let image = try require(model.details.assets?.images.first, "selected image asset exists")
+    try expect(
+      image.mime == "image/png" && image.naturalWidth == 64 && image.naturalHeight == 48
+        && image.renderedWidth == 128 && image.renderedHeight == 96,
+      "asset reports true format and natural versus rendered dimensions")
+    let frame = try require(image.frameID, "asset resource belongs to a frame")
+    let data = try await model.details.resourceData(url: image.url, frameID: frame)
+    let bitmap = try require(NSBitmapImageRep(data: data), "download returns actual image bytes")
+    try expect(
+      bitmap.pixelsWide == 64 && bitmap.pixelsHigh == 48,
+      "downloaded asset retains original resolution")
+    try await capture(model, stem: "\(phase)-inspector-assets")
+    try await selectDetail(model, selector: "#vector")
+    await model.details.refresh(force: true)
+    try expect(
+      model.details.assets?.svg?.contains("Fixture vector") == true
+        && model.details.assets?.svgTruncated == false, "SVG copy preserves actual vector markup")
+    model.close()
+  }
+
+  private func selectDetail(_ model: InspectorModel, selector: String) async throws {
+    model.pick()
+    try expect(
+      await pointer(model, selector: selector, click: true), "detail fixture element selected")
+    try await wait("detail selection locks") {
+      guard model.mode == .locked, let selection = model.selection, selection.locked else {
+        return false
+      }
+      return try await model.evaluate(
+        "(()=>{const api=globalThis.__shaarInspectorV2,el=api.element(),state=api.read().selection;return state?.locked&&state.id===\(selection.id)&&(el?.id===\(self.json(String(selector.dropFirst())))||el?.closest('svg')?.id===\(self.json(String(selector.dropFirst()))));})()"
+      ) as? Bool == true
     }
   }
 
@@ -371,12 +531,27 @@ final class InspectorProbe {
         ] as [String: Any]
       },
       "computedStyles": model.styles.computed.map { ["name": $0.name, "value": $0.value] },
+      "componentTree": try jsonValue(model.details.tree),
+      "componentData": try jsonValue(model.details.component),
+      "accessibility": model.details.accessibility.map { value in
+        [
+          "role": value.role, "name": value.name, "ignored": value.ignored as Any? ?? NSNull(),
+          "tabOrder": value.tabOrder as Any? ?? NSNull(), "warnings": value.warnings,
+          "aria": value.aria.map { ["name": $0.name, "value": $0.value] },
+          "properties": value.properties.map { ["name": $0.name, "value": $0.value] },
+        ] as [String: Any]
+      } as Any? ?? NSNull(),
+      "assets": Self.assetReceipt(model.details.assets),
       "renderedFonts": model.selection?.renderedFonts ?? [],
       "pageFonts": model.selection?.pageFonts ?? [],
     ]
     try JSONSerialization.data(withJSONObject: metadata, options: [.prettyPrinted, .sortedKeys])
       .write(to: root.appending(path: "\(stem).json"))
     checks.append("Inspector renders offscreen in light and dark on \(model.target.host)")
+  }
+  private func jsonValue<T: Encodable>(_ value: T?) throws -> Any {
+    guard let value else { return NSNull() }
+    return try JSONSerialization.jsonObject(with: JSONEncoder().encode(value))
   }
   private func wait(_ message: String, _ condition: () async throws -> Bool) async throws {
     for _ in 0..<Int(150 * ProbeTimeout.scale) {
@@ -402,6 +577,22 @@ final class InspectorProbe {
   private func report(_ error: Error?) throws {
     try Self.reportData(checks: checks, error: error).write(
       to: root.appending(path: "\(phase)-inspector-report.json"))
+  }
+
+  static func assetReceipt(_ assets: InspectorAssetsData?) -> Any {
+    assets.map { value in
+      [
+        "images": value.images.map { image in
+          [
+            "url": image.url, "mime": image.mime as Any? ?? NSNull(),
+            "renderedWidth": image.renderedWidth, "renderedHeight": image.renderedHeight,
+            "naturalWidth": image.naturalWidth, "naturalHeight": image.naturalHeight,
+            "transferSize": image.transferSize as Any? ?? NSNull(),
+          ] as [String: Any]
+        }, "fontFiles": value.fonts.map { ["url": $0.url, "mime": $0.mime] },
+        "svgTruncated": value.svgTruncated,
+      ] as [String: Any]
+    } as Any? ?? NSNull()
   }
 
   static func captureDimensions(_ png: Data) -> CGSize? {

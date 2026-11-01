@@ -6,3 +6,5 @@ ThirdParty/BitwardenRefreshSpike/refresh.patch -whitespace
 ThirdParty/BitwardenRefreshSpike/native-http-deadline.patch -whitespace
 # Preserve the exact pinned upstream license bytes.
 ThirdParty/PublicSuffix/LICENSE -whitespace
+# Generated React development messages contain significant spaces inside template strings.
+ThirdParty/InspectorFixtures/frameworks.js -whitespace

@@ -21,9 +21,13 @@ final class InspectorModel {
   enum Tab: String, CaseIterable {
     case design = "Design"
     case styles = "CSS"
+    case component = "Component"
+    case accessibility = "A11y"
+    case assets = "Assets"
   }
   var tab = Tab.design
   @ObservationIgnored lazy var styles = InspectorStylesModel(inspector: self)
+  @ObservationIgnored lazy var details = InspectorDetailsModel(inspector: self)
   var documentGeneration: Int { generation }
   var isOpen: Bool { mode != .closed }
   @ObservationIgnored weak var engine: BrowserEngine?
@@ -66,6 +70,7 @@ final class InspectorModel {
     fontTask = nil
     mode = .closed
     styles.reset()
+    details.reset()
     selection = nil
     installed = false
     engine?.runtime.endInspector(forTabID: target.tabID.uuidString)
@@ -82,6 +87,7 @@ final class InspectorModel {
     if next != target || committed {
       generation += 1
       styles.reset()
+      details.reset()
       target = next
       installed = false
       fontTask?.cancel()
@@ -148,6 +154,7 @@ final class InspectorModel {
         else { throw InspectorFailure("This page is no longer available.") }
         _ = try await evaluate(InspectorPageScript.install)
         _ = try await evaluate(InspectorStyleScript.install)
+        _ = try await evaluate(InspectorDetailsScript.install)
         _ = try await call("Page.enable")
         _ = try await call("DOM.enable")
         _ = try await call("DOM.getDocument", params: ["depth": 0])

@@ -44,7 +44,8 @@
       @"CSS.getPlatformFontsForNode", @"CSS.getBackgroundColors", @"CSS.getMatchedStylesForNode",
       @"CSS.getComputedStyleForNode", @"CSS.getStyleSheetText", @"Page.enable", @"Page.getResourceTree",
       @"Page.getResourceContent", @"Page.captureScreenshot", @"Overlay.enable", @"Overlay.disable",
-      @"Overlay.setShowGridOverlays", @"Overlay.setShowFlexOverlays", @"Overlay.getGridHighlightObjectsForTest"]];
+      @"Overlay.setShowGridOverlays", @"Overlay.setShowFlexOverlays", @"Overlay.getGridHighlightObjectsForTest",
+      @"DOM.describeNode", @"Accessibility.getPartialAXTree"]];
   });
   ArdiaCoreTab *tab = [self liveTabForID:tabID];
   if (!tab || ![_owners[tabID] isEqual:profileID] || ![_tabWindows[tabID] isEqual:windowID] ||

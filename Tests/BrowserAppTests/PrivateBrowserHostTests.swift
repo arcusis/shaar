@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import AppKit
+import ChromiumBridge
 import SwiftUI
 import Testing
 
@@ -28,6 +29,42 @@ struct PrivateBrowserHostTests {
       try await Task.sleep(for: .milliseconds(10))
     }
     #expect(releasedStore == nil)
+  }
+
+  @Test func retiringRealPrivateShellReleasesStoreAcrossHiddenWindows() async throws {
+    // UI-only lifecycle regression: no framework, engine, navigation, or visible window is started.
+    let runtime = ARCChromiumRuntime()
+    for _ in 0..<12 {
+      weak var releasedStore: PrivateBrowserStore?
+      let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 1000, height: 720),
+        styleMask: [], backing: .buffered, defer: false)
+      window.isReleasedWhenClosed = false
+      var ownerStore: PrivateBrowserStore? = PrivateBrowserStore(
+        contextID: "context", windowID: "window", tabID: "tab", url: "about:blank")
+      releasedStore = ownerStore
+      let hosting = NSHostingView<PrivateBrowserWindow?>(
+        rootView: PrivateBrowserWindow(store: ownerStore, runtime: runtime))
+      window.contentView = hosting
+      hosting.frame = NSRect(x: 0, y: 0, width: 1000, height: 720)
+      hosting.layoutSubtreeIfNeeded()
+      #expect(hosting.rootView?.store === ownerStore)
+      ownerStore?.showCommand()
+      try await Task.sleep(for: .milliseconds(100))
+      #expect(!window.isVisible)
+      window.endEditing(for: nil)
+      _ = window.makeFirstResponder(nil)
+      PrivateBrowserHost.retireHostingContent(hosting)
+      ownerStore?.clear()
+      ownerStore = nil
+      window.contentView = nil
+      window.close()
+      for _ in 0..<100 {
+        if releasedStore == nil { break }
+        try await Task.sleep(for: .milliseconds(10))
+      }
+      #expect(releasedStore == nil)
+    }
   }
 
   @Test func cachedHTTPWarningDoesNotRetainPrivateStoreAfterRetirement() {

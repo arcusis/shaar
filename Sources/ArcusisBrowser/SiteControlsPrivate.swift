@@ -52,24 +52,25 @@ final class PrivateSiteControlsModel: Identifiable {
 }
 
 struct PrivateSiteControlsButton: View {
-  let store: PrivateBrowserStore
+  weak var store: PrivateBrowserStore?
   let runtime: ARCChromiumRuntime
   @State private var model: PrivateSiteControlsModel?
 
   var body: some View {
     Button {
+      guard let store else { return }
       model = PrivateSiteControlsModel(store: store, runtime: runtime)
     } label: {
       Image(systemName: "slider.horizontal.3").frame(width: 28, height: 28)
     }
     .help("Site controls")
     .accessibilityLabel("Site controls")
-    .disabled(store.showsStartPage)
+    .disabled(store?.showsStartPage != false)
     .popover(item: $model, arrowEdge: .top) { model in
       PrivateSiteControlsPanel(model: model)
     }
-    .onChange(of: store.selectedTabID) { model = nil }
-    .onChange(of: store.selectedTab?.url) { model = nil }
+    .onChange(of: store?.selectedTabID) { model = nil }
+    .onChange(of: store?.selectedTab?.url) { model = nil }
   }
 }
 

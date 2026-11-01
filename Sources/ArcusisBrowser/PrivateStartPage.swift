@@ -5,7 +5,7 @@
 import SwiftUI
 
 struct PrivateStartPage: View {
-  let store: PrivateBrowserStore
+  weak var store: PrivateBrowserStore?
   @State private var query = ""
   @FocusState private var searchIsFocused: Bool
 
@@ -26,13 +26,17 @@ struct PrivateStartPage: View {
         }
         HStack(spacing: 10) {
           Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-          TextField("Search with \(store.searchEngine.displayName) or enter address", text: $query)
-            .textFieldStyle(.plain)
-            .focused($searchIsFocused)
-            .onSubmit { store.navigate(query) }
-            .accessibilityLabel("Private search with \(store.searchEngine.displayName)")
+          TextField(
+            "Search with \(store?.searchEngine.displayName ?? "selected search engine") or enter address",
+            text: $query
+          )
+          .textFieldStyle(.plain)
+          .focused($searchIsFocused)
+          .onSubmit { store?.navigate(query) }
+          .accessibilityLabel(
+            "Private search with \(store?.searchEngine.displayName ?? "selected search engine")")
           Button {
-            store.navigate(query)
+            store?.navigate(query)
           } label: {
             Image(systemName: "arrow.right")
           }

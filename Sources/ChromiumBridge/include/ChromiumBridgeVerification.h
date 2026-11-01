@@ -27,6 +27,9 @@ FOUNDATION_EXPORT BOOL ARCDisableBackgroundMode(NSURL *userDataDirectory);
 - (nullable NSDictionary *)probeExternalAppLaunchAuditForURL:(NSString *)url;
 /// Captures only the disposable probe's own tab, without a remote debugging socket.
 - (void)captureProbeTabID:(NSString *)tabID completion:(void (^)(NSData * _Nullable))completion;
+/// Marketing capture only: captures the exact native viewport, excluding content below the window.
+/// Requires the explicit capture flag and an owned disposable probe root.
+- (void)captureMarketingProbeTabID:(NSString *)tabID completion:(void (^)(NSData * _Nullable))completion;
 - (void)evaluatePrivateProbeTabID:(NSString *)tabID script:(NSString *)script
                        completion:(void (^)(NSString * _Nullable))completion;
 - (BOOL)attemptCancelledPrivateProbeCloseID:(NSString *)windowID;

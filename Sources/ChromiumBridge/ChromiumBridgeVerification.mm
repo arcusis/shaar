@@ -489,6 +489,24 @@ static BOOL ProbeViewIsVisibleInWindow(NSView *view, NSWindow *window) {
   [self captureProbeTab:_tabs[tabID] completion:completion];
 }
 
+- (void)captureMarketingProbeTabID:(NSString *)tabID completion:(void (^)(NSData *))completion {
+  ArdiaCoreTab *tab = _tabs[tabID];
+  NSSize size = tab.view.bounds.size;
+  if (!_testing || !ARCProbeRootIsOwned(_probeRoot) || !tab || tab.closed ||
+      ![NSProcessInfo.processInfo.arguments containsObject:@"--marketing-screenshots"] ||
+      size.width < 200 || size.height < 200) { completion(nil); return; }
+  [tab devToolsCall:@"Page.captureScreenshot"
+             params:@{@"format": @"png", @"fromSurface": @YES, @"captureBeyondViewport": @NO,
+                      @"clip": @{@"x": @0, @"y": @0, @"width": @(size.width),
+                                 @"height": @(size.height), @"scale": @1}}
+            timeout:5 completion:^(NSDictionary *result, NSString *error) {
+    NSString *base64 = result[@"data"];
+    NSData *data = !error && [base64 isKindOfClass:NSString.class]
+        ? [[NSData alloc] initWithBase64EncodedString:base64 options:0] : nil;
+    completion(data);
+  }];
+}
+
 - (void)clickProbePopupID:(NSString *)popupID buttonTitle:(NSString *)title completion:(void (^)(BOOL))completion {
   ARCNativeWindowState *state = nil;
   if (![self ownedProbePopupID:popupID state:&state] || ![title isKindOfClass:NSString.class] ||

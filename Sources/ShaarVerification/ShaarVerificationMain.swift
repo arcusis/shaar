@@ -7,6 +7,9 @@ import Foundation
 @main
 enum ShaarVerificationMain {
   @MainActor static func main() {
+    if CommandLine.arguments.contains("--marketing-screenshots") {
+      exit(MarketingScreenshots.run(arguments: CommandLine.arguments))
+    }
     exit(EngineProbe.run(arguments: CommandLine.arguments))
   }
 }

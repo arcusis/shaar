@@ -43,7 +43,7 @@ final class PrivateProductHostProbe {
   private let sourceA: String
   private let sourceB: String
   private var source: String
-  private var keyWindow: NSWindow?
+  private weak var keyWindow: NSWindow?
   private var host: PrivateBrowserHost?
   private var checks: [String: Bool] = [:]
   private var workspaceBytes = Data()
@@ -55,7 +55,7 @@ final class PrivateProductHostProbe {
   private var quitDiagnosticStages: [[String: Any]] = []
   private var nativeCloseObservations: [String: NativeCloseObservation] = [:]
   private weak var lifecycleStore: PrivateBrowserStore?
-  private weak var lifecycleHosting: NSHostingView<PrivateBrowserWindow>?
+  private weak var lifecycleHosting: NSHostingView<PrivateBrowserWindow?>?
 
   init(
     runtime: ARCChromiumRuntime, root: URL, fixture: URL, phase: String,
@@ -340,7 +340,7 @@ final class PrivateProductHostProbe {
     checks["productHostOwnsPrivateNativeWindow"] =
       first.store.windowID == first.windowID
       && first.store.contextID == first.contextID
-      && first.hosting.rootView.store === first.store
+      && first.hosting.rootView?.store === first.store
       && first.hosting.superview
         === runtime.hostView(
           forPrivateWindowID:
@@ -398,6 +398,7 @@ final class PrivateProductHostProbe {
       ).absoluteString
     first.store.submitCommand()
     try await waitForURL(first.store, tabID: commandTab.id, contains: "-command-t")
+    try await waitForCaptureReadiness(first, tabID: commandTab.id)
     first.store.showCommand()
     let captures = try await capturePrivateWindow(first, runID: runID, phase: phase)
     screenshotDigest = captures.hostDigest
@@ -841,6 +842,20 @@ final class PrivateProductHostProbe {
     let hostDigest = sha256(data)
     let rendererDigest = sha256(rendererData)
     return (hostDigest: hostDigest, rendererDigest: rendererDigest)
+  }
+
+  private func waitForCaptureReadiness(_ owner: PrivateBrowserHost.Owner, tabID: String)
+    async throws
+  {
+    for _ in 0..<Int(100 * ProbeTimeout.scale) {
+      if runtime.privateProbeCaptureIsReady(
+        forTabID: tabID, windowID: owner.windowID, contextID: owner.contextID)
+      {
+        return
+      }
+      try await Task.sleep(for: .milliseconds(50))
+    }
+    throw PrivateWindowFailure("Selected private renderer did not become ready for capture.")
   }
 
   private func waitForNativeCloseObservation(_ owner: PrivateBrowserHost.Owner) async -> Bool {

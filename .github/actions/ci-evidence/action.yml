@@ -1,0 +1,37 @@
+name: CI evidence
+description: Collect authored probe reports and upload stage logs, JUnit and summaries
+inputs:
+  stage:
+    description: Stage evidence directory name
+    required: true
+  extra-path:
+    description: Additional authored evidence directory
+    default: ''
+  compression-level:
+    description: Artifact compression level; ZIP candidates should use zero
+    default: '6'
+runs:
+  using: composite
+  steps:
+    - name: Collect scoped native probe reports
+      shell: bash
+      env:
+        CI_STAGE: ${{ inputs.stage }}
+      run: .venv/bin/python scripts/ci-evidence.py --directory "build/ci/$CI_STAGE"
+    - name: Upload logs, reports and authored images
+      if: always()
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+      with:
+        name: ci-${{ inputs.stage }}-${{ github.run_id }}-${{ github.run_attempt }}
+        path: build/ci/${{ inputs.stage }}/
+        if-no-files-found: warn
+        retention-days: 7
+        compression-level: ${{ inputs.compression-level }}
+    - name: Upload additional authored evidence separately
+      if: always() && inputs.extra-path != ''
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+      with:
+        name: ci-${{ inputs.stage }}-extra-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ inputs.extra-path }}
+        if-no-files-found: warn
+        retention-days: 7

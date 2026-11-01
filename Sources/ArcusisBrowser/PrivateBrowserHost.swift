@@ -15,7 +15,7 @@ final class PrivateBrowserHost {
     let windowID: String
     let store: PrivateBrowserStore
     let window: NSWindow
-    let hosting: NSHostingView<PrivateBrowserWindow>
+    let hosting: NSHostingView<PrivateBrowserWindow?>
     let titlebarDragView: NSView
   }
 
@@ -73,10 +73,23 @@ final class PrivateBrowserHost {
     runtime.onPrivateTabClosed = nil
     runtime.onPrivateWindowClosed = nil
     for owner in owners.values {
-      owner.store.clear()
-      owner.hosting.removeFromSuperview()
-      owner.titlebarDragView.removeFromSuperview()
+      retire(owner)
     }
+  }
+
+  /// Retire SwiftUI bindings before AppKit or its field editor can keep them alive.
+  static func retireHostingContent<Content: View>(_ hosting: NSHostingView<Content?>) {
+    hosting.rootView = nil
+    hosting.layoutSubtreeIfNeeded()
+    hosting.removeFromSuperview()
+  }
+
+  private func retire(_ owner: Owner) {
+    owner.window.endEditing(for: nil)
+    _ = owner.window.makeFirstResponder(nil)
+    Self.retireHostingContent(owner.hosting)
+    owner.titlebarDragView.removeFromSuperview()
+    owner.store.clear()
   }
 
   func openWindow() throws {
@@ -183,7 +196,8 @@ final class PrivateBrowserHost {
         saved: nil, source: nil, screens: NSScreen.screens.map(\.visibleFrame)),
       display: false)
     let store = PrivateBrowserStore(contextID: context, windowID: window, tabID: tab, url: url)
-    let hosting = NSHostingView(rootView: PrivateBrowserWindow(store: store, runtime: runtime))
+    let hosting = NSHostingView<PrivateBrowserWindow?>(
+      rootView: PrivateBrowserWindow(store: store, runtime: runtime))
     hosting.frame = nativeWindow.contentView?.bounds ?? .zero
     hosting.autoresizingMask = [.width, .height]
     guard let container = runtime.hostView(forPrivateWindowID: window, contextID: context) else {
@@ -316,9 +330,7 @@ final class PrivateBrowserHost {
   private func windowClosed(context: String, window: String) {
     guard let owner = owners[window], owner.contextID == context else { return }
     owners.removeValue(forKey: window)
-    owner.store.clear()
-    owner.hosting.removeFromSuperview()
-    owner.titlebarDragView.removeFromSuperview()
+    retire(owner)
     windowsByContext[context]?.remove(window)
     if windowsByContext[context]?.isEmpty == true {
       windowsByContext.removeValue(forKey: context)

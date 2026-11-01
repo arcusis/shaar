@@ -360,8 +360,11 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     [self->_windowCloseObservers removeObjectForKey:identity];
     [self->_retiredWindowIDs addObject:identity];
     [self->_windows removeObjectForKey:identity];
-    if (self->_onWindowClosed) self->_onWindowClosed(identity, quitting);
   });
+  // The engine loop may end before the queued native teardown runs. Publish its
+  // confirmed close now so host ownership cannot survive a clean engine exit.
+  // Keep native state retained by the queued block until this callback unwinds.
+  if (_onWindowClosed) _onWindowClosed(identity, quitting);
 }
 - (void)dealloc {
   for (id observer in _windowCloseObservers.allValues) [NSNotificationCenter.defaultCenter removeObserver:observer];

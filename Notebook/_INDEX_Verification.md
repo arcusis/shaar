@@ -1,5 +1,8 @@
 # Verification
 
+- [[Private_Fixture_Readiness]]
+- [[CI_Pipeline_Design]]
+- [[CI_Pipeline]]
 - [[Source_And_Native_Verification]]
 - [[Test_Coverage]]
 - [[Verification_Harness]]

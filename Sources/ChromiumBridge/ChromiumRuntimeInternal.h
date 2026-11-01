@@ -7,6 +7,7 @@
 #import "include/ChromiumBridgeVerification.h"
 #import "ChromiumDownloads.h"
 #import "ChromiumLibrary.h"
+#import "ChromiumShutdownGuard.h"
 #import "ChromiumWebStoreFit.h"
 #import "../../ThirdParty/ArdiaCore/ArdiaCore.h"
 
@@ -81,6 +82,7 @@ NSString *ARCValidatedProfileID(NSString *profileID);
   ARCEngineServices *_services;
   ARCLibraryService *_libraryService;
   ARCWebStoreFit *_webStoreFit;
+  ARCEngineShutdownGuard *_shutdownGuard;
 }
 - (void)closedWindowID:(NSString *)identity;
 - (ARCNativeWindowState *)stateForTabID:(NSString *)identity;

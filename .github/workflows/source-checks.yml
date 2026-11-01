@@ -203,15 +203,23 @@ jobs:
           set -o pipefail
           bash scripts/test-engine.sh 2>&1 | tee "$RUNNER_TEMP/engine-probes.log"
 
+      - name: Run Quit exit probe (initial and restart)
+        id: quit_exit_probe
+        env:
+          SHAAR_PROBE_TIMEOUT_SCALE: '3'
+        run: |
+          set -o pipefail
+          bash scripts/test-engine.sh --quit-exit 2>&1 | tee -a "$RUNNER_TEMP/engine-probes.log"
+
       - name: Collect engine probe logs
-        if: failure() && steps.engine_probes.outcome == 'failure'
+        if: failure() && (steps.engine_probes.outcome == 'failure' || steps.quit_exit_probe.outcome == 'failure')
         run: |
           mkdir -p "$RUNNER_TEMP/engine-probe-logs"
           sed -n 's/^Probe evidence: //p' "$RUNNER_TEMP/engine-probes.log" \
             | while read -r root; do cp "$root"/*.log "$root"/*.json "$RUNNER_TEMP/engine-probe-logs/" || true; done
 
       - name: Upload engine probe logs
-        if: failure() && steps.engine_probes.outcome == 'failure'
+        if: failure() && (steps.engine_probes.outcome == 'failure' || steps.quit_exit_probe.outcome == 'failure')
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: engine-probe-logs

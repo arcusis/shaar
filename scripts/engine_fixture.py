@@ -499,13 +499,15 @@ def argument_parser():
                       help="Run only the external-app consent probe with native no-launch guard")
     mode.add_argument("--private-window", action="store_true",
                       help="Compose owned native OTR windows with both normal engine fixture phases")
+    mode.add_argument("--quit-exit", action="store_true",
+                      help="Quit through the host menu with an extension installed; assert main and helper exit")
     return parser
 
 
 def build_engine_probe_arguments(executable, root, fixture_url, phase, *, include_bitwarden,
                                  onboarding_control, abrupt, saved_tab_capacity,
                                  external_app_consent=False, private_window=False,
-                                 private_window_run_id=None):
+                                 private_window_run_id=None, quit_exit=False):
     arguments = [str(executable), "--probe-data-dir", str(root),
                  "--probe-url", fixture_url, "--probe-phase", phase,
                  "--probe-output", str(root / f"{phase}.json")]
@@ -525,6 +527,8 @@ def build_engine_probe_arguments(executable, root, fixture_url, phase, *, includ
             raise RuntimeError('Private window mode requires a run identity')
         arguments.append('--probe-private-window')
         arguments.extend(('--probe-private-window-run-id', private_window_run_id))
+    if quit_exit:
+        arguments.append('--probe-quit-exit')
     return arguments
 
 
@@ -792,6 +796,87 @@ def validate_full_fixture_report(report, phase):
         raise RuntimeError('Full fixture report has wrong phase or mode')
 
 
+QUIT_EXIT_MODE = 'quit-exit-only'
+# Bounds from the Quit menu command: the browser process, then every helper in its group.
+QUIT_MAIN_EXIT_SECONDS = 15
+QUIT_HELPER_EXIT_SECONDS = 10
+
+
+def read_quit_checkpoint(root, phase, pid):
+    path = root / f'{phase}-quit-requested.json'
+    if not path.exists():
+        return None
+    checkpoint = json.loads(path.read_text())
+    if (not isinstance(checkpoint, dict) or checkpoint.get('schema') != 1
+            or checkpoint.get('phase') != phase or checkpoint.get('pid') != pid):
+        raise RuntimeError('Invalid or foreign quit checkpoint')
+    return checkpoint
+
+
+def last_keep_alive_sample(root, phase):
+    path = root / f'{phase}-quit-keepalive.log'
+    lines = path.read_text().splitlines() if path.exists() else []
+    return lines[-1] if lines else None
+
+
+def wait_until(condition, seconds):
+    """Return elapsed seconds once condition holds, or None when the bound passes first."""
+    start = time.monotonic()
+    deadline = start + probe_timeout(seconds)
+    while not condition():
+        if time.monotonic() >= deadline:
+            return None
+        time.sleep(0.05)
+    return time.monotonic() - start
+
+
+def wait_for_quit_exit(process, root, phase, timeout):
+    """Time main and helper exit from the probe's Quit command; write the phase receipt."""
+    deadline = time.monotonic() + probe_timeout(timeout)
+    while read_quit_checkpoint(root, phase, process.pid) is None:
+        if process.poll() is not None:
+            raise RuntimeError(f'{phase} exited before sending Quit ({process.returncode})')
+        if time.monotonic() >= deadline:
+            raise subprocess.TimeoutExpired(process.args, timeout)
+        time.sleep(0.05)
+    main_seconds = wait_until(lambda: process.poll() is not None, QUIT_MAIN_EXIT_SECONDS)
+    helper_seconds = None
+    if main_seconds is not None:
+        helper_seconds = wait_until(lambda: not process_group_exists(process.pid),
+                                    QUIT_HELPER_EXIT_SECONDS)
+    receipt = {
+        'schema': 1, 'phase': phase, 'pid': process.pid,
+        'mainExitSeconds': main_seconds, 'helpersExitSeconds': helper_seconds,
+        'mainExitBoundSeconds': probe_timeout(QUIT_MAIN_EXIT_SECONDS),
+        'helpersExitBoundSeconds': probe_timeout(QUIT_HELPER_EXIT_SECONDS),
+        'exitCode': process.returncode, 'lastKeepAliveSample': last_keep_alive_sample(root, phase),
+        'passed': main_seconds is not None and helper_seconds is not None,
+    }
+    (root / f'{phase}-quit-exit.json').write_text(json.dumps(receipt, indent=2, sort_keys=True) + '\n')
+    if main_seconds is None:
+        raise RuntimeError(f'{phase}: process still running {receipt["mainExitBoundSeconds"]:.0f}s after Quit; '
+                           f'last sample: {receipt["lastKeepAliveSample"]}')
+    if helper_seconds is None:
+        raise RuntimeError(f'{phase}: helper processes still running '
+                           f'{receipt["helpersExitBoundSeconds"]:.0f}s after the browser exited')
+    return process.returncode
+
+
+def validate_quit_exit_report(root, phase, report, exit_code):
+    receipt = json.loads((root / f'{phase}-quit-exit.json').read_text())
+    if (not isinstance(report, dict) or report.get('phase') != phase
+            or report.get('probeMode') != QUIT_EXIT_MODE
+            or report.get('quitExitOnly') is not True
+            or report.get('savedTabCapacityOnly') is not False
+            or report.get('externalAppConsentOnly') is not False
+            or report.get('privateWindowOnly') is not False
+            or report.get('bitwardenStoreProbe') is not False
+            or not isinstance(receipt, dict) or receipt.get('phase') != phase
+            or receipt.get('passed') is not True or receipt.get('exitCode') != exit_code):
+        raise RuntimeError(f'{phase} quit-exit evidence has mismatched mode, phase, or exit timing')
+    return receipt
+
+
 def validate_saved_tab_capacity_report(root, phase, report, exit_code):
     if not isinstance(report, dict):
         raise RuntimeError(f'{phase} engine report must be a JSON object')
@@ -979,6 +1064,8 @@ def main(argv=None):
         print('EXTERNAL APP CONSENT ONLY: owned loopback; native no-launch guard enabled', flush=True)
     if options.private_window:
         print('PRIVATE WINDOW FIXTURE: owned hidden OTR windows; synthetic loopback only', flush=True)
+    if options.quit_exit:
+        print('QUIT EXIT ONLY: host Quit command with an extension installed; process exit is timed', flush=True)
     root = Path(tempfile.mkdtemp(prefix="arcusis-engine-probe-"))
     (root / ".arcusis-probe").write_text("arcusis-engine-probe-v1\n")
     (root / ".arcusis-probe").chmod(0o600)
@@ -1002,16 +1089,19 @@ def main(argv=None):
                 abrupt=abrupt, saved_tab_capacity=options.saved_tab_capacity,
                 external_app_consent=options.external_app_consent,
                 private_window=options.private_window,
-                private_window_run_id=private_window_run_id)
+                private_window_run_id=private_window_run_id, quit_exit=options.quit_exit)
             with (root / f"{phase}.log").open("w") as log:
                 process = subprocess.Popen(arguments, stdout=log, stderr=log, start_new_session=True, env=probe_env)
                 try:
                     if abrupt and phase == 'initial':
                         terminate_at_checkpoint(process, root, timeout=90, settle_seconds=35 if options.abrupt_control else 0)
                         continue
-                    timeout = (240 if options.private_window else 180 if options.external_app_consent else 180 if options.saved_tab_capacity
-                               else 170 if include_bitwarden else 90)
-                    code = wait_for_probe(process, root, phase, timeout=timeout)
+                    if options.quit_exit:
+                        code = wait_for_quit_exit(process, root, phase, timeout=90)
+                    else:
+                        timeout = (240 if options.private_window else 180 if options.external_app_consent else 180 if options.saved_tab_capacity
+                                   else 170 if include_bitwarden else 90)
+                        code = wait_for_probe(process, root, phase, timeout=timeout)
                 except subprocess.TimeoutExpired:
                     raise RuntimeError(f"{phase} timed out; see {root}/{phase}.log")
                 finally:
@@ -1045,6 +1135,11 @@ def main(argv=None):
                 validate_saved_tab_capacity_report(root, phase, report, code)
             elif options.external_app_consent:
                 validate_external_app_consent_report(root, phase, report, code)
+            elif options.quit_exit:
+                receipt = validate_quit_exit_report(root, phase, report, code)
+                stopped = ' (shutdown guard stopped the event loop)' if report.get('quitEventLoopStopped') else ''
+                print(f"{phase}: browser exited {receipt['mainExitSeconds']:.2f}s after Quit{stopped}; "
+                      f"helpers {receipt['helpersExitSeconds']:.2f}s later", flush=True)
             elif options.private_window:
                 try:
                     validate_private_window_report(root, phase, report, code)

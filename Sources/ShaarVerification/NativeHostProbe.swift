@@ -1066,11 +1066,9 @@ final class NativeHostProbe {
   }
 
   private func menuItem(_ command: BrowserMenuCommand) throws -> NSMenuItem {
-    guard
-      let item = host?.menu?.items.flatMap({ $0.submenu?.items ?? [] }).first(where: {
-        $0.representedObject as? String == command.rawValue
-      })
-    else { throw HostProbeFailure("Missing native menu \(command).") }
+    guard let item = host?.menuItem(for: command) else {
+      throw HostProbeFailure("Missing native menu \(command).")
+    }
     return item
   }
 
@@ -1078,8 +1076,8 @@ final class NativeHostProbe {
     guard let host, host.canPerform(command) else {
       throw HostProbeFailure("Native menu disabled: \(command).")
     }
-    let item = try menuItem(command)
-    guard let action = item.action, NSApp.sendAction(action, to: item.target, from: item) else {
+    _ = try menuItem(command)
+    guard host.sendMenuCommand(command) else {
       throw HostProbeFailure("Native menu action failed: \(command).")
     }
   }

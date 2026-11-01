@@ -573,5 +573,101 @@ class ExternalAppConsentRunnerTests(unittest.TestCase):
         self.assertFalse((self.root / 'bitwarden-onboarding-summary.json').exists())
 
 
+class QuitExitRunnerTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory(prefix='arcusis-engine-probe-')
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+
+    def main_report(self, phase):
+        return dict(phase=phase, passed=True, probeMode=fixture.QUIT_EXIT_MODE, quitExitOnly=True,
+                    quitEventLoopStopped=False, savedTabCapacityOnly=False,
+                    externalAppConsentOnly=False, privateWindowOnly=False,
+                    bitwardenStoreProbe=False, checks=['quit'], chromiumVersion='test')
+
+    def write_checkpoint(self, phase, pid):
+        (self.root / f'{phase}-quit-requested.json').write_text(
+            json.dumps(dict(schema=1, phase=phase, pid=pid)))
+
+    def process(self, polls):
+        process = Mock(pid=4242, args=['probe'])
+        process.poll.side_effect = polls
+        process.returncode = 0
+        return process
+
+    def test_mode_is_exclusive_and_forwards_only_the_quit_probe_flag(self):
+        self.assertTrue(fixture.argument_parser().parse_args(['--quit-exit']).quit_exit)
+        for other in ('--bitwarden', '--abrupt-restart', '--saved-tab-capacity',
+                      '--external-app-consent', '--private-window'):
+            with self.subTest(other=other), contextlib.redirect_stderr(io.StringIO()), \
+                    self.assertRaises(SystemExit):
+                fixture.argument_parser().parse_args(['--quit-exit', other])
+        for phase in ('initial', 'restart'):
+            args = fixture.build_engine_probe_arguments(
+                '/tmp/ShaarVerification', self.root, 'http://127.0.0.1:43123/account', phase,
+                include_bitwarden=False, onboarding_control=False, abrupt=False,
+                saved_tab_capacity=False, quit_exit=True)
+            self.assertIn('--probe-quit-exit', args)
+            self.assertEqual(args[args.index('--probe-phase') + 1], phase)
+            self.assertNotIn('--probe-external-app-consent', args)
+
+    def test_exit_within_bounds_writes_passing_receipt(self):
+        self.write_checkpoint('initial', 4242)
+        process = self.process([None, 0, 0])
+        with patch.object(fixture, 'process_group_exists', return_value=False):
+            self.assertEqual(fixture.wait_for_quit_exit(process, self.root, 'initial', timeout=5), 0)
+        receipt = json.loads((self.root / 'initial-quit-exit.json').read_text())
+        self.assertTrue(receipt['passed'])
+        self.assertIsNotNone(receipt['mainExitSeconds'])
+        self.assertIsNotNone(receipt['helpersExitSeconds'])
+        report = self.main_report('initial')
+        self.assertEqual(fixture.validate_quit_exit_report(self.root, 'initial', report, 0), receipt)
+
+    def test_process_that_outlives_quit_fails_with_last_keep_alive_sample(self):
+        self.write_checkpoint('initial', 4242)
+        (self.root / 'initial-quit-keepalive.log').write_text('1 quit-requested\n2 quitting held\n')
+        process = Mock(pid=4242, args=['probe'], returncode=None)
+        process.poll.return_value = None
+        with patch.object(fixture, 'QUIT_MAIN_EXIT_SECONDS', 0.1), \
+                self.assertRaisesRegex(RuntimeError, 'still running.*2 quitting held'):
+            fixture.wait_for_quit_exit(process, self.root, 'initial', timeout=5)
+        receipt = json.loads((self.root / 'initial-quit-exit.json').read_text())
+        self.assertFalse(receipt['passed'])
+        self.assertIsNone(receipt['mainExitSeconds'])
+
+    def test_helpers_that_outlive_the_browser_fail(self):
+        self.write_checkpoint('initial', 4242)
+        process = self.process([0, 0])
+        with patch.object(fixture, 'QUIT_HELPER_EXIT_SECONDS', 0.1), \
+                patch.object(fixture, 'process_group_exists', return_value=True), \
+                self.assertRaisesRegex(RuntimeError, 'helper processes still running'):
+            fixture.wait_for_quit_exit(process, self.root, 'initial', timeout=5)
+        self.assertFalse(json.loads((self.root / 'initial-quit-exit.json').read_text())['passed'])
+
+    def test_foreign_checkpoint_and_early_exit_are_rejected(self):
+        self.write_checkpoint('initial', 1)
+        with self.assertRaisesRegex(RuntimeError, 'foreign quit checkpoint'):
+            fixture.wait_for_quit_exit(self.process([None]), self.root, 'initial', timeout=5)
+        (self.root / 'initial-quit-requested.json').unlink()
+        with self.assertRaisesRegex(RuntimeError, 'exited before sending Quit'):
+            fixture.wait_for_quit_exit(self.process([1]), self.root, 'initial', timeout=5)
+
+    def test_report_validation_rejects_wrong_mode_phase_or_exit(self):
+        receipt = dict(schema=1, phase='initial', passed=True, exitCode=0)
+        (self.root / 'initial-quit-exit.json').write_text(json.dumps(receipt))
+        cases = (
+            ('mode', lambda report: report.update(probeMode='full-fixture')),
+            ('flag', lambda report: report.update(quitExitOnly=False)),
+            ('phase', lambda report: report.update(phase='restart')),
+        )
+        for label, mutate in cases:
+            with self.subTest(label=label), self.assertRaises(RuntimeError):
+                report = self.main_report('initial')
+                mutate(report)
+                fixture.validate_quit_exit_report(self.root, 'initial', report, 0)
+        with self.assertRaises(RuntimeError):
+            fixture.validate_quit_exit_report(self.root, 'initial', self.main_report('initial'), 70)
+
+
 if __name__ == '__main__':
     unittest.main()

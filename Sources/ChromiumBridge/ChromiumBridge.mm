@@ -160,7 +160,12 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   if (_externalAppProbeTesting) strings.push_back(externalProbeSwitch.UTF8String);
   std::vector<const char *> arguments;
   for (const auto &value : strings) arguments.push_back(value.c_str());
-  return [_engineClass runWithArgc:(int)arguments.size() argv:arguments.data() delegate:self];
+  // Quit must end the process, so no extension may keep Chromium running in the background.
+  ARCDisableBackgroundMode(directory);
+  _shutdownGuard = [[ARCEngineShutdownGuard alloc] init];
+  int result = [_engineClass runWithArgc:(int)arguments.size() argv:arguments.data() delegate:self];
+  [_shutdownGuard engineReturned];
+  return result;
 }
 
 - (void)engineDidStart {

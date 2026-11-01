@@ -30,16 +30,26 @@ def require_hosted_mac() -> None:
         raise RuntimeError("Native fixtures and visual captures require a hosted macOS CI job")
 
 
+def prepare_coverage(cwd: Path, scratch: str) -> Path:
+    filename = subprocess.check_output(
+        ["swift", "test", "--scratch-path", scratch, "--show-codecov-path"], cwd=cwd, text=True).strip()
+    path = Path(filename)
+    if path.parent.name != "codecov" or not path.resolve().is_relative_to((cwd / scratch).resolve()):
+        raise ValueError("Swift coverage path escaped its scratch directory")
+    if path.parent.exists():
+        shutil.rmtree(path.parent)
+    return path
+
+
 def test_commands(checks: Commands, *, cwd: Path = ROOT, scratch: str = ".build") -> int:
     flags = ["--scratch-path", scratch, "--jobs", "2", "--force-resolved-versions", "--enable-code-coverage"]
     if checks.run("build", ["swift", "build", "--build-tests", *flags], cwd=cwd):
         return 1
+    coverage_path = prepare_coverage(cwd, scratch)
     status = checks.run("tests", ["swift", "test", "--skip-build", *flags,
                                  "--xunit-output", str(checks.directory / "swift.xml")], cwd=cwd)
     if status:
         return status
-    coverage_path = subprocess.check_output(
-        ["swift", "test", "--scratch-path", scratch, "--show-codecov-path"], cwd=cwd, text=True).strip()
     shutil.copyfile(coverage_path, checks.directory / "coverage.json")
     return checks.run("resolved-pins", ["git", "diff", "--exit-code", "--", "Package.resolved"])
 

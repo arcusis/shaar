@@ -57,7 +57,8 @@ def main() -> int:
         ("actionlint", ["actionlint", "-color"]),
         ("shellcheck", ["shellcheck", "-x", *tracked_shell_files()]),
         ("pins", [sys.executable, __file__, "--pins-only"]),
-        ("gitleaks", ["gitleaks", "dir", "--no-banner", "--redact", "--log-level", "warn", "."]),
+        ("gitleaks", ["gitleaks", "dir", "--no-banner", "--redact", "--log-level", "warn",
+                      "--report-format", "json", "--report-path", "build/ci/fast/gitleaks.json", "."]),
         ("python", [sys.executable, "scripts/test-python.py", "--junit", "build/ci/fast/python.xml"]),
     ]
     for name, arguments in commands:

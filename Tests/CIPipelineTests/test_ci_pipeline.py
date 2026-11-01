@@ -86,6 +86,21 @@ class PipelineGateTests(unittest.TestCase):
 
 
 class CoverageGateTests(unittest.TestCase):
+    def test_cached_profiles_are_removed_only_inside_expected_scratch_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            coverage = root / "scratch/debug/codecov/coverage.json"
+            coverage.parent.mkdir(parents=True)
+            coverage.with_suffix(".profraw").write_text("stale")
+            with patch.object(STAGES.subprocess, "check_output", return_value=str(coverage)):
+                self.assertEqual(STAGES.prepare_coverage(root, "scratch"), coverage)
+            self.assertFalse(coverage.parent.exists())
+            foreign = root / "foreign/codecov/coverage.json"
+            foreign.parent.mkdir(parents=True)
+            with patch.object(STAGES.subprocess, "check_output", return_value=str(foreign)), self.assertRaises(ValueError):
+                STAGES.prepare_coverage(root, "scratch")
+            self.assertTrue(foreign.parent.exists())
+
     def report(self, app=(4, 10), core=(8, 10)):
         return {"type": "llvm.coverage.json.export", "data": [{"files": [
             {"filename": f"/checkout/Sources/{module}/File.swift",

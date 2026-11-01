@@ -11,6 +11,7 @@ import { HomePage } from "../src/components/home";
 import { DocumentPage } from "../src/components/layout";
 import { screens, siteOrigin } from "../src/content";
 import { notFoundPage, Pages } from "../src/pages";
+import { fontFaceCSS, prepareFonts } from "./fonts";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const repositoryRoot = resolve(root, "..");
@@ -51,17 +52,20 @@ await writeAsset(
   "assets/shaar-logo.svg",
   `<!-- ${notice} -->\n${await readFile(resolve(repositoryRoot, "Branding/shaar-logo.svg"), "utf8")}`,
 );
-await copyFile(resolve(root, "src/styles.css"), resolve(output, "assets/styles.css"));
+const faces = await prepareFonts(resolve(root, ".font-cache"), resolve(output, "assets/fonts"));
+await writeAsset(
+  "assets/styles.css",
+  `${fontFaceCSS(faces)}\n${await readFile(resolve(root, "src/styles.css"), "utf8")}`,
+);
 
 for (const [family, file, name] of [
-  ["inter", "inter-latin-wght-normal.woff2", "inter.woff2"],
   ["geist-mono", "geist-mono-latin-wght-normal.woff2", "geist-mono.woff2"],
 ]) {
   await copyFile(
     resolve(root, `node_modules/@fontsource-variable/${family}/files/${file}`),
     resolve(output, `assets/${name}`),
   );
-  const licenseName = family === "inter" ? "Inter" : "Geist-Mono";
+  const licenseName = "Geist-Mono";
   await copyFile(
     resolve(root, `node_modules/@fontsource-variable/${family}/LICENSE`),
     resolve(output, `licenses/${licenseName}-OFL.txt`),

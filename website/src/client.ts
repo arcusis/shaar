@@ -2,7 +2,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-import { initializeSky } from "./sky";
+import { startScene } from "./scene";
+import { initializeSky, type SkyState } from "./sky";
 
 const root = document.documentElement;
 root.dataset.enhanced = "true";
@@ -79,5 +80,13 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeMenu();
   initializeStickyHeader();
   initializeStory();
-  initializeSky();
+  let updateScene: ((state: SkyState) => void) | null = null;
+  initializeSky((state) => {
+    if (updateScene) {
+      updateScene(state);
+      return;
+    }
+    const canvas = document.querySelector<HTMLCanvasElement>(".scene-canvas");
+    if (canvas) updateScene = startScene(canvas, state);
+  });
 });

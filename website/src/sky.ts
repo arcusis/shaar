@@ -76,46 +76,74 @@ function palette(elevation: number): Palette {
   return palettes[palettes.length - 1][1];
 }
 
-// Maps a body's hour angle and elevation onto the 1600 x 900 scene.
-function placement(hourAngle: number, elevation: number): string {
-  const x = 800 + Math.max(-1, Math.min(1, hourAngle / 110)) * 620;
-  const y = 600 - Math.max(-20, elevation) * 7.5;
-  return `translate(${x.toFixed(1)} ${y.toFixed(1)})`;
+export interface Point {
+  x: number;
+  y: number;
 }
 
-type SkyMode = "auto" | "sun" | "moon";
+/** Everything the hero needs to draw one moment of the sky, in 1600 x 900 scene units. */
+export interface SkyState {
+  top: string;
+  middle: string;
+  bottom: string;
+  land: number;
+  stars: number;
+  day: number;
+  night: boolean;
+  sun: Point;
+  moon: Point;
+}
 
-function render(landscape: HTMLElement, mode: SkyMode, now: Date): void {
-  const real = sunPosition(now);
+// Maps a body's hour angle and elevation onto the 1600 x 900 scene.
+function placement(hourAngle: number, elevation: number): Point {
+  return {
+    x: 800 + Math.max(-1, Math.min(1, hourAngle / 110)) * 620,
+    y: 600 - Math.max(-20, elevation) * 7.5,
+  };
+}
+
+export type SkyMode = "auto" | "sun" | "moon";
+
+export function skyState(mode: SkyMode, now: Date): SkyState {
   const sun =
     mode === "sun"
-      ? { elevation: 48, hourAngle: 18 }
+      ? { elevation: 48, hourAngle: 45 }
       : mode === "moon"
         ? { elevation: -30, hourAngle: 160 }
-        : real;
+        : sunPosition(now);
   const [top, middle, bottom, land, stars] = palette(sun.elevation);
-  landscape.style.setProperty("--sky-top", top);
-  landscape.style.setProperty("--sky-middle", middle);
-  landscape.style.setProperty("--sky-bottom", bottom);
-  landscape.style.setProperty("--land", land.toFixed(3));
-  landscape.style.setProperty("--stars", stars.toFixed(3));
-  landscape.style.setProperty(
-    "--day",
-    Math.max(0, Math.min(1, (sun.elevation + 4) / 16)).toFixed(3),
-  );
-
   // The moon is drawn roughly opposite the sun; this scene does not model lunar orbits.
   const moonAngle = sun.hourAngle > 0 ? sun.hourAngle - 180 : sun.hourAngle + 180;
-  landscape
-    .querySelector("[data-sun]")
-    ?.setAttribute("transform", placement(sun.hourAngle, sun.elevation));
-  landscape
-    .querySelector("[data-moon]")
-    ?.setAttribute("transform", placement(moonAngle, Math.max(-20, -sun.elevation)));
+  return {
+    top,
+    middle,
+    bottom,
+    land,
+    stars,
+    day: Math.max(0, Math.min(1, (sun.elevation + 4) / 16)),
+    night: sun.elevation < -3,
+    sun: placement(sun.hourAngle, sun.elevation),
+    moon: placement(moonAngle, Math.max(-20, -sun.elevation)),
+  };
+}
 
+function translate(point: Point): string {
+  return `translate(${point.x.toFixed(1)} ${point.y.toFixed(1)})`;
+}
+
+// Applies the state to the SVG fallback scene and the hero text colors.
+function render(landscape: HTMLElement, state: SkyState): void {
+  landscape.style.setProperty("--sky-top", state.top);
+  landscape.style.setProperty("--sky-middle", state.middle);
+  landscape.style.setProperty("--sky-bottom", state.bottom);
+  landscape.style.setProperty("--land", state.land.toFixed(3));
+  landscape.style.setProperty("--stars", state.stars.toFixed(3));
+  landscape.style.setProperty("--day", state.day.toFixed(3));
+  landscape.querySelector("[data-sun]")?.setAttribute("transform", translate(state.sun));
+  landscape.querySelector("[data-moon]")?.setAttribute("transform", translate(state.moon));
   const frame = landscape.closest<HTMLElement>(".hero-frame");
   if (frame) {
-    if (sun.elevation < -3) frame.dataset.night = "true";
+    if (state.night) frame.dataset.night = "true";
     else delete frame.dataset.night;
   }
 }
@@ -128,7 +156,7 @@ function jerusalemTime(now: Date): string {
   }).format(now);
 }
 
-export function initializeSky(): void {
+export function initializeSky(onChange: (state: SkyState) => void = () => {}): void {
   const landscape = document.querySelector<HTMLElement>("[data-landscape]");
   const control = document.querySelector<HTMLElement>(".sky-control");
   if (!landscape || !control) return;
@@ -137,7 +165,9 @@ export function initializeSky(): void {
   let mode: SkyMode = "auto";
   const update = () => {
     const now = new Date();
-    render(landscape, mode, now);
+    const state = skyState(mode, now);
+    render(landscape, state);
+    onChange(state);
     if (autoButton) autoButton.textContent = `Jerusalem ${jerusalemTime(now)}`;
     for (const button of buttons)
       button.setAttribute("aria-pressed", String(button.dataset.sky === mode));

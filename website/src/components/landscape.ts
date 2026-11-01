@@ -6,8 +6,7 @@
 // and a sun or moon placed by the current time in Jerusalem (see client.ts).
 // Everything is SVG plus CSS, so the scene needs no image files.
 
-const WIDTH = 1600;
-const HEIGHT = 900;
+import { SCENE_HEIGHT as HEIGHT, hills, roadPath, SCENE_WIDTH as WIDTH } from "../terrain";
 
 // Small deterministic generator so the build output is stable between runs.
 function random(seed: number): () => number {
@@ -73,7 +72,7 @@ function clouds(): string {
 }
 
 export function Landscape(): string {
-  return `<div class="landscape" data-landscape aria-hidden="true">
+  return `<div class="landscape" data-landscape aria-hidden="true"><canvas class="scene-canvas"></canvas>
     <svg class="landscape-art" viewBox="0 0 ${WIDTH} ${HEIGHT}" preserveAspectRatio="xMidYMax slice" focusable="false">
       <defs>
         <linearGradient id="sky" x2="0" y2="1"><stop class="sky-top"/><stop offset=".6" class="sky-middle"/><stop offset="1" class="sky-bottom"/></linearGradient>
@@ -108,13 +107,13 @@ export function Landscape(): string {
       <g class="clouds">${clouds()}</g>
       <g class="land">
         <g filter="url(#brush)">
-          <path fill="url(#hill-far)" d="M-40 520C120 430 260 380 420 420S640 520 760 500s180-70 300-60 220 90 360 70 180-40 220-30V900H-40Z"/>
-          <path fill="url(#hill-ridge)" d="M700 610c120-10 220-60 330-130s220-120 340-120 190 30 270 60V900H700Z"/>
-          <path fill="url(#hill-mid)" d="M-40 610c180-40 360-90 560-60s360 110 560 100 330-60 560-40V900H-40Z"/>
-          <path fill="url(#meadow)" d="M-40 690c220-30 480-40 760-20s560 50 920 10V900H-40Z"/>
+          <path fill="url(#hill-far)" d="${hills[0].path}"/>
+          <path fill="url(#hill-ridge)" d="${hills[1].path}"/>
+          <path fill="url(#hill-mid)" d="${hills[2].path}"/>
+          <path fill="url(#meadow)" d="${hills[3].path}"/>
         </g>
-        <path d="M-40 690c220-30 480-40 760-20s560 50 920 10V900H-40Z" fill="#2c5a1f" filter="url(#grain)" opacity=".5"/>
-        <path class="road" filter="url(#brush)" d="M1010 900c-70-60-170-90-150-130s150-50 160-80-60-40-40-62c40 20 82 42 70 74s-150 50-130 88 140 60 210 110Z"/>
+        <path d="${hills[3].path}" fill="#2c5a1f" filter="url(#grain)" opacity=".5"/>
+        <path class="road" filter="url(#brush)" d="${roadPath}"/>
         <g class="grass grass-back">${grassBlades(420, 688, 16, 38, 5)}</g>
         <g class="grass grass-front">${grassBlades(290, 770, 40, 95, 9)}</g>
       </g>

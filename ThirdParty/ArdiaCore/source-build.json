@@ -38,6 +38,7 @@
     "target": "chrome_framework",
     "syncJobs": 4,
     "buildJobs": 6,
+    "symbolLevel": 1,
     "minimumFreeBytes": 107374182400,
     "timeoutsSeconds": {
       "clone": 900,

@@ -963,16 +963,15 @@ class Runner:
                 raise BuildError(f"upstream script symlink rejected: {path.relative_to(self.output)}")
         self.checked_replace(scripts / "env.sh", "export CB=~/chromium-build",
                              'export CB="$ENGINE_BUILD_ROOT"', 1)
-        replacements = [
-            ("source ~/chromium-build/scripts/env.sh", 'source "$CB/scripts/env.sh"', 1),
-            ("source ~/chromium-build/scripts/gn_defines.sh",
-             'source "$CB/scripts/gn_defines.sh"', 1),
-        ]
+        env_source = ("source ~/chromium-build/scripts/env.sh", 'source "$CB/scripts/env.sh"', 1)
+        gn_defines_source = ("source ~/chromium-build/scripts/gn_defines.sh",
+                             'source "$CB/scripts/gn_defines.sh"', 1)
         for name in ("01-sync.sh", "02-gn-args.sh", "04-domain-substitution.sh",
                      "05-build.sh", "apply-chromium-patches.sh", "game-resource.sh"):
             path = scripts / name
             if not path.exists():
                 continue
+            replacements = [env_source, gn_defines_source] if name == "02-gn-args.sh" else [env_source]
             for old, new, count in replacements:
                 self.checked_replace(path, old, new, count)
         sync = scripts / "01-sync.sh"
@@ -1018,6 +1017,7 @@ class Runner:
         self.adapt_build_priority_script(build)
         gn_script = scripts / "02-gn-args.sh"
         self.adapt_pinned_gn_script(gn_script)
+        self.adapt_symbol_level(scripts / "gn_defines.sh", self.config["build"]["symbolLevel"])
         self.validate_staged_paths(scripts)
         self.receipt["inputs"]["upstreamBuildScriptSha256"] = upstream_digests
         self.receipt["inputs"]["scriptSubstitutions"] = [
@@ -1029,6 +1029,7 @@ class Runner:
             "GN invocation -> Chromium pinned buildtools/mac/gn",
             "network wrappers retain runner process-group timeout",
             "autoninja runs at background QoS with 6 jobs",
+            f"symbol_level 0 -> {self.config['build']['symbolLevel']} (stripped framework plus dSYM)",
         ]
         self.receipt["inputs"]["cacheRoots"] = {
             "gclient": str(self.output / "gclient-cache"),
@@ -1104,6 +1105,13 @@ class Runner:
             text = path.read_text()
         if not re.search(r'(?m)^\./buildtools/mac/gn gen "out/\$GN_OUT_CONFIGS"$', text):
             raise BuildError("pinned Chromium GN invocation adaptation anchor mismatch")
+
+    @staticmethod
+    def adapt_symbol_level(path: pathlib.Path, level: int) -> None:
+        if level not in (0, 1, 2):
+            raise BuildError(f"unsupported symbol level: {level}")
+        Runner.checked_replace(path, "  symbol_level=0 blink_symbol_level=0",
+                               f"  symbol_level={level} blink_symbol_level=0", 1)
 
     @staticmethod
     def adapt_build_priority_script(path: pathlib.Path) -> None:

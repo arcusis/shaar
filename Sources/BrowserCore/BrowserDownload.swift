@@ -39,7 +39,7 @@ public struct BrowserDownload: Identifiable, Equatable, Sendable {
     else { return nil }
     self.id = id
     self.profileID = profileID
-    self.filename = filename.isEmpty ? "Download" : filename
+    self.filename = filename.isEmpty ? BrowserLocalization.string("Download") : filename
     self.fileURL = path.isEmpty ? nil : URL(filePath: path)
     self.source = Self.sourceDescription(sourceURL)
     self.state = state
@@ -67,12 +67,15 @@ public struct BrowserDownload: Identifiable, Equatable, Sendable {
   }
 
   private static func sourceDescription(_ address: String) -> String {
-    if address.hasPrefix("data:") { return "Generated file" }
+    if address.hasPrefix("data:") { return BrowserLocalization.string("Generated file") }
     let value = address.hasPrefix("blob:") ? String(address.dropFirst(5)) : address
-    guard value.utf8.count <= 8192, let url = URL(string: value) else { return "Download" }
+    guard value.utf8.count <= 8192, let url = URL(string: value) else {
+      return BrowserLocalization.string("Download")
+    }
     if ["http", "https"].contains(url.scheme?.lowercased() ?? ""), let host = url.host() {
       return host
     }
-    return url.scheme == "chrome-extension" ? "Extension" : "Download"
+    return url.scheme == "chrome-extension"
+      ? BrowserLocalization.string("Extension") : BrowserLocalization.string("Download")
   }
 }

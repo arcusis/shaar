@@ -139,7 +139,12 @@ public enum CommandSearch {
         continue
       }
       let domain = CommandText.domain(of: page?.tab.url ?? favorite.originalURL)
-      if append(.favorite(favorite, subtitle: "Favorite · \(profileName) profile · \(domain)")) {
+      if append(
+        .favorite(
+          favorite,
+          subtitle: BrowserLocalization.format(
+            "Favorite · %@ profile · %@", arguments: [.string(profileName), .string(domain)])))
+      {
         break
       }
     }
@@ -190,7 +195,9 @@ public enum CommandSearch {
         let profile = session.profiles.first { $0.id == space.profileID }?.name ?? ""
         if append(
           CommandResult(
-            title: space.name, subtitle: "Switch space · \(profile) profile",
+            title: space.name,
+            subtitle: BrowserLocalization.format(
+              "Switch space · %@ profile", arguments: [.string(profile)]),
             symbol: space.symbol, action: .space(space.id)
           ))
         {
@@ -202,7 +209,11 @@ public enum CommandSearch {
         where CommandText.matches(query, CommandFields.closedTab(entry)) {
           let profile = session.profiles.first { $0.id == space.profileID }?.name ?? ""
           if append(
-            .reopen(entry, subtitle: "Reopen closed tab · \(space.name) · \(profile) profile"))
+            .reopen(
+              entry,
+              subtitle: BrowserLocalization.format(
+                "Reopen closed tab · %@ · %@ profile",
+                arguments: [.string(space.name), .string(profile)])))
           {
             break search
           }
@@ -213,7 +224,13 @@ public enum CommandSearch {
         for item in bookmarks where item.profileID == profile && item.destination != nil {
           guard CommandText.matches(query, CommandFields.bookmark(item)) else { continue }
           bookmarked.insert(item.address!)
-          if append(.bookmark(item, subtitle: "Bookmark · \(profileName) profile · \(item.path)")) {
+          if append(
+            .bookmark(
+              item,
+              subtitle: BrowserLocalization.format(
+                "Bookmark · %@ profile · %@", arguments: [.string(profileName), .string(item.path)])
+            ))
+          {
             break search
           }
         }
@@ -226,7 +243,17 @@ public enum CommandSearch {
             .history(
               entry,
               subtitle:
-                "History · \(profileName) profile · \(entry.lastVisit.formatted(date: .abbreviated, time: .omitted))"
+                BrowserLocalization.format(
+                  "History · %@ profile · %@",
+                  arguments: [
+                    .string(profileName),
+                    .string(
+                      entry.lastVisit.formatted(
+                        Date.FormatStyle(date: .abbreviated, time: .omitted)
+                          .locale(
+                            BrowserLanguage.currentLaunchLanguage == .hebrew
+                              ? Locale(identifier: "he") : .autoupdatingCurrent))),
+                  ])
             ))
           {
             break search
@@ -237,7 +264,9 @@ public enum CommandSearch {
     if let openURL {
       results.append(
         CommandResult(
-          title: query, subtitle: "Open in \(session.selectedSpace.name)",
+          title: query,
+          subtitle: BrowserLocalization.format(
+            "Open in %@", arguments: [.string(session.selectedSpace.name)]),
           symbol: "arrow.up.right", action: .open(openURL)
         ))
     }

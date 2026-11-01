@@ -185,8 +185,10 @@ public enum SessionError: Error, LocalizedError, Equatable {
 
   public var errorDescription: String? {
     switch self {
-    case .unsupportedVersion: "This session was saved by an unsupported browser version."
-    case .invalidState: "The saved session contains invalid spaces, profiles, or tabs."
+    case .unsupportedVersion:
+      BrowserLocalization.string("This session was saved by an unsupported browser version.")
+    case .invalidState:
+      BrowserLocalization.string("The saved session contains invalid spaces, profiles, or tabs.")
     }
   }
 }

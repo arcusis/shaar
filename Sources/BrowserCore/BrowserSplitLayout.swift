@@ -152,11 +152,11 @@ public enum SplitLayoutPreset: String, CaseIterable, Identifiable, Sendable {
 
   public var title: String {
     switch self {
-    case .columns: "Side by Side"
-    case .rows: "Stacked"
-    case .mainLeading: "One Left, Rest Stacked"
-    case .mainTop: "One Top, Rest Side by Side"
-    case .grid: "Grid"
+    case .columns: BrowserLocalization.string("Side by Side")
+    case .rows: BrowserLocalization.string("Stacked")
+    case .mainLeading: BrowserLocalization.string("One Left, Rest Stacked")
+    case .mainTop: BrowserLocalization.string("One Top, Rest Side by Side")
+    case .grid: BrowserLocalization.string("Grid")
     }
   }
 

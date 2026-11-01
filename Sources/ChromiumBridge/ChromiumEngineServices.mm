@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #import "ChromiumEngineServices.h"
+#import "include/ChromiumBridge.h"
 #import "../../ThirdParty/ArdiaCore/ac_engine.h"
 #include <dlfcn.h>
 #include <string.h>
@@ -16,7 +17,7 @@ static NSDictionary *ServiceJSON(const char *json) {
 
 static void ServiceReply(void *context, const char *json) {
   void (^done)(NSDictionary *) = (__bridge_transfer void (^)(NSDictionary *))context;
-  done(ServiceJSON(json) ?: @{@"error": @"Invalid engine service response."});
+  done(ServiceJSON(json) ?: @{@"error": ARCBridgeLocalizedString(@"Invalid engine service response.")});
 }
 
 @interface ARCEngineServices ()
@@ -54,7 +55,7 @@ static void ServiceEvent(void *context, const char *topic, const char *json) {
   }
   if (!version || version() != AC_ENGINE_ABI_VERSION || !_setSink || calls.count != methods.count) {
     if (error) *error = [NSError errorWithDomain:@"com.arcusis.browser.services" code:1
-      userInfo:@{NSLocalizedDescriptionKey: @"The engine does not expose the pinned profile service ABI."}];
+      userInfo:@{NSLocalizedDescriptionKey: ARCBridgeLocalizedString(@"The engine does not expose the pinned profile service ABI.")}];
     return nil;
   }
   _calls = calls;
@@ -80,7 +81,7 @@ static void ServiceEvent(void *context, const char *topic, const char *json) {
       (owner && ![owner isEqualToString:profileID]) ||
       (_paths[profileID] && ![_paths[profileID] isEqualToString:canonical])) {
     if (error) *error = [NSError errorWithDomain:@"com.arcusis.browser.services" code:2
-      userInfo:@{NSLocalizedDescriptionKey: @"The engine profile could not be verified."}];
+      userInfo:@{NSLocalizedDescriptionKey: ARCBridgeLocalizedString(@"The engine profile could not be verified.")}];
     return NO;
   }
   _paths[profileID] = canonical;
@@ -96,7 +97,7 @@ static void ServiceEvent(void *context, const char *topic, const char *json) {
   NSData *data = [NSJSONSerialization dataWithJSONObject:args options:0 error:nil];
   NSString *json = data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
   if (!_started || !path || !call || !json) {
-    completion(@{@"error": @"Unknown engine profile or service."});
+    completion(@{@"error": ARCBridgeLocalizedString(@"Unknown engine profile or service.")});
     return;
   }
   call(path.UTF8String, json.UTF8String, ServiceReply, (__bridge_retained void *)[completion copy]);

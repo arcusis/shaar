@@ -1,0 +1,11 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "NSCameraUsageDescription" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Allow websites you approve to use your camera for video calls." } }, "he" : { "stringUnit" : { "state" : "translated", "value" : "אתרים שתאשרו יוכלו להשתמש במצלמה לשיחות וידאו." } } } },
+    "NSMicrophoneUsageDescription" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Allow websites you approve to use your microphone for calls." } }, "he" : { "stringUnit" : { "state" : "translated", "value" : "אתרים שתאשרו יוכלו להשתמש במיקרופון לשיחות." } } } },
+    "NSLocationUsageDescription" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Allow websites you approve to use your location, such as maps and delivery sites." } }, "he" : { "stringUnit" : { "state" : "translated", "value" : "אתרים שתאשרו יוכלו להשתמש במיקום, למשל באתרי מפות ומשלוחים." } } } },
+    "NSLocationWhenInUseUsageDescription" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Allow websites you approve to use your location, such as maps and delivery sites." } }, "he" : { "stringUnit" : { "state" : "translated", "value" : "אתרים שתאשרו יוכלו להשתמש במיקום, למשל באתרי מפות ומשלוחים." } } } },
+    "NSBluetoothAlwaysUsageDescription" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Allow websites you approve to connect to Bluetooth devices, such as security keys and phones used for passkey sign-in." } }, "he" : { "stringUnit" : { "state" : "translated", "value" : "אתרים שתאשרו יוכלו להתחבר להתקני Bluetooth, כגון מפתחות אבטחה וטלפונים לכניסה עם מפתח גישה." } } } }
+  },
+  "version" : "1.1"
+}

@@ -1,0 +1,482 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "%d active downloads": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Closing the browser will cancel one active download."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Closing the browser will cancel %d active downloads."
+                }
+              }
+            }
+          }
+        },
+        "he": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "הסגירה תבטל הורדה פעילה אחת."
+                }
+              },
+              "two": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "הסגירה תבטל שתי הורדות פעילות."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "הסגירה תבטל %d הורדות פעילות."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Actions": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פעולות"
+          }
+        }
+      }
+    },
+    "Add extension": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הוספת תוסף"
+          }
+        }
+      }
+    },
+    "Allow permissions": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אישור הרשאות"
+          }
+        }
+      }
+    },
+    "Another %@ process is using this workspace.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "תהליך אחר של %@ משתמש בסביבת העבודה הזאת."
+          }
+        }
+      }
+    },
+    "Bookmark · %@ profile · %@": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סימנייה · פרופיל %@ · %@"
+          }
+        }
+      }
+    },
+    "Bookmarks": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סימניות"
+          }
+        }
+      }
+    },
+    "Close and Cancel Downloads": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סגירה וביטול ההורדות"
+          }
+        }
+      }
+    },
+    "Close tab": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סגירת לשונית"
+          }
+        }
+      }
+    },
+    "Download": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הורדה"
+          }
+        }
+      }
+    },
+    "Downloads are still running": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ההורדות עדיין פעילות"
+          }
+        }
+      }
+    },
+    "Enable extension": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הפעלת תוסף"
+          }
+        }
+      }
+    },
+    "Extension": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "תוסף"
+          }
+        }
+      }
+    },
+    "Favorite · %@ profile · %@": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מועדף · פרופיל %@ · %@"
+          }
+        }
+      }
+    },
+    "Favorites": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מועדפים"
+          }
+        }
+      }
+    },
+    "Favorites & Pinned": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מועדפים ולשוניות נעוצות"
+          }
+        }
+      }
+    },
+    "Generated file": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "קובץ שנוצר"
+          }
+        }
+      }
+    },
+    "Grid": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "תצוגת רשת"
+          }
+        }
+      }
+    },
+    "History": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "היסטוריה"
+          }
+        }
+      }
+    },
+    "History · %@ profile · %@": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "היסטוריה · פרופיל %@ · %@"
+          }
+        }
+      }
+    },
+    "Keep Browser Open": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "השארת הדפדפן פתוח"
+          }
+        }
+      }
+    },
+    "Most Visited": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ביקורים תכופים"
+          }
+        }
+      }
+    },
+    "One Left, Rest Stacked": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אחת מימין, השאר בטור"
+          }
+        }
+      }
+    },
+    "One Top, Rest Side by Side": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אחת למעלה, השאר זו לצד זו"
+          }
+        }
+      }
+    },
+    "Open Tabs": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לשוניות פתוחות"
+          }
+        }
+      }
+    },
+    "Open in %@": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פתיחה ב־%@"
+          }
+        }
+      }
+    },
+    "Recently Closed": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נסגרו לאחרונה"
+          }
+        }
+      }
+    },
+    "Reopen closed tab": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פתיחה מחדש של לשונית שנסגרה"
+          }
+        }
+      }
+    },
+    "Reopen closed tab · %@ · %@ profile": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פתיחת לשונית שנסגרה · %@ · פרופיל %@"
+          }
+        }
+      }
+    },
+    "Repair extension": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "תיקון תוסף"
+          }
+        }
+      }
+    },
+    "Side by Side": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "זה לצד זה"
+          }
+        }
+      }
+    },
+    "Stacked": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "זו מעל זו"
+          }
+        }
+      }
+    },
+    "Switch space · %@ profile": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מעבר למרחב · פרופיל %@"
+          }
+        }
+      }
+    },
+    "Tabs": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לשוניות"
+          }
+        }
+      }
+    },
+    "The engine returned invalid bookmark data.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מנוע הדפדפן החזיר נתוני סימנייה לא תקינים."
+          }
+        }
+      }
+    },
+    "The engine returned invalid history data.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מנוע הדפדפן החזיר נתוני היסטוריה לא תקינים."
+          }
+        }
+      }
+    },
+    "The saved session contains invalid spaces, profiles, or tabs.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ההפעלה השמורה מכילה מרחבים, פרופילים או לשוניות לא תקינים."
+          }
+        }
+      }
+    },
+    "The saved workspace version is unsupported.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "גרסת סביבת העבודה השמורה אינה נתמכת."
+          }
+        }
+      }
+    },
+    "The window no longer belongs to this workspace.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "החלון כבר אינו שייך לסביבת העבודה הזאת."
+          }
+        }
+      }
+    },
+    "The workspace has conflicting window, Space, profile, or tab ownership.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "בסביבת העבודה יש שיוכים סותרים של חלונות, מרחבים, פרופילים או לשוניות."
+          }
+        }
+      }
+    },
+    "The workspace lock file is invalid.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "קובץ הנעילה של סביבת העבודה אינו תקין."
+          }
+        }
+      }
+    },
+    "This session was saved by an unsupported browser version.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ההפעלה הזאת נשמרה בגרסת דפדפן שאינה נתמכת."
+          }
+        }
+      }
+    },
+    "Untitled bookmark": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סימנייה ללא שם"
+          }
+        }
+      }
+    },
+    "Untitled folder": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "תיקייה ללא שם"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.1"
+}

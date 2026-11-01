@@ -97,6 +97,37 @@ import Testing
     #expect(model.assets == nil && model.tree == nil && model.accessibility == nil)
   }
 
+  @Test func unavailableEngineRefreshReportsFailureAndKeepsValidatedDetails() async throws {
+    for tab in [InspectorModel.Tab.component, .accessibility, .assets] {
+      let inspector = try makeInspector(tab: tab)
+      let model = inspector.details
+      switch tab {
+      case .component:
+        try model.receive(
+          .component(tree("React"), nil), selectionID: 8, generation: inspector.documentGeneration)
+      case .accessibility:
+        try model.receive(
+          .accessibility(.init(aria: [], tabOrder: nil, tabLimit: false, warnings: [])),
+          selectionID: 8, generation: inspector.documentGeneration)
+      case .assets:
+        try model.receive(
+          .assets(.init(images: [], svg: nil, svgTruncated: false)), selectionID: 8,
+          generation: inspector.documentGeneration)
+      default: Issue.record("Unexpected detail tab")
+      }
+      await model.refresh(force: true)
+      #expect(model.failure != nil && !model.busy)
+      #expect(model.selectedID == 8 && model.activeTab == tab)
+      switch tab {
+      case .component: #expect(model.tree?.framework == "React")
+      case .accessibility: #expect(model.accessibility != nil)
+      case .assets: #expect(model.assets?.images.isEmpty == true)
+      default: break
+      }
+      inspector.close()
+    }
+  }
+
   @Test func malformedAssetDimensionsAndOversizedPayloadsAreRejected() throws {
     let inspector = try makeInspector(tab: .assets)
     defer { inspector.close() }

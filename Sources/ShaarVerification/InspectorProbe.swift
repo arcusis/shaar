@@ -114,6 +114,7 @@ final class InspectorProbe {
       try await model.evaluate("document.querySelectorAll(\(json(button.css))).length") as? Int
         == 1, "copied CSS resolves uniquely")
     try await capture(model, stem: "\(phase)-inspector")
+    try await styles(model)
     try await key(model, "ArrowRight")
     try await wait("arrow right selects next sibling") { model.selection?.css == "#next" }
     try await key(model, "ArrowLeft")
@@ -195,6 +196,15 @@ final class InspectorProbe {
         model.selection?.pageFonts.isEmpty == false
       }
       try await capture(model, stem: "public-\(name)")
+      model.tab = .styles
+      await model.styles.refresh(force: true)
+      try expect(
+        !model.styles.rules.isEmpty && !model.styles.computed.isEmpty,
+        "public CSS rules and computed values arrive")
+      try expect(
+        model.styles.rules.contains { $0.source.hasPrefix("https://") },
+        "public CSS resolves a real source URL and generated line")
+      try await capture(model, stem: "public-\(name)-css")
       let image: Data? = await withCheckedContinuation { continuation in
         engine.runtime.captureProbeTabID(target.tabID.uuidString) {
           continuation.resume(returning: $0)
@@ -203,6 +213,100 @@ final class InspectorProbe {
       try image?.write(to: root.appending(path: "public-\(name)-page.png"))
       model.close()
     }
+  }
+
+  private func styles(_ model: InspectorModel) async throws {
+    model.tab = .styles
+    let styles = model.styles
+    await styles.refresh(force: true)
+    try expect(
+      styles.failure == nil && styles.selectedID == model.selection?.id,
+      "CSS model follows locked element")
+    try expect(
+      styles.rules.contains {
+        $0.selector.contains("button") && $0.source.contains("/inspector#style-")
+          && $0.source.contains(":")
+      }, "matched CSS resolves real inline source and line")
+    let authored = styles.rules.first { $0.selector == "button" && $0.source.contains("#style-") }
+    try expect(
+      authored?.declarations.contains { $0.name == "font" } == true
+        && authored?.declarations.contains { $0.name == "font-style" } == false,
+      "matched declarations retain authored shorthand without generated longhands")
+    try expect(
+      styles.computed.contains { $0.name == "padding-top" && $0.value == "10px" },
+      "computed CSS contains final used values")
+    try expect(
+      styles.css.contains("padding-top: 10px;") && styles.tailwind.contains("[padding-top:10px]"),
+      "CSS and Tailwind exports include computed spacing")
+    await styles.edit(property: "padding", value: "30px", important: true)
+    try expect(
+      try await model.evaluate("getComputedStyle(document.querySelector('#save')).padding")
+        as? String == "30px", "live override changes actual renderer")
+    await styles.undo()
+    try expect(
+      try await model.evaluate("document.querySelector('#save').getAttribute('style')===null")
+        as? Bool == true,
+      "undo restores absent style attribute exactly")
+    try await wait("undo restores box details") { model.selection?.box.padding.first == "10px" }
+    try expect(
+      await pointer(model, selector: "#next", click: false, modifiers: 1),
+      "trusted Option hover reaches page")
+    let measurement =
+      try await model.evaluate("globalThis.__shaarInspectorStyles.measurement()")
+      as? [String: Double]
+    try expect(
+      abs((measurement?["horizontal"] ?? -999) - 32) < 0.5,
+      "Option guide measures actual sibling gap")
+    _ = await pointer(model, selector: "#next", click: false)
+    let button = try require(model.selection, "screenshot selection exists")
+    let png = try await styles.screenshot()
+    guard let bitmap = NSBitmapImageRep(data: png) else {
+      throw InspectorFailure("Element screenshot is not a PNG.")
+    }
+    try expect(
+      abs(Double(bitmap.pixelsWide) - button.box.width * 2) <= 2
+        && abs(Double(bitmap.pixelsHigh) - button.box.height * 2) <= 2,
+      "element screenshot contains exactly two pixels per CSS pixel")
+    try png.write(to: root.appending(path: "\(phase)-inspector-element@2x.png"))
+    try await capture(model, stem: "\(phase)-inspector-css")
+    for (selector, display) in [("#grid", "grid"), ("#flex", "flex")] {
+      model.pick()
+      try expect(
+        await pointer(model, selector: selector, click: true), "layout fixture can be selected")
+      // The fixture's center can hit a child; choose the container through its ancestor.
+      try await wait("layout fixture locks") { model.mode == .locked }
+      if model.selection?.css != selector {
+        _ = try await model.evaluate(
+          "(()=>{const api=globalThis.__shaarInspectorV2;for(let i=0;i<4&&api.element().id!==\(json(String(selector.dropFirst())));i++)api.navigate('up');return true;})()"
+        )
+      }
+      try await wait("layout container details arrive") { model.selection?.css == selector }
+      await styles.refresh(force: true)
+      try expect(
+        styles.computed.contains { $0.name == "display" && $0.value == display },
+        "layout properties distinguish \(display)")
+      await styles.toggleOverlay()
+      try expect(
+        styles.overlay && styles.failure == nil, "Chromium accepts real \(display) overlay")
+      if display == "grid" {
+        let highlight = try await model.withSelectedNode { node in
+          try await model.call(
+            "Overlay.getGridHighlightObjectsForTest", params: ["nodeIds": [node]])
+        }
+        try expect(
+          !(highlight["highlights"] as? [String: Any] ?? [:]).isEmpty,
+          "Chromium computes grid highlight geometry")
+      }
+      await styles.clearOverlay()
+      try expect(!styles.overlay, "layout overlay turns off")
+    }
+    model.pick()
+    try expect(
+      await pointer(model, selector: "#save", click: true), "selection returns to button child")
+    try await wait("button child selected again") { model.selection?.tag == "span" }
+    try await key(model, "ArrowUp")
+    try await wait("button restored after CSS probe") { model.selection?.css == "#save" }
+    model.tab = .design
   }
 
   private func loaded(host: String) async throws {
@@ -214,11 +318,13 @@ final class InspectorProbe {
     }
   }
   private func pointer(
-    _ model: InspectorModel, selector: String, frames: [String] = [], click: Bool
+    _ model: InspectorModel, selector: String, frames: [String] = [], click: Bool,
+    modifiers: Int = 0
   ) async -> Bool {
     await withCheckedContinuation { continuation in
       engine.runtime.inspectorProbePointer(
-        inTabID: model.target.tabID.uuidString, selector: selector, frames: frames, click: click
+        inTabID: model.target.tabID.uuidString, selector: selector, frames: frames, click: click,
+        modifiers: modifiers
       ) { continuation.resume(returning: $0) }
     }
   }
@@ -257,6 +363,14 @@ final class InspectorProbe {
     let state = try await model.evaluate("globalThis.__shaarInspectorV2.read()")
     let metadata: [String: Any] = [
       "url": model.target.url.absoluteString, "state": state ?? NSNull(),
+      "tab": model.tab.rawValue,
+      "matchedRules": model.styles.rules.map { rule in
+        [
+          "selector": rule.selector, "source": rule.source,
+          "declarations": rule.declarations.map { ["name": $0.name, "value": $0.value] },
+        ] as [String: Any]
+      },
+      "computedStyles": model.styles.computed.map { ["name": $0.name, "value": $0.value] },
       "renderedFonts": model.selection?.renderedFonts ?? [],
       "pageFonts": model.selection?.pageFonts ?? [],
     ]

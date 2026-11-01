@@ -6,7 +6,7 @@ enum InspectorPageScript {
   static let install = #"""
     (()=>{
       globalThis.__shaarInspectorV2?.stop();
-      const docs=new Set(),nodes=new Map(),ids=new WeakMap(),documents=new WeakMap();
+      const docs=new Set(),nodes=new Map(),ids=new WeakMap(),documents=new WeakMap(),cleanups=[];
       let fontNodes=[],fontTruncated=false;
       let nextID=0,revision=0,current=null,locked=false,closed=false,frames=[],packet=null,quads=null,queued=false;
       const shield=document.createElement('div');
@@ -197,7 +197,7 @@ enum InspectorPageScript {
         return node;
       };
       const at=(x,y)=>{shield.style.pointerEvents='none';try{return hit(window,x,y);}finally{shield.style.pointerEvents=locked?'none':'auto';}};
-      const stop=()=>{closed=true;shield.remove();observer.disconnect();fontNodes=[];for(const win of docs){try{win.removeEventListener('keydown',key,true);win.removeEventListener('load',scan,true);win.removeEventListener('scroll',layout,true);win.removeEventListener('resize',layout);}catch{}}docs.clear();nodes.clear();current=null;};
+      const stop=()=>{closed=true;for(const cleanup of cleanups){try{cleanup();}catch{}}cleanups.length=0;shield.remove();observer.disconnect();fontNodes=[];for(const win of docs){try{win.removeEventListener('keydown',key,true);win.removeEventListener('load',scan,true);win.removeEventListener('scroll',layout,true);win.removeEventListener('resize',layout);}catch{}}docs.clear();nodes.clear();current=null;};
       const visible=node=>node&&node.getClientRects().length>0;
       const navigate=direction=>{if(!attached(current))return;let next=null;
         if(direction==='up')next=parent(current);
@@ -217,10 +217,10 @@ enum InspectorPageScript {
       shield.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();if(e.button===0)choose(at(e.clientX,e.clientY),true);},true);
       shield.addEventListener('wheel',e=>{const node=at(e.clientX,e.clientY);if(!node)return;e.preventDefault();for(let el=node;el;el=el.parentElement){const s=el.ownerDocument.defaultView.getComputedStyle(el);if(/auto|scroll/.test(s.overflowY+s.overflowX)&&(el.scrollHeight>el.clientHeight||el.scrollWidth>el.clientWidth)){el.scrollBy(e.deltaX,e.deltaY);return;}}node.ownerDocument.defaultView.scrollBy(e.deltaX,e.deltaY);},{passive:false});
       scan();
-      const fontElements=()=>{const groups=new Map();fontTruncated=false;let documentIndex=0;
+      const fontElements=()=>{const groups=new Map();fontTruncated=false;let documentIndex=0,visited=0;
         for(const win of docs){try{const body=win.document.body;if(!body)continue;
           const walker=win.document.createTreeWalker(body,NodeFilter.SHOW_TEXT);let text;
-          while((text=walker.nextNode())){const parent=text.parentElement;if(!parent||!text.textContent.trim()||!parent.getClientRects().length)continue;
+          while((text=walker.nextNode())){if(++visited>20000){fontTruncated=true;break;}const parent=text.parentElement;if(!parent||!text.textContent.trim()||!parent.getClientRects().length)continue;
             const style=win.getComputedStyle(parent);if(style.visibility==='hidden')continue;
             const script=/\p{Script=Han}/u.test(text.textContent)?'han':/\p{Script=Arabic}/u.test(text.textContent)?'arabic':/\p{Extended_Pictographic}/u.test(text.textContent)?'emoji':'text';
             const group=[documentIndex,style.fontFamily,style.fontWeight,style.fontStyle,style.fontStretch,style.fontFeatureSettings,style.fontVariationSettings,script].join('|');
@@ -233,7 +233,7 @@ enum InspectorPageScript {
       globalThis.__shaarInspectorV2={revision:()=>revision,read:()=>{if(current&&!attached(current)){current=null;locked=false;shield.style.pointerEvents='auto';packet=null;revision++;paint();}
         if(current&&(!packet||Date.now()-lastCollection>1000)){const next=collect();if(packet&&JSON.stringify(packet)!==JSON.stringify(next)){revision++;next.revision=revision;}packet=next;lastCollection=Date.now();}
         return {closed,revision,selection:packet};},
-        element:()=>current,fontElements,fontScanTruncated:()=>fontTruncated,overlay:()=>({painted:svg.childElementCount===5,badge:badge.textContent,colors:[...svg.children].slice(0,4).map(n=>n.getAttribute('fill'))}),choose:id=>{const node=nodes.get(id);if(attached(node))choose(node,true);return true;},
+        element:()=>current,onStop:callback=>cleanups.push(callback),addOverlay:node=>shadow.append(node),visible:value=>{shield.style.visibility=value?'visible':'hidden';},fontElements,fontScanTruncated:()=>fontTruncated,overlay:()=>({painted:svg.childElementCount===5,badge:badge.textContent,colors:[...svg.children].slice(0,4).map(n=>n.getAttribute('fill'))}),choose:id=>{const node=nodes.get(id);if(attached(node))choose(node,true);return true;},
         pick:()=>{locked=false;packet=null;revision++;shield.style.pointerEvents='auto';paint();return true;},navigate,
         quads:(id,rev,model)=>{if(id===ids.get(current)&&rev===revision){quads=model;paint();}return true;},stop};
       return true;

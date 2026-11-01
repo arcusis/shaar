@@ -16,6 +16,7 @@
 - [[Picture_In_Picture_Controls]]
 - [[Site_Control_Center]]
 - [[Shaar_Inspector]]
+- [[Shaar_Inspector_CSS]]
 - [[External_App_Consent]]
 - [[Find_In_Page]]
 - [[Renderer_Recovery]]

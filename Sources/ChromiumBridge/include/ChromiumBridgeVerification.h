@@ -20,7 +20,7 @@ FOUNDATION_EXPORT BOOL ARCDisableBackgroundMode(NSURL *userDataDirectory);
 
 @interface ARCChromiumRuntime (Verification)
 - (void)inspectorProbePointerInTabID:(NSString *)tabID selector:(NSString *)selector
-                            frames:(NSArray<NSString *> *)frames click:(BOOL)click
+                            frames:(NSArray<NSString *> *)frames click:(BOOL)click modifiers:(NSInteger)modifiers
                         completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion NS_SWIFT_UI_ACTOR;
 - (void)inspectorProbeKeyInTabID:(NSString *)tabID key:(NSString *)key
                     completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion NS_SWIFT_UI_ACTOR;

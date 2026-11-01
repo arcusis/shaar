@@ -176,7 +176,8 @@ final class MarketingScreenshots {
         runtime: runtime, preferences: context.store.preferences, profileID: profile),
       profileName: context.store.profileName,
       actions: SiteControlsPanelActions(
-        runExtension: { _ in }, addExtensions: {}, showCertificate: {}, close: {})
+        runExtension: { _ in }, addExtensions: {}, showCertificate: {}, showDeveloperTools: {},
+        close: {})
     )
     .background(Color(nsColor: .windowBackgroundColor))
     .clipShape(RoundedRectangle(cornerRadius: 12))

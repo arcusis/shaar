@@ -182,6 +182,7 @@ export function startScene(
     offsetX = (width - SCENE_WIDTH * scale) / 2;
     offsetY = height - SCENE_HEIGHT * scale;
     tintLayer = null;
+    measureLayout();
     hillLayers = hills.map((hill, index) =>
       paintHill(new Path2D(hill.path), hill.top, hill.bottom, scale * pixelRatio, 11 + index),
     );
@@ -235,19 +236,72 @@ export function startScene(
     context.globalAlpha = 1;
   };
 
-  const drawCelestial = () => {
-    drawGlowBody(sky.sun, 56, "rgba(255,244,190,0.75)", "#f8cf3d", Math.min(1, sky.day * 1.4));
-    if (sky.stars > 0.05) {
-      const moon = { x: Math.min(1400, Math.max(1050, sky.moon.x)), y: Math.max(240, sky.moon.y) };
-      drawGlowBody(moon, 42, "rgba(220,228,255,0.35)", "#f3f1e4", Math.min(1, sky.stars * 1.2));
-      // Crescent: cut the disc with the sky color.
-      context.globalAlpha = Math.min(1, sky.stars * 1.2);
-      context.fillStyle = sky.top;
-      context.beginPath();
-      context.arc(moon.x + 18, moon.y - 12, 38, 0, Math.PI * 2);
-      context.fill();
-      context.globalAlpha = 1;
+  // Visible scene area and the headline box, in scene units, refreshed on resize. Used to keep
+  // the sun and moon clear of the text at every window width.
+  const layout = { left: 0, right: SCENE_WIDTH, top: 0, textRight: 0, textTop: 0, textBottom: 0 };
+
+  const measureLayout = () => {
+    layout.left = -offsetX / scale;
+    layout.right = (width - offsetX) / scale;
+    layout.top = -offsetY / scale;
+    const headline = canvas.closest(".hero-frame")?.querySelector("h1");
+    const bounds = canvas.getBoundingClientRect();
+    if (!headline) return;
+    // Measure the glyphs, not the block box, which is wider than the text.
+    const range = document.createRange();
+    range.selectNodeContents(headline);
+    const text = range.getBoundingClientRect();
+    layout.textRight = (text.right - bounds.left - offsetX) / scale;
+    layout.textTop = (text.top - bounds.top - offsetY) / scale;
+    layout.textBottom = (text.bottom - bounds.top - offsetY) / scale;
+  };
+
+  // Moves a body right of the headline, or above it when the window is too narrow.
+  const clearOfText = (point: { x: number; y: number }, radius: number, keepHeight: boolean) => {
+    const margin = radius * 1.4 + 24;
+    const minX = layout.textRight + margin;
+    const maxX = layout.right - margin;
+    const minY = layout.top + radius + 90;
+    if (minX <= maxX) {
+      const x = Math.min(maxX, Math.max(minX, point.x));
+      return { x, y: keepHeight ? point.y : Math.max(minY, point.y) };
     }
+    // Narrow window: sit above the headline. Clearing the text matters more than the nav.
+    const x = Math.min(maxX, Math.max(layout.left + margin, point.x));
+    const aboveText = layout.textTop - radius - 20;
+    return { x, y: Math.max(layout.top + radius * 0.6, Math.min(point.y, aboveText)) };
+  };
+
+  const drawCelestial = () => {
+    drawGlowBody(
+      clearOfText(sky.sun, 56, true),
+      56,
+      "rgba(255,244,190,0.75)",
+      "#f8cf3d",
+      Math.min(1, sky.day * 1.4),
+    );
+    if (sky.stars <= 0.05) return;
+    // Keep the moon in open sky, above the hill line.
+    const moon = clearOfText(
+      { x: sky.moon.x, y: Math.min(270, Math.max(200, sky.moon.y)) },
+      42,
+      false,
+    );
+    const alpha = Math.min(1, sky.stars * 1.2);
+    // Glow only, then a crescent: the disc clipped by an offset circle, so no
+    // sky-colored patch is painted over the glow.
+    drawGlowBody(moon, 42, "rgba(220,228,255,0.35)", "rgba(0,0,0,0)", alpha);
+    context.save();
+    context.globalAlpha = alpha;
+    context.beginPath();
+    context.rect(moon.x - 60, moon.y - 60, 120, 120);
+    context.arc(moon.x + 18, moon.y - 12, 38, 0, Math.PI * 2);
+    context.clip("evenodd");
+    context.fillStyle = "#f3f1e4";
+    context.beginPath();
+    context.arc(moon.x, moon.y, 42, 0, Math.PI * 2);
+    context.fill();
+    context.restore();
   };
 
   const drawClouds = (time: number) => {
@@ -494,6 +548,7 @@ export function startScene(
   }).observe(canvas);
 
   resize();
+  void document.fonts.ready.then(measureLayout);
   draw(performance.now());
   canvas.dataset.ready = "true";
   wake();

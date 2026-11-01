@@ -22,7 +22,7 @@ CodeQL covers Swift (fresh traced build), Python and Actions. Swift analysis has
 
 ## Selection, caches and required check
 
-PRs, production/native pushes, merge groups, nightly and manual runs use the same graph. Only Markdown-only changes under `Notebook/` and the explicitly listed root contribution/reference files skip native stages. Empty/unknown diffs and workflow/script changes select everything. Fast gates and dependency review still run on documentation changes.
+PRs, production/native pushes, merge groups, nightly and manual runs use the same graph. The planner normalizes dispatch repetition values to integers from 1 to 10 and emits a numeric JSON value; the caller applies `fromJSON` to its string job output before passing the typed reusable-workflow input. Invalid counts fail before builds. Only Markdown-only changes under `Notebook/` and the explicitly listed root contribution/reference files skip native stages. Empty/unknown diffs and workflow/script changes select everything. Fast gates and dependency review still run on documentation changes.
 
 Concurrency includes event/ref identity and cancels only superseded PR runs. SwiftPM cache keys include OS/architecture, toolchain, mode, manifest/lockfile and source hashes, with a same-mode/toolchain fallback for incremental builds. Commands always rebuild/test; cached products never count as a passing check. Engine archives use an independent pin key and are checked before extraction/use. Shipping, verification, coverage and sanitizer scratch paths stay separate.
 
@@ -36,6 +36,6 @@ The next PR adds the real isolated Sparkle update simulation. Prior-schema upgra
 
 ## Verification boundary
 
-Local verification built all test targets with coverage and two build jobs, then passed the existing Swift suite with hosted visual flags absent. The complete fast-gate entrypoint passed all eight commands, including 182 Python tests and 44 notes/3 indexes. Twenty focused pipeline tests cover gate failures/skips, immutable merge-group baselines, fresh module coverage, pin validation, binary checksums, scoped evidence, JUnit and failure retention across soak iterations. Local toolchain was Swift 6.4.2; hosted macOS 26 checks establish the CI toolchain/runtime boundary separately. Production-only provenance, Scorecard and real merge-group execution are not established by a PR or manual run.
+Local verification built all test targets with coverage and two build jobs, then passed the existing Swift suite with hosted visual flags absent. The complete fast-gate entrypoint passed all eight commands, including 183 Python tests and 44 notes/3 indexes. Twenty-one focused pipeline tests cover gate failures/skips, immutable merge-group baselines, fresh module coverage, pin validation, binary checksums, scoped evidence, JUnit and failure retention across soak iterations. Local toolchain was Swift 6.4.2; hosted macOS 26 checks establish the CI toolchain/runtime boundary separately. Production-only provenance, Scorecard and real merge-group execution are not established by a PR or manual run.
 
 Related: [[CI_Pipeline_Design]], [[Verification_Harness]], [[Test_Coverage]], [[Releasing]], [[Notebook_Maintenance]].

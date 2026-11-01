@@ -32,6 +32,7 @@ jobs:
     outputs:
       full: ${{ steps.plan.outputs.full }}
       base: ${{ steps.plan.outputs.base }}
+      iterations: ${{ steps.plan.outputs.iterations }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -143,7 +144,7 @@ jobs:
     if: needs.plan.outputs.full == 'true'
     uses: ./.github/workflows/ci-engine.yml
     with:
-      iterations: ${{ github.event_name == 'schedule' && 3 || inputs.probe_iterations || 1 }}
+      iterations: ${{ fromJSON(needs.plan.outputs.iterations || '1') }}
 
   shipping:
     name: Shipping bundle

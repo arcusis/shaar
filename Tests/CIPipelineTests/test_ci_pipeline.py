@@ -42,6 +42,15 @@ SBOM = load_script("ci-sbom")
 
 
 class PipelineGateTests(unittest.TestCase):
+    def test_probe_count_normalizes_dispatch_strings_before_typed_workflow_call(self):
+        for value in (1, "1", 10, "10"):
+            self.assertEqual(PLAN.iteration_count({"inputs": {"probe_iterations": value}}, "workflow_dispatch"), int(value))
+        for value in (0, "0", 11, -1, "1.5", True, "invalid"):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                PLAN.iteration_count({"inputs": {"probe_iterations": value}}, "workflow_dispatch")
+        self.assertEqual(PLAN.iteration_count({}, "schedule"), 3)
+        self.assertEqual(PLAN.iteration_count({}, "pull_request"), 1)
+
     def test_merge_group_compares_synthetic_head_to_immutable_base_and_fails_open_to_full_work(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

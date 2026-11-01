@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import AppKit
+import ChromiumBridge
 import SwiftUI
 import Testing
 
@@ -28,6 +29,79 @@ struct PrivateBrowserHostTests {
       try await Task.sleep(for: .milliseconds(10))
     }
     #expect(releasedStore == nil)
+  }
+
+  @Test func retiringRealPrivateShellReleasesStoreAcrossHiddenWindows() async throws {
+    // UI-only lifecycle regression: no framework, engine, navigation, or visible window is started.
+    let runtime = ARCChromiumRuntime()
+    for _ in 0..<12 {
+      weak var releasedStore: PrivateBrowserStore?
+      let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 1000, height: 720),
+        styleMask: [], backing: .buffered, defer: false)
+      window.isReleasedWhenClosed = false
+      var ownerStore: PrivateBrowserStore? = PrivateBrowserStore(
+        contextID: "context", windowID: "window", tabID: "tab", url: "about:blank")
+      releasedStore = ownerStore
+      let hosting = NSHostingView<PrivateBrowserWindow?>(
+        rootView: PrivateBrowserWindow(store: ownerStore, runtime: runtime))
+      window.contentView = hosting
+      hosting.frame = NSRect(x: 0, y: 0, width: 1000, height: 720)
+      hosting.layoutSubtreeIfNeeded()
+      #expect(hosting.rootView?.store === ownerStore)
+      ownerStore?.showCommand()
+      try await Task.sleep(for: .milliseconds(100))
+      #expect(!window.isVisible)
+      window.endEditing(for: nil)
+      _ = window.makeFirstResponder(nil)
+      PrivateBrowserHost.retireHostingContent(hosting)
+      ownerStore?.clear()
+      ownerStore = nil
+      window.contentView = nil
+      window.close()
+      for _ in 0..<100 {
+        if releasedStore == nil { break }
+        try await Task.sleep(for: .milliseconds(10))
+      }
+      #expect(releasedStore == nil)
+    }
+  }
+
+  @Test func cachedHTTPWarningDoesNotRetainPrivateStoreAfterRetirement() {
+    weak var releasedStore: PrivateBrowserStore?
+    let (warning, cachedBinding) = autoreleasepool {
+      let store = PrivateBrowserStore(
+        contextID: "context", windowID: "window", tabID: "tab", url: "about:blank")
+      store.navigate("http://example.com/private")
+      releasedStore = store
+      let warning = PrivateHTTPWarning(store: store)
+      return (warning, warning.isPresented)
+    }
+    #expect(releasedStore == nil)
+    #expect(!cachedBinding.wrappedValue)
+    cachedBinding.wrappedValue = false
+    warning.confirm(useHTTPS: false)
+    warning.cancel()
+    #expect(releasedStore == nil)
+  }
+
+  @Test func httpWarningPreservesConsentWhilePrivateStoreIsOwned() {
+    let store = PrivateBrowserStore(
+      contextID: "context", windowID: "window", tabID: "tab", url: "about:blank")
+    let warning = PrivateHTTPWarning(store: store)
+    var navigations: [String] = []
+    store.onNavigate = { _, value in navigations.append(value) }
+    store.navigate("http://example.com/private")
+    #expect(warning.isPresented.wrappedValue)
+    warning.confirm(useHTTPS: true)
+    #expect(navigations == ["https://example.com/private"])
+    #expect(!warning.isPresented.wrappedValue)
+    store.navigate("http://example.com/cancel")
+    warning.isPresented.wrappedValue = false
+    #expect(store.pendingHTTP == nil && navigations.count == 1)
+    store.navigate("http://example.com/private")
+    warning.confirm(useHTTPS: false)
+    #expect(navigations.last == "http://example.com/private")
   }
 
   @Test func privateOwnerCommandSurfaceExcludesNormalBrowserServices() {

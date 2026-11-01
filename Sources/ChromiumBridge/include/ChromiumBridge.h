@@ -90,6 +90,7 @@ typedef NS_ENUM(NSInteger, ARCPageReloadMode) {
     NSString *tabID, NSString *url, NSString *title, BOOL loading, BOOL canGoBack, BOOL canGoForward);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onPrivateTabSelected)(NSString *contextID, NSString *windowID,
     NSString *tabID);
+@property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onPrivateNavigationFailed)(NSString *contextID, NSString *windowID, NSString *tabID, NSString *message);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onPrivateTabClosed)(NSString *contextID, NSString *windowID,
     NSString *tabID);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onPrivateWindowClosed)(NSString *contextID, NSString *windowID);
@@ -248,6 +249,17 @@ typedef NS_ENUM(NSInteger, ARCPageReloadMode) {
 @end
 
 /// Product private browsing API. Contexts bind to an already-loaded regular Profile.
+@interface ARCChromiumRuntime (PrivatePrivacy)
+/// Private site controls never bind an OTR identity as a regular service profile.
+- (void)privateCookiesForTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID origin:(NSString *)origin
+                  completion:(void (NS_SWIFT_UI_ACTOR ^)(NSNumber * _Nullable, NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
+- (void)setPrivateCookiesAllowed:(BOOL)allowed tabID:(NSString *)tabID windowID:(NSString *)windowID
+                      contextID:(NSString *)contextID origin:(NSString *)origin
+                     completion:(void (NS_SWIFT_UI_ACTOR ^)(NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
+
+
+@end
+
 @interface ARCChromiumRuntime (PrivateBrowsing)
 - (void)createPrivateContextID:(NSString *)contextID sourceProfileID:(NSString *)sourceProfileID
                     completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL, NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;

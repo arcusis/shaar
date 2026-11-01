@@ -107,6 +107,8 @@ NSString *ARCValidatedProfileID(NSString *profileID);
 @end
 
 @interface ARCChromiumRuntime (PrivateBrowsingSupport)
+- (void)configurePrivateTab:(ArdiaCoreTab *)tab tabID:(NSString *)tabID windowID:(NSString *)windowID
+                 contextID:(NSString *)contextID url:(NSString *)url;
 - (BOOL)privateIdentityOccupied:(NSString *)identity;
 - (BOOL)isPrivateIdentity:(NSString *)identity;
 - (BOOL)privateURLIsAllowed:(NSString *)url;

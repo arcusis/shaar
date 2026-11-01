@@ -130,6 +130,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     let privateHost = PrivateBrowserHost(
       runtime: events.runtime, presentsWindows: presentation == .visible,
       keyWindow: keyWindow,
+      searchEngine: { [weak self] source in
+        guard let self, let id = UUID(uuidString: source) else { return .google }
+        return self.preferences.searchEngine(for: id)
+      },
       sourceProfileID: { [weak self] in
         if let privateSource = self?.privateHost?.activeOwner?.sourceProfileID {
           return privateSource

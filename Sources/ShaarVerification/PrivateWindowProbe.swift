@@ -55,6 +55,7 @@ final class PrivateWindowProbe {
 
   static let mode = "private-window-owned-engine-fixture"
   static let checkNames = [
+    "privatePrivacyDefaultsAndCookieAllow", "privateCookieAllowanceEndsWithGrantingWindow",
     "freshMarkedRoot", "sourceProfileAccepted", "unknownSourceRejected", "otrSourceRejected",
     "malformedContextRejected",
     "normalProfileIDCollisionRejected", "normalWindowIDCollisionRejected",
@@ -189,6 +190,24 @@ final class PrivateWindowProbe {
       throw PrivateWindowFailure("Private first tab could not be selected.")
     }
     try await waitForFixture(tabID: t1, privateTab: true, contextID: contextA)
+    let privacy = try await PrivatePrivacyProbe(
+      runtime: runtime, root: root, fixture: fixture, phase: phase,
+      tabID: t1, windowID: w1, contextID: contextA, normalTabID: normalTab
+    ).run()
+    checks["privatePrivacyDefaultsAndCookieAllow"] = privacy
+    // Lifecycle sharing below deliberately opts into this origin after proving default denial.
+    _ = runtime.selectPrivateTabID(t2, windowID: w2, contextID: contextA)
+    try await runtime.setPrivateCookiesAllowed(
+      true, tabID: t2, windowID: w2, contextID: contextA, origin: SiteOrigin.string(for: fixture)!)
+    for (tab, window) in [(t1, w1), (t2, w2)] {
+      let before = try await readPrivate(tab)
+      guard let instance = before["instance"] as? String, let path = before["path"] as? String,
+        runtime.reloadPrivateTabID(tab, windowID: window, contextID: contextA),
+        try await waitForPrivateReload(tab, path: path, priorInstance: instance)
+      else {
+        throw PrivateWindowFailure("Allowed private origin did not reload for sharing checks.")
+      }
+    }
     guard runtime.selectPrivateTabID(t2, windowID: w2, contextID: contextA) else {
       throw PrivateWindowFailure("Private second tab could not be selected.")
     }
@@ -291,6 +310,10 @@ final class PrivateWindowProbe {
     checks["differentSourceContextsIsolated"] =
       isolated["cookie"] as? String == "" && isolated["local"] is NSNull
 
+    _ = runtime.selectPrivateTabID(t1, windowID: w1, contextID: contextA)
+    try await runtime.setPrivateCookiesAllowed(
+      true, tabID: t1, windowID: w1, contextID: contextA,
+      origin: SiteOrigin.string(for: fixture)!)
     checks["closingOneSharedWindowRetainsOther"] = await close(w1)
     privateWindows.removeAll { $0 == w1 }
     checks["privateWindowCloseCallbackOwnerRouted"] =
@@ -318,6 +341,14 @@ final class PrivateWindowProbe {
     }
     checks["closedWindowRejected"] = closedTabResult == nil
     let audit = runtime.privateProbeAudit(forContextID: contextA)
+    _ = runtime.selectPrivateTabID(t2, windowID: w2, contextID: contextA)
+    let allowance = try await runtime.privateCookies(
+      forTabID: t2, windowID: w2, contextID: contextA,
+      origin: SiteOrigin.string(for: fixture)!)
+    checks["privateCookieAllowanceEndsWithGrantingWindow"] = !allowance.boolValue
+    try await runtime.setPrivateCookiesAllowed(
+      true, tabID: t2, windowID: w2, contextID: contextA,
+      origin: SiteOrigin.string(for: fixture)!)
     let retained = try await readPrivate(t2)
     checks["closingOneSharedWindowRetainsOther"] =
       checks["closingOneSharedWindowRetainsOther"] == true && audit?["windowCount"] as? Int == 1
@@ -668,7 +699,7 @@ final class PrivateWindowProbe {
       runtime.evaluatePrivateProbeTabID(
         tab,
         script:
-          "({fixture:document.documentElement.dataset.arcusisFixture, cookie:document.cookie, local:localStorage.getItem('private'), session:sessionStorage.getItem('private'), path:location.pathname, instance:window.arcusisInstance})"
+          "({fixture:document.documentElement.dataset.arcusisFixture, cookie:document.cookie, local:(()=>{try{return localStorage.getItem('private')}catch{return null}})(), session:(()=>{try{return sessionStorage.getItem('private')}catch{return null}})(), path:location.pathname, instance:window.arcusisInstance})"
       ) { continuation.resume(returning: $0) }
     }
     guard let json, let data = json.data(using: .utf8) else {

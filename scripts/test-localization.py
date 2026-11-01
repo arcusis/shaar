@@ -36,9 +36,13 @@ def test_runtime():
         ["swift", "build", "--jobs", "1", "--show-bin-path"],
         cwd=ROOT, env=environment, text=True,
     ).strip())
-    bundle = binary_dir / "BrowserAppTests.xctest"
-    if not bundle.is_dir():
-        raise RuntimeError("BrowserAppTests.xctest missing; build test targets first")
+    # Swift Build emits per-target bundles; classic SwiftPM emits one package bundle.
+    bundles = [binary_dir / name for name in (
+        "BrowserAppTests.xctest", "ArcusisBrowserPackageTests.xctest",
+    )]
+    bundle = next((candidate for candidate in bundles if candidate.is_dir()), None)
+    if bundle is None:
+        raise RuntimeError("App or package XCTest bundle missing; build test targets first")
     developer = Path(subprocess.check_output(
         ["xcode-select", "-p"], env=environment, text=True,
     ).strip())

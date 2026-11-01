@@ -55,7 +55,7 @@ final class PrivateProductHostProbe {
   private var quitDiagnosticStages: [[String: Any]] = []
   private var nativeCloseObservations: [String: NativeCloseObservation] = [:]
   private weak var lifecycleStore: PrivateBrowserStore?
-  private weak var lifecycleHosting: NSHostingView<PrivateBrowserWindow>?
+  private weak var lifecycleHosting: NSHostingView<PrivateBrowserWindow?>?
 
   init(
     runtime: ARCChromiumRuntime, root: URL, fixture: URL, phase: String,
@@ -340,7 +340,7 @@ final class PrivateProductHostProbe {
     checks["productHostOwnsPrivateNativeWindow"] =
       first.store.windowID == first.windowID
       && first.store.contextID == first.contextID
-      && first.hosting.rootView.store === first.store
+      && first.hosting.rootView?.store === first.store
       && first.hosting.superview
         === runtime.hostView(
           forPrivateWindowID:

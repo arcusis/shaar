@@ -21,6 +21,8 @@ final class SiteControlsDeveloperModel {
   private(set) var overridesMayBeActive = false
   var hasActiveSimulation: Bool { simulation.isActive || overridesMayBeActive }
   @ObservationIgnored private var userAgent: String?
+  @ObservationIgnored private var builtInToolsOpen = false
+  @ObservationIgnored private var mediaMonitor: Task<Void, Never>?
 
   init(target: SiteControlTarget, engine: BrowserEngine) {
     self.target = target
@@ -34,6 +36,9 @@ final class SiteControlsDeveloperModel {
 
   func update(target: SiteControlTarget, committed: Bool = false) {
     let changed = self.target.origin != target.origin || self.target.profileID != target.profileID
+    let toolsOpen = engine?.runtime.devToolsView(forTabID: target.tabID.uuidString) != nil
+    let toolsChanged = toolsOpen != builtInToolsOpen
+    builtInToolsOpen = toolsOpen
     if self.target != target { self.target = target }
     if changed {
       simulation =
@@ -48,7 +53,7 @@ final class SiteControlsDeveloperModel {
       performanceFailure = nil
       engine?.runtime.endDeveloperSession(forTabID: target.tabID.uuidString)
     }
-    if changed || committed { schedule() }
+    if changed || committed || toolsChanged { schedule() }
   }
 
   func set(_ value: DeveloperSimulation) {
@@ -62,9 +67,42 @@ final class SiteControlsDeveloperModel {
 
   func schedule() {
     revision += 1
+    monitorInspectorMedia()
     guard !applying else { return }
     applying = true
     Task { await drain() }
+  }
+
+  private func monitorInspectorMedia() {
+    mediaMonitor?.cancel()
+    mediaMonitor = nil
+    guard builtInToolsOpen, simulation.darkMode || simulation.reducedMotion else { return }
+    mediaMonitor = Task { [weak self] in
+      while !Task.isCancelled {
+        do { try await Task.sleep(for: .milliseconds(500)) } catch { return }
+        guard let self, !Task.isCancelled, let engine = self.engine, !engine.isClosed else {
+          return
+        }
+        guard engine.runtime.devToolsView(forTabID: self.target.tabID.uuidString) != nil else {
+          self.mediaMonitor = nil
+          return
+        }
+        guard !self.applying else { continue }
+        let target = self.target
+        let desired = self.simulation
+        let expression =
+          "(!\(desired.darkMode) || matchMedia('(prefers-color-scheme: dark)').matches) && (!\(desired.reducedMotion) || matchMedia('(prefers-reduced-motion: reduce)').matches)"
+        do {
+          let matches = try await self.evaluate(expression) as? Bool
+          guard !Task.isCancelled, target == self.target, desired == self.simulation else {
+            return
+          }
+          if matches == false { self.schedule() }
+        } catch {
+          // Navigation can replace the execution context; its commit reapplies simulations.
+        }
+      }
+    }
   }
 
   private func drain() async {

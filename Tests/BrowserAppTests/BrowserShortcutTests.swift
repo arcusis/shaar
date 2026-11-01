@@ -6,6 +6,21 @@ import AppKit
 import ChromiumBridge
 import Testing
 
+@testable import ArcusisBrowser
+
+@Test func developerToolsReservesOnlyOptionCommandI() {
+  #expect(ARCReservedBrowserShortcut("i", [.command, .option]))
+  #expect(ARCReservedBrowserShortcut("I", [.command, .option, .capsLock]))
+  #expect(!ARCReservedBrowserShortcut("i", .command))
+  #expect(!ARCReservedBrowserShortcut("i", [.command, .option, .shift]))
+  #expect(!ARCReservedBrowserShortcut("i", [.command, .option, .control]))
+  #expect(ShortcutCatalog.displayKeys(for: .developerTools) == "⌥⌘I")
+  #expect(
+    NSImage(
+      systemSymbolName: "chevron.left.forwardslash.chevron.right", accessibilityDescription: nil)
+      != nil)
+}
+
 @Test func browserShortcutsDoNotStealBitwardenAutofillOrOtherModifierVariants() {
   #expect(ARCReservedBrowserShortcut("l", .command))
   #expect(ARCReservedBrowserShortcut("t", .command))

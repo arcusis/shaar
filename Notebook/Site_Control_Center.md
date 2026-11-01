@@ -9,6 +9,8 @@ The page toolbar's site controls button opens a native popover for the selected 
 
 Reloads go through the store's reload path, so renderer-failure state and stale-target checks are shared with the toolbar and menu.
 
+The Developer Tools action opens Chromium's built-in inspector docked inside the selected page card; View > Developer Tools and Option-Command-I toggle it. The action and Shaar's Developer section are both available in the site control center. Docked DevTools and simulation protocol calls can run on the same page without opening another window.
+
 ## Automatic picture-in-picture
 
 The toggle reads and writes the playback feature's per-site setting ([[Media_Playback]]): `BrowserStore.automaticPictureInPictureAllowed(for:profileID:)` and `setAutomaticPictureInPicture(_:for:profileID:)`, keyed by the page's site in its profile. Saving notifies the window engines, which apply the choice to that profile's open pages. The pinned engine has no per-site content setting for it.

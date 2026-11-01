@@ -47,6 +47,10 @@ struct SiteControlsButton: View {
               store.perform(.open(BrowserExtension.storeCatalogURL))
             },
             showCertificate: { showCertificate(model) },
+            showDeveloperTools: {
+              self.model = nil
+              engine.showDeveloperTools(for: model.target)
+            },
             close: { self.model = nil }))
       }
       .onChange(of: store.session.selectedPage?.tab.id) { model = nil }
@@ -84,6 +88,7 @@ struct SiteControlsPanelActions {
   let runExtension: (String) -> Void
   let addExtensions: () -> Void
   let showCertificate: () -> Void
+  let showDeveloperTools: () -> Void
   let close: () -> Void
 }
 
@@ -112,7 +117,8 @@ struct SiteControlsPanel: View {
         .padding(8)
       }
       Divider()
-      SiteActionsSection(model: model, close: actions.close)
+      SiteActionsSection(
+        model: model, close: actions.close, showDeveloperTools: actions.showDeveloperTools)
       if let developer {
         Divider()
         SiteControlsDeveloperSection(model: developer)
@@ -274,6 +280,7 @@ struct SiteSecurityRow: View {
 struct SiteActionsSection: View {
   let model: SiteControlsModel
   let close: () -> Void
+  let showDeveloperTools: () -> Void
 
   var body: some View {
     VStack(alignment: .leading, spacing: 2) {
@@ -287,6 +294,20 @@ struct SiteActionsSection: View {
         .disabled(!model.isAvailable(action))
         .help(action.help)
       }
+      Button(action: showDeveloperTools) {
+        HStack(spacing: 10) {
+          Image(systemName: "chevron.left.forwardslash.chevron.right").frame(width: 20)
+          Text("Developer Tools")
+          Spacer(minLength: 0)
+          Text(ShortcutCatalog.displayKeys(for: .developerTools) ?? "")
+            .foregroundStyle(.secondary)
+        }
+        .contentShape(Rectangle())
+        .hoverRowBackground()
+      }
+      .buttonStyle(.plain)
+      .disabled(model.runningAction != nil)
+      .accessibilityIdentifier("site-developer-tools")
     }
     .padding(8)
   }

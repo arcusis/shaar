@@ -19,6 +19,10 @@ FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeExternalAppLaunchAuditForTest
 FOUNDATION_EXPORT BOOL ARCDisableBackgroundMode(NSURL *userDataDirectory);
 
 @interface ARCChromiumRuntime (Verification)
+/// Opens the engine's own Inspect menu command on an authored loopback page, offscreen.
+- (BOOL)inspectProbeElementInTabID:(NSString *)tabID;
+@property(readonly) BOOL probeInspectFound;
+@property(readonly, nullable) NSDictionary *probeInspectAudit;
 /// Test-only bounded audit. Requires explicit external-probe switch, testing mode, and owned marked root.
 - (nullable NSDictionary *)probeExternalAppLaunchAuditForURL:(NSString *)url;
 /// Captures only the disposable probe's own tab, without a remote debugging socket.

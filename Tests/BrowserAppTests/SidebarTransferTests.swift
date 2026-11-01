@@ -74,6 +74,7 @@ struct SidebarTransferTests {
     #expect(store.acceptSidebarDrop(decoded, into: target.id, pinned: true))
     let spacePayload = SidebarTransfer.space(sessionID: store.dragSessionID, spaceID: target.id)
     #expect(store.acceptSidebarDrop(spacePayload, into: source.id, beforeSpace: source.id))
+    try store.flushSaves()
     let restored = BrowserStore(sessionFile: file)
     #expect(restored.session == store.session)
     #expect(restored.dragSessionID != store.dragSessionID)

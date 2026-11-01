@@ -487,6 +487,15 @@ static BOOL ProbeViewIsVisibleInWindow(NSView *view, NSWindow *window) {
   return YES;
 }
 
+- (NSString *)probeKeepAliveState {
+  if (!_testing || !_probeRoot || !_engine) return nil;
+  return _engine.keepAliveState;
+}
+
+- (BOOL)probeQuitStoppedEventLoop {
+  return _testing && _probeRoot && _shutdownGuard.stoppedEventLoop;
+}
+
 - (void)captureProbeTab:(ArdiaCoreTab *)tab completion:(void (^)(NSData *))completion {
   [self captureProbeTab:tab diagnosticCompletion:^(NSData *data, NSString *error) {
     completion(data);

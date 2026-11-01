@@ -7,6 +7,7 @@
 #import "include/ChromiumBridgeVerification.h"
 #import "ChromiumDownloads.h"
 #import "ChromiumLibrary.h"
+#import "ChromiumShutdownGuard.h"
 #import "ChromiumMediaSession.h"
 #import "ChromiumWebStoreFit.h"
 #import "../../ThirdParty/ArdiaCore/ArdiaCore.h"
@@ -82,6 +83,7 @@ NSString *ARCValidatedProfileID(NSString *profileID);
   ARCEngineServices *_services;
   ARCLibraryService *_libraryService;
   ARCWebStoreFit *_webStoreFit;
+  ARCEngineShutdownGuard *_shutdownGuard;
   ARCMediaSessionTracker *_mediaSessions;
   /// The tab whose video Chromium's picture-in-picture window shows.
   NSString *_pictureInPictureVideoTabID;

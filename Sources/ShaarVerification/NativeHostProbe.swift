@@ -548,6 +548,7 @@ final class NativeHostProbe {
     first.window.setFrame(NSRect(x: 80, y: 90, width: 1000, height: 720), display: false)
     second.window.setFrame(NSRect(x: 150, y: 130, width: 980, height: 700), display: false)
     host.flushGeometry()
+    try manager.flushSaves()
     try expect(
       manager.workspace.focusedWindowID == secondID && (try file.load()) == manager.workspace,
       "owned focus notifications and geometry persist in the managed snapshot")
@@ -1066,11 +1067,9 @@ final class NativeHostProbe {
   }
 
   private func menuItem(_ command: BrowserMenuCommand) throws -> NSMenuItem {
-    guard
-      let item = host?.menu?.items.flatMap({ $0.submenu?.items ?? [] }).first(where: {
-        $0.representedObject as? String == command.rawValue
-      })
-    else { throw HostProbeFailure("Missing native menu \(command).") }
+    guard let item = host?.menuItem(for: command) else {
+      throw HostProbeFailure("Missing native menu \(command).")
+    }
     return item
   }
 
@@ -1078,8 +1077,8 @@ final class NativeHostProbe {
     guard let host, host.canPerform(command) else {
       throw HostProbeFailure("Native menu disabled: \(command).")
     }
-    let item = try menuItem(command)
-    guard let action = item.action, NSApp.sendAction(action, to: item.target, from: item) else {
+    _ = try menuItem(command)
+    guard host.sendMenuCommand(command) else {
       throw HostProbeFailure("Native menu action failed: \(command).")
     }
   }

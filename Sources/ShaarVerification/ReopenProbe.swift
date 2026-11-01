@@ -215,6 +215,7 @@ final class ReopenProbe {
     let saved = RecoveryIdentities(
       alpha: ids.alpha, beta: ids.beta, folder: ids.folder, alphaClosed: final, betaClosed: beta)
     try JSONEncoder().encode(saved).write(to: file, options: .atomic)
+    try store.flushSaves()
     try expect(
       try SessionFile(url: root.appending(path: "session.json")).load() == store.session,
       "live tabs and recovery snapshots save together atomically")

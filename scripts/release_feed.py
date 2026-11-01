@@ -38,6 +38,7 @@ BUILD_VERSION = re.compile(r"[1-9][0-9]*")
 REPOSITORY = re.compile(r"[A-Za-z0-9-]+/[A-Za-z0-9._-]+")
 REQUIRED_KEYS = (
     "SHAAR_BUNDLE_IDENTIFIER",
+    "SHAAR_VERIFICATION_BUNDLE_IDENTIFIER",
     "SHAAR_BUNDLE_VERSION",
     "SHAAR_BUILD_VERSION",
     "SHAAR_MINIMUM_SYSTEM_VERSION",
@@ -54,6 +55,7 @@ class ReleaseError(Exception):
 @dataclass(frozen=True)
 class ReleaseConfig:
     bundle_identifier: str
+    verification_bundle_identifier: str
     bundle_version: str
     build_version: int
     minimum_system_version: str
@@ -121,6 +123,7 @@ def parse_config(text: str) -> ReleaseConfig:
         raise ReleaseError(f"release config is missing {', '.join(missing)}")
     config = ReleaseConfig(
         bundle_identifier=values["SHAAR_BUNDLE_IDENTIFIER"],
+        verification_bundle_identifier=values["SHAAR_VERIFICATION_BUNDLE_IDENTIFIER"],
         bundle_version=values["SHAAR_BUNDLE_VERSION"],
         build_version=_build_number(values["SHAAR_BUILD_VERSION"], "release config build"),
         minimum_system_version=values["SHAAR_MINIMUM_SYSTEM_VERSION"],
@@ -128,8 +131,12 @@ def parse_config(text: str) -> ReleaseConfig:
         feed_url=values["SHAAR_FEED_URL"],
         public_ed_key=values["SHAAR_SPARKLE_PUBLIC_ED_KEY"],
     )
-    if not BUNDLE_IDENTIFIER.fullmatch(config.bundle_identifier):
-        raise ReleaseError(f"bundle identifier {config.bundle_identifier!r} must be reverse-DNS")
+    for identifier in (config.bundle_identifier, config.verification_bundle_identifier):
+        if not BUNDLE_IDENTIFIER.fullmatch(identifier):
+            raise ReleaseError(f"bundle identifier {identifier!r} must be reverse-DNS")
+    # macOS files crash reports, preferences and saved state by identifier; the harness must not share Shaar's.
+    if config.verification_bundle_identifier == config.bundle_identifier:
+        raise ReleaseError("verification bundle identifier must differ from the shipping bundle identifier")
     if not SYSTEM_VERSION.fullmatch(config.minimum_system_version):
         raise ReleaseError(f"minimum system version {config.minimum_system_version!r} must be Major.Minor")
     if not BUNDLE_VERSION.fullmatch(config.bundle_version):

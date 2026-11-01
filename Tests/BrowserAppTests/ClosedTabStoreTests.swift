@@ -16,6 +16,7 @@ struct ClosedTabStoreTests {
     let file = SessionFile(url: root.appending(path: "session.json"))
     let store = BrowserStore(sessionFile: file)
     store.perform(.open(URL(string: "https://example.com")!))
+    try store.flushSaves()
     let tab = try #require(store.session.selectedSpace.selectedTabID)
     let before = try Data(contentsOf: file.url)
     var requests = 0
@@ -25,6 +26,7 @@ struct ClosedTabStoreTests {
     #expect(try Data(contentsOf: file.url) == before)
     // A canceled beforeunload leaves the tab and file intact. Only this callback commits closure.
     store.nativeTabClosed(tab)
+    try store.flushSaves()
     #expect(store.session.closedTabs.map(\.id) == [tab])
     #expect(try file.load() == store.session)
     let restoredStore = BrowserStore(sessionFile: file)
@@ -32,6 +34,7 @@ struct ClosedTabStoreTests {
     let restored = try #require(restoredStore.session.selectedSpace.selectedTabID)
     #expect(restored != tab && restoredStore.session.closedTabs.isEmpty)
     restoredStore.nativeTabClosed(tab)
+    try restoredStore.flushSaves()
     #expect(restoredStore.session.selectedSpace.selectedTabID == restored)
     #expect(try file.load() == restoredStore.session)
   }

@@ -12,6 +12,7 @@ from pathlib import Path
 import plistlib
 import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -23,6 +24,10 @@ spec = importlib.util.spec_from_file_location("verify_engine_bundle", MODULE)
 verifier = importlib.util.module_from_spec(spec)
 assert spec and spec.loader
 spec.loader.exec_module(verifier)
+FEED_SPEC = importlib.util.spec_from_file_location("release_feed_for_verifier_tests", REPO / "scripts/release_feed.py")
+release_feed = importlib.util.module_from_spec(FEED_SPEC)
+sys.modules[FEED_SPEC.name] = release_feed
+FEED_SPEC.loader.exec_module(release_feed)
 
 
 class EngineBundleVerifierTests(unittest.TestCase):
@@ -162,6 +167,15 @@ class EngineBundleVerifierTests(unittest.TestCase):
             "CFBundleIdentifier": "com.attacker.helper", "CFBundleExecutable": "Chromium Helper",
         }))
         self.assertEqual(self.verify()["reason"], "helper_identity_mismatch")
+
+    def test_verifier_checks_the_shipping_identifier_and_rejects_the_harness_identifier(self):
+        config = release_feed.load_config(REPO / "scripts/release-config.sh")
+        self.assertEqual(verifier.APP_ID, config.bundle_identifier)
+        (self.app / "Contents/Info.plist").write_bytes(plistlib.dumps({
+            "CFBundleIdentifier": config.verification_bundle_identifier,
+            "CFBundleExecutable": verifier.APP_EXECUTABLE,
+        }))
+        self.assertEqual(self.verify()["reason"], "bundle_identity_mismatch")
 
     def test_missing_helper_and_escaping_framework_link_fail(self):
         shutil.rmtree(self.helpers / "Chromium Helper.app")

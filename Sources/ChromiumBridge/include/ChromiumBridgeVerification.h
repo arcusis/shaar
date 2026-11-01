@@ -14,6 +14,10 @@ NS_ASSUME_NONNULL_BEGIN
 FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeExternalAppLaunchAuditForTesting(
   NSString *url, NSArray *launches, NSURL *root, BOOL enabled);
 
+/// Turns off Chromium background mode in the Local State of `userDataDirectory`; YES when it is off.
+/// The runtime applies it before every launch. Exposed so tests can exercise the edit directly.
+FOUNDATION_EXPORT BOOL ARCDisableBackgroundMode(NSURL *userDataDirectory);
+
 @interface ARCChromiumRuntime (Verification)
 /// Test-only bounded audit. Requires explicit external-probe switch, testing mode, and owned marked root.
 - (nullable NSDictionary *)probeExternalAppLaunchAuditForURL:(NSString *)url;
@@ -46,6 +50,11 @@ FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeExternalAppLaunchAuditForTest
                     completion:(void (^)(BOOL clicked))completion;
 /// Intentionally terminates only an authored loopback page in a disposable probe profile.
 - (BOOL)crashProbeTabID:(NSString *)tabID;
+/// Chromium's keep-alive registry and quit state, for diagnosing a process that outlives Quit.
+/// Valid only while the engine loop runs.
+- (nullable NSString *)probeKeepAliveState;
+/// Whether Quit needed the shutdown guard to stop the AppKit event loop.
+@property(readonly) BOOL probeQuitStoppedEventLoop;
 @end
 
 NS_ASSUME_NONNULL_END

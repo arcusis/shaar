@@ -12,7 +12,8 @@ enum BrowserMenuCommand: String, CaseIterable {
     closeWindow,
     addFavorite
   case reopenClosed, recentlyClosed, bookmarkPage, bookmarks, history, downloads
-  case find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload, hardReload
+  case find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload, hardReload,
+    developerTools
   case splitView
   case extensions, help, minimizeWindow, zoomWindow, bringAllToFront, settings, quit, createFolder
   case checkForUpdates, performanceOverlay, elementPicker
@@ -225,6 +226,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .findNext, .findPrevious: return store.pageFind?.canMove == true
     case .reload, .hardReload:
       return afterLauncher ? store.currentPageAllowsReload : store.canReloadCurrentPage
+    case .developerTools:
+      return context.engine.siteControlTarget != nil && (afterLauncher || !store.commandIsOpen)
     case .splitView: return store.session.selectedSpace.tabs.count >= 2
     case .reopenClosed: return store.canReopenClosedTab
     case .bookmarkPage: return store.canBookmarkCurrentPage
@@ -369,6 +372,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .previousSpace: store.cycleSpace(by: -1)
     case .reload: store.reloadCurrentPage()
     case .hardReload: store.reloadCurrentPage(.bypassingCache)
+    case .developerTools: context.engine.toggleDeveloperTools()
     case .splitView: store.splitSelectedTab()
     case .elementPicker:
       if let model = context.engine.selectedDeveloperModel {
@@ -859,6 +863,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     add(.sidebar, "Toggle sidebar", to: view)
     add(.reload, "Reload", to: view)
     add(.hardReload, "Hard Reload", to: view)
+    add(.developerTools, "Developer Tools", to: view)
     add(.performanceOverlay, "Performance Overlay", to: view)
     add(.elementPicker, "Pick Element", to: view)
     let spaces = section("Spaces")

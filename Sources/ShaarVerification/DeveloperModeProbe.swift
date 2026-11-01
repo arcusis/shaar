@@ -84,6 +84,7 @@ final class DeveloperModeProbe {
     try expect(
       try await model.evaluate("navigator.language") as? String == "fr-FR",
       "session renewal preserves overrides beyond the first lease timeout")
+    try await dockedDeveloperTools(model)
     try await capture(model, feature: "simulations")
     model.set(DeveloperSimulation())
     try await settled(model)
@@ -172,6 +173,60 @@ final class DeveloperModeProbe {
         && !store.preferences.developerSimulation(
           on: "http://other.localhost", for: model.target.profileID
         ).isActive, "simulations stay isolated by site and profile")
+  }
+
+  private func dockedDeveloperTools(_ model: SiteControlsDeveloperModel) async throws {
+    let identity = model.target.tabID.uuidString
+    let runtime = engine.runtime
+    try expect(
+      engine.showDeveloperTools(for: model.target),
+      "built-in DevTools opens while simulations are active")
+    for _ in 0..<100 {
+      if let tools = runtime.devToolsView(forTabID: identity),
+        tools.superview === runtime.view(forTabID: identity), tools.frame.height > 0
+      {
+        break
+      }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    try expect(
+      runtime.devToolsView(forTabID: identity)?.superview === runtime.view(forTabID: identity)
+        && runtime.devToolsView(forTabID: identity) != nil,
+      "built-in DevTools stays docked beside the simulated page")
+    try await settled(model)
+    let retained =
+      "navigator.language==='fr-FR' && matchMedia('(prefers-reduced-motion: reduce)').matches"
+    for _ in 0..<100 {
+      if try await model.evaluate(retained) as? Bool == true { break }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    let state = try await model.evaluate(
+      "({language:navigator.language,motion:matchMedia('(prefers-reduced-motion: reduce)').matches,dark:matchMedia('(prefers-color-scheme: dark)').matches,zone:Intl.DateTimeFormat().resolvedOptions().timeZone})"
+    )
+    try JSONSerialization.data(
+      withJSONObject: state ?? [:], options: [.prettyPrinted, .sortedKeys]
+    )
+    .write(to: root.appending(path: "\(phase)-docked-simulation.json"), options: .atomic)
+    try expect(
+      try await model.evaluate(retained) as? Bool == true,
+      "simulation protocol remains usable with docked DevTools open")
+    try await Task.sleep(for: .seconds(1))
+    try expect(
+      try await model.evaluate(retained) as? Bool == true,
+      "active simulations survive built-in DevTools initialization")
+    try expect(
+      runtime.window(forID: engine.windowID)?.isVisible == false,
+      "coexisting developer tools keep the probe window offscreen")
+    try expect(runtime.closeDevTools(forTabID: identity), "built-in DevTools closes independently")
+    for _ in 0..<100 {
+      if runtime.devToolsView(forTabID: identity) == nil { break }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    try await settled(model)
+    let retainedAfterClose = try await model.evaluate(retained) as? Bool == true
+    try expect(
+      runtime.devToolsView(forTabID: identity) == nil && retainedAfterClose,
+      "closing built-in DevTools preserves active simulations")
   }
 
   private func cpuSimulations(

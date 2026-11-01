@@ -223,10 +223,12 @@ final class SiteControlsProbe {
     let extensions = ExtensionManagerModel.shared(
       runtime: engine.runtime, preferences: store.preferences, profileID: model.target.profileID)
     let actions = SiteControlsPanelActions(
-      runExtension: { _ in }, addExtensions: {}, showCertificate: {}, close: {})
+      runExtension: { _ in }, addExtensions: {}, showCertificate: {}, showDeveloperTools: {},
+      close: {})
     for (name, scheme) in [("light", ColorScheme.light), ("dark", .dark)] {
       let panel = SiteControlsPanel(
-        model: model, extensions: extensions, profileName: store.profileName, actions: actions
+        model: model, extensions: extensions, profileName: store.profileName,
+        developer: engine.selectedDeveloperModel, actions: actions
       )
       .background(Color(nsColor: .windowBackgroundColor))
       .environment(\.colorScheme, scheme)

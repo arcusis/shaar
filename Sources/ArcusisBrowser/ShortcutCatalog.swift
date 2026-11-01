@@ -54,6 +54,7 @@ struct ShortcutCatalog {
     case .sidebar: ("s", .command)
     case .reload: ("r", .command)
     case .hardReload: ("r", [.command, .shift])
+    case .developerTools: ("i", [.command, .option])
     case .performanceOverlay: ("p", [.command, .option])
     case .elementPicker: ("c", [.command, .option])
     case .newSpace: ("S", [.command, .shift])

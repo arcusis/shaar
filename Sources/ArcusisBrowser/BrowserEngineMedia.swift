@@ -10,7 +10,11 @@ import Foundation
 extension BrowserEngine {
   func receiveMediaSession(_ identity: String, payload: [String: Any]?) {
     guard let id = ownedLiveTab(identity) else { return }
-    store?.media.update(id, state: payload.flatMap(MediaSessionState.init(payload:)))
+    let state = payload.flatMap(MediaSessionState.init(payload:))
+    store?.media.update(id, state: state)
+    if pictureInPictureControls.tabID == id {
+      pictureInPictureControls.update(state?.pictureInPicture)
+    }
   }
 
   func performMedia(_ command: MediaCommand, tabID: UUID) -> Bool {
@@ -27,6 +31,7 @@ extension BrowserEngine {
   func forgetMedia(_ tabID: UUID) {
     store?.media.remove(tabID)
     autoPictureInPicture.forget(tabID)
+    pictureInPictureControls.detach(from: tabID)
   }
 
   /// Opens picture-in-picture for pages that leave the screen and closes it for pages that
@@ -41,6 +46,32 @@ extension BrowserEngine {
   func receivePictureInPicture(_ identity: String, active: Bool) {
     guard let id = ownedLiveTab(identity) else { return }
     autoPictureInPicture.pictureInPictureChanged(id, active: active)
+    if active {
+      let identity = id.uuidString
+      pictureInPictureControls.attach(
+        tabID: id,
+        finding: { [weak self] in self?.runtime.pictureInPictureVideoWindow(forTabID: identity) },
+        video: { [weak self] in self?.store?.media.sessions[id]?.pictureInPicture })
+    } else {
+      pictureInPictureControls.detach(from: id)
+    }
+  }
+
+  func performPictureInPicture(_ command: PictureInPictureControls.Command, tabID: UUID) {
+    guard let identity = ownedLiveTab(tabID.uuidString)?.uuidString else { return }
+    switch command {
+    case .play:
+      runtime.sendPictureInPictureCommand(.play, seconds: 0, tabID: identity)
+    case .pause:
+      runtime.sendPictureInPictureCommand(.pause, seconds: 0, tabID: identity)
+    case .skip(let seconds):
+      runtime.sendPictureInPictureCommand(.skip, seconds: seconds, tabID: identity)
+    case .close:
+      runtime.exitPictureInPicture(inTabID: identity)
+    case .backToTab:
+      runtime.exitPictureInPicture(inTabID: identity)
+      showRequestedTab(identity)
+    }
   }
 
   /// Back to Tab in the picture-in-picture window, or a page that focuses itself.

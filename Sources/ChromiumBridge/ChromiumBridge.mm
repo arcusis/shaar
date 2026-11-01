@@ -1131,8 +1131,10 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 - (void)tabDidChangeZoom:(ArdiaCoreTab *)tab { [_webStoreFit tabDidChangeZoom:tab]; }
 - (void)tab:(ArdiaCoreTab *)tab didChangePictureInPicture:(NSDictionary<NSString *, id> *)state {
   NSString *identity = [self identityForTab:tab];
+  BOOL active = [state[@"active"] isKindOfClass:NSNumber.class] && [state[@"active"] boolValue];
+  [self notePictureInPictureVideoTabID:identity active:active kind:state[@"kind"]];
   if (identity && [self liveTabForID:identity] && self.onPictureInPictureChanged) {
-    self.onPictureInPictureChanged(identity, [state[@"active"] isKindOfClass:NSNumber.class] && [state[@"active"] boolValue]);
+    self.onPictureInPictureChanged(identity, active);
   }
 }
 /// Implementing this replaces the engine's default activation, so private tabs keep their

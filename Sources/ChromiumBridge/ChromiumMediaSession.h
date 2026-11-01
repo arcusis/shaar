@@ -12,6 +12,8 @@ FOUNDATION_EXPORT NSString *const ARCMediaSessionMessage;
 FOUNDATION_EXPORT NSString *const ARCMediaActionMessage;
 /// Host message that allows or withholds the page's `enterpictureinpicture` handler.
 FOUNDATION_EXPORT NSString *const ARCAutoPictureInPictureMessage;
+/// Host message that plays, pauses or skips the video in Chromium's picture-in-picture window.
+FOUNDATION_EXPORT NSString *const ARCPictureInPictureCommandMessage;
 
 /// Main-world page script. It runs before page code in every frame, records the page's
 /// Media Session action handlers and reports playback state, metadata and supported actions.

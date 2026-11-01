@@ -30,6 +30,14 @@ typedef NS_ENUM(NSInteger, ARCMediaSessionAction) {
   ARCMediaSessionActionSeekTo,
 };
 
+/// Commands for the video in Chromium's picture-in-picture window.
+typedef NS_ENUM(NSInteger, ARCPictureInPictureCommand) {
+  ARCPictureInPictureCommandPlay,
+  ARCPictureInPictureCommandPause,
+  /// Seeks by `seconds`, negative to go back; ignored for live video.
+  ARCPictureInPictureCommandSkip,
+};
+
 /// All methods and callbacks run on the main thread. The engine owns the AppKit run loop.
 @interface ARCChromiumRuntime : NSObject
 @property(copy, nullable) void (^onReady)(void);
@@ -168,7 +176,8 @@ typedef NS_ENUM(NSInteger, ARCMediaSessionAction) {
 - (BOOL)setMuted:(BOOL)muted tabID:(NSString *)tabID;
 @end
 
-/// Chromium's built-in video picture-in-picture, driven for automatic picture-in-picture.
+/// Chromium's built-in video picture-in-picture, driven for automatic picture-in-picture and
+/// Shaar's own window controls.
 @interface ARCChromiumRuntime (PictureInPicture)
 /// Asks the page to open Chromium's picture-in-picture window for its largest playing video.
 /// `requested` is NO when the page has no playing video that allows picture-in-picture; the
@@ -181,6 +190,14 @@ typedef NS_ENUM(NSInteger, ARCMediaSessionAction) {
 /// Allows or withholds the page's `enterpictureinpicture` handler from Chromium, which keeps
 /// Chromium's automatic picture-in-picture off for a site the user turned it off for.
 - (void)setAutoPictureInPictureAllowed:(BOOL)allowed tabID:(NSString *)tabID;
+/// Chromium's video picture-in-picture window while it shows this tab's video, once shown.
+/// Chromium shows one such window at a time.
+- (nullable NSWindow *)pictureInPictureVideoWindowForTabID:(NSString *)tabID;
+/// Sends a command to the frame whose video is in picture-in-picture. Returns NO for a tab
+/// without a video in picture-in-picture.
+- (BOOL)sendPictureInPictureCommand:(ARCPictureInPictureCommand)command seconds:(double)seconds
+                              tabID:(NSString *)tabID
+  NS_SWIFT_NAME(sendPictureInPictureCommand(_:seconds:tabID:));
 @end
 
 /// Product private browsing API. Contexts bind to an already-loaded regular Profile.

@@ -34,6 +34,7 @@ final class BrowserEngine {
   let windowID: String
   private let callbacks: BrowserRuntimeClient
   let autoPictureInPicture: AutoPictureInPicture
+  let pictureInPictureControls = PictureInPictureControls()
   private(set) var isClosed = false
   var onClosed: ((Bool) -> Void)?
   let downloads = DownloadsModel(folder: DownloadsFolderSource())
@@ -135,6 +136,7 @@ final class BrowserEngine {
       self.mediaAccess.removeAll()
       self.store?.media.removeAll()
       self.autoPictureInPicture.forgetAll()
+      self.pictureInPictureControls.detach()
       self.favicons.removeAll()
       self.onClosed?(quitting)
     }
@@ -291,6 +293,9 @@ final class BrowserEngine {
     }
     callbacks.onPictureInPictureChanged = { [weak self] identity, active in
       self?.receivePictureInPicture(identity, active: active)
+    }
+    pictureInPictureControls.onCommand = { [weak self] tab, command in
+      self?.performPictureInPicture(command, tabID: tab)
     }
     callbacks.onTabActivationRequest = { [weak self] identity, _ in
       self?.showRequestedTab(identity)

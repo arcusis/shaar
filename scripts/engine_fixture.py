@@ -323,17 +323,20 @@ WEB_STORE_FIT_PAGE = b"""<!doctype html><html data-arcusis-fixture="web-store-fi
 <p>Fixed minimum width, like the Chrome Web Store.</p></html>"""
 
 
-# A silent canvas stream: no media file, network or audio device. The handlers log each
-# Media Session action so the probe can confirm what reached the page.
+# A silent canvas stream: no network or audio device. The handlers log each Media Session
+# action so the probe can confirm what reached the page. The clip is a 40 second silent
+# WebM loaded as a blob, so it has a duration to skip within.
 MEDIA_SESSION_PAGE = b"""<!doctype html><html data-arcusis-fixture="media"><meta charset="utf-8">
 <title>Media session fixture</title>
 <canvas id="canvas" width="320" height="180"></canvas>
 <video id="video" width="320" height="180" playsinline></video>
+<video id="clip" width="320" height="180" playsinline loop></video>
 <script>
 const canvas=document.getElementById('canvas'),video=document.getElementById('video');
 const context=canvas.getContext('2d');let hue=0;
 setInterval(()=>{context.fillStyle=`hsl(${hue=(hue+9)%360} 60% 50%)`;context.fillRect(0,0,320,180);},50);
 video.srcObject=canvas.captureStream(20);
+fetch('/media-clip.webm').then(r=>r.blob()).then(b=>{document.getElementById('clip').src=URL.createObjectURL(b);});
 window.arcusisMediaLog=[];
 navigator.mediaSession.metadata=new MediaMetadata({title:'Fixture Song',artist:'Fixture Artist',
   album:'Fixture Album',artwork:[{src:'/favicon-initial.png',sizes:'64x48',type:'image/png'}]});
@@ -342,6 +345,10 @@ for(const action of ['play','pause','previoustrack','nexttrack']){
     if(action==='play')video.play();if(action==='pause')video.pause();});
 }
 </script></html>"""
+
+PAGE_CSP = "default-src 'none'; img-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'"
+MEDIA_SESSION_CSP = PAGE_CSP + "; connect-src 'self'; media-src blob:"
+MEDIA_CLIP = Path(__file__).resolve().parent.parent / 'Tests/Fixtures/Media/seekable-clip.webm'
 
 
 class Fixture(http.server.BaseHTTPRequestHandler):
@@ -376,7 +383,16 @@ class Fixture(http.server.BaseHTTPRequestHandler):
             self.html(WEB_STORE_FIT_PAGE)
             return
         if path == '/media':
-            self.html(MEDIA_SESSION_PAGE)
+            self.html(MEDIA_SESSION_PAGE, csp=MEDIA_SESSION_CSP)
+            return
+        if path == '/media-clip.webm':
+            body = MEDIA_CLIP.read_bytes()
+            self.send_response(200)
+            self.send_header('Content-Type', 'video/webm')
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
             return
         self.html(b"""<!doctype html><html data-arcusis-fixture="v1"><meta charset="utf-8">
 <title>Arcusis account isolation fixture</title>
@@ -387,11 +403,11 @@ class Fixture(http.server.BaseHTTPRequestHandler):
 <label>Password <input id="password" type="password" autocomplete="current-password"></label></form>
 <script>window.arcusisInstance=crypto.randomUUID();</script></html>""")
 
-    def html(self, body):
+    def html(self, body, csp=PAGE_CSP):
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
-        self.send_header("Content-Security-Policy", "default-src 'none'; img-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'")
+        self.send_header("Content-Security-Policy", csp)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)

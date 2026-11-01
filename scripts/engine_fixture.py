@@ -14,6 +14,7 @@ import math
 import os
 import re
 from pathlib import Path
+import random
 import signal
 import shutil
 import socket
@@ -95,12 +96,18 @@ def record_bitwarden_summary(root, control_only):
     return summary
 
 
-def validate_host_lock_checkpoint(root, ready, pid, phase):
+def require_marked_probe_root(root, purpose):
+    """Return the canonical root only when this runner created and marked it."""
     canonical = root.resolve()
     if (canonical.parent != Path(tempfile.gettempdir()).resolve()
             or not canonical.name.startswith('arcusis-engine-probe-')
             or (canonical / '.arcusis-probe').read_text() != 'arcusis-engine-probe-v1\n'):
-        raise RuntimeError('Host lock verification requires a marked disposable root')
+        raise RuntimeError(f'{purpose} requires a marked disposable probe root')
+    return canonical
+
+
+def validate_host_lock_checkpoint(root, ready, pid, phase):
+    canonical = require_marked_probe_root(root, 'Host lock verification')
     if (not isinstance(ready, dict) or type(ready.get('schema')) is not int or ready['schema'] != 1
             or type(ready.get('pid')) is not int or ready['pid'] != pid or pid <= 1
             or ready.get('phase') != phase or phase not in ('initial', 'restart')
@@ -167,11 +174,7 @@ def wait_for_probe(process, root, phase, timeout):
 
 def validate_abrupt_checkpoint(root, ready, pid):
     """Bind the fault checkpoint to this parent's child and its marked temporary files."""
-    canonical = root.resolve()
-    if (canonical.parent != Path(tempfile.gettempdir()).resolve()
-            or not canonical.name.startswith('arcusis-engine-probe-')
-            or (canonical / '.arcusis-probe').read_text() != 'arcusis-engine-probe-v1\n'):
-        raise RuntimeError('Abrupt termination requires a marked disposable probe root')
+    canonical = require_marked_probe_root(root, 'Abrupt termination')
     if (not isinstance(ready, dict) or type(ready.get('schema')) is not int or ready['schema'] != 1
             or ready.get('ready') is not True or ready.get('localFixturesPassed') is not True
             or ready.get('phase') != 'initial' or type(ready.get('pid')) is not int
@@ -254,6 +257,102 @@ def terminate_at_checkpoint(process, root, timeout, settle_seconds=0):
     raise RuntimeError(f'Probe exited before abrupt-termination checkpoint ({process.returncode})')
 
 
+SESSION_RECOVERY_MODE = 'session-recovery-only'
+SESSION_RECOVERY_READY = 'session-recovery-ready.json'
+SESSION_RECOVERY_RECEIPT = 'session-recovery-kill.json'
+# The child keeps writing snapshots after its checkpoint; a random delay varies where SIGKILL lands.
+SESSION_RECOVERY_KILL_DELAY_SECONDS = (0.15, 0.6)
+
+
+def validate_session_recovery_checkpoint(root, ready, pid):
+    require_marked_probe_root(root, 'Session recovery')
+    if (not isinstance(ready, dict) or type(ready.get('schema')) is not int or ready['schema'] != 1
+            or ready.get('ready') is not True or ready.get('phase') != 'initial'
+            or ready.get('mode') != SESSION_RECOVERY_MODE
+            or type(ready.get('pid')) is not int or ready['pid'] != pid or pid <= 1
+            or ready.get('expectedSnapshot') != 'session-recovery-expected.json'
+            or ready.get('workspaceFile') != 'session-recovery-workspace.json'
+            or not isinstance(ready.get('checks'), list) or not ready['checks']
+            or not all(isinstance(check, str) and check for check in ready['checks'])
+            or not isinstance(ready.get('chromiumVersion'), str) or not ready['chromiumVersion']):
+        raise RuntimeError('Invalid or foreign session-recovery checkpoint')
+    return ready
+
+
+def wait_for_process_group_exit(pgid, seconds):
+    deadline = time.monotonic() + seconds
+    while process_group_exists(pgid):
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.05)
+    return True
+
+
+def kill_during_session_saves(process, root, timeout):
+    """SIGKILL the exact probe PID while it is still writing workspace snapshots."""
+    checkpoint = root / SESSION_RECOVERY_READY
+    deadline = time.monotonic() + probe_timeout(timeout)
+    while process.poll() is None:
+        if checkpoint.exists():
+            ready = validate_session_recovery_checkpoint(
+                root, json.loads(checkpoint.read_text()), process.pid)
+            delay = random.uniform(*SESSION_RECOVERY_KILL_DELAY_SECONDS)
+            time.sleep(delay)
+            if process.poll() is not None:
+                raise RuntimeError(f'Probe exited before SIGKILL ({process.returncode})')
+            print(f'initial: sending SIGKILL to probe PID {process.pid} after {delay:.3f}s of saves', flush=True)
+            os.kill(process.pid, signal.SIGKILL)
+            code = process.wait(timeout=10)
+            if code != -signal.SIGKILL:
+                raise RuntimeError(f'Unexpected session-recovery termination exit: {code}')
+            # Engine helpers exit when their browser process dies; only this probe's own group is cleaned up.
+            helpers_exited = wait_for_process_group_exit(process.pid, 10)
+            if not helpers_exited:
+                signal_probe(process, signal.SIGKILL)
+            receipt = {
+                'schema': 1, 'mode': SESSION_RECOVERY_MODE, 'passed': True, 'pid': process.pid,
+                'signal': 'SIGKILL', 'exitCode': code, 'secondsAfterCheckpoint': round(delay, 3),
+                'helpersExitedAfterKill': helpers_exited,
+                'chromiumVersion': ready['chromiumVersion'], 'checks': ready['checks'],
+                'scope': 'SIGKILL of the exact probe PID while snapshots were still being written. Recovery is evaluated by restart.json.',
+            }
+            (root / SESSION_RECOVERY_RECEIPT).write_text(json.dumps(receipt, indent=2, sort_keys=True) + '\n')
+            return receipt
+        if time.monotonic() >= deadline:
+            raise RuntimeError('Timed out waiting for session-recovery checkpoint')
+        time.sleep(0.05)
+    raise RuntimeError(f'Probe exited before session-recovery checkpoint ({process.returncode})')
+
+
+def validate_session_recovery_report(report, phase):
+    if (not isinstance(report, dict) or report.get('phase') != phase
+            or report.get('probeMode') != SESSION_RECOVERY_MODE
+            or report.get('sessionRecoveryOnly') is not True
+            or report.get('savedTabCapacityOnly') is not False
+            or report.get('externalAppConsentOnly') is not False
+            or report.get('privateWindowOnly') is not False
+            or report.get('abruptRecoveryProbe') is not False):
+        raise RuntimeError('Session recovery report has wrong phase or mode')
+
+
+def record_session_recovery_summary(root):
+    """Derive acceptance from the kill receipt and the restart report without modifying either."""
+    receipt = json.loads((root / SESSION_RECOVERY_RECEIPT).read_text())
+    restart = json.loads((root / 'restart.json').read_text())
+    validate_session_recovery_report(restart, 'restart')
+    killed = (receipt.get('mode') == SESSION_RECOVERY_MODE and receipt.get('passed') is True
+              and receipt.get('exitCode') == -signal.SIGKILL)
+    summary = {
+        'schema': 1, 'mode': SESSION_RECOVERY_MODE, 'faultInjected': killed,
+        'restartPassed': restart.get('passed') is True,
+        'passed': killed and restart.get('passed') is True,
+        'restartChecks': restart.get('checks', []), 'error': restart.get('error'),
+        'sourceReports': [SESSION_RECOVERY_RECEIPT, 'restart.json'],
+    }
+    (root / 'session-recovery-summary.json').write_text(json.dumps(summary, indent=2, sort_keys=True) + '\n')
+    return summary
+
+
 def signal_probe(process, requested_signal):
     try:
         if os.getpgid(process.pid) == process.pid:
@@ -323,6 +422,34 @@ WEB_STORE_FIT_PAGE = b"""<!doctype html><html data-arcusis-fixture="web-store-fi
 <p>Fixed minimum width, like the Chrome Web Store.</p></html>"""
 
 
+# A silent canvas stream: no network or audio device. The handlers log each Media Session
+# action so the probe can confirm what reached the page. The clip is a 40 second silent
+# WebM loaded as a blob, so it has a duration to skip within.
+MEDIA_SESSION_PAGE = b"""<!doctype html><html data-arcusis-fixture="media"><meta charset="utf-8">
+<title>Media session fixture</title>
+<canvas id="canvas" width="320" height="180"></canvas>
+<video id="video" width="320" height="180" playsinline></video>
+<video id="clip" width="320" height="180" playsinline loop></video>
+<script>
+const canvas=document.getElementById('canvas'),video=document.getElementById('video');
+const context=canvas.getContext('2d');let hue=0;
+setInterval(()=>{context.fillStyle=`hsl(${hue=(hue+9)%360} 60% 50%)`;context.fillRect(0,0,320,180);},50);
+video.srcObject=canvas.captureStream(20);
+fetch('/media-clip.webm').then(r=>r.blob()).then(b=>{document.getElementById('clip').src=URL.createObjectURL(b);});
+window.arcusisMediaLog=[];
+navigator.mediaSession.metadata=new MediaMetadata({title:'Fixture Song',artist:'Fixture Artist',
+  album:'Fixture Album',artwork:[{src:'/favicon-initial.png',sizes:'64x48',type:'image/png'}]});
+for(const action of ['play','pause','previoustrack','nexttrack']){
+  navigator.mediaSession.setActionHandler(action,()=>{window.arcusisMediaLog.push(action);
+    if(action==='play')video.play();if(action==='pause')video.pause();});
+}
+</script></html>"""
+
+PAGE_CSP = "default-src 'none'; img-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'"
+MEDIA_SESSION_CSP = PAGE_CSP + "; connect-src 'self'; media-src blob:"
+MEDIA_CLIP = Path(__file__).resolve().parent.parent / 'Tests/Fixtures/Media/seekable-clip.webm'
+
+
 class Fixture(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
@@ -354,6 +481,21 @@ class Fixture(http.server.BaseHTTPRequestHandler):
         if path == '/web-store-fit':
             self.html(WEB_STORE_FIT_PAGE)
             return
+        if path == '/media':
+            self.html(MEDIA_SESSION_PAGE, csp=MEDIA_SESSION_CSP)
+            return
+        if path == '/media-clip.webm':
+            body = MEDIA_CLIP.read_bytes()
+            self.send_response(200)
+            self.send_header('Content-Type', 'video/webm')
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            try:
+                self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            return
         self.html(b"""<!doctype html><html data-arcusis-fixture="v1"><meta charset="utf-8">
 <title>Arcusis account isolation fixture</title>
 <style>body{font:18px system-ui;padding:60px;color:#293445;background:#f0f4f8}</style>
@@ -363,11 +505,11 @@ class Fixture(http.server.BaseHTTPRequestHandler):
 <label>Password <input id="password" type="password" autocomplete="current-password"></label></form>
 <script>window.arcusisInstance=crypto.randomUUID();</script></html>""")
 
-    def html(self, body):
+    def html(self, body, csp=PAGE_CSP):
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
-        self.send_header("Content-Security-Policy", "default-src 'none'; img-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'")
+        self.send_header("Content-Security-Policy", csp)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -501,13 +643,16 @@ def argument_parser():
                       help="Compose owned native OTR windows with both normal engine fixture phases")
     mode.add_argument("--quit-exit", action="store_true",
                       help="Quit through the host menu with an extension installed; assert main and helper exit")
+    mode.add_argument("--session-recovery", action="store_true",
+                      help="SIGKILL the exact probe PID while it saves a managed workspace, then verify the restored session")
     return parser
 
 
 def build_engine_probe_arguments(executable, root, fixture_url, phase, *, include_bitwarden,
                                  onboarding_control, abrupt, saved_tab_capacity,
                                  external_app_consent=False, private_window=False,
-                                 private_window_run_id=None, quit_exit=False):
+                                 private_window_run_id=None, quit_exit=False,
+                                 session_recovery=False):
     arguments = [str(executable), "--probe-data-dir", str(root),
                  "--probe-url", fixture_url, "--probe-phase", phase,
                  "--probe-output", str(root / f"{phase}.json")]
@@ -529,6 +674,8 @@ def build_engine_probe_arguments(executable, root, fixture_url, phase, *, includ
         arguments.extend(('--probe-private-window-run-id', private_window_run_id))
     if quit_exit:
         arguments.append('--probe-quit-exit')
+    if session_recovery:
+        arguments.append('--probe-session-recovery')
     return arguments
 
 
@@ -1066,6 +1213,8 @@ def main(argv=None):
         print('PRIVATE WINDOW FIXTURE: owned hidden OTR windows; synthetic loopback only', flush=True)
     if options.quit_exit:
         print('QUIT EXIT ONLY: host Quit command with an extension installed; process exit is timed', flush=True)
+    if options.session_recovery:
+        print('SESSION RECOVERY ONLY: SIGKILL of the exact probe PID during saves, then restore', flush=True)
     root = Path(tempfile.mkdtemp(prefix="arcusis-engine-probe-"))
     (root / ".arcusis-probe").write_text("arcusis-engine-probe-v1\n")
     (root / ".arcusis-probe").chmod(0o600)
@@ -1075,7 +1224,11 @@ def main(argv=None):
     threading.Thread(target=server.serve_forever, daemon=True).start()
     executable = Path("build/Shaar Verification.app/Contents/MacOS/ShaarVerification").resolve()
     (root / 'Downloads').mkdir(mode=0o700)
-    probe_env = dict(os.environ, ARDIA_DOWNLOADS_DIR=str(root / 'Downloads'))
+    # Any ARDIA_BACKGROUND value keeps Chromium's picture-in-picture overlay transparent and
+    # click-through, so the media probe opens no visible window. The engine's other
+    # background test hooks require exactly '1' and stay off.
+    probe_env = dict(os.environ, ARDIA_DOWNLOADS_DIR=str(root / 'Downloads'),
+                     ARDIA_BACKGROUND='picture-in-picture')
     print(f"Probe evidence: {root}", flush=True)
     failures = []
     private_window_children = []
@@ -1089,12 +1242,16 @@ def main(argv=None):
                 abrupt=abrupt, saved_tab_capacity=options.saved_tab_capacity,
                 external_app_consent=options.external_app_consent,
                 private_window=options.private_window,
-                private_window_run_id=private_window_run_id, quit_exit=options.quit_exit)
+                private_window_run_id=private_window_run_id, quit_exit=options.quit_exit,
+                session_recovery=options.session_recovery)
             with (root / f"{phase}.log").open("w") as log:
                 process = subprocess.Popen(arguments, stdout=log, stderr=log, start_new_session=True, env=probe_env)
                 try:
                     if abrupt and phase == 'initial':
                         terminate_at_checkpoint(process, root, timeout=90, settle_seconds=35 if options.abrupt_control else 0)
+                        continue
+                    if options.session_recovery and phase == 'initial':
+                        kill_during_session_saves(process, root, timeout=120)
                         continue
                     if options.quit_exit:
                         code = wait_for_quit_exit(process, root, phase, timeout=90)
@@ -1140,6 +1297,8 @@ def main(argv=None):
                 stopped = ' (shutdown guard stopped the event loop)' if report.get('quitEventLoopStopped') else ''
                 print(f"{phase}: browser exited {receipt['mainExitSeconds']:.2f}s after Quit{stopped}; "
                       f"helpers {receipt['helpersExitSeconds']:.2f}s later", flush=True)
+            elif options.session_recovery:
+                validate_session_recovery_report(report, phase)
             elif options.private_window:
                 try:
                     validate_private_window_report(root, phase, report, code)
@@ -1170,6 +1329,9 @@ def main(argv=None):
             record_saved_tab_capacity_summary(root)
         if options.external_app_consent:
             record_external_app_consent_summary(root)
+        if options.session_recovery:
+            summary = record_session_recovery_summary(root)
+            print(f"session recovery: {'passed' if summary['passed'] else 'FAILED'}", flush=True)
     finally:
         server.shutdown()
         server.server_close()

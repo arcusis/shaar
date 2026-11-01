@@ -14,6 +14,7 @@ final class BrowserPreferencesStore {
   private var profileSearchEngines: [UUID: BrowserSearchEngine] = [:]
   private var connectedAccounts: [UUID: [ConnectedAccount]] = [:]
   private var pinnedExtensions: [UUID: [String]] = [:]
+  private var autoPictureInPictureOffSites: [UUID: [String]] = [:]
   private var preservesExistingFile = false
 
   private(set) var sidebarInitiallyVisible = true
@@ -63,6 +64,18 @@ final class BrowserPreferencesStore {
     save()
   }
 
+  /// Automatic picture-in-picture is on unless the profile turned it off for the site.
+  func allowsAutomaticPictureInPicture(on site: String, for profileID: UUID) -> Bool {
+    !(autoPictureInPictureOffSites[profileID] ?? []).contains(site)
+  }
+
+  func setAutomaticPictureInPicture(_ allowed: Bool, on site: String, for profileID: UUID) {
+    var sites = Set(autoPictureInPictureOffSites[profileID] ?? [])
+    if allowed { sites.remove(site) } else { sites.insert(site) }
+    autoPictureInPictureOffSites[profileID] = sites.isEmpty ? nil : sites.sorted()
+    save()
+  }
+
   func setSidebarInitiallyVisible(_ value: Bool) {
     sidebarInitiallyVisible = value
     save()
@@ -88,6 +101,7 @@ final class BrowserPreferencesStore {
       profileSearchEngines = document.profileSearchEngines
       connectedAccounts = document.connectedAccounts
       pinnedExtensions = document.pinnedExtensions
+      autoPictureInPictureOffSites = document.autoPictureInPictureOffSites
     } catch {
       preserveWithNotice("Saved preferences are invalid or unreadable; original file preserved.")
     }
@@ -112,7 +126,8 @@ final class BrowserPreferencesStore {
       let document = PreferencesDocument(
         version: 2, sidebarInitiallyVisible: sidebarInitiallyVisible,
         profileSearchEngines: profileSearchEngines,
-        pinnedExtensions: pinnedExtensions, connectedAccounts: connectedAccounts)
+        pinnedExtensions: pinnedExtensions, connectedAccounts: connectedAccounts,
+        autoPictureInPictureOffSites: autoPictureInPictureOffSites)
       let encoder = JSONEncoder()
       encoder.outputFormatting = [.sortedKeys]
       let data = try encoder.encode(document)
@@ -137,6 +152,7 @@ private struct PreferencesDocument: Codable {
   let profileSearchEngines: [UUID: BrowserSearchEngine]
   let connectedAccounts: [UUID: [ConnectedAccount]]
   let pinnedExtensions: [UUID: [String]]
+  let autoPictureInPictureOffSites: [UUID: [String]]
 
   private enum CodingKeys: String, CodingKey {
     case version
@@ -144,19 +160,22 @@ private struct PreferencesDocument: Codable {
     case profileSearchEngines
     case connectedAccounts
     case pinnedExtensions
+    case autoPictureInPictureOffSites
   }
 
   init(
     version: Int, sidebarInitiallyVisible: Bool,
     profileSearchEngines: [UUID: BrowserSearchEngine],
     pinnedExtensions: [UUID: [String]] = [:],
-    connectedAccounts: [UUID: [ConnectedAccount]] = [:]
+    connectedAccounts: [UUID: [ConnectedAccount]] = [:],
+    autoPictureInPictureOffSites: [UUID: [String]] = [:]
   ) {
     self.version = version
     self.sidebarInitiallyVisible = sidebarInitiallyVisible
     self.profileSearchEngines = profileSearchEngines
     self.connectedAccounts = connectedAccounts
     self.pinnedExtensions = pinnedExtensions
+    self.autoPictureInPictureOffSites = autoPictureInPictureOffSites
   }
 
   init(from decoder: Decoder) throws {
@@ -169,5 +188,8 @@ private struct PreferencesDocument: Codable {
       try values.decodeIfPresent([UUID: [ConnectedAccount]].self, forKey: .connectedAccounts) ?? [:]
     pinnedExtensions =
       try values.decodeIfPresent([UUID: [String]].self, forKey: .pinnedExtensions) ?? [:]
+    autoPictureInPictureOffSites =
+      try values.decodeIfPresent([UUID: [String]].self, forKey: .autoPictureInPictureOffSites)
+      ?? [:]
   }
 }

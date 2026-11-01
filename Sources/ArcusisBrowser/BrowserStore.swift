@@ -117,6 +117,12 @@ final class BrowserStore {
   @ObservationIgnored var onStopFinding: ((UUID) -> Void)?
   @ObservationIgnored var onNavigatePage: ((UUID, UUID, URL) -> Bool)?
   @ObservationIgnored var onReloadPage: ((UUID, UUID) -> Bool)?
+  /// Sends a media command to a live tab; false when the engine cannot deliver it.
+  @ObservationIgnored var onMediaCommand: ((UUID, MediaCommand) -> Bool)?
+  /// A site's automatic picture-in-picture setting changed for a profile.
+  @ObservationIgnored var onAutomaticPictureInPictureChanged: ((String, UUID) -> Void)?
+  /// Media playing in this window's tabs.
+  let media = MediaPlaybackModel()
   @ObservationIgnored var onSetSpaceProfile: ((UUID, UUID) -> Bool)?
   /// Opens New Profile onboarding for a Space; nil when no host can present it.
   @ObservationIgnored var onNewProfile: ((UUID) -> Void)?
@@ -126,16 +132,29 @@ final class BrowserStore {
   init(sessionFile: SessionFile? = nil, session: BrowserSession = .fresh()) {
     self.sessionFile = sessionFile
     self.session = session
+    let restored: BrowserSession?
     do {
-      if let saved = try sessionFile?.load() {
-        self.session = saved
-      } else {
-        save()
-      }
+      restored = try sessionFile?.load()
     } catch {
       maySave = false
       storageNotice =
         "Saved session could not be restored. The original file is preserved; changes in this window will not be saved."
+      return
+    }
+    if let restored {
+      self.session = restored
+    } else {
+      writeLaunchSnapshot()
+    }
+  }
+
+  /// The first snapshot is a launch checkpoint, written before any change is scheduled.
+  private func writeLaunchSnapshot() {
+    guard let sessionFile else { return }
+    do {
+      try sessionFile.save(session)
+    } catch {
+      storageNotice = Self.saveNotice(failure: error.localizedDescription)
     }
   }
 
@@ -1066,23 +1085,27 @@ final class BrowserStore {
       reconcileTransientState()
       return
     }
-    guard maySave else { return }
-    guard let sessionFile else { return }
+    guard maySave, let sessionFile else { return }
     let snapshot = session
-    if deferred {
-      snapshotScheduler.schedule(
-        { try sessionFile.save(snapshot) },
-        completion: { [weak self] error in
-          self?.storageNotice = error.map { "Changes could not be saved. \($0)" }
-        })
-      return
-    }
+    snapshotScheduler.schedule(
+      deferred: deferred, { try sessionFile.save(snapshot) },
+      completion: { [weak self] failure in
+        self?.storageNotice = Self.saveNotice(failure: failure)
+      })
+  }
+
+  /// Waits until the latest change is on disk. Ordinary saves return before the disk flush.
+  func flushSaves() throws {
     do {
-      try snapshotScheduler.writeNow { try sessionFile.save(snapshot) }
-      storageNotice = nil
+      try snapshotScheduler.flush()
     } catch {
-      storageNotice = "Changes could not be saved. \(error.localizedDescription)"
+      storageNotice = Self.saveNotice(failure: error.localizedDescription)
+      throw error
     }
+  }
+
+  private static func saveNotice(failure: String?) -> String? {
+    failure.map { "Changes could not be saved. \($0)" }
   }
 
   private func reconcileTransientState() {

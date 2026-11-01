@@ -195,7 +195,8 @@ final class DownloadProbe {
   private func wait(_ profile: UUID, _ message: String, predicate: (BrowserDownload) -> Bool)
     async throws -> BrowserDownload
   {
-    for _ in 0..<180 {
+    // The fixture paces slow transfers with short sleeps, which stretch on loaded hosts.
+    for _ in 0..<Int(180 * ProbeTimeout.scale) {
       if let item = engine.downloads.items(in: profile).first(where: predicate) {
         checks.append(message)
         return item
@@ -203,7 +204,10 @@ final class DownloadProbe {
       runtime.refreshDownloads(forProfileID: profile.uuidString)
       try await Task.sleep(for: .milliseconds(100))
     }
-    throw DownloadProbeFailure(message)
+    let seen = engine.downloads.items(in: profile).map {
+      "\($0.state) paused=\($0.paused) \($0.receivedBytes)/\($0.totalBytes ?? -1)"
+    }
+    throw DownloadProbeFailure("\(message); profile downloads: \(seen)")
   }
 
   private func verifyBytes(_ item: BrowserDownload, account: String, large: Bool) throws {

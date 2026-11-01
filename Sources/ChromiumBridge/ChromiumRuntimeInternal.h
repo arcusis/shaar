@@ -8,6 +8,7 @@
 #import "ChromiumDownloads.h"
 #import "ChromiumLibrary.h"
 #import "ChromiumShutdownGuard.h"
+#import "ChromiumMediaSession.h"
 #import "ChromiumWebStoreFit.h"
 #import "../../ThirdParty/ArdiaCore/ArdiaCore.h"
 
@@ -83,12 +84,18 @@ NSString *ARCValidatedProfileID(NSString *profileID);
   ARCLibraryService *_libraryService;
   ARCWebStoreFit *_webStoreFit;
   ARCEngineShutdownGuard *_shutdownGuard;
+  ARCMediaSessionTracker *_mediaSessions;
+  /// The tab whose video Chromium's picture-in-picture window shows.
+  NSString *_pictureInPictureVideoTabID;
 }
 - (void)closedWindowID:(NSString *)identity;
 - (ARCNativeWindowState *)stateForTabID:(NSString *)identity;
 - (ARCNativeWindowState *)stateForPopupID:(NSString *)identity;
 - (BOOL)isSelectedTabID:(NSString *)identity;
 - (void)publish:(ArdiaCoreTab *)tab;
+- (NSString *)identityForTab:(ArdiaCoreTab *)tab;
+/// An open tab this runtime owns in an open window, or nil.
+- (ArdiaCoreTab *)liveTabForID:(NSString *)tabID;
 - (void)evaluateTab:(ArdiaCoreTab *)tab script:(NSString *)script completion:(void (^)(NSString *))completion;
 - (void)evaluateTab:(ArdiaCoreTab *)tab script:(NSString *)script userGesture:(BOOL)userGesture
          completion:(void (^)(NSString *))completion;
@@ -103,6 +110,19 @@ NSString *ARCValidatedProfileID(NSString *profileID);
 - (BOOL)privateOwnerForTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID
                          tab:(ArdiaCoreTab **)tabOut window:(ArdiaCoreWindow **)windowOut;
 - (NSDictionary *)privateEntryForTab:(ArdiaCoreTab *)tab identity:(NSString **)identityOut;
+@end
+
+@interface ARCChromiumRuntime (MediaSessionSupport)
+- (void)receiveMediaSessionJSON:(NSString *)json frameID:(NSString *)frameID tab:(ArdiaCoreTab *)tab;
+- (void)publishMediaSessionForTabID:(NSString *)tabID;
+/// Drops the tab's frame reports, after a new document or a renderer exit.
+- (void)resetMediaSessionForTabID:(NSString *)tabID notify:(BOOL)notify;
+@end
+
+@interface ARCChromiumRuntime (PictureInPictureSupport)
+/// Records which tab's video Chromium's picture-in-picture window shows; `kind` is the
+/// engine's "video" or "document".
+- (void)notePictureInPictureVideoTabID:(NSString *)tabID active:(BOOL)active kind:(id)kind;
 @end
 
 @interface ARCChromiumRuntime (ExtensionSupport)

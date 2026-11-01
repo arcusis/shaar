@@ -162,6 +162,7 @@ final class NativeSelectionProbe {
       store.session.spaces.flatMap(\.tabs) == primaryBefore.spaces.flatMap(\.tabs)
         && store.session.profiles == primaryBefore.profiles,
       "native activation changes selection without duplicating or reassigning live pages")
+    try store.flushSaves()
     try expect(
       try SessionFile(url: root.appending(path: "session.json")).load() == store.session,
       "engine-selected owning Space and tab are persisted through the normal session path")

@@ -26,6 +26,7 @@ final class EngineProbe {
   private let privateWindowMode: Bool
   private let privateWindowRunID: String?
   private let quitExitMode: Bool
+  private let sessionRecoveryMode: Bool
   private let expectedAfterTermination: BrowserSession?
   private let output: URL
   private var checks: [String] = []
@@ -38,6 +39,7 @@ final class EngineProbe {
   private var browserEngine: BrowserEngine?
   private var savedTabCapacityFixture: SavedTabCapacityFixture?
   private var savedTabCapacityProbe: SavedTabCapacityProbe?
+  private var sessionRecoveryProbe: SessionRecoveryProbe?
   private var nativeHostProbe: NativeHostProbe?
   private var nativeFavoritesProbe: NativeFavoritesProbe?
   private var externalAppConsentProbe: ExternalAppConsentProbe?
@@ -63,7 +65,7 @@ final class EngineProbe {
     bitwardenOnboardingControl: Bool,
     awaitAbruptTermination: Bool, expectAbruptRecovery: Bool, savedTabCapacityMode: Bool,
     externalAppConsentMode: Bool, privateWindowMode: Bool, privateWindowRunID: String?,
-    quitExitMode: Bool
+    quitExitMode: Bool, sessionRecoveryMode: Bool
   ) throws {
     self.root = root
     self.fixture = fixture
@@ -76,6 +78,7 @@ final class EngineProbe {
     self.privateWindowMode = privateWindowMode
     self.privateWindowRunID = privateWindowRunID
     self.quitExitMode = quitExitMode
+    self.sessionRecoveryMode = sessionRecoveryMode
     expectedAfterTermination =
       expectAbruptRecovery ? try AbruptProbeCheckpoint.expectedSession(root: root) : nil
     self.output = output
@@ -84,7 +87,12 @@ final class EngineProbe {
     }
     runtime = try ARCChromiumRuntime(
       frameworkURL: frameworks.appending(path: "Chromium Framework.framework"))
-    if savedTabCapacityMode {
+    if sessionRecoveryMode {
+      savedTabCapacityFixture = nil
+      let recovery = try SessionRecoveryProbe.open(root: root, fixture: fixture, phase: phase)
+      sessionRecoveryProbe = recovery
+      store = recovery.store
+    } else if savedTabCapacityMode {
       let capacity = try SavedTabCapacityFixture.open(root: root, fixture: fixture, phase: phase)
       savedTabCapacityFixture = capacity
       store = capacity.store
@@ -155,6 +163,7 @@ final class EngineProbe {
       let externalAppConsentMode = arguments.contains("--probe-external-app-consent")
       let privateWindowMode = arguments.contains("--probe-private-window")
       let quitExitMode = arguments.contains("--probe-quit-exit")
+      let sessionRecoveryMode = arguments.contains("--probe-session-recovery")
       let privateWindowRunID = privateWindowMode ? try value("--probe-private-window-run-id") : nil
       guard
         !privateWindowMode
@@ -167,7 +176,7 @@ final class EngineProbe {
         "--bitwarden", "--bitwarden-onboarding-control",
         "--probe-await-abrupt-termination", "--probe-expect-abrupt-recovery",
         "--probe-saved-tab-capacity",
-        "--probe-private-window",
+        "--probe-private-window", "--probe-session-recovery",
         "--probe-quit-exit",
       ]
       guard externalAppConsentMode == noLaunchGuard,
@@ -179,7 +188,10 @@ final class EngineProbe {
         !quitExitMode
           || !conflictingFlags.filter({ $0 != "--probe-quit-exit" }).contains(
             where: arguments.contains),
-        !quitExitMode || !noLaunchGuard
+        !quitExitMode || !noLaunchGuard,
+        !sessionRecoveryMode
+          || !conflictingFlags.filter({ $0 != "--probe-session-recovery" }).contains(
+            where: arguments.contains)
       else { throw ProbeFailure("Invalid engine probe mode flags.") }
       guard !bitwardenOnboardingControl || includeBitwarden,
         !(awaitAbruptTermination && expectAbruptRecovery),
@@ -194,7 +206,8 @@ final class EngineProbe {
         awaitAbruptTermination: awaitAbruptTermination,
         expectAbruptRecovery: expectAbruptRecovery, savedTabCapacityMode: savedTabCapacityMode,
         externalAppConsentMode: externalAppConsentMode, privateWindowMode: privateWindowMode,
-        privateWindowRunID: privateWindowRunID, quitExitMode: quitExitMode)
+        privateWindowRunID: privateWindowRunID, quitExitMode: quitExitMode,
+        sessionRecoveryMode: sessionRecoveryMode)
       probe.runtime.onReady = { [weak probe] in
         guard let probe else { return }
         Task {
@@ -299,6 +312,11 @@ final class EngineProbe {
 
   private func exercise() async {
     do {
+      if let recovery = sessionRecoveryProbe, let browserEngine {
+        checks += try await recovery.run(runtime: runtime, engine: browserEngine)
+        finish(error: nil)
+        return
+      }
       if let capacity = savedTabCapacityFixture, let browserEngine {
         let probe = SavedTabCapacityProbe(
           runtime: runtime, engine: browserEngine, store: store, phase: phase, capacity: capacity)
@@ -507,6 +525,11 @@ final class EngineProbe {
           runtime: runtime, engine: browserEngine, store: store,
           root: root, phase: phase
         ).run()
+        fixtureStage = "MediaSession"
+        checks += try await MediaSessionProbe(
+          runtime: runtime, engine: browserEngine, store: store, root: root, fixture: fixture,
+          phase: phase
+        ).run()
         fixtureStage = "Download"
         checks += try await DownloadProbe(
           runtime: runtime, engine: browserEngine, store: store, root: root, phase: phase
@@ -572,6 +595,7 @@ final class EngineProbe {
         }
       }
       if awaitAbruptTermination {
+        try store.flushSaves()
         try expect(
           try SessionFile(url: root.appending(path: "session.json")).load() == store.session,
           "pre-termination checkpoint matches the last completed session save")
@@ -709,6 +733,7 @@ final class EngineProbe {
   private var baseTimeoutSeconds: Double {
     if externalAppConsentMode || savedTabCapacityMode { return 180 }
     if quitExitMode { return 90 }
+    if sessionRecoveryMode { return 90 }
     if includeBitwarden { return 150 }
     return privateWindowMode ? 210 : 75
   }
@@ -717,6 +742,7 @@ final class EngineProbe {
     if privateWindowMode { return PrivateWindowProbe.mode }
     if quitExitMode { return QuitExitProbe.mode }
     if externalAppConsentMode { return ExternalAppConsentProbe.mode }
+    if sessionRecoveryMode { return SessionRecoveryProbe.mode }
     return savedTabCapacityMode ? SavedTabCapacityFixture.mode : "full-fixture"
   }
 
@@ -724,6 +750,7 @@ final class EngineProbe {
     if savedTabCapacityMode { return SavedTabCapacityFixture.scope }
     if externalAppConsentMode { return ExternalAppConsentProbe.scope }
     if quitExitMode { return QuitExitProbe.scope }
+    if sessionRecoveryMode { return SessionRecoveryProbe.scope }
     if privateWindowMode {
       return
         "Owned private-window fixture composed with normal engine fixture. No real account or third-party service."
@@ -761,6 +788,7 @@ final class EngineProbe {
       "quitExitOnly": quitExitMode,
       "quitEventLoopStopped": quitExitProbe?.stoppedEventLoop ?? false,
       "privateWindowProbe": privateWindowMode,
+      "sessionRecoveryOnly": sessionRecoveryMode,
       "abruptRecoveryProbe": expectedAfterTermination != nil,
       "localFixturesPassed": localFixturesPassed,
       "nativeFavoritesPassed": nativeFavoritesProbe?.passed ?? false,

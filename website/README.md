@@ -31,7 +31,7 @@ Wrangler's build hook generates `dist/` before serving at `http://localhost:8787
 
 Design decisions and accessibility behavior: [Public Website Design](../Notebook/Public_Website_Design.md).
 
-For accessibility checks, open your own local preview tab with `orca tab create --url http://localhost:8787/ --json`, then run `pnpm check:a11y <browserPageId>`. This evaluates the installed axe-core rules in that specific Orca tab through DevTools; it adds no scripts to production assets. Check both themes and viewport sizes, inspect screenshots, and verify keyboard navigation and reduced motion separately. Automated checks do not establish full accessibility conformance. Close your tab afterward.
+For accessibility checks, open your own local preview tab with `orca tab create --url http://localhost:8787/ --json`, then run `pnpm check:a11y <browserPageId>`. This evaluates the installed axe-core rules in that specific Orca tab through DevTools; it adds no scripts to production assets. Check several viewport sizes, inspect screenshots, and verify keyboard navigation and reduced motion separately. Automated checks do not establish full accessibility conformance. Close your tab afterward.
 
 ## CI and deployment
 

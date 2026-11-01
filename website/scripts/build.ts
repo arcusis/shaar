@@ -49,14 +49,14 @@ await writeAsset(
 await copyFile(resolve(root, "src/styles.css"), resolve(output, "assets/styles.css"));
 
 for (const [family, file, name] of [
-  ["manrope", "manrope-latin-wght-normal.woff2", "manrope.woff2"],
-  ["newsreader", "newsreader-latin-wght-italic.woff2", "newsreader-italic.woff2"],
+  ["inter", "inter-latin-wght-normal.woff2", "inter.woff2"],
+  ["geist-mono", "geist-mono-latin-wght-normal.woff2", "geist-mono.woff2"],
 ]) {
   await copyFile(
     resolve(root, `node_modules/@fontsource-variable/${family}/files/${file}`),
     resolve(output, `assets/${name}`),
   );
-  const licenseName = family === "manrope" ? "Manrope" : "Newsreader";
+  const licenseName = family === "inter" ? "Inter" : "Geist-Mono";
   await copyFile(
     resolve(root, `node_modules/@fontsource-variable/${family}/LICENSE`),
     resolve(output, `licenses/${licenseName}-OFL.txt`),

@@ -3,41 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 const root = document.documentElement;
-const colorPreference = window.matchMedia("(prefers-color-scheme: dark)");
-const motionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
 root.dataset.enhanced = "true";
-
-try {
-  const saved = localStorage.getItem("shaar-theme");
-  if (saved === "light" || saved === "dark") root.dataset.theme = saved;
-} catch {
-  // Storage may be unavailable in private or restricted browsing contexts.
-}
-
-function isDark(): boolean {
-  return root.dataset.theme ? root.dataset.theme === "dark" : colorPreference.matches;
-}
-
-function initializeTheme(): void {
-  const button = document.querySelector<HTMLButtonElement>(".theme-control");
-  if (!button) return;
-  const updateLabel = () => {
-    button.setAttribute("aria-label", `Switch to ${isDark() ? "light" : "dark"} theme`);
-    button.title = `${isDark() ? "Dark" : "Light"} theme`;
-  };
-  button.hidden = false;
-  updateLabel();
-  colorPreference.addEventListener("change", updateLabel);
-  button.addEventListener("click", () => {
-    root.dataset.theme = isDark() ? "light" : "dark";
-    try {
-      localStorage.setItem("shaar-theme", root.dataset.theme);
-    } catch {
-      /* Theme still works without storage. */
-    }
-    updateLabel();
-  });
-}
 
 function initializeMenu(): void {
   const button = document.querySelector<HTMLButtonElement>(".menu-control");
@@ -69,46 +35,85 @@ function initializeMenu(): void {
   });
 }
 
-function initializeLandscape(): void {
-  const landscape = document.querySelector<HTMLElement>(".landscape");
-  const button = document.querySelector<HTMLButtonElement>(".motion-control");
-  if (!landscape || !button) return;
-  let finished = false;
-  const update = () => {
-    button.disabled = motionPreference.matches;
-    button.textContent = motionPreference.matches
-      ? "Reduced motion"
-      : finished
-        ? "Replay landscape ↻"
-        : landscape.dataset.paused
-          ? "Resume landscape ▷"
-          : "Pause landscape Ⅱ";
+// Home only: the sticky bar slides in once the hero frame (with its own nav) leaves view.
+function initializeStickyHeader(): void {
+  const header = document.querySelector<HTMLElement>(".site-header[data-home]");
+  const hero = document.querySelector(".hero-frame");
+  if (!header || !hero) return;
+  const setVisible = (visible: boolean) => {
+    if (visible) header.dataset.visible = "true";
+    else delete header.dataset.visible;
+    header.inert = !visible;
   };
-  button.hidden = false;
-  update();
-  motionPreference.addEventListener("change", update);
-  landscape.addEventListener("animationend", (event) => {
-    if (event.animationName === "sun-journey") {
-      finished = true;
-      update();
-    }
+  setVisible(false);
+  new IntersectionObserver(([entry]) => setVisible(!entry.isIntersecting), {
+    rootMargin: "-64px 0px 0px 0px",
+  }).observe(hero);
+}
+
+// Story: the step nearest the middle of the viewport picks the window shown beside it.
+function initializeStory(): void {
+  const grid = document.querySelector<HTMLElement>(".story-grid");
+  if (!grid) return;
+  const observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting && entry.target instanceof HTMLElement) {
+          grid.dataset.active = entry.target.dataset.step ?? "0";
+        }
+      }
+    },
+    { rootMargin: "-45% 0px -45% 0px" },
+  );
+  for (const step of grid.querySelectorAll(".step")) observer.observe(step);
+}
+
+// Hero sun: drag it anywhere in the sky; the light warms as it sets.
+function initializeSun(): void {
+  const sun = document.querySelector<HTMLElement>("[data-sun]");
+  const landscape = sun?.closest<HTMLElement>(".landscape");
+  if (!sun || !landscape) return;
+  let offsetX = 0;
+  let offsetY = 0;
+  const move = (event: PointerEvent) => {
+    const bounds = landscape.getBoundingClientRect();
+    const size = sun.offsetWidth;
+    const x = Math.min(
+      Math.max(event.clientX - bounds.left - offsetX, -size / 3),
+      bounds.width - size * 0.66,
+    );
+    const y = Math.min(
+      Math.max(event.clientY - bounds.top - offsetY, -size / 3),
+      bounds.height * 0.62,
+    );
+    sun.style.left = `${x}px`;
+    sun.style.top = `${y}px`;
+    landscape.style.setProperty(
+      "--dusk",
+      Math.max(0, (y / (bounds.height * 0.62) - 0.25) / 0.75).toFixed(3),
+    );
+  };
+  sun.addEventListener("pointerdown", (event) => {
+    const rect = sun.getBoundingClientRect();
+    offsetX = event.clientX - rect.left;
+    offsetY = event.clientY - rect.top;
+    sun.setPointerCapture(event.pointerId);
+    sun.classList.add("is-dragging", "was-dragged");
   });
-  button.addEventListener("click", () => {
-    if (finished) {
-      for (const animation of landscape.getAnimations({ subtree: true })) animation.play();
-      finished = false;
-      delete landscape.dataset.paused;
-    } else if (landscape.dataset.paused) {
-      delete landscape.dataset.paused;
-    } else {
-      landscape.dataset.paused = "true";
-    }
-    update();
+  sun.addEventListener("pointermove", (event) => {
+    if (sun.hasPointerCapture(event.pointerId)) move(event);
   });
+  const release = (event: PointerEvent) => {
+    if (sun.hasPointerCapture(event.pointerId)) sun.releasePointerCapture(event.pointerId);
+    sun.classList.remove("is-dragging");
+  };
+  sun.addEventListener("pointerup", release);
+  sun.addEventListener("pointercancel", release);
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  initializeTheme();
   initializeMenu();
-  initializeLandscape();
+  initializeStickyHeader();
+  initializeStory();
+  initializeSun();
 });

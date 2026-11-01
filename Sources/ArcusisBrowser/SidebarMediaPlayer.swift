@@ -49,6 +49,7 @@ struct SidebarMediaPlayer: View {
           onCommand(.setMuted(!state.muted))
         }
       }
+      .environment(\.layoutDirection, .leftToRight)
     }
     .padding(.horizontal, 8)
     .padding(.vertical, 6)

@@ -69,7 +69,7 @@ struct MediaCaptureIndicator: View {
       access.screen ? PanelsL10n.string("screen") : nil,
     ].compactMap { $0 }
     let formatter = ListFormatter()
-    formatter.locale = Locale(identifier: BrowserLanguage.currentLaunchLanguage.localeIdentifier)
+    formatter.locale = PanelsL10n.formattingLocale()
     return formatter.string(from: resources) ?? resources.joined(separator: ", ")
   }
 }

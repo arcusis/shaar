@@ -111,12 +111,16 @@ struct SidebarSplitRow: View {
 }
 
 extension SplitEdge {
-  var menuTitle: String {
+  static func forPhysicalRight(isRightToLeft: Bool) -> SplitEdge {
+    isRightToLeft ? .left : .right
+  }
+
+  func menuTitle(isRightToLeft: Bool = false) -> String {
     switch self {
-    case .left: "Left"
-    case .right: "Right"
-    case .top: "Top"
-    case .bottom: "Bottom"
+    case .left: ShellL10n.string(isRightToLeft ? "Right" : "Left")
+    case .right: ShellL10n.string(isRightToLeft ? "Left" : "Right")
+    case .top: ShellL10n.string("Top")
+    case .bottom: ShellL10n.string("Bottom")
     }
   }
 }

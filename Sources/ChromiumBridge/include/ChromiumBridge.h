@@ -53,7 +53,7 @@ FOUNDATION_EXPORT NSString *ARCBridgeLocalizedString(NSString *message);
 
 /// All methods and callbacks run on the main thread. The engine owns the AppKit run loop.
 @interface ARCChromiumRuntime : NSObject
-/// Must be set before `start`; configures Chromium UI locale and Accept-Language preference.
+/// Set before `runWithDataDirectory:testing:`; configures Chromium UI locale and Accept-Language.
 @property(nonatomic, copy) NSString *languageIdentifier;
 @property(copy, nullable) void (^onReady)(void);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onWindowClosed)(NSString *windowID, BOOL quitting);

@@ -12,6 +12,7 @@ struct SplitDropZone: View {
   let store: BrowserStore
   let targetID: UUID
   @State private var edge: SplitEdge?
+  @Environment(\.layoutDirection) private var layoutDirection
 
   var body: some View {
     if store.tabDrag != nil, store.canDropTab(beside: targetID) {
@@ -19,11 +20,18 @@ struct SplitDropZone: View {
         ZStack(alignment: alignment) {
           SplitDropCatcher(
             onHover: { point in
-              edge = point.map { Self.edge(at: $0, in: geometry.size, keeping: edge) }
+              edge = point.map {
+                Self.edge(
+                  at: $0, in: geometry.size, keeping: edge,
+                  isRightToLeft: layoutDirection == .rightToLeft)
+              }
             },
             onDrop: { point in
               store.dropTab(
-                beside: targetID, edge: Self.edge(at: point, in: geometry.size, keeping: edge))
+                beside: targetID,
+                edge: Self.edge(
+                  at: point, in: geometry.size, keeping: edge,
+                  isRightToLeft: layoutDirection == .rightToLeft))
             })
           if let edge {
             preview(edge, in: geometry.size)
@@ -59,13 +67,17 @@ struct SplitDropZone: View {
 
   /// The edge closest to the pointer. The current edge is kept until another is clearly
   /// closer, so the preview does not flip back and forth near a corner.
-  static func edge(at point: CGPoint, in size: CGSize, keeping current: SplitEdge? = nil)
+  static func edge(
+    at point: CGPoint, in size: CGSize, keeping current: SplitEdge? = nil,
+    isRightToLeft: Bool = false
+  )
     -> SplitEdge
   {
     guard size.width > 0, size.height > 0 else { return .right }
+    let logicalPoint = CGPoint(x: isRightToLeft ? size.width - point.x : point.x, y: point.y)
     let distances: [SplitEdge: CGFloat] = [
-      .left: point.x / size.width, .right: 1 - point.x / size.width,
-      .top: point.y / size.height, .bottom: 1 - point.y / size.height,
+      .left: logicalPoint.x / size.width, .right: 1 - logicalPoint.x / size.width,
+      .top: logicalPoint.y / size.height, .bottom: 1 - logicalPoint.y / size.height,
     ]
     let nearest = distances.min { $0.value < $1.value }?.key ?? .right
     guard let current, let kept = distances[current], let best = distances[nearest] else {

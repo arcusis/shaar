@@ -119,11 +119,11 @@ struct DownloadsPanel: View {
   }
 
   private func byteStatus(_ item: BrowserDownload) -> String {
-    let received = ByteCountFormatter.string(fromByteCount: item.receivedBytes, countStyle: .file)
+    let received = PanelsL10n.byteCount(item.receivedBytes)
     guard let total = item.totalBytes else { return received }
     return PanelsL10n.format(
       "%@ of %@", .string(received),
-      .string(ByteCountFormatter.string(fromByteCount: total, countStyle: .file)))
+      .string(PanelsL10n.byteCount(total)))
   }
 
   private func symbol(_ action: DownloadAction) -> String {

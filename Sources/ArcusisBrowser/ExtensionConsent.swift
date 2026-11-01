@@ -28,11 +28,15 @@ struct ExtensionConsent: View {
           .font(.caption).foregroundStyle(
             .secondary)
         Text(request.browserExtension.id).font(.caption.monospaced()).foregroundStyle(.secondary)
+          .environment(\.layoutDirection, .leftToRight)
       }
       LabeledContent(PanelsL10n.string("Profile"), value: profileName)
-      LabeledContent(
-        PanelsL10n.string("Page"),
-        value: request.sourceURL.host() ?? request.sourceURL.absoluteString)
+      LabeledContent {
+        Text(request.sourceURL.host() ?? request.sourceURL.absoluteString)
+          .environment(\.layoutDirection, .leftToRight)
+      } label: {
+        Text(PanelsL10n.string("Page"))
+      }
       Divider()
       Text(PanelsL10n.string("This extension can:")).font(.headline)
       ScrollView {
@@ -63,8 +67,11 @@ struct ExtensionConsent: View {
             )
           )
           .font(.callout)
-          Toggle("I understand and want to continue", isOn: $acknowledgedUnknownAccess)
-            .font(.callout)
+          Toggle(
+            PanelsL10n.string("I understand and want to continue"),
+            isOn: $acknowledgedUnknownAccess
+          )
+          .font(.callout)
         }
         .padding(12)
         .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))

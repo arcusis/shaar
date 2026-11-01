@@ -113,8 +113,9 @@ private struct SplitGroupView: View {
         .onChanged { value in
           activeDivider = index
           let physicalDelta = axis == .columns ? value.translation.width : value.translation.height
-          let delta =
-            axis == .columns && layoutDirection == .rightToLeft ? -physicalDelta : physicalDelta
+          let delta = SplitResizeDecision.logicalDelta(
+            physicalDelta, isHorizontal: axis == .columns,
+            isRightToLeft: layoutDirection == .rightToLeft)
           liveWeights = Self.resized(weights, at: index, by: delta, available: available)
         }
         .onEnded { _ in
@@ -139,6 +140,14 @@ private struct SplitGroupView: View {
     next[index] = leading
     next[index + 1] = pair - leading
     return next
+  }
+}
+
+enum SplitResizeDecision {
+  static func logicalDelta(
+    _ physicalDelta: CGFloat, isHorizontal: Bool, isRightToLeft: Bool
+  ) -> CGFloat {
+    isHorizontal && isRightToLeft ? -physicalDelta : physicalDelta
   }
 }
 

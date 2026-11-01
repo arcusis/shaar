@@ -216,7 +216,8 @@ struct CommandPanel: View {
       space.profileID != store.session.selectedSpace.profileID,
       let profile = store.session.profiles.first(where: { $0.id == space.profileID })
     else { return result.subtitle }
-    return "\(result.subtitle) · \(profile.name) profile"
+    return ShellL10n.format(
+      "%@ · %@ profile", arguments: [.string(result.subtitle), .string(profile.name)])
   }
 
   private func actionLabel(for result: CommandResult) -> String {

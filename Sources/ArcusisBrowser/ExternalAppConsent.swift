@@ -21,12 +21,14 @@ struct ExternalAppConsent: View {
         LabeledContent(PanelsL10n.string("Website")) {
           Text(request.requestingOrigin?.absoluteString ?? PanelsL10n.string("Unknown website"))
             .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+            .environment(\.layoutDirection, .leftToRight)
         }
         LabeledContent(PanelsL10n.string("Profile")) {
           Text(profileName).fixedSize(horizontal: false, vertical: true)
         }
         LabeledContent(PanelsL10n.string("Link type")) {
           Text(request.scheme).fixedSize(horizontal: false, vertical: true)
+            .environment(\.layoutDirection, .leftToRight)
         }
         Divider()
         Text(

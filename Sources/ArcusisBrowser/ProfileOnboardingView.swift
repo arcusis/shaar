@@ -230,7 +230,8 @@ final class ProfileOnboardingWindow: NSObject, NSWindowDelegate {
     super.init()
     window.title = SettingsL10n.string("New Profile")
     window.isReleasedWhenClosed = false
-    window.contentView = NSHostingView(rootView: ProfileOnboardingView(model: model))
+    window.contentView = NSHostingView(
+      rootView: ProfileOnboardingView(model: model).settingsLocalization())
     window.delegate = self
   }
 

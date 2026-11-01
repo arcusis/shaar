@@ -175,6 +175,7 @@ public enum BrowserLaunch {
     .frame(width: size.width, height: size.height)
     .background(Color(nsColor: .windowBackgroundColor))
     .environment(\.colorScheme, dark ? .dark : .light)
+    .shellLocalization()
     try renderOffscreen(view, to: url, size: size)
   }
 

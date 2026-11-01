@@ -19,7 +19,7 @@ extension PageReloadMode {
 
 private struct SiteControlFailure: LocalizedError {
   let errorDescription: String?
-  init(_ message: String) { errorDescription = message }
+  init(_ message: String) { errorDescription = ShellL10n.string(message) }
 }
 
 extension BrowserEngine: SiteControlBackend {

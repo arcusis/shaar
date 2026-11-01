@@ -246,7 +246,10 @@ enum SymbolCatalog {
   static func sections(matching query: String) -> [Section] {
     let needle = query.trimmingCharacters(in: .whitespaces).lowercased()
     return all.compactMap { section in
-      let sectionMatches = needle.isEmpty || section.name.lowercased().contains(needle)
+      let sectionMatches =
+        needle.isEmpty
+        || section.name.localizedCaseInsensitiveContains(needle)
+        || SettingsL10n.string(section.name).localizedCaseInsensitiveContains(needle)
       let symbols = section.symbols.filter { symbol in
         isAvailable(symbol) && (sectionMatches || searchText(for: symbol).contains(needle))
       }

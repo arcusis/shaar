@@ -23,7 +23,7 @@ struct PageNavigationButtons: View {
       }
       .disabled(state?.canGoForward != true)
 
-      navigationButton("arrow.clockwise", label: "Reload (Command-R)") {
+      navigationButton("arrow.clockwise", label: ShellL10n.string("Reload (Command-R)")) {
         store.reloadCurrentPage()
       }
       .disabled(!store.canReloadCurrentPage)

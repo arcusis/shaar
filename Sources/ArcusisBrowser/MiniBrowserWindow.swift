@@ -44,7 +44,7 @@ final class MiniBrowserController {
     else { throw WorkspaceError.invalidState }
     self.window = window
     engine = try BrowserEngine(events: events, windowID: id, store: store)
-    let hosting = NSHostingView(rootView: MiniBrowserWindow(controller: self))
+    let hosting = NSHostingView(rootView: MiniBrowserWindow(controller: self).shellLocalization())
     hosting.frame = content.bounds
     hosting.autoresizingMask = [.width, .height]
     content.addSubview(hosting)
@@ -147,6 +147,7 @@ struct MiniBrowserWindow: View {
       HStack {
         TextField(PanelsL10n.string("Enter address"), text: $address)
           .textFieldStyle(.roundedBorder)
+          .environment(\.layoutDirection, .leftToRight)
           .onSubmit { onNavigate(address) }
         Picker(PanelsL10n.string("Space"), selection: $destination) {
           ForEach(destinations) { space in

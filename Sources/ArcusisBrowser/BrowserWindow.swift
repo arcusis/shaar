@@ -267,14 +267,10 @@ struct BrowserWindow: View {
   }
 
   private func commandPanel(in size: CGSize) -> some View {
-    let contentLeft =
-      (store.sidebarIsVisible ? BrowserChromeLayout.sidebarWidth : 0)
-      + BrowserChromeLayout.pageCardInset
-    let contentTop: CGFloat = store.pageFind == nil ? 45 : 95
-    let initialContentFrame = CGRect(
-      x: contentLeft, y: contentTop,
-      width: max(0, size.width - contentLeft - BrowserChromeLayout.pageCardInset),
-      height: max(0, size.height - contentTop - BrowserChromeLayout.pageCardInset))
+    let initialContentFrame = BrowserChromeLayout.initialWebContentFrame(
+      size: size, sidebarVisible: store.sidebarIsVisible,
+      isRightToLeft: BrowserLanguage.currentLaunchLanguage.isRightToLeft,
+      findBarVisible: store.pageFind != nil)
     let sections = store.commandSections
     let frame = BrowserChromeLayout.commandPanelFrame(
       in: webContentFrame.isEmpty ? initialContentFrame : webContentFrame,
@@ -284,12 +280,16 @@ struct BrowserWindow: View {
       resultCount: sections.results.count, headerCount: sections.headerCount,
       availableHeight: frame.height
     )
+    // SwiftUI positions from the leading edge; the measured page frame uses physical x.
+    let centerX =
+      BrowserLanguage.currentLaunchLanguage.isRightToLeft
+      ? size.width - frame.midX : frame.midX
     let anchor = UnitPoint(
-      x: frame.midX / max(size.width, 1), y: frame.midY / max(size.height, 1))
+      x: centerX / max(size.width, 1), y: frame.midY / max(size.height, 1))
     return CommandPanel(store: store, resultsHeight: resultsHeight)
       .frame(width: frame.width)
       .fixedSize(horizontal: false, vertical: true)
-      .position(x: frame.midX, y: frame.midY)
+      .position(x: centerX, y: frame.midY)
       .animation(reduceMotion ? nil : .spring(duration: 0.24, bounce: 0.1), value: resultsHeight)
       .transition(.scale(scale: 0.94, anchor: anchor).combined(with: .opacity))
   }
@@ -307,14 +307,11 @@ struct BrowserWindow: View {
 
 private struct SidebarHiddenOffset: ViewModifier {
   let isHidden: Bool
-  @Environment(\.layoutDirection) private var layoutDirection
 
   func body(content: Content) -> some View {
     content.offset(
       x: isHidden
-        ? (layoutDirection == .rightToLeft
-          ? BrowserChromeLayout.sidebarWidth : -BrowserChromeLayout.sidebarWidth)
-        : 0)
+        ? BrowserChromeLayout.hiddenSidebarOffset : 0)
   }
 }
 

@@ -82,12 +82,17 @@ struct BrowserSettingsView: View {
   @AppStorage("settingsStartFresh") private var startFresh = false
   @AppStorage("settingsWarnBeforeQuit") private var warnBeforeQuit = false
   @AppStorage("settingsAppearance") private var appearance = "system"
+  @AppStorage(BrowserLanguage.selectionDefaultsKey) private var selectedLanguage =
+    BrowserLanguage.systemDefault.rawValue
   private var languageSelection: Binding<String> {
     Binding(
-      get: { BrowserLanguage.selection.rawValue },
+      get: {
+        BrowserLanguage(rawValue: selectedLanguage)?.rawValue
+          ?? BrowserLanguage.systemDefault.rawValue
+      },
       set: { rawValue in
         if let selection = BrowserLanguage(rawValue: rawValue) {
-          BrowserLanguage.selection = selection
+          selectedLanguage = selection.rawValue
         }
       })
   }
@@ -571,14 +576,24 @@ struct ConnectedAccountRow: View {
     HStack(spacing: 10) {
       AccountAvatar(account: account)
       VStack(alignment: .leading, spacing: 1) {
-        Text(account.name ?? account.email).lineLimit(1)
-        Text(account.name == nil ? account.provider.title : account.email)
-          .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        if let name = account.name {
+          Text(name).lineLimit(1)
+        } else {
+          Text(account.email).lineLimit(1)
+            .environment(\.layoutDirection, .leftToRight)
+        }
+        if account.name == nil {
+          Text(account.provider.title)
+            .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        } else {
+          Text(account.email)
+            .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            .environment(\.layoutDirection, .leftToRight)
+        }
       }
       Spacer(minLength: 0)
       if let disconnect { Button(SettingsL10n.string("Disconnect"), action: disconnect) }
     }
-    .environment(\.layoutDirection, .leftToRight)
   }
 }
 

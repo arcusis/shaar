@@ -156,7 +156,8 @@ struct LibraryPanel: View {
             .lineLimit(1)
           if let address = item.address {
             Text(address).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(
-              .middle)
+              .middle
+            ).environment(\.layoutDirection, .leftToRight)
           }
         }
         Spacer()
@@ -184,8 +185,10 @@ struct LibraryPanel: View {
         Menu(PanelsL10n.string("Move to folder")) {
           if let tree {
             ForEach(tree.items.filter(\.isFolder)) { folder in
-              Button(folder.path) {
+              Button {
                 store.moveBookmark(item.id, profileID: profileID, to: folder.id)
+              } label: {
+                Text(folder.path).environment(\.layoutDirection, .leftToRight)
               }
               .disabled(item.parentID == folder.id || tree.contains(item.id, inPathTo: folder.id))
             }
@@ -206,14 +209,14 @@ struct LibraryPanel: View {
           VStack(alignment: .leading, spacing: 4) {
             Text(item.title).font(.system(size: 13)).lineLimit(1)
             Text(item.address).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+              .environment(\.layoutDirection, .leftToRight)
               .truncationMode(.middle)
           }
           Spacer()
         }.contentShape(Rectangle())
       }.buttonStyle(.plain).disabled(!ownsContext || busy || item.destination == nil)
       let dateStyle = Date.FormatStyle(
-        date: .abbreviated, time: .shortened,
-        locale: Locale(identifier: BrowserLanguage.currentLaunchLanguage.localeIdentifier))
+        date: .abbreviated, time: .shortened, locale: PanelsL10n.formattingLocale())
       Text(item.lastVisit.formatted(dateStyle))
         .font(.caption).foregroundStyle(.secondary)
       Button {

@@ -12,6 +12,7 @@ struct SplitPaneToolbar: View {
   let tabID: UUID
 
   @Environment(\.colorScheme) private var colorScheme
+  @Environment(\.layoutDirection) private var layoutDirection
 
   private var tab: BrowserTab? {
     store.session.selectedSpace.tabs.first { $0.id == tabID }
@@ -32,13 +33,13 @@ struct SplitPaneToolbar: View {
         engine?.runtime.goForward(inTabID: tabID.uuidString)
       }
       .disabled(state?.canGoForward != true)
-      toolbarButton("arrow.clockwise", label: "Reload") {
+      toolbarButton("arrow.clockwise", label: ShellL10n.string("Reload")) {
         focus()
         store.reloadCurrentPage()
       }
       address
-      toolbarButton("plus", label: "New Tab in Split") {
-        store.openSplitPane(beside: tabID, edge: .right)
+      toolbarButton("plus", label: ShellL10n.string("New Tab in Split")) {
+        store.openSplitPane(beside: tabID, edge: physicalRightEdge)
       }
       .disabled(store.selectedSplitIsFull)
       paneMenu
@@ -86,7 +87,7 @@ struct SplitPaneToolbar: View {
   private var paneMenu: some View {
     Menu {
       Button(ShellL10n.string("New Tab to the Right")) {
-        store.openSplitPane(beside: tabID, edge: .right)
+        store.openSplitPane(beside: tabID, edge: physicalRightEdge)
       }
       .disabled(store.selectedSplitIsFull)
       Button(ShellL10n.string("New Tab Below")) {
@@ -108,6 +109,10 @@ struct SplitPaneToolbar: View {
     .fixedSize()
     .help(ShellL10n.string("Pane options"))
     .accessibilityLabel(ShellL10n.string("Pane options"))
+  }
+
+  private var physicalRightEdge: SplitEdge {
+    .forPhysicalRight(isRightToLeft: layoutDirection == .rightToLeft)
   }
 
   private func focus() {
@@ -132,6 +137,7 @@ struct SplitPaneToolbar: View {
 struct SplitLayoutControls: View {
   @Bindable var store: BrowserStore
   let split: BrowserSplit
+  @Environment(\.layoutDirection) private var layoutDirection
 
   var body: some View {
     let current = SplitLayoutPreset.matching(split.root)
@@ -146,7 +152,9 @@ struct SplitLayoutControls: View {
       Divider()
       if let selected = store.session.selectedSpace.selectedTabID {
         Button(ShellL10n.string("New Tab to the Right")) {
-          store.openSplitPane(beside: selected, edge: .right)
+          store.openSplitPane(
+            beside: selected,
+            edge: .forPhysicalRight(isRightToLeft: layoutDirection == .rightToLeft))
         }
         .disabled(store.selectedSplitIsFull)
         Button(ShellL10n.string("New Tab Below")) {

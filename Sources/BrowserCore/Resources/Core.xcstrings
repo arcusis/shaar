@@ -9,7 +9,7 @@
               "one": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "Closing the browser will cancel one active download."
+                  "value": "Closing the browser will cancel 1 active download."
                 }
               },
               "other": {
@@ -133,6 +133,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "הורדה"
+          }
+        }
+      }
+    },
+    "Personal": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אישי"
+          }
+        }
+      }
+    },
+    "Work": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "עבודה"
+          }
+        }
+      }
+    },
+    "the gateway to the internet": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "השער לאינטרנט"
           }
         }
       }

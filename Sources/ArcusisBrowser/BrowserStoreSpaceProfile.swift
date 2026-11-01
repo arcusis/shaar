@@ -36,8 +36,10 @@ struct SpaceMenuContent: View {
       store.showFolderEditor(.create(spaceID: space.id, parentID: nil))
     }
     Divider()
-    Button("Delete Space", role: .destructive) { store.spacePendingDeletion = space.id }
-      .disabled(store.session.spaces.count <= 1)
+    Button(ShellL10n.string("Delete Space"), role: .destructive) {
+      store.spacePendingDeletion = space.id
+    }
+    .disabled(store.session.spaces.count <= 1)
   }
 
   private func edit(_ focus: SpaceEditorFocus) {

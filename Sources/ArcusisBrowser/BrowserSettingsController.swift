@@ -286,7 +286,8 @@ final class BrowserSettingsController: NSObject {
     settingsWindow.title = SettingsL10n.string("Settings")
     settingsWindow.minSize = NSSize(width: 620, height: 500)
     settingsWindow.isReleasedWhenClosed = false
-    settingsWindow.contentView = NSHostingView(rootView: BrowserSettingsRoot(state: state))
+    settingsWindow.contentView = NSHostingView(
+      rootView: BrowserSettingsRoot(state: state).settingsLocalization())
     settingsWindow.center()
     let delegate = BrowserSettingsWindowDelegate(controller: self)
     windowDelegate = delegate

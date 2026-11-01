@@ -7,7 +7,7 @@
     "%d active downloads" : {
       "localizations" : {
         "en" : { "variations" : { "plural" : {
-          "one" : { "stringUnit" : { "state" : "translated", "value" : "Closing the browser will cancel one active download." } },
+          "one" : { "stringUnit" : { "state" : "translated", "value" : "Closing the browser will cancel 1 active download." } },
           "other" : { "stringUnit" : { "state" : "translated", "value" : "Closing the browser will cancel %d active downloads." } }
         } } },
         "he" : { "variations" : { "plural" : {

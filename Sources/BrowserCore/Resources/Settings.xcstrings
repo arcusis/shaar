@@ -76,7 +76,7 @@
         "he": {
           "stringUnit": {
             "state": "translated",
-            "value": "המרחבים שלה יועברו אל %@. המועדפים שלה יוסרו."
+            "value": "המרחבים שלו יועברו אל %@. המועדפים שלו יוסרו."
           }
         }
       }
@@ -376,7 +376,7 @@
         "he": {
           "stringUnit": {
             "state": "translated",
-            "value": "גרסה לבנייה"
+            "value": "מספר בנייה"
           }
         }
       }
@@ -1433,7 +1433,7 @@
               "two": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "%d מרחבים"
+                  "value": "שני מרחבים"
                 }
               },
               "other": {
@@ -2052,7 +2052,7 @@
         "he": {
           "stringUnit": {
             "state": "translated",
-            "value": "מידע על %@"
+            "value": "אודות %@"
           }
         }
       }
@@ -2082,7 +2082,7 @@
         "he": {
           "stringUnit": {
             "state": "translated",
-            "value": "תמיכה ב‑%@"
+            "value": "התמיכה של %@"
           }
         }
       }
@@ -2392,7 +2392,7 @@
         "he": {
           "stringUnit": {
             "state": "translated",
-            "value": "טרם נשאלה הרשאה"
+            "value": "טרם התבקשה הרשאה"
           }
         }
       }

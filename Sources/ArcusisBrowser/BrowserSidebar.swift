@@ -9,6 +9,7 @@ struct BrowserSidebar: View {
   @Bindable var store: BrowserStore
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.colorScheme) private var colorScheme
+  @Environment(\.layoutDirection) private var layoutDirection
   @Environment(\.browserWindowIsFullScreen) private var isFullScreen
   @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
   @Environment(\.browserChromeAccessibilityOverrides) private var accessibilityOverrides
@@ -187,7 +188,8 @@ struct BrowserSidebar: View {
           sectionDropTarget(
             pinned: true,
             height: space.pinnedItems().isEmpty ? 8 : 12,
-            hint: space.pinnedItems().isEmpty ? "Drop to pin in this Space" : nil)
+            hint: space.pinnedItems().isEmpty
+              ? ShellL10n.string("Drop to pin in this Space") : nil)
           if let folderDraft, folderDraft.section == .pinned, folderDraft.parentID == nil {
             folderDraftRow(depth: 0)
           }
@@ -309,7 +311,7 @@ struct BrowserSidebar: View {
           set: { if !$0 { clearSpaceID = nil } }
         ), titleVisibility: .visible
       ) {
-        Button("Close Tabs", role: .destructive) {
+        Button(ShellL10n.string("Close Tabs"), role: .destructive) {
           guard store.session.selectedSpaceID == space.id else { return }
           store.clearTodayTabs(in: space.id)
           clearSpaceID = nil
@@ -459,7 +461,7 @@ struct BrowserSidebar: View {
         )
       } else if store.tabDrag != nil {
         SidebarDropHint(
-          title: "Drop to add to Favorites", symbol: "star",
+          title: ShellL10n.string("Drop to add to Favorites"), symbol: "star",
           isTargeted: targetedSection == "favorites")
       } else {
         Color.clear.frame(height: 8).contentShape(Rectangle())
@@ -503,7 +505,7 @@ struct BrowserSidebar: View {
       Button(ShellL10n.string("History…")) { store.showLibrary(.history) }
     }
     .accessibilityLabel(ShellL10n.string("Library"))
-    .accessibilityHint("Open Library; hover to see recent downloads")
+    .accessibilityHint(ShellL10n.string("Open Library; hover to see recent downloads"))
     .help(ShellL10n.string("Library"))
     .buttonStyle(.plain)
     .onHover {
@@ -586,7 +588,7 @@ struct BrowserSidebar: View {
       Capsule().fill(Color.accentColor).frame(height: 2)
         .frame(maxHeight: .infinity, alignment: .bottom)
     case .split, .addToSplit:
-      Text(intent == .addToSplit ? "Add to Split" : "Split with")
+      Text(ShellL10n.string(intent == .addToSplit ? "Add to Split" : "Split with"))
         .font(.system(size: 10, weight: .medium))
         .padding(.horizontal, 7)
         .padding(.vertical, 3)
@@ -727,14 +729,16 @@ struct BrowserSidebar: View {
     if let selected = store.selectedSplit, !selected.tabIDs.contains(tab.id),
       let focused = space.selectedTabID
     {
-      Menu("Add to Split View") {
+      Menu(ShellL10n.string("Add to Split View")) {
         ForEach(SplitEdge.allCases, id: \.self) { edge in
-          Button(edge.menuTitle) { store.addToSplit(tab.id, beside: focused, edge: edge) }
+          Button(edge.menuTitle(isRightToLeft: layoutDirection == .rightToLeft)) {
+            store.addToSplit(tab.id, beside: focused, edge: edge)
+          }
         }
       }
       .disabled(store.selectedSplitIsFull)
     }
-    Menu("Split View with…") {
+    Menu(ShellL10n.string("Split View with…")) {
       ForEach(space.tabs.filter { $0.id != tab.id }) { candidate in
         Button(candidate.title) { store.splitTabs(tab.id, candidate.id) }
       }
@@ -1043,7 +1047,7 @@ struct BrowserSidebar: View {
           store.moveFolder(folder.id, from: space.id, to: space.id, parentID: parent?.parentID)
         }
       }
-      Menu("Move to Space") {
+      Menu(ShellL10n.string("Move to Space")) {
         let destinations = store.session.spaces.filter {
           $0.id != space.id && $0.profileID == space.profileID
         }

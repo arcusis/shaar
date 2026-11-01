@@ -98,10 +98,10 @@ struct LibraryDownloadsView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else if visibleItems.isEmpty {
         ContentUnavailableView(
-          PanelsL10n.string(filtersAreActive ? "No matches" : emptyTitle),
+          filtersAreActive ? PanelsL10n.string("No matches") : emptyTitle,
           systemImage: mediaOnly ? "photo.on.rectangle.angled" : "arrow.down.circle",
           description: Text(
-            PanelsL10n.string(filtersAreActive ? "Try another search or filter." : emptyDescription)
+            filtersAreActive ? PanelsL10n.string("Try another search or filter.") : emptyDescription
           )
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -329,7 +329,7 @@ struct LibraryDownloadsView: View {
   private func fileType(_ item: BrowserDownload) -> String {
     guard let url = item.fileURL, let type = UTType(filenameExtension: url.pathExtension),
       let description = type.localizedDescription
-    else { return "File" }
+    else { return PanelsL10n.string("File") }
     return description
   }
 
@@ -341,11 +341,11 @@ struct LibraryDownloadsView: View {
   }
 
   private func byteStatus(_ item: BrowserDownload) -> String {
-    let received = ByteCountFormatter.string(fromByteCount: item.receivedBytes, countStyle: .file)
+    let received = PanelsL10n.byteCount(item.receivedBytes)
     guard let total = item.totalBytes else { return received }
     return PanelsL10n.format(
       "%@ of %@", .string(received),
-      .string(ByteCountFormatter.string(fromByteCount: total, countStyle: .file)))
+      .string(PanelsL10n.byteCount(total)))
   }
 
   private func actionLabel(_ action: DownloadAction) -> String {

@@ -72,6 +72,7 @@ struct BookmarkEditor: View {
         TextField(PanelsL10n.string("https://example.com"), text: $address).textFieldStyle(
           .roundedBorder
         )
+        .environment(\.layoutDirection, .leftToRight)
         .accessibilityLabel(PanelsL10n.string("Bookmark address")).onSubmit { submit() }
       }
       if let tree {
@@ -81,14 +82,18 @@ struct BookmarkEditor: View {
             selection: Binding(get: { parentID ?? tree.otherID }, set: { parentID = $0 })
           ) {
             ForEach(tree.items.filter(\.isFolder)) { folder in
-              Text(folder.path).tag(folder.id)
+              Text(folder.path).environment(\.layoutDirection, .leftToRight).tag(folder.id)
             }
           }
         } else {
-          LabeledContent(
-            PanelsL10n.string("Folder"),
-            value: tree.items.first { $0.id == item?.parentID }?.path
-              ?? PanelsL10n.string("Unavailable"))
+          LabeledContent {
+            Text(
+              tree.items.first { $0.id == item?.parentID }?.path
+                ?? PanelsL10n.string("Unavailable")
+            ).environment(\.layoutDirection, .leftToRight)
+          } label: {
+            Text(PanelsL10n.string("Folder"))
+          }
         }
       }
       if !route.matches(store) {

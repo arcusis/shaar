@@ -1,6 +1,12 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Space": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"מרחב"}}}},
+    " and %@": {"localizations":{"he":{"stringUnit":{"state":"translated","value":" וגם %@"}}}},
+    "This space will be deleted from all %@, closing %@%@. Its profile is kept.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"המרחב הזה יימחק מכל החלונות שבהם הוא מופיע (%@), וייסגרו %@%@. הפרופיל שלו יישמר."}}}},
+    "Tabs in this space will close%@. Its profile is kept.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"הלשוניות במרחב הזה%@ ייסגרו. הפרופיל שלו יישמר."}}}},
+    "Saved session could not be restored. The original file is preserved; changes in this window will not be saved.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"לא ניתן לשחזר את ההפעלה השמורה. הקובץ המקורי נשמר; השינויים בחלון הזה לא יישמרו."}}}},
+    "⌘T": {"comment":"Keyboard shortcut glyph; retain unchanged.","localizations":{"he":{"stringUnit":{"state":"translated","value":"⌘T"}}}},
     "%@ Support": {
       "localizations": {
         "en": {
@@ -202,7 +208,7 @@
         "he": {
           "stringUnit": {
             "state": "translated",
-            "value": "על %@"
+            "value": "אודות %@"
           }
         }
       }
@@ -1818,7 +1824,7 @@
         "he": {
           "stringUnit": {
             "state": "translated",
-            "value": "הצמדת לשונית"
+            "value": "נעיצת לשונית"
           }
         }
       }
@@ -1919,6 +1925,36 @@
         }
       }
     },
+    "Left": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Left" } },
+        "he": { "stringUnit": { "state": "translated", "value": "שמאלה" } }
+      }
+    },
+    "Right": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Right" } },
+        "he": { "stringUnit": { "state": "translated", "value": "ימינה" } }
+      }
+    },
+    "Top": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Top" } },
+        "he": { "stringUnit": { "state": "translated", "value": "למעלה" } }
+      }
+    },
+    "Bottom": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Bottom" } },
+        "he": { "stringUnit": { "state": "translated", "value": "למטה" } }
+      }
+    },
+    "Cancel": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Cancel" } },
+        "he": { "stringUnit": { "state": "translated", "value": "ביטול" } }
+      }
+    },
     "Quit": {
       "localizations": {
         "en": {
@@ -1935,6 +1971,12 @@
         }
       }
     },
+    "Quit %@?": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Quit %@?" } },
+        "he": { "stringUnit": { "state": "translated", "value": "לצאת מ-%@?" } }
+      }
+    },
     "Quit %@": {
       "localizations": {
         "en": {
@@ -1949,6 +1991,12 @@
             "value": "יציאה מ-%@"
           }
         }
+      }
+    },
+    "Your windows and tabs will be saved.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Your windows and tabs will be saved." } },
+        "he": { "stringUnit": { "state": "translated", "value": "החלונות והלשוניות שלך יישמרו." } }
       }
     },
     "Quit Shaar": {
@@ -2346,7 +2394,7 @@
         "he": {
           "stringUnit": {
             "state": "translated",
-            "value": "הגדרות האתר"
+            "value": "מרכז הבקרה של האתר"
           }
         }
       }
@@ -2696,7 +2744,7 @@
         "he": {
           "stringUnit": {
             "state": "translated",
-            "value": "ביטול הצמדת לשונית"
+            "value": "ביטול נעיצת לשונית"
           }
         }
       }
@@ -2782,6 +2830,7 @@
       }
     },
     "esc": {
+      "comment": "Physical Escape key label; retain unchanged.",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -2792,7 +2841,7 @@
         "he": {
           "stringUnit": {
             "state": "translated",
-            "value": "יציאה"
+            "value": "esc"
           }
         }
       }
@@ -2919,6 +2968,168 @@
             }
           }
         }
+      }
+    },
+    "Drop to add to Favorites": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Drop to add to Favorites" } },
+        "he": { "stringUnit": { "state": "translated", "value": "שחרור להוספה למועדפים" } }
+      }
+    },
+    "Back": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Back" } },
+        "he": { "stringUnit": { "state": "translated", "value": "חזרה" } }
+      }
+    },
+    "Forward": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Forward" } },
+        "he": { "stringUnit": { "state": "translated", "value": "קדימה" } }
+      }
+    },
+    "Open": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Open" } },
+        "he": { "stringUnit": { "state": "translated", "value": "פתיחה" } }
+      }
+    },
+    "Address %@": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Address %@" } },
+        "he": { "stringUnit": { "state": "translated", "value": "כתובת %@" } }
+      }
+    },
+    "New Tab in Split": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "New Tab in Split" } },
+        "he": { "stringUnit": { "state": "translated", "value": "לשונית חדשה בתצוגה מפוצלת" } }
+      }
+    },
+    "Reload (Command-R)": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Reload (Command-R)" } },
+        "he": { "stringUnit": { "state": "translated", "value": "רענון (Command-R)" } }
+      }
+    },
+    "Reload this page in a new renderer process": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Reload this page in a new renderer process" } },
+        "he": { "stringUnit": { "state": "translated", "value": "טעינת הדף מחדש בתהליך עיבוד חדש" } }
+      }
+    },
+    "The workspace is unavailable.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "The workspace is unavailable." } },
+        "he": { "stringUnit": { "state": "translated", "value": "סביבת העבודה אינה זמינה." } }
+      }
+    },
+    "This window is closed; its changes will not be saved.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "This window is closed; its changes will not be saved." } },
+        "he": { "stringUnit": { "state": "translated", "value": "החלון הזה נסגר; השינויים שלו לא יישמרו." } }
+      }
+    },
+    "The window change was rejected. %@": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "The window change was rejected. %@" } },
+        "he": { "stringUnit": { "state": "translated", "value": "שינוי החלון נדחה. %@" } }
+      }
+    },
+    "Changes could not be saved. %@": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Changes could not be saved. %@" } },
+        "he": { "stringUnit": { "state": "translated", "value": "לא ניתן לשמור את השינויים. %@" } }
+      }
+    },
+    "Window changes could not be saved. %@": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Window changes could not be saved. %@" } },
+        "he": { "stringUnit": { "state": "translated", "value": "לא ניתן לשמור את שינויי החלון. %@" } }
+      }
+    },
+    "Saved windows could not be restored. The original files are preserved; changes in these temporary windows will not be saved.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Saved windows could not be restored. The original files are preserved; changes in these temporary windows will not be saved." } },
+        "he": { "stringUnit": { "state": "translated", "value": "לא ניתן לשחזר את החלונות השמורים. הקבצים המקוריים נשמרו; שינויים בחלונות הזמניים האלה לא יישמרו." } }
+      }
+    },
+    "This native window already has an application client.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "This native window already has an application client." } },
+        "he": { "stringUnit": { "state": "translated", "value": "לחלון המקורי הזה כבר משויך לקוח של האפליקציה." } }
+      }
+    },
+    "%@ · %@ profile": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "%@ · %@ profile" } },
+        "he": { "stringUnit": { "state": "translated", "value": "%@ · פרופיל %@" } }
+      }
+    },
+    "Drop to pin in this Space": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Drop to pin in this Space" } },
+        "he": { "stringUnit": { "state": "translated", "value": "שחרור לנעיצת לשונית במרחב הזה" } }
+      }
+    },
+    "Add to Split": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Add to Split" } },
+        "he": { "stringUnit": { "state": "translated", "value": "הוספה לתצוגה מפוצלת" } }
+      }
+    },
+    "Split with": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Split with" } },
+        "he": { "stringUnit": { "state": "translated", "value": "פיצול עם" } }
+      }
+    },
+    "Other": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Other" } },
+        "he": { "stringUnit": { "state": "translated", "value": "אחר" } }
+      }
+    },
+    "Extension": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Extension" } },
+        "he": { "stringUnit": { "state": "translated", "value": "הרחבה" } }
+      }
+    },
+    "This page has no certificate to show.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "This page has no certificate to show." } },
+        "he": { "stringUnit": { "state": "translated", "value": "לדף הזה אין אישור להצגה." } }
+      }
+    },
+    "The site presented a different certificate than this page uses.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "The site presented a different certificate than this page uses." } },
+        "he": { "stringUnit": { "state": "translated", "value": "האתר הציג אישור שונה מזה שמשמש את הדף הזה." } }
+      }
+    },
+    "This page can no longer be reloaded from here.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "This page can no longer be reloaded from here." } },
+        "he": { "stringUnit": { "state": "translated", "value": "אי אפשר לטעון את הדף הזה מחדש מכאן." } }
+      }
+    },
+    "Site controls are available for web pages only.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Site controls are available for web pages only." } },
+        "he": { "stringUnit": { "state": "translated", "value": "הגדרות האתר זמינות רק לדפי אינטרנט." } }
+      }
+    },
+    "The site's address is not valid.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "The site's address is not valid." } },
+        "he": { "stringUnit": { "state": "translated", "value": "כתובת האתר אינה תקינה." } }
+      }
+    },
+    "The site did not present a certificate.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "The site did not present a certificate." } },
+        "he": { "stringUnit": { "state": "translated", "value": "האתר לא הציג אישור." } }
       }
     }
   },

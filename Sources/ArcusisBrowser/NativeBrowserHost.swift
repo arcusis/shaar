@@ -280,10 +280,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   private func quit() {
     if UserDefaults.standard.bool(forKey: "settingsWarnBeforeQuit") && presentation == .visible {
       let alert = NSAlert()
-      alert.messageText = "Quit \(ProductIdentity.name)?"
-      alert.informativeText = "Your windows and tabs will be saved."
-      alert.addButton(withTitle: "Quit")
-      alert.addButton(withTitle: "Cancel")
+      alert.messageText = ShellL10n.format("Quit %@?", arguments: [.string(ProductIdentity.name)])
+      alert.informativeText = ShellL10n.string("Your windows and tabs will be saved.")
+      alert.addButton(withTitle: ShellL10n.string("Quit"))
+      alert.addButton(withTitle: ShellL10n.string("Cancel"))
       guard alert.runModal() == .alertFirstButtonReturn else { return }
     }
     flushGeometry()
@@ -402,15 +402,26 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     if NSApp.mainMenu === menu { NSApp.mainMenu = previousMenu }
     if NSApp.servicesMenu
       === menu?.items.first?.submenu?.items.first(where: {
-        $0.submenu?.title == "Services"
+        $0.submenu?.identifier?.rawValue == "Services"
+          || $0.submenu?.title == ShellL10n.string("Services")
       })?.submenu
     {
       NSApp.servicesMenu = previousServicesMenu
     }
-    if NSApp.windowsMenu === menu?.items.first(where: { $0.submenu?.title == "Window" })?.submenu {
+    if NSApp.windowsMenu
+      === menu?.items.first(where: {
+        $0.submenu?.identifier?.rawValue == "Window"
+          || $0.submenu?.title == ShellL10n.string("Window")
+      })?.submenu
+    {
       NSApp.windowsMenu = previousWindowsMenu
     }
-    if NSApp.helpMenu === menu?.items.first(where: { $0.submenu?.title == "Help" })?.submenu {
+    if NSApp.helpMenu
+      === menu?.items.first(where: {
+        $0.submenu?.identifier?.rawValue == "Help"
+          || $0.submenu?.title == ShellL10n.string("Help")
+      })?.submenu
+    {
       NSApp.helpMenu = previousHelpMenu
     }
   }
@@ -814,6 +825,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     func section(_ title: String) -> NSMenu {
       let item = NSMenuItem()
       let result = NSMenu(title: localizedTitle(title))
+      result.identifier = NSUserInterfaceItemIdentifier(title)
       item.submenu = result
       main.addItem(item)
       return result
@@ -824,6 +836,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       let item = NSMenuItem(
         title: localizedTitle(title), action: #selector(menuAction(_:)),
         keyEquivalent: shortcut?.key ?? "")
+      item.identifier = NSUserInterfaceItemIdentifier(title)
       item.target = target
       item.representedObject = command.rawValue
       item.keyEquivalentModifierMask = shortcut?.modifiers ?? []
@@ -833,6 +846,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       let shortcut = ShortcutCatalog.standardShortcut(for: title)
       let item = NSMenuItem(
         title: localizedTitle(title), action: action, keyEquivalent: shortcut?.key ?? "")
+      item.identifier = NSUserInterfaceItemIdentifier(title)
       item.keyEquivalentModifierMask = shortcut?.modifiers ?? []
       menu.addItem(item)
     }
@@ -843,6 +857,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     add(.checkForUpdates, "Check for Updates…", to: app)
     app.addItem(.separator())
     let services = NSMenu(title: ShellL10n.string("Services"))
+    services.identifier = NSUserInterfaceItemIdentifier("Services")
     let servicesItem = NSMenuItem(
       title: ShellL10n.string("Services"), action: nil, keyEquivalent: "")
     servicesItem.submenu = services
@@ -936,7 +951,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   }
 
   func menuNeedsUpdate(_ menu: NSMenu) {
-    guard menu.title == ShellL10n.string("Spaces") else { return }
+    guard
+      menu.identifier?.rawValue == "Spaces"
+        || menu.title == ShellL10n.string("Spaces")
+    else { return }
     while let item = menu.items.first(where: { $0.representedObject is UUID || $0.tag == 91827 }) {
       menu.removeItem(item)
     }
@@ -963,16 +981,20 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     previousHelpMenu = NSApp.helpMenu
     let main = Self.makeMenu(target: self)
     menu = main
-    if let spaces = main.items.first(where: { $0.submenu?.title == "Spaces" })?.submenu {
+    if let spaces = main.items.first(where: { $0.submenu?.identifier?.rawValue == "Spaces" })?
+      .submenu
+    {
       spaces.delegate = self
       menuNeedsUpdate(spaces)
     }
     NSApp.servicesMenu =
       main.items.first?.submenu?.items.first(where: {
-        $0.submenu?.title == "Services"
+        $0.submenu?.identifier?.rawValue == "Services"
       })?.submenu
-    NSApp.windowsMenu = main.items.first(where: { $0.submenu?.title == "Window" })?.submenu
-    NSApp.helpMenu = main.items.first(where: { $0.submenu?.title == "Help" })?.submenu
+    NSApp.windowsMenu =
+      main.items.first(where: { $0.submenu?.identifier?.rawValue == "Window" })?.submenu
+    NSApp.helpMenu =
+      main.items.first(where: { $0.submenu?.identifier?.rawValue == "Help" })?.submenu
     NSApp.mainMenu = main
     shortcutMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
       guard let self, let menu = self.menu, NSApp.mainMenu === menu,
@@ -983,6 +1005,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   }
 
   static func run(frameworkURL: URL) -> Int32 {
+    BrowserLanguage.applyToCurrentProcess()
+    let launchLanguage = BrowserLanguage.currentLaunchLanguage
+    ARCConfigureLocalization(BrowserLocalization.resourceBundleURL, launchLanguage.localeIdentifier)
     do {
       let directory = URL.applicationSupportDirectory.appending(
         path: ProductIdentity.dataFolderName, directoryHint: .isDirectory)
@@ -996,6 +1021,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       let preferences = BrowserPreferencesStore(
         fileURL: directory.appending(path: "preferences.json"))
       let runtime = try ARCChromiumRuntime(frameworkURL: frameworkURL)
+      runtime.languageIdentifier = launchLanguage.localeIdentifier
       BrowserSettingsAppearance.apply(
         UserDefaults.standard.string(forKey: "settingsAppearance") ?? "system")
       let host = NativeBrowserHost(

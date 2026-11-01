@@ -43,7 +43,11 @@ enum LauncherCommands {
       !excluded.contains(command)
     else { return nil }
     let title = entry.title.trimmingCharacters(in: CharacterSet(charactersIn: "…"))
-    let detail = entry.key.isEmpty ? entry.menu : "\(entry.menu) · \(entry.displayKeys)"
+    // Keep modifier/key order LTR inside a Hebrew menu description.
+    let displayKeys =
+      BrowserLanguage.currentLaunchLanguage.isRightToLeft
+      ? "\u{2066}\(entry.displayKeys)\u{2069}" : entry.displayKeys
+    let detail = entry.key.isEmpty ? entry.menu : "\(entry.menu) · \(displayKeys)"
     return LauncherCommand(id: name, title: title, detail: detail, symbol: symbol(for: command))
   }
 

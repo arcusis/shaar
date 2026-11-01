@@ -658,7 +658,7 @@ final class BrowserEngine {
     extensionPanel = .popup(
       ExtensionPopupContext(
         id: id, profileID: profile, tabID: tab, extensionID: extensionID,
-        name: extensions.first { $0.id == extensionID }?.name ?? "Extension"))
+        name: extensions.first { $0.id == extensionID }?.name ?? ShellL10n.string("Extension")))
   }
 
   private func requestInstallation(_ payload: [String: Any]) {

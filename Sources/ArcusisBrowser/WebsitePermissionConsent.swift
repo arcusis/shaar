@@ -18,10 +18,15 @@ struct WebsitePermissionConsent: View {
       )
       .font(.title2.weight(.semibold))
       Text(request.requestingOrigin.absoluteString).font(.headline).textSelection(.enabled)
+        .environment(\.layoutDirection, .leftToRight)
       Text(PanelsL10n.format("This site wants to %@.", .string(purposes)))
       LabeledContent(PanelsL10n.string("Profile"), value: profileName)
       LabeledContent(
-        PanelsL10n.string("Page"), value: request.pageURL.host() ?? request.pageURL.absoluteString)
+        PanelsL10n.string("Page")
+      ) {
+        Text(request.pageURL.host() ?? request.pageURL.absoluteString)
+          .environment(\.layoutDirection, .leftToRight)
+      }
       Divider()
       Text(scopeNote)
         .font(.callout).foregroundStyle(.secondary)
@@ -67,7 +72,7 @@ struct WebsitePermissionConsent: View {
 
   private func localizedList(_ values: [String]) -> String {
     let formatter = ListFormatter()
-    formatter.locale = Locale(identifier: BrowserLanguage.currentLaunchLanguage.localeIdentifier)
+    formatter.locale = PanelsL10n.formattingLocale()
     return formatter.string(from: values) ?? values.joined(separator: ", ")
   }
   private func resolve(accepted: Bool) {

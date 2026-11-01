@@ -87,7 +87,7 @@ struct ExtensionDetails: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       Button(action: back) {
-        Label(SettingsL10n.string("Extensions"), systemImage: "chevron.left")
+        Label(SettingsL10n.string("Extensions"), systemImage: "chevron.backward")
       }
       .buttonStyle(.plain)
       .foregroundStyle(.secondary)

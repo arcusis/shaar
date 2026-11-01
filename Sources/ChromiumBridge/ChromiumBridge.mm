@@ -43,14 +43,14 @@ static NSString *ARCStringWithLocale(NSString *format, NSLocale *locale, ...) {
 
 static NSString *ARCBridgeActiveDownloadsMessage(int count) {
   if (!ARCSelectedBridgeBundle) {
-    return count == 1 ? @"Closing the browser will cancel one active download."
+    return count == 1 ? @"Closing the browser will cancel 1 active download."
       : [NSString stringWithFormat:@"Closing the browser will cancel %d active downloads.", count];
   }
   NSString *englishFallback = @"Closing the browser will cancel %d active downloads.";
   NSString *format = [ARCSelectedBridgeBundle localizedStringForKey:@"%d active downloads"
       value:englishFallback table:@"Bridge"];
   if ([format isEqualToString:englishFallback]) {
-    return count == 1 ? @"Closing the browser will cancel one active download."
+    return count == 1 ? @"Closing the browser will cancel 1 active download."
       : [NSString stringWithFormat:englishFallback, count];
   }
   return ARCStringWithLocale(format, [NSLocale localeWithLocaleIdentifier:ARCBridgeLanguage], count);

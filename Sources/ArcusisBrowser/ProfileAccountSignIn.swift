@@ -50,7 +50,7 @@ final class ProfileAccountSignIn {
         store: store, engine: engine, presentation: presentation,
         title: SettingsL10n.format(
           "Sign in to %@ for %@", .string(provider.title), .string(profile.name))
-      ) { [weak self] in self?.cancel() })
+      ) { [weak self] in self?.cancel() }.settingsLocalization())
     hosting.frame = content.bounds
     hosting.autoresizingMask = [.width, .height]
     content.addSubview(hosting)

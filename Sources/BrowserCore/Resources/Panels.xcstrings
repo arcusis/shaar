@@ -1696,7 +1696,7 @@
         "he": {
           "stringUnit": {
             "state": "translated",
-            "value": "מנוע הדפדפן לא סיפק רשימה מלאה של גישת האתר. ייתכן שהתוסף יוכל לגשת לאתרים שלא מופיעים למעלה."
+            "value": "מנוע הדפדפן לא סיפק רשימה מלאה של האתרים שהתוסף יכול לגשת אליהם. ייתכן שהתוסף יוכל לגשת לאתרים שלא מופיעים למעלה."
           }
         }
       }
@@ -1769,7 +1769,7 @@
               "one": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "one match"
+                  "value": "1 match"
                 }
               },
               "other": {
@@ -1825,7 +1825,7 @@
               "one": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "one active capture tab"
+                  "value": "1 active capture tab"
                 }
               },
               "other": {
@@ -1871,7 +1871,7 @@
               "one": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "one day ago"
+                  "value": "1 day ago"
                 }
               },
               "other": {
@@ -1917,7 +1917,7 @@
               "one": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "one week ago"
+                  "value": "1 week ago"
                 }
               },
               "other": {
@@ -1963,7 +1963,7 @@
               "one": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "one week ago"
+                  "value": "1 week ago"
                 }
               },
               "other": {
@@ -2009,7 +2009,7 @@
               "one": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "one month ago"
+                  "value": "1 month ago"
                 }
               },
               "other": {
@@ -2055,7 +2055,7 @@
               "one": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "one month ago"
+                  "value": "1 month ago"
                 }
               },
               "other": {
@@ -2173,42 +2173,12 @@
         }
       }
     },
-    "%@:%@:%@": {
-      "localizations": {
-        "he": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@:%@:%@"
-          }
-        }
-      }
-    },
-    "%@:%@:": {
-      "localizations": {
-        "he": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@:%@:"
-          }
-        }
-      }
-    },
     "%@, %@": {
       "localizations": {
         "he": {
           "stringUnit": {
             "state": "translated",
             "value": "%@, %@"
-          }
-        }
-      }
-    },
-    "%@, %@%@, %@": {
-      "localizations": {
-        "he": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@, %@%@, %@"
           }
         }
       }
@@ -2241,7 +2211,7 @@
               "one": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "one active download"
+                  "value": "1 active download"
                 }
               },
               "other": {
@@ -2275,16 +2245,6 @@
                 }
               }
             }
-          }
-        }
-      }
-    },
-    "%@ %%@": {
-      "localizations": {
-        "he": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ %@"
           }
         }
       }
@@ -2337,7 +2297,7 @@
               "one": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "one recent page"
+                  "value": "1 recent page"
                 }
               },
               "other": {
@@ -2380,7 +2340,7 @@
         "he": {
           "stringUnit": {
             "state": "translated",
-            "value": "מאושר"
+            "value": "מותר"
           }
         }
       }
@@ -2440,7 +2400,7 @@
         "he": {
           "stringUnit": {
             "state": "translated",
-            "value": "לא מאושר"
+            "value": "לא מותר"
           }
         }
       }
@@ -2450,7 +2410,7 @@
         "he": {
           "stringUnit": {
             "state": "translated",
-            "value": "טרם נשאלה"
+            "value": "טרם התבקשה הרשאה"
           }
         }
       }

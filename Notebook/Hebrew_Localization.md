@@ -1,0 +1,21 @@
+# Hebrew localization
+
+BrowserCore and Chromium Bridge catalogs are translation authority for their tables. English remains source language and fallback. Hebrew plural forms use native `one`, `two`, and `other` categories; placeholders stay typed and positional.
+
+Fresh Personal and Work profile/Space labels use launch language when a new session is created. Existing saved names remain user data and are never rewritten after language changes. Shaar remains product brand; `Arcusis Browser` remains application data folder name for compatibility.
+
+Run `python3 scripts/check-localization.py` to validate catalogs and verify inventory freshness. Regenerate reviewed inventory with `python3 scripts/check-localization.py --write-inventory`. Run offscreen language captures with `python3 scripts/test-localization.py`; runner starts isolated English and Hebrew test children.
+
+The General settings language picker takes effect after restart. System Default follows macOS per-app language preferences. An explicit English or Hebrew choice applies a process-only `AppleLanguages` override before native framework startup; it does not overwrite macOS language preferences. Chromium receives the same launch language and corresponding `Accept-Language` selection. Hebrew dates and byte counts use an explicit Hebrew locale; existing English regional formatting is retained.
+
+The SwiftPM build-tool plugin compiles the Core, Bridge, Shell, Settings, and Panels catalogs with Apple's `xcstringstool`. App packaging also compiles localized permission descriptions from `Resources/Localizations/InfoPlist.xcstrings`. Compiled resources live in the BrowserCore package bundle and app `en.lproj` / `he.lproj` directories. The compiler can omit English identity values; English source keys remain valid fallbacks.
+
+See [[Hebrew_Glossary]] for approved terms and [Hebrew_String_Inventory.csv](Hebrew_String_Inventory.csv) for source locations, catalog keys, translations, and retained-value dispositions.
+
+Catalog values are authoritative. Inventory source locations are explicitly marked lexical occurrences; they are navigation aids rather than proof that every occurrence binds to that table. Source-reference checks cover direct keys, ternary branches, computed filter titles, native menu titles, and known error helpers. Brands, user names, URLs, internal service metadata, and diagnostic text have different ownership from interface translations.
+
+Build tests with `swift build --build-tests --jobs 1` before running the capture script. It requires 44 named captures in each language: sidebar and Command-T at two widths, hidden sidebar, mixed Hebrew/Latin queries, every Settings section, all onboarding steps, site control center, mini player, and PiP, in light and dark appearances, plus rendered pager and toggle checks. Hidden windows render at fixed 1x scale with animations disabled. Pixel bounds assert Command-T stays within the page card, hidden sidebars clear the page, and pagers/toggles occupy their expected physical positions. Separate geometry tests cover swipe, split, drag exclusions, and favorite ordering. Keyboard glyph groups retain LTR order inside Hebrew descriptions. Captures and assertions do not exercise physical pointer interaction or capture the desktop.
+
+SwiftUI already mirrors horizontal offsets with layout direction. Sidebar, pager, and toggle offsets stay in logical coordinates. Physical pointer deltas and AppKit frame calculations require explicit conversion.
+
+`python3 scripts/localization-fixture.py` uses marked temporary profiles and loopback HTTP. Eight scenarios cover first launch and restart in each language, then English-to-Hebrew and Hebrew-to-English changes on an existing profile. Evidence records observed request `Accept-Language`, navigator language, and internal `chrome://version` language/direction. Both test runners restrict child environments. Build or source checks alone do not establish engine runtime acceptance.

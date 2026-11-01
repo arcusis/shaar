@@ -4,6 +4,7 @@
 
 import BrowserCore
 import Foundation
+import SwiftUI
 
 enum SettingsL10n {
   static func string(_ key: String) -> String {
@@ -22,5 +23,13 @@ enum SettingsL10n {
         .string(String(message.dropFirst(saveFailure.count))))
     }
     return string(message)
+  }
+}
+
+extension View {
+  func settingsLocalization() -> some View {
+    let language = BrowserLanguage.currentLaunchLanguage
+    return environment(\.locale, Locale(identifier: language.localeIdentifier))
+      .environment(\.layoutDirection, language.isRightToLeft ? .rightToLeft : .leftToRight)
   }
 }

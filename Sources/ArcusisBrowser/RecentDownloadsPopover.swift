@@ -165,14 +165,17 @@ struct RecentDownloadsPopover: View {
   }
 
   private func accessibilityLabel(for item: BrowserDownload, stateLabel: String) -> String {
-    let details = item.state == .downloading && !item.dangerous ? ", \(byteStatus(item))" : ""
-    return "\(item.filename), \(stateLabel)\(details), \(relativeAge(item))"
+    let details = item.state == .downloading && !item.dangerous ? [byteStatus(item)] : []
+    let formatter = ListFormatter()
+    formatter.locale = PanelsL10n.formattingLocale()
+    return formatter.string(from: [item.filename, stateLabel] + details + [relativeAge(item)])
+      ?? ([item.filename, stateLabel] + details + [relativeAge(item)]).joined(separator: ", ")
   }
 
   private func relativeAge(_ item: BrowserDownload) -> String {
     let formatter = RelativeDateTimeFormatter()
     formatter.unitsStyle = .full
-    formatter.locale = Locale(identifier: BrowserLanguage.currentLaunchLanguage.localeIdentifier)
+    formatter.locale = PanelsL10n.formattingLocale()
     return formatter.localizedString(
       for: Date(timeIntervalSince1970: item.startTime), relativeTo: referenceDate)
   }
@@ -195,11 +198,11 @@ struct RecentDownloadsPopover: View {
   }
 
   private func byteStatus(_ item: BrowserDownload) -> String {
-    let received = ByteCountFormatter.string(fromByteCount: item.receivedBytes, countStyle: .file)
+    let received = PanelsL10n.byteCount(item.receivedBytes)
     guard let total = item.totalBytes else { return received }
     return PanelsL10n.format(
       "%@ of %@", .string(received),
-      .string(ByteCountFormatter.string(fromByteCount: total, countStyle: .file)))
+      .string(PanelsL10n.byteCount(total)))
   }
 }
 

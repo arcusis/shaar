@@ -13,9 +13,13 @@ struct SettingsShortcutsPane: View {
   private var entries: [ShortcutCatalog.Entry] {
     guard !search.isEmpty else { return catalog.entries }
     return catalog.entries.filter {
-      $0.title.localizedCaseInsensitiveContains(search)
-        || $0.menu.localizedCaseInsensitiveContains(search)
+      $0.localizedTitle.localizedCaseInsensitiveContains(search)
+        || $0.localizedMenu.localizedCaseInsensitiveContains(search)
         || $0.displayKeys.localizedCaseInsensitiveContains(search)
+        || $0.title.localizedCaseInsensitiveContains(search)
+        || $0.menu.localizedCaseInsensitiveContains(search)
+        || $0.englishTitle?.localizedCaseInsensitiveContains(search) == true
+        || $0.englishMenu?.localizedCaseInsensitiveContains(search) == true
     }
   }
 
@@ -40,6 +44,7 @@ struct SettingsShortcutsPane: View {
               Text(entry.displayKeys)
                 .font(.system(.body, design: .rounded).monospacedDigit())
                 .foregroundStyle(.secondary)
+                .environment(\.layoutDirection, .leftToRight)
             }
           }
         }

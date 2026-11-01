@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import AppKit
+import BrowserCore
 
 /// Shaar's controls over Chromium's picture-in-picture video. The view fills the video
 /// window: buttons fade in while the pointer is over it, the interior moves the window and
@@ -84,11 +85,23 @@ final class PictureInPictureControlsView: NSView {
   override func layout() {
     super.layout()
     controls.frame = bounds
-    layoutCorner(.backToTab, x: 8)
-    layoutCorner(.close, x: bounds.width - 8 - 28)
-    layoutCorner(.minimize, x: bounds.width - 8 - 28 - 4 - 28)
+    let corners = Self.cornerFrames(
+      width: bounds.width, rightToLeft: BrowserLanguage.currentLaunchLanguage.isRightToLeft)
+    layoutCorner(.backToTab, x: corners.backToTab)
+    layoutCorner(.close, x: corners.close)
+    layoutCorner(.minimize, x: corners.minimize)
     layoutCenter()
     buttons[.restore]?.frame = restoreFrame
+  }
+
+  static func cornerFrames(width: CGFloat, rightToLeft: Bool) -> (
+    backToTab: CGFloat, minimize: CGFloat, close: CGFloat
+  ) {
+    let trailing = width - 8 - 28
+    let middle = trailing - 4 - 28
+    return rightToLeft
+      ? (backToTab: trailing, minimize: width - middle - 28, close: width - trailing - 28)
+      : (backToTab: 8, minimize: middle, close: trailing)
   }
 
   override func updateTrackingAreas() {

@@ -43,6 +43,7 @@ struct ProfileFavoritesGrid: View {
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+  @Environment(\.layoutDirection) private var layoutDirection
   @State private var hoveredID: UUID?
 
   init(
@@ -157,7 +158,7 @@ struct ProfileFavoritesGrid: View {
         guard drops.count == 1, let payload = drops.first else { return false }
         let beforeID = Self.dropTargetBefore(
           targetID: favorite.id, dropX: point.x, tileWidth: geometry.size.width,
-          favorites: favorites)
+          favorites: favorites, isRightToLeft: layoutDirection == .rightToLeft)
         guard
           Self.accepts(
             payload, before: beforeID, favorites: favorites,
@@ -172,7 +173,7 @@ struct ProfileFavoritesGrid: View {
           item,
           Self.dropTargetBefore(
             targetID: favorite.id, dropX: point.x, tileWidth: geometry.size.width,
-            favorites: favorites))
+            favorites: favorites, isRightToLeft: layoutDirection == .rightToLeft))
       }
       .onHover { isHovered in
         if isHovered {
@@ -182,10 +183,10 @@ struct ProfileFavoritesGrid: View {
         }
       }
       .contextMenu {
-        Button(SettingsL10n.string("Move Left")) { moveLeft(favorite.id) }
-          .disabled(index(of: favorite.id) == 0)
-        Button(SettingsL10n.string("Move Right")) { moveRight(favorite.id) }
-          .disabled(index(of: favorite.id) == favorites.count - 1)
+        Button(SettingsL10n.string("Move Left")) { movePhysical(favorite.id, left: true) }
+          .disabled(isPhysicalMoveUnavailable(favorite.id, left: true))
+        Button(SettingsL10n.string("Move Right")) { movePhysical(favorite.id, left: false) }
+          .disabled(isPhysicalMoveUnavailable(favorite.id, left: false))
         Divider()
         Button(SettingsL10n.string("Reset to Original Address")) { onReset(favorite.id) }
         Button(SettingsL10n.string("Remove Favorite (keeps page)"), role: .destructive) {
@@ -266,11 +267,30 @@ struct ProfileFavoritesGrid: View {
     onMoveBefore(favoriteID, beforeNext)
   }
 
+  private func movePhysical(_ favoriteID: UUID, left: Bool) {
+    let moveLeftInOrder = Self.moveLeftInOrder(
+      physicalLeft: left, isRightToLeft: layoutDirection == .rightToLeft)
+    if moveLeftInOrder { moveLeft(favoriteID) } else { moveRight(favoriteID) }
+  }
+
+  private func isPhysicalMoveUnavailable(_ favoriteID: UUID, left: Bool) -> Bool {
+    guard let index = index(of: favoriteID) else { return true }
+    let moveLeftInOrder = Self.moveLeftInOrder(
+      physicalLeft: left, isRightToLeft: layoutDirection == .rightToLeft)
+    return moveLeftInOrder ? index == 0 : index == favorites.count - 1
+  }
+
+  static func moveLeftInOrder(physicalLeft: Bool, isRightToLeft: Bool) -> Bool {
+    physicalLeft != isRightToLeft
+  }
+
   static func dropTargetBefore(
-    targetID: UUID, dropX: CGFloat, tileWidth: CGFloat, favorites: [FavoriteTile]
+    targetID: UUID, dropX: CGFloat, tileWidth: CGFloat, favorites: [FavoriteTile],
+    isRightToLeft: Bool = false
   ) -> UUID? {
     guard let targetIndex = favorites.firstIndex(where: { $0.id == targetID }) else { return nil }
-    if dropX < tileWidth / 2 { return targetID }
+    let logicalDropX = isRightToLeft ? tileWidth - dropX : dropX
+    if logicalDropX < tileWidth / 2 { return targetID }
     let nextIndex = targetIndex + 1
     return favorites.indices.contains(nextIndex) ? favorites[nextIndex].id : nil
   }

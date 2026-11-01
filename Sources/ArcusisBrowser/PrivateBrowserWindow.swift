@@ -78,9 +78,12 @@ struct PrivateBrowserWindow: View {
                   Image(systemName: "globe")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
-                  Text(tab.title.isEmpty || tab.title == "about:blank" ? "New tab" : tab.title)
-                    .font(.system(size: 12))
-                    .lineLimit(1)
+                  Text(
+                    tab.title.isEmpty || tab.title == "about:blank"
+                      ? ShellL10n.string("New tab") : tab.title
+                  )
+                  .font(.system(size: 12))
+                  .lineLimit(1)
                   Spacer(minLength: 0)
                 }
                 .contentShape(Rectangle())
@@ -109,7 +112,7 @@ struct PrivateBrowserWindow: View {
       Button {
         store.openTab()
       } label: {
-        Label("New private tab", systemImage: "plus")
+        Label(ShellL10n.string("New private tab"), systemImage: "plus")
           .font(.system(size: 12, weight: .medium))
           .frame(maxWidth: .infinity, alignment: .leading)
       }

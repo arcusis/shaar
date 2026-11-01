@@ -213,7 +213,8 @@ final class SpaceSwipeWindowMonitor {
     let index =
       store.session.spaces.firstIndex(where: { $0.id == store.session.selectedSpaceID }) ?? 0
     pager.move(
-      delta: view.isRightToLeft ? -event.scrollingDeltaX : event.scrollingDeltaX,
+      delta: SpacePagerDecision.logicalDelta(
+        event.scrollingDeltaX, isRightToLeft: view.isRightToLeft),
       timestamp: event.timestamp, index: index,
       count: store.session.spaces.count)
     return nil

@@ -181,7 +181,7 @@ struct ExtensionRow: View {
       }
       .buttonStyle(.plain)
       .disabled(!item.enabled)
-      .help(pinned ? "Unpin from toolbar" : "Pin to toolbar")
+      .help(PanelsL10n.string(pinned ? "Unpin from toolbar" : "Pin to toolbar"))
       .accessibilityLabel(
         pinned
           ? PanelsL10n.format("Unpin %@", .string(item.name))

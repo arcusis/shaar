@@ -36,10 +36,12 @@ struct ThemeColorPicker: View {
     VStack(spacing: 12) {
       ThemeColorField(hsb: hsb) { update($0) }
         .frame(height: 200)
+        .environment(\.layoutDirection, .leftToRight)
         .focusable()
         .focused($fieldFocused)
       ThemeHueSlider(hsb: hsb) { update($0) }
         .frame(height: 28)
+        .environment(\.layoutDirection, .leftToRight)
       HStack(spacing: 10) {
         swatches
         hexField

@@ -9,6 +9,12 @@ The page toolbar's site controls button opens a native popover for the selected 
 
 Reloads go through the store's reload path, so renderer-failure state and stale-target checks are shared with the toolbar and menu.
 
+## Hover help and accessibility
+
+The toolbar's site controls button and every interactive control in the popover use native macOS hover help with the system tooltip delay. Permission switches describe the site setting they change; certificate and action buttons describe their operation, including Reload and Hard Reload shortcuts. VoiceOver labels match the tooltip text.
+
+Pinned extension buttons in both the toolbar and the popover show the extension name and a distinct, nonempty action title from Chromium's selected-tab action state. Missing, blank or duplicate titles fall back to the extension name. The title lookup reads only the selected native tab in its owning profile.
+
 ## Automatic picture-in-picture
 
 The toggle reads and writes the playback feature's per-site setting ([[Media_Playback]]): `BrowserStore.automaticPictureInPictureAllowed(for:profileID:)` and `setAutomaticPictureInPicture(_:for:profileID:)`, keyed by the page's site in its profile. Saving notifies the window engines, which apply the choice to that profile's open pages. The pinned engine has no per-site content setting for it.
@@ -16,5 +22,7 @@ The toggle reads and writes the playback feature's per-site setting ([[Media_Pla
 ## Verification
 
 `SiteControlsProbe` runs in both engine fixture phases on an authored page at `site-controls.localhost`, a site no other probe uses. It checks permission round trips and persistence across restart, the automatic picture-in-picture toggle saving for one site only, each action's effect on cookies and storage, Restart Page without a renderer failure, and offscreen light and dark captures with live engine state. HTTPS certificate retrieval and the certificate sheet are not exercised by the fixture; the handshake and fingerprint match were checked once against a public HTTPS site.
+
+`ExtensionManagementTests` covers action-title formatting and fallback. `ExtensionProbe` checks default and runtime-updated per-tab action titles through the pinned engine. Offscreen captures establish layout only; they do not exercise physical hover timing or VoiceOver speech.
 
 Related: [[Automatic_Picture_In_Picture]], [[Media_Consent]], [[Renderer_Recovery]], [[Keyboard_Commands]], [[Engine_Interop_Boundary]].

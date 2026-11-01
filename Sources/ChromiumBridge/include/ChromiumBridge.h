@@ -157,6 +157,8 @@ typedef NS_ENUM(NSInteger, ARCPageReloadMode) {
 
 @interface ARCChromiumRuntime (Extensions)
 - (NSArray<NSDictionary<NSString *, id> *> *)extensionsForProfileID:(NSString *)profileID;
+/// The current action title for an extension in the selected tab's owning profile.
+- (nullable NSString *)extensionActionTitleForID:(NSString *)extensionID tabID:(NSString *)tabID;
 - (BOOL)executeExtensionID:(NSString *)extensionID tabID:(NSString *)tabID error:(NSError **)error;
 /// Runs one fixed extension-management operation against a validated extension ID and profile.
 - (void)manageExtensionsForProfileID:(NSString *)profileID

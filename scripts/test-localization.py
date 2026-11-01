@@ -75,6 +75,12 @@ def expected_captures():
 
 
 def run(language, xctest, bundle, environment):
+    # Coverage-instrumented local bundles must keep LLVM output out of the checkout root.
+    profiles = ROOT / "build/Verification/localization-profiles"
+    if profiles.is_symlink():
+        raise RuntimeError("Localization profile path must not be a symlink")
+    profiles.mkdir(parents=True, exist_ok=True)
+    environment = dict(environment, LLVM_PROFILE_FILE=str(profiles / f"{language}-%m-%p.profraw"))
     command = [
         xctest, "-XCTest", f"BrowserAppTests.{SUITE}",
         "-BrowserLanguage.selection", language, str(bundle),

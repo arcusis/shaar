@@ -21,13 +21,18 @@ final class HebrewLocalizationVisualTests: XCTestCase {
 
   override func setUpWithError() throws {
     let arguments = ProcessInfo.processInfo.arguments
-    guard let selectionIndex = arguments.firstIndex(of: "-BrowserLanguage.selection"),
-      arguments.indices.contains(selectionIndex + 1)
-    else {
-      throw XCTSkip("Run through test-localization.py with isolated launch-language selection")
+    if let selectionIndex = arguments.firstIndex(of: "-BrowserLanguage.selection") {
+      guard arguments.indices.contains(selectionIndex + 1),
+        let selected = BrowserLanguage(rawValue: arguments[selectionIndex + 1]),
+        BrowserLanguage.supported.contains(selected)
+      else {
+        throw NSError(
+          domain: "HebrewLocalizationVisualTests", code: 1,
+          userInfo: [NSLocalizedDescriptionKey: "Invalid -BrowserLanguage.selection argument"])
+      }
+      XCTAssertEqual(arguments[selectionIndex + 1], BrowserLanguage.currentLaunchLanguage.rawValue)
     }
     let selected = BrowserLanguage.currentLaunchLanguage
-    XCTAssertEqual(arguments[selectionIndex + 1], selected.rawValue)
     let directory = URL(
       fileURLWithPath: "build/Verification/localization-visuals/\(selected.localeIdentifier)",
       isDirectory: true)

@@ -191,6 +191,8 @@ struct SavedTabCapacityFixture {
     else {
       throw SavedTabCapacityFailure("Initial capacity metadata changed outside dynamic titles.")
     }
+    // Native title changes use deferred writes. A restart checkpoint must describe durable bytes.
+    try workspaceStore.flushSaves()
     let checkpoint = try SavedTabCapacityIdentityCheckpoint(
       workspace: workspaceStore.workspace, windowID: initialCheckpoint.windowID, runID: runID)
     try Self.write(checkpoint, to: restartCheckpointURL)

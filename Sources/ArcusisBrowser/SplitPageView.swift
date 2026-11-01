@@ -160,6 +160,9 @@ struct BrowserSplitPageView: View {
           engine: engine, tabID: id, autofocus: id == store.session.selectedSpace.selectedTabID
         )
         .overlay { SplitDropZone(store: store, targetID: id) }
+        .overlay {
+          if let model = engine.developerModels[id] { DeveloperPageAccessories(model: model) }
+        }
       } else {
         ProgressView("Loading profile…")
       }

@@ -10,6 +10,10 @@ import Observation
 final class SiteControlsDeveloperModel {
   private(set) var target: SiteControlTarget
   private(set) var simulation: DeveloperSimulation
+  var performanceEnabled = false
+  var performanceSnapshot: PagePerformanceSnapshot?
+  var performanceFailure: String?
+  private(set) var documentGeneration = 0
   private(set) var applying = false
   private(set) var failure: String?
   @ObservationIgnored weak var engine: BrowserEngine?
@@ -39,6 +43,9 @@ final class SiteControlsDeveloperModel {
         } ?? DeveloperSimulation()
     }
     if committed {
+      documentGeneration += 1
+      performanceSnapshot = nil
+      performanceFailure = nil
       engine?.runtime.endDeveloperSession(forTabID: target.tabID.uuidString)
     }
     if changed || committed { schedule() }
@@ -68,6 +75,7 @@ final class SiteControlsDeveloperModel {
       let desired = simulation
       let destination = target
       do {
+        if performanceEnabled { try retainDeveloperSession() }
         if desired.isActive || overridesMayBeActive {
           guard let engine,
             engine.runtime.beginDeveloperSession(
@@ -89,10 +97,13 @@ final class SiteControlsDeveloperModel {
           }
           if current == revision {
             overridesMayBeActive = desired.isActive
-            if !desired.isActive {
+            if !desired.isActive && !performanceEnabled {
               engine.runtime.endDeveloperSession(forTabID: destination.tabID.uuidString)
             }
           }
+        }
+        if !desired.isActive && !overridesMayBeActive && !performanceEnabled {
+          engine?.runtime.endDeveloperSession(forTabID: destination.tabID.uuidString)
         }
         if current == revision && destination == target { failure = nil }
       } catch {
@@ -102,16 +113,29 @@ final class SiteControlsDeveloperModel {
     }
   }
 
+  func retainDeveloperSession() throws {
+    guard let engine,
+      engine.runtime.beginDeveloperSession(
+        forTabID: target.tabID.uuidString,
+        profileID: target.profileID.uuidString, windowID: engine.windowID)
+    else {
+      throw DeveloperModeFailure("The developer session could not start.")
+    }
+  }
+
   func call(_ method: String, params: [String: Any] = [:]) async throws -> [String: Any] {
     guard let engine, !engine.isClosed,
       engine.store?.session.profileID(forTabID: target.tabID) == target.profileID,
       engine.runtime.windowID(forTabID: target.tabID.uuidString) == engine.windowID
     else { throw DeveloperModeFailure("The developer tools target is no longer available.") }
     let destination = target
+    let generation = documentGeneration
     let result = try await engine.runtime.developerCall(
       method, params: params, tabID: destination.tabID.uuidString,
       profileID: destination.profileID.uuidString, windowID: engine.windowID)
-    guard destination == target else { throw DeveloperModeFailure("The page changed. Try again.") }
+    guard destination == target && generation == documentGeneration else {
+      throw DeveloperModeFailure("The page changed. Try again.")
+    }
     return result
   }
 

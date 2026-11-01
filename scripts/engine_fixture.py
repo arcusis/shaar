@@ -504,8 +504,12 @@ class Fixture(http.server.BaseHTTPRequestHandler):
         if path.startswith('/download/'):
             self.download(path.rsplit('/', 1)[-1])
             return
+        if path == '/developer-slow':
+            time.sleep(0.3)
+            self.html(b'<p>Slow authored resource</p>' + b'x' * 4096)
+            return
         if path == '/developer':
-            self.html(b"""<!doctype html><html data-developer-fixture="v1"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Developer fixture</title><style>body{font:18px system-ui;padding:30px}button{padding:14px}</style><h1>Developer fixture</h1><button data-testid="save">Save changes</button><div id="shift">Stable content</div></html>""", csp=PAGE_CSP + "; connect-src 'self'")
+            self.html(b"""<!doctype html><html data-developer-fixture="v1"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Developer fixture</title><style>body{font:18px system-ui;padding:30px}button{padding:14px}</style><h1>Developer fixture</h1><button id="performance-input" data-testid="save" onclick="const start=performance.now();while(performance.now()-start&lt;80){}">Save changes</button><div id="shift">Stable content</div></html>""", csp=PAGE_CSP + "; connect-src 'self'")
             return
         if path == '/web-store-fit':
             self.html(WEB_STORE_FIT_PAGE)

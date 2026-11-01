@@ -57,6 +57,12 @@ struct SiteControlsDeveloperSection: View {
           .font(.caption).foregroundStyle(.secondary)
         Button("Reset Simulations") { model.set(DeveloperSimulation()) }
           .disabled(!model.hasActiveSimulation)
+        Divider()
+        Toggle(
+          "Performance overlay",
+          isOn: Binding(get: { model.performanceEnabled }, set: { model.setPerformanceEnabled($0) })
+        )
+        .help("Toggle performance overlay (Command-Option-P)")
         if model.applying { ProgressView().controlSize(.small) }
         if let failure = model.failure { Text(failure).font(.caption).foregroundStyle(.red) }
       }

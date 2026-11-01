@@ -54,6 +54,7 @@ struct ShortcutCatalog {
     case .sidebar: ("s", .command)
     case .reload: ("r", .command)
     case .hardReload: ("r", [.command, .shift])
+    case .performanceOverlay: ("p", [.command, .option])
     case .newSpace: ("S", [.command, .shift])
     case .editSpace: ("s", [.command, .option])
     case .addFavorite: ("k", [.command, .option])

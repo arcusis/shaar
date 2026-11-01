@@ -16,6 +16,7 @@
 - [[Picture_In_Picture_Controls]]
 - [[Site_Control_Center]]
 - [[Developer_Simulations]]
+- [[Developer_Performance_Overlay]]
 - [[External_App_Consent]]
 - [[Find_In_Page]]
 - [[Renderer_Recovery]]

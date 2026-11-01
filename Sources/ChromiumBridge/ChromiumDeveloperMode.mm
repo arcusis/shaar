@@ -47,7 +47,7 @@
       @"Network.enable", @"Network.emulateNetworkConditions", @"Emulation.setCPUThrottlingRate",
       @"Emulation.setGeolocationOverride", @"Emulation.clearGeolocationOverride",
       @"Emulation.setTimezoneOverride", @"Emulation.setLocaleOverride", @"Emulation.setUserAgentOverride",
-      @"Emulation.setEmulatedMedia", @"Runtime.evaluate"]];
+      @"Emulation.setEmulatedMedia", @"Runtime.evaluate", @"Performance.enable", @"Performance.getMetrics"]];
   });
   ArdiaCoreTab *tab = [self liveTabForID:tabID];
   if (!tab || ![_owners[tabID] isEqual:profileID] || ![_tabWindows[tabID] isEqual:windowID] ||

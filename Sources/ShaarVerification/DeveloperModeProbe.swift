@@ -90,6 +90,7 @@ final class DeveloperModeProbe {
     try expect(
       try await model.evaluate("navigator.language") as? String != "fr-FR",
       "reset restores browser language")
+    try await performance(model)
     var remembered = DeveloperSimulation()
     remembered.reducedMotion = phase == "initial"
     model.set(remembered)
@@ -179,6 +180,92 @@ final class DeveloperModeProbe {
         && !store.preferences.developerSimulation(
           on: "http://other.localhost", for: model.target.profileID
         ).isActive, "simulations stay isolated by site and profile")
+  }
+
+  private func performance(_ model: SiteControlsDeveloperModel) async throws {
+    try expect(!model.performanceEnabled, "performance overlay starts disabled")
+    model.setPerformanceEnabled(true)
+    try await settled(model)
+    try await model.refreshPerformance()
+    _ = try await model.evaluate("document.getElementById('shift').style.marginTop='180px'; true")
+    _ = try await model.evaluate(
+      "fetch('/developer-slow?run='+Math.random(),{cache:'no-store'}).then(r=>r.text()).then(()=>true)"
+    )
+    let clicked: Bool = await withCheckedContinuation { continuation in
+      engine.runtime.clickProbeElement(
+        inTabID: model.target.tabID.uuidString, elementID: "performance-input"
+      ) { continuation.resume(returning: $0) }
+    }
+    try expect(clicked, "trusted renderer input reaches performance fixture button")
+    for _ in 0..<50 {
+      try await model.refreshPerformance()
+      if let snapshot = model.performanceSnapshot, snapshot.cls ?? 0 > 0, snapshot.inp != nil,
+        snapshot.lcp != nil, snapshot.requests >= 2, snapshot.transferredBytes > 0
+      {
+        break
+      }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    guard let snapshot = model.performanceSnapshot else {
+      throw DeveloperModeFailure("Performance samples are missing.")
+    }
+    try expect(
+      snapshot.cls ?? 0 > 0 && snapshot.lcp != nil && snapshot.inp != nil,
+      "observer reports forced layout shift, LCP and trusted interaction latency")
+    try expect(
+      snapshot.heapBytes ?? 0 > 0 && snapshot.requests >= 2 && snapshot.transferredBytes > 0,
+      "protocol heap and observed slow resource appear in live samples")
+    try await capturePerformance(snapshot)
+    let origin = snapshot.timeOrigin
+    let generation = model.documentGeneration
+    store.reloadCurrentPage()
+    for _ in 0..<100 {
+      if model.documentGeneration > generation && engine.pages[model.target.tabID]?.loading == false
+      {
+        break
+      }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    try expect(
+      model.documentGeneration > generation, "navigation starts a new performance generation")
+    try await settled(model)
+    try await model.refreshPerformance()
+    try expect(
+      model.performanceSnapshot?.timeOrigin != origin && model.performanceSnapshot?.cls == 0
+        && model.performanceSnapshot?.inp == nil, "navigation resets layout shifts and interactions"
+    )
+    model.setPerformanceEnabled(false)
+    try await settled(model)
+    try expect(model.performanceSnapshot == nil, "disabling overlay clears native samples")
+    try expect(
+      ShortcutCatalog.shortcut(for: .performanceOverlay)?.key == "p",
+      "performance overlay shortcut is registered")
+  }
+
+  private func capturePerformance(_ snapshot: PagePerformanceSnapshot) async throws {
+    for (name, scheme) in [("light", ColorScheme.light), ("dark", .dark)] {
+      let content = PerformanceOverlayPanel(snapshot: snapshot, close: {})
+        .frame(width: 268).padding(16).background(Color(nsColor: .windowBackgroundColor))
+        .environment(\.colorScheme, scheme)
+      let host = NSHostingView(rootView: content)
+      let window = NSWindow(
+        contentRect: NSRect(origin: .zero, size: host.fittingSize), styleMask: .borderless,
+        backing: .buffered, defer: false)
+      window.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
+      window.contentView = host
+      previewWindow = window
+      try await Task.sleep(for: .milliseconds(150))
+      host.layoutSubtreeIfNeeded()
+      guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else {
+        throw DeveloperModeFailure("Performance overlay could not render.")
+      }
+      host.cacheDisplay(in: host.bounds, to: bitmap)
+      guard let data = bitmap.representation(using: .png, properties: [:]) else {
+        throw DeveloperModeFailure("Performance screenshot could not encode.")
+      }
+      try data.write(to: root.appending(path: "\(phase)-developer-performance-\(name).png"))
+    }
+    checks.append("performance overlay renders offscreen in light and dark")
   }
 
   private func settled(_ model: SiteControlsDeveloperModel) async throws {

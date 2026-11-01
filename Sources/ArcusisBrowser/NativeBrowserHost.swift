@@ -15,7 +15,7 @@ enum BrowserMenuCommand: String, CaseIterable {
   case find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload, hardReload
   case splitView
   case extensions, help, minimizeWindow, zoomWindow, bringAllToFront, settings, quit, createFolder
-  case checkForUpdates
+  case checkForUpdates, performanceOverlay
 }
 
 @MainActor
@@ -220,6 +220,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     let store = context.store
     guard store.sheet == nil, context.window.attachedSheet == nil else { return false }
     switch command {
+    case .performanceOverlay: return context.engine.selectedDeveloperModel != nil
     case .find: return store.canFindCurrentPage
     case .findNext, .findPrevious: return store.pageFind?.canMove == true
     case .reload, .hardReload:
@@ -369,6 +370,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .reload: store.reloadCurrentPage()
     case .hardReload: store.reloadCurrentPage(.bypassingCache)
     case .splitView: store.splitSelectedTab()
+    case .performanceOverlay:
+      if let model = context.engine.selectedDeveloperModel {
+        model.setPerformanceEnabled(!model.performanceEnabled)
+      }
     case .extensions: context.engine.showExtensionList()
     case .help:
       if let url = URL(string: "https://github.com/arcusis/shaar") { store.perform(.open(url)) }
@@ -850,6 +855,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     add(.sidebar, "Toggle sidebar", to: view)
     add(.reload, "Reload", to: view)
     add(.hardReload, "Hard Reload", to: view)
+    add(.performanceOverlay, "Performance Overlay", to: view)
     let spaces = section("Spaces")
     add(.newSpace, "New space…", to: spaces)
     add(.editSpace, "Edit current space…", to: spaces)

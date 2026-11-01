@@ -148,6 +148,9 @@ struct BrowserWindow: View {
           } else if engine.pages[id] != nil {
             ChromiumPage(engine: engine, tabID: id)
               .overlay { SplitDropZone(store: store, targetID: id) }
+              .overlay {
+                if let model = engine.developerModels[id] { DeveloperPageAccessories(model: model) }
+              }
           } else {
             ProgressView("Loading profile…")
           }

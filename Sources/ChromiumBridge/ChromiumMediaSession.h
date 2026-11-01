@@ -10,6 +10,8 @@ NS_ASSUME_NONNULL_BEGIN
 FOUNDATION_EXPORT NSString *const ARCMediaSessionMessage;
 /// Host message that asks one frame's media script to perform a Media Session action.
 FOUNDATION_EXPORT NSString *const ARCMediaActionMessage;
+/// Host message that sets the active media element's volume.
+FOUNDATION_EXPORT NSString *const ARCMediaVolumeMessage;
 /// Host message that allows or withholds the page's `enterpictureinpicture` handler.
 FOUNDATION_EXPORT NSString *const ARCAutoPictureInPictureMessage;
 /// Host message that plays, pauses or skips the video in Chromium's picture-in-picture window.

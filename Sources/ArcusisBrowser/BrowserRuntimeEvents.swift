@@ -56,6 +56,9 @@ final class BrowserRuntimeEvents {
     runtime.onMediaAccess = { [weak self] id, access in
       self?.tabClient(id)?.onMediaAccess?(id, access)
     }
+    runtime.onMediaSessionChanged = { [weak self] id, state in
+      self?.tabClient(id)?.onMediaSessionChanged?(id, state)
+    }
     runtime.onExtensionPopup = { [weak self] payload in
       guard let self else { return }
       guard let id = payload["id"] as? String,

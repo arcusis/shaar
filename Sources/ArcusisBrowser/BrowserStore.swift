@@ -117,6 +117,10 @@ final class BrowserStore {
   @ObservationIgnored var onStopFinding: ((UUID) -> Void)?
   @ObservationIgnored var onNavigatePage: ((UUID, UUID, URL) -> Bool)?
   @ObservationIgnored var onReloadPage: ((UUID, UUID) -> Bool)?
+  /// Sends a media command to a live tab; false when the engine cannot deliver it.
+  @ObservationIgnored var onMediaCommand: ((UUID, MediaCommand) -> Bool)?
+  /// Media playing in this window's tabs.
+  let media = MediaPlaybackModel()
   @ObservationIgnored var onSetSpaceProfile: ((UUID, UUID) -> Bool)?
   /// Opens New Profile onboarding for a Space; nil when no host can present it.
   @ObservationIgnored var onNewProfile: ((UUID) -> Void)?

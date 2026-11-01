@@ -115,6 +115,13 @@ struct BrowserSidebar: View {
         tabList(space)
       }
       Spacer(minLength: 0)
+      if let item = store.miniPlayerItem {
+        SidebarMediaPlayer(
+          item: item, onSelect: { store.selectPage(item.tabID) },
+          onCommand: { store.performMedia($0, tabID: item.tabID) }
+        )
+        .transition(.opacity)
+      }
       Divider()
       HStack(spacing: 8) {
         recentDownloadsControls

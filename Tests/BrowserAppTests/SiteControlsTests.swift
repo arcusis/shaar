@@ -119,7 +119,8 @@ private func target(_ address: String) -> SiteControlTarget {
   let extensions = ExtensionManagerModel(
     profileID: model.target.profileID, extensions: pinned, pinnedIDs: pinned.map(\.id))
   let actions = SiteControlsPanelActions(
-    runExtension: { _ in }, addExtensions: {}, showCertificate: {}, close: {})
+    runExtension: { _ in }, addExtensions: {}, showCertificate: {}, showDeveloperTools: {},
+    close: {})
   for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
     let url = output.appending(path: "site-controls-\(name).png")
     let panel = SiteControlsPanel(
@@ -127,8 +128,10 @@ private func target(_ address: String) -> SiteControlTarget {
     )
     .background(Color(nsColor: .windowBackgroundColor))
     let bitmap = try VisualCapture.renderOffscreen(
-      panel, size: NSSize(width: 320, height: 700), appearance: appearance, to: url)
+      panel, size: NSSize(width: 320, height: 740), appearance: appearance, to: url)
     #expect(bitmap.pixelsWide == 320)
+    let text = try VisualTextRecognition.lines(in: url).joined(separator: " ")
+    #expect(text.contains("Developer Tools"))
   }
   #expect(model.isAllowed(.sound))
 }

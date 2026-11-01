@@ -9,6 +9,7 @@
 #import "ChromiumLibrary.h"
 #import "ChromiumShutdownGuard.h"
 #import "ChromiumMediaSession.h"
+#import "ChromiumDevTools.h"
 #import "ChromiumWebStoreFit.h"
 #import "../../ThirdParty/ArdiaCore/ArdiaCore.h"
 
@@ -52,6 +53,10 @@ NSString *ARCValidatedProfileID(NSString *profileID);
   NSMutableSet<NSString *> *_retiredWindowIDs;
   NSMutableDictionary<NSString *, ArdiaCoreProfile *> *_profiles;
   NSMutableDictionary<NSString *, ArdiaCoreTab *> *_tabs;
+  NSMutableDictionary<NSString *, ARCDevToolsPageView *> *_pageCards;
+  NSString *_probeInspectTabID;
+  BOOL _probeInspectFound;
+  NSMutableDictionary<NSString *, id> *_probeInspectAudit;
   NSMutableDictionary<NSString *, ArdiaCoreTab *> *_extensionManagers;
   NSMutableDictionary<NSString *, NSMutableDictionary *> *_privateProbeContexts;
   NSMutableDictionary<NSString *, NSMutableDictionary *> *_privateProbeWindows;

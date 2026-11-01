@@ -62,6 +62,66 @@ static BOOL ProbeViewIsVisibleInWindow(NSView *view, NSWindow *window) {
 
 @implementation ARCChromiumRuntime (Verification)
 
+- (BOOL)inspectorProbeOwnsTabID:(NSString *)identity {
+  ArdiaCoreTab *tab = [self liveTabForID:identity];
+  NSURLComponents *url = [NSURLComponents componentsWithString:tab.url ?: @""];
+  BOOL local = [url.scheme isEqual:@"http"] && [url.host isEqual:@"inspector.localhost"];
+  BOOL publicPage = [url.scheme isEqual:@"https"] &&
+    [@[@"developer.mozilla.org", @"www.w3.org"] containsObject:url.host];
+  return _testing && ARCProbeRootIsOwned(_probeRoot) && tab &&
+    [self isSelectedTabID:identity] && (local || publicPage);
+}
+
+- (void)inspectorProbePointerInTabID:(NSString *)identity selector:(NSString *)selector
+                            frames:(NSArray<NSString *> *)frames click:(BOOL)click
+                        completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion {
+  if (![self inspectorProbeOwnsTabID:identity] || selector.length > 2048 || frames.count > 8) {
+    completion(NO); return;
+  }
+  ArdiaCoreTab *tab = [self liveTabForID:identity];
+  NSData *encoded = [NSJSONSerialization dataWithJSONObject:@[selector, frames] options:0 error:nil];
+  NSString *literal = encoded ? [[NSString alloc] initWithData:encoded encoding:NSUTF8StringEncoding] : nil;
+  if (!literal) { completion(NO); return; }
+  NSString *expression = [NSString stringWithFormat:
+    @"(()=>{const [selector,frames]=%@;let doc=document;"
+     "for(const name of frames){doc=doc.querySelector(name)?.contentDocument;if(!doc)return null;}"
+     "const e=doc.querySelector(selector);if(!e)return null;e.scrollIntoView({block:'center'});"
+     "const r=e.getBoundingClientRect();let x=r.x+r.width/2,y=r.y+r.height/2;"
+     "for(let win=doc.defaultView;win!==window;){const f=win.frameElement,b=f.getBoundingClientRect(),sx=b.width/(f.offsetWidth||b.width||1),sy=b.height/(f.offsetHeight||b.height||1);"
+     "x=b.left+(x+f.clientLeft)*sx;y=b.top+(y+f.clientTop)*sy;win=f.ownerDocument.defaultView;}return {x,y};})()", literal];
+  [tab devToolsCall:@"Runtime.evaluate" params:@{@"expression":expression, @"returnByValue":@YES}
+           timeout:5 completion:^(NSDictionary *result, NSString *error) {
+    NSDictionary *point = result[@"result"][@"value"];
+    if (error || ![point isKindOfClass:NSDictionary.class] || ![self inspectorProbeOwnsTabID:identity] ||
+        ![point[@"x"] isKindOfClass:NSNumber.class] || ![point[@"y"] isKindOfClass:NSNumber.class] ||
+        !std::isfinite([point[@"x"] doubleValue]) || !std::isfinite([point[@"y"] doubleValue])) {
+      completion(NO); return;
+    }
+    [tab devToolsCall:@"Input.dispatchMouseEvent" params:@{@"type":@"mouseMoved", @"x":point[@"x"], @"y":point[@"y"]}
+             timeout:5 completion:^(NSDictionary *ignored, NSString *failure) {
+      if (failure || ![self inspectorProbeOwnsTabID:identity]) { completion(NO); return; }
+      if (!click) { completion(YES); return; }
+      ClickProbeTarget(tab, expression, ^BOOL { return [self inspectorProbeOwnsTabID:identity]; }, completion);
+    }];
+  }];
+}
+
+- (void)inspectorProbeKeyInTabID:(NSString *)identity key:(NSString *)key
+                    completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion {
+  NSDictionary *codes = @{@"ArrowUp":@38, @"ArrowDown":@40, @"ArrowLeft":@37, @"ArrowRight":@39, @"Escape":@27};
+  if (![self inspectorProbeOwnsTabID:identity] || !codes[key]) { completion(NO); return; }
+  ArdiaCoreTab *tab = [self liveTabForID:identity];
+  NSDictionary *down = @{@"type":@"keyDown", @"key":key, @"code":key, @"windowsVirtualKeyCode":codes[key]};
+  [tab devToolsCall:@"Input.dispatchKeyEvent" params:down timeout:5 completion:^(NSDictionary *ignored, NSString *error) {
+    if (error || ![self inspectorProbeOwnsTabID:identity]) { completion(NO); return; }
+    [tab devToolsCall:@"Input.dispatchKeyEvent"
+              params:@{@"type":@"keyUp", @"key":key, @"code":key, @"windowsVirtualKeyCode":codes[key]}
+             timeout:5 completion:^(NSDictionary *result, NSString *failure) {
+      completion(failure == nil && [self inspectorProbeOwnsTabID:identity]);
+    }];
+  }];
+}
+
 - (BOOL)inspectProbeElementInTabID:(NSString *)tabID {
   ArdiaCoreTab *tab = [self liveTabForID:tabID];
   NSURLComponents *url = [NSURLComponents componentsWithString:tab.url ?: @""];

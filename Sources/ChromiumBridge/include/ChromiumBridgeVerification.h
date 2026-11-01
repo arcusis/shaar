@@ -19,6 +19,11 @@ FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeExternalAppLaunchAuditForTest
 FOUNDATION_EXPORT BOOL ARCDisableBackgroundMode(NSURL *userDataDirectory);
 
 @interface ARCChromiumRuntime (Verification)
+- (void)inspectorProbePointerInTabID:(NSString *)tabID selector:(NSString *)selector
+                            frames:(NSArray<NSString *> *)frames click:(BOOL)click
+                        completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion NS_SWIFT_UI_ACTOR;
+- (void)inspectorProbeKeyInTabID:(NSString *)tabID key:(NSString *)key
+                    completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion NS_SWIFT_UI_ACTOR;
 /// Opens the engine's own Inspect menu command on an authored loopback page, offscreen.
 - (BOOL)inspectProbeElementInTabID:(NSString *)tabID;
 @property(readonly) BOOL probeInspectFound;

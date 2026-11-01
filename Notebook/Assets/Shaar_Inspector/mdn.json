@@ -1,0 +1,136 @@
+{
+  "pageFonts" : [
+    "Inter Variable",
+    "JetBrains Mono"
+  ],
+  "renderedFonts" : [
+    "Inter Variable"
+  ],
+  "state" : {
+    "closed" : false,
+    "revision" : 5,
+    "selection" : {
+      "ancestors" : [
+        {
+          "id" : 7,
+          "label" : "html"
+        },
+        {
+          "id" : 6,
+          "label" : "body.page-layout"
+        },
+        {
+          "id" : 5,
+          "label" : "div.page-layout__main"
+        },
+        {
+          "id" : 4,
+          "label" : "div.layout__2-sidebars-inline.reference-layout"
+        },
+        {
+          "id" : 3,
+          "label" : "main.layout__content"
+        },
+        {
+          "id" : 2,
+          "label" : "div.layout__header.reference-layout__header"
+        },
+        {
+          "id" : 1,
+          "label" : "h1"
+        }
+      ],
+      "backdrop" : {
+        "css" : "composited background",
+        "rgba" : [
+          0.094117647058823528,
+          0.098039215686274508,
+          0.10588235294117647,
+          1
+        ]
+      },
+      "box" : {
+        "border" : [
+          "0px",
+          "0px",
+          "0px",
+          "0px"
+        ],
+        "contentHeight" : 50,
+        "contentWidth" : 616,
+        "height" : 50,
+        "margin" : [
+          "16px",
+          "0px",
+          "16px",
+          "0px"
+        ],
+        "padding" : [
+          "0px",
+          "0px",
+          "0px",
+          "0px"
+        ],
+        "width" : 616
+      },
+      "colors" : [
+        {
+          "label" : "Text",
+          "value" : {
+            "css" : "rgb(255, 255, 255)",
+            "rgba" : [
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        {
+          "label" : "Background",
+          "value" : {
+            "css" : "rgba(0, 0, 0, 0)",
+            "rgba" : [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "component" : null,
+      "contrastLimit" : null,
+      "css" : "h1",
+      "foreground" : {
+        "css" : "rgb(255, 255, 255)",
+        "rgba" : [
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "frames" : [
+
+      ],
+      "id" : 1,
+      "jsPath" : "document.querySelector(\"h1\")",
+      "label" : "h1",
+      "locked" : true,
+      "playwright" : "page.getByText(\"Introduction to the CSS box model\", { exact: true })",
+      "revision" : 5,
+      "tag" : "h1",
+      "typography" : {
+        "family" : "Inter, sans-serif",
+        "letterSpacing" : "normal",
+        "lineHeight" : "50px",
+        "preview" : "Introduction to the CSS box model",
+        "size" : "40px",
+        "weight" : "400"
+      },
+      "xpath" : "\/*[local-name()='html'][1]\/*[local-name()='body'][1]\/*[local-name()='div'][2]\/*[local-name()='div'][1]\/*[local-name()='main'][1]\/*[local-name()='div'][1]\/*[local-name()='h1'][1]"
+    }
+  },
+  "url" : "https:\/\/developer.mozilla.org\/en-US\/docs\/Web\/CSS\/Guides\/Box_model\/Introduction"
+}

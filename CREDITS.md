@@ -25,5 +25,6 @@ Shaar is an independent project. It is not affiliated with, sponsored, or endors
 - [Bitwarden](https://bitwarden.com/): extension compatibility.
 - [Public Suffix List](https://publicsuffix.org/): public domain-boundary data used for registrable-domain decisions.
 - [Sparkle](https://sparkle-project.org/): software update framework.
+- [Playwright](https://playwright.dev/): Apache-2.0 test-only browser automation for Inspector renderer contracts; not bundled in the app.
 
 Each project retains its own trademarks and licensing. See the relevant upstream project and bundled third-party notices for license terms.

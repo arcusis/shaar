@@ -16,7 +16,7 @@ enum BrowserMenuCommand: String, CaseIterable {
     developerTools
   case splitView
   case extensions, help, minimizeWindow, zoomWindow, bringAllToFront, settings, quit, createFolder
-  case checkForUpdates
+  case checkForUpdates, inspector
 }
 
 @MainActor
@@ -227,6 +227,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       return afterLauncher ? store.currentPageAllowsReload : store.canReloadCurrentPage
     case .developerTools:
       return context.engine.siteControlTarget != nil && (afterLauncher || !store.commandIsOpen)
+    case .inspector:
+      return context.engine.siteControlTarget != nil && (afterLauncher || !store.commandIsOpen)
     case .splitView: return store.session.selectedSpace.tabs.count >= 2
     case .reopenClosed: return store.canReopenClosedTab
     case .bookmarkPage: return store.canBookmarkCurrentPage
@@ -372,6 +374,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .reload: store.reloadCurrentPage()
     case .hardReload: store.reloadCurrentPage(.bypassingCache)
     case .developerTools: context.engine.toggleDeveloperTools()
+    case .inspector: context.engine.toggleInspector()
     case .splitView: store.splitSelectedTab()
     case .extensions: context.engine.showExtensionList()
     case .help:
@@ -855,6 +858,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     add(.reload, "Reload", to: view)
     add(.hardReload, "Hard Reload", to: view)
     add(.developerTools, "Developer Tools", to: view)
+    add(.inspector, "Inspect Element", to: view)
     let spaces = section("Spaces")
     add(.newSpace, "New space…", to: spaces)
     add(.editSpace, "Edit current space…", to: spaces)

@@ -55,6 +55,8 @@ NSString *ARCValidatedProfileID(NSString *profileID);
   NSMutableDictionary<NSString *, ArdiaCoreTab *> *_tabs;
   NSMutableDictionary<NSString *, ARCDevToolsPageView *> *_pageCards;
   NSMutableDictionary<NSString *, NSString *> *_inspectorLeases;
+  NSMutableDictionary<NSString *, NSString *> *_developerLeases;
+  NSMutableDictionary<NSString *, NSString *> *_developerLeaseScopes;
   NSString *_probeInspectTabID;
   BOOL _probeInspectFound;
   NSMutableDictionary<NSString *, id> *_probeInspectAudit;

@@ -13,14 +13,26 @@ struct InspectorPanel: View {
         Image(systemName: "viewfinder").foregroundStyle(Color.accentColor)
         Text("Inspector").font(.system(size: 12, weight: .semibold))
         Spacer()
-        Text(model.mode == .locked ? "Locked" : "Inspecting")
-          .font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
+        Text(
+          model.panelMode == .page
+            ? "Page tools" : (model.mode == .locked ? "Locked" : "Inspecting")
+        )
+        .font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
         InspectorIconButton("Pick an element", symbol: "cursorarrow.rays", action: model.pick)
         InspectorIconButton("Close Inspector", symbol: "xmark", action: model.close)
       }
       .padding(.horizontal, 12).frame(height: 40)
       Divider()
-      if let selection = model.selection {
+      Picker(
+        "Inspector mode",
+        selection: Binding(get: { model.panelMode }, set: { model.setPanelMode($0) })
+      ) {
+        ForEach(InspectorModel.PanelMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+      }.pickerStyle(.segmented).labelsHidden().controlSize(.small).padding(12)
+      Divider()
+      if model.panelMode == .page, let tools = model.pageTools {
+        InspectorPageToolsView(inspector: model, model: tools)
+      } else if let selection = model.selection {
         selectionHeader(selection)
         Picker("Inspector section", selection: $model.tab) {
           ForEach(InspectorModel.Tab.allCases, id: \.self) { Text($0.rawValue).tag($0) }
@@ -113,16 +125,23 @@ struct InspectorPanel: View {
           .frame(maxWidth: .infinity, alignment: .leading).padding(12)
       }
       Divider()
-      HStack(spacing: 5) {
-        Image(systemName: "arrow.up.arrow.down").font(.system(size: 9))
-        Text("Parent / child").font(.system(size: 10))
-        Spacer()
-        Text("← → Siblings   esc Exit").font(.system(size: 10, design: .monospaced))
-      }.foregroundStyle(.secondary).padding(.horizontal, 12).frame(height: 28)
+      if model.panelMode == .element {
+        HStack(spacing: 5) {
+          Image(systemName: "arrow.up.arrow.down").font(.system(size: 9))
+          Text("Parent / child").font(.system(size: 10))
+          Spacer()
+          Text("← → Siblings   esc Exit").font(.system(size: 10, design: .monospaced))
+        }.foregroundStyle(.secondary).padding(.horizontal, 12).frame(height: 28)
+      }
     }
     .background(Color(nsColor: .windowBackgroundColor))
     .onExitCommand(perform: model.close)
-    .onMoveCommand { direction in
+    .onMoveCommand(perform: moveAction)
+  }
+
+  private var moveAction: ((MoveCommandDirection) -> Void)? {
+    guard model.panelMode == .element else { return nil }
+    return { direction in
       switch direction {
       case .up: model.navigate("up")
       case .down: model.navigate("down")

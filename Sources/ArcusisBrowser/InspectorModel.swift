@@ -25,6 +25,12 @@ final class InspectorModel {
     case accessibility = "A11y"
     case assets = "Assets"
   }
+  enum PanelMode: String, CaseIterable {
+    case element = "Element"
+    case page = "Page"
+  }
+  private(set) var panelMode = PanelMode.element
+  private(set) var pageTools: InspectorPageToolsModel?
   var tab = Tab.design
   @ObservationIgnored lazy var styles = InspectorStylesModel(inspector: self)
   @ObservationIgnored lazy var details = InspectorDetailsModel(inspector: self)
@@ -69,6 +75,9 @@ final class InspectorModel {
     fontTask?.cancel()
     fontTask = nil
     mode = .closed
+    pageTools?.stop()
+    pageTools = nil
+    panelMode = .element
     styles.reset()
     details.reset()
     selection = nil
@@ -88,6 +97,7 @@ final class InspectorModel {
       generation += 1
       styles.reset()
       details.reset()
+      pageTools?.documentChanged()
       target = next
       installed = false
       fontTask?.cancel()
@@ -101,7 +111,25 @@ final class InspectorModel {
     }
   }
 
+  func setPanelMode(_ value: PanelMode) {
+    guard isOpen else { return }
+    panelMode = value
+    if value == .page, pageTools == nil, let engine {
+      pageTools = InspectorPageToolsModel(
+        inspector: self, developer: engine.developerModel(for: target))
+    }
+    if value == .page { pageTools?.start() }
+    let generation = generation
+    Task { [weak self] in
+      guard let self, self.isOpen, self.generation == generation else { return }
+      _ = try? await self.evaluate(
+        "globalThis.__shaarInspectorV2?.suspend(\(self.panelMode == .page)); true")
+      if self.panelMode == .page { await self.styles.clearOverlay(generation: generation) }
+    }
+  }
+
   func pick() {
+    if panelMode != .element { setPanelMode(.element) }
     guard isOpen else {
       open()
       return
@@ -125,7 +153,9 @@ final class InspectorModel {
   }
 
   func navigate(_ direction: String) {
-    guard isOpen, ["up", "down", "left", "right"].contains(direction) else { return }
+    guard isOpen, panelMode == .element, ["up", "down", "left", "right"].contains(direction) else {
+      return
+    }
     let revision = generation
     Task { [weak self] in
       guard let self, self.generation == revision, self.isOpen else { return }
@@ -161,7 +191,11 @@ final class InspectorModel {
         _ = try await call("CSS.enable")
         guard revision == generation, isOpen else { return }
         installed = true
+        if panelMode == .page {
+          _ = try await evaluate("globalThis.__shaarInspectorV2.suspend(true)")
+        }
       }
+      if panelMode == .page { return }
       guard
         let state = try await evaluate("globalThis.__shaarInspectorV2?.read()") as? [String: Any],
         revision == generation, isOpen

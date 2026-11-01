@@ -233,6 +233,37 @@ final class InspectorProbe {
         }
       }
       try image?.write(to: root.appending(path: "public-\(name)-page.png"))
+      model.setPanelMode(.page)
+      let tools = try require(model.pageTools, "public Page tools exist")
+      try await wait("public page diagnostics start") {
+        await tools.refresh()
+        return tools.startedAt != nil
+      }
+      if name == "mdn" {
+        tools.tool = .vitals
+        try await wait("public renderer metrics arrive") {
+          await tools.refresh()
+          return tools.developer.performanceSnapshot?.heapBytes != nil && tools.cpu != nil
+        }
+        try await capture(model, stem: "public-mdn-vitals")
+        tools.tool = .network
+        await tools.refresh()
+        try expect(!tools.requests.isEmpty, "public page lists observed navigation resources")
+        try await capture(model, stem: "public-mdn-network")
+      } else {
+        tools.tool = .simulations
+        await tools.refresh()
+        try await capture(model, stem: "public-wcag-simulations")
+        tools.tool = .report
+        try await capture(model, stem: "public-wcag-report")
+        tools.tool = .console
+        await tools.refresh()
+        try await capture(model, stem: "public-wcag-console")
+        tools.tool = .storage
+        tools.storageArea = "local"
+        try await tools.loadStorage()
+        try await capture(model, stem: "public-wcag-storage")
+      }
       model.close()
     }
     store.perform(.open(URL(string: "https://react.dev/learn")!))
@@ -251,6 +282,13 @@ final class InspectorProbe {
       model.details.tree?.framework == "React", "public React runtime exposes a real component tree"
     )
     try await capture(model, stem: "public-react-component")
+    model.setPanelMode(.page)
+    let tools = try require(model.pageTools, "React page tools exist")
+    try await wait("public React technology marker arrives") {
+      await tools.refresh()
+      return tools.signals.contains { $0.name == "React" }
+    }
+    try await capture(model, stem: "public-react-tech")
     model.close()
   }
 
@@ -524,6 +562,28 @@ final class InspectorProbe {
     let metadata: [String: Any] = [
       "url": model.target.url.absoluteString, "state": state ?? NSNull(),
       "tab": model.tab.rawValue,
+      "panelMode": model.panelMode.rawValue,
+      "pageTool": model.pageTools?.tool.rawValue as Any? ?? NSNull(),
+      "pageDiagnostics": model.pageTools.map { tools in
+        [
+          "technologies": tools.signals.map {
+            ["name": $0.name, "version": $0.version as Any? ?? NSNull(), "source": $0.source]
+          },
+          "requests": tools.requests.map {
+            [
+              "url": $0.url, "method": $0.method, "status": $0.status,
+              "duration": $0.duration as Any? ?? NSNull(), "bytes": $0.bytes as Any? ?? NSNull(),
+            ]
+          },
+          "vitals": tools.developer.performanceSnapshot.map {
+            [
+              "lcp": $0.lcp as Any? ?? NSNull(), "inp": $0.inp as Any? ?? NSNull(),
+              "cls": $0.cls as Any? ?? NSNull(), "fps": $0.fps as Any? ?? NSNull(),
+              "heapBytes": $0.heapBytes as Any? ?? NSNull(),
+            ]
+          } as Any? ?? NSNull(),
+        ] as [String: Any]
+      } as Any? ?? NSNull(),
       "matchedRules": model.styles.rules.map { rule in
         [
           "selector": rule.selector, "source": rule.source,

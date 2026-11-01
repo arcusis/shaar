@@ -46,10 +46,11 @@ def main() -> None:
         pin = platforms[host]
         with urllib.request.urlopen(pin["url"], timeout=60) as response:
             payload = response.read(100_000_001)
-        binary = binary_from_archive(payload, name, pin["sha256"])
-        destination = options.destination / name
-        destination.write_bytes(binary)
-        destination.chmod(0o755)
+        for member in (name, *pin.get("companions", [])):
+            binary = binary_from_archive(payload, member, pin["sha256"])
+            destination = options.destination / member
+            destination.write_bytes(binary)
+            destination.chmod(0o755 if member == name else 0o644)
         print(f"Installed {name} from {pin['url']} ({pin['sha256']})")
 
 

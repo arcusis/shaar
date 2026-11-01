@@ -12,6 +12,7 @@ import sys
 import tarfile
 import tempfile
 import unittest
+import zipfile
 from unittest.mock import patch
 import xml.etree.ElementTree as ET
 
@@ -129,6 +130,22 @@ class CoverageGateTests(unittest.TestCase):
 
 
 class SupplyChainTests(unittest.TestCase):
+    def test_installer_keeps_pinned_zip_runtime_companion_beside_executable(self):
+        payload = io.BytesIO()
+        with zipfile.ZipFile(payload, "w") as archive:
+            archive.writestr("periphery", b"executable")
+            archive.writestr("libIndexStore.dylib", b"runtime library")
+        data = payload.getvalue()
+        manifest = {"periphery": {"Darwin-arm64": {
+            "url": "https://example.invalid/periphery.zip", "sha256": hashlib.sha256(data).hexdigest(),
+            "companions": ["libIndexStore.dylib"],
+        }}}
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(INSTALL.json, "loads", return_value=manifest), patch.object(INSTALL.platform, "system", return_value="Darwin"), patch.object(INSTALL.platform, "machine", return_value="arm64"), patch.object(INSTALL.urllib.request, "urlopen", return_value=io.BytesIO(data)), patch.object(sys, "argv", ["installer", "--include-periphery", "--destination", directory]):
+                INSTALL.main()
+            self.assertEqual((Path(directory) / "periphery").read_bytes(), b"executable")
+            self.assertEqual((Path(directory) / "libIndexStore.dylib").read_bytes(), b"runtime library")
+
     def archive(self, symbolic=False):
         output = io.BytesIO()
         with tarfile.open(fileobj=output, mode="w:gz") as archive:

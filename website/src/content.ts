@@ -33,37 +33,37 @@ export const screens = {
     file: "hero.png",
     width: 2880,
     height: 1920,
-    alt: "Shaar showing the Work Space sidebar with pinned sites and tabs, browsing the Shaar repository on GitHub",
+    alt: "Shaar in the Work Space on arcusis.com, with its tabs in the sidebar",
   },
   spaces: {
     file: "spaces.png",
     width: 2880,
     height: 1920,
-    alt: "Shaar in the Personal Space, in its own color, reading the Wikipedia article on Lisbon",
+    alt: "Shaar in the Hasbara Space, in its own color, on hasbara.co.il",
   },
   profiles: {
     file: "profiles.png",
     width: 1800,
     height: 1464,
-    alt: "Shaar Settings showing the Work and Personal profiles, each with its own color, search engine and Spaces",
+    alt: "Shaar Settings showing the Work profile used by the Work, Hasbara and Freight Spaces, and a separate Personal profile",
   },
   launcher: {
     file: "command-t.png",
     width: 2880,
     height: 1920,
-    alt: "Command-T launcher searching for swift across open tabs, recently closed tabs and history",
+    alt: "Command-T launcher searching for freight across history, open tabs and Spaces",
   },
   siteControls: {
     file: "site-controls.png",
     width: 2880,
     height: 1920,
-    alt: "Site control center on github.com with permissions, the secure connection and reload actions",
+    alt: "Site control center on arcusis.com with permissions, the secure connection and reload actions",
   },
   extensions: {
     file: "extensions.png",
     width: 2880,
     height: 1920,
-    alt: "Shaar with Dark Reader and Bitwarden from the Chrome Web Store in the toolbar, GitHub shown in dark mode",
+    alt: "Shaar on arcusis.com with Dark Reader and Bitwarden from the Chrome Web Store in the toolbar",
   },
 } as const;
 

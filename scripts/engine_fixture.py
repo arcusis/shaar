@@ -14,6 +14,7 @@ import math
 import os
 import re
 from pathlib import Path
+import random
 import signal
 import shutil
 import socket
@@ -95,12 +96,18 @@ def record_bitwarden_summary(root, control_only):
     return summary
 
 
-def validate_host_lock_checkpoint(root, ready, pid, phase):
+def require_marked_probe_root(root, purpose):
+    """Return the canonical root only when this runner created and marked it."""
     canonical = root.resolve()
     if (canonical.parent != Path(tempfile.gettempdir()).resolve()
             or not canonical.name.startswith('arcusis-engine-probe-')
             or (canonical / '.arcusis-probe').read_text() != 'arcusis-engine-probe-v1\n'):
-        raise RuntimeError('Host lock verification requires a marked disposable root')
+        raise RuntimeError(f'{purpose} requires a marked disposable probe root')
+    return canonical
+
+
+def validate_host_lock_checkpoint(root, ready, pid, phase):
+    canonical = require_marked_probe_root(root, 'Host lock verification')
     if (not isinstance(ready, dict) or type(ready.get('schema')) is not int or ready['schema'] != 1
             or type(ready.get('pid')) is not int or ready['pid'] != pid or pid <= 1
             or ready.get('phase') != phase or phase not in ('initial', 'restart')
@@ -167,11 +174,7 @@ def wait_for_probe(process, root, phase, timeout):
 
 def validate_abrupt_checkpoint(root, ready, pid):
     """Bind the fault checkpoint to this parent's child and its marked temporary files."""
-    canonical = root.resolve()
-    if (canonical.parent != Path(tempfile.gettempdir()).resolve()
-            or not canonical.name.startswith('arcusis-engine-probe-')
-            or (canonical / '.arcusis-probe').read_text() != 'arcusis-engine-probe-v1\n'):
-        raise RuntimeError('Abrupt termination requires a marked disposable probe root')
+    canonical = require_marked_probe_root(root, 'Abrupt termination')
     if (not isinstance(ready, dict) or type(ready.get('schema')) is not int or ready['schema'] != 1
             or ready.get('ready') is not True or ready.get('localFixturesPassed') is not True
             or ready.get('phase') != 'initial' or type(ready.get('pid')) is not int
@@ -252,6 +255,102 @@ def terminate_at_checkpoint(process, root, timeout, settle_seconds=0):
             raise RuntimeError('Timed out waiting for abrupt-termination checkpoint')
         time.sleep(0.05)
     raise RuntimeError(f'Probe exited before abrupt-termination checkpoint ({process.returncode})')
+
+
+SESSION_RECOVERY_MODE = 'session-recovery-only'
+SESSION_RECOVERY_READY = 'session-recovery-ready.json'
+SESSION_RECOVERY_RECEIPT = 'session-recovery-kill.json'
+# The child keeps writing snapshots after its checkpoint; a random delay varies where SIGKILL lands.
+SESSION_RECOVERY_KILL_DELAY_SECONDS = (0.15, 0.6)
+
+
+def validate_session_recovery_checkpoint(root, ready, pid):
+    require_marked_probe_root(root, 'Session recovery')
+    if (not isinstance(ready, dict) or type(ready.get('schema')) is not int or ready['schema'] != 1
+            or ready.get('ready') is not True or ready.get('phase') != 'initial'
+            or ready.get('mode') != SESSION_RECOVERY_MODE
+            or type(ready.get('pid')) is not int or ready['pid'] != pid or pid <= 1
+            or ready.get('expectedSnapshot') != 'session-recovery-expected.json'
+            or ready.get('workspaceFile') != 'session-recovery-workspace.json'
+            or not isinstance(ready.get('checks'), list) or not ready['checks']
+            or not all(isinstance(check, str) and check for check in ready['checks'])
+            or not isinstance(ready.get('chromiumVersion'), str) or not ready['chromiumVersion']):
+        raise RuntimeError('Invalid or foreign session-recovery checkpoint')
+    return ready
+
+
+def wait_for_process_group_exit(pgid, seconds):
+    deadline = time.monotonic() + seconds
+    while process_group_exists(pgid):
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.05)
+    return True
+
+
+def kill_during_session_saves(process, root, timeout):
+    """SIGKILL the exact probe PID while it is still writing workspace snapshots."""
+    checkpoint = root / SESSION_RECOVERY_READY
+    deadline = time.monotonic() + probe_timeout(timeout)
+    while process.poll() is None:
+        if checkpoint.exists():
+            ready = validate_session_recovery_checkpoint(
+                root, json.loads(checkpoint.read_text()), process.pid)
+            delay = random.uniform(*SESSION_RECOVERY_KILL_DELAY_SECONDS)
+            time.sleep(delay)
+            if process.poll() is not None:
+                raise RuntimeError(f'Probe exited before SIGKILL ({process.returncode})')
+            print(f'initial: sending SIGKILL to probe PID {process.pid} after {delay:.3f}s of saves', flush=True)
+            os.kill(process.pid, signal.SIGKILL)
+            code = process.wait(timeout=10)
+            if code != -signal.SIGKILL:
+                raise RuntimeError(f'Unexpected session-recovery termination exit: {code}')
+            # Engine helpers exit when their browser process dies; only this probe's own group is cleaned up.
+            helpers_exited = wait_for_process_group_exit(process.pid, 10)
+            if not helpers_exited:
+                signal_probe(process, signal.SIGKILL)
+            receipt = {
+                'schema': 1, 'mode': SESSION_RECOVERY_MODE, 'passed': True, 'pid': process.pid,
+                'signal': 'SIGKILL', 'exitCode': code, 'secondsAfterCheckpoint': round(delay, 3),
+                'helpersExitedAfterKill': helpers_exited,
+                'chromiumVersion': ready['chromiumVersion'], 'checks': ready['checks'],
+                'scope': 'SIGKILL of the exact probe PID while snapshots were still being written. Recovery is evaluated by restart.json.',
+            }
+            (root / SESSION_RECOVERY_RECEIPT).write_text(json.dumps(receipt, indent=2, sort_keys=True) + '\n')
+            return receipt
+        if time.monotonic() >= deadline:
+            raise RuntimeError('Timed out waiting for session-recovery checkpoint')
+        time.sleep(0.05)
+    raise RuntimeError(f'Probe exited before session-recovery checkpoint ({process.returncode})')
+
+
+def validate_session_recovery_report(report, phase):
+    if (not isinstance(report, dict) or report.get('phase') != phase
+            or report.get('probeMode') != SESSION_RECOVERY_MODE
+            or report.get('sessionRecoveryOnly') is not True
+            or report.get('savedTabCapacityOnly') is not False
+            or report.get('externalAppConsentOnly') is not False
+            or report.get('privateWindowOnly') is not False
+            or report.get('abruptRecoveryProbe') is not False):
+        raise RuntimeError('Session recovery report has wrong phase or mode')
+
+
+def record_session_recovery_summary(root):
+    """Derive acceptance from the kill receipt and the restart report without modifying either."""
+    receipt = json.loads((root / SESSION_RECOVERY_RECEIPT).read_text())
+    restart = json.loads((root / 'restart.json').read_text())
+    validate_session_recovery_report(restart, 'restart')
+    killed = (receipt.get('mode') == SESSION_RECOVERY_MODE and receipt.get('passed') is True
+              and receipt.get('exitCode') == -signal.SIGKILL)
+    summary = {
+        'schema': 1, 'mode': SESSION_RECOVERY_MODE, 'faultInjected': killed,
+        'restartPassed': restart.get('passed') is True,
+        'passed': killed and restart.get('passed') is True,
+        'restartChecks': restart.get('checks', []), 'error': restart.get('error'),
+        'sourceReports': [SESSION_RECOVERY_RECEIPT, 'restart.json'],
+    }
+    (root / 'session-recovery-summary.json').write_text(json.dumps(summary, indent=2, sort_keys=True) + '\n')
+    return summary
 
 
 def signal_probe(process, requested_signal):
@@ -499,13 +598,15 @@ def argument_parser():
                       help="Run only the external-app consent probe with native no-launch guard")
     mode.add_argument("--private-window", action="store_true",
                       help="Compose owned native OTR windows with both normal engine fixture phases")
+    mode.add_argument("--session-recovery", action="store_true",
+                      help="SIGKILL the exact probe PID while it saves a managed workspace, then verify the restored session")
     return parser
 
 
 def build_engine_probe_arguments(executable, root, fixture_url, phase, *, include_bitwarden,
                                  onboarding_control, abrupt, saved_tab_capacity,
                                  external_app_consent=False, private_window=False,
-                                 private_window_run_id=None):
+                                 private_window_run_id=None, session_recovery=False):
     arguments = [str(executable), "--probe-data-dir", str(root),
                  "--probe-url", fixture_url, "--probe-phase", phase,
                  "--probe-output", str(root / f"{phase}.json")]
@@ -525,6 +626,8 @@ def build_engine_probe_arguments(executable, root, fixture_url, phase, *, includ
             raise RuntimeError('Private window mode requires a run identity')
         arguments.append('--probe-private-window')
         arguments.extend(('--probe-private-window-run-id', private_window_run_id))
+    if session_recovery:
+        arguments.append('--probe-session-recovery')
     return arguments
 
 
@@ -979,6 +1082,8 @@ def main(argv=None):
         print('EXTERNAL APP CONSENT ONLY: owned loopback; native no-launch guard enabled', flush=True)
     if options.private_window:
         print('PRIVATE WINDOW FIXTURE: owned hidden OTR windows; synthetic loopback only', flush=True)
+    if options.session_recovery:
+        print('SESSION RECOVERY ONLY: SIGKILL of the exact probe PID during saves, then restore', flush=True)
     root = Path(tempfile.mkdtemp(prefix="arcusis-engine-probe-"))
     (root / ".arcusis-probe").write_text("arcusis-engine-probe-v1\n")
     (root / ".arcusis-probe").chmod(0o600)
@@ -1002,12 +1107,16 @@ def main(argv=None):
                 abrupt=abrupt, saved_tab_capacity=options.saved_tab_capacity,
                 external_app_consent=options.external_app_consent,
                 private_window=options.private_window,
-                private_window_run_id=private_window_run_id)
+                private_window_run_id=private_window_run_id,
+                session_recovery=options.session_recovery)
             with (root / f"{phase}.log").open("w") as log:
                 process = subprocess.Popen(arguments, stdout=log, stderr=log, start_new_session=True, env=probe_env)
                 try:
                     if abrupt and phase == 'initial':
                         terminate_at_checkpoint(process, root, timeout=90, settle_seconds=35 if options.abrupt_control else 0)
+                        continue
+                    if options.session_recovery and phase == 'initial':
+                        kill_during_session_saves(process, root, timeout=120)
                         continue
                     timeout = (240 if options.private_window else 180 if options.external_app_consent else 180 if options.saved_tab_capacity
                                else 170 if include_bitwarden else 90)
@@ -1045,6 +1154,8 @@ def main(argv=None):
                 validate_saved_tab_capacity_report(root, phase, report, code)
             elif options.external_app_consent:
                 validate_external_app_consent_report(root, phase, report, code)
+            elif options.session_recovery:
+                validate_session_recovery_report(report, phase)
             elif options.private_window:
                 try:
                     validate_private_window_report(root, phase, report, code)
@@ -1075,6 +1186,9 @@ def main(argv=None):
             record_saved_tab_capacity_summary(root)
         if options.external_app_consent:
             record_external_app_consent_summary(root)
+        if options.session_recovery:
+            summary = record_session_recovery_summary(root)
+            print(f"session recovery: {'passed' if summary['passed'] else 'FAILED'}", flush=True)
     finally:
         server.shutdown()
         server.server_close()

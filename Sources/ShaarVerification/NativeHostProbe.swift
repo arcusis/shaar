@@ -548,6 +548,7 @@ final class NativeHostProbe {
     first.window.setFrame(NSRect(x: 80, y: 90, width: 1000, height: 720), display: false)
     second.window.setFrame(NSRect(x: 150, y: 130, width: 980, height: 700), display: false)
     host.flushGeometry()
+    try manager.flushSaves()
     try expect(
       manager.workspace.focusedWindowID == secondID && (try file.load()) == manager.workspace,
       "owned focus notifications and geometry persist in the managed snapshot")

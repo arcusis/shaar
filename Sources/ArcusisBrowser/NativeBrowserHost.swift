@@ -986,6 +986,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
         let code = runtime.run(
           withDataDirectory: directory.appending(path: "Chromium"), testing: false)
         host.detach()
+        // Saves run on a background queue; the process must not exit before the last one lands.
+        try? workspace.flushSaves()
         return host.startupFailed ? 1 : code
       }
     } catch {

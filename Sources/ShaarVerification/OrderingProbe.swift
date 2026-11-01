@@ -175,6 +175,7 @@ final class OrderingProbe {
       !runtime.placeTabIDs(
         [ids[2].uuidString], pinnedIDs: [], profileID: other.profileID.uuidString),
       "native bridge rejects another profile's tab")
+    try store.flushSaves()
     let saved = try SessionFile(url: root.appending(path: "session.json")).load()
     try expect(
       saved == store.session,

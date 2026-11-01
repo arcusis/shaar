@@ -77,7 +77,7 @@ App tests live in `Tests/BrowserAppTests`, core tests in `Tests/BrowserCoreTests
 | Private window | `PrivateBrowserStoreTests`, `PrivateBrowserHostTests`, `test_private_window_fixture.py` | `PrivateWindowProbe`, `PrivateProductHostProbe` |
 | Tab switcher and recency | `TabRecencyTests` | — |
 | Recently closed tabs | `ClosedTabTests`, `ClosedTabStoreTests` | `ReopenProbe` |
-| Workspace persistence and restart recovery | `BrowserCoreTests`, `WorkspaceProcessLockTests`, `SnapshotSaveSchedulerTests`, `AbruptCheckpointTests`, `SavedTabCapacityTests` | `WorkspaceProbe`, `SavedTabCapacityProbe`, abrupt restart run |
+| Workspace persistence and restart recovery | `BrowserCoreTests`, `SnapshotFileTests`, `WorkspaceProcessLockTests`, `SnapshotSaveSchedulerTests`, `BrowserWorkspaceStoreTests`, `AbruptCheckpointTests`, `SavedTabCapacityTests` | `WorkspaceProbe`, `SavedTabCapacityProbe`, `SessionRecoveryProbe`, abrupt restart run |
 | Find in page | `PageFindTests` | `PageFindProbe` |
 | Renderer crash recovery | `RendererRecoveryTests` | `RendererRecoveryProbe` |
 | Bookmarks and history | `BrowserLibraryTests` (core and app) | `LibraryProbe` |

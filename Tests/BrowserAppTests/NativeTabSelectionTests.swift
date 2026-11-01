@@ -36,6 +36,7 @@ struct NativeTabSelectionTests {
     #expect(store.session.spaces[0] == source)
     #expect(store.session.selectedSpace.tabs == destination.tabs)
     #expect(store.commandIsOpen && store.commandQuery == "unfinished query")
+    try store.flushSaves()
     #expect(try file.load() == store.session)
     var duplicateSaves = 0
     store.onSessionChanged = { duplicateSaves += 1 }

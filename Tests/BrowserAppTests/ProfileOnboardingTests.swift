@@ -234,6 +234,7 @@ private struct CreationFailure: Error {}
     #expect(profile.name == "Work" && profile.tint == .rose)
     #expect(workspace.workspace.catalog.spaces.first { $0.id == spaceID }?.profileID == id)
     #expect(preferences.accounts(for: id) == [account])
+    try workspace.flushSaves()
     #expect(try file.load() == workspace.workspace)
     #expect(throws: WorkspaceError.self) {
       try draft.create(in: workspace, preferences: preferences)
@@ -270,6 +271,7 @@ private struct CreationFailure: Error {}
     #expect(settings.profiles.first?.color == custom)
     #expect(settings.profiles.first?.color.rgb == SpaceRGBColor(red: 1, green: 2, blue: 3))
     #expect(!settings.setProfileColor(UUID(), to: custom))
+    try workspace.flushSaves()
     #expect(try file.load()?.catalog.profiles.first?.customRGB == custom.customRGB)
   }
 

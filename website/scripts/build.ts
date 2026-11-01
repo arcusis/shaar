@@ -2,13 +2,14 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import { existsSync } from "node:fs";
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { HomePage } from "../src/components/home";
 import { DocumentPage } from "../src/components/layout";
-import { siteOrigin } from "../src/content";
+import { screens, siteOrigin } from "../src/content";
 import { notFoundPage, Pages } from "../src/pages";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -36,11 +37,15 @@ await writeAsset("index.html", HomePage());
 for (const page of pages) await writeAsset(`${page.path.slice(1)}index.html`, DocumentPage(page));
 await writeAsset("404.html", DocumentPage(notFoundPage));
 
-for (const name of ["command-t", "spaces-overview", "profile-extensions", "shaar-icon"]) {
-  await copyFile(
-    resolve(repositoryRoot, `.github/assets/${name}.png`),
-    resolve(output, `assets/${name}.png`),
-  );
+await copyFile(
+  resolve(repositoryRoot, ".github/assets/shaar-icon.png"),
+  resolve(output, "assets/shaar-icon.png"),
+);
+await mkdir(resolve(output, "assets/screens"), { recursive: true });
+for (const { file } of Object.values(screens)) {
+  const fresh = resolve(root, "screens", file);
+  const source = existsSync(fresh) ? fresh : resolve(repositoryRoot, ".github/assets", file);
+  await copyFile(source, resolve(output, "assets/screens", file));
 }
 await writeAsset(
   "assets/shaar-logo.svg",

@@ -75,7 +75,7 @@ export function Footer(): string {
     ],
   ] as const;
   return `<footer class="site-footer"><div class="footer-grid">
-      <div class="footer-brand">${Wordmark()}<p>A Mac browser with room for everything.</p></div>
+      <div class="footer-brand">${Wordmark()}<p>Your gateway to the web.</p></div>
       ${groups.map(([title, items]) => `<div class="footer-group"><h2>${title}</h2>${items.map(([href, label]) => `<a href="${href}">${label}</a>`).join("")}</div>`).join("")}
     </div>
     <div class="footer-bottom"><small>© 2026 Arcusis. All rights reserved.</small><span class="mono">Shaar ${release.version} · MPL-2.0</span><a class="mono" href="#top">Back to top ↑</a></div></footer>`;

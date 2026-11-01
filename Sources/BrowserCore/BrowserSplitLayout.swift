@@ -164,7 +164,9 @@ public enum SplitLayoutPreset: String, CaseIterable, Identifiable, Sendable {
     switch self {
     case .columns: "rectangle.split.3x1"
     case .rows: "rectangle.split.1x2"
-    case .mainLeading: "rectangle.lefthalf.inset.filled"
+    case .mainLeading:
+      BrowserLanguage.currentLaunchLanguage.isRightToLeft
+        ? "rectangle.righthalf.inset.filled" : "rectangle.lefthalf.inset.filled"
     case .mainTop: "rectangle.tophalf.inset.filled"
     case .grid: "rectangle.split.2x2"
     }

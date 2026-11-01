@@ -421,11 +421,12 @@ def terminate_process_group(process: subprocess.Popen, grace: float = 10.0) -> N
 
 class Runner:
     def __init__(self, repo: pathlib.Path, output: pathlib.Path, config: dict,
-                 update_patches: bool = False):
+                 update_patches: bool = False, jobs: int | None = None):
         self.repo = repo.resolve(strict=True)
         self.output = output
         self.config = config
         self.update_patches = update_patches
+        self.build_jobs = self.checked_build_jobs(config, jobs)
         self.receipt_path = output / RECEIPT_FILE
         self.receipt = self._load_receipt()
         recovery = recover_stale_lock(output, owner_record(self.repo), self.receipt)
@@ -526,6 +527,23 @@ class Runner:
             "status": "started",
             "startedAt": utc_now(),
         }
+
+    @staticmethod
+    def checked_build_jobs(config: dict, jobs: int | None) -> int:
+        """The pinned job count is a ceiling; a resume may build with fewer jobs to bound host load."""
+        ceiling = config["build"]["buildJobs"]
+        if jobs is None:
+            return ceiling
+        if not 1 <= jobs <= ceiling:
+            raise BuildError(f"build jobs must be between 1 and the pinned {ceiling}")
+        return jobs
+
+    @staticmethod
+    def build_command_without_jobs(command: list[str] | None) -> list[str] | None:
+        if not command or "-j" not in command:
+            return command
+        index = command.index("-j") + 1
+        return command[:index] + ["*"] + command[index + 1:]
 
     def accept_patch_update(self, data: dict) -> None:
         """Reopen a finished build whose config differs only by appended engine patches."""
@@ -731,7 +749,7 @@ class Runner:
         if log.exists() or log.is_symlink():
             raise BuildError(f"stage log already exists or is symlinked: {log.name}")
         started = utc_now()
-        record = {"attempt": attempt, "status": "running", "args": args,
+        record = {"attempt": attempt, "status": "running", "args": args, "jobs": self.build_jobs,
                   "cwd": str(cwd.relative_to(self.output)),
                   "timeoutSeconds": timeout_seconds, "startedAt": started,
                   "log": str(log.relative_to(self.output))}
@@ -742,7 +760,7 @@ class Runner:
         base_env = self.child_environment()
         base_env.update({"CB": str(self.output), "ENGINE_BUILD_ROOT": str(self.output),
             "AC_REPO": str(self.output / "source/ardia-build"),
-                         "JOBS": str(self.config["build"]["buildJobs"]),
+                         "JOBS": str(self.build_jobs),
                          })
         if env:
             base_env.update(env)
@@ -1092,7 +1110,7 @@ class Runner:
                          "gclient", "runhooks"],
             "gn": ["chromium_git/chromium/src/buildtools/mac/gn", "gen",
                    "out/Release_GN_arm64"],
-            "build": ["taskpolicy", "-b", "nice", "-n", "19", "autoninja", "-j", "6",
+            "build": ["taskpolicy", "-b", "nice", "-n", "19", "autoninja", "-j", str(self.build_jobs),
                       "-k", "0", "-C", "out/Release_GN_arm64", "chrome_framework"],
         }
 
@@ -1743,7 +1761,8 @@ class Runner:
                      ["/usr/bin/git", "-C", str(chromium), "apply", "--reverse", "--check",
                       str(engine_patch)], self.output, self.config["build"]["timeoutsSeconds"]["patches"])
         recorded_build = expected.get("effectiveCommands", {}).get("build")
-        if recorded_build != self.effective_commands()["build"]:
+        if (self.build_command_without_jobs(recorded_build) !=
+                self.build_command_without_jobs(self.effective_commands()["build"])):
             raise BuildError("effective Chromium build command changed after interruption")
 
     def bootstrap_depot_tools_python(self) -> None:
@@ -2002,6 +2021,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--run", action="store_true", help="run pinned source preparation and build")
     parser.add_argument("--update-patches", action="store_true",
                         help="with --run, rebuild a finished output after appending engine patches")
+    parser.add_argument("--jobs", type=int,
+                        help="with --run, build with fewer than the pinned build jobs")
     args = parser.parse_args(argv)
     repo = pathlib.Path(__file__).resolve().parents[1]
     try:
@@ -2011,7 +2032,7 @@ def main(argv: list[str] | None = None) -> int:
                               "execution": "opt-in; pass --run"}, indent=2))
             return 0
         output, _ = prepare_owned_output(repo)
-        runner = Runner(repo, output, config, update_patches=args.update_patches)
+        runner = Runner(repo, output, config, update_patches=args.update_patches, jobs=args.jobs)
         try:
             runner.execute()
         except Exception as exc:

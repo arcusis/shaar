@@ -37,6 +37,7 @@ class SourceBuildTests(unittest.TestCase):
         runner.repo = output
         runner.output = output
         runner.config = {"build": {"minimumFreeBytes": 0, "buildJobs": 6}}
+        runner.build_jobs = 6
         runner.receipt = {"stages": {}}
         runner.child_environment = lambda: os.environ.copy()
         runner.save = lambda: None
@@ -189,6 +190,19 @@ class SourceBuildTests(unittest.TestCase):
                 BUILD.Runner.adapt_symbol_level(script, 1)
             with self.assertRaisesRegex(BUILD.BuildError, "unsupported symbol level"):
                 BUILD.Runner.adapt_symbol_level(script, 3)
+
+    def test_build_jobs_may_only_drop_below_the_pinned_ceiling(self):
+        config = {"build": {"buildJobs": 6}}
+        self.assertEqual(BUILD.Runner.checked_build_jobs(config, None), 6)
+        self.assertEqual(BUILD.Runner.checked_build_jobs(config, 3), 3)
+        for jobs in (0, 7):
+            with self.subTest(jobs=jobs), self.assertRaises(BUILD.BuildError):
+                BUILD.Runner.checked_build_jobs(config, jobs)
+        recorded = ["autoninja", "-j", "6", "-C", "out"]
+        self.assertEqual(BUILD.Runner.build_command_without_jobs(recorded),
+                         BUILD.Runner.build_command_without_jobs(["autoninja", "-j", "3", "-C", "out"]))
+        self.assertNotEqual(BUILD.Runner.build_command_without_jobs(recorded),
+                            BUILD.Runner.build_command_without_jobs(["autoninja", "-j", "3", "-C", "other"]))
 
     def _patch_update_runner(self, repo, receipt_pins, patches):
         (repo / "ThirdParty/ArdiaCore").mkdir(parents=True)
@@ -393,6 +407,7 @@ class SourceBuildTests(unittest.TestCase):
     def test_gclient_cache_is_explicitly_owned(self):
         runner = BUILD.Runner.__new__(BUILD.Runner)
         runner.output = pathlib.Path("/owned/EngineSource")
+        runner.build_jobs = 6
         sync = runner.effective_commands()["sync"]
         self.assertNotIn("--cache-dir", sync)
         self.assertIn("gclient", sync)

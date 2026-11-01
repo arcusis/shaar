@@ -48,12 +48,13 @@ final class ProfileAccountSignIn {
     let hosting = NSHostingView(
       rootView: ProfileAccountSignInView(
         store: store, engine: engine, presentation: presentation,
-        title: "Sign in to \(provider.title) for \(profile.name)"
+        title: SettingsL10n.format(
+          "Sign in to %@ for %@", .string(provider.title), .string(profile.name))
       ) { [weak self] in self?.cancel() })
     hosting.frame = content.bounds
     hosting.autoresizingMask = [.width, .height]
     content.addSubview(hosting)
-    window.title = "\(provider.title) sign-in"
+    window.title = SettingsL10n.format("%@ sign-in", .string(provider.title))
     window.setContentSize(NSSize(width: 520, height: 680))
     window.minSize = NSSize(width: 420, height: 520)
     engine.onClosed = { [weak self] _ in self?.finish(nil) }
@@ -161,7 +162,7 @@ private struct ProfileAccountSignInView: View {
         Text(store.session.selectedPage?.tab.url.host() ?? "").lineLimit(1)
         Spacer()
         Text(title).font(.callout).foregroundStyle(.secondary).lineLimit(1)
-        Button("Cancel", action: cancel)
+        Button(SettingsL10n.string("Cancel"), action: cancel)
       }
       .padding(10)
       .background(Color(nsColor: .windowBackgroundColor))
@@ -169,7 +170,7 @@ private struct ProfileAccountSignInView: View {
       ZStack {
         Color(nsColor: .textBackgroundColor)
         if presentation.readsAccountList {
-          ProgressView("Finishing sign-in…")
+          ProgressView(SettingsL10n.string("Finishing sign-in…"))
         } else if let id = store.session.selectedSpace.selectedTabID, engine.pages[id] != nil {
           ChromiumPage(engine: engine, tabID: id)
         } else {

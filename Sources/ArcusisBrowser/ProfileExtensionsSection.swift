@@ -23,14 +23,15 @@ struct ProfileExtensionsSection: View {
             .frame(maxHeight: 220)
           } else {
             ContentUnavailableView(
-              "No Extensions", systemImage: "puzzlepiece.extension",
-              description: Text("Extensions you add appear here for this profile.")
+              SettingsL10n.string("No Extensions"), systemImage: "puzzlepiece.extension",
+              description: Text(
+                SettingsL10n.string("Extensions you add appear here for this profile."))
             )
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
           }
           Button(action: onAddExtensions) {
-            Label("Add Extensions…", systemImage: "plus")
+            Label(SettingsL10n.string("Add Extensions…"), systemImage: "plus")
           }
           .buttonStyle(.link)
           .padding(.top, 8)
@@ -51,8 +52,8 @@ struct ExtensionManagerList: View {
   var body: some View {
     if model.extensions.isEmpty {
       ContentUnavailableView(
-        "No Extensions", systemImage: "puzzlepiece.extension",
-        description: Text("Extensions you add appear here for this profile.")
+        SettingsL10n.string("No Extensions"), systemImage: "puzzlepiece.extension",
+        description: Text(SettingsL10n.string("Extensions you add appear here for this profile."))
       )
       .padding(.vertical, 12)
     } else {
@@ -86,7 +87,7 @@ struct ExtensionDetails: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       Button(action: back) {
-        Label("Extensions", systemImage: "chevron.left")
+        Label(SettingsL10n.string("Extensions"), systemImage: "chevron.left")
       }
       .buttonStyle(.plain)
       .foregroundStyle(.secondary)
@@ -94,29 +95,35 @@ struct ExtensionDetails: View {
         ExtensionIcon(image: model.icons[item.id], size: 40)
         VStack(alignment: .leading, spacing: 2) {
           Text(item.name).font(.headline).lineLimit(2)
-          Text("Version \(item.version)").font(.caption).foregroundStyle(.secondary)
+          Text(SettingsL10n.format("Version %@", .string(item.version))).font(.caption)
+            .foregroundStyle(.secondary)
         }
       }
       if !item.description.isEmpty {
         Text(item.description).font(.callout).foregroundStyle(.secondary)
           .fixedSize(horizontal: false, vertical: true)
       }
-      detailSection("Permissions", values: item.permissions)
-      detailSection("Site access", values: item.hostPermissions)
+      detailSection(SettingsL10n.string("Permissions"), values: item.permissions)
+      detailSection(SettingsL10n.string("Site access"), values: item.hostPermissions)
       Divider()
-      Button("Remove Extension…", role: .destructive) { confirmsRemoval = true }
-        .disabled(!item.mayDisable)
+      Button(SettingsL10n.string("Remove Extension…"), role: .destructive) {
+        confirmsRemoval = true
+      }
+      .disabled(!item.mayDisable)
     }
     .padding(16)
     .confirmationDialog(
-      "Remove \(item.name)?", isPresented: $confirmsRemoval, titleVisibility: .visible
+      SettingsL10n.format("Remove %@?", .string(item.name)), isPresented: $confirmsRemoval,
+      titleVisibility: .visible
     ) {
-      Button("Remove", role: .destructive) {
+      Button(SettingsL10n.string("Remove"), role: .destructive) {
         model.remove(item.id)
         back()
       }
     } message: {
-      Text("Its data in this profile is deleted. You can add it again from the Chrome Web Store.")
+      Text(
+        SettingsL10n.string(
+          "Its data in this profile is deleted. You can add it again from the Chrome Web Store."))
     }
   }
 

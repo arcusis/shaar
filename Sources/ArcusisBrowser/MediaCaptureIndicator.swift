@@ -20,14 +20,15 @@ struct MediaCaptureIndicator: View {
           }
         }
       } label: {
-        Label(
-          "In use", systemImage: captureSymbol
-        )
-        .font(.caption.weight(.semibold)).foregroundStyle(.red)
+        Label(PanelsL10n.string("In use"), systemImage: captureSymbol)
+          .font(.caption.weight(.semibold)).foregroundStyle(.red)
       }
       .menuIndicator(.hidden)
-      .help("Camera, microphone, or screen capture is active. Choose a tab to return to it.")
-      .accessibilityLabel("Active capture in \(capturingTabs.count) tabs")
+      .help(
+        PanelsL10n.string(
+          "Camera, microphone, or screen capture is active. Choose a tab to return to it.")
+      )
+      .accessibilityLabel(PanelsL10n.plural("%d active capture tabs", count: capturingTabs.count))
     }
   }
 
@@ -62,11 +63,14 @@ struct MediaCaptureIndicator: View {
   }
 
   private func resources(for access: MediaAccessState) -> String {
-    [
-      access.camera ? "camera" : nil, access.microphone ? "microphone" : nil,
-      access.screen ? "screen" : nil,
-    ]
-    .compactMap { $0 }.joined(separator: ", ")
+    let resources = [
+      access.camera ? PanelsL10n.string("camera") : nil,
+      access.microphone ? PanelsL10n.string("microphone") : nil,
+      access.screen ? PanelsL10n.string("screen") : nil,
+    ].compactMap { $0 }
+    let formatter = ListFormatter()
+    formatter.locale = Locale(identifier: BrowserLanguage.currentLaunchLanguage.localeIdentifier)
+    return formatter.string(from: resources) ?? resources.joined(separator: ", ")
   }
 }
 

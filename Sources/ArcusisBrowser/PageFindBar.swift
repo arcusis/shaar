@@ -13,13 +13,13 @@ struct PageFindBar: View {
     HStack(spacing: 10) {
       Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
       TextField(
-        "Find in page",
+        PanelsL10n.string("Find in page"),
         text: Binding(
           get: { isCurrent ? store.pageFind?.query ?? "" : "" },
           set: { if isCurrent { store.updatePageFindQuery($0) } })
       )
       .textFieldStyle(.roundedBorder)
-      .accessibilityLabel("Find in page")
+      .accessibilityLabel(PanelsL10n.string("Find in page"))
       .focused($queryIsFocused)
       .onSubmit { if isCurrent { store.movePageFind(forward: true) } }
       .onExitCommand { close() }
@@ -34,18 +34,18 @@ struct PageFindBar: View {
         Image(systemName: "chevron.up")
       }
       .disabled(!state.canMove)
-      .accessibilityLabel("Previous match")
-      .help("Previous match (Shift-Command-G)")
+      .accessibilityLabel(PanelsL10n.string("Previous match"))
+      .help(PanelsL10n.string("Previous match (Shift-Command-G)"))
       Button {
         if isCurrent { store.movePageFind(forward: true) }
       } label: {
         Image(systemName: "chevron.down")
       }
       .disabled(!state.canMove)
-      .accessibilityLabel("Next match")
-      .help("Next match (Command-G)")
-      Button("Done") { close() }
-        .help("Close find (Escape)")
+      .accessibilityLabel(PanelsL10n.string("Next match"))
+      .help(PanelsL10n.string("Next match (Command-G)"))
+      Button(PanelsL10n.string("Done")) { close() }
+        .help(PanelsL10n.string("Close find (Escape)"))
     }
     .controlSize(.small)
     .padding(.horizontal, 14).padding(.vertical, 8)

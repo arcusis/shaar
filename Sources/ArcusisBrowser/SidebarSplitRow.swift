@@ -44,7 +44,7 @@ struct SidebarSplitRow: View {
     )
     .animation(.easeOut(duration: 0.12), value: hoveredID)
     .accessibilityElement(children: .contain)
-    .accessibilityLabel("Split View, \(segments.count) tabs")
+    .accessibilityLabel(ShellL10n.plural("Split View, %d tabs", count: segments.count))
   }
 
   private func segmentView(_ segment: Segment, showsTitle: Bool) -> some View {
@@ -77,7 +77,7 @@ struct SidebarSplitRow: View {
     .accessibilityLabel(segment.title)
     .accessibilityAddTraits(raised ? [.isButton, .isSelected] : .isButton)
     .accessibilityAction { onSelect(segment.id) }
-    .accessibilityAction(named: Text("Close tab")) { onClose(segment.id) }
+    .accessibilityAction(named: ShellL10n.text("Close tab")) { onClose(segment.id) }
     .draggable(onDrag(segment.id))
   }
 
@@ -99,8 +99,8 @@ struct SidebarSplitRow: View {
           .contentShape(Circle())
       }
       .buttonStyle(.plain)
-      .help("Close \(segment.title)")
-      .accessibilityLabel("Close \(segment.title)")
+      .help(ShellL10n.format("Close %@", arguments: [.string(segment.title)]))
+      .accessibilityLabel(ShellL10n.format("Close %@", arguments: [.string(segment.title)]))
     } else if let favicon = segment.favicon {
       Image(nsImage: favicon).resizable().scaledToFit().frame(width: 16, height: 16)
     } else {

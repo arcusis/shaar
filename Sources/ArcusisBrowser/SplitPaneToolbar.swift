@@ -24,11 +24,11 @@ struct SplitPaneToolbar: View {
   var body: some View {
     let state = engine?.pages[tabID]
     HStack(spacing: 2) {
-      toolbarButton("chevron.left", label: "Back") {
+      toolbarButton("chevron.backward", label: ShellL10n.string("Back")) {
         engine?.runtime.goBack(inTabID: tabID.uuidString)
       }
       .disabled(state?.canGoBack != true)
-      toolbarButton("chevron.right", label: "Forward") {
+      toolbarButton("chevron.forward", label: ShellL10n.string("Forward")) {
         engine?.runtime.goForward(inTabID: tabID.uuidString)
       }
       .disabled(state?.canGoForward != true)
@@ -71,7 +71,7 @@ struct SplitPaneToolbar: View {
       .contentShape(Rectangle())
     }
     .help(tab?.url.absoluteString ?? "")
-    .accessibilityLabel("Address \(tab?.url.host() ?? "")")
+    .accessibilityLabel(ShellL10n.format("Address %@", arguments: [.string(tab?.url.host() ?? "")]))
     .draggable(
       store.beginTabDrag(tabID, spaceID: store.session.selectedSpaceID, fromSplitPane: true)
     ) {
@@ -85,13 +85,17 @@ struct SplitPaneToolbar: View {
 
   private var paneMenu: some View {
     Menu {
-      Button("New Tab to the Right") { store.openSplitPane(beside: tabID, edge: .right) }
-        .disabled(store.selectedSplitIsFull)
-      Button("New Tab Below") { store.openSplitPane(beside: tabID, edge: .bottom) }
-        .disabled(store.selectedSplitIsFull)
+      Button(ShellL10n.string("New Tab to the Right")) {
+        store.openSplitPane(beside: tabID, edge: .right)
+      }
+      .disabled(store.selectedSplitIsFull)
+      Button(ShellL10n.string("New Tab Below")) {
+        store.openSplitPane(beside: tabID, edge: .bottom)
+      }
+      .disabled(store.selectedSplitIsFull)
       Divider()
-      Button("Separate from Split") { store.unsplitTab(tabID) }
-      Button("Close Tab") { store.closeTab(tabID) }
+      Button(ShellL10n.string("Separate from Split")) { store.unsplitTab(tabID) }
+      Button(ShellL10n.string("Close Tab")) { store.closeTab(tabID) }
     } label: {
       Image(systemName: "ellipsis")
         .font(.system(size: 12, weight: .medium))
@@ -102,8 +106,8 @@ struct SplitPaneToolbar: View {
     .buttonStyle(.plain)
     .menuIndicator(.hidden)
     .fixedSize()
-    .help("Pane options")
-    .accessibilityLabel("Pane options")
+    .help(ShellL10n.string("Pane options"))
+    .accessibilityLabel(ShellL10n.string("Pane options"))
   }
 
   private func focus() {
@@ -141,15 +145,19 @@ struct SplitLayoutControls: View {
       }
       Divider()
       if let selected = store.session.selectedSpace.selectedTabID {
-        Button("New Tab to the Right") { store.openSplitPane(beside: selected, edge: .right) }
-          .disabled(store.selectedSplitIsFull)
-        Button("New Tab Below") { store.openSplitPane(beside: selected, edge: .bottom) }
-          .disabled(store.selectedSplitIsFull)
+        Button(ShellL10n.string("New Tab to the Right")) {
+          store.openSplitPane(beside: selected, edge: .right)
+        }
+        .disabled(store.selectedSplitIsFull)
+        Button(ShellL10n.string("New Tab Below")) {
+          store.openSplitPane(beside: selected, edge: .bottom)
+        }
+        .disabled(store.selectedSplitIsFull)
       }
     } label: {
       HStack(spacing: 6) {
         Image(systemName: (current ?? .columns).symbol)
-        Text("\(split.tabIDs.count) tabs")
+        Text(ShellL10n.plural("%d tabs", count: split.tabIDs.count))
       }
       .font(.system(size: 13))
       .foregroundStyle(.secondary)
@@ -161,7 +169,7 @@ struct SplitLayoutControls: View {
     .buttonStyle(.plain)
     .menuIndicator(.hidden)
     .fixedSize()
-    .help("Split layout")
-    .accessibilityLabel("Split layout")
+    .help(ShellL10n.string("Split layout"))
+    .accessibilityLabel(ShellL10n.string("Split layout"))
   }
 }

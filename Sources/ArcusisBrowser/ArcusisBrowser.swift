@@ -8,6 +8,7 @@ import SwiftUI
 
 public enum BrowserLaunch {
   @MainActor public static func run() {
+    BrowserLanguage.applyToCurrentProcess()
     let arguments = CommandLine.arguments
     if let index = arguments.firstIndex(of: "--render-preview"),
       arguments.indices.contains(index + 1)
@@ -75,6 +76,7 @@ public enum BrowserLaunch {
       showExtensionConsent: showExtensionConsent, showRecentDownloads: showRecentDownloads
     )
     .frame(width: size.width, height: size.height)
+    .shellLocalization()
     .background(Color(nsColor: .windowBackgroundColor))
     .environment(\.colorScheme, .light)
     let host = NSHostingView(rootView: view)
@@ -260,7 +262,7 @@ private struct NativePreview: View {
         )
         .frame(width: BrowserChromeLayout.sidebarWidth)
         VStack {
-          Text("Authored page preview").font(.headline).foregroundStyle(.secondary)
+          ShellL10n.text("Authored page preview").font(.headline).foregroundStyle(.secondary)
           Spacer()
         }
         .padding(24)
@@ -275,7 +277,7 @@ private struct NativePreview: View {
     } else if showSpaceEditor {
       SpaceEditor(store: store, route: .create)
     } else {
-      BrowserWindow(store: store)
+      BrowserWindow(store: store).shellLocalization()
     }
   }
 
@@ -323,52 +325,58 @@ private struct BrowserApplication: App {
 
   var body: some Scene {
     Window(ProductIdentity.name, id: "browser") {
-      BrowserWindow(store: store)
+      BrowserWindow(store: store).shellLocalization()
     }
     .defaultSize(width: 1200, height: 780)
     .windowStyle(.hiddenTitleBar)
     .commands {
       SpaceCommands(store: store)
       CommandGroup(replacing: .newItem) {
-        Button("New tab") { store.showCommand() }.keyboardShortcut("t")
-        Button("Search or enter address") {
+        Button(ShellL10n.string("New tab")) { store.showCommand() }.keyboardShortcut("t")
+        Button(ShellL10n.string("Search or enter address")) {
           store.showCommand()
           store.commandEditsCurrentURL = true
           store.commandQuery = store.session.selectedPage?.tab.url.absoluteString ?? ""
         }.keyboardShortcut("l")
-        Button("Downloads") { store.showDownloads() }.keyboardShortcut(
+        Button(ShellL10n.string("Downloads")) { store.showDownloads() }.keyboardShortcut(
           "j", modifiers: [.command, .shift])
       }
-      CommandMenu("Tabs") {
-        Button("Reload") { store.reloadCurrentPage() }.keyboardShortcut("r")
+      CommandMenu(ShellL10n.string("Tabs")) {
+        Button(ShellL10n.string("Reload")) { store.reloadCurrentPage() }.keyboardShortcut("r")
           .disabled(!store.canReloadCurrentPage)
-        Button("Hard Reload") { store.reloadCurrentPage(.bypassingCache) }
+        Button(ShellL10n.string("Hard Reload")) { store.reloadCurrentPage(.bypassingCache) }
           .keyboardShortcut("r", modifiers: [.command, .shift])
           .disabled(!store.canReloadCurrentPage)
-        Button("Close tab") {
+        Button(ShellL10n.string("Close tab")) {
           store.closeCurrentPage()
         }
         .keyboardShortcut("w")
         .disabled(store.session.selectedPage == nil)
-        Button("Reopen last closed tab") { store.reopenLastClosedTab() }
+        Button(ShellL10n.string("Reopen last closed tab")) { store.reopenLastClosedTab() }
           .keyboardShortcut("t", modifiers: [.command, .shift])
           .disabled(!store.canReopenClosedTab)
-        Button("Recently closed…") { store.showRecentlyClosed() }.disabled(store.sheet != nil)
-        Button("Toggle sidebar") { store.sidebarIsVisible.toggle() }.keyboardShortcut("s")
-      }
-      CommandMenu("Bookmarks") {
-        Button("Bookmark this page") { store.bookmarkCurrentPage() }.keyboardShortcut("d")
-          .disabled(!store.canBookmarkCurrentPage)
-        Button("Bookmarks…") { store.showLibrary(.bookmarks) }.disabled(store.sheet != nil)
-        Button("History…") { store.showLibrary(.history) }.keyboardShortcut("y").disabled(
+        Button(ShellL10n.string("Recently closed…")) { store.showRecentlyClosed() }.disabled(
           store.sheet != nil)
+        Button(ShellL10n.string("Toggle sidebar")) { store.sidebarIsVisible.toggle() }
+          .keyboardShortcut("s")
+      }
+      CommandMenu(ShellL10n.string("Bookmarks")) {
+        Button(ShellL10n.string("Bookmark this page")) { store.bookmarkCurrentPage() }
+          .keyboardShortcut("d")
+          .disabled(!store.canBookmarkCurrentPage)
+        Button(ShellL10n.string("Bookmarks…")) { store.showLibrary(.bookmarks) }.disabled(
+          store.sheet != nil)
+        Button(ShellL10n.string("History…")) { store.showLibrary(.history) }.keyboardShortcut("y")
+          .disabled(
+            store.sheet != nil)
       }
       CommandGroup(after: .textEditing) {
-        Button("Find in Page…") { store.showPageFind() }.keyboardShortcut("f")
+        Button(ShellL10n.string("Find in Page…")) { store.showPageFind() }.keyboardShortcut("f")
           .disabled(!store.canFindCurrentPage)
-        Button("Find Next") { store.movePageFind(forward: true) }.keyboardShortcut("g")
+        Button(ShellL10n.string("Find Next")) { store.movePageFind(forward: true) }
+          .keyboardShortcut("g")
           .disabled(store.pageFind?.canMove != true)
-        Button("Find Previous") { store.movePageFind(forward: false) }
+        Button(ShellL10n.string("Find Previous")) { store.movePageFind(forward: false) }
           .keyboardShortcut("g", modifiers: [.command, .shift])
           .disabled(store.pageFind?.canMove != true)
       }

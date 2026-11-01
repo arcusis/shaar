@@ -106,7 +106,7 @@ struct ProfileFavoritesGrid: View {
           }
         }
         .padding(.vertical, 1)
-        .accessibilityLabel("Favorite pages")
+        .accessibilityLabel(SettingsL10n.string("Favorite pages"))
         .coordinateSpace(name: "sidebarFavoriteViewport")
         .background {
           GeometryReader { geometry in
@@ -145,8 +145,12 @@ struct ProfileFavoritesGrid: View {
       }
       .buttonStyle(ProfileFavoriteTileButtonStyle(reduceMotion: reduceMotion))
       .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .help("\(favorite.title)\n\(favorite.url.absoluteString)")
-      .accessibilityLabel("\(favorite.title), \(favorite.url.absoluteString)")
+      .help(
+        SettingsL10n.format("%@\n%@", .string(favorite.title), .string(favorite.url.absoluteString))
+      )
+      .accessibilityLabel(
+        SettingsL10n.format("%@, %@", .string(favorite.title), .string(favorite.url.absoluteString))
+      )
       .accessibilityAddTraits(isSelected ? .isSelected : [])
       .draggable(dragPayload(for: favorite))
       .dropDestination(for: ProfileFavoriteDrag.self) { drops, point in
@@ -178,13 +182,15 @@ struct ProfileFavoritesGrid: View {
         }
       }
       .contextMenu {
-        Button("Move Left") { moveLeft(favorite.id) }
+        Button(SettingsL10n.string("Move Left")) { moveLeft(favorite.id) }
           .disabled(index(of: favorite.id) == 0)
-        Button("Move Right") { moveRight(favorite.id) }
+        Button(SettingsL10n.string("Move Right")) { moveRight(favorite.id) }
           .disabled(index(of: favorite.id) == favorites.count - 1)
         Divider()
-        Button("Reset to Original Address") { onReset(favorite.id) }
-        Button("Remove Favorite (keeps page)", role: .destructive) { onRemove(favorite.id) }
+        Button(SettingsL10n.string("Reset to Original Address")) { onReset(favorite.id) }
+        Button(SettingsL10n.string("Remove Favorite (keeps page)"), role: .destructive) {
+          onRemove(favorite.id)
+        }
       }
     }
     .frame(height: tileHeight)

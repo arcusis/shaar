@@ -9,6 +9,7 @@ import SwiftUI
 struct TitlebarSidebarToggle: View {
   @Bindable var store: BrowserStore
   @Environment(\.browserWindowIsFullScreen) private var isFullScreen
+  @Environment(\.layoutDirection) private var layoutDirection
 
   var body: some View {
     GeometryReader { geometry in
@@ -17,18 +18,23 @@ struct TitlebarSidebarToggle: View {
       Button {
         store.sidebarIsVisible = false
       } label: {
-        Image(systemName: "sidebar.left")
+        Image(systemName: "sidebar.leading")
           .font(.system(size: 14))
           .foregroundStyle(.secondary)
           .frame(width: 28, height: max(rowHeight, 24))
           .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
-      .help("Hide sidebar (Command-S)")
-      .accessibilityLabel("Hide sidebar (Command-S)")
+      .help(ShellL10n.string("Hide sidebar (Command-S)"))
+      .accessibilityLabel(ShellL10n.string("Hide sidebar (Command-S)"))
       .offset(
         x: isFullScreen
-          ? BrowserChromeLayout.fullScreenToggleLeading : BrowserChromeLayout.titlebarToggleLeading,
+          ? (layoutDirection == .rightToLeft
+            ? -BrowserChromeLayout.fullScreenToggleLeading
+            : BrowserChromeLayout.fullScreenToggleLeading)
+          : (layoutDirection == .rightToLeft
+            ? -BrowserChromeLayout.titlebarToggleLeading
+            : BrowserChromeLayout.titlebarToggleLeading),
         y: -titlebarHeight)
     }
   }

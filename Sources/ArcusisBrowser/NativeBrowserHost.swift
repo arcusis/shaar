@@ -329,7 +329,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
 
   /// Close Tab closes the window when no page is selected, and says so.
   static func closeTabTitle(for store: BrowserStore) -> String {
-    store.session.selectedPage == nil ? "Close window" : "Close tab"
+    ShellL10n.string(store.session.selectedPage == nil ? "Close window" : "Close tab")
   }
 
   private func perform(_ command: BrowserMenuCommand, in context: NativeBrowserContext) {
@@ -588,7 +588,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     // safe strip in the window frame so its geometry includes that top edge.
     let titlebarHost = window.contentView?.superview ?? content
     let titlebarDragView = WindowDragRegion.makeTitlebarDragView(
-      window: window, contentView: titlebarHost)
+      window: window, contentView: titlebarHost,
+      isRightToLeft: BrowserLanguage.currentLaunchLanguage.isRightToLeft,
+      trailingAccessoryWidth: BrowserLanguage.currentLaunchLanguage.isRightToLeft
+        ? BrowserChromeLayout.titlebarToggleLeading + 28 : 0)
     titlebarHost.addSubview(titlebarDragView, positioned: .above, relativeTo: nil)
     let context = NativeBrowserContext(
       id: id, nativeID: nativeID, window: window, store: store, engine: engine, hosting: hosting,
@@ -717,7 +720,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
             guard let self, let context else { return }
             WindowDragRegion.updateTitlebarDragView(
               context.titlebarDragView, window: context.window,
-              contentView: context.titlebarDragView.superview ?? context.contentView)
+              contentView: context.titlebarDragView.superview ?? context.contentView,
+              isRightToLeft: BrowserLanguage.currentLaunchLanguage.isRightToLeft,
+              trailingAccessoryWidth: BrowserLanguage.currentLaunchLanguage.isRightToLeft
+                ? BrowserChromeLayout.titlebarToggleLeading + 28 : 0)
             context.geometryTask?.cancel()
             context.geometryTask = Task { [weak self, weak context] in
               do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
@@ -781,16 +787,33 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       let command = BrowserMenuCommand(rawValue: raw)
     else { return false }
     if command == .closeTab {
-      item.title = activeContext.map { Self.closeTabTitle(for: $0.store) } ?? "Close window"
+      item.title =
+        activeContext.map { Self.closeTabTitle(for: $0.store) }
+        ?? ShellL10n.string("Close window")
     }
     return canPerform(command)
   }
 
   static func makeMenu(target: AnyObject) -> NSMenu {
     let main = NSMenu()
+    func localizedTitle(_ title: String) -> String {
+      if title == "About \(ProductIdentity.name)" {
+        return ShellL10n.format("About %@", arguments: [.string(ProductIdentity.name)])
+      }
+      if title == "Hide \(ProductIdentity.name)" {
+        return ShellL10n.format("Hide %@", arguments: [.string(ProductIdentity.name)])
+      }
+      if title == "Quit \(ProductIdentity.name)" {
+        return ShellL10n.format("Quit %@", arguments: [.string(ProductIdentity.name)])
+      }
+      if title == "\(ProductIdentity.name) Support" {
+        return ShellL10n.format("%@ Support", arguments: [.string(ProductIdentity.name)])
+      }
+      return ShellL10n.string(title)
+    }
     func section(_ title: String) -> NSMenu {
       let item = NSMenuItem()
-      let result = NSMenu(title: title)
+      let result = NSMenu(title: localizedTitle(title))
       item.submenu = result
       main.addItem(item)
       return result
@@ -799,7 +822,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     func add(_ command: BrowserMenuCommand, _ title: String, to menu: NSMenu) {
       let shortcut = ShortcutCatalog.shortcut(for: command)
       let item = NSMenuItem(
-        title: title, action: #selector(menuAction(_:)), keyEquivalent: shortcut?.key ?? "")
+        title: localizedTitle(title), action: #selector(menuAction(_:)),
+        keyEquivalent: shortcut?.key ?? "")
       item.target = target
       item.representedObject = command.rawValue
       item.keyEquivalentModifierMask = shortcut?.modifiers ?? []
@@ -807,7 +831,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     }
     func addStandard(_ title: String, _ action: Selector, to menu: NSMenu) {
       let shortcut = ShortcutCatalog.standardShortcut(for: title)
-      let item = NSMenuItem(title: title, action: action, keyEquivalent: shortcut?.key ?? "")
+      let item = NSMenuItem(
+        title: localizedTitle(title), action: action, keyEquivalent: shortcut?.key ?? "")
       item.keyEquivalentModifierMask = shortcut?.modifiers ?? []
       menu.addItem(item)
     }
@@ -817,8 +842,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       to: app)
     add(.checkForUpdates, "Check for Updates…", to: app)
     app.addItem(.separator())
-    let services = NSMenu(title: "Services")
-    let servicesItem = NSMenuItem(title: "Services", action: nil, keyEquivalent: "")
+    let services = NSMenu(title: ShellL10n.string("Services"))
+    let servicesItem = NSMenuItem(
+      title: ShellL10n.string("Services"), action: nil, keyEquivalent: "")
     servicesItem.submenu = services
     app.addItem(servicesItem)
     app.addItem(.separator())
@@ -857,7 +883,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     add(.previousSpace, "Previous space", to: spaces)
     let copyURLShortcut = ShortcutCatalog.standardShortcut(for: "Copy URL")
     let copyURL = NSMenuItem(
-      title: "Copy URL", action: #selector(copyCurrentURL(_:)),
+      title: ShellL10n.string("Copy URL"), action: #selector(copyCurrentURL(_:)),
       keyEquivalent: copyURLShortcut?.key ?? "")
     copyURL.target = target
     copyURL.keyEquivalentModifierMask = copyURLShortcut?.modifiers ?? []
@@ -910,7 +936,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   }
 
   func menuNeedsUpdate(_ menu: NSMenu) {
-    guard menu.title == "Spaces" else { return }
+    guard menu.title == ShellL10n.string("Spaces") else { return }
     while let item = menu.items.first(where: { $0.representedObject is UUID || $0.tag == 91827 }) {
       menu.removeItem(item)
     }

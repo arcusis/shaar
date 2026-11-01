@@ -68,7 +68,7 @@ final class DownloadsModel {
     else { return false }
     notices[profileID] = nil
     guard let onCommand else {
-      notices[profileID] = "Download controls are unavailable."
+      notices[profileID] = PanelsL10n.string("Download controls are unavailable.")
       return false
     }
     onCommand(action, id, profileID) { [weak self] error in self?.notices[profileID] = error }
@@ -96,7 +96,7 @@ final class DownloadsModel {
   }
 
   func fileActionFailed(profileID: UUID) {
-    notices[profileID] = "The downloaded file is no longer available."
+    notices[profileID] = PanelsL10n.string("The downloaded file is no longer available.")
   }
 
   private func decode(_ record: [String: Any], profileID: UUID) -> BrowserDownload? {

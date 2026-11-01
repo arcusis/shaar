@@ -31,7 +31,7 @@ struct BrowserChromeSurface: View {
   var body: some View {
     HStack(spacing: 4) {
       if !store.sidebarIsVisible {
-        chromeButton("sidebar.left", label: "Toggle sidebar (Command-S)") {
+        chromeButton("sidebar.leading", label: ShellL10n.string("Toggle sidebar")) {
           store.sidebarIsVisible.toggle()
         }
       }

@@ -53,14 +53,14 @@ enum ExtensionManagementOperation: Equatable {
 }
 
 enum ExtensionConsentPermissions {
-  static let unknownAccess = "Unknown access"
+  static let unknownAccess = PanelsL10n.string("Unknown access")
 
   static func displayValues(
     permissions: [String], hostPermissions: [String]?, complete: Bool
   ) -> [String] {
     var values = permissions
     if let hostPermissions {
-      values += hostPermissions.map { "Site access: \($0)" }
+      values += hostPermissions.map { PanelsL10n.format("Site access: %@", .string($0)) }
     }
     if !complete || hostPermissions == nil {
       values.append(unknownAccess)

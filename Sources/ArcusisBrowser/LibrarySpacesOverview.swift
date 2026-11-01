@@ -43,14 +43,14 @@ struct LibrarySpacesOverview: View {
               .frame(width: 280, height: max(0, geometry.size.height - 24))
           }
           Button(action: onCreateSpace) {
-            Label("New Space", systemImage: "plus")
+            Label(PanelsL10n.string("New Space"), systemImage: "plus")
               .font(.system(size: 14, weight: .semibold))
               .foregroundStyle(.secondary)
               .frame(maxWidth: .infinity, maxHeight: .infinity)
               .contentShape(Rectangle())
           }
           .buttonStyle(.plain)
-          .accessibilityLabel("New Space")
+          .accessibilityLabel(PanelsL10n.string("New Space"))
           .frame(width: 280, height: max(0, geometry.size.height - 24))
           .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 14))
         }
@@ -58,7 +58,7 @@ struct LibrarySpacesOverview: View {
         .padding(.vertical, 8)
       }
       .scrollIndicators(.visible)
-      .accessibilityLabel("Spaces")
+      .accessibilityLabel(PanelsL10n.string("Spaces"))
     }
     .background(Color(nsColor: .windowBackgroundColor))
   }
@@ -117,8 +117,8 @@ private struct LibrarySpaceCardView: View {
       VStack(spacing: 9) {
         Image(systemName: "rectangle.stack")
           .font(.system(size: 22, weight: .light)).foregroundStyle(.secondary)
-        Text("No tabs or folders").font(.callout).foregroundStyle(.secondary)
-        Text("This Space is ready when you are.")
+        Text(PanelsL10n.string("No tabs or folders")).font(.callout).foregroundStyle(.secondary)
+        Text(PanelsL10n.string("This Space is ready when you are."))
           .font(.caption).foregroundStyle(.tertiary).multilineTextAlignment(.center)
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -140,7 +140,7 @@ private struct LibrarySpaceCardView: View {
       }
       .menuStyle(.borderlessButton)
       .fixedSize()
-      .accessibilityLabel("Space options for \(card.space.name)")
+      .accessibilityLabel(PanelsL10n.format("Space options for %@", .string(card.space.name)))
     }
     .font(.system(size: 13, weight: .medium))
     .foregroundStyle(.secondary)
@@ -195,8 +195,9 @@ private struct LibrarySpaceCardHeader: View {
         .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
-      .help("Select \(space.name)")
-      .accessibilityLabel("Select Space \(space.name), Profile \(profileName)")
+      .help(PanelsL10n.format("Select %@", .string(space.name)))
+      .accessibilityLabel(
+        PanelsL10n.format("Select Space %@, Profile %@", .string(space.name), .string(profileName)))
       Button {
         guard
           LibrarySpacesOverviewModel.canEdit(
@@ -211,8 +212,8 @@ private struct LibrarySpaceCardHeader: View {
       }
       .buttonStyle(.plain)
       .foregroundStyle(.secondary)
-      .help("Edit \(space.name)")
-      .accessibilityLabel("Edit \(space.name)")
+      .help(PanelsL10n.format("Edit %@", .string(space.name)))
+      .accessibilityLabel(PanelsL10n.format("Edit %@", .string(space.name)))
     }
     .padding(.horizontal, 16)
     .padding(.top, 16)
@@ -243,7 +244,7 @@ private struct LibrarySpaceItemsView: View {
       .padding(.vertical, 8)
     }
     .scrollIndicators(.automatic)
-    .accessibilityLabel("Tabs and folders in \(card.space.name)")
+    .accessibilityLabel(PanelsL10n.format("Tabs and folders in %@", .string(card.space.name)))
   }
 
   private var firstTodayID: String? {
@@ -294,8 +295,9 @@ private struct LibrarySpaceItemsView: View {
         .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
-      .accessibilityLabel("Folder: \(folder.name)")
-      .accessibilityValue(collapsedFolders.contains(folder.id) ? "Collapsed" : "Expanded")
+      .accessibilityLabel(PanelsL10n.format("Folder: %@", .string(folder.name)))
+      .accessibilityValue(
+        PanelsL10n.string(collapsedFolders.contains(folder.id) ? "Collapsed" : "Expanded"))
     case .tab(let tab, let depth):
       tabButton(tab, depth: depth)
     }
@@ -330,7 +332,8 @@ private struct LibrarySpaceItemsView: View {
         Spacer(minLength: 0)
         if selected {
           Image(systemName: "checkmark.circle.fill")
-            .font(.system(size: 13)).foregroundStyle(tint).accessibilityLabel("Selected")
+            .font(.system(size: 13)).foregroundStyle(tint).accessibilityLabel(
+              PanelsL10n.string("Selected"))
         }
       }
       .padding(.leading, min(CGFloat(depth) * 13, 52))
@@ -367,7 +370,7 @@ struct LibrarySpaceCard: Identifiable {
   let items: [LibrarySpaceCardItem]
 
   var id: UUID { space.id }
-  var profileName: String { profile?.name ?? "Profile" }
+  var profileName: String { profile?.name ?? PanelsL10n.string("Profile") }
   var profileSymbol: String { profile?.displaySymbol ?? BrowserProfile.defaultSymbol }
   var profileRGB: SpaceRGBColor? { profile.flatMap { ProfileColorChoice(profile: $0).rgb } }
 }

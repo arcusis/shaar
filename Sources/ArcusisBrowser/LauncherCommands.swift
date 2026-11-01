@@ -63,9 +63,11 @@ enum LauncherCommands {
     case .history: "clock"
     case .downloads: "arrow.down.circle"
     case .find: "magnifyingglass"
-    case .sidebar: "sidebar.left"
-    case .nextSpace: "arrow.right"
-    case .previousSpace: "arrow.left"
+    case .sidebar: "sidebar.leading"
+    case .nextSpace:
+      BrowserLanguage.currentLaunchLanguage.isRightToLeft ? "arrow.left" : "arrow.right"
+    case .previousSpace:
+      BrowserLanguage.currentLaunchLanguage.isRightToLeft ? "arrow.right" : "arrow.left"
     case .reload: "arrow.clockwise"
     case .hardReload: "arrow.clockwise.circle"
     case .splitView: "rectangle.split.2x1"

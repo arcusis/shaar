@@ -46,6 +46,7 @@ struct PrivateBrowserWindow: View {
       }
     }
     .frame(minWidth: 760, minHeight: 520)
+    .shellLocalization()
   }
 
   private var privateSidebar: some View {
@@ -53,14 +54,14 @@ struct PrivateBrowserWindow: View {
       HStack(spacing: 8) {
         Image(systemName: "eye.slash.fill")
           .foregroundStyle(Color(red: 0.73, green: 0.66, blue: 0.95))
-        Text("Private browsing")
+        ShellL10n.text("Private browsing")
           .font(.system(size: 13, weight: .semibold))
           .lineLimit(1)
       }
       .padding(.horizontal, 16)
       .padding(.top, 22)
 
-      Text("PRIVATE TABS")
+      ShellL10n.text("PRIVATE TABS")
         .font(.system(size: 10, weight: .semibold))
         .tracking(0.8)
         .foregroundStyle(.secondary)
@@ -92,7 +93,7 @@ struct PrivateBrowserWindow: View {
                   .font(.system(size: 9, weight: .semibold))
               }
               .buttonStyle(.plain)
-              .accessibilityLabel("Close private tab")
+              .accessibilityLabel(ShellL10n.string("Close private tab"))
             }
             .padding(.horizontal, 10)
             .frame(height: 32)
@@ -116,7 +117,7 @@ struct PrivateBrowserWindow: View {
       .padding(.horizontal, 16)
 
       Spacer(minLength: 0)
-      Text("Private tabs stay out of your history")
+      ShellL10n.text("Private tabs stay out of your history")
         .font(.system(size: 11))
         .foregroundStyle(.secondary)
         .fixedSize(horizontal: false, vertical: true)
@@ -133,13 +134,13 @@ struct PrivateBrowserWindow: View {
         Button {
           store.goBack()
         } label: {
-          Image(systemName: "chevron.left")
+          Image(systemName: "chevron.backward")
         }
         .disabled(store.selectedTab?.canGoBack != true)
         Button {
           store.goForward()
         } label: {
-          Image(systemName: "chevron.right")
+          Image(systemName: "chevron.forward")
         }
         .disabled(store.selectedTab?.canGoForward != true)
         Button {
@@ -147,7 +148,7 @@ struct PrivateBrowserWindow: View {
         } label: {
           Image(systemName: "arrow.clockwise")
         }
-        TextField("Search or enter address", text: $addressDraft)
+        TextField(ShellL10n.string("Search or enter address"), text: $addressDraft)
           .textFieldStyle(.roundedBorder)
           .focused($addressIsFocused)
           .onSubmit {
@@ -175,13 +176,13 @@ struct PrivateBrowserWindow: View {
           Color.black.opacity(0.30)
             .ignoresSafeArea()
           VStack(alignment: .leading, spacing: 12) {
-            Text("Private search")
+            ShellL10n.text("Private search")
               .font(.system(size: 14, weight: .semibold))
-            TextField("Search or enter address", text: $store.commandQuery)
+            TextField(ShellL10n.string("Search or enter address"), text: $store.commandQuery)
               .textFieldStyle(.roundedBorder)
               .focused($commandIsFocused)
               .onSubmit { store.submitCommand() }
-            Text("Results open in this private window")
+            ShellL10n.text("Results open in this private window")
               .font(.system(size: 11))
               .foregroundStyle(.secondary)
           }

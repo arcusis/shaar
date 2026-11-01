@@ -15,18 +15,19 @@ struct DownloadsPanel: View {
     VStack(alignment: .leading, spacing: 16) {
       HStack {
         VStack(alignment: .leading, spacing: 4) {
-          Text("Downloads").font(.title2.weight(.semibold))
+          Text(PanelsL10n.string("Downloads")).font(.title2.weight(.semibold))
           Text(profileName).font(.callout).foregroundStyle(.secondary)
         }
         Spacer()
-        Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
+        Button(PanelsL10n.string("Done")) { dismiss() }.keyboardShortcut(.cancelAction)
       }
       if store.session.selectedSpace.profileID != profileID {
-        ContentUnavailableView("Profile changed", systemImage: "person.crop.circle")
+        ContentUnavailableView(
+          PanelsL10n.string("Profile changed"), systemImage: "person.crop.circle")
       } else if items.isEmpty {
         ContentUnavailableView(
-          "No downloads", systemImage: "arrow.down.circle",
-          description: Text("Downloads for this profile appear here."))
+          PanelsL10n.string("No downloads"), systemImage: "arrow.down.circle",
+          description: Text(PanelsL10n.string("Downloads for this profile appear here.")))
       } else {
         ScrollView {
           LazyVStack(alignment: .leading, spacing: 0) {
@@ -47,7 +48,8 @@ struct DownloadsPanel: View {
 
   private var items: [BrowserDownload] { engine.downloads.items(in: profileID) }
   private var profileName: String {
-    store.session.profiles.first { $0.id == profileID }?.name ?? "Unavailable profile"
+    store.session.profiles.first { $0.id == profileID }?.name
+      ?? PanelsL10n.string("Unavailable profile")
   }
 
   private func row(_ item: BrowserDownload) -> some View {
@@ -56,7 +58,8 @@ struct DownloadsPanel: View {
         .font(.title2).foregroundStyle(.secondary).frame(width: 28)
       VStack(alignment: .leading, spacing: 5) {
         Text(item.filename).font(.headline).lineLimit(1).truncationMode(.middle)
-        Text("\(item.source) · \(status(item))").font(.caption).foregroundStyle(.secondary)
+        Text(PanelsL10n.format("%@ · %@", .string(item.source), .string(status(item))))
+          .font(.caption).foregroundStyle(.secondary)
           .lineLimit(1)
         if item.state == .downloading && !item.dangerous {
           if let progress = item.progress {
@@ -67,7 +70,7 @@ struct DownloadsPanel: View {
           Text(byteStatus(item)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
         }
         if item.dangerous {
-          Text("Blocked by the browser. This file cannot be opened here.")
+          Text(PanelsL10n.string("Blocked by the browser. This file cannot be opened here."))
             .font(.caption).foregroundStyle(.secondary)
         }
       }
@@ -78,13 +81,15 @@ struct DownloadsPanel: View {
         } label: {
           Image(systemName: "arrow.up.forward.square")
         }
-        .help("Open file").accessibilityLabel("Open \(item.filename)")
+        .help(PanelsL10n.string("Open file"))
+        .accessibilityLabel(PanelsL10n.format("Open %@", .string(item.filename)))
         Button {
           engine.revealDownload(item.id, profileID: profileID, open: false)
         } label: {
           Image(systemName: "folder")
         }
-        .help("Show in Finder").accessibilityLabel("Show \(item.filename) in Finder")
+        .help(PanelsL10n.string("Show in Finder"))
+        .accessibilityLabel(PanelsL10n.format("Show %@ in Finder", .string(item.filename)))
       }
       ForEach(item.actions, id: \.rawValue) { action in
         Button {
@@ -94,7 +99,9 @@ struct DownloadsPanel: View {
         } label: {
           Image(systemName: symbol(action))
         }
-        .help(label(action)).accessibilityLabel("\(label(action)): \(item.filename)")
+        .help(label(action))
+        .accessibilityLabel(
+          PanelsL10n.format("%@: %@", .string(label(action)), .string(item.filename)))
       }
     }
     .buttonStyle(.borderless)
@@ -102,19 +109,21 @@ struct DownloadsPanel: View {
   }
 
   private func status(_ item: BrowserDownload) -> String {
-    if item.dangerous { return "Blocked" }
+    if item.dangerous { return PanelsL10n.string("Blocked") }
     switch item.state {
-    case .downloading: return item.paused ? "Paused" : "Downloading"
-    case .finished: return "Complete"
-    case .failed: return "Interrupted"
-    case .cancelled: return "Cancelled"
+    case .downloading: return PanelsL10n.string(item.paused ? "Paused" : "Downloading")
+    case .finished: return PanelsL10n.string("Complete")
+    case .failed: return PanelsL10n.string("Interrupted")
+    case .cancelled: return PanelsL10n.string("Cancelled")
     }
   }
 
   private func byteStatus(_ item: BrowserDownload) -> String {
     let received = ByteCountFormatter.string(fromByteCount: item.receivedBytes, countStyle: .file)
     guard let total = item.totalBytes else { return received }
-    return "\(received) of \(ByteCountFormatter.string(fromByteCount: total, countStyle: .file))"
+    return PanelsL10n.format(
+      "%@ of %@", .string(received),
+      .string(ByteCountFormatter.string(fromByteCount: total, countStyle: .file)))
   }
 
   private func symbol(_ action: DownloadAction) -> String {
@@ -128,10 +137,10 @@ struct DownloadsPanel: View {
 
   private func label(_ action: DownloadAction) -> String {
     switch action {
-    case .pause: "Pause"
-    case .resume: "Resume"
-    case .cancel: "Cancel download"
-    case .remove: "Remove from list"
+    case .pause: PanelsL10n.string("Pause")
+    case .resume: PanelsL10n.string("Resume")
+    case .cancel: PanelsL10n.string("Cancel download")
+    case .remove: PanelsL10n.string("Remove from list")
     }
   }
 }

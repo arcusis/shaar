@@ -42,7 +42,7 @@ struct RecentDownloadsPopover: View {
     let shown = Array(items.prefix(5).reversed())
     VStack(alignment: .leading, spacing: 10) {
       if shown.isEmpty {
-        Text("No recent downloads").font(.callout).foregroundStyle(.secondary)
+        Text(PanelsL10n.string("No recent downloads")).font(.callout).foregroundStyle(.secondary)
           .padding(.vertical, 8)
       } else {
         ForEach(Array(shown.enumerated()), id: \.element.id) { index, item in
@@ -61,7 +61,7 @@ struct RecentDownloadsPopover: View {
     .onAppear { revealed = true }
     .onExitCommand(perform: dismiss)
     .accessibilityElement(children: .contain)
-    .accessibilityLabel("Recent downloads for current profile")
+    .accessibilityLabel(PanelsL10n.string("Recent downloads for current profile"))
   }
 
   /// Tabs above the list fade out behind it, as in Arc.
@@ -172,6 +172,7 @@ struct RecentDownloadsPopover: View {
   private func relativeAge(_ item: BrowserDownload) -> String {
     let formatter = RelativeDateTimeFormatter()
     formatter.unitsStyle = .full
+    formatter.locale = Locale(identifier: BrowserLanguage.currentLaunchLanguage.localeIdentifier)
     return formatter.localizedString(
       for: Date(timeIntervalSince1970: item.startTime), relativeTo: referenceDate)
   }
@@ -184,19 +185,21 @@ struct RecentDownloadsPopover: View {
   }
 
   private func status(_ item: BrowserDownload) -> String {
-    if item.dangerous { return "Blocked" }
+    if item.dangerous { return PanelsL10n.string("Blocked") }
     return switch item.state {
-    case .downloading: item.paused ? "Paused" : "Downloading"
-    case .finished: "Complete"
-    case .failed: "Interrupted"
-    case .cancelled: "Cancelled"
+    case .downloading: PanelsL10n.string(item.paused ? "Paused" : "Downloading")
+    case .finished: PanelsL10n.string("Complete")
+    case .failed: PanelsL10n.string("Interrupted")
+    case .cancelled: PanelsL10n.string("Cancelled")
     }
   }
 
   private func byteStatus(_ item: BrowserDownload) -> String {
     let received = ByteCountFormatter.string(fromByteCount: item.receivedBytes, countStyle: .file)
     guard let total = item.totalBytes else { return received }
-    return "\(received) of \(ByteCountFormatter.string(fromByteCount: total, countStyle: .file))"
+    return PanelsL10n.format(
+      "%@ of %@", .string(received),
+      .string(ByteCountFormatter.string(fromByteCount: total, countStyle: .file)))
   }
 }
 

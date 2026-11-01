@@ -128,6 +128,7 @@ struct BrowserWindow: View {
         dismissLibraryDrawerAndFocusPage()
       }
     }
+    .shellLocalization()
   }
 
   private var page: some View {
@@ -149,7 +150,7 @@ struct BrowserWindow: View {
             ChromiumPage(engine: engine, tabID: id)
               .overlay { SplitDropZone(store: store, targetID: id) }
           } else {
-            ProgressView("Loading profile…")
+            ProgressView(ShellL10n.string("Loading profile…"))
           }
         } else {
           VStack(spacing: 18) {
@@ -158,7 +159,7 @@ struct BrowserWindow: View {
               .foregroundStyle(.secondary)
             Text(store.session.selectedSpace.name)
               .font(.system(size: 30, weight: .medium, design: .rounded))
-            Text(
+            ShellL10n.text(
               store.session.selectedPage == nil
                 ? "A little room for your next idea."
                 : "Browsing is not available in this development preview."
@@ -170,9 +171,9 @@ struct BrowserWindow: View {
             } label: {
               HStack {
                 Image(systemName: "magnifyingglass")
-                Text("Search or enter address")
+                ShellL10n.text("Search or enter address")
                 Spacer(minLength: 40)
-                Text("⌘T").foregroundStyle(.tertiary)
+                ShellL10n.text("⌘T").foregroundStyle(.tertiary)
               }
               .font(.system(size: 14))
               .padding(16)
@@ -181,7 +182,7 @@ struct BrowserWindow: View {
             }
             .buttonStyle(.plain)
             .frame(maxWidth: 420)
-            Text("\(store.profileName) profile")
+            Text(ShellL10n.format("%@ profile", arguments: [.string(store.profileName)]))
               .font(.system(size: 11))
               .foregroundStyle(.tertiary)
           }
@@ -239,7 +240,7 @@ struct BrowserWindow: View {
           HStack(spacing: 0) {
             BrowserSidebar(store: store)
               .frame(width: BrowserChromeLayout.sidebarWidth)
-              .offset(x: sidebarVisibility == .hidden ? -BrowserChromeLayout.sidebarWidth : 0)
+              .modifier(SidebarHiddenOffset(isHidden: sidebarVisibility == .hidden))
               .allowsHitTesting(sidebarVisibility != .hidden)
               .accessibilityHidden(sidebarVisibility == .hidden)
               .onHover { inside in
@@ -302,6 +303,19 @@ struct BrowserWindow: View {
     }
   }
 
+}
+
+private struct SidebarHiddenOffset: ViewModifier {
+  let isHidden: Bool
+  @Environment(\.layoutDirection) private var layoutDirection
+
+  func body(content: Content) -> some View {
+    content.offset(
+      x: isHidden
+        ? (layoutDirection == .rightToLeft
+          ? BrowserChromeLayout.sidebarWidth : -BrowserChromeLayout.sidebarWidth)
+        : 0)
+  }
 }
 
 private struct WebContentFramePreferenceKey: PreferenceKey {

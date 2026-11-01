@@ -80,6 +80,7 @@ struct SpacePager<Content: View>: View {
   let store: BrowserStore
   let state: SpacePagerState
   let reduceMotion: Bool
+  @Environment(\.layoutDirection) private var layoutDirection
   @ViewBuilder let content: (BrowserSpace) -> Content
 
   var body: some View {
@@ -94,7 +95,10 @@ struct SpacePager<Content: View>: View {
             .accessibilityHidden(space.id != store.session.selectedSpaceID)
         }
       }
-      .offset(x: -CGFloat(index) * geometry.size.width + state.offset)
+      .offset(
+        x: (layoutDirection == .rightToLeft ? CGFloat(index) : -CGFloat(index))
+          * geometry.size.width + state.offset
+      )
       .frame(width: geometry.size.width, alignment: .leading)
       .animation(
         reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.85),

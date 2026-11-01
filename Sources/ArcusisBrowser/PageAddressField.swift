@@ -16,7 +16,7 @@ struct PageAddressField: View {
     } label: {
       HStack(spacing: 6) {
         Image(systemName: url == nil ? "magnifyingglass" : "link")
-        Text(url?.host() ?? "Search or enter address")
+        Text(url?.host() ?? ShellL10n.string("Search or enter address"))
           .lineLimit(1)
           .truncationMode(.middle)
       }
@@ -26,7 +26,7 @@ struct PageAddressField: View {
       .frame(height: 26)
       .contentShape(Rectangle())
     }
-    .accessibilityLabel("Search or enter address")
-    .help(url?.absoluteString ?? "Search or enter address")
+    .accessibilityLabel(ShellL10n.string("Search or enter address"))
+    .help(url?.absoluteString ?? ShellL10n.string("Search or enter address"))
   }
 }

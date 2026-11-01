@@ -197,7 +197,8 @@ final class PrivateBrowserHost {
     container.addSubview(hosting)
     let titlebarHost = nativeWindow.contentView?.superview ?? container
     let titlebarDragView = WindowDragRegion.makeTitlebarDragView(
-      window: nativeWindow, contentView: titlebarHost)
+      window: nativeWindow, contentView: titlebarHost,
+      isRightToLeft: BrowserLanguage.currentLaunchLanguage.isRightToLeft)
     titlebarHost.addSubview(titlebarDragView, positioned: .above, relativeTo: nil)
     let owner = Owner(
       contextID: context, sourceProfileID: source, windowID: window, store: store,

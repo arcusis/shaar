@@ -143,9 +143,11 @@ final class PictureInPictureControlsView: NSView {
     buttons[.skipBack]?.isHidden = presentation.isLive
     buttons[.skipForward]?.isHidden = presentation.isLive
     let restore = presentation.tuckedLeft ? "chevron.right" : "chevron.left"
-    setSymbol(.restore, restore, label: "Restore Picture in Picture")
+    setSymbol(.restore, restore, label: PanelsL10n.string("Restore Picture in Picture"))
     let playing = presentation.isPlaying
-    setSymbol(.playPause, playing ? "pause.fill" : "play.fill", label: playing ? "Pause" : "Play")
+    setSymbol(
+      .playPause, playing ? "pause.fill" : "play.fill",
+      label: PanelsL10n.string(playing ? "Pause" : "Play"))
     needsLayout = true
   }
 
@@ -202,13 +204,13 @@ final class PictureInPictureControlsView: NSView {
 
   private static func symbol(for control: Control) -> (String, String) {
     switch control {
-    case .backToTab: ("pip.exit", "Back to Tab")
-    case .minimize: ("minus", "Minimize")
-    case .close: ("xmark", "Close")
-    case .skipBack: ("gobackward.10", "Skip Back 10 Seconds")
-    case .playPause: ("pause.fill", "Pause")
-    case .skipForward: ("goforward.10", "Skip Forward 10 Seconds")
-    case .restore: ("chevron.left", "Restore Picture in Picture")
+    case .backToTab: ("pip.exit", PanelsL10n.string("Back to Tab"))
+    case .minimize: ("minus", PanelsL10n.string("Minimize"))
+    case .close: ("xmark", PanelsL10n.string("Close"))
+    case .skipBack: ("gobackward.10", PanelsL10n.string("Skip Back 10 Seconds"))
+    case .playPause: ("pause.fill", PanelsL10n.string("Pause"))
+    case .skipForward: ("goforward.10", PanelsL10n.string("Skip Forward 10 Seconds"))
+    case .restore: ("chevron.left", PanelsL10n.string("Restore Picture in Picture"))
     }
   }
 

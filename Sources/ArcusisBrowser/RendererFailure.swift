@@ -18,9 +18,9 @@ struct RendererFailure: Identifiable, Equatable {
 
   var message: String {
     if status == "oom" || status == "evicted" {
-      return "This page ran out of memory. Reload it, or switch to another tab."
+      return PanelsL10n.string("This page ran out of memory. Reload it, or switch to another tab.")
     }
-    return "Reload this page, or switch to another tab to continue."
+    return PanelsL10n.string("Reload this page, or switch to another tab to continue.")
   }
 
   func belongs(to session: BrowserSession) -> Bool {

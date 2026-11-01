@@ -17,22 +17,26 @@ struct RecentlyClosedPanel: View {
     VStack(alignment: .leading, spacing: 16) {
       HStack {
         VStack(alignment: .leading, spacing: 4) {
-          Text("Recently Closed").font(.title2.weight(.semibold))
+          Text(PanelsL10n.string("Recently Closed")).font(.title2.weight(.semibold))
           if ownsContext {
-            Text("\(store.session.selectedSpace.name) · \(store.profileName) profile")
-              .font(.callout).foregroundStyle(.secondary)
+            Text(
+              PanelsL10n.format(
+                "%@ · %@ profile", .string(store.session.selectedSpace.name),
+                .string(store.profileName))
+            )
+            .font(.callout).foregroundStyle(.secondary)
           }
         }
         Spacer()
-        Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
+        Button(PanelsL10n.string("Done")) { dismiss() }.keyboardShortcut(.cancelAction)
       }
       if !ownsContext {
-        ContentUnavailableView("Space changed", systemImage: "square.stack")
+        ContentUnavailableView(PanelsL10n.string("Space changed"), systemImage: "square.stack")
           .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else if entries.isEmpty {
         ContentUnavailableView(
-          "No recently closed tabs", systemImage: "arrow.uturn.backward",
-          description: Text("Tabs closed in this space appear here.")
+          PanelsL10n.string("No recently closed tabs"), systemImage: "arrow.uturn.backward",
+          description: Text(PanelsL10n.string("Tabs closed in this space appear here."))
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else {
@@ -55,17 +59,18 @@ struct RecentlyClosedPanel: View {
                 }
                 .padding(.vertical, 12).contentShape(Rectangle())
               }
-              .buttonStyle(.plain).help("Reopen \(entry.tab.title)")
-              .accessibilityLabel("Reopen \(entry.tab.title)")
+              .buttonStyle(.plain).help(PanelsL10n.format("Reopen %@", .string(entry.tab.title)))
+              .accessibilityLabel(PanelsL10n.format("Reopen %@", .string(entry.tab.title)))
               Divider()
             }
           }
         }
       }
       HStack {
-        Text("Reopens pages in this space’s profile.").font(.caption).foregroundStyle(.secondary)
+        Text(PanelsL10n.string("Reopens pages in this space’s profile.")).font(.caption)
+          .foregroundStyle(.secondary)
         Spacer()
-        Button("Clear list") { store.clearClosedTabs(in: spaceID) }
+        Button(PanelsL10n.string("Clear list")) { store.clearClosedTabs(in: spaceID) }
           .disabled(!ownsContext || entries.isEmpty)
       }
     }

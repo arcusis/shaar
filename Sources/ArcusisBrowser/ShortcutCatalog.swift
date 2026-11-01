@@ -14,6 +14,23 @@ struct ShortcutCatalog {
     /// The `BrowserMenuCommand` name for app commands; nil for standard AppKit items.
     var command: String?
     var id: String { "\(menu):\(title):\(key):\(modifiers.rawValue)" }
+    var localizedMenu: String { SettingsL10n.string(menu) }
+    var localizedTitle: String {
+      let productName = ProductIdentity.name
+      if title == "About \(productName)" {
+        return SettingsL10n.format("About %@", .string(productName))
+      }
+      if title == "Hide \(productName)" {
+        return SettingsL10n.format("Hide %@", .string(productName))
+      }
+      if title == "Quit \(productName)" {
+        return SettingsL10n.format("Quit %@", .string(productName))
+      }
+      if title == "\(productName) Support" {
+        return SettingsL10n.format("%@ Support", .string(productName))
+      }
+      return SettingsL10n.string(title)
+    }
 
     var displayKeys: String {
       if key.isEmpty { return "—" }

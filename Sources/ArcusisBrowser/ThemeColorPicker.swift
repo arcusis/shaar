@@ -56,12 +56,14 @@ struct ThemeColorPicker: View {
       HStack(spacing: 1) {
         if let clearOption {
           ThemeColorSwatch(
-            label: "No color", selected: clearOption.isSelected, action: clearOption.select
+            label: SettingsL10n.string("No color"), selected: clearOption.isSelected,
+            action: clearOption.select
           ) { NoColorMark() }
         }
         ForEach(SpaceTint.allCases, id: \.self) { tint in
           swatch(
-            name: tint.rawValue.capitalized, rgb: SpaceTintRGB.color(for: tint),
+            name: SettingsL10n.string(tint.rawValue.capitalized),
+            rgb: SpaceTintRGB.color(for: tint),
             selected: isPresetSelected(tint)
           ) { color.selectPreset(tint) }
         }
@@ -86,13 +88,14 @@ struct ThemeColorPicker: View {
   private var hexField: some View {
     HStack(spacing: 6) {
       Circle().fill(Color(spaceRGB: hsb.rgb)).frame(width: 14, height: 14)
-      TextField("Hex", text: $hexDraft)
+      TextField(SettingsL10n.string("Hex"), text: $hexDraft)
+        .environment(\.layoutDirection, .leftToRight)
         .labelsHidden()
         .textFieldStyle(.plain)
         .font(.system(size: 12, design: .monospaced))
         .frame(width: 64)
         .onSubmit { commitHex() }
-        .accessibilityLabel("Hex color")
+        .accessibilityLabel(SettingsL10n.string("Hex color"))
     }
     .padding(.horizontal, 8)
     .frame(height: 26)
@@ -113,7 +116,9 @@ struct ThemeColorPicker: View {
   private func swatch(
     name: String, rgb: SpaceRGBColor, selected: Bool, action: @escaping () -> Void
   ) -> some View {
-    ThemeColorSwatch(label: "\(name) color", selected: selected, action: action) {
+    ThemeColorSwatch(
+      label: SettingsL10n.format("%@ color", .string(name)), selected: selected, action: action
+    ) {
       Circle().fill(Color(spaceRGB: rgb))
     }
   }
@@ -193,9 +198,11 @@ private struct ThemeColorField: View {
         })
     }
     .accessibilityElement()
-    .accessibilityLabel("Theme color field")
+    .accessibilityLabel(SettingsL10n.string("Theme color field"))
     .accessibilityValue(
-      "Saturation \(Int(hsb.saturation * 100)) percent, brightness \(Int(hsb.brightness * 100)) percent"
+      SettingsL10n.format(
+        "Saturation %d percent, brightness %d percent",
+        .integer(Int(hsb.saturation * 100)), .integer(Int(hsb.brightness * 100)))
     )
     .accessibilityAdjustableAction { direction in
       let delta = direction == .increment ? 0.05 : -0.05
@@ -248,8 +255,8 @@ private struct ThemeHueSlider: View {
         })
     }
     .accessibilityElement()
-    .accessibilityLabel("Theme hue")
-    .accessibilityValue("\(Int(hsb.hue * 360)) degrees")
+    .accessibilityLabel(SettingsL10n.string("Theme hue"))
+    .accessibilityValue(SettingsL10n.format("%d degrees", .integer(Int(hsb.hue * 360))))
     .accessibilityAdjustableAction { direction in
       onChange(hsb.withHue(hsb.hue + (direction == .increment ? 0.02 : -0.02)))
     }

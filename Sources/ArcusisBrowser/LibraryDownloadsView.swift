@@ -58,43 +58,51 @@ struct LibraryDownloadsView: View {
       HStack(spacing: 6) {
         HStack(spacing: 8) {
           Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-          TextField(mediaOnly ? "Search Media..." : "Search Downloads...", text: $search)
-            .textFieldStyle(.plain)
-            .focused($searchIsFocused)
-            .accessibilityLabel(mediaOnly ? "Search Media" : "Search Downloads")
+          TextField(
+            PanelsL10n.string(mediaOnly ? "Search Media…" : "Search Downloads…"), text: $search
+          )
+          .textFieldStyle(.plain)
+          .focused($searchIsFocused)
+          .accessibilityLabel(PanelsL10n.string(mediaOnly ? "Search Media" : "Search Downloads"))
         }
         .font(.system(size: 15))
         .padding(.horizontal, 10).frame(height: 36)
         .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
         if !mediaOnly {
           Menu {
-            Picker("Filter", selection: $typeFilter) {
+            Picker(PanelsL10n.string("Filter"), selection: $typeFilter) {
               ForEach(LibraryDownloadTypeFilter.allCases) { filter in
-                Text(filter.rawValue).tag(filter)
+                Text(filter.title).tag(filter)
               }
             }
           } label: {
-            Label("Filter", systemImage: "line.3.horizontal.decrease.circle")
+            Label(PanelsL10n.string("Filter"), systemImage: "line.3.horizontal.decrease.circle")
               .font(.system(size: 14, weight: .medium))
               .padding(.horizontal, 10).frame(height: 36)
               .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
           }
           .menuStyle(.borderlessButton).fixedSize()
-          .accessibilityLabel("Filter downloads")
+          .accessibilityLabel(PanelsL10n.string("Filter downloads"))
         }
       }
 
       if !profileIsCurrent {
-        ContentUnavailableView("Profile changed", systemImage: "person.crop.circle")
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
+        ContentUnavailableView(
+          PanelsL10n.string("Profile changed"), systemImage: "person.crop.circle"
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else if downloads == nil {
-        ContentUnavailableView("Downloads unavailable", systemImage: "arrow.down.circle")
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
+        ContentUnavailableView(
+          PanelsL10n.string("Downloads unavailable"), systemImage: "arrow.down.circle"
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else if visibleItems.isEmpty {
         ContentUnavailableView(
-          filtersAreActive ? "No matches" : emptyTitle,
+          PanelsL10n.string(filtersAreActive ? "No matches" : emptyTitle),
           systemImage: mediaOnly ? "photo.on.rectangle.angled" : "arrow.down.circle",
-          description: Text(filtersAreActive ? "Try another search or filter." : emptyDescription)
+          description: Text(
+            PanelsL10n.string(filtersAreActive ? "Try another search or filter." : emptyDescription)
+          )
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else if mediaOnly {
@@ -105,7 +113,7 @@ struct LibraryDownloadsView: View {
 
       if profileIsCurrent, let notice = downloads?.notices[profileID] {
         Text(notice).font(.callout).foregroundStyle(.secondary)
-          .accessibilityLabel("Download notice: \(notice)")
+          .accessibilityLabel(PanelsL10n.format("Download notice: %@", .string(notice)))
       }
     }
     .padding(16)
@@ -121,13 +129,14 @@ struct LibraryDownloadsView: View {
   }
 
   private var emptyTitle: String {
-    mediaOnly ? "No downloaded media" : "No downloads"
+    PanelsL10n.string(mediaOnly ? "No downloaded media" : "No downloads")
   }
 
   private var emptyDescription: String {
-    mediaOnly
-      ? "Downloaded images, videos, and PDFs appear here."
-      : "Downloads for this profile appear here."
+    PanelsL10n.string(
+      mediaOnly
+        ? "Downloaded images, videos, and PDFs appear here."
+        : "Downloads for this profile appear here.")
   }
 
   private func downloadList(_ items: [BrowserDownload]) -> some View {
@@ -146,7 +155,7 @@ struct LibraryDownloadsView: View {
       }
       .frame(maxWidth: .infinity, alignment: .leading)
     }
-    .accessibilityLabel("Chronological downloads")
+    .accessibilityLabel(PanelsL10n.string("Chronological downloads"))
   }
 
   private func downloadRow(_ item: BrowserDownload) -> some View {
@@ -179,14 +188,16 @@ struct LibraryDownloadsView: View {
           Text(byteStatus(item)).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
         }
         if item.dangerous {
-          Text("Blocked by the browser. This file cannot be opened here.")
+          Text(PanelsL10n.string("Blocked by the browser. This file cannot be opened here."))
             .font(.caption).foregroundStyle(.secondary)
         }
       }.frame(maxWidth: .infinity, alignment: .leading)
       Menu {
         if item.canOpen {
-          Button("Show in Finder") { open(item, inFinder: true) }.disabled(!canUseFileActions)
-          Button("Open") { open(item, inFinder: false) }.disabled(!canUseFileActions)
+          Button(PanelsL10n.string("Show in Finder")) { open(item, inFinder: true) }.disabled(
+            !canUseFileActions)
+          Button(PanelsL10n.string("Open")) { open(item, inFinder: false) }.disabled(
+            !canUseFileActions)
         }
         ForEach(
           downloads?.isFolderItem(item, profileID: profileID) == true ? [] : item.actions,
@@ -203,7 +214,7 @@ struct LibraryDownloadsView: View {
       }
       .menuStyle(.borderlessButton).fixedSize()
       .opacity(hoveredID == item.id ? 1 : 0)
-      .accessibilityLabel("Actions for \(item.filename)")
+      .accessibilityLabel(PanelsL10n.format("Actions for %@", .string(item.filename)))
     }
     .padding(8).contentShape(Rectangle())
     .background(
@@ -271,7 +282,7 @@ struct LibraryDownloadsView: View {
       }
       .frame(maxWidth: .infinity, alignment: .leading)
     }
-    .accessibilityLabel("Downloaded media")
+    .accessibilityLabel(PanelsL10n.string("Downloaded media"))
   }
 
   private var canUseDownloadActions: Bool {
@@ -332,15 +343,17 @@ struct LibraryDownloadsView: View {
   private func byteStatus(_ item: BrowserDownload) -> String {
     let received = ByteCountFormatter.string(fromByteCount: item.receivedBytes, countStyle: .file)
     guard let total = item.totalBytes else { return received }
-    return "\(received) of \(ByteCountFormatter.string(fromByteCount: total, countStyle: .file))"
+    return PanelsL10n.format(
+      "%@ of %@", .string(received),
+      .string(ByteCountFormatter.string(fromByteCount: total, countStyle: .file)))
   }
 
   private func actionLabel(_ action: DownloadAction) -> String {
     switch action {
-    case .pause: "Pause"
-    case .resume: "Resume"
-    case .cancel: "Cancel download"
-    case .remove: "Remove from list"
+    case .pause: PanelsL10n.string("Pause")
+    case .resume: PanelsL10n.string("Resume")
+    case .cancel: PanelsL10n.string("Cancel download")
+    case .remove: PanelsL10n.string("Remove from list")
     }
   }
 }

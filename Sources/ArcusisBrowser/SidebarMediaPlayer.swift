@@ -24,27 +24,27 @@ struct SidebarMediaPlayer: View {
       pageButton
       HStack(spacing: 2) {
         if state.supports(.previousTrack) {
-          control("backward.end.fill", label: "Previous track", id: "previous") {
+          control("backward.end.fill", label: PanelsL10n.string("Previous track"), id: "previous") {
             onCommand(.perform(.previousTrack))
           }
         }
         if let playPause = state.playPauseAction {
           control(
             playPause == .pause ? "pause.fill" : "play.fill",
-            label: playPause == .pause ? "Pause" : "Play", id: "play-pause"
+            label: PanelsL10n.string(playPause == .pause ? "Pause" : "Play"), id: "play-pause"
           ) {
             onCommand(.perform(playPause))
           }
         }
         if state.supports(.nextTrack) {
-          control("forward.end.fill", label: "Next track", id: "next") {
+          control("forward.end.fill", label: PanelsL10n.string("Next track"), id: "next") {
             onCommand(.perform(.nextTrack))
           }
         }
         Spacer(minLength: 0)
         control(
           state.muted ? "speaker.slash.fill" : "speaker.wave.2.fill",
-          label: state.muted ? "Unmute" : "Mute", id: "mute"
+          label: PanelsL10n.string(state.muted ? "Unmute" : "Mute"), id: "mute"
         ) {
           onCommand(.setMuted(!state.muted))
         }
@@ -55,7 +55,7 @@ struct SidebarMediaPlayer: View {
     .background(cardFill, in: RoundedRectangle(cornerRadius: 10))
     .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.06)))
     .accessibilityElement(children: .contain)
-    .accessibilityLabel("Now playing: \(title)")
+    .accessibilityLabel(PanelsL10n.format("Now playing: %@", .string(title)))
     .accessibilityIdentifier("sidebar-media-player")
   }
 
@@ -80,8 +80,8 @@ struct SidebarMediaPlayer: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
-    .help("Show the playing tab")
-    .accessibilityLabel("Show \(title)")
+    .help(PanelsL10n.string("Show the playing tab"))
+    .accessibilityLabel(PanelsL10n.format("Show %@", .string(title)))
     .accessibilityIdentifier("sidebar-media-select")
   }
 

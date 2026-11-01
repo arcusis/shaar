@@ -9,30 +9,40 @@ public enum NavigationInput {
     ["http", "https"].contains(url.scheme?.lowercased() ?? "") && !(url.host() ?? "").isEmpty
   }
 
+  /// The input as a web address (`https://…`, `example.com`, `localhost:3000`), or nil when
+  /// it is text to search for or uses an unsupported scheme.
+  public static func address(for input: String) -> URL? {
+    let input = input.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !input.isEmpty else { return nil }
+    if let url = URL(string: input), isWebURL(url) { return url }
+    if hasUnsupportedScheme(input) { return nil }
+    let host = input.split(separator: "/", maxSplits: 1).first.map(String.init) ?? ""
+    guard !input.contains(where: \.isWhitespace),
+      host.contains(".") || host == "localhost" || host.hasPrefix("localhost:")
+        || host.hasPrefix("["),
+      let url = URL(string: "https://" + input), isWebURL(url)
+    else { return nil }
+    return url
+  }
+
   public static func destination(
     for input: String, searchEngine: BrowserSearchEngine = .google
   ) -> URL? {
     let input = input.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !input.isEmpty else { return nil }
-    if let url = URL(string: input), isWebURL(url) { return url }
+    if let url = address(for: input) { return url }
     // Unsupported explicit schemes are never turned into executable navigation.
-    if input.contains("://") || input.lowercased().hasPrefix("javascript:")
-      || input.lowercased().hasPrefix("data:") || input.lowercased().hasPrefix("file:")
-    {
-      return nil
-    }
-    let host = input.split(separator: "/", maxSplits: 1).first.map(String.init) ?? ""
-    if !input.contains(where: \.isWhitespace),
-      host.contains(".") || host == "localhost" || host.hasPrefix("localhost:")
-        || host.hasPrefix("["),
-      let url = URL(string: "https://" + input), isWebURL(url)
-    {
-      return url
-    }
+    if hasUnsupportedScheme(input) { return nil }
     let endpoint = searchEngine.searchEndpoint
     var search = URLComponents(string: endpoint.url)
     search?.queryItems = [URLQueryItem(name: endpoint.queryName, value: input)]
     return search?.url
+  }
+
+  private static func hasUnsupportedScheme(_ input: String) -> Bool {
+    let lowercased = input.lowercased()
+    return input.contains("://") || lowercased.hasPrefix("javascript:")
+      || lowercased.hasPrefix("data:") || lowercased.hasPrefix("file:")
   }
 }
 
@@ -113,7 +123,11 @@ public enum CommandSearch {
       searchEngine: searchEngine, limit: resultLimit)
   }
 
-  /// `limit` counts every row, including the final Open row when input can navigate.
+  /// `limit` counts every row, including the Open row when input can navigate.
+  ///
+  /// Return runs the first row. A typed address puts Open first unless a result is already at
+  /// that exact address. Typed text puts Search first unless a result's site or title starts
+  /// with the text (`gith` selects an open GitHub tab). A leading result moves Open to the end.
   static func results(
     for query: String, in session: BrowserSession,
     bookmarks: [BrowserBookmark], history: [BrowserHistoryEntry],
@@ -122,8 +136,16 @@ public enum CommandSearch {
     let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
     let openURL = NavigationInput.destination(for: query, searchEngine: searchEngine)
     let candidateLimit = openURL == nil ? limit : limit - 1
+    let typedAddress = NavigationInput.address(for: query)
     var results: [CommandResult] = []
-    func append(_ result: CommandResult) -> Bool {
+    var leadingIndex: Int?
+    func leads(_ result: CommandResult, _ url: URL?) -> Bool {
+      if let typedAddress { return CommandText.sameAddress(url, typedAddress) }
+      return CommandText.siteStarts(with: query, url)
+        || CommandText.titleStarts(with: query, result.title)
+    }
+    func append(_ result: CommandResult, url: URL? = nil) -> Bool {
+      if leadingIndex == nil, leads(result, url) { leadingIndex = results.count }
       results.append(result)
       return results.count >= candidateLimit
     }
@@ -138,8 +160,11 @@ public enum CommandSearch {
       guard CommandText.matches(query, CommandFields.favorite(favorite, page: page)) else {
         continue
       }
-      let domain = CommandText.domain(of: page?.tab.url ?? favorite.originalURL)
-      if append(.favorite(favorite, subtitle: "Favorite · \(profileName) profile · \(domain)")) {
+      let url = page?.tab.url ?? favorite.originalURL
+      let domain = CommandText.domain(of: url)
+      if append(
+        .favorite(favorite, subtitle: "Favorite · \(profileName) profile · \(domain)"), url: url)
+      {
         break
       }
     }
@@ -169,7 +194,7 @@ public enum CommandSearch {
         }
         let context = path.isEmpty ? space.name : "\(space.name) · \(path)"
         let domain = CommandText.domain(of: tab.url)
-        return append(.tab(tab, space: space.id, subtitle: "\(context) · \(domain)"))
+        return append(.tab(tab, space: space.id, subtitle: "\(context) · \(domain)"), url: tab.url)
       }
       for tab in space.orderedTabs {
         if appendTabResult(tab) { break search }
@@ -202,7 +227,8 @@ public enum CommandSearch {
         where CommandText.matches(query, CommandFields.closedTab(entry)) {
           let profile = session.profiles.first { $0.id == space.profileID }?.name ?? ""
           if append(
-            .reopen(entry, subtitle: "Reopen closed tab · \(space.name) · \(profile) profile"))
+            .reopen(entry, subtitle: "Reopen closed tab · \(space.name) · \(profile) profile"),
+            url: entry.tab.url)
           {
             break search
           }
@@ -213,7 +239,10 @@ public enum CommandSearch {
         for item in bookmarks where item.profileID == profile && item.destination != nil {
           guard CommandText.matches(query, CommandFields.bookmark(item)) else { continue }
           bookmarked.insert(item.address!)
-          if append(.bookmark(item, subtitle: "Bookmark · \(profileName) profile · \(item.path)")) {
+          if append(
+            .bookmark(item, subtitle: "Bookmark · \(profileName) profile · \(item.path)"),
+            url: item.destination)
+          {
             break search
           }
         }
@@ -227,19 +256,22 @@ public enum CommandSearch {
               entry,
               subtitle:
                 "History · \(profileName) profile · \(entry.lastVisit.formatted(date: .abbreviated, time: .omitted))"
-            ))
+            ), url: entry.destination)
           {
             break search
           }
         }
       }
     }
-    if let openURL {
-      results.append(
-        CommandResult(
-          title: query, subtitle: "Open in \(session.selectedSpace.name)",
-          symbol: "arrow.up.right", action: .open(openURL)
-        ))
+    guard let openURL else { return results }
+    let openRow = CommandResult(
+      title: query, subtitle: "Open in \(session.selectedSpace.name)",
+      symbol: "arrow.up.right", action: .open(openURL))
+    if let leadingIndex {
+      results.insert(results.remove(at: leadingIndex), at: 0)
+      results.append(openRow)
+    } else {
+      results.insert(openRow, at: 0)
     }
     return results
   }

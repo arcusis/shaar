@@ -9,6 +9,10 @@ import SwiftUI
 /// buttons appear only for actions the page supports; mute uses the engine's tab mute.
 struct SidebarMediaPlayer: View {
   @Environment(\.colorScheme) private var colorScheme
+  @State var volumeIsVisible = false
+  @State private var pointerIsInside = false
+  @State private var editingVolume = false
+  @State private var draftVolume: Double?
   let item: MiniPlayerItem
   let onSelect: () -> Void
   let onCommand: (MediaCommand) -> Void
@@ -46,10 +50,13 @@ struct SidebarMediaPlayer: View {
           state.muted ? "speaker.slash.fill" : "speaker.wave.2.fill",
           label: PanelsL10n.string(state.muted ? "Unmute" : "Mute"), id: "mute"
         ) {
+          volumeIsVisible = true
           onCommand(.setMuted(!state.muted))
         }
+        .onHover { if $0 { volumeIsVisible = true } }
       }
       .environment(\.layoutDirection, .leftToRight)
+      if volumeIsVisible { volumeControl }
     }
     .padding(.horizontal, 8)
     .padding(.vertical, 6)
@@ -58,6 +65,51 @@ struct SidebarMediaPlayer: View {
     .accessibilityElement(children: .contain)
     .accessibilityLabel(PanelsL10n.format("Now playing: %@", .string(title)))
     .accessibilityIdentifier("sidebar-media-player")
+    .onHover {
+      pointerIsInside = $0
+      if !$0 && !editingVolume { volumeIsVisible = false }
+    }
+    .onChange(of: state.volume) { _, _ in
+      if !editingVolume { draftVolume = nil }
+    }
+    .onChange(of: item.tabID) { _, _ in
+      draftVolume = nil
+      volumeIsVisible = false
+      editingVolume = false
+    }
+  }
+
+  private var volumeControl: some View {
+    Slider(
+      value: Binding(
+        get: { draftVolume ?? state.volume ?? 0 },
+        set: {
+          draftVolume = $0
+          onCommand(.setVolume($0))
+        }), in: 0...1,
+      onEditingChanged: { editing in
+        editingVolume = editing
+        if !editing {
+          draftVolume = nil
+          if !pointerIsInside { volumeIsVisible = false }
+        }
+      }
+    ) {
+      Text(PanelsL10n.string("Volume"))
+    }
+    .labelsHidden()
+    .controlSize(.small)
+    .disabled(state.volume == nil)
+    .accessibilityLabel(PanelsL10n.string("Volume"))
+    .accessibilityValue(volumeAccessibilityValue)
+    .accessibilityIdentifier("sidebar-media-volume")
+    .environment(\.layoutDirection, .leftToRight)
+  }
+
+  private var volumeAccessibilityValue: String {
+    guard state.volume != nil else { return PanelsL10n.string("Unavailable") }
+    let percentage = Int(((draftVolume ?? state.volume ?? 0) * 100).rounded())
+    return PanelsL10n.plural("%d percent", count: percentage)
   }
 
   /// A raised card on the tinted sidebar in both appearances.

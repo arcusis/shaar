@@ -17,6 +17,13 @@ struct ManagedExtension: Identifiable, Equatable, Decodable {
   let mayDisable: Bool
   let permissions: [String]
   let hostPermissions: [String]
+
+  func help(actionTitle: String?) -> String {
+    guard let title = actionTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
+      !title.isEmpty, title != name
+    else { return name }
+    return "\(name): \(title)"
+  }
 }
 
 enum ExtensionManagementOperation: Equatable {

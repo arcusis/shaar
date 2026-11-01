@@ -205,8 +205,9 @@ public enum CommandLauncher {
 
   // MARK: Typed query
 
-  /// Ranked hits keep their existing order and matching Actions come next. Open follows the
-  /// Actions when there are hits; with no hits it leads, so Enter still searches the web.
+  /// Sections follow `CommandSearch`'s default row: when Open leads (a typed address, or text no
+  /// result's site or title starts with) it comes first, so Enter navigates or searches.
+  /// Otherwise the ranked hits lead, matching Actions come next and Open follows them.
   static func searchSections(
     for query: String, in session: BrowserSession, sources: CommandSources
   ) -> [CommandSection] {
@@ -217,8 +218,9 @@ public enum CommandLauncher {
       limit: CommandSearch.resultLimit - actions.results.count)
     let hits = CommandSection(id: "top-hits", title: "", results: results.filter { !$0.isOpen })
     let open = CommandSection(id: "open", title: "", results: results.filter(\.isOpen))
-    guard hits.results.isEmpty else { return [hits, actions, open] }
-    return [open, actions]
+    if hits.results.isEmpty { return [open, actions] }
+    if results.first?.isOpen == true { return [open, hits, actions] }
+    return [hits, actions, open]
   }
 
   // MARK: Chips

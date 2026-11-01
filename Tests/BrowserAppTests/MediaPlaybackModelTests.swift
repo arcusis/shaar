@@ -55,6 +55,18 @@ final class MediaPlaybackModelTests: XCTestCase {
     XCTAssertNil(paused.playPauseAction)
   }
 
+  func testVolumeAcceptsOnlyFiniteNumbersInRange() throws {
+    for volume in [0.0, 0.25, 1.0] {
+      let state = MediaSessionState(payload: ["playbackState": "playing", "volume": volume])
+      XCTAssertEqual(state?.volume, volume)
+    }
+    for volume: Any in [NSNull(), true, "0.5", -0.1, 1.1, Double.nan, Double.infinity] {
+      let state = MediaSessionState(payload: ["playbackState": "playing", "volume": volume])
+      XCTAssertNil(try XCTUnwrap(state).volume)
+    }
+    XCTAssertNil(playing.volume, "metadata alone does not imply a controllable element")
+  }
+
   func testPlayerShowsHiddenPlayingTabOnly() {
     let model = MediaPlaybackModel()
     let tab = UUID()
@@ -146,7 +158,8 @@ final class MediaPlaybackModelTests: XCTestCase {
     }
     XCTAssertTrue(store.performMedia(.perform(.nextTrack), tabID: tab))
     XCTAssertTrue(store.performMedia(.setMuted(true), tabID: tab))
-    XCTAssertEqual(received.map(\.0), [tab, tab])
-    XCTAssertEqual(received.map(\.1), [.perform(.nextTrack), .setMuted(true)])
+    XCTAssertTrue(store.performMedia(.setVolume(0.35), tabID: tab))
+    XCTAssertEqual(received.map(\.0), [tab, tab, tab])
+    XCTAssertEqual(received.map(\.1), [.perform(.nextTrack), .setMuted(true), .setVolume(0.35)])
   }
 }

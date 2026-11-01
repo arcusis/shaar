@@ -12,7 +12,9 @@
 | Bookmarks | סימניות | Browser bookmarks. |
 | Pinned tabs | לשוניות נעוצות | Pinned browser tabs. |
 | Site Control Center | מרכז הבקרה של האתר | Site-level controls. |
+| Developer Tools | כלים למפתחים | Chromium page inspector. |
 | Mini player | נגן ממוזער | Sidebar media controls. |
+| Volume | עוצמת קול | Media volume control. |
 | Picture in Picture | תמונה בתוך תמונה | Native floating video mode. |
 | Settings | הגדרות | Application settings. |
 | Extension / Extensions | תוסף / תוספים | Browser extensions. |

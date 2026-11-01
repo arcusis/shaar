@@ -45,8 +45,10 @@ struct ExtensionToolbar: View {
           ExtensionIcon(image: extensionModel.icons[pinned.id], size: 16)
         }
         .buttonStyle(.plain)
-        .help(pinned.name)
-        .accessibilityLabel(pinned.name)
+        .modifier(
+          ExtensionActionHelp(
+            model: extensionModel, item: pinned, tabID: store.session.selectedPage?.tab.id)
+        )
         .disabled(store.session.selectedPage == nil)
       }
       Button {

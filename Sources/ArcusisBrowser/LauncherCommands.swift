@@ -74,6 +74,7 @@ enum LauncherCommands {
       BrowserLanguage.currentLaunchLanguage.isRightToLeft ? "arrow.right" : "arrow.left"
     case .reload: "arrow.clockwise"
     case .hardReload: "arrow.clockwise.circle"
+    case .developerTools: "chevron.left.forwardslash.chevron.right"
     case .splitView: "rectangle.split.2x1"
     case .extensions: "puzzlepiece.extension"
     case .settings: "gearshape"

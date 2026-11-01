@@ -14,6 +14,30 @@ enum CommandText {
     return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
   }
 
+  /// True when the URL's site (host without `www.`) starts with the non-empty query.
+  static func siteStarts(with query: String, _ url: URL?) -> Bool {
+    guard !query.isEmpty, url != nil else { return false }
+    return domain(of: url).lowercased().hasPrefix(query.lowercased())
+  }
+
+  /// True when the title starts with the non-empty query, ignoring case.
+  static func titleStarts(with query: String, _ title: String) -> Bool {
+    !query.isEmpty && title.lowercased().hasPrefix(query.lowercased())
+  }
+
+  /// True when both URLs name the same page, ignoring a trailing slash and host case.
+  static func sameAddress(_ url: URL?, _ address: URL) -> Bool {
+    guard let url else { return false }
+    func key(_ value: URL) -> String {
+      var text = value.absoluteString
+      if let host = value.host() {
+        text = text.replacingOccurrences(of: host, with: host.lowercased())
+      }
+      return text.hasSuffix("/") ? String(text.dropLast()) : text
+    }
+    return key(url) == key(address)
+  }
+
   /// True when the query is empty or any field contains it, ignoring case.
   static func matches(_ query: String, _ fields: [String]) -> Bool {
     query.isEmpty || fields.contains { $0.localizedCaseInsensitiveContains(query) }

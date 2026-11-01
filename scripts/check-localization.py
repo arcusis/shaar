@@ -142,7 +142,7 @@ def main():
             raise ValueError("no String Catalogs found")
         for catalog in catalogs:
             validator.validate_catalog(catalog)
-        validator.validate_source_references(ROOT, catalogs)
+        validator.validate_source_references(ROOT, catalogs, include_app=True)
         rows = inventory_rows()
         expected = render_inventory(rows)
         if options.write_inventory:

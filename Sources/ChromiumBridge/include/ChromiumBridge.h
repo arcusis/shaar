@@ -163,6 +163,8 @@ FOUNDATION_EXPORT NSString *ARCBridgeLocalizedString(NSString *message);
 
 @interface ARCChromiumRuntime (Extensions)
 - (NSArray<NSDictionary<NSString *, id> *> *)extensionsForProfileID:(NSString *)profileID;
+/// The current action title for an extension in the selected tab's owning profile.
+- (nullable NSString *)extensionActionTitleForID:(NSString *)extensionID tabID:(NSString *)tabID;
 - (BOOL)executeExtensionID:(NSString *)extensionID tabID:(NSString *)tabID error:(NSError **)error;
 /// Runs one fixed extension-management operation against a validated extension ID and profile.
 - (void)manageExtensionsForProfileID:(NSString *)profileID
@@ -177,11 +179,18 @@ FOUNDATION_EXPORT NSString *ARCBridgeLocalizedString(NSString *message);
 - (void)closeExtensionPopupForWindowID:(NSString *)windowID;
 @end
 
+/// Chromium's own inspector, hosted alongside its inspected page inside the page card.
+@interface ARCChromiumRuntime (DevTools)
+- (BOOL)showDevToolsForTabID:(NSString *)tabID;
+- (BOOL)closeDevToolsForTabID:(NSString *)tabID;
+- (nullable NSView *)devToolsViewForTabID:(NSString *)tabID;
+@end
+
 /// Media Session state reported by a tab's pages, and actions sent back to them.
 @interface ARCChromiumRuntime (MediaSession)
 /// Keys: playbackState (none, paused, playing), title, artist, album, artwork (http or https URL
 /// or empty), actions (supported Media Session action names), hasVideo, canSeek and muted (the
-/// tab's native audio mute).
+/// tab's native audio mute), and volume (0...1, or null without a media element).
 - (nullable NSDictionary<NSString *, id> *)mediaSessionStateForTabID:(NSString *)tabID;
 /// `seconds` is the offset for seeking backward or forward and the position for seeking to.
 /// Returns NO when the tab has no media state or does not support the action.
@@ -190,6 +199,9 @@ FOUNDATION_EXPORT NSString *ARCBridgeLocalizedString(NSString *message);
   NS_SWIFT_NAME(sendMediaSessionAction(_:seconds:tabID:));
 /// Mutes the tab's audio output in the engine, independently of the page's own volume.
 - (BOOL)setMuted:(BOOL)muted tabID:(NSString *)tabID;
+/// Sets the reporting frame's active media volume in [0, 1]. Positive volume also unmutes.
+/// Returns NO for invalid values or when the tab has no controllable media element.
+- (BOOL)setMediaVolume:(double)volume tabID:(NSString *)tabID;
 @end
 
 /// Chromium's built-in video picture-in-picture, driven for automatic picture-in-picture and

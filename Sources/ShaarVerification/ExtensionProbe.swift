@@ -53,6 +53,14 @@ final class ExtensionProbe {
       try runtime.executeExtensionID(extensionA, tabID: spaces[1].selectedTabID!.uuidString)
     } catch { foreignRejected = true }
     try expect(foreignRejected, "profile B cannot execute an extension installed only in A")
+    try expect(
+      runtime.extensionActionTitle(forID: extensionA, tabID: spaces[1].selectedTabID!.uuidString)
+        == nil,
+      "extension tooltip cannot read another profile's action title")
+    try expect(
+      runtime.extensionActionTitle(forID: extensionA, tabID: spaces[0].selectedTabID!.uuidString)
+        == nil,
+      "extension tooltip rejects an inactive tab")
     let extensionB = try runtime.loadProbeExtension(at: fixtureURL, profileID: profileB.uuidString)
     try expect(
       extensionA == extensionB, "the same extension ID has separate installations in two profiles")
@@ -71,6 +79,9 @@ final class ExtensionProbe {
       }
       try await waitForContentScript(tab)
       engine.refreshExtensions()
+      try expect(
+        runtime.extensionActionTitle(forID: extensionA, tabID: tab) == "Open account probe",
+        "extension tooltip reads the action title from the selected tab's profile")
       engine.executeExtension(extensionA)
       guard case .popup(let popup) = engine.extensionPanel else {
         throw ExtensionProbeFailure(
@@ -81,6 +92,20 @@ final class ExtensionProbe {
         "popup \(index) belongs to its selected space profile and tab")
       attachHiddenPopup(popup.id)
       let initial = try await waitForPopup(popup.id, expression: "window.probeState")
+      _ = await evaluatePopup(
+        popup.id,
+        expression: """
+          (() => { window.probeActionTitle = null;
+            chrome.action.setTitle({tabId:\(runtime.nativeTabID(forID: tab)),title:'Inspect account'})
+              .then(() => window.probeActionTitle = {done:true})
+              .catch(error => window.probeActionTitle = {error:String(error)});
+            return true; })()
+          """)
+      let titleChanged = try await waitForPopup(popup.id, expression: "window.probeActionTitle")
+      try expect(
+        titleChanged["done"] as? Bool == true
+          && runtime.extensionActionTitle(forID: extensionA, tabID: tab) == "Inspect account",
+        "extension tooltip reads a per-tab action title updated at runtime")
       try expect(
         initial["serviceWorker"] as? Bool == true,
         "popup \(index) connects to its MV3 service worker")

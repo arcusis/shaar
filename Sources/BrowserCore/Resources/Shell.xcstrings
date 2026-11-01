@@ -1,6 +1,17 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Developer Tools": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Developer Tools"}},"he":{"stringUnit":{"state":"translated","value":"כלים למפתחים"}}}},
+    "More Spaces": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"More Spaces"}},"he":{"stringUnit":{"state":"translated","value":"מרחבים נוספים"}}}},
+    "Show site controls for this page": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Show site controls for this page"}},"he":{"stringUnit":{"state":"translated","value":"הצגת בקרות האתר עבור הדף הזה"}}}},
+    "Add extensions from the Chrome Web Store": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Add extensions from the Chrome Web Store"}},"he":{"stringUnit":{"state":"translated","value":"הוספת תוספים מחנות Chrome Web Store"}}}},
+    "Allow or block microphone access for this site": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Allow or block microphone access for this site"}},"he":{"stringUnit":{"state":"translated","value":"אישור או חסימה של גישה למיקרופון באתר הזה"}}}},
+    "Allow or block camera access for this site": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Allow or block camera access for this site"}},"he":{"stringUnit":{"state":"translated","value":"אישור או חסימה של גישה למצלמה באתר הזה"}}}},
+    "Allow or block location access for this site": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Allow or block location access for this site"}},"he":{"stringUnit":{"state":"translated","value":"אישור או חסימה של גישה למיקום באתר הזה"}}}},
+    "Allow or block notifications for this site": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Allow or block notifications for this site"}},"he":{"stringUnit":{"state":"translated","value":"אישור או חסימה של התראות מהאתר הזה"}}}},
+    "Allow or block pop-ups and redirects for this site": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Allow or block pop-ups and redirects for this site"}},"he":{"stringUnit":{"state":"translated","value":"אישור או חסימה של חלונות קופצים והפניות באתר הזה"}}}},
+    "Allow or mute sound for this site": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Allow or mute sound for this site"}},"he":{"stringUnit":{"state":"translated","value":"הפעלה או השתקה של צליל באתר הזה"}}}},
+    "Allow or block automatic picture-in-picture for this site": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Allow or block automatic picture-in-picture for this site"}},"he":{"stringUnit":{"state":"translated","value":"אישור או חסימה של תמונה בתוך תמונה אוטומטית באתר הזה"}}}},
     "Space": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"מרחב"}}}},
     " and %@": {"localizations":{"he":{"stringUnit":{"state":"translated","value":" וגם %@"}}}},
     "This space will be deleted from all %@, closing %@%@. Its profile is kept.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"המרחב הזה יימחק מכל החלונות שבהם הוא מופיע (%@), וייסגרו %@%@. הפרופיל שלו יישמר."}}}},

@@ -141,10 +141,10 @@ final class HebrewLocalizationVisualTests: XCTestCase {
       model: model, extensions: extensions, profileName: "אישי",
       actions: SiteControlsPanelActions(
         runExtension: { _ in }, addExtensions: {},
-        showCertificate: {}, close: {}))
+        showCertificate: {}, showDeveloperTools: {}, close: {}))
     let state = MediaSessionState(
       playbackState: .playing, title: "קטע בדיקה", artist: "אמן",
-      actions: [.pause, .previousTrack, .nextTrack])
+      actions: [.pause, .previousTrack, .nextTrack], volume: 0.35)
     let item = MiniPlayerItem(tabID: UUID(), pageTitle: "דף בדיקה", favicon: nil, state: state)
     for (theme, appearance) in [(ColorScheme.light, NSAppearance.Name.aqua), (.dark, .darkAqua)] {
       let scheme = theme == .dark ? "dark" : "light"
@@ -152,7 +152,7 @@ final class HebrewLocalizationVisualTests: XCTestCase {
         panel.environment(\.colorScheme, theme), name: "site-control-center-\(scheme).png",
         size: NSSize(width: 320, height: 720), appearance: appearance)
       try capture(
-        SidebarMediaPlayer(item: item, onSelect: {}, onCommand: { _ in })
+        SidebarMediaPlayer(volumeIsVisible: true, item: item, onSelect: {}, onCommand: { _ in })
           .environment(\.colorScheme, theme),
         name: "mini-player-\(scheme).png",
         size: NSSize(width: BrowserChromeLayout.sidebarWidth, height: 100),

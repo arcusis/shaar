@@ -24,6 +24,8 @@ extension BrowserEngine {
       return runtime.sendMediaSessionAction(action.bridgeAction, seconds: seconds, tabID: identity)
     case .setMuted(let muted):
       return runtime.setMuted(muted, tabID: identity)
+    case .setVolume(let volume):
+      return runtime.setMediaVolume(volume, tabID: identity)
     }
   }
 

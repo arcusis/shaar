@@ -67,17 +67,6 @@ struct BrowserSidebar: View {
     }
   }
 
-  private func scheduleSpaceReveal(_ proxy: ScrollViewProxy, id: UUID) {
-    DispatchQueue.main.async {
-      guard id == store.session.selectedSpaceID else { return }
-      if sidebarReduceMotion {
-        proxy.scrollTo(id)
-      } else {
-        withAnimation(.easeOut(duration: 0.12)) { proxy.scrollTo(id) }
-      }
-    }
-  }
-
   init(
     store: BrowserStore, previewRecentDownloads: [BrowserDownload]? = nil,
     previewFolderDraft: SidebarFolderDraft? = nil
@@ -336,36 +325,54 @@ struct BrowserSidebar: View {
   }
 
   private var spaceSelectors: some View {
-    ScrollViewReader { spaceScroll in
-      GeometryReader { geometry in
-        ScrollView(.horizontal) {
-          HStack(spacing: 0) {
-            ForEach(store.session.spaces) { space in
-              spaceSelector(space)
+    GeometryReader { geometry in
+      let spaces = store.session.spaces
+      let selected = spaces.firstIndex { $0.id == store.session.selectedSpaceID } ?? 0
+      let layout = SpaceIndicatorLayout(
+        count: spaces.count, selectedIndex: selected, width: geometry.size.width)
+      HStack(spacing: 0) {
+        ForEach(Array(spaces[layout.visible])) { space in
+          spaceSelector(
+            space,
+            width: space.id == store.session.selectedSpaceID
+              ? layout.selectedWidth : layout.dotWidth)
+        }
+        if layout.overflowWidth > 0 {
+          Menu {
+            ForEach(spaces) { space in
+              Button {
+                store.perform(.space(space.id))
+              } label: {
+                Label(space.name, systemImage: space.symbol)
+              }
             }
+          } label: {
+            Image(systemName: "ellipsis")
+              .font(.system(size: 12))
+              .frame(width: layout.overflowWidth, height: 30)
           }
-          .frame(minWidth: geometry.size.width)
+          .menuStyle(.borderlessButton)
+          .menuIndicator(.hidden)
+          .fixedSize()
+          .help(ShellL10n.string("More Spaces"))
+          .accessibilityLabel(ShellL10n.string("More Spaces"))
         }
       }
-      .scrollIndicators(.hidden)
-      .frame(maxWidth: .infinity)
-      .coordinateSpace(name: "sidebarSpaceViewport")
-      .background {
-        GeometryReader { geometry in
-          Color.clear.preference(
-            key: SidebarSpaceRevealFramesPreferenceKey.self,
-            value: SidebarRevealFrames(
-              viewport: CGRect(origin: .zero, size: geometry.size)))
-        }
-      }
-      .onAppear { scheduleSpaceReveal(spaceScroll, id: store.session.selectedSpaceID) }
-      .onChange(of: store.session.selectedSpaceID) { _, id in
-        scheduleSpaceReveal(spaceScroll, id: id)
+      .frame(width: geometry.size.width, height: geometry.size.height)
+    }
+    .frame(maxWidth: .infinity)
+    .coordinateSpace(name: "sidebarSpaceViewport")
+    .background {
+      GeometryReader { geometry in
+        Color.clear.preference(
+          key: SidebarSpaceRevealFramesPreferenceKey.self,
+          value: SidebarRevealFrames(
+            viewport: CGRect(origin: .zero, size: geometry.size)))
       }
     }
   }
 
-  private func spaceSelector(_ space: BrowserSpace) -> some View {
+  private func spaceSelector(_ space: BrowserSpace, width: CGFloat) -> some View {
     Button {
       store.perform(.space(space.id))
     } label: {
@@ -380,7 +387,7 @@ struct BrowserSidebar: View {
             .frame(width: 6, height: 6)
         }
       }
-      .frame(width: 22, height: 30)
+      .frame(width: width, height: 30)
       .contentShape(Rectangle())
     }
     .help(space.name)
@@ -410,7 +417,7 @@ struct BrowserSidebar: View {
       }
       return store.acceptSidebarDrop(
         item, into: space.id,
-        beforeSpace: point.x < 16 ? space.id : next)
+        beforeSpace: point.x < width / 2 ? space.id : next)
     } isTargeted: { targeted in
       targetedSpace = targetedSpace.updatingTarget(space.id, isActive: targeted)
     }

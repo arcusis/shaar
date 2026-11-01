@@ -9,9 +9,25 @@ struct DeveloperPageAccessories: View {
   let model: SiteControlsDeveloperModel
 
   var body: some View {
-    if model.performanceEnabled {
-      PerformanceOverlay(model: model)
-        .task(id: model.documentGeneration) { await model.pollPerformance() }
+    ZStack(alignment: .topLeading) {
+      if model.performanceEnabled {
+        PerformanceOverlay(model: model)
+          .task(id: model.documentGeneration) { await model.pollPerformance() }
+      }
+      if model.pickerEnabled {
+        VStack(alignment: .leading) {
+          if let element = model.pickedElement {
+            ElementPickerPanel(
+              element: element, copy: model.copyPickerValue, close: model.stopPicker
+            )
+            .frame(maxWidth: 360).padding(12)
+          }
+          Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .allowsHitTesting(model.pickedElement != nil)
+        .task(id: model.documentGeneration) { await model.pollPicker() }
+      }
     }
   }
 }

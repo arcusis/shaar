@@ -25,5 +25,7 @@ Shaar is an independent project. It is not affiliated with, sponsored, or endors
 - [Bitwarden](https://bitwarden.com/): extension compatibility.
 - [Public Suffix List](https://publicsuffix.org/): public domain-boundary data used for registrable-domain decisions.
 - [Sparkle](https://sparkle-project.org/): software update framework.
+- [React](https://github.com/facebook/react) 18.3.1 and [Vue](https://github.com/vuejs/core) 3.5.22: MIT-licensed test-only picker fixtures, downloaded with pinned integrity and license notices; never bundled in Shaar.
+- [Playwright](https://github.com/microsoft/playwright) 1.58.0: Apache-2.0-licensed headless locator contract tests.
 
 Each project retains its own trademarks and licensing. See the relevant upstream project and bundled third-party notices for license terms.

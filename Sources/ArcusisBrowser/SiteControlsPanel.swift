@@ -50,6 +50,7 @@ struct SiteControlsButton: View {
             close: { self.model = nil }))
       }
       .onChange(of: store.session.selectedPage?.tab.id) { model = nil }
+      .onChange(of: store.session.selectedPage?.tab.url) { model = nil }
     }
   }
 
@@ -95,6 +96,11 @@ struct SiteControlsPanel: View {
   let actions: SiteControlsPanelActions
 
   var body: some View {
+    SiteControlsScrollContainer { panelContent }
+      .task { await model.load() }
+  }
+
+  private var panelContent: some View {
     VStack(alignment: .leading, spacing: 0) {
       header
       Divider()
@@ -124,8 +130,6 @@ struct SiteControlsPanel: View {
           .padding([.horizontal, .bottom], 16)
       }
     }
-    .frame(width: 320)
-    .task { await model.load() }
   }
 
   private var header: some View {

@@ -18,6 +18,7 @@
 - [[Developer_Simulations]]
 - [[Developer_Performance_Overlay]]
 - [[Developer_Bug_Reports]]
+- [[Developer_Element_Picker]]
 - [[External_App_Consent]]
 - [[Find_In_Page]]
 - [[Renderer_Recovery]]

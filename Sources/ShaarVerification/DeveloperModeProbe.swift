@@ -92,6 +92,7 @@ final class DeveloperModeProbe {
       "reset restores browser language")
     try await performance(model)
     try await bugReport(model)
+    try await picker(model)
     var remembered = DeveloperSimulation()
     remembered.reducedMotion = phase == "initial"
     model.set(remembered)
@@ -371,6 +372,120 @@ final class DeveloperModeProbe {
       try data.write(to: root.appending(path: "\(phase)-developer-bug-report-\(name).png"))
     }
     checks.append("bug report section renders offscreen in light and dark")
+  }
+
+  private func picker(_ model: SiteControlsDeveloperModel) async throws {
+    for (path, identity, frames, framework) in [
+      ("/developer-react", "react-target", [String](), "React"),
+      ("/developer-vue", "vue-target", [], "Vue"),
+      ("/developer-plain", "plain-target", [], ""),
+      ("/developer-frame", "frame-target", ["picker-frame", "picker-frame"], ""),
+    ] {
+      let generation = model.documentGeneration
+      var url = URLComponents(url: model.target.url, resolvingAgainstBaseURL: false)!
+      url.path = path
+      url.query = nil
+      try expect(engine.navigateCurrentPage(to: url.url!), "picker fixture navigates to \(path)")
+      for _ in 0..<100 {
+        if model.documentGeneration > generation
+          && engine.pages[model.target.tabID]?.loading == false
+        {
+          break
+        }
+        try await Task.sleep(for: .milliseconds(100))
+      }
+      try await settled(model)
+      let arguments = String(
+        decoding: try JSONSerialization.data(withJSONObject: [identity, frames]), as: UTF8.self)
+      var targetReady = false
+      for _ in 0..<100 {
+        targetReady =
+          (try? await model.evaluate(
+            "(()=>{const [id,frames]=\(arguments);let doc=document;for(const frame of frames){doc=doc.getElementById(frame)?.contentDocument;if(!doc)return false;}return !!doc.getElementById(id);})()"
+          )) as? Bool == true
+        if targetReady { break }
+        try await Task.sleep(for: .milliseconds(100))
+      }
+      try expect(targetReady, "picker target is ready inside its owning document")
+      await model.startPicker()
+      if let failure = model.pickerFailure { throw DeveloperModeFailure(failure) }
+      let clicked: Bool = await withCheckedContinuation { continuation in
+        engine.runtime.clickProbeElement(
+          inTabID: model.target.tabID.uuidString, elementID: identity, frameIDs: frames
+        ) { continuation.resume(returning: $0) }
+      }
+      try expect(clicked, "trusted renderer input picks \(identity)")
+      for _ in 0..<50 {
+        try await model.refreshPicker()
+        if model.pickedElement != nil { break }
+        try await Task.sleep(for: .milliseconds(50))
+      }
+      guard let element = model.pickedElement else {
+        throw DeveloperModeFailure("Picker selection did not arrive for \(identity).")
+      }
+      let resolved =
+        try await model.evaluate(
+          "(()=>{const p=__shaarPickerV1.snapshot().selection;let doc=document;for(const f of p.frames)doc=doc.querySelector(f).contentDocument;const css=doc.querySelectorAll(p.css),x=doc.evaluate(p.xpath,doc,null,XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,null);return {css:css.length,xpath:x.snapshotLength,id:css[0]?.id,same:x.snapshotItem(0)===css[0],clicked:doc.defaultView.fixtureClicked===true};})()"
+        ) as? [String: Any]
+      try expect(
+        resolved?["css"] as? Int == 1 && resolved?["xpath"] as? Int == 1
+          && resolved?["same"] as? Bool == true && resolved?["id"] as? String == identity,
+        "CSS and XPath uniquely resolve to \(identity)")
+      try expect(
+        resolved?["clicked"] as? Bool == false, "picker selection does not activate page button")
+      try expect(element.frames.count == frames.count, "picker preserves same-origin frame context")
+      if !framework.isEmpty {
+        try expect(
+          element.framework == framework && element.component == framework + "Demo"
+            && element.source?.contains("/fixture/") == true,
+          "picker reads exposed \(framework) component name and source")
+      }
+      if framework == "React" { try await capturePicker(model, element: element) }
+      _ = try await model.evaluate(
+        "(()=>{let win=window;for(const f of __shaarPickerV1.snapshot().selection.frames)win=win.document.querySelector(f).contentWindow;win.dispatchEvent(new win.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));return true;})()"
+      )
+      try await model.refreshPicker()
+      try expect(
+        !model.pickerEnabled && model.pickedElement == nil,
+        "Escape exits picker including same-origin frame")
+    }
+    try expect(
+      ShortcutCatalog.shortcut(for: .elementPicker)?.modifiers == [.command, .option],
+      "element picker shortcut is registered")
+  }
+
+  private func capturePicker(_ model: SiteControlsDeveloperModel, element: PickedElement)
+    async throws
+  {
+    for (name, scheme) in [("light", ColorScheme.light), ("dark", .dark)] {
+      let content = ElementPickerPanel(element: element, copy: { _ in }, close: {})
+        .frame(width: 360).padding(16).background(Color(nsColor: .windowBackgroundColor))
+        .environment(\.colorScheme, scheme)
+      let host = NSHostingView(rootView: content)
+      let window = NSWindow(
+        contentRect: NSRect(origin: .zero, size: host.fittingSize), styleMask: .borderless,
+        backing: .buffered, defer: false)
+      window.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
+      window.contentView = host
+      previewWindow = window
+      try await Task.sleep(for: .milliseconds(150))
+      host.layoutSubtreeIfNeeded()
+      guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else {
+        throw DeveloperModeFailure("Element picker panel could not render.")
+      }
+      host.cacheDisplay(in: host.bounds, to: bitmap)
+      guard let data = bitmap.representation(using: .png, properties: [:]) else {
+        throw DeveloperModeFailure("Element picker screenshot could not encode.")
+      }
+      try data.write(to: root.appending(path: "\(phase)-developer-picker-\(name).png"))
+    }
+    let page = try await model.call(
+      "Page.captureScreenshot", params: ["format": "png", "captureBeyondViewport": false])
+    if let encoded = page["data"] as? String, let png = Data(base64Encoded: encoded) {
+      try png.write(to: root.appending(path: "\(phase)-developer-picker-page.png"))
+    }
+    checks.append(
+      "picker copy panel renders offscreen in light and dark with exposed component metadata")
   }
 
   private func settled(_ model: SiteControlsDeveloperModel) async throws {

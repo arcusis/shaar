@@ -52,6 +52,9 @@ FOUNDATION_EXPORT BOOL ARCDisableBackgroundMode(NSURL *userDataDirectory);
               completion:(void (^)(BOOL clicked))completion;
 - (void)clickProbeElementInTabID:(NSString *)tabID elementID:(NSString *)elementID
                     completion:(void (^)(BOOL clicked))completion;
+/// Trusted renderer input at an element inside authored same-origin fixture frames.
+- (void)clickProbeElementInTabID:(NSString *)tabID elementID:(NSString *)elementID
+                      frameIDs:(NSArray<NSString *> *)frameIDs completion:(void (^)(BOOL clicked))completion;
 /// Intentionally terminates only an authored loopback page in a disposable probe profile.
 - (BOOL)crashProbeTabID:(NSString *)tabID;
 /// Chromium's keep-alive registry and quit state, for diagnosing a process that outlives Quit.

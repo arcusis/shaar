@@ -10,6 +10,10 @@ import Observation
 final class SiteControlsDeveloperModel {
   private(set) var target: SiteControlTarget
   private(set) var simulation: DeveloperSimulation
+  var pickerEnabled = false
+  @ObservationIgnored var pickerRevision = 0
+  var pickedElement: PickedElement?
+  var pickerFailure: String?
   var includeSensitiveHeaders = false
   var creatingBugReport = false
   var reportFailure: String?
@@ -47,6 +51,10 @@ final class SiteControlsDeveloperModel {
         } ?? DeveloperSimulation()
     }
     if committed {
+      pickerRevision += 1
+      pickerEnabled = false
+      pickedElement = nil
+      pickerFailure = nil
       documentGeneration += 1
       performanceSnapshot = nil
       performanceFailure = nil

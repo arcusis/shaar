@@ -9,6 +9,10 @@ The page toolbar's site controls button opens a native popover for the selected 
 
 Reloads go through the store's reload path, so renderer-failure state and stale-target checks are shared with the toolbar and menu.
 
+## Developer controls
+
+The Developer section hosts [[Developer_Simulations]], [[Developer_Performance_Overlay]], [[Developer_Bug_Reports]] and [[Developer_Element_Picker]]. Feature state lives in a separate per-tab model. Expanded controls scroll within the available popover height.
+
 ## Automatic picture-in-picture
 
 The toggle reads and writes the playback feature's per-site setting ([[Media_Playback]]): `BrowserStore.automaticPictureInPictureAllowed(for:profileID:)` and `setAutomaticPictureInPicture(_:for:profileID:)`, keyed by the page's site in its profile. Saving notifies the window engines, which apply the choice to that profile's open pages. The pinned engine has no per-site content setting for it.

@@ -6,3 +6,4 @@ build/
 __pycache__/
 *.xcuserstate
 xcuserdata/
+Tests/DeveloperPickerTests/node_modules/

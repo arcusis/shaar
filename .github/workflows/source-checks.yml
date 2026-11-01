@@ -284,3 +284,46 @@ jobs:
           curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash \
             | bash -s -- 1.7.12 "$RUNNER_TEMP"
           "$RUNNER_TEMP/actionlint" -color
+
+  picker-locators:
+    name: Headless picker locator contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/build/PlaywrightBrowsers
+
+    steps:
+      - name: Check out source
+        # actions/checkout v5.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        # actions/setup-node v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '22'
+
+      - name: Set up pnpm
+        # pnpm/action-setup v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: '10.24.0'
+
+      - name: Install test dependencies and headless shell
+        run: |
+          python3 -m venv .venv
+          pnpm --dir Tests/DeveloperPickerTests install --frozen-lockfile --ignore-scripts
+          pnpm --dir Tests/DeveloperPickerTests exec playwright install chromium --with-deps --only-shell
+
+      - name: Resolve generated locators on authored loopback pages
+        run: pnpm --dir Tests/DeveloperPickerTests test
+
+      - name: Upload locator contract evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: picker-locator-contracts
+          path: build/Verification/picker-locators.json
+          if-no-files-found: warn

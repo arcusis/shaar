@@ -30,6 +30,9 @@ import uuid
 import zlib
 from urllib.parse import urlparse
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import developer_fixture_assets
+
 VERIFICATION_APP = Path('build/Shaar Verification.app')
 RELEASE_FEED = Path(__file__).resolve().with_name('release_feed.py')
 
@@ -503,6 +506,36 @@ class Fixture(http.server.BaseHTTPRequestHandler):
             return
         if path.startswith('/download/'):
             self.download(path.rsplit('/', 1)[-1])
+            return
+        if path.startswith('/developer-frameworks/'):
+            name = path.rsplit('/', 1)[-1]
+            if name not in ('react.js', 'react-dom.js', 'vue.js'):
+                self.send_error(404)
+                return
+            body = (developer_fixture_assets.CACHE / name).read_bytes()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/javascript')
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if path in ('/developer-react', '/developer-vue', '/developer-plain', '/developer-frame', '/developer-nested-frame', '/developer-frame-content', '/developer-complex'):
+            common = '<!doctype html><html data-developer-fixture="v1"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Picker fixture</title><style>body{font:18px system-ui;padding:30px}button{padding:14px}iframe{width:520px;height:320px;border:4px solid #aaa}</style>'
+            if path == '/developer-react':
+                page = '<script src="/developer-frameworks/react.js"></script><script src="/developer-frameworks/react-dom.js"></script><div id="app"></div><script>function ReactDemo(){return React.createElement("button",{id:"react-target","data-testid":"react-save",onClick:()=>window.fixtureClicked=true},"Save React")}ReactDOM.createRoot(document.getElementById("app")).render(React.createElement(ReactDemo,{__source:{fileName:"/fixture/ReactDemo.jsx",lineNumber:7}}));</script>'
+            elif path == '/developer-vue':
+                page = '<script src="/developer-frameworks/vue.js"></script><div id="app"></div><script>Vue.createApp({name:"VueDemo",__file:"/fixture/VueDemo.vue",render(){return Vue.h("button",{id:"vue-target",onClick:()=>window.fixtureClicked=true},"Save Vue")}}).mount("#app");</script>'
+            elif path == '/developer-plain':
+                page = '<span id="plain-target">Plain unique text</span><button id="both&quot;and&#39;quotes" data-quote-target>Quote target</button><button>Other button</button><ul><li>Duplicate</li><li id="second-duplicate">Duplicate</li></ul>'
+            elif path == '/developer-complex':
+                page = '<button id="ambiguous-role">Save</button><button><span aria-hidden="true">Ghost</span>Save</button><span id="ambiguous-text">Submit</span><input type="button" value="Submit"><input id="nameless-checkbox" type="checkbox"><span role="invented" id="invalid-role">Invalid role</span><span id="ambiguous-unicode">Join\u200bword</span><span>Joinword</span><button id="outside-shadow" data-testid="shadow-duplicate">Open shadow target</button><li id="shadow-css-target">Shadow fallback</li><div id="shadow-host"></div><script>document.getElementById("shadow-host").attachShadow({mode:"open"}).innerHTML=\'<button data-testid="shadow-duplicate">Shadow twin</button><li>Shadow fallback</li>\';</script>'
+            elif path == '/developer-frame-content':
+                page = '<button id="frame-target" data-testid="frame-save" onclick="window.fixtureClicked=true">Save frame</button>'
+            else:
+                source = '/developer-nested-frame' if path == '/developer-frame' else '/developer-frame-content'
+                page = '<iframe id="picker-frame" src="' + source + '"></iframe>'
+            self.html((common + page + '</html>').encode(), csp=PAGE_CSP.replace("script-src 'unsafe-inline'", "script-src 'self' 'unsafe-inline'") + "; frame-src 'self'")
             return
         if path == '/developer-slow':
             time.sleep(0.3)
@@ -1250,12 +1283,15 @@ def main(argv=None):
         print('SESSION RECOVERY ONLY: SIGKILL of the exact probe PID during saves, then restore', flush=True)
     app = VERIFICATION_APP.resolve()
     require_verification_bundle_identity(app)
+    if not (options.external_app_consent or options.saved_tab_capacity or options.quit_exit or options.session_recovery):
+        developer_fixture_assets.ensure_assets()
     root = Path(tempfile.mkdtemp(prefix="arcusis-engine-probe-"))
     (root / ".arcusis-probe").write_text("arcusis-engine-probe-v1\n")
     (root / ".arcusis-probe").chmod(0o600)
     private_window_run_id = str(uuid.uuid4()).upper() if options.private_window else None
     shutil.copytree("Tests/Fixtures/ProfileExtension", root / "Extension")
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Fixture)
+    (root / 'developer-fixture-server.json').write_text(json.dumps({'url': f'http://developer.localhost:{server.server_port}'}))
     threading.Thread(target=server.serve_forever, daemon=True).start()
     executable = app / "Contents/MacOS/ShaarVerification"
     (root / 'Downloads').mkdir(mode=0o700)

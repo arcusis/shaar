@@ -1,0 +1,29 @@
+[
+  {
+    "name": "react",
+    "version": "18.3.1",
+    "url": "https://registry.npmjs.org/react/-/react-18.3.1.tgz",
+    "integrity": "sha512-wS+hAgJShR0KhEvPJArfuPVN1+Hz1t0Y6n5jLrGQbkb4urgPE/0Rve+1kMB1v/oWgHgm4WIcV+i7F2pTVj+2iQ==",
+    "member": "package/umd/react.development.js",
+    "sha256": "28348fef6cb0ed8b2ceeb22deaf824428fd13875d84c73d38f77dd216fc24e7f",
+    "licenseSHA256": "52412d7bc7ce4157ea628bbaacb8829e0a9cb3c58f57f99176126bc8cf2bfc85"
+  },
+  {
+    "name": "react-dom",
+    "version": "18.3.1",
+    "url": "https://registry.npmjs.org/react-dom/-/react-dom-18.3.1.tgz",
+    "integrity": "sha512-5m4nQKp+rZRb09LNH59GM4BxTh9251/ylbKIbpe7TpGxfJ+9kv6BLkLBXIjjspbgbnIBNqlI23tRnTWT0snUIw==",
+    "member": "package/umd/react-dom.development.js",
+    "sha256": "f9044a5e9c39db8bb1a204dff924e526ec0a621e695bb69de1035811be8709e4",
+    "licenseSHA256": "52412d7bc7ce4157ea628bbaacb8829e0a9cb3c58f57f99176126bc8cf2bfc85"
+  },
+  {
+    "name": "vue",
+    "version": "3.5.22",
+    "url": "https://registry.npmjs.org/vue/-/vue-3.5.22.tgz",
+    "integrity": "sha512-toaZjQ3a/G/mYaLSbV+QsQhIdMo9x5rrqIpYRObsJ6T/J+RyCSFwN2LHNVH9v8uIcljDNa3QzPVdv3Y6b9hAJQ==",
+    "member": "package/dist/vue.global.js",
+    "sha256": "29afbb3f4ec3f07fcd0d88222bb058acb9ec6253d8ccf9412f8e606d4a581216",
+    "licenseSHA256": "1bb85cc9b13b81ef41c81c51866172fc345e0503c86726a6755b796590b70175"
+  }
+]

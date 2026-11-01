@@ -15,7 +15,7 @@ enum BrowserMenuCommand: String, CaseIterable {
   case find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload, hardReload
   case splitView
   case extensions, help, minimizeWindow, zoomWindow, bringAllToFront, settings, quit, createFolder
-  case checkForUpdates, performanceOverlay
+  case checkForUpdates, performanceOverlay, elementPicker
 }
 
 @MainActor
@@ -220,7 +220,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     let store = context.store
     guard store.sheet == nil, context.window.attachedSheet == nil else { return false }
     switch command {
-    case .performanceOverlay: return context.engine.selectedDeveloperModel != nil
+    case .performanceOverlay, .elementPicker: return context.engine.selectedDeveloperModel != nil
     case .find: return store.canFindCurrentPage
     case .findNext, .findPrevious: return store.pageFind?.canMove == true
     case .reload, .hardReload:
@@ -370,6 +370,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .reload: store.reloadCurrentPage()
     case .hardReload: store.reloadCurrentPage(.bypassingCache)
     case .splitView: store.splitSelectedTab()
+    case .elementPicker:
+      if let model = context.engine.selectedDeveloperModel {
+        if model.pickerEnabled { model.stopPicker() } else { Task { await model.startPicker() } }
+      }
     case .performanceOverlay:
       if let model = context.engine.selectedDeveloperModel {
         model.setPerformanceEnabled(!model.performanceEnabled)
@@ -856,6 +860,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     add(.reload, "Reload", to: view)
     add(.hardReload, "Hard Reload", to: view)
     add(.performanceOverlay, "Performance Overlay", to: view)
+    add(.elementPicker, "Pick Element", to: view)
     let spaces = section("Spaces")
     add(.newSpace, "New space…", to: spaces)
     add(.editSpace, "Edit current space…", to: spaces)

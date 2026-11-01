@@ -499,6 +499,21 @@ static BOOL ProbeViewIsVisibleInWindow(NSView *view, NSWindow *window) {
   [self captureProbeTab:state.popup completion:completion];
 }
 
+- (void)clickProbeElementInTabID:(NSString *)tabID elementID:(NSString *)elementID
+                      frameIDs:(NSArray<NSString *> *)frameIDs completion:(void (^)(BOOL))completion {
+  ArdiaCoreTab *tab = [self liveTabForID:tabID];
+  if (!_testing || !ARCProbeRootIsOwned(_probeRoot) || !tab || ![self isSelectedTabID:tabID] ||
+      elementID.length > 128 || frameIDs.count > 8) { completion(NO); return; }
+  NSData *data = [NSJSONSerialization dataWithJSONObject:@[elementID, frameIDs] options:0 error:nil];
+  NSString *literal = data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
+  if (!literal) { completion(NO); return; }
+  NSString *expression = [NSString stringWithFormat:
+    @"(()=>{const [id,frames]=%@;let doc=document;for(const name of frames){const frame=doc.getElementById(name);if(!frame?.contentDocument)return null;doc=frame.contentDocument;}"
+     "const e=doc.getElementById(id);if(!e)return null;e.scrollIntoView({block:'center'});let r=e.getBoundingClientRect(),x=r.x+r.width/2,y=r.y+r.height/2;"
+     "for(let win=doc.defaultView;win!==window;){const f=win.frameElement;if(!f)return null;const rect=f.getBoundingClientRect();x+=rect.x+f.clientLeft;y+=rect.y+f.clientTop;win=f.ownerDocument.defaultView;}return {x,y};})()", literal];
+  ClickProbeTarget(tab, expression, ^BOOL { return [self liveTabForID:tabID] == tab && [self isSelectedTabID:tabID]; }, completion);
+}
+
 - (BOOL)crashProbeTabID:(NSString *)tabID {
   ArdiaCoreTab *tab = _tabs[tabID];
   NSURL *url = tab ? [NSURL URLWithString:tab.url] : nil;

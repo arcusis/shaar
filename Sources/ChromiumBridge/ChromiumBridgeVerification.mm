@@ -84,6 +84,57 @@ static BOOL ProbeViewIsVisibleInWindow(NSView *view, NSWindow *window) {
   }];
 }
 
+- (BOOL)inspectProbeElementInTabID:(NSString *)tabID {
+  ArdiaCoreTab *tab = [self liveTabForID:tabID];
+  NSURLComponents *url = [NSURLComponents componentsWithString:tab.url ?: @""];
+  if (!_testing || !_probeRoot || !ARCProbeRootIsOwned(_probeRoot) || !tab ||
+      ![url.scheme isEqualToString:@"http"] ||
+      ![@[@"127.0.0.1", @"localhost"] containsObject:url.host.lowercaseString] ||
+      ![self isSelectedTabID:tabID]) return NO;
+  _probeInspectTabID = [tabID copy];
+  _probeInspectFound = NO;
+  _probeInspectAudit = [@{@"pressed": @NO, @"released": @NO, @"menuSeen": @NO} mutableCopy];
+  [tab devToolsCall:@"Input.dispatchMouseEvent"
+            params:@{@"type": @"mousePressed", @"x": @80, @"y": @80,
+                     @"button": @"right", @"buttons": @2, @"clickCount": @1}
+           timeout:5 completion:^(NSDictionary *result, NSString *error) {
+    self->_probeInspectAudit[@"pressed"] = @(error == nil);
+    if (error) self->_probeInspectAudit[@"pressError"] = error;
+    [tab devToolsCall:@"Input.dispatchMouseEvent"
+              params:@{@"type": @"mouseReleased", @"x": @80, @"y": @80,
+                       @"button": @"right", @"buttons": @0, @"clickCount": @1}
+             timeout:5 completion:^(NSDictionary *released, NSString *releaseError) {
+      self->_probeInspectAudit[@"released"] = @(releaseError == nil);
+      if (releaseError) self->_probeInspectAudit[@"releaseError"] = releaseError;
+    }];
+  }];
+  return YES;
+}
+
+- (BOOL)probeInspectFound { return _testing && _probeInspectFound; }
+- (NSDictionary *)probeInspectAudit { return _testing ? [_probeInspectAudit copy] : nil; }
+
+// The engine offers this hook only in background mode. Production keeps Chromium's native
+// context menu, including its Inspect command and the original clicked-node coordinates.
+- (NSDictionary *)tab:(ArdiaCoreTab *)tab runContextMenu:(NSDictionary *)menu {
+  NSString *identity = [self identityForTab:tab];
+  if (!_testing || !identity || ![_probeInspectTabID isEqualToString:identity]) return nil;
+  _probeInspectTabID = nil;
+  _probeInspectAudit[@"menuSeen"] = @YES;
+  _probeInspectAudit[@"items"] = menu[@"items"] ?: @[];
+  for (NSDictionary *item in menu[@"items"]) {
+    NSString *label = [item[@"label"] isKindOfClass:NSString.class] ? item[@"label"] : @"";
+    label = [label stringByReplacingOccurrencesOfString:@"&" withString:@""];
+    if ([label isEqualToString:@"Inspect"] && [item[@"enabled"] boolValue] &&
+        [item[@"id"] isKindOfClass:NSNumber.class]) {
+      _probeInspectFound = YES;
+      _probeInspectAudit[@"selected"] = item[@"id"];
+      return @{@"command": item[@"id"]};
+    }
+  }
+  return nil;
+}
+
 - (BOOL)privateProbeEnabled {
   return _testing && _probeRoot && ARCProbeRootIsOwned(_probeRoot) && !_closingBrowser;
 }

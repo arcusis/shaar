@@ -18,6 +18,13 @@ final class InspectorModel {
   private(set) var readingFonts = false
   private(set) var pageFontsTruncated = false
   var colorFormat = InspectorColor.Format.hex
+  enum Tab: String, CaseIterable {
+    case design = "Design"
+    case styles = "CSS"
+  }
+  var tab = Tab.design
+  @ObservationIgnored lazy var styles = InspectorStylesModel(inspector: self)
+  var documentGeneration: Int { generation }
   var isOpen: Bool { mode != .closed }
   @ObservationIgnored weak var engine: BrowserEngine?
   @ObservationIgnored private var generation = 0
@@ -58,6 +65,7 @@ final class InspectorModel {
     fontTask?.cancel()
     fontTask = nil
     mode = .closed
+    styles.reset()
     selection = nil
     installed = false
     engine?.runtime.endInspector(forTabID: target.tabID.uuidString)
@@ -65,6 +73,7 @@ final class InspectorModel {
     Task { [weak self] in
       guard let self, self.generation == revision, !self.isOpen else { return }
       _ = try? await self.evaluate("globalThis.__shaarInspectorV2?.stop(); true")
+      await self.styles.clearOverlay(generation: revision)
     }
   }
 
@@ -72,6 +81,7 @@ final class InspectorModel {
     let next = SiteControlTarget(tabID: target.tabID, profileID: target.profileID, url: url)
     if next != target || committed {
       generation += 1
+      styles.reset()
       target = next
       installed = false
       fontTask?.cancel()
@@ -137,6 +147,8 @@ final class InspectorModel {
             windowID: engine.windowID)
         else { throw InspectorFailure("This page is no longer available.") }
         _ = try await evaluate(InspectorPageScript.install)
+        _ = try await evaluate(InspectorStyleScript.install)
+        _ = try await call("Page.enable")
         _ = try await call("DOM.enable")
         _ = try await call("DOM.getDocument", params: ["depth": 0])
         _ = try await call("CSS.enable")
@@ -275,7 +287,7 @@ final class InspectorModel {
     }
   }
 
-  private func releaseGroup(_ group: String, target: SiteControlTarget) {
+  func releaseGroup(_ group: String, target: SiteControlTarget) {
     guard let engine else { return }
     let window = engine.windowID
     Task { [weak runtime = engine.runtime] in
@@ -284,6 +296,30 @@ final class InspectorModel {
         "Runtime.releaseObjectGroup", params: ["objectGroup": group],
         tabID: target.tabID.uuidString, profileID: target.profileID.uuidString, windowID: window)
     }
+  }
+
+  func withSelectedNode<T>(_ operation: (Int) async throws -> T) async throws -> T {
+    guard let selection, selection.locked else { throw InspectorFailure("Lock an element first.") }
+    let identity = selection.id
+    let revision = generation
+    let group = "shaar-inspector-node-\(UUID().uuidString)"
+    let destination = target
+    defer { releaseGroup(group, target: destination) }
+    let result = try await call(
+      "Runtime.evaluate",
+      params: [
+        "expression": "globalThis.__shaarInspectorV2.element()", "objectGroup": group,
+      ])
+    guard let objectID = (result["result"] as? [String: Any])?["objectId"] as? String,
+      let nodeID = try await call("DOM.requestNode", params: ["objectId": objectID])["nodeId"]
+        as? Int,
+      generation == revision, self.selection?.id == identity, isOpen
+    else { throw CancellationError() }
+    let value = try await operation(nodeID)
+    guard generation == revision, self.selection?.id == identity, isOpen else {
+      throw CancellationError()
+    }
+    return value
   }
 
   func evaluate(_ expression: String) async throws -> Any? {

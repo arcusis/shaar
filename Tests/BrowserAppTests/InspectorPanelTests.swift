@@ -25,10 +25,10 @@ import Testing
   @Test func selectionValidationAndNavigationRetireNativeState() async throws {
     let model = InspectorModel(target: target, engine: nil)
     #expect(!model.isOpen)
-    #expect(throws: InspectorFailure.self) { try model.receive(selection()) }
+    #expect(throws: InspectorFailure.self) { try model.receive(Self.fixtureSelection()) }
     model.open()
     model.open()
-    try model.receive(selection())
+    try model.receive(Self.fixtureSelection())
     #expect(model.mode == .locked && model.selection?.dimensions == "180 × 48")
     #expect(model.selection?.contrastGrade == "AAA")
     model.pick()
@@ -37,7 +37,7 @@ import Testing
     model.documentChanged(url: URL(string: "https://example.com/next")!, committed: true)
     #expect(model.target.url.path == "/next")
     #expect(model.mode == .picking && model.selection == nil)
-    try model.receive(selection(locked: false))
+    try model.receive(Self.fixtureSelection(locked: false))
     #expect(model.mode == .picking)
     await model.refresh()
     model.close()
@@ -55,19 +55,19 @@ import Testing
     for scheme in [ColorScheme.light, .dark] {
       for format in InspectorColor.Format.allCases {
         model.colorFormat = format
-        var value = selection(limit: format == .oklch ? "Gradient background" : nil)
+        var value = Self.fixtureSelection(limit: format == .oklch ? "Gradient background" : nil)
         value.renderedFonts = ["Arial"]
         value.pageFonts = ["Arial", "Georgia"]
         value.fontsAvailable = format != .rgb
         try model.receive(value)
-        let image = try await render(InspectorPanel(model: model), scheme: scheme)
+        let image = try await Self.render(InspectorPanel(model: model), scheme: scheme)
         #expect(image.count > 4_096)
         appearances.append(image)
       }
     }
     #expect(appearances[0] != appearances[3])
     model.documentChanged(url: target.url, committed: true)
-    #expect(try await render(InspectorPanel(model: model), scheme: .light).count > 4_096)
+    #expect(try await Self.render(InspectorPanel(model: model), scheme: .light).count > 4_096)
     #expect(NSApp.keyWindow === previous)
   }
 
@@ -75,7 +75,7 @@ import Testing
     let model = InspectorModel(target: target, engine: nil)
     model.open()
     defer { model.close() }
-    let good = selection()
+    let good = Self.fixtureSelection()
     try model.receive(good)
     let malformed = InspectorSelection(
       id: -1, revision: 0, locked: true, tag: "button", label: "button", component: nil,
@@ -87,7 +87,7 @@ import Testing
     #expect(model.selection == good)
   }
 
-  private func selection(locked: Bool = true, limit: String? = nil) -> InspectorSelection {
+  static func fixtureSelection(locked: Bool = true, limit: String? = nil) -> InspectorSelection {
     .init(
       id: 8, revision: 1, locked: locked, tag: "button", label: "button.save",
       component: "SaveButton",
@@ -114,7 +114,7 @@ import Testing
       backdrop: .init(css: "white", rgba: [1, 1, 1, 1]), contrastLimit: limit)
   }
 
-  private func render(_ panel: some View, scheme: ColorScheme) async throws -> Data {
+  static func render(_ panel: some View, scheme: ColorScheme) async throws -> Data {
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 320, height: 1000), styleMask: [], backing: .buffered,
       defer: false)

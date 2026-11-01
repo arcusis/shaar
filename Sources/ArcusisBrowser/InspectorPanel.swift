@@ -22,68 +22,79 @@ struct InspectorPanel: View {
       Divider()
       if let selection = model.selection {
         selectionHeader(selection)
+        Picker("Inspector section", selection: $model.tab) {
+          ForEach(InspectorModel.Tab.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+        }.pickerStyle(.segmented).labelsHidden().controlSize(.small)
+          .padding(.horizontal, 12).padding(.bottom, 10)
         Divider()
-        ScrollView {
-          VStack(spacing: 0) {
-            InspectorSection("Box model") { InspectorBoxModel(box: selection.box) }
-            InspectorSection("Typography") {
-              VStack(alignment: .leading, spacing: 4) {
-                if !selection.typography.preview.isEmpty {
-                  Text(selection.typography.preview).font(.system(size: 13))
-                    .lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(10).background(
-                      .primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 5)
+        if model.tab == .styles {
+          InspectorStylesView(inspector: model, model: model.styles)
+        } else {
+          ScrollView {
+            VStack(spacing: 0) {
+              InspectorSection("Box model") { InspectorBoxModel(box: selection.box) }
+              InspectorSection("Typography") {
+                VStack(alignment: .leading, spacing: 4) {
+                  if !selection.typography.preview.isEmpty {
+                    Text(selection.typography.preview).font(.system(size: 13))
+                      .lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
+                      .padding(10).background(
+                        .primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 5)
+                      )
+                      .padding(.bottom, 7)
+                  }
+                  InspectorProperty(
+                    "Rendered font",
+                    value: selection.fontsAvailable
+                      ? (selection.renderedFonts.isEmpty
+                        ? "No rendered text" : selection.renderedFonts.joined(separator: ", "))
+                      : (model.readingFonts ? "Reading…" : "Unavailable"), copy: model.copy)
+                  InspectorProperty(
+                    "CSS family", value: selection.typography.family, copy: model.copy)
+                  HStack(spacing: 12) {
+                    InspectorProperty("Size", value: selection.typography.size, copy: model.copy)
+                    InspectorProperty(
+                      "Weight", value: selection.typography.weight, copy: model.copy)
+                  }
+                  InspectorProperty(
+                    "Line height", value: selection.typography.lineHeight, copy: model.copy)
+                  InspectorProperty(
+                    "Letter spacing", value: selection.typography.letterSpacing, copy: model.copy)
+                  if !selection.pageFonts.isEmpty {
+                    Divider().padding(.vertical, 6)
+                    Text("Fonts on this page").font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text(selection.pageFonts.joined(separator: " · "))
+                      .font(.system(size: 11, design: .monospaced))
+                      .fixedSize(horizontal: false, vertical: true).padding(.top, 3)
+                    Text(
+                      model.pageFontsTruncated
+                        ? "Rendered text sample limit reached" : "From rendered text samples"
                     )
-                    .padding(.bottom, 7)
-                }
-                InspectorProperty(
-                  "Rendered font",
-                  value: selection.fontsAvailable
-                    ? (selection.renderedFonts.isEmpty
-                      ? "No rendered text" : selection.renderedFonts.joined(separator: ", "))
-                    : (model.readingFonts ? "Reading…" : "Unavailable"), copy: model.copy)
-                InspectorProperty(
-                  "CSS family", value: selection.typography.family, copy: model.copy)
-                HStack(spacing: 12) {
-                  InspectorProperty("Size", value: selection.typography.size, copy: model.copy)
-                  InspectorProperty("Weight", value: selection.typography.weight, copy: model.copy)
-                }
-                InspectorProperty(
-                  "Line height", value: selection.typography.lineHeight, copy: model.copy)
-                InspectorProperty(
-                  "Letter spacing", value: selection.typography.letterSpacing, copy: model.copy)
-                if !selection.pageFonts.isEmpty {
-                  Divider().padding(.vertical, 6)
-                  Text("Fonts on this page").font(.system(size: 11)).foregroundStyle(.secondary)
-                  Text(selection.pageFonts.joined(separator: " · "))
-                    .font(.system(size: 11, design: .monospaced))
-                    .fixedSize(horizontal: false, vertical: true).padding(.top, 3)
-                  Text(
-                    model.pageFontsTruncated
-                      ? "Sample limited to 160 font styles" : "From rendered text samples"
-                  )
-                  .font(.system(size: 10)).foregroundStyle(.secondary)
-                }
-                if !selection.fontsAvailable && !model.readingFonts {
-                  Text("Rendered font data unavailable; CSS family is shown above.")
                     .font(.system(size: 10)).foregroundStyle(.secondary)
+                  }
+                  if !selection.fontsAvailable && !model.readingFonts {
+                    Text("Rendered font data unavailable; CSS family is shown above.")
+                      .font(.system(size: 10)).foregroundStyle(.secondary)
+                  }
+                }
+              }
+              InspectorSection("Colors") {
+                VStack(alignment: .leading, spacing: 10) {
+                  Picker("Color format", selection: $model.colorFormat) {
+                    ForEach(InspectorColor.Format.allCases, id: \.self) {
+                      Text($0.rawValue).tag($0)
+                    }
+                  }.pickerStyle(.segmented).labelsHidden().controlSize(.small)
+                  ForEach(selection.colors) { swatch in
+                    InspectorSwatch(swatch: swatch, format: model.colorFormat, copy: model.copy)
+                  }
+                  Divider().padding(.vertical, 2)
+                  contrast(selection)
                 }
               }
             }
-            InspectorSection("Colors") {
-              VStack(alignment: .leading, spacing: 10) {
-                Picker("Color format", selection: $model.colorFormat) {
-                  ForEach(InspectorColor.Format.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                }.pickerStyle(.segmented).labelsHidden().controlSize(.small)
-                ForEach(selection.colors) { swatch in
-                  InspectorSwatch(swatch: swatch, format: model.colorFormat, copy: model.copy)
-                }
-                Divider().padding(.vertical, 2)
-                contrast(selection)
-              }
-            }
-          }
-        }.scrollBounceBehavior(.basedOnSize)
+          }.scrollBounceBehavior(.basedOnSize)
+        }
       } else {
         VStack(spacing: 10) {
           Image(systemName: "cursorarrow.rays").font(.system(size: 24, weight: .light))
@@ -136,6 +147,10 @@ struct InspectorPanel: View {
         copyButton("Playwright", value: selection.playwright)
         copyButton("XPath", value: selection.xpath)
         copyButton("JS path", value: selection.jsPath)
+        Spacer(minLength: 0)
+        InspectorIconButton("Save element at 2×", symbol: "camera") {
+          Task { await model.styles.saveScreenshot() }
+        }.disabled(!selection.locked)
       }
       HStack(spacing: 4) {
         if selection.ancestors.count > 3 {

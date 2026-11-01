@@ -491,7 +491,9 @@ border:2px solid #1e40af;border-radius:6px;background:#2563eb;color:white}
 #gradient{background:linear-gradient(white,black);color:white;padding:12px}
 </style><h1>Inspect the details.</h1><main id="card"><button id="save" data-testid="save" onclick="window.clicked=(window.clicked||0)+1"><span id="label">Save changes</span></button><button id="next">Cancel</button>
 <p id="transparent">Transparent text</p><p id="gradient">Gradient contrast</p>
-<iframe id="frame" src="/inspector-frame"></iframe></main></html>""",
+<iframe id="frame" src="/inspector-frame"></iframe>
+<section id="grid" style="display:grid;grid-template-columns:1fr 2fr;gap:12px;padding:8px;background:#eef2ff"><div>First track</div><div>Second track</div></section>
+<section id="flex" style="display:flex;gap:16px;padding:8px;background:#fef3c7"><div>First item</div><div>Second item</div></section></main></html>""",
                       csp=PAGE_CSP + "; frame-src 'self'")
             return
         if path == '/inspector-frame':

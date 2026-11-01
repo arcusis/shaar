@@ -73,9 +73,9 @@ static BOOL ProbeViewIsVisibleInWindow(NSView *view, NSWindow *window) {
 }
 
 - (void)inspectorProbePointerInTabID:(NSString *)identity selector:(NSString *)selector
-                            frames:(NSArray<NSString *> *)frames click:(BOOL)click
+                            frames:(NSArray<NSString *> *)frames click:(BOOL)click modifiers:(NSInteger)modifiers
                         completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion {
-  if (![self inspectorProbeOwnsTabID:identity] || selector.length > 2048 || frames.count > 8) {
+  if (![self inspectorProbeOwnsTabID:identity] || selector.length > 2048 || frames.count > 8 || (modifiers != 0 && modifiers != 1)) {
     completion(NO); return;
   }
   ArdiaCoreTab *tab = [self liveTabForID:identity];
@@ -97,7 +97,7 @@ static BOOL ProbeViewIsVisibleInWindow(NSView *view, NSWindow *window) {
         !std::isfinite([point[@"x"] doubleValue]) || !std::isfinite([point[@"y"] doubleValue])) {
       completion(NO); return;
     }
-    [tab devToolsCall:@"Input.dispatchMouseEvent" params:@{@"type":@"mouseMoved", @"x":point[@"x"], @"y":point[@"y"]}
+    [tab devToolsCall:@"Input.dispatchMouseEvent" params:@{@"type":@"mouseMoved", @"x":point[@"x"], @"y":point[@"y"], @"modifiers":@(modifiers)}
              timeout:5 completion:^(NSDictionary *ignored, NSString *failure) {
       if (failure || ![self inspectorProbeOwnsTabID:identity]) { completion(NO); return; }
       if (!click) { completion(YES); return; }

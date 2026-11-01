@@ -420,12 +420,12 @@ final class InspectorProbe {
     _ = await pointer(model, selector: "#next", click: false)
     let button = try require(model.selection, "screenshot selection exists")
     let png = try await styles.screenshot()
-    guard let bitmap = NSBitmapImageRep(data: png) else {
+    guard let dimensions = Self.captureDimensions(png) else {
       throw InspectorFailure("Element screenshot is not a PNG.")
     }
     try expect(
-      abs(Double(bitmap.pixelsWide) - button.box.width * 2) <= 2
-        && abs(Double(bitmap.pixelsHigh) - button.box.height * 2) <= 2,
+      abs(Double(dimensions.width) - button.box.width * 2) <= 2
+        && abs(Double(dimensions.height) - button.box.height * 2) <= 2,
       "element screenshot contains exactly two pixels per CSS pixel")
     try png.write(to: root.appending(path: "\(phase)-inspector-element@2x.png"))
     try await capture(model, stem: "\(phase)-inspector-css")
@@ -587,6 +587,18 @@ final class InspectorProbe {
     String(data: try! JSONEncoder().encode(value), encoding: .utf8)!
   }
   private func report(_ error: Error?) throws {
+    try Self.reportData(checks: checks, error: error).write(
+      to: root.appending(path: "\(phase)-inspector-report.json"))
+  }
+
+  static func captureDimensions(_ png: Data) -> CGSize? {
+    guard png.starts(with: [137, 80, 78, 71, 13, 10, 26, 10]),
+      let bitmap = NSBitmapImageRep(data: png), bitmap.pixelsWide > 0, bitmap.pixelsHigh > 0
+    else { return nil }
+    return CGSize(width: bitmap.pixelsWide, height: bitmap.pixelsHigh)
+  }
+
+  static func reportData(checks: [String], error: Error?) throws -> Data {
     try JSONSerialization.data(
       withJSONObject: [
         "passed": error == nil, "checks": checks,
@@ -594,6 +606,6 @@ final class InspectorProbe {
         "scope":
           "Offscreen native Inspector and trusted renderer input on owned loopback fixtures; public-page captures require explicit opt-in.",
       ], options: [.prettyPrinted, .sortedKeys]
-    ).write(to: root.appending(path: "\(phase)-inspector-report.json"))
+    )
   }
 }

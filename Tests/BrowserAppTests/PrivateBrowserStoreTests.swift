@@ -38,7 +38,7 @@ struct PrivateBrowserStoreTests {
     store.submitCommand()
     #expect(store.commandIsOpen == false)
     #expect(navigated?.0 == "first")
-    #expect(navigated?.1 == "private terms")
+    #expect(navigated?.1 == "https://www.google.com/search?q=private%20terms")
   }
 }
 
@@ -112,5 +112,60 @@ extension PrivateBrowserStoreTests {
     #expect(navigations == 0)
     #expect(store.tabs.isEmpty && store.address.isEmpty && store.commandQuery.isEmpty)
     #expect(!store.commandIsOpen && !store.pageIsFocused)
+  }
+}
+
+extension PrivateBrowserStoreTests {
+  @Test func privateStartSearchUsesSelectedProfileEngine() {
+    let store = PrivateBrowserStore(
+      contextID: "context", windowID: "window", tabID: "tab", url: "about:blank",
+      searchEngine: .duckDuckGo)
+    var navigated: String?
+    store.onNavigate = { _, value in navigated = value }
+    #expect(store.showsStartPage && store.address.isEmpty)
+    store.navigate("private query")
+    #expect(navigated == "https://duckduckgo.com/?q=private%20query")
+  }
+
+  @Test func plainHTTPRequiresExplicitChoiceAndHTTPSIsPreferred() {
+    let store = PrivateBrowserStore(
+      contextID: "context", windowID: "window", tabID: "tab", url: "about:blank")
+    var navigations: [String] = []
+    store.onNavigate = { _, value in navigations.append(value) }
+    store.navigate("http://example.com/path?q=1")
+    #expect(navigations.isEmpty && store.pendingHTTP?.host() == "example.com")
+    store.confirmHTTP(useHTTPS: true)
+    #expect(navigations == ["https://example.com/path?q=1"])
+    store.navigate("http://example.com/path?q=1")
+    store.confirmHTTP(useHTTPS: false)
+    #expect(navigations.last == "http://example.com/path?q=1")
+    store.navigate("http://example.com/cancel")
+    store.cancelHTTP()
+    store.confirmHTTP(useHTTPS: false)
+    #expect(navigations.count == 2)
+    store.navigate("http://example.com/stale")
+    store.navigate("about:blank")
+    store.confirmHTTP(useHTTPS: false)
+    #expect(
+      navigations == ["https://example.com/path?q=1", "http://example.com/path?q=1", "about:blank"])
+  }
+
+  @Test func pendingHTTPCannotFollowTabSelectionOrWindowClose() {
+    let store = PrivateBrowserStore(
+      contextID: "context", windowID: "window", tabID: "first", url: "about:blank")
+    var navigations = 0
+    store.onNavigate = { _, _ in navigations += 1 }
+    store.receive(
+      PrivateBrowserTab(
+        id: "second", url: "about:blank", title: "", loading: false, canGoBack: false,
+        canGoForward: false))
+    store.navigate("http://example.com/")
+    store.select("second")
+    store.confirmHTTP(useHTTPS: false)
+    #expect(navigations == 0 && store.pendingHTTP == nil)
+    store.navigate("http://example.com/")
+    store.clear()
+    store.confirmHTTP(useHTTPS: false)
+    #expect(navigations == 0 && store.pendingHTTP == nil)
   }
 }

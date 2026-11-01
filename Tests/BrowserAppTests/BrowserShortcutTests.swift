@@ -65,3 +65,10 @@ import Testing
   #expect(!ARCReservedBrowserShortcut("n", [.command, .option]))
   #expect(!ARCReservedBrowserShortcut("l", [.command, .shift]))
 }
+
+@Test func hardReloadReservesOnlyCommandShiftR() {
+  #expect(ARCReservedBrowserShortcut("R", [.command, .shift]))
+  #expect(ARCReservedBrowserShortcut("r", [.command, .shift]))
+  #expect(!ARCReservedBrowserShortcut("r", [.command, .option]))
+  #expect(!ARCReservedBrowserShortcut("r", [.command, .shift, .option]))
+}

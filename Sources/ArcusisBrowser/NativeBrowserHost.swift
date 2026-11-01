@@ -12,7 +12,8 @@ enum BrowserMenuCommand: String, CaseIterable {
     closeWindow,
     addFavorite
   case reopenClosed, recentlyClosed, bookmarkPage, bookmarks, history, downloads
-  case find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload, splitView
+  case find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload, hardReload
+  case splitView
   case extensions, help, minimizeWindow, zoomWindow, bringAllToFront, settings, quit, createFolder
   case checkForUpdates
 }
@@ -221,7 +222,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     switch command {
     case .find: return store.canFindCurrentPage
     case .findNext, .findPrevious: return store.pageFind?.canMove == true
-    case .reload: return afterLauncher ? store.currentPageAllowsReload : store.canReloadCurrentPage
+    case .reload, .hardReload:
+      return afterLauncher ? store.currentPageAllowsReload : store.canReloadCurrentPage
     case .splitView: return store.session.selectedSpace.tabs.count >= 2
     case .reopenClosed: return store.canReopenClosedTab
     case .bookmarkPage: return store.canBookmarkCurrentPage
@@ -365,6 +367,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .nextSpace: store.cycleSpace(by: 1)
     case .previousSpace: store.cycleSpace(by: -1)
     case .reload: store.reloadCurrentPage()
+    case .hardReload: store.reloadCurrentPage(.bypassingCache)
     case .splitView: store.splitSelectedTab()
     case .extensions: context.engine.showExtensionList()
     case .help:
@@ -846,6 +849,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     let view = section("View")
     add(.sidebar, "Toggle sidebar", to: view)
     add(.reload, "Reload", to: view)
+    add(.hardReload, "Hard Reload", to: view)
     let spaces = section("Spaces")
     add(.newSpace, "New space…", to: spaces)
     add(.editSpace, "Edit current space…", to: spaces)

@@ -107,8 +107,9 @@ final class BrowserEngine {
     self.lazyPinnedTabs = lazyPinnedTabs
     try events.router.register(callbacks)
     store.engine = self
-    store.onReloadPage = { [weak self] tab, profile in
-      self?.runtime.reloadTabID(tab.uuidString, profileID: profile.uuidString) ?? false
+    store.onReloadPage = { [weak self] tab, profile, mode in
+      self?.runtime.reloadTabID(
+        tab.uuidString, profileID: profile.uuidString, mode: mode.engineMode) ?? false
     }
     store.onNavigatePage = { [weak self] tab, profile, url in
       guard let self, !self.isClosed, let store = self.store,

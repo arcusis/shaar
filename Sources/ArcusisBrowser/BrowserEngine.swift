@@ -37,6 +37,7 @@ final class BrowserEngine {
   let pictureInPictureControls = PictureInPictureControls()
   private(set) var isClosed = false
   var onClosed: ((Bool) -> Void)?
+  var inspectors: [UUID: InspectorModel] = [:]
   let downloads = DownloadsModel(folder: DownloadsFolderSource())
   private(set) var pages: [UUID: PageState] = [:]
   private(set) var notice: String?
@@ -130,6 +131,8 @@ final class BrowserEngine {
         self.store?.resolveExternalApp(request.id, accepted: false)
       }
       self.isClosed = true
+      for model in self.inspectors.values { model.close() }
+      self.inspectors.removeAll()
       self.extensionPanel = nil
       self.store?.dismissPageFind()
       self.liveTabs.removeAll()
@@ -160,6 +163,9 @@ final class BrowserEngine {
         return
       }
       self.store?.nativeDocumentCommitted(tab, profileID: profile)
+      if let inspector = self.inspectors[tab] {
+        inspector.documentChanged(url: inspector.target.url, committed: true)
+      }
     }
     store.library.onLoad = { [weak self] key, limit, completion in
       guard let self, !self.isClosed else {
@@ -354,6 +360,7 @@ final class BrowserEngine {
       self.pages[id] = PageState(loading: loading, canGoBack: back, canGoForward: forward)
       self.store?.nativePageLoading(id, loading: loading)
       if let url = URL(string: address) {
+        self.inspectors[id]?.documentChanged(url: url)
         if let profile = self.store?.session.profileID(forTabID: id),
           self.store?.session.favoritePages.contains(where: { $0.tab.id == id }) == true
         {
@@ -379,6 +386,7 @@ final class BrowserEngine {
       else { return }
       self.liveTabs.remove(id)
       self.pages[id] = nil
+      self.inspectors.removeValue(forKey: id)?.close()
       self.mediaAccess[id] = nil
       self.forgetMedia(id)
       self.favicons[id] = nil
@@ -428,6 +436,7 @@ final class BrowserEngine {
       guard liveTabs.remove(id) != nil else { continue }
       events.router.forgetTab(id.uuidString, windowID: windowID)
       pages[id] = nil
+      inspectors.removeValue(forKey: id)?.close()
       mediaAccess[id] = nil
       forgetMedia(id)
       favicons[id] = nil
@@ -454,6 +463,7 @@ final class BrowserEngine {
       runtime.discardTabID(removed.uuidString)
       liveTabs.remove(removed)
       pages[removed] = nil
+      inspectors.removeValue(forKey: removed)?.close()
       mediaAccess[removed] = nil
       forgetMedia(removed)
       favicons[removed] = nil

@@ -1,0 +1,128 @@
+{
+  "pageFonts" : [
+    "Noto Sans",
+    "Noto Sans Mono"
+  ],
+  "renderedFonts" : [
+    "Noto Sans"
+  ],
+  "state" : {
+    "closed" : false,
+    "revision" : 4,
+    "selection" : {
+      "ancestors" : [
+        {
+          "id" : 5,
+          "label" : "html"
+        },
+        {
+          "id" : 4,
+          "label" : "body"
+        },
+        {
+          "id" : 3,
+          "label" : "div.default-grid.with-gap"
+        },
+        {
+          "id" : 2,
+          "label" : "main.standalone-resource__main"
+        },
+        {
+          "id" : 1,
+          "label" : "h1"
+        }
+      ],
+      "backdrop" : {
+        "css" : "composited background",
+        "rgba" : [
+          0.98039215686274506,
+          0.98039215686274506,
+          0.9882352941176471,
+          1
+        ]
+      },
+      "box" : {
+        "border" : [
+          "0px",
+          "0px",
+          "0px",
+          "0px"
+        ],
+        "contentHeight" : 61.578099999999999,
+        "contentWidth" : 616,
+        "height" : 94.578125,
+        "margin" : [
+          "0px",
+          "0px",
+          "20px",
+          "0px"
+        ],
+        "padding" : [
+          "33px",
+          "0px",
+          "0px",
+          "0px"
+        ],
+        "width" : 616
+      },
+      "colors" : [
+        {
+          "label" : "Text",
+          "value" : {
+            "css" : "rgb(0, 90, 106)",
+            "rgba" : [
+              0,
+              0.35294117647058826,
+              0.41568627450980394,
+              1
+            ]
+          }
+        },
+        {
+          "label" : "Background",
+          "value" : {
+            "css" : "rgba(0, 0, 0, 0)",
+            "rgba" : [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "component" : null,
+      "contrastLimit" : null,
+      "css" : "h1",
+      "foreground" : {
+        "css" : "rgb(0, 90, 106)",
+        "rgba" : [
+          0,
+          0.35294117647058826,
+          0.41568627450980394,
+          1
+        ]
+      },
+      "frames" : [
+
+      ],
+      "id" : 1,
+      "jsPath" : "document.querySelector(\"h1\")",
+      "label" : "h1",
+      "locked" : true,
+      "playwright" : "page.locator(\"h1\")",
+      "revision" : 4,
+      "tag" : "h1",
+      "typography" : {
+        "family" : "\"Noto Sans\", \"Trebuchet MS\", \"Helvetica Neue\", Arial, sans-serif",
+        "letterSpacing" : "normal",
+        "lineHeight" : "38.4px",
+        "preview" : "Understanding SC 1.4.3 Contrast (Minimum) (Level AA)",
+        "size" : "32px",
+        "weight" : "400"
+      },
+      "xpath" : "\/*[local-name()='html'][1]\/*[local-name()='body'][1]\/*[local-name()='div'][3]\/*[local-name()='main'][1]\/*[local-name()='h1'][1]"
+    }
+  },
+  "url" : "https:\/\/www.w3.org\/WAI\/WCAG22\/Understanding\/contrast-minimum.html"
+}

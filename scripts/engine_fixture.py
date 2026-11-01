@@ -479,6 +479,24 @@ MEDIA_CLIP = Path(__file__).resolve().parent.parent / 'Tests/Fixtures/Media/seek
 class Fixture(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
+        if path == '/inspector':
+            self.html(b"""<!doctype html><html data-inspector-fixture="v2"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Inspector fixture</title>
+<style>body{font:16px Arial,sans-serif;margin:0;padding:32px;background:white;color:#111827}
+main{padding:20px;background:#f3f4f6;border:1px solid #e5e7eb}
+button{font:600 16px/24px Arial,sans-serif;letter-spacing:.25px;margin:12px 16px;padding:10px 20px;
+border:2px solid #1e40af;border-radius:6px;background:#2563eb;color:white}
+#next{background:white;color:#111827;border-color:#d1d5db}iframe{width:340px;height:160px;border:2px solid #ddd}
+#transparent{color:rgba(0,0,0,.5);background:white;padding:12px}
+#gradient{background:linear-gradient(white,black);color:white;padding:12px}
+</style><h1>Inspect the details.</h1><main id="card"><button id="save" data-testid="save" onclick="window.clicked=(window.clicked||0)+1"><span id="label">Save changes</span></button><button id="next">Cancel</button>
+<p id="transparent">Transparent text</p><p id="gradient">Gradient contrast</p>
+<iframe id="frame" src="/inspector-frame"></iframe></main></html>""",
+                      csp=PAGE_CSP + "; frame-src 'self'")
+            return
+        if path == '/inspector-frame':
+            self.html(b"""<!doctype html><html><meta charset="utf-8"><style>body{font:16px Georgia;padding:12px;background:#fff}button{font:inherit;padding:8px 16px;margin:8px;border:1px solid #bbb;background:#fafafa;color:#222}</style><button id="nested">Frame action</button></html>""")
+            return
         if path.startswith('/private-privacy/'):
             body = json.dumps({'cookie': self.headers.get('Cookie', ''), 'fixture': 'privacy'}).encode()
             self.send_response(200)
@@ -1315,7 +1333,7 @@ def main(argv=None):
                         code = wait_for_quit_exit(process, root, phase, timeout=90)
                     else:
                         timeout = (240 if options.private_window else 180 if options.external_app_consent else 180 if options.saved_tab_capacity
-                                   else 170 if include_bitwarden else 90)
+                                   else 170 if include_bitwarden else 150)
                         code = wait_for_probe(process, root, phase, timeout=timeout)
                 except subprocess.TimeoutExpired:
                     raise RuntimeError(f"{phase} timed out; see {root}/{phase}.log")

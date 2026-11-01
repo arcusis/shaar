@@ -306,10 +306,9 @@ jobs:
           node-version: '22'
 
       - name: Set up pnpm
-        # pnpm/action-setup v4
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
-        with:
-          version: '10.24.0'
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.24.0 --activate
 
       - name: Install test dependencies and headless shell
         run: |

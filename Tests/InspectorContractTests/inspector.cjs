@@ -15,6 +15,8 @@ const styleSource = fs.readFileSync(path.join(root, 'Sources/ArcusisBrowser/Insp
 const styleScript = styleSource.match(/static let install = #"""([\s\S]*?)"""#/)[1];
 const detailsSource = fs.readFileSync(path.join(root, 'Sources/ArcusisBrowser/InspectorDetailsScript.swift'), 'utf8');
 const detailsScript = detailsSource.match(/static let install = #"""([\s\S]*?)"""#/)[1];
+const diagnosticsSource = fs.readFileSync(path.join(root, 'Sources/ArcusisBrowser/InspectorDiagnosticsScript.swift'), 'utf8');
+const diagnosticsScript = diagnosticsSource.match(/static let install = #"""([\s\S]*?)"""#/)[1];
 const output = path.join(root, 'build/Verification/inspector-contracts.json');
 fs.rmSync(output, { force: true });
 let server, browser;
@@ -201,14 +203,69 @@ async function serve() {
   assert.match((await page.evaluate(() => globalThis.__shaarInspectorDetails.accessibility())).warnings.join(' '), /hidden from the accessibility tree/);
   await page.keyboard.press('Escape');
   assert.equal((await state()).closed, true);
+
+  await page.evaluate(diagnosticsScript);
+  const technologies = await page.evaluate(() => globalThis.__shaarBugReportV1.tech());
+  assert(technologies.some(row => row.name === 'React'));
+  assert(technologies.some(row => row.name === 'Vue'));
+  await page.goto(new URL('/inspector-tools', url).href);
+  assert.equal(await page.evaluate(() => !!globalThis.__shaarBugReportV1), false, 'No implicit diagnostics');
+  await page.evaluate(script);
+  await page.evaluate(() => globalThis.__shaarInspectorV2.suspend(true));
+  await page.locator('#performance-input').click();
+  assert.equal(await page.evaluate(() => window.clicked), 1, 'Page mode passes trusted input');
+  await page.keyboard.press('Escape');
+  assert.equal((await state()).closed, false, 'Page mode does not steal Escape');
+  await page.evaluate(diagnosticsScript);
+  await page.evaluate(diagnosticsScript);
+  await page.evaluate(async () => {
+    let reads = 0;
+    const value = { get secret() { reads++; return 'secret'; } };
+    console.error('diagnostics-error', value);
+    if (reads) throw Error('Console collector invoked getter');
+    await (await fetch('/inspector-slow?contract', { headers: { Authorization: 'Bearer fixture' } })).text();
+    await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest(); xhr.open('GET', '/inspector-slow?xhr');
+      xhr.onload = resolve; xhr.onerror = reject; xhr.send();
+    });
+    const api = globalThis.__shaarBugReportV1;
+    if (!api.storage('local').items.some(row => row.key === 'inspector-key')) throw Error('Storage not read');
+    if (!api.writeStorage('local', 'new-key', 'changed').ok) throw Error('Storage not written');
+    if (api.readStorage('local', 'new-key').value !== 'changed') throw Error('Full value not read');
+    api.writeStorage('local', 'new-key', null);
+    if (localStorage.getItem('new-key') !== null) throw Error('Storage not deleted');
+    api.writeStorage('session', 'session-key', 'edited');
+    if (sessionStorage.getItem('session-key') !== 'edited') throw Error('Session storage not edited');
+    if (!api.writeStorage('local', '', 'empty key').ok) throw Error('Empty storage key rejected');
+    if (!api.writeStorage('local', 'big', 'x'.repeat(262145)).error) throw Error('Oversized storage accepted');
+  });
+  await page.waitForFunction(() => globalThis.__shaarBugReportV1.snapshot().resources.length >= 3);
+  const diagnostics = await page.evaluate(() => globalThis.__shaarBugReportV1.snapshot());
+  assert.equal(diagnostics.console.filter(row => row.message.includes('diagnostics-error')).length, 1, 'Idempotent installation');
+  assert.match(diagnostics.console[0].message, /Accessor/);
+  assert(diagnostics.network.some(row => row.url.includes('?contract') && row.status === 200 && row.method === 'GET'));
+  assert(diagnostics.network.some(row => row.url.includes('?xhr') && row.status === 200));
+  assert(diagnostics.network.some(row => row.headers.some(header => header.name.toLowerCase() === 'authorization' && header.value === 'Bearer fixture')));
+  assert((await page.evaluate(() => globalThis.__shaarBugReportV1.tech())).some(row => row.source === 'Claimed generator metadata'));
+  assert.equal(await page.evaluate(() => {
+    globalThis.__shaarBugReportV1.dispose();
+    return fetch === window.originalFetch && console.error === window.originalConsoleError && !globalThis.__shaarBugReportV1;
+  }), true, 'Close restores wrapped functions');
+  await page.evaluate(() => { globalThis.__shaarInspectorV2.suspend(false); globalThis.__shaarInspectorV2.pick(); });
+  await page.locator('#performance-input').click({ force: true });
+  assert.equal((await state()).selection.locked, true, 'Element mode resumes picking');
+  assert.equal(await page.evaluate(() => window.clicked), 1, 'Element mode intercepts lock click');
+  await page.evaluate(() => globalThis.__shaarInspectorV2.stop());
+
   fs.mkdirSync(path.dirname(output), { recursive: true });
   fs.writeFileSync(output, JSON.stringify({
     passed: true, headless: true, browserVersion: browser.version(),
     sourceSHA256: require('node:crypto').createHash('sha256').update(source).digest('hex'),
     styleSourceSHA256: require('node:crypto').createHash('sha256').update(styleSource).digest('hex'),
     detailsSourceSHA256: require('node:crypto').createHash('sha256').update(detailsSource).digest('hex'),
+    diagnosticsSourceSHA256: require('node:crypto').createHash('sha256').update(diagnosticsSource).digest('hex'),
     frameworks: JSON.parse(fs.readFileSync(path.join(root, 'ThirdParty/InspectorFixtures/pin.json'), 'utf8')),
-    checks: ['hover regions', 'lock interception', 'arrow navigation', 'breadcrumb', 'unique CSS/XPath/JS/Playwright', 'CSS edit and exact undo', 'CSS validation', 'Option measurement and release', 'conflicting page edit preserves page changes', 'alpha precision', 'gradient limit', 'same-origin iframe', 'iframe reload listeners', 'Escape cleanup'],
+    checks: ['hover regions', 'lock interception', 'arrow navigation', 'breadcrumb', 'unique CSS/XPath/JS/Playwright', 'CSS edit and exact undo', 'CSS validation', 'Option measurement and release', 'conflicting page edit preserves page changes', 'alpha precision', 'gradient limit', 'same-origin iframe', 'iframe reload listeners', 'Escape cleanup', 'Page mode passes input', 'Actual runtime technology markers', 'Bounded console without getters', 'fetch and XHR recording', 'Local/session storage CRUD', 'Collector restoration'],
   }, null, 2));
   console.log('Passed Inspector renderer contracts.');
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => {

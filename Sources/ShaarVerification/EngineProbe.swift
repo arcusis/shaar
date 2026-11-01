@@ -595,6 +595,10 @@ final class EngineProbe {
         checks += try await InspectorProbe(
           engine: browserEngine, store: store, root: root, fixture: fixture, phase: phase
         ).run()
+        fixtureStage = "PageTools"
+        checks += try await InspectorPageToolsProbe(
+          engine: browserEngine, store: store, root: root, fixture: fixture, phase: phase
+        ).run()
         fixtureStage = "normal-fixtures-complete"
         localFixturesPassed = true
         if includeBitwarden {
@@ -746,8 +750,7 @@ final class EngineProbe {
     if externalAppConsentMode || savedTabCapacityMode { return 180 }
     if quitExitMode { return 90 }
     if sessionRecoveryMode { return 90 }
-    if includeBitwarden { return 150 }
-    return privateWindowMode ? 210 : 135
+    return 210
   }
 
   private var probeMode: String {

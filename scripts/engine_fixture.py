@@ -479,6 +479,17 @@ MEDIA_CLIP = Path(__file__).resolve().parent.parent / 'Tests/Fixtures/Media/seek
 class Fixture(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
+        if path == '/inspector-tools':
+            self.html(b"""<!doctype html><html data-page-tools-fixture="v1"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="generator" content="Inspector fixture">
+<title>Page tools fixture</title><style>body{font:18px Arial;padding:32px;background:white;color:#172033}button{padding:14px}#shift{padding:20px;background:#eef2ff}</style>
+<h1>Measure the real page.</h1><button id="performance-input" onclick="window.clicked=(window.clicked||0)+1;const start=performance.now();while(performance.now()-start&lt;80){}">Save changes</button><div id="shift">Stable content</div>
+<script>window.originalFetch=fetch;window.originalConsoleError=console.error;localStorage.setItem('inspector-key','original');sessionStorage.setItem('session-key','session-original');console.error('page-tools-document-start');</script></html>""", csp=PAGE_CSP + "; connect-src 'self'", cookie='inspector-http-only=original; Path=/; HttpOnly; SameSite=Lax')
+            return
+        if path == '/inspector-slow':
+            time.sleep(0.15)
+            self.html(b'<p>Slow authored resource</p>' + b'x' * 4096)
+            return
         if path == '/inspector-frameworks.js':
             source = Path(__file__).resolve().parents[1] / 'ThirdParty/InspectorFixtures'
             body = (source / 'frameworks.js').read_bytes()
@@ -594,11 +605,13 @@ border:2px solid #1e40af;border-radius:6px;background:#2563eb;color:white}
 <label>Password <input id="password" type="password" autocomplete="current-password"></label></form>
 <script>window.arcusisInstance=crypto.randomUUID();</script></html>""")
 
-    def html(self, body, csp=PAGE_CSP):
+    def html(self, body, csp=PAGE_CSP, cookie=None):
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Security-Policy", csp)
+        if cookie is not None:
+            self.send_header("Set-Cookie", cookie)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -1367,7 +1380,7 @@ def main(argv=None):
                         code = wait_for_quit_exit(process, root, phase, timeout=90)
                     else:
                         timeout = (240 if options.private_window else 180 if options.external_app_consent else 180 if options.saved_tab_capacity
-                                   else 170 if include_bitwarden else 150)
+                                   else 235)
                         code = wait_for_probe(process, root, phase, timeout=timeout)
                 except subprocess.TimeoutExpired:
                     raise RuntimeError(f"{phase} timed out; see {root}/{phase}.log")

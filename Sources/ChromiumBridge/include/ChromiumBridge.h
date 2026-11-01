@@ -49,6 +49,12 @@ typedef NS_ENUM(NSInteger, ARCPageReloadMode) {
 
 /// All methods and callbacks run on the main thread. The engine owns the AppKit run loop.
 @interface ARCChromiumRuntime : NSObject
+/// Tab-scoped simulations and page diagnostics share the in-process protocol bridge.
+- (BOOL)beginDeveloperSessionForTabID:(NSString *)tabID profileID:(NSString *)profileID windowID:(NSString *)windowID;
+- (void)endDeveloperSessionForTabID:(NSString *)tabID profileID:(NSString *)profileID windowID:(NSString *)windowID;
+- (void)developerCall:(NSString *)method params:(NSDictionary *)params tabID:(NSString *)tabID
+           profileID:(NSString *)profileID windowID:(NSString *)windowID
+          completion:(void (NS_SWIFT_UI_ACTOR ^)(NSDictionary<NSString *, id> * _Nullable, NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
 /// Restricted Inspector commands. Each call validates the tab's profile and native window.
 - (BOOL)beginInspectorForTabID:(NSString *)tabID profileID:(NSString *)profileID windowID:(NSString *)windowID;
 - (void)endInspectorForTabID:(NSString *)tabID;

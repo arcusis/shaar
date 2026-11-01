@@ -7,10 +7,12 @@ import importlib.util
 import io
 import json
 import os
+import re
 from pathlib import Path
 import sys
 import tarfile
 import tempfile
+import tomllib
 import unittest
 import zipfile
 from unittest.mock import patch
@@ -131,6 +133,14 @@ class CoverageGateTests(unittest.TestCase):
 
 
 class SupplyChainTests(unittest.TestCase):
+    def test_generated_directory_exclusions_never_cover_nested_source_paths(self):
+        config = tomllib.loads((ROOT / ".gitleaks.toml").read_text())
+        patterns = config["allowlists"][0]["paths"]
+        for path in (".git/objects/a", ".build/product", ".venv/package.py", "build/EngineCache/archive"):
+            self.assertTrue(any(re.search(pattern, path) for pattern in patterns), path)
+        for path in ("Sources/build/Probe.swift", "scripts/build/check.sh", "Tests/.venv/fixture.py", "build.swift"):
+            self.assertFalse(any(re.search(pattern, path) for pattern in patterns), path)
+
     def test_spdx_file_checksums_and_package_verification_cover_real_files_only(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

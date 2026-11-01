@@ -3,11 +3,11 @@ title = "Shaar secret checks"
 [extend]
 useDefault = true
 
-# Generated products and downloaded dependencies are not repository source.
+# Generated products and dependencies at repository root are not source.
 # No complete source file, authored fixture or credential-shaped file is exempted.
 [[allowlists]]
 description = "Generated build and dependency directories"
-paths = ['''(^|/)(\.git|\.build|\.venv|build)/''']
+paths = ['''^(\.git|\.build|\.venv|build)/''']
 
 [[allowlists]]
 description = "Known public extension identity key"

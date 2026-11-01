@@ -28,15 +28,15 @@ assert.equal(redirect.status, 307);
 assert.equal(new URL(redirect.headers.get("location") ?? "", origin).pathname, "/download/");
 const missing = await fetch(`${origin}/this-page-does-not-exist/`);
 assert.equal(missing.status, 404);
-assert.match(await missing.text(), /This path ends here/);
+assert.match(await missing.text(), /Page not found/);
 const appcast = await fetch(`${origin}/appcast.xml`);
 assert.equal(appcast.status, 404, "The website must not serve a replacement appcast.");
 for (const path of [
   "/assets/client.js",
   "/assets/styles.css",
   "/assets/shaar-logo.svg",
-  "/assets/manrope.woff2",
-  "/assets/newsreader-italic.woff2",
+  "/assets/geist-mono.woff2",
+  "/assets/screens/page-arcusis.webp",
   "/robots.txt",
   "/sitemap.xml",
 ]) {

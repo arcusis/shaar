@@ -52,7 +52,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-            echo '::notice title=Website deploy skipped::No CLOUDFLARE_API_TOKEN secret is set. Deploy with `pnpm wrangler deploy` from a logged-in machine.'
+            echo "::notice title=Website deploy skipped::No CLOUDFLARE_API_TOKEN secret is set. Deploy with pnpm wrangler deploy from a logged-in machine."
             exit 0
           fi
           pnpm wrangler deploy

@@ -85,8 +85,21 @@ final class MediaSessionProbe {
     try await waitUntil("a new document clears the old session") {
       self.store.media.sessions[media] == nil
     }
-    store.perform(.space(home.id))
+    try await removeMediaSpace(space, returningTo: home.id)
     return checks
+  }
+
+  /// The fixture page keeps painting its canvas while live. Removing the Space closes its
+  /// tabs, so later stages and the restart phase run without that load; each phase opens
+  /// the Space again.
+  private func removeMediaSpace(_ space: UUID, returningTo home: UUID) async throws {
+    let tabs = Set(store.session.spaces.first { $0.id == space }?.tabs.map(\.id) ?? [])
+    store.perform(.space(home))
+    try expect(store.removeSpace(space), "the media Space can be removed")
+    try await waitUntil("the media Space's tabs close") {
+      self.engine.liveTabs.isDisjoint(with: tabs)
+    }
+    checks.append("removing the media Space closes its live tabs")
   }
 
   /// The probe's own Space shares the first profile so no extra profile loads.

@@ -392,7 +392,10 @@ class Fixture(http.server.BaseHTTPRequestHandler):
             self.send_header('Cache-Control', 'no-store')
             self.send_header('Content-Length', str(len(body)))
             self.end_headers()
-            self.wfile.write(body)
+            try:
+                self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
             return
         self.html(b"""<!doctype html><html data-arcusis-fixture="v1"><meta charset="utf-8">
 <title>Arcusis account isolation fixture</title>

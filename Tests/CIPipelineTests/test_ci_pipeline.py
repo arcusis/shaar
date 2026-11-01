@@ -39,6 +39,7 @@ STAGES = load_script("ci-stage")
 PINS = load_script("ci-checks")
 PYTHON_TESTS = load_script("test-python")
 SBOM = load_script("ci-sbom")
+SWIFT_REPORTS = load_script("ci-swift-reports")
 
 
 class PipelineGateTests(unittest.TestCase):
@@ -240,6 +241,54 @@ class SupplyChainTests(unittest.TestCase):
             (root / ".arcusis-probe").unlink()
             with self.assertRaises(ValueError):
                 EVIDENCE.collect(log, Path(output) / "evidence")
+
+
+class SwiftReportTests(unittest.TestCase):
+    def transcript(self, state="passed"):
+        return ("Test Suite 'All tests' started at now.\n"
+                "Test Case '-[Fixture.Cases sample]' started.\n"
+                "authored diagnostic\n"
+                f"Test Case '-[Fixture.Cases sample]' {state} (0.125 seconds).\n"
+                f"Test Suite 'All tests' {state if state == 'failed' else 'passed'} at now.\n"
+                f" Executed 1 test, with {int(state == 'failed')} failures in 0.125 seconds\n")
+
+    def test_xctest_report_keeps_multiple_products_skips_and_native_swift_testing(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            log = directory / "tests.log"
+            log.write_text(self.transcript() + self.transcript("skipped") + "Test run with 1 test passed\n")
+            native = directory / "swift-swift-testing.xml"
+            native.write_text('<testsuite tests="1"><testcase name="native"/></testsuite>')
+            (directory / "swift.xml").write_text('<testsuite tests="2"/>')
+            SWIFT_REPORTS.write_reports(log, directory)
+            suite = ET.parse(directory / "xctest.xml").getroot()
+            self.assertEqual(suite.attrib["tests"], "2")
+            self.assertEqual(suite.attrib["skipped"], "1")
+            self.assertEqual(suite[0].attrib["classname"], "Fixture.Cases")
+            self.assertEqual(suite[0].attrib["name"], "sample")
+            self.assertTrue(native.is_file())
+            self.assertFalse((directory / "swift.xml").exists())
+
+    def test_xctest_failure_keeps_diagnostic_and_duration(self):
+        cases = SWIFT_REPORTS.xctest_cases(self.transcript("failed"))
+        self.assertEqual(cases[0].attrib["time"], "0.125")
+        self.assertIn("authored diagnostic", cases[0].find("failure").text)
+
+    def test_truncated_unpaired_and_mismatched_xctest_logs_fail(self):
+        malformed = (self.transcript().split("Test Case", 1)[0],
+                     self.transcript().replace(" started.\n", "\n"),
+                     self.transcript().replace("Executed 1 test", "Executed 2 tests"))
+        for text in malformed:
+            with self.subTest(text=text), self.assertRaises(ValueError):
+                SWIFT_REPORTS.xctest_cases(text)
+
+    def test_missing_native_swift_testing_report_fails(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            log = directory / "tests.log"
+            log.write_text(self.transcript() + "Test run with 1 test passed\n")
+            with self.assertRaisesRegex(ValueError, "native JUnit"):
+                SWIFT_REPORTS.write_reports(log, directory)
 
 
 class ProbeSoakTests(unittest.TestCase):

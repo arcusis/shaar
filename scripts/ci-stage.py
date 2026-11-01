@@ -42,13 +42,23 @@ def prepare_coverage(cwd: Path, scratch: str) -> Path:
     return path
 
 
+def run_swift_tests(checks: Commands, name: str, arguments: list[str], *, cwd: Path = ROOT, env=None) -> int:
+    for report in (*checks.directory.glob("swift*.xml"), checks.directory / "xctest.xml"):
+        report.unlink(missing_ok=True)
+    status = checks.run(name, arguments, cwd=cwd, env=env)
+    reports = checks.run("test-reports", [sys.executable, str(ROOT / "scripts/ci-swift-reports.py"),
+                        "--log", str(checks.directory / f"{name}.log"),
+                        "--directory", str(checks.directory)])
+    return int(bool(status or reports))
+
+
 def test_commands(checks: Commands, *, cwd: Path = ROOT, scratch: str = ".build") -> int:
     flags = ["--scratch-path", scratch, "--jobs", "2", "--force-resolved-versions", "--enable-code-coverage"]
     if checks.run("build", ["swift", "build", "--build-tests", *flags], cwd=cwd):
         return 1
     coverage_path = prepare_coverage(cwd, scratch)
-    status = checks.run("tests", ["swift", "test", "--skip-build", *flags,
-                                 "--xunit-output", str(checks.directory / "swift.xml")], cwd=cwd)
+    status = run_swift_tests(checks, "tests", ["swift", "test", "--skip-build", *flags,
+                             "--xunit-output", str(checks.directory / "swift.xml")], cwd=cwd)
     if status:
         return status
     shutil.copyfile(coverage_path, checks.directory / "coverage.json")
@@ -108,9 +118,9 @@ def run_visuals(checks: Commands) -> None:
 
 def run_sanitizer(checks: Commands, sanitizer: str) -> None:
     environment = dict(os.environ, ASAN_OPTIONS="halt_on_error=1", TSAN_OPTIONS="halt_on_error=1")
-    checks.run(sanitizer, ["swift", "test", "--jobs", "2", "--force-resolved-versions",
-                          "--scratch-path", f"build/swiftpm/{sanitizer}", "--sanitize", sanitizer,
-                          "--xunit-output", str(checks.directory / "swift.xml")], env=environment)
+    run_swift_tests(checks, sanitizer, ["swift", "test", "--jobs", "2", "--force-resolved-versions",
+                    "--scratch-path", f"build/swiftpm/{sanitizer}", "--sanitize", sanitizer,
+                    "--xunit-output", str(checks.directory / "swift.xml")], env=environment)
 
 
 def main() -> int:

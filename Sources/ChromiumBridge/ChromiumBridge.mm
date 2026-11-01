@@ -160,6 +160,10 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     strings.push_back("--mute-audio");
     strings.push_back("--use-fake-device-for-media-stream");
     strings.push_back("--ardia-test-system-media-permission=granted");
+    if (ARCProbeRootIsOwned(_probeRoot) &&
+        [NSProcessInfo.processInfo.arguments containsObject:@"--marketing-screenshots"]) {
+      strings.push_back("--force-device-scale-factor=2");
+    }
   }
   if (_externalAppProbeTesting) strings.push_back(externalProbeSwitch.UTF8String);
   std::vector<const char *> arguments;

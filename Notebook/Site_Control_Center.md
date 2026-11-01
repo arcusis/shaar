@@ -17,4 +17,4 @@ The toggle reads and writes the playback feature's per-site setting ([[Media_Pla
 
 `SiteControlsProbe` runs in both engine fixture phases on an authored page at `site-controls.localhost`, a site no other probe uses. It checks permission round trips and persistence across restart, the automatic picture-in-picture toggle saving for one site only, each action's effect on cookies and storage, Restart Page without a renderer failure, and offscreen light and dark captures with live engine state. HTTPS certificate retrieval and the certificate sheet are not exercised by the fixture; the handshake and fingerprint match were checked once against a public HTTPS site.
 
-Related: [[Media_Consent]], [[Renderer_Recovery]], [[Keyboard_Commands]], [[Engine_Interop_Boundary]].
+Related: [[Automatic_Picture_In_Picture]], [[Media_Consent]], [[Renderer_Recovery]], [[Keyboard_Commands]], [[Engine_Interop_Boundary]].

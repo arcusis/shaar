@@ -12,6 +12,8 @@ This builds `build/Shaar Verification.app`: the same engine, resources and Info.
 
 Test-only engine entry points live in the explicit Clang submodule `ChromiumBridge.Verification` (`Sources/ChromiumBridge/include/ChromiumBridgeVerification.h`). Only the harness and its tests import it. Their implementations remain in the bridge because they read runtime state; each returns nothing unless the runtime started in testing mode with an owned, marked disposable probe root.
 
+The separate identifier was merged in [PR #330](https://github.com/arcusis/shaar/pull/330). Shipping verification still requires `com.arcusis.browser`; Chromium helper identifiers remain the pinned engine's `com.ardia.browser.*`. Identifier separation prevents shared macOS crash/restoration attribution and preferences domains; it does not fix the pending-navigation shutdown crash described in [[Quit_Exit_Verification]].
+
 Tests for harness code are in `Tests/ShaarVerificationTests`.
 
 Related: [[Source_And_Native_Verification]], [[Engine_Interop_Boundary]], [[Build_And_Run]].

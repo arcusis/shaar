@@ -23,6 +23,7 @@ final class PrivateBrowserHost {
   private let keyWindow: () -> NSWindow?
   private let sourceProfileID: () -> String?
   private let presentsWindows: Bool
+  private let searchEngine: (String) -> BrowserSearchEngine
   private var owners: [String: Owner] = [:]
   private var contextsBySource: [String: String] = [:]
   private var windowsByContext: [String: Set<String>] = [:]
@@ -31,8 +32,10 @@ final class PrivateBrowserHost {
   init(
     runtime: ARCChromiumRuntime, presentsWindows: Bool = true,
     keyWindow: @escaping () -> NSWindow? = { NSApp.keyWindow ?? NSApp.mainWindow },
+    searchEngine: @escaping (String) -> BrowserSearchEngine = { _ in .google },
     sourceProfileID: @escaping () -> String?
   ) {
+    self.searchEngine = searchEngine
     self.runtime = runtime
     self.presentsWindows = presentsWindows
     self.keyWindow = keyWindow
@@ -50,6 +53,12 @@ final class PrivateBrowserHost {
   var windowCount: Int { owners.count }
 
   func installCallbacks() {
+    runtime.onPrivateNavigationFailed = { [weak self] context, window, tab, message in
+      guard let owner = self?.owners[window], owner.contextID == context,
+        owner.store.selectedTabID == tab
+      else { return }
+      owner.store.failure = message
+    }
     runtime.onPrivateTabChanged = {
       [weak self] context, window, tab, url, title, loading, back, forward in
       self?.tabChanged(
@@ -68,6 +77,7 @@ final class PrivateBrowserHost {
   }
 
   func detach() {
+    runtime.onPrivateNavigationFailed = nil
     runtime.onPrivateTabChanged = nil
     runtime.onPrivateTabSelected = nil
     runtime.onPrivateTabClosed = nil
@@ -143,7 +153,6 @@ final class PrivateBrowserHost {
     switch command {
     case .newTab:
       owner.store.openTab()
-      owner.store.showCommand()
     case .search: owner.store.showCommand()
     case .closeTab:
       if owner.store.tabs.count > 1, let tab = owner.store.selectedTab {
@@ -182,7 +191,9 @@ final class PrivateBrowserHost {
       NativeWindowPlacement.frame(
         saved: nil, source: nil, screens: NSScreen.screens.map(\.visibleFrame)),
       display: false)
-    let store = PrivateBrowserStore(contextID: context, windowID: window, tabID: tab, url: url)
+    let store = PrivateBrowserStore(
+      contextID: context, windowID: window, tabID: tab, url: url, searchEngine: searchEngine(source)
+    )
     let hosting = NSHostingView(rootView: PrivateBrowserWindow(store: store, runtime: runtime))
     hosting.frame = nativeWindow.contentView?.bounds ?? .zero
     hosting.autoresizingMask = [.width, .height]

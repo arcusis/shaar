@@ -9,6 +9,10 @@ The page toolbar's site controls button opens a native popover for the selected 
 
 Reloads go through the store's reload path, so renderer-failure state and stale-target checks are shared with the toolbar and menu.
 
+## Private windows
+
+Private windows have a separate native site panel with **Allow cookies for this site**, including site storage. It reads and writes the exact origin in the owning OTR profile; the granting window owns its lifetime. Shared OTR state and engine limitations are documented in [[Private_Browsing]]. Normal permission and extension controls keep their existing profile scope.
+
 ## Automatic picture-in-picture
 
 The toggle reads and writes the playback feature's per-site setting ([[Media_Playback]]): `BrowserStore.automaticPictureInPictureAllowed(for:profileID:)` and `setAutomaticPictureInPicture(_:for:profileID:)`, keyed by the page's site in its profile. Saving notifies the window engines, which apply the choice to that profile's open pages. The pinned engine has no per-site content setting for it.

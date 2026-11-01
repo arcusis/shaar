@@ -24,7 +24,7 @@ struct PrivateBrowserWindow: View {
     .background(Color(nsColor: .windowBackgroundColor))
     .onAppear {
       addressDraft = store.address
-      addressIsFocused = true
+      addressIsFocused = !store.showsStartPage
     }
     .onChange(of: store.address) { _, value in addressDraft = value }
     .onChange(of: store.selectedTabID) { _, _ in addressDraft = store.address }
@@ -44,6 +44,20 @@ struct PrivateBrowserWindow: View {
         store.dismissCommand()
         pageIsFocused = true
       }
+    }
+    .alert(
+      "This connection would use HTTP",
+      isPresented: Binding(
+        get: { store.pendingHTTP != nil }, set: { if !$0 { store.cancelHTTP() } }
+      )
+    ) {
+      Button("Try HTTPS") { store.confirmHTTP(useHTTPS: true) }
+      Button("Continue with HTTP", role: .destructive) { store.confirmHTTP(useHTTPS: false) }
+      Button("Cancel", role: .cancel) { store.cancelHTTP() }
+    } message: {
+      Text(
+        "HTTP does not encrypt your connection to \(store.pendingHTTP?.host() ?? "this site"). This warning covers addresses opened here. The engine cannot enforce HTTPS across page links and redirects."
+      )
     }
     .frame(minWidth: 760, minHeight: 520)
   }
@@ -147,6 +161,7 @@ struct PrivateBrowserWindow: View {
         } label: {
           Image(systemName: "arrow.clockwise")
         }
+        PrivateSiteControlsButton(store: store, runtime: runtime)
         TextField("Search or enter address", text: $addressDraft)
           .textFieldStyle(.roundedBorder)
           .focused($addressIsFocused)
@@ -161,10 +176,16 @@ struct PrivateBrowserWindow: View {
       .padding(.vertical, 8)
       .background(Color(nsColor: .windowBackgroundColor))
 
+      if let failure = store.failure {
+        Text(failure).font(.callout).foregroundStyle(.red).padding(10)
+      }
       Divider().opacity(0.4)
       ZStack {
         Color(nsColor: .textBackgroundColor)
-        if let tab = store.selectedTab {
+        if store.showsStartPage {
+          PrivateStartPage(store: store)
+            .id(store.selectedTabID)
+        } else if let tab = store.selectedTab {
           PrivatePageView(
             runtime: runtime, store: store, tabID: tab.id, isFocused: pageIsFocused
           )

@@ -384,11 +384,8 @@ def record_session_recovery_summary(root):
 
 def signal_probe(process, requested_signal):
     try:
-        if os.getpgid(process.pid) == process.pid:
-            os.killpg(process.pid, requested_signal)
-        else:
-            # If ownership changed, cleanup may signal the known child only.
-            process.send_signal(requested_signal)
+        print(f'Signaling owned probe PID {process.pid}: {requested_signal.name}', flush=True)
+        process.send_signal(requested_signal)
     except ProcessLookupError:
         pass
 
@@ -474,14 +471,25 @@ for(const action of ['play','pause','previoustrack','nexttrack']){
 }
 </script></html>"""
 
-PAGE_CSP = "default-src 'none'; img-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'"
-MEDIA_SESSION_CSP = PAGE_CSP + "; connect-src 'self'; media-src blob:"
+PAGE_CSP = "default-src 'none'; img-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self' http://tracker.localhost:* http://localhost:*"
+MEDIA_SESSION_CSP = PAGE_CSP + "; media-src blob:"
 MEDIA_CLIP = Path(__file__).resolve().parent.parent / 'Tests/Fixtures/Media/seekable-clip.webm'
 
 
 class Fixture(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
+        if path.startswith('/private-privacy/'):
+            body = json.dumps({'cookie': self.headers.get('Cookie', ''), 'fixture': 'privacy'}).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('Set-Cookie', 'privacyHttp=1; HttpOnly; Path=/private-privacy/; SameSite=Lax')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         favicon_colors = {
             '/favicon-initial.png': (52, 86, 120),
             '/favicon-restart.png': (138, 75, 18),
@@ -613,6 +621,7 @@ PRIVATE_WINDOW_SCOPE = (
     'third-party endpoints or physical input.'
 )
 PRIVATE_WINDOW_CHECKS = (
+    'privatePrivacyDefaultsAndCookieAllow', 'privateCookieAllowanceEndsWithGrantingWindow',
     'freshMarkedRoot', 'sourceProfileAccepted', 'unknownSourceRejected', 'otrSourceRejected',
     'malformedContextRejected',
     'normalProfileIDCollisionRejected', 'normalWindowIDCollisionRejected',
@@ -862,6 +871,13 @@ def record_private_window_summary(root, *, listener_closed, child_receipts, proo
         private_path = root / f'{phase}-private-window.json'
         if private_path.is_file():
             shutil.copy2(private_path, proof_directory)
+        privacy_path = root / f'{phase}-private-privacy.json'
+        if privacy_path.is_file():
+            shutil.copy2(privacy_path, proof_directory)
+        for appearance in ('light', 'dark'):
+            panel = root / f'{phase}-private-site-controls-{appearance}.png'
+            if panel.is_file():
+                shutil.copy2(panel, proof_directory)
         diagnostic = root / f'{phase}-private-quit-diagnostic.json'
         if diagnostic.is_file():
             shutil.copy2(diagnostic, proof_directory)
@@ -1277,6 +1293,7 @@ def main(argv=None):
                 session_recovery=options.session_recovery)
             with (root / f"{phase}.log").open("w") as log:
                 process = subprocess.Popen(arguments, stdout=log, stderr=log, start_new_session=True, env=probe_env)
+                print(f"Probe PID: {process.pid}", flush=True)
                 try:
                     if abrupt and phase == 'initial':
                         terminate_at_checkpoint(process, root, timeout=90, settle_seconds=35 if options.abrupt_control else 0)

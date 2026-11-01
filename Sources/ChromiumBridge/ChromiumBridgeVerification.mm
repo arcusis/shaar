@@ -93,6 +93,71 @@ static BOOL ProbeViewIsVisibleInWindow(NSView *view, NSWindow *window) {
   }];
 }
 
+- (void)probePrivateNetworkControlsForTabID:(NSString *)tabID completion:(void (^)(BOOL))completion {
+  ArdiaCoreTab *tab = _privateProbeTabs[tabID][@"tab"];
+  if (![self privateProbeEnabled] || !tab || tab.closed || !tab.profile.offTheRecord) {
+    completion(NO);
+    return;
+  }
+  [tab devToolsCall:@"Network.enable" params:@{} timeout:5 completion:^(NSDictionary *result, NSString *error) {
+    if (error) { completion(NO); return; }
+    [tab devToolsCall:@"Network.setBlockedURLs" params:@{@"urls": @[@"*tracker.localhost*", @"http://*"]}
+      timeout:5 completion:^(NSDictionary *result, NSString *error) {
+      if (error) { completion(NO); return; }
+      [tab devToolsCall:@"Network.setCookieControls" params:@{@"enableThirdPartyCookieRestriction": @YES}
+        timeout:5 completion:^(NSDictionary *result, NSString *error) { completion(error == nil); }];
+    }];
+  }];
+}
+
+- (NSDictionary *)privatePrivacyStatusForProbeTabID:(NSString *)tabID {
+  NSDictionary *entry = _privateProbeTabs[tabID];
+  ArdiaCoreTab *tab = entry[@"tab"];
+  if (![self privateProbeEnabled] || !tab || tab.closed || !tab.profile.offTheRecord) return nil;
+  return @{@"ready": entry[@"privacyReady"] ?: @NO, @"failure": entry[@"loadFailure"] ?: @{},
+    @"error": entry[@"privacyError"] ?: NSNull.null};
+}
+
+- (NSDictionary *)privatePrivacyPreferencesForContextID:(NSString *)contextID {
+  if (![self privateProbeEnabled]) return nil;
+  NSDictionary *context = _privateProbeContexts[contextID];
+  ArdiaCoreProfile *profile = context[@"profile"];
+  ArdiaCoreProfile *source = context[@"sourceProfile"];
+  if (!profile || !profile.offTheRecord || profile.destroyed || !source || source.destroyed) return nil;
+  NSMutableDictionary *values = [NSMutableDictionary dictionary];
+  for (NSString *key in @[@"credentials_enable_service", @"autofill.profile_enabled", @"autofill.credit_card_enabled",
+      @"enable_referrers", @"webrtc.ip_handling_policy", @"profile.block_third_party_cookies"]) {
+    values[key] = @{@"private": [profile boolPreference:key] ?: NSNull.null,
+                    @"normal": [source boolPreference:key] ?: NSNull.null};
+  }
+  __block NSDictionary *wildcard = nil;
+  [self->_services call:@"site_settings.set" profileID:context[@"sourceProfileID"]
+    args:@{@"offTheRecord": @YES, @"origin": @"*", @"type": @"cookies", @"value": @"block"}
+    completion:^(NSDictionary *reply) { wildcard = reply; }];
+  values[@"wildcardCookieSetting"] = wildcard ?: @{};
+  return values;
+}
+
+- (void)evaluatePrivacyProbeTabID:(NSString *)tabID script:(NSString *)script
+                          completion:(void (^)(NSString *))completion {
+  NSDictionary *entry = _privateProbeTabs[tabID];
+  ArdiaCoreTab *tab = entry[@"tab"] ?: _tabs[tabID];
+  if (![self privateProbeEnabled] || !tab || tab.closed) {
+    completion(nil);
+    return;
+  }
+  [tab devToolsCall:@"Runtime.evaluate" params:@{@"expression": script, @"returnByValue": @YES, @"awaitPromise": @YES}
+    timeout:10 completion:^(NSDictionary *result, NSString *error) {
+    if (error || result[@"exceptionDetails"] || self->_privateProbeTabs[tabID] != entry || tab.closed) {
+      completion(nil);
+      return;
+    }
+    id value = result[@"result"][@"value"];
+    NSData *data = [value isKindOfClass:NSDictionary.class] ? [NSJSONSerialization dataWithJSONObject:value options:0 error:nil] : nil;
+    completion(data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil);
+  }];
+}
+
 - (BOOL)attemptCancelledPrivateProbeCloseID:(NSString *)windowID {
   NSMutableDictionary *entry = _privateProbeWindows[windowID];
   if (![self privateProbeEnabled] || !entry || [entry[@"closing"] boolValue]) return NO;
@@ -192,7 +257,10 @@ static BOOL ProbeViewIsVisibleInWindow(NSView *view, NSWindow *window) {
   NSURL *url = [NSURL URLWithString:tab.url ?: @""];
   valid = valid && [url.scheme isEqualToString:@"http"] &&
       [@[@"127.0.0.1", @"localhost"] containsObject:url.host.lowercaseString ?: @""];
-  if (!valid) { completion(nil, @"private-owner-rejected"); return; }
+  if (!valid) {
+    completion(nil, tab.loading ? @"private-owner-loading" : @"private-owner-rejected");
+    return;
+  }
   NSDictionary *capturedEntry = _privateProbeTabs[tabID];
   [self captureProbeTab:tab diagnosticCompletion:^(NSData *data, NSString *error) {
     BOOL current = self->_privateProbeTabs[tabID] == capturedEntry &&

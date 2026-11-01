@@ -1296,6 +1296,16 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     _onWindowShowRequest(state.identity, active);
   }
 }
+- (void)tab:(ArdiaCoreTab *)tab didFailLoad:(NSString *)url code:(int)code description:(NSString *)text {
+  NSString *identity = nil;
+  NSMutableDictionary *entry = (NSMutableDictionary *)[self privateEntryForTab:tab identity:&identity];
+  if (!entry || !tab.profile.offTheRecord) return;
+  entry[@"loadFailure"] = @{@"url": url, @"code": @(code), @"description": text};
+  if (self.onPrivateNavigationFailed)
+    self.onPrivateNavigationFailed(entry[@"contextID"], entry[@"windowID"], identity,
+      [NSString stringWithFormat:@"The private page could not load (%@).", text]);
+}
+
 - (void)engine:(ArdiaCoreEngine *)engine permissionRequest:(NSDictionary *)request tab:(ArdiaCoreTab *)tab {
   NSString *identity = request[@"id"];
   NSString *tabID = [self identityForTab:tab];

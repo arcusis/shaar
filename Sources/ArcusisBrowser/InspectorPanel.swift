@@ -24,7 +24,8 @@ struct InspectorPanel: View {
       .padding(.horizontal, 12).frame(height: 40)
       Divider()
       Picker(
-        "Inspector mode", selection: Binding(get: { model.panelMode }, set: model.setPanelMode)
+        "Inspector mode",
+        selection: Binding(get: { model.panelMode }, set: { model.setPanelMode($0) })
       ) {
         ForEach(InspectorModel.PanelMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
       }.pickerStyle(.segmented).labelsHidden().controlSize(.small).padding(12)

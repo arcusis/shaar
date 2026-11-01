@@ -36,8 +36,10 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     return [@[@"n", @"t", @"l", @"w", @"s", @"q", @"r", @"f", @"g", @"d", @"y", @","] containsObject:key.lowercaseString];
   }
   if (chord == (NSEventModifierFlagCommand | NSEventModifierFlagShift)) {
-    return [@[@"w", @"g", @"j", @"t"] containsObject:key.lowercaseString];
+    return [@[@"w", @"g", @"j", @"t", @"r"] containsObject:key.lowercaseString];
   }
+  if (chord == (NSEventModifierFlagCommand | NSEventModifierFlagOption))
+    return [key.lowercaseString isEqualToString:@"i"];
   return chord == (NSEventModifierFlagControl | NSEventModifierFlagOption) &&
     [@[@"[", @"]"] containsObject:key];
 }
@@ -61,6 +63,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     return nil;
   }
   _profiles = [NSMutableDictionary dictionary];
+  _pageCards = [NSMutableDictionary dictionary];
   _primaryWindowID = NSUUID.UUID.UUIDString;
   _windows = [NSMutableDictionary dictionary];
   _tabWindows = [NSMutableDictionary dictionary];
@@ -161,7 +164,12 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   if (_externalAppProbeTesting) strings.push_back(externalProbeSwitch.UTF8String);
   std::vector<const char *> arguments;
   for (const auto &value : strings) arguments.push_back(value.c_str());
-  return [_engineClass runWithArgc:(int)arguments.size() argv:arguments.data() delegate:self];
+  // Quit must end the process, so no extension may keep Chromium running in the background.
+  ARCDisableBackgroundMode(directory);
+  _shutdownGuard = [[ARCEngineShutdownGuard alloc] init];
+  int result = [_engineClass runWithArgc:(int)arguments.size() argv:arguments.data() delegate:self];
+  [_shutdownGuard engineReturned];
+  return result;
 }
 
 - (void)engineDidStart {
@@ -283,6 +291,8 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     }
     for (NSString *tabID in [self->_tabWindows.allKeys copy]) {
       if (![self->_tabWindows[tabID] isEqualToString:identity]) continue;
+      [self->_pageCards[tabID] invalidate];
+      [self->_pageCards removeObjectForKey:tabID];
       [self->_pendingHostClosures removeObject:tabID];
       [self->_tabs removeObjectForKey:tabID];
       [self->_owners removeObjectForKey:tabID];
@@ -294,8 +304,11 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     [self->_windowCloseObservers removeObjectForKey:identity];
     [self->_retiredWindowIDs addObject:identity];
     [self->_windows removeObjectForKey:identity];
-    if (self->_onWindowClosed) self->_onWindowClosed(identity, quitting);
   });
+  // The engine loop may end before the queued native teardown runs. Publish its
+  // confirmed close now so host ownership cannot survive a clean engine exit.
+  // Keep native state retained by the queued block until this callback unwinds.
+  if (_onWindowClosed) _onWindowClosed(identity, quitting);
 }
 - (void)dealloc {
   for (id observer in _windowCloseObservers.allValues) [NSNotificationCenter.defaultCenter removeObserver:observer];
@@ -664,7 +677,16 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   });
 }
 
-- (NSView *)viewForTabID:(NSString *)tabID { return _tabs[tabID].view; }
+- (NSView *)viewForTabID:(NSString *)tabID {
+  ArdiaCoreTab *tab = [self liveTabForID:tabID];
+  if (!tab || !tab.view) return nil;
+  ARCDevToolsPageView *view = _pageCards[tabID];
+  if (!view) {
+    view = [[ARCDevToolsPageView alloc] initWithTab:tab];
+    _pageCards[tabID] = view;
+  }
+  return view;
+}
 - (void)activateTabID:(NSString *)tabID {
   ArdiaCoreTab *tab = _tabs[tabID];
   ARCNativeWindowState *state = [self stateForTabID:tabID];
@@ -822,12 +844,21 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   if (_tabs[tabID]) { [self advanceDocumentGenerationForTabID:tabID]; [self invalidateExternalRequestsForTabID:tabID windowID:nil]; [_tabs[tabID] reload]; }
 }
 - (BOOL)reloadTabID:(NSString *)tabID profileID:(NSString *)profileID {
+  return [self reloadTabID:tabID profileID:profileID mode:ARCPageReloadModeNormal];
+}
+- (BOOL)reloadTabID:(NSString *)tabID profileID:(NSString *)profileID mode:(ARCPageReloadMode)mode {
   ArdiaCoreTab *tab = _tabs[tabID];
   if (!tab || tab.closed || ![self isSelectedTabID:tabID] ||
       ![_owners[tabID] isEqualToString:profileID]) return NO;
+  // Chromium discards in place: the tab keeps its WebContents and history but loses its renderer.
+  if (mode == ARCPageReloadModeNewRenderer && !tab.discarded && ![tab discard]) return NO;
   [self advanceDocumentGenerationForTabID:tabID];
   [self invalidateExternalRequestsForTabID:tabID windowID:nil];
-  [tab reload];
+  if (mode == ARCPageReloadModeBypassingCache) {
+    [tab reloadIgnoringCache];
+  } else {
+    [tab reload];
+  }
   return YES;
 }
 - (BOOL)placeTabIDs:(NSArray<NSString *> *)tabIDs pinnedIDs:(NSArray<NSString *> *)pinnedIDs
@@ -1228,6 +1259,8 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   [_pendingHostClosures removeObject:identity];
   [self stopFindingInTabID:identity];
   if ([state.selectedTabID isEqualToString:identity]) state.selectedTabID = nil;
+  [_pageCards[identity] invalidate];
+  [_pageCards removeObjectForKey:identity];
   [_tabs removeObjectForKey:identity];
   [_owners removeObjectForKey:identity];
   [_tabWindows removeObjectForKey:identity];

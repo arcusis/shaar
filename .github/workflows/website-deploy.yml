@@ -50,8 +50,9 @@ jobs:
       - name: Deploy Worker and static assets
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          test -n "$CLOUDFLARE_API_TOKEN" || { echo 'CLOUDFLARE_API_TOKEN secret is required'; exit 1; }
-          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo 'CLOUDFLARE_ACCOUNT_ID variable is required'; exit 1; }
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo '::notice title=Website deploy skipped::No CLOUDFLARE_API_TOKEN secret is set. Deploy with `pnpm wrangler deploy` from a logged-in machine.'
+            exit 0
+          fi
           pnpm wrangler deploy

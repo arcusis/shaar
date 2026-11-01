@@ -1,0 +1,2 @@
+# Hash-pinned SPDX validator, installed only for shipping bundle checks.
+spdx-tools==0.8.5

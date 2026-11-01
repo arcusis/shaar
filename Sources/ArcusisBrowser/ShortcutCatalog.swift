@@ -53,6 +53,8 @@ struct ShortcutCatalog {
     case .findPrevious: ("g", [.command, .shift])
     case .sidebar: ("s", .command)
     case .reload: ("r", .command)
+    case .hardReload: ("r", [.command, .shift])
+    case .developerTools: ("i", [.command, .option])
     case .newSpace: ("S", [.command, .shift])
     case .editSpace: ("s", [.command, .option])
     case .addFavorite: ("k", [.command, .option])
@@ -79,6 +81,12 @@ struct ShortcutCatalog {
     case .settings: (",", .command)
     case .quit: ("q", .command)
     }
+  }
+
+  /// Menu glyphs such as ⇧⌘R for a command's shortcut, or nil when it has none.
+  static func displayKeys(for command: BrowserMenuCommand?) -> String? {
+    guard let command, let shortcut = shortcut(for: command) else { return nil }
+    return Entry(menu: "", title: "", key: shortcut.key, modifiers: shortcut.modifiers).displayKeys
   }
 
   static func standardShortcut(for title: String) -> (

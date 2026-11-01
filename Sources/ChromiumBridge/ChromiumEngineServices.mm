@@ -44,7 +44,8 @@ static void ServiceEvent(void *context, const char *topic, const char *json) {
   auto version = (ac_engine_abi_version_t)dlsym(library, "ac_engine_abi_version");
   _setSink = (ac_engine_set_event_sink_t)dlsym(library, "ac_engine_set_event_sink");
   NSArray *methods = @[@"downloads.list", @"downloads.pause", @"downloads.resume", @"downloads.cancel", @"downloads.remove",
-    @"bookmarks.tree", @"bookmarks.apply", @"bookmarks.watch", @"history.query", @"history.delete_urls", @"history.watch"];
+    @"bookmarks.tree", @"bookmarks.apply", @"bookmarks.watch", @"history.query", @"history.delete_urls", @"history.watch",
+    @"site_settings.get", @"site_settings.set", @"site_data.clear", @"browsing_data.clear"];
   NSMutableDictionary *calls = [NSMutableDictionary dictionary];
   for (NSString *method in methods) {
     NSString *symbol = [@"ac_" stringByAppendingString:[method stringByReplacingOccurrencesOfString:@"." withString:@"_"]];

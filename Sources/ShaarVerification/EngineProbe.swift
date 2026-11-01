@@ -25,6 +25,7 @@ final class EngineProbe {
   private let externalAppConsentMode: Bool
   private let privateWindowMode: Bool
   private let privateWindowRunID: String?
+  private let quitExitMode: Bool
   private let sessionRecoveryMode: Bool
   private let expectedAfterTermination: BrowserSession?
   private let output: URL
@@ -43,6 +44,7 @@ final class EngineProbe {
   private var nativeFavoritesProbe: NativeFavoritesProbe?
   private var externalAppConsentProbe: ExternalAppConsentProbe?
   private var externalAppEvidence: ExternalAppConsentProbe.Evidence?
+  private var quitExitProbe: QuitExitProbe?
   private var resultError: Error?
   private enum BootstrapStage: String {
     case startup, loadingAlpha, loadingBeta, openingAlpha, openingBeta
@@ -63,7 +65,7 @@ final class EngineProbe {
     bitwardenOnboardingControl: Bool,
     awaitAbruptTermination: Bool, expectAbruptRecovery: Bool, savedTabCapacityMode: Bool,
     externalAppConsentMode: Bool, privateWindowMode: Bool, privateWindowRunID: String?,
-    sessionRecoveryMode: Bool
+    quitExitMode: Bool, sessionRecoveryMode: Bool
   ) throws {
     self.root = root
     self.fixture = fixture
@@ -75,6 +77,7 @@ final class EngineProbe {
     self.externalAppConsentMode = externalAppConsentMode
     self.privateWindowMode = privateWindowMode
     self.privateWindowRunID = privateWindowRunID
+    self.quitExitMode = quitExitMode
     self.sessionRecoveryMode = sessionRecoveryMode
     expectedAfterTermination =
       expectAbruptRecovery ? try AbruptProbeCheckpoint.expectedSession(root: root) : nil
@@ -159,6 +162,7 @@ final class EngineProbe {
       let savedTabCapacityMode = arguments.contains("--probe-saved-tab-capacity")
       let externalAppConsentMode = arguments.contains("--probe-external-app-consent")
       let privateWindowMode = arguments.contains("--probe-private-window")
+      let quitExitMode = arguments.contains("--probe-quit-exit")
       let sessionRecoveryMode = arguments.contains("--probe-session-recovery")
       let privateWindowRunID = privateWindowMode ? try value("--probe-private-window-run-id") : nil
       guard
@@ -173,6 +177,7 @@ final class EngineProbe {
         "--probe-await-abrupt-termination", "--probe-expect-abrupt-recovery",
         "--probe-saved-tab-capacity",
         "--probe-private-window", "--probe-session-recovery",
+        "--probe-quit-exit",
       ]
       guard externalAppConsentMode == noLaunchGuard,
         !externalAppConsentMode || !conflictingFlags.contains(where: arguments.contains),
@@ -180,6 +185,10 @@ final class EngineProbe {
           || !conflictingFlags.filter({ $0 != "--probe-private-window" }).contains(
             where: arguments.contains),
         !privateWindowMode || (!externalAppConsentMode && !noLaunchGuard),
+        !quitExitMode
+          || !conflictingFlags.filter({ $0 != "--probe-quit-exit" }).contains(
+            where: arguments.contains),
+        !quitExitMode || !noLaunchGuard,
         !sessionRecoveryMode
           || !conflictingFlags.filter({ $0 != "--probe-session-recovery" }).contains(
             where: arguments.contains)
@@ -197,7 +206,8 @@ final class EngineProbe {
         awaitAbruptTermination: awaitAbruptTermination,
         expectAbruptRecovery: expectAbruptRecovery, savedTabCapacityMode: savedTabCapacityMode,
         externalAppConsentMode: externalAppConsentMode, privateWindowMode: privateWindowMode,
-        privateWindowRunID: privateWindowRunID, sessionRecoveryMode: sessionRecoveryMode)
+        privateWindowRunID: privateWindowRunID, quitExitMode: quitExitMode,
+        sessionRecoveryMode: sessionRecoveryMode)
       probe.runtime.onReady = { [weak probe] in
         guard let probe else { return }
         Task {
@@ -311,6 +321,16 @@ final class EngineProbe {
         let probe = SavedTabCapacityProbe(
           runtime: runtime, engine: browserEngine, store: store, phase: phase, capacity: capacity)
         savedTabCapacityProbe = probe
+        checks += try await probe.run()
+        finish(error: nil)
+        return
+      }
+      if quitExitMode {
+        guard let browserEngine else { throw ProbeFailure("Quit probe engine is missing.") }
+        let probe = try QuitExitProbe(
+          runtime: runtime, primary: browserEngine, store: store, root: root, fixture: fixture,
+          phase: phase)
+        quitExitProbe = probe
         checks += try await probe.run()
         finish(error: nil)
         return
@@ -563,6 +583,14 @@ final class EngineProbe {
           primary: browserEngine, store: store, root: root, fixture: fixture, phase: phase)
         nativeHostProbe = nativeHost
         checks += try await nativeHost.run()
+        fixtureStage = "SiteControls"
+        checks += try await SiteControlsProbe(
+          engine: browserEngine, store: store, root: root, fixture: fixture, phase: phase
+        ).run()
+        fixtureStage = "DevTools"
+        checks += try await DevToolsProbe(
+          engine: browserEngine, store: store, root: root, fixture: fixture, phase: phase
+        ).run()
         fixtureStage = "normal-fixtures-complete"
         localFixturesPassed = true
         if includeBitwarden {
@@ -622,10 +650,35 @@ final class EngineProbe {
     }
     passed = resultError == nil && !externalAppConsentMode
     if !externalAppConsentMode { writeReport() }
-    runtime.quit()
+    quit()
+  }
+
+  /// The quit probe must leave through the host's own Quit command, as a person would.
+  private func quit() {
+    guard let quitExitProbe else {
+      runtime.quit()
+      return
+    }
+    do { try quitExitProbe.requestQuit() } catch {
+      resultError = ProbeFailure(
+        "\(resultError?.localizedDescription ?? "") Quit request: \(error.localizedDescription)")
+      passed = false
+      writeReport()
+      runtime.quit()
+    }
   }
 
   private func auditNativeHostShutdown() {
+    if let quitExitProbe {
+      let closures = quitExitProbe.auditAfterQuit()
+      checks += closures
+      if closures.isEmpty && resultError == nil {
+        resultError = ProbeFailure("Quit left a hidden host window open.")
+        passed = false
+      }
+      writeReport()
+      return
+    }
     if externalAppConsentMode {
       let engineClosed = browserEngine?.isClosed == true
       let primaryWindowClosed = runtime.window(forID: runtime.primaryWindowID) == nil
@@ -687,6 +740,7 @@ final class EngineProbe {
 
   private var baseTimeoutSeconds: Double {
     if externalAppConsentMode || savedTabCapacityMode { return 180 }
+    if quitExitMode { return 90 }
     if sessionRecoveryMode { return 90 }
     if includeBitwarden { return 150 }
     return privateWindowMode ? 210 : 75
@@ -694,6 +748,7 @@ final class EngineProbe {
 
   private var probeMode: String {
     if privateWindowMode { return PrivateWindowProbe.mode }
+    if quitExitMode { return QuitExitProbe.mode }
     if externalAppConsentMode { return ExternalAppConsentProbe.mode }
     if sessionRecoveryMode { return SessionRecoveryProbe.mode }
     return savedTabCapacityMode ? SavedTabCapacityFixture.mode : "full-fixture"
@@ -702,6 +757,7 @@ final class EngineProbe {
   private var reportScope: String {
     if savedTabCapacityMode { return SavedTabCapacityFixture.scope }
     if externalAppConsentMode { return ExternalAppConsentProbe.scope }
+    if quitExitMode { return QuitExitProbe.scope }
     if sessionRecoveryMode { return SessionRecoveryProbe.scope }
     if privateWindowMode {
       return
@@ -737,6 +793,8 @@ final class EngineProbe {
       "externalAppConsentProbe": externalAppConsentMode,
       "externalAppConsentRunID": externalAppEvidence?.runID as Any? ?? NSNull(),
       "privateWindowOnly": privateWindowMode,
+      "quitExitOnly": quitExitMode,
+      "quitEventLoopStopped": quitExitProbe?.stoppedEventLoop ?? false,
       "privateWindowProbe": privateWindowMode,
       "sessionRecoveryOnly": sessionRecoveryMode,
       "abruptRecoveryProbe": expectedAfterTermination != nil,

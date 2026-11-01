@@ -38,6 +38,15 @@ typedef NS_ENUM(NSInteger, ARCPictureInPictureCommand) {
   ARCPictureInPictureCommandSkip,
 };
 
+/// How the selected page reloads.
+typedef NS_ENUM(NSInteger, ARCPageReloadMode) {
+  ARCPageReloadModeNormal,
+  /// Revalidates every resource with its server instead of using cached copies.
+  ARCPageReloadModeBypassingCache,
+  /// Releases the page's renderer process, then loads the page again in a new one.
+  ARCPageReloadModeNewRenderer,
+};
+
 /// All methods and callbacks run on the main thread. The engine owns the AppKit run loop.
 @interface ARCChromiumRuntime : NSObject
 @property(copy, nullable) void (^onReady)(void);
@@ -124,6 +133,7 @@ typedef NS_ENUM(NSInteger, ARCPictureInPictureCommand) {
 - (void)goForwardInTabID:(NSString *)tabID;
 - (void)reloadTabID:(NSString *)tabID;
 - (BOOL)reloadTabID:(NSString *)tabID profileID:(NSString *)profileID;
+- (BOOL)reloadTabID:(NSString *)tabID profileID:(NSString *)profileID mode:(ARCPageReloadMode)mode;
 - (BOOL)findInTabID:(NSString *)tabID profileID:(NSString *)profileID requestID:(NSString *)requestID
               text:(NSString *)text forward:(BOOL)forward;
 - (void)stopFindingInTabID:(NSString *)tabID;
@@ -147,6 +157,8 @@ typedef NS_ENUM(NSInteger, ARCPictureInPictureCommand) {
 
 @interface ARCChromiumRuntime (Extensions)
 - (NSArray<NSDictionary<NSString *, id> *> *)extensionsForProfileID:(NSString *)profileID;
+/// The current action title for an extension in the selected tab's owning profile.
+- (nullable NSString *)extensionActionTitleForID:(NSString *)extensionID tabID:(NSString *)tabID;
 - (BOOL)executeExtensionID:(NSString *)extensionID tabID:(NSString *)tabID error:(NSError **)error;
 /// Runs one fixed extension-management operation against a validated extension ID and profile.
 - (void)manageExtensionsForProfileID:(NSString *)profileID
@@ -161,11 +173,18 @@ typedef NS_ENUM(NSInteger, ARCPictureInPictureCommand) {
 - (void)closeExtensionPopupForWindowID:(NSString *)windowID;
 @end
 
+/// Chromium's own inspector, hosted alongside its inspected page inside the page card.
+@interface ARCChromiumRuntime (DevTools)
+- (BOOL)showDevToolsForTabID:(NSString *)tabID;
+- (BOOL)closeDevToolsForTabID:(NSString *)tabID;
+- (nullable NSView *)devToolsViewForTabID:(NSString *)tabID;
+@end
+
 /// Media Session state reported by a tab's pages, and actions sent back to them.
 @interface ARCChromiumRuntime (MediaSession)
 /// Keys: playbackState (none, paused, playing), title, artist, album, artwork (http or https URL
 /// or empty), actions (supported Media Session action names), hasVideo, canSeek and muted (the
-/// tab's native audio mute).
+/// tab's native audio mute), and volume (0...1, or null without a media element).
 - (nullable NSDictionary<NSString *, id> *)mediaSessionStateForTabID:(NSString *)tabID;
 /// `seconds` is the offset for seeking backward or forward and the position for seeking to.
 /// Returns NO when the tab has no media state or does not support the action.
@@ -174,6 +193,9 @@ typedef NS_ENUM(NSInteger, ARCPictureInPictureCommand) {
   NS_SWIFT_NAME(sendMediaSessionAction(_:seconds:tabID:));
 /// Mutes the tab's audio output in the engine, independently of the page's own volume.
 - (BOOL)setMuted:(BOOL)muted tabID:(NSString *)tabID;
+/// Sets the reporting frame's active media volume in [0, 1]. Positive volume also unmutes.
+/// Returns NO for invalid values or when the tab has no controllable media element.
+- (BOOL)setMediaVolume:(double)volume tabID:(NSString *)tabID;
 @end
 
 /// Chromium's built-in video picture-in-picture, driven for automatic picture-in-picture and
@@ -198,6 +220,31 @@ typedef NS_ENUM(NSInteger, ARCPictureInPictureCommand) {
 - (BOOL)sendPictureInPictureCommand:(ARCPictureInPictureCommand)command seconds:(double)seconds
                               tabID:(NSString *)tabID
   NS_SWIFT_NAME(sendPictureInPictureCommand(_:seconds:tabID:));
+@end
+
+/// Site controls for the selected tab of a regular profile. Origins are http(s) origins; settings
+/// and site data are Chromium's own per-profile content settings and storage.
+@interface ARCChromiumRuntime (SiteControls)
+/// Chromium's security summary for the selected tab: `level`, `origin` and, for HTTPS pages, a
+/// `certificate` summary with the leaf's `sha256` fingerprint.
+- (nullable NSDictionary<NSString *, id> *)securityInfoForTabID:(NSString *)tabID profileID:(NSString *)profileID;
+/// Each content setting keyed by its engine name, with `value` (allow, block or ask) and `isDefault`.
+- (void)siteSettingsForOrigin:(NSString *)origin profileID:(NSString *)profileID
+                   completion:(void (NS_SWIFT_UI_ACTOR ^)(NSDictionary<NSString *, NSDictionary *> * _Nullable,
+                                                          NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
+/// `value` is allow, block, ask or default; default removes the site's exception.
+- (void)setSiteSetting:(NSString *)type value:(NSString *)value origin:(NSString *)origin
+             profileID:(NSString *)profileID
+            completion:(void (NS_SWIFT_UI_ACTOR ^)(NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
+/// Deletes cookies and stored data for the origin's whole site in this profile.
+- (void)clearSiteDataForOrigin:(NSString *)origin profileID:(NSString *)profileID
+                    completion:(void (NS_SWIFT_UI_ACTOR ^)(NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
+/// Empties this profile's HTTP cache, as Chromium's Empty Cache and Hard Reload does.
+- (void)clearCacheForProfileID:(NSString *)profileID
+                    completion:(void (NS_SWIFT_UI_ACTOR ^)(NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
+/// Deletes every cookie the selected tab's page would send, including partitioned ones.
+- (void)clearCookiesForTabID:(NSString *)tabID profileID:(NSString *)profileID
+                  completion:(void (NS_SWIFT_UI_ACTOR ^)(NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
 @end
 
 /// Product private browsing API. Contexts bind to an already-loaded regular Profile.

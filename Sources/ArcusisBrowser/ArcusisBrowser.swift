@@ -342,6 +342,9 @@ private struct BrowserApplication: App {
       CommandMenu("Tabs") {
         Button("Reload") { store.reloadCurrentPage() }.keyboardShortcut("r")
           .disabled(!store.canReloadCurrentPage)
+        Button("Hard Reload") { store.reloadCurrentPage(.bypassingCache) }
+          .keyboardShortcut("r", modifiers: [.command, .shift])
+          .disabled(!store.canReloadCurrentPage)
         Button("Close tab") {
           store.closeCurrentPage()
         }

@@ -17,6 +17,8 @@ bash scripts/test-engine.sh --session-recovery
 
 It does not simulate power loss; `F_FULLFSYNC` ordering and backup fallback are covered by `SnapshotFileTests`.
 
+[PR #331](https://github.com/arcusis/shaar/pull/331) reports the strict `--abrupt-restart` run failing at `restart restores Alpha Profile Favorite cookie` on its baseline and branch. Its summary also tries to read an `initial.json` that the killed initial phase never writes. That mode is not in CI. The distinct `--session-recovery` mode is in CI and verifies the managed JSON writer, not Chromium cookie-flush durability. See [[Session_Durability]].
+
 After the engine script creates `.venv`, runner checks can be executed with:
 
 ```sh

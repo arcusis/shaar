@@ -7,7 +7,9 @@
 #import "include/ChromiumBridgeVerification.h"
 #import "ChromiumDownloads.h"
 #import "ChromiumLibrary.h"
+#import "ChromiumShutdownGuard.h"
 #import "ChromiumMediaSession.h"
+#import "ChromiumDevTools.h"
 #import "ChromiumWebStoreFit.h"
 #import "../../ThirdParty/ArdiaCore/ArdiaCore.h"
 
@@ -51,6 +53,10 @@ NSString *ARCValidatedProfileID(NSString *profileID);
   NSMutableSet<NSString *> *_retiredWindowIDs;
   NSMutableDictionary<NSString *, ArdiaCoreProfile *> *_profiles;
   NSMutableDictionary<NSString *, ArdiaCoreTab *> *_tabs;
+  NSMutableDictionary<NSString *, ARCDevToolsPageView *> *_pageCards;
+  NSString *_probeInspectTabID;
+  BOOL _probeInspectFound;
+  NSMutableDictionary<NSString *, id> *_probeInspectAudit;
   NSMutableDictionary<NSString *, ArdiaCoreTab *> *_extensionManagers;
   NSMutableDictionary<NSString *, NSMutableDictionary *> *_privateProbeContexts;
   NSMutableDictionary<NSString *, NSMutableDictionary *> *_privateProbeWindows;
@@ -82,6 +88,7 @@ NSString *ARCValidatedProfileID(NSString *profileID);
   ARCEngineServices *_services;
   ARCLibraryService *_libraryService;
   ARCWebStoreFit *_webStoreFit;
+  ARCEngineShutdownGuard *_shutdownGuard;
   ARCMediaSessionTracker *_mediaSessions;
   /// The tab whose video Chromium's picture-in-picture window shows.
   NSString *_pictureInPictureVideoTabID;

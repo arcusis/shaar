@@ -1,5 +1,8 @@
 # Verification
 
+- [[Private_Fixture_Readiness]]
+- [[CI_Pipeline_Design]]
+- [[CI_Pipeline]]
 - [[Source_And_Native_Verification]]
 - [[Test_Coverage]]
 - [[Verification_Harness]]
@@ -10,6 +13,9 @@
 - [[Native_Window_Verification]]
 - [[Managed_Host_Verification]]
 - [[Abrupt_Restart_Durability]]
+- [[Session_Durability]]
+- [[Quit_Exit_Verification]]
+- [[Notebook_Maintenance]]
 - [[Bitwarden_Compatibility]]
 - [[Project_State]]
 - [[Arc_Reference_Library]]

@@ -11,6 +11,17 @@ import Testing
 struct ExtensionManagementTests {
   private let validID = String(repeating: "b", count: 32)
 
+  @Test func extensionHelpIncludesDistinctActionTitlesAndFallsBackToItsName() {
+    let item = ManagedExtension(
+      id: validID, name: "Password Manager", version: "1", description: "", enabled: true,
+      mayDisable: true, permissions: [], hostPermissions: [])
+    #expect(item.help(actionTitle: "Unlock vault") == "Password Manager: Unlock vault")
+    #expect(item.help(actionTitle: "  Unlock vault\n") == "Password Manager: Unlock vault")
+    #expect(item.help(actionTitle: nil) == "Password Manager")
+    #expect(item.help(actionTitle: " \n") == "Password Manager")
+    #expect(item.help(actionTitle: "Password Manager") == "Password Manager")
+  }
+
   @Test func operationsMapToBridgeOperationsWithTheirArguments() {
     let enable = ExtensionManagementOperation.setEnabled(id: validID, enabled: true)
     #expect(enable.bridgeOperation == .setEnabled)

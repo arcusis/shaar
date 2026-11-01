@@ -6,8 +6,8 @@ The adapter loads the framework, owns engine/profile/tab/window objects, returns
 
 Objective-C++ is an implementation choice, not a requirement for every browser feature. The upstream API is substantially Objective-C/C; a stable Swift-importable module could reduce wrapping. That alternative needs ABI, lifecycle and update evaluation before a rewrite. Keep feature state/UI in Swift and the engine adapter narrow.
 
-The repository's four JavaScript files are authored MV3 test-extension fixtures under Tests/Fixtures/ProfileExtension. They test browser behavior; the application shell is not a JavaScript UI. Swift probe code also evaluates page/extension expressions for diagnostics. A native browser still renders websites containing JavaScript,.
+The JavaScript files under `Tests/Fixtures/ProfileExtension` are authored MV3 test-extension fixtures. The bridge also injects a main-world media script for playback and picture-in-picture because the pinned engine lacks the required media-session API; see [[Media_Playback]]. Swift probe code evaluates page/extension expressions for diagnostics. The application shell remains native SwiftUI/AppKit, and web pages execute their own JavaScript through Chromium.
 
 Probe code lives in the separate `ShaarVerification` executable, and test-only engine entry points in the `ChromiumBridge.Verification` submodule that the app never imports; see [[Verification_Harness]].
 
-Related: [[Browser_Architecture]], [[Native_Window_Ownership]], [[Source_And_Native_Verification]].
+Related: [[Browser_Architecture]], [[Native_Window_Ownership]], [[Engine_Source_Build]], [[Source_And_Native_Verification]].

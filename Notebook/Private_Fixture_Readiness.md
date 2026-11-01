@@ -12,4 +12,6 @@ Local validation built all test targets in 78.56 seconds, passed 12 focused stor
 
 [Hosted preflight 41336411894](https://github.com/arcusis/shaar/actions/runs/41336411894) passed all five jobs on `1a6a07d`: each of three private fixtures passed 664 initial and 665 restart checks, all six Quit phases passed five checks each, baseline passed 598/599 checks, and recovery passed eight checks. Visuals and the shipping guard/signature checks passed. No failed repetition was retried. These finite results do not establish unlimited stability or address the pending-navigation engine crash in #333, real account compatibility or physical keyboard/window behavior.
 
+The prerequisite is rebased onto production `6f89d81`, including the merged DevTools, media, launcher, indicator and tooltip changes. Their new engine probes remain intact. The earlier local/preflight results describe the preceding base; the rebased candidate requires fresh hosted validation.
+
 Related: [[Quit_Exit_Verification]], [[Verification_Harness]], [[Source_And_Native_Verification]], [[Extension_Storage_Verification]].

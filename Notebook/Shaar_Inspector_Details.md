@@ -35,4 +35,6 @@ Opt-in public captures use React's public documentation for exposed component da
 
 References: [React Fiber types](https://github.com/facebook/react/blob/main/packages/react-reconciler/src/ReactInternalTypes.js), [Vue component metadata](https://github.com/vuejs/core/blob/main/packages/runtime-core/src/component.ts), [Svelte DOM metadata](https://github.com/sveltejs/svelte/blob/main/packages/svelte/src/internal/client/dev/elements.js), [Svelte dev ancestry](https://github.com/sveltejs/svelte/blob/main/packages/svelte/src/internal/client/context.js), [CDP accessibility](https://chromedevtools.github.io/devtools-protocol/tot/Accessibility/).
 
+Native unit coverage validates bounded snapshot publication, stale document/tab rejection, duplicate component identities, asset dimension/SVG limits, and unordered light/dark rendering of Component, Accessibility and Assets sections. The test-only Vue runtime is pinned to 3.5.42, including the upstream [server-renderer security fix](https://github.com/vuejs/core/security/advisories/GHSA-g2v6-rqmx-r4w6); no dependency exception is used.
+
 Related: [[Shaar_Inspector]], [[Shaar_Inspector_CSS]], [[Verification_Harness]]. Issue: [#366, Phase C](https://github.com/arcusis/shaar/issues/366).

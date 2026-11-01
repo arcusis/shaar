@@ -2596,7 +2596,7 @@
   ],
   "state" : {
     "closed" : false,
-    "revision" : 38,
+    "revision" : 39,
     "selection" : {
       "ancestors" : [
         {
@@ -2727,7 +2727,7 @@
       "label" : "img",
       "locked" : true,
       "playwright" : "page.locator(\"xpath=\/*[local-name()='html'][1]\/*[local-name()='body'][1]\/*[local-name()='div'][2]\/*[local-name()='div'][1]\/*[local-name()='main'][1]\/*[local-name()='div'][1]\/*[local-name()='section'][1]\/*[local-name()='p'][3]\/*[local-name()='img'][1]\")",
-      "revision" : 38,
+      "revision" : 39,
       "tag" : "img",
       "typography" : {
         "family" : "Inter, sans-serif",

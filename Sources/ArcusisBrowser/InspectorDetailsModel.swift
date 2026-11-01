@@ -131,15 +131,7 @@ final class InspectorDetailsModel {
       switch tab {
       case .component:
         let next: InspectorComponentTree = try await packet("components()", inspector: inspector)
-        let identities = Set(next.nodes.map(\.id))
-        guard next.framework == nil || ["React", "Vue", "Svelte"].contains(next.framework!),
-          next.nodes.count <= 250, identities.count == next.nodes.count,
-          next.nodes.allSatisfy({ $0.parent == nil || identities.contains($0.parent!) }),
-          next.selected == nil || identities.contains(next.selected!),
-          next.nodes.allSatisfy({
-            $0.id > 0 && $0.name.count <= 160 && ($0.source?.count ?? 0) <= 1024
-          }), (next.limit?.count ?? 0) <= 512
-        else { throw InspectorFailure("Component tree exceeds supported limits.") }
+        try validateTree(next)
         let chosen =
           !changed && next.nodes.contains(where: { $0.id == selectedComponent })
           ? selectedComponent : next.selected
@@ -150,9 +142,7 @@ final class InspectorDetailsModel {
         if !changed && selectedComponent != chosen { return }
         try validate(data)
         guard data?.id == chosen else { throw CancellationError() }
-        tree = next
-        component = data
-        selectedComponent = chosen
+        try receive(.component(next, data), selectionID: selection.id, generation: generation)
       case .accessibility:
         var next: InspectorAccessibilityData = try await packet(
           "accessibility()", inspector: inspector)
@@ -193,7 +183,7 @@ final class InspectorDetailsModel {
           next.warnings.append("Computed text contrast is below WCAG AA.")
         }
         guard matches(inspector, id: selection.id, generation: generation, tab: tab) else { return }
-        accessibility = next
+        try receive(.accessibility(next), selectionID: selection.id, generation: generation)
       case .assets:
         let next: InspectorAssetsData = try await packet("assets()", inspector: inspector)
         guard next.images.count <= 16, next.images.allSatisfy(\.valid),
@@ -217,14 +207,9 @@ final class InspectorDetailsModel {
             .init(url: $0.url, mime: $0.mime, frameID: $0.frameID)
           }
         guard matches(inspector, id: selection.id, generation: generation, tab: tab) else { return }
-        assets = resolved
+        try receive(.assets(resolved), selectionID: selection.id, generation: generation)
       default: return
       }
-      selectedID = selection.id
-      epoch = generation
-      activeTab = tab
-      updated = Date()
-      failure = nil
     } catch {
       if matches(inspector, id: selection.id, generation: generation, tab: tab),
         !(error is CancellationError)
@@ -232,6 +217,71 @@ final class InspectorDetailsModel {
         failure = error.localizedDescription
       }
     }
+  }
+
+  enum Snapshot {
+    case component(InspectorComponentTree, InspectorComponentData?)
+    case accessibility(InspectorAccessibilityData)
+    case assets(InspectorAssetsData)
+    var tab: InspectorModel.Tab {
+      switch self {
+      case .component: .component
+      case .accessibility: .accessibility
+      case .assets: .assets
+      }
+    }
+  }
+
+  /// Publish an enriched snapshot only for the document, selected element and tab that requested it.
+  func receive(_ snapshot: Snapshot, selectionID: Int, generation: Int) throws {
+    guard let inspector,
+      matches(inspector, id: selectionID, generation: generation, tab: snapshot.tab)
+    else { throw CancellationError() }
+    switch snapshot {
+    case .component(let tree, let data):
+      try validateTree(tree)
+      try validate(data)
+      guard data == nil || tree.nodes.contains(where: { $0.id == data?.id }) else {
+        throw InspectorFailure("Component data does not belong to this tree.")
+      }
+      self.tree = tree
+      component = data
+      selectedComponent = data?.id ?? tree.selected
+    case .accessibility(let data):
+      guard data.aria.count <= 64, data.properties.count <= 64, data.role.count <= 512,
+        data.name.count <= 512,
+        (data.aria + data.properties).allSatisfy({ $0.name.count <= 128 && $0.value.count <= 512 }),
+        data.warnings.count <= 20, data.warnings.allSatisfy({ $0.count <= 512 }),
+        data.tabOrder.map({ (1...5000).contains($0) }) ?? true
+      else { throw InspectorFailure("Accessibility data exceeds supported limits.") }
+      accessibility = data
+    case .assets(let data):
+      guard data.images.count <= 16, data.images.allSatisfy(\.valid),
+        (data.svg?.utf8.count ?? 0) <= 262_144,
+        data.fonts.count <= 80,
+        data.fonts.allSatisfy({
+          $0.url.count <= 16_384 && $0.mime.count <= 512 && $0.frameID.count <= 1024
+        })
+      else { throw InspectorFailure("Asset data exceeds supported limits.") }
+      assets = data
+    }
+    selectedID = selectionID
+    epoch = generation
+    activeTab = snapshot.tab
+    updated = Date()
+    failure = nil
+  }
+
+  private func validateTree(_ next: InspectorComponentTree) throws {
+    let identities = Set(next.nodes.map(\.id))
+    guard next.framework == nil || ["React", "Vue", "Svelte"].contains(next.framework!),
+      next.nodes.count <= 250, identities.count == next.nodes.count,
+      next.nodes.allSatisfy({ $0.parent == nil || identities.contains($0.parent!) }),
+      next.selected == nil || identities.contains(next.selected!),
+      next.nodes.allSatisfy({
+        $0.id > 0 && $0.name.count <= 160 && ($0.source?.count ?? 0) <= 1024
+      }), (next.limit?.count ?? 0) <= 512
+    else { throw InspectorFailure("Component tree exceeds supported limits.") }
   }
 
   func selectComponent(_ identity: Int) async {

@@ -541,19 +541,7 @@ final class InspectorProbe {
           "properties": value.properties.map { ["name": $0.name, "value": $0.value] },
         ] as [String: Any]
       } as Any? ?? NSNull(),
-      "assets": model.details.assets.map { value in
-        [
-          "images": value.images.map { image in
-            [
-              "url": image.url, "mime": image.mime as Any? ?? NSNull(),
-              "renderedWidth": image.renderedWidth, "renderedHeight": image.renderedHeight,
-              "naturalWidth": image.naturalWidth, "naturalHeight": image.naturalHeight,
-              "transferSize": image.transferSize as Any? ?? NSNull(),
-            ] as [String: Any]
-          }, "fontFiles": value.fonts.map { ["url": $0.url, "mime": $0.mime] },
-          "svgTruncated": value.svgTruncated,
-        ] as [String: Any]
-      } as Any? ?? NSNull(),
+      "assets": Self.assetReceipt(model.details.assets),
       "renderedFonts": model.selection?.renderedFonts ?? [],
       "pageFonts": model.selection?.pageFonts ?? [],
     ]
@@ -589,6 +577,22 @@ final class InspectorProbe {
   private func report(_ error: Error?) throws {
     try Self.reportData(checks: checks, error: error).write(
       to: root.appending(path: "\(phase)-inspector-report.json"))
+  }
+
+  static func assetReceipt(_ assets: InspectorAssetsData?) -> Any {
+    assets.map { value in
+      [
+        "images": value.images.map { image in
+          [
+            "url": image.url, "mime": image.mime as Any? ?? NSNull(),
+            "renderedWidth": image.renderedWidth, "renderedHeight": image.renderedHeight,
+            "naturalWidth": image.naturalWidth, "naturalHeight": image.naturalHeight,
+            "transferSize": image.transferSize as Any? ?? NSNull(),
+          ] as [String: Any]
+        }, "fontFiles": value.fonts.map { ["url": $0.url, "mime": $0.mime] },
+        "svgTruncated": value.svgTruncated,
+      ] as [String: Any]
+    } as Any? ?? NSNull()
   }
 
   static func captureDimensions(_ png: Data) -> CGSize? {

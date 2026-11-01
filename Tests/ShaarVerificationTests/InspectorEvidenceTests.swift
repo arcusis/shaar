@@ -6,9 +6,31 @@ import AppKit
 import Foundation
 import Testing
 
+@testable import ArcusisBrowser
 @testable import ShaarVerification
 
 @Suite @MainActor struct InspectorEvidenceTests {
+  @Test func assetReceiptPreservesObservedMetadataAndUnknowns() throws {
+    #expect(InspectorProbe.assetReceipt(nil) is NSNull)
+    var assets = InspectorAssetsData(
+      images: [
+        .init(
+          index: 0, url: "https://example.com/a.png", renderedWidth: 128, renderedHeight: 96,
+          naturalWidth: 64, naturalHeight: 48, transferSize: nil, bodySize: 512, mime: "image/png",
+          frameID: "frame")
+      ], svg: nil, svgTruncated: false)
+    assets.fonts = [
+      .init(url: "https://example.com/font.woff2", mime: "font/woff2", frameID: "frame")
+    ]
+    let receipt = try #require(InspectorProbe.assetReceipt(assets) as? [String: Any])
+    let image = try #require((receipt["images"] as? [[String: Any]])?.first)
+    #expect(image["naturalWidth"] as? Double == 64)
+    #expect(image["renderedWidth"] as? Double == 128)
+    #expect(image["mime"] as? String == "image/png")
+    #expect(image["transferSize"] is NSNull)
+    #expect((receipt["fontFiles"] as? [[String: String]])?.first?["mime"] == "font/woff2")
+  }
+
   @Test func screenshotDimensionsRequireAnActualPNG() throws {
     #expect(InspectorProbe.captureDimensions(Data("not an image".utf8)) == nil)
     let bitmap = try #require(

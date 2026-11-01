@@ -3,7 +3,7 @@
   "versions": {
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "vue": "3.5.22",
+    "vue": "3.5.42",
     "svelte": "4.2.20",
     "esbuild": "0.25.12"
   },
@@ -16,7 +16,7 @@
     "Tests/InspectorContractTests/fixtures/vue.js": "7503b061b9fe120a67a82d9f14371afedc3878b8d636222b6e9c1c47e2d9f50f"
   },
   "sha256": {
-    "frameworks.js.LEGAL.txt": "fb4b6daffc5b163a60184a0342e50b78f8bc7588a9864ee31e6ce3ae69800a4b",
-    "frameworks.js": "1dfc49b915444d602c7a7efd0fec549b814ec34150e810e8553363708b6f7c8f"
+    "frameworks.js.LEGAL.txt": "89f0d9b4239a0fee4219b61033c7f2630498350545371b582da5e7523b5d10e6",
+    "frameworks.js": "91f5a115d3253b704e67b3ef205594156e7b7e7daf314667bf929b064f864385"
   }
 }

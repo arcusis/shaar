@@ -25,8 +25,8 @@ struct SiteControlsButton: View {
         .frame(width: 28, height: 28)
         .contentShape(Rectangle())
     }
-    .help("Site controls")
-    .accessibilityLabel("Site controls")
+    .help("Show site controls for this page")
+    .accessibilityLabel("Show site controls for this page")
     .disabled(store.session.selectedPage == nil)
     .popover(item: engine.presentsNativePanels ? $model : .constant(nil), arrowEdge: .top) {
       model in
@@ -96,7 +96,7 @@ struct SiteControlsPanel: View {
     VStack(alignment: .leading, spacing: 0) {
       header
       Divider()
-      SiteExtensionsSection(model: extensions, actions: actions)
+      SiteExtensionsSection(model: extensions, actions: actions, tabID: model.target.tabID)
       if !model.permissions.isEmpty {
         Divider()
         SitePermissionsSection(model: model)
@@ -147,6 +147,7 @@ private struct SiteSectionTitle: View {
 struct SiteExtensionsSection: View {
   let model: ExtensionManagerModel
   let actions: SiteControlsPanelActions
+  let tabID: UUID
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
@@ -166,16 +167,15 @@ struct SiteExtensionsSection: View {
               .frame(width: 32, height: 32)
               .contentShape(Rectangle())
           }
-          .help(pinned.name)
-          .accessibilityLabel(pinned.name)
+          .modifier(ExtensionActionHelp(model: model, item: pinned, tabID: tabID))
         }
         Button(action: actions.addExtensions) {
           Image(systemName: "plus")
             .frame(width: 32, height: 32)
             .contentShape(Rectangle())
         }
-        .help("Add Extensions…")
-        .accessibilityLabel("Add Extensions")
+        .help("Add extensions from the Chrome Web Store")
+        .accessibilityLabel("Add extensions from the Chrome Web Store")
       }
       .buttonStyle(.plain)
       .padding(.horizontal, 4)
@@ -225,7 +225,8 @@ struct SitePermissionRow: View {
         .controlSize(.mini)
         .labelsHidden()
         .disabled(value == nil)
-        .accessibilityLabel(permission.title)
+        .help(permission.help)
+        .accessibilityLabel(permission.help)
     }
     .hoverRowBackground()
   }
@@ -241,6 +242,7 @@ struct SiteSecurityRow: View {
       Button(action: action) { label }
         .buttonStyle(.plain)
         .help("Show certificate")
+        .accessibilityLabel("Show certificate")
     } else {
       label
     }
@@ -282,6 +284,7 @@ struct SiteActionsSection: View {
         .buttonStyle(.plain)
         .disabled(!model.isAvailable(action))
         .help(action.help)
+        .accessibilityLabel(action.help)
       }
       Button(action: showDeveloperTools) {
         HStack(spacing: 10) {
@@ -337,6 +340,18 @@ extension SiteAction {
 }
 
 extension SitePermission {
+  var help: String {
+    switch self {
+    case .microphone: "Allow or block microphone access for this site"
+    case .camera: "Allow or block camera access for this site"
+    case .location: "Allow or block location access for this site"
+    case .notifications: "Allow or block notifications for this site"
+    case .popups: "Allow or block pop-ups and redirects for this site"
+    case .sound: "Allow or mute sound for this site"
+    case .autoPictureInPicture: "Allow or block automatic picture-in-picture for this site"
+    }
+  }
+
   var title: String {
     switch self {
     case .microphone: "Microphone"

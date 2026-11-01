@@ -91,6 +91,7 @@ final class DeveloperModeProbe {
       try await model.evaluate("navigator.language") as? String != "fr-FR",
       "reset restores browser language")
     try await performance(model)
+    try await bugReport(model)
     var remembered = DeveloperSimulation()
     remembered.reducedMotion = phase == "initial"
     model.set(remembered)
@@ -266,6 +267,110 @@ final class DeveloperModeProbe {
       try data.write(to: root.appending(path: "\(phase)-developer-performance-\(name).png"))
     }
     checks.append("performance overlay renders offscreen in light and dark")
+  }
+
+  private func bugReport(_ model: SiteControlsDeveloperModel) async throws {
+    _ = try await model.evaluate(
+      "console.error('shaar-report-fixture-error');fetch('/developer-slow?report='+Math.random(),{headers:{Authorization:'Bearer fixture-report-secret'}}).then(r=>r.text()).then(()=>true)"
+    )
+    _ = try await model.evaluate(
+      "new Promise((resolve,reject)=>{const request=new XMLHttpRequest();request.open('GET','/developer-slow?xhr='+Math.random());request.setRequestHeader('Authorization','Bearer fixture-xhr-secret');request.onload=()=>resolve(true);request.onerror=()=>reject(Error('XHR fixture failed'));request.send();})"
+    )
+    try await Task.sleep(for: .milliseconds(200))
+    try expect(
+      !model.includeSensitiveHeaders, "bug report defaults to sensitive HAR header redaction")
+    guard let file = await model.createBugReport() else {
+      throw DeveloperModeFailure(model.reportFailure ?? "Bug report export failed.")
+    }
+    let members = try readZip(file, member: nil)
+    for name in ["screenshot.png", "metadata.json", "console.json", "network.har", "README.txt"] {
+      try expect(
+        String(decoding: members, as: UTF8.self).contains(name),
+        "bug report archive includes \(name)")
+    }
+    let png = try readZip(file, member: "screenshot.png")
+    try expect(
+      png.starts(with: [137, 80, 78, 71, 13, 10, 26, 10]),
+      "report screenshot contains a real page PNG")
+    let console = String(decoding: try readZip(file, member: "console.json"), as: UTF8.self)
+    let har = String(decoding: try readZip(file, member: "network.har"), as: UTF8.self)
+    try expect(
+      console.contains("shaar-report-fixture-error"),
+      "document-start collector preserves console errors")
+    try expect(
+      har.contains("developer-slow") && har.lowercased().contains("authorization")
+        && har.contains("[redacted]")
+        && !har.contains("fixture-report-secret") && !har.contains("fixture-xhr-secret"),
+      "default HAR contains requests with authorization value redacted")
+    let metadata =
+      try JSONSerialization.jsonObject(with: readZip(file, member: "metadata.json"))
+      as? [String: Any]
+    try expect(
+      metadata?["engineVersion"] as? String == engine.runtime.chromiumVersion
+        && metadata?["viewport"] != nil && metadata?["activeSimulations"] != nil,
+      "report includes versions, viewport and simulation metadata")
+    try expect(
+      engine.downloads.libraryItems(in: model.target.profileID).contains {
+        $0.fileURL?.resolvingSymlinksInPath() == file.resolvingSymlinksInPath()
+      }, "saved ZIP appears in Library Downloads")
+    try expect(
+      store.libraryDrawerSection == .downloads,
+      "successful export opens the Library Downloads section")
+    store.closeLibraryDrawer()
+    try await captureReport(model)
+    model.includeSensitiveHeaders = true
+    guard let included = await model.createBugReport() else {
+      throw DeveloperModeFailure(model.reportFailure ?? "Opted-in export failed.")
+    }
+    let sensitive = String(decoding: try readZip(included, member: "network.har"), as: UTF8.self)
+    try expect(
+      sensitive.contains("Bearer fixture-report-secret")
+        && sensitive.contains("Bearer fixture-xhr-secret"),
+      "explicit opt-in retains exposed authorization value")
+    store.closeLibraryDrawer()
+    model.includeSensitiveHeaders = false
+  }
+
+  private func readZip(_ file: URL, member: String?) throws -> Data {
+    let process = Process()
+    process.executableURL = URL(filePath: "/usr/bin/unzip")
+    process.arguments = member.map { ["-p", file.path, $0] } ?? ["-Z", "-1", file.path]
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    process.standardError = FileHandle.nullDevice
+    try process.run()
+    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    guard process.terminationStatus == 0 else {
+      throw DeveloperModeFailure("Bug report ZIP member could not be read.")
+    }
+    return data
+  }
+
+  private func captureReport(_ model: SiteControlsDeveloperModel) async throws {
+    for (name, scheme) in [("light", ColorScheme.light), ("dark", .dark)] {
+      let content = DeveloperBugReportSection(model: model)
+        .frame(width: 320).padding(16).background(Color(nsColor: .windowBackgroundColor))
+        .environment(\.colorScheme, scheme)
+      let host = NSHostingView(rootView: content)
+      let window = NSWindow(
+        contentRect: NSRect(origin: .zero, size: host.fittingSize), styleMask: .borderless,
+        backing: .buffered, defer: false)
+      window.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
+      window.contentView = host
+      previewWindow = window
+      try await Task.sleep(for: .milliseconds(150))
+      host.layoutSubtreeIfNeeded()
+      guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else {
+        throw DeveloperModeFailure("Bug report section could not render.")
+      }
+      host.cacheDisplay(in: host.bounds, to: bitmap)
+      guard let data = bitmap.representation(using: .png, properties: [:]) else {
+        throw DeveloperModeFailure("Bug report screenshot could not encode.")
+      }
+      try data.write(to: root.appending(path: "\(phase)-developer-bug-report-\(name).png"))
+    }
+    checks.append("bug report section renders offscreen in light and dark")
   }
 
   private func settled(_ model: SiteControlsDeveloperModel) async throws {

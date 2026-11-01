@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #import "ChromiumRuntimeInternal.h"
+#import "ChromiumBugReport.h"
 #import "ChromiumProbeRoot.h"
 #import <dlfcn.h>
 #include <string>
@@ -173,6 +174,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   _engine = [_engineClass sharedEngine];
   [_services start];
   NSMutableArray<NSString *> *pageScripts = [NSMutableArray arrayWithObject:ARCMediaSessionPageScript()];
+  [pageScripts addObject:ARCBugReportPageScript()];
   if (_testing) {
     // Diagnostics only for the empty Bitwarden store-probe profile. No credential entry occurs.
     [pageScripts addObject:@"(function(post){"

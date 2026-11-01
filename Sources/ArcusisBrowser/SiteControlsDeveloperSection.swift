@@ -63,6 +63,8 @@ struct SiteControlsDeveloperSection: View {
           isOn: Binding(get: { model.performanceEnabled }, set: { model.setPerformanceEnabled($0) })
         )
         .help("Toggle performance overlay (Command-Option-P)")
+        Divider()
+        DeveloperBugReportSection(model: model)
         if model.applying { ProgressView().controlSize(.small) }
         if let failure = model.failure { Text(failure).font(.caption).foregroundStyle(.red) }
       }

@@ -17,6 +17,7 @@
 - [[Site_Control_Center]]
 - [[Developer_Simulations]]
 - [[Developer_Performance_Overlay]]
+- [[Developer_Bug_Reports]]
 - [[External_App_Consent]]
 - [[Find_In_Page]]
 - [[Renderer_Recovery]]

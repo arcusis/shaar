@@ -9,6 +9,7 @@ import Observation
 @MainActor @Observable
 final class DownloadsModel {
   private(set) var records: [UUID: [String: BrowserDownload]] = [:]
+  private var generatedFiles: [UUID: [String: DownloadsFolderFile]] = [:]
   let folder: DownloadsFolderSource?
 
   init(folder: DownloadsFolderSource? = nil) { self.folder = folder }
@@ -27,7 +28,13 @@ final class DownloadsModel {
     let browserItems = items(in: profileID)
     let paths = Set(
       browserItems.compactMap { $0.fileURL?.standardizedFileURL.resolvingSymlinksInPath() })
-    let folderItems = (folder?.items(profileID: profileID) ?? []).filter {
+    let generated = (generatedFiles[profileID] ?? [:]).keys.compactMap {
+      generatedItem(id: $0, profileID: profileID)
+    }
+    let local = Dictionary(
+      (generated + (folder?.items(profileID: profileID) ?? [])).map { ($0.id, $0) },
+      uniquingKeysWith: { first, _ in first })
+    let folderItems = local.values.filter {
       guard let url = $0.fileURL else { return false }
       return !paths.contains(url.standardizedFileURL.resolvingSymlinksInPath())
     }
@@ -37,12 +44,27 @@ final class DownloadsModel {
   }
 
   func libraryItem(id: String, profileID: UUID) -> BrowserDownload? {
-    records[profileID]?[id] ?? folder?.item(id: id, profileID: profileID)
+    records[profileID]?[id] ?? generatedItem(id: id, profileID: profileID)
+      ?? folder?.item(id: id, profileID: profileID)
   }
 
   func isFolderItem(_ item: BrowserDownload, profileID: UUID) -> Bool {
     records[profileID]?[item.id] == nil
-      && folder?.item(id: item.id, profileID: profileID) == item
+      && (generatedItem(id: item.id, profileID: profileID) == item
+        || folder?.item(id: item.id, profileID: profileID) == item)
+  }
+
+  private func generatedItem(id: String, profileID: UUID) -> BrowserDownload? {
+    guard let file = generatedFiles[profileID]?[id] else { return nil }
+    var fresh = file.url
+    fresh.removeAllCachedResourceValues()
+    return DownloadsFolderFile(url: fresh)?.download(profileID: profileID)
+  }
+
+  func registerGeneratedFile(_ url: URL, profileID: UUID) {
+    guard let file = DownloadsFolderFile(url: url) else { return }
+    generatedFiles[profileID, default: [:]][file.id] = file
+    folder?.refresh()
   }
 
   func restore(_ rows: [[String: Any]], profileID: UUID) {

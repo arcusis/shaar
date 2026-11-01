@@ -10,6 +10,10 @@ import Observation
 final class SiteControlsDeveloperModel {
   private(set) var target: SiteControlTarget
   private(set) var simulation: DeveloperSimulation
+  var includeSensitiveHeaders = false
+  var creatingBugReport = false
+  var reportFailure: String?
+  var reportURL: URL?
   var performanceEnabled = false
   var performanceSnapshot: PagePerformanceSnapshot?
   var performanceFailure: String?

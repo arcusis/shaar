@@ -131,7 +131,18 @@ private func target(_ address: String) -> SiteControlTarget {
       panel, size: NSSize(width: 320, height: 740), appearance: appearance, to: url)
     #expect(bitmap.pixelsWide == 320)
     let text = try VisualTextRecognition.lines(in: url).joined(separator: " ")
-    #expect(text.contains("Developer Tools"))
+    #expect(text.contains("mail.example"))
+    // The full popover scrolls on smaller displays, so its footer may be outside the viewport.
+    // Capture the action rows separately to verify their labels without relying on screen size.
+    let actionURL = output.appending(path: "site-actions-\(name).png")
+    let actionRows = SiteActionsSection(
+      model: model, close: actions.close, showDeveloperTools: actions.showDeveloperTools
+    )
+    .background(Color(nsColor: .windowBackgroundColor))
+    _ = try VisualCapture.renderOffscreen(
+      actionRows, size: NSSize(width: 320, height: 280), appearance: appearance, to: actionURL)
+    let actionText = try VisualTextRecognition.lines(in: actionURL).joined(separator: " ")
+    #expect(actionText.contains("Developer Tools"))
   }
   #expect(model.isAllowed(.sound))
 }

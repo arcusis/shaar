@@ -22,7 +22,7 @@ jobs:
   source-checks:
     name: Swift and Python source checks
     runs-on: macos-26
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Check out source
@@ -87,9 +87,9 @@ jobs:
       - name: Run Python tests
         run: .venv/bin/python scripts/test-python.py
 
-      - name: Run private window initial and restart fixture
+      - name: Run three independent private window initial and restart fixtures
         id: private_window
-        timeout-minutes: 20
+        timeout-minutes: 30
         env:
           ARCUSIS_PRIVATE_WINDOW_CI: '1'
           # Hosted virtual machines have no GPU; engine teardown and probes run slower.
@@ -100,13 +100,15 @@ jobs:
           test "$RUNNER_OS" = 'macOS'
           test "$ARCUSIS_PRIVATE_WINDOW_CI" = '1'
           rm -rf build/private-window-evidence
-          # Hosted virtual machines make this fixture's timing unreliable (#310);
-          # a single retry keeps both attempts' evidence and is reported as a warning.
-          if ! bash scripts/test-engine.sh --private-window 2>&1 | tee "$RUNNER_TEMP/private-window-fixture.log"; then
-            echo "::warning title=Private window fixture retried::First attempt failed; retrying once."
-            rm -rf build/private-window-evidence
-            bash scripts/test-engine.sh --private-window 2>&1 | tee -a "$RUNNER_TEMP/private-window-fixture.log"
-          fi
+          bash scripts/bundle-app.sh --with-engine --verification
+          status=0
+          for iteration in 1 2 3; do
+            echo "Independent private-window repetition $iteration"
+            if ! .venv/bin/python scripts/engine_fixture.py --private-window 2>&1 | tee -a "$RUNNER_TEMP/private-window-fixture.log"; then
+              status=1
+            fi
+          done
+          exit "$status"
 
       - name: Upload redacted private window evidence
         if: always() && steps.private_window.outcome != 'skipped'
@@ -208,13 +210,20 @@ jobs:
           set -o pipefail
           bash scripts/test-engine.sh 2>&1 | tee "$RUNNER_TEMP/engine-probes.log"
 
-      - name: Run Quit exit probe (initial and restart)
+      - name: Run three independent Quit exit probes (initial and restart)
         id: quit_exit_probe
         env:
           SHAAR_PROBE_TIMEOUT_SCALE: '3'
         run: |
           set -o pipefail
-          bash scripts/test-engine.sh --quit-exit 2>&1 | tee -a "$RUNNER_TEMP/engine-probes.log"
+          status=0
+          for iteration in 1 2 3; do
+            echo "Independent Quit repetition $iteration"
+            if ! .venv/bin/python scripts/engine_fixture.py --quit-exit 2>&1 | tee -a "$RUNNER_TEMP/engine-probes.log"; then
+              status=1
+            fi
+          done
+          exit "$status"
 
       - name: Run session recovery probe (SIGKILL during saves, then restore)
         id: session_recovery

@@ -36,7 +36,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     return [@[@"n", @"t", @"l", @"w", @"s", @"q", @"r", @"f", @"g", @"d", @"y", @","] containsObject:key.lowercaseString];
   }
   if (chord == (NSEventModifierFlagCommand | NSEventModifierFlagShift)) {
-    return [@[@"w", @"g", @"j", @"t"] containsObject:key.lowercaseString];
+    return [@[@"w", @"g", @"j", @"t", @"r"] containsObject:key.lowercaseString];
   }
   return chord == (NSEventModifierFlagControl | NSEventModifierFlagOption) &&
     [@[@"[", @"]"] containsObject:key];
@@ -822,12 +822,21 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   if (_tabs[tabID]) { [self advanceDocumentGenerationForTabID:tabID]; [self invalidateExternalRequestsForTabID:tabID windowID:nil]; [_tabs[tabID] reload]; }
 }
 - (BOOL)reloadTabID:(NSString *)tabID profileID:(NSString *)profileID {
+  return [self reloadTabID:tabID profileID:profileID mode:ARCPageReloadModeNormal];
+}
+- (BOOL)reloadTabID:(NSString *)tabID profileID:(NSString *)profileID mode:(ARCPageReloadMode)mode {
   ArdiaCoreTab *tab = _tabs[tabID];
   if (!tab || tab.closed || ![self isSelectedTabID:tabID] ||
       ![_owners[tabID] isEqualToString:profileID]) return NO;
+  // Chromium discards in place: the tab keeps its WebContents and history but loses its renderer.
+  if (mode == ARCPageReloadModeNewRenderer && !tab.discarded && ![tab discard]) return NO;
   [self advanceDocumentGenerationForTabID:tabID];
   [self invalidateExternalRequestsForTabID:tabID windowID:nil];
-  [tab reload];
+  if (mode == ARCPageReloadModeBypassingCache) {
+    [tab reloadIgnoringCache];
+  } else {
+    [tab reload];
+  }
   return YES;
 }
 - (BOOL)placeTabIDs:(NSArray<NSString *> *)tabIDs pinnedIDs:(NSArray<NSString *> *)pinnedIDs

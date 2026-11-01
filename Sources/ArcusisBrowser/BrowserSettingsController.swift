@@ -52,13 +52,12 @@ private final class BrowserSettingsState {
     guard
       let store = workspace.stores.values.first(where: {
         $0.session.spaces.contains { $0.profileID == profileID }
-      }), let spaceID = store.session.spaces.first(where: { $0.profileID == profileID })?.id,
-      let url = URL(string: "https://chromewebstore.google.com/category/extensions")
+      }), let spaceID = store.session.spaces.first(where: { $0.profileID == profileID })?.id
     else {
       return
     }
     if store.session.selectedSpaceID != spaceID { store.perform(.space(spaceID)) }
-    store.perform(.open(url))
+    store.perform(.open(BrowserExtension.storeCatalogURL))
   }
 
   var searchEngines: [BrowserSettingsChoice] {

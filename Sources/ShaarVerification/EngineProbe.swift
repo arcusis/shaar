@@ -545,6 +545,10 @@ final class EngineProbe {
           primary: browserEngine, store: store, root: root, fixture: fixture, phase: phase)
         nativeHostProbe = nativeHost
         checks += try await nativeHost.run()
+        fixtureStage = "SiteControls"
+        checks += try await SiteControlsProbe(
+          engine: browserEngine, store: store, root: root, fixture: fixture, phase: phase
+        ).run()
         fixtureStage = "normal-fixtures-complete"
         localFixturesPassed = true
         if includeBitwarden {

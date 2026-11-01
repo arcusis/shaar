@@ -116,7 +116,7 @@ final class BrowserStore {
   @ObservationIgnored var onFindRequest: ((PageFindState, Bool) -> Bool)?
   @ObservationIgnored var onStopFinding: ((UUID) -> Void)?
   @ObservationIgnored var onNavigatePage: ((UUID, UUID, URL) -> Bool)?
-  @ObservationIgnored var onReloadPage: ((UUID, UUID) -> Bool)?
+  @ObservationIgnored var onReloadPage: ((UUID, UUID, PageReloadMode) -> Bool)?
   /// Sends a media command to a live tab; false when the engine cannot deliver it.
   @ObservationIgnored var onMediaCommand: ((UUID, MediaCommand) -> Bool)?
   /// A site's automatic picture-in-picture setting changed for a profile.
@@ -687,7 +687,7 @@ final class BrowserStore {
   }
 
   @discardableResult
-  func reloadCurrentPage() -> Bool {
+  func reloadCurrentPage(_ mode: PageReloadMode = .normal) -> Bool {
     guard canReloadCurrentPage, let tab = session.selectedPage?.tab else { return false }
     dismissPageFind()
     engine?.extensionPanel = nil
@@ -697,7 +697,7 @@ final class BrowserStore {
       failure.loadingStarted = false
       rendererFailures[tab.id] = failure
     }
-    guard onReloadPage?(tab.id, session.selectedSpace.profileID) == true else {
+    guard onReloadPage?(tab.id, session.selectedSpace.profileID, mode) == true else {
       if rendererFailures[tab.id]?.id == previous?.id { rendererFailures[tab.id] = previous }
       return false
     }

@@ -19,6 +19,10 @@ public struct BrowserExtension: Identifiable, Equatable, Sendable {
     self.version = version
   }
 
+  /// The Chrome Web Store's extension catalog, where profiles add extensions.
+  public static let storeCatalogURL = URL(
+    string: "https://chromewebstore.google.com/category/extensions")!
+
   public static func isValidID(_ id: String) -> Bool {
     id.utf8.count == 32 && id.utf8.allSatisfy { (97...112).contains($0) }
   }

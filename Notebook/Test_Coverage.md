@@ -1,6 +1,6 @@
 # Test coverage
 
-Line coverage of the sources under the unit test suites, and the tests behind each user-facing feature. Measured with Swift 6.4.2 (Apple LLVM 21) on macOS 27 against `production` at `192491b` plus the tests added for issue #252.
+The coverage tables below are a historical snapshot measured with Swift 6.4.2 (Apple LLVM 21) on macOS 27 against `production` at `192491b` plus the tests added for issue #252. They are not current coverage percentages or line counts. The feature-to-test map is maintained separately against current source.
 
 ## Reproduce
 
@@ -25,9 +25,9 @@ Use `xcrun llvm-cov export -summary-only` with the same arguments for JSON. Both
 | ChromiumBridge | 3,745 | 2.51% | 2.51% |
 | All Swift and Objective-C++ sources | 41,963 | 36.03% | 35.47% |
 
-"Probes" are the `*Probe.swift` files and `ChromiumProbeTLS.mm` (12,152 lines). They drive the real engine inside `bash scripts/test-engine.sh` and cannot run in a unit test, so the "without probes" row excludes them.
+In that measurement, "probes" were the `*Probe.swift` files and `ChromiumProbeTLS.mm` (12,152 lines), excluded from the "without probes" row. Probes now live in the separate `ShaarVerification` target; its test-only bridge API lives in `ChromiumBridge.Verification`. Future coverage reports must account for this target split rather than reuse the old subtraction. See [[Verification_Harness]].
 
-ChromiumBridge and the engine-facing parts of ArcusisBrowser (`BrowserEngine`, `NativeBrowserHost`, `BrowserRuntimeEvents`, `PrivateBrowserHost`) need a loaded Chromium runtime. Their behaviour is verified by the native engine fixture (see [[Source_And_Native_Verification]]), not by line coverage. SwiftUI view bodies are partly covered by the offscreen layout tests; the visual capture tests are skipped locally and run only in GitHub Actions macOS CI with `ARCUSIS_SIDEBAR_VISUAL_CI=1`.
+ChromiumBridge and the engine-facing parts of ArcusisBrowser (`BrowserEngine`, `NativeBrowserHost`, `BrowserRuntimeEvents`, `PrivateBrowserHost`) need a loaded Chromium runtime. Their behaviour is verified by the native engine fixture (see [[Source_And_Native_Verification]]), not by line coverage. SwiftUI view bodies are partly covered by offscreen layout tests. Some capture suites require GitHub Actions macOS CI with `ARCUSIS_SIDEBAR_VISUAL_CI=1`; others, including media player and PiP control tests, render offscreen locally. A skipped capture is not local visual proof.
 
 Files raised by the #252 tests:
 
@@ -56,7 +56,7 @@ Files raised by the #252 tests:
 
 ## Feature to test map
 
-App tests live in `Tests/BrowserAppTests`, core tests in `Tests/BrowserCoreTests`, release and packaging tests in the Python suites under `Tests/`. Native probes run inside the engine fixture.
+App tests live in `Tests/BrowserAppTests`, core tests in `Tests/BrowserCoreTests`, harness tests in `Tests/ShaarVerificationTests`, and tooling/release/packaging tests in the Python suites under `Tests/`. Native probes run inside the engine fixture. Pending site-control tests are described in [[Site_Control_Center]]; they are not part of this branch's map.
 
 | Feature | Unit tests | Native probe |
 | --- | --- | --- |
@@ -78,6 +78,7 @@ App tests live in `Tests/BrowserAppTests`, core tests in `Tests/BrowserCoreTests
 | Tab switcher and recency | `TabRecencyTests` | — |
 | Recently closed tabs | `ClosedTabTests`, `ClosedTabStoreTests` | `ReopenProbe` |
 | Workspace persistence and restart recovery | `BrowserCoreTests`, `SnapshotFileTests`, `WorkspaceProcessLockTests`, `SnapshotSaveSchedulerTests`, `BrowserWorkspaceStoreTests`, `AbruptCheckpointTests`, `SavedTabCapacityTests` | `WorkspaceProbe`, `SavedTabCapacityProbe`, `SessionRecoveryProbe`, abrupt restart run |
+| Quit exit and background mode | `BackgroundModeLocalStateTests`, `QuitExitRunnerTests` | `QuitExitProbe` |
 | Find in page | `PageFindTests` | `PageFindProbe` |
 | Renderer crash recovery | `RendererRecoveryTests` | `RendererRecoveryProbe` |
 | Bookmarks and history | `BrowserLibraryTests` (core and app) | `LibraryProbe` |
@@ -86,6 +87,8 @@ App tests live in `Tests/BrowserAppTests`, core tests in `Tests/BrowserCoreTests
 | Extensions: install consent, management, toolbar pins, Web Store | `BrowserExtensionTests`, `ExtensionConsentTests`, `ExtensionManagementTests`, `ProfileExtensionsSectionTests`, `ExtensionManagerVisualTests`, `WebStoreFitTests` | `ExtensionProbe` |
 | Password manager extensions | — | `BitwardenProbe` |
 | Camera, microphone and screen consent | `WebsitePermissionRequestTests`, `WebsitePermissionConsentTests` | `MediaPermissionProbe` |
+| Media Session bridge and sidebar mini player | `MediaPlaybackModelTests`, `SidebarMediaPlayerVisualTests` | `MediaSessionProbe` |
+| Automatic picture-in-picture and controls | `AutoPictureInPictureTests`, `SiteSettingKeyTests`, `PictureInPictureControlsTests` | `MediaSessionProbe` |
 | External app links | `ExternalAppRequestTests`, `ExternalAppConsentTests`, `ExternalAppConsentLayoutTests`, `ExternalAppRoutingTests`, `ExternalAppProbeConfigurationTests` | `ExternalAppConsentProbe` |
 | Profile accounts (Google, Microsoft) | `ProfileAccountsTests`, `ProfileAccountParsingTests` | — |
 | Settings window | `BrowserSettingsIntegrationTests`, `BrowserSettingsLayoutTests`, `SettingsVisualTests` | `NativeHostProbe` |
@@ -93,6 +96,7 @@ App tests live in `Tests/BrowserAppTests`, core tests in `Tests/BrowserCoreTests
 | Engine event routing and probe harness | `BrowserRuntimeRouterTests`, `SwitchProbeMetricsTests`, `ProbeTLSConfigurationTests` | `EngineProbe`, `EngineTLSProbe` |
 | Automatic updates | `UpdateFeedTests`, `test_release_feed.py`, `test_release_script.py` | — |
 | App bundle, engine payload and resources | `test_bundle_app.py`, `test_verify_engine_bundle.py`, `test_engine_payload.py`, `test_fetch_engine.py`, `test_engine_source_build.py`, `test_browser_resources.py`, `test_engine_fixture.py` | — |
+| Notebook index membership | `test_notebook_links.py` | — |
 
 ## Known gaps
 
@@ -105,6 +109,6 @@ These features have model or engine coverage but no unit test of the code listed
 - Account sign-in flow (`ProfileAccountSignIn.swift`) and extension list refresh (`ExtensionManagerModel.refresh`). Both call the engine; their parsing and state rules are covered.
 - Sparkle wiring (`AppUpdater.swift`). Feed generation and release checks are covered by the release tests.
 - Password manager extensions have only the opt-in `BitwardenProbe`.
-- The 16 visual capture tests render at a fixed 1x scale but are skipped outside GitHub Actions macOS CI, so a local run does not check rendered layouts.
+- Hosted-only visual capture suites skip outside GitHub Actions macOS CI. Local offscreen captures from other suites do not establish those skipped layouts or physical interaction.
 
 Related: [[Source_And_Native_Verification]], [[Project_State]].

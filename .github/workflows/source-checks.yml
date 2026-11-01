@@ -66,6 +66,11 @@ jobs:
         run: |
           "$PYTHON" scripts/check-license-headers.py
 
+      - name: Check Notebook index links
+        env:
+          PYTHON: ${{ steps.python.outputs.python-path }}
+        run: '"$PYTHON" scripts/check-notebook-links.py'
+
       - name: Run Swift build and tests
         run: swift test --jobs 2
 

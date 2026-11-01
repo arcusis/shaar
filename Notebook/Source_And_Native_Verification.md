@@ -6,6 +6,7 @@ swift test --jobs 2
 .venv/bin/python scripts/test-python.py
 swift format lint --strict --recursive Package.swift Sources Tests
 python3 scripts/check-license-headers.py
+.venv/bin/python scripts/check-notebook-links.py
 bash scripts/test-engine.sh
 ```
 
@@ -33,5 +34,9 @@ Offscreen SwiftUI/AppKit images verify native layout. Chromium's remote renderin
 The hidden native host fixture also invokes real Settings menu target actions with an injected owned key-window identity. It checks exact shortcut registration, modal guards, window reuse, account/session preservation and Settings-only close routing. This is programmatic native evidence; physical keyboard/focus acceptance remains separate.
 
 The same fixture creates an unused profile and renames a profile through the live Settings controller. It seeds nonempty authored cookie/local/session storage, checks unchanged document/native-tab/window ownership, and verifies saved profile UUIDs and names on restart. Source tests additionally cover zero-window persistence, duplicate names, stale IDs, preference bindings, and failed writes. Static profile/editor previews establish layout only, not physical keyboard or sheet-focus acceptance.
+
+The current Source checks workflow runs Swift/Python checks, the private-window initial/restart fixture, hosted sidebar captures, full engine probes, the Quit exit probe, the session-recovery probe, shipping-bundle build/signature checks, and actionlint on GitHub-hosted runners. Probe timeouts scale with `SHAAR_PROBE_TIMEOUT_SCALE`; private-window CI currently permits one retry and records it as a warning. A passing retry does not establish flake resolution. The CI redesign is pending in [issue #334](https://github.com/arcusis/shaar/issues/334); [[Notebook_Maintenance]] documents the standalone index check for that pipeline.
+
+Feature-specific evidence and limits: [[Media_Playback]], [[Automatic_Picture_In_Picture]], [[Picture_In_Picture_Controls]], [[Session_Durability]] and [[Abrupt_Restart_Durability]]. The download probe's paced background-transfer wait now honors the timeout scale and reports download state on timeout (#329); this is a fixture timing fix, not a product latency claim.
 
 Related: [[Bitwarden_Compatibility]], [[Project_State]].

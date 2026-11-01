@@ -68,6 +68,14 @@ const steps: Step[] = [
     detail: "⌘ T to start · ↑↓ to choose · ↩ to go",
   },
   {
+    id: "step-site",
+    screen: "siteControls",
+    label: "Site controls",
+    title: "Every site, on your terms.",
+    body: "Camera, microphone, location and notifications for each site, the secure connection and its certificate, and Reload, Hard Reload or Clear Site Data, all in one place.",
+    detail: "Click the controls button beside the address",
+  },
+  {
     id: "step-extensions",
     screen: "extensions",
     label: "Extensions",

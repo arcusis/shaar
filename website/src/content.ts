@@ -25,38 +25,45 @@ export const release = {
   ],
 };
 
-// Real Shaar screenshots served from /assets/screens/. Files come from website/screens/
-// when present (fresh captures), otherwise from the repository's .github/assets/.
+// Real Shaar screenshots (live Chromium pages, captured offscreen at 2x by the
+// website screenshot harness). Files live in website/screens/; the build falls back to
+// the repository's .github/assets/ when a file is missing.
 export const screens = {
   hero: {
-    file: "command-t.png",
-    width: 1600,
-    height: 1040,
-    alt: "Shaar window with the sidebar of pinned sites and tabs and the Command-T launcher open",
+    file: "hero.png",
+    width: 2880,
+    height: 1920,
+    alt: "Shaar showing the Work Space sidebar with pinned sites and tabs, browsing the Shaar repository on GitHub",
   },
   spaces: {
-    file: "spaces-overview.png",
-    width: 1400,
-    height: 958,
-    alt: "Shaar Library showing differently colored Spaces with their pinned tabs and folders",
+    file: "spaces.png",
+    width: 2880,
+    height: 1920,
+    alt: "Shaar in the Personal Space, in its own color, reading the Wikipedia article on Lisbon",
   },
   profiles: {
-    file: "settings-profiles.png",
-    width: 720,
-    height: 560,
-    alt: "Shaar Settings showing two profiles, each with its own color, search engine and accounts",
+    file: "profiles.png",
+    width: 1800,
+    height: 1464,
+    alt: "Shaar Settings showing the Work and Personal profiles, each with its own color, search engine and Spaces",
   },
   launcher: {
     file: "command-t.png",
-    width: 1600,
-    height: 1040,
-    alt: "Command-T launcher listing open tabs, favorites and recently closed pages with filter chips",
+    width: 2880,
+    height: 1920,
+    alt: "Command-T launcher searching for swift across open tabs, recently closed tabs and history",
+  },
+  siteControls: {
+    file: "site-controls.png",
+    width: 2880,
+    height: 1920,
+    alt: "Site control center on github.com with permissions, the secure connection and reload actions",
   },
   extensions: {
-    file: "profile-extensions.png",
-    width: 440,
-    height: 230,
-    alt: "Shaar Settings showing Chrome Web Store extensions managed for one profile",
+    file: "extensions.png",
+    width: 2880,
+    height: 1920,
+    alt: "Shaar with Dark Reader and Bitwarden from the Chrome Web Store in the toolbar, GitHub shown in dark mode",
   },
 } as const;
 

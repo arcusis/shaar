@@ -1,0 +1,54 @@
+name: Shipping bundle
+on:
+  workflow_call:
+permissions:
+  contents: read
+  attestations: write
+  id-token: write
+jobs:
+  bundle:
+    name: Release bundle builds without verification code
+    runs-on: macos-26
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/ci-setup
+        with:
+          mode: shipping
+          products: build/swiftpm/default
+      - name: Build unsigned candidate, enforce bundle guard and verify signature
+        run: .venv/bin/python scripts/ci-stage.py shipping
+      - uses: ./.github/actions/ci-evidence
+        if: always()
+        with:
+          stage: shipping
+          compression-level: '0'
+  attest:
+    name: Attest unsigned production candidate
+    needs: bundle
+    if: github.event_name == 'push' && github.ref == 'refs/heads/production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      attestations: write
+      id-token: write
+    steps:
+      - name: Download this run's CI-built shipping artifact
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: ci-shipping-${{ github.run_id }}-${{ github.run_attempt }}
+          path: candidate
+      - name: Verify candidate digest
+        working-directory: candidate
+        run: sha256sum --check candidate.sha256
+      - name: Attest unsigned candidate built in this workflow
+        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f
+        with:
+          subject-path: |
+            candidate/Shaar-unsigned-candidate.zip
+            candidate/sbom.spdx.json

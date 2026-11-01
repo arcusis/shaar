@@ -1,0 +1,39 @@
+# CI stages and evidence
+
+The implementation for #334 uses `source-checks.yml` as its orchestration workflow, reusable workflows for build, engine, shipping and CodeQL jobs, and shared setup/evidence composite actions. The preceding design is [[CI_Pipeline_Design]]. This infrastructure PR does not complete #334 or implement #335 hooks.
+
+## Stages
+
+Fast gates use `.venv/bin/python scripts/ci-checks.py`: Swift formatting, license headers, the #336 Notebook-link checker, actionlint, shellcheck, action/SwiftPM pins, redacted Gitleaks and all Python tests. Missing tools fail. Gitleaks has exact-path/exact-value exceptions for the checked-in public extension identity and Sparkle verification keys; other content in those files remains scanned. The installer downloads fixed release assets verified against committed SHA256 digests; no remote shell script is executed. Python dependencies retain the existing hash-pinned requirements. Swift resolution uses the committed lockfile; unit checks also reject lockfile drift.
+
+The Swift stage explicitly builds test targets, then runs tests with coverage and per-test xUnit output. Python reports include failures, errors, skips and subtest failures. Other commands produce command-level JUnit and JSON recording exit status, arguments and duration. Stage summaries show results and commit identity; setup logs show Xcode, Swift and Python versions.
+
+Coverage compares the candidate with an immutable event base, built from `git archive` using the same runner/toolchain. Manual validation compares with the fetched production ref. The gate compares line ratios independently for `BrowserCore`, `ArcusisBrowser`, `ChromiumBridge`, `Shaar` and `ShaarVerification` wherever source coverage exists; core and app coverage must exist. Missing, invalid or duplicate coverage fails. Baseline build/test failure also fails. This does not measure Chromium internals or uninstrumented binary dependencies.
+
+After unit tests, one engine stage builds the verification bundle once and runs four independent modes: the existing full fixture, private-window fixture, Quit exit and interrupted-save recovery. The full fixture includes tabs, Spaces, profiles, extension storage, downloads, media, picture-in-picture and the merged site-controls probe. Modes continue after an earlier failure, preserving all results. Private windows never retry. Nightly runs each mode three times with fresh probe roots; every iteration runs and any failure fails the stage. Evidence names include mode, iteration, run and attempt. Evidence collection validates the fixture-root marker/ownership and copies only top-level authored JSON/log/PNG files, plus the existing redacted private-window proof directory. Browser profile directories are never uploaded.
+
+Hosted visuals retain all six existing filters and their hosted-only environment gate. These tests must not be enabled on a developer Mac. The stage runner refuses native fixtures or hosted visual capture outside macOS Actions; local verification builds and tests with those flags absent.
+
+Shipping follows engine, coverage and visual success. The existing `bundle-app.sh --with-engine` verification-code guard, pinned payload verification and deep signature check remain. CI produces `Shaar-unsigned-candidate.zip`, a SHA256 checksum, an SPDX 2.3 dependency/file inventory and a symlink inventory. The ZIP has an ad-hoc signature for integrity checks; it is not Developer ID signed, notarized or Sparkle signed. Only production push runs attest that workflow's CI-built ZIP, after verifying its checksum. PR builds have no signing material, and the building job has read-only token permissions. Local release signing and the existing release/appcast workflow remain unchanged.
+
+CodeQL covers Swift (fresh traced build), Python and Actions. Dependency review checks PR, merge-group and manual-validation diffs at high severity. Scorecard is a separate production-push/weekly assessment with SARIF artifacts; it does not publish a badge or change repository settings. Nightly/manual validation also runs Address and Thread Sanitizer tests in distinct scratch directories and Periphery. Sanitizer findings fail. Periphery execution errors fail; existing unused-declaration findings are a report, with public API, Objective-C/runtime, SwiftUI preview and Codable retention options.
+
+## Selection, caches and required check
+
+PRs, production/native pushes, merge groups, nightly and manual runs use the same graph. Only Markdown-only changes under `Notebook/` and the explicitly listed root contribution/reference files skip native stages. Empty/unknown diffs and workflow/script changes select everything. Fast gates and dependency review still run on documentation changes.
+
+Concurrency includes event/ref identity and cancels only superseded PR runs. SwiftPM cache keys include OS/architecture, toolchain, mode, manifest/lockfile and source hashes, with a same-mode/toolchain fallback for incremental builds. Commands always rebuild/test; cached products never count as a passing check. Engine archives use an independent pin key and are checked before extraction/use. Shipping, verification, coverage and sanitizer scratch paths stay separate.
+
+`CI required` runs with `always()` and fails on failure, cancellation, missing prerequisites or unexpected skips. It requires sanitizers/dead-code reporting for nightly/manual runs. It is the intended single required status context. Artifacts retain seven days of command logs, JUnit, coverage and authored evidence; Scorecard retains fourteen days. Additional evidence directories use separate artifacts so their common ancestor cannot change the paths consumed by coverage or attestation jobs.
+
+`.github/production-ruleset.json` records the intended exact production branch, `CI required` Actions integration and single-entry merge queue. It is deliberately disabled in the checked-in template. Existing enterprise PR/signature/no-force-push rules remain authoritative. This task does not merge a PR or enable a queue before its workflows exist on production. After merging, inspect a real emitted `CI required` check and apply/activate the reviewed ruleset; then verify `merge_group` checks on an actual queued PR. A trigger alone is not evidence that repository queue enforcement is active.
+
+## Remaining #334 work
+
+The next PR adds the real isolated Sparkle update simulation. Prior-schema upgrade fixtures and seeded randomized parser tests remain follow-up coverage; the infrastructure must not claim those scenarios already pass. Production-only attestations, Scorecard scheduling, nightly soak and active merge-queue enforcement need their own hosted-event evidence after the relevant workflow/rules are installed. Signed-distribution provenance is explicitly outside the approved CI-candidate scope. #335 installs hooks and adds the sensitive-file/large-binary blocklist in its separate PR, reusing fast-check commands.
+
+## Verification boundary
+
+Local verification built all test targets with coverage and two build jobs, then passed the existing Swift suite with hosted visual flags absent. The complete fast-gate entrypoint passed all eight commands, including 178 Python tests and 44 notes/3 indexes. Sixteen focused pipeline tests cover gate failures/skips, immutable merge-group baselines, module coverage, pin validation, binary checksums, scoped evidence, JUnit and failure retention across soak iterations. Local toolchain was Swift 6.4.2; hosted macOS 26 checks establish the CI toolchain/runtime boundary separately. Production-only provenance, Scorecard and real merge-group execution are not established by a PR or manual run.
+
+Related: [[CI_Pipeline_Design]], [[Verification_Harness]], [[Test_Coverage]], [[Releasing]], [[Notebook_Maintenance]].

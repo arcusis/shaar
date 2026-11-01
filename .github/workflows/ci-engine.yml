@@ -1,0 +1,30 @@
+name: Engine simulations
+on:
+  workflow_call:
+    inputs:
+      iterations:
+        type: number
+        default: 1
+permissions:
+  contents: read
+jobs:
+  probes:
+    name: Engine probes, private windows, Quit and recovery
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/ci-setup
+        with:
+          mode: verification
+          products: build/swiftpm/verification
+      - name: Run every probe iteration without retrying failures
+        env:
+          CI_ITERATIONS: ${{ inputs.iterations }}
+        run: .venv/bin/python scripts/ci-stage.py engine --iterations "$CI_ITERATIONS"
+      - uses: ./.github/actions/ci-evidence
+        if: always()
+        with:
+          stage: engine

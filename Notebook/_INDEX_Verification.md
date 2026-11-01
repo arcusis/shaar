@@ -10,6 +10,7 @@
 - [[Native_Window_Verification]]
 - [[Managed_Host_Verification]]
 - [[Abrupt_Restart_Durability]]
+- [[Quit_Exit_Verification]]
 - [[Bitwarden_Compatibility]]
 - [[Project_State]]
 - [[Arc_Reference_Library]]

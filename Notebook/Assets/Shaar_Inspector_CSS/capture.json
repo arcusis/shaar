@@ -1,11 +1,11 @@
 {
-  "capturedUTC": "2026-11-01T20:27:53.169182+00:00",
+  "capturedUTC": "2026-11-01T20:55:45.561286+00:00",
   "engine": "155.0.8059.84",
   "offscreen": true,
   "sourceSHA256": {
     "Sources/ArcusisBrowser/InspectorBoxModel.swift": "ee89f0fb2c5873efad97c1ab6e6fb4ce3580181f57690a1295a0a13eb2c0bb6e",
     "Sources/ArcusisBrowser/InspectorColor.swift": "fe7611933146d722c453f894c9ce334bb7bc0e9b69a49b3f23b87d2f30fd5dc2",
-    "Sources/ArcusisBrowser/InspectorModel.swift": "ddd963e11cb66aea0409152e12e3e14e0ba431df78e9e348317224081d1b3149",
+    "Sources/ArcusisBrowser/InspectorModel.swift": "4a864060b7ad13f9fd4490c771f21a4badc610b5456b7d6c428e77f76ff56fcb",
     "Sources/ArcusisBrowser/InspectorPage.swift": "a48e9e40c195e9912d525b418b179afc7eec48d1155090f5c1d950a2e8f1a9a4",
     "Sources/ArcusisBrowser/InspectorPageScript.swift": "a367c134b83f1ab8248c64eb7f7e09b07b015043235e4cae40f336233d7b00ef",
     "Sources/ArcusisBrowser/InspectorPanel.swift": "57f591a523f8435b25a4f646119347330c384f7f5ff5ac39716ee4ba45e210b0",

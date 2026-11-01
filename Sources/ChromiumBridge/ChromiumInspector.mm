@@ -42,7 +42,7 @@
       @"Runtime.releaseObjectGroup", @"DOM.enable",
       @"DOM.getDocument", @"DOM.requestNode", @"DOM.getBoxModel", @"CSS.enable",
       @"CSS.getPlatformFontsForNode", @"CSS.getBackgroundColors", @"CSS.getMatchedStylesForNode",
-      @"CSS.getComputedStyleForNode", @"CSS.getStyleSheetText", @"Page.getResourceTree",
+      @"CSS.getComputedStyleForNode", @"CSS.getStyleSheetText", @"Page.enable", @"Page.getResourceTree",
       @"Page.getResourceContent", @"Page.captureScreenshot", @"Overlay.enable", @"Overlay.disable",
       @"Overlay.setShowGridOverlays", @"Overlay.setShowFlexOverlays", @"Overlay.getGridHighlightObjectsForTest"]];
   });

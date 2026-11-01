@@ -148,6 +148,7 @@ final class InspectorModel {
         else { throw InspectorFailure("This page is no longer available.") }
         _ = try await evaluate(InspectorPageScript.install)
         _ = try await evaluate(InspectorStyleScript.install)
+        _ = try await call("Page.enable")
         _ = try await call("DOM.enable")
         _ = try await call("DOM.getDocument", params: ["depth": 0])
         _ = try await call("CSS.enable")

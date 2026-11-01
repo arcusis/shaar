@@ -2204,7 +2204,7 @@
         }
       ],
       "selector" : "h1, h1 + h2",
-      "source" : "Stylesheet style-sheet-75521-4:1"
+      "source" : "https:\/\/w3.org\/WAI\/assets\/css\/style.css:1"
     },
     {
       "declarations" : [
@@ -2218,7 +2218,7 @@
         }
       ],
       "selector" : "h1",
-      "source" : "Stylesheet style-sheet-75521-4:1"
+      "source" : "https:\/\/w3.org\/WAI\/assets\/css\/style.css:1"
     },
     {
       "declarations" : [
@@ -2228,7 +2228,7 @@
         }
       ],
       "selector" : "h1",
-      "source" : "Stylesheet style-sheet-75521-4:1"
+      "source" : "https:\/\/w3.org\/WAI\/assets\/css\/style.css:1"
     },
     {
       "declarations" : [
@@ -2242,7 +2242,7 @@
         }
       ],
       "selector" : "h1",
-      "source" : "Stylesheet style-sheet-75521-4:1"
+      "source" : "https:\/\/w3.org\/WAI\/assets\/css\/style.css:1"
     },
     {
       "declarations" : [
@@ -2256,7 +2256,7 @@
         }
       ],
       "selector" : "h1, h2, h3, h4",
-      "source" : "Stylesheet style-sheet-75521-4:1"
+      "source" : "https:\/\/w3.org\/WAI\/assets\/css\/style.css:1"
     },
     {
       "declarations" : [
@@ -2266,7 +2266,7 @@
         }
       ],
       "selector" : "h1, h2",
-      "source" : "Stylesheet style-sheet-75521-4:1"
+      "source" : "https:\/\/w3.org\/WAI\/assets\/css\/style.css:1"
     },
     {
       "declarations" : [
@@ -2276,7 +2276,7 @@
         }
       ],
       "selector" : "h1, h2, h3, h4, h5, h6",
-      "source" : "Stylesheet style-sheet-75521-4:1"
+      "source" : "https:\/\/w3.org\/WAI\/assets\/css\/style.css:1"
     },
     {
       "declarations" : [

@@ -126,7 +126,7 @@ struct ExtensionManagerPanel: View {
       Divider()
       Button {
         engine.extensionPanel = nil
-        store.perform(.open(URL(string: "https://chromewebstore.google.com/category/extensions")!))
+        store.perform(.open(BrowserExtension.storeCatalogURL))
       } label: {
         Label("Add Extensions…", systemImage: "plus")
           .frame(maxWidth: .infinity, alignment: .leading)
@@ -152,7 +152,6 @@ struct ExtensionRow: View {
   let pinned: Bool
   let canRun: Bool
   let actions: ExtensionRowActions
-  @State private var isHovered = false
 
   var body: some View {
     HStack(spacing: 10) {
@@ -195,13 +194,27 @@ struct ExtensionRow: View {
       .help("Details")
       .accessibilityLabel("Details for \(item.name)")
     }
-    .padding(.horizontal, 8)
-    .padding(.vertical, 6)
-    .background(
-      Color.primary.opacity(isHovered ? 0.06 : 0), in: RoundedRectangle(cornerRadius: 8)
-    )
-    .onHover { isHovered = $0 }
+    .hoverRowBackground()
   }
+}
+
+/// The padded, rounded hover highlight shared by rows in Shaar's popovers.
+struct HoverRowBackground: ViewModifier {
+  @State private var isHovered = false
+
+  func body(content: Content) -> some View {
+    content
+      .padding(.horizontal, 8)
+      .padding(.vertical, 6)
+      .background(
+        Color.primary.opacity(isHovered ? 0.06 : 0), in: RoundedRectangle(cornerRadius: 8)
+      )
+      .onHover { isHovered = $0 }
+  }
+}
+
+extension View {
+  func hoverRowBackground() -> some View { modifier(HoverRowBackground()) }
 }
 
 struct ExtensionIcon: View {

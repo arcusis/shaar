@@ -14,6 +14,7 @@
 - [[Media_Playback]]
 - [[Automatic_Picture_In_Picture]]
 - [[Picture_In_Picture_Controls]]
+- [[Site_Control_Center]]
 - [[External_App_Consent]]
 - [[Find_In_Page]]
 - [[Renderer_Recovery]]

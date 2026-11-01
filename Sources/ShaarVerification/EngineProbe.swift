@@ -26,6 +26,7 @@ final class EngineProbe {
   private let privateWindowMode: Bool
   private let privateWindowRunID: String?
   private let quitExitMode: Bool
+  private let quitPendingNavigation: Bool
   private let expectedAfterTermination: BrowserSession?
   private let output: URL
   private var checks: [String] = []
@@ -63,7 +64,7 @@ final class EngineProbe {
     bitwardenOnboardingControl: Bool,
     awaitAbruptTermination: Bool, expectAbruptRecovery: Bool, savedTabCapacityMode: Bool,
     externalAppConsentMode: Bool, privateWindowMode: Bool, privateWindowRunID: String?,
-    quitExitMode: Bool
+    quitExitMode: Bool, quitPendingNavigation: Bool
   ) throws {
     self.root = root
     self.fixture = fixture
@@ -76,6 +77,7 @@ final class EngineProbe {
     self.privateWindowMode = privateWindowMode
     self.privateWindowRunID = privateWindowRunID
     self.quitExitMode = quitExitMode
+    self.quitPendingNavigation = quitPendingNavigation
     expectedAfterTermination =
       expectAbruptRecovery ? try AbruptProbeCheckpoint.expectedSession(root: root) : nil
     self.output = output
@@ -155,6 +157,7 @@ final class EngineProbe {
       let externalAppConsentMode = arguments.contains("--probe-external-app-consent")
       let privateWindowMode = arguments.contains("--probe-private-window")
       let quitExitMode = arguments.contains("--probe-quit-exit")
+      let quitPendingNavigation = arguments.contains("--probe-quit-pending-navigation")
       let privateWindowRunID = privateWindowMode ? try value("--probe-private-window-run-id") : nil
       guard
         !privateWindowMode
@@ -179,7 +182,8 @@ final class EngineProbe {
         !quitExitMode
           || !conflictingFlags.filter({ $0 != "--probe-quit-exit" }).contains(
             where: arguments.contains),
-        !quitExitMode || !noLaunchGuard
+        !quitExitMode || !noLaunchGuard,
+        !quitPendingNavigation || quitExitMode
       else { throw ProbeFailure("Invalid engine probe mode flags.") }
       guard !bitwardenOnboardingControl || includeBitwarden,
         !(awaitAbruptTermination && expectAbruptRecovery),
@@ -194,7 +198,8 @@ final class EngineProbe {
         awaitAbruptTermination: awaitAbruptTermination,
         expectAbruptRecovery: expectAbruptRecovery, savedTabCapacityMode: savedTabCapacityMode,
         externalAppConsentMode: externalAppConsentMode, privateWindowMode: privateWindowMode,
-        privateWindowRunID: privateWindowRunID, quitExitMode: quitExitMode)
+        privateWindowRunID: privateWindowRunID, quitExitMode: quitExitMode,
+        quitPendingNavigation: quitPendingNavigation)
       probe.runtime.onReady = { [weak probe] in
         guard let probe else { return }
         Task {
@@ -311,7 +316,7 @@ final class EngineProbe {
         guard let browserEngine else { throw ProbeFailure("Quit probe engine is missing.") }
         let probe = try QuitExitProbe(
           runtime: runtime, primary: browserEngine, store: store, root: root, fixture: fixture,
-          phase: phase)
+          phase: phase, pendingNavigation: quitPendingNavigation)
         quitExitProbe = probe
         checks += try await probe.run()
         finish(error: nil)
@@ -723,7 +728,9 @@ final class EngineProbe {
   private var reportScope: String {
     if savedTabCapacityMode { return SavedTabCapacityFixture.scope }
     if externalAppConsentMode { return ExternalAppConsentProbe.scope }
-    if quitExitMode { return QuitExitProbe.scope }
+    if quitExitMode {
+      return quitPendingNavigation ? QuitExitProbe.pendingNavigationScope : QuitExitProbe.scope
+    }
     if privateWindowMode {
       return
         "Owned private-window fixture composed with normal engine fixture. No real account or third-party service."
@@ -760,6 +767,7 @@ final class EngineProbe {
       "privateWindowOnly": privateWindowMode,
       "quitExitOnly": quitExitMode,
       "quitEventLoopStopped": quitExitProbe?.stoppedEventLoop ?? false,
+      "quitPendingNavigation": quitPendingNavigation,
       "privateWindowProbe": privateWindowMode,
       "abruptRecoveryProbe": expectedAfterTermination != nil,
       "localFixturesPassed": localFixturesPassed,

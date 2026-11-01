@@ -79,6 +79,10 @@ def load_config(repo: pathlib.Path) -> dict:
     patch = repo / config["patch"]["file"]
     if sha256(patch) != config["patch"]["sha256"]:
         raise BuildError("profile download patch digest mismatch")
+    for item in config.get("patches", []):
+        if (not re.fullmatch(r"[0-9a-f]{64}", item["sha256"]) or
+                sha256(repo / item["file"]) != item["sha256"]):
+            raise BuildError(f"engine patch digest mismatch: {item['file']}")
     if "latest" in json.dumps(config).lower():
         raise BuildError("floating latest input rejected")
     return config
@@ -416,10 +420,12 @@ def terminate_process_group(process: subprocess.Popen, grace: float = 10.0) -> N
 
 
 class Runner:
-    def __init__(self, repo: pathlib.Path, output: pathlib.Path, config: dict):
+    def __init__(self, repo: pathlib.Path, output: pathlib.Path, config: dict,
+                 update_patches: bool = False):
         self.repo = repo.resolve(strict=True)
         self.output = output
         self.config = config
+        self.update_patches = update_patches
         self.receipt_path = output / RECEIPT_FILE
         self.receipt = self._load_receipt()
         recovery = recover_stale_lock(output, owner_record(self.repo), self.receipt)
@@ -436,6 +442,8 @@ class Runner:
             data = json.loads(self.receipt_path.read_text())
             if data.get("owner") != owner_record(self.repo):
                 raise BuildError("build receipt owner does not match checkout")
+            if self.update_patches:
+                self.accept_patch_update(data)
             current_config_digest = sha256(self.repo / "ThirdParty/ArdiaCore/source-build.json")
             if data.get("configDigest") != current_config_digest:
                 old_pins = json.loads(json.dumps(data.get("pins", {})))
@@ -518,6 +526,33 @@ class Runner:
             "status": "started",
             "startedAt": utc_now(),
         }
+
+    def accept_patch_update(self, data: dict) -> None:
+        """Reopen a finished build whose config differs only by appended engine patches."""
+        if data.get("status") != "succeeded":
+            raise BuildError("--update-patches requires a successful build receipt")
+        old_pins = json.loads(json.dumps(data.get("pins", {})))
+        new_pins = json.loads(json.dumps(self.config))
+        old_patches = old_pins.pop("patches", [])
+        new_patches = new_pins.pop("patches", [])
+        if (old_pins != new_pins or len(new_patches) <= len(old_patches) or
+                new_patches[:len(old_patches)] != old_patches):
+            raise BuildError("--update-patches accepts only appended engine patches")
+        data.setdefault("patchUpdates", []).append({
+            "previousConfigDigest": data.get("configDigest"),
+            "previousRunnerSha256": data.get("runnerSha256"),
+            "addedPatches": new_patches[len(old_patches):],
+            "previousFramework": data.get("framework"),
+            "previousFinishedAt": data.get("finishedAt"),
+            "at": utc_now(),
+        })
+        data["stages"]["05-build"]["status"] = "superseded"
+        data["configDigest"] = sha256(self.repo / "ThirdParty/ArdiaCore/source-build.json")
+        data["runnerSha256"] = sha256(pathlib.Path(__file__))
+        data["pins"] = self.config
+        data["framework"] = None
+        data["status"] = "started"
+        data.pop("finishedAt", None)
 
     @staticmethod
     def host_inputs(repo: pathlib.Path) -> dict:
@@ -1416,6 +1451,32 @@ class Runner:
     def patch_overlay(self) -> None:
         chromium = self.output / "chromium_git/chromium/src"
         verify_source_preconditions(self.output / "source/ardia", chromium)
+        self.apply_profile_patch(chromium)
+        self.apply_engine_patches(chromium)
+
+    def apply_engine_patches(self, chromium: pathlib.Path) -> None:
+        """Apply the configured engine fixes in order; a patch already in the tree is kept."""
+        timeout = self.config["build"]["timeoutsSeconds"]["patches"]
+        records = []
+        for index, item in enumerate(self.config.get("patches", []), start=1):
+            patch = self.repo / item["file"]
+            stage = f"engine-patch-{index:02d}"
+            reverse = subprocess.run(
+                ["/usr/bin/git", "-C", str(chromium), "apply", "--reverse", "--check", str(patch)],
+                cwd=self.output, env=self.child_environment(), capture_output=True, text=True,
+                timeout=timeout)
+            state = "already-applied"
+            if reverse.returncode:
+                self.run(f"{stage}-check", ["/usr/bin/git", "-C", str(chromium), "apply", "--check",
+                                            str(patch)], self.output, timeout)
+                self.run(f"{stage}-apply", ["/usr/bin/git", "-C", str(chromium), "apply", str(patch)],
+                         self.output, timeout)
+                state = "applied"
+            records.append({"file": item["file"], "sha256": sha256(patch), "state": state})
+            self.receipt["inputs"]["enginePatches"] = records
+            self.save()
+
+    def apply_profile_patch(self, chromium: pathlib.Path) -> None:
         patch = self.repo / self.config["patch"]["file"]
         reverse_args = ["/usr/bin/git", "-C", str(chromium), "apply", "--reverse", "--check", str(patch)]
         reverse = subprocess.run(reverse_args, cwd=self.output, env=self.child_environment(),
@@ -1621,7 +1682,9 @@ class Runner:
         """Bind incremental Ninja resume to the inputs recorded before reboot."""
         build = self.receipt.get("stages", {}).get("05-build", {})
         attempts = build.get("attempts", [])
-        if not attempts or attempts[-1].get("status") not in ("running", "failed"):
+        if not attempts:
+            return
+        if attempts[-1].get("status") not in ("running", "failed") and build.get("status") != "superseded":
             return
         chromium = self.verify_chromium_checkout()
         aria = self.output / "source/ardia"
@@ -1671,6 +1734,14 @@ class Runner:
         command = ["/usr/bin/git", "-C", str(chromium), "apply", "--reverse", "--check", str(patch)]
         self.run("resume-profile-patch-check", command, self.output,
                  self.config["build"]["timeoutsSeconds"]["patches"])
+        configured = {item["file"]: item["sha256"] for item in self.config.get("patches", [])}
+        for index, item in enumerate(expected.get("enginePatches", []), start=1):
+            engine_patch = self.repo / item["file"]
+            if configured.get(item["file"]) != item["sha256"] or sha256(engine_patch) != item["sha256"]:
+                raise BuildError(f"engine patch changed after the recorded build: {item['file']}")
+            self.run(f"resume-engine-patch-{index:02d}-check",
+                     ["/usr/bin/git", "-C", str(chromium), "apply", "--reverse", "--check",
+                      str(engine_patch)], self.output, self.config["build"]["timeoutsSeconds"]["patches"])
         recorded_build = expected.get("effectiveCommands", {}).get("build")
         if recorded_build != self.effective_commands()["build"]:
             raise BuildError("effective Chromium build command changed after interruption")
@@ -1857,6 +1928,7 @@ class Runner:
             "exports": exported,
             "requiredExports": required,
             "sourcePatchSha256": self.receipt["inputs"]["patchSha256"],
+            "enginePatchSha256": [item["sha256"] for item in self.receipt["inputs"].get("enginePatches", [])],
         }
         self.save()
 
@@ -1928,6 +2000,8 @@ def utc_now() -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true", help="run pinned source preparation and build")
+    parser.add_argument("--update-patches", action="store_true",
+                        help="with --run, rebuild a finished output after appending engine patches")
     args = parser.parse_args(argv)
     repo = pathlib.Path(__file__).resolve().parents[1]
     try:
@@ -1937,7 +2011,7 @@ def main(argv: list[str] | None = None) -> int:
                               "execution": "opt-in; pass --run"}, indent=2))
             return 0
         output, _ = prepare_owned_output(repo)
-        runner = Runner(repo, output, config)
+        runner = Runner(repo, output, config, update_patches=args.update_patches)
         try:
             runner.execute()
         except Exception as exc:

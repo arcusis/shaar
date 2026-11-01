@@ -11,12 +11,16 @@ import Foundation
 
 /// Quits through the production host's Quit menu command with an MV3 extension installed. The
 /// parent fixture times main and helper process exit from the checkpoint written here; this
-/// probe records Chromium's keep-alive registry until the engine loop ends.
+/// probe records Chromium's keep-alive registry until the engine loop ends. With a pending
+/// navigation, every host window first starts loading a fixture page whose response never
+/// arrives, so Quit tears the engine down while those navigations are in flight.
 @MainActor
 final class QuitExitProbe {
   static let mode = "quit-exit-only"
   static let scope =
     "Hidden host windows in disposable profiles with the component-loaded MV3 fixture. Quit is sent through the native menu command."
+  static let pendingNavigationScope =
+    "Hidden host windows in disposable profiles with the component-loaded MV3 fixture. Each window has a navigation in flight when Quit is sent through the native menu command."
 
   private let runtime: ARCChromiumRuntime
   private let primary: BrowserEngine
@@ -24,6 +28,7 @@ final class QuitExitProbe {
   private let root: URL
   private let fixture: URL
   private let phase: String
+  let pendingNavigation: Bool
   private let lock: WorkspaceProcessLock
   private let file: WorkspaceFile
   private var host: NativeBrowserHost?
@@ -32,7 +37,7 @@ final class QuitExitProbe {
 
   init(
     runtime: ARCChromiumRuntime, primary: BrowserEngine, store: BrowserStore, root: URL,
-    fixture: URL, phase: String
+    fixture: URL, phase: String, pendingNavigation: Bool
   ) throws {
     self.runtime = runtime
     self.primary = primary
@@ -40,6 +45,7 @@ final class QuitExitProbe {
     self.root = root
     self.fixture = fixture
     self.phase = phase
+    self.pendingNavigation = pendingNavigation
     let directory = root.appending(path: "quit-workspace")
     lock = try WorkspaceProcessLock(directory: directory)
     file = WorkspaceFile(
@@ -68,6 +74,7 @@ final class QuitExitProbe {
     try expect(
       !state.contains("BACKGROUND_MODE_MANAGER"),
       "no background-mode keep-alive holds the browser before Quit")
+    if pendingNavigation { try await startPendingNavigations(in: host) }
     record("before-quit")
     return checks
   }
@@ -144,6 +151,25 @@ final class QuitExitProbe {
       try await Task.sleep(for: .milliseconds(100))
     }
     throw QuitProbeFailure("Hidden host pages did not finish loading.")
+  }
+
+  /// The fixture server holds `/stall` open, so these navigations stay pending through Quit.
+  private func startPendingNavigations(in host: NativeBrowserHost) async throws {
+    let stall = fixture.deletingLastPathComponent().appending(path: "stall")
+    let engines = host.contexts.values.map(\.engine)
+    for engine in engines {
+      guard engine.navigateCurrentPage(to: stall) else {
+        throw QuitProbeFailure("A host window could not start its pending navigation.")
+      }
+    }
+    for _ in 0..<100 {
+      if engines.allSatisfy({ $0.pages.values.contains(where: \.loading) }) {
+        checks.append("every hidden host window has a navigation pending when Quit is sent")
+        return
+      }
+      try await Task.sleep(for: .milliseconds(50))
+    }
+    throw QuitProbeFailure("Hidden host windows did not start their pending navigations.")
   }
 
   private func writeCheckpoint() throws {

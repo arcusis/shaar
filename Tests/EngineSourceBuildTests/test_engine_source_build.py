@@ -178,6 +178,92 @@ class SourceBuildTests(unittest.TestCase):
             self.assertEqual(script.read_text().count("./buildtools/mac/gn gen"), 1)
             self.assertNotIn("./buildtools/mac/./buildtools/mac/gn", script.read_text())
 
+    def test_symbol_level_adaptation_changes_only_the_browser_symbol_level(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            script = pathlib.Path(temporary) / "gn_defines.sh"
+            script.write_text("_gn_args=(\n  symbol_level=0 blink_symbol_level=0 v8_symbol_level=0\n)\n")
+            BUILD.Runner.adapt_symbol_level(script, 1)
+            self.assertEqual(script.read_text(),
+                             "_gn_args=(\n  symbol_level=1 blink_symbol_level=0 v8_symbol_level=0\n)\n")
+            with self.assertRaisesRegex(BUILD.BuildError, "anchor mismatch"):
+                BUILD.Runner.adapt_symbol_level(script, 1)
+            with self.assertRaisesRegex(BUILD.BuildError, "unsupported symbol level"):
+                BUILD.Runner.adapt_symbol_level(script, 3)
+
+    def _patch_update_runner(self, repo, receipt_pins, patches):
+        (repo / "ThirdParty/ArdiaCore").mkdir(parents=True)
+        (repo / "ThirdParty/ArdiaCore/source-build.json").write_text("{}")
+        runner = BUILD.Runner.__new__(BUILD.Runner)
+        runner.repo = repo
+        runner.config = {**receipt_pins, "patches": patches}
+        data = {"status": "succeeded", "pins": receipt_pins, "framework": {"sha256": "old"},
+                "finishedAt": "then", "configDigest": "old", "runnerSha256": "old",
+                "stages": {"05-build": {"status": "succeeded",
+                                        "attempts": [{"status": "succeeded"}]}}}
+        return runner, data
+
+    def test_patch_update_reopens_only_the_build_for_appended_patches(self):
+        fix = {"file": "fix.patch", "sha256": "a" * 64}
+        with tempfile.TemporaryDirectory() as temporary:
+            runner, data = self._patch_update_runner(pathlib.Path(temporary),
+                                                     {"build": {"buildJobs": 6}}, [fix])
+            runner.accept_patch_update(data)
+        self.assertEqual(data["status"], "started")
+        self.assertIsNone(data["framework"])
+        self.assertNotIn("finishedAt", data)
+        self.assertEqual(data["stages"]["05-build"]["status"], "superseded")
+        self.assertFalse(BUILD.Runner.stage_succeeded(data["stages"]["05-build"]))
+        update = data["patchUpdates"][-1]
+        self.assertEqual(update["addedPatches"], [fix])
+        self.assertEqual(update["previousFramework"], {"sha256": "old"})
+
+    def test_patch_update_rejects_other_config_changes_and_unfinished_builds(self):
+        fix = {"file": "fix.patch", "sha256": "a" * 64}
+        cases = (
+            ({"build": {"buildJobs": 6}}, {"build": {"buildJobs": 4}}, [fix], "succeeded"),
+            ({"build": {"buildJobs": 6}}, {"build": {"buildJobs": 6}}, [], "succeeded"),
+            ({"build": {"buildJobs": 6}, "patches": [fix]},
+             {"build": {"buildJobs": 6}}, [{"file": "other.patch", "sha256": "b" * 64}, fix],
+             "succeeded"),
+            ({"build": {"buildJobs": 6}}, {"build": {"buildJobs": 6}}, [fix], "failed"),
+        )
+        for receipt_pins, config, patches, status in cases:
+            with self.subTest(config=config, patches=patches, status=status), \
+                    tempfile.TemporaryDirectory() as temporary:
+                runner, data = self._patch_update_runner(pathlib.Path(temporary), receipt_pins, patches)
+                runner.config = {**config, "patches": patches}
+                data["status"] = status
+                with self.assertRaises(BUILD.BuildError):
+                    runner.accept_patch_update(data)
+
+    def test_engine_patches_apply_in_order_and_keep_already_applied_ones(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            chromium = root / "src"
+            chromium.mkdir()
+            for args in (["init", "-q"], ["config", "user.name", "test"],
+                         ["config", "user.email", "test@example.invalid"]):
+                BUILD.subprocess.run(["/usr/bin/git", "-C", str(chromium), *args], check=True)
+            (chromium / "first.txt").write_text("one\n")
+            (chromium / "second.txt").write_text("one\n")
+            first = root / "first.patch"
+            second = root / "second.patch"
+            first.write_text("--- a/first.txt\n+++ b/first.txt\n@@ -1 +1,2 @@\n one\n+two\n")
+            second.write_text("--- a/second.txt\n+++ b/second.txt\n@@ -1 +1,2 @@\n one\n+two\n")
+            runner = self._runner_for_process_test(root)
+            runner.config["build"]["timeoutsSeconds"] = {"patches": 30}
+            runner.config["patches"] = [{"file": "first.patch", "sha256": BUILD.sha256(first)},
+                                        {"file": "second.patch", "sha256": BUILD.sha256(second)}]
+            runner.receipt["inputs"] = {}
+            BUILD.subprocess.run(["/usr/bin/git", "-C", str(chromium), "apply", str(first)], check=True)
+            runner.apply_engine_patches(chromium)
+            self.assertEqual((chromium / "second.txt").read_text(), "one\ntwo\n")
+            self.assertEqual([item["state"] for item in runner.receipt["inputs"]["enginePatches"]],
+                             ["already-applied", "applied"])
+            runner.apply_engine_patches(chromium)
+            self.assertEqual((chromium / "first.txt").read_text(), "one\ntwo\n")
+            self.assertEqual((chromium / "second.txt").read_text(), "one\ntwo\n")
+
     def test_build_priority_adaptation_calls_taskpolicy_directly(self):
         with tempfile.TemporaryDirectory() as temporary:
             script = pathlib.Path(temporary) / "05-build.sh"

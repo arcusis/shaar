@@ -323,9 +323,18 @@ WEB_STORE_FIT_PAGE = b"""<!doctype html><html data-arcusis-fixture="web-store-fi
 <p>Fixed minimum width, like the Chrome Web Store.</p></html>"""
 
 
+# Released when the run ends; until then /stall holds its response so a navigation stays pending.
+STALL_RELEASE = threading.Event()
+STALL_SECONDS = 120
+
+
 class Fixture(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
+        if path == '/stall':
+            STALL_RELEASE.wait(STALL_SECONDS)
+            self.html(b'<!doctype html><title>Stalled fixture</title>')
+            return
         favicon_colors = {
             '/favicon-initial.png': (52, 86, 120),
             '/favicon-restart.png': (138, 75, 18),
@@ -501,13 +510,16 @@ def argument_parser():
                       help="Compose owned native OTR windows with both normal engine fixture phases")
     mode.add_argument("--quit-exit", action="store_true",
                       help="Quit through the host menu with an extension installed; assert main and helper exit")
+    mode.add_argument("--quit-pending-navigation", action="store_true",
+                      help="Quit-exit probe with a navigation pending in every host window")
     return parser
 
 
 def build_engine_probe_arguments(executable, root, fixture_url, phase, *, include_bitwarden,
                                  onboarding_control, abrupt, saved_tab_capacity,
                                  external_app_consent=False, private_window=False,
-                                 private_window_run_id=None, quit_exit=False):
+                                 private_window_run_id=None, quit_exit=False,
+                                 quit_pending_navigation=False):
     arguments = [str(executable), "--probe-data-dir", str(root),
                  "--probe-url", fixture_url, "--probe-phase", phase,
                  "--probe-output", str(root / f"{phase}.json")]
@@ -527,8 +539,10 @@ def build_engine_probe_arguments(executable, root, fixture_url, phase, *, includ
             raise RuntimeError('Private window mode requires a run identity')
         arguments.append('--probe-private-window')
         arguments.extend(('--probe-private-window-run-id', private_window_run_id))
-    if quit_exit:
+    if quit_exit or quit_pending_navigation:
         arguments.append('--probe-quit-exit')
+    if quit_pending_navigation:
+        arguments.append('--probe-quit-pending-navigation')
     return arguments
 
 
@@ -800,6 +814,10 @@ QUIT_EXIT_MODE = 'quit-exit-only'
 # Bounds from the Quit menu command: the browser process, then every helper in its group.
 QUIT_MAIN_EXIT_SECONDS = 15
 QUIT_HELPER_EXIT_SECONDS = 10
+# macOS writes a crash report shortly after the process dies; an abnormal exit waits this long for it.
+CRASH_REPORT_SETTLE_SECONDS = 5
+CRASH_REPORT_DIRECTORY = Path.home() / 'Library' / 'Logs' / 'DiagnosticReports'
+CRASH_REPORT_PROCESS = 'ShaarVerification'
 
 
 def read_quit_checkpoint(root, phase, pid):
@@ -830,6 +848,30 @@ def wait_until(condition, seconds):
     return time.monotonic() - start
 
 
+def crash_reports_for(pid, since, directory=None):
+    """Names of the macOS crash reports written for the probe process since the given time."""
+    directory = directory or CRASH_REPORT_DIRECTORY
+    names = []
+    for path in sorted(directory.glob(f'{CRASH_REPORT_PROCESS}-*.ips')):
+        try:
+            if path.stat().st_mtime < since:
+                continue
+            _, body = path.read_text(errors='replace').split('\n', 1)
+            report = json.loads(body)
+        except (OSError, ValueError):
+            continue
+        if isinstance(report, dict) and report.get('pid') == pid:
+            names.append(path.name)
+    return names
+
+
+def quit_crash_reports(process, since):
+    """Crash reports for the exited probe; an abnormal exit waits briefly for the report to land."""
+    if process.returncode != 0:
+        wait_until(lambda: bool(crash_reports_for(process.pid, since)), CRASH_REPORT_SETTLE_SECONDS)
+    return crash_reports_for(process.pid, since)
+
+
 def wait_for_quit_exit(process, root, phase, timeout):
     """Time main and helper exit from the probe's Quit command; write the phase receipt."""
     deadline = time.monotonic() + probe_timeout(timeout)
@@ -839,18 +881,23 @@ def wait_for_quit_exit(process, root, phase, timeout):
         if time.monotonic() >= deadline:
             raise subprocess.TimeoutExpired(process.args, timeout)
         time.sleep(0.05)
+    quit_requested_at = time.time()
     main_seconds = wait_until(lambda: process.poll() is not None, QUIT_MAIN_EXIT_SECONDS)
     helper_seconds = None
+    crash_reports = []
     if main_seconds is not None:
         helper_seconds = wait_until(lambda: not process_group_exists(process.pid),
                                     QUIT_HELPER_EXIT_SECONDS)
+        crash_reports = quit_crash_reports(process, quit_requested_at - 1)
+    exited = main_seconds is not None and helper_seconds is not None
     receipt = {
         'schema': 1, 'phase': phase, 'pid': process.pid,
         'mainExitSeconds': main_seconds, 'helpersExitSeconds': helper_seconds,
         'mainExitBoundSeconds': probe_timeout(QUIT_MAIN_EXIT_SECONDS),
         'helpersExitBoundSeconds': probe_timeout(QUIT_HELPER_EXIT_SECONDS),
         'exitCode': process.returncode, 'lastKeepAliveSample': last_keep_alive_sample(root, phase),
-        'passed': main_seconds is not None and helper_seconds is not None,
+        'crashReports': crash_reports,
+        'passed': exited and process.returncode == 0 and not crash_reports,
     }
     (root / f'{phase}-quit-exit.json').write_text(json.dumps(receipt, indent=2, sort_keys=True) + '\n')
     if main_seconds is None:
@@ -859,14 +906,18 @@ def wait_for_quit_exit(process, root, phase, timeout):
     if helper_seconds is None:
         raise RuntimeError(f'{phase}: helper processes still running '
                            f'{receipt["helpersExitBoundSeconds"]:.0f}s after the browser exited')
+    if not receipt['passed']:
+        reports = ', '.join(crash_reports) or 'none'
+        raise RuntimeError(f'{phase}: browser exited {process.returncode} after Quit; crash reports: {reports}')
     return process.returncode
 
 
-def validate_quit_exit_report(root, phase, report, exit_code):
+def validate_quit_exit_report(root, phase, report, exit_code, pending_navigation=False):
     receipt = json.loads((root / f'{phase}-quit-exit.json').read_text())
     if (not isinstance(report, dict) or report.get('phase') != phase
             or report.get('probeMode') != QUIT_EXIT_MODE
             or report.get('quitExitOnly') is not True
+            or report.get('quitPendingNavigation') is not pending_navigation
             or report.get('savedTabCapacityOnly') is not False
             or report.get('externalAppConsentOnly') is not False
             or report.get('privateWindowOnly') is not False
@@ -1058,14 +1109,17 @@ def main(argv=None):
     if options.bitwarden_onboarding_control:
         print('CONTROL ONLY: two-second intro-screen age; clean first-click acceptance is not evaluated', flush=True)
     abrupt = options.abrupt_restart or options.abrupt_control
+    quit_exit = options.quit_exit or options.quit_pending_navigation
     if options.saved_tab_capacity:
         print('SAVED TAB CAPACITY ONLY: no account, MV3, or full baseline claims', flush=True)
     if options.external_app_consent:
         print('EXTERNAL APP CONSENT ONLY: owned loopback; native no-launch guard enabled', flush=True)
     if options.private_window:
         print('PRIVATE WINDOW FIXTURE: owned hidden OTR windows; synthetic loopback only', flush=True)
-    if options.quit_exit:
+    if quit_exit:
         print('QUIT EXIT ONLY: host Quit command with an extension installed; process exit is timed', flush=True)
+    if options.quit_pending_navigation:
+        print('QUIT PENDING NAVIGATION: every host window has a navigation in flight at Quit', flush=True)
     root = Path(tempfile.mkdtemp(prefix="arcusis-engine-probe-"))
     (root / ".arcusis-probe").write_text("arcusis-engine-probe-v1\n")
     (root / ".arcusis-probe").chmod(0o600)
@@ -1089,14 +1143,15 @@ def main(argv=None):
                 abrupt=abrupt, saved_tab_capacity=options.saved_tab_capacity,
                 external_app_consent=options.external_app_consent,
                 private_window=options.private_window,
-                private_window_run_id=private_window_run_id, quit_exit=options.quit_exit)
+                private_window_run_id=private_window_run_id, quit_exit=quit_exit,
+                quit_pending_navigation=options.quit_pending_navigation)
             with (root / f"{phase}.log").open("w") as log:
                 process = subprocess.Popen(arguments, stdout=log, stderr=log, start_new_session=True, env=probe_env)
                 try:
                     if abrupt and phase == 'initial':
                         terminate_at_checkpoint(process, root, timeout=90, settle_seconds=35 if options.abrupt_control else 0)
                         continue
-                    if options.quit_exit:
+                    if quit_exit:
                         code = wait_for_quit_exit(process, root, phase, timeout=90)
                     else:
                         timeout = (240 if options.private_window else 180 if options.external_app_consent else 180 if options.saved_tab_capacity
@@ -1135,8 +1190,9 @@ def main(argv=None):
                 validate_saved_tab_capacity_report(root, phase, report, code)
             elif options.external_app_consent:
                 validate_external_app_consent_report(root, phase, report, code)
-            elif options.quit_exit:
-                receipt = validate_quit_exit_report(root, phase, report, code)
+            elif quit_exit:
+                receipt = validate_quit_exit_report(root, phase, report, code,
+                                                    pending_navigation=options.quit_pending_navigation)
                 stopped = ' (shutdown guard stopped the event loop)' if report.get('quitEventLoopStopped') else ''
                 print(f"{phase}: browser exited {receipt['mainExitSeconds']:.2f}s after Quit{stopped}; "
                       f"helpers {receipt['helpersExitSeconds']:.2f}s later", flush=True)
@@ -1171,6 +1227,7 @@ def main(argv=None):
         if options.external_app_consent:
             record_external_app_consent_summary(root)
     finally:
+        STALL_RELEASE.set()
         server.shutdown()
         server.server_close()
     if options.private_window:

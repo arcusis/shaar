@@ -36,6 +36,9 @@ FOUNDATION_EXPORT BOOL ARCDisableBackgroundMode(NSURL *userDataDirectory);
                           completion:(void (^)(NSString * _Nullable))completion;
 - (BOOL)attemptCancelledPrivateProbeCloseID:(NSString *)windowID;
 - (nullable NSDictionary *)privateProbeAuditForContextID:(NSString *)contextID;
+/// The selected owned loopback tab is loaded and attached; does not start a capture.
+- (BOOL)privateProbeCaptureIsReadyForTabID:(NSString *)tabID windowID:(NSString *)windowID
+                              contextID:(NSString *)contextID;
 - (void)capturePrivateProbeTabID:(NSString *)tabID windowID:(NSString *)windowID
                        contextID:(NSString *)contextID
                       completion:(void (^)(NSData * _Nullable, NSString * _Nullable))completion;

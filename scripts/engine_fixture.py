@@ -574,10 +574,17 @@ class Fixture(http.server.BaseHTTPRequestHandler):
             self.send_header('Content-Range', f'bytes {offset}-{len(body)-1}/{len(body)}')
         self.end_headers()
         try:
+            started = time.monotonic()
             for start in range(offset, len(body), 16384):
                 self.wfile.write(body[start:start+16384])
                 if slow:
-                    time.sleep(0.02)
+                    # Catch up after scheduler stalls instead of accumulating one
+                    # overslept delay per chunk on hosted virtual machines.
+                    sent = min(start + 16384, len(body)) - offset
+                    deadline = started + sent / (16384 / 0.02)
+                    delay = deadline - time.monotonic()
+                    if delay > 0:
+                        time.sleep(delay)
         except (BrokenPipeError, ConnectionResetError):
             pass
 
@@ -1281,6 +1288,9 @@ def main(argv=None):
     private_window_children = []
     try:
         for phase in ("initial", "restart"):
+            if options.private_window and phase == 'restart' and failures:
+                print('SKIPPED restart: initial fixture failed; no valid seeded restart baseline', flush=True)
+                break
             output = root / f"{phase}.json"
             arguments = build_engine_probe_arguments(
                 executable, root, f"http://127.0.0.1:{server.server_port}/account", phase,

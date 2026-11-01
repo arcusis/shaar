@@ -451,6 +451,91 @@ class AbruptCheckpointTests(unittest.TestCase):
             fixture.record_abrupt_summary(self.root, control_only=False)
 
 
+class SessionRecoveryRunnerTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory(prefix='arcusis-engine-probe-')
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+        (self.root / '.arcusis-probe').write_text('arcusis-engine-probe-v1\n')
+        self.ready = dict(schema=1, ready=True, phase='initial', mode=fixture.SESSION_RECOVERY_MODE,
+                          pid=12345, expectedSnapshot='session-recovery-expected.json',
+                          workspaceFile='session-recovery-workspace.json',
+                          checks=['background saves reached disk'], chromiumVersion='test')
+
+    def restart_report(self, passed=True):
+        return dict(phase='restart', passed=passed, probeMode=fixture.SESSION_RECOVERY_MODE,
+                    sessionRecoveryOnly=True, savedTabCapacityOnly=False,
+                    externalAppConsentOnly=False, privateWindowOnly=False,
+                    abruptRecoveryProbe=False, checks=['workspace restored'], error=None)
+
+    def running_process(self):
+        process = Mock(pid=12345)
+        process.poll.return_value = None
+        return process
+
+    def test_flag_is_exclusive_and_forwards_to_both_child_phases(self):
+        self.assertTrue(fixture.argument_parser().parse_args(['--session-recovery']).session_recovery)
+        for other in ('--abrupt-restart', '--saved-tab-capacity', '--private-window'):
+            with self.subTest(other=other), contextlib.redirect_stderr(io.StringIO()), \
+                    self.assertRaises(SystemExit):
+                fixture.argument_parser().parse_args(['--session-recovery', other])
+        for phase in ('initial', 'restart'):
+            arguments = fixture.build_engine_probe_arguments(
+                '/tmp/ShaarVerification', self.root, 'http://127.0.0.1:43123/account', phase,
+                include_bitwarden=False, onboarding_control=False, abrupt=False,
+                saved_tab_capacity=False, session_recovery=True)
+            self.assertIn('--probe-session-recovery', arguments)
+            self.assertNotIn('--probe-await-abrupt-termination', arguments)
+
+    def test_foreign_or_malformed_checkpoint_never_sends_a_signal(self):
+        for change in [dict(pid=54321), dict(pid=True), dict(ready=False), dict(mode='full-fixture'),
+                       dict(phase='restart'), dict(checks=[]),
+                       dict(workspaceFile='../workspace.json')]:
+            (self.root / fixture.SESSION_RECOVERY_READY).write_text(json.dumps(self.ready | change))
+            with self.subTest(change=change), patch.object(fixture.os, 'kill') as kill, \
+                    patch.object(fixture.os, 'killpg') as kill_group:
+                with self.assertRaises(RuntimeError):
+                    fixture.kill_during_session_saves(self.running_process(), self.root, timeout=1)
+                kill.assert_not_called()
+                kill_group.assert_not_called()
+
+    def test_kill_targets_only_the_exact_probe_pid_and_records_a_receipt(self):
+        (self.root / fixture.SESSION_RECOVERY_READY).write_text(json.dumps(self.ready))
+        process = self.running_process()
+        process.wait.return_value = -signal.SIGKILL
+        with patch.object(fixture.os, 'kill') as kill, patch.object(fixture.os, 'killpg') as kill_group, \
+                patch.object(fixture, 'process_group_exists', side_effect=[True, False]), \
+                patch.object(fixture.time, 'sleep'):
+            fixture.kill_during_session_saves(process, self.root, timeout=1)
+            kill.assert_called_once_with(12345, signal.SIGKILL)
+            kill_group.assert_not_called()
+        receipt = json.loads((self.root / fixture.SESSION_RECOVERY_RECEIPT).read_text())
+        self.assertEqual(receipt['exitCode'], -signal.SIGKILL)
+        self.assertTrue(receipt['helpersExitedAfterKill'])
+
+    def test_unexpected_exit_code_writes_no_receipt(self):
+        (self.root / fixture.SESSION_RECOVERY_READY).write_text(json.dumps(self.ready))
+        process = self.running_process()
+        process.wait.return_value = 0
+        with patch.object(fixture.os, 'kill'), patch.object(fixture.time, 'sleep'):
+            with self.assertRaises(RuntimeError):
+                fixture.kill_during_session_saves(process, self.root, timeout=1)
+        self.assertFalse((self.root / fixture.SESSION_RECOVERY_RECEIPT).exists())
+
+    def test_summary_requires_the_kill_receipt_and_a_passing_restart(self):
+        receipt = dict(mode=fixture.SESSION_RECOVERY_MODE, passed=True, exitCode=-signal.SIGKILL)
+        (self.root / fixture.SESSION_RECOVERY_RECEIPT).write_text(json.dumps(receipt))
+        for restarted in (True, False):
+            (self.root / 'restart.json').write_text(json.dumps(self.restart_report(restarted)))
+            self.assertEqual(fixture.record_session_recovery_summary(self.root)['passed'], restarted)
+        (self.root / 'restart.json').write_text(
+            json.dumps(self.restart_report() | dict(probeMode='full-fixture')))
+        with self.assertRaises(RuntimeError):
+            fixture.record_session_recovery_summary(self.root)
+        with self.assertRaises(RuntimeError):
+            fixture.validate_full_fixture_report(self.restart_report(), 'restart')
+
+
 class ExternalAppConsentRunnerTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory(prefix='arcusis-engine-probe-')

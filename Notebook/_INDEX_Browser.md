@@ -10,6 +10,7 @@
 - [[Closed_Tab_Recovery]]
 - [[Extension_Consent]]
 - [[Media_Consent]]
+- [[Media_Playback]]
 - [[External_App_Consent]]
 - [[Find_In_Page]]
 - [[Renderer_Recovery]]

@@ -49,10 +49,8 @@ struct MediaCaptureIndicator: View {
     }
     let favorites: [CapturingTab] = store.session.favoritePages.compactMap {
       page -> CapturingTab? in
-      guard let profileID = store.session.profileID(forTabID: page.tab.id),
-        let space = store.session.spaces.first(where: {
-          $0.id == store.session.selectedSpaceID && $0.profileID == profileID
-        }) ?? store.session.spaces.first(where: { $0.profileID == profileID }),
+      guard let spaceID = store.spaceID(showingPage: page.tab.id),
+        let space = store.session.spaces.first(where: { $0.id == spaceID }),
         let access = engine.mediaAccess[page.tab.id], access.isCapturing
       else { return nil }
       return CapturingTab(

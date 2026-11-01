@@ -9,6 +9,14 @@ bash scripts/test-engine.sh --abrupt-control
 
 The strict mode tests process termination, not power loss or interruption during a session write. Chromium batches cookie-store writes on a timer or size threshold, so recently created cookies may not yet be durable at termination. The control mode adds an idle interval and is diagnostic only; it cannot establish strict crash-recovery acceptance. Neither mode verifies real Keychain behavior or external service accounts.
 
+The session-recovery fixture covers interruption during session writes. It builds a managed workspace through the production writer (Spaces, pinned and Today tabs, a favorite, a folder, a native navigation, selection and a second window), waits until background saves reach the file without an explicit flush, records the saved snapshot, then keeps saving window geometry until the runner sends SIGKILL to the exact child PID after a random delay. A fresh process must find a complete primary file, restore it without a storage notice, match the recorded snapshot (the geometry being written at the kill may hold either written value), reopen the navigated tab in the engine and remove the killed writer's temporary files.
+
+```sh
+bash scripts/test-engine.sh --session-recovery
+```
+
+It does not simulate power loss; `F_FULLFSYNC` ordering and backup fallback are covered by `SnapshotFileTests`.
+
 After the engine script creates `.venv`, runner checks can be executed with:
 
 ```sh

@@ -69,6 +69,7 @@ struct BrowserStoreTests {
     #expect(updated)
     #expect(store.session.selectedSpace.name == "Renamed")
     #expect(store.session.selectedSpace.profileID == profile)
+    try store.flushSaves()
     #expect(try file.load() == store.session)
   }
 
@@ -86,6 +87,7 @@ struct BrowserStoreTests {
     #expect(store.session.selectedSpace.profileID == profile)
     #expect(store.session.selectedSpace.selectedTab?.url.host() == "example.com")
     #expect(store.session.spaces[0].tabs.isEmpty)
+    try store.flushSaves()
     #expect(try file.load() == store.session)
   }
 

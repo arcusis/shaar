@@ -171,6 +171,13 @@ typedef NS_ENUM(NSInteger, ARCPageReloadMode) {
 - (void)closeExtensionPopupForWindowID:(NSString *)windowID;
 @end
 
+/// Chromium's own inspector, hosted alongside its inspected page inside the page card.
+@interface ARCChromiumRuntime (DevTools)
+- (BOOL)showDevToolsForTabID:(NSString *)tabID;
+- (BOOL)closeDevToolsForTabID:(NSString *)tabID;
+- (nullable NSView *)devToolsViewForTabID:(NSString *)tabID;
+@end
+
 /// Media Session state reported by a tab's pages, and actions sent back to them.
 @interface ARCChromiumRuntime (MediaSession)
 /// Keys: playbackState (none, paused, playing), title, artist, album, artwork (http or https URL

@@ -7,7 +7,8 @@
 
 Build: bash scripts/bundle-app.sh --with-engine --verification
 Run: .venv/bin/python scripts/capture-marketing-screenshots.py
-Requires Pillow in the local .venv. No desktop capture or window activation is used.
+Dependencies: .venv/bin/python -m pip install Pillow==13.0.0 imagequant==1.1.5
+No desktop capture or window activation is used.
 """
 
 import hashlib
@@ -18,6 +19,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 
+import imagequant
 from PIL import Image, ImageChops, ImageStat
 
 from engine_fixture import require_verification_bundle_identity
@@ -68,21 +70,18 @@ def optimize_png(image):
     data = encode_png(image)
     if len(data) <= 900_000:
         return data, 'Pillow lossless PNG optimization', 0
-    original = image.convert('RGB')
-    candidates = [('Pillow 256-color quantization, no resizing',
-                   original.quantize(colors=256, dither=Image.Dither.NONE))]
-    # Small RGB rounding steps retain photographic detail while reducing noise entropy.
+    original = image.convert('RGBA')
+    # Perceptual palette selection preserves dark gradients better than RGB rounding.
     # Every candidate must stay below 3/255 RMS error in every channel, without resizing.
-    candidates.extend((f'RGB rounding to multiples of {step}, no resizing',
-                       original.point([min(255, round(x / step) * step)
-                                       for x in range(256)] * 3)) for step in (4, 6, 8))
-    for description, candidate in candidates:
+    for colors in (256, 128, 96, 80, 64):
+        candidate = imagequant.quantize_pil_image(
+            original, dithering_level=0, max_colors=colors)
         error = max(ImageStat.Stat(
-            ImageChops.difference(original, candidate.convert('RGB'))).rms)
+            ImageChops.difference(original, candidate.convert('RGBA'))).rms)
         if error <= 3:
             data = encode_png(candidate)
             if len(data) <= 900_000:
-                return data, description, error
+                return data, f'libimagequant {colors}-color palette, no resizing', error
     raise RuntimeError('PNG exceeds 900 KB within the near-lossless error budget')
 
 

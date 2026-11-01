@@ -30,6 +30,43 @@ struct PrivateBrowserHostTests {
     #expect(releasedStore == nil)
   }
 
+  @Test func cachedHTTPWarningDoesNotRetainPrivateStoreAfterRetirement() {
+    weak var releasedStore: PrivateBrowserStore?
+    let (warning, cachedBinding) = autoreleasepool {
+      let store = PrivateBrowserStore(
+        contextID: "context", windowID: "window", tabID: "tab", url: "about:blank")
+      store.navigate("http://example.com/private")
+      releasedStore = store
+      let warning = PrivateHTTPWarning(store: store)
+      return (warning, warning.isPresented)
+    }
+    #expect(releasedStore == nil)
+    #expect(!cachedBinding.wrappedValue)
+    cachedBinding.wrappedValue = false
+    warning.confirm(useHTTPS: false)
+    warning.cancel()
+    #expect(releasedStore == nil)
+  }
+
+  @Test func httpWarningPreservesConsentWhilePrivateStoreIsOwned() {
+    let store = PrivateBrowserStore(
+      contextID: "context", windowID: "window", tabID: "tab", url: "about:blank")
+    let warning = PrivateHTTPWarning(store: store)
+    var navigations: [String] = []
+    store.onNavigate = { _, value in navigations.append(value) }
+    store.navigate("http://example.com/private")
+    #expect(warning.isPresented.wrappedValue)
+    warning.confirm(useHTTPS: true)
+    #expect(navigations == ["https://example.com/private"])
+    #expect(!warning.isPresented.wrappedValue)
+    store.navigate("http://example.com/cancel")
+    warning.isPresented.wrappedValue = false
+    #expect(store.pendingHTTP == nil && navigations.count == 1)
+    store.navigate("http://example.com/private")
+    warning.confirm(useHTTPS: false)
+    #expect(navigations.last == "http://example.com/private")
+  }
+
   @Test func privateOwnerCommandSurfaceExcludesNormalBrowserServices() {
     for command in [.newTab, .search, .closeTab, .closeWindow, .reload] as [BrowserMenuCommand] {
       #expect(PrivateBrowserHost.supportsPrivateCommand(command))

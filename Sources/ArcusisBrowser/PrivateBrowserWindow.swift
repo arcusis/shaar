@@ -45,20 +45,7 @@ struct PrivateBrowserWindow: View {
         pageIsFocused = true
       }
     }
-    .alert(
-      "This connection would use HTTP",
-      isPresented: Binding(
-        get: { store.pendingHTTP != nil }, set: { if !$0 { store.cancelHTTP() } }
-      )
-    ) {
-      Button("Try HTTPS") { store.confirmHTTP(useHTTPS: true) }
-      Button("Continue with HTTP", role: .destructive) { store.confirmHTTP(useHTTPS: false) }
-      Button("Cancel", role: .cancel) { store.cancelHTTP() }
-    } message: {
-      Text(
-        "HTTP does not encrypt your connection to \(store.pendingHTTP?.host() ?? "this site"). This warning covers addresses opened here. The engine cannot enforce HTTPS across page links and redirects."
-      )
-    }
+    .modifier(PrivateHTTPWarning(store: store))
     .frame(minWidth: 760, minHeight: 520)
   }
 

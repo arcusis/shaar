@@ -1,6 +1,6 @@
 # Private browsing
 
-Private windows use the pinned engine's primary off-the-record (OTR) profile for their source profile. They share temporary cookies and storage with other private windows for that profile. Regular windows retain their persistent profiles. Closing the last private window releases its OTR profile. Private tabs and cookie allowances are not written to Shaar's workspace or preferences. Confirmed closure ends field editing and retires the optional SwiftUI root before clearing the store; see [[Private_Fixture_Readiness]].
+Private windows use the pinned engine's primary off-the-record (OTR) profile for their source profile. They share temporary cookies and storage with other private windows for that profile. Regular windows retain their persistent profiles. Closing the last private window releases its OTR profile. Private tabs and cookie allowances are not written to Shaar's workspace or preferences. The HTTP warning keeps only a weak store reference, so cached presentation bindings and actions cannot retain private state after its host closes. Confirmed closure ends field editing and retires the optional SwiftUI root before clearing the store; see [[Private_Fixture_Readiness]].
 
 New private tabs show a native start page with search using the source profile's selected search engine, the supported protections, and engine limitations. `about:blank` remains an internal engine placeholder; it is not the presented start page or address-field text.
 

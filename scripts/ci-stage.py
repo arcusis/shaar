@@ -142,6 +142,8 @@ def main() -> int:
             if not checks.run("shipping-build", ["bash", "scripts/bundle-app.sh", "--with-engine"]):
                 checks.run("signature", ["codesign", "--verify", "--deep", "--strict", "--verbose=2", "build/Shaar.app"])
                 checks.run("sbom", [sys.executable, "scripts/ci-sbom.py"])
+                checks.run("sbom-validation", [sys.executable, "-m", "spdx_tools.spdx.clitools.pyspdxtools",
+                                               "--infile", str(checks.directory / "sbom.spdx.json")])
     except Exception as error:
         (checks.directory / "error.txt").write_text(str(error) + "\n")
         print(error, file=sys.stderr)

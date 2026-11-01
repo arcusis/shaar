@@ -36,6 +36,7 @@ EVIDENCE = load_script("ci-evidence")
 STAGES = load_script("ci-stage")
 PINS = load_script("ci-checks")
 PYTHON_TESTS = load_script("test-python")
+SBOM = load_script("ci-sbom")
 
 
 class PipelineGateTests(unittest.TestCase):
@@ -130,6 +131,27 @@ class CoverageGateTests(unittest.TestCase):
 
 
 class SupplyChainTests(unittest.TestCase):
+    def test_spdx_file_checksums_and_package_verification_cover_real_files_only(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            app = root / "Shaar.app"
+            app.mkdir()
+            (app / "Main").write_bytes(b"executable")
+            (app / "Resource").write_bytes(b"resource")
+            (app / "Alias").symlink_to("Main")
+            candidate = root / "candidate.zip"
+            candidate.write_bytes(b"authored candidate")
+            pin = {"chromiumVersion": "1.2.3", "archiveURL": "https://example.invalid/engine.zip", "sha256": "a" * 64}
+            document, links = SBOM.build_document(app, candidate, "b" * 40, pin, [])
+            self.assertEqual(len(document["files"]), 2)
+            self.assertEqual(links, {"./Shaar.app/Alias": "Main"})
+            self.assertTrue(document["packages"][0]["filesAnalyzed"])
+            expected = sorted(hashlib.sha1(data, usedforsecurity=False).hexdigest() for data in (b"executable", b"resource"))
+            verification = hashlib.sha1("".join(expected).encode(), usedforsecurity=False).hexdigest()
+            self.assertEqual(document["packages"][0]["packageVerificationCode"]["packageVerificationCodeValue"], verification)
+            for file in document["files"]:
+                self.assertEqual({item["algorithm"] for item in file["checksums"]}, {"SHA1", "SHA256"})
+
     def test_installer_keeps_pinned_zip_runtime_companion_beside_executable(self):
         payload = io.BytesIO()
         with zipfile.ZipFile(payload, "w") as archive:
@@ -141,7 +163,13 @@ class SupplyChainTests(unittest.TestCase):
             "companions": ["libIndexStore.dylib"],
         }}}
         with tempfile.TemporaryDirectory() as directory:
-            with patch.object(INSTALL.json, "loads", return_value=manifest), patch.object(INSTALL.platform, "system", return_value="Darwin"), patch.object(INSTALL.platform, "machine", return_value="arm64"), patch.object(INSTALL.urllib.request, "urlopen", return_value=io.BytesIO(data)), patch.object(sys, "argv", ["installer", "--include-periphery", "--destination", directory]):
+            with (
+                patch.object(INSTALL.json, "loads", return_value=manifest),
+                patch.object(INSTALL.platform, "system", return_value="Darwin"),
+                patch.object(INSTALL.platform, "machine", return_value="arm64"),
+                patch.object(INSTALL.urllib.request, "urlopen", return_value=io.BytesIO(data)),
+                patch.object(sys, "argv", ["installer", "--include-periphery", "--destination", directory]),
+            ):
                 INSTALL.main()
             self.assertEqual((Path(directory) / "periphery").read_bytes(), b"executable")
             self.assertEqual((Path(directory) / "libIndexStore.dylib").read_bytes(), b"runtime library")

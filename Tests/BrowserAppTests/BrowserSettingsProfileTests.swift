@@ -100,6 +100,7 @@ import Testing
     #expect(preferences.searchEngine(for: profileID) == .duckDuckGo)
     settings.close()
 
+    try workspace.flushSaves()
     let reloadedWorkspace = try BrowserWorkspaceStore(
       file: workspaceFile, initialSession: .fresh())
     let reloadedPreferences = BrowserPreferencesStore(fileURL: preferencesURL)
@@ -142,6 +143,7 @@ import Testing
       #expect(workspace.workspace.catalog.spaces.first { $0.id == spaceID }?.profileID == profileID)
     }
 
+    try workspace.flushSaves()
     let savedWorkspace = workspace.workspace
     let reloadedWorkspace = try BrowserWorkspaceStore(
       file: workspaceFile, initialSession: .fresh())
@@ -177,6 +179,7 @@ import Testing
     #expect(
       workspace.workspace.windows.first?.session.profiles.contains { $0.id == addedID } == true)
     try workspace.workspace.validate()
+    #expect(throws: (any Error).self) { try workspace.flushSaves() }
     #expect(workspace.storageNotice?.contains("could not be saved") == true)
     #expect(workspace.stores[windowID]?.storageNotice == workspace.storageNotice)
     #expect(settings.selectedProfileID == addedID)

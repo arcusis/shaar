@@ -20,31 +20,37 @@ struct SiteControlsButton: View {
   }
 
   var body: some View {
-    Button(action: open) {
-      Image(systemName: "slider.horizontal.3")
-        .frame(width: 28, height: 28)
-        .contentShape(Rectangle())
+    HStack(spacing: 4) {
+      if let developer = engine.selectedDeveloperModel {
+        DeveloperSimulationBadge(model: developer)
+      }
+      Button(action: open) {
+        Image(systemName: "slider.horizontal.3")
+          .frame(width: 28, height: 28)
+          .contentShape(Rectangle())
+      }
+      .help("Site controls")
+      .accessibilityLabel("Site controls")
+      .disabled(store.session.selectedPage == nil)
+      .popover(item: engine.presentsNativePanels ? $model : .constant(nil), arrowEdge: .top) {
+        model in
+        SiteControlsPanel(
+          model: model, extensions: extensionModel, profileName: store.profileName,
+          developer: engine.selectedDeveloperModel,
+          actions: SiteControlsPanelActions(
+            runExtension: { id in
+              self.model = nil
+              engine.executeExtension(id)
+            },
+            addExtensions: {
+              self.model = nil
+              store.perform(.open(BrowserExtension.storeCatalogURL))
+            },
+            showCertificate: { showCertificate(model) },
+            close: { self.model = nil }))
+      }
+      .onChange(of: store.session.selectedPage?.tab.id) { model = nil }
     }
-    .help("Site controls")
-    .accessibilityLabel("Site controls")
-    .disabled(store.session.selectedPage == nil)
-    .popover(item: engine.presentsNativePanels ? $model : .constant(nil), arrowEdge: .top) {
-      model in
-      SiteControlsPanel(
-        model: model, extensions: extensionModel, profileName: store.profileName,
-        actions: SiteControlsPanelActions(
-          runExtension: { id in
-            self.model = nil
-            engine.executeExtension(id)
-          },
-          addExtensions: {
-            self.model = nil
-            store.perform(.open(BrowserExtension.storeCatalogURL))
-          },
-          showCertificate: { showCertificate(model) },
-          close: { self.model = nil }))
-    }
-    .onChange(of: store.session.selectedPage?.tab.id) { model = nil }
   }
 
   private func open() {
@@ -85,6 +91,7 @@ struct SiteControlsPanel: View {
   let model: SiteControlsModel
   let extensions: ExtensionManagerModel
   let profileName: String
+  var developer: SiteControlsDeveloperModel? = nil
   let actions: SiteControlsPanelActions
 
   var body: some View {
@@ -106,6 +113,10 @@ struct SiteControlsPanel: View {
       }
       Divider()
       SiteActionsSection(model: model, close: actions.close)
+      if let developer {
+        Divider()
+        SiteControlsDeveloperSection(model: developer)
+      }
       if let failure = model.failure {
         Text(failure)
           .font(.caption).foregroundStyle(.red)

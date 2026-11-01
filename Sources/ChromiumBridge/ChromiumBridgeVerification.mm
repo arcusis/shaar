@@ -62,6 +62,28 @@ static BOOL ProbeViewIsVisibleInWindow(NSView *view, NSWindow *window) {
 
 @implementation ARCChromiumRuntime (Verification)
 
+- (void)grantProbeGeolocationInTabID:(NSString *)tabID completion:(void (NS_SWIFT_UI_ACTOR ^)(NSError *))completion {
+  ArdiaCoreTab *tab = [self liveTabForID:tabID];
+  if (!_testing || !ARCProbeRootIsOwned(_probeRoot) || !tab) {
+    completion(ARCBridgeError(@"Geolocation test override requires an owned probe tab."));
+    return;
+  }
+  NSString *origin = tab.securityInfo[@"origin"];
+  if (![origin hasPrefix:@"http://developer.localhost:"]) {
+    completion(ARCBridgeError(@"Geolocation test override requires the developer loopback site."));
+    return;
+  }
+  [tab devToolsCall:@"Target.getTargetInfo" params:@{} timeout:5 completion:^(NSDictionary *result, NSString *error) {
+    if (error) { completion(ARCBridgeError(error)); return; }
+    NSMutableDictionary *params = [@{@"permissions": @[@"geolocation"], @"origin": origin} mutableCopy];
+    NSString *context = result[@"targetInfo"][@"browserContextId"];
+    if (context.length) params[@"browserContextId"] = context;
+    [tab devToolsCall:@"Browser.grantPermissions" params:params timeout:5 completion:^(NSDictionary *granted, NSString *failure) {
+      completion(failure ? ARCBridgeError(failure) : nil);
+    }];
+  }];
+}
+
 - (BOOL)privateProbeEnabled {
   return _testing && _probeRoot && ARCProbeRootIsOwned(_probeRoot) && !_closingBrowser;
 }

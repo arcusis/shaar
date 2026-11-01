@@ -384,11 +384,8 @@ def record_session_recovery_summary(root):
 
 def signal_probe(process, requested_signal):
     try:
-        if os.getpgid(process.pid) == process.pid:
-            os.killpg(process.pid, requested_signal)
-        else:
-            # If ownership changed, cleanup may signal the known child only.
-            process.send_signal(requested_signal)
+        print(f'Sending signal {requested_signal} to disposable probe PID {process.pid}', flush=True)
+        process.send_signal(requested_signal)
     except ProcessLookupError:
         pass
 
@@ -506,6 +503,9 @@ class Fixture(http.server.BaseHTTPRequestHandler):
             return
         if path.startswith('/download/'):
             self.download(path.rsplit('/', 1)[-1])
+            return
+        if path == '/developer':
+            self.html(b"""<!doctype html><html data-developer-fixture="v1"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Developer fixture</title><style>body{font:18px system-ui;padding:30px}button{padding:14px}</style><h1>Developer fixture</h1><button data-testid="save">Save changes</button><div id="shift">Stable content</div></html>""", csp=PAGE_CSP + "; connect-src 'self'")
             return
         if path == '/web-store-fit':
             self.html(WEB_STORE_FIT_PAGE)
@@ -1277,6 +1277,7 @@ def main(argv=None):
                 session_recovery=options.session_recovery)
             with (root / f"{phase}.log").open("w") as log:
                 process = subprocess.Popen(arguments, stdout=log, stderr=log, start_new_session=True, env=probe_env)
+                print(f"{phase}: disposable probe PID {process.pid}", flush=True)
                 try:
                     if abrupt and phase == 'initial':
                         terminate_at_checkpoint(process, root, timeout=90, settle_seconds=35 if options.abrupt_control else 0)
@@ -1288,7 +1289,7 @@ def main(argv=None):
                         code = wait_for_quit_exit(process, root, phase, timeout=90)
                     else:
                         timeout = (240 if options.private_window else 180 if options.external_app_consent else 180 if options.saved_tab_capacity
-                                   else 170 if include_bitwarden else 90)
+                                   else 170 if include_bitwarden else 150)
                         code = wait_for_probe(process, root, phase, timeout=timeout)
                 except subprocess.TimeoutExpired:
                     raise RuntimeError(f"{phase} timed out; see {root}/{phase}.log")

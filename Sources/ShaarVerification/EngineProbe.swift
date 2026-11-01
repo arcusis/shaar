@@ -587,6 +587,10 @@ final class EngineProbe {
         checks += try await SiteControlsProbe(
           engine: browserEngine, store: store, root: root, fixture: fixture, phase: phase
         ).run()
+        fixtureStage = "DeveloperMode"
+        checks += try await DeveloperModeProbe(
+          engine: browserEngine, store: store, root: root, fixture: fixture, phase: phase
+        ).run()
         fixtureStage = "normal-fixtures-complete"
         localFixturesPassed = true
         if includeBitwarden {
@@ -739,7 +743,7 @@ final class EngineProbe {
     if quitExitMode { return 90 }
     if sessionRecoveryMode { return 90 }
     if includeBitwarden { return 150 }
-    return privateWindowMode ? 210 : 75
+    return privateWindowMode ? 210 : 135
   }
 
   private var probeMode: String {

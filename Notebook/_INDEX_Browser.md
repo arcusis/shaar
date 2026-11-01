@@ -12,6 +12,7 @@
 - [[Media_Consent]]
 - [[Media_Playback]]
 - [[Site_Control_Center]]
+- [[Developer_Simulations]]
 - [[External_App_Consent]]
 - [[Find_In_Page]]
 - [[Renderer_Recovery]]

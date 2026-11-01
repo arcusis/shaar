@@ -259,4 +259,15 @@ typedef NS_ENUM(NSInteger, ARCPageReloadMode) {
 - (BOOL)releasePrivateContextID:(NSString *)contextID;
 @end
 
+/// Restricted DevTools commands for browser-owned developer features. All calls validate tab,
+/// profile and window ownership, including after asynchronous completion.
+@interface ARCChromiumRuntime (DeveloperMode)
+/// Holds the engine's otherwise transient DevTools session while overrides are active.
+- (BOOL)beginDeveloperSessionForTabID:(NSString *)tabID profileID:(NSString *)profileID windowID:(NSString *)windowID;
+- (void)endDeveloperSessionForTabID:(NSString *)tabID;
+- (void)developerCall:(NSString *)method params:(NSDictionary *)params tabID:(NSString *)tabID
+           profileID:(NSString *)profileID windowID:(NSString *)windowID
+          completion:(void (NS_SWIFT_UI_ACTOR ^)(NSDictionary<NSString *, id> * _Nullable, NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
+@end
+
 NS_ASSUME_NONNULL_END

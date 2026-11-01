@@ -40,6 +40,10 @@ FOUNDATION_EXPORT BOOL ARCDisableBackgroundMode(NSURL *userDataDirectory);
 - (nullable NSString *)loadProbeExtensionAtURL:(NSURL *)url profileID:(NSString *)profileID error:(NSError **)error;
 - (void)evaluateProbePopupID:(NSString *)popupID script:(NSString *)script
                  completion:(void (^)(NSString * _Nullable))completion;
+/// Grants geolocation through CDP's test permission override, scoped to the owned tab's
+/// browser context and origin. Never asks macOS for physical location.
+- (void)grantProbeGeolocationInTabID:(NSString *)tabID
+                        completion:(void (NS_SWIFT_UI_ACTOR ^)(NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
 - (void)captureProbePopupID:(NSString *)popupID completion:(void (^)(NSData * _Nullable))completion;
 - (void)evaluateProbeUserGestureInTabID:(NSString *)tabID script:(NSString *)script
                            completion:(void (^)(NSString * _Nullable))completion;

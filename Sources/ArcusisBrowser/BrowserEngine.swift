@@ -37,6 +37,7 @@ final class BrowserEngine {
   let pictureInPictureControls = PictureInPictureControls()
   private(set) var isClosed = false
   var onClosed: ((Bool) -> Void)?
+  var developerModels: [UUID: SiteControlsDeveloperModel] = [:]
   let downloads = DownloadsModel(folder: DownloadsFolderSource())
   private(set) var pages: [UUID: PageState] = [:]
   private(set) var notice: String?
@@ -134,6 +135,10 @@ final class BrowserEngine {
       self.store?.dismissPageFind()
       self.liveTabs.removeAll()
       self.pages.removeAll()
+      for tab in self.developerModels.keys {
+        self.runtime.endDeveloperSession(forTabID: tab.uuidString)
+      }
+      self.developerModels.removeAll()
       self.mediaAccess.removeAll()
       self.store?.media.removeAll()
       self.autoPictureInPicture.forgetAll()
@@ -160,6 +165,9 @@ final class BrowserEngine {
         return
       }
       self.store?.nativeDocumentCommitted(tab, profileID: profile)
+      if let model = self.developerModels[tab] {
+        model.update(target: model.target, committed: true)
+      }
     }
     store.library.onLoad = { [weak self] key, limit, completion in
       guard let self, !self.isClosed else {
@@ -362,6 +370,7 @@ final class BrowserEngine {
           self.store?.nativeTabChanged(id, url: url, title: title)
         }
         self.withholdAutomaticPictureInPictureIfOff(id, url: url)
+        self.developerDocumentChanged(id, url: url)
       }
       if let profile = self.store?.session.profileID(forTabID: id),
         let icon = self.runtime.favicon(
@@ -379,6 +388,8 @@ final class BrowserEngine {
       else { return }
       self.liveTabs.remove(id)
       self.pages[id] = nil
+      self.runtime.endDeveloperSession(forTabID: id.uuidString)
+      self.developerModels[id] = nil
       self.mediaAccess[id] = nil
       self.forgetMedia(id)
       self.favicons[id] = nil
@@ -428,6 +439,8 @@ final class BrowserEngine {
       guard liveTabs.remove(id) != nil else { continue }
       events.router.forgetTab(id.uuidString, windowID: windowID)
       pages[id] = nil
+      runtime.endDeveloperSession(forTabID: id.uuidString)
+      developerModels[id] = nil
       mediaAccess[id] = nil
       forgetMedia(id)
       favicons[id] = nil
@@ -454,6 +467,8 @@ final class BrowserEngine {
       runtime.discardTabID(removed.uuidString)
       liveTabs.remove(removed)
       pages[removed] = nil
+      runtime.endDeveloperSession(forTabID: removed.uuidString)
+      developerModels[removed] = nil
       mediaAccess[removed] = nil
       forgetMedia(removed)
       favicons[removed] = nil

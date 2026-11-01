@@ -78,6 +78,7 @@ NSString *ARCValidatedProfileID(NSString *profileID);
   NSMutableArray<NSDictionary *> *_probeDiagnostics;
   NSMutableSet<NSString *> *_pendingHostClosures;
   NSMutableDictionary<NSString *, NSMutableDictionary<NSString *, id> *> *_detachedTabSelections;
+  NSMutableDictionary<NSString *, NSString *> *_developerLeases;
   BOOL _closingBrowser;
   ARCDownloadService *_downloadService;
   ARCEngineServices *_services;

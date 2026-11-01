@@ -35,10 +35,10 @@ public enum ExtensionInstallKind: String, Sendable {
 
   public var actionTitle: String {
     switch self {
-    case .install: "Add extension"
-    case .permissions: "Allow permissions"
-    case .reenable: "Enable extension"
-    case .repair: "Repair extension"
+    case .install: BrowserLocalization.string("Add extension")
+    case .permissions: BrowserLocalization.string("Allow permissions")
+    case .reenable: BrowserLocalization.string("Enable extension")
+    case .repair: BrowserLocalization.string("Repair extension")
     }
   }
 }

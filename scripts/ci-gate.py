@@ -12,7 +12,7 @@ from pathlib import Path
 
 def gate_errors(needs: dict, full: bool, nightly: bool) -> list[str]:
     expected = {"plan", "fast", "dependency-review"}
-    native = {"build", "coverage", "visuals", "engine", "shipping", "codeql"}
+    native = {"build", "coverage", "visuals", "localization", "engine", "shipping", "codeql"}
     if full:
         expected |= native
     if nightly:

@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import BrowserCore
 import CryptoKit
 import Foundation
 import Network
@@ -13,7 +14,7 @@ import Security
 enum SiteCertificateChain {
   struct Failure: LocalizedError {
     let errorDescription: String?
-    init(_ message: String) { errorDescription = message }
+    init(_ message: String) { errorDescription = ShellL10n.string(message) }
   }
 
   /// DER certificates, leaf first. The connection closes once the handshake finishes; no request

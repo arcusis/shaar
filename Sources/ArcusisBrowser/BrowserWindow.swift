@@ -128,6 +128,7 @@ struct BrowserWindow: View {
         dismissLibraryDrawerAndFocusPage()
       }
     }
+    .shellLocalization()
   }
 
   private var page: some View {
@@ -149,7 +150,7 @@ struct BrowserWindow: View {
             ChromiumPage(engine: engine, tabID: id)
               .overlay { SplitDropZone(store: store, targetID: id) }
           } else {
-            ProgressView("Loading profile…")
+            ProgressView(ShellL10n.string("Loading profile…"))
           }
         } else {
           VStack(spacing: 18) {
@@ -158,7 +159,7 @@ struct BrowserWindow: View {
               .foregroundStyle(.secondary)
             Text(store.session.selectedSpace.name)
               .font(.system(size: 30, weight: .medium, design: .rounded))
-            Text(
+            ShellL10n.text(
               store.session.selectedPage == nil
                 ? "A little room for your next idea."
                 : "Browsing is not available in this development preview."
@@ -170,9 +171,9 @@ struct BrowserWindow: View {
             } label: {
               HStack {
                 Image(systemName: "magnifyingglass")
-                Text("Search or enter address")
+                ShellL10n.text("Search or enter address")
                 Spacer(minLength: 40)
-                Text("⌘T").foregroundStyle(.tertiary)
+                ShellL10n.text("⌘T").foregroundStyle(.tertiary)
               }
               .font(.system(size: 14))
               .padding(16)
@@ -181,7 +182,7 @@ struct BrowserWindow: View {
             }
             .buttonStyle(.plain)
             .frame(maxWidth: 420)
-            Text("\(store.profileName) profile")
+            Text(ShellL10n.format("%@ profile", arguments: [.string(store.profileName)]))
               .font(.system(size: 11))
               .foregroundStyle(.tertiary)
           }
@@ -239,7 +240,7 @@ struct BrowserWindow: View {
           HStack(spacing: 0) {
             BrowserSidebar(store: store)
               .frame(width: BrowserChromeLayout.sidebarWidth)
-              .offset(x: sidebarVisibility == .hidden ? -BrowserChromeLayout.sidebarWidth : 0)
+              .modifier(SidebarHiddenOffset(isHidden: sidebarVisibility == .hidden))
               .allowsHitTesting(sidebarVisibility != .hidden)
               .accessibilityHidden(sidebarVisibility == .hidden)
               .onHover { inside in
@@ -266,14 +267,10 @@ struct BrowserWindow: View {
   }
 
   private func commandPanel(in size: CGSize) -> some View {
-    let contentLeft =
-      (store.sidebarIsVisible ? BrowserChromeLayout.sidebarWidth : 0)
-      + BrowserChromeLayout.pageCardInset
-    let contentTop: CGFloat = store.pageFind == nil ? 45 : 95
-    let initialContentFrame = CGRect(
-      x: contentLeft, y: contentTop,
-      width: max(0, size.width - contentLeft - BrowserChromeLayout.pageCardInset),
-      height: max(0, size.height - contentTop - BrowserChromeLayout.pageCardInset))
+    let initialContentFrame = BrowserChromeLayout.initialWebContentFrame(
+      size: size, sidebarVisible: store.sidebarIsVisible,
+      isRightToLeft: BrowserLanguage.currentLaunchLanguage.isRightToLeft,
+      findBarVisible: store.pageFind != nil)
     let sections = store.commandSections
     let frame = BrowserChromeLayout.commandPanelFrame(
       in: webContentFrame.isEmpty ? initialContentFrame : webContentFrame,
@@ -283,12 +280,16 @@ struct BrowserWindow: View {
       resultCount: sections.results.count, headerCount: sections.headerCount,
       availableHeight: frame.height
     )
+    // SwiftUI positions from the leading edge; the measured page frame uses physical x.
+    let centerX =
+      BrowserLanguage.currentLaunchLanguage.isRightToLeft
+      ? size.width - frame.midX : frame.midX
     let anchor = UnitPoint(
-      x: frame.midX / max(size.width, 1), y: frame.midY / max(size.height, 1))
+      x: centerX / max(size.width, 1), y: frame.midY / max(size.height, 1))
     return CommandPanel(store: store, resultsHeight: resultsHeight)
       .frame(width: frame.width)
       .fixedSize(horizontal: false, vertical: true)
-      .position(x: frame.midX, y: frame.midY)
+      .position(x: centerX, y: frame.midY)
       .animation(reduceMotion ? nil : .spring(duration: 0.24, bounce: 0.1), value: resultsHeight)
       .transition(.scale(scale: 0.94, anchor: anchor).combined(with: .opacity))
   }
@@ -302,6 +303,16 @@ struct BrowserWindow: View {
     }
   }
 
+}
+
+private struct SidebarHiddenOffset: ViewModifier {
+  let isHidden: Bool
+
+  func body(content: Content) -> some View {
+    content.offset(
+      x: isHidden
+        ? BrowserChromeLayout.hiddenSidebarOffset : 0)
+  }
 }
 
 private struct WebContentFramePreferenceKey: PreferenceKey {

@@ -3,22 +3,26 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import AppKit
+import BrowserCore
 import SwiftUI
 
 struct SpaceSwipeNavigation: NSViewRepresentable {
   let store: BrowserStore
   let pager: SpacePagerState
+  @Environment(\.layoutDirection) private var layoutDirection
 
   func makeNSView(context: Context) -> SpaceSwipeMonitorView {
     let view = SpaceSwipeMonitorView()
     view.store = store
     view.pager = pager
+    view.isRightToLeft = layoutDirection == .rightToLeft
     return view
   }
 
   func updateNSView(_ view: SpaceSwipeMonitorView, context: Context) {
     view.store = store
     view.pager = pager
+    view.isRightToLeft = layoutDirection == .rightToLeft
   }
 
   static func dismantleNSView(_ view: SpaceSwipeMonitorView, coordinator: ()) {
@@ -30,6 +34,7 @@ struct SpaceSwipeNavigation: NSViewRepresentable {
 final class SpaceSwipeMonitorView: NSView {
   weak var store: BrowserStore?
   weak var pager: SpacePagerState?
+  var isRightToLeft = false
   private var owner: SpaceSwipeWindowMonitor?
   private var ownerWindowID: ObjectIdentifier?
 
@@ -208,7 +213,9 @@ final class SpaceSwipeWindowMonitor {
     let index =
       store.session.spaces.firstIndex(where: { $0.id == store.session.selectedSpaceID }) ?? 0
     pager.move(
-      delta: event.scrollingDeltaX, timestamp: event.timestamp, index: index,
+      delta: SpacePagerDecision.logicalDelta(
+        event.scrollingDeltaX, isRightToLeft: view.isRightToLeft),
+      timestamp: event.timestamp, index: index,
       count: store.session.spaces.count)
     return nil
   }
@@ -225,7 +232,8 @@ final class SpaceSwipeWindowMonitor {
       deltaY: deltaY,
       eventBelongsToWindow: event.window === window,
       commandPressed: event.modifierFlags.contains(.command),
-      modalOwnsInput: modalOwnsInput
+      modalOwnsInput: modalOwnsInput,
+      isRightToLeft: clientView?.isRightToLeft ?? false
     ) { offset in
       store.cycleSpace(by: offset)
     }
@@ -298,12 +306,14 @@ enum SpaceSwipeNavigationDecision {
     eventBelongsToWindow: Bool,
     commandPressed: Bool,
     modalOwnsInput: Bool,
+    isRightToLeft: Bool = false,
     cycleSpace: (Int) -> Void
   ) -> SpaceSwipeRoutingResult {
     guard eventBelongsToWindow, !commandPressed, !modalOwnsInput,
       abs(deltaX) > abs(deltaY), deltaX != 0
     else { return .forwarded }
-    cycleSpace(deltaX > 0 ? -1 : 1)
+    let direction = isRightToLeft ? -1 : 1
+    cycleSpace(deltaX > 0 ? -direction : direction)
     return .consumed
   }
 }

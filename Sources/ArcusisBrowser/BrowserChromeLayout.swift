@@ -34,6 +34,21 @@ enum BrowserChromeLayout {
     max(0, windowWidth - leadingWidth)
   }
 
+  // SwiftUI mirrors horizontal offsets with layout direction.
+  static let hiddenSidebarOffset = -sidebarWidth
+
+  static func initialWebContentFrame(
+    size: CGSize, sidebarVisible: Bool, isRightToLeft: Bool, findBarVisible: Bool
+  ) -> CGRect {
+    let pageInset = pageCardInset
+    let sidebar = sidebarVisible ? sidebarWidth : 0
+    let x = (isRightToLeft ? pageInset : sidebar + pageInset)
+    let contentTop: CGFloat = findBarVisible ? 95 : 45
+    return CGRect(
+      x: x, y: contentTop, width: max(0, size.width - sidebar - 2 * pageInset),
+      height: max(0, size.height - contentTop - pageInset))
+  }
+
   static func commandPanelFrame(
     in webContent: CGRect,
     resultCount: Int = 0,

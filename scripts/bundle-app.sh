@@ -156,6 +156,8 @@ cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
+  <key>CFBundleDevelopmentRegion</key><string>en</string>
+  <key>CFBundleLocalizations</key><array><string>en</string><string>he</string></array>
   <key>CFBundleExecutable</key><string>$executable</string>
   <key>CFBundleIdentifier</key><string>$bundle_identifier</string>
   <key>CFBundleName</key><string>Shaar</string>

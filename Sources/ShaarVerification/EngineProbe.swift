@@ -27,6 +27,7 @@ final class EngineProbe {
   private let privateWindowRunID: String?
   private let quitExitMode: Bool
   private let sessionRecoveryMode: Bool
+  private let localizationMode: Bool
   private let expectedAfterTermination: BrowserSession?
   private let output: URL
   private var checks: [String] = []
@@ -65,7 +66,7 @@ final class EngineProbe {
     bitwardenOnboardingControl: Bool,
     awaitAbruptTermination: Bool, expectAbruptRecovery: Bool, savedTabCapacityMode: Bool,
     externalAppConsentMode: Bool, privateWindowMode: Bool, privateWindowRunID: String?,
-    quitExitMode: Bool, sessionRecoveryMode: Bool
+    quitExitMode: Bool, sessionRecoveryMode: Bool, localizationMode: Bool
   ) throws {
     self.root = root
     self.fixture = fixture
@@ -79,14 +80,18 @@ final class EngineProbe {
     self.privateWindowRunID = privateWindowRunID
     self.quitExitMode = quitExitMode
     self.sessionRecoveryMode = sessionRecoveryMode
+    self.localizationMode = localizationMode
     expectedAfterTermination =
       expectAbruptRecovery ? try AbruptProbeCheckpoint.expectedSession(root: root) : nil
     self.output = output
     guard let frameworks = Bundle.main.privateFrameworksURL else {
       throw ProbeFailure("Run the probe from the bundled app with its pinned engine.")
     }
+    let language = BrowserLanguage.currentLaunchLanguage
+    ARCConfigureLocalization(BrowserLocalization.resourceBundleURL, language.localeIdentifier)
     runtime = try ARCChromiumRuntime(
       frameworkURL: frameworks.appending(path: "Chromium Framework.framework"))
+    runtime.languageIdentifier = language.localeIdentifier
     if sessionRecoveryMode {
       savedTabCapacityFixture = nil
       let recovery = try SessionRecoveryProbe.open(root: root, fixture: fixture, phase: phase)
@@ -129,6 +134,18 @@ final class EngineProbe {
   }
 
   static func run(arguments: [String]) -> Int32 {
+    BrowserLanguage.applyToCurrentProcess()
+    if arguments.contains("--probe-localization") {
+      return LocalizationProbe.run(arguments: arguments)
+    }
+    return runCore(arguments: arguments, localizationMode: false)
+  }
+
+  static func runLocalization(arguments: [String]) -> Int32 {
+    runCore(arguments: arguments, localizationMode: true)
+  }
+
+  private static func runCore(arguments: [String], localizationMode: Bool) -> Int32 {
     do {
       func value(_ flag: String) throws -> String {
         guard let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1)
@@ -164,6 +181,9 @@ final class EngineProbe {
       let privateWindowMode = arguments.contains("--probe-private-window")
       let quitExitMode = arguments.contains("--probe-quit-exit")
       let sessionRecoveryMode = arguments.contains("--probe-session-recovery")
+      guard localizationMode == arguments.contains("--probe-localization") else {
+        throw ProbeFailure("Localization mode dispatch mismatch.")
+      }
       let privateWindowRunID = privateWindowMode ? try value("--probe-private-window-run-id") : nil
       guard
         !privateWindowMode
@@ -178,6 +198,7 @@ final class EngineProbe {
         "--probe-saved-tab-capacity",
         "--probe-private-window", "--probe-session-recovery",
         "--probe-quit-exit",
+        "--probe-localization",
       ]
       guard externalAppConsentMode == noLaunchGuard,
         !externalAppConsentMode || !conflictingFlags.contains(where: arguments.contains),
@@ -191,6 +212,9 @@ final class EngineProbe {
         !quitExitMode || !noLaunchGuard,
         !sessionRecoveryMode
           || !conflictingFlags.filter({ $0 != "--probe-session-recovery" }).contains(
+            where: arguments.contains),
+        !localizationMode
+          || !conflictingFlags.filter({ $0 != "--probe-localization" }).contains(
             where: arguments.contains)
       else { throw ProbeFailure("Invalid engine probe mode flags.") }
       guard !bitwardenOnboardingControl || includeBitwarden,
@@ -207,7 +231,7 @@ final class EngineProbe {
         expectAbruptRecovery: expectAbruptRecovery, savedTabCapacityMode: savedTabCapacityMode,
         externalAppConsentMode: externalAppConsentMode, privateWindowMode: privateWindowMode,
         privateWindowRunID: privateWindowRunID, quitExitMode: quitExitMode,
-        sessionRecoveryMode: sessionRecoveryMode)
+        sessionRecoveryMode: sessionRecoveryMode, localizationMode: localizationMode)
       probe.runtime.onReady = { [weak probe] in
         guard let probe else { return }
         Task {
@@ -270,6 +294,26 @@ final class EngineProbe {
       throw ProbeFailure("JavaScript evaluation failed for \(tab).")
     }
     return try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+  }
+
+  private func inspectInternalLocalization(_ language: BrowserLanguage) async throws -> String {
+    let tab = "D27E25BD-9546-4C44-9B50-67B048AA6D04"
+    do {
+      try runtime.openTabID(tab, profileID: profileA, url: "chrome://version")
+    } catch {
+      return "chrome://version internal UI unavailable in this engine build"
+    }
+    for _ in 0..<80 {
+      if let value = try? await evaluate(tab, LocalizationProbe.internalUIScript),
+        let evidence = value as? [String: Any],
+        let url = evidence["url"] as? String, url.hasPrefix("chrome://version")
+      {
+        return try LocalizationProbe.validateInternalUI(value, language: language)
+          ?? "chrome://version at \(url) has no document lang/dir metadata"
+      }
+      try? await Task.sleep(for: .milliseconds(100))
+    }
+    return "chrome://version internal UI language metadata unavailable"
   }
 
   private func snapshot(_ tab: String) async throws -> [String: Any] {
@@ -356,10 +400,31 @@ final class EngineProbe {
       try runtime.openTabID(tabA, profileID: profileA, url: fixture.absoluteString)
       bootstrapStage = .openingBeta
       try runtime.openTabID(tabB, profileID: profileB, url: fixture.absoluteString)
+      if localizationMode {
+        // Restored tabs retain the previous scenario URL; reuse their profiles with this fixture.
+        for (tab, profile) in [(tabA, profileA), (tabB, profileB)] {
+          loadedTabs.remove(tab)
+          guard
+            runtime.navigateTabID(
+              tab, profileID: profile, windowID: runtime.primaryWindowID,
+              url: fixture.absoluteString)
+          else { throw ProbeFailure("Localization fixture navigation was rejected.") }
+        }
+      }
       bootstrapStage = .readingAlpha
       let firstA = try await snapshot(tabA)
       bootstrapStage = .readingBeta
       let firstB = try await snapshot(tabB)
+      if localizationMode {
+        let language = BrowserLanguage.currentLaunchLanguage
+        checks += try LocalizationProbe.validate(
+          try await evaluate(tabA, LocalizationProbe.script),
+          language: language)
+        checks.append(try await inspectInternalLocalization(language))
+        localFixturesPassed = true
+        finish(error: nil)
+        return
+      }
       bootstrapStage = .ready
       if let expectedAfterTermination {
         let tabs = expectedAfterTermination.spaces.flatMap(\.tabs)
@@ -747,6 +812,7 @@ final class EngineProbe {
   }
 
   private var probeMode: String {
+    if localizationMode { return "localization-only" }
     if privateWindowMode { return PrivateWindowProbe.mode }
     if quitExitMode { return QuitExitProbe.mode }
     if externalAppConsentMode { return ExternalAppConsentProbe.mode }
@@ -755,6 +821,10 @@ final class EngineProbe {
   }
 
   private var reportScope: String {
+    if localizationMode {
+      return
+        "Owned marked temporary engine profile and authored loopback fixture. No user profile or external origin."
+    }
     if savedTabCapacityMode { return SavedTabCapacityFixture.scope }
     if externalAppConsentMode { return ExternalAppConsentProbe.scope }
     if quitExitMode { return QuitExitProbe.scope }

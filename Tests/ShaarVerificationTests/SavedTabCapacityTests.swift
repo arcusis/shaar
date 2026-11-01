@@ -40,6 +40,8 @@ struct SavedTabCapacityTests {
     #expect(
       initial.initialCheckpoint.matches(
         initial.workspaceStore.workspace, ignoringTabTitles: true))
+    // A normal restart follows the host's flush; native metadata updates save asynchronously.
+    #expect(initial.workspaceStore.persistSnapshot())
     try initial.recordExpectedRestartMetadata()
     let restartMetadata = try JSONDecoder().decode(
       SavedTabCapacityIdentityCheckpoint.self,

@@ -33,7 +33,9 @@ final class BrowserWorkspaceStore {
     } catch {
       maySave = false
       storageNotice =
-        "Saved windows could not be restored. The original files are preserved; changes in these temporary windows will not be saved."
+        ShellL10n.string(
+          "Saved windows could not be restored. The original files are preserved; changes in these temporary windows will not be saved."
+        )
     }
     for window in workspace.windows { attach(window) }
     if isNew && maySave { persistSnapshot() }
@@ -136,7 +138,8 @@ final class BrowserWorkspaceStore {
     stores[window.id] = BrowserStore(managedSession: window.session, notice: storageNotice) {
       [weak self] session, deferred in
       guard let self else {
-        return ManagedSessionSaveResult(session: session, notice: "The workspace is unavailable.")
+        return ManagedSessionSaveResult(
+          session: session, notice: ShellL10n.string("The workspace is unavailable."))
       }
       return self.changed(window.id, session: session, deferred: deferred)
     }
@@ -177,7 +180,8 @@ final class BrowserWorkspaceStore {
   {
     guard stores[id] != nil, let previous = workspace.window(id) else {
       return ManagedSessionSaveResult(
-        session: session, notice: "This window is closed; its changes will not be saved.")
+        session: session,
+        notice: ShellL10n.string("This window is closed; its changes will not be saved."))
     }
     do {
       try workspace.updateWindow(id, session: session)
@@ -185,7 +189,8 @@ final class BrowserWorkspaceStore {
       // A rejected identity/profile mutation must not reach the native engine.
       return ManagedSessionSaveResult(
         session: previous.session,
-        notice: "The window change was rejected. \(error.localizedDescription)")
+        notice: ShellL10n.format(
+          "The window change was rejected. %@", arguments: [.string(error.localizedDescription)]))
     }
     scheduleSnapshot(deferred: deferred)
     if !deferred { broadcast(excluding: id) }
@@ -231,7 +236,9 @@ final class BrowserWorkspaceStore {
   }
 
   private static func saveNotice(failure: String?) -> String? {
-    failure.map { "Window changes could not be saved. \($0)" }
+    failure.map {
+      ShellL10n.format("Window changes could not be saved. %@", arguments: [.string($0)])
+    }
   }
 
   private func broadcast(excluding sourceID: UUID?) {

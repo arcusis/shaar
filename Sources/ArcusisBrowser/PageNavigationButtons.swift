@@ -13,17 +13,17 @@ struct PageNavigationButtons: View {
     let state = id.flatMap { engine?.pages[$0] }
 
     HStack(spacing: 4) {
-      navigationButton("chevron.left", label: "Back") {
+      navigationButton("chevron.backward", label: ShellL10n.string("Back")) {
         if let id { engine?.runtime.goBack(inTabID: id.uuidString) }
       }
       .disabled(state?.canGoBack != true)
 
-      navigationButton("chevron.right", label: "Forward") {
+      navigationButton("chevron.forward", label: ShellL10n.string("Forward")) {
         if let id { engine?.runtime.goForward(inTabID: id.uuidString) }
       }
       .disabled(state?.canGoForward != true)
 
-      navigationButton("arrow.clockwise", label: "Reload (Command-R)") {
+      navigationButton("arrow.clockwise", label: ShellL10n.string("Reload (Command-R)")) {
         store.reloadCurrentPage()
       }
       .disabled(!store.canReloadCurrentPage)

@@ -55,9 +55,13 @@ private struct OnboardingStepHeader: View {
         }
       }
       .accessibilityHidden(true)
-      Text("Step \(step.rawValue + 1) of \(ProfileOnboardingStep.allCases.count)")
-        .font(.caption)
-        .foregroundStyle(.secondary)
+      Text(
+        SettingsL10n.format(
+          "Step %d of %d", .integer(step.rawValue + 1),
+          .integer(ProfileOnboardingStep.allCases.count))
+      )
+      .font(.caption)
+      .foregroundStyle(.secondary)
       Text(step.title).font(.title2.weight(.semibold))
     }
   }
@@ -74,13 +78,15 @@ private struct ProfileDetailsStep: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
-      Text("A profile keeps its own sign-ins, cookies, history and extensions.")
-        .foregroundStyle(.secondary)
+      Text(
+        SettingsL10n.string("A profile keeps its own sign-ins, cookies, history and extensions.")
+      )
+      .foregroundStyle(.secondary)
       HStack(spacing: 12) {
         SymbolPickerButton(
           symbol: $model.symbol, isPresented: $symbolPickerIsPresented,
-          accessibilityLabel: "Change Profile Icon")
-        TextField("Profile name", text: $model.name)
+          accessibilityLabel: SettingsL10n.string("Change Profile Icon"))
+        TextField(SettingsL10n.string("Profile name"), text: $model.name)
           .textFieldStyle(.roundedBorder)
           .focused($nameFocused)
           .onSubmit { model.continueToNext() }
@@ -105,14 +111,19 @@ private struct AccountConnectStep: View {
       } else if model.connecting == provider {
         HStack(spacing: 10) {
           ProgressView().controlSize(.small)
-          Text("Finish signing in to \(provider.title) in the sign-in window.")
-            .foregroundStyle(.secondary)
+          Text(
+            SettingsL10n.format(
+              "Finish signing in to %@ in the sign-in window.", .string(provider.title))
+          )
+          .foregroundStyle(.secondary)
         }
       } else {
         ProviderConnectButton(provider: provider) { model.connect(provider) }
       }
       Text(
-        "Optional. A profile connects one account, Google or Microsoft. You can also connect it later in Settings > Profiles."
+        SettingsL10n.string(
+          "Optional. A profile connects one account, Google or Microsoft. You can also connect it later in Settings > Profiles."
+        )
       )
       .font(.caption)
       .foregroundStyle(.secondary)
@@ -130,7 +141,7 @@ private struct ProviderConnectButton: View {
         if let logo = provider.logo {
           Image(nsImage: logo).resizable().frame(width: 18, height: 18)
         }
-        Text("Connect \(provider.title)")
+        Text(SettingsL10n.format("Connect %@", .string(provider.title)))
       }
       .padding(.horizontal, 6)
       .padding(.vertical, 2)
@@ -150,8 +161,11 @@ private struct ProfileSummaryStep: View {
         Text(model.trimmedName).font(.headline).lineLimit(1)
       }
       if model.connectedAccounts.isEmpty {
-        Text("No account connected. You can connect one later in Settings > Profiles.")
-          .foregroundStyle(.secondary)
+        Text(
+          SettingsL10n.string(
+            "No account connected. You can connect one later in Settings > Profiles.")
+        )
+        .foregroundStyle(.secondary)
       } else {
         ForEach(model.connectedAccounts, id: \.provider) { ConnectedAccountRow(account: $0) }
       }
@@ -167,13 +181,13 @@ private struct OnboardingFooter: View {
 
   var body: some View {
     HStack {
-      Button("Cancel") { model.cancel() }
+      Button(SettingsL10n.string("Cancel")) { model.cancel() }
         .keyboardShortcut(.cancelAction)
       Spacer()
-      Button("Back") { model.back() }
+      Button(SettingsL10n.string("Back")) { model.back() }
         .disabled(!model.canGoBack)
       if model.step.provider != nil {
-        Button("Skip") { model.skip() }
+        Button(SettingsL10n.string("Skip")) { model.skip() }
           .disabled(!model.canSkip)
       }
       Button(primaryTitle) { model.continueToNext() }
@@ -183,7 +197,7 @@ private struct OnboardingFooter: View {
   }
 
   private var primaryTitle: String {
-    model.step == .done ? "Create Profile" : "Continue"
+    SettingsL10n.string(model.step == .done ? "Create Profile" : "Continue")
   }
 }
 
@@ -191,9 +205,13 @@ extension AccountProvider {
   fileprivate var onboardingDescription: String {
     switch self {
     case .google:
-      "Sign in with a personal Google account or a Google Workspace account. If your company signs in through its own identity provider, that page opens in the same window and returns to Google."
+      SettingsL10n.string(
+        "Sign in with a personal Google account or a Google Workspace account. If your company signs in through its own identity provider, that page opens in the same window and returns to Google."
+      )
     case .microsoft:
-      "Sign in with a personal Microsoft account or a work or school account. Company sign-in through Okta, Azure AD, ADFS, Ping or a similar provider opens in the same window and returns to Microsoft."
+      SettingsL10n.string(
+        "Sign in with a personal Microsoft account or a work or school account. Company sign-in through Okta, Azure AD, ADFS, Ping or a similar provider opens in the same window and returns to Microsoft."
+      )
     }
   }
 }
@@ -210,9 +228,10 @@ final class ProfileOnboardingWindow: NSObject, NSWindowDelegate {
       contentRect: NSRect(origin: .zero, size: ProfileOnboardingView.size),
       styleMask: [.titled, .closable], backing: .buffered, defer: false)
     super.init()
-    window.title = "New Profile"
+    window.title = SettingsL10n.string("New Profile")
     window.isReleasedWhenClosed = false
-    window.contentView = NSHostingView(rootView: ProfileOnboardingView(model: model))
+    window.contentView = NSHostingView(
+      rootView: ProfileOnboardingView(model: model).settingsLocalization())
     window.delegate = self
   }
 

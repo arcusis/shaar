@@ -499,7 +499,7 @@ final class BrowserEngine {
         guard decision == .materialize else { continue }
         guard events.router.bindTab(tab.id.uuidString, windowID: windowID) else {
           failedTabs.insert(tab.id)
-          notice = "A saved tab already belongs to another window."
+          notice = ShellL10n.string("A saved tab already belongs to another window.")
           continue
         }
         liveTabs.insert(tab.id)
@@ -527,7 +527,7 @@ final class BrowserEngine {
       guard decision == .materialize else { continue }
       guard events.router.bindTab(page.tab.id.uuidString, windowID: windowID) else {
         failedTabs.insert(page.tab.id)
-        notice = "A saved Favorite page already belongs to another window."
+        notice = ShellL10n.string("A saved Favorite page already belongs to another window.")
         continue
       }
       liveTabs.insert(page.tab.id)
@@ -658,7 +658,7 @@ final class BrowserEngine {
     extensionPanel = .popup(
       ExtensionPopupContext(
         id: id, profileID: profile, tabID: tab, extensionID: extensionID,
-        name: extensions.first { $0.id == extensionID }?.name ?? "Extension"))
+        name: extensions.first { $0.id == extensionID }?.name ?? ShellL10n.string("Extension")))
   }
 
   private func requestInstallation(_ payload: [String: Any]) {
@@ -689,7 +689,8 @@ final class BrowserEngine {
       store.requestInstallation(request)
     else {
       events.resolveInstall(id, windowID: windowID, accepted: false)
-      notice = "The extension request could not be verified for this page and profile."
+      notice = ShellL10n.string(
+        "The extension request could not be verified for this page and profile.")
       return
     }
   }
@@ -715,7 +716,8 @@ final class BrowserEngine {
       store.requestWebsitePermission(request)
     else {
       events.resolveMedia(id, windowID: windowID, accepted: false)
-      notice = "This permission request is unavailable for the current page and profile."
+      notice = ShellL10n.string(
+        "This permission request is unavailable for the current page and profile.")
       return
     }
   }

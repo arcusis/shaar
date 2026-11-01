@@ -19,7 +19,7 @@ struct SidebarSiteGrouping: SidebarTidyGrouping {
   func groups(for tabs: [BrowserTab]) async -> [SidebarTidyGroup] {
     var groups: [String: [UUID]] = [:]
     for tab in tabs {
-      let host = tab.url.host()?.lowercased() ?? "Other"
+      let host = tab.url.host()?.lowercased() ?? ShellL10n.string("Other")
       groups[host, default: []].append(tab.id)
     }
     return groups.keys.sorted().map { SidebarTidyGroup(topic: $0, tabIDs: groups[$0]!) }

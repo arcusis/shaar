@@ -5,7 +5,7 @@
 import SwiftUI
 
 /// Sidebar toggle beside the traffic lights, as in Safari and Arc. In full screen the traffic
-/// lights are hidden, so it moves to the sidebar's top-left corner like Arc.
+/// lights are hidden, so it moves to the sidebar's leading corner like Arc.
 struct TitlebarSidebarToggle: View {
   @Bindable var store: BrowserStore
   @Environment(\.browserWindowIsFullScreen) private var isFullScreen
@@ -17,18 +17,19 @@ struct TitlebarSidebarToggle: View {
       Button {
         store.sidebarIsVisible = false
       } label: {
-        Image(systemName: "sidebar.left")
+        Image(systemName: "sidebar.leading")
           .font(.system(size: 14))
           .foregroundStyle(.secondary)
           .frame(width: 28, height: max(rowHeight, 24))
           .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
-      .help("Hide sidebar (Command-S)")
-      .accessibilityLabel("Hide sidebar (Command-S)")
+      .help(ShellL10n.string("Hide sidebar (Command-S)"))
+      .accessibilityLabel(ShellL10n.string("Hide sidebar (Command-S)"))
       .offset(
         x: isFullScreen
-          ? BrowserChromeLayout.fullScreenToggleLeading : BrowserChromeLayout.titlebarToggleLeading,
+          ? BrowserChromeLayout.fullScreenToggleLeading
+          : BrowserChromeLayout.titlebarToggleLeading,
         y: -titlebarHeight)
     }
   }

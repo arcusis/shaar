@@ -9,6 +9,7 @@ struct BrowserSidebar: View {
   @Bindable var store: BrowserStore
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.colorScheme) private var colorScheme
+  @Environment(\.layoutDirection) private var layoutDirection
   @Environment(\.browserWindowIsFullScreen) private var isFullScreen
   @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
   @Environment(\.browserChromeAccessibilityOverrides) private var accessibilityOverrides
@@ -94,8 +95,15 @@ struct BrowserSidebar: View {
         .contextMenu {
           SpaceMenuContent(store: store, space: store.session.selectedSpace)
         }
-        .accessibilityLabel("\(store.session.selectedSpace.name), Profile: \(store.profileName)")
-        .help("Space: \(store.session.selectedSpace.name) · Profile: \(store.profileName)")
+        .accessibilityLabel(
+          ShellL10n.format(
+            "%@, Profile: %@",
+            arguments: [.string(store.session.selectedSpace.name), .string(store.profileName)])
+        )
+        .help(
+          ShellL10n.format(
+            "Space: %@ · Profile: %@",
+            arguments: [.string(store.session.selectedSpace.name), .string(store.profileName)]))
         if let notice = store.sidebarNotice {
           Text(notice).font(.caption).fixedSize(horizontal: false, vertical: true)
         }
@@ -117,16 +125,16 @@ struct BrowserSidebar: View {
           .frame(height: 30)
         spaceSelectors
         Menu {
-          Button("New Folder") { beginFolderDraft(parentID: nil) }
-          Button("New Space") { store.spaceEditor = .create }
+          Button(ShellL10n.string("New Folder")) { beginFolderDraft(parentID: nil) }
+          Button(ShellL10n.string("New Space")) { store.spaceEditor = .create }
         } label: {
           Image(systemName: "plus")
             .font(.system(size: 16))
             .foregroundStyle(Color.primary.opacity(0.55))
             .frame(width: 30, height: 30)
         }
-        .help("Create a folder or space")
-        .accessibilityLabel("Add Folder or Space")
+        .help(ShellL10n.string("Create a folder or space"))
+        .accessibilityLabel(ShellL10n.string("Add Folder or Space"))
       }
       .frame(height: 32)
       .background {
@@ -169,7 +177,8 @@ struct BrowserSidebar: View {
           sectionDropTarget(
             pinned: true,
             height: space.pinnedItems().isEmpty ? 8 : 12,
-            hint: space.pinnedItems().isEmpty ? "Drop to pin in this Space" : nil)
+            hint: space.pinnedItems().isEmpty
+              ? ShellL10n.string("Drop to pin in this Space") : nil)
           if let folderDraft, folderDraft.section == .pinned, folderDraft.parentID == nil {
             folderDraftRow(depth: 0)
           }
@@ -202,18 +211,18 @@ struct BrowserSidebar: View {
           if !space.tabs.isEmpty || !space.folders.isEmpty {
             HStack(spacing: 8) {
               Rectangle().fill(Color.primary.opacity(0.12)).frame(height: 1)
-              Button("Tidy") { tidyTabs(in: space) }
+              Button(ShellL10n.string("Tidy")) { tidyTabs(in: space) }
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .disabled(tidyInProgress || !space.tabs.contains { !$0.isPinned })
-                .help("Group today's tabs by topic")
-              Button("Clear") {
+                .help(ShellL10n.string("Group today's tabs by topic"))
+              Button(ShellL10n.string("Clear")) {
                 clearSpaceID = space.id
               }
               .font(.system(size: 11, weight: .semibold))
               .foregroundStyle(.secondary)
               .disabled(!space.tabs.contains { !$0.isPinned })
-              .help("Close today's tabs")
+              .help(ShellL10n.string("Close today's tabs"))
             }
             .padding(.vertical, 6)
           }
@@ -224,7 +233,7 @@ struct BrowserSidebar: View {
               Image(systemName: "plus")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
-              Text("New tab")
+              ShellL10n.text("New tab")
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
               Spacer(minLength: 0)
@@ -239,14 +248,16 @@ struct BrowserSidebar: View {
               in: RoundedRectangle(cornerRadius: 8)
             )
           }
-          .accessibilityLabel("New tab")
+          .accessibilityLabel(ShellL10n.string("New tab"))
           .onHover { newTabIsHovered = $0 }
           .animation(sidebarReduceMotion ? nil : .easeOut(duration: 0.12), value: newTabIsHovered)
           .contextMenu {
-            Button("New Folder") { beginFolderDraft(parentID: nil, section: .today) }
-            Button("Reopen last closed tab") { store.reopenLastClosedTab() }
+            Button(ShellL10n.string("New Folder")) {
+              beginFolderDraft(parentID: nil, section: .today)
+            }
+            Button(ShellL10n.string("Reopen last closed tab")) { store.reopenLastClosedTab() }
               .disabled(!store.canReopenClosedTab)
-            Button("Recently closed…") { store.showRecentlyClosed() }
+            Button(ShellL10n.string("Recently closed…")) { store.showRecentlyClosed() }
           }
           sectionDropTarget(pinned: false)
           if let folderDraft, folderDraft.section == .today, folderDraft.parentID == nil {
@@ -280,22 +291,22 @@ struct BrowserSidebar: View {
         }
       }
       .contextMenu {
-        Button("New Folder") { beginFolderDraft(parentID: nil, section: .today) }
+        Button(ShellL10n.string("New Folder")) { beginFolderDraft(parentID: nil, section: .today) }
       }
       .confirmationDialog(
-        "Close today's tabs?",
+        ShellL10n.string("Close today's tabs?"),
         isPresented: Binding(
           get: { clearSpaceID == space.id },
           set: { if !$0 { clearSpaceID = nil } }
         ), titleVisibility: .visible
       ) {
-        Button("Close Tabs", role: .destructive) {
+        Button(ShellL10n.string("Close Tabs"), role: .destructive) {
           guard store.session.selectedSpaceID == space.id else { return }
           store.clearTodayTabs(in: space.id)
           clearSpaceID = nil
         }
       } message: {
-        Text("Pinned tabs and favorites will be kept.")
+        ShellL10n.text("Pinned tabs and favorites will be kept.")
       }
       .coordinateSpace(name: "sidebarOrdinaryViewport")
       .background {
@@ -343,8 +354,8 @@ struct BrowserSidebar: View {
           .menuStyle(.borderlessButton)
           .menuIndicator(.hidden)
           .fixedSize()
-          .help("More Spaces")
-          .accessibilityLabel("More Spaces")
+          .help(ShellL10n.string("More Spaces"))
+          .accessibilityLabel(ShellL10n.string("More Spaces"))
         }
       }
       .frame(width: geometry.size.width, height: geometry.size.height)
@@ -380,7 +391,7 @@ struct BrowserSidebar: View {
       .contentShape(Rectangle())
     }
     .help(space.name)
-    .accessibilityLabel("Switch to \(space.name)")
+    .accessibilityLabel(ShellL10n.format("Switch to %@", arguments: [.string(space.name)]))
     .accessibilityAddTraits(
       space.id == store.session.selectedSpaceID ? .isSelected : []
     )
@@ -457,7 +468,7 @@ struct BrowserSidebar: View {
         )
       } else if store.tabDrag != nil {
         SidebarDropHint(
-          title: "Drop to add to Favorites", symbol: "star",
+          title: ShellL10n.string("Drop to add to Favorites"), symbol: "star",
           isTargeted: targetedSection == "favorites")
       } else {
         Color.clear.frame(height: 8).contentShape(Rectangle())
@@ -497,12 +508,12 @@ struct BrowserSidebar: View {
           in: RoundedRectangle(cornerRadius: 8))
     }
     .contextMenu {
-      Button("Bookmarks…") { store.showLibrary(.bookmarks) }
-      Button("History…") { store.showLibrary(.history) }
+      Button(ShellL10n.string("Bookmarks…")) { store.showLibrary(.bookmarks) }
+      Button(ShellL10n.string("History…")) { store.showLibrary(.history) }
     }
-    .accessibilityLabel("Library")
-    .accessibilityHint("Open Library; hover to see recent downloads")
-    .help("Library")
+    .accessibilityLabel(ShellL10n.string("Library"))
+    .accessibilityHint(ShellL10n.string("Open Library; hover to see recent downloads"))
+    .help(ShellL10n.string("Library"))
     .buttonStyle(.plain)
     .onHover {
       recentDownloadsHoverChanged(.anchor, inside: $0, profileID: profileID, epoch: epoch)
@@ -584,7 +595,7 @@ struct BrowserSidebar: View {
       Capsule().fill(Color.accentColor).frame(height: 2)
         .frame(maxHeight: .infinity, alignment: .bottom)
     case .split, .addToSplit:
-      Text(intent == .addToSplit ? "Add to Split" : "Split with")
+      Text(ShellL10n.string(intent == .addToSplit ? "Add to Split" : "Split with"))
         .font(.system(size: 10, weight: .medium))
         .padding(.horizontal, 7)
         .padding(.vertical, 3)
@@ -630,8 +641,8 @@ struct BrowserSidebar: View {
         Image(systemName: "xmark")
       }
       .font(.system(size: 9, weight: .medium))
-      .help("Cancel new folder")
-      .accessibilityLabel("Cancel new folder")
+      .help(ShellL10n.string("Cancel new folder"))
+      .accessibilityLabel(ShellL10n.string("Cancel new folder"))
     }
     .padding(.vertical, 7).padding(.horizontal, 10)
     .padding(.leading, indentation(depth))
@@ -725,20 +736,22 @@ struct BrowserSidebar: View {
     if let selected = store.selectedSplit, !selected.tabIDs.contains(tab.id),
       let focused = space.selectedTabID
     {
-      Menu("Add to Split View") {
+      Menu(ShellL10n.string("Add to Split View")) {
         ForEach(SplitEdge.allCases, id: \.self) { edge in
-          Button(edge.menuTitle) { store.addToSplit(tab.id, beside: focused, edge: edge) }
+          Button(edge.menuTitle(isRightToLeft: layoutDirection == .rightToLeft)) {
+            store.addToSplit(tab.id, beside: focused, edge: edge)
+          }
         }
       }
       .disabled(store.selectedSplitIsFull)
     }
-    Menu("Split View with…") {
+    Menu(ShellL10n.string("Split View with…")) {
       ForEach(space.tabs.filter { $0.id != tab.id }) { candidate in
         Button(candidate.title) { store.splitTabs(tab.id, candidate.id) }
       }
     }
     if space.splits.contains(where: { $0.tabIDs.contains(tab.id) }) {
-      Button("Separate from Split") { store.unsplitTab(tab.id) }
+      Button(ShellL10n.string("Separate from Split")) { store.unsplitTab(tab.id) }
     }
   }
 
@@ -811,16 +824,18 @@ struct BrowserSidebar: View {
       }
       .contextMenu {
         splitMenu(for: tab, in: space)
-        Button("Add to Favorites") {
+        Button(ShellL10n.string("Add to Favorites")) {
           addToFavorites(tabID: tab.id, spaceID: space.id, profileID: space.profileID)
         }
         .disabled(
           store.sheet != nil || store.commandIsOpen || !NavigationInput.isWebURL(tab.url))
         Divider()
-        Button(tab.isPinned ? "Unpin tab" : "Pin tab") { store.togglePin(tab.id) }
-        Button("Move up") { shiftTab(tab, in: space, by: -1) }.disabled(boundary.isFirst)
-        Button("Move down") { shiftTab(tab, in: space, by: 1) }.disabled(boundary.isLast)
-        Menu("Move to Folder") {
+        Button(ShellL10n.string(tab.isPinned ? "Unpin tab" : "Pin tab")) { store.togglePin(tab.id) }
+        Button(ShellL10n.string("Move up")) { shiftTab(tab, in: space, by: -1) }.disabled(
+          boundary.isFirst)
+        Button(ShellL10n.string("Move down")) { shiftTab(tab, in: space, by: 1) }.disabled(
+          boundary.isLast)
+        Menu(ShellL10n.string("Move to Folder")) {
           ForEach(space.folders) { folder in
             Button(folderLabel(folder.id, in: space)) {
               store.moveTab(tab.id, from: space.id, to: space.id, folderID: folder.id)
@@ -828,23 +843,23 @@ struct BrowserSidebar: View {
           }
           if tab.folderID != nil {
             Divider()
-            Button("Outside folders") {
+            Button(ShellL10n.string("Outside folders")) {
               store.moveTab(tab.id, from: space.id, to: space.id, pinned: true)
             }
           }
-          if space.folders.isEmpty { Text("Create a folder first") }
+          if space.folders.isEmpty { ShellL10n.text("Create a folder first") }
         }
-        Menu("Move to Space") {
+        Menu(ShellL10n.string("Move to Space")) {
           let destinations = store.session.spaces.filter {
             $0.id != space.id && $0.profileID == space.profileID
           }
-          if destinations.isEmpty { Text("No other spaces share this profile") }
+          if destinations.isEmpty { ShellL10n.text("No other spaces share this profile") }
           ForEach(destinations) { target in
             Button(target.name) { store.moveTab(tab.id, from: space.id, to: target.id) }
           }
         }
         Divider()
-        Button("Close tab") { store.closeTab(tab.id) }
+        Button(ShellL10n.string("Close tab")) { store.closeTab(tab.id) }
       }
   }
 
@@ -975,7 +990,7 @@ struct BrowserSidebar: View {
       store.toggleFolder(folder.id, in: space.id)
     } label: {
       HStack(spacing: 8) {
-        Image(systemName: folder.isCollapsed ? "chevron.right" : "chevron.down").font(
+        Image(systemName: folder.isCollapsed ? "chevron.forward" : "chevron.down").font(
           .system(size: 9, weight: .semibold)
         )
         .frame(width: 10)
@@ -989,7 +1004,14 @@ struct BrowserSidebar: View {
       }.padding(.vertical, 8).padding(.horizontal, 10).contentShape(Rectangle())
     }
     .padding(.leading, indentation(depth))
-    .accessibilityLabel("\(folder.name), \(folder.isCollapsed ? "collapsed" : "expanded")")
+    .accessibilityLabel(
+      ShellL10n.format(
+        "%@, %@",
+        arguments: [
+          .string(folder.name),
+          .string(ShellL10n.string(folder.isCollapsed ? "collapsed" : "expanded")),
+        ])
+    )
     .help(folderLabel(folder.id, in: space))
     .draggable(
       SidebarTransfer.folder(
@@ -1015,28 +1037,28 @@ struct BrowserSidebar: View {
       in: RoundedRectangle(cornerRadius: 6)
     )
     .contextMenu {
-      Button("Edit folder…") {
+      Button(ShellL10n.string("Edit folder…")) {
         store.showFolderEditor(.edit(spaceID: space.id, folderID: folder.id))
       }
-      Button("New Folder Inside") {
+      Button(ShellL10n.string("New Folder Inside")) {
         beginFolderDraft(parentID: folder.id, section: folder.isPinned ? .pinned : .today)
       }
       Divider()
-      Button("Move up") { shiftFolder(folder, in: space, by: -1) }.disabled(
+      Button(ShellL10n.string("Move up")) { shiftFolder(folder, in: space, by: -1) }.disabled(
         siblings.first?.id == folder.id)
-      Button("Move down") { shiftFolder(folder, in: space, by: 1) }.disabled(
+      Button(ShellL10n.string("Move down")) { shiftFolder(folder, in: space, by: 1) }.disabled(
         siblings.last?.id == folder.id)
       if folder.parentID != nil {
-        Button("Move out one level") {
+        Button(ShellL10n.string("Move out one level")) {
           let parent = space.folders.first { $0.id == folder.parentID }
           store.moveFolder(folder.id, from: space.id, to: space.id, parentID: parent?.parentID)
         }
       }
-      Menu("Move to Space") {
+      Menu(ShellL10n.string("Move to Space")) {
         let destinations = store.session.spaces.filter {
           $0.id != space.id && $0.profileID == space.profileID
         }
-        if destinations.isEmpty { Text("No other spaces share this profile") }
+        if destinations.isEmpty { ShellL10n.text("No other spaces share this profile") }
         ForEach(destinations) { target in
           Button(target.name) { store.moveFolder(folder.id, from: space.id, to: target.id) }
         }

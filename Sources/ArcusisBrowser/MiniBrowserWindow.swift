@@ -44,11 +44,11 @@ final class MiniBrowserController {
     else { throw WorkspaceError.invalidState }
     self.window = window
     engine = try BrowserEngine(events: events, windowID: id, store: store)
-    let hosting = NSHostingView(rootView: MiniBrowserWindow(controller: self))
+    let hosting = NSHostingView(rootView: MiniBrowserWindow(controller: self).shellLocalization())
     hosting.frame = content.bounds
     hosting.autoresizingMask = [.width, .height]
     content.addSubview(hosting)
-    window.title = "Mini window"
+    window.title = PanelsL10n.string("Mini window")
     window.setContentSize(NSSize(width: 680, height: 520))
     window.minSize = NSSize(width: 440, height: 320)
     engine.onClosed = { [weak self] _ in
@@ -145,10 +145,11 @@ struct MiniBrowserWindow: View {
   var body: some View {
     VStack(spacing: 0) {
       HStack {
-        TextField("Enter address", text: $address)
+        TextField(PanelsL10n.string("Enter address"), text: $address)
           .textFieldStyle(.roundedBorder)
+          .environment(\.layoutDirection, .leftToRight)
           .onSubmit { onNavigate(address) }
-        Picker("Space", selection: $destination) {
+        Picker(PanelsL10n.string("Space"), selection: $destination) {
           ForEach(destinations) { space in
             Text("\(space.name)").tag(space.id)
           }
@@ -156,7 +157,7 @@ struct MiniBrowserWindow: View {
         .labelsHidden()
         .frame(width: 130)
         .onChange(of: destination) { _, value in onDestination(value) }
-        Button("Open in Space", action: onOpen)
+        Button(PanelsL10n.string("Open in Space"), action: onOpen)
           .disabled(store.session.selectedSpace.selectedTab == nil)
       }
       .padding(10)
@@ -167,7 +168,7 @@ struct MiniBrowserWindow: View {
         if let engine, let id = store.session.selectedSpace.selectedTabID, engine.pages[id] != nil {
           ChromiumPage(engine: engine, tabID: id)
         } else {
-          Text("Enter an address to get started").foregroundStyle(.secondary)
+          Text(PanelsL10n.string("Enter an address to get started")).foregroundStyle(.secondary)
         }
       }
     }

@@ -25,8 +25,8 @@ struct SiteControlsButton: View {
         .frame(width: 28, height: 28)
         .contentShape(Rectangle())
     }
-    .help("Show site controls for this page")
-    .accessibilityLabel("Show site controls for this page")
+    .help(ShellL10n.string("Show site controls for this page"))
+    .accessibilityLabel(ShellL10n.string("Show site controls for this page"))
     .disabled(store.session.selectedPage == nil)
     .popover(item: engine.presentsNativePanels ? $model : .constant(nil), arrowEdge: .top) {
       model in
@@ -126,7 +126,8 @@ struct SiteControlsPanel: View {
   private var header: some View {
     VStack(alignment: .leading, spacing: 2) {
       Text(model.target.host).font(.headline).lineLimit(1).truncationMode(.middle)
-      Text("\(profileName) profile").font(.caption).foregroundStyle(.secondary)
+      Text(ShellL10n.format("%@ profile", arguments: [.string(profileName)]))
+        .font(.caption).foregroundStyle(.secondary)
     }
     .padding([.horizontal, .top], 16)
     .padding(.bottom, 10)
@@ -139,7 +140,7 @@ private struct SiteSectionTitle: View {
   init(_ title: String) { self.title = title }
 
   var body: some View {
-    Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+    ShellL10n.text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
       .padding(.horizontal, 8)
   }
 }
@@ -154,7 +155,7 @@ struct SiteExtensionsSection: View {
       SiteSectionTitle("Extensions")
       HStack(spacing: 4) {
         if model.pinnedExtensions.isEmpty {
-          Text("Pin extensions to show them here.")
+          ShellL10n.text("Pin extensions to show them here.")
             .font(.callout).foregroundStyle(.secondary)
             .padding(.leading, 4)
           Spacer(minLength: 0)
@@ -174,8 +175,8 @@ struct SiteExtensionsSection: View {
             .frame(width: 32, height: 32)
             .contentShape(Rectangle())
         }
-        .help("Add extensions from the Chrome Web Store")
-        .accessibilityLabel("Add extensions from the Chrome Web Store")
+        .help(ShellL10n.string("Add extensions from the Chrome Web Store"))
+        .accessibilityLabel(ShellL10n.string("Add extensions from the Chrome Web Store"))
       }
       .buttonStyle(.plain)
       .padding(.horizontal, 4)
@@ -216,7 +217,7 @@ struct SitePermissionRow: View {
       VStack(alignment: .leading, spacing: 0) {
         Text(permission.title).lineLimit(1)
         if value == .ask {
-          Text("Asks first").font(.caption).foregroundStyle(.secondary)
+          ShellL10n.text("Asks first").font(.caption).foregroundStyle(.secondary)
         }
       }
       Spacer(minLength: 0)
@@ -241,8 +242,8 @@ struct SiteSecurityRow: View {
     if hasCertificate {
       Button(action: action) { label }
         .buttonStyle(.plain)
-        .help("Show certificate")
-        .accessibilityLabel("Show certificate")
+        .help(ShellL10n.string("Show certificate"))
+        .accessibilityLabel(ShellL10n.string("Show certificate"))
     } else {
       label
     }
@@ -254,13 +255,13 @@ struct SiteSecurityRow: View {
         .frame(width: 20)
         .foregroundStyle(security == .secure ? Color.secondary : Color.orange)
       VStack(alignment: .leading, spacing: 0) {
-        Text(security == .secure ? "Secure" : "Not Secure")
-        Text(hasCertificate ? "Show certificate" : "This connection is not encrypted")
+        ShellL10n.text(security == .secure ? "Secure" : "Not Secure")
+        ShellL10n.text(hasCertificate ? "Show certificate" : "This connection is not encrypted")
           .font(.caption).foregroundStyle(.secondary)
       }
       Spacer(minLength: 0)
       if hasCertificate {
-        Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+        Image(systemName: "chevron.forward").foregroundStyle(.tertiary)
       }
     }
     .contentShape(Rectangle())
@@ -289,9 +290,10 @@ struct SiteActionsSection: View {
       Button(action: showDeveloperTools) {
         HStack(spacing: 10) {
           Image(systemName: "chevron.left.forwardslash.chevron.right").frame(width: 20)
-          Text("Developer Tools")
+          ShellL10n.text("Developer Tools")
           Spacer(minLength: 0)
           Text(ShortcutCatalog.displayKeys(for: .developerTools) ?? "")
+            .environment(\.layoutDirection, .leftToRight)
             .foregroundStyle(.secondary)
         }
         .contentShape(Rectangle())
@@ -318,6 +320,7 @@ struct SiteActionLabel: View {
         ProgressView().controlSize(.small)
       } else if let keys = action.shortcutKeys {
         Text(keys).foregroundStyle(.secondary)
+          .environment(\.layoutDirection, .leftToRight)
       }
     }
     .foregroundStyle(action == .clearSiteData ? Color.red : Color.primary)
@@ -342,25 +345,26 @@ extension SiteAction {
 extension SitePermission {
   var help: String {
     switch self {
-    case .microphone: "Allow or block microphone access for this site"
-    case .camera: "Allow or block camera access for this site"
-    case .location: "Allow or block location access for this site"
-    case .notifications: "Allow or block notifications for this site"
-    case .popups: "Allow or block pop-ups and redirects for this site"
-    case .sound: "Allow or mute sound for this site"
-    case .autoPictureInPicture: "Allow or block automatic picture-in-picture for this site"
+    case .microphone: ShellL10n.string("Allow or block microphone access for this site")
+    case .camera: ShellL10n.string("Allow or block camera access for this site")
+    case .location: ShellL10n.string("Allow or block location access for this site")
+    case .notifications: ShellL10n.string("Allow or block notifications for this site")
+    case .popups: ShellL10n.string("Allow or block pop-ups and redirects for this site")
+    case .sound: ShellL10n.string("Allow or mute sound for this site")
+    case .autoPictureInPicture:
+      ShellL10n.string("Allow or block automatic picture-in-picture for this site")
     }
   }
 
   var title: String {
     switch self {
-    case .microphone: "Microphone"
-    case .camera: "Camera"
-    case .location: "Location"
-    case .notifications: "Notifications"
-    case .popups: "Pop-ups and Redirects"
-    case .sound: "Sound"
-    case .autoPictureInPicture: "Automatic Picture-in-Picture"
+    case .microphone: ShellL10n.string("Microphone")
+    case .camera: ShellL10n.string("Camera")
+    case .location: ShellL10n.string("Location")
+    case .notifications: ShellL10n.string("Notifications")
+    case .popups: ShellL10n.string("Pop-ups and Redirects")
+    case .sound: ShellL10n.string("Sound")
+    case .autoPictureInPicture: ShellL10n.string("Automatic Picture-in-Picture")
     }
   }
 

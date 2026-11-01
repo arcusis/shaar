@@ -12,22 +12,33 @@ struct WebsitePermissionConsent: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 20) {
-      Label("Allow \(titles)?", systemImage: request.kinds.first?.symbol ?? "hand.raised")
-        .font(.title2.weight(.semibold))
+      Label(
+        PanelsL10n.format("Allow %@?", .string(titles)),
+        systemImage: request.kinds.first?.symbol ?? "hand.raised"
+      )
+      .font(.title2.weight(.semibold))
       Text(request.requestingOrigin.absoluteString).font(.headline).textSelection(.enabled)
-      Text("This site wants to \(purposes).")
-      LabeledContent("Profile", value: profileName)
-      LabeledContent("Page", value: request.pageURL.host() ?? request.pageURL.absoluteString)
+        .environment(\.layoutDirection, .leftToRight)
+      Text(PanelsL10n.format("This site wants to %@.", .string(purposes)))
+      LabeledContent(PanelsL10n.string("Profile"), value: profileName)
+      LabeledContent(
+        PanelsL10n.string("Page")
+      ) {
+        Text(request.pageURL.host() ?? request.pageURL.absoluteString)
+          .environment(\.layoutDirection, .leftToRight)
+      }
       Divider()
       Text(scopeNote)
         .font(.callout).foregroundStyle(.secondary)
         .fixedSize(horizontal: false, vertical: true)
       HStack {
-        Button("Not now", role: .cancel) { resolve(accepted: false) }
+        Button(PanelsL10n.string("Not now"), role: .cancel) { resolve(accepted: false) }
           .keyboardShortcut(.cancelAction)
         Spacer()
-        Button(oneTime ? "Allow this time" : "Allow") { resolve(accepted: true) }
-          .disabled(!request.matches(store.session))
+        Button(PanelsL10n.string(oneTime ? "Allow this time" : "Allow")) {
+          resolve(accepted: true)
+        }
+        .disabled(!request.matches(store.session))
       }
     }
     .padding(28).frame(width: 440)
@@ -37,21 +48,32 @@ struct WebsitePermissionConsent: View {
 
   private var oneTime: Bool { request.kinds.allSatisfy(\.supportsOneTimeGrant) }
   private var titles: String {
-    ListFormatter.localizedString(byJoining: request.kinds.map(\.title))
+    localizedList(request.kinds.map(\.title))
   }
   private var purposes: String {
-    ListFormatter.localizedString(byJoining: request.kinds.map(\.purpose))
+    localizedList(request.kinds.map(\.purpose))
   }
   private var scopeNote: String {
     let duration =
       oneTime
-      ? "Only for this visit."
-      : "The site keeps this permission in this profile until you change it."
-    return
-      "\(duration) Other tabs and spaces sharing this profile share the permission. macOS may also ask for permission."
+      ? PanelsL10n.string("Only for this visit.")
+      : PanelsL10n.string("The site keeps this permission in this profile until you change it.")
+    return PanelsL10n.format(
+      "%@ %@", .string(duration),
+      .string(
+        PanelsL10n.string(
+          "Other tabs and spaces sharing this profile share the permission. macOS may also ask for permission."
+        )))
   }
   private var profileName: String {
-    store.session.profiles.first { $0.id == request.profileID }?.name ?? "Unavailable profile"
+    store.session.profiles.first { $0.id == request.profileID }?.name
+      ?? PanelsL10n.string("Unavailable profile")
+  }
+
+  private func localizedList(_ values: [String]) -> String {
+    let formatter = ListFormatter()
+    formatter.locale = PanelsL10n.formattingLocale()
+    return formatter.string(from: values) ?? values.joined(separator: ", ")
   }
   private func resolve(accepted: Bool) {
     store.resolveWebsitePermission(request.id, accepted: accepted)
@@ -62,31 +84,31 @@ struct WebsitePermissionConsent: View {
 extension WebsitePermissionKind {
   var title: String {
     switch self {
-    case .camera: "camera"
-    case .microphone: "microphone"
-    case .location: "location"
-    case .notifications: "notifications"
-    case .clipboard: "clipboard access"
-    case .midi: "MIDI devices"
-    case .multipleDownloads: "multiple downloads"
-    case .windowManagement: "window management"
-    case .localFonts: "local fonts"
-    case .storageAccess: "cookies across sites"
+    case .camera: PanelsL10n.string("camera")
+    case .microphone: PanelsL10n.string("microphone")
+    case .location: PanelsL10n.string("location")
+    case .notifications: PanelsL10n.string("notifications")
+    case .clipboard: PanelsL10n.string("clipboard access")
+    case .midi: PanelsL10n.string("MIDI devices")
+    case .multipleDownloads: PanelsL10n.string("multiple downloads")
+    case .windowManagement: PanelsL10n.string("window management")
+    case .localFonts: PanelsL10n.string("local fonts")
+    case .storageAccess: PanelsL10n.string("cookies across sites")
     }
   }
 
   var purpose: String {
     switch self {
-    case .camera: "use your camera"
-    case .microphone: "use your microphone"
-    case .location: "know your location"
-    case .notifications: "show notifications"
-    case .clipboard: "see text and images you copy"
-    case .midi: "use and reprogram your MIDI devices"
-    case .multipleDownloads: "download multiple files"
-    case .windowManagement: "open and place windows on your displays"
-    case .localFonts: "use fonts installed on this Mac"
-    case .storageAccess: "use its cookies while embedded in other sites"
+    case .camera: PanelsL10n.string("use your camera")
+    case .microphone: PanelsL10n.string("use your microphone")
+    case .location: PanelsL10n.string("know your location")
+    case .notifications: PanelsL10n.string("show notifications")
+    case .clipboard: PanelsL10n.string("see text and images you copy")
+    case .midi: PanelsL10n.string("use and reprogram your MIDI devices")
+    case .multipleDownloads: PanelsL10n.string("download multiple files")
+    case .windowManagement: PanelsL10n.string("open and place windows on your displays")
+    case .localFonts: PanelsL10n.string("use fonts installed on this Mac")
+    case .storageAccess: PanelsL10n.string("use its cookies while embedded in other sites")
     }
   }
 

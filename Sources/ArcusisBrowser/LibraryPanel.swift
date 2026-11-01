@@ -51,19 +51,25 @@ struct LibraryPanel: View {
         VStack(alignment: .leading, spacing: 4) {
           Text(section.title).font(.title2.weight(.semibold))
           if ownsContext {
-            Text("\(store.profileName) profile").font(.callout).foregroundStyle(.secondary)
+            Text(PanelsL10n.format("%@ profile", .string(store.profileName)))
+              .font(.callout).foregroundStyle(.secondary)
           }
         }
         Spacer()
-        Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
+        Button(PanelsL10n.string("Done")) { dismiss() }.keyboardShortcut(.cancelAction)
       }
-      Picker("Library", selection: $section) {
+      Picker(PanelsL10n.string("Library"), selection: $section) {
         ForEach(LibrarySection.allCases, id: \.self) { Text($0.title).tag($0) }
       }.pickerStyle(.segmented)
-      TextField("Search \(section.rawValue)", text: $query).textFieldStyle(.roundedBorder)
+      TextField(
+        PanelsL10n.string(section == .bookmarks ? "Search Bookmarks" : "Search History"),
+        text: $query
+      ).textFieldStyle(.roundedBorder)
       if !ownsContext {
-        ContentUnavailableView("Profile changed", systemImage: "person.crop.circle")
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
+        ContentUnavailableView(
+          PanelsL10n.string("Profile changed"), systemImage: "person.crop.circle"
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else if loading
         && (section == .bookmarks ? tree == nil : store.library.history[profileID] == nil)
       {
@@ -79,7 +85,7 @@ struct LibraryPanel: View {
           }
           if section == .bookmarks ? bookmarks.isEmpty : history.isEmpty {
             ContentUnavailableView(
-              "No matches", systemImage: section == .bookmarks ? "star" : "clock"
+              PanelsL10n.string("No matches"), systemImage: section == .bookmarks ? "star" : "clock"
             )
             .frame(maxWidth: .infinity).padding(.vertical, 32)
           }
@@ -91,18 +97,21 @@ struct LibraryPanel: View {
       }
       HStack {
         if section == .bookmarks {
-          Button("Add bookmark…") { add(folder: false) }
-          Button("New folder…") { add(folder: true) }
+          Button(PanelsL10n.string("Add bookmark…")) { add(folder: false) }
+          Button(PanelsL10n.string("New folder…")) { add(folder: true) }
         } else {
-          Text("\(store.library.history[profileID]?.count ?? 0) recent pages")
-            .font(.caption).foregroundStyle(.secondary)
+          Text(
+            PanelsL10n.plural(
+              "%d recent pages", count: store.library.history[profileID]?.count ?? 0)
+          )
+          .font(.caption).foregroundStyle(.secondary)
           if store.library.hasMoreHistory(profileID) {
-            Button("Load more") { store.library.loadMoreHistory(profileID) }
+            Button(PanelsL10n.string("Load more")) { store.library.loadMoreHistory(profileID) }
           }
         }
         Spacer()
         if loading || busy { ProgressView().controlSize(.small) }
-        Button("Refresh") { store.library.refresh(profileID, section: section) }
+        Button(PanelsL10n.string("Refresh")) { store.library.refresh(profileID, section: section) }
       }
       .disabled(!ownsContext || busy || loading)
     }
@@ -113,16 +122,18 @@ struct LibraryPanel: View {
       if ownsContext { store.library.refresh(profileID, section: section) }
     }
     .confirmationDialog(
-      tree?.items.first(where: { $0.id == removing })?.isFolder == true
-        ? "Delete bookmark folder and its contents?" : "Delete this bookmark?",
+      PanelsL10n.string(
+        tree?.items.first(where: { $0.id == removing })?.isFolder == true
+          ? "Delete bookmark folder and its contents?" : "Delete this bookmark?"),
       isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })
     ) {
-      Button("Delete", role: .destructive) {
+      Button(PanelsL10n.string("Delete"), role: .destructive) {
         if let id = removing { store.deleteBookmark(id, profileID: profileID) }
         removing = nil
       }
     } message: {
-      Text("Saved bookmarks are removed from this profile. Open pages stay open.")
+      Text(
+        PanelsL10n.string("Saved bookmarks are removed from this profile. Open pages stay open."))
     }
   }
 
@@ -145,7 +156,8 @@ struct LibraryPanel: View {
             .lineLimit(1)
           if let address = item.address {
             Text(address).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(
-              .middle)
+              .middle
+            ).environment(\.layoutDirection, .leftToRight)
           }
         }
         Spacer()
@@ -158,28 +170,31 @@ struct LibraryPanel: View {
     .buttonStyle(.plain).disabled(!ownsContext || busy)
     .help(
       !item.isFolder && item.destination == nil
-        ? "This address cannot be opened here. Use Edit to change it." : item.path
+        ? PanelsL10n.string("This address cannot be opened here. Use Edit to change it.")
+        : item.path
     )
     .contextMenu {
       if item.isFolder {
-        Button("New folder inside…") { add(folder: true, parent: item.id) }
-        Button("Add bookmark here…") { add(folder: false, parent: item.id) }
+        Button(PanelsL10n.string("New folder inside…")) { add(folder: true, parent: item.id) }
+        Button(PanelsL10n.string("Add bookmark here…")) { add(folder: false, parent: item.id) }
       }
       if !item.isPermanent {
-        Button("Edit…") {
+        Button(PanelsL10n.string("Edit…")) {
           store.showBookmarkEditor(BookmarkEditorRoute(profileID: profileID, mode: .edit(item.id)))
         }
-        Menu("Move to folder") {
+        Menu(PanelsL10n.string("Move to folder")) {
           if let tree {
             ForEach(tree.items.filter(\.isFolder)) { folder in
-              Button(folder.path) {
+              Button {
                 store.moveBookmark(item.id, profileID: profileID, to: folder.id)
+              } label: {
+                Text(folder.path).environment(\.layoutDirection, .leftToRight)
               }
               .disabled(item.parentID == folder.id || tree.contains(item.id, inPathTo: folder.id))
             }
           }
         }
-        Button("Delete…", role: .destructive) { removing = item.id }
+        Button(PanelsL10n.string("Delete…"), role: .destructive) { removing = item.id }
       }
     }
   }
@@ -194,19 +209,23 @@ struct LibraryPanel: View {
           VStack(alignment: .leading, spacing: 4) {
             Text(item.title).font(.system(size: 13)).lineLimit(1)
             Text(item.address).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+              .environment(\.layoutDirection, .leftToRight)
               .truncationMode(.middle)
           }
           Spacer()
         }.contentShape(Rectangle())
       }.buttonStyle(.plain).disabled(!ownsContext || busy || item.destination == nil)
-      Text(item.lastVisit.formatted(date: .abbreviated, time: .shortened))
+      let dateStyle = Date.FormatStyle(
+        date: .abbreviated, time: .shortened, locale: PanelsL10n.formattingLocale())
+      Text(item.lastVisit.formatted(dateStyle))
         .font(.caption).foregroundStyle(.secondary)
       Button {
         store.deleteHistoryEntry(item.address, profileID: profileID)
       } label: {
         Image(systemName: "trash")
-      }.buttonStyle(.borderless).help("Remove all visits to this address")
-        .accessibilityLabel("Remove \(item.title) from history").disabled(!ownsContext || busy)
+      }.buttonStyle(.borderless).help(PanelsL10n.string("Remove all visits to this address"))
+        .accessibilityLabel(PanelsL10n.format("Remove %@ from history", .string(item.title)))
+        .disabled(!ownsContext || busy)
     }.padding(.vertical, 10)
   }
 

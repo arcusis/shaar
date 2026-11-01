@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import AppKit
+import BrowserCore
 
 /// Shaar's controls over Chromium's picture-in-picture video. The view fills the video
 /// window: buttons fade in while the pointer is over it, the interior moves the window and
@@ -84,11 +85,23 @@ final class PictureInPictureControlsView: NSView {
   override func layout() {
     super.layout()
     controls.frame = bounds
-    layoutCorner(.backToTab, x: 8)
-    layoutCorner(.close, x: bounds.width - 8 - 28)
-    layoutCorner(.minimize, x: bounds.width - 8 - 28 - 4 - 28)
+    let corners = Self.cornerFrames(
+      width: bounds.width, rightToLeft: BrowserLanguage.currentLaunchLanguage.isRightToLeft)
+    layoutCorner(.backToTab, x: corners.backToTab)
+    layoutCorner(.close, x: corners.close)
+    layoutCorner(.minimize, x: corners.minimize)
     layoutCenter()
     buttons[.restore]?.frame = restoreFrame
+  }
+
+  static func cornerFrames(width: CGFloat, rightToLeft: Bool) -> (
+    backToTab: CGFloat, minimize: CGFloat, close: CGFloat
+  ) {
+    let trailing = width - 8 - 28
+    let middle = trailing - 4 - 28
+    return rightToLeft
+      ? (backToTab: trailing, minimize: width - middle - 28, close: width - trailing - 28)
+      : (backToTab: 8, minimize: middle, close: trailing)
   }
 
   override func updateTrackingAreas() {
@@ -143,9 +156,11 @@ final class PictureInPictureControlsView: NSView {
     buttons[.skipBack]?.isHidden = presentation.isLive
     buttons[.skipForward]?.isHidden = presentation.isLive
     let restore = presentation.tuckedLeft ? "chevron.right" : "chevron.left"
-    setSymbol(.restore, restore, label: "Restore Picture in Picture")
+    setSymbol(.restore, restore, label: PanelsL10n.string("Restore Picture in Picture"))
     let playing = presentation.isPlaying
-    setSymbol(.playPause, playing ? "pause.fill" : "play.fill", label: playing ? "Pause" : "Play")
+    setSymbol(
+      .playPause, playing ? "pause.fill" : "play.fill",
+      label: PanelsL10n.string(playing ? "Pause" : "Play"))
     needsLayout = true
   }
 
@@ -202,13 +217,13 @@ final class PictureInPictureControlsView: NSView {
 
   private static func symbol(for control: Control) -> (String, String) {
     switch control {
-    case .backToTab: ("pip.exit", "Back to Tab")
-    case .minimize: ("minus", "Minimize")
-    case .close: ("xmark", "Close")
-    case .skipBack: ("gobackward.10", "Skip Back 10 Seconds")
-    case .playPause: ("pause.fill", "Pause")
-    case .skipForward: ("goforward.10", "Skip Forward 10 Seconds")
-    case .restore: ("chevron.left", "Restore Picture in Picture")
+    case .backToTab: ("pip.exit", PanelsL10n.string("Back to Tab"))
+    case .minimize: ("minus", PanelsL10n.string("Minimize"))
+    case .close: ("xmark", PanelsL10n.string("Close"))
+    case .skipBack: ("gobackward.10", PanelsL10n.string("Skip Back 10 Seconds"))
+    case .playPause: ("pause.fill", PanelsL10n.string("Pause"))
+    case .skipForward: ("goforward.10", PanelsL10n.string("Skip Forward 10 Seconds"))
+    case .restore: ("chevron.left", PanelsL10n.string("Restore Picture in Picture"))
     }
   }
 

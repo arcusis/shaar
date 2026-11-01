@@ -41,8 +41,8 @@ struct BookmarkEditor: View {
     return item?.isFolder == true
   }
   private var heading: String {
-    guard route.itemID == nil else { return "Edit bookmark" }
-    return isFolder ? "New bookmark folder" : "Add bookmark"
+    guard route.itemID == nil else { return PanelsL10n.string("Edit bookmark") }
+    return PanelsL10n.string(isFolder ? "New bookmark folder" : "Add bookmark")
   }
   private var busy: Bool {
     store.library.mutating.contains(LibraryKey(profileID: route.profileID, section: .bookmarks))
@@ -62,29 +62,43 @@ struct BookmarkEditor: View {
         heading,
         systemImage: isFolder ? "folder" : "star"
       ).font(.title2.weight(.semibold))
-      Text("\(store.profileName) profile").font(.callout).foregroundStyle(.secondary)
-      TextField("Name", text: $title).textFieldStyle(.roundedBorder).focused($nameIsFocused)
-        .onSubmit { submit() }
+      Text(PanelsL10n.format("%@ profile", .string(store.profileName)))
+        .font(.callout).foregroundStyle(.secondary)
+      TextField(PanelsL10n.string("Name"), text: $title).textFieldStyle(.roundedBorder).focused(
+        $nameIsFocused
+      )
+      .onSubmit { submit() }
       if !isFolder {
-        TextField("https://example.com", text: $address).textFieldStyle(.roundedBorder)
-          .accessibilityLabel("Bookmark address").onSubmit { submit() }
+        TextField(PanelsL10n.string("https://example.com"), text: $address).textFieldStyle(
+          .roundedBorder
+        )
+        .environment(\.layoutDirection, .leftToRight)
+        .accessibilityLabel(PanelsL10n.string("Bookmark address")).onSubmit { submit() }
       }
       if let tree {
         if route.itemID == nil {
           Picker(
-            "Folder", selection: Binding(get: { parentID ?? tree.otherID }, set: { parentID = $0 })
+            PanelsL10n.string("Folder"),
+            selection: Binding(get: { parentID ?? tree.otherID }, set: { parentID = $0 })
           ) {
             ForEach(tree.items.filter(\.isFolder)) { folder in
-              Text(folder.path).tag(folder.id)
+              Text(folder.path).environment(\.layoutDirection, .leftToRight).tag(folder.id)
             }
           }
         } else {
-          LabeledContent(
-            "Folder", value: tree.items.first { $0.id == item?.parentID }?.path ?? "Unavailable")
+          LabeledContent {
+            Text(
+              tree.items.first { $0.id == item?.parentID }?.path
+                ?? PanelsL10n.string("Unavailable")
+            ).environment(\.layoutDirection, .leftToRight)
+          } label: {
+            Text(PanelsL10n.string("Folder"))
+          }
         }
       }
       if !route.matches(store) {
-        Text("This bookmark context is no longer available.").foregroundStyle(.secondary)
+        Text(PanelsL10n.string("This bookmark context is no longer available.")).foregroundStyle(
+          .secondary)
       }
       if let message = error ?? store.library.notice(route.profileID, section: .bookmarks) {
         Text(message).font(.callout).foregroundStyle(.secondary).fixedSize(
@@ -92,26 +106,29 @@ struct BookmarkEditor: View {
       }
       HStack {
         if route.itemID != nil {
-          Button("Delete…", role: .destructive) { removing = true }.disabled(
+          Button(PanelsL10n.string("Delete…"), role: .destructive) { removing = true }.disabled(
             busy || !route.matches(store))
         }
         Spacer()
         if busy { ProgressView().controlSize(.small) }
-        Button("Cancel", role: .cancel) { dismiss() }
-        Button("Save") { submit() }.keyboardShortcut(.defaultAction).disabled(!canSave)
+        Button(PanelsL10n.string("Cancel"), role: .cancel) { dismiss() }
+        Button(PanelsL10n.string("Save")) { submit() }.keyboardShortcut(.defaultAction).disabled(
+          !canSave)
       }
     }
     .padding(28).frame(width: 460).background(Color(nsColor: .windowBackgroundColor))
     .onAppear { nameIsFocused = true }
     .confirmationDialog(
-      isFolder ? "Delete this bookmark folder and its contents?" : "Delete this bookmark?",
+      PanelsL10n.string(
+        isFolder ? "Delete this bookmark folder and its contents?" : "Delete this bookmark?"),
       isPresented: $removing
     ) {
-      Button("Delete", role: .destructive) {
+      Button(PanelsL10n.string("Delete"), role: .destructive) {
         if let id = route.itemID { store.deleteBookmark(id, profileID: route.profileID) }
       }
     } message: {
-      Text("Saved bookmarks are removed from this profile. Open pages stay open.")
+      Text(
+        PanelsL10n.string("Saved bookmarks are removed from this profile. Open pages stay open."))
     }
   }
 
@@ -119,7 +136,8 @@ struct BookmarkEditor: View {
     guard canSave else { return }
     error = nil
     if !store.saveBookmark(route, title: title, address: address, parentID: parentID) {
-      error = "The bookmark could not be saved. Check its name, address, and folder."
+      error = PanelsL10n.string(
+        "The bookmark could not be saved. Check its name, address, and folder.")
     }
   }
 }

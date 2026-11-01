@@ -1,0 +1,2513 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "Developer Tools": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Developer Tools"}},"he":{"stringUnit":{"state":"translated","value":"כלים למפתחים"}}}},
+    "General": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "כללי"
+          }
+        }
+      }
+    },
+    "Appearance": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מראה"
+          }
+        }
+      }
+    },
+    "Privacy & Security": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פרטיות ואבטחה"
+          }
+        }
+      }
+    },
+    "Profiles": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פרופילים"
+          }
+        }
+      }
+    },
+    "Shortcuts": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "קיצורי מקלדת"
+          }
+        }
+      }
+    },
+    "About": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "על האפליקציה"
+          }
+        }
+      }
+    },
+    "Delete %@?": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "למחוק את %@?"
+          }
+        }
+      }
+    },
+    "Its Spaces will move to %@. Its favorites will be removed.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "המרחבים שלו יועברו אל %@. המועדפים שלו יוסרו."
+          }
+        }
+      }
+    },
+    "Move Spaces to": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "העברת מרחבים אל"
+          }
+        }
+      }
+    },
+    "Cancel": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ביטול"
+          }
+        }
+      }
+    },
+    "Delete": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מחיקה"
+          }
+        }
+      }
+    },
+    "Startup": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הפעלה"
+          }
+        }
+      }
+    },
+    "On startup": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "בעת ההפעלה"
+          }
+        }
+      }
+    },
+    "Restore windows and tabs": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "שחזור חלונות ולשוניות"
+          }
+        }
+      }
+    },
+    "Start with a new tab": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פתיחת לשונית חדשה"
+          }
+        }
+      }
+    },
+    "Default browser": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "דפדפן ברירת מחדל"
+          }
+        }
+      }
+    },
+    "Make Default": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הגדרה כברירת מחדל"
+          }
+        }
+      }
+    },
+    "Windows": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חלונות"
+          }
+        }
+      }
+    },
+    "Links from other apps open in": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "קישורים מאפליקציות אחרות נפתחים ב"
+          }
+        }
+      }
+    },
+    "Mini window": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חלון ממוזער"
+          }
+        }
+      }
+    },
+    "Main window": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חלון ראשי"
+          }
+        }
+      }
+    },
+    "Show sidebar in new windows": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הצגת סרגל הצד בחלונות חדשים"
+          }
+        }
+      }
+    },
+    "Warn before quitting with Command-Q": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הצגת אזהרה לפני יציאה באמצעות Command-Q"
+          }
+        }
+      }
+    },
+    "Theme": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ערכת נושא"
+          }
+        }
+      }
+    },
+    "System": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מערכת"
+          }
+        }
+      }
+    },
+    "Light": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "בהיר"
+          }
+        }
+      }
+    },
+    "Dark": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "כהה"
+          }
+        }
+      }
+    },
+    "System follows your Mac appearance.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "המראה של המערכת תואם למראה ב‑Mac."
+          }
+        }
+      }
+    },
+    "Profile": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פרופיל"
+          }
+        }
+      }
+    },
+    "Clear all history": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מחיקת כל ההיסטוריה"
+          }
+        }
+      }
+    },
+    "Browsing History": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "היסטוריית גלישה"
+          }
+        }
+      }
+    },
+    "Removes history for the selected profile. Cookies and cached files are not removed.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ההיסטוריה של הפרופיל שנבחר תימחק. קובצי Cookie וקבצים שמורים במטמון לא יוסרו."
+          }
+        }
+      }
+    },
+    "Clear all history for this profile?": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "למחוק את כל ההיסטוריה של הפרופיל הזה?"
+          }
+        }
+      }
+    },
+    "Clear History": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מחיקת ההיסטוריה"
+          }
+        }
+      }
+    },
+    "History cleared.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ההיסטוריה נמחקה."
+          }
+        }
+      }
+    },
+    "© 2026 Arcusis. All rights reserved.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "© 2026 Arcusis. כל הזכויות שמורות."
+          }
+        }
+      }
+    },
+    "Version": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "גרסה"
+          }
+        }
+      }
+    },
+    "Build": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מספר בנייה"
+          }
+        }
+      }
+    },
+    "Add Profile": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הוספת פרופיל"
+          }
+        }
+      }
+    },
+    "No Profile Selected": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא נבחר פרופיל"
+          }
+        }
+      }
+    },
+    "Name": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "שם"
+          }
+        }
+      }
+    },
+    "Save": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "שמירה"
+          }
+        }
+      }
+    },
+    "Search engine": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מנוע חיפוש"
+          }
+        }
+      }
+    },
+    "Spaces using this profile": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מרחבים שמשתמשים בפרופיל הזה"
+          }
+        }
+      }
+    },
+    "No Spaces assigned": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא הוקצו מרחבים"
+          }
+        }
+      }
+    },
+    "Open": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פתיחה"
+          }
+        }
+      }
+    },
+    "Accounts": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חשבונות"
+          }
+        }
+      }
+    },
+    "Sign in with the provider's own page. Gmail, Drive, Outlook, and Teams then open signed in for every Space using this profile.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "התחברות בדף של הספק. לאחר מכן Gmail, Drive, Outlook ו‑Teams ייפתחו כשהחשבון מחובר בכל מרחב שמשתמש בפרופיל הזה."
+          }
+        }
+      }
+    },
+    "Extensions": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "תוספים"
+          }
+        }
+      }
+    },
+    "Delete Profile…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מחיקת פרופיל…"
+          }
+        }
+      }
+    },
+    "Disconnect": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ניתוק"
+          }
+        }
+      }
+    },
+    "Open Settings": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פתיחת ההגדרות"
+          }
+        }
+      }
+    },
+    "macOS Permissions": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הרשאות macOS"
+          }
+        }
+      }
+    },
+    "Websites can only use what macOS allows. If a site's request is blocked here, change it in System Settings.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אתרים יכולים להשתמש רק בהרשאות ש‑macOS מאפשרת. אם בקשת אתר חסומה כאן, יש לשנות זאת בהגדרות המערכת."
+          }
+        }
+      }
+    },
+    "Finishing sign-in…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ההתחברות מסתיימת…"
+          }
+        }
+      }
+    },
+    "Profile color": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "צבע הפרופיל"
+          }
+        }
+      }
+    },
+    "No Extensions": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אין תוספים"
+          }
+        }
+      }
+    },
+    "Extensions you add appear here for this profile.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "תוספים שיוספו יופיעו כאן בפרופיל הזה."
+          }
+        }
+      }
+    },
+    "Add Extensions…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הוספת תוספים…"
+          }
+        }
+      }
+    },
+    "Version %@": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "גרסה %@"
+          }
+        }
+      }
+    },
+    "Remove Extension…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הסרת תוסף…"
+          }
+        }
+      }
+    },
+    "Remove %@?": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "להסיר את %@?"
+          }
+        }
+      }
+    },
+    "Remove": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הסרה"
+          }
+        }
+      }
+    },
+    "Its data in this profile is deleted. You can add it again from the Chrome Web Store.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הנתונים שלו בפרופיל הזה יימחקו. אפשר להוסיף אותו מחדש מחנות האינטרנט של Chrome."
+          }
+        }
+      }
+    },
+    "Favorite pages": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "דפים מועדפים"
+          }
+        }
+      }
+    },
+    "Move Left": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הזזה שמאלה"
+          }
+        }
+      }
+    },
+    "Move Right": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הזזה ימינה"
+          }
+        }
+      }
+    },
+    "Reset to Original Address": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "איפוס לכתובת המקורית"
+          }
+        }
+      }
+    },
+    "Remove Favorite (keeps page)": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הסרת המועדף (הדף יישאר)"
+          }
+        }
+      }
+    },
+    "Profile name": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "שם הפרופיל"
+          }
+        }
+      }
+    },
+    "Create": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "יצירה"
+          }
+        }
+      }
+    },
+    "Profile could not be saved.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן לשמור את הפרופיל."
+          }
+        }
+      }
+    },
+    "Step %d of %d": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "שלב %d מתוך %d"
+          }
+        }
+      }
+    },
+    "A profile keeps its own sign-ins, cookies, history and extensions.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לכל פרופיל יש חשבונות, קובצי Cookie, היסטוריה ותוספים משלו."
+          }
+        }
+      }
+    },
+    "Finish signing in to %@ in the sign-in window.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "יש להשלים את ההתחברות אל %@ בחלון ההתחברות."
+          }
+        }
+      }
+    },
+    "Optional. A profile connects one account, Google or Microsoft. You can also connect it later in Settings > Profiles.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אפשר לחבר לפרופיל חשבון Google או Microsoft. אפשר לעשות זאת גם מאוחר יותר דרך הגדרות > פרופילים."
+          }
+        }
+      }
+    },
+    "Connect %@": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חיבור אל %@"
+          }
+        }
+      }
+    },
+    "No account connected. You can connect one later in Settings > Profiles.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא מחובר חשבון. אפשר להתחבר מאוחר יותר דרך הגדרות > פרופילים."
+          }
+        }
+      }
+    },
+    "Back": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הקודם"
+          }
+        }
+      }
+    },
+    "Skip": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "דילוג"
+          }
+        }
+      }
+    },
+    "Search shortcuts": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חיפוש קיצורי מקלדת"
+          }
+        }
+      }
+    },
+    "No shortcuts match \"%@\".": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא נמצאו קיצורי מקלדת שתואמים לחיפוש „%@”."
+          }
+        }
+      }
+    },
+    "Space name": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "שם המרחב"
+          }
+        }
+      }
+    },
+    "Delete…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מחיקה…"
+          }
+        }
+      }
+    },
+    "Delete space": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מחיקת המרחב"
+          }
+        }
+      }
+    },
+    "New profile": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פרופיל חדש"
+          }
+        }
+      }
+    },
+    "Search icons": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חיפוש סמלים"
+          }
+        }
+      }
+    },
+    "Hex": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הקסדצימלי"
+          }
+        }
+      }
+    },
+    "Hex color": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "צבע הקסדצימלי"
+          }
+        }
+      }
+    },
+    "Theme color field": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "שדה צבע ערכת הנושא"
+          }
+        }
+      }
+    },
+    "Saturation %d percent, brightness %d percent": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "רוויה %d אחוז, בהירות %d אחוז"
+          }
+        }
+      }
+    },
+    "Theme hue": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "גוון ערכת הנושא"
+          }
+        }
+      }
+    },
+    "%d degrees": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d מעלות"
+          }
+        }
+      }
+    },
+    "No color": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ללא צבע"
+          }
+        }
+      }
+    },
+    "%@ color": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "צבע %@"
+          }
+        }
+      }
+    },
+    "Settings": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הגדרות"
+          }
+        }
+      }
+    },
+    "Language": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "שפה"
+          }
+        }
+      }
+    },
+    "System Default": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ברירת מחדל של המערכת"
+          }
+        }
+      }
+    },
+    "English": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אנגלית"
+          }
+        }
+      }
+    },
+    "Hebrew": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "עברית"
+          }
+        }
+      }
+    },
+    "Language changes after you restart the app.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "השפה תשתנה לאחר הפעלה מחדש של האפליקציה."
+          }
+        }
+      }
+    },
+    "Name, icon and color": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "שם, סמל וצבע"
+          }
+        }
+      }
+    },
+    "Connect Google": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חיבור ל‑Google"
+          }
+        }
+      }
+    },
+    "Connect Microsoft": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חיבור ל‑Microsoft"
+          }
+        }
+      }
+    },
+    "Ready": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מוכן"
+          }
+        }
+      }
+    },
+    "Create Profile": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "יצירת פרופיל"
+          }
+        }
+      }
+    },
+    "Continue": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "המשך"
+          }
+        }
+      }
+    },
+    "Clear History…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מחיקת ההיסטוריה…"
+          }
+        }
+      }
+    },
+    "Clearing…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "המחיקה מתבצעת…"
+          }
+        }
+      }
+    },
+    "Could not clear history: %@": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן למחוק את ההיסטוריה: %@"
+          }
+        }
+      }
+    },
+    "Unknown": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ידוע"
+          }
+        }
+      }
+    },
+    "Change Profile Icon": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "שינוי סמל הפרופיל"
+          }
+        }
+      }
+    },
+    "Default": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ברירת מחדל"
+          }
+        }
+      }
+    },
+    "Not default": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא מוגדר כברירת מחדל"
+          }
+        }
+      }
+    },
+    "Sign in to %@ for %@": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "התחברות אל %@ עבור %@"
+          }
+        }
+      }
+    },
+    "%@ sign-in": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "התחברות אל %@"
+          }
+        }
+      }
+    },
+    "Permissions": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הרשאות"
+          }
+        }
+      }
+    },
+    "Site access": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "גישה לאתרים"
+          }
+        }
+      }
+    },
+    "%@\n%@": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@\n%@"
+          }
+        }
+      }
+    },
+    "%@, %@": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, %@"
+          }
+        }
+      }
+    },
+    "%s color": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "צבע %s"
+          }
+        }
+      }
+    },
+    "Saved preferences exceed the supported size; original file preserved.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "גודל ההעדפות השמורות חורג מהמותר; הקובץ המקורי נשמר."
+          }
+        }
+      }
+    },
+    "Saved preferences use an unsupported version; original file preserved.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ההעדפות השמורות משתמשות בגרסה לא נתמכת; הקובץ המקורי נשמר."
+          }
+        }
+      }
+    },
+    "Saved preferences are invalid or unreadable; original file preserved.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ההעדפות השמורות אינן תקינות או שלא ניתן לקרוא אותן; הקובץ המקורי נשמר."
+          }
+        }
+      }
+    },
+    "Preferences changed in memory but exceed the supported storage size.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ההעדפות השתנו בזיכרון, אך גודלן חורג מהמותר לאחסון."
+          }
+        }
+      }
+    },
+    "Preferences changed in memory but could not be saved. Try again after fixing storage access.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ההעדפות השתנו בזיכרון אך לא ניתן לשמור אותן. יש לנסות שוב לאחר תיקון הגישה לאחסון."
+          }
+        }
+      }
+    },
+    "The profile could not be created. %@": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן ליצור את הפרופיל. %@"
+          }
+        }
+      }
+    },
+    "Sign in with a personal Google account or a Google Workspace account. If your company signs in through its own identity provider, that page opens in the same window and returns to Google.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אפשר להתחבר באמצעות חשבון Google אישי או חשבון Google Workspace. אם החברה משתמשת בספק זהויות משלה, הדף שלו ייפתח באותו חלון ויחזור ל‑Google."
+          }
+        }
+      }
+    },
+    "Sign in with a personal Microsoft account or a work or school account. Company sign-in through Okta, Azure AD, ADFS, Ping or a similar provider opens in the same window and returns to Microsoft.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אפשר להתחבר באמצעות חשבון Microsoft אישי או חשבון עבודה או לימודים. התחברות ארגונית דרך Okta,‏ Azure AD,‏ ADFS,‏ Ping או שירות דומה תיפתח באותו חלון ותחזור ל‑Microsoft."
+          }
+        }
+      }
+    },
+    "New Profile": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פרופיל חדש"
+          }
+        }
+      }
+    },
+    "White": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לבן"
+          }
+        }
+      }
+    },
+    "Pink": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ורוד"
+          }
+        }
+      }
+    },
+    "Purple": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סגול"
+          }
+        }
+      }
+    },
+    "Red": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אדום"
+          }
+        }
+      }
+    },
+    "Orange": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "כתום"
+          }
+        }
+      }
+    },
+    "Yellow": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "צהוב"
+          }
+        }
+      }
+    },
+    "Green": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ירוק"
+          }
+        }
+      }
+    },
+    "Blue": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "כחול"
+          }
+        }
+      }
+    },
+    "Slate": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "צפחה"
+          }
+        }
+      }
+    },
+    "%d Space": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d מרחב"
+          }
+        }
+      }
+    },
+    "%d Spaces": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "1 Space"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%d Spaces"
+                }
+              }
+            }
+          }
+        },
+        "he": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "מרחב אחד"
+                }
+              },
+              "two": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "שני מרחבים"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%d מרחבים"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Work": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "עבודה"
+          }
+        }
+      }
+    },
+    "Communication": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "תקשורת"
+          }
+        }
+      }
+    },
+    "Travel": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נסיעות"
+          }
+        }
+      }
+    },
+    "Food": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אוכל"
+          }
+        }
+      }
+    },
+    "Nature": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "טבע"
+          }
+        }
+      }
+    },
+    "Money": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "כסף"
+          }
+        }
+      }
+    },
+    "Health": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "בריאות"
+          }
+        }
+      }
+    },
+    "Sports": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ספורט"
+          }
+        }
+      }
+    },
+    "Devices": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מכשירים"
+          }
+        }
+      }
+    },
+    "Media": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מדיה"
+          }
+        }
+      }
+    },
+    "Education": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לימודים"
+          }
+        }
+      }
+    },
+    "Home": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "בית"
+          }
+        }
+      }
+    },
+    "Symbols": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סמלים"
+          }
+        }
+      }
+    },
+    "File": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "קובץ"
+          }
+        }
+      }
+    },
+    "Edit": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "עריכה"
+          }
+        }
+      }
+    },
+    "View": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "תצוגה"
+          }
+        }
+      }
+    },
+    "History": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "היסטוריה"
+          }
+        }
+      }
+    },
+    "Bookmarks": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סימניות"
+          }
+        }
+      }
+    },
+    "Window": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חלון"
+          }
+        }
+      }
+    },
+    "Help": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "עזרה"
+          }
+        }
+      }
+    },
+    "New Window": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חלון חדש"
+          }
+        }
+      }
+    },
+    "New Private Window": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חלון פרטי חדש"
+          }
+        }
+      }
+    },
+    "New Mini Window": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חלון ממוזער חדש"
+          }
+        }
+      }
+    },
+    "New Tab": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לשונית חדשה"
+          }
+        }
+      }
+    },
+    "Search": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חיפוש"
+          }
+        }
+      }
+    },
+    "Close Window": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סגירת חלון"
+          }
+        }
+      }
+    },
+    "Find": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חיפוש בדף"
+          }
+        }
+      }
+    },
+    "Find Next": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הבא"
+          }
+        }
+      }
+    },
+    "Find Previous": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הקודם"
+          }
+        }
+      }
+    },
+    "Show Sidebar": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הצגת סרגל הצד"
+          }
+        }
+      }
+    },
+    "Reload": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "טעינה מחדש"
+          }
+        }
+      }
+    },
+    "Hard Reload": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "טעינה מחדש מלאה"
+          }
+        }
+      }
+    },
+    "New Space": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מרחב חדש"
+          }
+        }
+      }
+    },
+    "Edit Space": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "עריכת המרחב"
+          }
+        }
+      }
+    },
+    "Add Favorite": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הוספת מועדף"
+          }
+        }
+      }
+    },
+    "Create Folder": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "יצירת תיקייה"
+          }
+        }
+      }
+    },
+    "Close Tab": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סגירת לשונית"
+          }
+        }
+      }
+    },
+    "Reopen Closed Tab": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פתיחת הלשונית שנסגרה מחדש"
+          }
+        }
+      }
+    },
+    "Recently Closed": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נסגרו לאחרונה"
+          }
+        }
+      }
+    },
+    "Bookmark Page": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הוספת סימנייה לדף"
+          }
+        }
+      }
+    },
+    "Downloads": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הורדות"
+          }
+        }
+      }
+    },
+    "Zoom Window": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הגדלת החלון"
+          }
+        }
+      }
+    },
+    "Quit": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "יציאה"
+          }
+        }
+      }
+    },
+    "Hide Others": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הסתרת האחרות"
+          }
+        }
+      }
+    },
+    "Undo": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ביטול הפעולה"
+          }
+        }
+      }
+    },
+    "Redo": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ביצוע מחדש"
+          }
+        }
+      }
+    },
+    "Cut": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "גזירה"
+          }
+        }
+      }
+    },
+    "Copy": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "העתקה"
+          }
+        }
+      }
+    },
+    "Paste": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הדבקה"
+          }
+        }
+      }
+    },
+    "Select All": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "בחירת הכול"
+          }
+        }
+      }
+    },
+    "Copy URL": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "העתקת כתובת URL"
+          }
+        }
+      }
+    },
+    "Check for Updates…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "בדיקת עדכונים…"
+          }
+        }
+      }
+    },
+    "Show All": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הצגת הכול"
+          }
+        }
+      }
+    },
+    "Bring All to Front": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "העברת הכול לחזית"
+          }
+        }
+      }
+    },
+    "Done": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סיום"
+          }
+        }
+      }
+    },
+    "Rename Profile": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "שינוי שם הפרופיל"
+          }
+        }
+      }
+    },
+    "Change Space Icon": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "שינוי סמל המרחב"
+          }
+        }
+      }
+    },
+    "Separate Profile keeps sign-ins and extensions apart.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פרופיל נפרד שומר חשבונות ותוספים בנפרד."
+          }
+        }
+      }
+    },
+    "Spaces sharing a Profile share website sign-ins and extensions.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מרחבים שמשתפים פרופיל חולקים חשבונות אתרים ותוספים."
+          }
+        }
+      }
+    },
+    "This Space could not be saved. Check its name and Profile.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן לשמור את המרחב. יש לבדוק את השם והפרופיל."
+          }
+        }
+      }
+    },
+    "About %@": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אודות %@"
+          }
+        }
+      }
+    },
+    "Hide %@": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הסתרת %@"
+          }
+        }
+      }
+    },
+    "Quit %@": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "יציאה מ‑%@"
+          }
+        }
+      }
+    },
+    "%@ Support": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "התמיכה של %@"
+          }
+        }
+      }
+    },
+    "New window": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חלון חדש"
+          }
+        }
+      }
+    },
+    "New tab": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לשונית חדשה"
+          }
+        }
+      }
+    },
+    "Search or enter address": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חיפוש או הזנת כתובת"
+          }
+        }
+      }
+    },
+    "Close window": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סגירת חלון"
+          }
+        }
+      }
+    },
+    "Find in Page…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חיפוש בדף…"
+          }
+        }
+      }
+    },
+    "Toggle sidebar": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הצגה או הסתרה של סרגל הצד"
+          }
+        }
+      }
+    },
+    "New space…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מרחב חדש…"
+          }
+        }
+      }
+    },
+    "Edit current space…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "עריכת המרחב הנוכחי…"
+          }
+        }
+      }
+    },
+    "Next space": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "המרחב הבא"
+          }
+        }
+      }
+    },
+    "Previous space": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "המרחב הקודם"
+          }
+        }
+      }
+    },
+    "Split View": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "תצוגה מפוצלת"
+          }
+        }
+      }
+    },
+    "Close tab": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סגירת לשונית"
+          }
+        }
+      }
+    },
+    "Add to Favorites": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הוספה למועדפים"
+          }
+        }
+      }
+    },
+    "New Folder": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "תיקייה חדשה"
+          }
+        }
+      }
+    },
+    "Reopen last closed tab": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פתיחת הלשונית האחרונה שנסגרה"
+          }
+        }
+      }
+    },
+    "Recently closed…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נסגרו לאחרונה…"
+          }
+        }
+      }
+    },
+    "Bookmark this page": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הוספת סימנייה לדף הזה"
+          }
+        }
+      }
+    },
+    "Bookmarks…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סימניות…"
+          }
+        }
+      }
+    },
+    "History…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "היסטוריה…"
+          }
+        }
+      }
+    },
+    "Manage Extensions…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ניהול תוספים…"
+          }
+        }
+      }
+    },
+    "Minimize": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מזעור"
+          }
+        }
+      }
+    },
+    "Zoom": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הגדלה"
+          }
+        }
+      }
+    },
+    "Services": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "שירותים"
+          }
+        }
+      }
+    },
+    "Spaces": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מרחבים"
+          }
+        }
+      }
+    },
+    "Tabs": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לשוניות"
+          }
+        }
+      }
+    },
+    "Archive": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ארכיון"
+          }
+        }
+      }
+    },
+    "Settings…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הגדרות…"
+          }
+        }
+      }
+    },
+    "Checking…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מתבצעת בדיקה…"
+          }
+        }
+      }
+    },
+    "Allowed": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מותר"
+          }
+        }
+      }
+    },
+    "Not allowed": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא מותר"
+          }
+        }
+      }
+    },
+    "Not asked yet": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "טרם התבקשה הרשאה"
+          }
+        }
+      }
+    },
+    "Camera": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מצלמה"
+          }
+        }
+      }
+    },
+    "Microphone": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מיקרופון"
+          }
+        }
+      }
+    },
+    "Location": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מיקום"
+          }
+        }
+      }
+    },
+    "Notifications": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "התראות"
+          }
+        }
+      }
+    },
+    "Screen Recording": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הקלטת מסך"
+          }
+        }
+      }
+    },
+    "Lavender": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לבנדר"
+          }
+        }
+      }
+    },
+    "Ocean": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אוקיינוס"
+          }
+        }
+      }
+    },
+    "Rose": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ורוד"
+          }
+        }
+      }
+    },
+    "Forest": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "יער"
+          }
+        }
+      }
+    },
+    "the selected profile": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הפרופיל שנבחר"
+          }
+        }
+      }
+    },
+    "Window changes could not be saved. %@": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן לשמור את שינויי החלונות. %@"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

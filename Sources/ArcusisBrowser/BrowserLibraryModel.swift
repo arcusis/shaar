@@ -60,7 +60,7 @@ final class BrowserLibraryModel {
     let limit = historyLimits[profile] ?? 500
     guard let onLoad else {
       loading.remove(key)
-      notices[key] = "The browser engine is unavailable."
+      notices[key] = PanelsL10n.string("The browser engine is unavailable.")
       return
     }
     onLoad(key, limit) { [weak self] result in

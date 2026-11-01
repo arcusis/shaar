@@ -26,9 +26,9 @@ struct ProfileNameEditor: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
-      Text(title).font(.headline)
-      TextField("Profile name", text: $name)
-        .accessibilityLabel("Profile name")
+      Text(SettingsL10n.string(title)).font(.headline)
+      TextField(SettingsL10n.string("Profile name"), text: $name)
+        .accessibilityLabel(SettingsL10n.string("Profile name"))
         .focused($isNameFocused)
         .onChange(of: name) { errorMessage = nil }
       if let errorMessage {
@@ -36,10 +36,10 @@ struct ProfileNameEditor: View {
       }
       HStack {
         Spacer()
-        Button("Cancel", action: onCancel)
+        Button(SettingsL10n.string("Cancel"), action: onCancel)
           .keyboardShortcut(.cancelAction)
-        Button(initialName.isEmpty ? "Create" : "Save") {
-          errorMessage = onSave(name) ? nil : "Profile could not be saved."
+        Button(SettingsL10n.string(initialName.isEmpty ? "Create" : "Save")) {
+          errorMessage = onSave(name) ? nil : SettingsL10n.string("Profile could not be saved.")
         }
         .keyboardShortcut(.defaultAction)
         .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

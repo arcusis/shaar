@@ -65,7 +65,7 @@ struct CommandPanel: View {
       return .handled
     }
     .onExitCommand { store.dismissCommand() }
-    .accessibilityLabel("Search tabs, spaces, or the web")
+    .accessibilityLabel(ShellL10n.string("Search tabs, spaces, or the web"))
   }
 
   private var searchField: some View {
@@ -73,13 +73,13 @@ struct CommandPanel: View {
       Image(systemName: "magnifyingglass")
         .font(.system(size: 21, weight: .light))
         .foregroundStyle(.secondary)
-      TextField("Search or enter address", text: $store.commandQuery)
+      TextField(ShellL10n.string("Search or enter address"), text: $store.commandQuery)
         .textFieldStyle(.plain)
         .font(.system(size: 21))
         .focused($searchIsFocused)
         .onSubmit { acceptCommand() }
         .accessibilityIdentifier("command-search")
-      Text("esc")
+      ShellL10n.text("esc")
         .font(.system(size: 11))
         .foregroundStyle(.tertiary)
         .padding(.horizontal, 6)
@@ -126,8 +126,8 @@ struct CommandPanel: View {
 
   private var emptyMessage: String {
     let query = store.commandQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-    if query.isEmpty, store.commandFilter == nil { return "No suggestions yet" }
-    return "No matching results"
+    if query.isEmpty, store.commandFilter == nil { return ShellL10n.string("No suggestions yet") }
+    return ShellL10n.string("No matching results")
   }
 
   private func row(_ result: CommandResult, isSelected: Bool) -> some View {
@@ -153,7 +153,7 @@ struct CommandPanel: View {
     HStack {
       Label(store.profileName, systemImage: "person.crop.circle")
       Spacer()
-      Text("⇥ filter    ↑↓ select    ↩ open")
+      ShellL10n.text("⇥ filter    ↑↓ select    ↩ open")
     }
     .font(.system(size: 10))
     .foregroundStyle(.secondary)
@@ -216,20 +216,22 @@ struct CommandPanel: View {
       space.profileID != store.session.selectedSpace.profileID,
       let profile = store.session.profiles.first(where: { $0.id == space.profileID })
     else { return result.subtitle }
-    return "\(result.subtitle) · \(profile.name) profile"
+    return ShellL10n.format(
+      "%@ · %@ profile", arguments: [.string(result.subtitle), .string(profile.name)])
   }
 
   private func actionLabel(for result: CommandResult) -> String {
     switch result.action {
-    case .tab: "Switch to Tab"
-    case .favorite: "Open Favorite"
-    case .space: "Switch Space"
-    case .folder: "Open Folder"
-    case .reopen: "Reopen Tab"
-    case .bookmark: "Open Bookmark"
-    case .history: "Open"
-    case .command: "Run Action"
-    case .open(let url): isWebSearch(url) ? "Search Web" : "Open"
+    case .tab: ShellL10n.string("Switch to Tab")
+    case .favorite: ShellL10n.string("Open Favorite")
+    case .space: ShellL10n.string("Switch Space")
+    case .folder: ShellL10n.string("Open Folder")
+    case .reopen: ShellL10n.string("Reopen Tab")
+    case .bookmark: ShellL10n.string("Open Bookmark")
+    case .history: ShellL10n.string("Open")
+    case .command: ShellL10n.string("Run Action")
+    case .open(let url):
+      ShellL10n.string(isWebSearch(url) ? "Search Web" : "Open")
     }
   }
 

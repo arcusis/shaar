@@ -47,18 +47,21 @@ struct FolderEditor: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 14) {
-      Label(route.folderID == nil ? "New Folder" : "Rename Folder", systemImage: "folder")
-        .font(.headline)
-      TextField("Folder name", text: $name).textFieldStyle(.roundedBorder)
+      Label(
+        PanelsL10n.string(route.folderID == nil ? "New Folder" : "Rename Folder"),
+        systemImage: "folder"
+      )
+      .font(.headline)
+      TextField(PanelsL10n.string("Folder name"), text: $name).textFieldStyle(.roundedBorder)
         .focused($nameIsFocused).onSubmit { submit() }
       if let error { Text(error).font(.caption).foregroundStyle(.red) }
       HStack {
         if route.folderID != nil {
-          Button("Remove folder…", role: .destructive) { removing = true }
+          Button(PanelsL10n.string("Remove folder…"), role: .destructive) { removing = true }
         }
         Spacer()
-        Button("Cancel", role: .cancel) { dismiss() }
-        Button(route.folderID == nil ? "Create folder" : "Save") { submit() }
+        Button(PanelsL10n.string("Cancel"), role: .cancel) { dismiss() }
+        Button(PanelsL10n.string(route.folderID == nil ? "Create folder" : "Save")) { submit() }
           .keyboardShortcut(.defaultAction)
           .disabled(
             name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -67,12 +70,12 @@ struct FolderEditor: View {
     }
     .padding(20).frame(width: 360).background(Color(nsColor: .windowBackgroundColor))
     .onAppear { nameIsFocused = true }
-    .confirmationDialog("Remove \(name)?", isPresented: $removing) {
-      Button("Remove folder", role: .destructive) {
+    .confirmationDialog(PanelsL10n.format("Remove %@?", .string(name)), isPresented: $removing) {
+      Button(PanelsL10n.string("Remove folder"), role: .destructive) {
         if let id = route.folderID, store.removeFolder(id, in: route.spaceID) { dismiss() }
       }
     } message: {
-      Text("Tabs and nested folders move to its parent. Pages stay open.")
+      Text(PanelsL10n.string("Tabs and nested folders move to its parent. Pages stay open."))
     }
   }
 
@@ -87,7 +90,7 @@ struct FolderEditor: View {
     if succeeded {
       dismiss()
     } else {
-      error = "This folder could not be saved. Check its name and location."
+      error = PanelsL10n.string("This folder could not be saved. Check its name and location.")
     }
   }
 

@@ -12,9 +12,48 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+static NSBundle *ARCSelectedBridgeBundle;
+static NSString *ARCBridgeLanguage = @"en";
+
+NSString *ARCBridgeLocalizedString(NSString *key) {
+  return [ARCSelectedBridgeBundle localizedStringForKey:key value:key table:@"Bridge"] ?: key;
+}
+
 NSError *ARCBridgeError(NSString *message) {
+  NSString *localized = ARCBridgeLocalizedString(message);
   return [NSError errorWithDomain:@"com.arcusis.browser.chromium" code:1
-                        userInfo:@{NSLocalizedDescriptionKey: message}];
+                        userInfo:@{NSLocalizedDescriptionKey: localized}];
+}
+
+void ARCConfigureLocalization(NSURL *bundleURL, NSString *languageIdentifier) {
+  NSString *language = [@[@"en", @"he"] containsObject:languageIdentifier] ? languageIdentifier : @"en";
+  ARCBridgeLanguage = language;
+  NSBundle *packageBundle = [NSBundle bundleWithURL:bundleURL];
+  NSString *localizationPath = [packageBundle pathForResource:language ofType:@"lproj"];
+  ARCSelectedBridgeBundle = localizationPath ? [NSBundle bundleWithPath:localizationPath] : packageBundle;
+}
+
+static NSString *ARCStringWithLocale(NSString *format, NSLocale *locale, ...) {
+  va_list arguments;
+  va_start(arguments, locale);
+  NSString *result = [[NSString alloc] initWithFormat:format locale:locale arguments:arguments];
+  va_end(arguments);
+  return result;
+}
+
+static NSString *ARCBridgeActiveDownloadsMessage(int count) {
+  if (!ARCSelectedBridgeBundle) {
+    return count == 1 ? @"Closing the browser will cancel 1 active download."
+      : [NSString stringWithFormat:@"Closing the browser will cancel %d active downloads.", count];
+  }
+  NSString *englishFallback = @"Closing the browser will cancel %d active downloads.";
+  NSString *format = [ARCSelectedBridgeBundle localizedStringForKey:@"%d active downloads"
+      value:englishFallback table:@"Bridge"];
+  if ([format isEqualToString:englishFallback]) {
+    return count == 1 ? @"Closing the browser will cancel 1 active download."
+      : [NSString stringWithFormat:englishFallback, count];
+  }
+  return ARCStringWithLocale(format, [NSLocale localeWithLocaleIdentifier:ARCBridgeLanguage], count);
 }
 
 BOOL ARCIsCanonicalID(NSString *value) {
@@ -49,12 +88,21 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 
 @implementation ARCChromiumRuntime
 
+@synthesize languageIdentifier = _languageIdentifier;
+
+- (void)setLanguageIdentifier:(NSString *)languageIdentifier {
+  _languageIdentifier = [@[@"en", @"he"] containsObject:languageIdentifier] ? [languageIdentifier copy] : @"en";
+}
+
 - (instancetype)initWithFrameworkURL:(NSURL *)url error:(NSError **)error {
   if (!(self = [super init])) return nil;
+  _languageIdentifier = @"en";
   NSURL *binary = [url URLByAppendingPathComponent:@"Versions/Current/Chromium Framework"];
   _library = dlopen(binary.fileSystemRepresentation, RTLD_NOW | RTLD_GLOBAL);
   if (!_library) {
-    if (error) *error = ARCBridgeError([NSString stringWithFormat:@"Cannot load Chromium: %s", dlerror()]);
+    NSString *reason = [NSString stringWithUTF8String:dlerror() ?: "unknown loader error"];
+    NSString *format = ARCBridgeLocalizedString(@"Cannot load Chromium: %@");
+    if (error) *error = ARCBridgeError([NSString stringWithFormat:format, reason]);
     return nil;
   }
   _engineClass = NSClassFromString(@"ArdiaCoreEngine");
@@ -107,7 +155,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   };
   _libraryService.onError = ^(NSString *profile, NSString *section, NSString *message) {
     ARCChromiumRuntime *owner = weakSelf;
-    if (owner.onLibraryError) owner.onLibraryError(profile, section, message);
+    if (owner.onLibraryError) owner.onLibraryError(profile, section, ARCBridgeLocalizedString(message));
   };
   _downloadService.onChanged = ^(NSString *profile, NSDictionary *download) {
     ARCChromiumRuntime *owner = weakSelf;
@@ -121,6 +169,11 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 }
 
 - (int)runWithDataDirectory:(NSURL *)directory testing:(BOOL)testing {
+  if (!_languageIdentifier) _languageIdentifier = @"en";
+  if (!ARCSelectedBridgeBundle && _languageIdentifier.length) {
+    NSURL *resources = [NSBundle.mainBundle URLForResource:@"ArcusisBrowser_BrowserCore" withExtension:@"bundle"];
+    if (resources) ARCConfigureLocalization(resources, _languageIdentifier);
+  }
   NSAssert(NSThread.isMainThread, @"Chromium must start on the main thread");
   _testing = testing;
   if (testing) _probeRoot = directory.URLByDeletingLastPathComponent.URLByResolvingSymlinksInPath;
@@ -151,6 +204,9 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     "--disable-features=MacAppCodeSignClone,DevToolsAcceptDebuggingConnections",
     "--profile-directory=Default"
   };
+  strings.push_back("--lang=" + std::string(_languageIdentifier.UTF8String));
+  NSString *acceptedLanguages = [_languageIdentifier isEqualToString:@"he"] ? @"he,en" : @"en";
+  strings.push_back("--accept-lang=" + std::string(acceptedLanguages.UTF8String));
   if (testing) {
     // Disposable fixture profiles only. Real profiles always use the OS keychain.
     strings.push_back("--use-mock-keychain");
@@ -614,7 +670,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
       if (transfer && self->_detachedTabSelections[existingID] == transfer) {
         [self->_detachedTabSelections removeObjectForKey:existingID];
       }
-      if (self->_onNotice) self->_onNotice(@"Moving live tabs between windows is not supported.");
+      if (self->_onNotice) self->_onNotice(ARCBridgeLocalizedString(@"Moving live tabs between windows is not supported."));
     });
     return;
   }
@@ -655,7 +711,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
         target.incomingOpenerID = nil;
         [tab closeNow];
         [self closeWindowID:targetID];
-        if (self->_onNotice) self->_onNotice(@"The requested page could not be adopted into its window.");
+        if (self->_onNotice) self->_onNotice(ARCBridgeLocalizedString(@"The requested page could not be adopted into its window."));
       } else if (self->_onWindowShowRequest) {
         self->_onWindowShowRequest(targetID, YES);
       }
@@ -1126,7 +1182,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   ARCNativeWindowState *popupState = [self stateForPopupTab:tab];
   if (popupState) {
     [self closeExtensionPopupForWindowID:popupState.identity];
-    if (_onNotice) _onNotice(@"The extension stopped working. Open it again to retry.");
+    if (_onNotice) _onNotice(ARCBridgeLocalizedString(@"The extension stopped working. Open it again to retry."));
     return;
   }
   NSString *identity = [self identityForTab:tab];
@@ -1297,7 +1353,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     rejected.closeWhenEmpty = YES;
     dispatch_async(dispatch_get_main_queue(), ^{
       [self closeWindowID:rejectedID];
-      if (self->_onNotice) self->_onNotice(@"This browser window type or profile is unavailable.");
+      if (self->_onNotice) self->_onNotice(ARCBridgeLocalizedString(@"This browser window type or profile is unavailable."));
     });
     return rejected.native;
   }
@@ -1412,7 +1468,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   if (!identity.length || !profileID || ![directory isEqualToString:prompt[@"profile"]] ||
       ![self isSelectedTabID:tabID] || !_onInstallRequest || _pendingInstalls.count >= 10) {
     if (identity) [_engineClass resolveExtensionInstallPrompt:identity accepted:NO];
-    if (_onNotice) _onNotice(@"The extension request has no active profile context and was canceled.");
+    if (_onNotice) _onNotice(ARCBridgeLocalizedString(@"The extension request has no active profile context and was canceled."));
     return;
   }
   NSMutableDictionary *request = prompt.mutableCopy;
@@ -1435,10 +1491,10 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   // Tests must resolve their own transfers before shutdown, without opening a dialog.
   if (_testing) { completion(NO); return; }
   NSAlert *alert = [[NSAlert alloc] init];
-  alert.messageText = @"Downloads are still running";
-  alert.informativeText = [NSString stringWithFormat:@"Closing the browser will cancel %d active download%@.", count, count == 1 ? @"" : @"s"];
-  [alert addButtonWithTitle:@"Keep Browser Open"];
-  NSButton *quit = [alert addButtonWithTitle:@"Close and Cancel Downloads"];
+  alert.messageText = ARCBridgeLocalizedString(@"Downloads are still running");
+  alert.informativeText = ARCBridgeActiveDownloadsMessage(count);
+  [alert addButtonWithTitle:ARCBridgeLocalizedString(@"Keep Browser Open")];
+  NSButton *quit = [alert addButtonWithTitle:ARCBridgeLocalizedString(@"Close and Cancel Downloads")];
   quit.hasDestructiveAction = YES;
   [alert beginSheetModalForWindow:window.window completionHandler:^(NSModalResponse response) {
     completion(response == NSAlertSecondButtonReturn);

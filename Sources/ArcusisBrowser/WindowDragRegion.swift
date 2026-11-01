@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import AppKit
+import BrowserCore
 import SwiftUI
 
 struct WindowDragRegion: NSViewRepresentable {
@@ -14,7 +15,8 @@ struct WindowDragRegion: NSViewRepresentable {
 
   static func titlebarDragFrame(
     contentBounds: NSRect, contentLayoutRect: NSRect, trafficLightsFrame: NSRect?,
-    isFlipped: Bool = false
+    isFlipped: Bool = false, isRightToLeft: Bool = false,
+    trailingAccessoryWidth: CGFloat = 0
   ) -> NSRect? {
     let top: CGFloat
     if isFlipped {
@@ -25,21 +27,37 @@ struct WindowDragRegion: NSViewRepresentable {
     guard top > 0 else { return nil }
     guard let trafficLightsFrame else { return nil }
     let originY = isFlipped ? contentBounds.minY : contentLayoutRect.maxY
-    let startX = max(
-      contentBounds.minX,
-      trafficLightsFrame.maxX + 8 + BrowserChromeLayout.titlebarAccessoryWidth)
-    guard startX < contentBounds.maxX else { return nil }
-    return NSRect(x: startX, y: originY, width: contentBounds.maxX - startX, height: top)
+    let startX: CGFloat
+    let endX: CGFloat
+    if isRightToLeft {
+      startX = max(contentBounds.minX, trafficLightsFrame.maxX + 8)
+      endX = min(contentBounds.maxX, contentBounds.maxX - trailingAccessoryWidth)
+    } else {
+      startX = max(
+        contentBounds.minX,
+        trafficLightsFrame.maxX + 8 + BrowserChromeLayout.titlebarAccessoryWidth)
+      endX = contentBounds.maxX
+    }
+    guard startX < endX else { return nil }
+    return NSRect(x: startX, y: originY, width: endX - startX, height: top)
   }
 
-  static func makeTitlebarDragView(window: NSWindow, contentView: NSView) -> NSView {
+  static func makeTitlebarDragView(
+    window: NSWindow, contentView: NSView, isRightToLeft: Bool = false,
+    trailingAccessoryWidth: CGFloat = 0
+  ) -> NSView {
     let view = WindowDragView()
     view.autoresizingMask = [.width, .minYMargin]
-    updateTitlebarDragView(view, window: window, contentView: contentView)
+    updateTitlebarDragView(
+      view, window: window, contentView: contentView, isRightToLeft: isRightToLeft,
+      trailingAccessoryWidth: trailingAccessoryWidth)
     return view
   }
 
-  static func updateTitlebarDragView(_ view: NSView, window: NSWindow, contentView: NSView) {
+  static func updateTitlebarDragView(
+    _ view: NSView, window: NSWindow, contentView: NSView, isRightToLeft: Bool = false,
+    trailingAccessoryWidth: CGFloat = 0
+  ) {
     let buttons = [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton]
       .compactMap { window.standardWindowButton($0) }
     guard buttons.count == 3 else {
@@ -58,7 +76,8 @@ struct WindowDragRegion: NSViewRepresentable {
     let layoutRect = contentView.convert(window.contentLayoutRect, from: nil)
     if let frame = titlebarDragFrame(
       contentBounds: contentView.bounds, contentLayoutRect: layoutRect,
-      trafficLightsFrame: trafficLightsFrame, isFlipped: contentView.isFlipped)
+      trafficLightsFrame: trafficLightsFrame, isFlipped: contentView.isFlipped,
+      isRightToLeft: isRightToLeft, trailingAccessoryWidth: trailingAccessoryWidth)
     {
       view.frame = frame
       view.isHidden = false

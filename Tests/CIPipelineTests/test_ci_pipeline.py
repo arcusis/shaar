@@ -68,19 +68,20 @@ class PipelineGateTests(unittest.TestCase):
 
     def results(self, native="success", nightly="skipped"):
         results = {name: {"result": "success"} for name in ("plan", "fast", "dependency-review")}
-        results.update({name: {"result": native} for name in ("build", "coverage", "visuals", "engine", "shipping", "codeql")})
+        results.update({name: {"result": native} for name in ("build", "coverage", "visuals", "localization", "engine", "shipping", "codeql")})
         results.update({name: {"result": nightly} for name in ("sanitizers", "dead-code")})
         return results
 
     def test_full_pipeline_rejects_failed_cancelled_skipped_or_missing_stage(self):
-        for result in ("failure", "cancelled", "skipped", None):
-            with self.subTest(result=result):
-                needs = self.results()
-                if result is None:
-                    del needs["engine"]
-                else:
-                    needs["engine"]["result"] = result
-                self.assertTrue(GATE.gate_errors(needs, True, False))
+        for stage in ("engine", "localization"):
+            for result in ("failure", "cancelled", "skipped", None):
+                with self.subTest(stage=stage, result=result):
+                    needs = self.results()
+                    if result is None:
+                        del needs[stage]
+                    else:
+                        needs[stage]["result"] = result
+                    self.assertTrue(GATE.gate_errors(needs, True, False))
 
     def test_docs_skip_native_but_never_skip_fast_gates(self):
         needs = self.results(native="skipped")

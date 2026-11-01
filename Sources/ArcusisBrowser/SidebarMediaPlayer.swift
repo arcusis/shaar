@@ -28,68 +28,42 @@ struct SidebarMediaPlayer: View {
       pageButton
       HStack(spacing: 2) {
         if state.supports(.previousTrack) {
-          control("backward.end.fill", label: "Previous track", id: "previous") {
+          control("backward.end.fill", label: PanelsL10n.string("Previous track"), id: "previous") {
             onCommand(.perform(.previousTrack))
           }
         }
         if let playPause = state.playPauseAction {
           control(
             playPause == .pause ? "pause.fill" : "play.fill",
-            label: playPause == .pause ? "Pause" : "Play", id: "play-pause"
+            label: PanelsL10n.string(playPause == .pause ? "Pause" : "Play"), id: "play-pause"
           ) {
             onCommand(.perform(playPause))
           }
         }
         if state.supports(.nextTrack) {
-          control("forward.end.fill", label: "Next track", id: "next") {
+          control("forward.end.fill", label: PanelsL10n.string("Next track"), id: "next") {
             onCommand(.perform(.nextTrack))
           }
         }
         Spacer(minLength: 0)
         control(
           state.muted ? "speaker.slash.fill" : "speaker.wave.2.fill",
-          label: state.muted ? "Unmute" : "Mute", id: "mute"
+          label: PanelsL10n.string(state.muted ? "Unmute" : "Mute"), id: "mute"
         ) {
           volumeIsVisible = true
           onCommand(.setMuted(!state.muted))
         }
         .onHover { if $0 { volumeIsVisible = true } }
       }
-      if volumeIsVisible {
-        Slider(
-          value: Binding(
-            get: { draftVolume ?? state.volume ?? 0 },
-            set: {
-              draftVolume = $0
-              onCommand(.setVolume($0))
-            }), in: 0...1,
-          onEditingChanged: { editing in
-            editingVolume = editing
-            if !editing {
-              draftVolume = nil
-              if !pointerIsInside { volumeIsVisible = false }
-            }
-          }
-        ) {
-          Text("Volume")
-        }
-        .labelsHidden()
-        .controlSize(.small)
-        .disabled(state.volume == nil)
-        .accessibilityLabel("Volume")
-        .accessibilityValue(
-          state.volume == nil
-            ? "Unavailable" : "\(Int(((draftVolume ?? state.volume ?? 0) * 100).rounded())) percent"
-        )
-        .accessibilityIdentifier("sidebar-media-volume")
-      }
+      .environment(\.layoutDirection, .leftToRight)
+      if volumeIsVisible { volumeControl }
     }
     .padding(.horizontal, 8)
     .padding(.vertical, 6)
     .background(cardFill, in: RoundedRectangle(cornerRadius: 10))
     .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.06)))
     .accessibilityElement(children: .contain)
-    .accessibilityLabel("Now playing: \(title)")
+    .accessibilityLabel(PanelsL10n.format("Now playing: %@", .string(title)))
     .accessibilityIdentifier("sidebar-media-player")
     .onHover {
       pointerIsInside = $0
@@ -103,6 +77,39 @@ struct SidebarMediaPlayer: View {
       volumeIsVisible = false
       editingVolume = false
     }
+  }
+
+  private var volumeControl: some View {
+    Slider(
+      value: Binding(
+        get: { draftVolume ?? state.volume ?? 0 },
+        set: {
+          draftVolume = $0
+          onCommand(.setVolume($0))
+        }), in: 0...1,
+      onEditingChanged: { editing in
+        editingVolume = editing
+        if !editing {
+          draftVolume = nil
+          if !pointerIsInside { volumeIsVisible = false }
+        }
+      }
+    ) {
+      Text(PanelsL10n.string("Volume"))
+    }
+    .labelsHidden()
+    .controlSize(.small)
+    .disabled(state.volume == nil)
+    .accessibilityLabel(PanelsL10n.string("Volume"))
+    .accessibilityValue(volumeAccessibilityValue)
+    .accessibilityIdentifier("sidebar-media-volume")
+    .environment(\.layoutDirection, .leftToRight)
+  }
+
+  private var volumeAccessibilityValue: String {
+    guard state.volume != nil else { return PanelsL10n.string("Unavailable") }
+    let percentage = Int(((draftVolume ?? state.volume ?? 0) * 100).rounded())
+    return PanelsL10n.plural("%d percent", count: percentage)
   }
 
   /// A raised card on the tinted sidebar in both appearances.
@@ -126,8 +133,8 @@ struct SidebarMediaPlayer: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
-    .help("Show the playing tab")
-    .accessibilityLabel("Show \(title)")
+    .help(PanelsL10n.string("Show the playing tab"))
+    .accessibilityLabel(PanelsL10n.format("Show %@", .string(title)))
     .accessibilityIdentifier("sidebar-media-select")
   }
 

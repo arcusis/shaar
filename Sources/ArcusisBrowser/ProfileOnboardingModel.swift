@@ -19,10 +19,10 @@ enum ProfileOnboardingStep: Int, CaseIterable {
 
   var title: String {
     switch self {
-    case .details: "Name, icon and color"
-    case .google: "Connect Google"
-    case .microsoft: "Connect Microsoft"
-    case .done: "Ready"
+    case .details: SettingsL10n.string("Name, icon and color")
+    case .google: SettingsL10n.string("Connect Google")
+    case .microsoft: SettingsL10n.string("Connect Microsoft")
+    case .done: SettingsL10n.string("Ready")
     }
   }
 
@@ -183,7 +183,8 @@ final class ProfileOnboardingModel {
       outcome = .created(id)
       actions.close(.created(id))
     } catch {
-      failure = "The profile could not be created. \(error.localizedDescription)"
+      failure = SettingsL10n.format(
+        "The profile could not be created. %@", .string(error.localizedDescription))
     }
   }
 }

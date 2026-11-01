@@ -39,7 +39,7 @@ public enum CommandFilter: String, CaseIterable, Identifiable, Sendable {
   case tabs, history, bookmarks, actions
 
   public var id: String { rawValue }
-  public var title: String { rawValue.capitalized }
+  public var title: String { BrowserLocalization.string(rawValue.capitalized) }
 
   public var symbol: String {
     switch self {
@@ -169,12 +169,16 @@ public enum CommandLauncher {
       CommandResult.reopen($0, subtitle: CommandText.domain(of: $0.tab.url))
     }
     return [
-      CommandSection(id: "open-tabs", title: "Open Tabs", results: Array(openTabs)),
       CommandSection(
-        id: "favorites", title: "Favorites & Pinned", results: Array(favorites) + pinned),
-      CommandSection(id: "recently-closed", title: "Recently Closed", results: Array(closed)),
+        id: "open-tabs", title: BrowserLocalization.string("Open Tabs"), results: Array(openTabs)),
       CommandSection(
-        id: "most-visited", title: "Most Visited",
+        id: "favorites", title: BrowserLocalization.string("Favorites & Pinned"),
+        results: Array(favorites) + pinned),
+      CommandSection(
+        id: "recently-closed", title: BrowserLocalization.string("Recently Closed"),
+        results: Array(closed)),
+      CommandSection(
+        id: "most-visited", title: BrowserLocalization.string("Most Visited"),
         results: mostVisited(in: session, history: sources.history)),
     ]
   }
@@ -238,11 +242,15 @@ public enum CommandLauncher {
       .prefix(filteredLimit)
       .map { CommandResult.reopen($0, subtitle: CommandText.domain(of: $0.tab.url)) }
     return [
-      CommandSection(id: "tabs", title: "Open Tabs", results: Array(tabs.prefix(filteredLimit))),
       CommandSection(
-        id: "favorites", title: "Favorites",
+        id: "tabs", title: BrowserLocalization.string("Open Tabs"),
+        results: Array(tabs.prefix(filteredLimit))),
+      CommandSection(
+        id: "favorites", title: BrowserLocalization.string("Favorites"),
         results: Array(favoriteResults(matching: query, in: session).prefix(filteredLimit))),
-      CommandSection(id: "recently-closed", title: "Recently Closed", results: Array(closed)),
+      CommandSection(
+        id: "recently-closed", title: BrowserLocalization.string("Recently Closed"),
+        results: Array(closed)),
     ]
   }
 
@@ -257,7 +265,8 @@ public enum CommandLauncher {
       }
       .prefix(filteredLimit)
       .map { CommandResult.history($0, subtitle: CommandText.domain(of: $0.destination)) }
-    return CommandSection(id: "history", title: "History", results: Array(results))
+    return CommandSection(
+      id: "history", title: BrowserLocalization.string("History"), results: Array(results))
   }
 
   static func bookmarkSection(
@@ -271,7 +280,8 @@ public enum CommandLauncher {
       }
       .prefix(filteredLimit)
       .map { CommandResult.bookmark($0, subtitle: CommandText.domain(of: $0.destination)) }
-    return CommandSection(id: "bookmarks", title: "Bookmarks", results: Array(results))
+    return CommandSection(
+      id: "bookmarks", title: BrowserLocalization.string("Bookmarks"), results: Array(results))
   }
 
   static func actionSection(for query: String, sources: CommandSources, limit: Int?)
@@ -280,7 +290,8 @@ public enum CommandLauncher {
     let matching = sources.commands.filter { $0.matches(query) }
     let limited = limit.map { Array(matching.prefix($0)) } ?? matching
     return CommandSection(
-      id: "actions", title: "Actions", results: limited.map(CommandResult.command))
+      id: "actions", title: BrowserLocalization.string("Actions"),
+      results: limited.map(CommandResult.command))
   }
 
   // MARK: Shared helpers

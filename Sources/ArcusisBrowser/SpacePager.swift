@@ -53,6 +53,10 @@ final class SpacePagerState {
 }
 
 enum SpacePagerDecision {
+  static func logicalDelta(_ physicalDelta: CGFloat, isRightToLeft: Bool) -> CGFloat {
+    isRightToLeft ? -physicalDelta : physicalDelta
+  }
+
   static func rubberBand(_ offset: CGFloat, index: Int, count: Int, width: CGFloat) -> CGFloat {
     guard width > 0, count > 0 else { return 0 }
     let minOffset = -CGFloat(count - 1 - index) * width
@@ -94,7 +98,9 @@ struct SpacePager<Content: View>: View {
             .accessibilityHidden(space.id != store.session.selectedSpaceID)
         }
       }
-      .offset(x: -CGFloat(index) * geometry.size.width + state.offset)
+      .offset(
+        x: -CGFloat(index) * geometry.size.width + state.offset
+      )
       .frame(width: geometry.size.width, alignment: .leading)
       .animation(
         reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.85),

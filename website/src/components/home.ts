@@ -4,6 +4,7 @@
 
 import { release, repository, type SitePage, screens } from "../content";
 import { escapeHtml } from "../html";
+import { ShaarDemo } from "./demo";
 import { Landscape, SkyControl } from "./landscape";
 import { Layout } from "./layout";
 import { HeroNavigation } from "./navigation";
@@ -28,7 +29,7 @@ function Hero(): string {
     </div>
     <div class="hero-bottom"><p>Shaar (<span lang="he" dir="rtl">שער</span>) means gateway in Hebrew</p>${SkyControl()}</div>
   </section>
-  <div class="hero-window">${Screenshot("hero", "screenshot screenshot-hero")}</div>
+  <div class="hero-window">${ShaarDemo()}</div>
   <div class="beta-strip"><p>Shaar is in public beta. Expect bugs, and report them on GitHub.</p><a href="/changelog/">Release notes for ${release.version}</a></div>`;
 }
 

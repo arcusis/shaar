@@ -3,7 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import { existsSync } from "node:fs";
-import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
@@ -43,6 +43,11 @@ await copyFile(
   resolve(output, "assets/shaar-icon.png"),
 );
 await mkdir(resolve(output, "assets/screens"), { recursive: true });
+for (const file of await readdir(resolve(root, "screens"))) {
+  if (/\.(png|webp)$/.test(file)) {
+    await copyFile(resolve(root, "screens", file), resolve(output, "assets/screens", file));
+  }
+}
 for (const { file } of Object.values(screens)) {
   const fresh = resolve(root, "screens", file);
   const source = existsSync(fresh) ? fresh : resolve(repositoryRoot, ".github/assets", file);

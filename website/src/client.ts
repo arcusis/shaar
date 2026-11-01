@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import { initializeDemo } from "./demo";
 import { startScene } from "./scene";
 import { initializeSky, type SkyState } from "./sky";
 
@@ -80,6 +81,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeMenu();
   initializeStickyHeader();
   initializeStory();
+  initializeDemo();
   let updateScene: ((state: SkyState) => void) | null = null;
   initializeSky((state) => {
     if (updateScene) {

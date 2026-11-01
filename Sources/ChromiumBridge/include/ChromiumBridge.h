@@ -30,6 +30,14 @@ typedef NS_ENUM(NSInteger, ARCMediaSessionAction) {
   ARCMediaSessionActionSeekTo,
 };
 
+/// Commands for the video in Chromium's picture-in-picture window.
+typedef NS_ENUM(NSInteger, ARCPictureInPictureCommand) {
+  ARCPictureInPictureCommandPlay,
+  ARCPictureInPictureCommandPause,
+  /// Seeks by `seconds`, negative to go back; ignored for live video.
+  ARCPictureInPictureCommandSkip,
+};
+
 /// All methods and callbacks run on the main thread. The engine owns the AppKit run loop.
 @interface ARCChromiumRuntime : NSObject
 @property(copy, nullable) void (^onReady)(void);
@@ -50,6 +58,11 @@ typedef NS_ENUM(NSInteger, ARCMediaSessionAction) {
 /// A tab's validated Media Session state changed; `state` is nil when the tab has no media.
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onMediaSessionChanged)(NSString *tabID,
     NSDictionary<NSString *, id> * _Nullable state);
+/// Chromium's picture-in-picture window opened or closed for a tab's page.
+@property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onPictureInPictureChanged)(NSString *tabID, BOOL active);
+/// The engine asks to show a tab, for example from the picture-in-picture window's Back to Tab
+/// button (`reason` is "pictureInPicture") or a page focusing itself ("page" or "window").
+@property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onTabActivationRequest)(NSString *tabID, NSString *reason);
 @property(copy, nullable) void (^onFindResult)(NSString *tabID, NSString *requestID, int count, int active, BOOL final);
 @property(copy, nullable) void (^onDownloadChanged)(NSString *profileID, NSDictionary<NSString *, id> *download);
 @property(copy, nullable) void (^onDownloadRemoved)(NSString *profileID, NSString *downloadID);
@@ -161,6 +174,30 @@ typedef NS_ENUM(NSInteger, ARCMediaSessionAction) {
   NS_SWIFT_NAME(sendMediaSessionAction(_:seconds:tabID:));
 /// Mutes the tab's audio output in the engine, independently of the page's own volume.
 - (BOOL)setMuted:(BOOL)muted tabID:(NSString *)tabID;
+@end
+
+/// Chromium's built-in video picture-in-picture, driven for automatic picture-in-picture and
+/// Shaar's own window controls.
+@interface ARCChromiumRuntime (PictureInPicture)
+/// Asks the page to open Chromium's picture-in-picture window for its largest playing video.
+/// `requested` is NO when the page has no playing video that allows picture-in-picture; the
+/// window itself is confirmed by `onPictureInPictureChanged`.
+- (void)enterPictureInPictureInTabID:(NSString *)tabID completion:(void (^)(BOOL requested))completion;
+- (void)exitPictureInPictureInTabID:(NSString *)tabID;
+/// YES when Chromium's own automatic picture-in-picture will open a window as the tab hides:
+/// the page registered `enterpictureinpicture` and the content setting allows it.
+- (BOOL)engineHandlesAutoPictureInPictureForTabID:(NSString *)tabID;
+/// Allows or withholds the page's `enterpictureinpicture` handler from Chromium, which keeps
+/// Chromium's automatic picture-in-picture off for a site the user turned it off for.
+- (void)setAutoPictureInPictureAllowed:(BOOL)allowed tabID:(NSString *)tabID;
+/// Chromium's video picture-in-picture window while it shows this tab's video, once shown.
+/// Chromium shows one such window at a time.
+- (nullable NSWindow *)pictureInPictureVideoWindowForTabID:(NSString *)tabID;
+/// Sends a command to the frame whose video is in picture-in-picture. Returns NO for a tab
+/// without a video in picture-in-picture.
+- (BOOL)sendPictureInPictureCommand:(ARCPictureInPictureCommand)command seconds:(double)seconds
+                              tabID:(NSString *)tabID
+  NS_SWIFT_NAME(sendPictureInPictureCommand(_:seconds:tabID:));
 @end
 
 /// Product private browsing API. Contexts bind to an already-loaded regular Profile.

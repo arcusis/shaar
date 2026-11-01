@@ -6,4 +6,20 @@ The sidebar footer shows a compact player for a tab that has played and is not o
 
 The engine fixture plays a silent canvas stream with an authored Media Session on loopback and checks metadata, supported actions, handler delivery, mute, player visibility and selection. It does not establish compatibility with specific sites such as YouTube Music or Spotify; check those in a local preview build.
 
+## Automatic picture-in-picture
+
+When a page with a playing, audible video leaves the screen (another tab, Space or split selection), Shaar asks the page, with a user gesture, to open Chromium's own video picture-in-picture window for its largest playing video; returning to the page closes that window. The request runs before the native selection changes. A window the user opened is left alone. Pages that register `enterpictureinpicture` (video calls) use Chromium's automatic picture-in-picture under its content setting, which the engine allows by default; Shaar does not request a second window for them.
+
+The setting is per site (lowercased http or https host) and per profile, on by default, and stored in preferences. `BrowserStore.automaticPictureInPictureAllowed(for:profileID:)` and `setAutomaticPictureInPicture(_:for:profileID:)` are the shared API for site controls. When a site is off, Shaar does not open the window and the page script withholds the page's `enterpictureinpicture` handler from Chromium, which turns off Chromium's automatic picture-in-picture for that page as well.
+
+## Picture-in-picture controls
+
+The pinned engine replaces Chromium's overlay with its own (`chrome/browser/ardia/pip/ac_pip_window.cc` upstream), which shows only close, back to tab, play/pause and a progress bar and hides Chromium's skip, minimize and track buttons unconditionally. Registering Media Session `seekbackward`/`seekforward` handlers cannot bring them back, and changing the overlay means a source build of the engine. So Chromium keeps drawing and playing the video while Shaar places a transparent, non-activating child panel over its window (`PictureInPictureControls`). Chromium's window is found as the visible frameless views window that floats on every Space, and only while the engine reports a video (not document) picture-in-picture for an owned tab.
+
+The panel shows Back to Tab, Minimize and Close in the top corners and Skip Back 10 s, Play/Pause and Skip Forward 10 s in the middle while the pointer is over it. It covers the whole video, so the engine's own buttons never appear. Dragging the interior moves the video window and dragging its border resizes it with the video's shape kept, within Chromium's minimum and maximum size. Minimize tucks the window to the nearer screen side, leaving a 28 pt strip that restores it; playback continues. Close and Back to Tab first restore a tucked window so Chromium remembers a visible place. Close exits picture-in-picture and the video keeps playing in its tab, as the engine's own close does; Back to Tab also selects the tab.
+
+Play/pause and skipping act on `document.pictureInPictureElement` itself through the page script, not the page's Media Session handlers, which may drive another element or ignore seek offsets. Skipping is hidden while the video's duration is infinite (live) and until the page reports the video. The page reports the window's video (playing, live) with its media state; the bridge merges it from whichever frame has it.
+
+The engine fixture runs with `ARDIA_BACKGROUND` set, which makes Chromium's overlay transparent and click-through, and checks that leaving the playing fixture tab or its Space opens the window, returning closes it, and a site turned off stays in its tab. The controls follow the window's transparency, so they stay invisible too. The fixture presses each control: play/pause, minimize and restore, Back to Tab and the hidden skip buttons on the live canvas stream; skip back and forward (exact 10 s with the clip paused) and close on a 40 s seekable WebM clip; and it drags the interior and a corner with synthetic pointer events.
+
 Related: [[Media_Consent]], [[Engine_Interop_Boundary]].

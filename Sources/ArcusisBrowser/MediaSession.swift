@@ -18,6 +18,24 @@ enum MediaSessionAction: String, CaseIterable, Sendable {
   case seekTo = "seekto"
 }
 
+/// The video in Chromium's picture-in-picture window.
+struct PictureInPictureVideo: Equatable, Sendable {
+  var isPlaying: Bool
+  /// A live stream has no duration to skip within.
+  var isLive: Bool
+
+  init(isPlaying: Bool, isLive: Bool) {
+    self.isPlaying = isPlaying
+    self.isLive = isLive
+  }
+
+  init?(payload: Any?) {
+    guard let payload = payload as? [String: Any] else { return nil }
+    self.init(
+      isPlaying: payload["playing"] as? Bool ?? false, isLive: payload["live"] as? Bool ?? false)
+  }
+}
+
 /// One tab's playback as reported by the engine bridge.
 struct MediaSessionState: Equatable, Sendable {
   var playbackState: MediaPlaybackState
@@ -29,11 +47,15 @@ struct MediaSessionState: Equatable, Sendable {
   var hasVideo: Bool
   var canSeek: Bool
   var muted: Bool
+  /// The playing element is muted or at zero volume in the page.
+  var silent: Bool
+  var pictureInPicture: PictureInPictureVideo?
 
   init(
     playbackState: MediaPlaybackState, title: String = "", artist: String = "",
     album: String = "", artwork: URL? = nil, actions: Set<MediaSessionAction> = [],
-    hasVideo: Bool = false, canSeek: Bool = false, muted: Bool = false
+    hasVideo: Bool = false, canSeek: Bool = false, muted: Bool = false, silent: Bool = false,
+    pictureInPicture: PictureInPictureVideo? = nil
   ) {
     self.playbackState = playbackState
     self.title = title
@@ -44,6 +66,8 @@ struct MediaSessionState: Equatable, Sendable {
     self.hasVideo = hasVideo
     self.canSeek = canSeek
     self.muted = muted
+    self.silent = silent
+    self.pictureInPicture = pictureInPicture
   }
 
   /// Parses the bridge payload. Unknown action names are ignored; a missing or unknown
@@ -62,7 +86,9 @@ struct MediaSessionState: Equatable, Sendable {
       actions: Set(names.compactMap(MediaSessionAction.init(rawValue:))),
       hasVideo: payload["hasVideo"] as? Bool ?? false,
       canSeek: payload["canSeek"] as? Bool ?? false,
-      muted: payload["muted"] as? Bool ?? false)
+      muted: payload["muted"] as? Bool ?? false,
+      silent: payload["silent"] as? Bool ?? false,
+      pictureInPicture: PictureInPictureVideo(payload: payload["pictureInPicture"]))
   }
 
   var isPlaying: Bool { playbackState == .playing }

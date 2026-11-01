@@ -1,0 +1,64 @@
+name: CI toolchain and caches
+description: Configure Python, SwiftPM products and independently pinned engine archives
+inputs:
+  mode:
+    description: Cache namespace for this build mode
+    required: true
+  products:
+    description: Mode-specific SwiftPM scratch directory
+    default: .build
+  tools:
+    description: Install checksum-pinned fast-check tools
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - name: Install uv
+      uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
+    - name: Configure Python and report toolchain
+      id: toolchain
+      shell: bash
+      env:
+        CI_MODE: ${{ inputs.mode }}
+      run: |
+        uv python install 3.13
+        uv venv --python 3.13 .venv
+        requirements=(scripts/release-requirements.txt)
+        if [[ "$CI_MODE" == shipping ]]; then requirements+=(scripts/sbom-requirements.txt); fi
+        uv pip sync --python .venv/bin/python --require-hashes --only-binary=:all: "${requirements[@]}"
+        echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+        echo "PYTHON=$PWD/.venv/bin/python" >> "$GITHUB_ENV"
+        xcodebuild -version
+        swift --version
+        .venv/bin/python --version
+        toolchain=$( { xcodebuild -version; swift --version; } | shasum -a 256 | cut -d ' ' -f 1)
+        echo "identity=$toolchain" >> "$GITHUB_OUTPUT"
+        echo "CI_TOOLCHAIN_ID=$toolchain" >> "$GITHUB_ENV"
+        {
+          echo '### Toolchain'
+          echo '```text'
+          xcodebuild -version
+          swift --version
+          .venv/bin/python --version
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"
+    - name: Cache SwiftPM products for this source and mode
+      if: inputs.mode != 'fast'
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        path: ${{ inputs.products }}
+        key: swiftpm-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.identity }}-${{ inputs.mode }}-${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**') }}
+        restore-keys: |
+          swiftpm-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.identity }}-${{ inputs.mode }}-
+    - name: Cache pinned engine archive independently
+      if: inputs.mode == 'verification' || inputs.mode == 'shipping'
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        path: build/EngineCache/*.tar.xz
+        key: engine-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('ThirdParty/ArdiaCore/pin.json') }}
+    - name: Install verified fast-check binaries
+      if: inputs.tools == 'true'
+      shell: bash
+      run: |
+        .venv/bin/python scripts/install-ci-tools.py
+        echo "$PWD/build/ci-tools" >> "$GITHUB_PATH"

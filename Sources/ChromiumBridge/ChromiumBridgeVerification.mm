@@ -228,9 +228,8 @@ static BOOL ProbeViewIsVisibleInWindow(NSView *view, NSWindow *window) {
            @"noPendingFactory": @([(NSDictionary *)lease[@"pending"] count] == 0)};
 }
 
-- (void)capturePrivateProbeTabID:(NSString *)tabID windowID:(NSString *)windowID
-                       contextID:(NSString *)contextID
-                      completion:(void (^)(NSData *, NSString *))completion {
+- (BOOL)privateProbeCaptureIsReadyForTabID:(NSString *)tabID windowID:(NSString *)windowID
+                              contextID:(NSString *)contextID {
   ArdiaCoreTab *tab = nil;
   ArdiaCoreWindow *nativeWindow = nil;
   NSMutableDictionary *window = _privateProbeWindows[windowID];
@@ -243,7 +242,18 @@ static BOOL ProbeViewIsVisibleInWindow(NSView *view, NSWindow *window) {
   NSURL *url = [NSURL URLWithString:tab.url ?: @""];
   valid = valid && [url.scheme isEqualToString:@"http"] &&
       [@[@"127.0.0.1", @"localhost"] containsObject:url.host.lowercaseString ?: @""];
-  if (!valid) { completion(nil, @"private-owner-rejected"); return; }
+  return valid;
+}
+
+- (void)capturePrivateProbeTabID:(NSString *)tabID windowID:(NSString *)windowID
+                       contextID:(NSString *)contextID
+                      completion:(void (^)(NSData *, NSString *))completion {
+  if (![self privateProbeCaptureIsReadyForTabID:tabID windowID:windowID contextID:contextID]) {
+    completion(nil, @"private-owner-rejected");
+    return;
+  }
+  ArdiaCoreTab *tab = _privateProbeTabs[tabID][@"tab"];
+  NSMutableDictionary *window = _privateProbeWindows[windowID];
   NSDictionary *capturedEntry = _privateProbeTabs[tabID];
   [self captureProbeTab:tab diagnosticCompletion:^(NSData *data, NSString *error) {
     BOOL current = self->_privateProbeTabs[tabID] == capturedEntry &&

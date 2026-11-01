@@ -18,6 +18,7 @@ swift test --jobs 2
 .venv/bin/python scripts/test-python.py
 swift format lint --strict --recursive Package.swift Sources Tests
 python3 scripts/check-license-headers.py
+.venv/bin/python scripts/check-notebook-links.py
 bash scripts/test-engine.sh
 ```
 
@@ -34,6 +35,16 @@ Follow nearby Swift style and keep functions small and named for their purpose.
 Add comments to explain why behavior is required, not to restate code. Keep
 documentation accurate and free of personal data. Preserve upstream license and
 notice files when changing bundled components.
+
+Every pull request must update `Notebook/` for its changes, including tooling,
+tests, CI, and documentation. Update an existing note or add a short atomic note
+for each new concept. Link every note directly from at least one `_INDEX_*.md`
+using a `[[Note_Name]]` wiki link; links from other notes alone do not count.
+Keep index links current when renaming or removing notes. Describe behavior
+present on the target branch separately from proposals in open pull requests,
+and state verification limits. Run `.venv/bin/python scripts/check-notebook-links.py`
+before submitting; CI rejects notes missing index links. See
+[Notebook maintenance](Notebook/Notebook_Maintenance.md).
 
 Start every new source file with the MPL-2.0 header used across the repository;
 `scripts/check-license-headers.py` enforces it.

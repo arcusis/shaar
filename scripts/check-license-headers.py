@@ -26,12 +26,18 @@ COMMENT_PREFIX_BY_SUFFIX = {
     ".mm": "//",
     ".py": "#",
     ".sh": "#",
+    ".ts": "//",
+    ".jsonc": "//",
 }
 # Lines that must stay first in their file: interpreter lines and the SwiftPM tools version.
 PREAMBLE_PREFIXES = ("#!", "// swift-tools-version")
 
 
 def expected_notice(path: Path) -> list[str] | None:
+    if path.suffix == ".css":
+        return [f"/* {NOTICE_LINES[0]}", f" * {NOTICE_LINES[1]}", f" * {NOTICE_LINES[2]} */"]
+    if path.suffix == ".svg" and path.as_posix().startswith("website/"):
+        return [f"<!-- {NOTICE_LINES[0]}", NOTICE_LINES[1], f"{NOTICE_LINES[2]} -->"]
     prefix = COMMENT_PREFIX_BY_SUFFIX.get(path.suffix)
     if prefix is None:
         return None

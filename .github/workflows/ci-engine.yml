@@ -3,6 +3,7 @@ on:
   workflow_call:
     inputs:
       iterations:
+        description: Requested repetitions; private-window and Quit run at least three
         type: number
         default: 1
 permissions:

@@ -23,6 +23,7 @@ VISUAL_FILTERS = (
     "SpaceIconPickerVisualTests", "SidebarFoldersVisualTests", "CommandPanelVisualTests",
 )
 ENGINE_MODES = ("baseline", "private-window", "quit-exit", "session-recovery")
+MINIMUM_REPETITIONS = {"private-window": 3, "quit-exit": 3}
 
 
 def require_hosted_mac() -> None:
@@ -84,7 +85,8 @@ def run_engine(checks: Commands, mode: str, iterations: int) -> None:
         return
     environment = dict(os.environ, SHAAR_PROBE_TIMEOUT_SCALE="3", ARCUSIS_PRIVATE_WINDOW_CI="1")
     for selected in ENGINE_MODES if mode == "all" else (mode,):
-        for iteration in range(1, iterations + 1):
+        repetitions = max(iterations, MINIMUM_REPETITIONS.get(selected, 1))
+        for iteration in range(1, repetitions + 1):
             flags = [] if selected == "baseline" else [f"--{selected}"]
             proof = ROOT / "build/private-window-evidence"
             if selected == "private-window" and proof.exists():

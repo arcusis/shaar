@@ -250,14 +250,15 @@ class ProbeSoakTests(unittest.TestCase):
             STAGES.run_engine(checks, "all", 2)
         names = [call.args[0] for call in checks.run.call_args_list]
         self.assertEqual(names, ["verification-build", "baseline-1", "baseline-2",
-                                 "private-window-1", "private-window-2", "quit-exit-1",
-                                 "quit-exit-2", "session-recovery-1", "session-recovery-2"])
+                                 "private-window-1", "private-window-2", "private-window-3",
+                                 "quit-exit-1", "quit-exit-2", "quit-exit-3",
+                                 "session-recovery-1", "session-recovery-2"])
 
     def test_soak_keeps_all_iteration_failures_without_retrying(self):
         checks = unittest.mock.Mock()
         checks.run.side_effect = [0, 1, 0, 1]
         with patch.object(STAGES, "require_hosted_mac"), patch.dict(os.environ, {}):
-            STAGES.run_engine(checks, "quit-exit", 3)
+            STAGES.run_engine(checks, "quit-exit", 1)
         names = [call.args[0] for call in checks.run.call_args_list]
         self.assertEqual(names, ["verification-build", "quit-exit-1", "quit-exit-2", "quit-exit-3"])
         self.assertTrue(all(call.args[1][-1] == "--quit-exit" for call in checks.run.call_args_list[1:]))

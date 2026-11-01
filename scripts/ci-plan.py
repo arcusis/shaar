@@ -49,7 +49,7 @@ def main() -> None:
         output.write(f"full={str(full).lower()}\nbase={base}\niterations={iterations}\n")
     with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as output:
         output.write(f"### CI selection\n\nFull native pipeline: **{full}**. Immutable baseline: `{base}`. "
-                     f"Probe repetitions: **{iterations}**.\n")
+                     f"Requested probe repetitions: **{iterations}**; private/Quit minimum: **3**.\n")
 
 
 if __name__ == "__main__":

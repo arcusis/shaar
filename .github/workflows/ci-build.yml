@@ -1,0 +1,23 @@
+name: Build and tests
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  unit:
+    name: Swift build and unit tests
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/ci-setup
+        with:
+          mode: unit-coverage
+      - name: Build then run unit tests with coverage and JUnit
+        run: .venv/bin/python scripts/ci-stage.py unit
+      - uses: ./.github/actions/ci-evidence
+        if: always()
+        with:
+          stage: unit

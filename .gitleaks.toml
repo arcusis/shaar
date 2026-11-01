@@ -1,0 +1,24 @@
+title = "Shaar secret checks"
+
+[extend]
+useDefault = true
+
+# Generated products and dependencies at repository root are not source.
+# No complete source file, authored fixture or credential-shaped file is exempted.
+[[allowlists]]
+description = "Generated build and dependency directories"
+paths = ['''^(\.git|\.build|\.venv|build)/''']
+
+[[allowlists]]
+description = "Known public extension identity key"
+condition = "AND"
+paths = ['''^Tests/Fixtures/ProfileExtension/manifest\.json$''']
+regexTarget = "match"
+regexes = ['''^key":\ "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvnIuafbHv5\+GLNAtTskR8y8ugcm3gZZWKRXl3c3RGrMbw0OmLfSfonfbfmRgkcxoa2RAUjoNwiAkx7SWLEaHvbCRBh9WU4EJauQ5ccD7usein22Ynl\+h2H1NZi9j7aOmm/h4KZ71Kr\+65ynsFEyDK0Ru5AwwKokKYTgUJsFNuMzZZnO3cXRtb9RLcv9MyDduYic7whvdoD/yYEvf6bks0hCZIAcS5Aa3A7HisUl34gL7wcV2RtUrFQ/G\+hkxHOnlj/qHwk/AzUjh7\+DJSGCmyKx6M6Ie6of9d9iRxcQpyW0Y0z/DgnSnq3KE0uhWlbhe5kfnkcYIzQUGI\+OB48utHQIDAQAB"$''']
+
+[[allowlists]]
+description = "Known public Sparkle verification key"
+condition = "AND"
+paths = ['''^scripts/release\-config\.sh$''']
+regexTarget = "match"
+regexes = ['''^SHAAR_SPARKLE_PUBLIC_ED_KEY=mAZzywTpmIBYZQRU9LERPRlNASVCm8X31EF9ZmDYX9Y=$''']

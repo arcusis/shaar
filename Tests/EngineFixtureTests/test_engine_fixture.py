@@ -9,6 +9,7 @@ import fcntl
 import json
 import os
 from pathlib import Path
+import plistlib
 import signal
 import tempfile
 import unittest
@@ -140,6 +141,35 @@ class SavedTabCapacityRunnerTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             fixture.record_saved_tab_capacity_summary(self.root)
         self.assertFalse((self.root / 'saved-tab-capacity-summary.json').exists())
+
+
+class VerificationBundleIdentityTests(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory(prefix='verification-bundle-identity-')
+        self.addCleanup(directory.cleanup)
+        self.app = Path(directory.name) / 'Shaar Verification.app'
+        (self.app / 'Contents').mkdir(parents=True)
+        self.config = fixture.load_release_config()
+
+    def write_identifier(self, identifier):
+        (self.app / 'Contents/Info.plist').write_bytes(plistlib.dumps({'CFBundleIdentifier': identifier}))
+
+    def test_accepts_the_verification_identifier(self):
+        self.write_identifier(self.config.verification_bundle_identifier)
+        fixture.require_verification_bundle_identity(self.app)
+
+    def test_refuses_the_shipping_identifier(self):
+        self.write_identifier(self.config.bundle_identifier)
+        with self.assertRaisesRegex(RuntimeError, 'carries the shipping identifier'):
+            fixture.require_verification_bundle_identity(self.app)
+
+    def test_refuses_any_other_identifier_or_missing_plist(self):
+        self.write_identifier('com.example.other')
+        with self.assertRaisesRegex(RuntimeError, 'is not'):
+            fixture.require_verification_bundle_identity(self.app)
+        (self.app / 'Contents/Info.plist').unlink()
+        with self.assertRaisesRegex(RuntimeError, 'Unreadable'):
+            fixture.require_verification_bundle_identity(self.app)
 
 
 class BitwardenSummaryTests(unittest.TestCase):
@@ -584,8 +614,10 @@ class ExternalAppConsentRunnerTests(unittest.TestCase):
                 patch.object(fixture.threading.Thread, 'start'), \
                 patch.object(fixture.subprocess, 'Popen', return_value=process) as popen, \
                 patch.object(fixture, 'wait_for_probe', return_value=0) as wait, \
-                patch.object(fixture, 'stop_probe'):
+                patch.object(fixture, 'stop_probe'), \
+                patch.object(fixture, 'require_verification_bundle_identity') as identity:
             fixture.main(['--external-app-consent'])
+        identity.assert_called_once_with(fixture.VERIFICATION_APP.resolve())
         self.assertEqual(popen.call_count, 2)
         for call in popen.call_args_list:
             args = call.args[0]

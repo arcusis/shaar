@@ -5,6 +5,7 @@
 """Run the real native engine against a disposable, authored local account fixture."""
 
 import http.server
+import importlib.util
 from http.cookies import SimpleCookie
 import argparse
 import fcntl
@@ -12,6 +13,7 @@ import json
 import hashlib
 import math
 import os
+import plistlib
 import re
 from pathlib import Path
 import random
@@ -20,12 +22,39 @@ import shutil
 import socket
 import struct
 import subprocess
+import sys
 import tempfile
 import threading
 import time
 import uuid
 import zlib
 from urllib.parse import urlparse
+
+VERIFICATION_APP = Path('build/Shaar Verification.app')
+RELEASE_FEED = Path(__file__).resolve().with_name('release_feed.py')
+
+
+def load_release_config():
+    spec = importlib.util.spec_from_file_location('_release_feed_for_engine_fixture', RELEASE_FEED)
+    module = importlib.util.module_from_spec(spec)
+    # dataclasses resolve the module through sys.modules while the class body runs.
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module.load_config()
+
+
+def require_verification_bundle_identity(app):
+    """Refuse to launch a harness that macOS would treat as the installed Shaar."""
+    config = load_release_config()
+    try:
+        identifier = plistlib.loads((app / 'Contents/Info.plist').read_bytes()).get('CFBundleIdentifier')
+    except (OSError, plistlib.InvalidFileException, ValueError) as error:
+        raise RuntimeError(f'Unreadable verification bundle Info.plist: {app}') from error
+    if identifier == config.bundle_identifier:
+        raise RuntimeError(f'Verification bundle carries the shipping identifier {identifier}; rebuild it')
+    if identifier != config.verification_bundle_identifier:
+        raise RuntimeError(
+            f'Verification bundle identifier {identifier!r} is not {config.verification_bundle_identifier}')
 
 
 def record_bitwarden_summary(root, control_only):
@@ -1127,6 +1156,8 @@ def main(argv=None):
         print('PRIVATE WINDOW FIXTURE: owned hidden OTR windows; synthetic loopback only', flush=True)
     if options.session_recovery:
         print('SESSION RECOVERY ONLY: SIGKILL of the exact probe PID during saves, then restore', flush=True)
+    app = VERIFICATION_APP.resolve()
+    require_verification_bundle_identity(app)
     root = Path(tempfile.mkdtemp(prefix="arcusis-engine-probe-"))
     (root / ".arcusis-probe").write_text("arcusis-engine-probe-v1\n")
     (root / ".arcusis-probe").chmod(0o600)
@@ -1134,7 +1165,7 @@ def main(argv=None):
     shutil.copytree("Tests/Fixtures/ProfileExtension", root / "Extension")
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Fixture)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    executable = Path("build/Shaar Verification.app/Contents/MacOS/ShaarVerification").resolve()
+    executable = app / "Contents/MacOS/ShaarVerification"
     (root / 'Downloads').mkdir(mode=0o700)
     # Any ARDIA_BACKGROUND value keeps Chromium's picture-in-picture overlay transparent and
     # click-through, so the media probe opens no visible window. The engine's other

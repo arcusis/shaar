@@ -286,6 +286,11 @@ final class InspectorProbe {
     String(data: try! JSONEncoder().encode(value), encoding: .utf8)!
   }
   private func report(_ error: Error?) throws {
+    try Self.reportData(checks: checks, error: error).write(
+      to: root.appending(path: "\(phase)-inspector-report.json"))
+  }
+
+  static func reportData(checks: [String], error: Error?) throws -> Data {
     try JSONSerialization.data(
       withJSONObject: [
         "passed": error == nil, "checks": checks,
@@ -293,6 +298,6 @@ final class InspectorProbe {
         "scope":
           "Offscreen native Inspector and trusted renderer input on owned loopback fixtures; public-page captures require explicit opt-in.",
       ], options: [.prettyPrinted, .sortedKeys]
-    ).write(to: root.appending(path: "\(phase)-inspector-report.json"))
+    )
   }
 }

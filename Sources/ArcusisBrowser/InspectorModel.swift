@@ -30,7 +30,7 @@ final class InspectorModel {
   @ObservationIgnored private var cachedPageFonts: [String] = []
   @ObservationIgnored private var lastPageFontScan = Date.distantPast
 
-  init(target: SiteControlTarget, engine: BrowserEngine) {
+  init(target: SiteControlTarget, engine: BrowserEngine?) {
     self.target = target
     self.engine = engine
   }
@@ -195,17 +195,23 @@ final class InspectorModel {
       let liveRevision = try await evaluate("globalThis.__shaarInspectorV2?.revision()") as? Int
       guard revision == generation, isOpen, liveRevision == valueRevision else { return }
       next.pageFonts = cachedPageFonts
-      selection = next
-      lastRevision = valueRevision
-      lastFonts = Date()
-      mode = next.locked ? .locked : .picking
-      failure = nil
+      try receive(next)
       if fontTask == nil && Date().timeIntervalSince(lastPageFontScan) > 15 {
         fontTask = Task { [weak self] in await self?.scanPageFonts() }
       }
     } catch {
       if revision == generation, !Task.isCancelled { failure = error.localizedDescription }
     }
+  }
+
+  /// Apply validated renderer data independently of protocol transport and native rendering.
+  func receive(_ next: InspectorSelection) throws {
+    guard isOpen, next.valid else { throw InspectorFailure("Element data could not be displayed.") }
+    selection = next
+    lastRevision = next.revision
+    lastFonts = Date()
+    mode = next.locked ? .locked : .picking
+    failure = nil
   }
 
   private func fonts(for nodeID: Int) async throws -> [String] {

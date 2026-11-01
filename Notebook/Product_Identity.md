@@ -8,7 +8,7 @@ The browser is **Shaar** (Hebrew שער, "gateway"): a browser is a gateway to t
 
 ## What deliberately keeps the old identity
 
-- Bundle identifier `com.arcusis.browser`.
+- Bundle identifier `com.arcusis.browser`. The never-shipped probe harness uses `com.arcusis.browser.verification` instead; see [[Verification_Harness]].
 - Data folder name `Arcusis Browser` (`ProductIdentity.dataFolderName`) under the user-level Application Support directory.
 - Swift target and executable names (`ArcusisBrowser`).
 

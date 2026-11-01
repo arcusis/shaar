@@ -297,7 +297,11 @@ class BundleAppTests(unittest.TestCase):
         )
         self.assertNotIn("build/swiftpm/default", self._log())
         self.assertIn("Built build/Shaar Verification.app", result.stdout)
-        self.assertEqual(self._info_plist("build/Shaar Verification.app")["CFBundleExecutable"], "ShaarVerification")
+        plist = self._info_plist("build/Shaar Verification.app")
+        config = release_feed.load_config(RELEASE_CONFIG)
+        self.assertEqual(plist["CFBundleExecutable"], "ShaarVerification")
+        self.assertEqual(plist["CFBundleIdentifier"], config.verification_bundle_identifier)
+        self.assertNotEqual(plist["CFBundleIdentifier"], config.bundle_identifier)
         self.assertTrue((self.root / "build/Shaar Verification.app/Contents/MacOS/ShaarVerification").is_file())
         self.assertFalse((self.root / "build/Shaar Verification.app/Contents/MacOS/ArcusisBrowser").exists())
         self.assertTrue(

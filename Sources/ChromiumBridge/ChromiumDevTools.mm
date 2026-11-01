@@ -119,5 +119,8 @@
   ARCNativeWindowState *state = [self stateForTabID:identity];
   if (state.native != window || [self liveTabForID:identity] != tab) return;
   [_pageCards[identity] setDevToolsView:view];
+  // The frontend initializes its own emulation settings. Let the owning Swift model
+  // reapply active Shaar simulations when this inspector opens or closes.
+  [self publish:tab];
 }
 @end

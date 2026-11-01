@@ -227,7 +227,8 @@ final class SiteControlsProbe {
       close: {})
     for (name, scheme) in [("light", ColorScheme.light), ("dark", .dark)] {
       let panel = SiteControlsPanel(
-        model: model, extensions: extensions, profileName: store.profileName, actions: actions
+        model: model, extensions: extensions, profileName: store.profileName,
+        developer: engine.selectedDeveloperModel, actions: actions
       )
       .background(Color(nsColor: .windowBackgroundColor))
       .environment(\.colorScheme, scheme)

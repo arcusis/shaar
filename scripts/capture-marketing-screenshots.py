@@ -18,7 +18,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from PIL import Image
+from PIL import Image, ImageChops, ImageStat
 
 from engine_fixture import require_verification_bundle_identity
 
@@ -28,9 +28,7 @@ def main():
     os.chdir(repo)
     app = repo / 'build/Shaar Verification.app'
     require_verification_bundle_identity(app)
-    output = repo / 'website/public-screens'
-    required = {'hero.png', 'spaces.png', 'command-t.png', 'site-controls.png', 'profiles.png'}
-    allowed = required | {'extensions.png', 'mini-player.png'}
+    output = repo / 'website/screens'
     # mkdtemp creates an owned mode-0700 root. Never accept a caller-supplied profile.
     with tempfile.TemporaryDirectory(prefix='arcusis-engine-probe-marketing-') as temporary:
         root = Path(temporary)
@@ -57,43 +55,72 @@ def main():
         print((root / 'capture.log').read_text())
         if status != 0:
             raise RuntimeError(f'Offscreen capture failed: exit {status}')
-        manifest = json.loads((root / 'manifest.json').read_text())
-        files = {entry['file'] for entry in manifest['images']}
-        if not required <= files or not files <= allowed:
-            raise RuntimeError(f'Missing or unexpected capture files: {files}')
-        optimized = {}
-        for entry in manifest['images']:
-            filename = entry['file']
-            with Image.open(root / filename) as image:
-                expected = (entry['pixelSize']['width'], entry['pixelSize']['height'])
-                if image.size != expected or entry['scale'] != 2:
-                    raise RuntimeError(f'Invalid Retina dimensions: {filename}')
-                # Preserve all pixels unless the lossless encode exceeds the website budget.
-                buffer = io.BytesIO()
-                image.save(buffer, format='PNG', optimize=True)
-                data = buffer.getvalue()
-                entry['optimization'] = 'Pillow lossless PNG optimization'
-                if len(data) > 900_000:
-                    buffer = io.BytesIO()
-                    image.convert('RGB').quantize(colors=256, dither=Image.Dither.NONE).save(
-                        buffer, format='PNG', optimize=True)
-                    data = buffer.getvalue()
-                    entry['optimization'] = 'Pillow 256-color quantization, no resizing'
-                if len(data) > 900_000:
-                    raise RuntimeError(f'{filename} exceeds 900 KB after optimization')
-                entry['bytes'] = len(data)
-                entry['sha256'] = hashlib.sha256(data).hexdigest()
-                optimized[filename] = data
-        # Publish only after every mandatory capture passes; remove stale optional images.
-        output.mkdir(parents=True, exist_ok=True)
-        for filename in allowed - files:
-            (output / filename).unlink(missing_ok=True)
-        for filename, data in optimized.items():
-            (output / filename).write_bytes(data)
-            print(f'{filename}: {len(data):,} bytes')
-        (output / 'manifest.json').write_text(json.dumps(manifest, indent=2, sort_keys=True) + '\n')
-        for skipped in manifest['skipped']:
-            print(f"Skipped {skipped['file']}: {skipped['reason']}")
+        publish(root, output)
+
+
+def encode_png(image):
+    buffer = io.BytesIO()
+    image.save(buffer, format='PNG', optimize=True)
+    return buffer.getvalue()
+
+
+def optimize_png(image):
+    data = encode_png(image)
+    if len(data) <= 900_000:
+        return data, 'Pillow lossless PNG optimization', 0
+    original = image.convert('RGB')
+    candidates = [('Pillow 256-color quantization, no resizing',
+                   original.quantize(colors=256, dither=Image.Dither.NONE))]
+    # Small RGB rounding steps retain photographic detail while reducing noise entropy.
+    # Every candidate must stay below 3/255 RMS error in every channel, without resizing.
+    candidates.extend((f'RGB rounding to multiples of {step}, no resizing',
+                       original.point([min(255, round(x / step) * step)
+                                       for x in range(256)] * 3)) for step in (4, 6, 8))
+    for description, candidate in candidates:
+        error = max(ImageStat.Stat(
+            ImageChops.difference(original, candidate.convert('RGB'))).rms)
+        if error <= 3:
+            data = encode_png(candidate)
+            if len(data) <= 900_000:
+                return data, description, error
+    raise RuntimeError('PNG exceeds 900 KB within the near-lossless error budget')
+
+
+def publish(root, output):
+    required = {
+        'hero.png', 'spaces.png', 'command-t.png', 'site-controls.png', 'profiles.png',
+        'extensions.png', 'page-arcusis.png', 'page-hasbara.png', 'page-freightfte.png',
+        'page-github.png',
+    }
+    manifest = json.loads((root / 'manifest.json').read_text())
+    files = {entry['file'] for entry in manifest['images']}
+    if files != required:
+        raise RuntimeError(f'Missing or unexpected capture files: {files}')
+    optimized = {}
+    for entry in manifest['images']:
+        filename = entry['file']
+        with Image.open(root / filename) as image:
+            expected = (entry['pixelSize']['width'], entry['pixelSize']['height'])
+            if image.size != expected or entry['scale'] != 2:
+                raise RuntimeError(f'Invalid Retina dimensions: {filename}')
+            if filename.startswith('page-') and (image.size != (2880, 1800)
+                    or entry['document']['width'] != 1440
+                    or entry['document']['height'] != 900):
+                raise RuntimeError(f'Invalid page-only viewport: {filename}')
+            data, optimization, error = optimize_png(image)
+            entry['optimization'] = optimization
+            entry['maxChannelRMSE'] = round(error, 4)
+            entry['bytes'] = len(data)
+            entry['sha256'] = hashlib.sha256(data).hexdigest()
+            optimized[filename] = data
+    # Publish only after every mandatory capture passes.
+    output.mkdir(parents=True, exist_ok=True)
+    for filename, data in optimized.items():
+        (output / filename).write_bytes(data)
+        print(f'{filename}: {len(data):,} bytes')
+    (output / 'manifest.json').write_text(json.dumps(manifest, indent=2, sort_keys=True) + '\n')
+    for skipped in manifest['skipped']:
+        print(f"Skipped {skipped['file']}: {skipped['reason']}")
 
 
 if __name__ == '__main__':

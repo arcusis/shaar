@@ -79,6 +79,7 @@ final class MediaSessionProbe {
       store.session.selectedSpaceID == space && store.session.selectedPage?.tab.id == media,
       "the player's site icon returns to the playing tab's Space")
     try expect(store.miniPlayerItem == nil, "the player hides when its tab is selected")
+    try await checkAutomaticPictureInPicture(home: home, space: space, media: media)
 
     _ = await evaluate(media, "(()=>{location.reload();return {};})()")
     try await waitUntil("a new document clears the old session") {
@@ -94,6 +95,7 @@ final class MediaSessionProbe {
       guard
         store.createSpace(name: Self.spaceName, sharingProfile: home.profileID, tint: .ocean)
       else { throw MediaSessionProbeFailure("Could not create the media Space.") }
+      store.perform(.open(fixture))
       store.perform(.open(mediaURL))
     }
     guard let space = store.session.spaces.first(where: { $0.name == Self.spaceName }),
@@ -105,6 +107,53 @@ final class MediaSessionProbe {
         "ready"] as? String == "media"
     }
     return (space.id, tab.id)
+  }
+
+  /// Chromium's overlay window is kept transparent and click-through by the engine's
+  /// background mode, which the fixture sets; nothing appears on screen.
+  private func checkAutomaticPictureInPicture(home: BrowserSpace, space: UUID, media: UUID)
+    async throws
+  {
+    guard
+      let other = store.session.spaces.first(where: { $0.id == space })?.tabs
+        .first(where: { $0.url.path != "/media" })?.id
+    else { throw MediaSessionProbeFailure("The media Space has no second tab.") }
+    // The mini player steps hid this tab; that window must close before measuring.
+    try await waitForPictureInPicture(media, open: false)
+    store.perform(.tab(space: space, tab: other))
+    try await waitForPictureInPicture(media, open: true)
+    checks.append("switching tabs away from a playing video opens Chromium's video window")
+    store.perform(.tab(space: space, tab: media))
+    try await waitForPictureInPicture(media, open: false)
+    checks.append("returning to the tab closes the automatic window")
+
+    store.perform(.space(home.id))
+    try await waitForPictureInPicture(media, open: true)
+    checks.append("switching Space away from a playing video opens the window")
+    store.perform(.tab(space: space, tab: media))
+    try await waitForPictureInPicture(media, open: false)
+    checks.append("returning to the Space closes the window")
+
+    store.setAutomaticPictureInPicture(false, for: mediaURL, profileID: home.profileID)
+    store.perform(.tab(space: space, tab: other))
+    try await Task.sleep(for: .milliseconds(1500))
+    try expect(
+      !(await pictureInPictureOpen(media)), "a site turned off stays in its tab when left")
+    store.perform(.tab(space: space, tab: media))
+    store.setAutomaticPictureInPicture(true, for: mediaURL, profileID: home.profileID)
+    _ = try await waitForSession(media) { $0.isPlaying }
+  }
+
+  private func waitForPictureInPicture(_ tab: UUID, open: Bool) async throws {
+    try await waitUntil("picture-in-picture \(open ? "opens" : "closes")") {
+      await self.pictureInPictureOpen(tab) == open
+        && self.engine.autoPictureInPicture.openPages.contains(tab) == open
+    }
+  }
+
+  private func pictureInPictureOpen(_ tab: UUID) async -> Bool {
+    await evaluate(tab, "({open:document.pictureInPictureElement!==null})")?["open"] as? Bool
+      == true
   }
 
   private var mediaURL: URL {

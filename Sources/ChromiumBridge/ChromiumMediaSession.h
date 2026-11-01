@@ -10,6 +10,8 @@ NS_ASSUME_NONNULL_BEGIN
 FOUNDATION_EXPORT NSString *const ARCMediaSessionMessage;
 /// Host message that asks one frame's media script to perform a Media Session action.
 FOUNDATION_EXPORT NSString *const ARCMediaActionMessage;
+/// Host message that allows or withholds the page's `enterpictureinpicture` handler.
+FOUNDATION_EXPORT NSString *const ARCAutoPictureInPictureMessage;
 
 /// Main-world page script. It runs before page code in every frame, records the page's
 /// Media Session action handlers and reports playback state, metadata and supported actions.
@@ -24,6 +26,8 @@ FOUNDATION_EXPORT NSString *ARCComposedPageScript(NSArray<NSString *> *scripts);
 - (nullable NSDictionary<NSString *, id> *)stateForTabID:(NSString *)tabID;
 /// The frame whose state the tab reports; actions are sent to it.
 - (nullable NSString *)frameIDForTabID:(NSString *)tabID;
+/// Every frame that reported media for the tab, oldest report first.
+- (NSArray<NSString *> *)frameIDsForTabID:(NSString *)tabID;
 /// Drops every frame of the tab. Returns YES when the tab had a state.
 - (BOOL)forgetTabID:(NSString *)tabID;
 @end

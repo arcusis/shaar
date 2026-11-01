@@ -465,6 +465,13 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   return [_tabs allKeysForObject:tab].firstObject;
 }
 
+- (ArdiaCoreTab *)liveTabForID:(NSString *)tabID {
+  ArdiaCoreTab *tab = _tabs[tabID];
+  ARCNativeWindowState *state = [self stateForTabID:tabID];
+  if (!tab || tab.closed || !state || state.closing || state.closed || _closingBrowser) return nil;
+  return tab;
+}
+
 - (NSDictionary *)privateEntryForTab:(ArdiaCoreTab *)tab identity:(NSString **)identityOut {
   for (NSString *identity in _privateProbeTabs) {
     NSDictionary *entry = _privateProbeTabs[identity];
@@ -1122,6 +1129,26 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   [self evaluateTab:tab script:script completion:^(NSString *ignored) {}];
 }
 - (void)tabDidChangeZoom:(ArdiaCoreTab *)tab { [_webStoreFit tabDidChangeZoom:tab]; }
+- (void)tab:(ArdiaCoreTab *)tab didChangePictureInPicture:(NSDictionary<NSString *, id> *)state {
+  NSString *identity = [self identityForTab:tab];
+  if (identity && [self liveTabForID:identity] && self.onPictureInPictureChanged) {
+    self.onPictureInPictureChanged(identity, [state[@"active"] isKindOfClass:NSNumber.class] && [state[@"active"] boolValue]);
+  }
+}
+/// Implementing this replaces the engine's default activation, so private tabs keep their
+/// own selection path and other tabs go to the application, which can switch Space.
+- (void)tab:(ArdiaCoreTab *)tab requestsActivation:(NSString *)reason {
+  NSString *privateTabID = nil;
+  NSDictionary *privateEntry = [self privateEntryForTab:tab identity:&privateTabID];
+  if (privateEntry) {
+    [self selectPrivateTabID:privateTabID windowID:privateEntry[@"windowID"] contextID:privateEntry[@"contextID"]];
+    return;
+  }
+  NSString *identity = [self identityForTab:tab];
+  if (identity && [self liveTabForID:identity] && self.onTabActivationRequest) {
+    self.onTabActivationRequest(identity, reason.length ? reason : @"page");
+  }
+}
 - (void)tabDidChangeAudio:(ArdiaCoreTab *)tab {
   NSString *identity = [self identityForTab:tab];
   if (identity && [self mediaSessionStateForTabID:identity]) [self publishMediaSessionForTabID:identity];

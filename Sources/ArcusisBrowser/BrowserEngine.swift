@@ -33,6 +33,7 @@ final class BrowserEngine {
   let events: BrowserRuntimeEvents
   let windowID: String
   private let callbacks: BrowserRuntimeClient
+  let autoPictureInPicture: AutoPictureInPicture
   private(set) var isClosed = false
   var onClosed: ((Bool) -> Void)?
   let downloads = DownloadsModel(folder: DownloadsFolderSource())
@@ -96,6 +97,7 @@ final class BrowserEngine {
     self.runtime = runtime
     self.events = events
     self.windowID = windowID ?? runtime.primaryWindowID
+    autoPictureInPicture = AutoPictureInPicture(engine: .chromium(runtime))
     callbacks = BrowserRuntimeClient(windowID: self.windowID) { [weak store] in
       Set(store?.session.profiles.map { $0.id.uuidString } ?? [])
     }
@@ -132,6 +134,7 @@ final class BrowserEngine {
       self.pages.removeAll()
       self.mediaAccess.removeAll()
       self.store?.media.removeAll()
+      self.autoPictureInPicture.forgetAll()
       self.favicons.removeAll()
       self.onClosed?(quitting)
     }
@@ -141,7 +144,7 @@ final class BrowserEngine {
       else { return }
       self.pages[tab]?.loading = false
       self.mediaAccess[tab] = nil
-      self.store?.media.remove(tab)
+      self.forgetMedia(tab)
       if case .popup(let popup) = self.extensionPanel, popup.tabID == tab {
         self.extensionPanel = nil
       }
@@ -286,6 +289,15 @@ final class BrowserEngine {
     store.onMediaCommand = { [weak self] tab, command in
       self?.performMedia(command, tabID: tab) ?? false
     }
+    callbacks.onPictureInPictureChanged = { [weak self] identity, active in
+      self?.receivePictureInPicture(identity, active: active)
+    }
+    callbacks.onTabActivationRequest = { [weak self] identity, _ in
+      self?.showRequestedTab(identity)
+    }
+    store.onAutomaticPictureInPictureChanged = { [weak self] site, profile in
+      self?.applyAutomaticPictureInPicture(site: site, profileID: profile)
+    }
     store.onInstallDecision = { [weak self] id, accepted in
       guard let self else { return }
       self.events.resolveInstall(id, windowID: self.windowID, accepted: accepted)
@@ -343,6 +355,7 @@ final class BrowserEngine {
         } else {
           self.store?.nativeTabChanged(id, url: url, title: title)
         }
+        self.withholdAutomaticPictureInPictureIfOff(id, url: url)
       }
       if let profile = self.store?.session.profileID(forTabID: id),
         let icon = self.runtime.favicon(
@@ -361,7 +374,7 @@ final class BrowserEngine {
       self.liveTabs.remove(id)
       self.pages[id] = nil
       self.mediaAccess[id] = nil
-      self.store?.media.remove(id)
+      self.forgetMedia(id)
       self.favicons[id] = nil
       self.store?.nativeTabClosed(id)
     }
@@ -410,7 +423,7 @@ final class BrowserEngine {
       events.router.forgetTab(id.uuidString, windowID: windowID)
       pages[id] = nil
       mediaAccess[id] = nil
-      store?.media.remove(id)
+      forgetMedia(id)
       favicons[id] = nil
       runtime.discardTabID(id.uuidString)
     }
@@ -436,7 +449,7 @@ final class BrowserEngine {
       liveTabs.remove(removed)
       pages[removed] = nil
       mediaAccess[removed] = nil
-      store.media.remove(removed)
+      forgetMedia(removed)
       favicons[removed] = nil
     }
     for profile in Set(session.spaces.map(\.profileID)) {
@@ -543,6 +556,8 @@ final class BrowserEngine {
         lastTabOrders[profile] = positions
       }
     }
+    // Before the switch, so the leaving page still counts as visible to Chromium.
+    handOffPictureInPicture()
     runtime.activateProfileID(session.selectedSpace.profileID.uuidString, windowID: windowID)
     if let selected = session.selectedPage?.tab.id {
       runtime.activateTabID(selected.uuidString)

@@ -1012,7 +1012,11 @@ def main(argv=None):
     threading.Thread(target=server.serve_forever, daemon=True).start()
     executable = Path("build/Shaar Verification.app/Contents/MacOS/ShaarVerification").resolve()
     (root / 'Downloads').mkdir(mode=0o700)
-    probe_env = dict(os.environ, ARDIA_DOWNLOADS_DIR=str(root / 'Downloads'))
+    # Any ARDIA_BACKGROUND value keeps Chromium's picture-in-picture overlay transparent and
+    # click-through, so the media probe opens no visible window. The engine's other
+    # background test hooks require exactly '1' and stay off.
+    probe_env = dict(os.environ, ARDIA_DOWNLOADS_DIR=str(root / 'Downloads'),
+                     ARDIA_BACKGROUND='picture-in-picture')
     print(f"Probe evidence: {root}", flush=True)
     failures = []
     private_window_children = []

@@ -29,11 +29,13 @@ struct MediaSessionState: Equatable, Sendable {
   var hasVideo: Bool
   var canSeek: Bool
   var muted: Bool
+  /// The playing element is muted or at zero volume in the page.
+  var silent: Bool
 
   init(
     playbackState: MediaPlaybackState, title: String = "", artist: String = "",
     album: String = "", artwork: URL? = nil, actions: Set<MediaSessionAction> = [],
-    hasVideo: Bool = false, canSeek: Bool = false, muted: Bool = false
+    hasVideo: Bool = false, canSeek: Bool = false, muted: Bool = false, silent: Bool = false
   ) {
     self.playbackState = playbackState
     self.title = title
@@ -44,6 +46,7 @@ struct MediaSessionState: Equatable, Sendable {
     self.hasVideo = hasVideo
     self.canSeek = canSeek
     self.muted = muted
+    self.silent = silent
   }
 
   /// Parses the bridge payload. Unknown action names are ignored; a missing or unknown
@@ -62,7 +65,8 @@ struct MediaSessionState: Equatable, Sendable {
       actions: Set(names.compactMap(MediaSessionAction.init(rawValue:))),
       hasVideo: payload["hasVideo"] as? Bool ?? false,
       canSeek: payload["canSeek"] as? Bool ?? false,
-      muted: payload["muted"] as? Bool ?? false)
+      muted: payload["muted"] as? Bool ?? false,
+      silent: payload["silent"] as? Bool ?? false)
   }
 
   var isPlaying: Bool { playbackState == .playing }

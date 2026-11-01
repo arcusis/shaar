@@ -90,6 +90,8 @@ NSString *ARCValidatedProfileID(NSString *profileID);
 - (BOOL)isSelectedTabID:(NSString *)identity;
 - (void)publish:(ArdiaCoreTab *)tab;
 - (NSString *)identityForTab:(ArdiaCoreTab *)tab;
+/// An open tab this runtime owns in an open window, or nil.
+- (ArdiaCoreTab *)liveTabForID:(NSString *)tabID;
 - (void)evaluateTab:(ArdiaCoreTab *)tab script:(NSString *)script completion:(void (^)(NSString *))completion;
 - (void)evaluateTab:(ArdiaCoreTab *)tab script:(NSString *)script userGesture:(BOOL)userGesture
          completion:(void (^)(NSString *))completion;

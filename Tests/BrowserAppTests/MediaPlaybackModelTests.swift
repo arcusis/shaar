@@ -19,7 +19,7 @@ final class MediaPlaybackModelTests: XCTestCase {
         "playbackState": "playing", "title": "Song", "artist": "Artist", "album": "Album",
         "artwork": "https://music.example/cover.png",
         "actions": ["play", "pause", "nexttrack", "skipad"],
-        "hasVideo": true, "canSeek": true, "muted": true,
+        "hasVideo": true, "canSeek": true, "muted": true, "silent": true,
       ]))
     XCTAssertEqual(state.playbackState, .playing)
     XCTAssertEqual(state.title, "Song")
@@ -30,6 +30,7 @@ final class MediaPlaybackModelTests: XCTestCase {
     XCTAssertTrue(state.hasVideo)
     XCTAssertTrue(state.canSeek)
     XCTAssertTrue(state.muted)
+    XCTAssertTrue(state.silent)
   }
 
   func testPayloadRejectsUnknownPlaybackStateAndNonWebArtwork() {

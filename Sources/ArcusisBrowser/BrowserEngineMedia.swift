@@ -2,6 +2,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import AppKit
+import BrowserCore
 import ChromiumBridge
 import Foundation
 
@@ -18,6 +20,59 @@ extension BrowserEngine {
       return runtime.sendMediaSessionAction(action.bridgeAction, seconds: seconds, tabID: identity)
     case .setMuted(let muted):
       return runtime.setMuted(muted, tabID: identity)
+    }
+  }
+
+  /// Drops a tab's playback and picture-in-picture state.
+  func forgetMedia(_ tabID: UUID) {
+    store?.media.remove(tabID)
+    autoPictureInPicture.forget(tabID)
+  }
+
+  /// Opens picture-in-picture for pages that leave the screen and closes it for pages that
+  /// return. Runs before native selection changes.
+  func handOffPictureInPicture() {
+    guard !isClosed, let store else { return }
+    autoPictureInPicture.visiblePagesChanged(
+      to: store.visiblePageIDs.intersection(liveTabs), sessions: store.media.sessions,
+      allowed: { store.automaticPictureInPictureAllowed(forTab: $0) })
+  }
+
+  func receivePictureInPicture(_ identity: String, active: Bool) {
+    guard let id = ownedLiveTab(identity) else { return }
+    autoPictureInPicture.pictureInPictureChanged(id, active: active)
+  }
+
+  /// Back to Tab in the picture-in-picture window, or a page that focuses itself.
+  func showRequestedTab(_ identity: String) {
+    guard let id = ownedLiveTab(identity), let store else { return }
+    store.selectPage(id)
+    // Offscreen windows, such as verification hosts, are never ordered on screen.
+    guard let window = runtime.window(forID: windowID), window.isVisible || window.isMiniaturized
+    else { return }
+    if window.isMiniaturized { window.deminiaturize(nil) }
+    NSApp.activate()
+    window.makeKeyAndOrderFront(nil)
+  }
+
+  /// A new page starts with its handler registered; withhold it when the site is turned off.
+  func withholdAutomaticPictureInPictureIfOff(_ tabID: UUID, url: URL) {
+    guard ownedLiveTab(tabID.uuidString) != nil, let store,
+      let profileID = store.session.profileID(forTabID: tabID),
+      !store.automaticPictureInPictureAllowed(for: url, profileID: profileID)
+    else { return }
+    runtime.setAutoPictureInPictureAllowed(false, tabID: tabID.uuidString)
+  }
+
+  func applyAutomaticPictureInPicture(site: String, profileID: UUID) {
+    guard !isClosed, let store else { return }
+    for tabID in liveTabs where store.session.profileID(forTabID: tabID) == profileID {
+      guard let url = store.session.page(forTabID: tabID)?.tab.url,
+        SiteSettingKey.site(for: url) == site
+      else { continue }
+      runtime.setAutoPictureInPictureAllowed(
+        store.automaticPictureInPictureAllowed(for: url, profileID: profileID),
+        tabID: tabID.uuidString)
     }
   }
 
@@ -41,5 +96,14 @@ extension MediaSessionAction {
     case .seekForward: .seekForward
     case .seekTo: .seekTo
     }
+  }
+}
+
+extension AutoPictureInPicture.Engine {
+  static func chromium(_ runtime: ARCChromiumRuntime) -> Self {
+    Self(
+      enter: { runtime.enterPictureInPicture(inTabID: $0.uuidString) { _ in } },
+      exit: { runtime.exitPictureInPicture(inTabID: $0.uuidString) },
+      handlesAutomatically: { runtime.engineHandlesAutoPictureInPicture(forTabID: $0.uuidString) })
   }
 }

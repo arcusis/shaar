@@ -7,12 +7,16 @@
 
 NSString *const ARCMediaSessionMessage = @"arcusisMediaSession";
 NSString *const ARCMediaActionMessage = @"arcusisMediaAction";
+NSString *const ARCAutoPictureInPictureMessage = @"arcusisAutoPictureInPicture";
 
 static const NSUInteger ARCMediaTextLimit = 300;
 static const NSUInteger ARCMediaArtworkLimit = 2048;
 
 // The script keeps the page's own handlers so actions behave exactly like the page's
 // media keys. It falls back to the playing element only where the outcome is certain.
+// When a site's automatic picture-in-picture is off it withholds the page's
+// `enterpictureinpicture` handler from Chromium, whose automatic picture-in-picture
+// requires that registration.
 static const char *const ARCMediaSessionScriptSource = R"JS((function(post){
 'use strict';
 if(!/^(https?|file):$/.test(location.protocol))return function(){};
@@ -22,7 +26,8 @@ const ACTIONS=['play','pause','previoustrack','nexttrack','seekbackward','seekfo
 const EVENTS=['play','playing','pause','ended','emptied','loadedmetadata','durationchange','volumechange'];
 const session=navigator.mediaSession,proto=session&&Object.getPrototypeOf(session);
 const handlers=new Map(),tracked=new WeakSet();
-let current=null,last='',queued=false;
+let setAutoPictureInPicture=()=>{};
+let current=null,last='',queued=false,autoPictureInPicture=true;
 const playing=m=>!m.paused&&!m.ended;
 const seekable=m=>!!m&&finite(m.duration)&&m.duration>0&&m.seekable.length>0;
 const activeMedia=()=>{
@@ -46,7 +51,7 @@ const snapshot=()=>{
     artist:(metadata&&metadata.artist)||'',album:(metadata&&metadata.album)||'',
     artwork:artworkOf(metadata),actions:ACTIONS.filter(a=>supported.has(a)),
     hasVideo:!!media&&media.localName==='video'&&media.videoWidth>0,
-    canSeek:supported.has('seekto')};
+    canSeek:supported.has('seekto'),silent:!media||media.muted||media.volume===0};
 };
 const report=()=>{
   queued=false;
@@ -81,12 +86,22 @@ if(proto){
   wrapSetter('metadata');
   wrapSetter('playbackState');
   const setActionHandler=proto.setActionHandler;
+  const register=(action,handler)=>{
+    const withheld=action==='enterpictureinpicture'&&!autoPictureInPicture;
+    apply(setActionHandler,session,[action,withheld?null:handler]);
+  };
   proto.setActionHandler=function(action,handler){
-    const result=apply(setActionHandler,this,arguments);
-    if(typeof handler==='function')handlers.set(String(action),handler);
-    else handlers.delete(String(action));
+    if(this!==session)return apply(setActionHandler,this,arguments);
+    const name=String(action),value=typeof handler==='function'?handler:null;
+    register(name,value);
+    if(value)handlers.set(name,value);
+    else handlers.delete(name);
     schedule();
-    return result;
+  };
+  setAutoPictureInPicture=allowed=>{
+    if(autoPictureInPicture===allowed)return;
+    autoPictureInPicture=allowed;
+    if(handlers.has('enterpictureinpicture'))register('enterpictureinpicture',handlers.get('enterpictureinpicture'));
   };
 }
 const invoke=(action,details)=>{
@@ -117,8 +132,11 @@ const perform=(action,seconds)=>{
 addEventListener('pagehide',()=>{last='null';post('arcusisMediaSession','null');},true);
 addEventListener('pageshow',event=>{if(event.persisted){last='';schedule();}},true);
 return function(kind,json){
-  if(kind!=='arcusisMediaAction')return;
-  try{const message=parse(json);perform(String(message.action),Number(message.seconds));}catch(e){}
+  try{
+    const message=parse(json);
+    if(kind==='arcusisMediaAction')perform(String(message.action),Number(message.seconds));
+    else if(kind==='arcusisAutoPictureInPicture')setAutoPictureInPicture(message.allowed===true);
+  }catch(e){}
 };
 }))JS";
 
@@ -182,6 +200,7 @@ static NSDictionary<NSString *, id> *ARCMediaSessionStateFromJSON(NSString *json
     @"actions": ARCMediaActions(report[@"actions"]),
     @"hasVideo": @(ARCMediaFlag(report[@"hasVideo"])),
     @"canSeek": @(ARCMediaFlag(report[@"canSeek"])),
+    @"silent": @(ARCMediaFlag(report[@"silent"])),
   };
 }
 
@@ -230,6 +249,10 @@ static NSDictionary<NSString *, id> *ARCMediaSessionStateFromJSON(NSString *json
   return frameID ? _frames[tabID][frameID] : nil;
 }
 
+- (NSArray<NSString *> *)frameIDsForTabID:(NSString *)tabID {
+  return [_order[tabID] copy] ?: @[];
+}
+
 - (BOOL)forgetTabID:(NSString *)tabID {
   BOOL had = _frames[tabID].count > 0;
   [_frames removeObjectForKey:tabID];
@@ -255,20 +278,20 @@ static NSString *ARCMediaSessionActionName(ARCMediaSessionAction action) {
 @implementation ARCChromiumRuntime (MediaSession)
 
 - (NSDictionary<NSString *, id> *)mediaSessionStateForTabID:(NSString *)tabID {
-  ArdiaCoreTab *tab = _tabs[tabID];
+  ArdiaCoreTab *tab = [self liveTabForID:tabID];
   NSDictionary *state = [_mediaSessions stateForTabID:tabID];
-  if (!tab || tab.closed || !state) return nil;
+  if (!tab || !state) return nil;
   NSMutableDictionary *result = [state mutableCopy];
   result[@"muted"] = @(tab.muted);
   return result;
 }
 
 - (BOOL)sendMediaSessionAction:(ARCMediaSessionAction)action seconds:(double)seconds tabID:(NSString *)tabID {
-  ArdiaCoreTab *tab = _tabs[tabID];
+  ArdiaCoreTab *tab = [self liveTabForID:tabID];
   NSString *name = ARCMediaSessionActionName(action);
   NSString *frameID = [_mediaSessions frameIDForTabID:tabID];
   NSArray *supported = [_mediaSessions stateForTabID:tabID][@"actions"];
-  if (!tab || tab.closed || _closingBrowser || !name || !frameID || ![supported containsObject:name]) return NO;
+  if (!tab || !name || !frameID || ![supported containsObject:name]) return NO;
   NSData *data = [NSJSONSerialization dataWithJSONObject:@{
     @"action": name, @"seconds": @(std::isfinite(seconds) ? seconds : 0),
   } options:0 error:nil];
@@ -282,8 +305,8 @@ static NSString *ARCMediaSessionActionName(ARCMediaSessionAction action) {
 }
 
 - (BOOL)setMuted:(BOOL)muted tabID:(NSString *)tabID {
-  ArdiaCoreTab *tab = _tabs[tabID];
-  if (!tab || tab.closed || _closingBrowser) return NO;
+  ArdiaCoreTab *tab = [self liveTabForID:tabID];
+  if (!tab) return NO;
   tab.muted = muted;
   [self publishMediaSessionForTabID:tabID];
   return YES;

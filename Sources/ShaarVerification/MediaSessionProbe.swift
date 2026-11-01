@@ -73,6 +73,7 @@ final class MediaSessionProbe {
     try expect(store.performMedia(.setMuted(false), tabID: media), "unmute is delivered")
     _ = try await waitForSession(media) { !$0.muted }
     checks.append("mute toggles the engine's tab audio")
+    try await checkVolume(media)
 
     store.selectPage(media)
     try expect(
@@ -87,6 +88,38 @@ final class MediaSessionProbe {
     }
     try await removeMediaSpace(space, returningTo: home.id)
     return checks
+  }
+
+  private func checkVolume(_ media: UUID) async throws {
+    _ = await evaluate(media, "(()=>{document.getElementById('video').volume=0.6;return {};})()")
+    _ = try await waitForSession(media) { $0.volume == 0.6 }
+    try expect(store.performMedia(.setMuted(true), tabID: media), "mute before changing volume")
+    _ = await evaluate(media, "(()=>{document.getElementById('video').muted=true;return {};})()")
+    try expect(store.performMedia(.setVolume(0.35), tabID: media), "volume reaches the media frame")
+    _ = try await waitForSession(media) { $0.volume == 0.35 && !$0.muted && !$0.silent }
+    let element = await evaluate(
+      media,
+      "({volume:document.getElementById('video').volume,muted:document.getElementById('video').muted})"
+    )
+    try expect(
+      element?["volume"] as? Double == 0.35 && element?["muted"] as? Bool == false,
+      "positive volume changes the page element and unmutes both page and tab")
+    try expect(store.performMedia(.setVolume(0), tabID: media), "zero volume is delivered")
+    _ = try await waitForSession(media) { $0.volume == 0 && $0.silent }
+    for value in [-0.1, 1.1, Double.nan, Double.infinity] {
+      try expect(!store.performMedia(.setVolume(value), tabID: media), "invalid volume is rejected")
+    }
+    _ = await evaluate(
+      media,
+      "(()=>{for(const action of ['previoustrack','nexttrack'])navigator.mediaSession.setActionHandler(action,null);return {};})()"
+    )
+    _ = try await waitForSession(media) { $0.actions == [.play, .pause] }
+    try expect(
+      store.performMedia(.setVolume(0.7), tabID: media), "play/pause-only volume is delivered")
+    _ = try await waitForSession(media) { $0.volume == 0.7 && !$0.silent }
+    try expect(store.performMedia(.setVolume(1), tabID: media), "full volume is delivered")
+    _ = try await waitForSession(media) { $0.volume == 1 }
+    checks.append("page volume changes report back, including sites with only play/pause")
   }
 
   /// The fixture page keeps painting its canvas while live. Removing the Space closes its

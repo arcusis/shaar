@@ -7,6 +7,6 @@
   "permissions": ["storage", "scripting", "activeTab", "offscreen", "bookmarks", "history"],
   "host_permissions": ["http://127.0.0.1/*"],
   "background": {"service_worker": "background.js"},
-  "action": {"default_popup": "popup.html"},
+  "action": {"default_popup": "popup.html", "default_title": "Open account probe"},
   "content_scripts": [{"matches": ["http://127.0.0.1/*"], "js": ["content.js"]}]
 }

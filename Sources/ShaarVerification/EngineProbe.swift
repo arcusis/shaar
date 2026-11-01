@@ -587,6 +587,10 @@ final class EngineProbe {
         checks += try await SiteControlsProbe(
           engine: browserEngine, store: store, root: root, fixture: fixture, phase: phase
         ).run()
+        fixtureStage = "DevTools"
+        checks += try await DevToolsProbe(
+          engine: browserEngine, store: store, root: root, fixture: fixture, phase: phase
+        ).run()
         fixtureStage = "normal-fixtures-complete"
         localFixturesPassed = true
         if includeBitwarden {

@@ -9,6 +9,10 @@ import SwiftUI
 /// buttons appear only for actions the page supports; mute uses the engine's tab mute.
 struct SidebarMediaPlayer: View {
   @Environment(\.colorScheme) private var colorScheme
+  @State var volumeIsVisible = false
+  @State private var pointerIsInside = false
+  @State private var editingVolume = false
+  @State private var draftVolume: Double?
   let item: MiniPlayerItem
   let onSelect: () -> Void
   let onCommand: (MediaCommand) -> Void
@@ -46,8 +50,38 @@ struct SidebarMediaPlayer: View {
           state.muted ? "speaker.slash.fill" : "speaker.wave.2.fill",
           label: state.muted ? "Unmute" : "Mute", id: "mute"
         ) {
+          volumeIsVisible = true
           onCommand(.setMuted(!state.muted))
         }
+        .onHover { if $0 { volumeIsVisible = true } }
+      }
+      if volumeIsVisible {
+        Slider(
+          value: Binding(
+            get: { draftVolume ?? state.volume ?? 0 },
+            set: {
+              draftVolume = $0
+              onCommand(.setVolume($0))
+            }), in: 0...1,
+          onEditingChanged: { editing in
+            editingVolume = editing
+            if !editing {
+              draftVolume = nil
+              if !pointerIsInside { volumeIsVisible = false }
+            }
+          }
+        ) {
+          Text("Volume")
+        }
+        .labelsHidden()
+        .controlSize(.small)
+        .disabled(state.volume == nil)
+        .accessibilityLabel("Volume")
+        .accessibilityValue(
+          state.volume == nil
+            ? "Unavailable" : "\(Int(((draftVolume ?? state.volume ?? 0) * 100).rounded())) percent"
+        )
+        .accessibilityIdentifier("sidebar-media-volume")
       }
     }
     .padding(.horizontal, 8)
@@ -57,6 +91,18 @@ struct SidebarMediaPlayer: View {
     .accessibilityElement(children: .contain)
     .accessibilityLabel("Now playing: \(title)")
     .accessibilityIdentifier("sidebar-media-player")
+    .onHover {
+      pointerIsInside = $0
+      if !$0 && !editingVolume { volumeIsVisible = false }
+    }
+    .onChange(of: state.volume) { _, _ in
+      if !editingVolume { draftVolume = nil }
+    }
+    .onChange(of: item.tabID) { _, _ in
+      draftVolume = nil
+      volumeIsVisible = false
+      editingVolume = false
+    }
   }
 
   /// A raised card on the tinted sidebar in both appearances.

@@ -75,6 +75,31 @@ final class SidebarMediaPlayerVisualTests: XCTestCase {
     XCTAssertEqual(controlCount(videoOnly), 2, "play/pause and mute only")
   }
 
+  func testExpandedVolumeFitsWithFullAndPlayPauseOnlyControls() throws {
+    for actions: Set<MediaSessionAction> in [
+      [.play, .pause, .previousTrack, .nextTrack], [.play, .pause],
+    ] {
+      for (appearance, scheme, name) in [
+        (NSAppearance.Name.aqua, ColorScheme.light, "light"), (.darkAqua, .dark, "dark"),
+      ] {
+        let view = SidebarMediaPlayer(
+          volumeIsVisible: true,
+          item: MiniPlayerItem(
+            tabID: UUID(), pageTitle: "Page", favicon: FaviconFixture.icon(siteColor),
+            state: MediaSessionState(
+              playbackState: .playing, title: "Night Drive", artist: "Arcusis Trio",
+              actions: actions, volume: 0.35)),
+          onSelect: {}, onCommand: { _ in })
+        let bitmap = try VisualCapture.renderOffscreen(
+          view.environment(\.colorScheme, scheme).padding(14)
+            .background(Color(nsColor: .windowBackgroundColor)),
+          size: NSSize(width: 200, height: 120), appearance: appearance,
+          to: root.appending(path: "volume-\(actions.count)-\(name).png"))
+        XCTAssertEqual(bitmap.pixelsWide, 200)
+      }
+    }
+  }
+
   private func player(actions: Set<MediaSessionAction>, muted: Bool) -> SidebarMediaPlayer {
     SidebarMediaPlayer(
       item: MiniPlayerItem(

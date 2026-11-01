@@ -7,6 +7,7 @@
 
 NSString *const ARCMediaSessionMessage = @"arcusisMediaSession";
 NSString *const ARCMediaActionMessage = @"arcusisMediaAction";
+NSString *const ARCMediaVolumeMessage = @"arcusisMediaVolume";
 NSString *const ARCAutoPictureInPictureMessage = @"arcusisAutoPictureInPicture";
 NSString *const ARCPictureInPictureCommandMessage = @"arcusisPictureInPicture";
 
@@ -64,6 +65,7 @@ const snapshot=()=>{
     artwork:artworkOf(metadata),actions:ACTIONS.filter(a=>supported.has(a)),
     hasVideo:!!media&&media.localName==='video'&&media.videoWidth>0,
     canSeek:supported.has('seekto'),silent:!media||media.muted||media.volume===0,
+    volume:media?media.volume:null,
     pictureInPicture:pictureInPictureState()};
 };
 const report=()=>{
@@ -150,12 +152,20 @@ const pictureInPicture=(command,seconds)=>{
   else if(command==='skip'&&finite(seconds)&&finite(video.duration))seekBy(video,seconds);
   schedule();
 };
+const setVolume=value=>{
+  const media=activeMedia();
+  if(!media||typeof value!=='number'||!finite(value)||value<0||value>1)return;
+  media.volume=value;
+  if(value>0)media.muted=false;
+  schedule();
+};
 addEventListener('pagehide',()=>{last='null';post('arcusisMediaSession','null');},true);
 addEventListener('pageshow',event=>{if(event.persisted){last='';schedule();}},true);
 return function(kind,json){
   try{
     const message=parse(json);
     if(kind==='arcusisMediaAction')perform(String(message.action),Number(message.seconds));
+    else if(kind==='arcusisMediaVolume')setVolume(message.volume);
     else if(kind==='arcusisAutoPictureInPicture')setAutoPictureInPicture(message.allowed===true);
     else if(kind==='arcusisPictureInPicture')pictureInPicture(String(message.command),Number(message.seconds));
   }catch(e){}
@@ -205,6 +215,13 @@ static BOOL ARCMediaFlag(id value) {
   return [value isKindOfClass:NSNumber.class] && [value boolValue];
 }
 
+static id ARCMediaVolume(id value) {
+  if (![value isKindOfClass:NSNumber.class] ||
+      CFGetTypeID((__bridge CFTypeRef)value) == CFBooleanGetTypeID()) return NSNull.null;
+  double volume = [value doubleValue];
+  return std::isfinite(volume) && volume >= 0 && volume <= 1 ? @(volume) : NSNull.null;
+}
+
 /// The video in Chromium's picture-in-picture window, or NSNull when the frame has none.
 static id ARCPictureInPictureVideo(id value) {
   if (![value isKindOfClass:NSDictionary.class]) return NSNull.null;
@@ -229,6 +246,7 @@ static NSDictionary<NSString *, id> *ARCMediaSessionStateFromJSON(NSString *json
     @"hasVideo": @(ARCMediaFlag(report[@"hasVideo"])),
     @"canSeek": @(ARCMediaFlag(report[@"canSeek"])),
     @"silent": @(ARCMediaFlag(report[@"silent"])),
+    @"volume": ARCMediaVolume(report[@"volume"]),
     @"pictureInPicture": ARCPictureInPictureVideo(report[@"pictureInPicture"]),
   };
 }
@@ -347,6 +365,22 @@ static NSString *ARCMediaSessionActionName(ARCMediaSessionAction action) {
   ArdiaCoreTab *tab = [self liveTabForID:tabID];
   if (!tab) return NO;
   tab.muted = muted;
+  [self publishMediaSessionForTabID:tabID];
+  return YES;
+}
+
+- (BOOL)setMediaVolume:(double)volume tabID:(NSString *)tabID {
+  if (!std::isfinite(volume) || volume < 0 || volume > 1) return NO;
+  ArdiaCoreTab *tab = [self liveTabForID:tabID];
+  NSString *frameID = [_mediaSessions frameIDForTabID:tabID];
+  id current = [_mediaSessions stateForTabID:tabID][@"volume"];
+  if (!tab || !frameID || ![current isKindOfClass:NSNumber.class]) return NO;
+  NSData *data = [NSJSONSerialization dataWithJSONObject:@{@"volume": @(volume)} options:0 error:nil];
+  if (!data) return NO;
+  tab.frozen = NO;
+  if (volume > 0) tab.muted = NO;
+  [tab callFrame:frameID kind:ARCMediaVolumeMessage
+            json:[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]];
   [self publishMediaSessionForTabID:tabID];
   return YES;
 }

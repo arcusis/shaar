@@ -38,6 +38,8 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   if (chord == (NSEventModifierFlagCommand | NSEventModifierFlagShift)) {
     return [@[@"w", @"g", @"j", @"t", @"r"] containsObject:key.lowercaseString];
   }
+  if (chord == (NSEventModifierFlagCommand | NSEventModifierFlagOption))
+    return [key.lowercaseString isEqualToString:@"i"];
   return chord == (NSEventModifierFlagControl | NSEventModifierFlagOption) &&
     [@[@"[", @"]"] containsObject:key];
 }
@@ -61,6 +63,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     return nil;
   }
   _profiles = [NSMutableDictionary dictionary];
+  _pageCards = [NSMutableDictionary dictionary];
   _primaryWindowID = NSUUID.UUID.UUIDString;
   _windows = [NSMutableDictionary dictionary];
   _tabWindows = [NSMutableDictionary dictionary];
@@ -288,6 +291,8 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     }
     for (NSString *tabID in [self->_tabWindows.allKeys copy]) {
       if (![self->_tabWindows[tabID] isEqualToString:identity]) continue;
+      [self->_pageCards[tabID] invalidate];
+      [self->_pageCards removeObjectForKey:tabID];
       [self->_pendingHostClosures removeObject:tabID];
       [self->_tabs removeObjectForKey:tabID];
       [self->_owners removeObjectForKey:tabID];
@@ -669,7 +674,16 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   });
 }
 
-- (NSView *)viewForTabID:(NSString *)tabID { return _tabs[tabID].view; }
+- (NSView *)viewForTabID:(NSString *)tabID {
+  ArdiaCoreTab *tab = [self liveTabForID:tabID];
+  if (!tab || !tab.view) return nil;
+  ARCDevToolsPageView *view = _pageCards[tabID];
+  if (!view) {
+    view = [[ARCDevToolsPageView alloc] initWithTab:tab];
+    _pageCards[tabID] = view;
+  }
+  return view;
+}
 - (void)activateTabID:(NSString *)tabID {
   ArdiaCoreTab *tab = _tabs[tabID];
   ARCNativeWindowState *state = [self stateForTabID:tabID];
@@ -1242,6 +1256,8 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   [_pendingHostClosures removeObject:identity];
   [self stopFindingInTabID:identity];
   if ([state.selectedTabID isEqualToString:identity]) state.selectedTabID = nil;
+  [_pageCards[identity] invalidate];
+  [_pageCards removeObjectForKey:identity];
   [_tabs removeObjectForKey:identity];
   [_owners removeObjectForKey:identity];
   [_tabWindows removeObjectForKey:identity];

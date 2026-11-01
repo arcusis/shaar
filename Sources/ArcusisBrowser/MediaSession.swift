@@ -49,13 +49,15 @@ struct MediaSessionState: Equatable, Sendable {
   var muted: Bool
   /// The playing element is muted or at zero volume in the page.
   var silent: Bool
+  /// Nil when the reporting frame has no media element whose volume can be changed.
+  var volume: Double?
   var pictureInPicture: PictureInPictureVideo?
 
   init(
     playbackState: MediaPlaybackState, title: String = "", artist: String = "",
     album: String = "", artwork: URL? = nil, actions: Set<MediaSessionAction> = [],
     hasVideo: Bool = false, canSeek: Bool = false, muted: Bool = false, silent: Bool = false,
-    pictureInPicture: PictureInPictureVideo? = nil
+    pictureInPicture: PictureInPictureVideo? = nil, volume: Double? = nil
   ) {
     self.playbackState = playbackState
     self.title = title
@@ -68,6 +70,7 @@ struct MediaSessionState: Equatable, Sendable {
     self.muted = muted
     self.silent = silent
     self.pictureInPicture = pictureInPicture
+    self.volume = volume.flatMap { $0.isFinite && (0...1).contains($0) ? $0 : nil }
   }
 
   /// Parses the bridge payload. Unknown action names are ignored; a missing or unknown
@@ -88,7 +91,8 @@ struct MediaSessionState: Equatable, Sendable {
       canSeek: payload["canSeek"] as? Bool ?? false,
       muted: payload["muted"] as? Bool ?? false,
       silent: payload["silent"] as? Bool ?? false,
-      pictureInPicture: PictureInPictureVideo(payload: payload["pictureInPicture"]))
+      pictureInPicture: PictureInPictureVideo(payload: payload["pictureInPicture"]),
+      volume: Self.parseVolume(payload["volume"]))
   }
 
   var isPlaying: Bool { playbackState == .playing }
@@ -107,6 +111,13 @@ struct MediaSessionState: Equatable, Sendable {
     else { return nil }
     return url
   }
+
+  private static func parseVolume(_ value: Any?) -> Double? {
+    guard let number = value as? NSNumber,
+      CFGetTypeID(number) != CFBooleanGetTypeID()
+    else { return nil }
+    return number.doubleValue
+  }
 }
 
 /// A user command for one tab's media.
@@ -115,4 +126,5 @@ enum MediaCommand: Equatable, Sendable {
   /// and the position for seeking to.
   case perform(MediaSessionAction, seconds: TimeInterval = 0)
   case setMuted(Bool)
+  case setVolume(Double)
 }

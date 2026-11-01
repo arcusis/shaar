@@ -268,7 +268,11 @@ class ProbeSoakTests(unittest.TestCase):
 
     def test_command_failure_survives_later_success_in_junit(self):
         from ci_support import Commands
-        with tempfile.TemporaryDirectory() as directory, patch("ci_support.ROOT", Path(directory)):
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("ci_support.ROOT", Path(directory)),
+            patch.dict(os.environ, {"GITHUB_STEP_SUMMARY": ""}),
+        ):
             checks = Commands("soak")
             checks.run("failed", [sys.executable, "-c", "raise SystemExit(7)"])
             checks.run("passed", [sys.executable, "-c", "pass"])

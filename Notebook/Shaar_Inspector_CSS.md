@@ -25,4 +25,6 @@ Opt-in public captures select real MDN and W3C headings and render the **CSS** t
 
 References: [CDP CSS](https://chromedevtools.github.io/devtools-protocol/tot/CSS/), [CDP Overlay](https://chromedevtools.github.io/devtools-protocol/tot/Overlay/), [CDP captureScreenshot](https://chromedevtools.github.io/devtools-protocol/tot/Page/#method-captureScreenshot), [Tailwind arbitrary properties](https://tailwindcss.com/docs/adding-custom-styles#arbitrary-properties).
 
+Native unit tests exercise authored fallback declarations, shorthand exclusion, bounded/current-selection snapshot acceptance, grid/flex layout exports, CSS/Tailwind formatting and unordered panel rendering in both appearances. PNG evidence rejects malformed/truncated images before checking 2× dimensions.
+
 Related: [[Shaar_Inspector]], [[Engine_Interop_Boundary]], [[Verification_Harness]]. Issue: [#366, Phase B](https://github.com/arcusis/shaar/issues/366).

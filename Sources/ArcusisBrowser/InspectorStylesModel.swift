@@ -149,11 +149,8 @@ final class InspectorStylesModel {
       guard inspector.isOpen, inspector.documentGeneration == generation,
         inspector.selection?.id == selection.id
       else { return }
-      rules = nextRules
-      computed = nextComputed
-      selectedID = selection.id
-      epoch = generation
-      updated = Date()
+      try receive(
+        rules: nextRules, computed: nextComputed, selectionID: selection.id, generation: generation)
       undoDepth =
         try await inspector.evaluate("globalThis.__shaarInspectorStyles.undoDepth()") as? Int ?? 0
       failure = nil
@@ -164,7 +161,29 @@ final class InspectorStylesModel {
     }
   }
 
-  private func declarations(_ style: [String: Any]) -> [InspectorDeclaration] {
+  /// Commit one bounded snapshot only while its original selection and document remain current.
+  func receive(
+    rules: [InspectorRule], computed: [InspectorDeclaration], selectionID: Int, generation: Int
+  ) throws {
+    guard let inspector, inspector.isOpen, inspector.selection?.id == selectionID,
+      inspector.documentGeneration == generation
+    else { throw CancellationError() }
+    guard rules.count <= 81, computed.count <= 2048,
+      rules.allSatisfy({
+        $0.selector.count <= 2048 && $0.source.count <= 16_384 && $0.declarations.count <= 120
+      }),
+      (computed + rules.flatMap(\.declarations)).allSatisfy({
+        $0.name.count <= 128 && $0.value.count <= 4110
+      })
+    else { throw InspectorFailure("Style data exceeds the supported size.") }
+    self.rules = rules
+    self.computed = computed
+    selectedID = selectionID
+    epoch = generation
+    updated = Date()
+  }
+
+  func declarations(_ style: [String: Any]) -> [InspectorDeclaration] {
     return ((style["cssProperties"] as? [[String: Any]]) ?? []).prefix(2048).enumerated().compactMap
     { index, row in
       guard row["implicit"] as? Bool != true, row["disabled"] as? Bool != true,

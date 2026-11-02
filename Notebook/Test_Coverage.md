@@ -112,3 +112,11 @@ These features have model or engine coverage but no unit test of the code listed
 - Hosted-only visual capture suites skip outside GitHub Actions macOS CI. Local offscreen captures from other suites do not establish those skipped layouts or physical interaction.
 
 Related: [[Source_And_Native_Verification]], [[Project_State]].
+
+## Deterministic thumbnail lifecycle coverage
+
+Merge-group run [41432220347](https://github.com/arcusis/shaar/actions/runs/41432220347) compared immutable production `37deacc` with the #375 queue commit. App sources and app tests were identical. BrowserCore and ShaarVerification counts matched; ArcusisBrowser differed by three lines, all in `LibraryDownloadsView.swift`: the failed-thumbnail guard and Quick Look cancellation forwarding. Baseline covered 19699/33015 app lines; candidate covered 19696/33015. This was incidental asynchronous capture teardown coverage, not a changed-source regression or an incorrect merge-group baseline.
+
+Keep the exact per-module no-regression comparison. Extract the existing Quick Look request lifecycle into an internal request object with injected start/cancel operations. Production defaults use the same system generator. Unit tests explicitly drive a failed result through the loader and cancel an already-started request before completing it. The cancellation handshake uses an async stream rather than a sleep or a Quick Look timing assumption. Existing real-thumbnail capture assertions remain. Related: [[Commit_Gates]], [[CI_Run_Time]].
+
+Local verification: `swift build --jobs 2 --force-resolved-versions` passed; both focused lifecycle tests passed (2/2), without windows or a real Quick Look request. All ten shared fast gates passed, including 215 Python tests. Exact-head hosted coverage remains required before delivery.

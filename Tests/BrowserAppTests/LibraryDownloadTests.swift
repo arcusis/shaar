@@ -5,6 +5,7 @@
 import AppKit
 import BrowserCore
 import Foundation
+import QuickLookThumbnailing
 import SwiftUI
 import Testing
 
@@ -192,6 +193,60 @@ struct LibraryDownloadTests {
     ] {
       let date = try #require(calendar.date(byAdding: .day, value: -days, to: now))
       #expect(LibraryDownloadQuery.relativeDay(date, now: now, calendar: calendar) == label)
+    }
+  }
+
+  @Test func thumbnailFailureLeavesCacheEmpty() async throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let imageURL = root.appending(path: "authored-image.png")
+    try makePNGFixture().write(to: imageURL)
+    let profile = BrowserProfile(name: "Current")
+    let space = BrowserSpace(profileID: profile.id, name: "Current", symbol: "circle", tint: .ocean)
+    let session = try BrowserSession(
+      profiles: [profile], spaces: [space], selectedSpaceID: space.id)
+    let store = BrowserStore(sessionFile: nil, session: session)
+    let downloads = DownloadsModel()
+    downloads.restore(
+      [record(filename: "authored-image.png", path: imageURL.path)], profileID: profile.id)
+    let item = try #require(downloads.items(in: profile.id).first)
+    let media = try #require(
+      LibraryDownloadQuery.mediaFile(
+        for: item, profileID: profile.id, currentProfileID: profile.id, downloads: downloads))
+    await confirmation("Thumbnail generation failed once") { failed in
+      let loader = LibraryThumbnailLoader { request in
+        LibraryThumbnailRequest(
+          request,
+          start: { _, completion in
+            failed()
+            completion(nil, CocoaError(.fileReadCorruptFile))
+          })
+      }
+      await loader.load(
+        item, media: media, profileID: profile.id, store: store, downloads: downloads)
+      #expect(loader.image(for: item, media: media, profileID: profile.id) == nil)
+    }
+  }
+
+  @Test func pendingThumbnailCancellationForwardsToGenerator() async throws {
+    let request = QLThumbnailGenerator.Request(
+      fileAt: URL(filePath: "/tmp/authored-thumbnail.png"),
+      size: CGSize(width: 260, height: 180), scale: 2, representationTypes: .all)
+    let (started, continuation) = AsyncStream<LibraryThumbnailRequest.Completion>.makeStream()
+    defer { continuation.finish() }
+    try await confirmation("Pending thumbnail canceled once") { canceled in
+      let thumbnail = LibraryThumbnailRequest(
+        request,
+        start: { _, completion in
+          continuation.yield(completion)
+        }, cancel: { _ in canceled() })
+      let task = Task { await thumbnail.generate() }
+      var iterator = started.makeAsyncIterator()
+      let completion = try #require(await iterator.next())
+      task.cancel()
+      completion(nil, CancellationError())
+      #expect(await task.value == nil)
     }
   }
 

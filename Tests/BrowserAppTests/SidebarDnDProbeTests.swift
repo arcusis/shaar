@@ -124,6 +124,7 @@ private final class OffscreenSidebarDrag: NSObject, NSDraggingInfo {
 private final class OffscreenSidebarMount {
   let host: NSHostingView<AnyView>
   let window: NSWindow
+  private(set) var lastOperation: NSDragOperation = []
 
   init(store: BrowserStore, draft: SidebarFolderDraft? = nil) {
     _ = NSApplication.shared
@@ -156,6 +157,7 @@ private final class OffscreenSidebarMount {
     info.location = receiver.convert(
       NSPoint(x: receiver.bounds.midX, y: receiver.bounds.midY), to: nil)
     let operation = receiver.draggingEntered(info)
+    lastOperation = operation
     if hold > .zero {
       _ = receiver.draggingUpdated(info)
       try await Task.sleep(for: hold)
@@ -198,9 +200,15 @@ extension SidebarDnDProbeTests {
     #expect(store.session.selectedSpace.tabs.first { $0.id == second }?.isPinned == false)
   }
 
-  @Test func nativeHeldDropCreatesFolderAndRefusesStackFavoriteDrop() async throws {
+  @Test(arguments: [false, true])
+  func nativeHeldDropCreatesFolderAndRefusesStackFavoriteDrop(existingFavorite: Bool) async throws {
     let store = BrowserStore()
     let space = store.session.selectedSpaceID
+    if existingFavorite {
+      _ = store.session.addFavorite(
+        profileID: store.session.selectedSpace.profileID,
+        originalURL: URL(string: "https://favorite.example")!, title: "Favorite")
+    }
     let first = store.session.open(URL(string: "https://first.example")!)!
     let second = store.session.open(URL(string: "https://second.example")!)!
     store.togglePin(first)
@@ -228,9 +236,10 @@ extension SidebarDnDProbeTests {
       store.sidebarDrag = refused
       try await mounted.settle()
       let favoriteTarget = try #require(
-        mounted.receivers.first { $0.convert($0.bounds, to: mounted.host).minY < 10 })
+        mounted.receivers.last { $0.convert($0.bounds, to: mounted.host).minY < 10 })
       let before = store.session
       _ = try await mounted.drop(refused, on: favoriteTarget)
+      #expect(mounted.lastOperation.isEmpty)
       #expect(store.session == before)
       #expect(store.favoritesDropIsRefused)
     }

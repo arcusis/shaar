@@ -27,7 +27,7 @@ concurrency:
 jobs:
   validate-release:
     name: Validate release tag, assets and appcast
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: read
@@ -144,7 +144,7 @@ jobs:
   deploy-appcast:
     name: Deploy appcast to GitHub Pages
     needs: validate-release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       pages: write

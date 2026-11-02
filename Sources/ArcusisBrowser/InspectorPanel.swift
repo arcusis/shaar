@@ -103,7 +103,8 @@ struct InspectorPanel: View {
       Text(InspectorL10n.string("Inspector")).font(.system(size: 12, weight: .semibold))
       Spacer()
       InspectorIconButton(
-        InspectorL10n.string("Pick an element"), symbol: "cursorarrow.rays", action: model.pick)
+        InspectorL10n.string("Pick an element"), symbol: "cursorarrow.rays"
+      ) { model.pick() }
       InspectorIconButton(
         InspectorL10n.string(model.mode == .locked ? "Unlock element" : "Lock element"),
         symbol: model.mode == .locked ? "lock.fill" : "lock.open", action: model.toggleLock

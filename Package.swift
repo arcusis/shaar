@@ -38,10 +38,11 @@ let package = Package(
       name: "ShaarVerification",
       dependencies: ["ArcusisBrowser", "BrowserCore", "ChromiumBridge"],
       linkerSettings: bundleFrameworksLinkerSettings),
-    .testTarget(name: "BrowserCoreTests", dependencies: ["BrowserCore"]),
+    .target(name: "BrowserTestSupport", path: "Tests/TestSupport"),
+    .testTarget(name: "BrowserCoreTests", dependencies: ["BrowserCore", "BrowserTestSupport"]),
     .testTarget(
       name: "BrowserAppTests",
-      dependencies: ["ArcusisBrowser", "BrowserCore"]),
+      dependencies: ["ArcusisBrowser", "BrowserCore", "BrowserTestSupport"]),
     .testTarget(
       name: "ShaarVerificationTests",
       dependencies: ["ArcusisBrowser", "BrowserCore", "ChromiumBridge", "ShaarVerification"]),

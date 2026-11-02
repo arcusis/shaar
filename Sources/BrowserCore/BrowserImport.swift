@@ -38,7 +38,9 @@ public enum BrowserImport {
     throw ImportError.unsupported
   }
 
-  public static func operations(for items: [BrowserImportItem], otherFolderID: UUID) -> [[String: Any]] {
+  public static func operations(for items: [BrowserImportItem], otherFolderID: UUID) -> [[String:
+    Any]]
+  {
     var operations: [[String: Any]] = []
     var folders: [String: UUID] = [:]
     for item in items where item.kind == .bookmark {
@@ -48,17 +50,26 @@ public enum BrowserImport {
         var path = ""
         for component in folder.components(separatedBy: " / ") {
           path = path.isEmpty ? component : "\(path) / \(component)"
-          if let existing = folders[path] { currentParent = existing }
-          else {
+          if let existing = folders[path] {
+            currentParent = existing
+          } else {
             let id = UUID()
             folders[path] = id
-            operations.append(["op": "add", "id": id.uuidString.lowercased(), "parent": currentParent.uuidString.lowercased(), "k": "f", "t": component])
+            operations.append([
+              "op": "add", "id": id.uuidString.lowercased(),
+              "parent": currentParent.uuidString.lowercased(), "k": "f", "t": component,
+            ])
             currentParent = id
           }
         }
         parent = currentParent
-      } else { parent = otherFolderID }
-      operations.append(["op": "add", "id": item.id.uuidString.lowercased(), "parent": parent.uuidString.lowercased(), "k": "u", "t": item.title, "u": item.address])
+      } else {
+        parent = otherFolderID
+      }
+      operations.append([
+        "op": "add", "id": item.id.uuidString.lowercased(),
+        "parent": parent.uuidString.lowercased(), "k": "u", "t": item.title, "u": item.address,
+      ])
     }
     return operations
   }
@@ -66,7 +77,9 @@ public enum BrowserImport {
   private static func chromium(_ roots: [String: Any]) -> [BrowserImportItem] {
     var result: [BrowserImportItem] = []
     for key in ["bookmark_bar", "other", "synced"] {
-      if let root = roots[key] as? [String: Any] { walk(root["children"] as? [[String: Any]] ?? [], path: nil, into: &result) }
+      if let root = roots[key] as? [String: Any] {
+        walk(root["children"] as? [[String: Any]] ?? [], path: nil, into: &result)
+      }
     }
     return result
   }
@@ -77,13 +90,18 @@ public enum BrowserImport {
     return result
   }
 
-  private static func walkSafari(_ nodes: [[String: Any]], path: String?, into result: inout [BrowserImportItem]) {
+  private static func walkSafari(
+    _ nodes: [[String: Any]], path: String?, into result: inout [BrowserImportItem]
+  ) {
     for node in nodes {
       let title = node["Title"] as? String ?? "Untitled"
       if let address = node["URLString"] as? String, valid(address) {
-        result.append(.init(id: UUID(), kind: .bookmark, title: title, address: address, folder: path))
+        result.append(
+          .init(id: UUID(), kind: .bookmark, title: title, address: address, folder: path))
       } else {
-        walkSafari(node["Children"] as? [[String: Any]] ?? [], path: path.map { "\($0) / \(title)" } ?? title, into: &result)
+        walkSafari(
+          node["Children"] as? [[String: Any]] ?? [],
+          path: path.map { "\($0) / \(title)" } ?? title, into: &result)
       }
     }
   }
@@ -96,8 +114,9 @@ public enum BrowserImport {
 
   /// Firefox's exported bookmarks.html uses the standard Netscape bookmark format.
   private static func htmlBookmarks(_ html: String) -> [BrowserImportItem] {
-    guard let expression = try? NSRegularExpression(
-    pattern: #"(?is)<A\b[^>]*HREF\s*=\s*["']([^"']+)["'][^>]*>(.*?)</A>"#)
+    guard
+      let expression = try? NSRegularExpression(
+        pattern: #"(?is)<A\b[^>]*HREF\s*=\s*["']([^"']+)["'][^>]*>(.*?)</A>"#)
     else { return [] }
     let range = NSRange(html.startIndex..., in: html)
     return expression.matches(in: html, range: range).compactMap { match in
@@ -106,20 +125,27 @@ public enum BrowserImport {
       else { return nil }
       let address = String(html[urlRange])
       guard valid(address) else { return nil }
-      let title = String(html[titleRange]).replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
-        .replacingOccurrences(of: "&amp;", with: "&")
-        .replacingOccurrences(of: "&quot;", with: "\"")
-      return BrowserImportItem(id: UUID(), kind: .bookmark, title: title, address: address, folder: nil)
+      let title = String(html[titleRange]).replacingOccurrences(
+        of: "<[^>]+>", with: "", options: .regularExpression
+      )
+      .replacingOccurrences(of: "&amp;", with: "&")
+      .replacingOccurrences(of: "&quot;", with: "\"")
+      return BrowserImportItem(
+        id: UUID(), kind: .bookmark, title: title, address: address, folder: nil)
     }
   }
 
-  private static func walk(_ nodes: [[String: Any]], path: String?, into result: inout [BrowserImportItem]) {
+  private static func walk(
+    _ nodes: [[String: Any]], path: String?, into result: inout [BrowserImportItem]
+  ) {
     for node in nodes {
       let title = node["name"] as? String ?? node["title"] as? String ?? "Untitled"
       let address = node["url"] as? String ?? node["uri"] as? String
       if let address, valid(address) {
-        result.append(.init(id: UUID(), kind: .bookmark, title: title, address: address, folder: path))
-      } else if let children = node["children"] as? [[String: Any]] ?? node["c"] as? [[String: Any]] {
+        result.append(
+          .init(id: UUID(), kind: .bookmark, title: title, address: address, folder: path))
+      } else if let children = node["children"] as? [[String: Any]] ?? node["c"] as? [[String: Any]]
+      {
         walk(children, path: path.map { "\($0) / \(title)" } ?? title, into: &result)
       }
     }

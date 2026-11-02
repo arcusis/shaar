@@ -760,13 +760,18 @@ final class BrowserEngine {
   }
 
   private func applyImportedBookmarks(
-    _ operations: [[String: Any]], profileID: UUID, completion: @escaping @MainActor (Error?) -> Void
+    _ operations: [[String: Any]], profileID: UUID,
+    completion: @escaping @MainActor (Error?) -> Void
   ) {
-    guard let first = operations.first else { completion(nil); return }
+    guard let first = operations.first else {
+      completion(nil)
+      return
+    }
     events.applyBookmarkOperation(first, profileID: profileID.uuidString) { [weak self] error in
       guard let self else { return }
-      if let error { completion(error) }
-      else {
+      if let error {
+        completion(error)
+      } else {
         self.applyImportedBookmarks(
           Array(operations.dropFirst()), profileID: profileID, completion: completion)
       }

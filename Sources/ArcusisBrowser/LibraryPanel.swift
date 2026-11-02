@@ -136,10 +136,13 @@ struct LibraryPanel: View {
         showingImportPreview = true
       }
     }
-    .sheet(isPresented: $showingImportPreview, onDismiss: {
-      importPreview = []
-      importError = nil
-    }) {
+    .sheet(
+      isPresented: $showingImportPreview,
+      onDismiss: {
+        importPreview = []
+        importError = nil
+      }
+    ) {
       importPreviewSheet
     }
     .onChange(of: section) { _, section in
@@ -168,17 +171,21 @@ struct LibraryPanel: View {
       if let importError {
         Text(importError).foregroundStyle(.secondary)
       } else {
-        Text(PanelsL10n.format(
-          "%d bookmarks are ready to import into %@.", .integer(importPreview.count),
-          .string(store.profileName)))
+        Text(
+          PanelsL10n.format(
+            "%d bookmarks are ready to import into %@.", .integer(importPreview.count),
+            .string(store.profileName)))
         List(importPreview.prefix(40)) { item in
           VStack(alignment: .leading) {
             Text(item.title).lineLimit(1)
             Text(item.address).font(.caption).foregroundStyle(.secondary).lineLimit(1)
           }
         }
-        Text(PanelsL10n.string("History import requires an engine feature that is not available in this build."))
-          .font(.caption).foregroundStyle(.secondary)
+        Text(
+          PanelsL10n.string(
+            "History import requires an engine feature that is not available in this build.")
+        )
+        .font(.caption).foregroundStyle(.secondary)
       }
       HStack {
         Spacer()
@@ -197,9 +204,11 @@ struct LibraryPanel: View {
     guard ownsContext, let tree, !importPreview.isEmpty else { return }
     let operations = BrowserImport.operations(for: importPreview, otherFolderID: tree.otherID)
     guard !operations.isEmpty else { return }
-    store.library.mutate(.bookmarks(operations), profile: profileID, completion: { success in
-      if success { showingImportPreview = false }
-    })
+    store.library.mutate(
+      .bookmarks(operations), profile: profileID,
+      completion: { success in
+        if success { showingImportPreview = false }
+      })
   }
 
   private func bookmarkRow(_ item: BrowserBookmark) -> some View {

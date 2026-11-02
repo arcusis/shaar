@@ -53,7 +53,6 @@ enum LauncherCommands {
 
   private static func symbol(for command: BrowserMenuCommand) -> String {
     switch command {
-    case .newWindow: "macwindow"
     case .newPrivateWindow: "eye.slash"
     case .newMiniWindow: "macwindow.badge.plus"
     case .newSpace: "plus.square.on.square"

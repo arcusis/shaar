@@ -83,7 +83,7 @@ final class HebrewLocalizationVisualTests: XCTestCase {
             }, "Command-T Actions need localized Hebrew titles")
           XCTAssertTrue(
             store.commandSections.results.contains {
-              $0.subtitle.contains("\u{2066}⌘N\u{2069}")
+              $0.subtitle.contains("\u{2066}⇧⌘N\u{2069}")
             }, "Keyboard modifiers and Latin keys keep LTR order inside Hebrew descriptions")
         }
         let command = BrowserWindow(store: store)

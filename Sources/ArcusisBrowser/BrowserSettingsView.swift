@@ -293,7 +293,6 @@ struct BrowserSettingsView: View {
           Text(SettingsL10n.string("Mini window")).tag(false)
           Text(SettingsL10n.string("Main window")).tag(true)
         }
-        Toggle(SettingsL10n.string("Show sidebar in new windows"), isOn: $sidebarInitiallyVisible)
         Toggle(SettingsL10n.string("Warn before quitting with Command-Q"), isOn: $warnBeforeQuit)
       }
       Section {

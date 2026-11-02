@@ -87,7 +87,91 @@
     "Invalid engine service response." : { "localizations" : { "he" : { "stringUnit" : { "state" : "translated", "value" : "התקבלה תשובה לא תקינה משירות המנוע." } } } },
     "Unknown engine profile or service." : { "localizations" : { "he" : { "stringUnit" : { "state" : "translated", "value" : "פרופיל המנוע או השירות אינם מוכרים." } } } },
     "Library updates are unavailable for this profile." : { "localizations" : { "he" : { "stringUnit" : { "state" : "translated", "value" : "עדכוני הספרייה אינם זמינים בפרופיל הזה." } } } },
-    "Cannot load Chromium: %@" : { "localizations" : { "he" : { "stringUnit" : { "state" : "translated", "value" : "לא ניתן לטעון את Chromium: %@" } } } }
+    "Cannot load Chromium: %@" : { "localizations" : { "he" : { "stringUnit" : { "state" : "translated", "value" : "לא ניתן לטעון את Chromium: %@" } } } },
+    "The developer tools target is no longer available.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The developer tools target is no longer available."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "יעד כלי הפיתוח אינו זמין עוד."
+          }
+        }
+      }
+    },
+    "The developer tools target changed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The developer tools target changed."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "יעד כלי הפיתוח השתנה."
+          }
+        }
+      }
+    },
+    "The Inspector target is no longer available.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Inspector target is no longer available."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "יעד כלי הבדיקה אינו זמין עוד."
+          }
+        }
+      }
+    },
+    "The Inspector target changed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Inspector target changed."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "יעד כלי הבדיקה השתנה."
+          }
+        }
+      }
+    },
+    "Geolocation test override requires an owned probe tab.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "עקיפת המיקום לבדיקה דורשת לשונית שבבעלות בדיקת האימות."
+          }
+        }
+      }
+    },
+    "Geolocation test override requires the developer loopback site.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "עקיפת המיקום לבדיקה דורשת את אתר הלולאה המקומית של כלי הפיתוח."
+          }
+        }
+      }
+    }
   },
   "version" : "1.1"
 }

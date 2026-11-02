@@ -13,6 +13,19 @@
 | Bookmarks | סימניות | Browser bookmarks. |
 | Pinned tabs | לשוניות נעוצות | Pinned browser tabs. |
 | Site Control Center | מרכז הבקרה של האתר | Site-level controls. |
+| Inspector | כלי הבדיקה | Native element and page diagnostics. |
+| Inspect Element | בדיקת אלמנט | Native menu action; command identifier remains unchanged. |
+| Element | אלמנט | DOM element; distinct from framework component. |
+| Component | רכיב | React, Vue, or Svelte component. |
+| Accessibility | נגישות | Selected-element accessibility details. |
+| Assets | משאבים | Page images, SVG, and fonts. |
+| Network | רשת | Page request diagnostics. |
+| Console | מסוף | Page console messages. |
+| Storage | אחסון | Site keys and cookies. |
+| Simulations | הדמיות | Tab-scoped developer overrides. |
+| Bug report | דוח תקלה | Local diagnostic archive. |
+| Vitals | מדדי ביצועים | Keep Core Web Vitals, LCP, INP, CLS names stable. |
+| Tech stack | טכנולוגיות | Detected framework/runtime markers. |
 | Developer Tools | כלים למפתחים | Chromium page inspector. |
 | Mini player | נגן ממוזער | Sidebar media controls. |
 | Volume | עוצמת קול | Media volume control. |

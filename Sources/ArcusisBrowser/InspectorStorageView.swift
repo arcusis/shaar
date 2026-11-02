@@ -17,21 +17,24 @@ struct InspectorStorageView: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      Picker("Storage area", selection: $model.storageArea) {
-        Text("Local").tag("local")
-        Text("Session").tag("session")
-        Text("Cookies").tag("cookies")
+      Picker(InspectorToolsL10n.string("Storage area"), selection: $model.storageArea) {
+        Text(InspectorToolsL10n.string("Local")).tag("local")
+        Text(InspectorToolsL10n.string("Session")).tag("session")
+        Text(InspectorToolsL10n.string("Cookies")).tag("cookies")
       }.pickerStyle(.segmented).labelsHidden().controlSize(.small).padding(12)
       HStack {
         Text(
           model.storageArea == "cookies"
-            ? "\(model.cookies.count) cookies for this URL"
-            : "\(model.storage.count) keys · current origin"
+            ? InspectorToolsL10n.plural(
+              "%d cookies for this URL", count: model.cookies.count)
+            : InspectorToolsL10n.plural(
+              "%d keys · current origin", count: model.storage.count)
         )
         .font(.system(size: 11)).foregroundStyle(.secondary)
         Spacer()
-        InspectorIconButton("Refresh storage", symbol: "arrow.clockwise") { refresh() }
-        InspectorIconButton("Add entry", symbol: "plus") {
+        InspectorIconButton(InspectorToolsL10n.string("Refresh storage"), symbol: "arrow.clockwise")
+        { refresh() }
+        InspectorIconButton(InspectorToolsL10n.string("Add entry"), symbol: "plus") {
           reset()
           document = model.inspector?.documentGeneration ?? -1
           editing = true
@@ -58,7 +61,12 @@ struct InspectorStorageView: View {
             }
           } else {
             ForEach(model.storage) { row in
-              entry(row.key, preview: row.preview, detail: "\(row.length) characters", id: row.id) {
+              entry(
+                row.key, preview: row.preview,
+                detail: InspectorToolsL10n.plural(
+                  "%d characters", count: row.length),
+                id: row.id
+              ) {
                 select(row)
               }
             }
@@ -66,7 +74,8 @@ struct InspectorStorageView: View {
           if model.storageLimited {
             Text(
               model.storageArea == "cookies"
-                ? "Showing up to 200 cookies." : "Showing up to 200 keys; oversized keys omitted."
+                ? InspectorToolsL10n.string("Showing up to 200 cookies.")
+                : InspectorToolsL10n.string("Showing up to 200 keys; oversized keys omitted.")
             ).font(.system(size: 11))
               .foregroundStyle(.secondary).padding(12)
           }
@@ -76,27 +85,35 @@ struct InspectorStorageView: View {
         Divider()
         ScrollView {
           VStack(alignment: .leading, spacing: 9) {
-            Text(selected == nil ? "New entry" : "Edit value").font(
+            Text(InspectorToolsL10n.string(selected == nil ? "New entry" : "Edit value")).font(
               .system(size: 11, weight: .semibold))
-            TextField("Key", text: $key).textFieldStyle(.roundedBorder).disabled(selected != nil)
-            TextEditor(text: $value).font(.system(size: 11, design: .monospaced))
-              .frame(height: 120).border(.secondary.opacity(0.2))
+            TextField(InspectorToolsL10n.string("Key"), text: $key).environment(
+              \.layoutDirection, .leftToRight
+            ).textFieldStyle(.roundedBorder)
+              .disabled(selected != nil)
+            TextEditor(text: $value).environment(\.layoutDirection, .leftToRight).font(
+              .system(size: 11, design: .monospaced)
+            )
+            .frame(height: 120).border(.secondary.opacity(0.2))
             if let cookie {
               Text(
                 cookie.editable
-                  ? "Domain, path, expiry, partition and security flags are preserved."
-                  : "Opaque partition cookie · read only"
+                  ? InspectorToolsL10n.string(
+                    "Domain, path, expiry, partition and security flags are preserved.")
+                  : InspectorToolsL10n.string("Opaque partition cookie · read only")
               )
               .font(.system(size: 10)).foregroundStyle(.secondary)
             }
             HStack {
               if selected != nil {
-                Button("Delete", role: .destructive) { save(deleting: true) }.disabled(
+                Button(InspectorToolsL10n.string("Delete"), role: .destructive) {
+                  save(deleting: true)
+                }.disabled(
                   reading || cookie?.editable == false)
               }
               Spacer()
-              Button("Cancel", action: reset)
-              Button("Save") { save(deleting: false) }.disabled(
+              Button(InspectorToolsL10n.string("Cancel"), action: reset)
+              Button(InspectorToolsL10n.string("Save")) { save(deleting: false) }.disabled(
                 reading || cookie?.editable == false
                   || (model.storageArea == "cookies" && key.isEmpty))
             }.controlSize(.small).font(.system(size: 11))

@@ -14,7 +14,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SUITE = "HebrewLocalizationVisualTests"
+SUITES = {"HebrewLocalizationVisualTests": 5, "InspectorLocalizationVisualTests": 1}
 
 
 def child_environment():
@@ -61,6 +61,9 @@ def expected_captures():
              "sidebar-toggle-windowed.png", "sidebar-toggle-fullscreen.png",
              "private-start-page-light.png", "private-start-page-dark.png"}
     for scheme in ("light", "dark"):
+        for panel in ("design", "css", "component", "accessibility", "assets", "overview",
+                      "vitals", "network", "console", "storage", "simulations", "report"):
+            names.add(f"inspector-{panel}-{scheme}.png")
         names.add(f"command-t-mixed-{scheme}.png")
         for width, state in ((760, "shown"), (1200, "shown"), (760, "hidden")):
             for screen in ("sidebar", "command-t"):
@@ -82,25 +85,28 @@ def run(language, xctest, bundle, environment):
         raise RuntimeError("Localization profile path must not be a symlink")
     profiles.mkdir(parents=True, exist_ok=True)
     environment = dict(environment, LLVM_PROFILE_FILE=str(profiles / f"{language}-%m-%p.profraw"))
-    command = [
-        xctest, "-XCTest", f"BrowserAppTests.{SUITE}",
-        "-BrowserLanguage.selection", language, str(bundle),
-    ]
-    result = subprocess.run(
-        command, cwd=ROOT, env=environment, capture_output=True, text=True, timeout=300,
-    )
-    output = redact((result.stdout or "") + (result.stderr or ""))
-    print(f"Localization child {language}: exit {result.returncode}")
-    print(output, end="" if output.endswith("\n") or not output else "\n")
-    if result.returncode:
-        return result.returncode
-    counts = re.findall(r"Executed (\d+) tests?,", output)
-    if not counts or not all(int(count) >= 4 for count in counts) or re.search(r"\b[1-9]\d* tests? skipped\b", output):
-        print(f"Localization child {language}: incomplete or skipped suite", file=sys.stderr)
-        return 1
-    if "HebrewLocalizationVisualTests" not in output:
-        print(f"Localization child {language}: test runner output missing suite identity", file=sys.stderr)
-        return 1
+    for suite, minimum_tests in SUITES.items():
+        # xctest interprets its last argument as the bundle: keep language flags before it.
+        command = [
+            xctest, "-XCTest", f"BrowserAppTests.{suite}",
+            "-BrowserLanguage.selection", language, str(bundle),
+        ]
+        result = subprocess.run(
+            command, cwd=ROOT, env=environment, capture_output=True, text=True, timeout=300,
+        )
+        output = redact((result.stdout or "") + (result.stderr or ""))
+        print(f"Localization child {language}/{suite}: exit {result.returncode}")
+        print(output, end="" if output.endswith("\n") or not output else "\n")
+        if result.returncode:
+            return result.returncode
+        counts = re.findall(r"Executed (\d+) tests?,", output)
+        if (not counts or not all(int(count) >= minimum_tests for count in counts)
+                or re.search(r"\b[1-9]\d* tests? skipped\b", output)):
+            print(f"Localization child {language}/{suite}: incomplete or skipped suite", file=sys.stderr)
+            return 1
+        if suite not in output:
+            print(f"Localization child {language}: test runner output missing {suite}", file=sys.stderr)
+            return 1
     directory = ROOT / f"build/Verification/localization-visuals/{language}"
     screenshots = {path.name for path in directory.glob("*.png") if path.stat().st_size > 0}
     missing = expected_captures() - screenshots

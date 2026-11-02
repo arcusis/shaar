@@ -19,11 +19,17 @@ struct InspectorBoxModel: View {
         "\(InspectorColor.number(box.contentWidth)) × \(InspectorColor.number(box.contentHeight))"
       )
       .font(.system(size: 11, weight: .medium, design: .monospaced))
+      .environment(\.layoutDirection, .leftToRight)
     }
     .frame(height: 176)
     .accessibilityElement(children: .combine)
     .accessibilityLabel(
-      "Box model. Content \(InspectorColor.number(box.contentWidth)) by \(InspectorColor.number(box.contentHeight)) pixels."
+      InspectorL10n.format(
+        "Box model. Content %@ by %@ pixels.",
+        arguments: [
+          .string(InspectorColor.number(box.contentWidth)),
+          .string(InspectorColor.number(box.contentHeight)),
+        ])
     )
   }
 
@@ -37,7 +43,8 @@ struct InspectorBoxModel: View {
             RoundedRectangle(cornerRadius: 2).strokeBorder(
               .primary.opacity(0.12),
               style: StrokeStyle(lineWidth: 0.5, dash: name == "margin" ? [3, 2] : [])))
-        Text(name).font(.system(size: 10)).foregroundStyle(.secondary).offset(x: 6, y: 4)
+        InspectorL10n.text(name.capitalized).font(.system(size: 10)).foregroundStyle(.secondary)
+          .offset(x: 6, y: 4)
         if values.count == 4 {
           value(values[0]).position(x: width / 2, y: 11)
           value(values[2]).position(x: width / 2, y: height - 11)
@@ -50,5 +57,6 @@ struct InspectorBoxModel: View {
   private func value(_ text: String) -> some View {
     Text(text.replacingOccurrences(of: "px", with: ""))
       .font(.system(size: 10, design: .monospaced)).lineLimit(1)
+      .environment(\.layoutDirection, .leftToRight)
   }
 }

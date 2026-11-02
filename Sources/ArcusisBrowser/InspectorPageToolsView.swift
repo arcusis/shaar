@@ -23,14 +23,15 @@ struct InspectorPageToolsView: View {
               )
               .foregroundStyle(model.tool == tool ? Color.accentColor : .secondary)
               .contentShape(Rectangle())
-          }.buttonStyle(.plain).help(tool.rawValue).accessibilityLabel(tool.rawValue)
+          }.buttonStyle(.plain).help(tool.title).accessibilityLabel(tool.title)
             .accessibilityAddTraits(model.tool == tool ? .isSelected : [])
         }
       }.padding(.horizontal, 8).padding(.vertical, 5)
       HStack {
-        Text(model.tool.rawValue).font(.system(size: 12, weight: .semibold))
+        Text(model.tool.title).font(.system(size: 12, weight: .semibold))
         Spacer()
-        Text(inspector.target.url.host ?? "Page").font(.system(size: 11, design: .monospaced))
+        Text(inspector.target.url.host ?? InspectorToolsL10n.string("Page"))
+          .font(.system(size: 11, design: .monospaced))
           .foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
       }.padding(12)
       Divider()
@@ -59,7 +60,8 @@ struct InspectorPageToolsView: View {
       Divider()
       Label(
         model.startedAt == nil
-          ? "Waiting for page diagnostics" : "Page diagnostics · local capture",
+          ? InspectorToolsL10n.string("Waiting for page diagnostics")
+          : InspectorToolsL10n.string("Page diagnostics · local capture"),
         systemImage: "record.circle"
       )
       .font(.system(size: 10)).foregroundStyle(.secondary)
@@ -72,24 +74,29 @@ struct InspectorPageToolsView: View {
   }
 
   private var stack: some View {
-    InspectorSection("Detected technologies", copy: copyTechnologies) {
+    InspectorSection(InspectorToolsL10n.string("Detected technologies"), copy: copyTechnologies) {
       if model.startedAt == nil && model.failure != nil {
-        hint("Page diagnostics are unavailable in this document.")
+        hint(InspectorToolsL10n.string("Page diagnostics are unavailable in this document."))
       } else if model.startedAt == nil {
-        ProgressView("Reading page…").controlSize(.small).font(.system(size: 11))
+        ProgressView(InspectorToolsL10n.string("Reading page…")).controlSize(.small)
+          .font(.system(size: 11))
       } else if model.signals.isEmpty {
         hint(
-          "No supported runtime markers found. Detection is limited to exposed globals, DOM markers and generator metadata."
+          InspectorToolsL10n.string(
+            "No supported runtime markers found. Detection is limited to exposed globals, DOM markers and generator metadata."
+          )
         )
       }
       ForEach(model.signals) { signal in
         HStack(alignment: .top) {
           VStack(alignment: .leading, spacing: 4) {
             Text(signal.name).font(.system(size: 12, weight: .medium))
-            Text(signal.source).font(.system(size: 11)).foregroundStyle(.secondary)
+            Text(InspectorToolsL10n.string(signal.source)).font(.system(size: 11)).foregroundStyle(
+              .secondary)
           }
           Spacer()
-          Text(signal.version ?? "Version unavailable").font(.system(size: 11, design: .monospaced))
+          Text(signal.version ?? InspectorToolsL10n.string("Version unavailable"))
+            .font(.system(size: 11, design: .monospaced))
             .foregroundStyle(.secondary).multilineTextAlignment(.trailing)
         }.padding(.vertical, 5)
       }
@@ -98,40 +105,55 @@ struct InspectorPageToolsView: View {
 
   private var vitals: some View {
     Group {
-      InspectorSection("Core Web Vitals") {
+      InspectorSection(InspectorToolsL10n.string("Core Web Vitals")) {
         let value = model.developer.performanceSnapshot
         metric(
-          "LCP", detail: "Largest contentful paint", value: value?.lcp, unit: "ms",
+          "LCP", detail: InspectorToolsL10n.string("Largest contentful paint"), value: value?.lcp,
+          unit: "ms",
           quality: value?.lcpQuality ?? .unavailable)
         Divider().padding(.vertical, 8)
         metric(
-          "INP", detail: "Interaction to next paint", value: value?.inp, unit: "ms",
+          "INP", detail: InspectorToolsL10n.string("Interaction to next paint"), value: value?.inp,
+          unit: "ms",
           quality: value?.inpQuality ?? .unavailable)
         Divider().padding(.vertical, 8)
         metric(
-          "CLS", detail: "Cumulative layout shift", value: value?.cls, unit: "",
+          "CLS", detail: InspectorToolsL10n.string("Cumulative layout shift"), value: value?.cls,
+          unit: "",
           quality: value?.clsQuality ?? .unavailable)
         hint(
-          "Live navigation diagnostics. INP requires a measured interaction; buffered entries can be limited. These are not field percentile scores."
+          InspectorToolsL10n.string(
+            "Live navigation diagnostics. INP requires a measured interaction; buffered entries can be limited. These are not field percentile scores."
+          )
         )
       }
-      InspectorSection("Renderer") {
+      InspectorSection(InspectorToolsL10n.string("Renderer")) {
         let value = model.developer.performanceSnapshot
         InspectorProperty(
-          "CPU", value: model.cpu.map { String(format: "%.1f%%", $0) } ?? "Unavailable",
+          "CPU",
+          value: model.cpu.map { String(format: "%.1f%%", $0) }
+            ?? InspectorToolsL10n.string("Unavailable"),
           copy: inspector.copy)
         InspectorProperty(
-          "JS heap", value: value?.heapBytes.map(Self.bytes) ?? "Unavailable", copy: inspector.copy)
-        InspectorProperty(
-          "FPS", value: value?.fps.map { String(format: "%.0f", $0) } ?? "Unavailable",
+          InspectorToolsL10n.string("JS heap"),
+          value: value?.heapBytes.map(Self.bytes) ?? InspectorToolsL10n.string("Unavailable"),
           copy: inspector.copy)
         InspectorProperty(
-          "Requests", value: value.map { String($0.requests) } ?? "—", copy: inspector.copy)
+          "FPS",
+          value: value?.fps.map { String(format: "%.0f", $0) }
+            ?? InspectorToolsL10n.string("Unavailable"),
+          copy: inspector.copy)
         InspectorProperty(
-          "Observed transfer", value: value.map { Self.bytes($0.transferredBytes) } ?? "—",
+          InspectorToolsL10n.string("Requests"), value: value.map { String($0.requests) } ?? "—",
+          copy: inspector.copy)
+        InspectorProperty(
+          InspectorToolsL10n.string("Observed transfer"),
+          value: value.map { Self.bytes($0.transferredBytes) } ?? "—",
           copy: inspector.copy)
         hint(
-          "CPU is main-thread task time between samples. FPS is unavailable in hidden documents. Cross-origin transfer sizes may be restricted."
+          InspectorToolsL10n.string(
+            "CPU is main-thread task time between samples. FPS is unavailable in hidden documents. Cross-origin transfer sizes may be restricted."
+          )
         )
       }
     }
@@ -165,11 +187,15 @@ struct InspectorPageToolsView: View {
 
   private var network: some View {
     Group {
-      InspectorSection("\(model.requests.count) recent requests") {
+      InspectorSection(
+        InspectorToolsL10n.plural("%d recent requests", count: model.requests.count)
+      ) {
         hint(
-          "Resource timing plus fetch/XHR observed while page tools are open. Headers and timings can be restricted; — means unavailable."
+          InspectorToolsL10n.string(
+            "Resource timing plus fetch/XHR observed while page tools are open. Headers and timings can be restricted; — means unavailable."
+          )
         )
-        if model.requests.isEmpty { hint("No requests observed yet.") }
+        if model.requests.isEmpty { hint(InspectorToolsL10n.string("No requests observed yet.")) }
       }
       LazyVStack(spacing: 0) {
         ForEach(model.requests.reversed()) { row in
@@ -189,7 +215,9 @@ struct InspectorPageToolsView: View {
               Text(row.bytes.map(Self.bytes) ?? "—").frame(minWidth: 48, alignment: .trailing)
             }.font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
           }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
-            .help(row.url).contextMenu { Button("Copy URL") { inspector.copy(row.url) } }
+            .help(row.url).contextMenu {
+              Button(InspectorToolsL10n.string("Copy URL")) { inspector.copy(row.url) }
+            }
             .overlay(alignment: .bottom) { Divider() }
         }
       }
@@ -198,9 +226,14 @@ struct InspectorPageToolsView: View {
 
   private var console: some View {
     Group {
-      InspectorSection("\(model.console.count) recent messages", copy: copyConsole) {
+      InspectorSection(
+        InspectorToolsL10n.plural("%d recent messages", count: model.console.count),
+        copy: copyConsole
+      ) {
         hint(
-          "Recorded since page tools opened, up to 300 messages. Earlier console history and worker logs are unavailable."
+          InspectorToolsL10n.string(
+            "Recorded since page tools opened, up to 300 messages. Earlier console history and worker logs are unavailable."
+          )
         )
       }
       LazyVStack(spacing: 0) {
@@ -213,7 +246,9 @@ struct InspectorPageToolsView: View {
                 .system(size: 10, design: .monospaced)
               ).foregroundStyle(.secondary)
             }
-            Text(row.message).font(.system(size: 11, design: .monospaced)).textSelection(.enabled)
+            Text(row.message).environment(\.layoutDirection, .leftToRight).font(
+              .system(size: 11, design: .monospaced)
+            ).textSelection(.enabled)
               .frame(maxWidth: .infinity, alignment: .leading)
           }.foregroundStyle(
             ["error", "unhandledrejection"].contains(row.level)
@@ -226,39 +261,52 @@ struct InspectorPageToolsView: View {
   }
 
   private var report: some View {
-    InspectorSection("Local bug report") {
+    InspectorSection(InspectorToolsL10n.string("Local bug report")) {
       VStack(alignment: .leading, spacing: 12) {
-        Label("Screenshot, console, HAR and environment", systemImage: "doc.zipper")
-          .font(.system(size: 12, weight: .medium))
+        Label(
+          InspectorToolsL10n.string("Screenshot, console, HAR and environment"),
+          systemImage: "doc.zipper"
+        )
+        .font(.system(size: 12, weight: .medium))
         hint(
-          "Creates a ZIP in this profile’s Downloads. Includes the current viewport, up to 300 console messages, recent page requests and active simulations."
+          InspectorToolsL10n.string(
+            "Creates a ZIP in this profile’s Downloads. Includes the current viewport, up to 300 console messages, recent page requests and active simulations."
+          )
         )
         Toggle(
-          "Include sensitive HAR headers", isOn: Bindable(model.developer).includeSensitiveHeaders
+          InspectorToolsL10n.string("Include sensitive HAR headers"),
+          isOn: Bindable(model.developer).includeSensitiveHeaders
         )
         .toggleStyle(.checkbox).font(.system(size: 11))
         hint(
-          "Cookie and authorization headers are redacted by default. URLs, console messages and screenshot content are not redacted. Nothing is uploaded."
+          InspectorToolsL10n.string(
+            "Cookie and authorization headers are redacted by default. URLs, console messages and screenshot content are not redacted. Nothing is uploaded."
+          )
         )
         Button {
           Task { _ = await model.developer.createBugReport() }
         } label: {
           HStack {
             if model.developer.creatingBugReport { ProgressView().controlSize(.mini) }
-            Text(model.developer.creatingBugReport ? "Creating report…" : "Create bug report")
+            Text(
+              InspectorToolsL10n.string(
+                model.developer.creatingBugReport ? "Creating report…" : "Create bug report"))
             Spacer()
             Image(systemName: "arrow.down.doc")
           }.font(.system(size: 12, weight: .medium))
         }.buttonStyle(.borderedProminent).controlSize(.regular).disabled(
           model.developer.creatingBugReport || model.startedAt == nil)
         if let file = model.developer.reportURL {
-          Label("Saved to Downloads", systemImage: "checkmark.circle").font(.system(size: 11))
+          Label(InspectorToolsL10n.string("Saved to Downloads"), systemImage: "checkmark.circle")
+            .font(.system(size: 11))
             .foregroundStyle(.secondary).help(file.lastPathComponent)
         }
         if let error = model.developer.reportFailure { hint(error) }
         Divider()
         hint(
-          "Page-level capture only. Response bodies, browser headers, worker/WebSocket traffic and other frames may be unavailable."
+          InspectorToolsL10n.string(
+            "Page-level capture only. Response bodies, browser headers, worker/WebSocket traffic and other frames may be unavailable."
+          )
         )
       }
     }
@@ -278,8 +326,7 @@ struct InspectorPageToolsView: View {
   }
 
   static func bytes(_ value: Double) -> String {
-    ByteCountFormatter.string(
-      fromByteCount: Int64(min(max(0, value), Double(Int64.max / 2))), countStyle: .file)
+    PanelsL10n.byteCount(Int64(min(max(0, value), Double(Int64.max / 2))))
   }
 }
 

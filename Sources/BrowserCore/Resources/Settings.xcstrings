@@ -2507,6 +2507,38 @@
           }
         }
       }
+    },
+    "Inspect Element": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inspect Element"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "בדיקת אלמנט"
+          }
+        }
+      }
+    },
+    "Inspect layout, typography, and colors (⌥⌘C)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inspect layout, typography, and colors (⌥⌘C)"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "בדיקת פריסה, טיפוגרפיה וצבעים (\u2066⌥⌘C\u2069)"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

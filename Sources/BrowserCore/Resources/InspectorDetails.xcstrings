@@ -1,0 +1,1188 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "Click an element to lock its details.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Click an element to lock its details."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לחיצה על אלמנט תנעל את פרטיו."
+          }
+        }
+      }
+    },
+    "Reading details…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reading details…"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פרטי האלמנט נטענים…"
+          }
+        }
+      }
+    },
+    "%1$@ components": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ components"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "רכיבי %1$@"
+          }
+        }
+      }
+    },
+    "Inspect %1$@ data": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inspect %1$@ data"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "בדיקת הנתונים של %1$@"
+          }
+        }
+      }
+    },
+    "Source": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Source"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מקור"
+          }
+        }
+      }
+    },
+    "source location": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "source location"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מיקום המקור"
+          }
+        }
+      }
+    },
+    "Source location is not exposed by this build.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Source location is not exposed by this build."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מיקום המקור אינו זמין בגרסה הזאת."
+          }
+        }
+      }
+    },
+    "Values limited by depth, key count or text length.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Values limited by depth, key count or text length."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הנתונים הוגבלו לפי עומק, מספר מפתחות או אורך טקסט."
+          }
+        }
+      }
+    },
+    "Props": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Props"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מאפיינים"
+          }
+        }
+      }
+    },
+    "State": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "State"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מצב"
+          }
+        }
+      }
+    },
+    "Hook state slots": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hook state slots"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ערכי מצב של Hooks"
+          }
+        }
+      }
+    },
+    "Component data": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Component data"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נתוני רכיב"
+          }
+        }
+      }
+    },
+    "No framework component metadata is exposed for this element.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No framework component metadata is exposed for this element."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא זמינים עבור האלמנט הזה נתוני רכיב מהמסגרת."
+          }
+        }
+      }
+    },
+    "Development builds can expose names, source locations, props and state. Svelte source metadata may be available without runtime state.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Development builds can expose names, source locations, props and state. Svelte source metadata may be available without runtime state."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "גרסאות פיתוח יכולות לחשוף שמות, מיקומי מקור, מאפיינים ומצב. ב־Svelte ייתכן שנתוני המקור יהיו זמינים גם בלי מצב בזמן ריצה."
+          }
+        }
+      }
+    },
+    "Accessibility": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accessibility"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נגישות"
+          }
+        }
+      }
+    },
+    "Role": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Role"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "תפקיד"
+          }
+        }
+      }
+    },
+    "Name": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "שם"
+          }
+        }
+      }
+    },
+    "No accessible name": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No accessible name"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אין שם נגיש"
+          }
+        }
+      }
+    },
+    "In tree": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In tree"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "בעץ הנגישות"
+          }
+        }
+      }
+    },
+    "No": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא"
+          }
+        }
+      }
+    },
+    "Yes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yes"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "כן"
+          }
+        }
+      }
+    },
+    "Unavailable": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unavailable"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא זמין"
+          }
+        }
+      }
+    },
+    "Tab order": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tab order"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סדר מעבר עם Tab"
+          }
+        }
+      }
+    },
+    "%1$@ · document": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · document"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · מסמך"
+          }
+        }
+      }
+    },
+    "Not in sequential order": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not in sequential order"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא מופיע בסדר המעבר"
+          }
+        }
+      }
+    },
+    "Document estimate; shadow roots, nested frames and radio groups can change browser tab order.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Document estimate; shadow roots, nested frames and radio groups can change browser tab order."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הערכה לפי המסמך; Shadow DOM, מסגרות מקוננות וקבוצות כפתורי בחירה עשויים לשנות את סדר המעבר בדפדפן."
+          }
+        }
+      }
+    },
+    "Tab-order sample limited to 5,000 candidates.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tab-order sample limited to 5,000 candidates."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "דגימת סדר המעבר הוגבלה ל־5,000 מועמדים."
+          }
+        }
+      }
+    },
+    "ARIA attributes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ARIA attributes"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מאפייני ARIA"
+          }
+        }
+      }
+    },
+    "No ARIA attributes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No ARIA attributes"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אין מאפייני ARIA"
+          }
+        }
+      }
+    },
+    "Checks": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checks"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "בדיקות"
+          }
+        }
+      }
+    },
+    "No selected-element warnings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No selected-element warnings"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אין אזהרות לגבי האלמנט שנבחר"
+          }
+        }
+      }
+    },
+    "Selected-element checks cover names, alt text, duplicate IDs, hidden focus targets and computed contrast.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selected-element checks cover names, alt text, duplicate IDs, hidden focus targets and computed contrast."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "בדיקות האלמנט שנבחר כוללות שמות, טקסט חלופי, מזהי ID כפולים, יעדי מיקוד מוסתרים וניגודיות מחושבת."
+          }
+        }
+      }
+    },
+    "Images": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Images"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "תמונות"
+          }
+        }
+      }
+    },
+    "No images in this selection": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No images in this selection"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אין תמונות בבחירה הזאת"
+          }
+        }
+      }
+    },
+    "Image": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Image"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "תמונה"
+          }
+        }
+      }
+    },
+    "Rendered": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rendered"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מידות בתצוגה"
+          }
+        }
+      }
+    },
+    "Natural": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Natural"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מידות מקוריות"
+          }
+        }
+      }
+    },
+    "Format": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Format"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פורמט"
+          }
+        }
+      }
+    },
+    "Transfer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transfer"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "העברה"
+          }
+        }
+      }
+    },
+    "Encoded body": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Encoded body"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "גוף מקודד"
+          }
+        }
+      }
+    },
+    "Transfer may be unavailable for cached or cross-origin resources.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transfer may be unavailable for cached or cross-origin resources."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ייתכן שנתוני ההעברה לא יהיו זמינים למשאבים שמורים במטמון או ממקור אחר."
+          }
+        }
+      }
+    },
+    "Copy URL": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy URL"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "העתקת כתובת URL"
+          }
+        }
+      }
+    },
+    "Download": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הורדה"
+          }
+        }
+      }
+    },
+    "SVG": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SVG"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SVG"
+          }
+        }
+      }
+    },
+    "%d bytes of markup": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "1 byte of markup"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%d bytes of markup"
+                }
+              }
+            }
+          }
+        },
+        "he": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "בית אחד של קוד סימון"
+                }
+              },
+              "two": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "שני בתים של קוד סימון"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%d בתים של קוד סימון"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Copy SVG": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy SVG"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "העתקת SVG"
+          }
+        }
+      }
+    },
+    "SVG exceeds the 256 KiB copy limit.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SVG exceeds the 256 KiB copy limit."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "גודל SVG חורג ממגבלת ההעתקה של 256 KiB."
+          }
+        }
+      }
+    },
+    "Fonts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fonts"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "גופנים"
+          }
+        }
+      }
+    },
+    "Download font file": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download font file"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הורדת קובץ גופן"
+          }
+        }
+      }
+    },
+    "Rendered names come from sampled text. Loaded font files are listed separately; system fonts have no page resource.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rendered names come from sampled text. Loaded font files are listed separately; system fonts have no page resource."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "השמות שמוצגים נאספו מדגימת טקסט. קובצי גופנים שנטענו מופיעים בנפרד; לגופני מערכת אין משאב בדף."
+          }
+        }
+      }
+    },
+    "Preview limited to 20 lines; Copy includes the bounded snapshot.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preview limited to 20 lines; Copy includes the bounded snapshot."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "התצוגה המקדימה הוגבלה ל־20 שורות; ההעתקה כוללת את תמונת המצב המלאה בגבולות הנתמכים."
+          }
+        }
+      }
+    },
+    "Accessibility data exceeds supported limits.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accessibility data exceeds supported limits."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נתוני הנגישות חורגים מהמגבלות הנתמכות."
+          }
+        }
+      }
+    },
+    "Asset data exceeds supported limits.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Asset data exceeds supported limits."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נתוני המשאבים חורגים מהמגבלות הנתמכות."
+          }
+        }
+      }
+    },
+    "Component data does not belong to this tree.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Component data does not belong to this tree."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נתוני הרכיב אינם שייכים לעץ הרכיבים הזה."
+          }
+        }
+      }
+    },
+    "Component tree exceeds supported limits.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Component tree exceeds supported limits."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "עץ הרכיבים חורג מהמגבלות הנתמכות."
+          }
+        }
+      }
+    },
+    "Component values exceed supported limits.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Component values exceed supported limits."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ערכי הרכיב חורגים מהמגבלות הנתמכות."
+          }
+        }
+      }
+    },
+    "The selected element is no longer available.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The selected element is no longer available."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "האלמנט שנבחר כבר אינו זמין."
+          }
+        }
+      }
+    },
+    "Element details exceed the supported size.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Element details exceed the supported size."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פרטי האלמנט חורגים מהגודל הנתמך."
+          }
+        }
+      }
+    },
+    "This asset is no longer selected.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This asset is no longer selected."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "המשאב הזה כבר אינו נבחר."
+          }
+        }
+      }
+    },
+    "Asset data is unavailable or exceeds 32 MiB.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Asset data is unavailable or exceeds 32 MiB."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נתוני המשאב אינם זמינים או שגודלם חורג מ־32 MiB."
+          }
+        }
+      }
+    },
+    "Chromium did not return this resource's content.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chromium did not return this resource's content."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chromium לא החזיר את תוכן המשאב הזה."
+          }
+        }
+      }
+    },
+    "Tree limited to 250 components and 4,000 runtime nodes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tree limited to 250 components and 4,000 runtime nodes"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "העץ הוגבל ל־250 רכיבים ול־4,000 צמתים בזמן ריצה"
+          }
+        }
+      }
+    },
+    "Svelte exposes source ancestry; props/state require a captured development registration.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Svelte exposes source ancestry; props/state require a captured development registration."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Svelte חושף את שרשרת המקור; הצגת מאפיינים ומצב דורשת רישום שנאסף בגרסת פיתוח."
+          }
+        }
+      }
+    },
+    "Raw hook state slots; custom hook structure and hook names are not inferred.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Raw hook state slots; custom hook structure and hook names are not inferred."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מוצגים ערכי מצב Hooks גולמיים; המבנה והשמות של Hooks מותאמים אישית אינם מוסקים."
+          }
+        }
+      }
+    },
+    "Development state capture is not exposed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Development state capture is not exposed."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לכידת מצב הפיתוח אינה זמינה."
+          }
+        }
+      }
+    },
+    "This build exposes source metadata only; component props and state are unavailable.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This build exposes source metadata only; component props and state are unavailable."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "גרסה זו חושפת נתוני מקור בלבד; מאפייני הרכיב ומצבו אינם זמינים."
+          }
+        }
+      }
+    },
+    "Runtime component data is no longer available.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Runtime component data is no longer available."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נתוני הרכיב בזמן ריצה כבר אינם זמינים."
+          }
+        }
+      }
+    },
+    "Interactive element has no accessible name.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interactive element has no accessible name."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לאלמנט האינטראקטיבי אין שם נגיש."
+          }
+        }
+      }
+    },
+    "Computed text contrast is below WCAG AA.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Computed text contrast is below WCAG AA."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ניגודיות הטקסט המחושבת נמוכה מדרישת WCAG AA."
+          }
+        }
+      }
+    },
+    "Image has no alt attribute.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Image has no alt attribute."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לתמונה אין מאפיין alt."
+          }
+        }
+      }
+    },
+    "Focusable element is hidden from the accessibility tree.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Focusable element is hidden from the accessibility tree."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אלמנט שניתן למקד מוסתר מעץ הנגישות."
+          }
+        }
+      }
+    },
+    "Element ID is duplicated.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Element ID is duplicated."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מזהה האלמנט מופיע יותר מפעם אחת."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

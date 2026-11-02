@@ -23,6 +23,8 @@ let package = Package(
       exclude: [
         "Resources/Core.xcstrings", "Resources/Bridge.xcstrings", "Resources/Shell.xcstrings",
         "Resources/Settings.xcstrings", "Resources/Panels.xcstrings",
+        "Resources/Inspector.xcstrings", "Resources/InspectorDetails.xcstrings",
+        "Resources/InspectorTools.xcstrings",
       ],
       resources: [.process("Resources")],
       plugins: [.plugin(name: "CompileLocalizations")]),

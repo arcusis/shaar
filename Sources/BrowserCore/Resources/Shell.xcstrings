@@ -120,7 +120,7 @@
               "other": {
                 "stringUnit": {
                   "state": "translated",
-                  "value": "%d לשוניות tabs"
+                  "value": "%d לשוניות"
                 }
               }
             }
@@ -3164,7 +3164,39 @@
     "Private site controls": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Private site controls"}},"he":{"stringUnit":{"state":"translated","value":"מרכז הבקרה של האתר בגלישה פרטית"}}}},
     "Allow cookies for this site": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Allow cookies for this site"}},"he":{"stringUnit":{"state":"translated","value":"אישור קובצי Cookie לאתר הזה"}}}},
     "Also allows site storage. Reload the page after changing this setting.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Also allows site storage. Reload the page after changing this setting."}},"he":{"stringUnit":{"state":"translated","value":"ההגדרה מאפשרת גם אחסון באתר. יש לטעון מחדש את הדף לאחר שינוי ההגדרה."}}}},
-    "Private windows for this profile share this setting. Closing the window that allowed it blocks the site again. Turning it off blocks it in every private window; existing data is erased when the last private window closes.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Private windows for this profile share this setting. Closing the window that allowed it blocks the site again. Turning it off blocks it in every private window; existing data is erased when the last private window closes."}},"he":{"stringUnit":{"state":"translated","value":"חלונות פרטיים של הפרופיל הזה משתפים הגדרה זו. סגירת החלון שבו ההרשאה ניתנה תחסום שוב את האתר. כיבוי ההגדרה חוסם אותו בכל החלונות הפרטיים; הנתונים הקיימים נמחקים כשנסגר החלון הפרטי האחרון."}}}}
+    "Private windows for this profile share this setting. Closing the window that allowed it blocks the site again. Turning it off blocks it in every private window; existing data is erased when the last private window closes.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Private windows for this profile share this setting. Closing the window that allowed it blocks the site again. Turning it off blocks it in every private window; existing data is erased when the last private window closes."}},"he":{"stringUnit":{"state":"translated","value":"חלונות פרטיים של הפרופיל הזה משתפים הגדרה זו. סגירת החלון שבו ההרשאה ניתנה תחסום שוב את האתר. כיבוי ההגדרה חוסם אותו בכל החלונות הפרטיים; הנתונים הקיימים נמחקים כשנסגר החלון הפרטי האחרון."}}}},
+    "Inspect Element": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inspect Element"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "בדיקת אלמנט"
+          }
+        }
+      }
+    },
+    "Inspect layout, typography, and colors (⌥⌘C)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inspect layout, typography, and colors (⌥⌘C)"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "בדיקת פריסה, טיפוגרפיה וצבעים (\u2066⌥⌘C\u2069)"
+          }
+        }
+      }
+    }
   },
   "version": "1.0"
 }

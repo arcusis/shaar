@@ -309,8 +309,10 @@ def validate_source_references(root, catalogs, include_app=False):
     for catalog in catalogs:
         catalog_keys[catalog.stem] = set(json.loads(catalog.read_text(encoding="utf-8"))["strings"])
     wrappers = {"BrowserLocalization": "Core", "ShellL10n": "Shell",
-                "SettingsL10n": "Settings", "PanelsL10n": "Panels"}
-    call = re.compile(r"\b(BrowserLocalization|ShellL10n|SettingsL10n|PanelsL10n)\.(?:string|text|format|plural)\s*\(")
+                "SettingsL10n": "Settings", "PanelsL10n": "Panels",
+                "InspectorL10n": "Inspector", "InspectorDetailsL10n": "InspectorDetails",
+                "InspectorToolsL10n": "InspectorTools"}
+    call = re.compile(r"\b(" + "|".join(map(re.escape, wrappers)) + r")\.(?:string|text|format|plural)\s*\(")
     source_root = root / "Sources" if include_app else root / "Sources/BrowserCore"
     for path in sorted(source_root.rglob("*.swift")):
         source = path.read_text(encoding="utf-8")

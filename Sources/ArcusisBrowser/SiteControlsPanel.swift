@@ -312,14 +312,14 @@ struct SiteActionsSection: View {
       Button(action: inspectElement) {
         HStack(spacing: 10) {
           Image(systemName: "viewfinder").frame(width: 20)
-          Text("Inspect Element")
+          Text(ShellL10n.string("Inspect Element"))
           Spacer(minLength: 0)
-          Text("⌥⌘C").foregroundStyle(.secondary)
+          Text("⌥⌘C").environment(\.layoutDirection, .leftToRight).foregroundStyle(.secondary)
         }.contentShape(Rectangle()).hoverRowBackground()
       }
       .buttonStyle(.plain)
-      .help("Inspect layout, typography, and colors (⌥⌘C)")
-      .accessibilityLabel("Inspect layout, typography, and colors (⌥⌘C)")
+      .help(ShellL10n.string("Inspect layout, typography, and colors (⌥⌘C)"))
+      .accessibilityLabel(ShellL10n.string("Inspect layout, typography, and colors (⌥⌘C)"))
       .disabled(model.runningAction != nil)
       .accessibilityIdentifier("site-inspect-element")
     }

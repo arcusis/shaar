@@ -15,6 +15,7 @@ final class BrowserPreferencesStore {
   private var connectedAccounts: [UUID: [ConnectedAccount]] = [:]
   private var pinnedExtensions: [UUID: [String]] = [:]
   private var autoPictureInPictureOffSites: [UUID: [String]] = [:]
+  private var developerSimulations: [UUID: [String: DeveloperSimulation]] = [:]
   private var preservesExistingFile = false
 
   private(set) var sidebarInitiallyVisible = true
@@ -76,6 +77,17 @@ final class BrowserPreferencesStore {
     save()
   }
 
+  func developerSimulation(on origin: String, for profileID: UUID) -> DeveloperSimulation {
+    developerSimulations[profileID]?[origin] ?? DeveloperSimulation()
+  }
+
+  func setDeveloperSimulation(_ value: DeveloperSimulation, on origin: String, for profileID: UUID)
+  {
+    developerSimulations[profileID, default: [:]][origin] = value.isActive ? value : nil
+    if developerSimulations[profileID]?.isEmpty == true { developerSimulations[profileID] = nil }
+    save()
+  }
+
   func setSidebarInitiallyVisible(_ value: Bool) {
     sidebarInitiallyVisible = value
     save()
@@ -102,6 +114,7 @@ final class BrowserPreferencesStore {
       connectedAccounts = document.connectedAccounts
       pinnedExtensions = document.pinnedExtensions
       autoPictureInPictureOffSites = document.autoPictureInPictureOffSites
+      developerSimulations = document.developerSimulations
     } catch {
       preserveWithNotice("Saved preferences are invalid or unreadable; original file preserved.")
     }
@@ -127,7 +140,8 @@ final class BrowserPreferencesStore {
         version: 2, sidebarInitiallyVisible: sidebarInitiallyVisible,
         profileSearchEngines: profileSearchEngines,
         pinnedExtensions: pinnedExtensions, connectedAccounts: connectedAccounts,
-        autoPictureInPictureOffSites: autoPictureInPictureOffSites)
+        autoPictureInPictureOffSites: autoPictureInPictureOffSites,
+        developerSimulations: developerSimulations)
       let encoder = JSONEncoder()
       encoder.outputFormatting = [.sortedKeys]
       let data = try encoder.encode(document)
@@ -153,6 +167,7 @@ private struct PreferencesDocument: Codable {
   let connectedAccounts: [UUID: [ConnectedAccount]]
   let pinnedExtensions: [UUID: [String]]
   let autoPictureInPictureOffSites: [UUID: [String]]
+  let developerSimulations: [UUID: [String: DeveloperSimulation]]
 
   private enum CodingKeys: String, CodingKey {
     case version
@@ -161,6 +176,7 @@ private struct PreferencesDocument: Codable {
     case connectedAccounts
     case pinnedExtensions
     case autoPictureInPictureOffSites
+    case developerSimulations
   }
 
   init(
@@ -168,7 +184,8 @@ private struct PreferencesDocument: Codable {
     profileSearchEngines: [UUID: BrowserSearchEngine],
     pinnedExtensions: [UUID: [String]] = [:],
     connectedAccounts: [UUID: [ConnectedAccount]] = [:],
-    autoPictureInPictureOffSites: [UUID: [String]] = [:]
+    autoPictureInPictureOffSites: [UUID: [String]] = [:],
+    developerSimulations: [UUID: [String: DeveloperSimulation]] = [:]
   ) {
     self.version = version
     self.sidebarInitiallyVisible = sidebarInitiallyVisible
@@ -176,6 +193,7 @@ private struct PreferencesDocument: Codable {
     self.connectedAccounts = connectedAccounts
     self.pinnedExtensions = pinnedExtensions
     self.autoPictureInPictureOffSites = autoPictureInPictureOffSites
+    self.developerSimulations = developerSimulations
   }
 
   init(from decoder: Decoder) throws {
@@ -188,6 +206,9 @@ private struct PreferencesDocument: Codable {
       try values.decodeIfPresent([UUID: [ConnectedAccount]].self, forKey: .connectedAccounts) ?? [:]
     pinnedExtensions =
       try values.decodeIfPresent([UUID: [String]].self, forKey: .pinnedExtensions) ?? [:]
+    developerSimulations =
+      try values.decodeIfPresent(
+        [UUID: [String: DeveloperSimulation]].self, forKey: .developerSimulations) ?? [:]
     autoPictureInPictureOffSites =
       try values.decodeIfPresent([UUID: [String]].self, forKey: .autoPictureInPictureOffSites)
       ?? [:]

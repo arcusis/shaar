@@ -479,6 +479,69 @@ MEDIA_CLIP = Path(__file__).resolve().parent.parent / 'Tests/Fixtures/Media/seek
 class Fixture(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
+        if path == '/inspector-tools':
+            self.html(b"""<!doctype html><html data-page-tools-fixture="v1"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="generator" content="Inspector fixture">
+<title>Page tools fixture</title><style>body{font:18px Arial;padding:32px;background:white;color:#172033}button{padding:14px}#shift{padding:20px;background:#eef2ff}</style>
+<h1>Measure the real page.</h1><button id="performance-input" onclick="window.clicked=(window.clicked||0)+1;const start=performance.now();while(performance.now()-start&lt;80){}">Save changes</button><div id="shift">Stable content</div>
+<script>window.originalFetch=fetch;window.originalConsoleError=console.error;localStorage.setItem('inspector-key','original');sessionStorage.setItem('session-key','session-original');console.error('page-tools-document-start');</script></html>""", csp=PAGE_CSP + "; connect-src 'self'", cookie='inspector-http-only=original; Path=/; HttpOnly; SameSite=Lax')
+            return
+        if path == '/inspector-slow':
+            time.sleep(0.15)
+            self.html(b'<p>Slow authored resource</p>' + b'x' * 4096)
+            return
+        if path == '/inspector-frameworks.js':
+            source = Path(__file__).resolve().parents[1] / 'ThirdParty/InspectorFixtures'
+            body = (source / 'frameworks.js').read_bytes()
+            pin = json.loads((source / 'pin.json').read_text())
+            if hashlib.sha256(body).hexdigest() != pin['sha256']['frameworks.js']:
+                self.send_error(500, 'Inspector fixture hash mismatch')
+                return
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/javascript; charset=utf-8')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if path in {'/inspector-source/ReactCounter.jsx', '/inspector-source/vue.js', '/inspector-source/InspectorCounter.svelte'}:
+            source = Path(__file__).resolve().parents[1] / 'Tests/InspectorContractTests/fixtures' / Path(path).name
+            body = source.read_bytes()
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/plain; charset=utf-8')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if path == '/inspector-components':
+            self.html(b"""<!doctype html><html><meta charset="utf-8"><title>Inspector component fixture</title>
+<style>body{font:16px/1.5 Arial,sans-serif;margin:0;padding:32px;background:#fff;color:#111827}main{display:grid;gap:20px}button{font:600 16px/24px Arial;padding:10px 20px;border:1px solid #1e40af;border-radius:6px;background:#2563eb;color:white}img{width:128px;height:96px;image-rendering:pixelated}svg{width:120px;height:60px}</style>
+<h1>Runtime component contracts</h1><main><div id="react-root"></div><div id="vue-root"></div><div id="svelte-root"></div>
+<img id="asset" src="/favicon-initial.png" alt="Fixture artwork"><img id="missing-alt" src="/favicon-restart.png">
+<svg id="vector" viewBox="0 0 120 60" role="img" aria-label="Fixture vector"><rect width="120" height="60" fill="#2563eb"/></svg>
+<button id="unnamed" aria-label=""><svg width="16" height="16"><path d="M2 2L14 14"/></svg></button><input id="hidden-focus" aria-hidden="true" value="Authored focus warning"></main>
+<script src="/inspector-frameworks.js"></script></html>""",
+                      csp=PAGE_CSP.replace("script-src 'unsafe-inline'", "script-src 'self' 'unsafe-inline'"))
+            return
+        if path == '/inspector':
+            self.html(b"""<!doctype html><html data-inspector-fixture="v2"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Inspector fixture</title>
+<style>body{font:16px Arial,sans-serif;margin:0;padding:32px;background:white;color:#111827}
+main{padding:20px;background:#f3f4f6;border:1px solid #e5e7eb}
+button{font:600 16px/24px Arial,sans-serif;letter-spacing:.25px;margin:12px 16px;padding:10px 20px;
+border:2px solid #1e40af;border-radius:6px;background:#2563eb;color:white}
+#next{background:white;color:#111827;border-color:#d1d5db}iframe{width:340px;height:160px;border:2px solid #ddd}
+#transparent{color:rgba(0,0,0,.5);background:white;padding:12px}
+#gradient{background:linear-gradient(white,black);color:white;padding:12px}
+</style><h1>Inspect the details.</h1><main id="card"><button id="save" data-testid="save" onclick="window.clicked=(window.clicked||0)+1"><span id="label">Save changes</span></button><button id="next">Cancel</button>
+<p id="transparent">Transparent text</p><p id="gradient">Gradient contrast</p>
+<iframe id="frame" src="/inspector-frame"></iframe>
+<section id="grid" style="display:grid;grid-template-columns:1fr 2fr;gap:12px;padding:8px;background:#eef2ff"><div>First track</div><div>Second track</div></section>
+<section id="flex" style="display:flex;gap:16px;padding:8px;background:#fef3c7"><div>First item</div><div>Second item</div></section></main></html>""",
+                      csp=PAGE_CSP + "; frame-src 'self'")
+            return
+        if path == '/inspector-frame':
+            self.html(b"""<!doctype html><html><meta charset="utf-8"><style>body{font:16px Georgia;padding:12px;background:#fff}button{font:inherit;padding:8px 16px;margin:8px;border:1px solid #bbb;background:#fafafa;color:#222}</style><button id="nested">Frame action</button></html>""")
+            return
         if path.startswith('/private-privacy/'):
             body = json.dumps({'cookie': self.headers.get('Cookie', ''), 'fixture': 'privacy'}).encode()
             self.send_response(200)
@@ -542,11 +605,13 @@ class Fixture(http.server.BaseHTTPRequestHandler):
 <label>Password <input id="password" type="password" autocomplete="current-password"></label></form>
 <script>window.arcusisInstance=crypto.randomUUID();</script></html>""")
 
-    def html(self, body, csp=PAGE_CSP):
+    def html(self, body, csp=PAGE_CSP, cookie=None):
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Security-Policy", csp)
+        if cookie is not None:
+            self.send_header("Set-Cookie", cookie)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -1315,7 +1380,7 @@ def main(argv=None):
                         code = wait_for_quit_exit(process, root, phase, timeout=90)
                     else:
                         timeout = (240 if options.private_window else 180 if options.external_app_consent else 180 if options.saved_tab_capacity
-                                   else 170 if include_bitwarden else 90)
+                                   else 235)
                         code = wait_for_probe(process, root, phase, timeout=timeout)
                 except subprocess.TimeoutExpired:
                     raise RuntimeError(f"{phase} timed out; see {root}/{phase}.log")

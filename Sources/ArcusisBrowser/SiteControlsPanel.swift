@@ -46,7 +46,11 @@ struct SiteControlsButton: View {
             self.model = nil
             engine.showDeveloperTools(for: model.target)
           },
-          close: { self.model = nil }))
+          close: { self.model = nil },
+          inspectElement: {
+            self.model = nil
+            engine.toggleInspector(for: model.target)
+          }))
     }
     .onChange(of: store.session.selectedPage?.tab.id) { model = nil }
   }
@@ -84,6 +88,7 @@ struct SiteControlsPanelActions {
   let showCertificate: () -> Void
   let showDeveloperTools: () -> Void
   let close: () -> Void
+  var inspectElement: () -> Void = {}
 }
 
 struct SiteControlsPanel: View {
@@ -111,7 +116,8 @@ struct SiteControlsPanel: View {
       }
       Divider()
       SiteActionsSection(
-        model: model, close: actions.close, showDeveloperTools: actions.showDeveloperTools)
+        model: model, close: actions.close, showDeveloperTools: actions.showDeveloperTools,
+        inspectElement: actions.inspectElement)
       if let failure = model.failure {
         Text(failure)
           .font(.caption).foregroundStyle(.red)
@@ -272,6 +278,7 @@ struct SiteActionsSection: View {
   let model: SiteControlsModel
   let close: () -> Void
   let showDeveloperTools: () -> Void
+  var inspectElement: () -> Void = {}
 
   var body: some View {
     VStack(alignment: .leading, spacing: 2) {
@@ -300,6 +307,19 @@ struct SiteActionsSection: View {
       .buttonStyle(.plain)
       .disabled(model.runningAction != nil)
       .accessibilityIdentifier("site-developer-tools")
+      Button(action: inspectElement) {
+        HStack(spacing: 10) {
+          Image(systemName: "viewfinder").frame(width: 20)
+          Text("Inspect Element")
+          Spacer(minLength: 0)
+          Text("⌥⌘C").foregroundStyle(.secondary)
+        }.contentShape(Rectangle()).hoverRowBackground()
+      }
+      .buttonStyle(.plain)
+      .help("Inspect layout, typography, and colors (⌥⌘C)")
+      .accessibilityLabel("Inspect layout, typography, and colors (⌥⌘C)")
+      .disabled(model.runningAction != nil)
+      .accessibilityIdentifier("site-inspect-element")
     }
     .padding(8)
   }

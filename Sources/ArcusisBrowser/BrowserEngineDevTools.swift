@@ -9,7 +9,9 @@ extension BrowserEngine {
   @discardableResult
   func showDeveloperTools(for target: SiteControlTarget) -> Bool {
     guard siteControlTarget == target else { return false }
-    return runtime.showDevTools(forTabID: target.tabID.uuidString)
+    let shown = runtime.showDevTools(forTabID: target.tabID.uuidString)
+    developerModels[target.tabID]?.update(target: target)
+    return shown
   }
 
   func toggleDeveloperTools() {
@@ -20,5 +22,6 @@ extension BrowserEngine {
     } else {
       runtime.showDevTools(forTabID: identity)
     }
+    developerModels[target.tabID]?.update(target: target)
   }
 }

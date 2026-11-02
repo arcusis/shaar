@@ -146,7 +146,7 @@ struct BrowserWindow: View {
           } else if let failure = store.rendererFailures[id] {
             FailedPageView(store: store, failure: failure)
           } else if engine.pages[id] != nil {
-            ChromiumPage(engine: engine, tabID: id)
+            InspectorPage(engine: engine, tabID: id)
               .overlay { SplitDropZone(store: store, targetID: id) }
           } else {
             ProgressView("Loading profile…")

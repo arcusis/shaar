@@ -1,0 +1,507 @@
+{
+  "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Box_model/Introduction",
+  "panelMode": "Page",
+  "pageTool": "Network",
+  "pageDiagnostics": {
+    "requests": [
+      {
+        "bytes": 30049,
+        "duration": 3804.100000000559,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Box_model/Introduction"
+      },
+      {
+        "bytes": 4419,
+        "duration": 297,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/styles-global.205a3717c7a0c605.css"
+      },
+      {
+        "bytes": 890,
+        "duration": 340.79999999981374,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/270.c4deb27edf934078.css"
+      },
+      {
+        "bytes": 947,
+        "duration": 303.1000000005588,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/styles-navigation.c3ebf384e65df345.css"
+      },
+      {
+        "bytes": 689,
+        "duration": 303.20000000018626,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/styles-breadcrumbs.87eb742f4e711dc3.css"
+      },
+      {
+        "bytes": 679,
+        "duration": 317.80000000074506,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/9228.c46ef79d5582674d.css"
+      },
+      {
+        "bytes": 583,
+        "duration": 317.80000000074506,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/styles-heading-anchor.0eec5185ab9425b7.css"
+      },
+      {
+        "bytes": 1177,
+        "duration": 317.90000000037253,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/styles-left-sidebar.46e37af4d0b5c883.css"
+      },
+      {
+        "bytes": 544,
+        "duration": 317.90000000037253,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/styles-a11y-menu.5796ee87cb69f93f.css"
+      },
+      {
+        "bytes": 1539,
+        "duration": 325.70000000018626,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/styles-menu.e2c5c8a53a8854c2.css"
+      },
+      {
+        "bytes": 621,
+        "duration": 333.40000000037253,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/styles-article-footer.81ae18c89fc527dc.css"
+      },
+      {
+        "bytes": 532,
+        "duration": 333.5,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/styles-logo.aea5ff6edf1b9cfb.css"
+      },
+      {
+        "bytes": 745,
+        "duration": 333.6000000005588,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/styles-breadcrumbs-bar.2d1bed1ab424b6b3.css"
+      },
+      {
+        "bytes": 644,
+        "duration": 340.80000000074506,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/styles-reference-layout.632d2f3884f10ca3.css"
+      },
+      {
+        "bytes": 3236,
+        "duration": 347.40000000037253,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/styles-content-section.ee79aa021892f35a.css"
+      },
+      {
+        "bytes": 620,
+        "duration": 353.5,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/styles-reference-toc.9b9bd019efd16b86.css"
+      },
+      {
+        "bytes": 639,
+        "duration": 353.70000000018626,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/styles-page-layout.5a4354f33e894319.css"
+      },
+      {
+        "bytes": 1126,
+        "duration": 617.8999999994412,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/styles-footer.66072dd619a4ef50.css"
+      },
+      {
+        "bytes": 28716,
+        "duration": 706.7999999998137,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/jetbrains-mono-latin.119994ed445212c7.woff2"
+      },
+      {
+        "bytes": 8994,
+        "duration": 890.2000000001863,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/runtime.5df19022d1b28328.js"
+      },
+      {
+        "bytes": 105784,
+        "duration": 983.3999999994412,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/inter-latin.9a3b1bc220d426ef.woff2"
+      },
+      {
+        "bytes": 9965,
+        "duration": 603,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/5909.489e266d049aa182.js"
+      },
+      {
+        "bytes": 14751,
+        "duration": 617.6000000005588,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/index.016ac320c2222096.js"
+      },
+      {
+        "bytes": 776,
+        "duration": 676,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/1216.2fdb44f0bb574bc2.js"
+      },
+      {
+        "bytes": 23794,
+        "duration": 675.9000000003725,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/4585.e30f706b333273cd.js"
+      },
+      {
+        "bytes": 469,
+        "duration": 1190.8999999994412,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/manifest.json"
+      },
+      {
+        "bytes": 443,
+        "duration": 579.5,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/menu.74ccd9bb64dbf543.svg"
+      },
+      {
+        "bytes": 435,
+        "duration": 597.4000000003725,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/chevron-right.a81fc439dd5e4839.svg"
+      },
+      {
+        "bytes": 466,
+        "duration": 579.2999999998137,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/ssr/contrast.d86e85c43de8dee8.svg"
+      },
+      {
+        "bytes": 468,
+        "duration": 579.2999999998137,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/ssr/languages.dcba936080e5be86.svg"
+      },
+      {
+        "bytes": 475,
+        "duration": 962.1000000005588,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/external-link.4f3a2dc8e402cae5.svg"
+      },
+      {
+        "bytes": 611,
+        "duration": 1241.2000000001863,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/github.4d94e1bf436aa7ed.svg"
+      },
+      {
+        "bytes": 576,
+        "duration": 1244.800000000745,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/bluesky.a9421882d093c829.svg"
+      },
+      {
+        "bytes": 473,
+        "duration": 1240.7999999998137,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/rss.37214526d7308d0c.svg"
+      },
+      {
+        "bytes": 475,
+        "duration": 1241.5999999996275,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/x.4c7e68bf52af030a.svg"
+      },
+      {
+        "bytes": 772,
+        "duration": 1242.2000000001863,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/mastodon.1a5c0fde8353f680.svg"
+      },
+      {
+        "bytes": 116232,
+        "duration": 664.8999999994412,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/inter-italic-latin.fd2627ec16333c05.woff2"
+      },
+      {
+        "bytes": 3883,
+        "duration": 634.4000000003725,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Box_model/Introduction/boxmodel.png"
+      },
+      {
+        "bytes": null,
+        "duration": 1183.7000000001863,
+        "method": "UNKNOWN",
+        "status": 0,
+        "url": "https://incoming.telemetry.mozilla.org/submit/mdn-fred/events/1/d7fe6a2b-6506-494e-96d7-50efac758654"
+      },
+      {
+        "bytes": 937,
+        "duration": 290.29999999981374,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/3708.4a0422a33ccb46ea.js"
+      },
+      {
+        "bytes": 1248,
+        "duration": 302.29999999981374,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/7489.cd806d2f427a883d.js"
+      },
+      {
+        "bytes": 846,
+        "duration": 302.20000000018626,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/1477.2e21275901ede190.js"
+      },
+      {
+        "bytes": 1062,
+        "duration": 302.30000000074506,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/4249.f72e3bc533441dbe.js"
+      },
+      {
+        "bytes": 1635,
+        "duration": 369.70000000018626,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/8280.d23400460d00c14a.js"
+      },
+      {
+        "bytes": 2498,
+        "duration": 302.29999999981374,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/9204.6afe342b1a966b73.js"
+      },
+      {
+        "bytes": 1204,
+        "duration": 320.09999999962747,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/3690.dde3c3c4604a6af2.js"
+      },
+      {
+        "bytes": 1229,
+        "duration": 320.20000000018626,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/2868.72600e71ae8128fe.js"
+      },
+      {
+        "bytes": 2332,
+        "duration": 369.59999999962747,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/3711.97606c6489b00a61.js"
+      },
+      {
+        "bytes": 1244,
+        "duration": 369.69999999925494,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/9234.e2ca939eeab03c93.js"
+      },
+      {
+        "bytes": 704,
+        "duration": 390.09999999962747,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/8121.0d3b90f48eb7f970.js"
+      },
+      {
+        "bytes": 1106,
+        "duration": 391.69999999925494,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/3980.1b5a9384580db09a.js"
+      },
+      {
+        "bytes": 1958,
+        "duration": 319.90000000037253,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/5542.1e868b3ebf533fa2.js"
+      },
+      {
+        "bytes": 1156,
+        "duration": 320,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/9099.d5fd55aa8af08e99.js"
+      },
+      {
+        "bytes": 711,
+        "duration": 320,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/9647.28b4240dbab81568.js"
+      },
+      {
+        "bytes": 2628,
+        "duration": 390.09999999962747,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/4920.a37ab55f7abde7d9.js"
+      },
+      {
+        "bytes": 2707,
+        "duration": 301.90000000037253,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/5196.8750081dbe089c86.js"
+      },
+      {
+        "bytes": 2324,
+        "duration": 369.5,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/1996.e833c07cb4ee4327.js"
+      },
+      {
+        "bytes": 761,
+        "duration": 391.40000000037253,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/8926.2bd0c75389285bbf.js"
+      },
+      {
+        "bytes": 2101,
+        "duration": 319.8999999994412,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/7938.07886f31308437a6.js"
+      },
+      {
+        "bytes": 3012,
+        "duration": 319.8999999994412,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/169.43043e6e06493384.js"
+      },
+      {
+        "bytes": 2338,
+        "duration": 369.5,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/2173.fe760a50c3627b0f.js"
+      },
+      {
+        "bytes": 1507,
+        "duration": 394.5,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/static/client/4060.8abfad3012e87803.js"
+      },
+      {
+        "bytes": 480,
+        "duration": 636.2999999998137,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/api/v1/whoami"
+      },
+      {
+        "bytes": null,
+        "duration": 501.90000000037253,
+        "method": "UNKNOWN",
+        "status": 0,
+        "url": "https://incoming.telemetry.mozilla.org/submit/mdn-fred/events/1/8f56b85b-7ab2-497c-8c8d-a4d24cbb0c06"
+      },
+      {
+        "bytes": 1177,
+        "duration": 1044.699999999255,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/pong/get"
+      },
+      {
+        "bytes": 539,
+        "duration": 296.19999999925494,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/favicon.svg"
+      },
+      {
+        "bytes": 2471,
+        "duration": 296.20000000018626,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/favicon-192x192.png"
+      },
+      {
+        "bytes": null,
+        "duration": 360,
+        "method": "UNKNOWN",
+        "status": 0,
+        "url": "https://incoming.telemetry.mozilla.org/submit/mdn-fred/events/1/b6392bef-6e16-4b3d-b793-d6ed87ec2dad"
+      },
+      {
+        "bytes": null,
+        "duration": 350.79999999981374,
+        "method": "UNKNOWN",
+        "status": 0,
+        "url": "https://incoming.telemetry.mozilla.org/submit/mdn-fred/events/1/2985c1fe-2715-42aa-b533-179f1be6caf8"
+      },
+      {
+        "bytes": 56407,
+        "duration": 315.70000000018626,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://developer.mozilla.org/pimg/aHR0cHM6Ly9zdGF0aWM0LmJ1eXNlbGxhZHMubmV0L3V1LzIvMTc5MTY0LzE3OTM0NTk4NjEtTURCXzkuMF8tX01ETl8xNDU2eDE4MC5wbmc%3D.2bh8VeXVhuOeGF4G2Rw2aZwz8iY5GkSHyPvDWp8fzoE%3D"
+      }
+    ],
+    "technologies": [],
+    "vitals": {
+      "cls": 0.010857650579872806,
+      "fps": null,
+      "heapBytes": 4973736,
+      "inp": null,
+      "lcp": 3876
+    }
+  }
+}

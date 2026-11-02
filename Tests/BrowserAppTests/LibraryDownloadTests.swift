@@ -229,22 +229,28 @@ struct LibraryDownloadTests {
     }
   }
 
-  @Test func pendingThumbnailCancellationForwardsToGenerator() async throws {
+  @Test(arguments: [false, true])
+  func pendingThumbnailCancellationForwardsToGenerator(useSystemCancellation: Bool) async throws {
     let request = QLThumbnailGenerator.Request(
       fileAt: URL(filePath: "/tmp/authored-thumbnail.png"),
       size: CGSize(width: 260, height: 180), scale: 2, representationTypes: .all)
     let (started, continuation) = AsyncStream<LibraryThumbnailRequest.Completion>.makeStream()
     defer { continuation.finish() }
-    try await confirmation("Pending thumbnail canceled once") { canceled in
-      let thumbnail = LibraryThumbnailRequest(
-        request,
-        start: { _, completion in
-          continuation.yield(completion)
-        }, cancel: { _ in canceled() })
+    try await confirmation(
+      "Pending thumbnail forwarded cancellation", expectedCount: useSystemCancellation ? 0 : 1
+    ) { canceled in
+      let start: LibraryThumbnailRequest.Start = { _, completion in
+        continuation.yield(completion)
+      }
+      let thumbnail =
+        useSystemCancellation
+        ? LibraryThumbnailRequest(request, start: start)
+        : LibraryThumbnailRequest(request, start: start, cancel: { _ in canceled() })
       let task = Task { await thumbnail.generate() }
       var iterator = started.makeAsyncIterator()
       let completion = try #require(await iterator.next())
       task.cancel()
+      #expect(task.isCancelled)
       completion(nil, CancellationError())
       #expect(await task.value == nil)
     }

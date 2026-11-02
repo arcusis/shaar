@@ -1,6 +1,7 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Copy for AI": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copy for AI"}},"he":{"stringUnit":{"state":"translated","value":"העתקה ל-AI"}}}},
     "Developer Tools": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Developer Tools"}},"he":{"stringUnit":{"state":"translated","value":"כלים למפתחים"}}}},
     "General": {
       "localizations": {

@@ -24,6 +24,7 @@ final class InspectorModel {
     case component = "Component"
     case accessibility = "A11y"
     case assets = "Assets"
+    case notes = "Notes"
   }
   enum PanelMode: String, CaseIterable {
     case element = "Element"
@@ -34,6 +35,7 @@ final class InspectorModel {
   var tab = Tab.design
   @ObservationIgnored lazy var styles = InspectorStylesModel(inspector: self)
   @ObservationIgnored lazy var details = InspectorDetailsModel(inspector: self)
+  @ObservationIgnored lazy var aiCopy = InspectorAICopyModel(inspector: self)
   var documentGeneration: Int { generation }
   var isOpen: Bool { mode != .closed }
   @ObservationIgnored weak var engine: BrowserEngine?
@@ -69,6 +71,7 @@ final class InspectorModel {
   }
 
   func close() {
+    aiCopy.cancel()
     generation += 1
     pollTask?.cancel()
     pollTask = nil
@@ -94,6 +97,7 @@ final class InspectorModel {
   func documentChanged(url: URL, committed: Bool = false) {
     let next = SiteControlTarget(tabID: target.tabID, profileID: target.profileID, url: url)
     if next != target || committed {
+      aiCopy.cancel()
       generation += 1
       styles.reset()
       details.reset()

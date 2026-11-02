@@ -1,0 +1,33 @@
+## Design Feedback across pages
+
+## Design Feedback: Account
+
+**URL:** https://example.com/account
+
+### 1. Save
+
+**Intent:** Change
+**Selector:** ` #save `
+**Source:** /src/SaveButton.tsx:12
+**Text:** Save changes
+**Feedback:** Increase padding.
+
+### 2. Save
+
+**Intent:** Important
+**Selector:** ` #save `
+**Source:** /src/SaveButton.tsx:12
+**Text:** Save changes
+**Feedback:** Keep keyboard focus visible.
+
+## Design Feedback: Settings
+
+**URL:** https://example.com/settings
+
+### 1. Save
+
+**Intent:** Question
+**Selector:** ` #save `
+**Source:** /src/SaveButton.tsx:12
+**Text:** Save changes
+**Feedback:** Should this be primary?

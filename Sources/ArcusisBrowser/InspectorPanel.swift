@@ -21,6 +21,13 @@ struct InspectorPanel: View {
         )
         .font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
         InspectorIconButton(
+          InspectorL10n.string(model.tab == .notes ? "Back to element" : "Notes"),
+          symbol: model.tab == .notes ? "arrow.left" : "square.and.pencil"
+        ) {
+          model.setPanelMode(.element)
+          model.tab = model.tab == .notes ? .design : .notes
+        }
+        InspectorIconButton(
           InspectorL10n.string("Pick an element"), symbol: "cursorarrow.rays", action: model.pick)
         InspectorIconButton(
           InspectorL10n.string("Close Inspector"), symbol: "xmark", action: model.close)
@@ -38,6 +45,8 @@ struct InspectorPanel: View {
       Divider()
       if model.panelMode == .page, let tools = model.pageTools {
         InspectorPageToolsView(inspector: model, model: tools)
+      } else if model.tab == .notes {
+        InspectorNotesView(model: model.aiCopy)
       } else if let selection = model.selection {
         selectionHeader(selection)
         Picker(InspectorL10n.string("Inspector section"), selection: $model.tab) {
@@ -146,7 +155,7 @@ struct InspectorPanel: View {
           .frame(maxWidth: .infinity, alignment: .leading).padding(12)
       }
       Divider()
-      if model.panelMode == .element {
+      if model.panelMode == .element, model.tab != .notes {
         HStack(spacing: 5) {
           Image(systemName: "arrow.up.arrow.down").font(.system(size: 9))
           InspectorL10n.text("Parent / child").font(.system(size: 10))
@@ -164,7 +173,7 @@ struct InspectorPanel: View {
   }
 
   private var moveAction: ((MoveCommandDirection) -> Void)? {
-    guard model.panelMode == .element else { return nil }
+    guard model.panelMode == .element, model.tab != .notes else { return nil }
     return { direction in
       switch direction {
       case .up: model.navigate("up")
@@ -201,6 +210,7 @@ struct InspectorPanel: View {
           Task { await model.styles.saveScreenshot() }
         }.disabled(!selection.locked)
       }.environment(\.layoutDirection, .leftToRight)
+      InspectorAICopyControls(model: model.aiCopy)
       HStack(spacing: 4) {
         if selection.ancestors.count > 3 {
           Menu {

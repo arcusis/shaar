@@ -159,12 +159,19 @@ private final class OffscreenSidebarMount {
     #expect(!window.isVisible && !window.isKeyWindow)
   }
 
-  func drop(_ item: SidebarTransfer, on receiver: NSView, hold: Duration = .zero) async throws
+  func drop(
+    _ item: SidebarTransfer, on receiver: NSView, hold: Duration = .zero,
+    busyMainActor: Bool = false
+  ) async throws
     -> Bool
   {
     let info = try OffscreenSidebarDrag(window: window, item: item)
     info.location = receiver.convert(
       NSPoint(x: receiver.bounds.midX, y: receiver.bounds.midY), to: nil)
+    if busyMainActor {
+      // Queue work ahead of the hover task, as other native suites do in a full test run.
+      Task { @MainActor in Self.blockMainActor() }
+    }
     let operation = receiver.draggingEntered(info)
     lastOperation = operation
     if hold > .zero {
@@ -178,6 +185,10 @@ private final class OffscreenSidebarMount {
     receiver.draggingExited(info)
     #expect(!window.isVisible && !window.isKeyWindow)
     return accepted
+  }
+
+  private static func blockMainActor() {
+    Thread.sleep(forTimeInterval: 1)
   }
 
   func capture(_ name: String, root: URL) throws {
@@ -209,8 +220,10 @@ extension SidebarDnDProbeTests {
     #expect(store.session.selectedSpace.tabs.first { $0.id == second }?.isPinned == false)
   }
 
-  @Test(arguments: [false, true])
-  func nativeHeldDropCreatesFolderAndRefusesStackFavoriteDrop(existingFavorite: Bool) async throws {
+  @Test(arguments: [false, true], [false, true])
+  func nativeHeldDropCreatesFolderAndRefusesStackFavoriteDrop(
+    existingFavorite: Bool, busyMainActor: Bool
+  ) async throws {
     let store = BrowserStore()
     let space = store.session.selectedSpaceID
     if existingFavorite {
@@ -231,11 +244,12 @@ extension SidebarDnDProbeTests {
     // explicitly, as AppKit does throughout a real mouse or trackpad hold.
     let transfer = SidebarTransfer.tab(
       sessionID: store.dragSessionID, sourceSpaceID: space, tabID: second)
-    // The sidebar arms folder creation after a 650 ms hover (BrowserSidebar.scheduleFolderHover).
-    // Hold well past it: under parallel CI load the main actor can run that timer late.
-    #expect(try await mounted.drop(transfer, on: target, hold: .milliseconds(1500)))
+    #expect(
+      try await mounted.drop(
+        transfer, on: target, hold: .milliseconds(750), busyMainActor: busyMainActor))
     let folder = try #require(store.session.selectedSpace.folders.first)
     #expect(store.session.selectedSpace.tabs.allSatisfy { $0.folderID == folder.id })
+    #expect(store.session.selectedSpace.splits.isEmpty)
     #expect(store.renameFolder(folder.id, in: space, name: "Projects"))
     store.splitTabs(first, second)
     let split = try #require(store.session.selectedSpace.splits.first)

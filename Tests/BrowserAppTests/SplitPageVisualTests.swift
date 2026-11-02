@@ -37,7 +37,7 @@ final class SplitPageVisualTests: XCTestCase {
         split: split, focusedID: store.session.selectedSpace.selectedTabID,
         onFocus: { _ in }, onWeightsChange: { _, _ in }
       ) { id in
-        SplitPaneToolbar(store: store, engine: nil, tabID: id)
+        SplitPaneToolbar(store: store, tabID: id)
       } pane: { id in
         let index = ids.firstIndex(of: id) ?? 0
         ZStack {

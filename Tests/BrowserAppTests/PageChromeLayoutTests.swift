@@ -16,6 +16,44 @@ final class PageChromeLayoutTests: XCTestCase {
     XCTAssertEqual(BrowserChromeLayout.pageCardRadius, 10)
   }
 
+  func testSplitWindowHasOneAddressAndNavigationGroupInLightAndDark() async throws {
+    var session = BrowserSession.fresh()
+    let first = try XCTUnwrap(session.open(URL(string: "https://first.example")!))
+    let second = try XCTUnwrap(session.open(URL(string: "https://second.example")!))
+    XCTAssertTrue(session.splitTabs(first, second, in: session.selectedSpaceID))
+    let stores = [("single page", BrowserStore()), ("split", BrowserStore(session: session))]
+    let identifiers = [
+      "browser.chrome.address", "browser.chrome.back", "browser.chrome.forward",
+      "browser.chrome.reload",
+    ]
+
+    for (layout, store) in stores {
+      for (scheme, appearance) in [
+        (ColorScheme.light, NSAppearance.Name.aqua),
+        (.dark, .darkAqua),
+      ] {
+        let host = NSHostingView(
+          rootView: BrowserWindow(store: store).environment(\.colorScheme, scheme))
+        let window = NSWindow(
+          contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
+          styleMask: .borderless, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.appearance = NSAppearance(named: appearance)
+        window.contentView = host
+        defer { window.close() }
+
+        host.layoutSubtreeIfNeeded()
+        try await Task.sleep(for: .milliseconds(100))
+        let counts = accessibilityIdentifierCounts(in: host)
+        for identifier in identifiers {
+          XCTAssertEqual(
+            counts[identifier, default: 0], 1,
+            "Expected one \(identifier) control in \(layout) \(scheme) mode")
+        }
+      }
+    }
+  }
+
   func testCapturesActualBrowserWindowChromeAcrossAccessibilityModes() async throws {
     let root = URL(
       fileURLWithPath: "/tmp/browser-page-chrome-corrected-captures", isDirectory: true)
@@ -100,5 +138,28 @@ final class PageChromeLayoutTests: XCTestCase {
     XCTAssertEqual(rendered.pixelsWide, Int(host.bounds.width))
     XCTAssertEqual(rendered.pixelsHigh, Int(host.bounds.height))
     return (rendered.pixelsWide, rendered.pixelsHigh)
+  }
+
+  private func accessibilityIdentifierCounts(in root: NSObject) -> [String: Int] {
+    var counts: [String: Int] = [:]
+    var visited = Set<ObjectIdentifier>()
+    var pending: [NSObject] = [root]
+    let identifierSelector = NSSelectorFromString("accessibilityIdentifier")
+    let childrenSelector = NSSelectorFromString("accessibilityChildren")
+
+    while let element = pending.popLast() {
+      guard visited.insert(ObjectIdentifier(element)).inserted else { continue }
+      if element.responds(to: identifierSelector),
+        let identifier = element.perform(identifierSelector)?.takeUnretainedValue() as? String
+      {
+        counts[identifier, default: 0] += 1
+      }
+      if element.responds(to: childrenSelector),
+        let children = element.perform(childrenSelector)?.takeUnretainedValue() as? [NSObject]
+      {
+        pending.append(contentsOf: children)
+      }
+    }
+    return counts
   }
 }

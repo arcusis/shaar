@@ -15,6 +15,14 @@ runs:
   steps:
     - name: Install uv
       uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
+      with:
+        enable-cache: true
+        cache-dependency-glob: scripts/*requirements.txt
+    - name: Restore Python environment for locked requirements
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        path: .venv
+        key: python-${{ runner.os }}-${{ runner.arch }}-3.13-${{ inputs.mode == 'codeql' && 'stdlib' || hashFiles('scripts/*requirements.txt') }}
     - name: Configure Python and report toolchain
       id: toolchain
       shell: bash
@@ -22,34 +30,44 @@ runs:
         CI_MODE: ${{ inputs.mode }}
       run: |
         uv python install 3.13
-        uv venv --python 3.13 .venv
+        if [[ ! -x .venv/bin/python ]]; then uv venv --python 3.13 .venv; fi
         requirements=(scripts/release-requirements.txt)
         if [[ "$CI_MODE" == shipping ]]; then requirements+=(scripts/sbom-requirements.txt); fi
-        uv pip sync --python .venv/bin/python --require-hashes --only-binary=:all: "${requirements[@]}"
+        if [[ "$CI_MODE" != codeql ]]; then
+          uv pip sync --python .venv/bin/python --require-hashes --only-binary=:all: "${requirements[@]}"
+        fi
         echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
         echo "PYTHON=$PWD/.venv/bin/python" >> "$GITHUB_ENV"
-        xcodebuild -version
+        if [[ "$RUNNER_OS" == macOS ]]; then xcodebuild -version; fi
         swift --version
         .venv/bin/python --version
-        toolchain=$( { xcodebuild -version; swift --version; } | shasum -a 256 | cut -d ' ' -f 1)
+        toolchain=$( { if [[ "$RUNNER_OS" == macOS ]]; then xcodebuild -version; fi; swift --version; } | shasum -a 256 | cut -d ' ' -f 1)
         echo "identity=$toolchain" >> "$GITHUB_OUTPUT"
         echo "CI_TOOLCHAIN_ID=$toolchain" >> "$GITHUB_ENV"
         {
           echo '### Toolchain'
           echo '```text'
-          xcodebuild -version
+          if [[ "$RUNNER_OS" == macOS ]]; then xcodebuild -version; fi
           swift --version
           .venv/bin/python --version
           echo '```'
         } >> "$GITHUB_STEP_SUMMARY"
     - name: Cache SwiftPM products for this source and mode
-      if: inputs.mode != 'fast'
+      if: inputs.mode != 'fast' && inputs.mode != 'codeql'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
       with:
         path: ${{ inputs.products }}
         key: swiftpm-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.identity }}-${{ inputs.mode }}-${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**') }}
         restore-keys: |
           swiftpm-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.identity }}-${{ inputs.mode }}-
+    - name: Cache SwiftPM dependencies without compiled app objects
+      if: inputs.mode != 'fast'
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        path: |
+          ~/Library/Caches/org.swift.swiftpm
+          ~/.cache/org.swift.swiftpm
+        key: swift-dependencies-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.identity }}-${{ hashFiles('Package.swift', 'Package.resolved') }}
     - name: Cache pinned engine archive independently
       if: inputs.mode == 'verification' || inputs.mode == 'shipping'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9

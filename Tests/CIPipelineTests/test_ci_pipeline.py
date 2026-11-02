@@ -40,9 +40,36 @@ PINS = load_script("ci-checks")
 PYTHON_TESTS = load_script("test-python")
 SBOM = load_script("ci-sbom")
 SWIFT_REPORTS = load_script("ci-swift-reports")
+EXTRACTION = load_script("check-codeql-extraction")
+CODEQL_BUILD = load_script("codeql-build")
 
 
 class PipelineGateTests(unittest.TestCase):
+    def test_known_non_native_diffs_and_unknown_changes_select_required_coverage(self):
+        for paths in (["Notebook/Note.md"], ["README.md", "CONTRIBUTING.md"]):
+            self.assertEqual(PLAN.select_stages(paths, "pull_request"), (False, False, False))
+        for paths in (["website/src/Page.svelte"], ["website/package.json", "Notebook/Note.md"]):
+            self.assertEqual(PLAN.select_stages(paths, "pull_request"), (False, True, False))
+            self.assertEqual(PLAN.select_stages(paths, "merge_group"), (False, True, False))
+        for paths in (None, [], ["unclassified-input"]):
+            self.assertTrue(PLAN.select_stages(paths, "pull_request")[0])
+        self.assertEqual(PLAN.select_stages(["Sources/App.swift"], "pull_request"), (True, False, True))
+        self.assertEqual(PLAN.select_stages(["scripts/tool.py"], "pull_request"), (True, False, False))
+        for paths in (["scripts/codeql-build.py"], [".github/workflows/ci-codeql.yml"],
+                      [".github/actions/ci-setup/action.yml"]):
+            self.assertFalse(PLAN.select_stages(paths, "pull_request")[2])
+        for event in ("push", "schedule", "workflow_dispatch"):
+            self.assertEqual(PLAN.select_stages(["Notebook/Note.md"], event), (True, True, True))
+        self.assertTrue(PLAN.select_stages(["scripts/tool.py"], "merge_group")[2])
+
+    def test_website_gate_rejects_unexpected_skip_or_missing_result(self):
+        needs = self.results(native="skipped")
+        self.assertTrue(GATE.gate_errors(needs, False, False, True))
+        needs["website"] = {"result": "skipped"}
+        self.assertTrue(GATE.gate_errors(needs, False, False, True))
+        needs["website"] = {"result": "success"}
+        self.assertEqual(GATE.gate_errors(needs, False, False, True), [])
+
     def test_new_branch_push_uses_immutable_production_merge_base(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -75,7 +102,7 @@ class PipelineGateTests(unittest.TestCase):
                 command.return_value.stdout = b"README.md\0"
                 PLAN.main()
             baseline.assert_not_called()
-            self.assertIn("full=false", (root / "output").read_text())
+            self.assertIn("full=true", (root / "output").read_text())
             self.assertIn("base=" + "a" * 40, (root / "output").read_text())
 
     def test_probe_count_normalizes_dispatch_strings_before_typed_workflow_call(self):
@@ -390,6 +417,171 @@ class ProbeSoakTests(unittest.TestCase):
             self.assertEqual(suite.attrib["tests"], "3")
             self.assertEqual(len(suite.findall("testcase/failure")), 1)
             self.assertEqual(len(suite.findall("testcase/skipped")), 2)
+
+
+class SwiftExtractionTests(unittest.TestCase):
+    def test_missing_source_fails_even_when_other_modules_have_more_files(self):
+        root = Path("/checkout")
+        report = {"#select": {"tuples": [[{"label": "/checkout/Sources/Core/One.swift"}, "extracted"],
+                                          [{"label": "One.swift", "url": {"uri": "file:///checkout/Sources/App/Two.swift"}}, "extracted"]]}}
+        expected = {"Sources/Core/One.swift", "Sources/App/Two.swift", "Sources/App/Missing.swift"}
+        self.assertEqual(EXTRACTION.missing_sources(report, expected, root), ["Sources/App/Missing.swift"])
+        self.assertEqual(EXTRACTION.missing_sources(report, expected - {"Sources/App/Missing.swift"}, root), [])
+        with self.assertRaises(ValueError):
+            EXTRACTION.missing_sources(report, set(), root)
+
+
+class SwiftCompilerPlanTests(unittest.TestCase):
+    def test_analysis_target_matches_shipping_arm64_on_every_runner(self):
+        CODEQL_BUILD.validate_compilation([
+            "swiftc", "-whole-module-optimization", "-target", "arm64-apple-macosx26.0"])
+        for arguments in (["swiftc", "-whole-module-optimization", "-target", "x86_64-apple-macosx26.0"],
+                          ["swiftc", "-target", "arm64-apple-macosx26.0"],
+                          ["swiftc", "-whole-module-optimization"]):
+            with self.assertRaisesRegex(ValueError, "arm64"):
+                CODEQL_BUILD.validate_compilation(arguments)
+
+    def test_native_graph_materializes_response_files_and_framework_links_without_compiling(self):
+        from swift_build_plan import manifest_commands, prepare_inputs
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            scratch = root / "build/plan"
+            scratch.mkdir(parents=True)
+            framework = root / "artifacts/Example.framework"
+            framework.mkdir(parents=True)
+            (framework / "Binary").write_bytes(b"authored binary")
+            (framework / "Alias").symlink_to("Binary")
+            response = scratch / "Core.build/sources"
+            source = root / "Sources/With Space.swift"
+            copied = scratch / "Example.framework"
+            manifest = scratch / "debug.yaml"
+            manifest.write_text("commands:\n  \"source-list\":\n    tool: write-auxiliary-file\n    inputs: "
+                                + json.dumps(["<sources-file-list>", str(source)]) + "\n    outputs: "
+                                + json.dumps([str(response)]) + "\n  \"framework\":\n    tool: copy-tool\n    inputs: "
+                                + json.dumps([str(framework)]) + "\n    outputs: " + json.dumps([str(copied)]) + "\n")
+            prepare_inputs(manifest_commands(manifest), root, scratch)
+            self.assertEqual(CODEQL_BUILD.command_sources(["@" + str(response)], root), {"Sources/With Space.swift"})
+            self.assertEqual((copied / "Binary").read_bytes(), b"authored binary")
+            self.assertEqual((copied / "Alias").readlink(), Path("Binary"))
+            self.assertEqual(list(scratch.rglob("*.o")), [])
+
+    def test_native_graph_refuses_outputs_outside_scratch_and_dependency_cycles(self):
+        from swift_build_plan import ordered_modules, prepare_inputs
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            with self.assertRaisesRegex(ValueError, "escaped"):
+                prepare_inputs([{"outputs": [str(root / "outside")]}], root, root / "build/plan")
+        first = ["swiftc", "-module-name", "First", "-emit-module-path", "First.swiftmodule"]
+        second = ["swiftc", "-module-name", "Second", "-emit-module-path", "Second.swiftmodule"]
+        nodes = [{"args": first, "inputs": ["Second.swiftmodule"]},
+                 {"args": second, "inputs": ["First.swiftmodule"]}]
+        with self.assertRaisesRegex(ValueError, "cycle"):
+            ordered_modules(nodes, [first, second])
+        nodes[1]["inputs"] = []
+        self.assertEqual(ordered_modules(nodes, [first, second]), [second, first])
+
+    def test_full_extraction_inventory_includes_manifest_and_compilation_plugins(self):
+        from ci_support import swift_source_files
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            names = {"Sources/App/A.swift", "Plugins/CompileLocalizations/plugin.swift", "Package.swift"}
+            for name in names:
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("// authored fixture")
+            self.assertEqual(swift_source_files(root, "full", tracked=False, include_build_inputs=True), names)
+            self.assertEqual(swift_source_files(root, "shipping", tracked=False), {"Sources/App/A.swift"})
+
+    def test_replay_inventory_detects_new_untracked_swift_file_without_running_git(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "Sources/App/A.swift"
+            source.parent.mkdir(parents=True)
+            source.write_text("struct A {}")
+            with patch("ci_support.subprocess.check_output", return_value=b"Sources/App/A.swift\0"):
+                before = CODEQL_BUILD.source_hashes(root)
+            source.with_name("B.swift").write_text("struct B {}")
+            with patch("ci_support.subprocess.check_output") as git_command:
+                after = CODEQL_BUILD.source_hashes(root, tracked=False)
+            git_command.assert_not_called()
+            self.assertNotEqual(before, after)
+            self.assertEqual(set(after), {"Sources/App/A.swift", "Sources/App/B.swift"})
+
+    def test_mutated_compiler_binary_rejects_replay_before_compiling(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            compiler = directory / "swiftc"
+            compiler.write_bytes(b"changed compiler")
+            plan = directory / "plan.json"
+            plan.write_text(json.dumps({"scope": "full", "compiler": str(compiler), "compiler_sha256": "old",
+                                        "revision": "a", "toolchain": "one", "sources": {}}))
+            with (patch.object(CODEQL_BUILD, "PLAN", plan),
+                  patch.object(CODEQL_BUILD, "identity", return_value={"revision": "a", "toolchain": "one"}),
+                  patch.object(CODEQL_BUILD, "source_hashes", return_value={}),
+                  self.assertRaisesRegex(ValueError, "compiler changed")):
+                CODEQL_BUILD.replay()
+
+    def test_shipping_scope_retains_support_warmup_and_excludes_verification_module(self):
+        from ci_support import swift_source_files
+        names = b"Sources/App/A.swift\0Sources/ShaarVerification/Probe.swift\0Tests/TestSupport/Seed.swift\0"
+        with patch("ci_support.subprocess.check_output", return_value=names):
+            self.assertEqual(len(swift_source_files(ROOT)), 3)
+            self.assertEqual(swift_source_files(ROOT, "shipping"), {"Sources/App/A.swift", "Tests/TestSupport/Seed.swift"})
+            with self.assertRaises(ValueError):
+                swift_source_files(ROOT, "unknown")
+
+    def test_scope_mismatch_rejects_plan_before_any_compiler_runs(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            plan = Path(temporary) / "plan.json"
+            plan.write_text(json.dumps({"scope": "full"}))
+            with patch.object(CODEQL_BUILD, "PLAN", plan), self.assertRaisesRegex(ValueError, "scope changed"):
+                CODEQL_BUILD.replay("shipping")
+
+    def test_support_module_is_retained_but_test_targets_are_outside_default_build_inventory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.assertEqual(CODEQL_BUILD.command_sources([
+                "Tests/TestSupport/SeededGenerator.swift", "Tests/BrowserCoreTests/Cases.swift",
+            ], root), {"Tests/TestSupport/SeededGenerator.swift"})
+
+    def test_plan_keeps_argument_arrays_and_rejects_missing_or_duplicate_sources(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "Sources/Core/With Space.swift"
+            source.parent.mkdir(parents=True)
+            source.write_text("struct Example {}")
+            response = root / "build/sources"
+            response.parent.mkdir()
+            response.write_text(json.dumps(str(source)))
+            compiler = Path("/toolchain/swiftc")
+            line = f"{compiler} -module-name Core -whole-module-optimization -target arm64-apple-macosx26.0 @{response}"
+            expected = {"Sources/Core/With Space.swift"}
+            commands = CODEQL_BUILD.compiler_commands(line, root, compiler, expected)
+            self.assertEqual(commands[0][-1], "@" + str(response))
+            with self.assertRaisesRegex(ValueError, "omitted"):
+                CODEQL_BUILD.compiler_commands(line, root, compiler, expected | {"Sources/Other.swift"})
+            with self.assertRaisesRegex(ValueError, "Duplicate"):
+                CODEQL_BUILD.compiler_commands(line + "\n" + line, root, compiler, expected)
+
+    def test_response_file_cannot_escape_owned_build_directory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            response = root / "outside"
+            response.write_text("Sources/Core.swift")
+            with self.assertRaisesRegex(ValueError, "response file"):
+                CODEQL_BUILD.command_sources(["@" + str(response)], root)
+
+    def test_changed_source_or_toolchain_rejects_replay_before_compiling(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            plan = Path(temporary) / "plan.json"
+            plan.write_text(json.dumps({"scope": "full", "revision": "a", "toolchain": "one", "sources": {"Sources/A.swift": "old"}}))
+            with (patch.object(CODEQL_BUILD, "PLAN", plan),
+                  patch.object(CODEQL_BUILD, "identity", return_value={"revision": "a", "toolchain": "one"}),
+                  patch.object(CODEQL_BUILD, "source_hashes", return_value={"Sources/A.swift": "new"}),
+                  patch.object(CODEQL_BUILD.subprocess, "check_output") as compile_command,
+                  self.assertRaisesRegex(ValueError, "source content changed")):
+                CODEQL_BUILD.replay()
+            compile_command.assert_not_called()
 
 
 if __name__ == "__main__":

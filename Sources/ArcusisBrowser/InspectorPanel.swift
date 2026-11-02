@@ -28,7 +28,9 @@ struct InspectorPanel: View {
           model.tab = model.tab == .notes ? .design : .notes
         }
         InspectorIconButton(
-          InspectorL10n.string("Pick an element"), symbol: "cursorarrow.rays", action: model.pick)
+          InspectorL10n.string("Pick an element"), symbol: "cursorarrow.rays"
+        ) { model.pick() }
+
         InspectorIconButton(
           InspectorL10n.string("Close Inspector"), symbol: "xmark", action: model.close)
       }

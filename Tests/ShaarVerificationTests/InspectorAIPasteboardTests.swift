@@ -30,7 +30,7 @@ import Testing
     #expect(!InspectorAICopyProbe.isMaskedPixel(decoded, x: 1, y: 0))
     #expect(!InspectorAICopyProbe.isMaskedPixel(decoded, x: -1, y: 0))
     let receipt = try InspectorAICopyProbe.pasteboardReceipt(board)
-    #expect(receipt["items"] as? Int == 2 && receipt["png"] as? Bool == true)
+    #expect(receipt["items"] as? Int == 1 && receipt["png"] as? Bool == true)
     #expect(receipt["width"] as? Int == 20 && receipt["height"] as? Int == 12)
     try InspectorAICopyModel.write("Notes only", png: nil, to: board)
     #expect(throws: InspectorFailure.self) { _ = try InspectorAICopyProbe.pasteboardReceipt(board) }

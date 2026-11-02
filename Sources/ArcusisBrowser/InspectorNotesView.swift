@@ -9,82 +9,93 @@ struct InspectorNotesView: View {
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 12) {
-        HStack {
-          Text("Notes · \(model.notes.count)/50").font(.system(size: 12, weight: .semibold))
-          Spacer()
-          Toggle("Detailed", isOn: $model.detailed).toggleStyle(.checkbox).fixedSize()
-        }
-        Text(
-          "Notes stay in this tab across page navigation. Form controls are omitted from copied context."
-        )
-        .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-        Picker("Intent", selection: $model.intent) {
-          ForEach(InspectorAIFormatter.Intent.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-        }.pickerStyle(.segmented).labelsHidden()
-        TextEditor(text: $model.feedback).font(.system(size: 11)).frame(height: 80)
-          .border(.secondary.opacity(0.2)).accessibilityLabel("Feedback for selected element")
-          .overlay(alignment: .topLeading) {
-            if model.feedback.isEmpty {
-              Text("Describe a change, question or important detail…")
-                .font(.system(size: 11)).foregroundStyle(.tertiary).padding(5)
-                .allowsHitTesting(false).accessibilityHidden(true)
-            }
+        VStack(alignment: .leading, spacing: 8) {
+          Text("Add feedback").font(.system(size: 11, weight: .semibold))
+          if !model.canCopy {
+            Text("Lock an element to add a note.").font(.system(size: 11)).foregroundStyle(
+              .secondary)
           }
-        Button("Add note for selected element") { Task { await model.addNote() } }
-          .disabled(
-            !model.canCopy || model.feedback.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-              || model.notes.count >= 50)
+          TextEditor(text: $model.feedback).font(.system(size: 11)).frame(height: 76)
+            .padding(4).background(
+              Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 5)
+            )
+            .overlay(
+              RoundedRectangle(cornerRadius: 5).strokeBorder(.primary.opacity(0.13), lineWidth: 0.5)
+            )
+            .accessibilityLabel("Feedback for selected element")
+            .overlay(alignment: .topLeading) {
+              if model.feedback.isEmpty {
+                Text("Describe feedback…").font(.system(size: 11)).foregroundStyle(.tertiary)
+                  .padding(8)
+                  .allowsHitTesting(false).accessibilityHidden(true)
+              }
+            }
+          HStack(spacing: 8) {
+            Picker("Intent", selection: $model.intent) {
+              ForEach(InspectorAIFormatter.Intent.allCases, id: \.self) {
+                Text($0.rawValue).tag($0)
+              }
+            }.pickerStyle(.segmented).labelsHidden()
+            Button("Add note") { Task { await model.addNote() } }
+              .disabled(
+                !model.canCopy
+                  || model.feedback.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                  || model.notes.count >= 50)
+          }
+        }
         Divider()
-        HStack {
+        HStack(spacing: 7) {
+          Text("Notes").font(.system(size: 11, weight: .semibold))
+          Text("\(model.notes.count)/50").font(.system(size: 10, design: .monospaced))
+            .foregroundStyle(.tertiary)
+          Spacer(minLength: 0)
           Button("Copy all for AI") { model.copyNotes() }.disabled(
             model.notes.isEmpty || model.busy)
-          Spacer()
-          Button("Clear") { model.clear() }.disabled(model.notes.isEmpty || model.busy)
+          InspectorIconButton("Clear notes", symbol: "trash") { model.clear() }.disabled(
+            model.notes.isEmpty || model.busy)
         }
         if !model.clearedNotes.isEmpty {
-          Button("Undo clear (\(model.clearedNotes.count))") { model.undoClear() }
+          Button("Undo clear (\(model.clearedNotes.count))", systemImage: "arrow.uturn.backward") {
+            model.undoClear()
+          }
         }
         ForEach(model.notes) { note in
-          VStack(alignment: .leading, spacing: 5) {
-            HStack {
-              Text(note.intent.rawValue).fontWeight(.semibold)
+          VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 7) {
+              Text(note.intent.rawValue).font(.system(size: 9, weight: .medium))
+                .padding(.horizontal, 5).padding(.vertical, 3)
+                .background(.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 3))
               Text(
                 note.context.accessibleName.isEmpty ? note.context.tag : note.context.accessibleName
-              ).lineLimit(1)
-              Spacer()
-              InspectorIconButton("Delete note", symbol: "trash") { model.delete(note.id) }
+              )
+              .font(.system(size: 11, weight: .medium)).lineLimit(1).truncationMode(.middle)
+              Spacer(minLength: 0)
+              InspectorIconButton("Delete note", symbol: "xmark") { model.delete(note.id) }
             }
-            Text(InspectorAIFormatter.url(note.context.url)).font(
-              .system(size: 10, design: .monospaced)
-            ).lineLimit(1).foregroundStyle(.secondary)
-            Text(note.feedback).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+            Text(note.feedback).font(.system(size: 11)).textSelection(.enabled)
+              .fixedSize(horizontal: false, vertical: true)
+            Text(note.context.selector).font(.system(size: 10, design: .monospaced))
+              .foregroundStyle(.secondary)
+              .lineLimit(1).truncationMode(.middle).help(note.context.selector)
+              .environment(\.layoutDirection, .leftToRight)
+            Text(InspectorAIFormatter.url(note.context.url)).font(.system(size: 10))
+              .foregroundStyle(.secondary)
+              .lineLimit(1).truncationMode(.middle).help(InspectorAIFormatter.url(note.context.url))
+              .environment(\.layoutDirection, .leftToRight)
           }.padding(10).frame(maxWidth: .infinity, alignment: .leading)
-            .background(.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 5))
+            .background(.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 5))
+            .overlay(
+              RoundedRectangle(cornerRadius: 5).strokeBorder(.primary.opacity(0.08), lineWidth: 0.5)
+            )
         }
+        Text("Notes stay in this tab across page navigation.")
+          .font(.system(size: 10)).foregroundStyle(.secondary).fixedSize(
+            horizontal: false, vertical: true)
         if model.busy { ProgressView().controlSize(.small) }
-        if let value = model.failure ?? model.status { Text(value).foregroundStyle(.secondary) }
+        if let value = model.status, !value.hasPrefix("Copied ") {
+          Text(value).foregroundStyle(.secondary)
+        }
       }.padding(12).font(.system(size: 11)).controlSize(.small)
     }.scrollBounceBehavior(.basedOnSize)
-  }
-}
-
-struct InspectorAICopyControls: View {
-  @Bindable var model: InspectorAICopyModel
-  var body: some View {
-    VStack(alignment: .leading, spacing: 6) {
-      HStack {
-        Button {
-          Task { await model.copyElement() }
-        } label: {
-          Label(model.busy ? "Preparing…" : "Copy for AI", systemImage: "doc.on.clipboard")
-        }.disabled(!model.canCopy).help("Copy context and element PNG (Command-Shift-C)")
-        Spacer()
-        Toggle("Detailed", isOn: $model.detailed).toggleStyle(.checkbox).fixedSize()
-      }.controlSize(.small).font(.system(size: 11))
-      if let message = model.failure ?? model.status {
-        Text(message).font(.system(size: 10)).foregroundStyle(.secondary).fixedSize(
-          horizontal: false, vertical: true)
-      }
-    }
   }
 }

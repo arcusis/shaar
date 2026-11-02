@@ -8,31 +8,31 @@ enum InspectorPageScript {
       globalThis.__shaarInspectorV2?.stop();
       const docs=new Set(),nodes=new Map(),ids=new WeakMap(),documents=new WeakMap(),cleanups=[];
       let fontNodes=[],fontTruncated=false;
-      let nextID=0,revision=0,current=null,locked=false,closed=false,suspended=false,frames=[],packet=null,quads=null,queued=false;
+      let nextID=0,revision=0,current=null,locked=false,closed=false,suspended=false,frames=[],packet=null,quads=null,queued=false,edgeFocus=null;
       const shield=document.createElement('div');
       shield.dataset.shaarInspector='';
       shield.style.cssText='all:initial;position:fixed;inset:0;z-index:2147483647;cursor:crosshair;pointer-events:auto;';
-      const shadow=shield.attachShadow({mode:'closed'}),svg=document.createElementNS('http://www.w3.org/2000/svg','svg'),badge=document.createElement('div');
+      const shadow=shield.attachShadow({mode:'closed'}),svg=document.createElementNS('http://www.w3.org/2000/svg','svg'),emphasis=document.createElementNS('http://www.w3.org/2000/svg','svg'),badge=document.createElement('div');
       svg.style.cssText='position:fixed;inset:0;width:100%;height:100%;pointer-events:none;overflow:hidden;';
+      emphasis.style.cssText=svg.style.cssText;
       badge.style.cssText='all:initial;position:fixed;display:none;background:#202124;color:#fff;border-radius:4px;padding:5px 8px;font:11px ui-monospace,SFMono-Regular,monospace;line-height:16px;pointer-events:none;box-shadow:0 2px 6px #0003;';
-      shadow.append(svg,badge);document.documentElement.append(shield);
+      shadow.append(svg,emphasis,badge);document.documentElement.append(shield);
       const normalize=s=>String(s||'').replace(/[\u200b\u00ad]/g,'').replace(/\s+/g,' ').trim();
       const quoted=s=>JSON.stringify(String(s));
       const escape=CSS.escape.bind(CSS);
       const unique=(doc,selector,node)=>{try{const all=doc.querySelectorAll(selector);return all.length===1&&all[0]===node;}catch{return false;}};
       const seeds=node=>{
-        const result=[escape(node.localName)];
+        const result=[];
         if(node.id)result.push('#'+escape(node.id));
-        for(const attr of ['data-testid','name','aria-label','title','role']){
+        for(const attr of ['data-testid','data-test','data-qa','aria-label','aria-labelledby','title','alt','name','role']){
           const value=node.getAttribute(attr);if(value)result.push('['+attr+'='+escape(value)+']');
         }
-        const classes=[...node.classList].slice(0,8);
-        for(const name of classes){result.push('.'+escape(name));result.push(escape(node.localName)+'.'+escape(name));}
-        for(let a=0;a<classes.length;a++)for(let b=a+1;b<classes.length;b++)result.push('.'+escape(classes[a])+'.'+escape(classes[b]));
         return result;
       };
       const css=node=>{
-        const doc=node.ownerDocument,candidates=seeds(node).filter(s=>unique(doc,s,node));
+        const doc=node.ownerDocument;
+        for(const candidate of seeds(node))if(unique(doc,candidate,node))return candidate;
+        const candidates=[];
         let suffix='',current=node,depth=0;
         while(current&&current.nodeType===1&&depth++<256){
           const siblings=current.parentElement?[...current.parentElement.children].filter(n=>n.localName===current.localName):[current];
@@ -46,6 +46,7 @@ enum InspectorPageScript {
         }
         return candidates.sort((a,b)=>a.length-b.length||a.localeCompare(b))[0]||null;
       };
+      const readableComponent=name=>typeof name==='string'&&name.length>=3&&name.length<=160&&!['Anonymous','Unknown','Component','ForwardRef','Memo'].includes(name)&&/^(?:[A-Z][A-Za-z0-9]*(?:\.[A-Z][A-Za-z0-9]*)*(?:\([A-Za-z0-9_.]+\))?|[a-z]{3,}(?:[-_][a-z]{3,})+)$/.test(name);
       const literal=value=>{
         if(!value.includes("'"))return "'"+value+"'";
         if(!value.includes('"'))return '"'+value+'"';
@@ -109,15 +110,14 @@ enum InspectorPageScript {
       };
       const component=node=>{
         for(let el=node,depth=0;el&&depth++<64;el=el.parentElement){
-          const svelte=globalThis.__shaarInspectorDetails?.componentName?.(el);if(svelte)return {framework:'Svelte',name:String(svelte).slice(0,160),source:el.__svelte_meta?.loc?.file||null};
+          const svelte=globalThis.__shaarInspectorDetails?.componentName?.(el);if(readableComponent(svelte))return {framework:'Svelte',name:svelte,source:el.__svelte_meta?.loc?.file||null};
           const key=Object.keys(el).find(k=>k.startsWith('__reactFiber$')||k.startsWith('__reactInternalInstance$'));
           if(key){for(let fiber=el[key],steps=0;fiber&&steps++<64;fiber=fiber.return){
             const type=fiber.type,componentName=typeof type==='function'?type.displayName||type.name:type?.displayName||type?.render?.displayName||type?.render?.name;
-            if(componentName)return {framework:'React',name:String(componentName),source:fiber._debugSource?.fileName||null};
+            if(readableComponent(componentName))return {framework:'React',name:componentName,source:fiber._debugSource?.fileName||null};
           }}
-          const vue=el.__vueParentComponent;
-          if(vue){const type=vue.type;return {framework:'Vue',name:type?.name||type?.__name||null,source:type?.__file||null};}
-          if(el.__vue__){const options=el.__vue__.$options;return {framework:'Vue',name:options?.name||null,source:options?.__file||null};}
+          for(let vue=el.__vueParentComponent,steps=0;vue&&steps++<64;vue=vue.parent){const type=vue.type,name=type?.name||type?.__name;if(readableComponent(name))return {framework:'Vue',name,source:type?.__file||null};}
+          for(let vue=el.__vue__,steps=0;vue&&steps++<64;vue=vue.$parent){const options=vue.$options;if(readableComponent(options?.name))return {framework:'Vue',name:options.name,source:options.__file||null};}
         }
         return null;
       };
@@ -136,7 +136,7 @@ enum InspectorPageScript {
       const rectQuad=(x,y,w,h)=>[x,y,x+w,y,x+w,y+h,x,y+h];
       const path=quad=>'M'+quad.reduce((s,n,i)=>s+(i?(i%2?' ': ' L'):'')+n,'')+' Z';
       const paint=()=>{
-        if(!attached(current)){svg.replaceChildren();badge.style.display='none';return;}
+        if(!attached(current)){svg.replaceChildren();emphasis.replaceChildren();badge.style.display='none';return;}
         const r=topRect(current),s=current.ownerDocument.defaultView.getComputedStyle(current),num=v=>parseFloat(v)||0;
         const edges=prefix=>['Top','Right','Bottom','Left'].map(side=>num(s[prefix+side+(prefix==='border'?'Width':'')]));
         const b=edges('border'),p=edges('padding'),m=edges('margin'),scale=current.offsetWidth?r.w/current.offsetWidth:1;
@@ -147,6 +147,9 @@ enum InspectorPageScript {
         const layer=(outer,inner,color)=>{const el=document.createElementNS(svg.namespaceURI,'path');el.setAttribute('d',path(outer)+(inner?path(inner):''));el.setAttribute('fill',color);el.setAttribute('fill-rule','evenodd');svg.append(el);};
         layer(model.margin,model.border,'#f6b26b77');layer(model.border,model.padding,'#f8d87288');layer(model.padding,model.content,'#93c47d77');layer(model.content,null,'#6fa8dc55');
         const outline=document.createElementNS(svg.namespaceURI,'path');outline.setAttribute('d',path(model.border));outline.setAttribute('fill','none');outline.setAttribute('stroke','#3985ff');outline.setAttribute('stroke-width','1.5');svg.append(outline);
+        emphasis.setAttribute('viewBox','0 0 '+innerWidth+' '+innerHeight);emphasis.replaceChildren();
+        if(edgeFocus){const outer=model[edgeFocus.region],inner=model[{margin:'border',border:'padding',padding:'content'}[edgeFocus.region]],i=edgeFocus.index*2,j=(i+2)%8;
+          const edge=document.createElementNS(svg.namespaceURI,'path');edge.setAttribute('d',path([outer[i],outer[i+1],outer[j],outer[j+1],inner[j],inner[j+1],inner[i],inner[i+1]]));edge.setAttribute('fill','#3985ff66');edge.setAttribute('stroke','#3985ff');edge.setAttribute('stroke-width','2');emphasis.append(edge);}
         const native=current.getBoundingClientRect();
         badge.textContent=label(current).slice(0,100)+'  '+Math.round(native.width*100)/100+' × '+Math.round(native.height*100)/100;
         badge.style.display='block';badge.style.left=Math.max(4,Math.min(innerWidth-badge.offsetWidth-4,r.x))+'px';
@@ -186,12 +189,12 @@ enum InspectorPageScript {
         const contentSize=axis=>{const i=axis==='width'?1:0,extra=number(p[i])+number(p[i+2])+number(b[i])+number(b[i+2]),used=parseFloat(s[axis]);
           return Math.max(0,Number.isFinite(used)?used-(s.boxSizing==='border-box'?extra:0):r[axis]-extra);};
         return {id:identify(node),revision,locked,tag:node.localName,label:label(node).slice(0,512),component:found?.name||null,
-          css:selector,xpath:pathValue,playwright:locator(node,selector,frames).code,jsPath,frames,ancestors:ancestry,
+          css:selector,xpath:pathValue,playwright:locator(node,selector,frames).code,jsPath,frames,ancestors:ancestry,display:s.display,identifier:node.id?node.id.slice(0,128):null,classNames:[...node.classList].slice(0,8).map(value=>value.slice(0,128)),
           box:{width:r.width,height:r.height,contentWidth:contentSize('width'),contentHeight:contentSize('height'),margin:m,border:b,padding:p},
           typography:{family:s.fontFamily.slice(0,512),size:s.fontSize,weight:s.fontWeight,lineHeight:s.lineHeight,letterSpacing:s.letterSpacing,preview:normalize(node.innerText||node.textContent).slice(0,200)},
           colors,foreground:color(s.color),backdrop:{css:'composited background',rgba:backdrop},contrastLimit:limit};
       };
-      const choose=(node,lock=locked)=>{if(!attached(node)||node===shield)return;nodes.clear();current=node;locked=lock;frames=context(node);revision++;packet=null;quads=null;shield.style.pointerEvents=locked||suspended?'none':'auto';observer.disconnect();observer.observe(document.documentElement);observer.observe(node);paint();};
+      const choose=(node,lock=locked)=>{if(!attached(node)||node===shield)return;nodes.clear();current=node;edgeFocus=null;locked=lock;frames=context(node);revision++;packet=null;quads=null;shield.style.pointerEvents=locked||suspended?'none':'auto';observer.disconnect();observer.observe(document.documentElement);observer.observe(node);paint();};
       const hit=(win,x,y,depth=0)=>{const node=win.document.elementFromPoint(x,y);if(!node)return null;
         if(node.localName==='iframe'&&depth<8){try{const frame=node.getBoundingClientRect(),child=node.contentWindow;void child.document;
           return hit(child,(x-frame.left)/(frame.width/(node.offsetWidth||frame.width||1))-node.clientLeft,(y-frame.top)/(frame.height/(node.offsetHeight||frame.height||1))-node.clientTop,depth+1)||node;}catch{}}
@@ -235,9 +238,10 @@ enum InspectorPageScript {
         if(current&&(!packet||Date.now()-lastCollection>1000)){const next=collect();if(packet&&JSON.stringify(packet)!==JSON.stringify(next)){revision++;next.revision=revision;}packet=next;lastCollection=Date.now();}
         return {closed,revision,selection:packet};},
         copyMetadata:()=>current?{role:role(current),component:component(current)}:null,rectFor:topRect,
+        highlightEdge:(region,index)=>{edgeFocus=['margin','border','padding'].includes(region)&&Number.isInteger(index)&&index>=0&&index<4?{region,index}:null;paint();return true;},edgeHighlight:()=>({active:edgeFocus,painted:emphasis.childElementCount===1}),
         element:()=>current,onStop:callback=>cleanups.push(callback),addOverlay:node=>shadow.append(node),visible:value=>{shield.style.visibility=value&&!suspended?'visible':'hidden';},fontElements,fontScanTruncated:()=>fontTruncated,overlay:()=>({painted:svg.childElementCount===5,badge:badge.textContent,colors:[...svg.children].slice(0,4).map(n=>n.getAttribute('fill'))}),choose:id=>{const node=nodes.get(id);if(attached(node))choose(node,true);return true;},
-        suspend:value=>{suspended=!!value;shield.style.visibility=suspended?'hidden':'visible';shield.style.pointerEvents=suspended||locked?'none':'auto';return true;},
-        pick:()=>{suspended=false;shield.style.visibility='visible';locked=false;packet=null;revision++;shield.style.pointerEvents='auto';paint();return true;},navigate,
+        suspend:value=>{suspended=!!value;if(suspended){edgeFocus=null;paint();}shield.style.visibility=suspended?'hidden':'visible';shield.style.pointerEvents=suspended||locked?'none':'auto';return true;},
+        pick:()=>{suspended=false;edgeFocus=null;shield.style.visibility='visible';locked=false;packet=null;revision++;shield.style.pointerEvents='auto';paint();return true;},navigate,
         quads:(id,rev,model)=>{if(id===ids.get(current)&&rev===revision){quads=model;paint();}return true;},stop};
       return true;
     })()

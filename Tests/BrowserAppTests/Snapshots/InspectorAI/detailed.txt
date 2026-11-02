@@ -14,11 +14,6 @@ Text content:
 Save changes
 ```
 
-Nearby context:
-```
-main: Save changes Cancel
-```
-
 Computed styles:
 ```css
 display: inline-block;
@@ -36,11 +31,6 @@ Full DOM path: ` html > body > main > button:nth-of-type(1) `
 Bounds: x=20, y=40, width=180, height=48
 
 Classes: primary
-
-Nearby elements:
-```
-main: Save changes Cancel
-```
 
 Full computed styles:
 ```css

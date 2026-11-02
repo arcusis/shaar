@@ -1,4 +1,5 @@
 Attached browser context from https://example.com/account
+Screenshot: /Users/developer/Library/Caches/Shaar/Inspector/123-button.png
 
 Selected element:
 - Tag: button
@@ -12,11 +13,6 @@ Selected element:
 Text content:
 ```
 Save changes
-```
-
-Nearby context:
-```
-main: Save changes Cancel
 ```
 
 Computed styles:

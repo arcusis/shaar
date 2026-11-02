@@ -10,6 +10,7 @@ import Testing
 @testable import ArcusisBrowser
 
 @Suite @MainActor struct InspectorPanelTests {
+  init() { _ = NSApplication.shared }
   private var target: SiteControlTarget {
     .init(tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/inspect")!)
   }

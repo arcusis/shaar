@@ -20,7 +20,7 @@ final class InspectorModel {
   var colorFormat = InspectorColor.Format.hex
   enum Tab: String, CaseIterable {
     case design = "Design"
-    case styles = "CSS"
+    case styles = "Code"
     case component = "Component"
     case accessibility = "A11y"
     case assets = "Assets"
@@ -33,6 +33,7 @@ final class InspectorModel {
   private(set) var panelMode = PanelMode.element
   private(set) var pageTools: InspectorPageToolsModel?
   var tab = Tab.design
+  let presentation = InspectorPresentation()
   @ObservationIgnored lazy var styles = InspectorStylesModel(inspector: self)
   @ObservationIgnored lazy var details = InspectorDetailsModel(inspector: self)
   @ObservationIgnored lazy var aiCopy = InspectorAICopyModel(inspector: self)
@@ -71,6 +72,7 @@ final class InspectorModel {
   }
 
   func close() {
+    presentation.dismiss()
     aiCopy.cancel()
     generation += 1
     pollTask?.cancel()
@@ -97,6 +99,7 @@ final class InspectorModel {
   func documentChanged(url: URL, committed: Bool = false) {
     let next = SiteControlTarget(tabID: target.tabID, profileID: target.profileID, url: url)
     if next != target || committed {
+      presentation.dismiss()
       aiCopy.cancel()
       generation += 1
       styles.reset()
@@ -117,6 +120,7 @@ final class InspectorModel {
 
   func setPanelMode(_ value: PanelMode) {
     guard isOpen else { return }
+    presentation.copyMenuOpen = false
     panelMode = value
     if value == .page, pageTools == nil, let engine {
       pageTools = InspectorPageToolsModel(
@@ -168,8 +172,30 @@ final class InspectorModel {
   }
 
   func copy(_ value: String) {
-    NSPasteboard.general.clearContents()
-    NSPasteboard.general.setString(value, forType: .string)
+    copy(value, label: "value")
+  }
+
+  func copy(_ value: String, label: String, to pasteboard: NSPasteboard = .general) {
+    pasteboard.clearContents()
+    if pasteboard.setString(value, forType: .string) { presentation.copied(label) }
+  }
+
+  func toggleLock() {
+    if mode == .locked { pick() } else if let selection { selectAncestor(selection.id) }
+  }
+
+  func highlightEdge(_ region: String, _ index: Int, active: Bool) {
+    guard isOpen, panelMode == .element, let selection,
+      ["margin", "border", "padding"].contains(region), (0...3).contains(index)
+    else { return }
+    let generation = generation
+    Task { [weak self] in
+      guard let self, self.isOpen, self.generation == generation, self.selection?.id == selection.id
+      else { return }
+      _ = try? await self.evaluate(
+        "globalThis.__shaarInspectorV2?.highlightEdge(\(active ? "'" + region + "'" : "null"),\(index)); true"
+      )
+    }
   }
 
   func refresh() async {

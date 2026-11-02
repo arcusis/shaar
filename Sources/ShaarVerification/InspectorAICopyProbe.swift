@@ -40,15 +40,26 @@ import SwiftUI
     }
     try await pick(inspector, "#ai-save")
     let ai = inspector.aiCopy
+    ai.screenshotCache = .init(directory: root.appending(path: "inspector-ai-cache"))
     let board = NSPasteboard.withUniqueName()
     defer { board.releaseGlobally() }
     await ai.copyElement(to: board)
     try check(ai.failure == nil, "AI element copy failed: \(ai.failure ?? "")")
     let receipt = try Self.pasteboardReceipt(board)
     try check(
-      receipt["items"] as? Int == 2 && receipt["png"] as? Bool == true,
-      "Clipboard must contain Markdown followed by PNG.")
+      receipt["items"] as? Int == 1 && receipt["png"] as? Bool == true,
+      "Clipboard must contain Markdown and PNG on one item.")
     let text = board.pasteboardItems?.first?.string(forType: .string) ?? ""
+    guard
+      let path = text.split(separator: "\n").first(where: { $0.hasPrefix("Screenshot: ") })?
+        .dropFirst("Screenshot: ".count)
+    else {
+      throw InspectorFailure("AI context does not reference its screenshot file.")
+    }
+    let savedPNG = try Data(contentsOf: URL(filePath: String(path)))
+    try check(
+      savedPNG == board.pasteboardItems?.first?.data(forType: .png),
+      "Screenshot file and pasteboard PNG differ.")
     try check(
       text.hasPrefix("Attached browser context from http://inspector.localhost:"),
       "Markdown header is missing.")
@@ -59,7 +70,6 @@ import SwiftUI
       "private-query-fixture", "private-fragment-fixture", "password-private-fixture",
       "input-private-fixture", "textarea-private-fixture", "selected-private-fixture",
     ] { try check(!text.contains(secret), "Private fixture value leaked into Markdown.") }
-    try await capture(inspector, stem: "\(phase)-inspector-ai-element")
     ai.feedback = "Increase the button padding."
     await ai.addNote()
     try check(ai.notes.count == 1 && ai.feedback.isEmpty, "Locked element note was not added.")
@@ -81,8 +91,26 @@ import SwiftUI
     let other = InspectorModel(
       target: .init(tabID: UUID(), profileID: target.profileID, url: address.url!), engine: nil)
     try check(other.aiCopy.notes.isEmpty, "Notes escaped their owning tab.")
-    inspector.tab = .notes
-    try await capture(inspector, stem: "\(phase)-inspector-ai-notes")
+    await ai.copy(.withNotes, to: board)
+    try check(
+      ai.failure == nil
+        && board.string(forType: .string)?.contains("## Design Feedback across pages") == true
+        && ai.notes.count == 2,
+      "Copy with notes must include context and preserve the notes.")
+    await ai.copy(.image, to: board)
+    try check(
+      ai.failure == nil && board.pasteboardItems?.count == 1
+        && board.string(forType: .string) == nil && board.data(forType: .png) != nil,
+      "Copy image did not export one image-only item.")
+    inspector.highlightEdge("padding", 0, active: true)
+    try await wait {
+      try await inspector.evaluate("__shaarInspectorV2.edgeHighlight().painted") as? Bool == true
+    }
+    inspector.highlightEdge("padding", 0, active: false)
+    try await wait {
+      try await inspector.evaluate("__shaarInspectorV2.edgeHighlight().painted") as? Bool == false
+    }
+    try await captureRedesign(inspector)
     ai.copyNotes(to: board)
     let notes = board.string(forType: .string) ?? ""
     try check(
@@ -186,7 +214,6 @@ import SwiftUI
       ) as? Bool == true, "Copy reactivated picking overlays in Page mode.")
     inspector.setPanelMode(.element)
     inspector.tab = .notes
-    try await capture(inspector, stem: "\(phase)-inspector-ai-detailed")
     let data = try JSONSerialization.data(
       withJSONObject: [
         "clipboard": receipt, "notesPages": 2, "privateControlsMasked": centers.count,
@@ -194,7 +221,7 @@ import SwiftUI
       ], options: [.prettyPrinted, .sortedKeys])
     try data.write(to: root.appending(path: "\(phase)-inspector-ai-receipt.json"))
     return [
-      "Copy for AI has Markdown and PNG pasteboard items",
+      "Copy for AI has one Markdown/PNG item and a cached screenshot path",
       "AI context omits URL suffixes and form values",
       "Notes stay per tab, group pages, delete, copy-clear and undo",
       "Detailed AI copy uses collected CSS, console, HTTP errors and technologies",
@@ -214,10 +241,10 @@ import SwiftUI
   }
 
   static func pasteboardReceipt(_ board: NSPasteboard) throws -> [String: Any] {
-    guard let items = board.pasteboardItems, items.count == 2,
+    guard let items = board.pasteboardItems, items.count == 1,
       let markdown = items[0].string(forType: .string),
       let typed = items[0].string(forType: .init("net.daringfireball.markdown")), markdown == typed,
-      let png = items[1].data(forType: .png), let bitmap = NSBitmapImageRep(data: png),
+      let png = items[0].data(forType: .png), let bitmap = NSBitmapImageRep(data: png),
       bitmap.pixelsWide > 0 && bitmap.pixelsHigh > 0
     else { throw InspectorFailure("Clipboard context is missing Markdown or an actual PNG.") }
     return [
@@ -264,13 +291,46 @@ import SwiftUI
     }
 
   }
-  private func capture(_ inspector: InspectorModel, stem: String) async throws {
+  private func captureRedesign(_ inspector: InspectorModel) async throws {
+    let detailed = inspector.aiCopy.detailed
+    defer {
+      inspector.aiCopy.detailed = detailed
+      inspector.presentation.dismiss()
+    }
+    await inspector.styles.refresh(force: true)
+    try check(inspector.styles.failure == nil, "Redesign CSS snapshot is unavailable.")
+    var images: [String] = []
+    for (name, tab, menu) in [
+      ("design", InspectorModel.Tab.design, false), ("code", .styles, false),
+      ("notes", .notes, false), ("copy-menu", .design, true),
+    ] {
+      inspector.tab = tab
+      inspector.presentation.dismiss()
+      inspector.aiCopy.detailed = menu
+      inspector.presentation.copyMenuOpen = menu
+      for width in [CGFloat(320), 420] {
+        let stem = "\(phase)-inspector-redesign-\(name)-\(Int(width))"
+        try await capture(inspector, stem: stem, width: width)
+        images += [stem + "-light.png", stem + "-dark.png"]
+      }
+    }
+    try JSONSerialization.data(
+      withJSONObject: ["passed": true, "offscreen": true, "images": images],
+      options: [.prettyPrinted, .sortedKeys]
+    )
+    .write(to: root.appending(path: "\(phase)-inspector-redesign-receipt.json"))
+  }
+
+  private func capture(_ inspector: InspectorModel, stem: String, width: CGFloat) async throws {
     for (name, scheme) in [("light", ColorScheme.light), ("dark", .dark)] {
+      let previous = NSApp.keyWindow
+      let layout = InspectorLayoutSnapshot()
       let host = NSHostingView(
-        rootView: InspectorPanel(model: inspector).frame(width: 320, height: 960).environment(
-          \.colorScheme, scheme))
+        rootView: InspectorPanel(model: inspector, layout: layout).frame(width: width, height: 960)
+          .environment(
+            \.colorScheme, scheme))
       let window = NSWindow(
-        contentRect: NSRect(x: 0, y: 0, width: 320, height: 960), styleMask: .borderless,
+        contentRect: NSRect(x: 0, y: 0, width: width, height: 960), styleMask: .borderless,
         backing: .buffered, defer: false)
       window.isReleasedWhenClosed = false
       window.contentView = host
@@ -281,6 +341,7 @@ import SwiftUI
       }
       host.layoutSubtreeIfNeeded()
       try await Task.sleep(for: .milliseconds(100))
+      host.layoutSubtreeIfNeeded()
       guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else {
         throw InspectorFailure("AI notes capture could not render.")
       }
@@ -288,6 +349,17 @@ import SwiftUI
       try bitmap.representation(using: .png, properties: [:])?.write(
         to: root.appending(path: "\(stem)-\(name).png"))
       try check(!window.isVisible, "AI notes capture ordered a window.")
+      try check(NSApp.keyWindow === previous, "Redesign capture changed the key window.")
+      try check(
+        layout.tabFrames.count == 6
+          && layout.tabFrames.values.allSatisfy { $0.minX >= -0.5 && $0.maxX <= width + 0.5 },
+        "Inspector tabs escaped their panel width.")
+      if inspector.presentation.copyMenuOpen {
+        let frame = layout.copyMenuFrame
+        try check(
+          frame.width >= 180 && frame.minX >= 0 && frame.maxX <= width + 0.5 && frame.maxY <= 960,
+          "Copy menu escaped its panel bounds: \(frame).")
+      }
     }
   }
 }

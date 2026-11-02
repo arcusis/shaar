@@ -12,6 +12,7 @@ enum InspectorAICopyScript {
       const omitted='input,textarea,select,option,optgroup,script,style,template,noscript,[contenteditable]';
       let capture=null;
       const normalize=s=>String(s||'').replace(/\s+/g,' ').trim();
+      const clip=(raw,limit)=>{const value=normalize(raw);if(value.length<=limit)return value;const prefix=value.slice(0,limit),space=prefix.lastIndexOf(' ');return (space<0?'':prefix.slice(0,space))+'…';};
       const url=raw=>{try{const u=new URL(raw,location.href);u.search='';u.hash='';u.username='';u.password='';return u.href;}catch{return '';}};
       const secrets=()=>{
         const values=new Set(),visit=(win,depth=0)=>{if(depth>8)return;try{
@@ -20,11 +21,11 @@ enum InspectorAICopyScript {
         }catch{}};visit(window);const entries=[...values].sort((a,b)=>b.length-a.length);if(entries.reduce((n,v)=>n+v.length,0)>65536)throw Error('Form context exceeds the private copy limit.');return entries.length?new RegExp(entries.map(v=>{const escaped=v.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');return v.length<3?'(?<![A-Za-z0-9_])(?:'+escaped+')(?![A-Za-z0-9_])':escaped;}).join('|'),'g'):null;
       };
       const scrub=(value,values)=>values?String(value||'').replace(values,'[form value omitted]'):String(value||'');
-      const safeText=(root,values,limit=300)=>{
+      const safeText=(root,values,limit=1200,includeHidden=false)=>{
         if(!root||root.closest?.(omitted))return '';
         const walker=root.ownerDocument.createTreeWalker(root,NodeFilter.SHOW_TEXT);let node,result='',count=0;
-        while((node=walker.nextNode())&&count++<4096&&result.length<1200){const el=node.parentElement;if(!el||el.closest(omitted)||!el.getClientRects().length)continue;const style=el.ownerDocument.defaultView.getComputedStyle(el);if(style.visibility==='hidden'||style.display==='none')continue;result+=' '+node.textContent;}
-        return scrub(normalize(result),values).slice(0,limit);
+        while((node=walker.nextNode())&&count++<4096&&result.length<2400){const el=node.parentElement;if(!el||el.closest(omitted))continue;if(!includeHidden){if(!el.getClientRects().length)continue;const style=el.ownerDocument.defaultView.getComputedStyle(el);if(style.visibility==='hidden'||style.display==='none')continue;}result+=' '+node.textContent;}
+        return clip(scrub(result,values),limit);
       };
       const html=(root,values)=>{let visited=0;const walk=(node,depth)=>{
         if(++visited>128||depth>10)return {text:'…',attributes:[],children:[]};
@@ -39,14 +40,14 @@ enum InspectorAICopyScript {
         if(!node?.isConnected||!selection?.locked||selection.id!==id)throw Error('Lock the same element again.');
         const values=secrets(),r=inspector.rectFor(node),style=node.ownerDocument.defaultView.getComputedStyle(node),metadata=inspector.copyMetadata();
         const refs=node.getAttribute('aria-labelledby');
-        const accessibleName=node.closest(omitted)?'':refs?refs.split(/\s+/).map(key=>safeText(node.ownerDocument.getElementById(key),values)).join(' '):node.getAttribute('aria-label')||node.getAttribute('alt')||safeText(node,values);
+        const accessibleName=node.closest(omitted)?'':refs?refs.split(/\s+/).map(key=>safeText(node.ownerDocument.getElementById(key),values,300,true)).join(' '):node.getAttribute('aria-label')||node.getAttribute('alt')||node.getAttribute('title')||(node.labels?.length?[...node.labels].map(label=>safeText(label,values,300,true)).join(' '):'');
         const ancestry=[];for(let el=node;el&&ancestry.length<64;el=el.parentElement)ancestry.unshift(el.localName);
-        const neighbors=[node.previousElementSibling,node.parentElement,node.nextElementSibling].filter(Boolean).map(el=>el.localName+': '+safeText(el,values,150)).join('\n');
+        const own=safeText(node,values),seen=new Set();const neighbors=[node.previousElementSibling,node.nextElementSibling].filter(Boolean).map(el=>({tag:el.localName,text:safeText(el,values,300)})).filter(row=>row.text&&row.text!==own&&!seen.has(row.text)&&seen.add(row.text)).map(row=>row.tag+': '+row.text).join('\n');
         return {id,url:url(location.href),title:scrub(document.title,values).slice(0,300),tag:node.localName,
-          accessibleName:scrub(accessibleName,values).slice(0,300),role:metadata?.role||'Unavailable',selector:scrub(selection.css,values)===selection.css?selection.css:fullPath(node),
+          accessibleName:clip(scrub(accessibleName,values),300),role:metadata?.role||'',selector:scrub(selection.css,values)===selection.css?selection.css:fullPath(node),
           source:scrub(metadata?.component?.source||'',values),components:metadata?.component?.name?[metadata.component.framework+': '+scrub(metadata.component.name,values)]:[],
           bounds:{x:r.x,y:r.y,width:r.w,height:r.h},classes:[...node.classList].slice(0,64),
-          text:safeText(node,values),nearby:neighbors.slice(0,300),styles:['display','position','font-size','color','background-color'].map(name=>({name,value:scrub(style.getPropertyValue(name),values).slice(0,512)})),
+          text:own,nearby:neighbors,styles:['display','position','font-size','color','background-color'].map(name=>({name,value:scrub(style.getPropertyValue(name),values).slice(0,512)})),
           html:html(node,values),ancestors:ancestry,domPath:[...selection.frames,fullPath(node)].join(' :: '),protected:!!node.closest(omitted)};
       };
       const sanitize=value=>{const values=secrets(),structural=new Set(['selector','domPath','tag','role','classes','ancestors','name']);let count=0;const walk=(v,depth=0,key='')=>{

@@ -1192,7 +1192,7 @@ class Runner:
         if level not in (0, 1, 2):
             raise BuildError(f"unsupported symbol level: {level}")
         Runner.checked_replace(path, "  symbol_level=0 blink_symbol_level=0",
-                               f"  symbol_level={level} blink_symbol_level=0", 1)
+                               f"  symbol_level={level} blink_symbol_level=0 concurrent_links=1", 1)
 
     @staticmethod
     def adapt_build_priority_script(path: pathlib.Path) -> None:

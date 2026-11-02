@@ -222,7 +222,7 @@ class SourceBuildTests(unittest.TestCase):
             script.write_text("_gn_args=(\n  symbol_level=0 blink_symbol_level=0 v8_symbol_level=0\n)\n")
             BUILD.Runner.adapt_symbol_level(script, 1)
             self.assertEqual(script.read_text(),
-                             "_gn_args=(\n  symbol_level=1 blink_symbol_level=0 v8_symbol_level=0\n)\n")
+                             "_gn_args=(\n  symbol_level=1 blink_symbol_level=0 concurrent_links=1 v8_symbol_level=0\n)\n")
             with self.assertRaisesRegex(BUILD.BuildError, "anchor mismatch"):
                 BUILD.Runner.adapt_symbol_level(script, 1)
             with self.assertRaisesRegex(BUILD.BuildError, "unsupported symbol level"):

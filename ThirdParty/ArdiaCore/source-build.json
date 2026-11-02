@@ -37,7 +37,7 @@
     "configuration": "Release_GN_arm64",
     "target": "chrome_framework",
     "syncJobs": 4,
-    "buildJobs": 6,
+    "buildJobs": 12,
     "symbolLevel": 1,
     "minimumFreeBytes": 107374182400,
     "timeoutsSeconds": {
@@ -51,5 +51,15 @@
   "patch": {
     "file": "ThirdParty/ArdiaCore/patches/profile-download-directory.patch",
     "sha256": "be7185ea26fa81164c2407f9055a260f96c1f0aafffa204878e16cf984758545"
-  }
+  },
+  "patches": [
+    {
+      "file": "ThirdParty/ArdiaCore/patches/quit-pending-navigation-window-controller.patch",
+      "sha256": "b42ab7eb706e7c1f9fe32a456375b37bf3e55e5eb0be6aa8768d30ee188b5643"
+    },
+    {
+      "file": "ThirdParty/ArdiaCore/patches/private-profile-privacy.patch",
+      "sha256": "77f2a6fa096326b8781ecb145acb7cb09cc68d425a48113f2c54aa6f0e2d73d5"
+    }
+  ]
 }

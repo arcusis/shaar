@@ -28,7 +28,7 @@ def swift_source_files(root: Path, scope: str = "full", *, tracked: bool = True)
         files = [path.relative_to(root).as_posix() for directory in SWIFT_SOURCE_ROOTS
                  for path in (root / directory).rglob("*.swift") if path.is_file()]
     return {name for name in files if name.endswith(".swift")
-            and (scope == "full" or not name.startswith(("Sources/ShaarVerification/", "Tests/TestSupport/")))}
+            and (scope == "full" or not name.startswith("Sources/ShaarVerification/"))}
 
 
 def file_sha256(path: Path) -> str:

@@ -58,6 +58,8 @@ def compiler_commands(log: str, root: Path, compiler: Path, expected: set[str]) 
             continue
         if sources & covered:
             raise ValueError("Duplicate Swift module compiler invocation")
+        if "-v" in arguments:
+            arguments.remove("-v")
         commands.append(arguments)
         covered |= sources
     if not expected or covered != expected:
@@ -79,12 +81,13 @@ def prepare(scope: str) -> int:
                  "-Xswiftc", "-whole-module-optimization", "-Xswiftc", "-Onone",
                  "-Xswiftc", "-num-threads", "-Xswiftc", "2",
                  "-Xswiftc", "-no-emit-module-separately-wmo"]
-    if scope == "shipping":
-        arguments += ["--product", "ArcusisBrowser"]
     if checks.run("native-build-plan", arguments):
         return checks.finish()
     sources = source_hashes(ROOT, scope)
-    commands = compiler_commands((checks.directory / "native-build-plan.log").read_text(), ROOT, compiler, set(sources))
+    all_sources = source_hashes(ROOT)
+    commands = compiler_commands((checks.directory / "native-build-plan.log").read_text(), ROOT, compiler, set(all_sources))
+    commands = [command for command in commands if command_sources(command, ROOT) <= set(sources)]
+    commands.sort(key=lambda command: command[command.index("-module-name") + 1] != "BrowserTestSupport")
     PLAN.parent.mkdir(parents=True, exist_ok=True)
     PLAN.write_text(json.dumps(dict(identity(), scope=scope, compiler=str(compiler), compiler_sha256=file_sha256(compiler), sources=sources, commands=commands), indent=2) + "\n")
     return checks.finish()

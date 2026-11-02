@@ -471,12 +471,12 @@ class SwiftCompilerPlanTests(unittest.TestCase):
                   self.assertRaisesRegex(ValueError, "compiler changed")):
                 CODEQL_BUILD.replay()
 
-    def test_shipping_scope_excludes_only_verification_and_support_modules(self):
+    def test_shipping_scope_retains_support_warmup_and_excludes_verification_module(self):
         from ci_support import swift_source_files
         names = b"Sources/App/A.swift\0Sources/ShaarVerification/Probe.swift\0Tests/TestSupport/Seed.swift\0"
         with patch("ci_support.subprocess.check_output", return_value=names):
             self.assertEqual(len(swift_source_files(ROOT)), 3)
-            self.assertEqual(swift_source_files(ROOT, "shipping"), {"Sources/App/A.swift"})
+            self.assertEqual(swift_source_files(ROOT, "shipping"), {"Sources/App/A.swift", "Tests/TestSupport/Seed.swift"})
             with self.assertRaises(ValueError):
                 swift_source_files(ROOT, "unknown")
 

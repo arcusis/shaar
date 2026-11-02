@@ -139,13 +139,17 @@ private struct SplitGroupView: View {
     .focusable()
     .onKeyPress(.leftArrow) {
       adjustDivider(
-        index, by: SplitResizeDecision.logicalDelta(-Self.keyboardStep, isHorizontal: axis == .columns,
+        index,
+        by: SplitResizeDecision.logicalDelta(
+          -Self.keyboardStep, isHorizontal: axis == .columns,
           isRightToLeft: layoutDirection == .rightToLeft), available: available)
       return .handled
     }
     .onKeyPress(.rightArrow) {
       adjustDivider(
-        index, by: SplitResizeDecision.logicalDelta(Self.keyboardStep, isHorizontal: axis == .columns,
+        index,
+        by: SplitResizeDecision.logicalDelta(
+          Self.keyboardStep, isHorizontal: axis == .columns,
           isRightToLeft: layoutDirection == .rightToLeft), available: available)
       return .handled
     }

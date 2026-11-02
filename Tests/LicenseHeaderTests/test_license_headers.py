@@ -61,6 +61,12 @@ class LicenseHeaderTests(unittest.TestCase):
         })
         self.assertEqual(missing, [])
 
+    def test_website_source_headers(self):
+        files = ["website/src/client.ts", "website/wrangler.jsonc", "website/src/styles.css", "website/public/social.svg"]
+        valid = {name: "\n".join(check_license_headers.expected_notice(Path(name))) + "\n" for name in files}
+        self.assertEqual(self._missing(valid), [])
+        self.assertEqual(self._missing({name: "no header\n" for name in files}), [Path(name) for name in files])
+
 
 if __name__ == "__main__":
     unittest.main()

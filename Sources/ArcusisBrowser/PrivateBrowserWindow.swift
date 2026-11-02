@@ -7,7 +7,8 @@ import ChromiumBridge
 import SwiftUI
 
 struct PrivateBrowserWindow: View {
-  @Bindable var store: PrivateBrowserStore
+  // The native host owns this model. Cached SwiftUI callbacks must not extend its lifetime.
+  weak var store: PrivateBrowserStore?
   let runtime: ARCChromiumRuntime
   @FocusState private var addressIsFocused: Bool
   @FocusState private var commandIsFocused: Bool
@@ -23,16 +24,16 @@ struct PrivateBrowserWindow: View {
     }
     .background(Color(nsColor: .windowBackgroundColor))
     .onAppear {
-      addressDraft = store.address
-      addressIsFocused = true
+      addressDraft = store?.address ?? ""
+      addressIsFocused = store?.showsStartPage == false
     }
-    .onChange(of: store.address) { _, value in addressDraft = value }
-    .onChange(of: store.selectedTabID) { _, _ in addressDraft = store.address }
-    .onChange(of: store.pageIsFocused) { _, focused in
-      if focused { pageIsFocused = true }
+    .onChange(of: store?.address) { _, value in addressDraft = value ?? "" }
+    .onChange(of: store?.selectedTabID) { _, _ in addressDraft = store?.address ?? "" }
+    .onChange(of: store?.pageIsFocused) { _, focused in
+      if focused == true { pageIsFocused = true }
     }
-    .onChange(of: store.commandIsOpen) { _, open in
-      if open {
+    .onChange(of: store?.commandIsOpen) { _, open in
+      if open == true {
         addressIsFocused = false
         commandIsFocused = true
       } else {
@@ -40,13 +41,18 @@ struct PrivateBrowserWindow: View {
       }
     }
     .onExitCommand {
-      if store.commandIsOpen {
-        store.dismissCommand()
+      if store?.commandIsOpen == true {
+        store?.dismissCommand()
         pageIsFocused = true
       }
     }
+    .modifier(PrivateHTTPWarning(store: store))
     .frame(minWidth: 760, minHeight: 520)
     .shellLocalization()
+  }
+
+  private var commandQueryBinding: Binding<String> {
+    Binding(get: { store?.commandQuery ?? "" }, set: { store?.commandQuery = $0 })
   }
 
   private var privateSidebar: some View {
@@ -69,10 +75,10 @@ struct PrivateBrowserWindow: View {
 
       ScrollView {
         VStack(spacing: 4) {
-          ForEach(store.tabs) { tab in
+          ForEach(store?.tabs ?? []) { tab in
             HStack(spacing: 8) {
               Button {
-                store.selectTab(tab.id)
+                store?.selectTab(tab.id)
               } label: {
                 HStack(spacing: 8) {
                   Image(systemName: "globe")
@@ -90,7 +96,7 @@ struct PrivateBrowserWindow: View {
               }
               .buttonStyle(.plain)
               Button {
-                store.closeTab(tab.id)
+                store?.closeTab(tab.id)
               } label: {
                 Image(systemName: "xmark")
                   .font(.system(size: 9, weight: .semibold))
@@ -100,9 +106,9 @@ struct PrivateBrowserWindow: View {
             }
             .padding(.horizontal, 10)
             .frame(height: 32)
-            .foregroundStyle(.primary.opacity(store.selectedTabID == tab.id ? 1 : 0.72))
+            .foregroundStyle(.primary.opacity(store?.selectedTabID == tab.id ? 1 : 0.72))
             .background(
-              store.selectedTabID == tab.id ? Color.accentColor.opacity(0.14) : .clear,
+              store?.selectedTabID == tab.id ? Color.accentColor.opacity(0.14) : .clear,
               in: RoundedRectangle(cornerRadius: 7))
           }
         }
@@ -110,7 +116,7 @@ struct PrivateBrowserWindow: View {
       }
 
       Button {
-        store.openTab()
+        store?.openTab()
       } label: {
         Label(ShellL10n.string("New private tab"), systemImage: "plus")
           .font(.system(size: 12, weight: .medium))
@@ -135,28 +141,29 @@ struct PrivateBrowserWindow: View {
     VStack(spacing: 0) {
       HStack(spacing: 8) {
         Button {
-          store.goBack()
+          store?.goBack()
         } label: {
           Image(systemName: "chevron.backward")
         }
-        .disabled(store.selectedTab?.canGoBack != true)
+        .disabled(store?.selectedTab?.canGoBack != true)
         Button {
-          store.goForward()
+          store?.goForward()
         } label: {
           Image(systemName: "chevron.forward")
         }
-        .disabled(store.selectedTab?.canGoForward != true)
+        .disabled(store?.selectedTab?.canGoForward != true)
         Button {
-          store.reload()
+          store?.reload()
         } label: {
           Image(systemName: "arrow.clockwise")
         }
+        PrivateSiteControlsButton(store: store, runtime: runtime)
         TextField(ShellL10n.string("Search or enter address"), text: $addressDraft)
           .textFieldStyle(.roundedBorder)
           .focused($addressIsFocused)
           .onSubmit {
-            store.address = addressDraft
-            store.navigate(addressDraft)
+            store?.address = addressDraft
+            store?.navigate(addressDraft)
             pageIsFocused = true
           }
       }
@@ -165,26 +172,33 @@ struct PrivateBrowserWindow: View {
       .padding(.vertical, 8)
       .background(Color(nsColor: .windowBackgroundColor))
 
+      if let failure = store?.failure {
+        Text(failure).font(.callout).foregroundStyle(.red).padding(10)
+      }
       Divider().opacity(0.4)
       ZStack {
         Color(nsColor: .textBackgroundColor)
-        if let tab = store.selectedTab {
+        if store?.showsStartPage == true {
+          PrivateStartPage(store: store)
+            .id(store?.selectedTabID)
+        } else if let tab = store?.selectedTab {
           PrivatePageView(
-            runtime: runtime, store: store, tabID: tab.id, isFocused: pageIsFocused
+            runtime: runtime, windowID: store?.windowID ?? "", contextID: store?.contextID ?? "",
+            tabID: tab.id, isFocused: pageIsFocused
           )
           .focusable()
           .focused($pageIsFocused)
         }
-        if store.commandIsOpen {
+        if store?.commandIsOpen == true {
           Color.black.opacity(0.30)
             .ignoresSafeArea()
           VStack(alignment: .leading, spacing: 12) {
             ShellL10n.text("Private search")
               .font(.system(size: 14, weight: .semibold))
-            TextField(ShellL10n.string("Search or enter address"), text: $store.commandQuery)
+            TextField(ShellL10n.string("Search or enter address"), text: commandQueryBinding)
               .textFieldStyle(.roundedBorder)
               .focused($commandIsFocused)
-              .onSubmit { store.submitCommand() }
+              .onSubmit { store?.submitCommand() }
             ShellL10n.text("Results open in this private window")
               .font(.system(size: 11))
               .foregroundStyle(.secondary)
@@ -210,7 +224,8 @@ struct PrivateBrowserWindow: View {
 
 private struct PrivatePageView: NSViewRepresentable {
   let runtime: ARCChromiumRuntime
-  let store: PrivateBrowserStore
+  let windowID: String
+  let contextID: String
   let tabID: String
   let isFocused: Bool
 
@@ -220,10 +235,10 @@ private struct PrivatePageView: NSViewRepresentable {
 
   func updateNSView(_ view: ChromiumPageContainerView, context: Context) {
     _ = view.attach(
-      runtime.view(forPrivateTabID: tabID, windowID: store.windowID, contextID: store.contextID))
+      runtime.view(forPrivateTabID: tabID, windowID: windowID, contextID: contextID))
     if isFocused, view.window?.isKeyWindow == true {
       _ = runtime.focusPrivateTabID(
-        tabID, windowID: store.windowID, contextID: store.contextID)
+        tabID, windowID: windowID, contextID: contextID)
     }
   }
 

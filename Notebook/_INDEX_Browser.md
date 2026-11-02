@@ -15,6 +15,7 @@
 - [[Automatic_Picture_In_Picture]]
 - [[Picture_In_Picture_Controls]]
 - [[Site_Control_Center]]
+- [[Private_Browsing]]
 - [[External_App_Consent]]
 - [[Find_In_Page]]
 - [[Renderer_Recovery]]

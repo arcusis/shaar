@@ -211,6 +211,8 @@ final class BrowserEngine {
       case .bookmark(let operation):
         self.events.applyBookmarkOperation(
           operation, profileID: profile.uuidString, completion: done)
+      case .bookmarks(let operations):
+        self.applyImportedBookmarks(operations, profileID: profile, completion: done)
       case .deleteHistory(let url):
         self.events.deleteHistoryURL(url, profileID: profile.uuidString, completion: done)
       }
@@ -754,6 +756,20 @@ final class BrowserEngine {
     guard store.requestExternalApp(request) else {
       events.resolveExternalApp(id, windowID: windowID, accepted: false)
       return
+    }
+  }
+
+  private func applyImportedBookmarks(
+    _ operations: [[String: Any]], profileID: UUID, completion: @escaping @MainActor (Error?) -> Void
+  ) {
+    guard let first = operations.first else { completion(nil); return }
+    events.applyBookmarkOperation(first, profileID: profileID.uuidString) { [weak self] error in
+      guard let self else { return }
+      if let error { completion(error) }
+      else {
+        self.applyImportedBookmarks(
+          Array(operations.dropFirst()), profileID: profileID, completion: completion)
+      }
     }
   }
 

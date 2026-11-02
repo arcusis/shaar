@@ -13,11 +13,12 @@ struct LibraryKey: Hashable {
 
 enum LibraryMutation {
   case bookmark([String: Any])
+  case bookmarks([[String: Any]])
   case deleteHistory(String)
 
   var section: LibrarySection {
     switch self {
-    case .bookmark: .bookmarks
+    case .bookmark, .bookmarks: .bookmarks
     case .deleteHistory: .history
     }
   }

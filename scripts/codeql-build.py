@@ -79,15 +79,15 @@ def extraction_arguments(arguments: list[str]) -> list[str]:
     index = 0
     while index < len(arguments):
         argument = arguments[index]
-        if argument in {"-num-threads", "-j", "-driver-batch-count"}:
+        if argument in {"-num-threads", "-j", "-driver-batch-count", "-emit-module-path", "-emit-objc-header-path"}:
             index += 2
             continue
         if argument not in {"-whole-module-optimization", "-no-emit-module-separately-wmo",
-                            "-incremental", "-enable-batch-mode", "-disable-batch-mode"}:
+                            "-incremental", "-enable-batch-mode", "-disable-batch-mode",
+                            "-emit-module", "-emit-objc-header"}:
             result.append(argument)
         index += 1
-    return [*result, "-enable-batch-mode", "-driver-batch-count", "2", "-j", "2",
-            "-no-emit-module-separately"]
+    return [*result, "-enable-batch-mode", "-driver-batch-count", "2", "-j", "2"]
 
 
 def freshly_compiles_module(arguments: list[str]) -> bool:
@@ -95,7 +95,7 @@ def freshly_compiles_module(arguments: list[str]) -> bool:
         return True
     return (arguments[arguments.index("-module-name") + 1] == "ArcusisBrowser"
             and "-enable-batch-mode" in arguments and "-incremental" not in arguments
-            and "-no-emit-module-separately" in arguments
+            and "-c" in arguments and "-emit-module" not in arguments
             and "-driver-batch-count" in arguments
             and arguments[arguments.index("-driver-batch-count") + 1] == "2")
 
@@ -120,10 +120,13 @@ def prepare(scope: str) -> int:
     commands = compiler_commands(native_command_log(manifest, compiler), ROOT, compiler, set(all_sources))
     commands = ordered_modules(manifest, commands)
     commands = [command for command in commands if command_sources(command, ROOT) <= set(sources)]
-    commands.sort(key=lambda command: command[command.index("-module-name") + 1] != "BrowserTestSupport")
-    commands = [extraction_arguments(command) for command in commands]
+    traced = []
+    for command in commands:
+        if command[command.index("-module-name") + 1] == "ArcusisBrowser":
+            traced.append(extraction_arguments(command))
+        traced.append(command)
     PLAN.parent.mkdir(parents=True, exist_ok=True)
-    PLAN.write_text(json.dumps(dict(identity(), scope=scope, compiler=str(compiler), compiler_sha256=file_sha256(compiler), sources=sources, commands=commands), indent=2) + "\n")
+    PLAN.write_text(json.dumps(dict(identity(), scope=scope, compiler=str(compiler), compiler_sha256=file_sha256(compiler), sources=sources, commands=traced), indent=2) + "\n")
     return checks.finish()
 
 
@@ -149,6 +152,8 @@ def replay(scope: str = "full") -> int:
             raise ValueError("Compiler plan must freshly compile complete Swift modules")
         covered |= command_sources(arguments, ROOT)
         module = arguments[arguments.index("-module-name") + 1]
+        if "-whole-module-optimization" not in arguments:
+            module += "-batches"
         if checks.run(module, arguments):
             return checks.finish()
     if covered != set(plan["sources"]):

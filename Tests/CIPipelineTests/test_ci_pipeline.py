@@ -445,13 +445,16 @@ class SwiftCompilerPlanTests(unittest.TestCase):
     def test_app_batches_preserve_sources_and_disable_incremental_skipping(self):
         arguments = ["swiftc", "-module-name", "ArcusisBrowser", "-whole-module-optimization",
                      "-no-emit-module-separately-wmo", "-incremental", "-num-threads", "2",
-                     "-j", "2", "-Onone", "-emit-module", "-output-file-map", "outputs.json",
+                     "-j", "2", "-Onone", "-c", "-emit-module", "-emit-module-path", "App.swiftmodule",
+                     "-output-file-map", "outputs.json",
                      "Sources/ArcusisBrowser/A.swift", "Sources/ArcusisBrowser/B.swift"]
         batched = CODEQL_BUILD.extraction_arguments(arguments)
         self.assertEqual(CODEQL_BUILD.command_sources(batched, ROOT), CODEQL_BUILD.command_sources(arguments, ROOT))
         self.assertNotIn("-incremental", batched)
         self.assertNotIn("-whole-module-optimization", batched)
         self.assertNotIn("-num-threads", batched)
+        self.assertNotIn("-emit-module", batched)
+        self.assertNotIn("-emit-module-path", batched)
         self.assertTrue(CODEQL_BUILD.freshly_compiles_module(batched))
         self.assertFalse(CODEQL_BUILD.freshly_compiles_module([*batched, "-incremental"]))
         core = ["swiftc", "-module-name", "BrowserCore", "-whole-module-optimization"]

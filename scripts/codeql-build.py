@@ -72,6 +72,34 @@ def identity() -> dict:
     return {"revision": os.environ["GITHUB_SHA"], "toolchain": os.environ["CI_TOOLCHAIN_ID"]}
 
 
+def extraction_arguments(arguments: list[str]) -> list[str]:
+    if arguments[arguments.index("-module-name") + 1] != "ArcusisBrowser":
+        return arguments
+    result = []
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
+        if argument in {"-num-threads", "-j", "-driver-batch-count"}:
+            index += 2
+            continue
+        if argument not in {"-whole-module-optimization", "-no-emit-module-separately-wmo",
+                            "-incremental", "-enable-batch-mode", "-disable-batch-mode"}:
+            result.append(argument)
+        index += 1
+    return [*result, "-enable-batch-mode", "-driver-batch-count", "2", "-j", "2",
+            "-no-emit-module-separately"]
+
+
+def freshly_compiles_module(arguments: list[str]) -> bool:
+    if "-whole-module-optimization" in arguments:
+        return True
+    return (arguments[arguments.index("-module-name") + 1] == "ArcusisBrowser"
+            and "-enable-batch-mode" in arguments and "-incremental" not in arguments
+            and "-no-emit-module-separately" in arguments
+            and "-driver-batch-count" in arguments
+            and arguments[arguments.index("-driver-batch-count") + 1] == "2")
+
+
 def prepare(scope: str) -> int:
     checks = Commands("codeql-prepare")
     compiler = Path(subprocess.check_output(["xcrun", "--find", "swiftc"], text=True).strip())
@@ -93,6 +121,7 @@ def prepare(scope: str) -> int:
     commands = ordered_modules(manifest, commands)
     commands = [command for command in commands if command_sources(command, ROOT) <= set(sources)]
     commands.sort(key=lambda command: command[command.index("-module-name") + 1] != "BrowserTestSupport")
+    commands = [extraction_arguments(command) for command in commands]
     PLAN.parent.mkdir(parents=True, exist_ok=True)
     PLAN.write_text(json.dumps(dict(identity(), scope=scope, compiler=str(compiler), compiler_sha256=file_sha256(compiler), sources=sources, commands=commands), indent=2) + "\n")
     return checks.finish()
@@ -116,8 +145,8 @@ def replay(scope: str = "full") -> int:
     checks = Commands("codeql-swift")
     covered = set()
     for arguments in plan["commands"]:
-        if arguments[0] != str(compiler) or "-whole-module-optimization" not in arguments:
-            raise ValueError("Compiler plan must freshly compile whole Swift modules")
+        if arguments[0] != str(compiler) or not freshly_compiles_module(arguments):
+            raise ValueError("Compiler plan must freshly compile complete Swift modules")
         covered |= command_sources(arguments, ROOT)
         module = arguments[arguments.index("-module-name") + 1]
         if checks.run(module, arguments):

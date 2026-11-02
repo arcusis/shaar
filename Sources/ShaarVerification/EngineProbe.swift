@@ -522,6 +522,12 @@ final class EngineProbe {
           store.session == before, "private fixture leaves normal model and selection unchanged")
       }
       fixtureStage = "normal-switches"
+      guard
+        let alphaSpace = store.session.spaces.first(where: {
+          $0.tabs.contains { $0.id.uuidString == tabA }
+        })
+      else { throw ProbeFailure("Native Alpha tab lost its owning Space.") }
+      store.perform(.space(alphaSpace.id))
       for iteration in 0..<SwitchProbeMetrics.expectedSwitchCount {
         let isShared = iteration.isMultiple(of: 2)
         let tab = isShared ? sharedA : tabA

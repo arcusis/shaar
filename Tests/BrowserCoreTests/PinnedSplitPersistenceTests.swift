@@ -102,4 +102,45 @@ struct PinnedSplitPersistenceTests {
     #expect(session.selectedSpace.splits.first?.tabIDs.count == BrowserSplit.maxPanes)
     try session.validate()
   }
+
+  @Test func refusedFolderSectionChangesPreserveNestedStackAndOrder() throws {
+    var (session, _) = fixture()
+    let space = session.selectedSpaceID
+    let folder = session.addFolder(name: "Projects", in: space)!
+    let child = session.addFolder(name: "Nested", in: space, parentID: folder)!
+    let today = session.addFolder(name: "Reading", in: space, section: .today)!
+    let split = try #require(session.selectedSpace.splits.first)
+    let grouped = session.moveSplit(split.id, from: space, to: space, folderID: child)
+    #expect(grouped)
+    let before = session
+    let wrongSiblingSection = session.moveFolder(
+      folder, from: space, to: space, before: today, pinned: true)
+    #expect(!wrongSiblingSection)
+    #expect(session == before)
+    let wrongParentSection = session.moveFolder(
+      folder, from: space, to: space, parentID: today, pinned: true)
+    #expect(!wrongParentSection)
+    #expect(session == before)
+    try session.validate()
+  }
+
+  @Test func regroupingMemberKeepsBothStacksValidAndAdoptsDestinationSection() throws {
+    var (session, ids) = fixture()
+    let space = session.selectedSpaceID
+    let regrouped = session.addToSplit(ids[1], beside: ids[3], edge: .right, in: space)
+    #expect(regrouped)
+    #expect(session.selectedSpace.splits.count == 2)
+    #expect(
+      session.selectedSpace.splits.first { $0.tabIDs.contains(ids[0]) }?.tabIDs == [ids[0], ids[2]])
+    #expect(
+      session.selectedSpace.splits.first { $0.tabIDs.contains(ids[3]) }?.tabIDs == [ids[3], ids[1]])
+    #expect(session.selectedSpace.tabs.first { $0.id == ids[1] }?.isPinned == false)
+    let reordered = session.addToSplit(ids[1], beside: ids[3], edge: .left, in: space)
+    #expect(reordered)
+    #expect(
+      session.selectedSpace.splits.first { $0.tabIDs.contains(ids[3]) }?.tabIDs == [ids[1], ids[3]])
+    #expect(session.selectedSpace.tabs.filter { $0.isPinned }.map(\.id) == [ids[0], ids[2]])
+    try session.validate()
+  }
+
 }

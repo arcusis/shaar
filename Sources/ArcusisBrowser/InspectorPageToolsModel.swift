@@ -15,6 +15,7 @@ final class InspectorPageToolsModel {
     case storage = "Storage"
     case simulations = "Simulations"
     case report = "Bug report"
+    var title: String { InspectorToolsL10n.string(rawValue) }
     var symbol: String {
       switch self {
       case .overview: "shippingbox"
@@ -157,7 +158,7 @@ final class InspectorPageToolsModel {
 
   private func recording() async throws {
     guard let inspector, let engine = inspector.engine else {
-      throw InspectorFailure("The page is no longer available.")
+      throw InspectorFailure(InspectorToolsL10n.string("The page is no longer available."))
     }
     if bootstrapID == nil {
       let target = developer.target
@@ -166,7 +167,8 @@ final class InspectorPageToolsModel {
         "Page.addScriptToEvaluateOnNewDocument", params: ["source": recordingScript],
         tabID: target.tabID.uuidString, profileID: target.profileID.uuidString, windowID: window)
       guard let id = result["identifier"] as? String else {
-        throw InspectorFailure("Chromium did not install the page diagnostics bootstrap.")
+        throw InspectorFailure(
+          InspectorToolsL10n.string("Chromium did not install the page diagnostics bootstrap."))
       }
       if active {
         bootstrapID = id
@@ -184,7 +186,8 @@ final class InspectorPageToolsModel {
       }
     }
     guard try await developer.evaluate(recordingScript) as? Bool == true else {
-      throw InspectorFailure("Page diagnostics are unavailable in this document.")
+      throw InspectorFailure(
+        InspectorToolsL10n.string("Page diagnostics are unavailable in this document."))
     }
   }
 
@@ -193,7 +196,7 @@ final class InspectorPageToolsModel {
       engine.pages[inspector.target.tabID]?.loading == false
     else { return }
     guard inspector.target.origin != nil else {
-      failure = "Page tools require an HTTP or HTTPS page."
+      failure = InspectorToolsL10n.string("Page tools require an HTTP or HTTPS page.")
       return
     }
     busy = true
@@ -211,7 +214,9 @@ final class InspectorPageToolsModel {
       guard
         let snapshot = try await developer.evaluate("globalThis.__shaarBugReportV1.snapshot()")
           as? [String: Any]
-      else { throw InspectorFailure("Page diagnostics are unavailable.") }
+      else {
+        throw InspectorFailure(InspectorToolsL10n.string("Page diagnostics are unavailable."))
+      }
       if tool == .overview {
         let value = try await developer.evaluate("globalThis.__shaarBugReportV1.tech()") ?? []
         try receiveTechnologies(value, generation: generation)
@@ -254,7 +259,8 @@ final class InspectorPageToolsModel {
     }
     let encoded = try JSONSerialization.data(withJSONObject: snapshot)
     guard encoded.count <= 8_388_608 else {
-      throw InspectorFailure("Page diagnostics exceed the supported size.")
+      throw InspectorFailure(
+        InspectorToolsL10n.string("Page diagnostics exceed the supported size."))
     }
     if let time = snapshot["startedAt"] as? Double, time.isFinite,
       (0...253_402_300_799_000).contains(time)
@@ -295,7 +301,7 @@ final class InspectorPageToolsModel {
     }
     let data = try JSONSerialization.data(withJSONObject: value)
     guard data.count < 65_536 else {
-      throw InspectorFailure("Page markers exceed the supported size.")
+      throw InspectorFailure(InspectorToolsL10n.string("Page markers exceed the supported size."))
     }
     let rows = try JSONDecoder().decode([StackSignal].self, from: data)
     guard rows.count <= 20,
@@ -303,7 +309,10 @@ final class InspectorPageToolsModel {
         !$0.name.isEmpty && $0.name.count <= 160 && ($0.version?.count ?? 0) <= 64
           && $0.source.count <= 512
       })
-    else { throw InspectorFailure("Technology markers exceed the supported size.") }
+    else {
+      throw InspectorFailure(
+        InspectorToolsL10n.string("Technology markers exceed the supported size."))
+    }
     var names = Set<String>()
     signals = rows.filter { names.insert($0.name).inserted }
   }
@@ -339,14 +348,18 @@ final class InspectorPageToolsModel {
     else { throw CancellationError() }
     let data = try JSONSerialization.data(withJSONObject: value["items"] ?? [])
     guard data.count < 1_048_576 else {
-      throw InspectorFailure("Storage snapshot exceeds its supported size.")
+      throw InspectorFailure(
+        InspectorToolsL10n.string("Storage snapshot exceeds its supported size."))
     }
     let rows = try JSONDecoder().decode([StorageRow].self, from: data)
     guard rows.count <= 200,
       rows.allSatisfy({
         $0.key.count <= 4096 && $0.preview.count <= 256 && (0...Int(Int32.max)).contains($0.length)
       })
-    else { throw InspectorFailure("Storage entries exceed the supported size.") }
+    else {
+      throw InspectorFailure(
+        InspectorToolsL10n.string("Storage entries exceed the supported size."))
+    }
     storage = rows
     storageLimited = value["truncated"] as? Bool == true
   }
@@ -367,7 +380,7 @@ final class InspectorPageToolsModel {
 
   func writeCookie(_ cookie: Cookie?, name: String, value: String) async {
     guard name.utf8.count <= 4096, value.utf8.count <= 4096, !name.isEmpty else {
-      failure = "Cookie name or value exceeds the editor limit."
+      failure = InspectorToolsL10n.string("Cookie name or value exceeds the editor limit.")
       return
     }
     do {
@@ -376,7 +389,8 @@ final class InspectorPageToolsModel {
       ]
       if let cookie {
         guard cookies.contains(where: { $0.id == cookie.id }), cookie.editable else {
-          throw InspectorFailure("This cookie cannot be edited in its current partition.")
+          throw InspectorFailure(
+            InspectorToolsL10n.string("This cookie cannot be edited in its current partition."))
         }
         params["path"] = cookie.path
         if cookie.domain.hasPrefix(".") { params["domain"] = cookie.domain }
@@ -389,7 +403,7 @@ final class InspectorPageToolsModel {
       }
       let result = try await developer.call("Network.setCookie", params: params)
       guard result["success"] as? Bool == true else {
-        throw InspectorFailure("Chromium rejected this cookie.")
+        throw InspectorFailure(InspectorToolsL10n.string("Chromium rejected this cookie."))
       }
       try await loadStorage()
       failure = nil
@@ -425,11 +439,14 @@ final class InspectorPageToolsModel {
       let value = try await developer.evaluate(
         "(()=>{if(location.origin!==\(expectedOrigin)[0])throw Error('The page changed.');return globalThis.__shaarBugReportV1.\(method)(...\(literal));})()"
       ) as? [String: Any]
-    else { throw InspectorFailure("Page storage is unavailable.") }
+    else { throw InspectorFailure(InspectorToolsL10n.string("Page storage is unavailable.")) }
     guard active, expectedGeneration == inspector?.documentGeneration else {
       throw CancellationError()
     }
-    if let error = value["error"] as? String { throw InspectorFailure(String(error.prefix(256))) }
+    if let error = value["error"] as? String {
+      let bounded = String(error.prefix(256))
+      throw InspectorFailure(InspectorToolsL10n.backendError(bounded))
+    }
     return value
   }
 

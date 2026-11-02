@@ -43,13 +43,15 @@ struct BrowserLibraryDrawer: View {
             if let profileID = store.libraryDrawerProfileID {
               LibraryDownloadsView(store: store, profileID: profileID, mediaOnly: false)
             } else {
-              ContentUnavailableView("Profile changed", systemImage: "person.crop.circle")
+              ContentUnavailableView(
+                PanelsL10n.string("Profile changed"), systemImage: "person.crop.circle")
             }
           case .media:
             if let profileID = store.libraryDrawerProfileID {
               LibraryDownloadsView(store: store, profileID: profileID, mediaOnly: true)
             } else {
-              ContentUnavailableView("Profile changed", systemImage: "person.crop.circle")
+              ContentUnavailableView(
+                PanelsL10n.string("Profile changed"), systemImage: "person.crop.circle")
             }
           }
         }
@@ -58,7 +60,7 @@ struct BrowserLibraryDrawer: View {
       .frame(width: geometry.size.width, height: geometry.size.height)
     }
     .accessibilityElement(children: .contain)
-    .accessibilityLabel("Library")
+    .accessibilityLabel(PanelsL10n.string("Library"))
     .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: store.libraryDrawerSection)
     .onAppear { if section == .spaces { spacesSearchIsFocused = true } }
     .onChange(of: store.libraryDrawerSection) { _, value in
@@ -74,14 +76,17 @@ struct BrowserLibraryDrawer: View {
       .frame(maxWidth: .infinity, maxHeight: .infinity)
 
       Button(action: closeAndFocusPage) {
-        Image(systemName: "arrow.left")
-          .font(.system(size: 16, weight: .medium))
-          .frame(width: 36, height: 36)
-          .contentShape(Rectangle())
+        Image(
+          systemName: BrowserLanguage.currentLaunchLanguage.isRightToLeft
+            ? "arrow.right" : "arrow.left"
+        )
+        .font(.system(size: 16, weight: .medium))
+        .frame(width: 36, height: 36)
+        .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
-      .help("Close Library")
-      .accessibilityLabel("Close Library")
+      .help(PanelsL10n.string("Close Library"))
+      .accessibilityLabel(PanelsL10n.string("Close Library"))
       .padding(8)
     }
     .padding(.horizontal, 8)
@@ -94,7 +99,7 @@ struct BrowserLibraryDrawer: View {
     } label: {
       VStack(spacing: 5) {
         Image(systemName: item.symbol).font(.system(size: 22, weight: .medium))
-        Text(item.rawValue)
+        Text(PanelsL10n.string(item.rawValue))
           .font(.system(size: 12, weight: .semibold))
           .lineLimit(1)
           .minimumScaleFactor(0.8)

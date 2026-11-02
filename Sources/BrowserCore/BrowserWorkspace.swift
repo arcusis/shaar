@@ -9,9 +9,13 @@ public enum WorkspaceError: Error, LocalizedError {
 
   public var errorDescription: String? {
     switch self {
-    case .unsupportedVersion: "The saved workspace version is unsupported."
-    case .invalidState: "The workspace has conflicting window, Space, profile, or tab ownership."
-    case .unknownWindow: "The window no longer belongs to this workspace."
+    case .unsupportedVersion:
+      BrowserLocalization.string("The saved workspace version is unsupported.")
+    case .invalidState:
+      BrowserLocalization.string(
+        "The workspace has conflicting window, Space, profile, or tab ownership.")
+    case .unknownWindow:
+      BrowserLocalization.string("The window no longer belongs to this workspace.")
     }
   }
 }

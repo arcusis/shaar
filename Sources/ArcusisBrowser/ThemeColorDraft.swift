@@ -68,14 +68,14 @@ struct ThemeColorDraft: Equatable {
 /// Named colors offered next to the preset tints wherever a Space or profile color is picked.
 enum ThemeColorPalette {
   static let extras: [(name: String, color: SpaceRGBColor)] = [
-    ("White", .init(red: 240, green: 234, blue: 228)),
-    ("Pink", .init(red: 237, green: 152, blue: 180)),
-    ("Purple", .init(red: 166, green: 112, blue: 160)),
-    ("Red", .init(red: 238, green: 83, blue: 100)),
-    ("Orange", .init(red: 255, green: 133, blue: 83)),
-    ("Yellow", .init(red: 255, green: 215, blue: 90)),
-    ("Green", .init(red: 54, green: 217, blue: 144)),
-    ("Blue", .init(red: 109, green: 188, blue: 215)),
-    ("Slate", .init(red: 103, green: 105, blue: 143)),
+    (SettingsL10n.string("White"), .init(red: 240, green: 234, blue: 228)),
+    (SettingsL10n.string("Pink"), .init(red: 237, green: 152, blue: 180)),
+    (SettingsL10n.string("Purple"), .init(red: 166, green: 112, blue: 160)),
+    (SettingsL10n.string("Red"), .init(red: 238, green: 83, blue: 100)),
+    (SettingsL10n.string("Orange"), .init(red: 255, green: 133, blue: 83)),
+    (SettingsL10n.string("Yellow"), .init(red: 255, green: 215, blue: 90)),
+    (SettingsL10n.string("Green"), .init(red: 54, green: 217, blue: 144)),
+    (SettingsL10n.string("Blue"), .init(red: 109, green: 188, blue: 215)),
+    (SettingsL10n.string("Slate"), .init(red: 103, green: 105, blue: 143)),
   ]
 }

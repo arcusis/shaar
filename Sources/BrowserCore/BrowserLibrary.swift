@@ -7,7 +7,9 @@ import Foundation
 public enum LibrarySection: String, CaseIterable, Sendable {
   case bookmarks, history
 
-  public var title: String { self == .bookmarks ? "Bookmarks" : "History" }
+  public var title: String {
+    BrowserLocalization.string(self == .bookmarks ? "Bookmarks" : "History")
+  }
 }
 
 public enum LibraryDataError: Error, LocalizedError {
@@ -15,8 +17,8 @@ public enum LibraryDataError: Error, LocalizedError {
 
   public var errorDescription: String? {
     switch self {
-    case .invalidBookmarks: "The engine returned invalid bookmark data."
-    case .invalidHistory: "The engine returned invalid history data."
+    case .invalidBookmarks: BrowserLocalization.string("The engine returned invalid bookmark data.")
+    case .invalidHistory: BrowserLocalization.string("The engine returned invalid history data.")
     }
   }
 }
@@ -94,7 +96,7 @@ public struct BookmarkTree: Equatable, Sendable {
   }
 
   private static func untitledBookmarkTitle(kind: String) -> String {
-    kind == "f" ? "Untitled folder" : "Untitled bookmark"
+    BrowserLocalization.string(kind == "f" ? "Untitled folder" : "Untitled bookmark")
   }
 }
 

@@ -3,10 +3,11 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #import "ChromiumLibrary.h"
+#import "include/ChromiumBridge.h"
 #include <limits.h>
 
 static NSError *LibraryError(NSString *message) {
-  return [NSError errorWithDomain:@"com.arcusis.browser.library" code:1 userInfo:@{NSLocalizedDescriptionKey: message}];
+  return [NSError errorWithDomain:@"com.arcusis.browser.library" code:1 userInfo:@{NSLocalizedDescriptionKey: ARCBridgeLocalizedString(message)}];
 }
 
 static BOOL LibraryURL(id value, BOOL webOnly) {
@@ -28,7 +29,7 @@ static BOOL LibraryURL(id value, BOOL webOnly) {
 - (void)watchProfileID:(NSString *)profileID {
   for (NSString *section in @[@"bookmarks", @"history"]) {
     [_services call:[section stringByAppendingString:@".watch"] profileID:profileID args:@{} completion:^(NSDictionary *result) {
-      if (![result[@"ok"] isEqual:@YES] && self->_onError) self->_onError(profileID, section, @"Library updates are unavailable for this profile.");
+      if (![result[@"ok"] isEqual:@YES] && self->_onError) self->_onError(profileID, section, ARCBridgeLocalizedString(@"Library updates are unavailable for this profile."));
     }];
   }
 }

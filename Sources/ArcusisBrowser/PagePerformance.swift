@@ -15,10 +15,10 @@ enum PerformanceQuality: String {
 
   var title: String {
     switch self {
-    case .unavailable: "Unavailable"
-    case .good: "Good"
-    case .needsImprovement: "Needs improvement"
-    case .poor: "Poor"
+    case .unavailable: InspectorToolsL10n.string("Unavailable")
+    case .good: InspectorToolsL10n.string("Good")
+    case .needsImprovement: InspectorToolsL10n.string("Needs improvement")
+    case .poor: InspectorToolsL10n.string("Poor")
     }
   }
 }

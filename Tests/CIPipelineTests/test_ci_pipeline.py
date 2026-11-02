@@ -543,7 +543,7 @@ class SwiftCompilerPlanTests(unittest.TestCase):
             self.assertEqual(list(scratch.rglob("*.o")), [])
 
     def test_native_graph_refuses_outputs_outside_scratch_and_dependency_cycles(self):
-        from swift_build_plan import ordered_modules, prepare_inputs
+        from swift_build_plan import ordered_modules, parallel_module_batches, prepare_inputs
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
             with self.assertRaisesRegex(ValueError, "escaped"):
@@ -556,6 +556,24 @@ class SwiftCompilerPlanTests(unittest.TestCase):
             ordered_modules(nodes, [first, second])
         nodes[1]["inputs"] = []
         self.assertEqual(ordered_modules(nodes, [first, second]), [second, first])
+
+    def test_parallel_native_batches_only_start_modules_after_dependencies(self):
+        from swift_build_plan import parallel_module_batches
+        def module(name, output, inputs=()):
+            return ["swiftc", "-module-name", name, "-emit-module-path", output]
+        core = module("Core", "Core.swiftmodule")
+        app = module("App", "App.swiftmodule")
+        support = module("Support", "Support.swiftmodule")
+        nodes = [{"args": core, "inputs": []},
+                 {"args": app, "inputs": ["Core.swiftmodule"]},
+                 {"args": support, "inputs": []}]
+        batches = parallel_module_batches(nodes, [app, support, core], max_parallel=2)
+        self.assertEqual([[item[item.index("-module-name") + 1] for item in batch]
+                          for batch in batches], [["Core", "Support"], ["App"]])
+        self.assertEqual({item[item.index("-module-name") + 1]
+                          for batch in batches for item in batch}, {"Core", "App", "Support"})
+        with self.assertRaisesRegex(ValueError, "positive"):
+            parallel_module_batches(nodes, [core, app, support], max_parallel=0)
 
     def test_full_extraction_inventory_includes_manifest_and_compilation_plugins(self):
         from ci_support import swift_source_files

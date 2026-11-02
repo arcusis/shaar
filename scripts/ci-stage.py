@@ -16,6 +16,7 @@ import tarfile
 from pathlib import Path
 
 from ci_support import Commands, ROOT
+from ci_engine import BUNDLE_NAME, archive_bundle, engine_shards, restore_bundle, shard_modes
 
 
 VISUAL_FILTERS = (
@@ -93,18 +94,42 @@ def run_engine(checks: Commands, mode: str, iterations: int) -> None:
     require_hosted_mac()
     if checks.run("verification-build", ["bash", "scripts/bundle-app.sh", "--with-engine", "--verification"]):
         return
-    environment = dict(os.environ, SHAAR_PROBE_TIMEOUT_SCALE="3", ARCUSIS_PRIVATE_WINDOW_CI="1")
     for selected in ENGINE_MODES if mode == "all" else (mode,):
         repetitions = max(iterations, MINIMUM_REPETITIONS.get(selected, 1))
-        for iteration in range(1, repetitions + 1):
-            flags = [] if selected == "baseline" else [f"--{selected}"]
-            proof = ROOT / "build/private-window-evidence"
-            if selected == "private-window" and proof.exists():
-                shutil.rmtree(proof)
-            # Every iteration is evaluated. A later pass never erases an earlier failure.
-            checks.run(f"{selected}-{iteration}", [sys.executable, "scripts/engine_fixture.py", *flags], env=environment)
-            if selected == "private-window" and proof.is_dir():
-                shutil.copytree(proof, checks.directory / f"private-window-{iteration}")
+        run_probe_iterations(checks, selected, range(1, repetitions + 1))
+
+
+def run_probe_iterations(checks: Commands, mode: str, iterations: range) -> None:
+    environment = dict(os.environ, SHAAR_PROBE_TIMEOUT_SCALE="3", ARCUSIS_PRIVATE_WINDOW_CI="1")
+    for iteration in iterations:
+        flags = [] if mode == "baseline" else [f"--{mode}"]
+        proof = ROOT / "build/private-window-evidence"
+        if mode == "private-window" and proof.exists():
+            shutil.rmtree(proof)
+        # Every iteration is evaluated. A later pass never erases an earlier failure.
+        checks.run(f"{mode}-{iteration}", [sys.executable, "scripts/engine_fixture.py", *flags], env=environment)
+        if mode == "private-window" and proof.is_dir():
+            shutil.copytree(proof, checks.directory / f"private-window-{iteration}")
+
+
+def build_engine_bundle(checks: Commands, iterations: int) -> None:
+    require_hosted_mac()
+    if checks.run("verification-build", ["bash", "scripts/bundle-app.sh", "--with-engine", "--verification"]):
+        return
+    archive_bundle(ROOT, checks.directory)
+    with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
+        output.write(f"shards={json.dumps(engine_shards(iterations))}\n")
+
+
+def run_engine_shard(checks: Commands, shard: str, iterations: int) -> None:
+    require_hosted_mac()
+    modes = shard_modes(shard, iterations)
+    restore_bundle(ROOT, ROOT / "build/ci/engine-build")
+    if checks.run("verification-signature", ["codesign", "--verify", "--deep", "--strict", "--verbose=2",
+                                            f"build/{BUNDLE_NAME}"]):
+        return
+    for mode, repetitions in modes:
+        run_probe_iterations(checks, mode, repetitions)
 
 
 def run_visuals(checks: Commands) -> None:
@@ -134,12 +159,15 @@ def run_sanitizer(checks: Commands, sanitizer: str) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("stage", choices=("unit", "coverage", "engine", "visual", "localization", "shipping", "sanitize", "dead-code"))
+    parser.add_argument("stage", choices=("unit", "coverage", "engine", "engine-build", "engine-shard", "visual", "localization", "shipping", "sanitize", "dead-code"))
+    parser.add_argument("--shard", choices=engine_shards(10), default="baseline-lifecycle")
     parser.add_argument("--mode", choices=("all", *ENGINE_MODES), default="all")
     parser.add_argument("--iterations", type=int, choices=range(1, 11), default=1)
     parser.add_argument("--sanitizer", choices=("address", "thread"), default="address")
     options = parser.parse_args()
     suffix = f"-{options.mode}" if options.stage == "engine" and options.mode != "all" else ""
+    if options.stage == "engine-shard":
+        suffix = f"-{options.shard}"
     suffix += f"-{options.sanitizer}" if options.stage == "sanitize" else ""
     checks = Commands(options.stage + suffix)
     try:
@@ -149,6 +177,10 @@ def main() -> int:
             check_base_coverage(checks)
         elif options.stage == "engine":
             run_engine(checks, options.mode, options.iterations)
+        elif options.stage == "engine-build":
+            build_engine_bundle(checks, options.iterations)
+        elif options.stage == "engine-shard":
+            run_engine_shard(checks, options.shard, options.iterations)
         elif options.stage == "visual":
             run_visuals(checks)
         elif options.stage == "localization":

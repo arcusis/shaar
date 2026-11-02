@@ -12,6 +12,10 @@ from pathlib import Path
 
 
 MODULES = ("BrowserCore", "ArcusisBrowser", "ChromiumBridge", "Shaar", "ShaarVerification")
+# Engine-driven UI tests cover a few timing-dependent lines nondeterministically (merge group run
+# 41492941258 dropped ArcusisBrowser by 3 of 36,330 lines with no source change). Tolerate drops
+# up to 0.025 percentage points; anything larger is a real regression.
+NOISE = Fraction(1, 4000)
 
 
 def module_coverage(report: dict) -> dict[str, tuple[int, int]]:
@@ -47,7 +51,7 @@ def regressions(base: dict, candidate: dict) -> list[str]:
         if count == 0:
             continue
         new_covered, new_count = candidate.get(module, (0, 0))
-        if not new_count or Fraction(new_covered, new_count) < Fraction(covered, count):
+        if not new_count or Fraction(new_covered, new_count) < Fraction(covered, count) - NOISE:
             errors.append(f"{module}: {covered}/{count} to {new_covered}/{new_count}")
     return errors
 

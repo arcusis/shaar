@@ -22,7 +22,7 @@ Only `bundle-app.sh --with-engine --with-updates` in the release configuration w
 ## Cutting a release
 
 1. Raise `SHAAR_BUNDLE_VERSION` (Major.Minor.Patch, which also sets the tag `v<version>`) and `SHAAR_BUILD_VERSION`. Sparkle orders updates by the build number.
-2. Merge the change and wait for Source checks on that exact production commit to pass, including full Swift CodeQL analysis. PR analysis covers shipping code; production analysis also covers verification/test-support modules, the manifest and build plugins. Then tag `v<version>` at that verified commit and push the tag.
+2. Merge the change and wait for both Source checks and Swift security on that exact production commit to pass. Full production Swift analysis includes verification/support modules, the manifest and build plugins. Release CI enforces those exact successful production-push runs and blocks any open code-scanning alert at any severity. Then tag `v<version>` at that verified commit and push the tag.
 3. Write the release notes as `<li>` lines in an HTML file.
 4. Dry run: `bash scripts/release.sh --notes notes.html`. Add `--allow-unsigned-update` when the EdDSA key is not on this Mac.
 5. Real run, from a clean checkout of the tag: `bash scripts/release.sh --notes notes.html --notarize --upload`. It notarizes and staples the app and the DMG, then creates a **draft** release on the existing tag with all three assets.

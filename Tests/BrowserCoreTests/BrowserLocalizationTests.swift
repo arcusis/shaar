@@ -7,6 +7,36 @@ import Testing
 
 @testable import BrowserCore
 
+@Test func packagedCoreResourcesResolveWithoutBuilderScratchDirectory() throws {
+  let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: root) }
+  let app = root.appendingPathComponent("Fixture.app")
+  let resources = app.appendingPathComponent("Contents/Resources")
+  let package = resources.appendingPathComponent("ArcusisBrowser_BrowserCore.bundle")
+  try FileManager.default.createDirectory(at: package, withIntermediateDirectories: true)
+  let info = try PropertyListSerialization.data(
+    fromPropertyList: ["CFBundleIdentifier": "test.resources", "CFBundlePackageType": "APPL"],
+    format: .xml, options: 0)
+  try info.write(to: app.appendingPathComponent("Contents/Info.plist"))
+  try info.write(to: package.appendingPathComponent("Info.plist"))
+  let host = try #require(Bundle(url: app))
+  let selected = BrowserLocalization.resourceBundle(in: host) {
+    Issue.record("Packaged resource lookup reached the builder fallback")
+    return .main
+  }
+  #expect(selected.bundleURL.standardizedFileURL == package.standardizedFileURL)
+}
+
+@Test func developmentCoreResourcesUseSwiftPMFallbackWhenHostHasNoPackage() {
+  var usedFallback = false
+  let selected = BrowserLocalization.resourceBundle(in: Bundle(for: NSObject.self)) {
+    usedFallback = true
+    return .main
+  }
+  #expect(usedFallback)
+  #expect(selected == .main)
+}
+
 @Test func coreCatalogLocalizesProductMeaningAndFreshSessionDefaults() throws {
   #expect(ProductIdentity.name == "Shaar")
   #expect(ProductIdentity.dataFolderName == "Arcusis Browser")

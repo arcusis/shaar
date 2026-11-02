@@ -32,7 +32,36 @@ import Testing
     let receipt = try InspectorAICopyProbe.pasteboardReceipt(board)
     #expect(receipt["items"] as? Int == 1 && receipt["png"] as? Bool == true)
     #expect(receipt["width"] as? Int == 20 && receipt["height"] as? Int == 12)
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    let cache = root.appending(path: "cache")
+    try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let file = cache.appending(path: "123-button.png")
+    try png.write(to: file)
+    try InspectorAICopyModel.write("Screenshot: " + file.path, png: png, to: board)
+    #expect(
+      try InspectorAICopyProbe.screenshotFile(board, within: cache)
+        == file.resolvingSymlinksInPath())
+    try Data([1, 2, 3]).write(to: file)
+    #expect(throws: InspectorFailure.self) {
+      _ = try InspectorAICopyProbe.screenshotFile(board, within: cache)
+    }
+    try FileManager.default.removeItem(at: file)
+    #expect(throws: InspectorFailure.self) {
+      _ = try InspectorAICopyProbe.screenshotFile(board, within: cache)
+    }
+    let outside = root.appending(path: "outside.png")
+    try png.write(to: outside)
+    let link = cache.appending(path: "link.png")
+    try FileManager.default.createSymbolicLink(at: link, withDestinationURL: outside)
+    try InspectorAICopyModel.write("Screenshot: " + link.path, png: png, to: board)
+    #expect(throws: InspectorFailure.self) {
+      _ = try InspectorAICopyProbe.screenshotFile(board, within: cache)
+    }
     try InspectorAICopyModel.write("Notes only", png: nil, to: board)
     #expect(throws: InspectorFailure.self) { _ = try InspectorAICopyProbe.pasteboardReceipt(board) }
+    #expect(throws: InspectorFailure.self) {
+      _ = try InspectorAICopyProbe.screenshotFile(board, within: cache)
+    }
   }
 }

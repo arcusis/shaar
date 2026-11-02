@@ -64,7 +64,7 @@ struct InspectorDesignView: View {
           ) {
             VStack(spacing: 8) {
               Text(selection.typography.preview)
-                .font(.custom(previewFont, size: 18)).lineLimit(2)
+                .font(.custom(previewFont, size: 18).weight(previewWeight)).lineLimit(2)
                 .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading).padding(8)
                 .background(.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 5))
               LazyVGrid(
@@ -110,6 +110,21 @@ struct InspectorDesignView: View {
       .trimmingCharacters(
         in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "\"'")))
       ?? "System"
+  }
+
+  private var previewWeight: Font.Weight {
+    guard let weight = Double(selection.typography.weight), weight.isFinite else { return .regular }
+    switch weight {
+    case ..<150: return .ultraLight
+    case ..<250: return .thin
+    case ..<350: return .light
+    case ..<450: return .regular
+    case ..<550: return .medium
+    case ..<650: return .semibold
+    case ..<750: return .bold
+    case ..<850: return .heavy
+    default: return .black
+    }
   }
 
   private func field(_ title: String, value: String) -> some View {

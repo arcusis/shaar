@@ -50,16 +50,7 @@ import SwiftUI
       receipt["items"] as? Int == 1 && receipt["png"] as? Bool == true,
       "Clipboard must contain Markdown and PNG on one item.")
     let text = board.pasteboardItems?.first?.string(forType: .string) ?? ""
-    guard
-      let path = text.split(separator: "\n").first(where: { $0.hasPrefix("Screenshot: ") })?
-        .dropFirst("Screenshot: ".count)
-    else {
-      throw InspectorFailure("AI context does not reference its screenshot file.")
-    }
-    let savedPNG = try Data(contentsOf: URL(filePath: String(path)))
-    try check(
-      savedPNG == board.pasteboardItems?.first?.data(forType: .png),
-      "Screenshot file and pasteboard PNG differ.")
+    _ = try Self.screenshotFile(board, within: ai.screenshotCache.directory)
     try check(
       text.hasPrefix("Attached browser context from http://inspector.localhost:"),
       "Markdown header is missing.")
@@ -251,6 +242,29 @@ import SwiftUI
       "items": items.count, "markdown": true, "png": true, "width": bitmap.pixelsWide,
       "height": bitmap.pixelsHigh,
     ]
+  }
+
+  static func screenshotFile(_ board: NSPasteboard, within directory: URL) throws -> URL {
+    let text = board.string(forType: .string) ?? ""
+    guard let line = text.split(separator: "\n").first(where: { $0.hasPrefix("Screenshot: ") })
+    else {
+      throw InspectorFailure("AI context does not reference its screenshot file.")
+    }
+    let path = String(line.dropFirst("Screenshot: ".count))
+    let root = directory.standardizedFileURL.resolvingSymlinksInPath()
+    let file = URL(filePath: path).standardizedFileURL.resolvingSymlinksInPath()
+    guard path.hasPrefix("/"), file.path.hasPrefix(root.path + "/"),
+      file.pathExtension.lowercased() == "png"
+    else {
+      throw InspectorFailure("Screenshot reference escaped the owned cache.")
+    }
+    guard let data = try? Data(contentsOf: file),
+      data == board.pasteboardItems?.first?.data(forType: .png),
+      NSBitmapImageRep(data: data) != nil
+    else {
+      throw InspectorFailure("Screenshot file is missing or differs from the pasteboard PNG.")
+    }
+    return file
   }
   private func check(_ value: Bool, _ message: String) throws {
     if !value { throw InspectorFailure(message) }

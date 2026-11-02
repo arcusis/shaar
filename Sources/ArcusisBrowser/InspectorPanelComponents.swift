@@ -124,18 +124,19 @@ struct InspectorCodeBlock: View {
         if let copy { InspectorIconButton("Copy code", symbol: "doc.on.doc", action: copy) }
       }.padding(.horizontal, 9).frame(height: 27)
       ScrollView([.horizontal, .vertical]) {
-        LazyVStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 3) {
           ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
             HStack(alignment: .firstTextBaseline, spacing: 10) {
               Text(String(index + 1)).foregroundStyle(.tertiary).frame(
                 width: 23, alignment: .trailing)
               Text(line.isEmpty ? " " : line).foregroundStyle(.primary).textSelection(.enabled)
               Spacer(minLength: 12)
-            }.font(.system(size: 11, design: .monospaced)).fixedSize(
+            }.font(.system(size: 11, weight: .regular, design: .monospaced)).fixedSize(
               horizontal: true, vertical: false)
           }
         }.padding(.bottom, 9)
-      }.frame(height: min(260, CGFloat(max(1, lines.count)) * 17 + 9))
+      }.defaultScrollAnchor(.topLeading).frame(
+        height: min(260, CGFloat(max(1, lines.count)) * 17 + 9))
     }.background(.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 5))
       .environment(\.layoutDirection, .leftToRight)
   }

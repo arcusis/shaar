@@ -139,7 +139,22 @@ ditto "$binary_dir/Sparkle.framework" "$app/Contents/Frameworks/Sparkle.framewor
 mkdir -p "$app/Contents/Resources/Sparkle"
 cp "$scratch_path/artifacts/sparkle/Sparkle/LICENSE" "$app/Contents/Resources/Sparkle/LICENSE"
 if $with_engine; then
-  framework=$(bash scripts/fetch-engine.sh)
+  if $with_verification && [[ ${SHAAR_TEST_BUILT_ENGINE:-0} == 1 ]]; then
+    receipt=build/EngineSource/receipt.json
+    jq -e '.status == "succeeded" and (.framework.path | type == "string")' "$receipt" >/dev/null
+    built_binary="build/EngineSource/$(jq -er .framework.path "$receipt")"
+    [[ $(shasum -a 256 "$built_binary" | cut -d ' ' -f 1) == $(jq -er .framework.sha256 "$receipt") ]] || {
+      echo 'Built engine does not match its source-build receipt.' >&2
+      exit 1
+    }
+    framework=${built_binary%/Versions/*/Chromium Framework}
+    [[ $framework != "$built_binary" && -d "$framework/Versions" ]] || {
+      echo 'Built engine receipt has an unexpected framework path.' >&2
+      exit 1
+    }
+  else
+    framework=$(bash scripts/fetch-engine.sh)
+  fi
   # Keep version symlinks and upstream resources. Re-sign nested code inside out.
   ditto "$framework" "$app/Contents/Frameworks/Chromium Framework.framework"
   sign_engine_framework "$app/Contents/Frameworks/Chromium Framework.framework" adhoc_sign

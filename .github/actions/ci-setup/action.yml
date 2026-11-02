@@ -53,7 +53,7 @@ runs:
           echo '```'
         } >> "$GITHUB_STEP_SUMMARY"
     - name: Cache SwiftPM products for this source and mode
-      if: inputs.mode != 'fast' && inputs.mode != 'codeql' && inputs.mode != 'engine-probe'
+      if: inputs.mode != 'fast' && inputs.mode != 'codeql'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
       with:
         path: ${{ inputs.products }}
@@ -61,7 +61,7 @@ runs:
         restore-keys: |
           swiftpm-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.identity }}-${{ inputs.mode }}-
     - name: Cache SwiftPM dependencies without compiled app objects
-      if: inputs.mode != 'fast' && inputs.mode != 'engine-probe'
+      if: inputs.mode != 'fast'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
       with:
         path: |

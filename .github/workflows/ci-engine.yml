@@ -9,12 +9,10 @@ on:
 permissions:
   contents: read
 jobs:
-  prepare:
-    name: Build shared verification bundle
+  probes:
+    name: Engine probes, private windows, Quit and recovery
     runs-on: macos-26
-    timeout-minutes: 30
-    outputs:
-      shards: ${{ steps.bundle.outputs.shards }}
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -23,42 +21,11 @@ jobs:
         with:
           mode: verification
           products: build/swiftpm/verification
-      - name: Build and bind bundle to commit, engine and toolchain
-        id: bundle
+      - name: Run every probe iteration without retrying failures
         env:
           CI_ITERATIONS: ${{ inputs.iterations }}
-        run: .venv/bin/python scripts/ci-stage.py engine-build --iterations "$CI_ITERATIONS"
+        run: .venv/bin/python scripts/ci-stage.py engine --iterations "$CI_ITERATIONS"
       - uses: ./.github/actions/ci-evidence
         if: always()
         with:
-          stage: engine-build
-          compression-level: '0'
-  probes:
-    name: Engine ${{ matrix.shard }}
-    needs: prepare
-    runs-on: macos-26
-    timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: ${{ fromJSON(needs.prepare.outputs.shards) }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/ci-setup
-        with:
-          mode: engine-probe
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
-        with:
-          name: ci-engine-build-${{ github.run_id }}-${{ github.run_attempt }}
-          path: build/ci/engine-build
-      - name: Verify shared bundle and run assigned iterations without retries
-        env:
-          CI_ITERATIONS: ${{ inputs.iterations }}
-          CI_SHARD: ${{ matrix.shard }}
-        run: .venv/bin/python scripts/ci-stage.py engine-shard --iterations "$CI_ITERATIONS" --shard "$CI_SHARD"
-      - uses: ./.github/actions/ci-evidence
-        if: always()
-        with:
-          stage: engine-shard-${{ matrix.shard }}
+          stage: engine

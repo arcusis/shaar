@@ -320,18 +320,6 @@ class SwiftReportTests(unittest.TestCase):
 
 
 class ProbeSoakTests(unittest.TestCase):
-    def test_shards_cover_every_original_iteration_once_without_retry(self):
-        from collections import Counter
-        from ci_engine import engine_shards, shard_modes
-        for iterations in (1, 2, 3, 10):
-            expected = Counter((mode, index) for mode in STAGES.ENGINE_MODES
-                               for index in range(1, max(iterations, STAGES.MINIMUM_REPETITIONS.get(mode, 1)) + 1))
-            actual = Counter((mode, index) for shard in engine_shards(iterations)
-                             for mode, indexes in shard_modes(shard, iterations) for index in indexes)
-            self.assertEqual(actual, expected)
-        with self.assertRaises(ValueError):
-            shard_modes("private-window-4", 1)
-
     def test_all_modes_share_one_build_and_preserve_each_iteration(self):
         checks = unittest.mock.Mock()
         checks.run.return_value = 0
@@ -394,40 +382,6 @@ class ProbeSoakTests(unittest.TestCase):
             self.assertEqual(suite.attrib["tests"], "3")
             self.assertEqual(len(suite.findall("testcase/failure")), 1)
             self.assertEqual(len(suite.findall("testcase/skipped")), 2)
-
-
-class EngineTransferTests(unittest.TestCase):
-    def test_transferred_bundle_preserves_exec_and_links_and_rejects_wrong_context_or_digest(self):
-        from ci_engine import BUNDLE_NAME, archive_bundle, restore_bundle
-        import shutil
-        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {
-            "GITHUB_SHA": "a" * 40, "CI_TOOLCHAIN_ID": "toolchain",
-        }):
-            root = Path(temporary)
-            pin = root / "ThirdParty/ArdiaCore/pin.json"
-            pin.parent.mkdir(parents=True)
-            pin.write_text(json.dumps({"sha256": "b" * 64}))
-            bundle = root / "build" / BUNDLE_NAME
-            bundle.mkdir(parents=True)
-            executable = bundle / "Main"
-            executable.write_bytes(b"authored executable")
-            executable.chmod(0o755)
-            (bundle / "Alias").symlink_to("Main")
-            directory = root / "evidence"
-            directory.mkdir()
-            archive_bundle(root, directory)
-            shutil.rmtree(bundle)
-            with patch.dict(os.environ, {"GITHUB_SHA": "c" * 40}), self.assertRaises(ValueError):
-                restore_bundle(root, directory)
-            restore_bundle(root, directory)
-            self.assertEqual(executable.read_bytes(), b"authored executable")
-            self.assertEqual(executable.stat().st_mode & 0o111, 0o111)
-            self.assertEqual((bundle / "Alias").readlink(), Path("Main"))
-            shutil.rmtree(bundle)
-            with (directory / "verification.tar.gz").open("ab") as archive:
-                archive.write(b"tampered")
-            with self.assertRaisesRegex(ValueError, "digest"):
-                restore_bundle(root, directory)
 
 
 class SwiftExtractionTests(unittest.TestCase):

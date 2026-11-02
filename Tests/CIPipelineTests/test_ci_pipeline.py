@@ -221,6 +221,11 @@ class CoverageGateTests(unittest.TestCase):
         self.assertEqual(COVERAGE.regressions({"BrowserCore": (8, 10)}, {"BrowserCore": (16, 20)}), [])
         self.assertEqual(COVERAGE.regressions({"BrowserCore": (8, 10)}, {"BrowserCore": (9, 10)}), [])
 
+    def test_timing_noise_passes_but_real_drop_fails(self):
+        base = {"ArcusisBrowser": (22697, 36330)}
+        self.assertEqual(COVERAGE.regressions(base, {"ArcusisBrowser": (22694, 36330)}), [])
+        self.assertEqual(len(COVERAGE.regressions(base, {"ArcusisBrowser": (22680, 36330)})), 1)
+
     def test_missing_malformed_and_duplicate_source_data_fail(self):
         reports = [{}, {"type": "llvm.coverage.json.export", "data": [{"files": []}]}, self.report(core=(11, 10))]
         duplicated = self.report()

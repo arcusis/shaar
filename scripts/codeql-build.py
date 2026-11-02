@@ -14,6 +14,7 @@ import subprocess
 import time
 
 from ci_support import Commands, ROOT, SWIFT_SOURCE_ROOTS, swift_source_files, file_sha256
+from swift_build_plan import manifest_commands, native_command_log, ordered_modules, prepare_inputs
 
 
 PLAN = ROOT / "build/ci/codeql-swift/compile-plan.json"
@@ -80,12 +81,16 @@ def prepare(scope: str) -> int:
                  "--scratch-path", "build/swiftpm/codeql", "--disable-index-store", "--verbose",
                  "-Xswiftc", "-whole-module-optimization", "-Xswiftc", "-Onone",
                  "-Xswiftc", "-num-threads", "-Xswiftc", "2",
-                 "-Xswiftc", "-no-emit-module-separately-wmo"]
+                 "-Xswiftc", "-no-emit-module-separately-wmo", "--print-manifest-job-graph"]
     if checks.run("native-build-plan", arguments):
         return checks.finish()
     sources = source_hashes(ROOT, scope)
     all_sources = source_hashes(ROOT)
-    commands = compiler_commands((checks.directory / "native-build-plan.log").read_text(), ROOT, compiler, set(all_sources))
+    scratch = ROOT / "build/swiftpm/codeql"
+    manifest = manifest_commands(scratch / "debug.yaml")
+    prepare_inputs(manifest, ROOT, scratch)
+    commands = compiler_commands(native_command_log(manifest, compiler), ROOT, compiler, set(all_sources))
+    commands = ordered_modules(manifest, commands)
     commands = [command for command in commands if command_sources(command, ROOT) <= set(sources)]
     commands.sort(key=lambda command: command[command.index("-module-name") + 1] != "BrowserTestSupport")
     PLAN.parent.mkdir(parents=True, exist_ok=True)

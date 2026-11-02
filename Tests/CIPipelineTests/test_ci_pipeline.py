@@ -442,6 +442,45 @@ class SwiftExtractionTests(unittest.TestCase):
 
 
 class SwiftCompilerPlanTests(unittest.TestCase):
+    def test_native_graph_materializes_response_files_and_framework_links_without_compiling(self):
+        from swift_build_plan import manifest_commands, prepare_inputs
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            scratch = root / "build/plan"
+            scratch.mkdir(parents=True)
+            framework = root / "artifacts/Example.framework"
+            framework.mkdir(parents=True)
+            (framework / "Binary").write_bytes(b"authored binary")
+            (framework / "Alias").symlink_to("Binary")
+            response = scratch / "Core.build/sources"
+            source = root / "Sources/With Space.swift"
+            copied = scratch / "Example.framework"
+            manifest = scratch / "debug.yaml"
+            manifest.write_text("commands:\n  \"source-list\":\n    tool: write-auxiliary-file\n    inputs: "
+                                + json.dumps(["<sources-file-list>", str(source)]) + "\n    outputs: "
+                                + json.dumps([str(response)]) + "\n  \"framework\":\n    tool: copy-tool\n    inputs: "
+                                + json.dumps([str(framework)]) + "\n    outputs: " + json.dumps([str(copied)]) + "\n")
+            prepare_inputs(manifest_commands(manifest), root, scratch)
+            self.assertEqual(CODEQL_BUILD.command_sources(["@" + str(response)], root), {"Sources/With Space.swift"})
+            self.assertEqual((copied / "Binary").read_bytes(), b"authored binary")
+            self.assertEqual((copied / "Alias").readlink(), Path("Binary"))
+            self.assertEqual(list(scratch.rglob("*.o")), [])
+
+    def test_native_graph_refuses_outputs_outside_scratch_and_dependency_cycles(self):
+        from swift_build_plan import ordered_modules, prepare_inputs
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            with self.assertRaisesRegex(ValueError, "escaped"):
+                prepare_inputs([{"outputs": [str(root / "outside")]}], root, root / "build/plan")
+        first = ["swiftc", "-module-name", "First", "-emit-module-path", "First.swiftmodule"]
+        second = ["swiftc", "-module-name", "Second", "-emit-module-path", "Second.swiftmodule"]
+        nodes = [{"args": first, "inputs": ["Second.swiftmodule"]},
+                 {"args": second, "inputs": ["First.swiftmodule"]}]
+        with self.assertRaisesRegex(ValueError, "cycle"):
+            ordered_modules(nodes, [first, second])
+        nodes[1]["inputs"] = []
+        self.assertEqual(ordered_modules(nodes, [first, second]), [second, first])
+
     def test_replay_inventory_detects_new_untracked_swift_file_without_running_git(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

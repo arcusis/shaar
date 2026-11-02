@@ -61,6 +61,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     return nil;
   }
   _profiles = [NSMutableDictionary dictionary];
+  _privateTrackerPreparedSources = [NSMutableSet set];
   _primaryWindowID = NSUUID.UUID.UUIDString;
   _windows = [NSMutableDictionary dictionary];
   _tabWindows = [NSMutableDictionary dictionary];

@@ -45,8 +45,11 @@ static void ServiceEvent(void *context, const char *topic, const char *json) {
   _setSink = (ac_engine_set_event_sink_t)dlsym(library, "ac_engine_set_event_sink");
   NSArray *methods = @[@"downloads.list", @"downloads.pause", @"downloads.resume", @"downloads.cancel", @"downloads.remove",
     @"bookmarks.tree", @"bookmarks.apply", @"bookmarks.watch", @"history.query", @"history.delete_urls", @"history.watch"];
+  NSArray *privateMethods = @[@"private.tracker.rules.set", @"private.privacy.get",
+    @"private.tracker.site.set", @"private.tracker.site.get", @"site.settings.set",
+    @"site.settings.get", @"site.settings.set.default"];
   NSMutableDictionary *calls = [NSMutableDictionary dictionary];
-  for (NSString *method in methods) {
+  for (NSString *method in [methods arrayByAddingObjectsFromArray:privateMethods]) {
     NSString *symbol = [@"ac_" stringByAppendingString:[method stringByReplacingOccurrencesOfString:@"." withString:@"_"]];
     void *address = dlsym(library, symbol.UTF8String);
     if (address) calls[method] = [NSValue valueWithPointer:address];
@@ -60,6 +63,33 @@ static void ServiceEvent(void *context, const char *topic, const char *json) {
   _paths = [NSMutableDictionary dictionary];
   _profilesByPath = [NSMutableDictionary dictionary];
   return self;
+}
+
+- (BOOL)privatePrivacyAvailable {
+  return _calls[@"private.tracker.rules.set"] && _calls[@"private.privacy.get"] &&
+    _calls[@"private.tracker.site.set"] && _calls[@"private.tracker.site.get"] &&
+    _calls[@"site.settings.set"] && _calls[@"site.settings.get"] &&
+    _calls[@"site.settings.set.default"];
+}
+
+- (void)preparePrivateTrackerRulesForProfileID:(NSString *)profileID
+  completion:(void (^)(BOOL))completion {
+  NSAssert(NSThread.isMainThread, @"Private rules require the UI thread");
+  if (!self.privatePrivacyAvailable) { completion(NO); return; }
+  NSURL *url = [[NSBundle mainBundle].resourceURL URLByAppendingPathComponent:@"Privacy/tracker-domains.json"];
+  NSData *data = [NSData dataWithContentsOfURL:url options:NSDataReadingMappedIfSafe error:nil];
+  NSDictionary *rules = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+  NSArray *domains = [rules[@"domains"] isKindOfClass:NSArray.class] ? rules[@"domains"] : nil;
+  NSString *revision = [rules[@"revision"] isKindOfClass:NSString.class] ? rules[@"revision"] : nil;
+  if (![rules[@"schema"] isEqual:@1] || !revision.length || !domains.count || domains.count > 100000) {
+    completion(NO); return;
+  }
+  [self call:@"private.tracker.rules.set" profileID:profileID
+    args:@{@"schema": @1, @"revision": revision, @"domains": domains}
+    completion:^(NSDictionary *result) {
+      completion([result[@"revision"] isEqual:revision] &&
+        [result[@"domainCount"] isEqual:@(domains.count)]);
+    }];
 }
 
 - (void)start {

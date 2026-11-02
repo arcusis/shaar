@@ -50,6 +50,7 @@ NSString *ARCValidatedProfileID(NSString *profileID);
   NSMutableDictionary<NSString *, id> *_windowCloseObservers;
   NSMutableSet<NSString *> *_retiredWindowIDs;
   NSMutableDictionary<NSString *, ArdiaCoreProfile *> *_profiles;
+  NSMutableSet<NSString *> *_privateTrackerPreparedSources;
   NSMutableDictionary<NSString *, ArdiaCoreTab *> *_tabs;
   NSMutableDictionary<NSString *, ArdiaCoreTab *> *_extensionManagers;
   NSMutableDictionary<NSString *, NSMutableDictionary *> *_privateProbeContexts;

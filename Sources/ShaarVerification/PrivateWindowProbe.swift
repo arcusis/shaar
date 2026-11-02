@@ -59,6 +59,10 @@ final class PrivateWindowProbe {
     "malformedContextRejected",
     "normalProfileIDCollisionRejected", "normalWindowIDCollisionRejected",
     "normalTabIDCollisionRejected",
+    "privateGlobalCookiesAndStorageBlocked", "privateHTTPSOnlyEnabled",
+    "privateReferrersDisabled", "privateWebRTCPolicyRestricted",
+    "privateExtensionsDisabled", "privateTrackerRulesLoaded",
+    "privateTrackerRequestBlocked", "privateSiteCookieAllowanceWorks",
     "multipleTabsShareNativePrivateWindow", "privateSelectionAndNativeViewsOwned",
     "privateNavigationReloadBackForward", "privateCallbacksUseOwnersWithoutRegularContamination",
     "invalidPrivateOperationsRejected", "privateTabCloseConfirmedAndStaleRejected",
@@ -189,6 +193,22 @@ final class PrivateWindowProbe {
       throw PrivateWindowFailure("Private first tab could not be selected.")
     }
     try await waitForFixture(tabID: t1, privateTab: true, contextID: contextA)
+    let privacy = try await privatePrivacyStatus(contextA)
+    let storageBlocked = try await privateStorageIsBlocked(t1)
+    checks["privateGlobalCookiesAndStorageBlocked"] =
+      privacy["globalCookies"] as? String == "block" && storageBlocked
+    checks["privateHTTPSOnlyEnabled"] = privacy["httpsOnly"] as? Bool == true
+    checks["privateReferrersDisabled"] = privacy["referrersEnabled"] as? Bool == false
+    checks["privateWebRTCPolicyRestricted"] =
+      privacy["webRTCIPHandlingPolicy"] as? String == "disable_non_proxied_udp"
+      && privacy["webRTCPolicyExceptionCount"] as? Int == 0
+      && privacy["localIPExceptionCount"] as? Int == 0
+    checks["privateExtensionsDisabled"] = privacy["extensionsDisabled"] as? Bool == true
+    checks["privateTrackerRulesLoaded"] =
+      privacy["trackerProtectionEnabled"] as? Bool == true
+      && (privacy["trackerDomainCount"] as? Int ?? 0) > 6000
+    checks["privateTrackerRequestBlocked"] = try await trackerRequestBlocked(t1, context: contextA)
+    checks["privateSiteCookieAllowanceWorks"] = try await allowPrivateFixtureCookies(contextA)
     guard runtime.selectPrivateTabID(t2, windowID: w2, contextID: contextA) else {
       throw PrivateWindowFailure("Private second tab could not be selected.")
     }
@@ -663,12 +683,73 @@ final class PrivateWindowProbe {
     return value
   }
 
+  private func privatePrivacyStatus(_ context: String) async throws -> [String: Any] {
+    let data: Data? = await withCheckedContinuation { continuation in
+      runtime.privatePrivacyStatus(forContextID: context) {
+        continuation.resume(returning: try? JSONSerialization.data(withJSONObject: $0))
+      }
+    }
+    guard let data, let value = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+      throw PrivateWindowFailure("Private engine privacy status is malformed.")
+    }
+    if value["error"] != nil || value["offTheRecord"] as? Bool != true {
+      throw PrivateWindowFailure("Private engine privacy status is unavailable.")
+    }
+    return value
+  }
+
+  private func privateStorageIsBlocked(_ tab: String) async throws -> Bool {
+    let value = try await evaluatePrivateObject(tab,
+      "(()=>{document.cookie='privacy_probe=1; Path=/';let storageAllowed=false;try{localStorage.setItem('privacy_probe','1');storageAllowed=true}catch{};return {cookieAllowed:document.cookie.includes('privacy_probe=1'),storageAllowed}})()")
+    return value["cookieAllowed"] as? Bool == false && value["storageAllowed"] as? Bool == false
+  }
+
+  private func trackerRequestBlocked(_ tab: String, context: String) async throws -> Bool {
+    let before = try await privatePrivacyStatus(context)["blockedTrackerRequests"] as? Int ?? 0
+    _ = try await evaluatePrivateObject(tab,
+      "(()=>{let image=new Image();window.__privateTrackerProbeImage=image;image.src='https://www.google-analytics.com/collect?private_probe=1';return {started:true}})()")
+    for _ in 0..<40 {
+      if (try await privatePrivacyStatus(context)["blockedTrackerRequests"] as? Int ?? 0) > before {
+        return true
+      }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    return false
+  }
+
+  private func allowPrivateFixtureCookies(_ context: String) async throws -> Bool {
+    guard let scheme = fixture.scheme, let host = fixture.host, let port = fixture.port else {
+      return false
+    }
+    let origin = "\(scheme)://\(host):\(port)"
+    let data: Data? = await withCheckedContinuation { continuation in
+      runtime.setPrivateCookieSetting(contextID: context, origin: origin, value: "allow") {
+        continuation.resume(returning: try? JSONSerialization.data(withJSONObject: $0))
+      }
+    }
+    guard let data, let result = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+      return false
+    }
+    let status = try await privatePrivacyStatus(context)
+    return result["ok"] as? Bool == true && status["globalCookies"] as? String == "block"
+  }
+
+  private func evaluatePrivateObject(_ tab: String, _ script: String) async throws -> [String: Any] {
+    let json: String? = await withCheckedContinuation { continuation in
+      runtime.evaluatePrivateProbeTabID(tab, script: script) { continuation.resume(returning: $0) }
+    }
+    guard let json, let data = json.data(using: .utf8),
+      let value = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else { throw PrivateWindowFailure("Private engine script returned no object.") }
+    return value
+  }
+
   private func readPrivate(_ tab: String) async throws -> [String: Any] {
     let json: String? = await withCheckedContinuation { continuation in
       runtime.evaluatePrivateProbeTabID(
         tab,
         script:
-          "({fixture:document.documentElement.dataset.arcusisFixture, cookie:document.cookie, local:localStorage.getItem('private'), session:sessionStorage.getItem('private'), path:location.pathname, instance:window.arcusisInstance})"
+          "({fixture:document.documentElement.dataset.arcusisFixture, cookie:document.cookie, local:(()=>{try{return localStorage.getItem('private')}catch{return null}})(), session:(()=>{try{return sessionStorage.getItem('private')}catch{return null}})(), path:location.pathname, instance:window.arcusisInstance})"
       ) { continuation.resume(returning: $0) }
     }
     guard let json, let data = json.data(using: .utf8) else {
@@ -925,7 +1006,7 @@ final class PrivateWindowProbe {
           && productLifecycleBlocker == "",
       ],
       "scope":
-        "Owned hidden native product and engine windows on synthetic loopback origin. No real accounts, third-party endpoints or physical input.",
+        "Owned hidden native product and engine windows on synthetic loopback origin. No real accounts, physical input or unmarked profiles. A known tracker-domain image request must be blocked by the engine.",
     ]
     try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
       .write(to: root.appending(path: "\(phase)-private-window.json"), options: .atomic)

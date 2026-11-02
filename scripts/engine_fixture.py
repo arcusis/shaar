@@ -448,13 +448,17 @@ EXTERNAL_APP_CONSENT_CLEANUP_KEYS = {
 PRIVATE_WINDOW_MODE = 'private-window-owned-engine-fixture'
 PRIVATE_WINDOW_SCOPE = (
     'Owned hidden native product and engine windows on synthetic loopback origin. No real accounts, '
-    'third-party endpoints or physical input.'
+    'physical input or unmarked profiles. A known tracker-domain image request must be blocked by the engine.'
 )
 PRIVATE_WINDOW_CHECKS = (
     'freshMarkedRoot', 'sourceProfileAccepted', 'unknownSourceRejected', 'otrSourceRejected',
     'malformedContextRejected',
     'normalProfileIDCollisionRejected', 'normalWindowIDCollisionRejected',
     'normalTabIDCollisionRejected',
+    'privateGlobalCookiesAndStorageBlocked', 'privateHTTPSOnlyEnabled',
+    'privateReferrersDisabled', 'privateWebRTCPolicyRestricted',
+    'privateExtensionsDisabled', 'privateTrackerRulesLoaded',
+    'privateTrackerRequestBlocked', 'privateSiteCookieAllowanceWorks',
     'multipleTabsShareNativePrivateWindow', 'privateSelectionAndNativeViewsOwned',
     'privateNavigationReloadBackForward', 'privateCallbacksUseOwnersWithoutRegularContamination',
     'invalidPrivateOperationsRejected', 'privateTabCloseConfirmedAndStaleRejected',

@@ -16,17 +16,26 @@ struct SpaceRemovalImpact {
   let tabs: Int
   let windows: Int
   var favoritePages: Int = 0
-  var tabDescription: String { "\(tabs) \(tabs == 1 ? "tab" : "tabs")" }
+  var tabDescription: String { ShellL10n.plural("%d tabs", count: tabs) }
 
   private var favoriteImpact: String {
     guard favoritePages > 0 else { return "" }
-    return " and \(favoritePages) Favorite \(favoritePages == 1 ? "page" : "pages")"
+    return ShellL10n.format(
+      " and %@",
+      arguments: [.string(ShellL10n.plural("%d Favorite pages", count: favoritePages))])
   }
 
   var message: String {
     windows > 1
-      ? "This space will be deleted from all \(windows) windows, closing \(tabDescription)\(favoriteImpact). Its profile is kept."
-      : "Tabs in this space will close\(favoriteImpact). Its profile is kept."
+      ? ShellL10n.format(
+        "This space will be deleted from all %@, closing %@%@. Its profile is kept.",
+        arguments: [
+          .string(ShellL10n.plural("%d windows", count: windows)), .string(tabDescription),
+          .string(favoriteImpact),
+        ])
+      : ShellL10n.format(
+        "Tabs in this space will close%@. Its profile is kept.",
+        arguments: [.string(favoriteImpact)])
   }
 }
 
@@ -138,7 +147,9 @@ final class BrowserStore {
     } catch {
       maySave = false
       storageNotice =
-        "Saved session could not be restored. The original file is preserved; changes in this window will not be saved."
+        ShellL10n.string(
+          "Saved session could not be restored. The original file is preserved; changes in this window will not be saved."
+        )
       return
     }
     if let restored {
@@ -549,7 +560,7 @@ final class BrowserStore {
     guard canFavoriteCurrentPage, case .tab(let tab) = session.selectedPage else { return false }
     let tabID = tab.id
     guard profileFavorites.count < BrowserSession.maximumFavoritesPerProfile else {
-      sidebarNotice = "A profile can have up to 16 favorites."
+      sidebarNotice = ShellL10n.string("A profile can have up to 16 favorites.")
       return false
     }
     guard session.promoteTabToFavorite(tabID, in: session.selectedSpaceID) != nil else {
@@ -869,7 +880,7 @@ final class BrowserStore {
       let targetSpace = session.spaces.first(where: { $0.id == destination }),
       origin.profileID != targetSpace.profileID
     {
-      sidebarNotice = "Tabs can move only between spaces sharing a profile."
+      sidebarNotice = ShellL10n.string("Tabs can move only between spaces sharing a profile.")
       return false
     }
     guard
@@ -979,13 +990,13 @@ final class BrowserStore {
       let targetSpace = session.spaces.first(where: { $0.id == destination })
     {
       if origin.profileID != targetSpace.profileID {
-        sidebarNotice = "Folders can move only between spaces sharing a profile."
+        sidebarNotice = ShellL10n.string("Folders can move only between spaces sharing a profile.")
         return false
       }
       if source == destination,
         targetSpace.folderPath(to: parentID).contains(where: { $0.id == id })
       {
-        sidebarNotice = "A folder cannot be moved inside itself."
+        sidebarNotice = ShellL10n.string("A folder cannot be moved inside itself.")
         return false
       }
     }
@@ -1105,7 +1116,7 @@ final class BrowserStore {
   }
 
   private static func saveNotice(failure: String?) -> String? {
-    failure.map { "Changes could not be saved. \($0)" }
+    failure.map { ShellL10n.format("Changes could not be saved. %@", arguments: [.string($0)]) }
   }
 
   private func reconcileTransientState() {

@@ -199,6 +199,29 @@ jobs:
           stage: visual
           extra-path: build/Verification/sidebar-chrome-ci
 
+  localization:
+    name: Hebrew localization, offscreen visuals, and engine locale
+    needs: [plan, build]
+    if: needs.plan.outputs.full == 'true'
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/ci-setup
+        with:
+          mode: localization
+      - name: Capture English and Hebrew screens and verify native engine language
+        run: .venv/bin/python scripts/ci-stage.py localization
+      - uses: ./.github/actions/ci-evidence
+        if: always()
+        with:
+          stage: localization
+          extra-path: |
+            build/Verification/localization-visuals
+            build/Verification/localization-engine-evidence
+
   engine:
     name: Engine simulations
     needs: plan
@@ -283,7 +306,7 @@ jobs:
   required:
     name: CI required
     if: always()
-    needs: [plan, fast, dependency-review, build, coverage, visuals, engine, shipping, codeql, inspector-contracts, website, sanitizers, dead-code]
+    needs: [plan, fast, dependency-review, build, coverage, visuals, localization, engine, shipping, codeql, inspector-contracts, website, sanitizers, dead-code]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

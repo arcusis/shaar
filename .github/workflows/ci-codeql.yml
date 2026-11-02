@@ -34,7 +34,7 @@ jobs:
           mode: codeql
           products: build/swiftpm/codeql
       - name: Plan native Swift compiler commands before tracing
-        if: matrix.language == 'swift'
+        if: matrix.language == 'swift' && !inputs.full
         run: .venv/bin/python scripts/codeql-build.py prepare --scope "$CI_SWIFT_SCOPE"
       - name: Initialize CodeQL
         id: init
@@ -44,7 +44,12 @@ jobs:
           build-mode: ${{ matrix.language == 'swift' && 'manual' || 'none' }}
       - name: Trace a fresh Swift build
         if: matrix.language == 'swift'
-        run: .venv/bin/python scripts/codeql-build.py replay --scope "$CI_SWIFT_SCOPE"
+        run: |
+          if [[ "$CI_SWIFT_SCOPE" == full ]]; then
+            .venv/bin/python scripts/codeql-build.py full
+          else
+            .venv/bin/python scripts/codeql-build.py replay --scope "$CI_SWIFT_SCOPE"
+          fi
       - name: Analyze
         id: analyze
         uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370

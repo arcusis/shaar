@@ -95,19 +95,20 @@ class PipelineGateTests(unittest.TestCase):
 
     def results(self, native="success", nightly="skipped"):
         results = {name: {"result": "success"} for name in ("plan", "fast", "dependency-review")}
-        results.update({name: {"result": native} for name in ("build", "coverage", "visuals", "engine", "shipping", "codeql", "inspector-contracts")})
+        results.update({name: {"result": native} for name in ("build", "coverage", "visuals", "localization", "engine", "shipping", "codeql", "inspector-contracts")})
         results.update({name: {"result": nightly} for name in ("sanitizers", "dead-code")})
         return results
 
     def test_full_pipeline_rejects_failed_cancelled_skipped_or_missing_stage(self):
-        for result in ("failure", "cancelled", "skipped", None):
-            with self.subTest(result=result):
-                needs = self.results()
-                if result is None:
-                    del needs["engine"]
-                else:
-                    needs["engine"]["result"] = result
-                self.assertTrue(GATE.gate_errors(needs, True, False))
+        for stage in ("engine", "localization", "inspector-contracts"):
+            for result in ("failure", "cancelled", "skipped", None):
+                with self.subTest(stage=stage, result=result):
+                    needs = self.results()
+                    if result is None:
+                        del needs[stage]
+                    else:
+                        needs[stage]["result"] = result
+                    self.assertTrue(GATE.gate_errors(needs, True, False))
 
     def test_docs_skip_native_but_never_skip_fast_gates(self):
         needs = self.results(native="skipped")
@@ -489,6 +490,18 @@ class SwiftCompilerPlanTests(unittest.TestCase):
             ordered_modules(nodes, [first, second])
         nodes[1]["inputs"] = []
         self.assertEqual(ordered_modules(nodes, [first, second]), [second, first])
+
+    def test_full_extraction_inventory_includes_manifest_and_compilation_plugins(self):
+        from ci_support import swift_source_files
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            names = {"Sources/App/A.swift", "Plugins/CompileLocalizations/plugin.swift", "Package.swift"}
+            for name in names:
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("// authored fixture")
+            self.assertEqual(swift_source_files(root, "full", tracked=False, include_build_inputs=True), names)
+            self.assertEqual(swift_source_files(root, "shipping", tracked=False), {"Sources/App/A.swift"})
 
     def test_replay_inventory_detects_new_untracked_swift_file_without_running_git(self):
         with tempfile.TemporaryDirectory() as temporary:

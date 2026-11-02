@@ -13,9 +13,13 @@ struct SettingsShortcutsPane: View {
   private var entries: [ShortcutCatalog.Entry] {
     guard !search.isEmpty else { return catalog.entries }
     return catalog.entries.filter {
-      $0.title.localizedCaseInsensitiveContains(search)
-        || $0.menu.localizedCaseInsensitiveContains(search)
+      $0.localizedTitle.localizedCaseInsensitiveContains(search)
+        || $0.localizedMenu.localizedCaseInsensitiveContains(search)
         || $0.displayKeys.localizedCaseInsensitiveContains(search)
+        || $0.title.localizedCaseInsensitiveContains(search)
+        || $0.menu.localizedCaseInsensitiveContains(search)
+        || $0.englishTitle?.localizedCaseInsensitiveContains(search) == true
+        || $0.englishMenu?.localizedCaseInsensitiveContains(search) == true
     }
   }
 
@@ -27,22 +31,29 @@ struct SettingsShortcutsPane: View {
   var body: some View {
     Form {
       Section {
-        TextField("Search shortcuts", text: $search, prompt: Text("Search shortcuts"))
-          .labelsHidden()
+        TextField(
+          SettingsL10n.string("Search shortcuts"), text: $search,
+          prompt: Text(SettingsL10n.string("Search shortcuts"))
+        )
+        .labelsHidden()
       }
       ForEach(menus, id: \.self) { menu in
-        Section(menu) {
+        Section(SettingsL10n.string(menu)) {
           ForEach(entries.filter { $0.menu == menu }) { entry in
-            LabeledContent(entry.title) {
+            LabeledContent(entry.localizedTitle) {
               Text(entry.displayKeys)
                 .font(.system(.body, design: .rounded).monospacedDigit())
                 .foregroundStyle(.secondary)
+                .environment(\.layoutDirection, .leftToRight)
             }
           }
         }
       }
       if entries.isEmpty {
-        Section { Text("No shortcuts match \"\(search)\".").foregroundStyle(.secondary) }
+        Section {
+          Text(SettingsL10n.format("No shortcuts match \"%@\".", .string(search)))
+            .foregroundStyle(.secondary)
+        }
       }
     }
     .formStyle(.grouped)

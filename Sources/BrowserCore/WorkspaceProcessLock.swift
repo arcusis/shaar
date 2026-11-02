@@ -10,8 +10,10 @@ public enum WorkspaceLockError: Error, LocalizedError {
 
   public var errorDescription: String? {
     switch self {
-    case .inUse: "Another \(ProductIdentity.name) process is using this workspace."
-    case .invalidFile: "The workspace lock file is invalid."
+    case .inUse:
+      BrowserLocalization.format(
+        "Another %@ process is using this workspace.", arguments: [.string(ProductIdentity.name)])
+    case .invalidFile: BrowserLocalization.string("The workspace lock file is invalid.")
     }
   }
 }

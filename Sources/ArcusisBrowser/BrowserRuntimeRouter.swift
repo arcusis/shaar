@@ -45,7 +45,9 @@ final class BrowserRuntimeClient {
 enum BrowserRoutingError: Error, LocalizedError {
   case duplicateWindow
 
-  var errorDescription: String? { "This native window already has an application client." }
+  var errorDescription: String? {
+    ShellL10n.string("This native window already has an application client.")
+  }
 }
 
 /// Retains ownership until close delivery, after Chromium has removed its tab mapping.

@@ -81,16 +81,20 @@ def identity() -> dict:
     return {"revision": os.environ["GITHUB_SHA"], "toolchain": os.environ["CI_TOOLCHAIN_ID"]}
 
 
+def swift_build_arguments(scratch: str) -> list[str]:
+    return ["swift", "build", "--build-system", "native", "--jobs", "2", "--force-resolved-versions",
+                 "--scratch-path", scratch, "--arch", "arm64", "--disable-index-store", "--verbose",
+                 "-Xswiftc", "-whole-module-optimization", "-Xswiftc", "-Onone",
+                 "-Xswiftc", "-num-threads", "-Xswiftc", "2",
+                 "-Xswiftc", "-no-emit-module-separately-wmo"]
+
+
 def prepare(scope: str) -> int:
     checks = Commands("codeql-prepare")
     compiler = Path(subprocess.check_output(["xcrun", "--find", "swiftc"], text=True).strip())
     if checks.run("clean", ["swift", "package", "--scratch-path", "build/swiftpm/codeql", "clean"]):
         return checks.finish()
-    arguments = ["swift", "build", "--build-system", "native", "--jobs", "2", "--force-resolved-versions",
-                 "--scratch-path", "build/swiftpm/codeql", "--arch", "arm64", "--disable-index-store", "--verbose",
-                 "-Xswiftc", "-whole-module-optimization", "-Xswiftc", "-Onone",
-                 "-Xswiftc", "-num-threads", "-Xswiftc", "2",
-                 "-Xswiftc", "-no-emit-module-separately-wmo", "--print-manifest-job-graph"]
+    arguments = [*swift_build_arguments("build/swiftpm/codeql"), "--print-manifest-job-graph"]
     if checks.run("native-build-plan", arguments):
         return checks.finish()
     sources = source_hashes(ROOT, scope)
@@ -136,11 +140,22 @@ def replay(scope: str = "full") -> int:
     return checks.finish()
 
 
+def full_build() -> int:
+    scratch = "build/swiftpm/codeql-full"
+    if (ROOT / scratch).exists():
+        raise ValueError("Full Swift analysis requires a fresh scratch directory")
+    checks = Commands("codeql-swift")
+    checks.run("full-build", [*swift_build_arguments(scratch), "--manifest-cache", "none"])
+    return checks.finish()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("prepare", "replay"))
+    parser.add_argument("mode", choices=("prepare", "replay", "full"))
     parser.add_argument("--scope", choices=("full", "shipping"), default="full")
     options = parser.parse_args()
+    if options.mode == "full":
+        return full_build()
     return prepare(options.scope) if options.mode == "prepare" else replay(options.scope)
 
 

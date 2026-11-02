@@ -63,8 +63,8 @@ struct PrivateSiteControlsButton: View {
     } label: {
       Image(systemName: "slider.horizontal.3").frame(width: 28, height: 28)
     }
-    .help("Site controls")
-    .accessibilityLabel("Site controls")
+    .help(ShellL10n.string("Site controls"))
+    .accessibilityLabel(ShellL10n.string("Site controls"))
     .disabled(store?.showsStartPage != false)
     .popover(item: $model, arrowEdge: .top) { model in
       PrivateSiteControlsPanel(model: model)
@@ -79,19 +79,23 @@ struct PrivateSiteControlsPanel: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 14) {
-      Text("Private site controls").font(.headline)
-      Text(model.origin).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+      ShellL10n.text("Private site controls").font(.headline)
+      Text(model.origin)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .textSelection(.enabled)
+        .environment(\.layoutDirection, .leftToRight)
       Divider()
       Toggle(
-        "Allow cookies for this site",
+        ShellL10n.string("Allow cookies for this site"),
         isOn: Binding(
           get: { model.allowed == true }, set: { value in Task { await model.setAllowed(value) } }
         )
       )
       .toggleStyle(.switch)
       .disabled(model.allowed == nil || model.saving)
-      Text("Also allows site storage. Reload the page after changing this setting.")
-      Text(
+      ShellL10n.text("Also allows site storage. Reload the page after changing this setting.")
+      ShellL10n.text(
         "Private windows for this profile share this setting. Closing the window that allowed it blocks the site again. Turning it off blocks it in every private window; existing data is erased when the last private window closes."
       )
       if let failure = model.failure { Text(failure).foregroundStyle(.red) }

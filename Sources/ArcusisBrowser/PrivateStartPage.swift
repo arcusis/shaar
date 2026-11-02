@@ -2,12 +2,17 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import BrowserCore
 import SwiftUI
 
 struct PrivateStartPage: View {
   weak var store: PrivateBrowserStore?
   @State private var query = ""
   @FocusState private var searchIsFocused: Bool
+
+  private var searchEngineName: String {
+    store?.searchEngine.displayName ?? ShellL10n.string("selected search engine")
+  }
 
   var body: some View {
     ScrollView {
@@ -17,9 +22,9 @@ struct PrivateStartPage: View {
           .foregroundStyle(.purple)
           .accessibilityHidden(true)
         VStack(alignment: .leading, spacing: 8) {
-          Text("A little more private.")
+          ShellL10n.text("A little more private.")
             .font(.system(size: 30, weight: .semibold, design: .rounded))
-          Text(
+          ShellL10n.text(
             "Your browsing history stays out of this Mac’s saved history. Private windows for the same profile share temporary site data until the last one closes."
           )
           .foregroundStyle(.secondary)
@@ -27,26 +32,29 @@ struct PrivateStartPage: View {
         HStack(spacing: 10) {
           Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
           TextField(
-            "Search with \(store?.searchEngine.displayName ?? "selected search engine") or enter address",
+            ShellL10n.format(
+              "Search with %1$@ or enter address", arguments: [.string(searchEngineName)]),
             text: $query
           )
           .textFieldStyle(.plain)
           .focused($searchIsFocused)
           .onSubmit { store?.navigate(query) }
           .accessibilityLabel(
-            "Private search with \(store?.searchEngine.displayName ?? "selected search engine")")
+            ShellL10n.format("Private search with %1$@", arguments: [.string(searchEngineName)]))
           Button {
             store?.navigate(query)
           } label: {
-            Image(systemName: "arrow.right")
+            Image(
+              systemName: BrowserLanguage.currentLaunchLanguage.isRightToLeft
+                ? "arrow.left" : "arrow.right")
           }
           .buttonStyle(.plain)
-          .accessibilityLabel("Search privately")
+          .accessibilityLabel(ShellL10n.string("Search privately"))
         }
         .padding(14)
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
         VStack(alignment: .leading, spacing: 12) {
-          Text("Current protections").font(.headline)
+          ShellL10n.text("Current protections").font(.headline)
           protection(
             "Cookies and storage blocked for addresses opened here",
             symbol: "externaldrive.badge.xmark")
@@ -58,11 +66,11 @@ struct PrivateStartPage: View {
         .font(.callout)
         Divider()
         VStack(alignment: .leading, spacing: 8) {
-          Text("Know the limits").font(.headline)
-          Text(
+          ShellL10n.text("Know the limits").font(.headline)
+          ShellL10n.text(
             "Private browsing does not hide your IP address or activity from websites, your employer, or your internet provider. Downloads remain on disk."
           )
-          Text(
+          ShellL10n.text(
             "This engine cannot enforce a global cookie/storage block across redirects, page links, or every frame. Tracker and third-party request blocking, forced HTTPS across page links and redirects, referrer trimming, WebRTC IP limits, and disabling already permitted private extensions are unavailable."
           )
         }
@@ -77,7 +85,7 @@ struct PrivateStartPage: View {
   }
 
   private func protection(_ title: String, symbol: String) -> some View {
-    Label(title, systemImage: symbol)
+    Label(ShellL10n.string(title), systemImage: symbol)
       .labelStyle(.titleAndIcon)
       .fixedSize(horizontal: false, vertical: true)
   }

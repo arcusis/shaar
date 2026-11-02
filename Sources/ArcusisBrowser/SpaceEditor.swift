@@ -53,24 +53,26 @@ struct SpaceEditor: View {
     VStack(alignment: .leading, spacing: 14) {
       HStack(spacing: 12) {
         SymbolPickerButton(
-          symbol: $symbol, isPresented: $iconIsPresented, accessibilityLabel: "Change Space Icon")
-        TextField("Space name", text: $name)
+          symbol: $symbol, isPresented: $iconIsPresented,
+          accessibilityLabel: SettingsL10n.string("Change Space Icon"))
+        TextField(SettingsL10n.string("Space name"), text: $name)
           .textFieldStyle(.plain).font(.title3.weight(.semibold))
           .focused($nameIsFocused).onSubmit { submit() }
-          .accessibilityLabel("Space name")
+          .accessibilityLabel(SettingsL10n.string("Space name"))
       }
       ThemeColorPicker(color: $appearance, focusOnAppear: store.spaceEditorFocus == .theme)
       if route.spaceID == nil { profileSection }
       if let error { Text(error).font(.caption).foregroundStyle(.red) }
       HStack(spacing: 10) {
         if route.spaceID != nil {
-          Button("Delete…", role: .destructive) { deleteIsPresented = true }
+          Button(SettingsL10n.string("Delete…"), role: .destructive) { deleteIsPresented = true }
             .buttonStyle(.plain).foregroundStyle(.red)
             .disabled(store.session.spaces.count == 1)
         }
         Spacer(minLength: 8)
-        Button("Cancel", role: .cancel) { dismiss() }.keyboardShortcut(.cancelAction)
-        Button(route.spaceID == nil ? "Create" : "Done") { submit() }
+        Button(SettingsL10n.string("Cancel"), role: .cancel) { dismiss() }.keyboardShortcut(
+          .cancelAction)
+        Button(SettingsL10n.string(route.spaceID == nil ? "Create" : "Done")) { submit() }
           .keyboardShortcut(.defaultAction)
           .disabled(SpaceEditorSavePolicy.isDisabled(name: name, appearance: appearance))
       }
@@ -92,8 +94,10 @@ struct SpaceEditor: View {
       }
       store.spaceEditorFocus = .name
     }
-    .confirmationDialog("Delete \(name)?", isPresented: $deleteIsPresented) {
-      Button("Delete space", role: .destructive) {
+    .confirmationDialog(
+      SettingsL10n.format("Delete %@?", .string(name)), isPresented: $deleteIsPresented
+    ) {
+      Button(SettingsL10n.string("Delete space"), role: .destructive) {
         if let id = route.spaceID, store.removeSpace(id) {
           finished = true
           dismiss()
@@ -106,16 +110,16 @@ struct SpaceEditor: View {
 
   private var profileSection: some View {
     VStack(alignment: .leading, spacing: 6) {
-      Picker("Profile", selection: $sharedProfileID) {
-        Text("New profile").tag(Optional<UUID>.none)
+      Picker(SettingsL10n.string("Profile"), selection: $sharedProfileID) {
+        Text(SettingsL10n.string("New profile")).tag(Optional<UUID>.none)
         ForEach(store.session.profiles) { profile in
           Label(profile.name, systemImage: profile.displaySymbol).tag(Optional(profile.id))
         }
       }
       Text(
         sharedProfileID == nil
-          ? "Separate Profile keeps sign-ins and extensions apart."
-          : "Spaces sharing a Profile share website sign-ins and extensions."
+          ? SettingsL10n.string("Separate Profile keeps sign-ins and extensions apart.")
+          : SettingsL10n.string("Spaces sharing a Profile share website sign-ins and extensions.")
       )
       .font(.caption).foregroundStyle(.secondary)
     }
@@ -128,7 +132,7 @@ struct SpaceEditor: View {
     if !store.updateSpace(
       id, name: name, tint: appearance.tint, customRGB: appearance.customRGB, symbol: symbol)
     {
-      error = "This Space could not be saved. Check its name and Profile."
+      error = SettingsL10n.string("This Space could not be saved. Check its name and Profile.")
     } else {
       error = nil
     }
@@ -149,7 +153,7 @@ struct SpaceEditor: View {
       finished = true
       dismiss()
     } else {
-      error = "This Space could not be saved. Check its name and Profile."
+      error = SettingsL10n.string("This Space could not be saved. Check its name and Profile.")
     }
   }
 }

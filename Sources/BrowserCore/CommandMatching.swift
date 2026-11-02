@@ -59,7 +59,10 @@ enum CommandFields {
 
   /// Includes the row's verb so typing "reopen" lists closed tabs.
   static func closedTab(_ entry: ClosedBrowserTab) -> [String] {
-    ["Reopen closed tab", entry.tab.title, entry.tab.url.absoluteString]
+    [
+      BrowserLocalization.string("Reopen closed tab"), entry.tab.title,
+      entry.tab.url.absoluteString,
+    ]
   }
 
   static func bookmark(_ item: BrowserBookmark) -> [String] {

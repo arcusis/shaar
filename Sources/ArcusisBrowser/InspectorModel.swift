@@ -182,7 +182,7 @@ final class InspectorModel {
           engine.runtime.beginInspector(
             forTabID: target.tabID.uuidString, profileID: target.profileID.uuidString,
             windowID: engine.windowID)
-        else { throw InspectorFailure("This page is no longer available.") }
+        else { throw InspectorFailure(InspectorL10n.string("This page is no longer available.")) }
         _ = try await evaluate(InspectorPageScript.install)
         _ = try await evaluate(InspectorStyleScript.install)
         _ = try await evaluate(InspectorDetailsScript.install)
@@ -214,10 +214,12 @@ final class InspectorModel {
       guard valueRevision != lastRevision || Date().timeIntervalSince(lastFonts) > 2 else { return }
       let data = try JSONSerialization.data(withJSONObject: value)
       guard data.count <= 1_048_576 else {
-        throw InspectorFailure("Element data exceeds the supported size.")
+        throw InspectorFailure(InspectorL10n.string("Element data exceeds the supported size."))
       }
       var next = try JSONDecoder().decode(InspectorSelection.self, from: data)
-      guard next.valid else { throw InspectorFailure("Element data could not be displayed.") }
+      guard next.valid else {
+        throw InspectorFailure(InspectorL10n.string("Element data could not be displayed."))
+      }
       readingFonts = true
       defer { if revision == generation { readingFonts = false } }
       let objectGroup = "shaar-inspector-selection-\(UUID().uuidString)"
@@ -254,13 +256,17 @@ final class InspectorModel {
         fontTask = Task { [weak self] in await self?.scanPageFonts() }
       }
     } catch {
-      if revision == generation, !Task.isCancelled { failure = error.localizedDescription }
+      if revision == generation, !Task.isCancelled {
+        failure = InspectorL10n.display(error.localizedDescription)
+      }
     }
   }
 
   /// Apply validated renderer data independently of protocol transport and native rendering.
   func receive(_ next: InspectorSelection) throws {
-    guard isOpen, next.valid else { throw InspectorFailure("Element data could not be displayed.") }
+    guard isOpen, next.valid else {
+      throw InspectorFailure(InspectorL10n.string("Element data could not be displayed."))
+    }
     selection = next
     lastRevision = next.revision
     lastFonts = Date()
@@ -271,7 +277,7 @@ final class InspectorModel {
   private func fonts(for nodeID: Int) async throws -> [String] {
     let result = try await call("CSS.getPlatformFontsForNode", params: ["nodeId": nodeID])
     guard let fonts = result["fonts"] as? [[String: Any]] else {
-      throw InspectorFailure("Chromium did not return rendered font data.")
+      throw InspectorFailure(InspectorL10n.string("Chromium did not return rendered font data."))
     }
     return Array(
       Set(
@@ -341,7 +347,9 @@ final class InspectorModel {
   }
 
   func withSelectedNode<T>(_ operation: (Int) async throws -> T) async throws -> T {
-    guard let selection, selection.locked else { throw InspectorFailure("Lock an element first.") }
+    guard let selection, selection.locked else {
+      throw InspectorFailure(InspectorL10n.string("Lock an element first."))
+    }
     let identity = selection.id
     let revision = generation
     let group = "shaar-inspector-node-\(UUID().uuidString)"
@@ -369,7 +377,8 @@ final class InspectorModel {
       "Runtime.evaluate",
       params: ["expression": expression, "returnByValue": true, "awaitPromise": true])
     if result["exceptionDetails"] != nil {
-      throw InspectorFailure("The page could not complete the Inspector request.")
+      throw InspectorFailure(
+        InspectorL10n.string("The page could not complete the Inspector request."))
     }
     return (result["result"] as? [String: Any])?["value"]
   }
@@ -378,7 +387,9 @@ final class InspectorModel {
     guard let engine, !engine.isClosed,
       engine.store?.session.profileID(forTabID: target.tabID) == target.profileID,
       engine.runtime.windowID(forTabID: target.tabID.uuidString) == engine.windowID
-    else { throw InspectorFailure("This Inspector target is no longer available.") }
+    else {
+      throw InspectorFailure(InspectorL10n.string("This Inspector target is no longer available."))
+    }
     let destination = target
     let revision = generation
     let result = try await engine.runtime.inspectorCall(

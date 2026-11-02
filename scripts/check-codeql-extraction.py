@@ -52,7 +52,8 @@ def main() -> int:
     parser.add_argument("report", type=Path)
     parser.add_argument("--scope", choices=("full", "shipping"), default="full")
     options = parser.parse_args()
-    expected = swift_source_files(ROOT, options.scope, tracked=False)
+    expected = swift_source_files(ROOT, options.scope, tracked=False,
+                                  include_build_inputs=options.scope == "full")
     missing = missing_sources(json.loads(options.report.read_text()), expected, ROOT)
     result = {"scope": options.scope, "expected": len(expected), "missing": missing, "revision": os.environ.get("GITHUB_SHA", "local")}
     options.report.with_name("coverage.json").write_text(json.dumps(result, indent=2) + "\n")

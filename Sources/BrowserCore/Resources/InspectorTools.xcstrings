@@ -1,0 +1,2188 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "Tech stack": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tech stack"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "טכנולוגיות"
+          }
+        }
+      }
+    },
+    "Vitals": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vitals"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מדדי ביצועים"
+          }
+        }
+      }
+    },
+    "Network": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Network"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "רשת"
+          }
+        }
+      }
+    },
+    "Console": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Console"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מסוף"
+          }
+        }
+      }
+    },
+    "Storage": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Storage"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אחסון"
+          }
+        }
+      }
+    },
+    "Simulations": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Simulations"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הדמיות"
+          }
+        }
+      }
+    },
+    "Bug report": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bug report"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "דוח תקלה"
+          }
+        }
+      }
+    },
+    "Page": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Page"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "דף"
+          }
+        }
+      }
+    },
+    "Waiting for page diagnostics": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for page diagnostics"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "בהמתנה לנתוני אבחון של הדף"
+          }
+        }
+      }
+    },
+    "Page diagnostics · local capture": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Page diagnostics · local capture"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נתוני אבחון של הדף · איסוף מקומי"
+          }
+        }
+      }
+    },
+    "Detected technologies": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detected technologies"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "טכנולוגיות שזוהו"
+          }
+        }
+      }
+    },
+    "Page diagnostics are unavailable in this document.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Page diagnostics are unavailable in this document."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נתוני האבחון אינם זמינים במסמך הזה."
+          }
+        }
+      }
+    },
+    "Reading page…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reading page…"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "קריאת נתוני הדף…"
+          }
+        }
+      }
+    },
+    "No supported runtime markers found. Detection is limited to exposed globals, DOM markers and generator metadata.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No supported runtime markers found. Detection is limited to exposed globals, DOM markers and generator metadata."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא נמצאו סמני סביבת ריצה נתמכים. הזיהוי מוגבל למשתנים גלובליים חשופים, לסמני DOM ולנתוני מחולל."
+          }
+        }
+      }
+    },
+    "Version unavailable": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version unavailable"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הגרסה אינה זמינה"
+          }
+        }
+      }
+    },
+    "Core Web Vitals": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Core Web Vitals"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מדדי Core Web Vitals"
+          }
+        }
+      }
+    },
+    "Largest contentful paint": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Largest contentful paint"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הצגת רכיב התוכן הגדול ביותר"
+          }
+        }
+      }
+    },
+    "Interaction to next paint": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interaction to next paint"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "זמן מאינטראקציה עד לציור הבא"
+          }
+        }
+      }
+    },
+    "Cumulative layout shift": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cumulative layout shift"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "תזוזת פריסה מצטברת"
+          }
+        }
+      }
+    },
+    "Live navigation diagnostics. INP requires a measured interaction; buffered entries can be limited. These are not field percentile scores.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live navigation diagnostics. INP requires a measured interaction; buffered entries can be limited. These are not field percentile scores."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נתוני אבחון של הניווט הנוכחי. מדידת INP דורשת אינטראקציה שנמדדה; מספר הרשומות המאוחסנות עשוי להיות מוגבל. אלה אינם אחוזונים מנתוני משתמשים."
+          }
+        }
+      }
+    },
+    "Renderer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Renderer"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מנוע רינדור"
+          }
+        }
+      }
+    },
+    "Unavailable": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unavailable"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא זמין"
+          }
+        }
+      }
+    },
+    "JS heap": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "JS heap"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ערימת JS"
+          }
+        }
+      }
+    },
+    "Requests": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requests"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "בקשות"
+          }
+        }
+      }
+    },
+    "Observed transfer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Observed transfer"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נפח העברה שנמדד"
+          }
+        }
+      }
+    },
+    "CPU is main-thread task time between samples. FPS is unavailable in hidden documents. Cross-origin transfer sizes may be restricted.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CPU is main-thread task time between samples. FPS is unavailable in hidden documents. Cross-origin transfer sizes may be restricted."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CPU מציג את זמן המשימות בתהליכון הראשי בין דגימות. FPS אינו זמין במסמכים מוסתרים. נתוני נפח ההעברה של משאבים ממקור אחר עשויים להיות מוגבלים."
+          }
+        }
+      }
+    },
+    "Good": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Good"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "טוב"
+          }
+        }
+      }
+    },
+    "Needs improvement": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Needs improvement"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "דורש שיפור"
+          }
+        }
+      }
+    },
+    "Poor": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poor"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חלש"
+          }
+        }
+      }
+    },
+    "Resource timing plus fetch/XHR observed while page tools are open. Headers and timings can be restricted; — means unavailable.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resource timing plus fetch/XHR observed while page tools are open. Headers and timings can be restricted; — means unavailable."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "תזמון משאבים וקריאות fetch/XHR שנצפו כשהכלים פתוחים. כותרות ותזמונים עשויים להיות מוגבלים; — פירושו לא זמין."
+          }
+        }
+      }
+    },
+    "No requests observed yet.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No requests observed yet."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "עדיין לא נצפו בקשות."
+          }
+        }
+      }
+    },
+    "Copy URL": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy URL"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "העתקת כתובת URL"
+          }
+        }
+      }
+    },
+    "Recorded since page tools opened, up to 300 messages. Earlier console history and worker logs are unavailable.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recorded since page tools opened, up to 300 messages. Earlier console history and worker logs are unavailable."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ההודעות נאספו מאז פתיחת כלי הדף, עד 300 הודעות. היסטוריית מסוף קודמת ויומני Web Workers אינם זמינים."
+          }
+        }
+      }
+    },
+    "Local bug report": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Local bug report"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "דוח תקלה מקומי"
+          }
+        }
+      }
+    },
+    "Screenshot, console, HAR and environment": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Screenshot, console, HAR and environment"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "צילום מסך, מסוף, HAR וסביבה"
+          }
+        }
+      }
+    },
+    "Creates a ZIP in this profile’s Downloads. Includes the current viewport, up to 300 console messages, recent page requests and active simulations.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Creates a ZIP in this profile’s Downloads. Includes the current viewport, up to 300 console messages, recent page requests and active simulations."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "יוצר קובץ ZIP בתיקיית ההורדות של הפרופיל. כולל את אזור התצוגה הנוכחי, עד 300 הודעות מסוף, בקשות אחרונות והדמיות פעילות."
+          }
+        }
+      }
+    },
+    "Include sensitive HAR headers": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Include sensitive HAR headers"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לכלול כותרות HAR רגישות"
+          }
+        }
+      }
+    },
+    "Cookie and authorization headers are redacted by default. URLs, console messages and screenshot content are not redacted. Nothing is uploaded.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cookie and authorization headers are redacted by default. URLs, console messages and screenshot content are not redacted. Nothing is uploaded."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "כותרות Cookie ו‑Authorization מוסתרות כברירת מחדל. כתובות URL, הודעות מסוף ותוכן צילום המסך אינם מוסתרים. שום מידע אינו מועלה."
+          }
+        }
+      }
+    },
+    "Creating report…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Creating report…"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "יצירת דוח…"
+          }
+        }
+      }
+    },
+    "Create bug report": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create bug report"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "יצירת דוח תקלה"
+          }
+        }
+      }
+    },
+    "Saved to Downloads": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved to Downloads"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נשמר בהורדות"
+          }
+        }
+      }
+    },
+    "Page-level capture only. Response bodies, browser headers, worker/WebSocket traffic and other frames may be unavailable.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Page-level capture only. Response bodies, browser headers, worker/WebSocket traffic and other frames may be unavailable."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "האיסוף מוגבל לדף. גופי תגובות, כותרות דפדפן, תעבורת Worker ו‑WebSocket ומסגרות אחרות עשויים להיות לא זמינים."
+          }
+        }
+      }
+    },
+    "Storage area": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Storage area"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אזור אחסון"
+          }
+        }
+      }
+    },
+    "Local": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Local"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מקומי"
+          }
+        }
+      }
+    },
+    "Session": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Session"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הפעלה"
+          }
+        }
+      }
+    },
+    "Cookies": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cookies"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "קובצי Cookie"
+          }
+        }
+      }
+    },
+    "Refresh storage": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refresh storage"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "רענון האחסון"
+          }
+        }
+      }
+    },
+    "Add entry": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add entry"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הוספת רשומה"
+          }
+        }
+      }
+    },
+    "New entry": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New entry"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "רשומה חדשה"
+          }
+        }
+      }
+    },
+    "Edit value": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit value"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "עריכת ערך"
+          }
+        }
+      }
+    },
+    "Key": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Key"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מפתח"
+          }
+        }
+      }
+    },
+    "Domain, path, expiry, partition and security flags are preserved.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Domain, path, expiry, partition and security flags are preserved."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הדומיין, הנתיב, התפוגה, המחיצה ודגלי האבטחה יישמרו."
+          }
+        }
+      }
+    },
+    "Opaque partition cookie · read only": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opaque partition cookie · read only"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "קובץ Cookie במחיצה אטומה · לקריאה בלבד"
+          }
+        }
+      }
+    },
+    "Delete": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מחיקה"
+          }
+        }
+      }
+    },
+    "Cancel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ביטול"
+          }
+        }
+      }
+    },
+    "Save": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "שמירה"
+          }
+        }
+      }
+    },
+    "Showing up to 200 cookies.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Showing up to 200 cookies."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מוצגים עד 200 קובצי Cookie."
+          }
+        }
+      }
+    },
+    "Showing up to 200 keys; oversized keys omitted.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Showing up to 200 keys; oversized keys omitted."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מוצגים עד 200 מפתחות; מפתחות גדולים מדי הושמטו."
+          }
+        }
+      }
+    },
+    "Environment": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Environment"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סביבה"
+          }
+        }
+      }
+    },
+    "Viewport": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Viewport"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אזור תצוגה"
+          }
+        }
+      }
+    },
+    "Desktop": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desktop"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מחשב"
+          }
+        }
+      }
+    },
+    "Phone · 390 × 844": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Phone · 390 × 844"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "טלפון · 390 × 844"
+          }
+        }
+      }
+    },
+    "Tablet · 820 × 1180": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tablet · 820 × 1180"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "טאבלט · 820 × 1180"
+          }
+        }
+      }
+    },
+    "Normal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Normal"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "רגיל"
+          }
+        }
+      }
+    },
+    "Slow 3G": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slow 3G"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3G איטי"
+          }
+        }
+      }
+    },
+    "Offline": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offline"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא מקוון"
+          }
+        }
+      }
+    },
+    "slower": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "slower"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "איטי יותר"
+          }
+        }
+      }
+    },
+    "Dark appearance": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dark appearance"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מראה כהה"
+          }
+        }
+      }
+    },
+    "Reduced motion": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reduced motion"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הפחתת תנועה"
+          }
+        }
+      }
+    },
+    "Location": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Location"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מיקום"
+          }
+        }
+      }
+    },
+    "Actual": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actual"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נוכחי"
+          }
+        }
+      }
+    },
+    "San Francisco": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "San Francisco"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סן פרנסיסקו"
+          }
+        }
+      }
+    },
+    "London": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "London"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לונדון"
+          }
+        }
+      }
+    },
+    "Timezone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Timezone"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אזור זמן"
+          }
+        }
+      }
+    },
+    "System": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מערכת"
+          }
+        }
+      }
+    },
+    "New York": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New York"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ניו יורק"
+          }
+        }
+      }
+    },
+    "Tokyo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tokyo"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "טוקיו"
+          }
+        }
+      }
+    },
+    "Language": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Language"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "שפה"
+          }
+        }
+      }
+    },
+    "English": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "English"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אנגלית"
+          }
+        }
+      }
+    },
+    "French": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "French"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "צרפתית"
+          }
+        }
+      }
+    },
+    "Hebrew": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hebrew"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "עברית"
+          }
+        }
+      }
+    },
+    "Saved for this site and profile. Location still requires site permission. Reload may be needed for page code that cached language or media values.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved for this site and profile. Location still requires site permission. Reload may be needed for page code that cached language or media values."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ההגדרות נשמרו לאתר ולפרופיל האלה. מיקום עדיין דורש הרשאת אתר. ייתכן שיהיה צורך לטעון מחדש דף ששמר ערכי שפה או מדיה."
+          }
+        }
+      }
+    },
+    "Applying…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Applying…"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מחיל…"
+          }
+        }
+      }
+    },
+    "Reset all": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reset all"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "איפוס הכול"
+          }
+        }
+      }
+    },
+    "Simulations active — reset all": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Simulations active — reset all"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הדמיות פעילות — איפוס הכול"
+          }
+        }
+      }
+    },
+    "Reset active simulations": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reset active simulations"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "איפוס הדמיות פעילות"
+          }
+        }
+      }
+    },
+    "The page is no longer available.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The page is no longer available."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הדף אינו זמין עוד."
+          }
+        }
+      }
+    },
+    "Chromium did not install the page diagnostics bootstrap.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chromium did not install the page diagnostics bootstrap."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chromium לא הצליח להתקין את קוד האתחול של אבחון הדף."
+          }
+        }
+      }
+    },
+    "Page diagnostics are unavailable.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Page diagnostics are unavailable."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נתוני האבחון אינם זמינים."
+          }
+        }
+      }
+    },
+    "Page tools require an HTTP or HTTPS page.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Page tools require an HTTP or HTTPS page."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "כלי הדף דורשים דף HTTP או HTTPS."
+          }
+        }
+      }
+    },
+    "Page diagnostics exceed the supported size.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Page diagnostics exceed the supported size."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נתוני האבחון חורגים מהגודל הנתמך."
+          }
+        }
+      }
+    },
+    "Page markers exceed the supported size.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Page markers exceed the supported size."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סמני הדף חורגים מהגודל הנתמך."
+          }
+        }
+      }
+    },
+    "Technology markers exceed the supported size.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Technology markers exceed the supported size."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סמני הטכנולוגיה חורגים מהגודל הנתמך."
+          }
+        }
+      }
+    },
+    "Storage snapshot exceeds its supported size.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Storage snapshot exceeds its supported size."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "תמונת מצב האחסון חורגת מהגודל הנתמך."
+          }
+        }
+      }
+    },
+    "Storage entries exceed the supported size.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Storage entries exceed the supported size."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "רשומות האחסון חורגות מהגודל הנתמך."
+          }
+        }
+      }
+    },
+    "Cookie name or value exceeds the editor limit.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cookie name or value exceeds the editor limit."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "שם או ערך קובץ ה‑Cookie חורגים ממגבלת העורך."
+          }
+        }
+      }
+    },
+    "This cookie cannot be edited in its current partition.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This cookie cannot be edited in its current partition."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן לערוך קובץ Cookie זה במחיצה הנוכחית."
+          }
+        }
+      }
+    },
+    "Chromium rejected this cookie.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chromium rejected this cookie."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chromium דחה את קובץ ה‑Cookie."
+          }
+        }
+      }
+    },
+    "Page storage is unavailable.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Page storage is unavailable."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אחסון הדף אינו זמין."
+          }
+        }
+      }
+    },
+    "The developer session could not start.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The developer session could not start."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן להפעיל את כלי הפיתוח."
+          }
+        }
+      }
+    },
+    "The page's user agent is unavailable.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The page's user agent is unavailable."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מחרוזת User-Agent של הדף אינה זמינה."
+          }
+        }
+      }
+    },
+    "The developer tools target is no longer available.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The developer tools target is no longer available."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "יעד כלי הפיתוח אינו זמין עוד."
+          }
+        }
+      }
+    },
+    "The page changed. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The page changed. Try again."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הדף השתנה. כדאי לנסות שוב."
+          }
+        }
+      }
+    },
+    "The page script could not complete: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The page script could not complete: %@"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סקריפט הדף לא הצליח להסתיים: %@"
+          }
+        }
+      }
+    },
+    "Page diagnostics are unavailable. Reload this page and try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Page diagnostics are unavailable. Reload this page and try again."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נתוני האבחון אינם זמינים. כדאי לטעון מחדש את הדף ולנסות שוב."
+          }
+        }
+      }
+    },
+    "The page changed or its screenshot could not be captured.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The page changed or its screenshot could not be captured."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הדף השתנה או שלא ניתן היה לצלם אותו."
+          }
+        }
+      }
+    },
+    "The report exceeds its supported size.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The report exceeds its supported size."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הדוח חורג מהגודל הנתמך."
+          }
+        }
+      }
+    },
+    "The bug report could not be archived.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The bug report could not be archived."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן ליצור ארכיון לדוח התקלה."
+          }
+        }
+      }
+    },
+    "%d recent requests": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "1 recent request"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%d recent requests"
+                }
+              }
+            }
+          }
+        },
+        "he": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "בקשה אחרונה אחת"
+                }
+              },
+              "two": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "שתי בקשות אחרונות"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%d בקשות אחרונות"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%d recent messages": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "1 recent message"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%d recent messages"
+                }
+              }
+            }
+          }
+        },
+        "he": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "הודעה אחרונה אחת"
+                }
+              },
+              "two": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "שתי הודעות אחרונות"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%d הודעות אחרונות"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%d cookies for this URL": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "1 cookie for this URL"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%d cookies for this URL"
+                }
+              }
+            }
+          }
+        },
+        "he": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "קובץ Cookie אחד לכתובת URL זו"
+                }
+              },
+              "two": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "שני קובצי Cookie לכתובת URL זו"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%d קובצי Cookie לכתובת URL זו"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%d keys · current origin": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "1 key · current origin"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%d keys · current origin"
+                }
+              }
+            }
+          }
+        },
+        "he": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "מפתח אחד · המקור הנוכחי"
+                }
+              },
+              "two": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "שני מפתחות · המקור הנוכחי"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%d מפתחות · המקור הנוכחי"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%d characters": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "1 character"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%d characters"
+                }
+              }
+            }
+          }
+        },
+        "he": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "תו אחד"
+                }
+              },
+              "two": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "שני תווים"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%d תווים"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%d× slower": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d× slower"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פי %d איטי יותר"
+          }
+        }
+      }
+    },
+    "Storage is not available in this document.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Storage is not available in this document."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "האחסון אינו זמין במסמך הזה."
+          }
+        }
+      }
+    },
+    "Value exceeds the 256K-character editor limit.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Value exceeds the 256K-character editor limit."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הערך חורג ממגבלת 256K התווים של העורך."
+          }
+        }
+      }
+    },
+    "Storage could not be read.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Storage could not be read."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן לקרוא את האחסון."
+          }
+        }
+      }
+    },
+    "Storage key or value exceeds the editor limit.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Storage key or value exceeds the editor limit."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מפתח או ערך האחסון חורגים ממגבלת העורך."
+          }
+        }
+      }
+    },
+    "Storage could not be changed; it may be restricted or full.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Storage could not be changed; it may be restricted or full."
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן לשנות את האחסון; ייתכן שהוא מוגבל או מלא."
+          }
+        }
+      }
+    },
+    "Unknown script error": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unknown script error"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "שגיאת סקריפט לא ידועה"
+          }
+        }
+      }
+    },
+    "Runtime version": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Runtime version"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "גרסת סביבת הריצה"
+          }
+        }
+      }
+    },
+    "Runtime major-version marker": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Runtime major-version marker"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סמן הגרסה הראשית של סביבת הריצה"
+          }
+        }
+      }
+    },
+    "DOM version marker": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DOM version marker"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סמן גרסה ב‑DOM"
+          }
+        }
+      }
+    },
+    "Claimed generator metadata": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claimed generator metadata"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נתוני המחולל לפי הצהרת הדף"
+          }
+        }
+      }
+    },
+    "DOM runtime marker": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DOM runtime marker"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סמן סביבת ריצה ב‑DOM"
+          }
+        }
+      }
+    },
+    "Component runtime marker": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Component runtime marker"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סמן סביבת הריצה של הרכיב"
+          }
+        }
+      }
+    },
+    "Development source marker": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Development source marker"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סמן מקור של גרסת פיתוח"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

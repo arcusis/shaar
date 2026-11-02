@@ -141,6 +141,15 @@ def run_visuals(checks: Commands) -> None:
         checks.run(name, ["swift", "test", "--skip-build", "--jobs", "2", "--filter", name], env=environment)
 
 
+def run_localization(checks: Commands) -> None:
+    require_hosted_mac()
+    if checks.run("localization-build", ["swift", "build", "--build-tests", "--jobs", "1", "--force-resolved-versions"]):
+        return
+    if checks.run("localization-captures", [sys.executable, "scripts/test-localization.py"]):
+        return
+    checks.run("localization-engine", [sys.executable, "scripts/localization-fixture.py"])
+
+
 def run_sanitizer(checks: Commands, sanitizer: str) -> None:
     environment = dict(os.environ, ASAN_OPTIONS="halt_on_error=1", TSAN_OPTIONS="halt_on_error=1")
     run_swift_tests(checks, sanitizer, ["swift", "test", "--jobs", "2", "--force-resolved-versions",
@@ -150,7 +159,7 @@ def run_sanitizer(checks: Commands, sanitizer: str) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("stage", choices=("unit", "coverage", "engine", "engine-build", "engine-shard", "visual", "shipping", "sanitize", "dead-code"))
+    parser.add_argument("stage", choices=("unit", "coverage", "engine", "engine-build", "engine-shard", "visual", "localization", "shipping", "sanitize", "dead-code"))
     parser.add_argument("--shard", choices=engine_shards(10), default="baseline-lifecycle")
     parser.add_argument("--mode", choices=("all", *ENGINE_MODES), default="all")
     parser.add_argument("--iterations", type=int, choices=range(1, 11), default=1)
@@ -174,6 +183,8 @@ def main() -> int:
             run_engine_shard(checks, options.shard, options.iterations)
         elif options.stage == "visual":
             run_visuals(checks)
+        elif options.stage == "localization":
+            run_localization(checks)
         elif options.stage == "sanitize":
             run_sanitizer(checks, options.sanitizer)
         elif options.stage == "dead-code":

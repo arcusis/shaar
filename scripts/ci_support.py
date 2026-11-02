@@ -19,14 +19,19 @@ ROOT = Path(__file__).resolve().parents[1]
 SWIFT_SOURCE_ROOTS = ("Sources", "Tests/TestSupport")
 
 
-def swift_source_files(root: Path, scope: str = "full", *, tracked: bool = True) -> set[str]:
+def swift_source_files(root: Path, scope: str = "full", *, tracked: bool = True,
+                       include_build_inputs: bool = False) -> set[str]:
     if scope not in {"full", "shipping"}:
         raise ValueError("Unknown Swift analysis scope")
+    roots = (*SWIFT_SOURCE_ROOTS, *(("Package.swift", "Plugins") if include_build_inputs else ()))
     if tracked:
-        files = subprocess.check_output(["git", "ls-files", "-z", "--", *SWIFT_SOURCE_ROOTS], cwd=root).decode().split("\0")
+        files = subprocess.check_output(["git", "ls-files", "-z", "--", *roots], cwd=root).decode().split("\0")
     else:
-        files = [path.relative_to(root).as_posix() for directory in SWIFT_SOURCE_ROOTS
-                 for path in (root / directory).rglob("*.swift") if path.is_file()]
+        files = []
+        for name in roots:
+            entry = root / name
+            candidates = [entry] if entry.is_file() else entry.rglob("*.swift")
+            files.extend(path.relative_to(root).as_posix() for path in candidates if path.is_file())
     return {name for name in files if name.endswith(".swift")
             and (scope == "full" or not name.startswith("Sources/ShaarVerification/"))}
 

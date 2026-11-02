@@ -134,13 +134,15 @@ final class DeveloperPageModel {
               forTabID: destination.tabID.uuidString, profileID: destination.profileID.uuidString,
               windowID: engine.windowID)
           else {
-            throw DeveloperModeFailure("The developer session could not start.")
+            throw DeveloperModeFailure(
+              InspectorToolsL10n.string("The developer session could not start."))
           }
           if userAgent == nil {
             userAgent = try await evaluate("navigator.userAgent") as? String
           }
           guard let userAgent else {
-            throw DeveloperModeFailure("The page's user agent is unavailable.")
+            throw DeveloperModeFailure(
+              InspectorToolsL10n.string("The page's user agent is unavailable."))
           }
           overridesMayBeActive = true
           for (method, params) in desired.commands(userAgent: userAgent) {
@@ -187,7 +189,8 @@ final class DeveloperPageModel {
         forTabID: target.tabID.uuidString,
         profileID: target.profileID.uuidString, windowID: engine.windowID)
     else {
-      throw DeveloperModeFailure("The developer session could not start.")
+      throw DeveloperModeFailure(
+        InspectorToolsL10n.string("The developer session could not start."))
     }
   }
 
@@ -195,14 +198,17 @@ final class DeveloperPageModel {
     guard !closed, let engine, !engine.isClosed,
       engine.store?.session.profileID(forTabID: target.tabID) == target.profileID,
       engine.runtime.windowID(forTabID: target.tabID.uuidString) == engine.windowID
-    else { throw DeveloperModeFailure("The developer tools target is no longer available.") }
+    else {
+      throw DeveloperModeFailure(
+        InspectorToolsL10n.string("The developer tools target is no longer available."))
+    }
     let destination = target
     let generation = documentGeneration
     let result = try await engine.runtime.developerCall(
       method, params: params, tabID: destination.tabID.uuidString,
       profileID: destination.profileID.uuidString, windowID: engine.windowID)
     guard destination == target && generation == documentGeneration else {
-      throw DeveloperModeFailure("The page changed. Try again.")
+      throw DeveloperModeFailure(InspectorToolsL10n.string("The page changed. Try again."))
     }
     return result
   }
@@ -216,8 +222,11 @@ final class DeveloperPageModel {
     if let exception = result["exceptionDetails"] as? [String: Any] {
       let detail =
         (exception["exception"] as? [String: Any])?["description"] as? String
-        ?? exception["text"] as? String ?? "Unknown script error"
-      throw DeveloperModeFailure("The page script could not complete: \(detail.prefix(240))")
+        ?? exception["text"] as? String ?? InspectorToolsL10n.string("Unknown script error")
+      throw DeveloperModeFailure(
+        InspectorToolsL10n.format(
+          "The page script could not complete: %@",
+          arguments: [.string(String(detail.prefix(240)))]))
     }
     return (result["result"] as? [String: Any])?["value"]
   }

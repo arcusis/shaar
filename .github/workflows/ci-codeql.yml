@@ -2,10 +2,6 @@ name: CodeQL
 on:
   workflow_call:
     inputs:
-      full:
-        description: Include verification and support modules on full production/nightly analysis
-        type: boolean
-        default: true
       swift:
         description: Trace Swift sources for this selected diff
         type: boolean
@@ -18,7 +14,7 @@ jobs:
     name: CodeQL ${{ matrix.language }}
     runs-on: ${{ matrix.language == 'swift' && 'macos-26-intel' || 'ubuntu-24.04' }}
     env:
-      CI_SWIFT_SCOPE: ${{ inputs.full && 'full' || 'shipping' }}
+      CI_SWIFT_SCOPE: all
     timeout-minutes: ${{ matrix.language == 'swift' && 60 || 20 }}
     strategy:
       fail-fast: false
@@ -33,8 +29,16 @@ jobs:
         with:
           mode: codeql
           products: build/swiftpm/codeql
-      - name: Plan native Swift compiler commands before tracing
-        if: matrix.language == 'swift' && !inputs.full
+      - name: Cache native SwiftPM build prerequisites
+        if: matrix.language == 'swift'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: build/swiftpm/codeql-semantic
+          key: codeql-native-${{ runner.os }}-${{ runner.arch }}-${{ env.CI_TOOLCHAIN_ID }}-${{ hashFiles('scripts/codeql-build.py', 'Package.swift', 'Package.resolved', 'Plugins/**', 'Sources/**', 'Tests/**') }}
+          restore-keys: |
+            codeql-native-${{ runner.os }}-${{ runner.arch }}-${{ env.CI_TOOLCHAIN_ID }}-
+      - name: Build prerequisites and bind every Swift compiler command before tracing
+        if: matrix.language == 'swift'
         run: .venv/bin/python scripts/codeql-build.py prepare --scope "$CI_SWIFT_SCOPE"
       - name: Initialize CodeQL
         id: init
@@ -42,14 +46,15 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.language == 'swift' && 'manual' || 'none' }}
-      - name: Trace a fresh Swift build
+      - name: Cache SDK modules for this extractor and target
         if: matrix.language == 'swift'
-        run: |
-          if [[ "$CI_SWIFT_SCOPE" == full ]]; then
-            .venv/bin/python scripts/codeql-build.py full
-          else
-            .venv/bin/python scripts/codeql-build.py replay --scope "$CI_SWIFT_SCOPE"
-          fi
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: build/codeql-sdk-modules
+          key: codeql-sdk-${{ runner.os }}-${{ runner.arch }}-${{ env.CI_TOOLCHAIN_ID }}-${{ steps.init.outputs.codeql-version }}-arm64-v1
+      - name: Freshly extract every Swift source into one database
+        if: matrix.language == 'swift'
+        run: .venv/bin/python scripts/codeql-build.py semantic
       - name: Analyze
         id: analyze
         uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370

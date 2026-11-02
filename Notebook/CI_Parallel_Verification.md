@@ -19,4 +19,14 @@ Part 2 timings and extraction inventories remain unverified until hosted runs co
 
 Resource/shard implementation: native test build passed; both packaged-resource and development-fallback tests passed. All eleven shared fast gates passed, including 245 Python tests. The shard distribution regression checks exact scenario/iteration equality for counts 1, 2, 3 and 10; transfer regression preserves executable permissions/symlinks and rejects changed context/digest. No local app or native fixture was launched.
 
+## Complete semantic extraction trial
+
+Before tracing, SwiftPM builds native prerequisites with its ordinary dependency checks, using a source/toolchain-keyed cache with a same-toolchain restore prefix. Native compilation and unit execution remain separate required gates. During tracing, replay complete module inputs in fresh whole-module `-typecheck` invocations, with output/incremental flags removed. Two compiler processes share one CodeQL database; no database import or SARIF-only union is used. Manifest and plugin APIs receive explicit fresh semantic invocations. Cache SDK modules separately by extractor version/toolchain/arm64 target. Never cache a CodeQL database, project TRAP data or extraction results.
+
+Unlike part 1, the `all` inventory includes every tracked Swift path (currently 396), including all unit tests and build configuration. Unknown Swift inputs outside the planned target/configuration graph fail preparation. Docs/site/CI PRs retain Swift analysis too. Validate commit, compiler bytes, toolchain, source hashes and response-file coverage immediately before extraction; require the independent CodeQL extracted-file query to cover the full inventory afterward.
+
+The default manual/PR/merge-group/production/nightly path keeps Swift. `measure_without_swift=true` requires a manual dispatch with `deep_checks=false`; its final check is named `Timing only (Swift deferred)`, never `CI required`. This measures the alternate scheduling cost without enabling a PR exclusion policy.
+
+Local preparation covered all 396 Swift files; all ten fresh semantic compiler commands passed. Forty-seven pipeline regressions and all eleven shared fast gates passed, including 248 Python tests. These checks establish command validity, not hosted CodeQL extraction or the time target.
+
 Sources: [Swift compilation guidance](https://docs.github.com/en/code-security/reference/code-scanning/codeql/build-options-for-compiled-languages), [database import limitations](https://docs.github.com/en/code-security/reference/code-scanning/codeql/codeql-cli-manual/database-import), [database finalization](https://docs.github.com/en/code-security/reference/code-scanning/codeql/codeql-cli-manual/database-finalize).

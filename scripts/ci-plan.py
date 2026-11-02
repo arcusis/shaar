@@ -33,15 +33,7 @@ def select_stages(paths: list[str] | None, event: str) -> tuple[bool, bool, bool
     native = not all(documentation_only([path]) or path.startswith("website/")
                      or path.startswith(".github/workflows/website-") and path.endswith(".yml") for path in paths)
     website = any(website_path(path) or path.startswith(".github/workflows/") for path in paths)
-    unrelated = all(documentation_only([path]) or website_path(path)
-                    or path.startswith(("scripts/", ".github/", ".githooks/"))
-                    or path.startswith("Tests/") and path.endswith(".py")
-                    or path in {".gitignore", ".gitleaks.toml"} for path in paths)
-    swift = native and (event != "pull_request" or not unrelated or any(
-        path.startswith(("Sources/", "ThirdParty/")) or path.endswith(".swift")
-        or path in {"Package.resolved", "scripts/bundle-app.sh"}
-        for path in paths))
-    return native, website, swift
+    return native, website, True
 
 
 def iteration_count(event: dict, name: str) -> int:
@@ -73,6 +65,11 @@ def main() -> None:
         if result.returncode == 0:
             paths = [path for path in result.stdout.decode().split("\0") if path]
     full, website, swift = select_stages(paths, name)
+    benchmark = name == "workflow_dispatch" and str(event.get("inputs", {}).get("measure_without_swift", False)).lower() == "true"
+    if benchmark:
+        if str(event.get("inputs", {}).get("deep_checks", True)).lower() != "false":
+            raise ValueError("Swift timing benchmark requires deep_checks=false")
+        swift = False
     with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
         output.write(f"full={str(full).lower()}\nbase={base}\niterations={iterations}\nwebsite={str(website).lower()}\nswift={str(swift).lower()}\n")
     with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as output:

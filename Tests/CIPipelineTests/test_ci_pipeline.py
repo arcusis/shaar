@@ -47,17 +47,17 @@ CODEQL_BUILD = load_script("codeql-build")
 class PipelineGateTests(unittest.TestCase):
     def test_known_non_native_diffs_and_unknown_changes_select_required_coverage(self):
         for paths in (["Notebook/Note.md"], ["README.md", "CONTRIBUTING.md"]):
-            self.assertEqual(PLAN.select_stages(paths, "pull_request"), (False, False, False))
+            self.assertEqual(PLAN.select_stages(paths, "pull_request"), (False, False, True))
         for paths in (["website/src/Page.svelte"], ["website/package.json", "Notebook/Note.md"]):
-            self.assertEqual(PLAN.select_stages(paths, "pull_request"), (False, True, False))
-            self.assertEqual(PLAN.select_stages(paths, "merge_group"), (False, True, False))
+            self.assertEqual(PLAN.select_stages(paths, "pull_request"), (False, True, True))
+            self.assertEqual(PLAN.select_stages(paths, "merge_group"), (False, True, True))
         for paths in (None, [], ["unclassified-input"]):
             self.assertTrue(PLAN.select_stages(paths, "pull_request")[0])
         self.assertEqual(PLAN.select_stages(["Sources/App.swift"], "pull_request"), (True, False, True))
-        self.assertEqual(PLAN.select_stages(["scripts/tool.py"], "pull_request"), (True, False, False))
+        self.assertEqual(PLAN.select_stages(["scripts/tool.py"], "pull_request"), (True, False, True))
         for paths in (["scripts/codeql-build.py"], [".github/workflows/ci-codeql.yml"],
                       [".github/actions/ci-setup/action.yml"]):
-            self.assertFalse(PLAN.select_stages(paths, "pull_request")[2])
+            self.assertTrue(PLAN.select_stages(paths, "pull_request")[2])
         for event in ("push", "schedule", "workflow_dispatch"):
             self.assertEqual(PLAN.select_stages(["Notebook/Note.md"], event), (True, True, True))
         self.assertTrue(PLAN.select_stages(["scripts/tool.py"], "merge_group")[2])
@@ -132,6 +132,7 @@ class PipelineGateTests(unittest.TestCase):
         results = {name: {"result": "success"} for name in ("plan", "fast", "dependency-review")}
         results.update({name: {"result": native} for name in ("build", "coverage", "visuals", "localization", "engine", "shipping", "codeql", "inspector-contracts")})
         results.update({name: {"result": nightly} for name in ("sanitizers", "dead-code")})
+        results["codeql"] = {"result": "success"}
         return results
 
     def test_full_pipeline_rejects_failed_cancelled_skipped_or_missing_stage(self):
@@ -583,12 +584,37 @@ class SwiftCompilerPlanTests(unittest.TestCase):
             with patch.object(CODEQL_BUILD, "PLAN", plan), self.assertRaisesRegex(ValueError, "scope changed"):
                 CODEQL_BUILD.replay("shipping")
 
-    def test_support_module_is_retained_but_test_targets_are_outside_default_build_inventory(self):
+    def test_compiler_inventory_includes_test_targets_for_complete_pr_analysis(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             self.assertEqual(CODEQL_BUILD.command_sources([
                 "Tests/TestSupport/SeededGenerator.swift", "Tests/BrowserCoreTests/Cases.swift",
-            ], root), {"Tests/TestSupport/SeededGenerator.swift"})
+            ], root), {"Tests/TestSupport/SeededGenerator.swift", "Tests/BrowserCoreTests/Cases.swift"})
+
+    def test_semantic_commands_drop_cached_outputs_but_keep_every_input_and_definition(self):
+        arguments = ["/toolchain/swiftc", "-module-name", "App", "-whole-module-optimization",
+                     "-target", "arm64-apple-macosx26.0", "-emit-module", "-emit-module-path", "old.swiftmodule",
+                     "-c", "@build/sources", "-output-file-map", "old.json", "-incremental",
+                     "-D", "FEATURE", "-module-cache-path", "old-cache", "-I", "Modules"]
+        actual = CODEQL_BUILD.typecheck_arguments(arguments)
+        for absent in ("-c", "-emit-module", "old.swiftmodule", "old.json", "-incremental", "old-cache"):
+            self.assertNotIn(absent, actual)
+        for retained in ("@build/sources", "FEATURE", "Modules", "-whole-module-optimization"):
+            self.assertIn(retained, actual)
+        self.assertEqual(actual[-1], "-typecheck")
+
+    def test_complete_inventory_includes_tests_manifest_plugins_and_unknown_swift_paths(self):
+        from ci_support import swift_source_files
+        names = b"Sources/App.swift\0Tests/Unit.swift\0Package.swift\0Plugins/Compile/Plugin.swift\0Other.swift\0"
+        with patch("ci_support.subprocess.check_output", return_value=names) as command:
+            self.assertEqual(len(swift_source_files(ROOT, "all")), 5)
+        self.assertEqual(command.call_args.args[0][-1], "*.swift")
+
+    def test_docs_prs_still_require_swift_analysis(self):
+        needs = PipelineGateTests().results(native="skipped")
+        self.assertEqual(GATE.gate_errors(needs, False, False), [])
+        needs["codeql"] = {"result": "skipped"}
+        self.assertIn("codeql: skipped", GATE.gate_errors(needs, False, False))
 
     def test_plan_keeps_argument_arrays_and_rejects_missing_or_duplicate_sources(self):
         with tempfile.TemporaryDirectory() as temporary:

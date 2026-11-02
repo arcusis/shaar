@@ -50,7 +50,7 @@ def missing_sources(document: dict, expected: set[str], root: Path) -> list[str]
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("report", type=Path)
-    parser.add_argument("--scope", choices=("full", "shipping"), default="full")
+    parser.add_argument("--scope", choices=("all", "full", "shipping"), default="all")
     options = parser.parse_args()
     expected = swift_source_files(ROOT, options.scope, tracked=False,
                                   include_build_inputs=options.scope == "full")

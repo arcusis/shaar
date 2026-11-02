@@ -64,7 +64,8 @@ struct BrowserWindow: View {
         .clipped()
         .animation(
           spaceReduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.85),
-          value: store.session.selectedSpaceID)
+          value: store.session.selectedSpaceID
+        )
         .animation(reduceMotion ? nil : .spring(duration: 0.3), value: store.libraryDrawerSection)
       }
       sidebarLayer
@@ -234,7 +235,9 @@ struct BrowserWindow: View {
     .transition(
       .asymmetric(
         insertion: .move(edge: pageEntryEdge),
-        removal: .move(edge: pageEntryEdge == .trailing ? .leading : .trailing)))
+        removal: .move(edge: pageEntryEdge == .trailing ? .leading : .trailing)
+      )
+    )
     .background(Color(nsColor: .textBackgroundColor))
     .clipShape(RoundedRectangle(cornerRadius: BrowserChromeLayout.pageCardRadius))
     .overlay(

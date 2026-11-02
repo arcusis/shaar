@@ -16,9 +16,10 @@ private final class BrowserSettingsState {
   private(set) var selectedProfileID: UUID?
   private var didPresent = false
   var onOpenSpace: (UUID) -> Void = { _ in }
-  var onConnectAccount: (UUID, AccountProvider) -> Void = { _, _ in }
+  var onConnectAccount: (UUID, AccountSignInOption) -> Void = { _, _ in }
   var onDisconnectAccount: (UUID, AccountProvider) -> Void = { _, _ in }
   var onAddProfile: () -> Void = {}
+  var onRestart: (() -> String?)?
 
   init(
     workspace: BrowserWorkspaceStore, preferences: BrowserPreferencesStore,
@@ -52,13 +53,12 @@ private final class BrowserSettingsState {
     guard
       let store = workspace.stores.values.first(where: {
         $0.session.spaces.contains { $0.profileID == profileID }
-      }), let spaceID = store.session.spaces.first(where: { $0.profileID == profileID })?.id,
-      let url = URL(string: "https://chromewebstore.google.com/category/extensions")
+      }), let spaceID = store.session.spaces.first(where: { $0.profileID == profileID })?.id
     else {
       return
     }
     if store.session.selectedSpaceID != spaceID { store.perform(.space(spaceID)) }
-    store.perform(.open(url))
+    store.perform(.open(BrowserExtension.storeCatalogURL))
   }
 
   var searchEngines: [BrowserSettingsChoice] {
@@ -168,6 +168,7 @@ private struct BrowserSettingsRoot: View {
       selectedSearchEngine: Binding(
         get: { state.selectedSearchEngine }, set: { _ = state.selectSearchEngine($0) }),
       storageNotice: state.storageNotice,
+      onRestart: state.onRestart,
       onAddProfile: state.onAddProfile,
       onRenameProfile: { state.renameProfile($0, name: $1) },
       onSetProfileColor: { state.setProfileColor($0, to: $1) },
@@ -227,7 +228,7 @@ final class BrowserSettingsController: NSObject {
   }
 
   func setAccountHandlers(
-    connect: @escaping (UUID, AccountProvider) -> Void,
+    connect: @escaping (UUID, AccountSignInOption) -> Void,
     disconnect: @escaping (UUID, AccountProvider) -> Void
   ) {
     state.onConnectAccount = connect
@@ -236,6 +237,10 @@ final class BrowserSettingsController: NSObject {
 
   func setAddProfileHandler(_ handler: @escaping () -> Void) {
     state.onAddProfile = handler
+  }
+
+  func setRestartHandler(_ handler: @escaping () -> String?) {
+    state.onRestart = handler
   }
 
   @discardableResult
@@ -284,10 +289,11 @@ final class BrowserSettingsController: NSObject {
       contentRect: NSRect(x: 0, y: 0, width: 720, height: 560),
       styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered,
       defer: false)
-    settingsWindow.title = "Settings"
+    settingsWindow.title = SettingsL10n.string("Settings")
     settingsWindow.minSize = NSSize(width: 620, height: 500)
     settingsWindow.isReleasedWhenClosed = false
-    settingsWindow.contentView = NSHostingView(rootView: BrowserSettingsRoot(state: state))
+    settingsWindow.contentView = NSHostingView(
+      rootView: BrowserSettingsRoot(state: state).settingsLocalization())
     settingsWindow.center()
     let delegate = BrowserSettingsWindowDelegate(controller: self)
     windowDelegate = delegate

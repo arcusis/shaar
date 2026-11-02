@@ -23,12 +23,24 @@ struct SidebarSplitRow: View {
   let onSelect: (UUID) -> Void
   let onClose: (UUID) -> Void
   let onDrag: (UUID) -> SidebarTransfer
+  var memberMenu: ((UUID) -> AnyView)? = nil
+  var onStackDrag: (() -> SidebarTransfer)? = nil
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.browserChromeAccessibilityOverrides) private var accessibilityOverrides
   @State private var hoveredID: UUID?
 
   var body: some View {
     GeometryReader { geometry in
       let segmentWidth = geometry.size.width / CGFloat(max(segments.count, 1))
       HStack(spacing: 2) {
+        if let onStackDrag {
+          Image(systemName: "rectangle.split.2x1")
+            .font(.system(size: 10)).foregroundStyle(.secondary)
+            .frame(width: 18, height: 28).contentShape(Rectangle())
+            .help(ShellL10n.string("Drag split stack"))
+            .accessibilityLabel(ShellL10n.string("Drag split stack"))
+            .draggable(onStackDrag())
+        }
         ForEach(segments) { segment in
           segmentView(segment, showsTitle: segmentWidth >= Self.titleMinimumWidth)
         }
@@ -44,7 +56,7 @@ struct SidebarSplitRow: View {
     )
     .animation(.easeOut(duration: 0.12), value: hoveredID)
     .accessibilityElement(children: .contain)
-    .accessibilityLabel("Split View, \(segments.count) tabs")
+    .accessibilityLabel(ShellL10n.plural("Split View, %d tabs", count: segments.count))
   }
 
   private func segmentView(_ segment: Segment, showsTitle: Bool) -> some View {
@@ -77,8 +89,12 @@ struct SidebarSplitRow: View {
     .accessibilityLabel(segment.title)
     .accessibilityAddTraits(raised ? [.isButton, .isSelected] : .isButton)
     .accessibilityAction { onSelect(segment.id) }
-    .accessibilityAction(named: Text("Close tab")) { onClose(segment.id) }
+    .accessibilityAction(named: ShellL10n.text("Close tab")) { onClose(segment.id) }
+    .sidebarPageMotion(
+      id: segment.id, reduceMotion: reduceMotion || accessibilityOverrides.reduceMotion == true
+    )
     .draggable(onDrag(segment.id))
+    .contextMenu { if let memberMenu { memberMenu(segment.id) } }
   }
 
   private func segmentFill(raised: Bool, hovered: Bool) -> Double {
@@ -99,8 +115,8 @@ struct SidebarSplitRow: View {
           .contentShape(Circle())
       }
       .buttonStyle(.plain)
-      .help("Close \(segment.title)")
-      .accessibilityLabel("Close \(segment.title)")
+      .help(ShellL10n.format("Close %@", arguments: [.string(segment.title)]))
+      .accessibilityLabel(ShellL10n.format("Close %@", arguments: [.string(segment.title)]))
     } else if let favicon = segment.favicon {
       Image(nsImage: favicon).resizable().scaledToFit().frame(width: 16, height: 16)
     } else {
@@ -111,12 +127,16 @@ struct SidebarSplitRow: View {
 }
 
 extension SplitEdge {
-  var menuTitle: String {
+  static func forPhysicalRight(isRightToLeft: Bool) -> SplitEdge {
+    isRightToLeft ? .left : .right
+  }
+
+  func menuTitle(isRightToLeft: Bool = false) -> String {
     switch self {
-    case .left: "Left"
-    case .right: "Right"
-    case .top: "Top"
-    case .bottom: "Bottom"
+    case .left: ShellL10n.string(isRightToLeft ? "Right" : "Left")
+    case .right: ShellL10n.string(isRightToLeft ? "Left" : "Right")
+    case .top: ShellL10n.string("Top")
+    case .bottom: ShellL10n.string("Bottom")
     }
   }
 }

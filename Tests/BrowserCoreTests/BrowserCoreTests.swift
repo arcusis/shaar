@@ -190,7 +190,7 @@ private func openTab(_ address: String, in session: inout BrowserSession) throws
   for index in 0..<20 { session.open(URL(string: "https://example.com/\(index)")!) }
   let results = CommandSearch.results(for: "example.com", in: session)
   #expect(results.count == 10)
-  #expect(results.last?.action == .open(URL(string: "https://example.com")!))
+  #expect(results.first?.action == .open(URL(string: "https://example.com")!))
 }
 
 @Test func editingSpaceAppearancePreservesProfileAndTabIdentity() throws {

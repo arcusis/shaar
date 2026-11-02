@@ -17,14 +17,16 @@ struct SpaceCommands: Commands {
   let store: BrowserStore
 
   var body: some Commands {
-    CommandMenu("Spaces") {
-      Button("New space…") { store.spaceEditor = .create }
+    CommandMenu(ShellL10n.string("Spaces")) {
+      Button(ShellL10n.string("New space…")) { store.spaceEditor = .create }
         .keyboardShortcut("n", modifiers: [.command, .option])
-      Button("Edit current space…") { store.spaceEditor = .edit(store.session.selectedSpaceID) }
+      Button(ShellL10n.string("Edit current space…")) {
+        store.spaceEditor = .edit(store.session.selectedSpaceID)
+      }
       Divider()
-      Button("Previous space") { store.cycleSpace(by: -1) }
+      Button(ShellL10n.string("Previous space")) { store.cycleSpace(by: -1) }
         .keyboardShortcut(.leftArrow, modifiers: [.command, .option])
-      Button("Next space") { store.cycleSpace(by: 1) }
+      Button(ShellL10n.string("Next space")) { store.cycleSpace(by: 1) }
         .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
       Divider()
       ForEach(Array(store.session.spaces.enumerated()), id: \.element.id) { index, space in
@@ -36,11 +38,11 @@ struct SpaceCommands: Commands {
         }
       }
     }
-    CommandMenu("Page") {
-      Button("Split View") { store.splitSelectedTab() }
+    CommandMenu(ShellL10n.string("Page")) {
+      Button(ShellL10n.string("Split View")) { store.splitSelectedTab() }
         .keyboardShortcut("=", modifiers: [.control, .shift])
         .disabled(store.session.selectedSpace.tabs.count < 2)
-      Button("Copy URL") {
+      Button(ShellL10n.string("Copy URL")) {
         guard let url = store.session.selectedPage?.tab.url else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(CleanLink.clean(url).absoluteString, forType: .string)

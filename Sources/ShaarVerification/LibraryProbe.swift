@@ -290,6 +290,7 @@ final class LibraryProbe {
           && runtime.nativeTabID(forID: id.uuidString) == nativeIDs[index],
         "library operations retain unrelated live account document \(index + 1)")
     }
+    try store.flushSaves()
     try expect(
       try SessionFile(url: root.appending(path: "session.json")).load() == store.session,
       "library UI does not corrupt the persisted browser session")

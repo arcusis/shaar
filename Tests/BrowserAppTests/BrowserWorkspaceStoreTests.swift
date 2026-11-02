@@ -56,6 +56,7 @@ struct BrowserWorkspaceStoreTests {
     #expect(first.updateSpace(first.session.selectedSpaceID, name: "Renamed", tint: .rose))
     #expect(second.session.selectedSpace.name == "Renamed")
     #expect(second.session.selectedSpace.selectedTabID == secondTab)
+    try manager.flushSaves()
     #expect(try file.load() == manager.workspace)
     let restored = try BrowserWorkspaceStore(file: file)
     #expect(restored.workspace == manager.workspace)
@@ -153,6 +154,59 @@ struct BrowserWorkspaceStoreTests {
     #expect(manager.workspace == unsaved)
     #expect(try file.load() == unsaved)
     #expect(manager.stores.values.allSatisfy { $0.storageNotice == nil })
+  }
+
+  @Test func tabMetadataSpaceAndWindowChangesAllReachTheSavedWorkspace() throws {
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let file = file(directory)
+    let manager = try BrowserWorkspaceStore(file: file, initialSession: fixture())
+    let firstID = manager.workspace.windows[0].id
+    let first = try #require(manager.stores[firstID])
+    let tab = try #require(first.session.selectedSpace.selectedTabID)
+    let address = URL(string: "https://example.com/navigated")!
+
+    first.nativeTabChanged(tab, url: address, title: "Navigated page")
+    try manager.flushSaves()
+    let savedTab = try file.load()?.window(firstID)?.session.spaces.flatMap(\.tabs)
+      .first { $0.id == tab }
+    #expect(savedTab?.url == address && savedTab?.title == "Navigated page")
+
+    first.cycleSpace(by: 1)
+    try manager.flushSaves()
+    #expect(
+      try file.load()?.window(firstID)?.session.selectedSpaceID == first.session.selectedSpaceID)
+
+    let secondID = try manager.newWindow(from: firstID)
+    try manager.focusWindow(secondID)
+    try manager.setGeometry(
+      WorkspaceWindowGeometry(x: 10, y: 20, width: 900, height: 700), for: secondID)
+    try manager.flushSaves()
+    #expect(try file.load() == manager.workspace)
+  }
+
+  @Test func damagedWorkspaceRestoresTheBackupAndKeepsSaving() throws {
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let file = file(directory)
+    let manager = try BrowserWorkspaceStore(file: file, initialSession: fixture())
+    let lastKnownGood = manager.workspace
+    let firstID = lastKnownGood.windows[0].id
+    manager.stores[firstID]!.perform(.open(URL(string: "https://example.com/latest")!))
+    try manager.flushSaves()
+    let damaged = Data("{\"windows\":".utf8)
+    try damaged.write(to: file.url)
+
+    let restored = try BrowserWorkspaceStore(file: file)
+    #expect(restored.workspace == lastKnownGood)
+    #expect(restored.storageNotice == nil)
+    let snapshot = SnapshotFile<BrowserWorkspace>(url: file.url)
+    #expect(try Data(contentsOf: snapshot.damagedURL) == damaged)
+
+    restored.stores[firstID]!.perform(.open(URL(string: "https://example.com/after-recovery")!))
+    try restored.flushSaves()
+    #expect(try file.load() == restored.workspace)
+    #expect(try Data(contentsOf: snapshot.backupURL) != damaged)
   }
 
   @Test func retiredWindowStoreCannotResurrectItsRecordAfterNativeClosure() throws {

@@ -20,6 +20,9 @@ final class BrowserRuntimeClient {
   var onExternalAppRequest: (([String: Any]) -> Void)?
   var onExternalAppDismissed: ((String) -> Void)?
   var onMediaAccess: ((String, [String: NSNumber]) -> Void)?
+  var onMediaSessionChanged: ((String, [String: Any]?) -> Void)?
+  var onPictureInPictureChanged: ((String, Bool) -> Void)?
+  var onTabActivationRequest: ((String, String) -> Void)?
   var onFindResult: ((String, String, Int32, Int32, Bool) -> Void)?
   var onDownloadChanged: ((String, [String: Any]) -> Void)?
   var onDownloadRemoved: ((String, String) -> Void)?
@@ -42,7 +45,9 @@ final class BrowserRuntimeClient {
 enum BrowserRoutingError: Error, LocalizedError {
   case duplicateWindow
 
-  var errorDescription: String? { "This native window already has an application client." }
+  var errorDescription: String? {
+    ShellL10n.string("This native window already has an application client.")
+  }
 }
 
 /// Retains ownership until close delivery, after Chromium has removed its tab mapping.

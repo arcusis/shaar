@@ -43,7 +43,7 @@ final class PrivateProductHostProbe {
   private let sourceA: String
   private let sourceB: String
   private var source: String
-  private var keyWindow: NSWindow?
+  private weak var keyWindow: NSWindow?
   private var host: PrivateBrowserHost?
   private var checks: [String: Bool] = [:]
   private var workspaceBytes = Data()
@@ -55,7 +55,7 @@ final class PrivateProductHostProbe {
   private var quitDiagnosticStages: [[String: Any]] = []
   private var nativeCloseObservations: [String: NativeCloseObservation] = [:]
   private weak var lifecycleStore: PrivateBrowserStore?
-  private weak var lifecycleHosting: NSHostingView<PrivateBrowserWindow>?
+  private weak var lifecycleHosting: NSHostingView<PrivateBrowserWindow?>?
 
   init(
     runtime: ARCChromiumRuntime, root: URL, fixture: URL, phase: String,
@@ -340,13 +340,14 @@ final class PrivateProductHostProbe {
     checks["productHostOwnsPrivateNativeWindow"] =
       first.store.windowID == first.windowID
       && first.store.contextID == first.contextID
-      && first.hosting.rootView.store === first.store
+      && first.hosting.rootView?.store === first.store
       && first.hosting.superview
         === runtime.hostView(
           forPrivateWindowID:
             first.windowID, contextID: first.contextID)
-      && nativePageView.map { isDescendant($0, of: first.hosting) } == true
+      && nativePageView != nil && first.store.showsStartPage
 
+    try await captureStartPage(first)
     let firstPath = fixture.appending(path: "private-product-\(runID.lowercased())-a")
       .absoluteString
     first.store.openTab()
@@ -362,10 +363,12 @@ final class PrivateProductHostProbe {
       first.store.selectTab(secondTab.id)
     }
     first.store.navigate(firstPath)
+    first.store.confirmHTTP(useHTTPS: false)
     try await waitForURL(first.store, tabID: secondTab.id, contains: "private-product-")
     let nextPath = fixture.appending(path: "private-product-\(runID.lowercased())-next")
       .absoluteString
     first.store.navigate(nextPath)
+    first.store.confirmHTTP(useHTTPS: false)
     try await waitForURL(first.store, tabID: secondTab.id, contains: "-next")
     try await waitForTab(first.store, tabID: secondTab.id, canGoBack: true)
     first.store.goBack()
@@ -386,7 +389,7 @@ final class PrivateProductHostProbe {
     checks["productCommandTUsesPrivateOpaqueSearch"] =
       privateHost.activeOwner?.windowID == first.windowID
       && privateHost.canPerform(.newTab)
-      && first.store.commandIsOpen && first.store.tabs.count == 3
+      && first.store.showsStartPage && first.store.tabs.count == 3
       && commandTab.id != secondTab.id
     privateHost.perform(.search)
     checks["productCommandLTargetsCurrentPrivateTab"] =
@@ -397,7 +400,9 @@ final class PrivateProductHostProbe {
         path: "private-product-\(runID.lowercased())-command-t"
       ).absoluteString
     first.store.submitCommand()
+    first.store.confirmHTTP(useHTTPS: false)
     try await waitForURL(first.store, tabID: commandTab.id, contains: "-command-t")
+    try await waitForCaptureReadiness(first, tabID: commandTab.id)
     first.store.showCommand()
     let captures = try await capturePrivateWindow(first, runID: runID, phase: phase)
     screenshotDigest = captures.hostDigest
@@ -427,13 +432,23 @@ final class PrivateProductHostProbe {
       && lifecycleStore === first.store && lifecycleHosting === first.hosting
   }
 
-  private func isDescendant(_ view: NSView, of parent: NSView) -> Bool {
-    var current: NSView? = view
-    while let view = current {
-      if view === parent { return true }
-      current = view.superview
+  private func captureStartPage(_ owner: PrivateBrowserHost.Owner) async throws {
+    let directory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+      .appending(path: "build/private-window-evidence/\(runID)", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+      owner.window.appearance = NSAppearance(named: appearance)
+      owner.hosting.layoutSubtreeIfNeeded()
+      try await Task.sleep(for: .milliseconds(150))
+      guard !owner.window.isVisible,
+        let bitmap = owner.hosting.bitmapImageRepForCachingDisplay(in: owner.hosting.bounds)
+      else { throw PrivateWindowFailure("Private start page must remain offscreen.") }
+      owner.hosting.cacheDisplay(in: owner.hosting.bounds, to: bitmap)
+      guard let png = bitmap.representation(using: .png, properties: [:]), png.count > 4096
+      else { throw PrivateWindowFailure("Private start page capture was empty.") }
+      try png.write(to: directory.appending(path: "start-\(phase)-\(name).png"))
     }
-    return false
+    owner.window.appearance = nil
   }
 
   private func waitForTab(
@@ -841,6 +856,20 @@ final class PrivateProductHostProbe {
     let hostDigest = sha256(data)
     let rendererDigest = sha256(rendererData)
     return (hostDigest: hostDigest, rendererDigest: rendererDigest)
+  }
+
+  private func waitForCaptureReadiness(_ owner: PrivateBrowserHost.Owner, tabID: String)
+    async throws
+  {
+    for _ in 0..<Int(100 * ProbeTimeout.scale) {
+      if runtime.privateProbeCaptureIsReady(
+        forTabID: tabID, windowID: owner.windowID, contextID: owner.contextID)
+      {
+        return
+      }
+      try await Task.sleep(for: .milliseconds(50))
+    }
+    throw PrivateWindowFailure("Selected private renderer did not become ready for capture.")
   }
 
   private func waitForNativeCloseObservation(_ owner: PrivateBrowserHost.Owner) async -> Bool {

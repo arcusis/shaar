@@ -226,6 +226,7 @@ final class FolderProbe {
     try expect(
       store.session.version == BrowserSession.currentVersion,
       "folder session uses the current schema")
+    try store.flushSaves()
     try expect(
       try SessionFile(url: root.appending(path: "session.json")).load() == store.session,
       "folder hierarchy, membership, selection, and collapse state save atomically")

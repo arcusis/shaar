@@ -13,11 +13,23 @@ let bundleFrameworksLinkerSettings: [LinkerSetting] = [
 
 let package = Package(
   name: "ArcusisBrowser",
+  defaultLocalization: "en",
   platforms: [.macOS("26.0")],
   products: [.executable(name: "ArcusisBrowser", targets: ["Shaar"])],
   dependencies: [.package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.1")],
   targets: [
-    .target(name: "BrowserCore", resources: [.process("Resources/public_suffix_list.dat")]),
+    .target(
+      name: "BrowserCore",
+      exclude: [
+        "Resources/Core.xcstrings", "Resources/Bridge.xcstrings", "Resources/Shell.xcstrings",
+        "Resources/Settings.xcstrings", "Resources/Panels.xcstrings",
+        "Resources/Inspector.xcstrings", "Resources/InspectorDetails.xcstrings",
+        "Resources/InspectorTools.xcstrings",
+      ],
+      resources: [.process("Resources")],
+      plugins: [.plugin(name: "CompileLocalizations")]),
+    .plugin(
+      name: "CompileLocalizations", capability: .buildTool(), path: "Plugins/CompileLocalizations"),
     .target(
       name: "ChromiumBridge",
       publicHeadersPath: "include",
@@ -38,10 +50,12 @@ let package = Package(
       name: "ShaarVerification",
       dependencies: ["ArcusisBrowser", "BrowserCore", "ChromiumBridge"],
       linkerSettings: bundleFrameworksLinkerSettings),
-    .testTarget(name: "BrowserCoreTests", dependencies: ["BrowserCore"]),
+    .target(name: "BrowserTestSupport", path: "Tests/TestSupport"),
+    .testTarget(name: "BrowserCoreTests", dependencies: ["BrowserCore", "BrowserTestSupport"]),
     .testTarget(
       name: "BrowserAppTests",
-      dependencies: ["ArcusisBrowser", "BrowserCore"]),
+      dependencies: ["ArcusisBrowser", "BrowserCore", "BrowserTestSupport"],
+      resources: [.copy("Snapshots/InspectorAI")]),
     .testTarget(
       name: "ShaarVerificationTests",
       dependencies: ["ArcusisBrowser", "BrowserCore", "ChromiumBridge", "ShaarVerification"]),

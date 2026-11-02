@@ -33,8 +33,12 @@ final class BrowserEngine {
   let events: BrowserRuntimeEvents
   let windowID: String
   private let callbacks: BrowserRuntimeClient
+  let autoPictureInPicture: AutoPictureInPicture
+  let pictureInPictureControls = PictureInPictureControls()
   private(set) var isClosed = false
   var onClosed: ((Bool) -> Void)?
+  var inspectors: [UUID: InspectorModel] = [:]
+  var developerModels: [UUID: DeveloperPageModel] = [:]
   let downloads = DownloadsModel(folder: DownloadsFolderSource())
   private(set) var pages: [UUID: PageState] = [:]
   private(set) var notice: String?
@@ -48,7 +52,7 @@ final class BrowserEngine {
       if extensionPanel == nil { runtime.closeExtensionPopup(forWindowID: windowID) }
     }
   }
-  @ObservationIgnored private weak var store: BrowserStore?
+  @ObservationIgnored private(set) weak var store: BrowserStore?
   @ObservationIgnored private var loadedProfiles: Set<UUID> = []
   @ObservationIgnored private var loadingProfiles: Set<UUID> = []
   @ObservationIgnored private var failedProfiles: Set<UUID> = []
@@ -96,6 +100,7 @@ final class BrowserEngine {
     self.runtime = runtime
     self.events = events
     self.windowID = windowID ?? runtime.primaryWindowID
+    autoPictureInPicture = AutoPictureInPicture(engine: .chromium(runtime))
     callbacks = BrowserRuntimeClient(windowID: self.windowID) { [weak store] in
       Set(store?.session.profiles.map { $0.id.uuidString } ?? [])
     }
@@ -104,8 +109,9 @@ final class BrowserEngine {
     self.lazyPinnedTabs = lazyPinnedTabs
     try events.router.register(callbacks)
     store.engine = self
-    store.onReloadPage = { [weak self] tab, profile in
-      self?.runtime.reloadTabID(tab.uuidString, profileID: profile.uuidString) ?? false
+    store.onReloadPage = { [weak self] tab, profile, mode in
+      self?.runtime.reloadTabID(
+        tab.uuidString, profileID: profile.uuidString, mode: mode.engineMode) ?? false
     }
     store.onNavigatePage = { [weak self] tab, profile, url in
       guard let self, !self.isClosed, let store = self.store,
@@ -126,11 +132,18 @@ final class BrowserEngine {
         self.store?.resolveExternalApp(request.id, accepted: false)
       }
       self.isClosed = true
+      for model in self.inspectors.values { model.close() }
+      self.inspectors.removeAll()
+      for model in self.developerModels.values { model.close() }
+      self.developerModels.removeAll()
       self.extensionPanel = nil
       self.store?.dismissPageFind()
       self.liveTabs.removeAll()
       self.pages.removeAll()
       self.mediaAccess.removeAll()
+      self.store?.media.removeAll()
+      self.autoPictureInPicture.forgetAll()
+      self.pictureInPictureControls.detach()
       self.favicons.removeAll()
       self.onClosed?(quitting)
     }
@@ -140,6 +153,7 @@ final class BrowserEngine {
       else { return }
       self.pages[tab]?.loading = false
       self.mediaAccess[tab] = nil
+      self.forgetMedia(tab)
       if case .popup(let popup) = self.extensionPanel, popup.tabID == tab {
         self.extensionPanel = nil
       }
@@ -152,6 +166,12 @@ final class BrowserEngine {
         return
       }
       self.store?.nativeDocumentCommitted(tab, profileID: profile)
+      if let model = self.developerModels[tab] {
+        model.update(target: model.target, committed: true)
+      }
+      if let inspector = self.inspectors[tab] {
+        inspector.documentChanged(url: inspector.target.url, committed: true)
+      }
     }
     store.library.onLoad = { [weak self] key, limit, completion in
       guard let self, !self.isClosed else {
@@ -278,6 +298,24 @@ final class BrowserEngine {
         microphone: state["microphone"]?.boolValue ?? false,
         screen: state["screen"]?.boolValue ?? false)
     }
+    callbacks.onMediaSessionChanged = { [weak self] identity, payload in
+      self?.receiveMediaSession(identity, payload: payload)
+    }
+    store.onMediaCommand = { [weak self] tab, command in
+      self?.performMedia(command, tabID: tab) ?? false
+    }
+    callbacks.onPictureInPictureChanged = { [weak self] identity, active in
+      self?.receivePictureInPicture(identity, active: active)
+    }
+    pictureInPictureControls.onCommand = { [weak self] tab, command in
+      self?.performPictureInPicture(command, tabID: tab)
+    }
+    callbacks.onTabActivationRequest = { [weak self] identity, _ in
+      self?.showRequestedTab(identity)
+    }
+    store.onAutomaticPictureInPictureChanged = { [weak self] site, profile in
+      self?.applyAutomaticPictureInPicture(site: site, profileID: profile)
+    }
     store.onInstallDecision = { [weak self] id, accepted in
       guard let self else { return }
       self.events.resolveInstall(id, windowID: self.windowID, accepted: accepted)
@@ -328,6 +366,8 @@ final class BrowserEngine {
       self.pages[id] = PageState(loading: loading, canGoBack: back, canGoForward: forward)
       self.store?.nativePageLoading(id, loading: loading)
       if let url = URL(string: address) {
+        self.inspectors[id]?.documentChanged(url: url)
+        self.developerDocumentChanged(id, url: url)
         if let profile = self.store?.session.profileID(forTabID: id),
           self.store?.session.favoritePages.contains(where: { $0.tab.id == id }) == true
         {
@@ -335,6 +375,7 @@ final class BrowserEngine {
         } else {
           self.store?.nativeTabChanged(id, url: url, title: title)
         }
+        self.withholdAutomaticPictureInPictureIfOff(id, url: url)
       }
       if let profile = self.store?.session.profileID(forTabID: id),
         let icon = self.runtime.favicon(
@@ -352,7 +393,10 @@ final class BrowserEngine {
       else { return }
       self.liveTabs.remove(id)
       self.pages[id] = nil
+      self.inspectors.removeValue(forKey: id)?.close()
+      self.developerModels.removeValue(forKey: id)?.close()
       self.mediaAccess[id] = nil
+      self.forgetMedia(id)
       self.favicons[id] = nil
       self.store?.nativeTabClosed(id)
     }
@@ -400,7 +444,10 @@ final class BrowserEngine {
       guard liveTabs.remove(id) != nil else { continue }
       events.router.forgetTab(id.uuidString, windowID: windowID)
       pages[id] = nil
+      inspectors.removeValue(forKey: id)?.close()
+      developerModels.removeValue(forKey: id)?.close()
       mediaAccess[id] = nil
+      forgetMedia(id)
       favicons[id] = nil
       runtime.discardTabID(id.uuidString)
     }
@@ -425,7 +472,10 @@ final class BrowserEngine {
       runtime.discardTabID(removed.uuidString)
       liveTabs.remove(removed)
       pages[removed] = nil
+      inspectors.removeValue(forKey: removed)?.close()
+      developerModels.removeValue(forKey: removed)?.close()
       mediaAccess[removed] = nil
+      forgetMedia(removed)
       favicons[removed] = nil
     }
     for profile in Set(session.spaces.map(\.profileID)) {
@@ -469,7 +519,7 @@ final class BrowserEngine {
         guard decision == .materialize else { continue }
         guard events.router.bindTab(tab.id.uuidString, windowID: windowID) else {
           failedTabs.insert(tab.id)
-          notice = "A saved tab already belongs to another window."
+          notice = ShellL10n.string("A saved tab already belongs to another window.")
           continue
         }
         liveTabs.insert(tab.id)
@@ -497,7 +547,7 @@ final class BrowserEngine {
       guard decision == .materialize else { continue }
       guard events.router.bindTab(page.tab.id.uuidString, windowID: windowID) else {
         failedTabs.insert(page.tab.id)
-        notice = "A saved Favorite page already belongs to another window."
+        notice = ShellL10n.string("A saved Favorite page already belongs to another window.")
         continue
       }
       liveTabs.insert(page.tab.id)
@@ -532,6 +582,8 @@ final class BrowserEngine {
         lastTabOrders[profile] = positions
       }
     }
+    // Before the switch, so the leaving page still counts as visible to Chromium.
+    handOffPictureInPicture()
     runtime.activateProfileID(session.selectedSpace.profileID.uuidString, windowID: windowID)
     if let selected = session.selectedPage?.tab.id {
       runtime.activateTabID(selected.uuidString)
@@ -626,7 +678,7 @@ final class BrowserEngine {
     extensionPanel = .popup(
       ExtensionPopupContext(
         id: id, profileID: profile, tabID: tab, extensionID: extensionID,
-        name: extensions.first { $0.id == extensionID }?.name ?? "Extension"))
+        name: extensions.first { $0.id == extensionID }?.name ?? ShellL10n.string("Extension")))
   }
 
   private func requestInstallation(_ payload: [String: Any]) {
@@ -657,7 +709,8 @@ final class BrowserEngine {
       store.requestInstallation(request)
     else {
       events.resolveInstall(id, windowID: windowID, accepted: false)
-      notice = "The extension request could not be verified for this page and profile."
+      notice = ShellL10n.string(
+        "The extension request could not be verified for this page and profile.")
       return
     }
   }
@@ -683,7 +736,8 @@ final class BrowserEngine {
       store.requestWebsitePermission(request)
     else {
       events.resolveMedia(id, windowID: windowID, accepted: false)
-      notice = "This permission request is unavailable for the current page and profile."
+      notice = ShellL10n.string(
+        "This permission request is unavailable for the current page and profile.")
       return
     }
   }

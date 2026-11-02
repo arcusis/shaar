@@ -17,6 +17,13 @@ struct ManagedExtension: Identifiable, Equatable, Decodable {
   let mayDisable: Bool
   let permissions: [String]
   let hostPermissions: [String]
+
+  func help(actionTitle: String?) -> String {
+    guard let title = actionTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
+      !title.isEmpty, title != name
+    else { return name }
+    return "\(name): \(title)"
+  }
 }
 
 enum ExtensionManagementOperation: Equatable {
@@ -53,14 +60,14 @@ enum ExtensionManagementOperation: Equatable {
 }
 
 enum ExtensionConsentPermissions {
-  static let unknownAccess = "Unknown access"
+  static let unknownAccess = PanelsL10n.string("Unknown access")
 
   static func displayValues(
     permissions: [String], hostPermissions: [String]?, complete: Bool
   ) -> [String] {
     var values = permissions
     if let hostPermissions {
-      values += hostPermissions.map { "Site access: \($0)" }
+      values += hostPermissions.map { PanelsL10n.format("Site access: %@", .string($0)) }
     }
     if !complete || hostPermissions == nil {
       values.append(unknownAccess)

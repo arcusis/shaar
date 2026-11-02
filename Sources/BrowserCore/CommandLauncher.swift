@@ -39,7 +39,7 @@ public enum CommandFilter: String, CaseIterable, Identifiable, Sendable {
   case tabs, history, bookmarks, actions
 
   public var id: String { rawValue }
-  public var title: String { rawValue.capitalized }
+  public var title: String { BrowserLocalization.string(rawValue.capitalized) }
 
   public var symbol: String {
     switch self {
@@ -169,12 +169,16 @@ public enum CommandLauncher {
       CommandResult.reopen($0, subtitle: CommandText.domain(of: $0.tab.url))
     }
     return [
-      CommandSection(id: "open-tabs", title: "Open Tabs", results: Array(openTabs)),
       CommandSection(
-        id: "favorites", title: "Favorites & Pinned", results: Array(favorites) + pinned),
-      CommandSection(id: "recently-closed", title: "Recently Closed", results: Array(closed)),
+        id: "open-tabs", title: BrowserLocalization.string("Open Tabs"), results: Array(openTabs)),
       CommandSection(
-        id: "most-visited", title: "Most Visited",
+        id: "favorites", title: BrowserLocalization.string("Favorites & Pinned"),
+        results: Array(favorites) + pinned),
+      CommandSection(
+        id: "recently-closed", title: BrowserLocalization.string("Recently Closed"),
+        results: Array(closed)),
+      CommandSection(
+        id: "most-visited", title: BrowserLocalization.string("Most Visited"),
         results: mostVisited(in: session, history: sources.history)),
     ]
   }
@@ -201,8 +205,9 @@ public enum CommandLauncher {
 
   // MARK: Typed query
 
-  /// Ranked hits keep their existing order and matching Actions come next. Open follows the
-  /// Actions when there are hits; with no hits it leads, so Enter still searches the web.
+  /// Sections follow `CommandSearch`'s default row: when Open leads (a typed address, or text no
+  /// result's site or title starts with) it comes first, so Enter navigates or searches.
+  /// Otherwise the ranked hits lead, matching Actions come next and Open follows them.
   static func searchSections(
     for query: String, in session: BrowserSession, sources: CommandSources
   ) -> [CommandSection] {
@@ -213,8 +218,9 @@ public enum CommandLauncher {
       limit: CommandSearch.resultLimit - actions.results.count)
     let hits = CommandSection(id: "top-hits", title: "", results: results.filter { !$0.isOpen })
     let open = CommandSection(id: "open", title: "", results: results.filter(\.isOpen))
-    guard hits.results.isEmpty else { return [hits, actions, open] }
-    return [open, actions]
+    if hits.results.isEmpty { return [open, actions] }
+    if results.first?.isOpen == true { return [open, hits, actions] }
+    return [hits, actions, open]
   }
 
   // MARK: Chips
@@ -236,11 +242,15 @@ public enum CommandLauncher {
       .prefix(filteredLimit)
       .map { CommandResult.reopen($0, subtitle: CommandText.domain(of: $0.tab.url)) }
     return [
-      CommandSection(id: "tabs", title: "Open Tabs", results: Array(tabs.prefix(filteredLimit))),
       CommandSection(
-        id: "favorites", title: "Favorites",
+        id: "tabs", title: BrowserLocalization.string("Open Tabs"),
+        results: Array(tabs.prefix(filteredLimit))),
+      CommandSection(
+        id: "favorites", title: BrowserLocalization.string("Favorites"),
         results: Array(favoriteResults(matching: query, in: session).prefix(filteredLimit))),
-      CommandSection(id: "recently-closed", title: "Recently Closed", results: Array(closed)),
+      CommandSection(
+        id: "recently-closed", title: BrowserLocalization.string("Recently Closed"),
+        results: Array(closed)),
     ]
   }
 
@@ -255,7 +265,8 @@ public enum CommandLauncher {
       }
       .prefix(filteredLimit)
       .map { CommandResult.history($0, subtitle: CommandText.domain(of: $0.destination)) }
-    return CommandSection(id: "history", title: "History", results: Array(results))
+    return CommandSection(
+      id: "history", title: BrowserLocalization.string("History"), results: Array(results))
   }
 
   static func bookmarkSection(
@@ -269,7 +280,8 @@ public enum CommandLauncher {
       }
       .prefix(filteredLimit)
       .map { CommandResult.bookmark($0, subtitle: CommandText.domain(of: $0.destination)) }
-    return CommandSection(id: "bookmarks", title: "Bookmarks", results: Array(results))
+    return CommandSection(
+      id: "bookmarks", title: BrowserLocalization.string("Bookmarks"), results: Array(results))
   }
 
   static func actionSection(for query: String, sources: CommandSources, limit: Int?)
@@ -278,7 +290,8 @@ public enum CommandLauncher {
     let matching = sources.commands.filter { $0.matches(query) }
     let limited = limit.map { Array(matching.prefix($0)) } ?? matching
     return CommandSection(
-      id: "actions", title: "Actions", results: limited.map(CommandResult.command))
+      id: "actions", title: BrowserLocalization.string("Actions"),
+      results: limited.map(CommandResult.command))
   }
 
   // MARK: Shared helpers

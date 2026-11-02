@@ -19,4 +19,6 @@ All bundles include the Shaar app icon, `Resources/Branding/Shaar.icns`, generat
 
 `bash scripts/bundle-app.sh` without `--with-engine` builds `build/Shaar Shell.app`, a separate UI-only preview. `swift run ArcusisBrowser` also runs that preview without webpage rendering. `--with-engine --verification` builds the probe harness instead; see [[Verification_Harness]].
 
+An opt-in pinned engine source-build runner and reviewed download-directory patch are documented in [[Engine_Source_Build]]. That runner does not replace the normal prebuilt bundle path.
+
 Related: [[Source_And_Native_Verification]], [[Releasing]].

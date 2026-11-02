@@ -13,7 +13,8 @@ enum AbruptProbeCheckpoint {
   static func record(root: URL, session: BrowserSession, checks: [String], chromiumVersion: String)
     throws
   {
-    guard try SessionFile(url: root.appending(path: "session.json")).load() == session else {
+    guard try SessionFile(url: root.appending(path: "session.json")).loadPrimary() == session
+    else {
       throw AbruptCheckpointError.snapshotMismatch
     }
     try SessionFile(url: root.appending(path: snapshotName)).save(session)
@@ -29,8 +30,8 @@ enum AbruptProbeCheckpoint {
   }
 
   static func expectedSession(root: URL) throws -> BrowserSession {
-    guard let expected = try SessionFile(url: root.appending(path: snapshotName)).load(),
-      let saved = try SessionFile(url: root.appending(path: "session.json")).load(),
+    guard let expected = try SessionFile(url: root.appending(path: snapshotName)).loadPrimary(),
+      let saved = try SessionFile(url: root.appending(path: "session.json")).loadPrimary(),
       saved == expected
     else { throw AbruptCheckpointError.snapshotMismatch }
     return expected

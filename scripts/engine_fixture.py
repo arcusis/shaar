@@ -5,6 +5,7 @@
 """Run the real native engine against a disposable, authored local account fixture."""
 
 import http.server
+import importlib.util
 from http.cookies import SimpleCookie
 import argparse
 import fcntl
@@ -12,19 +13,48 @@ import json
 import hashlib
 import math
 import os
+import plistlib
 import re
 from pathlib import Path
+import random
 import signal
 import shutil
 import socket
 import struct
 import subprocess
+import sys
 import tempfile
 import threading
 import time
 import uuid
 import zlib
 from urllib.parse import urlparse
+
+VERIFICATION_APP = Path('build/Shaar Verification.app')
+RELEASE_FEED = Path(__file__).resolve().with_name('release_feed.py')
+
+
+def load_release_config():
+    spec = importlib.util.spec_from_file_location('_release_feed_for_engine_fixture', RELEASE_FEED)
+    module = importlib.util.module_from_spec(spec)
+    # dataclasses resolve the module through sys.modules while the class body runs.
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module.load_config()
+
+
+def require_verification_bundle_identity(app):
+    """Refuse to launch a harness that macOS would treat as the installed Shaar."""
+    config = load_release_config()
+    try:
+        identifier = plistlib.loads((app / 'Contents/Info.plist').read_bytes()).get('CFBundleIdentifier')
+    except (OSError, plistlib.InvalidFileException, ValueError) as error:
+        raise RuntimeError(f'Unreadable verification bundle Info.plist: {app}') from error
+    if identifier == config.bundle_identifier:
+        raise RuntimeError(f'Verification bundle carries the shipping identifier {identifier}; rebuild it')
+    if identifier != config.verification_bundle_identifier:
+        raise RuntimeError(
+            f'Verification bundle identifier {identifier!r} is not {config.verification_bundle_identifier}')
 
 
 def record_bitwarden_summary(root, control_only):
@@ -95,12 +125,18 @@ def record_bitwarden_summary(root, control_only):
     return summary
 
 
-def validate_host_lock_checkpoint(root, ready, pid, phase):
+def require_marked_probe_root(root, purpose):
+    """Return the canonical root only when this runner created and marked it."""
     canonical = root.resolve()
     if (canonical.parent != Path(tempfile.gettempdir()).resolve()
             or not canonical.name.startswith('arcusis-engine-probe-')
             or (canonical / '.arcusis-probe').read_text() != 'arcusis-engine-probe-v1\n'):
-        raise RuntimeError('Host lock verification requires a marked disposable root')
+        raise RuntimeError(f'{purpose} requires a marked disposable probe root')
+    return canonical
+
+
+def validate_host_lock_checkpoint(root, ready, pid, phase):
+    canonical = require_marked_probe_root(root, 'Host lock verification')
     if (not isinstance(ready, dict) or type(ready.get('schema')) is not int or ready['schema'] != 1
             or type(ready.get('pid')) is not int or ready['pid'] != pid or pid <= 1
             or ready.get('phase') != phase or phase not in ('initial', 'restart')
@@ -167,11 +203,7 @@ def wait_for_probe(process, root, phase, timeout):
 
 def validate_abrupt_checkpoint(root, ready, pid):
     """Bind the fault checkpoint to this parent's child and its marked temporary files."""
-    canonical = root.resolve()
-    if (canonical.parent != Path(tempfile.gettempdir()).resolve()
-            or not canonical.name.startswith('arcusis-engine-probe-')
-            or (canonical / '.arcusis-probe').read_text() != 'arcusis-engine-probe-v1\n'):
-        raise RuntimeError('Abrupt termination requires a marked disposable probe root')
+    canonical = require_marked_probe_root(root, 'Abrupt termination')
     if (not isinstance(ready, dict) or type(ready.get('schema')) is not int or ready['schema'] != 1
             or ready.get('ready') is not True or ready.get('localFixturesPassed') is not True
             or ready.get('phase') != 'initial' or type(ready.get('pid')) is not int
@@ -254,13 +286,106 @@ def terminate_at_checkpoint(process, root, timeout, settle_seconds=0):
     raise RuntimeError(f'Probe exited before abrupt-termination checkpoint ({process.returncode})')
 
 
+SESSION_RECOVERY_MODE = 'session-recovery-only'
+SESSION_RECOVERY_READY = 'session-recovery-ready.json'
+SESSION_RECOVERY_RECEIPT = 'session-recovery-kill.json'
+# The child keeps writing snapshots after its checkpoint; a random delay varies where SIGKILL lands.
+SESSION_RECOVERY_KILL_DELAY_SECONDS = (0.15, 0.6)
+
+
+def validate_session_recovery_checkpoint(root, ready, pid):
+    require_marked_probe_root(root, 'Session recovery')
+    if (not isinstance(ready, dict) or type(ready.get('schema')) is not int or ready['schema'] != 1
+            or ready.get('ready') is not True or ready.get('phase') != 'initial'
+            or ready.get('mode') != SESSION_RECOVERY_MODE
+            or type(ready.get('pid')) is not int or ready['pid'] != pid or pid <= 1
+            or ready.get('expectedSnapshot') != 'session-recovery-expected.json'
+            or ready.get('workspaceFile') != 'session-recovery-workspace.json'
+            or not isinstance(ready.get('checks'), list) or not ready['checks']
+            or not all(isinstance(check, str) and check for check in ready['checks'])
+            or not isinstance(ready.get('chromiumVersion'), str) or not ready['chromiumVersion']):
+        raise RuntimeError('Invalid or foreign session-recovery checkpoint')
+    return ready
+
+
+def wait_for_process_group_exit(pgid, seconds):
+    deadline = time.monotonic() + seconds
+    while process_group_exists(pgid):
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.05)
+    return True
+
+
+def kill_during_session_saves(process, root, timeout):
+    """SIGKILL the exact probe PID while it is still writing workspace snapshots."""
+    checkpoint = root / SESSION_RECOVERY_READY
+    deadline = time.monotonic() + probe_timeout(timeout)
+    while process.poll() is None:
+        if checkpoint.exists():
+            ready = validate_session_recovery_checkpoint(
+                root, json.loads(checkpoint.read_text()), process.pid)
+            delay = random.uniform(*SESSION_RECOVERY_KILL_DELAY_SECONDS)
+            time.sleep(delay)
+            if process.poll() is not None:
+                raise RuntimeError(f'Probe exited before SIGKILL ({process.returncode})')
+            print(f'initial: sending SIGKILL to probe PID {process.pid} after {delay:.3f}s of saves', flush=True)
+            os.kill(process.pid, signal.SIGKILL)
+            code = process.wait(timeout=10)
+            if code != -signal.SIGKILL:
+                raise RuntimeError(f'Unexpected session-recovery termination exit: {code}')
+            # Engine helpers exit when their browser process dies; only this probe's own group is cleaned up.
+            helpers_exited = wait_for_process_group_exit(process.pid, 10)
+            if not helpers_exited:
+                signal_probe(process, signal.SIGKILL)
+            receipt = {
+                'schema': 1, 'mode': SESSION_RECOVERY_MODE, 'passed': True, 'pid': process.pid,
+                'signal': 'SIGKILL', 'exitCode': code, 'secondsAfterCheckpoint': round(delay, 3),
+                'helpersExitedAfterKill': helpers_exited,
+                'chromiumVersion': ready['chromiumVersion'], 'checks': ready['checks'],
+                'scope': 'SIGKILL of the exact probe PID while snapshots were still being written. Recovery is evaluated by restart.json.',
+            }
+            (root / SESSION_RECOVERY_RECEIPT).write_text(json.dumps(receipt, indent=2, sort_keys=True) + '\n')
+            return receipt
+        if time.monotonic() >= deadline:
+            raise RuntimeError('Timed out waiting for session-recovery checkpoint')
+        time.sleep(0.05)
+    raise RuntimeError(f'Probe exited before session-recovery checkpoint ({process.returncode})')
+
+
+def validate_session_recovery_report(report, phase):
+    if (not isinstance(report, dict) or report.get('phase') != phase
+            or report.get('probeMode') != SESSION_RECOVERY_MODE
+            or report.get('sessionRecoveryOnly') is not True
+            or report.get('savedTabCapacityOnly') is not False
+            or report.get('externalAppConsentOnly') is not False
+            or report.get('privateWindowOnly') is not False
+            or report.get('abruptRecoveryProbe') is not False):
+        raise RuntimeError('Session recovery report has wrong phase or mode')
+
+
+def record_session_recovery_summary(root):
+    """Derive acceptance from the kill receipt and the restart report without modifying either."""
+    receipt = json.loads((root / SESSION_RECOVERY_RECEIPT).read_text())
+    restart = json.loads((root / 'restart.json').read_text())
+    validate_session_recovery_report(restart, 'restart')
+    killed = (receipt.get('mode') == SESSION_RECOVERY_MODE and receipt.get('passed') is True
+              and receipt.get('exitCode') == -signal.SIGKILL)
+    summary = {
+        'schema': 1, 'mode': SESSION_RECOVERY_MODE, 'faultInjected': killed,
+        'restartPassed': restart.get('passed') is True,
+        'passed': killed and restart.get('passed') is True,
+        'restartChecks': restart.get('checks', []), 'error': restart.get('error'),
+        'sourceReports': [SESSION_RECOVERY_RECEIPT, 'restart.json'],
+    }
+    (root / 'session-recovery-summary.json').write_text(json.dumps(summary, indent=2, sort_keys=True) + '\n')
+    return summary
+
+
 def signal_probe(process, requested_signal):
     try:
-        if os.getpgid(process.pid) == process.pid:
-            os.killpg(process.pid, requested_signal)
-        else:
-            # If ownership changed, cleanup may signal the known child only.
-            process.send_signal(requested_signal)
+        print(f'Signaling owned probe PID {process.pid}: {requested_signal.name}', flush=True)
+        process.send_signal(requested_signal)
     except ProcessLookupError:
         pass
 
@@ -322,10 +447,36 @@ WEB_STORE_FIT_PAGE = b"""<!doctype html><html data-arcusis-fixture="web-store-fi
 <style>body{margin:0;min-width:1280px;font:18px system-ui}</style>
 <p>Fixed minimum width, like the Chrome Web Store.</p></html>"""
 
-
-# Released when the run ends; until then /stall holds its response so a navigation stays pending.
 STALL_RELEASE = threading.Event()
 STALL_SECONDS = 120
+
+
+# A silent canvas stream: no network or audio device. The handlers log each Media Session
+# action so the probe can confirm what reached the page. The clip is a 40 second silent
+# WebM loaded as a blob, so it has a duration to skip within.
+MEDIA_SESSION_PAGE = b"""<!doctype html><html data-arcusis-fixture="media"><meta charset="utf-8">
+<title>Media session fixture</title>
+<canvas id="canvas" width="320" height="180"></canvas>
+<video id="video" width="320" height="180" playsinline></video>
+<video id="clip" width="320" height="180" playsinline loop></video>
+<script>
+const canvas=document.getElementById('canvas'),video=document.getElementById('video');
+const context=canvas.getContext('2d');let hue=0;
+setInterval(()=>{context.fillStyle=`hsl(${hue=(hue+9)%360} 60% 50%)`;context.fillRect(0,0,320,180);},50);
+video.srcObject=canvas.captureStream(20);
+fetch('/media-clip.webm').then(r=>r.blob()).then(b=>{document.getElementById('clip').src=URL.createObjectURL(b);});
+window.arcusisMediaLog=[];
+navigator.mediaSession.metadata=new MediaMetadata({title:'Fixture Song',artist:'Fixture Artist',
+  album:'Fixture Album',artwork:[{src:'/favicon-initial.png',sizes:'64x48',type:'image/png'}]});
+for(const action of ['play','pause','previoustrack','nexttrack']){
+  navigator.mediaSession.setActionHandler(action,()=>{window.arcusisMediaLog.push(action);
+    if(action==='play')video.play();if(action==='pause')video.pause();});
+}
+</script></html>"""
+
+PAGE_CSP = "default-src 'none'; img-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self' http://tracker.localhost:* http://localhost:*"
+MEDIA_SESSION_CSP = PAGE_CSP + "; media-src blob:"
+MEDIA_CLIP = Path(__file__).resolve().parent.parent / 'Tests/Fixtures/Media/seekable-clip.webm'
 
 
 class Fixture(http.server.BaseHTTPRequestHandler):
@@ -334,6 +485,88 @@ class Fixture(http.server.BaseHTTPRequestHandler):
         if path == '/stall':
             STALL_RELEASE.wait(STALL_SECONDS)
             self.html(b'<!doctype html><title>Stalled fixture</title>')
+            return
+        if path in ('/inspector-ai', '/inspector-ai/second'):
+            self.html(b"""<!doctype html><html><meta charset="utf-8"><meta name="generator" content="Inspector AI fixture"><title>Inspector AI copy</title>
+<style>body{font:16px Arial;margin:24px;color:#172033;background:white}main{padding:20px;border:1px solid #ddd;width:340px}button{font:16px Arial;padding:10px;background:#2563eb;color:white}input,textarea,select{display:block;width:230px;height:32px;margin:12px 0}</style>
+<main id="ai-card"><h1>Review the account card</h1><button id="ai-save" aria-label="Save changes">Save changes</button><input id="ai-password" type="password" value="password-private-fixture"><input id="ai-input" value="input-private-fixture"><textarea id="ai-textarea">textarea-private-fixture</textarea><select id="ai-select"><option selected value="option-private-fixture">selected-private-fixture</option></select><p>Public nearby context.</p></main></html>""")
+            return
+        if path == '/inspector-ai-failure':
+            self.send_error(503, 'Inspector AI fixture error')
+            return
+        if path == '/inspector-tools':
+            self.html(b"""<!doctype html><html data-page-tools-fixture="v1"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="generator" content="Inspector fixture">
+<title>Page tools fixture</title><style>body{font:18px Arial;padding:32px;background:white;color:#172033}button{padding:14px}#shift{padding:20px;background:#eef2ff}</style>
+<h1>Measure the real page.</h1><button id="performance-input" onclick="window.clicked=(window.clicked||0)+1;const start=performance.now();while(performance.now()-start&lt;80){}">Save changes</button><div id="shift">Stable content</div>
+<script>window.originalFetch=fetch;window.originalConsoleError=console.error;localStorage.setItem('inspector-key','original');sessionStorage.setItem('session-key','session-original');console.error('page-tools-document-start');</script></html>""", csp=PAGE_CSP + "; connect-src 'self'", cookie='inspector-http-only=original; Path=/; HttpOnly; SameSite=Lax')
+            return
+        if path == '/inspector-slow':
+            time.sleep(0.15)
+            self.html(b'<p>Slow authored resource</p>' + b'x' * 4096)
+            return
+        if path == '/inspector-frameworks.js':
+            source = Path(__file__).resolve().parents[1] / 'ThirdParty/InspectorFixtures'
+            body = (source / 'frameworks.js').read_bytes()
+            pin = json.loads((source / 'pin.json').read_text())
+            if hashlib.sha256(body).hexdigest() != pin['sha256']['frameworks.js']:
+                self.send_error(500, 'Inspector fixture hash mismatch')
+                return
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/javascript; charset=utf-8')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if path in {'/inspector-source/ReactCounter.jsx', '/inspector-source/vue.js', '/inspector-source/InspectorCounter.svelte'}:
+            source = Path(__file__).resolve().parents[1] / 'Tests/InspectorContractTests/fixtures' / Path(path).name
+            body = source.read_bytes()
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/plain; charset=utf-8')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if path == '/inspector-components':
+            self.html(b"""<!doctype html><html><meta charset="utf-8"><title>Inspector component fixture</title>
+<style>body{font:16px/1.5 Arial,sans-serif;margin:0;padding:32px;background:#fff;color:#111827}main{display:grid;gap:20px}button{font:600 16px/24px Arial;padding:10px 20px;border:1px solid #1e40af;border-radius:6px;background:#2563eb;color:white}img{width:128px;height:96px;image-rendering:pixelated}svg{width:120px;height:60px}</style>
+<h1>Runtime component contracts</h1><main><div id="react-root"></div><div id="vue-root"></div><div id="svelte-root"></div>
+<img id="asset" src="/favicon-initial.png" alt="Fixture artwork"><img id="missing-alt" src="/favicon-restart.png">
+<svg id="vector" viewBox="0 0 120 60" role="img" aria-label="Fixture vector"><rect width="120" height="60" fill="#2563eb"/></svg>
+<button id="unnamed" aria-label=""><svg width="16" height="16"><path d="M2 2L14 14"/></svg></button><input id="hidden-focus" aria-hidden="true" value="Authored focus warning"></main>
+<script src="/inspector-frameworks.js"></script></html>""",
+                      csp=PAGE_CSP.replace("script-src 'unsafe-inline'", "script-src 'self' 'unsafe-inline'"))
+            return
+        if path == '/inspector':
+            self.html(b"""<!doctype html><html data-inspector-fixture="v2"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Inspector fixture</title>
+<style>body{font:16px Arial,sans-serif;margin:0;padding:32px;background:white;color:#111827}
+main{padding:20px;background:#f3f4f6;border:1px solid #e5e7eb}
+button{font:600 16px/24px Arial,sans-serif;letter-spacing:.25px;margin:12px 16px;padding:10px 20px;
+border:2px solid #1e40af;border-radius:6px;background:#2563eb;color:white}
+#next{background:white;color:#111827;border-color:#d1d5db}iframe{width:340px;height:160px;border:2px solid #ddd}
+#transparent{color:rgba(0,0,0,.5);background:white;padding:12px}
+#gradient{background:linear-gradient(white,black);color:white;padding:12px}
+</style><h1>Inspect the details.</h1><main id="card"><button id="save" data-testid="save" onclick="window.clicked=(window.clicked||0)+1"><span id="label">Save changes</span></button><button id="next">Cancel</button>
+<p id="transparent">Transparent text</p><p id="gradient">Gradient contrast</p>
+<iframe id="frame" src="/inspector-frame"></iframe>
+<section id="grid" style="display:grid;grid-template-columns:1fr 2fr;gap:12px;padding:8px;background:#eef2ff"><div>First track</div><div>Second track</div></section>
+<section id="flex" style="display:flex;gap:16px;padding:8px;background:#fef3c7"><div>First item</div><div>Second item</div></section></main></html>""",
+                      csp=PAGE_CSP + "; frame-src 'self'")
+            return
+        if path == '/inspector-frame':
+            self.html(b"""<!doctype html><html><meta charset="utf-8"><style>body{font:16px Georgia;padding:12px;background:#fff}button{font:inherit;padding:8px 16px;margin:8px;border:1px solid #bbb;background:#fafafa;color:#222}</style><button id="nested">Frame action</button></html>""")
+            return
+        if path.startswith('/private-privacy/'):
+            body = json.dumps({'cookie': self.headers.get('Cookie', ''), 'fixture': 'privacy'}).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('Set-Cookie', 'privacyHttp=1; HttpOnly; Path=/private-privacy/; SameSite=Lax')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
             return
         favicon_colors = {
             '/favicon-initial.png': (52, 86, 120),
@@ -363,6 +596,21 @@ class Fixture(http.server.BaseHTTPRequestHandler):
         if path == '/web-store-fit':
             self.html(WEB_STORE_FIT_PAGE)
             return
+        if path == '/media':
+            self.html(MEDIA_SESSION_PAGE, csp=MEDIA_SESSION_CSP)
+            return
+        if path == '/media-clip.webm':
+            body = MEDIA_CLIP.read_bytes()
+            self.send_response(200)
+            self.send_header('Content-Type', 'video/webm')
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            try:
+                self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            return
         self.html(b"""<!doctype html><html data-arcusis-fixture="v1"><meta charset="utf-8">
 <title>Arcusis account isolation fixture</title>
 <style>body{font:18px system-ui;padding:60px;color:#293445;background:#f0f4f8}</style>
@@ -372,11 +620,13 @@ class Fixture(http.server.BaseHTTPRequestHandler):
 <label>Password <input id="password" type="password" autocomplete="current-password"></label></form>
 <script>window.arcusisInstance=crypto.randomUUID();</script></html>""")
 
-    def html(self, body):
+    def html(self, body, csp=PAGE_CSP, cookie=None):
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
-        self.send_header("Content-Security-Policy", "default-src 'none'; img-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'")
+        self.send_header("Content-Security-Policy", csp)
+        if cookie is not None:
+            self.send_header("Set-Cookie", cookie)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -404,10 +654,17 @@ class Fixture(http.server.BaseHTTPRequestHandler):
             self.send_header('Content-Range', f'bytes {offset}-{len(body)-1}/{len(body)}')
         self.end_headers()
         try:
+            started = time.monotonic()
             for start in range(offset, len(body), 16384):
                 self.wfile.write(body[start:start+16384])
                 if slow:
-                    time.sleep(0.02)
+                    # Catch up after scheduler stalls instead of accumulating one
+                    # overslept delay per chunk on hosted virtual machines.
+                    sent = min(start + 16384, len(body)) - offset
+                    deadline = started + sent / (16384 / 0.02)
+                    delay = deadline - time.monotonic()
+                    if delay > 0:
+                        time.sleep(delay)
         except (BrokenPipeError, ConnectionResetError):
             pass
 
@@ -448,17 +705,14 @@ EXTERNAL_APP_CONSENT_CLEANUP_KEYS = {
 PRIVATE_WINDOW_MODE = 'private-window-owned-engine-fixture'
 PRIVATE_WINDOW_SCOPE = (
     'Owned hidden native product and engine windows on synthetic loopback origin. No real accounts, '
-    'physical input or unmarked profiles. A known tracker-domain image request must be blocked by the engine.'
+    'third-party endpoints or physical input.'
 )
 PRIVATE_WINDOW_CHECKS = (
+    'privatePrivacyDefaultsAndCookieAllow', 'privateCookieAllowanceEndsWithGrantingWindow',
     'freshMarkedRoot', 'sourceProfileAccepted', 'unknownSourceRejected', 'otrSourceRejected',
     'malformedContextRejected',
     'normalProfileIDCollisionRejected', 'normalWindowIDCollisionRejected',
     'normalTabIDCollisionRejected',
-    'privateGlobalCookiesAndStorageBlocked', 'privateHTTPSOnlyEnabled',
-    'privateReferrersDisabled', 'privateWebRTCPolicyRestricted',
-    'privateExtensionsDisabled', 'privateTrackerRulesLoaded',
-    'privateTrackerRequestBlocked', 'privateSiteCookieAllowanceWorks',
     'multipleTabsShareNativePrivateWindow', 'privateSelectionAndNativeViewsOwned',
     'privateNavigationReloadBackForward', 'privateCallbacksUseOwnersWithoutRegularContamination',
     'invalidPrivateOperationsRejected', 'privateTabCloseConfirmedAndStaleRejected',
@@ -516,6 +770,8 @@ def argument_parser():
                       help="Quit through the host menu with an extension installed; assert main and helper exit")
     mode.add_argument("--quit-pending-navigation", action="store_true",
                       help="Quit-exit probe with a navigation pending in every host window")
+    mode.add_argument("--session-recovery", action="store_true",
+                      help="SIGKILL the exact probe PID while it saves a managed workspace, then verify the restored session")
     return parser
 
 
@@ -523,7 +779,7 @@ def build_engine_probe_arguments(executable, root, fixture_url, phase, *, includ
                                  onboarding_control, abrupt, saved_tab_capacity,
                                  external_app_consent=False, private_window=False,
                                  private_window_run_id=None, quit_exit=False,
-                                 quit_pending_navigation=False):
+                                 quit_pending_navigation=False, session_recovery=False):
     arguments = [str(executable), "--probe-data-dir", str(root),
                  "--probe-url", fixture_url, "--probe-phase", phase,
                  "--probe-output", str(root / f"{phase}.json")]
@@ -547,6 +803,8 @@ def build_engine_probe_arguments(executable, root, fixture_url, phase, *, includ
         arguments.append('--probe-quit-exit')
     if quit_pending_navigation:
         arguments.append('--probe-quit-pending-navigation')
+    if session_recovery:
+        arguments.append('--probe-session-recovery')
     return arguments
 
 
@@ -704,6 +962,13 @@ def record_private_window_summary(root, *, listener_closed, child_receipts, proo
         private_path = root / f'{phase}-private-window.json'
         if private_path.is_file():
             shutil.copy2(private_path, proof_directory)
+        privacy_path = root / f'{phase}-private-privacy.json'
+        if privacy_path.is_file():
+            shutil.copy2(privacy_path, proof_directory)
+        for appearance in ('light', 'dark'):
+            panel = root / f'{phase}-private-site-controls-{appearance}.png'
+            if panel.is_file():
+                shutil.copy2(panel, proof_directory)
         diagnostic = root / f'{phase}-private-quit-diagnostic.json'
         if diagnostic.is_file():
             shutil.copy2(diagnostic, proof_directory)
@@ -818,7 +1083,6 @@ QUIT_EXIT_MODE = 'quit-exit-only'
 # Bounds from the Quit menu command: the browser process, then every helper in its group.
 QUIT_MAIN_EXIT_SECONDS = 15
 QUIT_HELPER_EXIT_SECONDS = 10
-# macOS writes a crash report shortly after the process dies; an abnormal exit waits this long for it.
 CRASH_REPORT_SETTLE_SECONDS = 5
 CRASH_REPORT_DIRECTORY = Path.home() / 'Library' / 'Logs' / 'DiagnosticReports'
 CRASH_REPORT_PROCESS = 'ShaarVerification'
@@ -853,11 +1117,11 @@ def wait_until(condition, seconds):
 
 
 def crash_reports_for(pid, since, directory=None):
-    """Names of the macOS crash reports written for the probe process since the given time."""
+    """Names of macOS crash reports for this probe process since the given time."""
     directory = directory or CRASH_REPORT_DIRECTORY
     names = []
-    pattern = f'{CRASH_REPORT_PROCESS}-*.ips'
-    paths = [*directory.glob(pattern), *(directory / 'Retired').glob(pattern)]
+    paths = [*directory.glob(f'{CRASH_REPORT_PROCESS}-*.ips'),
+             *(directory / 'Retired').glob(f'{CRASH_REPORT_PROCESS}-*.ips')]
     for path in sorted(paths):
         try:
             if path.stat().st_mtime < since:
@@ -872,7 +1136,6 @@ def crash_reports_for(pid, since, directory=None):
 
 
 def quit_crash_reports(process, since):
-    """Crash reports for the exited probe; an abnormal exit waits briefly for the report to land."""
     if process.returncode != 0:
         wait_until(lambda: bool(crash_reports_for(process.pid, since)), CRASH_REPORT_SETTLE_SECONDS)
     return crash_reports_for(process.pid, since)
@@ -895,7 +1158,6 @@ def wait_for_quit_exit(process, root, phase, timeout):
         helper_seconds = wait_until(lambda: not process_group_exists(process.pid),
                                     QUIT_HELPER_EXIT_SECONDS)
         crash_reports = quit_crash_reports(process, quit_requested_at - 1)
-    exited = main_seconds is not None and helper_seconds is not None
     receipt = {
         'schema': 1, 'phase': phase, 'pid': process.pid,
         'mainExitSeconds': main_seconds, 'helpersExitSeconds': helper_seconds,
@@ -903,7 +1165,8 @@ def wait_for_quit_exit(process, root, phase, timeout):
         'helpersExitBoundSeconds': probe_timeout(QUIT_HELPER_EXIT_SECONDS),
         'exitCode': process.returncode, 'lastKeepAliveSample': last_keep_alive_sample(root, phase),
         'crashReports': crash_reports,
-        'passed': exited and process.returncode == 0 and not crash_reports,
+        'passed': main_seconds is not None and helper_seconds is not None
+                  and process.returncode == 0 and not crash_reports,
     }
     (root / f'{phase}-quit-exit.json').write_text(json.dumps(receipt, indent=2, sort_keys=True) + '\n')
     if main_seconds is None:
@@ -1126,6 +1389,10 @@ def main(argv=None):
         print('QUIT EXIT ONLY: host Quit command with an extension installed; process exit is timed', flush=True)
     if options.quit_pending_navigation:
         print('QUIT PENDING NAVIGATION: every host window has a navigation in flight at Quit', flush=True)
+    if options.session_recovery:
+        print('SESSION RECOVERY ONLY: SIGKILL of the exact probe PID during saves, then restore', flush=True)
+    app = VERIFICATION_APP.resolve()
+    require_verification_bundle_identity(app)
     root = Path(tempfile.mkdtemp(prefix="arcusis-engine-probe-"))
     (root / ".arcusis-probe").write_text("arcusis-engine-probe-v1\n")
     (root / ".arcusis-probe").chmod(0o600)
@@ -1133,14 +1400,21 @@ def main(argv=None):
     shutil.copytree("Tests/Fixtures/ProfileExtension", root / "Extension")
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Fixture)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    executable = Path("build/Shaar Verification.app/Contents/MacOS/ShaarVerification").resolve()
+    executable = app / "Contents/MacOS/ShaarVerification"
     (root / 'Downloads').mkdir(mode=0o700)
-    probe_env = dict(os.environ, ARDIA_DOWNLOADS_DIR=str(root / 'Downloads'))
+    # Any ARDIA_BACKGROUND value keeps Chromium's picture-in-picture overlay transparent and
+    # click-through, so the media probe opens no visible window. The engine's other
+    # background test hooks require exactly '1' and stay off.
+    probe_env = dict(os.environ, ARDIA_DOWNLOADS_DIR=str(root / 'Downloads'),
+                     ARDIA_BACKGROUND='picture-in-picture')
     print(f"Probe evidence: {root}", flush=True)
     failures = []
     private_window_children = []
     try:
         for phase in ("initial", "restart"):
+            if options.private_window and phase == 'restart' and failures:
+                print('SKIPPED restart: initial fixture failed; no valid seeded restart baseline', flush=True)
+                break
             output = root / f"{phase}.json"
             arguments = build_engine_probe_arguments(
                 executable, root, f"http://127.0.0.1:{server.server_port}/account", phase,
@@ -1150,18 +1424,23 @@ def main(argv=None):
                 external_app_consent=options.external_app_consent,
                 private_window=options.private_window,
                 private_window_run_id=private_window_run_id, quit_exit=quit_exit,
-                quit_pending_navigation=options.quit_pending_navigation)
+                quit_pending_navigation=options.quit_pending_navigation,
+                session_recovery=options.session_recovery)
             with (root / f"{phase}.log").open("w") as log:
                 process = subprocess.Popen(arguments, stdout=log, stderr=log, start_new_session=True, env=probe_env)
+                print(f"Probe PID: {process.pid}", flush=True)
                 try:
                     if abrupt and phase == 'initial':
                         terminate_at_checkpoint(process, root, timeout=90, settle_seconds=35 if options.abrupt_control else 0)
+                        continue
+                    if options.session_recovery and phase == 'initial':
+                        kill_during_session_saves(process, root, timeout=120)
                         continue
                     if quit_exit:
                         code = wait_for_quit_exit(process, root, phase, timeout=90)
                     else:
                         timeout = (240 if options.private_window else 180 if options.external_app_consent else 180 if options.saved_tab_capacity
-                                   else 170 if include_bitwarden else 90)
+                                   else 280)
                         code = wait_for_probe(process, root, phase, timeout=timeout)
                 except subprocess.TimeoutExpired:
                     raise RuntimeError(f"{phase} timed out; see {root}/{phase}.log")
@@ -1202,6 +1481,8 @@ def main(argv=None):
                 stopped = ' (shutdown guard stopped the event loop)' if report.get('quitEventLoopStopped') else ''
                 print(f"{phase}: browser exited {receipt['mainExitSeconds']:.2f}s after Quit{stopped}; "
                       f"helpers {receipt['helpersExitSeconds']:.2f}s later", flush=True)
+            elif options.session_recovery:
+                validate_session_recovery_report(report, phase)
             elif options.private_window:
                 try:
                     validate_private_window_report(root, phase, report, code)
@@ -1232,6 +1513,9 @@ def main(argv=None):
             record_saved_tab_capacity_summary(root)
         if options.external_app_consent:
             record_external_app_consent_summary(root)
+        if options.session_recovery:
+            summary = record_session_recovery_summary(root)
+            print(f"session recovery: {'passed' if summary['passed'] else 'FAILED'}", flush=True)
     finally:
         STALL_RELEASE.set()
         server.shutdown()

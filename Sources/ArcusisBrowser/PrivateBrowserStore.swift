@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import BrowserCore
 import Foundation
 import Observation
 
@@ -20,7 +21,12 @@ final class PrivateBrowserStore {
   let windowID: String
   private(set) var tabs: [PrivateBrowserTab]
   private(set) var selectedTabID: String
+  let searchEngine: BrowserSearchEngine
   var address: String
+  var failure: String?
+  private(set) var pendingHTTP: URL?
+  private var pendingHTTPTabID: String?
+  var showsStartPage: Bool { selectedTab?.url == "about:blank" }
   var commandIsOpen = false
   var commandQuery = ""
   var pageIsFocused = false
@@ -32,11 +38,15 @@ final class PrivateBrowserStore {
   @ObservationIgnored var onBack: ((String) -> Void)?
   @ObservationIgnored var onForward: ((String) -> Void)?
 
-  init(contextID: String, windowID: String, tabID: String, url: String) {
+  init(
+    contextID: String, windowID: String, tabID: String, url: String,
+    searchEngine: BrowserSearchEngine = .google
+  ) {
     self.contextID = contextID
     self.windowID = windowID
     selectedTabID = tabID
-    address = url
+    self.searchEngine = searchEngine
+    address = url == "about:blank" ? "" : url
     tabs = [
       PrivateBrowserTab(
         id: tabID, url: url, title: url, loading: true, canGoBack: false, canGoForward: false)
@@ -46,7 +56,39 @@ final class PrivateBrowserStore {
   var selectedTab: PrivateBrowserTab? { tabs.first { $0.id == selectedTabID } }
 
   func openTab() { onOpenTab?() }
-  func navigate(_ value: String) { onNavigate?(selectedTabID, value) }
+  func navigate(_ value: String) {
+    cancelHTTP()
+    failure = nil
+    if value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "about:blank" {
+      onNavigate?(selectedTabID, "about:blank")
+      return
+    }
+    guard let destination = NavigationInput.destination(for: value, searchEngine: searchEngine)
+    else { return }
+    if destination.scheme?.lowercased() == "http" {
+      pendingHTTP = destination
+      pendingHTTPTabID = selectedTabID
+    } else {
+      cancelHTTP()
+      onNavigate?(selectedTabID, destination.absoluteString)
+    }
+  }
+
+  func confirmHTTP(useHTTPS: Bool) {
+    guard let url = pendingHTTP, pendingHTTPTabID == selectedTabID else {
+      cancelHTTP()
+      return
+    }
+    var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+    if useHTTPS { components?.scheme = "https" }
+    cancelHTTP()
+    if let destination = components?.url { onNavigate?(selectedTabID, destination.absoluteString) }
+  }
+
+  func cancelHTTP() {
+    pendingHTTP = nil
+    pendingHTTPTabID = nil
+  }
   func closeTab(_ tabID: String) { onCloseTab?(tabID) }
   func selectTab(_ tabID: String) { onSelectTab?(tabID) }
   func reload() { onReload?(selectedTabID) }
@@ -59,13 +101,16 @@ final class PrivateBrowserStore {
     } else {
       tabs.append(tab)
     }
-    if tab.id == selectedTabID { address = tab.url }
+    if tab.id == selectedTabID { address = tab.url == "about:blank" ? "" : tab.url }
   }
 
   func select(_ tabID: String) {
     guard tabs.contains(where: { $0.id == tabID }) else { return }
+    cancelHTTP()
+    failure = nil
     selectedTabID = tabID
-    address = tabs.first(where: { $0.id == tabID })?.url ?? ""
+    let url = tabs.first(where: { $0.id == tabID })?.url ?? ""
+    address = url == "about:blank" ? "" : url
   }
 
   func remove(_ tabID: String) {
@@ -95,6 +140,8 @@ final class PrivateBrowserStore {
   }
 
   func clear() {
+    cancelHTTP()
+    failure = nil
     onOpenTab = nil
     onNavigate = nil
     onCloseTab = nil

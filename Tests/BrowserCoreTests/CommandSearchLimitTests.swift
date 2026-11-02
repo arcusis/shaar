@@ -36,7 +36,8 @@ import Testing
   }
   let results = limitedResults(for: "closed.example", in: session)
   #expect(results.count == 3)
-  #expect(results.dropLast().allSatisfy { $0.symbol == "arrow.uturn.backward" })
+  #expect(results.first?.isOpen == true)
+  #expect(results.dropFirst().allSatisfy { $0.symbol == "arrow.uturn.backward" })
 }
 
 @Test func bookmarkMatchesStopAtTheLimitAndHideTheirHistory() throws {
@@ -48,7 +49,8 @@ import Testing
   }
   let limited = limitedResults(
     for: "docs.example", in: session, bookmarks: bookmarks, history: history)
-  #expect(limited.dropLast().map(\.symbol) == ["star", "star"])
+  #expect(limited.first?.isOpen == true)
+  #expect(limited.dropFirst().map(\.symbol) == ["star", "star"])
 
   let all = CommandSearch.results(
     for: "docs.example", in: session, bookmarks: bookmarks, history: history)
@@ -62,7 +64,8 @@ import Testing
     try visit("https://past.example/\($0)", profile: profile)
   }
   let results = limitedResults(for: "past.example", in: session, history: history)
-  #expect(results.dropLast().map(\.symbol) == ["clock", "clock"])
+  #expect(results.first?.isOpen == true)
+  #expect(results.dropFirst().map(\.symbol) == ["clock", "clock"])
 }
 
 private func limitedResults(

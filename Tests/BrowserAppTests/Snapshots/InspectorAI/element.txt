@@ -1,0 +1,30 @@
+Attached browser context from https://example.com/account
+Screenshot: /Users/developer/Library/Caches/Shaar/Inspector/123-button.png
+
+Selected element:
+- Tag: button
+- Accessible name: Save
+- Role: button
+- Selector: ` #save `
+- Source: /src/SaveButton.tsx:12
+- React/components: React: SaveButton
+- Dimensions: 180 × 48
+
+Text content:
+```
+Save changes
+```
+
+Computed styles:
+```css
+display: inline-block;
+```
+
+HTML:
+```html
+<button id="save">Save changes</button>
+```
+
+Ancestor path: html > body > main > button
+
+Full DOM path: ` html > body > main > button:nth-of-type(1) `

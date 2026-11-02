@@ -185,8 +185,10 @@ public enum SessionError: Error, LocalizedError, Equatable {
 
   public var errorDescription: String? {
     switch self {
-    case .unsupportedVersion: "This session was saved by an unsupported browser version."
-    case .invalidState: "The saved session contains invalid spaces, profiles, or tabs."
+    case .unsupportedVersion:
+      BrowserLocalization.string("This session was saved by an unsupported browser version.")
+    case .invalidState:
+      BrowserLocalization.string("The saved session contains invalid spaces, profiles, or tabs.")
     }
   }
 }
@@ -256,11 +258,17 @@ public struct BrowserSession: Codable, Equatable, Sendable {
   public var selectedSpace: BrowserSpace { spaces.first { $0.id == selectedSpaceID }! }
 
   public static func fresh() -> BrowserSession {
-    let personal = BrowserProfile(name: "Personal")
-    let work = BrowserProfile(name: "Work")
+    fresh(language: BrowserLanguage.currentLaunchLanguage)
+  }
+
+  static func fresh(language: BrowserLanguage) -> BrowserSession {
+    let personalName = BrowserLocalization.string("Personal", table: "Core", language: language)
+    let workName = BrowserLocalization.string("Work", table: "Core", language: language)
+    let personal = BrowserProfile(name: personalName)
+    let work = BrowserProfile(name: workName)
     let spaces = [
-      BrowserSpace(profileID: personal.id, name: "Personal", symbol: "house", tint: .lavender),
-      BrowserSpace(profileID: work.id, name: "Work", symbol: "briefcase", tint: .ocean),
+      BrowserSpace(profileID: personal.id, name: personalName, symbol: "house", tint: .lavender),
+      BrowserSpace(profileID: work.id, name: workName, symbol: "briefcase", tint: .ocean),
     ]
     // These values are constructed together and satisfy the session invariants.
     return try! BrowserSession(
@@ -413,6 +421,12 @@ public struct BrowserSession: Codable, Equatable, Sendable {
       && spaces[source].selectedFavoriteID == nil && spaces[source].selectedTabID == id
     var updated = spaces
     updated[source].tabs.remove(at: position)
+    // A tab payload always moves one page, including when its drag presentation expired.
+    updated[source].splits = updated[source].splits.compactMap { split in
+      guard split.tabIDs.contains(id) else { return split }
+      guard let root = split.root.removing(id), root.paneIDs.count >= 2 else { return nil }
+      return BrowserSplit(id: split.id, root: root)
+    }
     if source != destination { updated[source].reconcileSplits() }
     let tabs = updated[destination].tabs
     let insertion =

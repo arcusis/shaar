@@ -11,33 +11,35 @@ struct SpaceMenuContent: View {
   let space: BrowserSpace
 
   var body: some View {
-    Button("Change Space Icon…") { edit(.icon) }
-    Button("Rename Space…") { edit(.name) }
-    Button("Edit Theme Color…") { edit(.theme) }
-    Menu("Set Profile") {
+    Button(ShellL10n.string("Change Space Icon…")) { edit(.icon) }
+    Button(ShellL10n.string("Rename Space…")) { edit(.name) }
+    Button(ShellL10n.string("Edit Theme Color…")) { edit(.theme) }
+    Menu(ShellL10n.string("Set Profile")) {
       ForEach(store.session.profiles) { profile in
-        Button {
-          _ = store.setSpaceProfile(space.id, to: profile.id)
-        } label: {
-          if profile.id == space.profileID {
-            Label(profile.name, systemImage: "checkmark")
-          } else {
-            Text(profile.name)
-          }
+        Toggle(
+          isOn: Binding(
+            get: { profile.id == space.profileID },
+            set: { selected in if selected { _ = store.setSpaceProfile(space.id, to: profile.id) } }
+          )
+        ) {
+          let account = store.preferences.accounts(for: profile.id).first
+          ProfileIdentityLabel(profile: profile, account: account)
         }
       }
       Divider()
-      Button("New Profile…") { store.onNewProfile?(space.id) }
+      Button(ShellL10n.string("New Profile…")) { store.onNewProfile?(space.id) }
         .disabled(store.onNewProfile == nil)
     }
     Divider()
-    Button("New Folder") {
+    Button(ShellL10n.string("New Folder")) {
       store.perform(.space(space.id))
       store.showFolderEditor(.create(spaceID: space.id, parentID: nil))
     }
     Divider()
-    Button("Delete Space", role: .destructive) { store.spacePendingDeletion = space.id }
-      .disabled(store.session.spaces.count <= 1)
+    Button(ShellL10n.string("Delete Space"), role: .destructive) {
+      store.spacePendingDeletion = space.id
+    }
+    .disabled(store.session.spaces.count <= 1)
   }
 
   private func edit(_ focus: SpaceEditorFocus) {
@@ -54,11 +56,14 @@ struct SpaceMenuDialogs: ViewModifier {
   func body(content: Content) -> some View {
     content
       .confirmationDialog(
-        "Delete \(space(store.spacePendingDeletion)?.name ?? "Space")?",
+        ShellL10n.format(
+          "Delete %@?",
+          arguments: [.string(space(store.spacePendingDeletion)?.name ?? ShellL10n.string("Space"))]
+        ),
         isPresented: isPending(\.spacePendingDeletion),
         presenting: store.spacePendingDeletion
       ) { id in
-        Button("Delete Space", role: .destructive) { _ = store.removeSpace(id) }
+        Button(ShellL10n.string("Delete Space"), role: .destructive) { _ = store.removeSpace(id) }
       } message: { id in
         Text(store.spaceRemovalImpact(id).message)
       }

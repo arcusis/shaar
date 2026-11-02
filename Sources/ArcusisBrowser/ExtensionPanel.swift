@@ -45,8 +45,10 @@ struct ExtensionToolbar: View {
           ExtensionIcon(image: extensionModel.icons[pinned.id], size: 16)
         }
         .buttonStyle(.plain)
-        .help(pinned.name)
-        .accessibilityLabel(pinned.name)
+        .modifier(
+          ExtensionActionHelp(
+            model: extensionModel, item: pinned, tabID: store.session.selectedPage?.tab.id)
+        )
         .disabled(store.session.selectedPage == nil)
       }
       Button {
@@ -54,8 +56,8 @@ struct ExtensionToolbar: View {
       } label: {
         Image(systemName: "puzzlepiece.extension")
       }
-      .help("Extensions for \(store.profileName)")
-      .accessibilityLabel("Extensions for \(store.profileName)")
+      .help(PanelsL10n.format("Extensions for %@", .string(store.profileName)))
+      .accessibilityLabel(PanelsL10n.format("Extensions for %@", .string(store.profileName)))
     }
     .popover(
       item: engine.presentsNativePanels ? $engine.extensionPanel : .constant(nil),
@@ -74,7 +76,7 @@ struct ExtensionToolbar: View {
             } label: {
               Image(systemName: "xmark")
             }
-            .buttonStyle(.plain).help("Close extension")
+            .buttonStyle(.plain).help(PanelsL10n.string("Close extension"))
           }
           .padding(12)
           Divider()
@@ -114,8 +116,9 @@ struct ExtensionManagerPanel: View {
   private var list: some View {
     VStack(alignment: .leading, spacing: 0) {
       VStack(alignment: .leading, spacing: 2) {
-        Text("Extensions").font(.headline)
-        Text("\(store.profileName) profile").font(.caption).foregroundStyle(.secondary)
+        Text(PanelsL10n.string("Extensions")).font(.headline)
+        Text(PanelsL10n.format("%@ profile", .string(store.profileName)))
+          .font(.caption).foregroundStyle(.secondary)
       }
       .padding([.horizontal, .top], 16)
       .padding(.bottom, 10)
@@ -126,9 +129,9 @@ struct ExtensionManagerPanel: View {
       Divider()
       Button {
         engine.extensionPanel = nil
-        store.perform(.open(URL(string: "https://chromewebstore.google.com/category/extensions")!))
+        store.perform(.open(BrowserExtension.storeCatalogURL))
       } label: {
-        Label("Add Extensions…", systemImage: "plus")
+        Label(PanelsL10n.string("Add Extensions…"), systemImage: "plus")
           .frame(maxWidth: .infinity, alignment: .leading)
           .contentShape(Rectangle())
       }
@@ -152,7 +155,6 @@ struct ExtensionRow: View {
   let pinned: Bool
   let canRun: Bool
   let actions: ExtensionRowActions
-  @State private var isHovered = false
 
   var body: some View {
     HStack(spacing: 10) {
@@ -169,7 +171,10 @@ struct ExtensionRow: View {
       }
       .buttonStyle(.plain)
       .disabled(!item.enabled || !canRun)
-      .help(item.enabled ? "Open \(item.name)" : "\(item.name) is off")
+      .help(
+        item.enabled
+          ? PanelsL10n.format("Open %@", .string(item.name))
+          : PanelsL10n.format("%@ is off", .string(item.name)))
       Button {
         actions.setPinned(!pinned)
       } label: {
@@ -178,8 +183,11 @@ struct ExtensionRow: View {
       }
       .buttonStyle(.plain)
       .disabled(!item.enabled)
-      .help(pinned ? "Unpin from toolbar" : "Pin to toolbar")
-      .accessibilityLabel(pinned ? "Unpin \(item.name)" : "Pin \(item.name)")
+      .help(PanelsL10n.string(pinned ? "Unpin from toolbar" : "Pin to toolbar"))
+      .accessibilityLabel(
+        pinned
+          ? PanelsL10n.format("Unpin %@", .string(item.name))
+          : PanelsL10n.format("Pin %@", .string(item.name)))
       Toggle(
         "", isOn: Binding(get: { item.enabled }, set: actions.setEnabled)
       )
@@ -187,21 +195,38 @@ struct ExtensionRow: View {
       .controlSize(.mini)
       .labelsHidden()
       .disabled(!item.mayDisable)
-      .accessibilityLabel(item.enabled ? "Turn off \(item.name)" : "Turn on \(item.name)")
+      .accessibilityLabel(
+        item.enabled
+          ? PanelsL10n.format("Turn off %@", .string(item.name))
+          : PanelsL10n.format("Turn on %@", .string(item.name)))
       Button(action: actions.showDetails) {
         Image(systemName: "info.circle").foregroundStyle(.secondary)
       }
       .buttonStyle(.plain)
-      .help("Details")
-      .accessibilityLabel("Details for \(item.name)")
+      .help(PanelsL10n.string("Details"))
+      .accessibilityLabel(PanelsL10n.format("Details for %@", .string(item.name)))
     }
-    .padding(.horizontal, 8)
-    .padding(.vertical, 6)
-    .background(
-      Color.primary.opacity(isHovered ? 0.06 : 0), in: RoundedRectangle(cornerRadius: 8)
-    )
-    .onHover { isHovered = $0 }
+    .hoverRowBackground()
   }
+}
+
+/// The padded, rounded hover highlight shared by rows in Shaar's popovers.
+struct HoverRowBackground: ViewModifier {
+  @State private var isHovered = false
+
+  func body(content: Content) -> some View {
+    content
+      .padding(.horizontal, 8)
+      .padding(.vertical, 6)
+      .background(
+        Color.primary.opacity(isHovered ? 0.06 : 0), in: RoundedRectangle(cornerRadius: 8)
+      )
+      .onHover { isHovered = $0 }
+  }
+}
+
+extension View {
+  func hoverRowBackground() -> some View { modifier(HoverRowBackground()) }
 }
 
 struct ExtensionIcon: View {

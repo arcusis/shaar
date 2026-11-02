@@ -33,7 +33,9 @@ final class BrowserWorkspaceStore {
     } catch {
       maySave = false
       storageNotice =
-        "Saved windows could not be restored. The original files are preserved; changes in these temporary windows will not be saved."
+        ShellL10n.string(
+          "Saved windows could not be restored. The original files are preserved; changes in these temporary windows will not be saved."
+        )
     }
     for window in workspace.windows { attach(window) }
     if isNew && maySave { persistSnapshot() }
@@ -43,20 +45,20 @@ final class BrowserWorkspaceStore {
   func newWindow(from sourceID: UUID? = nil) throws -> UUID {
     let id = try workspace.addWindow(from: sourceID)
     attach(workspace.window(id)!)
-    persistSnapshot()
+    saveAndBroadcast()
     return id
   }
 
   func removeWindow(_ id: UUID) throws {
     try workspace.removeWindow(id)
     stores[id] = nil
-    persistSnapshot()
+    saveAndBroadcast()
   }
 
   func focusWindow(_ id: UUID) throws {
     guard workspace.focusedWindowID != id else { return }
     try workspace.focusWindow(id)
-    persistSnapshot()
+    saveAndBroadcast()
   }
 
   @discardableResult
@@ -110,10 +112,11 @@ final class BrowserWorkspaceStore {
   func setGeometry(_ geometry: WorkspaceWindowGeometry, for id: UUID) throws {
     guard workspace.window(id)?.geometry != geometry else { return }
     try workspace.setGeometry(geometry, for: id)
-    persistSnapshot()
+    saveAndBroadcast()
   }
 
-  /// Called before native restoration as well as after mutations. IO failure leaves valid unsaved state live.
+  /// Writes synchronously at lifecycle checkpoints: launch, native restoration and quit.
+  /// IO failure leaves valid unsaved state live.
   @discardableResult
   func persistSnapshot() -> Bool {
     let saved = writeSnapshot()
@@ -121,11 +124,22 @@ final class BrowserWorkspaceStore {
     return saved
   }
 
+  /// Waits until the latest change is on disk. Ordinary changes return before the disk flush.
+  func flushSaves() throws {
+    do {
+      try snapshotScheduler.flush()
+    } catch {
+      showSaveResult(failure: error.localizedDescription)
+      throw error
+    }
+  }
+
   private func attach(_ window: WorkspaceWindow) {
     stores[window.id] = BrowserStore(managedSession: window.session, notice: storageNotice) {
       [weak self] session, deferred in
       guard let self else {
-        return ManagedSessionSaveResult(session: session, notice: "The workspace is unavailable.")
+        return ManagedSessionSaveResult(
+          session: session, notice: ShellL10n.string("The workspace is unavailable."))
       }
       return self.changed(window.id, session: session, deferred: deferred)
     }
@@ -166,7 +180,8 @@ final class BrowserWorkspaceStore {
   {
     guard stores[id] != nil, let previous = workspace.window(id) else {
       return ManagedSessionSaveResult(
-        session: session, notice: "This window is closed; its changes will not be saved.")
+        session: session,
+        notice: ShellL10n.string("This window is closed; its changes will not be saved."))
     }
     do {
       try workspace.updateWindow(id, session: session)
@@ -174,19 +189,16 @@ final class BrowserWorkspaceStore {
       // A rejected identity/profile mutation must not reach the native engine.
       return ManagedSessionSaveResult(
         session: previous.session,
-        notice: "The window change was rejected. \(error.localizedDescription)")
+        notice: ShellL10n.format(
+          "The window change was rejected. %@", arguments: [.string(error.localizedDescription)]))
     }
-    if deferred {
-      scheduleSnapshot()
-    } else {
-      writeSnapshot()
-      broadcast(excluding: id)
-    }
+    scheduleSnapshot(deferred: deferred)
+    if !deferred { broadcast(excluding: id) }
     return ManagedSessionSaveResult(session: workspace.window(id)!.session, notice: storageNotice)
   }
 
   private func saveAndBroadcast() {
-    _ = writeSnapshot()
+    scheduleSnapshot(deferred: false)
     broadcast(excluding: nil)
   }
 
@@ -200,23 +212,33 @@ final class BrowserWorkspaceStore {
       storageNotice = nil
       return true
     } catch {
-      storageNotice = "Window changes could not be saved. \(error.localizedDescription)"
+      storageNotice = Self.saveNotice(failure: error.localizedDescription)
       return false
     }
   }
 
-  private func scheduleSnapshot() {
-    guard maySave, let file else { return }
+  /// Every change is flushed to disk off the main thread; deferred changes also coalesce.
+  private func scheduleSnapshot(deferred: Bool) {
+    guard maySave else { return }
+    faviconCache?.retain(workspace.faviconItemIDs)
+    guard let file else { return }
     let snapshot = workspace
     snapshotScheduler.schedule(
-      { try file.save(snapshot) },
-      completion: { [weak self] error in
-        guard let self else { return }
-        let notice = error.map { "Window changes could not be saved. \($0)" }
-        guard self.storageNotice != notice else { return }
-        self.storageNotice = notice
-        self.broadcast(excluding: nil)
-      })
+      deferred: deferred, { try file.save(snapshot) },
+      completion: { [weak self] failure in self?.showSaveResult(failure: failure) })
+  }
+
+  private func showSaveResult(failure: String?) {
+    let notice = Self.saveNotice(failure: failure)
+    guard storageNotice != notice else { return }
+    storageNotice = notice
+    broadcast(excluding: nil)
+  }
+
+  private static func saveNotice(failure: String?) -> String? {
+    failure.map {
+      ShellL10n.format("Window changes could not be saved. %@", arguments: [.string($0)])
+    }
   }
 
   private func broadcast(excluding sourceID: UUID?) {

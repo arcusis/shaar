@@ -27,11 +27,13 @@ import Testing
     #expect(store.setSpaceProfile(spaceID, to: target))
     #expect(store.session.profileID(forTabID: tabID) == target)
     #expect(manager.stores[second]?.session.spaces.first { $0.id == spaceID }?.profileID == target)
+    try manager.flushSaves()
     #expect(try file.load() == manager.workspace)
     let created = try manager.createProfile(BrowserProfile(name: "New"), assigningSpace: spaceID)
     #expect(store.session.selectedSpace.profileID == created)
     #expect(store.session.profiles.first { $0.id == created }?.name == "New")
     #expect(manager.stores[second]?.session.spaces.first { $0.id == spaceID }?.profileID == created)
+    try manager.flushSaves()
     #expect(try file.load() == manager.workspace)
   }
 }

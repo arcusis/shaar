@@ -12,9 +12,48 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+static NSBundle *ARCSelectedBridgeBundle;
+static NSString *ARCBridgeLanguage = @"en";
+
+NSString *ARCBridgeLocalizedString(NSString *key) {
+  return [ARCSelectedBridgeBundle localizedStringForKey:key value:key table:@"Bridge"] ?: key;
+}
+
 NSError *ARCBridgeError(NSString *message) {
+  NSString *localized = ARCBridgeLocalizedString(message);
   return [NSError errorWithDomain:@"com.arcusis.browser.chromium" code:1
-                        userInfo:@{NSLocalizedDescriptionKey: message}];
+                        userInfo:@{NSLocalizedDescriptionKey: localized}];
+}
+
+void ARCConfigureLocalization(NSURL *bundleURL, NSString *languageIdentifier) {
+  NSString *language = [@[@"en", @"he"] containsObject:languageIdentifier] ? languageIdentifier : @"en";
+  ARCBridgeLanguage = language;
+  NSBundle *packageBundle = [NSBundle bundleWithURL:bundleURL];
+  NSString *localizationPath = [packageBundle pathForResource:language ofType:@"lproj"];
+  ARCSelectedBridgeBundle = localizationPath ? [NSBundle bundleWithPath:localizationPath] : packageBundle;
+}
+
+static NSString *ARCStringWithLocale(NSString *format, NSLocale *locale, ...) {
+  va_list arguments;
+  va_start(arguments, locale);
+  NSString *result = [[NSString alloc] initWithFormat:format locale:locale arguments:arguments];
+  va_end(arguments);
+  return result;
+}
+
+static NSString *ARCBridgeActiveDownloadsMessage(int count) {
+  if (!ARCSelectedBridgeBundle) {
+    return count == 1 ? @"Closing the browser will cancel 1 active download."
+      : [NSString stringWithFormat:@"Closing the browser will cancel %d active downloads.", count];
+  }
+  NSString *englishFallback = @"Closing the browser will cancel %d active downloads.";
+  NSString *format = [ARCSelectedBridgeBundle localizedStringForKey:@"%d active downloads"
+      value:englishFallback table:@"Bridge"];
+  if ([format isEqualToString:englishFallback]) {
+    return count == 1 ? @"Closing the browser will cancel 1 active download."
+      : [NSString stringWithFormat:englishFallback, count];
+  }
+  return ARCStringWithLocale(format, [NSLocale localeWithLocaleIdentifier:ARCBridgeLanguage], count);
 }
 
 BOOL ARCIsCanonicalID(NSString *value) {
@@ -32,12 +71,17 @@ NSString *ARCValidatedProfileID(NSString *profileID) {
 BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   NSEventModifierFlags chord = modifiers & (NSEventModifierFlagCommand | NSEventModifierFlagControl |
     NSEventModifierFlagOption | NSEventModifierFlagShift | NSEventModifierFlagFunction);
+  // Keep Command-N out of Chromium: Shaar intentionally leaves it without a menu action.
   if (chord == NSEventModifierFlagCommand) {
     return [@[@"n", @"t", @"l", @"w", @"s", @"q", @"r", @"f", @"g", @"d", @"y", @","] containsObject:key.lowercaseString];
   }
   if (chord == (NSEventModifierFlagCommand | NSEventModifierFlagShift)) {
-    return [@[@"w", @"g", @"j", @"t"] containsObject:key.lowercaseString];
+    return [@[@"w", @"g", @"j", @"t", @"r", @"c"] containsObject:key.lowercaseString];
   }
+  if (chord == (NSEventModifierFlagCommand | NSEventModifierFlagOption | NSEventModifierFlagShift))
+    return [key.lowercaseString isEqualToString:@"c"];
+  if (chord == (NSEventModifierFlagCommand | NSEventModifierFlagOption))
+    return [key.lowercaseString isEqualToString:@"i"];
   return chord == (NSEventModifierFlagControl | NSEventModifierFlagOption) &&
     [@[@"[", @"]"] containsObject:key];
 }
@@ -47,12 +91,21 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 
 @implementation ARCChromiumRuntime
 
+@synthesize languageIdentifier = _languageIdentifier;
+
+- (void)setLanguageIdentifier:(NSString *)languageIdentifier {
+  _languageIdentifier = [@[@"en", @"he"] containsObject:languageIdentifier] ? [languageIdentifier copy] : @"en";
+}
+
 - (instancetype)initWithFrameworkURL:(NSURL *)url error:(NSError **)error {
   if (!(self = [super init])) return nil;
+  _languageIdentifier = @"en";
   NSURL *binary = [url URLByAppendingPathComponent:@"Versions/Current/Chromium Framework"];
   _library = dlopen(binary.fileSystemRepresentation, RTLD_NOW | RTLD_GLOBAL);
   if (!_library) {
-    if (error) *error = ARCBridgeError([NSString stringWithFormat:@"Cannot load Chromium: %s", dlerror()]);
+    NSString *reason = [NSString stringWithUTF8String:dlerror() ?: "unknown loader error"];
+    NSString *format = ARCBridgeLocalizedString(@"Cannot load Chromium: %@");
+    if (error) *error = ARCBridgeError([NSString stringWithFormat:format, reason]);
     return nil;
   }
   _engineClass = NSClassFromString(@"ArdiaCoreEngine");
@@ -62,6 +115,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   }
   _profiles = [NSMutableDictionary dictionary];
   _privateTrackerPreparedSources = [NSMutableSet set];
+  _pageCards = [NSMutableDictionary dictionary];
   _primaryWindowID = NSUUID.UUID.UUIDString;
   _windows = [NSMutableDictionary dictionary];
   _tabWindows = [NSMutableDictionary dictionary];
@@ -88,6 +142,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   _detachedTabSelections = [NSMutableDictionary dictionary];
   _probeExtensions = [NSMutableDictionary dictionary];
   _probeDiagnostics = [NSMutableArray array];
+  _mediaSessions = [[ARCMediaSessionTracker alloc] init];
   _services = [[ARCEngineServices alloc] initWithLibrary:_library error:error];
   if (!_services) return nil;
   _downloadService = [[ARCDownloadService alloc] initWithServices:_services];
@@ -104,7 +159,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   };
   _libraryService.onError = ^(NSString *profile, NSString *section, NSString *message) {
     ARCChromiumRuntime *owner = weakSelf;
-    if (owner.onLibraryError) owner.onLibraryError(profile, section, message);
+    if (owner.onLibraryError) owner.onLibraryError(profile, section, ARCBridgeLocalizedString(message));
   };
   _downloadService.onChanged = ^(NSString *profile, NSDictionary *download) {
     ARCChromiumRuntime *owner = weakSelf;
@@ -118,6 +173,11 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 }
 
 - (int)runWithDataDirectory:(NSURL *)directory testing:(BOOL)testing {
+  if (!_languageIdentifier) _languageIdentifier = @"en";
+  if (!ARCSelectedBridgeBundle && _languageIdentifier.length) {
+    NSURL *resources = [NSBundle.mainBundle URLForResource:@"ArcusisBrowser_BrowserCore" withExtension:@"bundle"];
+    if (resources) ARCConfigureLocalization(resources, _languageIdentifier);
+  }
   NSAssert(NSThread.isMainThread, @"Chromium must start on the main thread");
   _testing = testing;
   if (testing) _probeRoot = directory.URLByDeletingLastPathComponent.URLByResolvingSymlinksInPath;
@@ -148,6 +208,9 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     "--disable-features=MacAppCodeSignClone,DevToolsAcceptDebuggingConnections",
     "--profile-directory=Default"
   };
+  strings.push_back("--lang=" + std::string(_languageIdentifier.UTF8String));
+  NSString *acceptedLanguages = [_languageIdentifier isEqualToString:@"he"] ? @"he,en" : @"en";
+  strings.push_back("--accept-lang=" + std::string(acceptedLanguages.UTF8String));
   if (testing) {
     // Disposable fixture profiles only. Real profiles always use the OS keychain.
     strings.push_back("--use-mock-keychain");
@@ -157,6 +220,10 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     strings.push_back("--mute-audio");
     strings.push_back("--use-fake-device-for-media-stream");
     strings.push_back("--ardia-test-system-media-permission=granted");
+    if (ARCProbeRootIsOwned(_probeRoot) &&
+        [NSProcessInfo.processInfo.arguments containsObject:@"--marketing-screenshots"]) {
+      strings.push_back("--force-device-scale-factor=2");
+    }
   }
   if (_externalAppProbeTesting) strings.push_back(externalProbeSwitch.UTF8String);
   std::vector<const char *> arguments;
@@ -172,16 +239,18 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 - (void)engineDidStart {
   _engine = [_engineClass sharedEngine];
   [_services start];
+  NSMutableArray<NSString *> *pageScripts = [NSMutableArray arrayWithObject:ARCMediaSessionPageScript()];
   if (_testing) {
     // Diagnostics only for the empty Bitwarden store-probe profile. No credential entry occurs.
-    _engine.pageScript = @"(function(post){"
+    [pageScripts addObject:@"(function(post){"
       "if(location.protocol==='chrome-extension:' && location.host==='nngceckbapebfimnlniiiahkandclblb'){"
       "const report=(kind,value)=>post('arcusisProbeDiagnostic',JSON.stringify({kind,message:String(value).slice(0,8192),url:location.href}));"
       "addEventListener('error',e=>report('error',e.message+' '+(e.error?.stack||'')));"
       "addEventListener('unhandledrejection',e=>report('rejection',e.reason?.stack||e.reason));"
       "const original=console.error;console.error=(...args)=>{report('console',args.map(String).join(' '));return original.apply(console,args);};"
-      "}return function(){};})";
+      "}return function(){};})"];
   }
+  _engine.pageScript = ARCComposedPageScript(pageScripts);
   if (_testing) [NSApp setActivationPolicy:NSApplicationActivationPolicyProhibited];
   [self createWindowID:_primaryWindowID error:nil];
   if (_onReady) _onReady();
@@ -286,6 +355,8 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     }
     for (NSString *tabID in [self->_tabWindows.allKeys copy]) {
       if (![self->_tabWindows[tabID] isEqualToString:identity]) continue;
+      [self->_pageCards[tabID] invalidate];
+      [self->_pageCards removeObjectForKey:tabID];
       [self->_pendingHostClosures removeObject:tabID];
       [self->_tabs removeObjectForKey:tabID];
       [self->_owners removeObjectForKey:tabID];
@@ -297,8 +368,11 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     [self->_windowCloseObservers removeObjectForKey:identity];
     [self->_retiredWindowIDs addObject:identity];
     [self->_windows removeObjectForKey:identity];
-    if (self->_onWindowClosed) self->_onWindowClosed(identity, quitting);
   });
+  // The engine loop may end before the queued native teardown runs. Publish its
+  // confirmed close now so host ownership cannot survive a clean engine exit.
+  // Keep native state retained by the queued block until this callback unwinds.
+  if (_onWindowClosed) _onWindowClosed(identity, quitting);
 }
 - (void)dealloc {
   for (id observer in _windowCloseObservers.allValues) [NSNotificationCenter.defaultCenter removeObserver:observer];
@@ -468,6 +542,13 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   return [_tabs allKeysForObject:tab].firstObject;
 }
 
+- (ArdiaCoreTab *)liveTabForID:(NSString *)tabID {
+  ArdiaCoreTab *tab = _tabs[tabID];
+  ARCNativeWindowState *state = [self stateForTabID:tabID];
+  if (!tab || tab.closed || !state || state.closing || state.closed || _closingBrowser) return nil;
+  return tab;
+}
+
 - (NSDictionary *)privateEntryForTab:(ArdiaCoreTab *)tab identity:(NSString **)identityOut {
   for (NSString *identity in _privateProbeTabs) {
     NSDictionary *entry = _privateProbeTabs[identity];
@@ -597,7 +678,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
       if (transfer && self->_detachedTabSelections[existingID] == transfer) {
         [self->_detachedTabSelections removeObjectForKey:existingID];
       }
-      if (self->_onNotice) self->_onNotice(@"Moving live tabs between windows is not supported.");
+      if (self->_onNotice) self->_onNotice(ARCBridgeLocalizedString(@"Moving live tabs between windows is not supported."));
     });
     return;
   }
@@ -638,7 +719,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
         target.incomingOpenerID = nil;
         [tab closeNow];
         [self closeWindowID:targetID];
-        if (self->_onNotice) self->_onNotice(@"The requested page could not be adopted into its window.");
+        if (self->_onNotice) self->_onNotice(ARCBridgeLocalizedString(@"The requested page could not be adopted into its window."));
       } else if (self->_onWindowShowRequest) {
         self->_onWindowShowRequest(targetID, YES);
       }
@@ -660,7 +741,16 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   });
 }
 
-- (NSView *)viewForTabID:(NSString *)tabID { return _tabs[tabID].view; }
+- (NSView *)viewForTabID:(NSString *)tabID {
+  ArdiaCoreTab *tab = [self liveTabForID:tabID];
+  if (!tab || !tab.view) return nil;
+  ARCDevToolsPageView *view = _pageCards[tabID];
+  if (!view) {
+    view = [[ARCDevToolsPageView alloc] initWithTab:tab];
+    _pageCards[tabID] = view;
+  }
+  return view;
+}
 - (void)activateTabID:(NSString *)tabID {
   ArdiaCoreTab *tab = _tabs[tabID];
   ARCNativeWindowState *state = [self stateForTabID:tabID];
@@ -792,6 +882,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   [_owners removeObjectForKey:tabID];
   [_tabWindows removeObjectForKey:tabID];
   [_documentGenerations removeObjectForKey:tabID];
+  [self resetMediaSessionForTabID:tabID notify:NO];
   [tab closeNow];
 }
 - (void)activateProfileID:(NSString *)profileID {
@@ -817,12 +908,21 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   if (_tabs[tabID]) { [self advanceDocumentGenerationForTabID:tabID]; [self invalidateExternalRequestsForTabID:tabID windowID:nil]; [_tabs[tabID] reload]; }
 }
 - (BOOL)reloadTabID:(NSString *)tabID profileID:(NSString *)profileID {
+  return [self reloadTabID:tabID profileID:profileID mode:ARCPageReloadModeNormal];
+}
+- (BOOL)reloadTabID:(NSString *)tabID profileID:(NSString *)profileID mode:(ARCPageReloadMode)mode {
   ArdiaCoreTab *tab = _tabs[tabID];
   if (!tab || tab.closed || ![self isSelectedTabID:tabID] ||
       ![_owners[tabID] isEqualToString:profileID]) return NO;
+  // Chromium discards in place: the tab keeps its WebContents and history but loses its renderer.
+  if (mode == ARCPageReloadModeNewRenderer && !tab.discarded && ![tab discard]) return NO;
   [self advanceDocumentGenerationForTabID:tabID];
   [self invalidateExternalRequestsForTabID:tabID windowID:nil];
-  [tab reload];
+  if (mode == ARCPageReloadModeBypassingCache) {
+    [tab reloadIgnoringCache];
+  } else {
+    [tab reload];
+  }
   return YES;
 }
 - (BOOL)placeTabIDs:(NSArray<NSString *> *)tabIDs pinnedIDs:(NSArray<NSString *> *)pinnedIDs
@@ -950,6 +1050,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 }
 - (void)engineQuitCancelled {
   _closingBrowser = NO;
+  if (_onQuitCancelled) _onQuitCancelled();
   [_detachedTabSelections removeAllObjects];
   for (ARCNativeWindowState *state in _windows.allValues) if (!state.closed) state.closing = NO;
 }
@@ -1090,7 +1191,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   ARCNativeWindowState *popupState = [self stateForPopupTab:tab];
   if (popupState) {
     [self closeExtensionPopupForWindowID:popupState.identity];
-    if (_onNotice) _onNotice(@"The extension stopped working. Open it again to retry.");
+    if (_onNotice) _onNotice(ARCBridgeLocalizedString(@"The extension stopped working. Open it again to retry."));
     return;
   }
   NSString *identity = [self identityForTab:tab];
@@ -1098,6 +1199,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   if (!identity || !profile || tab.closed) return;
   [self invalidateExternalRequestsForTabID:identity windowID:nil];
   [self stopFindingInTabID:identity];
+  [self resetMediaSessionForTabID:identity notify:YES];
   if (_onRendererGone) _onRendererGone(identity, profile, status, code);
 }
 - (void)tabDidCommitDocument:(ArdiaCoreTab *)tab {
@@ -1106,6 +1208,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   if (identity) {
     [self advanceDocumentGenerationForTabID:identity];
     [self invalidateExternalRequestsForTabID:identity windowID:nil];
+    [self resetMediaSessionForTabID:identity notify:YES];
   }
   [self hideWebStoreBrowserPromptInTab:tab];
   [_webStoreFit tabDidNavigate:tab];
@@ -1122,6 +1225,32 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   [self evaluateTab:tab script:script completion:^(NSString *ignored) {}];
 }
 - (void)tabDidChangeZoom:(ArdiaCoreTab *)tab { [_webStoreFit tabDidChangeZoom:tab]; }
+- (void)tab:(ArdiaCoreTab *)tab didChangePictureInPicture:(NSDictionary<NSString *, id> *)state {
+  NSString *identity = [self identityForTab:tab];
+  BOOL active = [state[@"active"] isKindOfClass:NSNumber.class] && [state[@"active"] boolValue];
+  [self notePictureInPictureVideoTabID:identity active:active kind:state[@"kind"]];
+  if (identity && [self liveTabForID:identity] && self.onPictureInPictureChanged) {
+    self.onPictureInPictureChanged(identity, active);
+  }
+}
+/// Implementing this replaces the engine's default activation, so private tabs keep their
+/// own selection path and other tabs go to the application, which can switch Space.
+- (void)tab:(ArdiaCoreTab *)tab requestsActivation:(NSString *)reason {
+  NSString *privateTabID = nil;
+  NSDictionary *privateEntry = [self privateEntryForTab:tab identity:&privateTabID];
+  if (privateEntry) {
+    [self selectPrivateTabID:privateTabID windowID:privateEntry[@"windowID"] contextID:privateEntry[@"contextID"]];
+    return;
+  }
+  NSString *identity = [self identityForTab:tab];
+  if (identity && [self liveTabForID:identity] && self.onTabActivationRequest) {
+    self.onTabActivationRequest(identity, reason.length ? reason : @"page");
+  }
+}
+- (void)tabDidChangeAudio:(ArdiaCoreTab *)tab {
+  NSString *identity = [self identityForTab:tab];
+  if (identity && [self mediaSessionStateForTabID:identity]) [self publishMediaSessionForTabID:identity];
+}
 - (void)tab:(ArdiaCoreTab *)tab didFindMatches:(int)count active:(int)active final:(BOOL)final {
   NSString *identity = [self identityForTab:tab];
   ARCNativeWindowState *state = [self stateForTabID:identity];
@@ -1138,8 +1267,13 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   ARCNativeWindowState *state = [self stateForPopupTab:tab];
   if (state.popupID && !state.closed && _onExtensionPopupSize) _onExtensionPopupSize(state.popupID, size);
 }
-- (void)tab:(ArdiaCoreTab *)tab didReceivePageMessage:(NSString *)kind json:(NSString *)json {
-  if (!_testing || ![kind isEqualToString:@"arcusisProbeDiagnostic"] || _probeDiagnostics.count >= 100 ||
+- (void)tab:(ArdiaCoreTab *)tab didReceivePageMessage:(NSString *)kind json:(NSString *)json
+         frame:(NSString *)frameID main:(BOOL)main {
+  if ([kind isEqualToString:ARCMediaSessionMessage]) {
+    [self receiveMediaSessionJSON:json frameID:frameID tab:tab];
+    return;
+  }
+  if (!main || !_testing || ![kind isEqualToString:@"arcusisProbeDiagnostic"] || _probeDiagnostics.count >= 100 ||
       ![tab.url hasPrefix:@"chrome-extension://nngceckbapebfimnlniiiahkandclblb/"]) return;
   NSData *data = [json dataUsingEncoding:NSUTF8StringEncoding];
   id event = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
@@ -1190,10 +1324,13 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   [_pendingHostClosures removeObject:identity];
   [self stopFindingInTabID:identity];
   if ([state.selectedTabID isEqualToString:identity]) state.selectedTabID = nil;
+  [_pageCards[identity] invalidate];
+  [_pageCards removeObjectForKey:identity];
   [_tabs removeObjectForKey:identity];
   [_owners removeObjectForKey:identity];
   [_tabWindows removeObjectForKey:identity];
   [_documentGenerations removeObjectForKey:identity];
+  [self resetMediaSessionForTabID:identity notify:NO];
   dispatch_async(dispatch_get_main_queue(), ^{
     if (notify && self->_onTabClosed) self->_onTabClosed(identity);
     if (notify && state.closeWhenEmpty && !state.closing && !state.closed &&
@@ -1225,7 +1362,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     rejected.closeWhenEmpty = YES;
     dispatch_async(dispatch_get_main_queue(), ^{
       [self closeWindowID:rejectedID];
-      if (self->_onNotice) self->_onNotice(@"This browser window type or profile is unavailable.");
+      if (self->_onNotice) self->_onNotice(ARCBridgeLocalizedString(@"This browser window type or profile is unavailable."));
     });
     return rejected.native;
   }
@@ -1243,6 +1380,16 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     _onWindowShowRequest(state.identity, active);
   }
 }
+- (void)tab:(ArdiaCoreTab *)tab didFailLoad:(NSString *)url code:(int)code description:(NSString *)text {
+  NSString *identity = nil;
+  NSMutableDictionary *entry = (NSMutableDictionary *)[self privateEntryForTab:tab identity:&identity];
+  if (!entry || !tab.profile.offTheRecord) return;
+  entry[@"loadFailure"] = @{@"url": url, @"code": @(code), @"description": text};
+  if (self.onPrivateNavigationFailed)
+    self.onPrivateNavigationFailed(entry[@"contextID"], entry[@"windowID"], identity,
+      [NSString stringWithFormat:@"The private page could not load (%@).", text]);
+}
+
 - (void)engine:(ArdiaCoreEngine *)engine permissionRequest:(NSDictionary *)request tab:(ArdiaCoreTab *)tab {
   NSString *identity = request[@"id"];
   NSString *tabID = [self identityForTab:tab];
@@ -1340,7 +1487,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   if (!identity.length || !profileID || ![directory isEqualToString:prompt[@"profile"]] ||
       ![self isSelectedTabID:tabID] || !_onInstallRequest || _pendingInstalls.count >= 10) {
     if (identity) [_engineClass resolveExtensionInstallPrompt:identity accepted:NO];
-    if (_onNotice) _onNotice(@"The extension request has no active profile context and was canceled.");
+    if (_onNotice) _onNotice(ARCBridgeLocalizedString(@"The extension request has no active profile context and was canceled."));
     return;
   }
   NSMutableDictionary *request = prompt.mutableCopy;
@@ -1363,10 +1510,10 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   // Tests must resolve their own transfers before shutdown, without opening a dialog.
   if (_testing) { completion(NO); return; }
   NSAlert *alert = [[NSAlert alloc] init];
-  alert.messageText = @"Downloads are still running";
-  alert.informativeText = [NSString stringWithFormat:@"Closing the browser will cancel %d active download%@.", count, count == 1 ? @"" : @"s"];
-  [alert addButtonWithTitle:@"Keep Browser Open"];
-  NSButton *quit = [alert addButtonWithTitle:@"Close and Cancel Downloads"];
+  alert.messageText = ARCBridgeLocalizedString(@"Downloads are still running");
+  alert.informativeText = ARCBridgeActiveDownloadsMessage(count);
+  [alert addButtonWithTitle:ARCBridgeLocalizedString(@"Keep Browser Open")];
+  NSButton *quit = [alert addButtonWithTitle:ARCBridgeLocalizedString(@"Close and Cancel Downloads")];
   quit.hasDestructiveAction = YES;
   [alert beginSheetModalForWindow:window.window completionHandler:^(NSModalResponse response) {
     completion(response == NSAlertSecondButtonReturn);

@@ -9,14 +9,21 @@ struct BrowserSidebar: View {
   @Bindable var store: BrowserStore
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.colorScheme) private var colorScheme
+  @Environment(\.layoutDirection) private var layoutDirection
   @Environment(\.browserWindowIsFullScreen) private var isFullScreen
   @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
   @Environment(\.browserChromeAccessibilityOverrides) private var accessibilityOverrides
+  @Namespace private var sidebarMotionNamespace
   @State private var pagerState = SpacePagerState()
   @State private var targetedTab: UUID?
   @State private var targetedSpace: UUID?
   @State private var targetedSection: String?
   @State private var targetedFolder: UUID?
+  @State private var folderHoverTask: Task<Void, Never>?
+  @State private var folderHoverTab: UUID?
+  @State private var folderHoverSession: DropSession.ID?
+  @State private var folderHoverDeadline: ContinuousClock.Instant?
+  @State private var folderDropReady: UUID?
   @State private var targetedTabIntent: SidebarTabDropIntent?
   @State private var hoveredTabID: UUID?
   @State private var newTabIsHovered = false
@@ -38,6 +45,20 @@ struct BrowserSidebar: View {
 
   private var sidebarReduceMotion: Bool {
     reduceMotion || accessibilityOverrides.reduceMotion == true
+  }
+
+  private var sidebarMotion: Animation {
+    sidebarReduceMotion ? .easeOut(duration: 0.16) : .spring(response: 0.32, dampingFraction: 0.82)
+  }
+
+  private var sidebarLayoutKey: [String] {
+    store.profileFavorites.map { $0.id.uuidString }
+      + store.session.selectedSpace.folders.map {
+        "\($0.id):\($0.parentID?.uuidString ?? "root"):\($0.isPinned):\($0.isCollapsed)"
+      }
+      + store.session.selectedSpace.tabs.map {
+        "\($0.id):\($0.isPinned):\($0.folderID?.uuidString ?? "root")"
+      }
   }
 
   private var activeSidebarSelectionKey: String {
@@ -66,17 +87,6 @@ struct BrowserSidebar: View {
     }
   }
 
-  private func scheduleSpaceReveal(_ proxy: ScrollViewProxy, id: UUID) {
-    DispatchQueue.main.async {
-      guard id == store.session.selectedSpaceID else { return }
-      if sidebarReduceMotion {
-        proxy.scrollTo(id)
-      } else {
-        withAnimation(.easeOut(duration: 0.12)) { proxy.scrollTo(id) }
-      }
-    }
-  }
-
   init(
     store: BrowserStore, previewRecentDownloads: [BrowserDownload]? = nil,
     previewFolderDraft: SidebarFolderDraft? = nil
@@ -91,6 +101,8 @@ struct BrowserSidebar: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
       profileFavorites
+        .id(sidebarReduceMotion ? sidebarLayoutKey.description : "favorites")
+        .transition(.opacity)
       VStack(alignment: .leading, spacing: 4) {
         HStack(spacing: 7) {
           Label(store.session.selectedSpace.name, systemImage: store.session.selectedSpace.symbol)
@@ -105,32 +117,48 @@ struct BrowserSidebar: View {
         .contextMenu {
           SpaceMenuContent(store: store, space: store.session.selectedSpace)
         }
-        .accessibilityLabel("\(store.session.selectedSpace.name), Profile: \(store.profileName)")
-        .help("Space: \(store.session.selectedSpace.name) · Profile: \(store.profileName)")
+        .accessibilityLabel(
+          ShellL10n.format(
+            "%@, Profile: %@",
+            arguments: [.string(store.session.selectedSpace.name), .string(store.profileName)])
+        )
+        .help(
+          ShellL10n.format(
+            "Space: %@ · Profile: %@",
+            arguments: [.string(store.session.selectedSpace.name), .string(store.profileName)]))
         if let notice = store.sidebarNotice {
           Text(notice).font(.caption).fixedSize(horizontal: false, vertical: true)
         }
       }
       SpacePager(store: store, state: pagerState, reduceMotion: sidebarReduceMotion) { space in
         tabList(space)
+          .id(sidebarReduceMotion ? sidebarLayoutKey.description : "tabs")
+          .transition(.opacity)
       }
       Spacer(minLength: 0)
+      if let item = store.miniPlayerItem {
+        SidebarMediaPlayer(
+          item: item, onSelect: { store.selectPage(item.tabID) },
+          onCommand: { store.performMedia($0, tabID: item.tabID) }
+        )
+        .transition(.opacity)
+      }
       Divider()
       HStack(spacing: 8) {
         recentDownloadsControls
           .frame(height: 30)
         spaceSelectors
         Menu {
-          Button("New Folder") { beginFolderDraft(parentID: nil) }
-          Button("New Space") { store.spaceEditor = .create }
+          Button(ShellL10n.string("New Folder")) { beginFolderDraft(parentID: nil) }
+          Button(ShellL10n.string("New Space")) { store.spaceEditor = .create }
         } label: {
           Image(systemName: "plus")
             .font(.system(size: 16))
             .foregroundStyle(Color.primary.opacity(0.55))
             .frame(width: 30, height: 30)
         }
-        .help("Create a folder or space")
-        .accessibilityLabel("Add Folder or Space")
+        .help(ShellL10n.string("Create a folder or space"))
+        .accessibilityLabel(ShellL10n.string("Add Folder or Space"))
       }
       .frame(height: 32)
       .background {
@@ -142,6 +170,8 @@ struct BrowserSidebar: View {
       }
       .accessibilityIdentifier("sidebar-space-footer")
     }
+    .environment(\.sidebarMotionNamespace, sidebarMotionNamespace)
+    .animation(sidebarMotion, value: sidebarLayoutKey)
     .buttonStyle(.plain)
     .padding(.horizontal, 14)
     .padding(.top, isFullScreen ? BrowserChromeLayout.fullScreenToggleRowHeight : 4)
@@ -159,7 +189,11 @@ struct BrowserSidebar: View {
       value: store.session.selectedSpaceID
     )
     .zIndex(1)
-    .onChange(of: store.session.selectedSpaceID) { _, _ in folderDraft = nil }
+    .onChange(of: store.session.selectedSpaceID) { _, _ in
+      folderDraft = nil
+      cancelFolderHover()
+    }
+    .onDisappear { cancelFolderHover() }
     .onAppear {
       if folderDraft != nil { folderNameIsFocused = true }
     }
@@ -170,18 +204,40 @@ struct BrowserSidebar: View {
     return ScrollViewReader { tabScroll in
       ScrollView {
         LazyVStack(alignment: .leading, spacing: 4) {
+          HStack {
+            ShellL10n.text("Pinned").font(.system(size: 11, weight: .semibold))
+              .foregroundStyle(.secondary)
+            Spacer()
+            Button {
+              beginFolderDraft(parentID: nil)
+            } label: {
+              Image(systemName: "folder.badge.plus").frame(width: 26, height: 26)
+            }
+            .help(ShellL10n.string("New Folder"))
+            .accessibilityLabel(ShellL10n.string("New Folder"))
+            .accessibilityIdentifier("sidebar-pinned-new-folder")
+          }
           sectionDropTarget(
             pinned: true,
             height: space.pinnedItems().isEmpty ? 8 : 12,
-            hint: space.pinnedItems().isEmpty ? "Drop to pin in this Space" : nil)
-          if let folderDraft, folderDraft.section == .pinned, folderDraft.parentID == nil {
+            hint: space.pinnedItems().isEmpty
+              ? ShellL10n.string("Drop to pin in this Space") : nil)
+          if let folderDraft, folderDraft.section == .pinned, folderDraft.parentID == nil,
+            folderDraft.editingFolderID == nil
+          {
             folderDraftRow(depth: 0)
           }
           ForEach(space.pinnedItems()) { item in
             switch item {
             case .folder(let folder, let depth):
-              folderRow(folder, depth: depth)
-              if let folderDraft, folderDraft.parentID == folder.id {
+              if folderDraft?.editingFolderID == folder.id {
+                folderDraftRow(depth: depth)
+              } else {
+                folderRow(folder, depth: depth)
+              }
+              if let folderDraft, folderDraft.editingFolderID == nil,
+                folderDraft.parentID == folder.id
+              {
                 folderDraftRow(depth: depth + 1)
               }
             case .tab(let tab, let depth):
@@ -206,18 +262,18 @@ struct BrowserSidebar: View {
           if !space.tabs.isEmpty || !space.folders.isEmpty {
             HStack(spacing: 8) {
               Rectangle().fill(Color.primary.opacity(0.12)).frame(height: 1)
-              Button("Tidy") { tidyTabs(in: space) }
+              Button(ShellL10n.string("Tidy")) { tidyTabs(in: space) }
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .disabled(tidyInProgress || !space.tabs.contains { !$0.isPinned })
-                .help("Group today's tabs by topic")
-              Button("Clear") {
+                .help(ShellL10n.string("Group today's tabs by topic"))
+              Button(ShellL10n.string("Clear")) {
                 clearSpaceID = space.id
               }
               .font(.system(size: 11, weight: .semibold))
               .foregroundStyle(.secondary)
               .disabled(!space.tabs.contains { !$0.isPinned })
-              .help("Close today's tabs")
+              .help(ShellL10n.string("Close today's tabs"))
             }
             .padding(.vertical, 6)
           }
@@ -228,7 +284,7 @@ struct BrowserSidebar: View {
               Image(systemName: "plus")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
-              Text("New tab")
+              ShellL10n.text("New tab")
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
               Spacer(minLength: 0)
@@ -243,24 +299,34 @@ struct BrowserSidebar: View {
               in: RoundedRectangle(cornerRadius: 8)
             )
           }
-          .accessibilityLabel("New tab")
+          .accessibilityLabel(ShellL10n.string("New tab"))
           .onHover { newTabIsHovered = $0 }
           .animation(sidebarReduceMotion ? nil : .easeOut(duration: 0.12), value: newTabIsHovered)
           .contextMenu {
-            Button("New Folder") { beginFolderDraft(parentID: nil, section: .today) }
-            Button("Reopen last closed tab") { store.reopenLastClosedTab() }
+            Button(ShellL10n.string("New Folder")) {
+              beginFolderDraft(parentID: nil, section: .today)
+            }
+            Button(ShellL10n.string("Reopen last closed tab")) { store.reopenLastClosedTab() }
               .disabled(!store.canReopenClosedTab)
-            Button("Recently closed…") { store.showRecentlyClosed() }
+            Button(ShellL10n.string("Recently closed…")) { store.showRecentlyClosed() }
           }
           sectionDropTarget(pinned: false)
-          if let folderDraft, folderDraft.section == .today, folderDraft.parentID == nil {
+          if let folderDraft, folderDraft.section == .today, folderDraft.parentID == nil,
+            folderDraft.editingFolderID == nil
+          {
             folderDraftRow(depth: 0)
           }
           ForEach(space.items(isPinned: false)) { item in
             switch item {
             case .folder(let folder, let depth):
-              folderRow(folder, depth: depth)
-              if let folderDraft, folderDraft.parentID == folder.id {
+              if folderDraft?.editingFolderID == folder.id {
+                folderDraftRow(depth: depth)
+              } else {
+                folderRow(folder, depth: depth)
+              }
+              if let folderDraft, folderDraft.editingFolderID == nil,
+                folderDraft.parentID == folder.id
+              {
                 folderDraftRow(depth: depth + 1)
               }
             case .tab(let tab, _):
@@ -284,22 +350,22 @@ struct BrowserSidebar: View {
         }
       }
       .contextMenu {
-        Button("New Folder") { beginFolderDraft(parentID: nil, section: .today) }
+        Button(ShellL10n.string("New Folder")) { beginFolderDraft(parentID: nil, section: .today) }
       }
       .confirmationDialog(
-        "Close today's tabs?",
+        ShellL10n.string("Close today's tabs?"),
         isPresented: Binding(
           get: { clearSpaceID == space.id },
           set: { if !$0 { clearSpaceID = nil } }
         ), titleVisibility: .visible
       ) {
-        Button("Close Tabs", role: .destructive) {
+        Button(ShellL10n.string("Close Tabs"), role: .destructive) {
           guard store.session.selectedSpaceID == space.id else { return }
           store.clearTodayTabs(in: space.id)
           clearSpaceID = nil
         }
       } message: {
-        Text("Pinned tabs and favorites will be kept.")
+        ShellL10n.text("Pinned tabs and favorites will be kept.")
       }
       .coordinateSpace(name: "sidebarOrdinaryViewport")
       .background {
@@ -318,36 +384,54 @@ struct BrowserSidebar: View {
   }
 
   private var spaceSelectors: some View {
-    ScrollViewReader { spaceScroll in
-      GeometryReader { geometry in
-        ScrollView(.horizontal) {
-          HStack(spacing: 0) {
-            ForEach(store.session.spaces) { space in
-              spaceSelector(space)
+    GeometryReader { geometry in
+      let spaces = store.session.spaces
+      let selected = spaces.firstIndex { $0.id == store.session.selectedSpaceID } ?? 0
+      let layout = SpaceIndicatorLayout(
+        count: spaces.count, selectedIndex: selected, width: geometry.size.width)
+      HStack(spacing: 0) {
+        ForEach(Array(spaces[layout.visible])) { space in
+          spaceSelector(
+            space,
+            width: space.id == store.session.selectedSpaceID
+              ? layout.selectedWidth : layout.dotWidth)
+        }
+        if layout.overflowWidth > 0 {
+          Menu {
+            ForEach(spaces) { space in
+              Button {
+                store.perform(.space(space.id))
+              } label: {
+                Label(space.name, systemImage: space.symbol)
+              }
             }
+          } label: {
+            Image(systemName: "ellipsis")
+              .font(.system(size: 12))
+              .frame(width: layout.overflowWidth, height: 30)
           }
-          .frame(minWidth: geometry.size.width)
+          .menuStyle(.borderlessButton)
+          .menuIndicator(.hidden)
+          .fixedSize()
+          .help(ShellL10n.string("More Spaces"))
+          .accessibilityLabel(ShellL10n.string("More Spaces"))
         }
       }
-      .scrollIndicators(.hidden)
-      .frame(maxWidth: .infinity)
-      .coordinateSpace(name: "sidebarSpaceViewport")
-      .background {
-        GeometryReader { geometry in
-          Color.clear.preference(
-            key: SidebarSpaceRevealFramesPreferenceKey.self,
-            value: SidebarRevealFrames(
-              viewport: CGRect(origin: .zero, size: geometry.size)))
-        }
-      }
-      .onAppear { scheduleSpaceReveal(spaceScroll, id: store.session.selectedSpaceID) }
-      .onChange(of: store.session.selectedSpaceID) { _, id in
-        scheduleSpaceReveal(spaceScroll, id: id)
+      .frame(width: geometry.size.width, height: geometry.size.height)
+    }
+    .frame(maxWidth: .infinity)
+    .coordinateSpace(name: "sidebarSpaceViewport")
+    .background {
+      GeometryReader { geometry in
+        Color.clear.preference(
+          key: SidebarSpaceRevealFramesPreferenceKey.self,
+          value: SidebarRevealFrames(
+            viewport: CGRect(origin: .zero, size: geometry.size)))
       }
     }
   }
 
-  private func spaceSelector(_ space: BrowserSpace) -> some View {
+  private func spaceSelector(_ space: BrowserSpace, width: CGFloat) -> some View {
     Button {
       store.perform(.space(space.id))
     } label: {
@@ -362,11 +446,11 @@ struct BrowserSidebar: View {
             .frame(width: 6, height: 6)
         }
       }
-      .frame(width: 22, height: 30)
+      .frame(width: width, height: 30)
       .contentShape(Rectangle())
     }
     .help(space.name)
-    .accessibilityLabel("Switch to \(space.name)")
+    .accessibilityLabel(ShellL10n.format("Switch to %@", arguments: [.string(space.name)]))
     .accessibilityAddTraits(
       space.id == store.session.selectedSpaceID ? .isSelected : []
     )
@@ -392,7 +476,7 @@ struct BrowserSidebar: View {
       }
       return store.acceptSidebarDrop(
         item, into: space.id,
-        beforeSpace: point.x < 16 ? space.id : next)
+        beforeSpace: point.x < width / 2 ? space.id : next)
     } isTargeted: { targeted in
       targetedSpace = targetedSpace.updatingTarget(space.id, isActive: targeted)
     }
@@ -406,67 +490,29 @@ struct BrowserSidebar: View {
   }
 
   private var profileFavorites: some View {
-    let profileID = store.session.selectedSpace.profileID
     let favorites = store.profileFavorites.map { favorite in
       let page = store.session.favoritePages.first { $0.favoriteID == favorite.id }
       return FavoriteTile(
         id: favorite.id, title: favorite.title, url: page?.tab.url ?? favorite.originalURL,
-        image: store.favicon(for: favorite))
+        image: store.favicon(for: favorite), pageID: page?.tab.id)
     }
-    return Group {
-      if !favorites.isEmpty {
-        ProfileFavoritesGrid(
-          favorites: favorites,
-          selectedID: store.session.selectedSpace.selectedFavoriteID,
-          profileID: profileID,
-          dragSessionID: store.dragSessionID,
-          onSelect: { _ = store.selectFavorite($0) },
-          onReset: { _ = store.resetFavorite($0) },
-          onRemove: { _ = store.removeFavorite($0) },
-          onMoveBefore: { _ = store.moveFavorite($0, before: $1) },
-          onTabDrop: { item, before in
-            guard case .tab(let sessionID, let source, let tabID) = item,
-              sessionID == store.dragSessionID, source == store.session.selectedSpaceID
-            else { return false }
-            addToFavorites(tabID: tabID, spaceID: source, profileID: profileID)
-            guard
-              let favoriteID = store.session.favoritePages.first(where: { $0.tab.id == tabID })?
-                .favoriteID
-            else { return false }
-            if let before { _ = store.moveFavorite(favoriteID, before: before) }
-            return true
-          },
-          accessibilityOverrides: ProfileFavoritesAccessibilityOverrides(
-            reduceMotion: sidebarReduceMotion,
-            reduceTransparency: reduceTransparency
-              || accessibilityOverrides.reduceTransparency == true)
-        )
-      } else if store.tabDrag != nil {
-        SidebarDropHint(
-          title: "Drop to add to Favorites", symbol: "star",
-          isTargeted: targetedSection == "favorites")
-      } else {
-        Color.clear.frame(height: 8).contentShape(Rectangle())
-      }
-    }
-    .animation(sidebarReduceMotion ? nil : .smooth(duration: 0.2), value: store.tabDrag != nil)
-    .dropDestination(for: SidebarTransfer.self) { items, _ in
-      guard items.count == 1, case .tab(let sessionID, let source, let tabID) = items[0],
-        sessionID == store.dragSessionID, source == store.session.selectedSpaceID
-      else { return false }
-      store.separateDraggedPane(tabID)
-      addToFavorites(tabID: tabID, spaceID: source, profileID: profileID)
-      return store.session.favoritePages.contains { $0.tab.id == tabID }
-    } isTargeted: { targeted in
-      targetedSection = targetedSection.updatingTarget("favorites", isActive: targeted)
-    }
-    .dropDestination(for: URL.self) { urls, _ in
-      guard urls.count == 1, NavigationInput.isWebURL(urls[0]), store.sheet == nil,
-        !store.commandIsOpen
-      else { return false }
-      store.perform(.open(urls[0]))
-      return store.addCurrentPageAsFavorite()
-    }
+    return ProfileFavoritesGrid(
+      favorites: favorites,
+      selectedID: store.session.selectedSpace.selectedFavoriteID,
+      profileID: store.session.selectedSpace.profileID,
+      dragSessionID: store.dragSessionID,
+      onSelect: { _ = store.selectFavorite($0) },
+      onReset: { _ = store.resetFavorite($0) },
+      onRemove: { _ = store.removeFavorite($0) },
+      onMoveBefore: { _ = store.moveFavorite($0, before: $1) },
+      onTabDrop: { store.acceptFavoritesDrop($0, before: $1) },
+      accessibilityOverrides: ProfileFavoritesAccessibilityOverrides(
+        reduceMotion: sidebarReduceMotion,
+        reduceTransparency: reduceTransparency
+          || accessibilityOverrides.reduceTransparency == true),
+      activeDrag: store.sidebarDrag,
+      dropRefusal: store.favoritesDropRefusal(for: store.sidebarDrag),
+      onBeginDrag: { store.beginSidebarDrag($0) })
   }
 
   private var recentDownloadsControls: some View {
@@ -483,12 +529,12 @@ struct BrowserSidebar: View {
           in: RoundedRectangle(cornerRadius: 8))
     }
     .contextMenu {
-      Button("Bookmarks…") { store.showLibrary(.bookmarks) }
-      Button("History…") { store.showLibrary(.history) }
+      Button(ShellL10n.string("Bookmarks…")) { store.showLibrary(.bookmarks) }
+      Button(ShellL10n.string("History…")) { store.showLibrary(.history) }
     }
-    .accessibilityLabel("Library")
-    .accessibilityHint("Open Library; hover to see recent downloads")
-    .help("Library")
+    .accessibilityLabel(ShellL10n.string("Library"))
+    .accessibilityHint(ShellL10n.string("Open Library; hover to see recent downloads"))
+    .help(ShellL10n.string("Library"))
     .buttonStyle(.plain)
     .onHover {
       recentDownloadsHoverChanged(.anchor, inside: $0, profileID: profileID, epoch: epoch)
@@ -570,7 +616,7 @@ struct BrowserSidebar: View {
       Capsule().fill(Color.accentColor).frame(height: 2)
         .frame(maxHeight: .infinity, alignment: .bottom)
     case .split, .addToSplit:
-      Text(intent == .addToSplit ? "Add to Split" : "Split with")
+      Text(ShellL10n.string(intent == .addToSplit ? "Add to Split" : "Split with"))
         .font(.system(size: 10, weight: .medium))
         .padding(.horizontal, 7)
         .padding(.vertical, 3)
@@ -588,11 +634,46 @@ struct BrowserSidebar: View {
 
   private func commitFolderDraft() {
     guard let draft = folderDraft, draft.isValid(in: store.session),
-      store.createFolder(
-        name: draft.name, in: draft.spaceID, section: draft.section, parentID: draft.parentID)
-        != nil
+      commitFolder(draft)
     else { return }
     folderDraft = nil
+  }
+
+  private func commitFolder(_ draft: SidebarFolderDraft) -> Bool {
+    switch draft.route {
+    case .create:
+      return store.createFolder(
+        name: draft.name, in: draft.spaceID, section: draft.section, parentID: draft.parentID)
+        != nil
+    case .edit(_, let folder):
+      return store.renameFolder(folder, in: draft.spaceID, name: draft.name)
+    }
+  }
+
+  private func scheduleFolderHover(_ tab: BrowserTab, in space: BrowserSpace) {
+    guard folderHoverTask == nil, folderDropReady == nil, tab.isPinned,
+      !space.splits.contains(where: { $0.tabIDs.contains(tab.id) }),
+      let drag = store.tabDrag, drag.tabID != tab.id
+    else { return }
+    // Measure the hold from the native event, even if other main-actor work delays the task.
+    let deadline = ContinuousClock.now + .milliseconds(650)
+    folderHoverDeadline = deadline
+    folderHoverTask = Task { @MainActor in
+      try? await Task.sleep(until: deadline, clock: .continuous)
+      guard !Task.isCancelled, folderHoverTab == tab.id,
+        targetedTabIntent?.combinesTabs != false
+      else { return }
+      folderDropReady = tab.id
+    }
+  }
+
+  private func cancelFolderHover() {
+    folderHoverTask?.cancel()
+    folderHoverTask = nil
+    folderDropReady = nil
+    folderHoverTab = nil
+    folderHoverSession = nil
+    folderHoverDeadline = nil
   }
 
   private func folderDraftRow(depth: Int) -> some View {
@@ -616,8 +697,8 @@ struct BrowserSidebar: View {
         Image(systemName: "xmark")
       }
       .font(.system(size: 9, weight: .medium))
-      .help("Cancel new folder")
-      .accessibilityLabel("Cancel new folder")
+      .help(ShellL10n.string("Cancel new folder"))
+      .accessibilityLabel(ShellL10n.string("Cancel new folder"))
     }
     .padding(.vertical, 7).padding(.horizontal, 10)
     .padding(.leading, indentation(depth))
@@ -686,7 +767,31 @@ struct BrowserSidebar: View {
         isSelected: store.session.selectedPage.map { split.tabIDs.contains($0.tab.id) } ?? false,
         onSelect: { store.perform(.tab(space: space.id, tab: $0)) },
         onClose: { store.closeTab($0) },
-        onDrag: { store.beginTabDrag($0, spaceID: space.id, fromSplitPane: true) }
+        onDrag: { store.beginTabDrag($0, spaceID: space.id, fromSplitPane: true) },
+        memberMenu: { id in
+          AnyView(
+            Group {
+              Button(ShellL10n.string("Add to Favorites")) {
+                _ = store.acceptFavoritesDrop(
+                  .tab(
+                    sessionID: store.dragSessionID, sourceSpaceID: space.id, tabID: id))
+              }
+              Menu(ShellL10n.string("Move to Folder")) {
+                ForEach(space.folders) { folder in
+                  Button(folderLabel(folder.id, in: space)) {
+                    _ = store.moveTab(id, from: space.id, to: space.id, folderID: folder.id)
+                  }
+                }
+                if space.folders.isEmpty { ShellL10n.text("Create a folder first") }
+              }
+              Button(ShellL10n.string("Separate from Split")) { store.unsplitTab(id) }
+              Button(ShellL10n.string("Close tab")) { store.closeTab(id) }
+            })
+        },
+        onStackDrag: {
+          store.beginSidebarDrag(
+            .split(sessionID: store.dragSessionID, sourceSpaceID: space.id, splitID: split.id))
+        }
       )
     } else {
       SidebarTabRow(
@@ -702,6 +807,8 @@ struct BrowserSidebar: View {
           hoveredTabID = hoveredTabID.updatingTarget(tab.id, isActive: isHovered)
         }
       )
+      .sidebarPageMotion(id: tab.id, reduceMotion: sidebarReduceMotion)
+      .draggable(store.beginTabDrag(tab.id, spaceID: space.id, fromSplitPane: false))
     }
   }
 
@@ -711,20 +818,22 @@ struct BrowserSidebar: View {
     if let selected = store.selectedSplit, !selected.tabIDs.contains(tab.id),
       let focused = space.selectedTabID
     {
-      Menu("Add to Split View") {
+      Menu(ShellL10n.string("Add to Split View")) {
         ForEach(SplitEdge.allCases, id: \.self) { edge in
-          Button(edge.menuTitle) { store.addToSplit(tab.id, beside: focused, edge: edge) }
+          Button(edge.menuTitle(isRightToLeft: layoutDirection == .rightToLeft)) {
+            store.addToSplit(tab.id, beside: focused, edge: edge)
+          }
         }
       }
       .disabled(store.selectedSplitIsFull)
     }
-    Menu("Split View with…") {
+    Menu(ShellL10n.string("Split View with…")) {
       ForEach(space.tabs.filter { $0.id != tab.id }) { candidate in
         Button(candidate.title) { store.splitTabs(tab.id, candidate.id) }
       }
     }
     if space.splits.contains(where: { $0.tabIDs.contains(tab.id) }) {
-      Button("Separate from Split") { store.unsplitTab(tab.id) }
+      Button(ShellL10n.string("Separate from Split")) { store.unsplitTab(tab.id) }
     }
   }
 
@@ -737,15 +846,39 @@ struct BrowserSidebar: View {
     let space = store.session.selectedSpace
     let boundary = index.boundary(for: tab.id)
     return tabRowContent(tab, in: space)
-      .draggable(
-        store.beginTabDrag(
-          tab.id, spaceID: space.id,
-          fromSplitPane: space.splits.contains(where: { $0.tabIDs.contains(tab.id) }))
-      )
       .dropDestination(for: SidebarTransfer.self) { items, point in
         guard items.count == 1, let item = items.first else { return false }
         let sourceID: UUID
-        if case .tab(_, _, let id) = item { sourceID = id } else { return false }
+        switch item {
+        case .tab(_, _, let id): sourceID = id
+        case .split(_, let source, let id):
+          guard
+            let leader = store.session.spaces.first(where: { $0.id == source })?
+              .splits.first(where: { $0.id == id })?.tabIDs.first
+          else {
+            return false
+          }
+          sourceID = leader
+        case .favorite, .url:
+          return store.acceptSidebarDrop(
+            item, into: space.id, before: tab.id, pinned: tab.isPinned, folderID: tab.folderID)
+        default: return false
+        }
+        // A drop can reach the main actor before the hover task resumes after its deadline.
+        let heldOverTab =
+          folderHoverTab == tab.id
+          && folderHoverDeadline.map { ContinuousClock.now >= $0 } == true
+        if folderDropReady == tab.id || heldOverTab {
+          defer { cancelFolderHover() }
+          guard
+            let folder = store.createFolderFromDrop(
+              item, onto: tab.id, name: ShellL10n.string("Untitled"))
+          else { return false }
+          folderDraft = SidebarFolderDraft(
+            route: .edit(spaceID: space.id, folderID: folder), section: .pinned)
+          folderNameIsFocused = true
+          return true
+        }
         if let split = space.splits.first(where: { $0.tabIDs.contains(tab.id) }),
           split.tabIDs.contains(sourceID), sourceID != tab.id
         {
@@ -753,7 +886,7 @@ struct BrowserSidebar: View {
         }
         let joinsSplit = space.splits.contains(where: { $0.tabIDs.contains(tab.id) })
         let intent = SidebarTabDropIntent.at(point.y, joinsSplit: joinsSplit)
-        if sourceID != tab.id, intent.combinesTabs,
+        if case .tab = item, sourceID != tab.id, intent.combinesTabs,
           space.tabs.contains(where: { $0.id == sourceID })
         {
           return store.dropTabIntoSidebarSplit(item, target: tab.id)
@@ -771,42 +904,57 @@ struct BrowserSidebar: View {
         targetedTab = targetedTab.updatingTarget(tab.id, isActive: targeted)
         if !targeted { targetedTabIntent = nil }
       }
-      .onContinuousHover { phase in
-        guard targetedTab == tab.id else { return }
-        switch phase {
-        case .active(let location):
-          targetedTabIntent = SidebarTabDropIntent.at(
-            location.y, joinsSplit: space.splits.contains(where: { $0.tabIDs.contains(tab.id) }))
+      .onDropSessionUpdated { drop in
+        switch drop.phase {
+        case .entering, .active:
+          if folderHoverSession != drop.id || folderHoverTab != tab.id {
+            cancelFolderHover()
+            folderHoverSession = drop.id
+            folderHoverTab = tab.id
+          }
+          let intent = SidebarTabDropIntent.at(
+            drop.location.y,
+            joinsSplit: space.splits.contains(where: { $0.tabIDs.contains(tab.id) }))
+          targetedTabIntent = intent
+          if intent.combinesTabs {
+            scheduleFolderHover(tab, in: space)
+          } else {
+            cancelFolderHover()
+          }
+        case .exiting, .ended(.cancel), .ended(.forbidden), .dataTransferCompleted:
+          if folderHoverSession == drop.id, folderHoverTab == tab.id { cancelFolderHover() }
         case .ended:
-          targetedTabIntent = nil
+          // Transfer decoding can finish after isTargeted becomes false. Keep the offer
+          // until the action consumes it, or this session completes/cancels.
+          break
+        @unknown default:
+          cancelFolderHover()
         }
       }
       .overlay(alignment: .top) {
-        if targetedTab == tab.id { tabDropIndicator(targetedTabIntent ?? .reorderBefore) }
+        if folderDropReady == tab.id {
+          SidebarDropHint(
+            title: ShellL10n.string("Create folder"), symbol: "folder.badge.plus", isTargeted: true)
+        } else if targetedTab == tab.id {
+          tabDropIndicator(targetedTabIntent ?? .reorderBefore)
+        }
       }
-      .animation(sidebarReduceMotion ? nil : .easeOut(duration: 0.12), value: targetedTab)
-      .dropDestination(for: ProfileFavoriteDrag.self) { items, _ in
-        guard items.count == 1 else { return false }
-        return moveFavoriteDrop(
-          items[0], space: space, before: tab.id, pinned: tab.isPinned, folderID: tab.folderID)
-      }
-      .dropDestination(for: URL.self) { urls, _ in
-        guard urls.count == 1 else { return false }
-        return openDroppedURL(
-          urls[0], space: space, before: tab.id, pinned: tab.isPinned, folderID: tab.folderID)
-      }
+      .animation(sidebarMotion, value: targetedTab)
+      .animation(sidebarMotion, value: folderDropReady)
       .contextMenu {
         splitMenu(for: tab, in: space)
-        Button("Add to Favorites") {
+        Button(ShellL10n.string("Add to Favorites")) {
           addToFavorites(tabID: tab.id, spaceID: space.id, profileID: space.profileID)
         }
         .disabled(
           store.sheet != nil || store.commandIsOpen || !NavigationInput.isWebURL(tab.url))
         Divider()
-        Button(tab.isPinned ? "Unpin tab" : "Pin tab") { store.togglePin(tab.id) }
-        Button("Move up") { shiftTab(tab, in: space, by: -1) }.disabled(boundary.isFirst)
-        Button("Move down") { shiftTab(tab, in: space, by: 1) }.disabled(boundary.isLast)
-        Menu("Move to Folder") {
+        Button(ShellL10n.string(tab.isPinned ? "Unpin tab" : "Pin tab")) { store.togglePin(tab.id) }
+        Button(ShellL10n.string("Move up")) { shiftTab(tab, in: space, by: -1) }.disabled(
+          boundary.isFirst)
+        Button(ShellL10n.string("Move down")) { shiftTab(tab, in: space, by: 1) }.disabled(
+          boundary.isLast)
+        Menu(ShellL10n.string("Move to Folder")) {
           ForEach(space.folders) { folder in
             Button(folderLabel(folder.id, in: space)) {
               store.moveTab(tab.id, from: space.id, to: space.id, folderID: folder.id)
@@ -814,23 +962,23 @@ struct BrowserSidebar: View {
           }
           if tab.folderID != nil {
             Divider()
-            Button("Outside folders") {
+            Button(ShellL10n.string("Outside folders")) {
               store.moveTab(tab.id, from: space.id, to: space.id, pinned: true)
             }
           }
-          if space.folders.isEmpty { Text("Create a folder first") }
+          if space.folders.isEmpty { ShellL10n.text("Create a folder first") }
         }
-        Menu("Move to Space") {
+        Menu(ShellL10n.string("Move to Space")) {
           let destinations = store.session.spaces.filter {
             $0.id != space.id && $0.profileID == space.profileID
           }
-          if destinations.isEmpty { Text("No other spaces share this profile") }
+          if destinations.isEmpty { ShellL10n.text("No other spaces share this profile") }
           ForEach(destinations) { target in
             Button(target.name) { store.moveTab(tab.id, from: space.id, to: target.id) }
           }
         }
         Divider()
-        Button("Close tab") { store.closeTab(tab.id) }
+        Button(ShellL10n.string("Close tab")) { store.closeTab(tab.id) }
       }
   }
 
@@ -887,42 +1035,9 @@ struct BrowserSidebar: View {
       } isTargeted: { targeted in
         targetedSection = targetedSection.updatingTarget(zone, isActive: targeted)
       }
-      .dropDestination(for: ProfileFavoriteDrag.self) { items, _ in
-        guard items.count == 1 else { return false }
-        return moveFavoriteDrop(items[0], space: store.session.selectedSpace, pinned: pinned)
-      }
-      .dropDestination(for: URL.self) { urls, _ in
-        guard urls.count == 1 else { return false }
-        return openDroppedURL(urls[0], space: store.session.selectedSpace, pinned: pinned)
-      }
       .animation(sidebarReduceMotion ? nil : .easeOut(duration: 0.12), value: targetedSection)
-      .animation(sidebarReduceMotion ? nil : .smooth(duration: 0.2), value: showsHint)
+      .animation(sidebarMotion, value: showsHint)
       .accessibilityHidden(true)
-  }
-
-  private func moveFavoriteDrop(
-    _ payload: ProfileFavoriteDrag, space: BrowserSpace, before: UUID? = nil,
-    pinned: Bool, folderID: UUID? = nil
-  ) -> Bool {
-    guard payload.dragSessionID == store.dragSessionID, payload.profileID == space.profileID,
-      payload.favoriteIDs == store.profileFavorites.map(\.id),
-      payload.favoriteIDs.contains(payload.favoriteID),
-      store.session.selectedSpaceID == space.id
-    else { return false }
-    return store.restoreFavoriteAsTab(
-      payload.favoriteID, in: space.id, before: before, pinned: pinned, folderID: folderID)
-  }
-
-  private func openDroppedURL(
-    _ url: URL, space: BrowserSpace, before: UUID? = nil, pinned: Bool, folderID: UUID? = nil
-  ) -> Bool {
-    guard NavigationInput.isWebURL(url), store.session.selectedSpaceID == space.id,
-      store.sheet == nil, !store.commandIsOpen
-    else { return false }
-    store.perform(.open(url))
-    guard case .tab(let tab) = store.session.selectedPage else { return false }
-    return store.moveTab(
-      tab.id, from: space.id, to: space.id, before: before, pinned: pinned, folderID: folderID)
   }
 
   private func shiftTab(_ tab: BrowserTab, in space: BrowserSpace, by offset: Int) {
@@ -961,13 +1076,20 @@ struct BrowserSidebar: View {
       store.toggleFolder(folder.id, in: space.id)
     } label: {
       HStack(spacing: 8) {
-        Image(systemName: folder.isCollapsed ? "chevron.right" : "chevron.down").font(
+        Image(systemName: folder.isCollapsed ? "chevron.forward" : "chevron.down").font(
           .system(size: 9, weight: .semibold)
         )
         .frame(width: 10)
         Image(systemName: folder.isCollapsed ? "folder" : "folder.fill").font(.system(size: 12))
-        Text(folder.name).font(.system(size: 13, weight: active ? .semibold : .regular)).lineLimit(
-          1)
+        VStack(alignment: .leading, spacing: 2) {
+          Text(folder.name).font(.system(size: 13, weight: active ? .semibold : .regular))
+            .lineLimit(1)
+          if !space.tabs.contains(where: { $0.folderID == folder.id }),
+            !space.folders.contains(where: { $0.parentID == folder.id })
+          {
+            ShellL10n.text("Drop tabs here").font(.system(size: 10)).foregroundStyle(.secondary)
+          }
+        }
         Spacer(minLength: 0)
         if folder.isCollapsed && active {
           Circle().fill(Color.accentColor).frame(width: 5, height: 5)
@@ -975,11 +1097,20 @@ struct BrowserSidebar: View {
       }.padding(.vertical, 8).padding(.horizontal, 10).contentShape(Rectangle())
     }
     .padding(.leading, indentation(depth))
-    .accessibilityLabel("\(folder.name), \(folder.isCollapsed ? "collapsed" : "expanded")")
+    .sidebarPageMotion(id: folder.id, reduceMotion: sidebarReduceMotion)
+    .accessibilityLabel(
+      ShellL10n.format(
+        "%@, %@",
+        arguments: [
+          .string(folder.name),
+          .string(ShellL10n.string(folder.isCollapsed ? "collapsed" : "expanded")),
+        ])
+    )
     .help(folderLabel(folder.id, in: space))
     .draggable(
-      SidebarTransfer.folder(
-        sessionID: store.dragSessionID, sourceSpaceID: space.id, folderID: folder.id)
+      store.beginSidebarDrag(
+        .folder(
+          sessionID: store.dragSessionID, sourceSpaceID: space.id, folderID: folder.id))
     )
     .dropDestination(for: SidebarTransfer.self) { items, _ in
       guard items.count == 1, let item = items.first else { return false }
@@ -988,41 +1119,33 @@ struct BrowserSidebar: View {
     } isTargeted: { targeted in
       targetedFolder = targetedFolder.updatingTarget(folder.id, isActive: targeted)
     }
-    .dropDestination(for: ProfileFavoriteDrag.self) { items, _ in
-      guard items.count == 1 else { return false }
-      return moveFavoriteDrop(items[0], space: space, pinned: true, folderID: folder.id)
-    }
-    .dropDestination(for: URL.self) { urls, _ in
-      guard urls.count == 1 else { return false }
-      return openDroppedURL(urls[0], space: space, pinned: true, folderID: folder.id)
-    }
     .background(
       targetedFolder == folder.id ? Color.accentColor.opacity(0.16) : .clear,
       in: RoundedRectangle(cornerRadius: 6)
     )
     .contextMenu {
-      Button("Edit folder…") {
+      Button(ShellL10n.string("Edit folder…")) {
         store.showFolderEditor(.edit(spaceID: space.id, folderID: folder.id))
       }
-      Button("New Folder Inside") {
+      Button(ShellL10n.string("New Folder Inside")) {
         beginFolderDraft(parentID: folder.id, section: folder.isPinned ? .pinned : .today)
       }
       Divider()
-      Button("Move up") { shiftFolder(folder, in: space, by: -1) }.disabled(
+      Button(ShellL10n.string("Move up")) { shiftFolder(folder, in: space, by: -1) }.disabled(
         siblings.first?.id == folder.id)
-      Button("Move down") { shiftFolder(folder, in: space, by: 1) }.disabled(
+      Button(ShellL10n.string("Move down")) { shiftFolder(folder, in: space, by: 1) }.disabled(
         siblings.last?.id == folder.id)
       if folder.parentID != nil {
-        Button("Move out one level") {
+        Button(ShellL10n.string("Move out one level")) {
           let parent = space.folders.first { $0.id == folder.parentID }
           store.moveFolder(folder.id, from: space.id, to: space.id, parentID: parent?.parentID)
         }
       }
-      Menu("Move to Space") {
+      Menu(ShellL10n.string("Move to Space")) {
         let destinations = store.session.spaces.filter {
           $0.id != space.id && $0.profileID == space.profileID
         }
-        if destinations.isEmpty { Text("No other spaces share this profile") }
+        if destinations.isEmpty { ShellL10n.text("No other spaces share this profile") }
         ForEach(destinations) { target in
           Button(target.name) { store.moveFolder(folder.id, from: space.id, to: target.id) }
         }

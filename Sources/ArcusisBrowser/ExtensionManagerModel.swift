@@ -66,6 +66,13 @@ final class ExtensionManagerModel {
     pinnedIDs.compactMap { id in extensions.first { $0.id == id && $0.enabled } }
   }
 
+  func help(for item: ManagedExtension, tabID: UUID?) -> String {
+    let title = tabID.flatMap {
+      runtime?.extensionActionTitle(forID: item.id, tabID: $0.uuidString)
+    }
+    return item.help(actionTitle: title)
+  }
+
   func refresh() {
     guard let runtime, let preferences,
       ExtensionManagementOperation.isValidProfileID(profileID.uuidString)

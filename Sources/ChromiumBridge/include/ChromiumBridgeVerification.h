@@ -18,15 +18,44 @@ FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeExternalAppLaunchAuditForTest
 /// The runtime applies it before every launch. Exposed so tests can exercise the edit directly.
 FOUNDATION_EXPORT BOOL ARCDisableBackgroundMode(NSURL *userDataDirectory);
 
+/// Verification callback transition: a pending/rejected dialog must retain its CDP hold.
+FOUNDATION_EXPORT void ARCCompletePrivateQuitDialogCancellation(
+  BOOL ownerCurrent, NSString * _Nullable dialogError, void (^releaseHold)(void), void (^reject)(void));
+
+/// The shipped media reporter, for deterministic JavaScript event-order tests without an engine.
+FOUNDATION_EXPORT NSString *ARCMediaSessionPageScript(void);
+
 @interface ARCChromiumRuntime (Verification)
+/// Grants geolocation only on the selected disposable Inspector loopback fixture.
+- (void)grantProbeGeolocationInTabID:(NSString *)tabID completion:(void (NS_SWIFT_UI_ACTOR ^)(NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
+- (void)inspectorProbePointerInTabID:(NSString *)tabID selector:(NSString *)selector
+                            frames:(NSArray<NSString *> *)frames click:(BOOL)click modifiers:(NSInteger)modifiers
+                        completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion NS_SWIFT_UI_ACTOR;
+- (void)inspectorProbeKeyInTabID:(NSString *)tabID key:(NSString *)key
+                    completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion NS_SWIFT_UI_ACTOR;
+/// Opens the engine's own Inspect menu command on an authored loopback page, offscreen.
+- (BOOL)inspectProbeElementInTabID:(NSString *)tabID;
+@property(readonly) BOOL probeInspectFound;
+@property(readonly, nullable) NSDictionary *probeInspectAudit;
 /// Test-only bounded audit. Requires explicit external-probe switch, testing mode, and owned marked root.
 - (nullable NSDictionary *)probeExternalAppLaunchAuditForURL:(NSString *)url;
 /// Captures only the disposable probe's own tab, without a remote debugging socket.
 - (void)captureProbeTabID:(NSString *)tabID completion:(void (^)(NSData * _Nullable))completion;
+/// Marketing capture only: captures the exact native viewport, excluding content below the window.
+/// Requires the explicit capture flag and an owned disposable probe root.
+- (void)captureMarketingProbeTabID:(NSString *)tabID completion:(void (^)(NSData * _Nullable))completion;
 - (void)evaluatePrivateProbeTabID:(NSString *)tabID script:(NSString *)script
                        completion:(void (^)(NSString * _Nullable))completion;
+- (void)probePrivateNetworkControlsForTabID:(NSString *)tabID completion:(void (^)(BOOL))completion;
+- (nullable NSDictionary *)privatePrivacyStatusForProbeTabID:(NSString *)tabID;
+- (nullable NSDictionary *)privatePrivacyPreferencesForContextID:(NSString *)contextID;
+- (void)evaluatePrivacyProbeTabID:(NSString *)tabID script:(NSString *)script
+                          completion:(void (^)(NSString * _Nullable))completion;
 - (BOOL)attemptCancelledPrivateProbeCloseID:(NSString *)windowID;
 - (nullable NSDictionary *)privateProbeAuditForContextID:(NSString *)contextID;
+/// The selected owned loopback tab is loaded and attached; does not start a capture.
+- (BOOL)privateProbeCaptureIsReadyForTabID:(NSString *)tabID windowID:(NSString *)windowID
+                              contextID:(NSString *)contextID;
 - (void)capturePrivateProbeTabID:(NSString *)tabID windowID:(NSString *)windowID
                        contextID:(NSString *)contextID
                       completion:(void (^)(NSData * _Nullable, NSString * _Nullable))completion;

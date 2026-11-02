@@ -1,7 +1,9 @@
 .build/
 .swiftpm/
 build/
+/Notebook/Hebrew_String_Inventory.csv
 .DS_Store
+node_modules/
 .venv/
 __pycache__/
 *.xcuserstate

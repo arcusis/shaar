@@ -11,6 +11,7 @@ struct FavoriteTile {
   let title: String
   let url: URL
   let image: NSImage?
+  var pageID: UUID? = nil
 }
 
 struct ProfileFavoriteDrag: Codable, Transferable, Equatable {
@@ -40,9 +41,20 @@ struct ProfileFavoritesGrid: View {
   let onMoveBefore: (UUID, UUID?) -> Void
   let onTabDrop: (SidebarTransfer, UUID?) -> Bool
   let accessibilityOverrides: ProfileFavoritesAccessibilityOverrides?
+  let activeDrag: SidebarTransfer?
+  let dropRefusal: String?
+  let onBeginDrag: (SidebarTransfer) -> SidebarTransfer
+  @Namespace private var tileNamespace
+  @Environment(\.sidebarMotionNamespace) private var sharedNamespace
+  @State private var gridWidth: CGFloat = 212
+  @State private var insertionIndex: Int?
+  @State private var draggedOut = false
+  @State private var isTargeted = false
+  @State private var multipleItems = false
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+  @Environment(\.layoutDirection) private var layoutDirection
   @State private var hoveredID: UUID?
 
   init(
@@ -55,8 +67,14 @@ struct ProfileFavoritesGrid: View {
     onRemove: @escaping (UUID) -> Void,
     onMoveBefore: @escaping (UUID, UUID?) -> Void,
     onTabDrop: @escaping (SidebarTransfer, UUID?) -> Bool = { _, _ in false },
-    accessibilityOverrides: ProfileFavoritesAccessibilityOverrides? = nil
+    accessibilityOverrides: ProfileFavoritesAccessibilityOverrides? = nil,
+    activeDrag: SidebarTransfer? = nil,
+    dropRefusal: String? = nil,
+    onBeginDrag: @escaping (SidebarTransfer) -> SidebarTransfer = { $0 }
   ) {
+    self.activeDrag = activeDrag
+    self.dropRefusal = dropRefusal
+    self.onBeginDrag = onBeginDrag
     self.favorites = favorites
     self.selectedID = selectedID
     self.profileID = profileID
@@ -69,57 +87,175 @@ struct ProfileFavoritesGrid: View {
     self.accessibilityOverrides = accessibilityOverrides
   }
 
-  /// Arc widens the grid as favorites are added: 2 per row, then 3, then 4 (up to 4 x 4).
-  static func columnCount(for count: Int) -> Int {
-    if count <= 4 { return 2 }
-    return count <= 9 ? 3 : 4
+  private var draggedFavoriteID: UUID? {
+    guard case .favorite(let payload) = activeDrag,
+      payload.profileID == profileID, payload.dragSessionID == dragSessionID,
+      payload.favoriteIDs == favorites.map(\.id)
+    else { return nil }
+    return payload.favoriteID
   }
 
-  private var columns: [GridItem] {
-    Array(
-      repeating: GridItem(.flexible(minimum: 0, maximum: .infinity), spacing: 8),
-      count: Self.columnCount(for: favorites.count))
+  private var remainingFavorites: [FavoriteTile] {
+    favorites.filter { $0.id != draggedFavoriteID }
   }
 
-  static func tileHeight(columns: Int) -> CGFloat {
-    switch columns {
-    case 2: 54
-    case 3: 48
-    default: 44
-    }
+  private var refusal: String? {
+    if multipleItems { return ShellL10n.string("Single tabs only") }
+    return dropRefusal
   }
 
-  private var tileHeight: CGFloat {
-    Self.tileHeight(columns: Self.columnCount(for: favorites.count))
+  private var motionReduced: Bool { reduceMotion || accessibilityOverrides?.reduceMotion == true }
+  private var motion: Animation {
+    motionReduced ? .easeOut(duration: 0.16) : .spring(response: 0.32, dampingFraction: 0.82)
+  }
+
+  private enum EntryID: Hashable {
+    case tile(UUID)
+    case gap
+  }
+  private var entries: [EntryID] {
+    var ids = (insertionIndex != nil || draggedOut ? remainingFavorites : favorites)
+      .map { EntryID.tile($0.id) }
+    if let insertionIndex { ids.insert(.gap, at: min(insertionIndex, ids.count)) }
+    return ids
+  }
+
+  private func destination(at point: CGPoint, width: CGFloat) -> Int {
+    FavoritesGridLayout.insertionIndex(
+      at: point, count: remainingFavorites.count + 1, width: width,
+      rtl: layoutDirection == .rightToLeft)
   }
 
   var body: some View {
-    let motionReduced = reduceMotion || accessibilityOverrides?.reduceMotion == true
     let transparencyReduced =
       reduceTransparency || accessibilityOverrides?.reduceTransparency == true
-    Group {
-      if !favorites.isEmpty {
-        LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
-          ForEach(favorites, id: \.id) { favorite in
-            tile(favorite, reduceMotion: motionReduced, reduceTransparency: transparencyReduced)
-              .id(favorite.id)
+    VStack(spacing: 0) {
+      FavoritesGridLayout {
+        ForEach(entries, id: \.self) { entry in
+          switch entry {
+          case .tile(let id):
+            if let favorite = favorites.first(where: { $0.id == id }) {
+              tile(favorite, reduceMotion: motionReduced, reduceTransparency: transparencyReduced)
+                .sidebarPageMotion(id: favorite.pageID ?? favorite.id, reduceMotion: motionReduced)
+
+            }
+          case .gap:
+            RoundedRectangle(cornerRadius: 12)
+              .fill(Color.accentColor.opacity(0.1))
+              .overlay {
+                RoundedRectangle(cornerRadius: 12)
+                  .strokeBorder(
+                    Color.accentColor, style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+              }
+              .accessibilityLabel(ShellL10n.string("Drop to add to Favorites"))
+              .transition(.opacity)
           }
         }
-        .padding(.vertical, 1)
-        .accessibilityLabel("Favorite pages")
-        .coordinateSpace(name: "sidebarFavoriteViewport")
-        .background {
-          GeometryReader { geometry in
-            Color.clear.preference(
-              key: SidebarFavoriteRevealFramesPreferenceKey.self,
-              value: SidebarRevealFrames(viewport: CGRect(origin: .zero, size: geometry.size)))
-          }
+      }
+      // Replacing the layout under Reduce Motion crossfades instead of interpolating frames.
+      .id(motionReduced ? String(describing: entries) : "favorites")
+      .transition(.opacity)
+      .padding(.vertical, favorites.isEmpty && insertionIndex == nil ? 0 : 1)
+      .frame(minHeight: entries.isEmpty ? (activeDrag == nil ? 8 : 44) : 0)
+      .contentShape(Rectangle())
+      .accessibilityLabel(SettingsL10n.string("Favorite pages"))
+      .coordinateSpace(name: "sidebarFavoriteViewport")
+      .background {
+        GeometryReader { geometry in
+          Color.clear.preference(
+            key: SidebarFavoriteRevealFramesPreferenceKey.self,
+            value: SidebarRevealFrames(viewport: CGRect(origin: .zero, size: geometry.size)))
+        }
+      }
+      .onGeometryChange(for: CGFloat.self) {
+        $0.size.width
+      } action: {
+        gridWidth = $0
+      }
+      .dropDestination(for: SidebarTransfer.self) { items, point in
+        defer { clearPreview() }
+        guard items.count == 1, let item = items.first, refusal == nil else { return false }
+        let remaining: [FavoriteTile]
+        if case .favorite(let payload) = item {
+          remaining = favorites.filter { $0.id != payload.favoriteID }
+        } else {
+          remaining = favorites
+        }
+        let index = FavoritesGridLayout.insertionIndex(
+          at: point, count: remaining.count + 1, width: gridWidth,
+          rtl: layoutDirection == .rightToLeft)
+        let before = remaining.indices.contains(index) ? remaining[index].id : nil
+        if case .favorite(let payload) = item {
+          guard
+            Self.accepts(
+              payload, before: before, favorites: favorites,
+              profileID: profileID, dragSessionID: dragSessionID)
+          else { return false }
+          onMoveBefore(payload.favoriteID, before)
+          return true
+        }
+        return onTabDrop(item, before)
+      }
+      .onDropSessionUpdated { drop in
+        switch drop.phase {
+        case .entering, .active:
+          isTargeted = true
+          multipleItems = drop.itemsCount != 1
+          draggedOut = false
+          insertionIndex =
+            refusal == nil
+            ? destination(at: drop.location, width: gridWidth) : nil
+        case .exiting:
+          isTargeted = false
+          insertionIndex = nil
+          draggedOut = draggedFavoriteID != nil
+        case .ended(.cancel), .ended(.forbidden), .dataTransferCompleted:
+          clearPreview()
+        case .ended:
+          break
+        @unknown default:
+          clearPreview()
+        }
+      }
+      .dropConfiguration { _ in
+        DropConfiguration(operation: refusal == nil ? .move : .forbidden)
+      }
+      .overlay {
+        if entries.isEmpty, activeDrag != nil, !isTargeted {
+          SidebarDropHint(
+            title: refusal ?? ShellL10n.string("Drop to add to Favorites"),
+            symbol: refusal == nil ? "star" : "nosign", isTargeted: false)
+        }
+        if isTargeted, let refusal {
+          Label(refusal, systemImage: "nosign")
+            .font(.caption).foregroundStyle(.red).padding(6)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6))
+            .allowsHitTesting(false)
+            .transition(.opacity)
         }
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
-    .animation(motionReduced ? nil : .easeOut(duration: 0.12), value: hoveredID)
-    .animation(motionReduced ? nil : .smooth(duration: 0.25), value: favorites.count)
+    .environment(\.sidebarMotionNamespace, sharedNamespace ?? tileNamespace)
+    .preference(
+      key: FavoritesGridPresentationKey.self,
+      value: FavoritesGridPresentation(
+        ids: entries.map { if case .tile(let id) = $0 { id } else { nil } },
+        refusal: isTargeted ? refusal : nil)
+    )
+    .animation(motion, value: entries)
+    .animation(motion, value: isTargeted)
+    .animation(motion, value: activeDrag != nil)
+    .onChange(of: activeDrag) { _, item in
+      if item == nil { clearPreview() }
+    }
+  }
+
+  private func clearPreview() {
+    insertionIndex = nil
+    draggedOut = false
+    isTargeted = false
+    multipleItems = false
   }
 
   private func tile(
@@ -145,31 +281,14 @@ struct ProfileFavoritesGrid: View {
       }
       .buttonStyle(ProfileFavoriteTileButtonStyle(reduceMotion: reduceMotion))
       .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .help("\(favorite.title)\n\(favorite.url.absoluteString)")
-      .accessibilityLabel("\(favorite.title), \(favorite.url.absoluteString)")
+      .help(
+        SettingsL10n.format("%@\n%@", .string(favorite.title), .string(favorite.url.absoluteString))
+      )
+      .accessibilityLabel(
+        SettingsL10n.format("%@, %@", .string(favorite.title), .string(favorite.url.absoluteString))
+      )
       .accessibilityAddTraits(isSelected ? .isSelected : [])
-      .draggable(dragPayload(for: favorite))
-      .dropDestination(for: ProfileFavoriteDrag.self) { drops, point in
-        guard drops.count == 1, let payload = drops.first else { return false }
-        let beforeID = Self.dropTargetBefore(
-          targetID: favorite.id, dropX: point.x, tileWidth: geometry.size.width,
-          favorites: favorites)
-        guard
-          Self.accepts(
-            payload, before: beforeID, favorites: favorites,
-            profileID: profileID, dragSessionID: dragSessionID)
-        else { return false }
-        onMoveBefore(payload.favoriteID, beforeID)
-        return true
-      }
-      .dropDestination(for: SidebarTransfer.self) { items, point in
-        guard items.count == 1, let item = items.first else { return false }
-        return onTabDrop(
-          item,
-          Self.dropTargetBefore(
-            targetID: favorite.id, dropX: point.x, tileWidth: geometry.size.width,
-            favorites: favorites))
-      }
+      .draggable(onBeginDrag(.favorite(dragPayload(for: favorite))))
       .onHover { isHovered in
         if isHovered {
           hoveredID = favorite.id
@@ -178,16 +297,18 @@ struct ProfileFavoritesGrid: View {
         }
       }
       .contextMenu {
-        Button("Move Left") { moveLeft(favorite.id) }
-          .disabled(index(of: favorite.id) == 0)
-        Button("Move Right") { moveRight(favorite.id) }
-          .disabled(index(of: favorite.id) == favorites.count - 1)
+        Button(SettingsL10n.string("Move Left")) { movePhysical(favorite.id, left: true) }
+          .disabled(isPhysicalMoveUnavailable(favorite.id, left: true))
+        Button(SettingsL10n.string("Move Right")) { movePhysical(favorite.id, left: false) }
+          .disabled(isPhysicalMoveUnavailable(favorite.id, left: false))
         Divider()
-        Button("Reset to Original Address") { onReset(favorite.id) }
-        Button("Remove Favorite (keeps page)", role: .destructive) { onRemove(favorite.id) }
+        Button(SettingsL10n.string("Reset to Original Address")) { onReset(favorite.id) }
+        Button(SettingsL10n.string("Remove Favorite (keeps page)"), role: .destructive) {
+          onRemove(favorite.id)
+        }
       }
     }
-    .frame(height: tileHeight)
+    .frame(height: FavoritesGridLayout.height)
     .background {
       GeometryReader { geometry in
         if isSelected {
@@ -260,11 +381,30 @@ struct ProfileFavoritesGrid: View {
     onMoveBefore(favoriteID, beforeNext)
   }
 
+  private func movePhysical(_ favoriteID: UUID, left: Bool) {
+    let moveLeftInOrder = Self.moveLeftInOrder(
+      physicalLeft: left, isRightToLeft: layoutDirection == .rightToLeft)
+    if moveLeftInOrder { moveLeft(favoriteID) } else { moveRight(favoriteID) }
+  }
+
+  private func isPhysicalMoveUnavailable(_ favoriteID: UUID, left: Bool) -> Bool {
+    guard let index = index(of: favoriteID) else { return true }
+    let moveLeftInOrder = Self.moveLeftInOrder(
+      physicalLeft: left, isRightToLeft: layoutDirection == .rightToLeft)
+    return moveLeftInOrder ? index == 0 : index == favorites.count - 1
+  }
+
+  static func moveLeftInOrder(physicalLeft: Bool, isRightToLeft: Bool) -> Bool {
+    physicalLeft != isRightToLeft
+  }
+
   static func dropTargetBefore(
-    targetID: UUID, dropX: CGFloat, tileWidth: CGFloat, favorites: [FavoriteTile]
+    targetID: UUID, dropX: CGFloat, tileWidth: CGFloat, favorites: [FavoriteTile],
+    isRightToLeft: Bool = false
   ) -> UUID? {
     guard let targetIndex = favorites.firstIndex(where: { $0.id == targetID }) else { return nil }
-    if dropX < tileWidth / 2 { return targetID }
+    let logicalDropX = isRightToLeft ? tileWidth - dropX : dropX
+    if logicalDropX < tileWidth / 2 { return targetID }
     let nextIndex = targetIndex + 1
     return favorites.indices.contains(nextIndex) ? favorites[nextIndex].id : nil
   }

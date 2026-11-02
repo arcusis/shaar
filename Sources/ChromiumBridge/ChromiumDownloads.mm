@@ -3,10 +3,11 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #import "ChromiumDownloads.h"
+#import "include/ChromiumBridge.h"
 
 static NSError *DownloadError(NSString *message) {
   return [NSError errorWithDomain:@"com.arcusis.browser.downloads" code:1
-                        userInfo:@{NSLocalizedDescriptionKey: message}];
+                        userInfo:@{NSLocalizedDescriptionKey: ARCBridgeLocalizedString(message)}];
 }
 
 @implementation ARCDownloadService {

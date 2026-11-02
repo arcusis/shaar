@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #import "ChromiumEngineServices.h"
+#import "include/ChromiumBridge.h"
 #import "../../ThirdParty/ArdiaCore/ac_engine.h"
 #include <dlfcn.h>
 #include <string.h>
@@ -16,7 +17,7 @@ static NSDictionary *ServiceJSON(const char *json) {
 
 static void ServiceReply(void *context, const char *json) {
   void (^done)(NSDictionary *) = (__bridge_transfer void (^)(NSDictionary *))context;
-  done(ServiceJSON(json) ?: @{@"error": @"Invalid engine service response."});
+  done(ServiceJSON(json) ?: @{@"error": ARCBridgeLocalizedString(@"Invalid engine service response.")});
 }
 
 @interface ARCEngineServices ()
@@ -44,19 +45,21 @@ static void ServiceEvent(void *context, const char *topic, const char *json) {
   auto version = (ac_engine_abi_version_t)dlsym(library, "ac_engine_abi_version");
   _setSink = (ac_engine_set_event_sink_t)dlsym(library, "ac_engine_set_event_sink");
   NSArray *methods = @[@"downloads.list", @"downloads.pause", @"downloads.resume", @"downloads.cancel", @"downloads.remove",
-    @"bookmarks.tree", @"bookmarks.apply", @"bookmarks.watch", @"history.query", @"history.delete_urls", @"history.watch"];
+    @"bookmarks.tree", @"bookmarks.apply", @"bookmarks.watch", @"history.query", @"history.delete_urls", @"history.watch",
+    @"site_settings.get", @"site_settings.set", @"site_data.clear", @"browsing_data.clear"];
   NSArray *privateMethods = @[@"private.tracker.rules.set", @"private.privacy.get",
-    @"private.tracker.site.set", @"private.tracker.site.get", @"site.settings.set",
-    @"site.settings.get", @"site.settings.set.default"];
+    @"private.tracker.site.set", @"private.tracker.site.get", @"site_settings.set_default"];
   NSMutableDictionary *calls = [NSMutableDictionary dictionary];
   for (NSString *method in [methods arrayByAddingObjectsFromArray:privateMethods]) {
     NSString *symbol = [@"ac_" stringByAppendingString:[method stringByReplacingOccurrencesOfString:@"." withString:@"_"]];
     void *address = dlsym(library, symbol.UTF8String);
     if (address) calls[method] = [NSValue valueWithPointer:address];
   }
-  if (!version || version() != AC_ENGINE_ABI_VERSION || !_setSink || calls.count != methods.count) {
+  BOOL mandatoryAvailable = YES;
+  for (NSString *method in methods) mandatoryAvailable = mandatoryAvailable && calls[method] != nil;
+  if (!version || version() != AC_ENGINE_ABI_VERSION || !_setSink || !mandatoryAvailable) {
     if (error) *error = [NSError errorWithDomain:@"com.arcusis.browser.services" code:1
-      userInfo:@{NSLocalizedDescriptionKey: @"The engine does not expose the pinned profile service ABI."}];
+      userInfo:@{NSLocalizedDescriptionKey: ARCBridgeLocalizedString(@"The engine does not expose the pinned profile service ABI.")}];
     return nil;
   }
   _calls = calls;
@@ -68,8 +71,8 @@ static void ServiceEvent(void *context, const char *topic, const char *json) {
 - (BOOL)privatePrivacyAvailable {
   return _calls[@"private.tracker.rules.set"] && _calls[@"private.privacy.get"] &&
     _calls[@"private.tracker.site.set"] && _calls[@"private.tracker.site.get"] &&
-    _calls[@"site.settings.set"] && _calls[@"site.settings.get"] &&
-    _calls[@"site.settings.set.default"];
+    _calls[@"site_settings.set"] && _calls[@"site_settings.get"] &&
+    _calls[@"site_settings.set_default"];
 }
 
 - (void)preparePrivateTrackerRulesForProfileID:(NSString *)profileID
@@ -109,7 +112,7 @@ static void ServiceEvent(void *context, const char *topic, const char *json) {
       (owner && ![owner isEqualToString:profileID]) ||
       (_paths[profileID] && ![_paths[profileID] isEqualToString:canonical])) {
     if (error) *error = [NSError errorWithDomain:@"com.arcusis.browser.services" code:2
-      userInfo:@{NSLocalizedDescriptionKey: @"The engine profile could not be verified."}];
+      userInfo:@{NSLocalizedDescriptionKey: ARCBridgeLocalizedString(@"The engine profile could not be verified.")}];
     return NO;
   }
   _paths[profileID] = canonical;
@@ -125,7 +128,7 @@ static void ServiceEvent(void *context, const char *topic, const char *json) {
   NSData *data = [NSJSONSerialization dataWithJSONObject:args options:0 error:nil];
   NSString *json = data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
   if (!_started || !path || !call || !json) {
-    completion(@{@"error": @"Unknown engine profile or service."});
+    completion(@{@"error": ARCBridgeLocalizedString(@"Unknown engine profile or service.")});
     return;
   }
   call(path.UTF8String, json.UTF8String, ServiceReply, (__bridge_retained void *)[completion copy]);

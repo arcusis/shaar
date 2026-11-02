@@ -6,6 +6,10 @@ import AppKit
 import BrowserCore
 
 struct ShortcutCatalog {
+  static func isEditMenu(identifier: String?, title: String) -> Bool {
+    identifier == "Edit" || title == "Edit"
+  }
+
   struct Entry: Identifiable {
     let menu: String
     let title: String
@@ -13,7 +17,40 @@ struct ShortcutCatalog {
     let modifiers: NSEvent.ModifierFlags
     /// The `BrowserMenuCommand` name for app commands; nil for standard AppKit items.
     var command: String?
+    let englishMenu: String?
+    let englishTitle: String?
+
+    init(
+      menu: String, title: String, key: String, modifiers: NSEvent.ModifierFlags,
+      command: String? = nil, englishMenu: String? = nil, englishTitle: String? = nil
+    ) {
+      self.menu = menu
+      self.title = title
+      self.key = key
+      self.modifiers = modifiers
+      self.command = command
+      self.englishMenu = englishMenu
+      self.englishTitle = englishTitle
+    }
+
     var id: String { "\(menu):\(title):\(key):\(modifiers.rawValue)" }
+    var localizedMenu: String { SettingsL10n.string(menu) }
+    var localizedTitle: String {
+      let productName = ProductIdentity.name
+      if title == "About \(productName)" {
+        return SettingsL10n.format("About %@", .string(productName))
+      }
+      if title == "Hide \(productName)" {
+        return SettingsL10n.format("Hide %@", .string(productName))
+      }
+      if title == "Quit \(productName)" {
+        return SettingsL10n.format("Quit %@", .string(productName))
+      }
+      if title == "\(productName) Support" {
+        return SettingsL10n.format("%@ Support", .string(productName))
+      }
+      return SettingsL10n.string(title)
+    }
 
     var displayKeys: String {
       if key.isEmpty { return "—" }
@@ -42,7 +79,6 @@ struct ShortcutCatalog {
     key: String, modifiers: NSEvent.ModifierFlags
   )? {
     switch command {
-    case .newWindow: ("n", .command)
     case .newPrivateWindow: ("n", [.command, .shift])
     case .newMiniWindow: ("n", [.command, .option])
     case .newTab: ("t", .command)
@@ -53,6 +89,10 @@ struct ShortcutCatalog {
     case .findPrevious: ("g", [.command, .shift])
     case .sidebar: ("s", .command)
     case .reload: ("r", .command)
+    case .hardReload: ("r", [.command, .shift])
+    case .developerTools: ("i", [.command, .option])
+    case .inspector: ("c", [.command, .option])
+    case .inspectorCopy: ("c", [.command, .shift])
     case .newSpace: ("S", [.command, .shift])
     case .editSpace: ("s", [.command, .option])
     case .addFavorite: ("k", [.command, .option])
@@ -81,6 +121,12 @@ struct ShortcutCatalog {
     }
   }
 
+  /// Menu glyphs such as ⇧⌘R for a command's shortcut, or nil when it has none.
+  static func displayKeys(for command: BrowserMenuCommand?) -> String? {
+    guard let command, let shortcut = shortcut(for: command) else { return nil }
+    return Entry(menu: "", title: "", key: shortcut.key, modifiers: shortcut.modifiers).displayKeys
+  }
+
   static func standardShortcut(for title: String) -> (
     key: String, modifiers: NSEvent.ModifierFlags
   )? {
@@ -93,7 +139,7 @@ struct ShortcutCatalog {
     case "Copy": ("c", .command)
     case "Paste": ("v", .command)
     case "Select All": ("a", .command)
-    case "Copy URL": ("c", [.command, .shift])
+    case "Copy URL": ("c", [.command, .option, .shift])
     default: nil
     }
   }
@@ -108,9 +154,13 @@ struct ShortcutCatalog {
       section.items.compactMap { item in
         guard !item.isSeparatorItem, !item.keyEquivalent.isEmpty || item.representedObject is String
         else { return nil }
+        let englishMenu = section.identifier?.rawValue
+        let englishTitle = item.identifier?.rawValue
         return Entry(
           menu: section.title, title: item.title, key: item.keyEquivalent,
-          modifiers: item.keyEquivalentModifierMask, command: item.representedObject as? String)
+          modifiers: item.keyEquivalentModifierMask, command: item.representedObject as? String,
+          englishMenu: englishMenu?.isEmpty == false ? englishMenu : nil,
+          englishTitle: englishTitle?.isEmpty == false ? englishTitle : nil)
       }
     }
   }
@@ -130,7 +180,11 @@ enum ShortcutPageRouting {
     let key = (event.charactersIgnoringModifiers ?? "").lowercased()
     let matches = menu.items.compactMap(\.submenu).contains { section in
       section.items.contains { item in
-        guard item.representedObject is String || section.title != "Edit" else { return false }
+        guard
+          item.representedObject is String
+            || !ShortcutCatalog.isEditMenu(
+              identifier: section.identifier?.rawValue, title: section.title)
+        else { return false }
         let itemFlags = item.keyEquivalentModifierMask.intersection([
           .command, .option, .control, .shift,
         ])

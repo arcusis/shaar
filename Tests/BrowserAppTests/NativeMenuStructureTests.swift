@@ -27,11 +27,17 @@ import Testing
   func item(_ command: BrowserMenuCommand) -> NSMenuItem? {
     commandItems.first { $0.0 == command.rawValue }?.1
   }
-  #expect(item(.newWindow)?.menu?.title == "File")
   #expect(item(.newPrivateWindow)?.menu?.title == "File")
   #expect(item(.closeWindow)?.menu?.title == "File")
   #expect(item(.find)?.menu?.title == "Edit")
   #expect(item(.reload)?.menu?.title == "View")
+  #expect(item(.hardReload)?.menu?.title == "View")
+  #expect(item(.hardReload)?.keyEquivalent == "r")
+  #expect(item(.hardReload)?.keyEquivalentModifierMask == [.command, .shift])
+  #expect(item(.developerTools)?.menu?.title == "View")
+  #expect(item(.developerTools)?.title == "Developer Tools")
+  #expect(item(.developerTools)?.keyEquivalent == "i")
+  #expect(item(.developerTools)?.keyEquivalentModifierMask == [.command, .option])
   #expect(item(.newSpace)?.menu?.title == "Spaces")
   #expect(item(.closeTab)?.menu?.title == "Tabs")
   #expect(item(.bookmarks)?.menu?.title == "Archive")
@@ -48,7 +54,8 @@ import Testing
   let items = menu.items.compactMap(\.submenu).flatMap(\.items)
   func item(_ title: String) -> NSMenuItem? { items.first { $0.title == title } }
 
-  #expect(item("New window")?.keyEquivalent == "n")
+  #expect(item("New window") == nil)
+  #expect(!items.contains { $0.keyEquivalent == "n" && $0.keyEquivalentModifierMask == .command })
   #expect(item("New Private Window")?.keyEquivalent == "n")
   #expect(item("New Private Window")?.keyEquivalentModifierMask == [.command, .shift])
   #expect(item("New tab")?.keyEquivalent == "t")
@@ -61,7 +68,7 @@ import Testing
   #expect(item("New Mini Window")?.keyEquivalentModifierMask == [.command, .option])
   #expect(item("New space…")?.keyEquivalent == "S")
   #expect(item("New Folder")?.keyEquivalentModifierMask == [.command, .control])
-  #expect(item("Copy URL")?.keyEquivalentModifierMask == [.command, .shift])
+  #expect(item("Copy URL")?.keyEquivalentModifierMask == [.command, .option, .shift])
   #expect(item("Downloads")?.keyEquivalentModifierMask == [.command, .shift])
   #expect(item("Undo")?.action == NSSelectorFromString("undo:"))
   #expect(item("Cut")?.action == NSSelectorFromString("cut:"))

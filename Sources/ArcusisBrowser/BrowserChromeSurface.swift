@@ -31,7 +31,7 @@ struct BrowserChromeSurface: View {
   var body: some View {
     HStack(spacing: 4) {
       if !store.sidebarIsVisible {
-        chromeButton("sidebar.left", label: "Toggle sidebar (Command-S)") {
+        chromeButton("sidebar.leading", label: ShellL10n.string("Toggle sidebar")) {
           store.sidebarIsVisible.toggle()
         }
       }
@@ -68,6 +68,8 @@ struct BrowserChromeSurface: View {
       HStack(spacing: 4) {
         MediaCaptureIndicator(store: store, engine: engine)
           .fixedSize()
+        DeveloperSimulationBadge(engine: engine)
+        SiteControlsButton(engine: engine, store: store)
         ExtensionToolbar(engine: engine, store: store)
           .frame(width: 28, height: 28)
       }

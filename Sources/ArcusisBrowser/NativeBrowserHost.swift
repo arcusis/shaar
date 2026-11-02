@@ -8,13 +8,29 @@ import ChromiumBridge
 import SwiftUI
 
 enum BrowserMenuCommand: String, CaseIterable {
-  case newWindow, newPrivateWindow, newMiniWindow, newTab, search, newSpace, editSpace, closeTab,
+  case newPrivateWindow, newMiniWindow, newTab, search, newSpace, editSpace, closeTab,
     closeWindow,
     addFavorite
   case reopenClosed, recentlyClosed, bookmarkPage, bookmarks, history, downloads
-  case find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload, splitView
+  case find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload, hardReload,
+    developerTools
+  case splitView
   case extensions, help, minimizeWindow, zoomWindow, bringAllToFront, settings, quit, createFolder
-  case checkForUpdates
+  case checkForUpdates, inspector, inspectorCopy
+}
+
+/// AppKit otherwise falls back from unbound Command-N to the private-window menu item.
+@MainActor
+final class NativeBrowserMenu: NSMenu {
+  override func performKeyEquivalent(with event: NSEvent) -> Bool {
+    let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+    if event.type == .keyDown, modifiers == .command,
+      event.charactersIgnoringModifiers?.lowercased() == "n"
+    {
+      return false
+    }
+    return super.performKeyEquivalent(with: event)
+  }
 }
 
 @MainActor
@@ -63,12 +79,14 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   private(set) var settingsController: BrowserSettingsController?
   private var privateHost: PrivateBrowserHost?
   private var miniWindows: [String: MiniBrowserController] = [:]
-  private var accountSignIns: [String: ProfileAccountSignIn] = [:]
+  private(set) var accountSignIns: [String: ProfileAccountSignIn] = [:]
   private(set) var profileOnboarding: ProfileOnboardingWindow?
   private var pendingURLs: [URL] = []
   private var claimedPrimary = false
+  private var reopenHandlerInstalled = false
   private var started = false
   private var startupFailed = false
+  private(set) var restartRequested = false
   private var shortcutMonitor: Any?
   private var previousMenu: NSMenu?
   private var previousServicesMenu: NSMenu?
@@ -94,6 +112,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     self.keyWindow = keyWindow
     self.screens = screens
     super.init()
+    events.runtime.onQuitCancelled = { [weak self] in self?.restartRequested = false }
   }
 
   var activeContext: NativeBrowserContext? {
@@ -116,7 +135,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   func restore() throws {
     guard !started else { throw WorkspaceError.invalidState }
     started = true
-    if presentation == .visible && UserDefaults.standard.bool(forKey: "settingsStartFresh") {
+    if presentation == .visible
+      && BrowserRestart.startsFresh(arguments: ProcessInfo.processInfo.arguments)
+    {
       let oldWindows = workspace.workspace.windows.map(\.id)
       _ = try workspace.newWindow(from: workspace.workspace.focusedWindowID)
       for id in oldWindows { try workspace.removeWindow(id) }
@@ -128,6 +149,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     let privateHost = PrivateBrowserHost(
       runtime: events.runtime, presentsWindows: presentation == .visible,
       keyWindow: keyWindow,
+      searchEngine: { [weak self] source in
+        guard let self, let id = UUID(uuidString: source) else { return .google }
+        return self.preferences.searchEngine(for: id)
+      },
       sourceProfileID: { [weak self] in
         if let privateSource = self?.privateHost?.activeOwner?.sourceProfileID {
           return privateSource
@@ -158,13 +183,17 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       context.window.makeKeyAndOrderFront(nil)
     }
     settingsController?.setAccountHandlers(
-      connect: { [weak self] profile, provider in
-        self?.runSavedProfileSignIn(profile, provider: provider, purpose: .signIn)
+      connect: { [weak self] profile, option in
+        self?.runSavedProfileSignIn(
+          profile, provider: option.provider, purpose: .signIn, option: option)
       },
       disconnect: { [weak self] profile, provider in
         self?.runSavedProfileSignIn(profile, provider: provider, purpose: .signOut)
       })
     settingsController?.setAddProfileHandler { [weak self] in self?.presentNewProfile() }
+    settingsController?.setRestartHandler { [weak self] in
+      self?.restartForLanguageChange()
+    }
     installMenus()
     if presentation == .visible {
       for context in contexts.values where context.id != focused { context.window.orderFront(nil) }
@@ -192,7 +221,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
 
   func canPerform(_ command: BrowserMenuCommand) -> Bool {
     guard !events.runtime.isQuitting else { return false }
-    if command == .newWindow || command == .newMiniWindow || command == .quit { return true }
+    if command == .newMiniWindow || command == .quit { return true }
     if command == .checkForUpdates { return canCheckForUpdates }
     if command == .newPrivateWindow {
       return activeContext != nil || privateHost?.hasActiveWindow == true
@@ -221,7 +250,15 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     switch command {
     case .find: return store.canFindCurrentPage
     case .findNext, .findPrevious: return store.pageFind?.canMove == true
-    case .reload: return afterLauncher ? store.currentPageAllowsReload : store.canReloadCurrentPage
+    case .reload, .hardReload:
+      return afterLauncher ? store.currentPageAllowsReload : store.canReloadCurrentPage
+    case .developerTools:
+      return context.engine.siteControlTarget != nil && (afterLauncher || !store.commandIsOpen)
+    case .inspector:
+      return context.engine.siteControlTarget != nil && (afterLauncher || !store.commandIsOpen)
+    case .inspectorCopy:
+      guard let target = context.engine.siteControlTarget else { return false }
+      return context.engine.inspectors[target.tabID]?.aiCopy.canCopy == true
     case .splitView: return store.session.selectedSpace.tabs.count >= 2
     case .reopenClosed: return store.canReopenClosedTab
     case .bookmarkPage: return store.canBookmarkCurrentPage
@@ -233,12 +270,12 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
 
   /// Commands that act on the app rather than one window and need no window to be enabled.
   private static let appCommands: Set<BrowserMenuCommand> = [
-    .newWindow, .newPrivateWindow, .newMiniWindow, .quit,
+    .newPrivateWindow, .newMiniWindow, .quit,
   ]
 
   func perform(_ command: BrowserMenuCommand) {
     guard canPerform(command) else { return }
-    if performAppCommand(command, from: activeContext) { return }
+    if performAppCommand(command) { return }
     if privateHost?.hasActiveWindow == true {
       privateHost?.perform(command)
       return
@@ -256,14 +293,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   }
 
   /// Runs app-wide commands; returns false for commands that belong to a window.
-  private func performAppCommand(
-    _ command: BrowserMenuCommand, from source: NativeBrowserContext?
-  ) -> Bool {
+  private func performAppCommand(_ command: BrowserMenuCommand) -> Bool {
     switch command {
     case .quit: quit()
     case .newMiniWindow: openMiniWindow(url: nil)
-    case .newWindow:
-      do { try newWindow(from: source?.id) } catch { report(error) }
     case .newPrivateWindow:
       do { try privateHost?.openWindow() } catch { report(error) }
     case .checkForUpdates: updater?.checkForUpdates()
@@ -278,15 +311,26 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   private func quit() {
     if UserDefaults.standard.bool(forKey: "settingsWarnBeforeQuit") && presentation == .visible {
       let alert = NSAlert()
-      alert.messageText = "Quit \(ProductIdentity.name)?"
-      alert.informativeText = "Your windows and tabs will be saved."
-      alert.addButton(withTitle: "Quit")
-      alert.addButton(withTitle: "Cancel")
+      alert.messageText = ShellL10n.format("Quit %@?", arguments: [.string(ProductIdentity.name)])
+      alert.informativeText = ShellL10n.string("Your windows and tabs will be saved.")
+      alert.addButton(withTitle: ShellL10n.string("Quit"))
+      alert.addButton(withTitle: ShellL10n.string("Cancel"))
       guard alert.runModal() == .alertFirstButtonReturn else { return }
     }
     flushGeometry()
     workspace.persistSnapshot()
     events.runtime.quit()
+  }
+
+  func restartForLanguageChange() -> String? {
+    do {
+      try BrowserRestart.prepare(workspace: workspace, flushGeometry: flushGeometry)
+      restartRequested = true
+      events.runtime.quit()
+      return nil
+    } catch {
+      return SettingsL10n.string("Your tabs could not be saved. Shaar has not restarted.")
+    }
   }
 
   // MARK: Launcher Actions
@@ -308,7 +352,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     guard let command = BrowserMenuCommand(rawValue: name), let context = contexts[id],
       canPerformLauncherCommand(command, in: context)
     else { return }
-    if performAppCommand(command, from: context) { return }
+    if performAppCommand(command) { return }
     if command == .settings {
       settingsController?.show(for: context.store.session.selectedSpace.profileID)
       return
@@ -327,7 +371,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
 
   /// Close Tab closes the window when no page is selected, and says so.
   static func closeTabTitle(for store: BrowserStore) -> String {
-    store.session.selectedPage == nil ? "Close window" : "Close tab"
+    ShellL10n.string(store.session.selectedPage == nil ? "Close window" : "Close tab")
   }
 
   private func perform(_ command: BrowserMenuCommand, in context: NativeBrowserContext) {
@@ -365,6 +409,15 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .nextSpace: store.cycleSpace(by: 1)
     case .previousSpace: store.cycleSpace(by: -1)
     case .reload: store.reloadCurrentPage()
+    case .hardReload: store.reloadCurrentPage(.bypassingCache)
+    case .developerTools: context.engine.toggleDeveloperTools()
+    case .inspector: context.engine.toggleInspector()
+    case .inspectorCopy:
+      if let target = context.engine.siteControlTarget,
+        let inspector = context.engine.inspectors[target.tabID]
+      {
+        Task { await inspector.aiCopy.copyElement() }
+      }
     case .splitView: store.splitSelectedTab()
     case .extensions: context.engine.showExtensionList()
     case .help:
@@ -374,7 +427,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .bringAllToFront:
       for browser in contexts.values { browser.window.orderFront(nil) }
       context.window.makeKeyAndOrderFront(nil)
-    case .newWindow, .newPrivateWindow, .newMiniWindow, .settings, .quit, .checkForUpdates: break
+    case .newPrivateWindow, .newMiniWindow, .settings, .quit, .checkForUpdates: break
     }
   }
 
@@ -383,10 +436,18 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   }
 
   func detach() {
+    if reopenHandlerInstalled {
+      NSAppleEventManager.shared().removeEventHandler(
+        forEventClass: AEEventClass(kCoreEventClass), andEventID: AEEventID(kAEReopenApplication))
+      reopenHandlerInstalled = false
+    }
+    events.runtime.onQuitCancelled = nil
     if let shortcutMonitor { NSEvent.removeMonitor(shortcutMonitor) }
     shortcutMonitor = nil
     privateHost?.detach()
     privateHost = nil
+    profileOnboarding?.model.cancel()
+    for flow in Array(accountSignIns.values) { flow.cancel() }
     profileOnboarding?.close()
     profileOnboarding = nil
     events.onWindowRequest = nil
@@ -399,27 +460,46 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     if NSApp.mainMenu === menu { NSApp.mainMenu = previousMenu }
     if NSApp.servicesMenu
       === menu?.items.first?.submenu?.items.first(where: {
-        $0.submenu?.title == "Services"
+        $0.submenu?.identifier?.rawValue == "Services"
+          || $0.submenu?.title == ShellL10n.string("Services")
       })?.submenu
     {
       NSApp.servicesMenu = previousServicesMenu
     }
-    if NSApp.windowsMenu === menu?.items.first(where: { $0.submenu?.title == "Window" })?.submenu {
+    if NSApp.windowsMenu
+      === menu?.items.first(where: {
+        $0.submenu?.identifier?.rawValue == "Window"
+          || $0.submenu?.title == ShellL10n.string("Window")
+      })?.submenu
+    {
       NSApp.windowsMenu = previousWindowsMenu
     }
-    if NSApp.helpMenu === menu?.items.first(where: { $0.submenu?.title == "Help" })?.submenu {
+    if NSApp.helpMenu
+      === menu?.items.first(where: {
+        $0.submenu?.identifier?.rawValue == "Help"
+          || $0.submenu?.title == ShellL10n.string("Help")
+      })?.submenu
+    {
       NSApp.helpMenu = previousHelpMenu
     }
   }
 
   /// Connect or disconnect a provider account of a saved profile from Settings.
   private func runSavedProfileSignIn(
-    _ profileID: UUID, provider: AccountProvider, purpose: ProfileAccountSignIn.Purpose
+    _ profileID: UUID, provider: AccountProvider, purpose: ProfileAccountSignIn.Purpose,
+    option: AccountSignInOption? = nil
   ) {
     guard
       let profile = workspace.workspace.catalog.profiles.first(where: { $0.id == profileID })
     else { return }
-    runAccountSignIn(profile, provider: provider, purpose: purpose) { [weak self] account in
+    // Apple offers no public web logout URL. Disconnect the primary link; iCloud retains its
+    // own Sign Out control rather than pretending a visit to its home page clears cookies.
+    if purpose == .signOut, provider == .apple {
+      preferences.removeAccount(provider, for: profileID)
+      return
+    }
+    runAccountSignIn(profile, provider: provider, purpose: purpose, option: option) {
+      [weak self] account in
       guard let self else { return }
       switch (purpose, account) {
       case (.signIn, let account?): self.preferences.setAccount(account, for: profileID)
@@ -433,11 +513,13 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   /// saved yet, so onboarding can connect accounts before it creates the profile.
   private func runAccountSignIn(
     _ profile: BrowserProfile, provider: AccountProvider, purpose: ProfileAccountSignIn.Purpose,
+    option: AccountSignInOption? = nil,
     completion: @escaping (ConnectedAccount?) -> Void
   ) {
     do {
       let flow = try ProfileAccountSignIn(
-        events: events, profile: profile, provider: provider, purpose: purpose)
+        events: events, profile: profile, provider: provider, purpose: purpose,
+        visible: presentation == .visible, option: option)
       let id = flow.engine.windowID
       accountSignIns[id] = flow
       flow.onFinished = { [weak self] account in
@@ -465,9 +547,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
 
   private func profileOnboardingActions() -> ProfileOnboardingActions {
     ProfileOnboardingActions(
-      connect: { [weak self] profile, provider, completion in
+      connect: { [weak self] profile, option, completion in
         self?.runAccountSignIn(
-          profile, provider: provider, purpose: .signIn, completion: completion)
+          profile, provider: option.provider, purpose: .signIn, option: option,
+          completion: completion)
       },
       stopConnecting: { [weak self] in
         guard let profileID = self?.profileOnboarding?.model.profileID else { return }
@@ -480,13 +563,43 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   }
 
   private func cancelAccountSignIns(for profileID: UUID) {
-    for flow in accountSignIns.values where flow.profileID == profileID { flow.cancel() }
+    for flow in Array(accountSignIns.values) where flow.profileID == profileID { flow.cancel() }
   }
 
   private func profileOnboardingClosed(_ outcome: ProfileOnboardingModel.Outcome) {
     profileOnboarding?.close()
     profileOnboarding = nil
     if case .created(let id) = outcome { settingsController?.selectProfile(id) }
+  }
+
+  /// Install after Chromium starts so Dock reopen cannot create an unmanaged blank window.
+  func installReopenHandler() {
+    NSAppleEventManager.shared().setEventHandler(
+      self, andSelector: #selector(handleReopen(_:reply:)),
+      forEventClass: AEEventClass(kCoreEventClass), andEventID: AEEventID(kAEReopenApplication))
+    reopenHandlerInstalled = true
+  }
+
+  @objc func handleReopen(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) {
+    guard started, !startupFailed, !events.runtime.isQuitting else { return }
+    do {
+      let context: NativeBrowserContext
+      if let existing = workspace.workspace.focusedWindowID.flatMap({ contexts[$0] })
+        ?? contexts.values.first
+      {
+        context = existing
+      } else {
+        let id = try newWindow()
+        guard let created = contexts[id] else { throw WorkspaceError.invalidState }
+        context = created
+        // Ignore the retired new-window preference when recovering the main window.
+        context.store.sidebarIsVisible = true
+      }
+      if presentation == .visible {
+        if context.window.isMiniaturized { context.window.deminiaturize(nil) }
+        context.window.makeKeyAndOrderFront(nil)
+      }
+    } catch { report(error) }
   }
 
   @objc func handleURL(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) {
@@ -585,7 +698,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     // safe strip in the window frame so its geometry includes that top edge.
     let titlebarHost = window.contentView?.superview ?? content
     let titlebarDragView = WindowDragRegion.makeTitlebarDragView(
-      window: window, contentView: titlebarHost)
+      window: window, contentView: titlebarHost,
+      isRightToLeft: BrowserLanguage.currentLaunchLanguage.isRightToLeft,
+      trailingAccessoryWidth: BrowserLanguage.currentLaunchLanguage.isRightToLeft
+        ? BrowserChromeLayout.titlebarToggleLeading + 28 : 0)
     titlebarHost.addSubview(titlebarDragView, positioned: .above, relativeTo: nil)
     let context = NativeBrowserContext(
       id: id, nativeID: nativeID, window: window, store: store, engine: engine, hosting: hosting,
@@ -601,6 +717,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   }
 
   private func requestedWindow(profile: String, type: String) -> String? {
+    if let flow = accountSignIns.values.first(where: { $0.profileID.uuidString == profile }) {
+      return flow.requestedWindow(type: type)
+    }
     guard started, !events.runtime.isQuitting, ["normal", "popup", "app"].contains(type),
       let profileID = UUID(uuidString: profile),
       let destination = workspace.workspace.catalog.spaces.first(where: {
@@ -646,6 +765,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     // The engine can request visibility during insertion. Present only once its
     // notification has unwound and the application has adopted the page.
     DispatchQueue.main.async { [weak self] in
+      if let flow = self?.accountSignIns.values.first(where: { $0.ownsWindow(nativeID) }) {
+        flow.showWindow(nativeID, active: active)
+        return
+      }
       guard let self, self.presentation == .visible,
         !self.events.runtime.isQuitting,
         let context = self.contexts.values.first(where: { $0.nativeID == nativeID }),
@@ -714,7 +837,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
             guard let self, let context else { return }
             WindowDragRegion.updateTitlebarDragView(
               context.titlebarDragView, window: context.window,
-              contentView: context.titlebarDragView.superview ?? context.contentView)
+              contentView: context.titlebarDragView.superview ?? context.contentView,
+              isRightToLeft: BrowserLanguage.currentLaunchLanguage.isRightToLeft,
+              trailingAccessoryWidth: BrowserLanguage.currentLaunchLanguage.isRightToLeft
+                ? BrowserChromeLayout.titlebarToggleLeading + 28 : 0)
             context.geometryTask?.cancel()
             context.geometryTask = Task { [weak self, weak context] in
               do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
@@ -778,16 +904,34 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       let command = BrowserMenuCommand(rawValue: raw)
     else { return false }
     if command == .closeTab {
-      item.title = activeContext.map { Self.closeTabTitle(for: $0.store) } ?? "Close window"
+      item.title =
+        activeContext.map { Self.closeTabTitle(for: $0.store) }
+        ?? ShellL10n.string("Close window")
     }
     return canPerform(command)
   }
 
   static func makeMenu(target: AnyObject) -> NSMenu {
-    let main = NSMenu()
+    let main = NativeBrowserMenu()
+    func localizedTitle(_ title: String) -> String {
+      if title == "About \(ProductIdentity.name)" {
+        return ShellL10n.format("About %@", arguments: [.string(ProductIdentity.name)])
+      }
+      if title == "Hide \(ProductIdentity.name)" {
+        return ShellL10n.format("Hide %@", arguments: [.string(ProductIdentity.name)])
+      }
+      if title == "Quit \(ProductIdentity.name)" {
+        return ShellL10n.format("Quit %@", arguments: [.string(ProductIdentity.name)])
+      }
+      if title == "\(ProductIdentity.name) Support" {
+        return ShellL10n.format("%@ Support", arguments: [.string(ProductIdentity.name)])
+      }
+      return ShellL10n.string(title)
+    }
     func section(_ title: String) -> NSMenu {
       let item = NSMenuItem()
-      let result = NSMenu(title: title)
+      let result = NSMenu(title: localizedTitle(title))
+      result.identifier = NSUserInterfaceItemIdentifier(title)
       item.submenu = result
       main.addItem(item)
       return result
@@ -796,7 +940,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     func add(_ command: BrowserMenuCommand, _ title: String, to menu: NSMenu) {
       let shortcut = ShortcutCatalog.shortcut(for: command)
       let item = NSMenuItem(
-        title: title, action: #selector(menuAction(_:)), keyEquivalent: shortcut?.key ?? "")
+        title: localizedTitle(title), action: #selector(menuAction(_:)),
+        keyEquivalent: shortcut?.key ?? "")
+      item.identifier = NSUserInterfaceItemIdentifier(title)
       item.target = target
       item.representedObject = command.rawValue
       item.keyEquivalentModifierMask = shortcut?.modifiers ?? []
@@ -804,7 +950,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     }
     func addStandard(_ title: String, _ action: Selector, to menu: NSMenu) {
       let shortcut = ShortcutCatalog.standardShortcut(for: title)
-      let item = NSMenuItem(title: title, action: action, keyEquivalent: shortcut?.key ?? "")
+      let item = NSMenuItem(
+        title: localizedTitle(title), action: action, keyEquivalent: shortcut?.key ?? "")
+      item.identifier = NSUserInterfaceItemIdentifier(title)
       item.keyEquivalentModifierMask = shortcut?.modifiers ?? []
       menu.addItem(item)
     }
@@ -814,8 +962,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       to: app)
     add(.checkForUpdates, "Check for Updates…", to: app)
     app.addItem(.separator())
-    let services = NSMenu(title: "Services")
-    let servicesItem = NSMenuItem(title: "Services", action: nil, keyEquivalent: "")
+    let services = NSMenu(title: ShellL10n.string("Services"))
+    services.identifier = NSUserInterfaceItemIdentifier("Services")
+    let servicesItem = NSMenuItem(
+      title: ShellL10n.string("Services"), action: nil, keyEquivalent: "")
     servicesItem.submenu = services
     app.addItem(servicesItem)
     app.addItem(.separator())
@@ -826,7 +976,6 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     app.addItem(.separator())
     add(.quit, "Quit \(ProductIdentity.name)", to: app)
     let file = section("File")
-    add(.newWindow, "New window", to: file)
     add(.newPrivateWindow, "New Private Window", to: file)
     add(.newMiniWindow, "New Mini Window", to: file)
     add(.newTab, "New tab", to: file)
@@ -846,6 +995,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     let view = section("View")
     add(.sidebar, "Toggle sidebar", to: view)
     add(.reload, "Reload", to: view)
+    add(.hardReload, "Hard Reload", to: view)
+    add(.developerTools, "Developer Tools", to: view)
+    add(.inspector, "Inspect Element", to: view)
+    add(.inspectorCopy, "Copy for AI", to: view)
     let spaces = section("Spaces")
     add(.newSpace, "New space…", to: spaces)
     add(.editSpace, "Edit current space…", to: spaces)
@@ -853,7 +1006,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     add(.previousSpace, "Previous space", to: spaces)
     let copyURLShortcut = ShortcutCatalog.standardShortcut(for: "Copy URL")
     let copyURL = NSMenuItem(
-      title: "Copy URL", action: #selector(copyCurrentURL(_:)),
+      title: ShellL10n.string("Copy URL"), action: #selector(copyCurrentURL(_:)),
       keyEquivalent: copyURLShortcut?.key ?? "")
     copyURL.target = target
     copyURL.keyEquivalentModifierMask = copyURLShortcut?.modifiers ?? []
@@ -906,7 +1059,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   }
 
   func menuNeedsUpdate(_ menu: NSMenu) {
-    guard menu.title == "Spaces" else { return }
+    guard
+      menu.identifier?.rawValue == "Spaces"
+        || menu.title == ShellL10n.string("Spaces")
+    else { return }
     while let item = menu.items.first(where: { $0.representedObject is UUID || $0.tag == 91827 }) {
       menu.removeItem(item)
     }
@@ -933,16 +1089,20 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     previousHelpMenu = NSApp.helpMenu
     let main = Self.makeMenu(target: self)
     menu = main
-    if let spaces = main.items.first(where: { $0.submenu?.title == "Spaces" })?.submenu {
+    if let spaces = main.items.first(where: { $0.submenu?.identifier?.rawValue == "Spaces" })?
+      .submenu
+    {
       spaces.delegate = self
       menuNeedsUpdate(spaces)
     }
     NSApp.servicesMenu =
       main.items.first?.submenu?.items.first(where: {
-        $0.submenu?.title == "Services"
+        $0.submenu?.identifier?.rawValue == "Services"
       })?.submenu
-    NSApp.windowsMenu = main.items.first(where: { $0.submenu?.title == "Window" })?.submenu
-    NSApp.helpMenu = main.items.first(where: { $0.submenu?.title == "Help" })?.submenu
+    NSApp.windowsMenu =
+      main.items.first(where: { $0.submenu?.identifier?.rawValue == "Window" })?.submenu
+    NSApp.helpMenu =
+      main.items.first(where: { $0.submenu?.identifier?.rawValue == "Help" })?.submenu
     NSApp.mainMenu = main
     shortcutMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
       guard let self, let menu = self.menu, NSApp.mainMenu === menu,
@@ -952,7 +1112,15 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     }
   }
 
-  static func run(frameworkURL: URL) -> Int32 {
+  enum LaunchResult {
+    case exited(Int32)
+    case restart
+  }
+
+  static func run(frameworkURL: URL) -> LaunchResult {
+    BrowserLanguage.applyToCurrentProcess()
+    let launchLanguage = BrowserLanguage.currentLaunchLanguage
+    ARCConfigureLocalization(BrowserLocalization.resourceBundleURL, launchLanguage.localeIdentifier)
     do {
       let directory = URL.applicationSupportDirectory.appending(
         path: ProductIdentity.dataFolderName, directoryHint: .isDirectory)
@@ -966,6 +1134,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       let preferences = BrowserPreferencesStore(
         fileURL: directory.appending(path: "preferences.json"))
       let runtime = try ARCChromiumRuntime(frameworkURL: frameworkURL)
+      runtime.languageIdentifier = launchLanguage.localeIdentifier
       BrowserSettingsAppearance.apply(
         UserDefaults.standard.string(forKey: "settingsAppearance") ?? "system")
       let host = NativeBrowserHost(
@@ -976,7 +1145,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
         forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))
       runtime.onReady = { [weak host] in
         host?.updater = AppUpdater.forMainBundle()
-        do { try host?.restore() } catch {
+        do {
+          try host?.restore()
+          host?.installReopenHandler()
+        } catch {
           host?.startupFailed = true
           host?.report(error)
           host?.events.runtime.quit()
@@ -986,11 +1158,13 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
         let code = runtime.run(
           withDataDirectory: directory.appending(path: "Chromium"), testing: false)
         host.detach()
-        return host.startupFailed ? 1 : code
+        // Saves run on a background queue; the process must not exit before the last one lands.
+        try? workspace.flushSaves()
+        return host.restartRequested ? .restart : .exited(host.startupFailed ? 1 : code)
       }
     } catch {
       FileHandle.standardError.write(Data("\(StartupFailureMessage.text(for: error))\n".utf8))
-      return 1
+      return .exited(1)
     }
   }
 }

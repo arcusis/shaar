@@ -15,7 +15,7 @@ final class PrivateBrowserHost {
     let windowID: String
     let store: PrivateBrowserStore
     let window: NSWindow
-    let hosting: NSHostingView<PrivateBrowserWindow>
+    let hosting: NSHostingView<PrivateBrowserWindow?>
     let titlebarDragView: NSView
   }
 
@@ -23,6 +23,7 @@ final class PrivateBrowserHost {
   private let keyWindow: () -> NSWindow?
   private let sourceProfileID: () -> String?
   private let presentsWindows: Bool
+  private let searchEngine: (String) -> BrowserSearchEngine
   private var owners: [String: Owner] = [:]
   private var contextsBySource: [String: String] = [:]
   private var windowsByContext: [String: Set<String>] = [:]
@@ -31,8 +32,10 @@ final class PrivateBrowserHost {
   init(
     runtime: ARCChromiumRuntime, presentsWindows: Bool = true,
     keyWindow: @escaping () -> NSWindow? = { NSApp.keyWindow ?? NSApp.mainWindow },
+    searchEngine: @escaping (String) -> BrowserSearchEngine = { _ in .google },
     sourceProfileID: @escaping () -> String?
   ) {
+    self.searchEngine = searchEngine
     self.runtime = runtime
     self.presentsWindows = presentsWindows
     self.keyWindow = keyWindow
@@ -50,6 +53,12 @@ final class PrivateBrowserHost {
   var windowCount: Int { owners.count }
 
   func installCallbacks() {
+    runtime.onPrivateNavigationFailed = { [weak self] context, window, tab, message in
+      guard let owner = self?.owners[window], owner.contextID == context,
+        owner.store.selectedTabID == tab
+      else { return }
+      owner.store.failure = message
+    }
     runtime.onPrivateTabChanged = {
       [weak self] context, window, tab, url, title, loading, back, forward in
       self?.tabChanged(
@@ -68,15 +77,29 @@ final class PrivateBrowserHost {
   }
 
   func detach() {
+    runtime.onPrivateNavigationFailed = nil
     runtime.onPrivateTabChanged = nil
     runtime.onPrivateTabSelected = nil
     runtime.onPrivateTabClosed = nil
     runtime.onPrivateWindowClosed = nil
     for owner in owners.values {
-      owner.store.clear()
-      owner.hosting.removeFromSuperview()
-      owner.titlebarDragView.removeFromSuperview()
+      retire(owner)
     }
+  }
+
+  /// Retire SwiftUI bindings before AppKit or its field editor can keep them alive.
+  static func retireHostingContent<Content: View>(_ hosting: NSHostingView<Content?>) {
+    hosting.rootView = nil
+    hosting.layoutSubtreeIfNeeded()
+    hosting.removeFromSuperview()
+  }
+
+  private func retire(_ owner: Owner) {
+    owner.window.endEditing(for: nil)
+    _ = owner.window.makeFirstResponder(nil)
+    Self.retireHostingContent(owner.hosting)
+    owner.titlebarDragView.removeFromSuperview()
+    owner.store.clear()
   }
 
   func openWindow() throws {
@@ -143,7 +166,6 @@ final class PrivateBrowserHost {
     switch command {
     case .newTab:
       owner.store.openTab()
-      owner.store.showCommand()
     case .search: owner.store.showCommand()
     case .closeTab:
       if owner.store.tabs.count > 1, let tab = owner.store.selectedTab {
@@ -182,8 +204,11 @@ final class PrivateBrowserHost {
       NativeWindowPlacement.frame(
         saved: nil, source: nil, screens: NSScreen.screens.map(\.visibleFrame)),
       display: false)
-    let store = PrivateBrowserStore(contextID: context, windowID: window, tabID: tab, url: url)
-    let hosting = NSHostingView(rootView: PrivateBrowserWindow(store: store, runtime: runtime))
+    let store = PrivateBrowserStore(
+      contextID: context, windowID: window, tabID: tab, url: url, searchEngine: searchEngine(source)
+    )
+    let hosting = NSHostingView<PrivateBrowserWindow?>(
+      rootView: PrivateBrowserWindow(store: store, runtime: runtime))
     hosting.frame = nativeWindow.contentView?.bounds ?? .zero
     hosting.autoresizingMask = [.width, .height]
     guard let container = runtime.hostView(forPrivateWindowID: window, contextID: context) else {
@@ -197,7 +222,8 @@ final class PrivateBrowserHost {
     container.addSubview(hosting)
     let titlebarHost = nativeWindow.contentView?.superview ?? container
     let titlebarDragView = WindowDragRegion.makeTitlebarDragView(
-      window: nativeWindow, contentView: titlebarHost)
+      window: nativeWindow, contentView: titlebarHost,
+      isRightToLeft: BrowserLanguage.currentLaunchLanguage.isRightToLeft)
     titlebarHost.addSubview(titlebarDragView, positioned: .above, relativeTo: nil)
     let owner = Owner(
       contextID: context, sourceProfileID: source, windowID: window, store: store,
@@ -315,9 +341,7 @@ final class PrivateBrowserHost {
   private func windowClosed(context: String, window: String) {
     guard let owner = owners[window], owner.contextID == context else { return }
     owners.removeValue(forKey: window)
-    owner.store.clear()
-    owner.hosting.removeFromSuperview()
-    owner.titlebarDragView.removeFromSuperview()
+    retire(owner)
     windowsByContext[context]?.remove(window)
     if windowsByContext[context]?.isEmpty == true {
       windowsByContext.removeValue(forKey: context)

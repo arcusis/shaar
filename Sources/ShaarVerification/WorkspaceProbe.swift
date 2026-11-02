@@ -239,6 +239,7 @@ final class WorkspaceProbe {
     first.perform(.space(ids.beta))
     try manager.focusWindow(ids.second)
     try await captureWindows()
+    try manager.flushSaves()
     try expect(
       try file.load() == manager.workspace && manager.workspace.focusedWindowID == ids.second,
       "one atomic manifest retains both models and focused window after native callbacks")
@@ -255,6 +256,7 @@ final class WorkspaceProbe {
         runtime.closeWindowID(id.uuidString), "managed fixture native window closes normally")
     }
     try await wait("managed native client shutdown") { self.clients.values.allSatisfy(\.isClosed) }
+    try manager.flushSaves()
     try expect(
       manager.workspace.windows.count == 2 && (try file.load()) == manager.workspace,
       "retaining managed records for the next launch does not mistake native shutdown for tab closure"

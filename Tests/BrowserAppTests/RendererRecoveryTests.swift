@@ -34,7 +34,7 @@ struct RendererRecoveryTests {
     let space = store.session.selectedSpace
     let tab = try #require(space.selectedTab)
     var reloaded: [UUID] = []
-    store.onReloadPage = { id, profile in
+    store.onReloadPage = { id, profile, _ in
       #expect(profile == space.profileID)
       reloaded.append(id)
       return true
@@ -72,7 +72,7 @@ struct RendererRecoveryTests {
       tab.id, profileID: space.profileID, status: "launchFailed", exitCode: 1)
     let failure = try #require(store.rendererFailures[tab.id])
     #expect(!store.reloadFailedPage(failure.id))
-    store.onReloadPage = { _, _ in false }
+    store.onReloadPage = { _, _, _ in false }
     #expect(!store.reloadFailedPage(failure.id))
     #expect(store.rendererFailures[tab.id]?.reloading == false)
     #expect(store.canReloadFailure(failure.id))

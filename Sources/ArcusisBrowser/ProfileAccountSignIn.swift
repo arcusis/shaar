@@ -7,7 +7,7 @@ import BrowserCore
 import Observation
 import SwiftUI
 
-/// Signs a profile in to, or out of, a Google or Microsoft account in a window that uses that
+/// Signs a profile in to, or out of, a provider account in a window that uses that
 /// profile's own engine storage. The window keeps no tabs once it closes.
 @MainActor
 final class ProfileAccountSignIn {
@@ -18,21 +18,28 @@ final class ProfileAccountSignIn {
   let window: NSWindow
   let provider: AccountProvider
   let profileID: UUID
+  private let profile: BrowserProfile
+  private let events: BrowserRuntimeEvents
+  private let visible: Bool
+  private var popups: [String: SignInPopup] = [:]
   private let purpose: Purpose
   private let presentation = ProfileAccountSignInPresentation()
-  private var capturedEmail: String?
   private var finished = false
   private var watcher: Task<Void, Never>?
   var onFinished: ((ConnectedAccount?) -> Void)?
 
   init(
     events: BrowserRuntimeEvents, profile: BrowserProfile, provider: AccountProvider,
-    purpose: Purpose
+    purpose: Purpose, visible: Bool = true, option: AccountSignInOption? = nil
   ) throws {
     self.provider = provider
     self.purpose = purpose
+    self.profile = profile
+    self.events = events
+    self.visible = visible
     profileID = profile.id
-    let url = purpose == .signIn ? provider.signInURL : provider.signOutURL
+    let entry = option.flatMap { $0.provider == provider ? $0 : nil } ?? .standard(for: provider)
+    let url = purpose == .signIn ? entry.signInURL : provider.signOutURL
     let space = BrowserSpace(
       profileID: profile.id, name: provider.title, symbol: "person.crop.circle", tint: .ocean,
       tabs: [BrowserTab(url: url)])
@@ -48,17 +55,18 @@ final class ProfileAccountSignIn {
     let hosting = NSHostingView(
       rootView: ProfileAccountSignInView(
         store: store, engine: engine, presentation: presentation,
-        title: "Sign in to \(provider.title) for \(profile.name)"
-      ) { [weak self] in self?.cancel() })
+        title: SettingsL10n.format(
+          "Sign in to %@ for %@", .string(provider.title), .string(profile.name))
+      ) { [weak self] in self?.cancel() }.settingsLocalization())
     hosting.frame = content.bounds
     hosting.autoresizingMask = [.width, .height]
     content.addSubview(hosting)
-    window.title = "\(provider.title) sign-in"
+    window.title = SettingsL10n.format("%@ sign-in", .string(provider.title))
     window.setContentSize(NSSize(width: 520, height: 680))
     window.minSize = NSSize(width: 420, height: 520)
     engine.onClosed = { [weak self] _ in self?.finish(nil) }
     engine.reconcile()
-    if purpose == .signIn {
+    if purpose == .signIn && visible {
       window.center()
       window.makeKeyAndOrderFront(nil)
     }
@@ -69,30 +77,45 @@ final class ProfileAccountSignIn {
   private func watch() async {
     for poll in 0..<(purpose == .signIn ? 1_200 : 30) {
       do { try await Task.sleep(for: .milliseconds(500)) } catch { return }
-      guard !finished, let url = store.session.selectedPage?.tab.url else { continue }
+      guard !finished else { return }
       if purpose == .signOut {
         // Sign-out pages clear cookies while they load and then redirect; give them two seconds.
         let loaded = !engine.pages.isEmpty && engine.pages.values.allSatisfy { !$0.loading }
         if loaded && poll >= 4 { return finish(nil) }
         continue
       }
-      switch provider {
-      case .google: await watchGoogle(url)
-      case .microsoft: await watchMicrosoft(url)
+      for surface in [(store, engine)] + popups.values.map({ ($0.store, $0.engine) }) {
+        for tab in surface.0.session.selectedSpace.tabs {
+          guard !finished, !Task.isCancelled else { return }
+          switch provider {
+          case .google: await watchGoogle(tab, engine: surface.1)
+          case .microsoft, .apple: await watchAccount(tab)
+          }
+        }
       }
     }
     finish(nil)
   }
 
-  private func watchGoogle(_ url: URL) async {
+  private func watchGoogle(_ tab: BrowserTab, engine: BrowserEngine) async {
+    let url = tab.url
     if provider.isSignedInPage(url), !presentation.readsAccountList {
-      presentation.readsAccountList = engine.navigateCurrentPage(to: GoogleAccountList.url)
+      presentation.readsAccountList = true
+      if !engine.navigateCurrentPage(to: GoogleAccountList.url) {
+        presentation.readsAccountList = false
+      }
     } else if url.host() == GoogleAccountList.url.host(),
       url.path() == GoogleAccountList.url.path(),
-      let body = await evaluate(GoogleAccountList.readScript),
+      let body = await evaluate(GoogleAccountList.readScript, tab: tab.id),
       let accounts = GoogleAccountList.accounts(fromBody: body)
     {
-      if let account = accounts.first { return finish(account) }
+      if var account = accounts.first {
+        if account.photoData == nil {
+          account.photoData = await readPhoto(account.photoURL, tab: tab.id)
+        }
+        guard !finished else { return }
+        return finish(account)
+      }
       // Google left sign-in without a session; return to sign-in instead of showing the raw list.
       if engine.navigateCurrentPage(to: provider.signInURL) {
         presentation.readsAccountList = false
@@ -100,25 +123,25 @@ final class ProfileAccountSignIn {
     }
   }
 
-  /// Work and school accounts may leave Microsoft for the company's identity provider and come
-  /// back; the email is read wherever the account is entered and kept until the landing page.
-  private func watchMicrosoft(_ url: URL) async {
-    if provider.isSignedInPage(url) {
-      let pageText = capturedEmail == nil ? await evaluate(MicrosoftSignInPage.emailScript) : nil
-      if let email = capturedEmail ?? MicrosoftSignInPage.email(in: url, pageText: pageText) {
-        finish(ConnectedAccount(provider: .microsoft, email: email))
+  /// Federated redirects and MFA stay untouched. Only signed-in provider account UI can
+  /// establish the primary account; a typed address or a login hint cannot complete the flow.
+  private func watchAccount(_ tab: BrowserTab) async {
+    if provider.isSignedInPage(tab.url) {
+      if let body = await evaluate(SessionAccountPage.readScript(for: provider), tab: tab.id),
+        var account = SessionAccountPage.account(from: body, provider: provider)
+      {
+        if account.photoData == nil {
+          account.photoData = await readPhoto(
+            SessionAccountPage.photoSource(from: body, provider: provider), tab: tab.id)
+        }
+        guard !finished else { return }
+        finish(account)
       }
       return
     }
-    guard MicrosoftSignInPage.mayShowAccountEmail(url),
-      let email = MicrosoftSignInPage.email(
-        in: url, pageText: await evaluate(MicrosoftSignInPage.emailScript))
-    else { return }
-    capturedEmail = email
   }
 
-  private func evaluate(_ script: String) async -> String? {
-    guard let tab = store.session.selectedPage?.tab.id else { return nil }
+  private func evaluate(_ script: String, tab: UUID) async -> String? {
     let json: String? = await withCheckedContinuation { continuation in
       engine.runtime.evaluate(inTabID: tab.uuidString, script: script) {
         continuation.resume(returning: $0)
@@ -128,6 +151,50 @@ final class ProfileAccountSignIn {
     return try? JSONDecoder().decode(String.self, from: data)
   }
 
+  /// Reads a bounded thumbnail using the profile's browser session, never the system cookie jar.
+  private func readPhoto(_ url: URL?, tab: UUID) async -> Data? {
+    guard let url, let script = SessionAccountPage.photoScript(url: url) else { return nil }
+    for _ in 0..<12 {
+      guard !finished, !Task.isCancelled else { return nil }
+      if let result = await evaluate(script, tab: tab) {
+        if result == "unavailable" { return nil }
+        if let data = SessionAccountPage.photoData(from: result) { return data }
+      }
+      do { try await Task.sleep(for: .milliseconds(100)) } catch { return nil }
+    }
+    return nil
+  }
+
+  /// Chromium asks before it attaches the popup tab. A disposable host keeps opener, cookies,
+  /// MFA and postMessage intact without adding an unfinished profile to the saved catalog.
+  func requestedWindow(type: String) -> String? {
+    guard !finished, purpose == .signIn, ["normal", "popup"].contains(type) else { return nil }
+    do {
+      let popup = try SignInPopup(
+        events: events, profile: profile, presentation: presentation,
+        cancel: { [weak self] in
+          self?.cancel()
+        })
+      let id = popup.engine.windowID
+      popups[id] = popup
+      popup.engine.onClosed = { [weak self] _ in self?.popups[id] = nil }
+      DispatchQueue.main.async { [weak self, weak popup] in
+        guard self?.popups[id] === popup else { return }
+        popup?.engine.reconcile()
+      }
+      return id
+    } catch { return nil }
+  }
+
+  func ownsWindow(_ id: String) -> Bool { id == engine.windowID || popups[id] != nil }
+
+  var windowIDs: Set<String> { Set(popups.keys).union([engine.windowID]) }
+
+  func showWindow(_ id: String, active: Bool) {
+    guard visible, !finished, let window = popups[id]?.window else { return }
+    if active { window.makeKeyAndOrderFront(nil) } else { window.orderFront(nil) }
+  }
+
   /// Abandons the flow, as the window's own Cancel button does.
   func cancel() { finish(nil) }
 
@@ -135,8 +202,44 @@ final class ProfileAccountSignIn {
     guard !finished else { return }
     finished = true
     watcher?.cancel()
-    onFinished?(account)
+    for id in Array(popups.keys) { engine.runtime.closeWindowID(id) }
+    popups.removeAll()
     engine.runtime.closeWindowID(engine.windowID)
+    onFinished?(account)
+  }
+}
+
+@MainActor
+private final class SignInPopup {
+  let store: BrowserStore
+  let engine: BrowserEngine
+  let window: NSWindow
+
+  init(
+    events: BrowserRuntimeEvents, profile: BrowserProfile,
+    presentation: ProfileAccountSignInPresentation, cancel: @escaping () -> Void
+  ) throws {
+    let space = BrowserSpace(
+      profileID: profile.id, name: profile.name, symbol: "person", tint: .ocean)
+    store = BrowserStore(
+      session: try BrowserSession(
+        profiles: [profile], spaces: [space], selectedSpaceID: space.id))
+    let id = UUID().uuidString
+    try events.runtime.createWindowID(id)
+    guard let window = events.runtime.window(forID: id),
+      let content = events.runtime.hostView(forWindowID: id)
+    else { throw WorkspaceError.invalidState }
+    self.window = window
+    engine = try BrowserEngine(events: events, windowID: id, store: store)
+    let hosting = NSHostingView(
+      rootView: ProfileAccountSignInView(
+        store: store, engine: engine, presentation: presentation, title: profile.name,
+        cancel: cancel
+      ).settingsLocalization())
+    hosting.frame = content.bounds
+    hosting.autoresizingMask = [.width, .height]
+    content.addSubview(hosting)
+    window.setContentSize(NSSize(width: 520, height: 680))
   }
 }
 
@@ -161,7 +264,7 @@ private struct ProfileAccountSignInView: View {
         Text(store.session.selectedPage?.tab.url.host() ?? "").lineLimit(1)
         Spacer()
         Text(title).font(.callout).foregroundStyle(.secondary).lineLimit(1)
-        Button("Cancel", action: cancel)
+        Button(SettingsL10n.string("Cancel"), action: cancel)
       }
       .padding(10)
       .background(Color(nsColor: .windowBackgroundColor))
@@ -169,7 +272,7 @@ private struct ProfileAccountSignInView: View {
       ZStack {
         Color(nsColor: .textBackgroundColor)
         if presentation.readsAccountList {
-          ProgressView("Finishing sign-in…")
+          ProgressView(SettingsL10n.string("Finishing sign-in…"))
         } else if let id = store.session.selectedSpace.selectedTabID, engine.pages[id] != nil {
           ChromiumPage(engine: engine, tabID: id)
         } else {

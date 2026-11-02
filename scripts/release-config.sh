@@ -7,6 +7,9 @@
 # Keep plain KEY=value lines: Python reads this file without running it.
 
 SHAAR_BUNDLE_IDENTIFIER=com.arcusis.browser
+# The engine probe harness (build/Shaar Verification.app) never ships. A separate identifier keeps
+# its crash reports, preferences and saved window state away from the installed app.
+SHAAR_VERIFICATION_BUNDLE_IDENTIFIER=com.arcusis.browser.verification
 # Apple's Major.Minor.Patch version shown to users; the release tag is v<this>.
 SHAAR_BUNDLE_VERSION=0.1.0
 # Strictly increasing build number. Sparkle orders updates by this value.

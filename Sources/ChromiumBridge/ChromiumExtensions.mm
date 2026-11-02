@@ -62,6 +62,13 @@ static NSString *ARCJSONLiteral(id value) {
   return YES;
 }
 
+- (NSString *)extensionActionTitleForID:(NSString *)extensionID tabID:(NSString *)tabID {
+  ArdiaCoreTab *tab = _tabs[tabID];
+  if (!ARCExtensionIDIsValid(extensionID) || !tab || tab.closed || ![self isSelectedTabID:tabID]) return nil;
+  id title = [tab actionStatesForExtensions:@[extensionID]][extensionID][@"title"];
+  return [title isKindOfClass:NSString.class] ? title : nil;
+}
+
 - (BOOL)executeExtensionID:(NSString *)extensionID tabID:(NSString *)tabID error:(NSError **)error {
   ArdiaCoreTab *tab = _tabs[tabID];
   NSDictionary *state = ARCExtensionIDIsValid(extensionID) && tab ? [tab actionStatesForExtensions:@[extensionID]][extensionID] : nil;

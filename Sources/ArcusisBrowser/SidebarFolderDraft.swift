@@ -8,7 +8,7 @@ import Foundation
 struct SidebarFolderDraft: Equatable {
   let route: FolderEditorRoute
   let section: SidebarSection
-  var name = "Untitled"
+  var name = ShellL10n.string("Untitled")
 
   init(route: FolderEditorRoute, section: SidebarSection = .pinned) {
     self.route = route
@@ -21,8 +21,12 @@ struct SidebarFolderDraft: Equatable {
     return parentID
   }
 
+  var editingFolderID: UUID? {
+    guard case .edit(_, let folder) = route else { return nil }
+    return folder
+  }
+
   func isValid(in session: BrowserSession) -> Bool {
-    guard case .create = route else { return false }
     return route.matches(session)
   }
 }

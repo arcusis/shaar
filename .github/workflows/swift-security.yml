@@ -1,0 +1,52 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+name: Swift security
+on:
+  pull_request:
+  push:
+  merge_group:
+    types: [checks_requested]
+  schedule:
+    - cron: '23 1 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: swift-security-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref != 'refs/heads/production') }}
+
+jobs:
+  analyze:
+    name: CodeQL Swift
+    permissions:
+      contents: read
+      security-events: write
+    uses: ./.github/workflows/ci-codeql.yml
+    with:
+      swift_only: true
+      full: ${{ github.event_name != 'pull_request' && github.event_name != 'merge_group' }}
+
+  required:
+    name: Swift security required
+    needs: analyze
+    if: always() && ((github.event_name == 'push' && github.ref == 'refs/heads/production') || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      security-events: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Require Swift success and no open code-scanning alerts
+        env:
+          SWIFT_RESULT: ${{ needs.analyze.result }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          test "$SWIFT_RESULT" = success
+          python3 scripts/check-release-ci.py --repository "$GITHUB_REPOSITORY" --alerts-only

@@ -30,6 +30,7 @@ KEY = base64.b64encode(
 ).decode()
 CONFIG_TEXT = f"""# comment
 SHAAR_BUNDLE_IDENTIFIER=com.arcusis.browser
+SHAAR_VERIFICATION_BUNDLE_IDENTIFIER=com.arcusis.browser.verification
 SHAAR_BUNDLE_VERSION=1.2.3
 SHAAR_BUILD_VERSION=7
 SHAAR_MINIMUM_SYSTEM_VERSION=26.0
@@ -108,10 +109,27 @@ class ReleaseFeedTests(unittest.TestCase):
                 release_feed.parse_config(
                     CONFIG_TEXT.replace("SHAAR_BUNDLE_IDENTIFIER=com.arcusis.browser", f"SHAAR_BUNDLE_IDENTIFIER={identifier}")
                 )
+        with self.assertRaisesRegex(release_feed.ReleaseError, "reverse-DNS"):
+            release_feed.parse_config(CONFIG_TEXT.replace(
+                "SHAAR_VERIFICATION_BUNDLE_IDENTIFIER=com.arcusis.browser.verification",
+                "SHAAR_VERIFICATION_BUNDLE_IDENTIFIER=verification",
+            ))
         with self.assertRaisesRegex(release_feed.ReleaseError, "missing SHAAR_FEED_URL"):
             release_feed.parse_config(
                 "\n".join(line for line in CONFIG_TEXT.splitlines() if "FEED_URL" not in line)
             )
+
+    def test_verification_identifier_is_separate_from_the_shipping_identifier(self):
+        self.assertEqual(self.config.verification_bundle_identifier, "com.arcusis.browser.verification")
+        shared = CONFIG_TEXT.replace(
+            "SHAAR_VERIFICATION_BUNDLE_IDENTIFIER=com.arcusis.browser.verification",
+            "SHAAR_VERIFICATION_BUNDLE_IDENTIFIER=com.arcusis.browser",
+        )
+        with self.assertRaisesRegex(release_feed.ReleaseError, "must differ from the shipping"):
+            release_feed.parse_config(shared)
+        missing = "\n".join(line for line in CONFIG_TEXT.splitlines() if "VERIFICATION" not in line)
+        with self.assertRaisesRegex(release_feed.ReleaseError, "missing SHAAR_VERIFICATION_BUNDLE_IDENTIFIER"):
+            release_feed.parse_config(missing)
 
     def test_public_key_must_be_32_byte_base64(self):
         self.assertTrue(self.config.public_key_is_ready)

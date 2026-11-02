@@ -1,0 +1,88 @@
+{
+  "url": "https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html",
+  "panelMode": "Page",
+  "pageTool": "Console",
+  "pageDiagnostics": {
+    "requests": [
+      {
+        "bytes": 26012,
+        "duration": 236.59999999962747,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html"
+      },
+      {
+        "bytes": null,
+        "duration": 80.29999999981374,
+        "method": "UNKNOWN",
+        "status": 0,
+        "url": "https://w3.org/WAI/assets/css/style.css"
+      },
+      {
+        "bytes": 3311,
+        "duration": 24.59999999962747,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://www.w3.org/WAI/WCAG22/Understanding/base.css"
+      },
+      {
+        "bytes": 13148,
+        "duration": 24.799999999813735,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://www.w3.org/WAI/WCAG22/Understanding/img/1.4.3-1.4.6-logos-author-choice-logos.png"
+      },
+      {
+        "bytes": 718,
+        "duration": 51.700000000186265,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://www.w3.org/WAI/assets/images/social/linkedin.svg"
+      },
+      {
+        "bytes": 652,
+        "duration": 51.799999999813735,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://www.w3.org/WAI/assets/images/email.svg"
+      },
+      {
+        "bytes": 894,
+        "duration": 52.09999999962747,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://www.w3.org/assets/website-2021/svg/mastodon.svg"
+      },
+      {
+        "bytes": 920,
+        "duration": 24.600000000558794,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://www.w3.org/WAI/WCAG22/Understanding/a11y-light.css"
+      },
+      {
+        "bytes": 666,
+        "duration": 51.80000000074506,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://www.w3.org/WAI/assets/images/social/youtube.svg"
+      },
+      {
+        "bytes": 4278,
+        "duration": 51.80000000074506,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://www.w3.org/WAI/assets/scripts/main.js"
+      },
+      {
+        "bytes": 4626,
+        "duration": 17.700000000186265,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://www.w3.org/favicon.ico"
+      }
+    ],
+    "technologies": [],
+    "vitals": null
+  }
+}

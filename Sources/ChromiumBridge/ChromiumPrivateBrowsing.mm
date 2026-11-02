@@ -32,7 +32,7 @@
 
 - (void)setPrivateCookieSettingForContextID:(NSString *)contextID origin:(NSString *)origin
   value:(NSString *)value completion:(void (^)(NSDictionary *))completion {
-  [self privatePrivacyCall:@"site.settings.set" contextID:contextID
+  [self privatePrivacyCall:@"site_settings.set" contextID:contextID
                      args:@{@"origin": origin ?: @"", @"type": @"cookies", @"value": value ?: @""}
                completion:completion];
 }
@@ -106,7 +106,7 @@
       ![_privateTrackerPreparedSources containsObject:sourceProfileID]) {
     [_services preparePrivateTrackerRulesForProfileID:sourceProfileID completion:^(BOOL ready) {
       if (!ready) {
-        completion(NO, ARCBridgeError(@"Private tracker rules could not be installed."));
+        completion(NO, ARCBridgeError(@"Private site protections could not be applied."));
         return;
       }
       [self->_privateTrackerPreparedSources addObject:sourceProfileID];
@@ -159,7 +159,14 @@
         }
         BOOL valid = self->_profiles[sourceProfileID] == source && !source.destroyed && !source.offTheRecord &&
           privateProfile && !privateProfile.destroyed && privateProfile.offTheRecord && privateProfile != source;
-        if (valid) current[@"profile"] = privateProfile;
+        if (valid) {
+          // These are the only relevant booleans exposed by the pinned host-pref allowlist.
+          for (NSString *key in @[@"credentials_enable_service", @"autofill.profile_enabled", @"autofill.credit_card_enabled"]) {
+            [privateProfile setBoolPreference:key value:NO];
+            valid = valid && [[privateProfile boolPreference:key] isEqual:@NO];
+          }
+          if (valid) current[@"profile"] = privateProfile;
+        }
         NSDictionary *pending = [current[@"pending"] copy];
         [current[@"pending"] removeAllObjects];
         NSMutableSet<NSString *> *registered = [NSMutableSet set];
@@ -198,7 +205,8 @@
             [(NSSet *)current[@"contextIDs"] count] == 0 &&
             [(NSDictionary *)current[@"pending"] count] == 0) {
           [self->_privateProbeSourceLeases removeObjectForKey:sourceProfileID];
-          if (valid && !privateProfile.destroyed) [self->_engine releaseProfile:privateProfile];
+          if (privateProfile && privateProfile.offTheRecord && privateProfile != source && !privateProfile.destroyed)
+            [self->_engine releaseProfile:privateProfile];
         }
     }];
   });
@@ -254,7 +262,7 @@
     return NO;
   }
   native.activeProfile = profile;
-  ArdiaCoreTab *tab = [native openTab:url profile:profile foreground:YES];
+  ArdiaCoreTab *tab = [native openTab:@"about:blank" profile:profile foreground:YES];
   if (!tab || !native.hostView || !tab.view || !creationCurrent()) {
     [tab closeNow];
     [native close];
@@ -267,7 +275,7 @@
   tab.view.frame = native.hostView.bounds;
   tab.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
   [native.hostView addSubview:tab.view];
-  [tab loadURL:url];
+  // Navigation waits for private protection setup below.
   tab.delegate = self;
   if (!creationCurrent()) {
     [tab closeNow];
@@ -304,6 +312,7 @@
   [_privateProbePendingTabs removeObject:tabID];
   [context[@"windows"] addObject:windowID];
   native.delegate = self;
+  [self configurePrivateTab:tab tabID:tabID windowID:windowID contextID:contextID url:url];
   [self publish:tab];
   if (self.onPrivateTabSelected) self.onPrivateTabSelected(contextID, windowID, tabID);
   return YES;
@@ -368,7 +377,7 @@
   if ([windowEntry[@"pendingTabs"] containsObject:tabID]) return NO;
   [windowEntry[@"pendingTabs"] addObject:tabID];
   [_privateProbePendingTabs addObject:tabID];
-  ArdiaCoreTab *tab = [native openTab:url profile:profile foreground:NO];
+  ArdiaCoreTab *tab = [native openTab:@"about:blank" profile:profile foreground:NO];
   if (!tab || tab.closed || tab.profile != profile || !tab.view || !native.hostView || !current()) {
     [tab closeNow];
     [windowEntry[@"pendingTabs"] removeObject:tabID];
@@ -392,12 +401,13 @@
     if (error) *error = ARCBridgeError(@"Private tab owner changed during creation.");
     return NO;
   }
-  [tab loadURL:url];
+  // Navigation waits for private protection setup below.
   if (!current() || _privateProbeTabs[tabID] != entry) {
     [tab closeNow];
     if (error) *error = ARCBridgeError(@"Private tab owner changed during navigation start.");
     return NO;
   }
+  [self configurePrivateTab:tab tabID:tabID windowID:windowID contextID:contextID url:url];
   [self publish:tab];
   return YES;
 }
@@ -445,7 +455,7 @@
   ArdiaCoreTab *tab = nil;
   if (![self privateOwnerForTabID:tabID windowID:windowID contextID:contextID tab:&tab window:nil]) return NO;
   if (![self privateURLIsAllowed:url]) return NO;
-  [tab loadURL:url];
+  [self configurePrivateTab:tab tabID:tabID windowID:windowID contextID:contextID url:url];
   return [self privateOwnerForTabID:tabID windowID:windowID contextID:contextID tab:nil window:nil];
 }
 
@@ -512,6 +522,14 @@
   }
   id observer = entry[@"observer"];
   if (observer) [NSNotificationCenter.defaultCenter removeObserver:observer];
+  for (NSString *origin in [entry[@"cookieOrigins"] copy]) {
+    NSDictionary *args = @{@"offTheRecord": @YES, @"origin": origin, @"type": @"cookies", @"value": @"block"};
+    [_services call:@"site_settings.set" profileID:context[@"sourceProfileID"] args:args completion:^(NSDictionary *result) {}];
+    for (NSMutableDictionary *other in _privateProbeWindows.allValues) {
+      if (_privateProbeContexts[other[@"contextID"]][@"profile"] == context[@"profile"])
+        [other[@"cookieOrigins"] removeObject:origin];
+    }
+  }
   [_privateProbeWindows removeObjectForKey:windowID];
   [context[@"windows"] removeObject:windowID];
   if (_closingBrowser && [(NSSet *)context[@"windows"] count] == 0 &&

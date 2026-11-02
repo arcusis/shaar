@@ -307,6 +307,7 @@ final class NativeWindowProbe {
     try expect(
       true, "normal primary close and recovery recording still work after another window closes")
     store.perform(.tab(space: bases[0].id, tab: first))
+    try store.flushSaves()
     try expect(
       try SessionFile(url: root.appending(path: "session.json")).load() == store.session,
       "native window experiment preserves the primary session persistence contract")

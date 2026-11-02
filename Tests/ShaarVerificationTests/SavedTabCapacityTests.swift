@@ -40,10 +40,18 @@ struct SavedTabCapacityTests {
     #expect(
       initial.initialCheckpoint.matches(
         initial.workspaceStore.workspace, ignoringTabTitles: true))
+    // A normal restart follows the host's flush; native metadata updates save asynchronously.
+    #expect(initial.workspaceStore.persistSnapshot())
     try initial.recordExpectedRestartMetadata()
     let restartMetadata = try JSONDecoder().decode(
       SavedTabCapacityIdentityCheckpoint.self,
       from: Data(contentsOf: initial.restartCheckpointURL))
+    let restored = try WorkspaceFile(
+      url: initial.workspaceURL,
+      legacySessionURL: root.appending(path: "unused-legacy-session.json")
+    ).load()
+    let durable = try #require(restored)
+    #expect(restartMetadata.matches(durable))
     #expect(restartMetadata.runID == initial.runID)
     #expect(restartMetadata.spaces[0].tabs[0].title == "Dynamic engine title")
 

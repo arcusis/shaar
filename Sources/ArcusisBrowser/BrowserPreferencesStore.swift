@@ -14,6 +14,8 @@ final class BrowserPreferencesStore {
   private var profileSearchEngines: [UUID: BrowserSearchEngine] = [:]
   private var connectedAccounts: [UUID: [ConnectedAccount]] = [:]
   private var pinnedExtensions: [UUID: [String]] = [:]
+  private var autoPictureInPictureOffSites: [UUID: [String]] = [:]
+  private var developerSimulations: [UUID: [String: DeveloperSimulation]] = [:]
   private var preservesExistingFile = false
 
   private(set) var sidebarInitiallyVisible = true
@@ -63,6 +65,29 @@ final class BrowserPreferencesStore {
     save()
   }
 
+  /// Automatic picture-in-picture is on unless the profile turned it off for the site.
+  func allowsAutomaticPictureInPicture(on site: String, for profileID: UUID) -> Bool {
+    !(autoPictureInPictureOffSites[profileID] ?? []).contains(site)
+  }
+
+  func setAutomaticPictureInPicture(_ allowed: Bool, on site: String, for profileID: UUID) {
+    var sites = Set(autoPictureInPictureOffSites[profileID] ?? [])
+    if allowed { sites.remove(site) } else { sites.insert(site) }
+    autoPictureInPictureOffSites[profileID] = sites.isEmpty ? nil : sites.sorted()
+    save()
+  }
+
+  func developerSimulation(on origin: String, for profileID: UUID) -> DeveloperSimulation {
+    developerSimulations[profileID]?[origin] ?? DeveloperSimulation()
+  }
+
+  func setDeveloperSimulation(_ value: DeveloperSimulation, on origin: String, for profileID: UUID)
+  {
+    developerSimulations[profileID, default: [:]][origin] = value.isActive ? value : nil
+    if developerSimulations[profileID]?.isEmpty == true { developerSimulations[profileID] = nil }
+    save()
+  }
+
   func setSidebarInitiallyVisible(_ value: Bool) {
     sidebarInitiallyVisible = value
     save()
@@ -76,20 +101,28 @@ final class BrowserPreferencesStore {
       defer { try? handle.close() }
       let data = try handle.read(upToCount: Self.maximumFileSize + 1) ?? Data()
       guard data.count <= Self.maximumFileSize else {
-        preserveWithNotice("Saved preferences exceed the supported size; original file preserved.")
+        preserveWithNotice(
+          SettingsL10n.string(
+            "Saved preferences exceed the supported size; original file preserved."))
         return
       }
       let document = try JSONDecoder().decode(PreferencesDocument.self, from: data)
       guard document.version == 1 || document.version == 2 else {
-        preserveWithNotice("Saved preferences use an unsupported version; original file preserved.")
+        preserveWithNotice(
+          SettingsL10n.string(
+            "Saved preferences use an unsupported version; original file preserved."))
         return
       }
       sidebarInitiallyVisible = document.sidebarInitiallyVisible
       profileSearchEngines = document.profileSearchEngines
       connectedAccounts = document.connectedAccounts
       pinnedExtensions = document.pinnedExtensions
+      autoPictureInPictureOffSites = document.autoPictureInPictureOffSites
+      developerSimulations = document.developerSimulations
     } catch {
-      preserveWithNotice("Saved preferences are invalid or unreadable; original file preserved.")
+      preserveWithNotice(
+        SettingsL10n.string("Saved preferences are invalid or unreadable; original file preserved.")
+      )
     }
   }
 
@@ -112,12 +145,15 @@ final class BrowserPreferencesStore {
       let document = PreferencesDocument(
         version: 2, sidebarInitiallyVisible: sidebarInitiallyVisible,
         profileSearchEngines: profileSearchEngines,
-        pinnedExtensions: pinnedExtensions, connectedAccounts: connectedAccounts)
+        pinnedExtensions: pinnedExtensions, connectedAccounts: connectedAccounts,
+        autoPictureInPictureOffSites: autoPictureInPictureOffSites,
+        developerSimulations: developerSimulations)
       let encoder = JSONEncoder()
       encoder.outputFormatting = [.sortedKeys]
       let data = try encoder.encode(document)
       guard data.count <= Self.maximumFileSize else {
-        storageNotice = "Preferences changed in memory but exceed the supported storage size."
+        storageNotice = SettingsL10n.string(
+          "Preferences changed in memory but exceed the supported storage size.")
         return
       }
       try data.write(to: fileURL, options: .atomic)
@@ -125,8 +161,9 @@ final class BrowserPreferencesStore {
         [.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
       storageNotice = nil
     } catch {
-      storageNotice =
+      storageNotice = SettingsL10n.string(
         "Preferences changed in memory but could not be saved. Try again after fixing storage access."
+      )
     }
   }
 }
@@ -137,6 +174,8 @@ private struct PreferencesDocument: Codable {
   let profileSearchEngines: [UUID: BrowserSearchEngine]
   let connectedAccounts: [UUID: [ConnectedAccount]]
   let pinnedExtensions: [UUID: [String]]
+  let autoPictureInPictureOffSites: [UUID: [String]]
+  let developerSimulations: [UUID: [String: DeveloperSimulation]]
 
   private enum CodingKeys: String, CodingKey {
     case version
@@ -144,19 +183,25 @@ private struct PreferencesDocument: Codable {
     case profileSearchEngines
     case connectedAccounts
     case pinnedExtensions
+    case autoPictureInPictureOffSites
+    case developerSimulations
   }
 
   init(
     version: Int, sidebarInitiallyVisible: Bool,
     profileSearchEngines: [UUID: BrowserSearchEngine],
     pinnedExtensions: [UUID: [String]] = [:],
-    connectedAccounts: [UUID: [ConnectedAccount]] = [:]
+    connectedAccounts: [UUID: [ConnectedAccount]] = [:],
+    autoPictureInPictureOffSites: [UUID: [String]] = [:],
+    developerSimulations: [UUID: [String: DeveloperSimulation]] = [:]
   ) {
     self.version = version
     self.sidebarInitiallyVisible = sidebarInitiallyVisible
     self.profileSearchEngines = profileSearchEngines
     self.connectedAccounts = connectedAccounts
     self.pinnedExtensions = pinnedExtensions
+    self.autoPictureInPictureOffSites = autoPictureInPictureOffSites
+    self.developerSimulations = developerSimulations
   }
 
   init(from decoder: Decoder) throws {
@@ -169,5 +214,11 @@ private struct PreferencesDocument: Codable {
       try values.decodeIfPresent([UUID: [ConnectedAccount]].self, forKey: .connectedAccounts) ?? [:]
     pinnedExtensions =
       try values.decodeIfPresent([UUID: [String]].self, forKey: .pinnedExtensions) ?? [:]
+    developerSimulations =
+      try values.decodeIfPresent(
+        [UUID: [String: DeveloperSimulation]].self, forKey: .developerSimulations) ?? [:]
+    autoPictureInPictureOffSites =
+      try values.decodeIfPresent([UUID: [String]].self, forKey: .autoPictureInPictureOffSites)
+      ?? [:]
   }
 }

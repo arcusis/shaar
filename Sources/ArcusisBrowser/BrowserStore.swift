@@ -16,17 +16,26 @@ struct SpaceRemovalImpact {
   let tabs: Int
   let windows: Int
   var favoritePages: Int = 0
-  var tabDescription: String { "\(tabs) \(tabs == 1 ? "tab" : "tabs")" }
+  var tabDescription: String { ShellL10n.plural("%d tabs", count: tabs) }
 
   private var favoriteImpact: String {
     guard favoritePages > 0 else { return "" }
-    return " and \(favoritePages) Favorite \(favoritePages == 1 ? "page" : "pages")"
+    return ShellL10n.format(
+      " and %@",
+      arguments: [.string(ShellL10n.plural("%d Favorite pages", count: favoritePages))])
   }
 
   var message: String {
     windows > 1
-      ? "This space will be deleted from all \(windows) windows, closing \(tabDescription)\(favoriteImpact). Its profile is kept."
-      : "Tabs in this space will close\(favoriteImpact). Its profile is kept."
+      ? ShellL10n.format(
+        "This space will be deleted from all %@, closing %@%@. Its profile is kept.",
+        arguments: [
+          .string(ShellL10n.plural("%d windows", count: windows)), .string(tabDescription),
+          .string(favoriteImpact),
+        ])
+      : ShellL10n.format(
+        "Tabs in this space will close%@. Its profile is kept.",
+        arguments: [.string(favoriteImpact)])
   }
 }
 
@@ -35,6 +44,7 @@ final class BrowserStore {
   var session: BrowserSession
   var splitTabRecency: [UUID] = []
   var pendingSplitPlacement: SplitPlacement?
+  var sidebarDrag: SidebarTransfer?
   var tabDrag: TabDrag?
   let dragSessionID = UUID()
   let library = BrowserLibraryModel()
@@ -116,7 +126,13 @@ final class BrowserStore {
   @ObservationIgnored var onFindRequest: ((PageFindState, Bool) -> Bool)?
   @ObservationIgnored var onStopFinding: ((UUID) -> Void)?
   @ObservationIgnored var onNavigatePage: ((UUID, UUID, URL) -> Bool)?
-  @ObservationIgnored var onReloadPage: ((UUID, UUID) -> Bool)?
+  @ObservationIgnored var onReloadPage: ((UUID, UUID, PageReloadMode) -> Bool)?
+  /// Sends a media command to a live tab; false when the engine cannot deliver it.
+  @ObservationIgnored var onMediaCommand: ((UUID, MediaCommand) -> Bool)?
+  /// A site's automatic picture-in-picture setting changed for a profile.
+  @ObservationIgnored var onAutomaticPictureInPictureChanged: ((String, UUID) -> Void)?
+  /// Media playing in this window's tabs.
+  let media = MediaPlaybackModel()
   @ObservationIgnored var onSetSpaceProfile: ((UUID, UUID) -> Bool)?
   /// Opens New Profile onboarding for a Space; nil when no host can present it.
   @ObservationIgnored var onNewProfile: ((UUID) -> Void)?
@@ -126,16 +142,31 @@ final class BrowserStore {
   init(sessionFile: SessionFile? = nil, session: BrowserSession = .fresh()) {
     self.sessionFile = sessionFile
     self.session = session
+    let restored: BrowserSession?
     do {
-      if let saved = try sessionFile?.load() {
-        self.session = saved
-      } else {
-        save()
-      }
+      restored = try sessionFile?.load()
     } catch {
       maySave = false
       storageNotice =
-        "Saved session could not be restored. The original file is preserved; changes in this window will not be saved."
+        ShellL10n.string(
+          "Saved session could not be restored. The original file is preserved; changes in this window will not be saved."
+        )
+      return
+    }
+    if let restored {
+      self.session = restored
+    } else {
+      writeLaunchSnapshot()
+    }
+  }
+
+  /// The first snapshot is a launch checkpoint, written before any change is scheduled.
+  private func writeLaunchSnapshot() {
+    guard let sessionFile else { return }
+    do {
+      try sessionFile.save(session)
+    } catch {
+      storageNotice = Self.saveNotice(failure: error.localizedDescription)
     }
   }
 
@@ -530,7 +561,7 @@ final class BrowserStore {
     guard canFavoriteCurrentPage, case .tab(let tab) = session.selectedPage else { return false }
     let tabID = tab.id
     guard profileFavorites.count < BrowserSession.maximumFavoritesPerProfile else {
-      sidebarNotice = "A profile can have up to 16 favorites."
+      sidebarNotice = ShellL10n.string("Favorites are full (12). Remove one to add another.")
       return false
     }
     guard session.promoteTabToFavorite(tabID, in: session.selectedSpaceID) != nil else {
@@ -572,17 +603,19 @@ final class BrowserStore {
     guard sheet == nil, !commandIsOpen, session.selectedSpaceID == spaceID,
       let space = session.spaces.first(where: { $0.id == spaceID }),
       session.favorites.contains(where: { $0.id == id && $0.profileID == space.profileID }),
-      let pageID = session.favoritePages.first(where: { $0.favoriteID == id })?.tab.id,
-      session.selectFavorite(id, in: spaceID),
-      session.removeFavorite(id, disposition: .preserveAsTab)
+      let pageID = session.favoritePages.first(where: { $0.favoriteID == id })?.tab.id
     else { return false }
-    let restoredTab = session.selectedSpace.tabs.first { $0.id == pageID }
-    if folderID != nil || restoredTab?.isPinned != pinned {
+    var draft = session
+    guard draft.selectFavorite(id, in: spaceID),
+      draft.removeFavorite(id, disposition: .preserveAsTab)
+    else { return false }
+    if tabID != nil || folderID != nil || pinned {
       guard
-        session.moveTab(
+        draft.moveTab(
           pageID, from: spaceID, to: spaceID, before: tabID, pinned: pinned, folderID: folderID)
       else { return false }
     }
+    session = draft
     save()
     return true
   }
@@ -681,7 +714,7 @@ final class BrowserStore {
   }
 
   @discardableResult
-  func reloadCurrentPage() -> Bool {
+  func reloadCurrentPage(_ mode: PageReloadMode = .normal) -> Bool {
     guard canReloadCurrentPage, let tab = session.selectedPage?.tab else { return false }
     dismissPageFind()
     engine?.extensionPanel = nil
@@ -691,7 +724,7 @@ final class BrowserStore {
       failure.loadingStarted = false
       rendererFailures[tab.id] = failure
     }
-    guard onReloadPage?(tab.id, session.selectedSpace.profileID) == true else {
+    guard onReloadPage?(tab.id, session.selectedSpace.profileID, mode) == true else {
       if rendererFailures[tab.id]?.id == previous?.id { rendererFailures[tab.id] = previous }
       return false
     }
@@ -850,7 +883,7 @@ final class BrowserStore {
       let targetSpace = session.spaces.first(where: { $0.id == destination }),
       origin.profileID != targetSpace.profileID
     {
-      sidebarNotice = "Tabs can move only between spaces sharing a profile."
+      sidebarNotice = ShellL10n.string("Tabs can move only between spaces sharing a profile.")
       return false
     }
     guard
@@ -869,17 +902,39 @@ final class BrowserStore {
     _ item: SidebarTransfer, into space: UUID, before targetTab: UUID? = nil,
     pinned: Bool? = nil, beforeSpace: UUID? = nil, folderID: UUID? = nil, beforeFolder: UUID? = nil
   ) -> Bool {
-    guard session.spaces.contains(where: { $0.id == space }) else { return false }
+    guard sheet == nil, !commandIsOpen,
+      session.spaces.contains(where: { $0.id == space })
+    else { return false }
     switch item {
     case .tab(let sessionID, let source, let tab):
       guard sessionID == dragSessionID else { return false }
-      let separated = separateDraggedPane(tab)
-      if moveTab(
-        tab, from: source, to: space, before: targetTab, pinned: pinned, folderID: folderID)
-      {
-        return true
-      }
-      guard separated else { return false }
+      guard
+        moveTab(
+          tab, from: source, to: space, before: targetTab, pinned: pinned, folderID: folderID)
+      else { return false }
+      tabDrag = nil
+      return true
+    case .split(let sessionID, let source, let split):
+      guard sessionID == dragSessionID,
+        session.moveSplit(
+          split, from: source, to: space, before: targetTab, pinned: pinned, folderID: folderID)
+      else { return false }
+      tabDrag = nil
+      save()
+      return true
+    case .favorite(let payload):
+      guard acceptsFavoriteDrag(payload, in: space) else { return false }
+      return restoreFavoriteAsTab(
+        payload.favoriteID, in: space, before: targetTab, pinned: pinned ?? false,
+        folderID: folderID)
+    case .url(let url):
+      guard NavigationInput.isWebURL(url), space == session.selectedSpaceID else { return false }
+      var draft = session
+      guard let tab = draft.open(url) else { return false }
+      let moved = draft.moveTab(
+        tab, from: space, to: space, before: targetTab, pinned: pinned, folderID: folderID)
+      guard moved || (targetTab == nil && folderID == nil && pinned != true) else { return false }
+      session = draft
       save()
       return true
     case .space(let sessionID, let id):
@@ -888,9 +943,77 @@ final class BrowserStore {
       else { return false }
       return moveSpace(id, before: beforeSpace)
     case .folder(let sessionID, let source, let folder):
-      guard sessionID == dragSessionID, targetTab == nil, pinned != false else { return false }
-      return moveFolder(folder, from: source, to: space, parentID: folderID, before: beforeFolder)
+      guard sessionID == dragSessionID, targetTab == nil else { return false }
+      return moveFolder(
+        folder, from: source, to: space, parentID: folderID, before: beforeFolder, pinned: pinned)
     }
+  }
+
+  func acceptsFavoriteDrag(_ payload: ProfileFavoriteDrag, in spaceID: UUID) -> Bool {
+    guard let space = session.spaces.first(where: { $0.id == spaceID }) else { return false }
+    return payload.dragSessionID == dragSessionID && payload.profileID == space.profileID
+      && payload.favoriteIDs == profileFavorites.map(\.id)
+      && payload.favoriteIDs.contains(payload.favoriteID) && session.selectedSpaceID == spaceID
+  }
+
+  @discardableResult
+  func acceptFavoritesDrop(_ item: SidebarTransfer, before target: UUID? = nil) -> Bool {
+    guard sheet == nil, !commandIsOpen else { return false }
+    let profile = session.selectedSpace.profileID
+    guard target == nil || profileFavorites.contains(where: { $0.id == target }) else {
+      return false
+    }
+    if let refusal = favoritesDropRefusal(for: item) {
+      sidebarNotice = refusal
+      return false
+    }
+    sidebarNotice = nil
+    switch item {
+    case .tab(let token, let source, let tab):
+      guard token == dragSessionID, source == session.selectedSpaceID,
+        let page = session.selectedSpace.tabs.first(where: { $0.id == tab }),
+        NavigationInput.isWebURL(page.url),
+        let favorite = session.promoteTabToFavorite(tab, in: source)
+      else { return false }
+      if let target { _ = session.moveFavorite(favorite, in: profile, before: target) }
+    case .favorite(let payload):
+      guard acceptsFavoriteDrag(payload, in: session.selectedSpaceID) else { return false }
+      return moveFavorite(payload.favoriteID, before: target)
+    case .url(let url):
+      guard NavigationInput.isWebURL(url),
+        profileFavorites.count < BrowserSession.maximumFavoritesPerProfile
+      else { return false }
+      perform(.open(url))
+      guard addCurrentPageAsFavorite() else { return false }
+      if let favorite = session.selectedSpace.selectedFavoriteID, let target {
+        _ = session.moveFavorite(favorite, in: profile, before: target)
+      }
+    case .split, .folder, .space:
+      return false
+    }
+    tabDrag = nil
+    save()
+    return true
+  }
+
+  @discardableResult
+  func createFolderFromDrop(_ item: SidebarTransfer, onto target: UUID, name: String) -> UUID? {
+    guard sheet == nil, !commandIsOpen,
+      case .tab(let token, let source, let tab) = item, token == dragSessionID,
+      source == session.selectedSpaceID, tab != target,
+      let first = session.selectedSpace.tabs.first(where: { $0.id == target }), first.isPinned,
+      session.selectedSpace.tabs.contains(where: { $0.id == tab }),
+      !session.selectedSpace.splits.contains(where: { $0.tabIDs.contains(target) })
+    else { return nil }
+    var draft = session
+    guard let folder = draft.addFolder(name: name, in: source, parentID: first.folderID),
+      draft.moveTab(target, from: source, to: source, folderID: folder),
+      draft.moveTab(tab, from: source, to: source, folderID: folder)
+    else { return nil }
+    session = draft
+    tabDrag = nil
+    save()
+    return folder
   }
 
   func showFolderEditor(_ route: FolderEditorRoute) {
@@ -952,7 +1075,7 @@ final class BrowserStore {
   @discardableResult
   func moveFolder(
     _ id: UUID, from source: UUID, to destination: UUID, parentID: UUID? = nil,
-    before target: UUID? = nil
+    before target: UUID? = nil, pinned: Bool? = nil
   ) -> Bool {
     guard sheet == nil else { return false }
     sidebarNotice = nil
@@ -960,17 +1083,19 @@ final class BrowserStore {
       let targetSpace = session.spaces.first(where: { $0.id == destination })
     {
       if origin.profileID != targetSpace.profileID {
-        sidebarNotice = "Folders can move only between spaces sharing a profile."
+        sidebarNotice = ShellL10n.string("Folders can move only between spaces sharing a profile.")
         return false
       }
       if source == destination,
         targetSpace.folderPath(to: parentID).contains(where: { $0.id == id })
       {
-        sidebarNotice = "A folder cannot be moved inside itself."
+        sidebarNotice = ShellL10n.string("A folder cannot be moved inside itself.")
         return false
       }
     }
-    guard session.moveFolder(id, from: source, to: destination, parentID: parentID, before: target)
+    guard
+      session.moveFolder(
+        id, from: source, to: destination, parentID: parentID, before: target, pinned: pinned)
     else { return false }
     save()
     return true
@@ -1066,23 +1191,27 @@ final class BrowserStore {
       reconcileTransientState()
       return
     }
-    guard maySave else { return }
-    guard let sessionFile else { return }
+    guard maySave, let sessionFile else { return }
     let snapshot = session
-    if deferred {
-      snapshotScheduler.schedule(
-        { try sessionFile.save(snapshot) },
-        completion: { [weak self] error in
-          self?.storageNotice = error.map { "Changes could not be saved. \($0)" }
-        })
-      return
-    }
+    snapshotScheduler.schedule(
+      deferred: deferred, { try sessionFile.save(snapshot) },
+      completion: { [weak self] failure in
+        self?.storageNotice = Self.saveNotice(failure: failure)
+      })
+  }
+
+  /// Waits until the latest change is on disk. Ordinary saves return before the disk flush.
+  func flushSaves() throws {
     do {
-      try snapshotScheduler.writeNow { try sessionFile.save(snapshot) }
-      storageNotice = nil
+      try snapshotScheduler.flush()
     } catch {
-      storageNotice = "Changes could not be saved. \(error.localizedDescription)"
+      storageNotice = Self.saveNotice(failure: error.localizedDescription)
+      throw error
     }
+  }
+
+  private static func saveNotice(failure: String?) -> String? {
+    failure.map { ShellL10n.format("Changes could not be saved. %@", arguments: [.string($0)]) }
   }
 
   private func reconcileTransientState() {

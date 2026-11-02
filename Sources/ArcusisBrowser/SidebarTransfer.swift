@@ -7,8 +7,11 @@ import Foundation
 import UniformTypeIdentifiers
 
 /// Local identity-only payloads; another app or browser launch cannot move these tabs.
-enum SidebarTransfer: Codable, Transferable {
+enum SidebarTransfer: Codable, Transferable, Equatable {
   case tab(sessionID: UUID, sourceSpaceID: UUID, tabID: UUID)
+  case split(sessionID: UUID, sourceSpaceID: UUID, splitID: UUID)
+  case favorite(ProfileFavoriteDrag)
+  case url(URL)
   case space(sessionID: UUID, spaceID: UUID)
   case folder(sessionID: UUID, sourceSpaceID: UUID, folderID: UUID)
 
@@ -17,5 +20,6 @@ enum SidebarTransfer: Codable, Transferable {
       contentType: .init(exportedAs: "com.arcusis.browser.sidebar-item", conformingTo: .data)
     )
     .visibility(.ownProcess)
+    ProxyRepresentation(importing: { (url: URL) in SidebarTransfer.url(url) })
   }
 }

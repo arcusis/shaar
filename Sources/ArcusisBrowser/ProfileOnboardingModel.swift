@@ -7,22 +7,15 @@ import Foundation
 import Observation
 
 enum ProfileOnboardingStep: Int, CaseIterable {
-  case details, google, microsoft, done
-
-  var provider: AccountProvider? {
-    switch self {
-    case .google: .google
-    case .microsoft: .microsoft
-    case .details, .done: nil
-    }
-  }
+  case name, icon, color, account, done
 
   var title: String {
     switch self {
-    case .details: "Name, icon and color"
-    case .google: "Connect Google"
-    case .microsoft: "Connect Microsoft"
-    case .done: "Ready"
+    case .name: SettingsL10n.string("Name")
+    case .icon: SettingsL10n.string("Icon")
+    case .color: SettingsL10n.string("Color")
+    case .account: SettingsL10n.string("Account")
+    case .done: SettingsL10n.string("Ready")
     }
   }
 
@@ -62,7 +55,7 @@ struct ProfileDraft: Equatable {
 /// Work the onboarding window hands to its host: account sign-in, creation and closing.
 struct ProfileOnboardingActions {
   /// Signs the not yet created profile in; reports the account, or nil when abandoned.
-  var connect: (BrowserProfile, AccountProvider, @escaping (ConnectedAccount?) -> Void) -> Void
+  var connect: (BrowserProfile, AccountSignInOption, @escaping (ConnectedAccount?) -> Void) -> Void
   var stopConnecting: () -> Void
   var create: (ProfileDraft) throws -> UUID
   var close: (ProfileOnboardingModel.Outcome) -> Void
@@ -81,12 +74,13 @@ final class ProfileOnboardingModel {
   var name = ""
   var color = ProfileColorChoice.none
   var symbol = BrowserProfile.defaultSymbol
-  private(set) var step = ProfileOnboardingStep.details
+  private(set) var step = ProfileOnboardingStep.name
   private(set) var accounts: [AccountProvider: ConnectedAccount] = [:]
   private(set) var connecting: AccountProvider?
   private(set) var outcome: Outcome?
   private(set) var failure: String?
   @ObservationIgnored private let actions: ProfileOnboardingActions
+  @ObservationIgnored private var connectionID: UUID?
 
   init(spaceID: UUID? = nil, actions: ProfileOnboardingActions) {
     self.spaceID = spaceID
@@ -96,18 +90,18 @@ final class ProfileOnboardingModel {
   var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
   var isBusy: Bool { connecting != nil || outcome != nil }
   var canGoBack: Bool { step.previous != nil && !isBusy }
-  var canSkip: Bool { step.provider != nil && stepAccount == nil && !isBusy }
+  var canSkip: Bool { step == .account && stepAccount == nil && !isBusy }
 
   var canContinue: Bool {
     switch step {
-    case .details: !trimmedName.isEmpty && !isBusy
-    case .google, .microsoft: stepAccount != nil && !isBusy
+    case .name: !trimmedName.isEmpty && !isBusy
+    case .icon, .color: !isBusy
+    case .account: stepAccount != nil && !isBusy
     case .done: !isBusy
     }
   }
 
-  /// The account connected on the current step, if it is an account step.
-  var stepAccount: ConnectedAccount? { step.provider.flatMap { accounts[$0] } }
+  var stepAccount: ConnectedAccount? { connectedAccounts.first }
 
   var connectedAccounts: [ConnectedAccount] {
     AccountProvider.allCases.compactMap { accounts[$0] }
@@ -125,21 +119,33 @@ final class ProfileOnboardingModel {
   }
 
   func back() {
-    guard canGoBack, let previous = reachableStep(from: step, moving: \.previous) else { return }
+    guard canGoBack, let previous = step.previous else { return }
     failure = nil
     step = previous
   }
 
   func connect(_ provider: AccountProvider) {
-    guard !isBusy, step.provider == provider, !trimmedName.isEmpty else { return }
+    connect(option: .standard(for: provider))
+  }
+
+  func connect(option: AccountSignInOption) {
+    let provider = option.provider
+    guard !isBusy, step == .account, accounts.isEmpty, !trimmedName.isEmpty else { return }
     connecting = provider
-    actions.connect(BrowserProfile(id: profileID, name: trimmedName), provider) {
-      [weak self] account in self?.connectionFinished(provider, account: account)
+    let attempt = UUID()
+    connectionID = attempt
+    actions.connect(
+      BrowserProfile(
+        id: profileID, name: trimmedName, tint: color.tint, customRGB: color.customRGB,
+        symbol: symbol), option
+    ) {
+      [weak self] account in self?.connectionFinished(provider, attempt: attempt, account: account)
     }
   }
 
   func cancel() {
     guard outcome == nil else { return }
+    connectionID = nil
     if connecting != nil { actions.stopConnecting() }
     connecting = nil
     outcome = .cancelled
@@ -147,31 +153,18 @@ final class ProfileOnboardingModel {
   }
 
   private func advance() {
-    guard let next = reachableStep(from: step, moving: \.next) else { return }
+    guard let next = step.next else { return }
     failure = nil
     step = next
   }
 
-  /// A profile has one account, so once a provider is connected the other provider's step is
-  /// passed over in both directions.
-  private func reachableStep(
-    from start: ProfileOnboardingStep,
-    moving move: (ProfileOnboardingStep) -> ProfileOnboardingStep?
-  ) -> ProfileOnboardingStep? {
-    var candidate = move(start)
-    while let current = candidate, isPassedOver(current) { candidate = move(current) }
-    return candidate
-  }
-
-  private func isPassedOver(_ step: ProfileOnboardingStep) -> Bool {
-    guard let provider = step.provider, let connected = accounts.keys.first else { return false }
-    return provider != connected
-  }
-
-  private func connectionFinished(_ provider: AccountProvider, account: ConnectedAccount?) {
-    guard outcome == nil, connecting == provider else { return }
+  private func connectionFinished(
+    _ provider: AccountProvider, attempt: UUID, account: ConnectedAccount?
+  ) {
+    guard outcome == nil, connecting == provider, connectionID == attempt else { return }
+    connectionID = nil
     connecting = nil
-    if let account { accounts[provider] = account }
+    if let account, account.provider == provider { accounts = [provider: account] }
   }
 
   private func create() {
@@ -183,7 +176,8 @@ final class ProfileOnboardingModel {
       outcome = .created(id)
       actions.close(.created(id))
     } catch {
-      failure = "The profile could not be created. \(error.localizedDescription)"
+      failure = SettingsL10n.format(
+        "The profile could not be created. %@", .string(error.localizedDescription))
     }
   }
 }

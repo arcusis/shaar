@@ -57,7 +57,7 @@ import Testing
       == [.tab(space: spaceID, tab: titleTab.id), .open(searchURL("Rare title token"))])
   #expect(
     CommandSearch.results(for: "address-token", in: session).map(\.action)
-      == [.tab(space: spaceID, tab: addressTab.id), .open(searchURL("address-token"))])
+      == [.open(searchURL("address-token")), .tab(space: spaceID, tab: addressTab.id)])
   #expect(
     CommandSearch.results(for: "Rare folder", in: session).map(\.action)
       == [
@@ -265,8 +265,10 @@ private func stableID(_ suffix: Int) -> UUID {
     emptyResults.dropFirst(tabs.count).map(\.action)
       == folders.map { .folder(space: spaceID, folder: $0.id) } + [.space(spaceID)])
   let nestedMatch = CommandSearch.results(for: "Infrastructure", in: session)
+  // The "Infrastructure" folder row leads because its name starts with the query.
+  #expect(nestedMatch.first?.title == "Infrastructure")
   #expect(
-    nestedMatch.first
+    nestedMatch.dropFirst().first
       == CommandResult(
         title: "Child", subtitle: "Main · Projects / Infrastructure · example.com",
         symbol: "rectangle.on.rectangle", action: .tab(space: spaceID, tab: stableID(9_254))))

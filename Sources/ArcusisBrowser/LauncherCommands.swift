@@ -43,13 +43,16 @@ enum LauncherCommands {
       !excluded.contains(command)
     else { return nil }
     let title = entry.title.trimmingCharacters(in: CharacterSet(charactersIn: "…"))
-    let detail = entry.key.isEmpty ? entry.menu : "\(entry.menu) · \(entry.displayKeys)"
+    // Keep modifier/key order LTR inside a Hebrew menu description.
+    let displayKeys =
+      BrowserLanguage.currentLaunchLanguage.isRightToLeft
+      ? "\u{2066}\(entry.displayKeys)\u{2069}" : entry.displayKeys
+    let detail = entry.key.isEmpty ? entry.menu : "\(entry.menu) · \(displayKeys)"
     return LauncherCommand(id: name, title: title, detail: detail, symbol: symbol(for: command))
   }
 
   private static func symbol(for command: BrowserMenuCommand) -> String {
     switch command {
-    case .newWindow: "macwindow"
     case .newPrivateWindow: "eye.slash"
     case .newMiniWindow: "macwindow.badge.plus"
     case .newSpace: "plus.square.on.square"
@@ -63,10 +66,14 @@ enum LauncherCommands {
     case .history: "clock"
     case .downloads: "arrow.down.circle"
     case .find: "magnifyingglass"
-    case .sidebar: "sidebar.left"
-    case .nextSpace: "arrow.right"
-    case .previousSpace: "arrow.left"
+    case .sidebar: "sidebar.leading"
+    case .nextSpace:
+      BrowserLanguage.currentLaunchLanguage.isRightToLeft ? "arrow.left" : "arrow.right"
+    case .previousSpace:
+      BrowserLanguage.currentLaunchLanguage.isRightToLeft ? "arrow.right" : "arrow.left"
     case .reload: "arrow.clockwise"
+    case .hardReload: "arrow.clockwise.circle"
+    case .developerTools: "chevron.left.forwardslash.chevron.right"
     case .splitView: "rectangle.split.2x1"
     case .extensions: "puzzlepiece.extension"
     case .settings: "gearshape"

@@ -118,6 +118,13 @@ jobs:
         env:
           CI_BASE_SHA: ${{ needs.plan.outputs.base }}
         run: .venv/bin/python scripts/ci-checks.py
+      - name: Upload Hebrew string inventory for translators
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: hebrew-string-inventory-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/Localization/Hebrew_String_Inventory.csv
+          if-no-files-found: error
+          retention-days: 30
       - uses: ./.github/actions/ci-evidence
         if: always()
         with:

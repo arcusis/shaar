@@ -51,6 +51,7 @@ struct BrowserChromeSurface: View {
     }
     .padding(.horizontal, 6)
     .frame(height: 34)
+    .accessibilityElement(children: .contain)
     .background(SpaceChromeTint(space: store.session.selectedSpace).color(for: colorScheme))
     .animation(
       (accessibilityOverrides.reduceMotion ?? reduceMotion) ? nil : .easeOut(duration: 0.18),

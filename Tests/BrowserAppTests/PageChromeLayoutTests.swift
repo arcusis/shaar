@@ -155,9 +155,9 @@ final class PageChromeLayoutTests: XCTestCase {
         counts[identifier, default: 0] += 1
       }
       if element.responds(to: childrenSelector),
-        let children = element.perform(childrenSelector)?.takeUnretainedValue() as? [NSObject]
+        let children = element.perform(childrenSelector)?.takeUnretainedValue() as? [Any]
       {
-        pending.append(contentsOf: children)
+        pending.append(contentsOf: children.compactMap { $0 as? NSObject })
       }
     }
     return counts

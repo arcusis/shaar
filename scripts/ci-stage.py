@@ -16,6 +16,7 @@ import tarfile
 from pathlib import Path
 
 from ci_support import Commands, ROOT
+from sidebar_dnd_fixture import registered_sidebar_type
 
 
 VISUAL_FILTERS = (
@@ -45,7 +46,8 @@ def prepare_coverage(cwd: Path, scratch: str) -> Path:
 def run_swift_tests(checks: Commands, name: str, arguments: list[str], *, cwd: Path = ROOT, env=None) -> int:
     for report in (*checks.directory.glob("swift*.xml"), checks.directory / "xctest.xml"):
         report.unlink(missing_ok=True)
-    status = checks.run(name, arguments, cwd=cwd, env=env)
+    with registered_sidebar_type():
+        status = checks.run(name, arguments, cwd=cwd, env=env)
     reports = checks.run("test-reports", [sys.executable, str(ROOT / "scripts/ci-swift-reports.py"),
                         "--log", str(checks.directory / f"{name}.log"),
                         "--directory", str(checks.directory)])

@@ -12,6 +12,8 @@ from pathlib import Path
 import subprocess
 import tempfile
 
+from sidebar_dnd_fixture import registered_sidebar_type
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -26,6 +28,11 @@ def main() -> int:
     parent = ROOT / "build/Verification/sidebar-dnd"
     parent.mkdir(parents=True, exist_ok=True)
     evidence = Path(tempfile.mkdtemp(prefix="restart-", dir=parent))
+    with registered_sidebar_type():
+        return run_phases(evidence, coverage)
+
+
+def run_phases(evidence: Path, coverage: list[str]) -> int:
     report = {"passed": False, "physicalInput": False, "visibleWindows": False, "phases": []}
     for phase in ("initial", "restart"):
         environment = dict(os.environ, SHAAR_SIDEBAR_DND_PHASE=phase, SHAAR_SIDEBAR_DND_ROOT=str(evidence))

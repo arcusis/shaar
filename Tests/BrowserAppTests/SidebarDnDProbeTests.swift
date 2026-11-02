@@ -6,11 +6,20 @@ import AppKit
 import BrowserCore
 import SwiftUI
 import Testing
+import UniformTypeIdentifiers
 
 @testable import ArcusisBrowser
 
 @Suite(.serialized) @MainActor
 struct SidebarDnDProbeTests {
+  init() throws {
+    let type = UTType("com.arcusis.browser.sidebar-item")
+    try #require(
+      type?.isDeclared == true && type?.conforms(to: .data) == true,
+      "Native drop probes require the registered_sidebar_type fixture used by ci-stage.py and sidebar-dnd-probe.py."
+    )
+  }
+
   @Test(arguments: [0, 1]) func pinnedToFavoritesOffscreenDrop(existingFavorites: Int) async throws
   {
     _ = NSApplication.shared

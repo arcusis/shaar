@@ -14,7 +14,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SUITES = {"HebrewLocalizationVisualTests": 5, "InspectorLocalizationVisualTests": 1}
+SUITES = {"HebrewLocalizationVisualTests": 5, "InspectorLocalizationVisualTests": 1,
+          "InspectorDockWidthTests": 2}
 
 
 def child_environment():
@@ -77,6 +78,8 @@ def expected_captures():
             names.add(f"{screen}-{scheme}.png")
     for scheme in ("light", "dark"):
         for width in (320, 420):
+            for panel in ("design", "code"):
+                names.add(f"after-{panel}-{width}-{scheme}.png")
             for panel in ("design", "code", "notes", "copy-menu"):
                 names.add(f"inspector-redesign-{panel}-{width}-{scheme}.png")
     return names

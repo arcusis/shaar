@@ -47,3 +47,9 @@ Hebrew captures use seeded native selections in isolated locale test children; E
 | Code | [PNG](Assets/Shaar_Inspector_Redesign/he-code-320-light.png) | [PNG](Assets/Shaar_Inspector_Redesign/he-code-320-dark.png) | [PNG](Assets/Shaar_Inspector_Redesign/he-code-420-light.png) | [PNG](Assets/Shaar_Inspector_Redesign/he-code-420-dark.png) |
 | Notes | [PNG](Assets/Shaar_Inspector_Redesign/he-notes-320-light.png) | [PNG](Assets/Shaar_Inspector_Redesign/he-notes-320-dark.png) | [PNG](Assets/Shaar_Inspector_Redesign/he-notes-420-light.png) | [PNG](Assets/Shaar_Inspector_Redesign/he-notes-420-dark.png) |
 | Copy Menu | [PNG](Assets/Shaar_Inspector_Redesign/he-copy-menu-320-light.png) | [PNG](Assets/Shaar_Inspector_Redesign/he-copy-menu-320-dark.png) | [PNG](Assets/Shaar_Inspector_Redesign/he-copy-menu-420-light.png) | [PNG](Assets/Shaar_Inspector_Redesign/he-copy-menu-420-dark.png) |
+
+## Fixed dock width and readable ancestry
+
+The page card and Inspector content use explicit viewport bounds. Switching between Design and Code cannot increase dock width; long CSS stays inside the dock. Six tab hit areas retain visible gaps, with icons at narrow widths and labels at 420 points. Breadcrumb chips show tag/ID identity while preserving renderer IDs and original labels for navigation and exports. Initial scroll targets keep the selected chip visible.
+
+Offscreen width-stress captures compare production #376 with the redesign at 320/420 points in light/dark using the same seeded long-CSS selection. Native engine verification checks that all six Inspector tabs preserve the Chromium page viewport. Copy for AI and parent/child navigation handlers remain unchanged by this layout correction.

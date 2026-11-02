@@ -8,6 +8,7 @@ struct InspectorPanel: View {
   @Bindable var model: InspectorModel
   var layout: InspectorLayoutSnapshot? = nil
   @State private var copyButtonFrame = CGRect.zero
+  @State private var breadcrumbPosition: Int?
   var body: some View {
     GeometryReader { geometry in
       VStack(spacing: 0) {
@@ -18,12 +19,20 @@ struct InspectorPanel: View {
           VStack(alignment: .leading, spacing: 7) {
             if let selection = model.selection { elementHeader(selection) }
             InspectorActionsView(model: model, copyButtonFrame: $copyButtonFrame)
-            if let selection = model.selection { breadcrumb(selection) }
-          }.padding(.horizontal, 12).padding(.top, 5).padding(.bottom, 9)
+            if let selection = model.selection {
+              breadcrumb(selection, width: max(0, geometry.size.width - 24))
+            }
+          }.frame(width: max(0, geometry.size.width - 24), alignment: .leading)
+            .padding(.horizontal, 12).padding(.top, 5).padding(.bottom, 9)
           tabs(width: geometry.size.width)
           Divider()
         }
-        content
+        content.frame(width: geometry.size.width).frame(maxHeight: .infinity).clipped()
+          .onGeometryChange(for: CGRect.self) {
+            $0.frame(in: .named("InspectorPanel"))
+          } action: {
+            layout?.contentFrame = $0
+          }
         if let failure = model.failure ?? model.aiCopy.failure {
           Divider()
           Text(failure).font(.system(size: 11)).foregroundStyle(.secondary)
@@ -33,8 +42,14 @@ struct InspectorPanel: View {
           Divider()
           footer
         }
-      }.frame(maxWidth: .infinity, maxHeight: .infinity)
+      }.frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
+        .clipped()
         .background(Color(nsColor: .windowBackgroundColor))
+        .onGeometryChange(for: CGSize.self) {
+          $0.size
+        } action: {
+          layout?.panelSize = $0
+        }
     }
     .coordinateSpace(name: "InspectorPanel")
     .environment(\.inspectorPresentation, model.presentation)
@@ -166,7 +181,8 @@ struct InspectorPanel: View {
   }
 
   private func tabs(width: CGFloat) -> some View {
-    HStack(spacing: 0) {
+    let showsLabels = width >= 420
+    return HStack(spacing: 4) {
       ForEach(InspectorModel.Tab.allCases, id: \.self) { value in
         Button {
           model.presentation.copyMenuOpen = false
@@ -174,13 +190,13 @@ struct InspectorPanel: View {
         } label: {
           HStack(spacing: 4) {
             Image(systemName: symbol(value)).font(.system(size: 10))
-            if width >= 400 {
+            if showsLabels {
               InspectorL10n.text(value.rawValue).font(.system(size: 11)).lineLimit(1).fixedSize()
             }
           }.fontWeight(model.tab == value ? .semibold : .regular)
             .foregroundStyle(model.tab == value ? .primary : .secondary)
-            .padding(.horizontal, width >= 400 ? 7 : 0)
-            .frame(maxWidth: width >= 400 ? nil : .infinity, minHeight: 32).contentShape(
+            .padding(.horizontal, showsLabels ? 5 : 0)
+            .frame(maxWidth: showsLabels ? nil : .infinity, minHeight: 32).contentShape(
               Rectangle()
             )
             .overlay(alignment: .bottom) {
@@ -215,32 +231,41 @@ struct InspectorPanel: View {
     }
   }
 
-  private func breadcrumb(_ selection: InspectorSelection) -> some View {
-    ScrollViewReader { proxy in
-      ScrollView(.horizontal, showsIndicators: false) {
-        HStack(spacing: 3) {
-          ForEach(selection.ancestors) { ancestor in
+  private func breadcrumb(_ selection: InspectorSelection, width: CGFloat) -> some View {
+    ScrollView(.horizontal, showsIndicators: false) {
+      HStack(spacing: 3) {
+        ForEach(selection.ancestors) { ancestor in
+          HStack(spacing: 3) {
             if ancestor.id != selection.ancestors.first?.id {
               Image(systemName: "chevron.right").font(.system(size: 6)).foregroundStyle(.tertiary)
             }
             Button {
               model.selectAncestor(ancestor.id)
             } label: {
-              Text(ancestor.label).font(.system(size: 10, design: .monospaced)).lineLimit(1)
+              Text(ancestor.displayLabel).font(.system(size: 10, design: .monospaced))
+                .fixedSize(horizontal: true, vertical: false)
                 .foregroundStyle(ancestor.id == selection.id ? .primary : .secondary)
-                .padding(.horizontal, 5).frame(height: 21)
+                .padding(.horizontal, 7).frame(height: 23)
                 .background(
-                  .primary.opacity(ancestor.id == selection.id ? 0.05 : 0),
-                  in: RoundedRectangle(cornerRadius: 3))
+                  .primary.opacity(ancestor.id == selection.id ? 0.07 : 0.025),
+                  in: RoundedRectangle(cornerRadius: 3)
+                )
+                .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(.primary.opacity(0.08)))
             }.buttonStyle(.plain).help(
               InspectorL10n.format("Inspect %@", arguments: [.string(ancestor.label)])
-            ).id(ancestor.id)
-          }
-        }.fixedSize(horizontal: true, vertical: false)
-      }.frame(height: 23).environment(\.layoutDirection, .leftToRight)
-        .onAppear { proxy.scrollTo(selection.id, anchor: .trailing) }
-        .onChange(of: selection.id) { proxy.scrollTo(selection.id, anchor: .trailing) }
-    }
+            )
+            .onGeometryChange(for: CGRect.self) {
+              $0.frame(in: .named("InspectorPanel"))
+            } action: {
+              layout?.breadcrumbFrames[ancestor.id] = $0
+            }
+          }.id(ancestor.id)
+        }
+      }.scrollTargetLayout()
+    }.scrollPosition(id: $breadcrumbPosition, anchor: .trailing)
+      .defaultScrollAnchor(.trailing)
+      .frame(width: width, height: 23).environment(\.layoutDirection, .leftToRight)
+      .onChange(of: selection.id, initial: true) { breadcrumbPosition = selection.id }
   }
 
   @ViewBuilder private var content: some View {

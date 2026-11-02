@@ -176,7 +176,7 @@ enum InspectorPageScript {
         const surface=document.createElement('i');surface.style.cssText='display:none;background:Canvas;color-scheme:'+s.colorScheme;
         shadow.append(surface);const canvasColor=getComputedStyle(surface).backgroundColor;surface.remove();
         backdrop=over(backdrop,color(canvasColor).rgba);
-        const ancestry=[];for(let el=node;el&&ancestry.length<32;el=parent(el))ancestry.unshift({id:identify(el),label:label(el).slice(0,100)});
+        const ancestry=[];for(let el=node;el&&ancestry.length<32;el=parent(el))ancestry.unshift({id:identify(el),label:label(el).slice(0,100),tag:el.localName.slice(0,128),identifier:el.id?el.id.slice(0,128):null});
         const selector=css(node)||'',pathValue=xpath(node)||'',found=component(node);
         let jsPath='document';for(const frame of frames)jsPath+='.querySelector('+quoted(frame)+').contentDocument';
         jsPath+='.querySelector('+quoted(selector)+')';

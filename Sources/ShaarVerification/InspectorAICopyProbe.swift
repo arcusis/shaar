@@ -365,7 +365,9 @@ import SwiftUI
       try check(!window.isVisible, "AI notes capture ordered a window.")
       try check(NSApp.keyWindow === previous, "Redesign capture changed the key window.")
       try check(
-        layout.tabFrames.count == 6
+        abs(layout.panelSize.width - width) < 0.5
+          && abs(layout.contentFrame.width - width) < 0.5
+          && layout.tabFrames.count == 6
           && layout.tabFrames.values.allSatisfy { $0.minX >= -0.5 && $0.maxX <= width + 0.5 },
         "Inspector tabs escaped their panel width.")
       if inspector.presentation.copyMenuOpen {

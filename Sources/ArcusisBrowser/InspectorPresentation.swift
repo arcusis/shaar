@@ -31,6 +31,9 @@ import SwiftUI
 }
 
 @MainActor final class InspectorLayoutSnapshot {
+  var panelSize = CGSize.zero
+  var contentFrame = CGRect.zero
+  var breadcrumbFrames: [Int: CGRect] = [:]
   var tabFrames: [String: CGRect] = [:]
   var copyMenuFrame = CGRect.zero
 }

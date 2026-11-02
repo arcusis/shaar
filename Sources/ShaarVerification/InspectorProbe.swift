@@ -417,6 +417,18 @@ final class InspectorProbe {
   }
 
   private func styles(_ model: InspectorModel) async throws {
+    engine.runtime.window(forID: engine.windowID)?.contentView?.layoutSubtreeIfNeeded()
+    let pageID = model.target.tabID.uuidString
+    let viewport = engine.runtime.view(forTabID: pageID)?.frame.size
+    for tab in InspectorModel.Tab.allCases {
+      model.tab = tab
+      try await Task.sleep(for: .milliseconds(100))
+      engine.runtime.window(forID: engine.windowID)?.contentView?.layoutSubtreeIfNeeded()
+      let current = engine.runtime.view(forTabID: pageID)?.frame.size
+      guard Self.sameViewport(viewport, current)
+      else { throw InspectorFailure("Switching Inspector tabs resized the page viewport.") }
+    }
+    try expect(true, "Inspector tabs preserve the fixed dock and page viewport")
     model.tab = .styles
     let styles = model.styles
     await styles.refresh(force: true)
@@ -508,6 +520,15 @@ final class InspectorProbe {
     try await key(model, "ArrowUp")
     try await wait("button restored after CSS probe") { model.selection?.css == "#save" }
     model.tab = .design
+  }
+
+  static func sameViewport(_ expected: CGSize?, _ actual: CGSize?) -> Bool {
+    guard let expected, let actual,
+      [expected.width, expected.height, actual.width, actual.height].allSatisfy({
+        $0.isFinite && $0 > 0
+      })
+    else { return false }
+    return abs(expected.width - actual.width) < 0.5 && abs(expected.height - actual.height) < 0.5
   }
 
   private func loaded(host: String) async throws {

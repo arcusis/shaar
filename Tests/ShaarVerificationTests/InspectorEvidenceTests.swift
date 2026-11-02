@@ -10,6 +10,18 @@ import Testing
 @testable import ShaarVerification
 
 @Suite @MainActor struct InspectorEvidenceTests {
+  @Test func viewportContractRejectsContentDrivenGrowthAndMissingOrInvalidFrames() {
+    let viewport = CGSize(width: 800, height: 600)
+    #expect(InspectorProbe.sameViewport(viewport, viewport))
+    #expect(InspectorProbe.sameViewport(viewport, .init(width: 800.25, height: 599.75)))
+    #expect(!InspectorProbe.sameViewport(viewport, .init(width: 840, height: 600)))
+    #expect(!InspectorProbe.sameViewport(viewport, .init(width: 800, height: 640)))
+    #expect(!InspectorProbe.sameViewport(nil, viewport))
+    #expect(!InspectorProbe.sameViewport(viewport, nil))
+    #expect(!InspectorProbe.sameViewport(viewport, .zero))
+    #expect(!InspectorProbe.sameViewport(viewport, .init(width: CGFloat.infinity, height: 600)))
+  }
+
   @Test func assetReceiptPreservesObservedMetadataAndUnknowns() throws {
     #expect(InspectorProbe.assetReceipt(nil) is NSNull)
     var assets = InspectorAssetsData(

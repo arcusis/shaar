@@ -8,6 +8,14 @@ struct InspectorSelection: Decodable, Equatable {
   struct Ancestor: Decodable, Equatable, Identifiable {
     let id: Int
     let label: String
+    var tag: String? = nil
+    var identifier: String? = nil
+
+    var displayLabel: String {
+      let element = tag ?? String(label.prefix { $0 != "." && $0 != "#" })
+      guard let identifier, !identifier.isEmpty else { return element }
+      return element + "#" + identifier
+    }
   }
   struct Box: Decodable, Equatable {
     let width: Double
@@ -72,7 +80,10 @@ struct InspectorSelection: Decodable, Equatable {
         $0.count == 4 && $0.allSatisfy { $0.count <= 64 }
       }
       && [css, xpath, playwright, jsPath].allSatisfy { $0.count <= 16_384 }
-      && ancestors.allSatisfy { $0.id > 0 && $0.label.count <= 100 }
+      && ancestors.allSatisfy {
+        $0.id > 0 && $0.label.count <= 100 && ($0.tag?.count ?? 0) <= 128
+          && ($0.identifier?.count ?? 0) <= 128
+      }
       && frames.allSatisfy { $0.count <= 16_384 }
       && colors.count <= 8 && colors.allSatisfy { $0.label.count <= 64 && $0.value.valid }
       && foreground.valid && backdrop.valid && label.count <= 512 && tag.count <= 128

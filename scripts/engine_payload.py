@@ -107,7 +107,7 @@ def _same_archive_stat(left: os.stat_result, right: os.stat_result) -> bool:
 def _check_archive_unchanged(stream: BinaryIO, path: Path, initial: os.stat_result) -> None:
     try:
         current = _archive_stat(stream)
-        named = path.stat(follow_symlinks=False)
+        named = path.lstat()
     except OSError as error:
         raise PayloadError("archive changed during comparison") from error
     if (not _same_archive_stat(initial, current) or not stat.S_ISREG(named.st_mode)
@@ -118,7 +118,7 @@ def _check_archive_unchanged(stream: BinaryIO, path: Path, initial: os.stat_resu
 def _open_archive(path: Path) -> BinaryIO:
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
     try:
-        named = path.stat(follow_symlinks=False)
+        named = path.lstat()
         if not stat.S_ISREG(named.st_mode):
             raise PayloadError("archive is not a supported regular file")
         descriptor = os.open(path, flags)

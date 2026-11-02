@@ -45,8 +45,14 @@ struct BrowserWindow: View {
             }
           }
           .animation(
-            reduceMotion ? .easeOut(duration: 0.12) : nil, value: store.libraryDrawerSection
+            reduceMotion ? nil : .easeOut(duration: 0.12), value: store.libraryDrawerSection
           )
+          .transaction { transaction in
+            if reduceMotion {
+              transaction.animation = nil
+              transaction.disablesAnimations = true
+            }
+          }
           .frame(width: leadingWidth)
           page
             .padding(BrowserChromeLayout.pageCardInset)

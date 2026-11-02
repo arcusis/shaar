@@ -11,12 +11,12 @@ import XCTest
 
 @MainActor
 final class SidebarIssue209VisualTests: XCTestCase {
-  func testSixteenFavoritesAndTabs() async throws {
+  func testTwelveFavoritesAndTabs() async throws {
     try XCTSkipUnless(
       SidebarVisualCaptureSupport.enabled, "Visual capture requires explicit opt-in")
     var session = BrowserSession.fresh()
     let profile = session.selectedSpace.profileID
-    for index in 0..<16 {
+    for index in 0..<12 {
       XCTAssertNotNil(
         session.addFavorite(
           profileID: profile, originalURL: URL(string: "https://favorite\(index).example")!))
@@ -32,6 +32,6 @@ final class SidebarIssue209VisualTests: XCTestCase {
     let mounted = try MountedChromeSidebar(
       view: view, size: NSSize(width: 240, height: 760), appearance: .aqua)
     defer { mounted.close() }
-    _ = try await mounted.capture(to: URL(fileURLWithPath: "/tmp/arc-sidebar-16-favorites.png"))
+    _ = try await mounted.capture(to: URL(fileURLWithPath: "/tmp/arc-sidebar-12-favorites.png"))
   }
 }

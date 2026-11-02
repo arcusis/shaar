@@ -25,6 +25,8 @@ struct SidebarSplitRow: View {
   let onDrag: (UUID) -> SidebarTransfer
   var memberMenu: ((UUID) -> AnyView)? = nil
   var onStackDrag: (() -> SidebarTransfer)? = nil
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.browserChromeAccessibilityOverrides) private var accessibilityOverrides
   @State private var hoveredID: UUID?
 
   var body: some View {
@@ -88,6 +90,9 @@ struct SidebarSplitRow: View {
     .accessibilityAddTraits(raised ? [.isButton, .isSelected] : .isButton)
     .accessibilityAction { onSelect(segment.id) }
     .accessibilityAction(named: ShellL10n.text("Close tab")) { onClose(segment.id) }
+    .sidebarPageMotion(
+      id: segment.id, reduceMotion: reduceMotion || accessibilityOverrides.reduceMotion == true
+    )
     .draggable(onDrag(segment.id))
     .contextMenu { if let memberMenu { memberMenu(segment.id) } }
   }

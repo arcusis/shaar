@@ -6,6 +6,8 @@ import SwiftUI
 
 /// Dashed placeholder shown in an empty sidebar section while a tab is dragged, like Arc.
 struct SidebarDropHint: View {
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.browserChromeAccessibilityOverrides) private var accessibilityOverrides
   let title: String
   let symbol: String
   let isTargeted: Bool
@@ -27,7 +29,10 @@ struct SidebarDropHint: View {
             style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
       )
       .animation(.easeOut(duration: 0.12), value: isTargeted)
-      .transition(.opacity.combined(with: .scale(scale: 0.96)))
+      .transition(
+        reduceMotion || accessibilityOverrides.reduceMotion == true
+          ? .opacity : .opacity.combined(with: .scale(scale: 0.96))
+      )
       .allowsHitTesting(false)
   }
 }

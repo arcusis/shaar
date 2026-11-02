@@ -561,7 +561,7 @@ final class BrowserStore {
     guard canFavoriteCurrentPage, case .tab(let tab) = session.selectedPage else { return false }
     let tabID = tab.id
     guard profileFavorites.count < BrowserSession.maximumFavoritesPerProfile else {
-      sidebarNotice = ShellL10n.string("A profile can have up to 16 favorites.")
+      sidebarNotice = ShellL10n.string("Favorites are full (12). Remove one to add another.")
       return false
     }
     guard session.promoteTabToFavorite(tabID, in: session.selectedSpaceID) != nil else {
@@ -963,6 +963,11 @@ final class BrowserStore {
     guard target == nil || profileFavorites.contains(where: { $0.id == target }) else {
       return false
     }
+    if let refusal = favoritesDropRefusal(for: item) {
+      sidebarNotice = refusal
+      return false
+    }
+    sidebarNotice = nil
     switch item {
     case .tab(let token, let source, let tab):
       guard token == dragSessionID, source == session.selectedSpaceID,

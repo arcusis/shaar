@@ -132,14 +132,15 @@ final class InspectorModel {
     }
   }
 
-  func pick() {
+  @discardableResult
+  func pick() -> Task<Void, Never>? {
     if panelMode != .element { setPanelMode(.element) }
     guard isOpen else {
       open()
-      return
+      return nil
     }
     let revision = generation
-    Task { [weak self] in
+    return Task { [weak self] in
       guard let self, self.generation == revision, self.isOpen else { return }
       _ = try? await self.evaluate("globalThis.__shaarInspectorV2?.pick(); true")
       guard self.generation == revision, self.isOpen else { return }

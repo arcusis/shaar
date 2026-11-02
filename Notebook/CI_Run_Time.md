@@ -1,0 +1,79 @@
+# CI run time and retained coverage
+
+Issue [#378](https://github.com/arcusis/shaar/issues/378) requires a green app PR within 15 minutes, including runner queue time. Design preceded implementation. Related: [[CI_Pipeline]], [[Commit_Gates]], [[Test_Coverage]], [[Releasing]].
+
+## Measured hosted execution
+
+Durations use GitHub run creation/completion timestamps, not the sum of job times. A failed or canceled run does not establish the green target. Every listed run used attempt 1; native fixtures have no retry path.
+
+| Run | Profile | Wall time | Result and boundary |
+| --- | --- | --- | --- |
+| [41409163101](https://github.com/arcusis/shaar/actions/runs/41409163101) | Original #374 | 34m26s | Green; Swift CodeQL 31m04s, serial engine 19m55s, shipping 4m50s |
+| [41417517803](https://github.com/arcusis/shaar/actions/runs/41417517803) | Original #375 | 39m07s | Green; Swift CodeQL 30m04s, serial engine 28m27s |
+| [41423270716](https://github.com/arcusis/shaar/actions/runs/41423270716) | First parallel graph | 28m55s | Coverage rejected a stale source tree missing merged screenshot probes; no threshold changed |
+| [41427217156](https://github.com/arcusis/shaar/actions/runs/41427217156) | Direct full-source compiler replay | 21m11s | Green; every selected gate and 215/215 Swift files |
+| [41434389242](https://github.com/arcusis/shaar/actions/runs/41434389242) | Shipping plus support replay | 23m43s | Green; 178/178 Swift files; above target |
+| [41437699136](https://github.com/arcusis/shaar/actions/runs/41437699136) | Planning without duplicate compilation | 18m09s | Swift passed in 17m40s, 178/178 files; Inspector restart failure kept run red |
+| [41441422985](https://github.com/arcusis/shaar/actions/runs/41441422985) | Two app batches, picker acknowledgement | Canceled after >24m | Every native gate passed; Swift tracing exceeded the budget |
+| [41438505574](https://github.com/arcusis/shaar/actions/runs/41438505574) | Production with Hebrew/RTL | 42m01s | Green; Swift 29m42s, localization stage 12m10s |
+| Pending hosted run | Integrated localization, standard Intel, explicit arm64 | Pending | Extraction and final wall time remain unproven |
+
+A [cold shipping-only trial](https://github.com/arcusis/shaar/actions/runs/41430145476) was canceled after exceeding the budget; it supplies no green timing claim. The original baseline included 1m52s before execution; its executing graph took 32m34s. Across measured runs, macOS build/probe durations vary substantially. Final acceptance depends on observed hosted execution.
+
+## Pipeline structure
+
+Start unit build, verification preparation and CodeQL immediately after stage selection. Start shipping after fast/dependency review; it consumes no unit artifact. Coverage and visuals still require unit success. `CI required` still requires every selected stage, including fast/dependency checks, probes, coverage, visuals, website checks and shipping. Independent candidate preparation cannot authorize a merge.
+
+Keep production's single engine job and runner unchanged: build the verification bundle and run baseline, private-window, Quit and recovery modes on the same machine. Preserve requested counts, the private/Quit minimum three, fresh roots and every failure without retries. Engine sharding and cross-runner bundle transfer are deferred to the follow-up. Shipping runs independently; final CI still requires the complete engine result.
+
+Use Ubuntu 24.04 for every Linux workflow. Fast gates remain on macOS because the integrated resource tests exercise Apple's real catalog compiler. Dependency review v5 and download-artifact v8 use Node 24 and full SHA pins. Keep dependency severity policy and synthetic merge-group review. Use a separate stdlib-only Python environment for Swift CodeQL helpers; signing/release dependencies remain hash-synchronized in native/check jobs. Cache locked Python environments, SwiftPM dependencies/products, engine archives by pin digest and pnpm stores. Always execute required build/test commands after restoration. Known docs/site PR diffs skip native work; unknown or empty diffs select full work. Website validation is required for relevant PR and merge-group changes. Ruleset 26350516 remains owner-managed: ALLGREEN groups up to five, no ruleset mutation.
+
+## Fresh Swift extraction
+
+SwiftPM manifest caching includes the environment; CodeQL initialization changes it. Running SwiftPM under tracing caused a long manifest-interpreter gap. Before initialization, ask native SwiftPM for its job graph, materialize declared source lists/framework copies and record compiler argument arrays. Planning creates no app objects. Bind the plan to revision, scope, compiler binary SHA256 and Git-derived source hashes. Under tracing, verify those bytes and the complete filesystem inventory without Git or compiler-lookup subprocesses.
+
+Compile every selected module in native whole-module mode, optimization disabled, with two backend threads. Entry/verification commands follow native dependency order. The two-batch experiment was slower and is not the final strategy. Reject missing/duplicate planned sources, escaped response/output paths, graph cycles and mutated compiler/content/scope. Independently decode CodeQL's extracted-file query and require every selected Swift file.
+
+PRs, merge groups and timing runs cover all shipping modules plus support warm-up. Production/nightly/deep manual runs use fresh SwiftPM tracing for all default-build modules, the package manifest and build plugins. Manifest caching is disabled and a fresh scratch directory is required. The full extracted-file gate includes those build inputs. Proven CI-only PRs may skip Swift analysis; source/build-input changes and unknown diffs retain it. Python and Actions analysis remain selected for native/CI work. Release procedure requires green full production Source checks before tagging; Developer ID, notarization and real Sparkle signing stay local and unchanged.
+
+The next hardware variant runs only CodeQL Swift on standard `macos-26-intel` (4 CPUs/14 GB), leaving native build/runtime jobs on M1 `macos-26` (3 CPUs/7 GB). Both are standard public-repository runners. Explicitly compile arm64 and reject a plan targeting another architecture, preserving shipping conditional code. [GitHub runner specifications](https://docs.github.com/en/actions/reference/runners/github-hosted-runners) establish hardware availability, not a speed claim.
+
+The two-batch trial completed baseline/lifecycle at 13m44s, shipping at 14m38s and visuals at exactly 15m00s. Its unit job waited about 79 seconds for fast checks. Independent unit/unsigned-candidate preparation now starts earlier; the final gate still requires fast, dependency review, build and every downstream check. These changes remove idle dependencies, not validation.
+
+## Coverage and readiness
+
+The #375 queue baseline was correct: identical app/test source differed by three incidentally covered Quick Look cancellation/failure lines. Explicit lifecycle tests fixed that timing dependency; [#375 run 41439606539](https://github.com/arcusis/shaar/actions/runs/41439606539) passed strict coverage at 19709/33024 app lines versus 19699/33015 baseline. No epsilon, exclusion or retry was added. See [[Test_Coverage]].
+
+The graph-only trial failed `detail selection locks` selecting `#hidden-focus` after missing-alt. `InspectorModel.pick()` queued renderer work while the probe dispatched input immediately. Return the existing task, preserve UI callback behavior and await it at each probe picker transition. A focused regression starts locked and verifies acknowledgement precedes subsequent input. Keep the original click/lock assertions and every scenario.
+
+| Protected area | Retained gate |
+| --- | --- |
+| App/core/localization/schema | Native build, all unit suites, source pins, strict per-module coverage, catalog validation, English/Hebrew captures and real engine locale |
+| Engine/private/Quit/recovery | All original scenarios and repetitions, shard evidence, no retries |
+| Native presentation | All six hosted-only visual filters and real-thumbnail capture assertions |
+| Inspector | Source-hashed headless renderer contracts, native input and screenshot probes |
+| Python/hooks/workflows | All discovered Python tests, sensitive-file/history gates, redacted Gitleaks, formatting, license/Notebook checks, shellcheck, actionlint and SHA pins |
+| Static analysis | Selected Swift extraction gate, Python/Actions CodeQL, full production/nightly Swift inventory |
+| Website | Locked install, typecheck, tests, lint/format, build, licenses and static/served links |
+| Shipping/update | Verification-code exclusion, pinned engine, deep signature, validated SBOM, real ephemeral-key Sparkle cases |
+| Production/nightly | Unsigned-candidate provenance, Scorecard, sanitizers and dead-code report |
+
+Before Hebrew integration, local verification passed the native build, fresh runtime replay of 216 files, 41 pipeline tests and ten shared gates/231 Python tests. After integration, the native build, all three focused test functions/four parameter cases, fresh PR-scope replay of 187 files and a fresh full SwiftPM build passed. Current full inventory is 225 runtime files plus manifest/plugin (227); 42 pipeline tests pass. Full shared-gate and hosted extraction results remain pending. No local app or visible window was launched. Hosted results establish native runtime/extraction behavior separately. Final annotation audit remains pending; informational macOS capacity notices are outside the requested deprecation/migration cleanup.
+
+Sources: [GitHub compiled-language guidance](https://docs.github.com/en/code-security/how-tos/find-and-fix-code-vulnerabilities/manage-your-configuration/codeql-for-compiled-languages), [CodeQL preparation](https://docs.github.com/en/code-security/tutorials/customize-code-scanning/prepare-code-for-analysis), [Swift compiler performance](https://github.com/swiftlang/swift/blob/main/docs/CompilerPerformance.md), [SwiftPM graph planning](https://github.com/swiftlang/swift-package-manager/blob/swift-6.3-RELEASE/Sources/Commands/SwiftBuildCommand.swift), [CodeQL extraction internals](https://github.com/github/codeql/blob/main/swift/extractor/SwiftExtractor.cpp), [dependency-review v5](https://github.com/actions/dependency-review-action/releases/tag/v5.0.0), [runner inventory](https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md).
+
+Production integration includes Hebrew/RTL (`b213f63`). Preserve its localization fast check, hosted English/Hebrew captures, real engine-locale fixture, compilation plugin and final localization requirement. Resolve Inspector's button conflict by keeping the localized label and discarding the picker task in the UI callback. CodeQL follow-up work remains part of #378; this infrastructure PR does not close the issue and reports measured green wall time even before the 15-minute target is reached.
+
+Preserve full production/nightly CodeQL compilation of the new SwiftPM localization plugin and package manifest. Full analysis uses a fresh native SwiftPM build under tracing, with manifest caching disabled; its extracted-file gate also requires `Package.swift` and `Plugins/**/*.swift`. PR shipping analysis keeps pre-initialization graph planning and fresh runtime-module replay. This retains build-configuration coverage while allowing the remaining CodeQL latency work to ship separately.
+
+Integrated verification passed 243 Python tests and ten of eleven shared gates; the localization gate identified stale lexical line references after the Inspector edits. Regenerating `Hebrew_String_Inventory.csv` restored that gate without changing catalog translations. Native build, three focused test functions/four parameter cases, fresh 187-file shipping replay and fresh full SwiftPM build passed locally; all eleven gate commands are now verified. Hosted runtime/static-analysis results remain separate requirements.
+
+Hosted integration exposed two setup dependencies before analysis: resource/bundle tests invoke `xcrun xcstringstool`, unavailable on Ubuntu, and the release dependency lock has no usable Intel wheel for cryptography 50.0.2. Keep the existing real compiler tests on macOS; use stdlib-only Python for CodeQL, whose helpers and localization plugin need no signing library. Native fast/shipping jobs keep the full hashed dependency sync. No test, dependency-review threshold or source-extraction requirement is removed.
+
+## Part 1 rollout boundary
+
+Run 41452004445 passed the non-engine gates, including Swift CodeQL, but the transferred verification bundles failed at startup in all four shards. Per the rollout decision, remove only engine sharding and its transfer helper/tests. Restore `ci-engine.yml` and `ci-stage.py` byte-for-byte from production; keep the independent shipping/build schedule, runner pins, Node 24 actions and other verified speedups. Do not change resource loading in this PR. Further sharding/CodeQL work follows after part 1 merges.
+
+Required mergeability integration after production #376 preserves Inspector notes/copy controls, new native probes, snapshot fixtures and the new-branch immutable-base fix. Keep the picker task adapter on the localized button and regenerate only lexical inventory references. This integration resolves PR #380 conflicts; it introduces no additional pipeline tuning.
+
+The incoming immutable-base regression still asserts the exact prior SHA. Its stage expectation follows this pipeline's stronger policy: production/native pushes always run full checks, including documentation-only diffs. PR path selection remains unchanged.

@@ -71,6 +71,18 @@ import Testing
     #expect(NSApp.keyWindow === previous)
   }
 
+  @Test func awaitingPickerAcknowledgesModeChangeBeforeNextInput() async throws {
+    let model = InspectorModel(target: target, engine: nil)
+    model.open()
+    defer { model.close() }
+    try model.receive(Self.fixtureSelection())
+    #expect(model.mode == .locked)
+    let pending = try #require(model.pick())
+    #expect(model.mode == .locked)
+    await pending.value
+    #expect(model.mode == .picking)
+  }
+
   @Test func invalidRendererPacketsCannotReplaceValidSelection() throws {
     let model = InspectorModel(target: target, engine: nil)
     model.open()

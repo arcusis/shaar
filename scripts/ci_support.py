@@ -4,6 +4,7 @@
 
 """Command evidence shared by CI stages and local fast checks."""
 
+import hashlib
 import json
 import os
 import subprocess
@@ -13,6 +14,31 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+SWIFT_SOURCE_ROOTS = ("Sources", "Tests/TestSupport")
+
+
+def swift_source_files(root: Path, scope: str = "full", *, tracked: bool = True,
+                       include_build_inputs: bool = False) -> set[str]:
+    if scope not in {"full", "shipping"}:
+        raise ValueError("Unknown Swift analysis scope")
+    roots = (*SWIFT_SOURCE_ROOTS, *(("Package.swift", "Plugins") if include_build_inputs else ()))
+    if tracked:
+        files = subprocess.check_output(["git", "ls-files", "-z", "--", *roots], cwd=root).decode().split("\0")
+    else:
+        files = []
+        for name in roots:
+            entry = root / name
+            candidates = [entry] if entry.is_file() else entry.rglob("*.swift")
+            files.extend(path.relative_to(root).as_posix() for path in candidates if path.is_file())
+    return {name for name in files if name.endswith(".swift")
+            and (scope == "full" or not name.startswith("Sources/ShaarVerification/"))}
+
+
+def file_sha256(path: Path) -> str:
+    with path.open("rb") as source:
+        return hashlib.file_digest(source, "sha256").hexdigest()
 
 
 class Commands:

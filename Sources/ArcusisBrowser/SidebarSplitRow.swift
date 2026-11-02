@@ -23,12 +23,22 @@ struct SidebarSplitRow: View {
   let onSelect: (UUID) -> Void
   let onClose: (UUID) -> Void
   let onDrag: (UUID) -> SidebarTransfer
+  var memberMenu: ((UUID) -> AnyView)? = nil
+  var onStackDrag: (() -> SidebarTransfer)? = nil
   @State private var hoveredID: UUID?
 
   var body: some View {
     GeometryReader { geometry in
       let segmentWidth = geometry.size.width / CGFloat(max(segments.count, 1))
       HStack(spacing: 2) {
+        if let onStackDrag {
+          Image(systemName: "rectangle.split.2x1")
+            .font(.system(size: 10)).foregroundStyle(.secondary)
+            .frame(width: 18, height: 28).contentShape(Rectangle())
+            .help(ShellL10n.string("Drag split stack"))
+            .accessibilityLabel(ShellL10n.string("Drag split stack"))
+            .draggable(onStackDrag())
+        }
         ForEach(segments) { segment in
           segmentView(segment, showsTitle: segmentWidth >= Self.titleMinimumWidth)
         }
@@ -79,6 +89,7 @@ struct SidebarSplitRow: View {
     .accessibilityAction { onSelect(segment.id) }
     .accessibilityAction(named: ShellL10n.text("Close tab")) { onClose(segment.id) }
     .draggable(onDrag(segment.id))
+    .contextMenu { if let memberMenu { memberMenu(segment.id) } }
   }
 
   private func segmentFill(raised: Bool, hovered: Bool) -> Double {

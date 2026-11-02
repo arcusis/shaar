@@ -30,6 +30,17 @@ public indirect enum SplitNode: Equatable, Sendable {
     }
   }
 
+  /// Maps page identities without changing layout or divider weights.
+  func mappingPanes(_ ids: [UUID: UUID]) -> SplitNode? {
+    switch self {
+    case .pane(let id): return ids[id].map(SplitNode.pane)
+    case .group(let axis, let children, let weights):
+      let mapped = children.compactMap { $0.mappingPanes(ids) }
+      guard mapped.count == children.count else { return nil }
+      return .group(axis, mapped, weights)
+    }
+  }
+
   var isValid: Bool {
     guard Set(paneIDs).count == paneIDs.count else { return false }
     return isWellFormed

@@ -94,7 +94,8 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
       spaces: session.spaces.map { source in
         var space = source
         space.tabs = source.tabs.filter(\.isPinned)
-        space.splits = []
+        let pins = Set(space.tabs.map(\.id))
+        space.splits = source.splits.filter { Set($0.tabIDs).isSubset(of: pins) }
         space.selectedTabID = nil
         space.selectedFavoriteID = nil
         space.folders = source.folders.map(Self.sharedFolder)
@@ -494,7 +495,6 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
       space.selectedTabID = nil
       space.selectedFavoriteID = nil
       space.folders = source.folders.map(Self.sharedFolder)
-      space.splits = []
       space.tabs = source.tabs.filter(\.isPinned).map { tab in
         let pinID = oldBindings[tab.id] ?? Self.allocate(&allocated)
         references.append(WorkspacePinReference(tabID: tab.id, pinID: pinID))
@@ -502,6 +502,10 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
         return BrowserTab(
           id: pinID, url: definition?.url ?? tab.url, title: definition?.title ?? tab.title,
           isPinned: true, folderID: tab.folderID)
+      }
+      let bindings = Dictionary(uniqueKeysWithValues: references.map { ($0.tabID, $0.pinID) })
+      space.splits = source.splits.compactMap { split in
+        split.root.mappingPanes(bindings).map { BrowserSplit(id: split.id, root: $0) }
       }
       return space
     }
@@ -574,7 +578,20 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
         tab.folderID = nil
         return tab
       }
-      space.splits = prior?.splits ?? []
+      let pinBindings = Dictionary(uniqueKeysWithValues: references.map { ($0.pinID, $0.tabID) })
+      let sharedSplits = definition.splits.compactMap { split in
+        split.root.mappingPanes(pinBindings).map { BrowserSplit(id: split.id, root: $0) }
+      }
+      let sharedPanes = Set(sharedSplits.flatMap(\.tabIDs))
+      let pinnedIDs = Set(space.tabs.filter(\.isPinned).map(\.id))
+      let localSplits = (prior?.splits ?? []).compactMap { split -> BrowserSplit? in
+        guard !Set(split.tabIDs).isSubset(of: pinnedIDs) else { return nil }
+        var root: SplitNode? = split.root
+        for id in sharedPanes { root = root?.removing(id) }
+        guard let root, root.paneIDs.count >= 2 else { return nil }
+        return BrowserSplit(id: split.id, root: root)
+      }
+      space.splits = sharedSplits + localSplits
       space.reconcileSplits()
       space.selectedTabID = prior?.selectedTabID.flatMap { id in
         space.tabs.contains { $0.id == id } ? id : nil

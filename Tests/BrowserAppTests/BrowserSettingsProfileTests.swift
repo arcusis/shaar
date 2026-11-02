@@ -91,10 +91,14 @@ import Testing
     let workspace = try BrowserWorkspaceStore(file: workspaceFile, initialSession: .fresh())
     let profileID = workspace.workspace.catalog.profiles[0].id
     let preferences = BrowserPreferencesStore(fileURL: preferencesURL)
+    let downloadDirectory = root.appending(path: "downloads", directoryHint: .isDirectory)
+    preferences.setDownloadDirectory(downloadDirectory, for: profileID)
     let settings = BrowserSettingsController(
       workspace: workspace, preferences: preferences, presentation: .hiddenProbe)
     settings.show(for: profileID)
 
+    #expect(settings.profiles.first { $0.id == profileID }?.downloadDirectory
+      == downloadDirectory.standardizedFileURL)
     #expect(settings.selectSearchEngine(BrowserSearchEngine.duckDuckGo.rawValue, for: profileID))
     #expect(settings.renameProfile(profileID, name: "Personal renamed"))
     #expect(preferences.searchEngine(for: profileID) == .duckDuckGo)
@@ -108,6 +112,7 @@ import Testing
       reloadedWorkspace.workspace.catalog.profiles.first { $0.id == profileID })
     #expect(reloadedProfile.name == "Personal renamed")
     #expect(reloadedPreferences.searchEngine(for: profileID) == .duckDuckGo)
+    #expect(reloadedPreferences.downloadDirectory(for: profileID) == downloadDirectory.standardizedFileURL)
     #expect(
       reloadedWorkspace.workspace.windows[0].session.profiles.first { $0.id == profileID }?.id
         == profileID)

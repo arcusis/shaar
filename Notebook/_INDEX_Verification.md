@@ -3,6 +3,7 @@
 - [[Private_Fixture_Readiness]]
 - [[CI_Pipeline_Design]]
 - [[CI_Pipeline]]
+- [[Sparkle_Update_Simulation]]
 - [[Source_And_Native_Verification]]
 - [[Test_Coverage]]
 - [[Verification_Harness]]

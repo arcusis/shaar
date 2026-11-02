@@ -167,6 +167,8 @@ def main() -> int:
                 checks.run("sbom", [sys.executable, "scripts/ci-sbom.py"])
                 checks.run("sbom-validation", [sys.executable, "-m", "spdx_tools.spdx.clitools.pyspdxtools",
                                                "--infile", str(checks.directory / "sbom.spdx.json")])
+                if not any(item["status"] for item in checks.results):
+                    checks.run("sparkle-update", [sys.executable, "scripts/ci-sparkle.py"])
     except Exception as error:
         (checks.directory / "error.txt").write_text(str(error) + "\n")
         print(error, file=sys.stderr)

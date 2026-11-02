@@ -29,6 +29,7 @@ private struct NativeTabPlacement: Equatable {
 /// Owns one window's live tabs independently of its selected SwiftUI space.
 @MainActor @Observable
 final class BrowserEngine {
+  private static let tabSuspensionDelay: TimeInterval = 5 * 60
   let runtime: ARCChromiumRuntime
   let events: BrowserRuntimeEvents
   let windowID: String
@@ -63,6 +64,10 @@ final class BrowserEngine {
   @ObservationIgnored private var lastSpaceID: UUID?
   @ObservationIgnored private var lastTabID: UUID?
   @ObservationIgnored private var lastTabOrders: [UUID: [NativeTabPlacement]] = [:]
+  @ObservationIgnored private var inactiveSince: [UUID: Date] = [:]
+  @ObservationIgnored private var suspendedScrollPositions: [UUID: CGPoint] = [:]
+  @ObservationIgnored private var suspendingTabs: Set<UUID> = []
+  @ObservationIgnored private var suspensionTask: Task<Void, Never>?
   private(set) var favicons: [UUID: NSImage] = [:]
 
   func seedFavicon(_ image: NSImage, for tabID: UUID) {
@@ -132,6 +137,7 @@ final class BrowserEngine {
         self.store?.resolveExternalApp(request.id, accepted: false)
       }
       self.isClosed = true
+      self.suspensionTask?.cancel()
       for model in self.inspectors.values { model.close() }
       self.inspectors.removeAll()
       for model in self.developerModels.values { model.close() }
@@ -166,6 +172,7 @@ final class BrowserEngine {
         return
       }
       self.store?.nativeDocumentCommitted(tab, profileID: profile)
+      self.restoreSuspendedScrollPosition(for: tab)
       if let model = self.developerModels[tab] {
         model.update(target: model.target, committed: true)
       }
@@ -388,9 +395,9 @@ final class BrowserEngine {
       }
     }
     callbacks.onTabClosed = { [weak self] identity in
-      guard let self, let id = UUID(uuidString: identity),
-        self.liveTabs.contains(id) || self.pages[id] != nil
-      else { return }
+      guard let self, let id = UUID(uuidString: identity) else { return }
+      if self.suspendingTabs.remove(id) != nil { return }
+      guard self.liveTabs.contains(id) || self.pages[id] != nil else { return }
       self.liveTabs.remove(id)
       self.pages[id] = nil
       self.inspectors.removeValue(forKey: id)?.close()
@@ -435,12 +442,86 @@ final class BrowserEngine {
         self.runtime.discardTabID(identity)
       }
     }
+    suspensionTask = Task { [weak self] in
+      while !Task.isCancelled {
+        do { try await Task.sleep(for: .seconds(30)) } catch { return }
+        guard let self, !self.isClosed else { return }
+        self.suspendInactiveTabs()
+      }
+    }
+  }
+
+  private func suspendInactiveTabs() {
+    guard !isClosed, let store else { return }
+    let visible = store.visiblePageIDs
+    let now = Date()
+    let candidates = store.session.spaces.flatMap(\.tabs)
+      + store.session.favoritePages.map(\.tab)
+    for tab in candidates {
+      guard !visible.contains(tab.id), !tab.isPinned,
+        store.media.sessions[tab.id]?.isPlaying != true,
+        inspectors[tab.id] == nil, developerModels[tab.id] == nil,
+        liveTabs.contains(tab.id)
+      else {
+        inactiveSince[tab.id] = nil
+        continue
+      }
+      let since = inactiveSince[tab.id] ?? now
+      inactiveSince[tab.id] = since
+      guard now.timeIntervalSince(since) >= Self.tabSuspensionDelay else { continue }
+      suspend(tab.id)
+    }
+  }
+
+  private func suspend(_ tabID: UUID) {
+    guard let store, liveTabs.contains(tabID), !suspendingTabs.contains(tabID),
+      let tab = store.session.page(forTabID: tabID)?.tab,
+      !tab.isPinned, !store.visiblePageIDs.contains(tabID),
+      store.media.sessions[tabID]?.isPlaying != true,
+      store.session.profileID(forTabID: tabID) != nil
+    else { return }
+    runtime.evaluate(
+      inTabID: tabID.uuidString,
+      script: "({x:scrollX,y:scrollY})") { [weak self] result in
+        MainActor.assumeIsolated {
+          guard let self, let store = self.store, let result, let data = result.data(using: .utf8),
+            let position = (try? JSONSerialization.jsonObject(with: data)) as? [String: NSNumber],
+            self.liveTabs.contains(tabID),
+            !store.visiblePageIDs.contains(tabID),
+            store.session.page(forTabID: tabID)?.tab.isPinned == false,
+            store.media.sessions[tabID]?.isPlaying != true,
+            self.inspectors[tabID] == nil, self.developerModels[tabID] == nil
+          else { return }
+          self.suspendedScrollPositions[tabID] = CGPoint(
+            x: CGFloat(position["x"]?.doubleValue ?? 0),
+            y: CGFloat(position["y"]?.doubleValue ?? 0))
+          self.suspendingTabs.insert(tabID)
+          self.inactiveSince[tabID] = nil
+          self.events.router.forgetTab(tabID.uuidString, windowID: self.windowID)
+          self.liveTabs.remove(tabID)
+          self.pages[tabID] = nil
+          self.mediaAccess[tabID] = nil
+          self.forgetMedia(tabID)
+          self.runtime.discardTabID(tabID.uuidString)
+        }
+      }
+  }
+
+  private func restoreSuspendedScrollPosition(for tabID: UUID) {
+    guard let position = suspendedScrollPositions.removeValue(forKey: tabID) else { return }
+    let x = max(0, position.x)
+    let y = max(0, position.y)
+    runtime.evaluate(
+      inTabID: tabID.uuidString,
+      script: "requestAnimationFrame(()=>scrollTo(\(x),\(y))); true") { _ in }
   }
 
   /// Drop documents before their saved tabs acquire a different engine profile.
   func discardReassignedTabs(_ ids: Set<UUID>) {
     for id in ids {
       failedTabs.remove(id)
+      suspendedScrollPositions[id] = nil
+      inactiveSince[id] = nil
       guard liveTabs.remove(id) != nil else { continue }
       events.router.forgetTab(id.uuidString, windowID: windowID)
       pages[id] = nil
@@ -469,6 +550,8 @@ final class BrowserEngine {
       // Ordinary tab close waits for Chromium's beforeunload decision. This path
       // handles confirmed space removal; profile files are deliberately retained.
       events.router.forgetTab(removed.uuidString, windowID: windowID)
+      suspendedScrollPositions[removed] = nil
+      inactiveSince[removed] = nil
       runtime.discardTabID(removed.uuidString)
       liveTabs.remove(removed)
       pages[removed] = nil
@@ -515,7 +598,8 @@ final class BrowserEngine {
           isSelected: space.id == session.selectedSpaceID
             && (session.selectedPage?.tab.id == tab.id
               || store.selectedSplit?.tabIDs.contains(tab.id) == true),
-          isLive: liveTabs.contains(tab.id), lazy: lazyPinnedTabs)
+          isLive: liveTabs.contains(tab.id),
+          lazy: lazyPinnedTabs || suspendedScrollPositions[tab.id] != nil)
         guard decision == .materialize else { continue }
         guard events.router.bindTab(tab.id.uuidString, windowID: windowID) else {
           failedTabs.insert(tab.id)
@@ -543,7 +627,8 @@ final class BrowserEngine {
       }
       let decision = TabMaterializationPolicy.decision(
         isSelected: session.selectedSpace.selectedFavoriteID == favorite.id,
-        isLive: liveTabs.contains(page.tab.id), lazy: lazyPinnedTabs)
+        isLive: liveTabs.contains(page.tab.id),
+        lazy: lazyPinnedTabs || suspendedScrollPositions[page.tab.id] != nil)
       guard decision == .materialize else { continue }
       guard events.router.bindTab(page.tab.id.uuidString, windowID: windowID) else {
         failedTabs.insert(page.tab.id)

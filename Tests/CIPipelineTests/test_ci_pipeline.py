@@ -43,6 +43,41 @@ SWIFT_REPORTS = load_script("ci-swift-reports")
 
 
 class PipelineGateTests(unittest.TestCase):
+    def test_new_branch_push_uses_immutable_production_merge_base(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "event.json").write_text(json.dumps({"before": "0" * 40}))
+            env = {"GITHUB_EVENT_PATH": str(root / "event.json"), "GITHUB_EVENT_NAME": "push",
+                   "GITHUB_SHA": "c" * 40, "GITHUB_OUTPUT": str(root / "output"),
+                   "GITHUB_STEP_SUMMARY": str(root / "summary")}
+            with (patch.dict(os.environ, env),
+                  patch.object(PLAN.subprocess, "check_output", return_value="b" * 40 + "\n") as baseline,
+                  patch.object(PLAN.subprocess, "run") as command):
+                command.return_value.returncode = 0
+                command.return_value.stdout = b"Sources/ArcusisBrowser/InspectorPanel.swift\0"
+                PLAN.main()
+            baseline.assert_called_once_with(["git", "merge-base", "origin/production", "HEAD"], text=True)
+            self.assertEqual(command.call_args.args[0], ["git", "diff", "--name-only", "-z", "b" * 40, "HEAD"])
+            self.assertIn("full=true", (root / "output").read_text())
+            self.assertIn("base=" + "b" * 40, (root / "output").read_text())
+
+    def test_existing_branch_push_preserves_before_sha(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "event.json").write_text(json.dumps({"before": "a" * 40}))
+            env = {"GITHUB_EVENT_PATH": str(root / "event.json"), "GITHUB_EVENT_NAME": "push",
+                   "GITHUB_SHA": "c" * 40, "GITHUB_OUTPUT": str(root / "output"),
+                   "GITHUB_STEP_SUMMARY": str(root / "summary")}
+            with (patch.dict(os.environ, env),
+                  patch.object(PLAN.subprocess, "check_output") as baseline,
+                  patch.object(PLAN.subprocess, "run") as command):
+                command.return_value.returncode = 0
+                command.return_value.stdout = b"README.md\0"
+                PLAN.main()
+            baseline.assert_not_called()
+            self.assertIn("full=false", (root / "output").read_text())
+            self.assertIn("base=" + "a" * 40, (root / "output").read_text())
+
     def test_probe_count_normalizes_dispatch_strings_before_typed_workflow_call(self):
         for value in (1, "1", 10, "10"):
             self.assertEqual(PLAN.iteration_count({"inputs": {"probe_iterations": value}}, "workflow_dispatch"), int(value))

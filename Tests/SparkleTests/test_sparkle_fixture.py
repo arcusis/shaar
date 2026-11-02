@@ -21,6 +21,18 @@ import sparkle_fixture as fixture
 
 
 class SparkleFixtureTests(unittest.TestCase):
+    def test_diagnostic_patch_fails_closed_on_sdk_callback_drift(self):
+        source = """- (void)showUpdaterError:(NSError *)__unused error acknowledgement:(void (^)(void))acknowledgement
+{
+    acknowledgement();
+}"""
+        result = fixture.add_error_diagnostics(source)
+        self.assertEqual(result.count("acknowledgement();"), 1)
+        self.assertIn("cursor.userInfo[NSUnderlyingErrorKey]", result)
+        for changed in ("different callback", source + source):
+            with self.assertRaisesRegex(ValueError, "requires review"):
+                fixture.add_error_diagnostics(changed)
+
     def test_native_entrypoint_refuses_local_execution_before_reading_payload(self):
         with patch.dict(os.environ, {}, clear=True), patch.object(fixture, "verify_archive") as verify:
             with self.assertRaisesRegex(RuntimeError, "hosted macOS"):

@@ -153,7 +153,36 @@ def configure_bundle(app: Path, identifier: str, public_key: str, version: int) 
     checked(["codesign", "--verify", "--deep", "--strict", str(app)])
 
 
-def build_driver(work: Path, framework: Path, checkout: Path) -> Path:
+def add_error_diagnostics(source: str) -> str:
+    original = """- (void)showUpdaterError:(NSError *)__unused error acknowledgement:(void (^)(void))acknowledgement
+{
+    acknowledgement();
+}"""
+    replacement = """- (void)showUpdaterError:(NSError *)__unused error acknowledgement:(void (^)(void))acknowledgement
+{
+    NSError *cursor = error;
+    for (NSUInteger depth = 0; cursor != nil && depth < 8; depth++) {
+        fprintf(stderr, "Fixture SDK error %ld (%s). %s\\n", (long)cursor.code,
+                cursor.domain.UTF8String, cursor.localizedDescription.UTF8String);
+        cursor = cursor.userInfo[NSUnderlyingErrorKey];
+    }
+    acknowledgement();
+}"""
+    if source.count(original) != 1:
+        raise ValueError("Pinned Sparkle CLI error callback changed; diagnostic patch requires review")
+    return source.replace(original, replacement)
+
+
+def seal_driver_framework(framework: Path) -> None:
+    # SDK helpers authenticate their caller's team. Disposable ad-hoc driver needs ad-hoc helpers too.
+    components = ("Versions/B/XPCServices/Installer.xpc", "Versions/B/XPCServices/Downloader.xpc",
+                  "Versions/B/Autoupdate", "Versions/B/Updater.app", "")
+    for component in components:
+        flags = ["--preserve-metadata=entitlements"] if component.endswith("Downloader.xpc") else []
+        checked(["codesign", "--force", "--timestamp=none", "--sign", "-", *flags, str(framework / component)])
+
+
+def build_driver(work: Path, framework: Path, checkout: Path, evidence: Path) -> Path:
     pin = next(item for item in json.loads((ROOT / "Package.resolved").read_text())["pins"]
                if item["identity"].lower() == "sparkle")
     revision = subprocess.check_output(["git", "-C", str(checkout), "rev-parse", "HEAD"], text=True).strip()
@@ -167,14 +196,22 @@ def build_driver(work: Path, framework: Path, checkout: Path) -> Path:
     (contents / "MacOS").mkdir(parents=True)
     copied = contents / "Frameworks/Sparkle.framework"
     checked(["ditto", str(framework), str(copied)])
+    seal_driver_framework(copied)
     executable = contents / "MacOS/sparkle-cli"
     sources = checkout / "sparkle-cli"
+    original = sources / "SPUCommandLineUserDriver.m"
+    diagnostic = work / original.name
+    diagnostic.write_text(add_error_diagnostics(original.read_text()))
+    (evidence / "sparkle-driver.json").write_text(json.dumps(dict(
+        sdkRevision=revision, sdkVersion=pin["state"]["version"],
+        originalUserDriverSHA256=sha256(original), compiledUserDriverSHA256=sha256(diagnostic),
+        modification="Error-chain logging only; original acknowledgement and updater flow retained"), indent=2) + "\n")
     checked(["xcrun", "clang", "-fobjc-arc", "-fmodules",
              "-DSPU_OBJC_DIRECT=__attribute__((objc_direct))",
              "-DSPU_OBJC_DIRECT_MEMBERS=__attribute__((objc_direct_members))",
              "-F", str(copied.parent), "-framework", "Sparkle", "-framework", "Foundation",
              "-framework", "AppKit", "-Wl,-rpath,@executable_path/../Frameworks",
-             *[str(sources / name) for name in ("main.m", "SPUCommandLineDriver.m", "SPUCommandLineUserDriver.m")],
+             "-I", str(sources), str(sources / "main.m"), str(sources / "SPUCommandLineDriver.m"), str(diagnostic),
              "-o", str(executable)])
     info = dict(CFBundleExecutable="sparkle-cli", CFBundleIdentifier=f"org.arcusis.fixture.driver.{uuid.uuid4().hex}",
                 CFBundleName="Shaar update fixture", CFBundlePackageType="APPL", CFBundleVersion="1",
@@ -182,6 +219,7 @@ def build_driver(work: Path, framework: Path, checkout: Path) -> Path:
                 NSAppTransportSecurity={"NSAllowsArbitraryLoads": True})
     (contents / "Info.plist").write_bytes(plistlib.dumps(info))
     checked(["codesign", "--force", "--timestamp=none", "--sign", "-", str(app)])
+    checked(["codesign", "--verify", "--deep", "--strict", str(app)])
     return executable
 
 
@@ -340,7 +378,7 @@ def run_simulation(evidence: Path) -> None:
         verify_archive(previous, pin["sha256"], pin["size"])
         sdk = ROOT / "build/swiftpm/default"
         framework = ROOT / "build/Shaar.app/Contents/Frameworks/Sparkle.framework"
-        driver = build_driver(work, framework, sdk / "checkouts/Sparkle")
+        driver = build_driver(work, framework, sdk / "checkouts/Sparkle", evidence)
         signer = sdk / "artifacts/sparkle/Sparkle/bin/sign_update"
         for case in CASES:
             try:

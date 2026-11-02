@@ -662,6 +662,29 @@ class QuitExitRunnerTests(unittest.TestCase):
         self.assertFalse(receipt['passed'])
         self.assertEqual(receipt['crashReports'], ['ShaarVerification-2026-11-01-120000.ips'])
 
+    def test_retired_reports_keep_process_and_time_filters(self):
+        (self.reports / 'Retired').mkdir()
+        name = 'Retired/ShaarVerification-2026-11-01-120000.ips'
+        self.write_crash_report(name, 4242)
+        self.write_crash_report('Retired/ShaarVerification-2026-11-01-120001.ips', 4343)
+        old = self.write_crash_report('Retired/ShaarVerification-2026-11-01-110000.ips', 4242)
+        os.utime(old, (1, 1))
+        (self.reports / 'Retired/ShaarVerification-malformed.ips').write_text('not json')
+        self.assertEqual(fixture.crash_reports_for(4242, since=100), [name])
+
+    def test_retired_crash_report_fails_even_with_clean_exit(self):
+        self.write_checkpoint('initial', 4242)
+        (self.reports / 'Retired').mkdir()
+        name = 'Retired/ShaarVerification-2026-11-01-120000.ips'
+        self.write_crash_report(name, 4242)
+        process = self.process([0, 0])
+        with patch.object(fixture, 'process_group_exists', return_value=False), \
+                self.assertRaisesRegex(RuntimeError, 'exited 0 after Quit; crash reports: Retired/'):
+            fixture.wait_for_quit_exit(process, self.root, 'initial', timeout=5)
+        receipt = json.loads((self.root / 'initial-quit-exit.json').read_text())
+        self.assertFalse(receipt['passed'])
+        self.assertEqual(receipt['crashReports'], [name])
+
     def test_abnormal_exit_without_report_still_fails(self):
         self.write_checkpoint('initial', 4242)
         process = self.process([70, 70])

@@ -26,7 +26,11 @@ binary="$output/$(jq -er .framework.path "$receipt")"
   echo 'Built framework changed after its receipt was written.' >&2
   exit 1
 }
-framework=${binary%/Versions/A/Chromium Framework}
+framework=${binary%/Versions/*/Chromium Framework}
+[[ $framework != "$binary" && -d "$framework/Versions" ]] || {
+  echo 'Built framework receipt has an unexpected version layout.' >&2
+  exit 1
+}
 dsym="$(dirname "$framework")/Chromium Framework.dSYM"
 entitlements="$output/source/ardia/packages/ardiacore/scripts/signing"
 tree=$(jq -er .source.engineTree ThirdParty/ArdiaCore/source-build.json)
@@ -41,9 +45,9 @@ staged="$package/stage/Chromium Framework.framework"
 
 adhoc_sign_like_upstream() {
   case "$1" in
-    *"Helper (Renderer).app") codesign --force --sign - --options runtime \
+    *"Helper (Renderer).app"|*"Helper (Aperitif Renderer).app") codesign --force --sign - --options runtime \
       --entitlements "$entitlements/renderer.entitlements" "$1" ;;
-    *"Helper (GPU).app") codesign --force --sign - --options runtime \
+    *"Helper (GPU).app"|*"Helper (Aperitif GPU).app") codesign --force --sign - --options runtime \
       --entitlements "$entitlements/gpu.entitlements" "$1" ;;
     *) codesign --force --sign - --options runtime "$1" ;;
   esac
@@ -52,7 +56,8 @@ sign_engine_framework "$staged" adhoc_sign_like_upstream
 codesign --verify --deep --strict "$staged"
 
 archive="$package/ArdiaCore-${tree:0:12}-$label.tar.xz"
-tar --no-mac-metadata -cf - -C "$package/stage" "Chromium Framework.framework" | xz -T0 -9 > "$archive"
+# Bound compression CPU use while other work continues on the build host.
+tar --no-mac-metadata -cf - -C "$package/stage" "Chromium Framework.framework" | nice -n 19 xz -T2 -9 > "$archive"
 checksum=$(shasum -a 256 "$archive" | cut -d ' ' -f 1)
 jq -n --arg sha "$checksum" '{sha256: $sha}' > "$package/payload-pin.json"
 python3 scripts/engine_payload.py --archive "$archive" --framework "$staged" \

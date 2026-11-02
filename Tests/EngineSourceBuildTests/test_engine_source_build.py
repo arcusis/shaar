@@ -128,6 +128,43 @@ class SourceBuildTests(unittest.TestCase):
         self.assertTrue(any("metalSha256" in item for item in errors))
         self.assertTrue(any("signature" in item for item in errors))
 
+    def test_metal_toolchain_resume_accepts_only_same_identity_after_cryptex_remount(self):
+        def evidence(suffix):
+            mount = ("/private/var/run/com.apple.security.cryptexd/mnt/"
+                     f"com.apple.MobileAsset.MetalToolchain-v27.2.47.0.{suffix}")
+            return {
+                "component": {"status": "installed", "buildVersion": "27B47",
+                              "toolchainIdentifier": "com.apple.dt.toolchain.Metal.32023.922.4",
+                              "toolchainSearchPath": mount},
+                "metalPath": mount.removeprefix("/private") + "/Metal.xctoolchain/usr/bin/metal",
+                "metalRealPath": mount + "/Metal.xctoolchain/usr/bin/metal",
+                "metalVersion": "Apple metal version 32023.922\nInstalledDir: " + mount + "/bin",
+                "metalSha256": "a" * 64,
+                "codesignVerifyReturnCode": 0,
+                "codesignDisplay": "Executable=" + mount + "/Metal.xctoolchain/usr/bin/metal\nCDHash=abc",
+                "assetPath": None, "assetSha256": None,
+            }
+
+        expected = evidence("6PS9OS")
+        actual = evidence("0EEEx7")
+        original = json.loads(json.dumps(expected))
+        self.assertEqual(BUILD.metal_toolchain_precondition_errors(expected, actual), [])
+        self.assertEqual(expected, original)
+        for field, value in (("metalSha256", "b" * 64), ("codesignVerifyReturnCode", 1),
+                             ("metalVersion", "Apple metal version 999"),
+                             ("codesignDisplay", "CDHash=changed"),
+                             ("metalPath", "/other/toolchain/usr/bin/metal"),
+                             ("assetSha256", "c" * 64)):
+            with self.subTest(field=field):
+                changed = {**actual, field: value}
+                self.assertTrue(BUILD.metal_toolchain_precondition_errors(expected, changed))
+        for field in ("buildVersion", "toolchainIdentifier", "toolchainSearchPath"):
+            with self.subTest(component=field):
+                changed = {**actual, "component": {**actual["component"], field: "changed"}}
+                self.assertTrue(BUILD.metal_toolchain_precondition_errors(expected, changed))
+        changed_version = json.loads(json.dumps(actual).replace("v27.2.47.0", "v27.2.48.0"))
+        self.assertTrue(BUILD.metal_toolchain_precondition_errors(expected, changed_version))
+
     def test_ardia_series_must_support_explicit_owned_path_overrides(self):
         series = ('SRC = os.environ.get("CHROMIUM_SRC", "/unsafe/default")\n'
                   'BASE = os.environ.get("AC_SERIES_BASE", "/unsafe/default")\n')
@@ -532,6 +569,28 @@ class SourceBuildTests(unittest.TestCase):
             self.assertEqual(calls[1][0], "01-sync")
             self.assertEqual(calls[1][1], ["/bin/bash", str(shell_file)])
             self.assertEqual(calls[1][3], 28800)
+
+    def test_build_timeout_override_preserves_pins_and_other_stage_timeouts(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = pathlib.Path(temporary)
+            scripts = output / "scripts"
+            scripts.mkdir()
+            for name in ("05-build.sh", "04-domain-substitution.sh"):
+                (scripts / name).write_text("true\n")
+            runner = BUILD.Runner.__new__(BUILD.Runner)
+            runner.output = output
+            runner.config = {"build": {"timeoutsSeconds": {"build": 43200, "patches": 14400}}}
+            original = json.dumps(runner.config, sort_keys=True)
+            calls = []
+            runner.run = lambda *args: calls.append(args)
+            runner.source_stage(scripts, "05-build.sh", "build")
+            self.assertEqual(calls[-1][3], 43200)
+            runner.build_timeout_seconds = 172800
+            runner.source_stage(scripts, "05-build.sh", "build")
+            self.assertEqual(calls[-1][3], 172800)
+            runner.source_stage(scripts, "04-domain-substitution.sh", "patches")
+            self.assertEqual(calls[-1][3], 14400)
+            self.assertEqual(json.dumps(runner.config, sort_keys=True), original)
 
     def test_stage_order_keeps_fresh_upstream_sequence(self):
         self.assertEqual(

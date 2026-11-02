@@ -313,7 +313,31 @@ def source_precondition_errors(contents: dict[str, str]) -> list[str]:
     return errors
 
 
+def metal_toolchain_identity(toolchain: dict) -> dict:
+    """Ignore Apple's per-boot Cryptex mount suffix, retaining the mounted version."""
+    identity = json.loads(json.dumps(toolchain))
+    component = identity.get("component", {})
+    mount = component.get("toolchainSearchPath", "")
+    match = re.fullmatch(
+        r"/private/var/run/com\.apple\.security\.cryptexd/mnt/"
+        r"com\.apple\.MobileAsset\.MetalToolchain-v(\d+\.\d+\.\d+\.\d+)\.[A-Za-z0-9]{6}",
+        mount,
+    )
+    if match is None:
+        return identity
+    stable_mount = f"<MetalToolchain-v{match.group(1)}>"
+    component["toolchainSearchPath"] = stable_mount
+    for field in ("metalPath", "metalRealPath", "metalVersion", "codesignDisplay"):
+        value = identity.get(field)
+        if isinstance(value, str):
+            identity[field] = value.replace(mount, stable_mount).replace(
+                mount.removeprefix("/private"), stable_mount)
+    return identity
+
+
 def metal_toolchain_precondition_errors(expected: dict, actual: dict) -> list[str]:
+    expected = metal_toolchain_identity(expected)
+    actual = metal_toolchain_identity(actual)
     errors = []
     for field in ("component", "metalPath", "metalRealPath", "metalVersion",
                   "metalSha256", "codesignVerifyReturnCode", "codesignDisplay",
@@ -421,12 +445,16 @@ def terminate_process_group(process: subprocess.Popen, grace: float = 10.0) -> N
 
 class Runner:
     def __init__(self, repo: pathlib.Path, output: pathlib.Path, config: dict,
-                 update_patches: bool = False, jobs: int | None = None):
+                 update_patches: bool = False, jobs: int | None = None,
+                 build_timeout_seconds: int | None = None):
         self.repo = repo.resolve(strict=True)
         self.output = output
         self.config = config
         self.update_patches = update_patches
         self.build_jobs = self.checked_build_jobs(config, jobs)
+        if build_timeout_seconds is not None and build_timeout_seconds <= 0:
+            raise BuildError("build timeout must be positive")
+        self.build_timeout_seconds = build_timeout_seconds
         self.receipt_path = output / RECEIPT_FILE
         self.receipt = self._load_receipt()
         recovery = recover_stale_lock(output, owner_record(self.repo), self.receipt)
@@ -1261,6 +1289,8 @@ class Runner:
 
     def source_stage(self, scripts: pathlib.Path, name: str, timeout: str) -> None:
         stage_timeout = self.config["build"]["timeoutsSeconds"][timeout]
+        if timeout == "build" and getattr(self, "build_timeout_seconds", None) is not None:
+            stage_timeout = self.build_timeout_seconds
         entry = scripts / name
         assert_real_owned_path(scripts, self.output)
         assert_real_owned_path(entry, self.output)
@@ -2023,6 +2053,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="with --run, rebuild a finished output after appending engine patches")
     parser.add_argument("--jobs", type=int,
                         help="with --run, build with fewer than the pinned build jobs")
+    parser.add_argument("--build-timeout-seconds", type=int,
+                        help="with --run, override only the build stage timeout without changing pins")
     args = parser.parse_args(argv)
     repo = pathlib.Path(__file__).resolve().parents[1]
     try:
@@ -2032,7 +2064,8 @@ def main(argv: list[str] | None = None) -> int:
                               "execution": "opt-in; pass --run"}, indent=2))
             return 0
         output, _ = prepare_owned_output(repo)
-        runner = Runner(repo, output, config, update_patches=args.update_patches, jobs=args.jobs)
+        runner = Runner(repo, output, config, update_patches=args.update_patches, jobs=args.jobs,
+                        build_timeout_seconds=args.build_timeout_seconds)
         try:
             runner.execute()
         except Exception as exc:

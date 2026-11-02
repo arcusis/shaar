@@ -852,7 +852,9 @@ def crash_reports_for(pid, since, directory=None):
     """Names of the macOS crash reports written for the probe process since the given time."""
     directory = directory or CRASH_REPORT_DIRECTORY
     names = []
-    for path in sorted(directory.glob(f'{CRASH_REPORT_PROCESS}-*.ips')):
+    pattern = f'{CRASH_REPORT_PROCESS}-*.ips'
+    paths = [*directory.glob(pattern), *(directory / 'Retired').glob(pattern)]
+    for path in sorted(paths):
         try:
             if path.stat().st_mtime < since:
                 continue
@@ -861,7 +863,7 @@ def crash_reports_for(pid, since, directory=None):
         except (OSError, ValueError):
             continue
         if isinstance(report, dict) and report.get('pid') == pid:
-            names.append(path.name)
+            names.append(path.relative_to(directory).as_posix())
     return names
 
 

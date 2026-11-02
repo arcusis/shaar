@@ -6,6 +6,7 @@
 | Space | מרחב | Product concept. |
 | Spaces | מרחבים | Product concept. |
 | Profile | פרופיל | Browser profile. |
+| Private browsing | גלישה פרטית | Temporary private-window session; preserve stated protection limits. |
 | Tab | לשונית | Browser tab. |
 | Sidebar | סרגל צד | Browser sidebar. |
 | Favorites | מועדפים | Saved user items. |
@@ -19,6 +20,7 @@
 | Settings | הגדרות | Application settings. |
 | Extension / Extensions | תוסף / תוספים | Browser extensions. |
 | Permission | הרשאה | Website or system permission. |
+| Cookies | קובצי Cookie | Browser site data; keep Cookie in Latin script. |
 | Download / Downloads | הורדה / הורדות | Browser downloads. |
 | Window | חלון | Browser window. |
 | Mini window | חלון ממוזער | Separate from the mini player. |

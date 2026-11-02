@@ -136,6 +136,30 @@ final class HebrewLocalizationVisualTests: XCTestCase {
     }
   }
 
+  func testPrivateStartPageRendersAndDoesNotRetainStore() throws {
+    let size = NSSize(width: 720, height: 720)
+    for (theme, appearance) in [(ColorScheme.light, NSAppearance.Name.aqua), (.dark, .darkAqua)] {
+      let scheme = theme == .dark ? "dark" : "light"
+      weak var releasedStore: PrivateBrowserStore?
+      let hosting = try autoreleasepool {
+        let scopedStore = PrivateBrowserStore(
+          contextID: UUID().uuidString, windowID: UUID().uuidString,
+          tabID: UUID().uuidString, url: "about:blank")
+        releasedStore = scopedStore
+        try capture(
+          PrivateStartPage(store: scopedStore).environment(\.colorScheme, theme),
+          name: "private-start-page-\(scheme).png", size: size, appearance: appearance)
+        return NSHostingView(
+          rootView: PrivateStartPage(store: scopedStore).environment(\.colorScheme, theme))
+      }
+      hosting.frame = NSRect(origin: .zero, size: size)
+      hosting.layoutSubtreeIfNeeded()
+      withExtendedLifetime(hosting) {
+        XCTAssertNil(releasedStore, "Hosted PrivateStartPage must not retain its private store")
+      }
+    }
+  }
+
   func testSiteControlCenterMiniPlayerAndPictureInPicture() throws {
     let target = SiteControlTarget(
       tabID: UUID(), profileID: UUID(),

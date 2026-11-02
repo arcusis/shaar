@@ -58,7 +58,8 @@ def test_runtime():
 
 def expected_captures():
     names = {"space-pager-selected.png", "space-pager-drag.png",
-             "sidebar-toggle-windowed.png", "sidebar-toggle-fullscreen.png"}
+             "sidebar-toggle-windowed.png", "sidebar-toggle-fullscreen.png",
+             "private-start-page-light.png", "private-start-page-dark.png"}
     for scheme in ("light", "dark"):
         names.add(f"command-t-mixed-{scheme}.png")
         for width, state in ((760, "shown"), (1200, "shown"), (760, "hidden")):

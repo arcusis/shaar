@@ -1,0 +1,68 @@
+Attached browser context from https://example.com/path
+
+Selected element:
+- Tag: button
+- Accessible name: Save
+- Role: button
+- Selector: ` #save `
+- Source: /src/SaveButton.tsx:12
+- React/components: React: SaveButton
+- Dimensions: 180 × 48
+
+Text content:
+```
+Text with https://example.com/x and control.
+```
+
+Nearby context:
+```
+main: Save changes Cancel
+```
+
+Computed styles:
+```css
+display: inline-block;
+```
+
+HTML:
+````html
+<div><a href="https://example.com/x">Safe &lt;text&gt; ```</a></div>
+````
+
+Ancestor path: html > body > main > button
+
+Full DOM path: ` html > body > main > button:nth-of-type(1) `
+
+Bounds: x=20, y=40, width=180, height=48
+
+Classes: primary
+
+Nearby elements:
+```
+main: Save changes Cancel
+```
+
+Full computed styles:
+```css
+line-height: 24px;
+```
+
+Matched CSS rules:
+Source: https://example.com/app.css
+```css
+#save {
+  padding: 12px;
+}
+```
+
+Console errors:
+```
+Error loading https://example.com/api
+```
+
+Network errors:
+```
+GET https://example.com/api — status 500
+```
+
+Tech stack: React

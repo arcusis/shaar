@@ -68,7 +68,7 @@ import Testing
   #expect(item("New Mini Window")?.keyEquivalentModifierMask == [.command, .option])
   #expect(item("New space…")?.keyEquivalent == "S")
   #expect(item("New Folder")?.keyEquivalentModifierMask == [.command, .control])
-  #expect(item("Copy URL")?.keyEquivalentModifierMask == [.command, .shift])
+  #expect(item("Copy URL")?.keyEquivalentModifierMask == [.command, .option, .shift])
   #expect(item("Downloads")?.keyEquivalentModifierMask == [.command, .shift])
   #expect(item("Undo")?.action == NSSelectorFromString("undo:"))
   #expect(item("Cut")?.action == NSSelectorFromString("cut:"))

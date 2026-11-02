@@ -64,6 +64,9 @@ def main() -> None:
             or os.environ["GITHUB_SHA"])
     if name == "workflow_dispatch":
         base = subprocess.check_output(["git", "rev-parse", "origin/production"], text=True).strip()
+    if name == "push" and base == "0" * 40:
+        base = subprocess.check_output(
+            ["git", "merge-base", "origin/production", "HEAD"], text=True).strip()
     paths = None
     if name in ("pull_request", "push", "merge_group") and re.fullmatch(r"[0-9a-f]{40}", base) and set(base) != {"0"}:
         result = subprocess.run(["git", "diff", "--name-only", "-z", base, "HEAD"], capture_output=True, check=False)

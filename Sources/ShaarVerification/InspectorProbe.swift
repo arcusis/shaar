@@ -160,6 +160,9 @@ final class InspectorProbe {
         && engine.runtime.window(forID: engine.windowID)?.isVisible == false,
       "Inspector never orders a window or changes desktop focus")
     try await componentDetails()
+    checks += try await InspectorAICopyProbe(
+      engine: engine, store: store, root: root, fixture: fixture, phase: phase
+    ).run()
     if phase == "initial"
       && ProcessInfo.processInfo.environment["SHAAR_INSPECTOR_PUBLIC_CAPTURE"] == "1"
     {

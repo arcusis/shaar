@@ -109,7 +109,7 @@ enum InspectorPageScript {
       };
       const component=node=>{
         for(let el=node,depth=0;el&&depth++<64;el=el.parentElement){
-          const svelte=globalThis.__shaarInspectorDetails?.componentName?.(el);if(svelte)return {framework:'Svelte',name:String(svelte).slice(0,160)};
+          const svelte=globalThis.__shaarInspectorDetails?.componentName?.(el);if(svelte)return {framework:'Svelte',name:String(svelte).slice(0,160),source:el.__svelte_meta?.loc?.file||null};
           const key=Object.keys(el).find(k=>k.startsWith('__reactFiber$')||k.startsWith('__reactInternalInstance$'));
           if(key){for(let fiber=el[key],steps=0;fiber&&steps++<64;fiber=fiber.return){
             const type=fiber.type,componentName=typeof type==='function'?type.displayName||type.name:type?.displayName||type?.render?.displayName||type?.render?.name;
@@ -234,7 +234,8 @@ enum InspectorPageScript {
       globalThis.__shaarInspectorV2={revision:()=>revision,read:()=>{if(current&&!attached(current)){current=null;locked=false;shield.style.pointerEvents=suspended?'none':'auto';packet=null;revision++;paint();}
         if(current&&(!packet||Date.now()-lastCollection>1000)){const next=collect();if(packet&&JSON.stringify(packet)!==JSON.stringify(next)){revision++;next.revision=revision;}packet=next;lastCollection=Date.now();}
         return {closed,revision,selection:packet};},
-        element:()=>current,onStop:callback=>cleanups.push(callback),addOverlay:node=>shadow.append(node),visible:value=>{shield.style.visibility=value?'visible':'hidden';},fontElements,fontScanTruncated:()=>fontTruncated,overlay:()=>({painted:svg.childElementCount===5,badge:badge.textContent,colors:[...svg.children].slice(0,4).map(n=>n.getAttribute('fill'))}),choose:id=>{const node=nodes.get(id);if(attached(node))choose(node,true);return true;},
+        copyMetadata:()=>current?{role:role(current),component:component(current)}:null,rectFor:topRect,
+        element:()=>current,onStop:callback=>cleanups.push(callback),addOverlay:node=>shadow.append(node),visible:value=>{shield.style.visibility=value&&!suspended?'visible':'hidden';},fontElements,fontScanTruncated:()=>fontTruncated,overlay:()=>({painted:svg.childElementCount===5,badge:badge.textContent,colors:[...svg.children].slice(0,4).map(n=>n.getAttribute('fill'))}),choose:id=>{const node=nodes.get(id);if(attached(node))choose(node,true);return true;},
         suspend:value=>{suspended=!!value;shield.style.visibility=suspended?'hidden':'visible';shield.style.pointerEvents=suspended||locked?'none':'auto';return true;},
         pick:()=>{suspended=false;shield.style.visibility='visible';locked=false;packet=null;revision++;shield.style.pointerEvents='auto';paint();return true;},navigate,
         quads:(id,rev,model)=>{if(id===ids.get(current)&&rev===revision){quads=model;paint();}return true;},stop};

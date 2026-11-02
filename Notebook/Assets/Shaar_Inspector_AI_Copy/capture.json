@@ -1,0 +1,72 @@
+{
+  "capturedUTC": "2026-11-02T08:44:13.750598+00:00",
+  "offscreen": true,
+  "phases": {
+    "initial": {
+      "checks": 836,
+      "chromiumVersion": "155.0.8059.84",
+      "inspectorAI": {
+        "clipboard": {
+          "height": 84,
+          "items": 2,
+          "markdown": true,
+          "png": true,
+          "width": 250
+        },
+        "notesPages": 2,
+        "passed": true,
+        "privateControlsMasked": 4
+      },
+      "passed": true
+    },
+    "restart": {
+      "checks": 838,
+      "chromiumVersion": "155.0.8059.84",
+      "inspectorAI": {
+        "clipboard": {
+          "height": 84,
+          "items": 2,
+          "markdown": true,
+          "png": true,
+          "width": 250
+        },
+        "notesPages": 2,
+        "passed": true,
+        "privateControlsMasked": 4
+      },
+      "passed": true
+    }
+  },
+  "scope": "Native SwiftUI element copy and per-tab notes on loopback inspector.localhost fixtures. Uniquely named pasteboards only; no system clipboard changes. Programmatic behavior and rendering evidence do not establish physical keyboard or hover acceptance.",
+  "sha256": {
+    "detailed-dark.png": "f3e4db0c8f3aef8b5b84e56d333efbe568d831cfdfbbcc07898296b78f63d0ad",
+    "detailed-light.png": "cafe351bcb153d1c931455acd86cf7b807837011eb60d19e8602de244daf7fec",
+    "element-dark.png": "dab6a654dba75abb3891f1848351f95364c2abc71cbfbfa70699aaf0b0d06972",
+    "element-light.png": "4cc84226115abe208568458d8003ff13b9dd3d5dda6803a1f5753ab84c3368ed",
+    "notes-dark.png": "97303fd7bc23a11a92a5d21d95628e1851de6c0d25a981e5e9eb84b1cc14d5f7",
+    "notes-light.png": "54f8fc20b31c9056f52e7554ec83c2e40fb401514d2b87e78a9d6628647fa11a",
+    "private.png": "0fc4f9e4fc6b2429fc90fccd55fab5393f4a5bbd4e1f7afd18b436327c5d42b5"
+  },
+  "sourceSHA256": {
+    "Sources/ArcusisBrowser/InspectorAICopyModel.swift": "e491b7f69abd2a331cca93d12a58d996f77f63cba389afc240a0224da81bbcbe",
+    "Sources/ArcusisBrowser/InspectorAICopyScript.swift": "9ae6beab6bd98cf870cdfe8b344df66eeff8901e5fb5eb5f79598009b98b5ca6",
+    "Sources/ArcusisBrowser/InspectorAIFormatter.swift": "77efa07577a5e64bd721458ef14d54695526b1a88cefa55ed382766819d85663",
+    "Sources/ArcusisBrowser/InspectorModel.swift": "1c75bf3920f66d05107ec4ff6aec8aa4bfe52d63cde2b1829ea75da2b3641287",
+    "Sources/ArcusisBrowser/InspectorNotesView.swift": "9dbed0de51b5ad9d40af9ab4e11236f09fd2f3d37015347c2e64823a26a12f9b",
+    "Sources/ArcusisBrowser/InspectorPageScript.swift": "dc35037e0c96955a86ddd0b55eef13bd5613b271d3cc9743088cd28394e5c3b2",
+    "Sources/ArcusisBrowser/InspectorPanel.swift": "9ed16d152b8029df7fedbf2640763c5671027152a737d1a0d1252016198ec0fc",
+    "Sources/ArcusisBrowser/NativeBrowserHost.swift": "0c3a55a6e6b4f4e7c5ffa7bdccc626ce773703f68a98103f752875ce6beec6c7",
+    "Sources/ArcusisBrowser/ShortcutCatalog.swift": "7a310128b5aa3230156b90d903c68a2a4fe6fc3f73146e570e81e6ead9c1cabe",
+    "Sources/ChromiumBridge/ChromiumBridge.mm": "d4a786a74c6741db3188a51b790cd2de09fcfaa6dad83e07e32201969f82b7b6",
+    "Sources/ShaarVerification/EngineProbe.swift": "8e42d2d5bb94a6006e79b796bce1a2824ba7834c77e48aa80b5e1df9cf075d3d",
+    "Sources/ShaarVerification/InspectorAICopyProbe.swift": "fa7b5c44257efccbe85711ba77331c10634f6d2fc85553bcdb525d49e5b090c7",
+    "Sources/ShaarVerification/InspectorProbe.swift": "f9839121773975cc3ebf84e89420f6555a0f3a1985523eaf0d267bb3bbcd094b",
+    "Tests/BrowserAppTests/InspectorAICopyTests.swift": "ffdfec1fdd9a24dc0974783ee0eda4fdc43e09353a89130a535e070013766b43",
+    "Tests/BrowserAppTests/InspectorAIFormatterTests.swift": "b5f000bf64d34340104fb575c1a38b61fde8e76d98dd367627df320b14023dbb",
+    "Tests/BrowserAppTests/NativeMenuStructureTests.swift": "1cdde1b14e73a4fd9965be6313e1b852c21a27ab7d179b339ed3b3ae30c5c18a",
+    "Tests/InspectorContractTests/inspector.cjs": "c04606a58ca939c9c908be7772eacc01f44bb2a056db9bad4ec9b69ac12eaa2f",
+    "Tests/ShaarVerificationTests/InspectorAIPasteboardTests.swift": "1a42133987d24f18a250dbb30183ed799af290ea05435f6c4f9e6048883dff17",
+    "scripts/engine_fixture.py": "5f62f36a270a594992f7d3babad3d50f08b0dfb728053fe69de0057b16c1d85b"
+  },
+  "visibleWindows": false
+}

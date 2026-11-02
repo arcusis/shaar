@@ -73,3 +73,7 @@ Hosted integration exposed two setup dependencies before analysis: resource/bund
 ## Part 1 rollout boundary
 
 Run 41452004445 passed the non-engine gates, including Swift CodeQL, but the transferred verification bundles failed at startup in all four shards. Per the rollout decision, remove only engine sharding and its transfer helper/tests. Restore `ci-engine.yml` and `ci-stage.py` byte-for-byte from production; keep the independent shipping/build schedule, runner pins, Node 24 actions and other verified speedups. Do not change resource loading in this PR. Further sharding/CodeQL work follows after part 1 merges.
+
+Required mergeability integration after production #376 preserves Inspector notes/copy controls, new native probes, snapshot fixtures and the new-branch immutable-base fix. Keep the picker task adapter on the localized button and regenerate only lexical inventory references. This integration resolves PR #380 conflicts; it introduces no additional pipeline tuning.
+
+The incoming immutable-base regression still asserts the exact prior SHA. Its stage expectation follows this pipeline's stronger policy: production/native pushes always run full checks, including documentation-only diffs. PR path selection remains unchanged.

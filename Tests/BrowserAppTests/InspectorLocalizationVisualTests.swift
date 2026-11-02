@@ -148,9 +148,22 @@ final class InspectorLocalizationVisualTests: XCTestCase {
     let assetsData = try XCTUnwrap(inspector.details.assets)
     let stylesRules = inspector.styles.rules
     let computedStyles = inspector.styles.computed
+    inspector.aiCopy.append(
+      context: InspectorAIFormatterTests.context(), feedback: "Keep the primary action clear.",
+      intent: .important)
+    if language == "he" {
+      for key in [
+        "Copy for AI", "Notes", "Intent", "Change", "Question", "Important",
+        "Copy all for AI", "Delete note",
+      ] {
+        XCTAssertNotEqual(InspectorL10n.string(key), key, "Translated Inspector copy/notes: \(key)")
+      }
+      XCTAssertTrue(
+        InspectorL10n.format("Undo clear (%1$lld)", arguments: [.integer(2)]).contains("2"))
+    }
     let elementPanels: [(String, InspectorModel.Tab)] = [
       ("design", .design), ("css", .styles), ("component", .component),
-      ("accessibility", .accessibility), ("assets", .assets),
+      ("accessibility", .accessibility), ("assets", .assets), ("notes", .notes),
     ]
     for (name, tab) in elementPanels {
       inspector.tab = tab
@@ -167,7 +180,7 @@ final class InspectorLocalizationVisualTests: XCTestCase {
       case .assets:
         try inspector.details.receive(
           .assets(assetsData), selectionID: 8, generation: generation)
-      case .design: break
+      case .design, .notes: break
       }
       try capture(InspectorPanel(model: inspector), name: name, directory: outputDirectory)
     }

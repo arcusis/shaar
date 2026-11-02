@@ -17,6 +17,8 @@ const detailsSource = fs.readFileSync(path.join(root, 'Sources/ArcusisBrowser/In
 const detailsScript = detailsSource.match(/static let install = #"""([\s\S]*?)"""#/)[1];
 const diagnosticsSource = fs.readFileSync(path.join(root, 'Sources/ArcusisBrowser/InspectorDiagnosticsScript.swift'), 'utf8');
 const diagnosticsScript = diagnosticsSource.match(/static let install = #"""([\s\S]*?)"""#/)[1];
+const aiSource = fs.readFileSync(path.join(root, 'Sources/ArcusisBrowser/InspectorAICopyScript.swift'), 'utf8');
+const aiScript = aiSource.match(/static let install = #"""([\s\S]*?)"""#/)[1];
 const output = path.join(root, 'build/Verification/inspector-contracts.json');
 fs.rmSync(output, { force: true });
 let server, browser;
@@ -153,6 +155,10 @@ async function serve() {
   let component = await componentData();
   assert.equal(component.tree.framework, 'React');
   assert.equal(component.data.name, 'ReactCounter');
+  await page.evaluate(aiScript);
+  const reactContext = await page.evaluate(() => __shaarInspectorCopy.context(__shaarInspectorV2.read().selection.id));
+  assert(reactContext.components.some(name=>name.includes('ReactCounter')));
+
   assert.equal(JSON.parse(component.data.props).label, 'React counter');
   assert.equal(JSON.parse(component.data.props).accessorProbe.danger, '[Accessor]');
   assert.equal(JSON.parse(component.data.props).accessorProbe.self, '[Circular]');
@@ -169,6 +175,9 @@ async function serve() {
   component = await componentData();
   assert.equal(component.tree.framework, 'Vue');
   assert.equal(component.data.name, 'VueCounter');
+  const vueContext = await page.evaluate(() => __shaarInspectorCopy.context(__shaarInspectorV2.read().selection.id));
+  assert(vueContext.components.some(name=>name.includes('VueCounter')));
+
   assert.equal(JSON.parse(component.data.state).data.count, 3);
   await page.locator('#vue-counter').click();
   await page.waitForFunction(() => document.querySelector('#vue-counter').textContent.endsWith(': 4'));
@@ -178,6 +187,9 @@ async function serve() {
   component = await componentData();
   assert.equal(component.tree.framework, 'Svelte');
   assert.equal(component.data.name, 'InspectorCounter');
+  const svelteContext = await page.evaluate(() => __shaarInspectorCopy.context(__shaarInspectorV2.read().selection.id));
+  assert.match(svelteContext.source,/InspectorCounter.svelte/);
+
   assert.equal(JSON.parse(component.data.props).label, 'Svelte counter');
   assert.equal(JSON.parse(component.data.state).count, 4);
   assert.match(component.data.source, /InspectorCounter.svelte:9:1/);
@@ -257,15 +269,56 @@ async function serve() {
   assert.equal(await page.evaluate(() => window.clicked), 1, 'Element mode intercepts lock click');
   await page.evaluate(() => globalThis.__shaarInspectorV2.stop());
 
+  await page.goto(new URL('/inspector-ai?token=private-query#private-fragment', url).href);
+  await page.evaluate(script);
+  await page.locator('#ai-save').click({ force: true });
+  await page.keyboard.press('ArrowUp');
+  await page.evaluate(aiScript);
+  const ai = await page.evaluate(() => {
+    const picker = globalThis.__shaarInspectorV2, api = globalThis.__shaarInspectorCopy;
+    const id = picker.read().selection.id, context = api.context(id);
+    const token = api.begin(id);
+    if (getComputedStyle(document.querySelector('#ai-password')).visibility !== 'hidden') throw Error('Password was not hidden');
+    if (!document.querySelector('[data-shaar-copy-mask]')) throw Error('Screenshot mask missing');
+    if (api.end('wrong-token')) throw Error('Foreign mask token accepted');
+    if (!api.end(token)) throw Error('Mask cleanup failed');
+    if (document.querySelector('#ai-password').hasAttribute('style')) throw Error('Original inline style was not restored');
+    const scrubbed = api.sanitize({message:'input-private-fixture textarea-private-fixture password-private-fixture'});
+    return {context,scrubbed};
+  });
+  const aiText = JSON.stringify(ai);
+  for (const secret of ['password-private-fixture','input-private-fixture','textarea-private-fixture','selected-private-fixture','private-query','private-fragment']) assert(!aiText.includes(secret), secret + ' leaked into AI context');
+  assert.match(ai.context.text, /Public nearby context/);
+  assert.match(ai.context.domPath, /html:nth-of-type/);
+  await page.evaluate(() => {
+    const picker=__shaarInspectorV2,api=__shaarInspectorCopy,token=api.begin(picker.read().selection.id);
+    const input=document.createElement('input'); input.value='late-private-control';picker.element().append(input);
+    if(api.end(token)!==false)throw Error('A newly inserted form control did not invalidate capture');
+    if(document.querySelector('[data-shaar-copy-mask]'))throw Error('Invalidated capture left a mask behind');
+    input.remove();
+  });
+
+  const maskToken = await page.evaluate(() => { const p=__shaarInspectorV2; return __shaarInspectorCopy.begin(p.read().selection.id); });
+  await page.evaluate(() => __shaarInspectorV2.visible(false));
+  await page.locator('#ai-card').screenshot({path:path.join(root,'build/inspector-ai-mask-headless.png')});
+  await page.evaluate(token=>{__shaarInspectorCopy.end(token);__shaarInspectorV2.visible(true);},maskToken);
+
+  await page.evaluate(() => { const picker = globalThis.__shaarInspectorV2; picker.pick(); });
+  await page.locator('#ai-password').click({ force: true });
+  const protectedContext = await page.evaluate(() => globalThis.__shaarInspectorCopy.context(globalThis.__shaarInspectorV2.read().selection.id));
+  assert.equal(protectedContext.protected, true);
+  assert.equal(protectedContext.text, '');
+  await page.evaluate(() => { const p = globalThis.__shaarInspectorV2; p.stop(); if(globalThis.__shaarInspectorCopy) throw Error('Copy collector survived Inspector close'); });
   fs.mkdirSync(path.dirname(output), { recursive: true });
   fs.writeFileSync(output, JSON.stringify({
     passed: true, headless: true, browserVersion: browser.version(),
     sourceSHA256: require('node:crypto').createHash('sha256').update(source).digest('hex'),
     styleSourceSHA256: require('node:crypto').createHash('sha256').update(styleSource).digest('hex'),
     detailsSourceSHA256: require('node:crypto').createHash('sha256').update(detailsSource).digest('hex'),
+    aiSourceSHA256: require('node:crypto').createHash('sha256').update(aiSource).digest('hex'),
     diagnosticsSourceSHA256: require('node:crypto').createHash('sha256').update(diagnosticsSource).digest('hex'),
     frameworks: JSON.parse(fs.readFileSync(path.join(root, 'ThirdParty/InspectorFixtures/pin.json'), 'utf8')),
-    checks: ['hover regions', 'lock interception', 'arrow navigation', 'breadcrumb', 'unique CSS/XPath/JS/Playwright', 'CSS edit and exact undo', 'CSS validation', 'Option measurement and release', 'conflicting page edit preserves page changes', 'alpha precision', 'gradient limit', 'same-origin iframe', 'iframe reload listeners', 'Escape cleanup', 'Page mode passes input', 'Actual runtime technology markers', 'Bounded console without getters', 'fetch and XHR recording', 'Local/session storage CRUD', 'Collector restoration'],
+    checks: ['hover regions', 'lock interception', 'arrow navigation', 'breadcrumb', 'unique CSS/XPath/JS/Playwright', 'CSS edit and exact undo', 'CSS validation', 'Option measurement and release', 'conflicting page edit preserves page changes', 'alpha precision', 'gradient limit', 'same-origin iframe', 'iframe reload listeners', 'Escape cleanup', 'Page mode passes input', 'Actual runtime technology markers', 'Bounded console without getters', 'fetch and XHR recording', 'Local/session storage CRUD', 'Collector restoration', 'AI context and form privacy', 'Private screenshot mask restoration', 'React Vue Svelte AI context'],
   }, null, 2));
   console.log('Passed Inspector renderer contracts.');
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => {

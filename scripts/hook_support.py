@@ -13,8 +13,8 @@ from git_content import git, object_id, push_base, push_updates, snapshot
 from sensitive_files import policy_errors
 
 
-def config(root: Path, key: str, *, scope: str | None = None) -> str | None:
-    arguments = ["config", *([scope] if scope else []), "--get", key]
+def config(root: Path, key: str, *, scope: str | None = None, path_value: bool = False) -> str | None:
+    arguments = ["config", *([scope] if scope else []), *(["--path"] if path_value else []), "--get", key]
     try:
         return git(root, *arguments).decode().strip()
     except subprocess.CalledProcessError as error:
@@ -28,9 +28,9 @@ def install_hooks(root: Path) -> Path:
         raise ValueError("Worktree hook installation requires prior core.worktree/core.bare migration")
     git_directory = Path(git(root, "rev-parse", "--absolute-git-dir").decode().strip())
     destination = git_directory / "shaar-hooks"
-    previous = config(root, "core.hooksPath")
+    previous = config(root, "core.hooksPath", path_value=True)
     if previous and (root / previous).resolve() == destination.resolve():
-        previous = config(root, "shaar.previousHooksPath", scope="--worktree")
+        previous = config(root, "shaar.previousHooksPath", scope="--worktree", path_value=True)
         if previous is None:
             raise ValueError("Managed hook path has no saved previous hook chain")
     else:
@@ -56,7 +56,7 @@ def install_hooks(root: Path) -> Path:
 
 
 def chain_previous(root: Path, stage: str, arguments: list[str], data: bytes | None) -> int:
-    previous = config(root, "shaar.previousHooksPath", scope="--worktree")
+    previous = config(root, "shaar.previousHooksPath", scope="--worktree", path_value=True)
     if not previous:
         return 0
     hook = root / previous / stage

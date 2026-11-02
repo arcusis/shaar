@@ -15,7 +15,7 @@ if { [ "$stage" = pre-commit ] || [ "$stage" = pre-push ]; } && [ -f scripts/hoo
   exec .venv/bin/python scripts/hook-checks.py "$stage" "$@"
 fi
 # Keep prior guards active when checking out a version predating these hooks.
-previous=$(git config --worktree --get shaar.previousHooksPath || true)
+previous=$(git config --worktree --path --get shaar.previousHooksPath || true)
 if [ "$stage" = pre-commit ] || [ "$stage" = pre-push ]; then
   echo 'Shaar hook runner absent in this checkout; delegating to previous hooks.' >&2
 fi

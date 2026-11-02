@@ -181,6 +181,13 @@ class HookTests(unittest.TestCase):
             self.assertEqual(hook_support.run_hook(self.root, "pre-commit", []), 23)
             checks.assert_not_called()
 
+    def test_installer_preserves_git_path_expansion_for_previous_hooks(self):
+        self.stage(".githooks/run.sh", (ROOT / ".githooks/run.sh").read_bytes())
+        git_content.git(self.root, "config", "--local", "core.hooksPath", "~/shaar-previous-hooks")
+        hook_support.install_hooks(self.root)
+        self.assertEqual(hook_support.config(self.root, "shaar.previousHooksPath", scope="--worktree"),
+                         str(Path.home() / "shaar-previous-hooks"))
+
 
 if __name__ == "__main__":
     unittest.main()

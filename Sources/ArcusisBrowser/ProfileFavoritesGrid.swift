@@ -153,27 +153,22 @@ struct ProfileFavoritesGrid: View {
         SettingsL10n.format("%@, %@", .string(favorite.title), .string(favorite.url.absoluteString))
       )
       .accessibilityAddTraits(isSelected ? .isSelected : [])
-      .draggable(dragPayload(for: favorite))
-      .dropDestination(for: ProfileFavoriteDrag.self) { drops, point in
-        guard drops.count == 1, let payload = drops.first else { return false }
-        let beforeID = Self.dropTargetBefore(
-          targetID: favorite.id, dropX: point.x, tileWidth: geometry.size.width,
-          favorites: favorites, isRightToLeft: layoutDirection == .rightToLeft)
-        guard
-          Self.accepts(
-            payload, before: beforeID, favorites: favorites,
-            profileID: profileID, dragSessionID: dragSessionID)
-        else { return false }
-        onMoveBefore(payload.favoriteID, beforeID)
-        return true
-      }
+      .draggable(SidebarTransfer.favorite(dragPayload(for: favorite)))
       .dropDestination(for: SidebarTransfer.self) { items, point in
         guard items.count == 1, let item = items.first else { return false }
-        return onTabDrop(
-          item,
-          Self.dropTargetBefore(
-            targetID: favorite.id, dropX: point.x, tileWidth: geometry.size.width,
-            favorites: favorites, isRightToLeft: layoutDirection == .rightToLeft))
+        let before = Self.dropTargetBefore(
+          targetID: favorite.id, dropX: point.x, tileWidth: geometry.size.width,
+          favorites: favorites, isRightToLeft: layoutDirection == .rightToLeft)
+        if case .favorite(let payload) = item {
+          guard
+            Self.accepts(
+              payload, before: before, favorites: favorites,
+              profileID: profileID, dragSessionID: dragSessionID)
+          else { return false }
+          onMoveBefore(payload.favoriteID, before)
+          return true
+        }
+        return onTabDrop(item, before)
       }
       .onHover { isHovered in
         if isHovered {

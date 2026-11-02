@@ -1,6 +1,11 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Pinned": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Pinned"}},"he":{"stringUnit":{"state":"translated","value":"נעוצים"}}}},
+    "Single tabs only": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Single tabs only"}},"he":{"stringUnit":{"state":"translated","value":"לשוניות בודדות בלבד"}}}},
+    "Drop tabs here": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Drop tabs here"}},"he":{"stringUnit":{"state":"translated","value":"יש לגרור לכאן לשוניות"}}}},
+    "Drag split stack": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Drag split stack"}},"he":{"stringUnit":{"state":"translated","value":"גרירת ערימת תצוגה מפוצלת"}}}},
+    "Create folder": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Create folder"}},"he":{"stringUnit":{"state":"translated","value":"יצירת תיקייה"}}}},
     "Copy for AI": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copy for AI"}},"he":{"stringUnit":{"state":"translated","value":"העתקה ל-AI"}}}},
     "Developer Tools": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Developer Tools"}},"he":{"stringUnit":{"state":"translated","value":"כלים למפתחים"}}}},
     "More Spaces": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"More Spaces"}},"he":{"stringUnit":{"state":"translated","value":"מרחבים נוספים"}}}},

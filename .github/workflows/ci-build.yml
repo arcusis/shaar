@@ -21,3 +21,4 @@ jobs:
         if: always()
         with:
           stage: unit
+          extra-path: build/Verification/sidebar-dnd

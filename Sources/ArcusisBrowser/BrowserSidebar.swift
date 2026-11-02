@@ -18,6 +18,10 @@ struct BrowserSidebar: View {
   @State private var targetedSpace: UUID?
   @State private var targetedSection: String?
   @State private var targetedFolder: UUID?
+  @State private var folderHoverTask: Task<Void, Never>?
+  @State private var folderHoverTab: UUID?
+  @State private var folderHoverSession: DropSession.ID?
+  @State private var folderDropReady: UUID?
   @State private var targetedTabIntent: SidebarTabDropIntent?
   @State private var hoveredTabID: UUID?
   @State private var newTabIsHovered = false
@@ -163,7 +167,11 @@ struct BrowserSidebar: View {
       value: store.session.selectedSpaceID
     )
     .zIndex(1)
-    .onChange(of: store.session.selectedSpaceID) { _, _ in folderDraft = nil }
+    .onChange(of: store.session.selectedSpaceID) { _, _ in
+      folderDraft = nil
+      cancelFolderHover()
+    }
+    .onDisappear { cancelFolderHover() }
     .onAppear {
       if folderDraft != nil { folderNameIsFocused = true }
     }
@@ -174,19 +182,40 @@ struct BrowserSidebar: View {
     return ScrollViewReader { tabScroll in
       ScrollView {
         LazyVStack(alignment: .leading, spacing: 4) {
+          HStack {
+            ShellL10n.text("Pinned").font(.system(size: 11, weight: .semibold))
+              .foregroundStyle(.secondary)
+            Spacer()
+            Button {
+              beginFolderDraft(parentID: nil)
+            } label: {
+              Image(systemName: "folder.badge.plus").frame(width: 26, height: 26)
+            }
+            .help(ShellL10n.string("New Folder"))
+            .accessibilityLabel(ShellL10n.string("New Folder"))
+            .accessibilityIdentifier("sidebar-pinned-new-folder")
+          }
           sectionDropTarget(
             pinned: true,
             height: space.pinnedItems().isEmpty ? 8 : 12,
             hint: space.pinnedItems().isEmpty
               ? ShellL10n.string("Drop to pin in this Space") : nil)
-          if let folderDraft, folderDraft.section == .pinned, folderDraft.parentID == nil {
+          if let folderDraft, folderDraft.section == .pinned, folderDraft.parentID == nil,
+            folderDraft.editingFolderID == nil
+          {
             folderDraftRow(depth: 0)
           }
           ForEach(space.pinnedItems()) { item in
             switch item {
             case .folder(let folder, let depth):
-              folderRow(folder, depth: depth)
-              if let folderDraft, folderDraft.parentID == folder.id {
+              if folderDraft?.editingFolderID == folder.id {
+                folderDraftRow(depth: depth)
+              } else {
+                folderRow(folder, depth: depth)
+              }
+              if let folderDraft, folderDraft.editingFolderID == nil,
+                folderDraft.parentID == folder.id
+              {
                 folderDraftRow(depth: depth + 1)
               }
             case .tab(let tab, let depth):
@@ -260,14 +289,22 @@ struct BrowserSidebar: View {
             Button(ShellL10n.string("Recently closed…")) { store.showRecentlyClosed() }
           }
           sectionDropTarget(pinned: false)
-          if let folderDraft, folderDraft.section == .today, folderDraft.parentID == nil {
+          if let folderDraft, folderDraft.section == .today, folderDraft.parentID == nil,
+            folderDraft.editingFolderID == nil
+          {
             folderDraftRow(depth: 0)
           }
           ForEach(space.items(isPinned: false)) { item in
             switch item {
             case .folder(let folder, let depth):
-              folderRow(folder, depth: depth)
-              if let folderDraft, folderDraft.parentID == folder.id {
+              if folderDraft?.editingFolderID == folder.id {
+                folderDraftRow(depth: depth)
+              } else {
+                folderRow(folder, depth: depth)
+              }
+              if let folderDraft, folderDraft.editingFolderID == nil,
+                folderDraft.parentID == folder.id
+              {
                 folderDraftRow(depth: depth + 1)
               }
             case .tab(let tab, _):
@@ -449,26 +486,17 @@ struct BrowserSidebar: View {
           onReset: { _ = store.resetFavorite($0) },
           onRemove: { _ = store.removeFavorite($0) },
           onMoveBefore: { _ = store.moveFavorite($0, before: $1) },
-          onTabDrop: { item, before in
-            guard case .tab(let sessionID, let source, let tabID) = item,
-              sessionID == store.dragSessionID, source == store.session.selectedSpaceID
-            else { return false }
-            addToFavorites(tabID: tabID, spaceID: source, profileID: profileID)
-            guard
-              let favoriteID = store.session.favoritePages.first(where: { $0.tab.id == tabID })?
-                .favoriteID
-            else { return false }
-            if let before { _ = store.moveFavorite(favoriteID, before: before) }
-            return true
-          },
+          onTabDrop: { store.acceptFavoritesDrop($0, before: $1) },
           accessibilityOverrides: ProfileFavoritesAccessibilityOverrides(
             reduceMotion: sidebarReduceMotion,
             reduceTransparency: reduceTransparency
               || accessibilityOverrides.reduceTransparency == true)
         )
-      } else if store.tabDrag != nil {
+      } else if store.tabDrag != nil || store.sidebarDrag != nil {
         SidebarDropHint(
-          title: ShellL10n.string("Drop to add to Favorites"), symbol: "star",
+          title: ShellL10n.string(
+            store.favoritesDropIsRefused ? "Single tabs only" : "Drop to add to Favorites"),
+          symbol: store.favoritesDropIsRefused ? "nosign" : "star",
           isTargeted: targetedSection == "favorites")
       } else {
         Color.clear.frame(height: 8).contentShape(Rectangle())
@@ -476,21 +504,21 @@ struct BrowserSidebar: View {
     }
     .animation(sidebarReduceMotion ? nil : .smooth(duration: 0.2), value: store.tabDrag != nil)
     .dropDestination(for: SidebarTransfer.self) { items, _ in
-      guard items.count == 1, case .tab(let sessionID, let source, let tabID) = items[0],
-        sessionID == store.dragSessionID, source == store.session.selectedSpaceID
-      else { return false }
-      store.separateDraggedPane(tabID)
-      addToFavorites(tabID: tabID, spaceID: source, profileID: profileID)
-      return store.session.favoritePages.contains { $0.tab.id == tabID }
+      guard items.count == 1, let item = items.first else { return false }
+      return store.acceptFavoritesDrop(item)
     } isTargeted: { targeted in
       targetedSection = targetedSection.updatingTarget("favorites", isActive: targeted)
     }
-    .dropDestination(for: URL.self) { urls, _ in
-      guard urls.count == 1, NavigationInput.isWebURL(urls[0]), store.sheet == nil,
-        !store.commandIsOpen
-      else { return false }
-      store.perform(.open(urls[0]))
-      return store.addCurrentPageAsFavorite()
+    .dropConfiguration { _ in
+      DropConfiguration(operation: store.favoritesDropIsRefused ? .forbidden : .move)
+    }
+    .overlay {
+      if targetedSection == "favorites", store.favoritesDropIsRefused {
+        Label(ShellL10n.string("Single tabs only"), systemImage: "nosign")
+          .font(.caption).foregroundStyle(.red).padding(4)
+          .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 4))
+          .allowsHitTesting(false)
+      }
     }
   }
 
@@ -613,11 +641,42 @@ struct BrowserSidebar: View {
 
   private func commitFolderDraft() {
     guard let draft = folderDraft, draft.isValid(in: store.session),
-      store.createFolder(
-        name: draft.name, in: draft.spaceID, section: draft.section, parentID: draft.parentID)
-        != nil
+      commitFolder(draft)
     else { return }
     folderDraft = nil
+  }
+
+  private func commitFolder(_ draft: SidebarFolderDraft) -> Bool {
+    switch draft.route {
+    case .create:
+      return store.createFolder(
+        name: draft.name, in: draft.spaceID, section: draft.section, parentID: draft.parentID)
+        != nil
+    case .edit(_, let folder):
+      return store.renameFolder(folder, in: draft.spaceID, name: draft.name)
+    }
+  }
+
+  private func scheduleFolderHover(_ tab: BrowserTab, in space: BrowserSpace) {
+    guard folderHoverTask == nil, folderDropReady == nil, tab.isPinned,
+      !space.splits.contains(where: { $0.tabIDs.contains(tab.id) }),
+      let drag = store.tabDrag, drag.tabID != tab.id
+    else { return }
+    folderHoverTask = Task { @MainActor in
+      try? await Task.sleep(for: .milliseconds(650))
+      guard !Task.isCancelled, folderHoverTab == tab.id,
+        targetedTabIntent?.combinesTabs != false
+      else { return }
+      folderDropReady = tab.id
+    }
+  }
+
+  private func cancelFolderHover() {
+    folderHoverTask?.cancel()
+    folderHoverTask = nil
+    folderDropReady = nil
+    folderHoverTab = nil
+    folderHoverSession = nil
   }
 
   private func folderDraftRow(depth: Int) -> some View {
@@ -711,7 +770,31 @@ struct BrowserSidebar: View {
         isSelected: store.session.selectedPage.map { split.tabIDs.contains($0.tab.id) } ?? false,
         onSelect: { store.perform(.tab(space: space.id, tab: $0)) },
         onClose: { store.closeTab($0) },
-        onDrag: { store.beginTabDrag($0, spaceID: space.id, fromSplitPane: true) }
+        onDrag: { store.beginTabDrag($0, spaceID: space.id, fromSplitPane: true) },
+        memberMenu: { id in
+          AnyView(
+            Group {
+              Button(ShellL10n.string("Add to Favorites")) {
+                _ = store.acceptFavoritesDrop(
+                  .tab(
+                    sessionID: store.dragSessionID, sourceSpaceID: space.id, tabID: id))
+              }
+              Menu(ShellL10n.string("Move to Folder")) {
+                ForEach(space.folders) { folder in
+                  Button(folderLabel(folder.id, in: space)) {
+                    _ = store.moveTab(id, from: space.id, to: space.id, folderID: folder.id)
+                  }
+                }
+                if space.folders.isEmpty { ShellL10n.text("Create a folder first") }
+              }
+              Button(ShellL10n.string("Separate from Split")) { store.unsplitTab(id) }
+              Button(ShellL10n.string("Close tab")) { store.closeTab(id) }
+            })
+        },
+        onStackDrag: {
+          store.beginSidebarDrag(
+            .split(sessionID: store.dragSessionID, sourceSpaceID: space.id, splitID: split.id))
+        }
       )
     } else {
       SidebarTabRow(
@@ -727,6 +810,7 @@ struct BrowserSidebar: View {
           hoveredTabID = hoveredTabID.updatingTarget(tab.id, isActive: isHovered)
         }
       )
+      .draggable(store.beginTabDrag(tab.id, spaceID: space.id, fromSplitPane: false))
     }
   }
 
@@ -764,15 +848,35 @@ struct BrowserSidebar: View {
     let space = store.session.selectedSpace
     let boundary = index.boundary(for: tab.id)
     return tabRowContent(tab, in: space)
-      .draggable(
-        store.beginTabDrag(
-          tab.id, spaceID: space.id,
-          fromSplitPane: space.splits.contains(where: { $0.tabIDs.contains(tab.id) }))
-      )
       .dropDestination(for: SidebarTransfer.self) { items, point in
         guard items.count == 1, let item = items.first else { return false }
         let sourceID: UUID
-        if case .tab(_, _, let id) = item { sourceID = id } else { return false }
+        switch item {
+        case .tab(_, _, let id): sourceID = id
+        case .split(_, let source, let id):
+          guard
+            let leader = store.session.spaces.first(where: { $0.id == source })?
+              .splits.first(where: { $0.id == id })?.tabIDs.first
+          else {
+            return false
+          }
+          sourceID = leader
+        case .favorite, .url:
+          return store.acceptSidebarDrop(
+            item, into: space.id, before: tab.id, pinned: tab.isPinned, folderID: tab.folderID)
+        default: return false
+        }
+        if folderDropReady == tab.id {
+          defer { cancelFolderHover() }
+          guard
+            let folder = store.createFolderFromDrop(
+              item, onto: tab.id, name: ShellL10n.string("Untitled"))
+          else { return false }
+          folderDraft = SidebarFolderDraft(
+            route: .edit(spaceID: space.id, folderID: folder), section: .pinned)
+          folderNameIsFocused = true
+          return true
+        }
         if let split = space.splits.first(where: { $0.tabIDs.contains(tab.id) }),
           split.tabIDs.contains(sourceID), sourceID != tab.id
         {
@@ -780,7 +884,7 @@ struct BrowserSidebar: View {
         }
         let joinsSplit = space.splits.contains(where: { $0.tabIDs.contains(tab.id) })
         let intent = SidebarTabDropIntent.at(point.y, joinsSplit: joinsSplit)
-        if sourceID != tab.id, intent.combinesTabs,
+        if case .tab = item, sourceID != tab.id, intent.combinesTabs,
           space.tabs.contains(where: { $0.id == sourceID })
         {
           return store.dropTabIntoSidebarSplit(item, target: tab.id)
@@ -798,30 +902,42 @@ struct BrowserSidebar: View {
         targetedTab = targetedTab.updatingTarget(tab.id, isActive: targeted)
         if !targeted { targetedTabIntent = nil }
       }
-      .onContinuousHover { phase in
-        guard targetedTab == tab.id else { return }
-        switch phase {
-        case .active(let location):
-          targetedTabIntent = SidebarTabDropIntent.at(
-            location.y, joinsSplit: space.splits.contains(where: { $0.tabIDs.contains(tab.id) }))
+      .onDropSessionUpdated { drop in
+        switch drop.phase {
+        case .entering, .active:
+          if folderHoverSession != drop.id || folderHoverTab != tab.id {
+            cancelFolderHover()
+            folderHoverSession = drop.id
+            folderHoverTab = tab.id
+          }
+          let intent = SidebarTabDropIntent.at(
+            drop.location.y,
+            joinsSplit: space.splits.contains(where: { $0.tabIDs.contains(tab.id) }))
+          targetedTabIntent = intent
+          if intent.combinesTabs {
+            scheduleFolderHover(tab, in: space)
+          } else {
+            cancelFolderHover()
+          }
+        case .exiting, .ended(.cancel), .ended(.forbidden), .dataTransferCompleted:
+          if folderHoverSession == drop.id, folderHoverTab == tab.id { cancelFolderHover() }
         case .ended:
-          targetedTabIntent = nil
+          // Transfer decoding can finish after isTargeted becomes false. Keep the offer
+          // until the action consumes it, or this session completes/cancels.
+          break
+        @unknown default:
+          cancelFolderHover()
         }
       }
       .overlay(alignment: .top) {
-        if targetedTab == tab.id { tabDropIndicator(targetedTabIntent ?? .reorderBefore) }
+        if folderDropReady == tab.id {
+          SidebarDropHint(
+            title: ShellL10n.string("Create folder"), symbol: "folder.badge.plus", isTargeted: true)
+        } else if targetedTab == tab.id {
+          tabDropIndicator(targetedTabIntent ?? .reorderBefore)
+        }
       }
       .animation(sidebarReduceMotion ? nil : .easeOut(duration: 0.12), value: targetedTab)
-      .dropDestination(for: ProfileFavoriteDrag.self) { items, _ in
-        guard items.count == 1 else { return false }
-        return moveFavoriteDrop(
-          items[0], space: space, before: tab.id, pinned: tab.isPinned, folderID: tab.folderID)
-      }
-      .dropDestination(for: URL.self) { urls, _ in
-        guard urls.count == 1 else { return false }
-        return openDroppedURL(
-          urls[0], space: space, before: tab.id, pinned: tab.isPinned, folderID: tab.folderID)
-      }
       .contextMenu {
         splitMenu(for: tab, in: space)
         Button(ShellL10n.string("Add to Favorites")) {
@@ -916,42 +1032,9 @@ struct BrowserSidebar: View {
       } isTargeted: { targeted in
         targetedSection = targetedSection.updatingTarget(zone, isActive: targeted)
       }
-      .dropDestination(for: ProfileFavoriteDrag.self) { items, _ in
-        guard items.count == 1 else { return false }
-        return moveFavoriteDrop(items[0], space: store.session.selectedSpace, pinned: pinned)
-      }
-      .dropDestination(for: URL.self) { urls, _ in
-        guard urls.count == 1 else { return false }
-        return openDroppedURL(urls[0], space: store.session.selectedSpace, pinned: pinned)
-      }
       .animation(sidebarReduceMotion ? nil : .easeOut(duration: 0.12), value: targetedSection)
       .animation(sidebarReduceMotion ? nil : .smooth(duration: 0.2), value: showsHint)
       .accessibilityHidden(true)
-  }
-
-  private func moveFavoriteDrop(
-    _ payload: ProfileFavoriteDrag, space: BrowserSpace, before: UUID? = nil,
-    pinned: Bool, folderID: UUID? = nil
-  ) -> Bool {
-    guard payload.dragSessionID == store.dragSessionID, payload.profileID == space.profileID,
-      payload.favoriteIDs == store.profileFavorites.map(\.id),
-      payload.favoriteIDs.contains(payload.favoriteID),
-      store.session.selectedSpaceID == space.id
-    else { return false }
-    return store.restoreFavoriteAsTab(
-      payload.favoriteID, in: space.id, before: before, pinned: pinned, folderID: folderID)
-  }
-
-  private func openDroppedURL(
-    _ url: URL, space: BrowserSpace, before: UUID? = nil, pinned: Bool, folderID: UUID? = nil
-  ) -> Bool {
-    guard NavigationInput.isWebURL(url), store.session.selectedSpaceID == space.id,
-      store.sheet == nil, !store.commandIsOpen
-    else { return false }
-    store.perform(.open(url))
-    guard case .tab(let tab) = store.session.selectedPage else { return false }
-    return store.moveTab(
-      tab.id, from: space.id, to: space.id, before: before, pinned: pinned, folderID: folderID)
   }
 
   private func shiftTab(_ tab: BrowserTab, in space: BrowserSpace, by offset: Int) {
@@ -995,8 +1078,15 @@ struct BrowserSidebar: View {
         )
         .frame(width: 10)
         Image(systemName: folder.isCollapsed ? "folder" : "folder.fill").font(.system(size: 12))
-        Text(folder.name).font(.system(size: 13, weight: active ? .semibold : .regular)).lineLimit(
-          1)
+        VStack(alignment: .leading, spacing: 2) {
+          Text(folder.name).font(.system(size: 13, weight: active ? .semibold : .regular))
+            .lineLimit(1)
+          if !space.tabs.contains(where: { $0.folderID == folder.id }),
+            !space.folders.contains(where: { $0.parentID == folder.id })
+          {
+            ShellL10n.text("Drop tabs here").font(.system(size: 10)).foregroundStyle(.secondary)
+          }
+        }
         Spacer(minLength: 0)
         if folder.isCollapsed && active {
           Circle().fill(Color.accentColor).frame(width: 5, height: 5)
@@ -1014,8 +1104,9 @@ struct BrowserSidebar: View {
     )
     .help(folderLabel(folder.id, in: space))
     .draggable(
-      SidebarTransfer.folder(
-        sessionID: store.dragSessionID, sourceSpaceID: space.id, folderID: folder.id)
+      store.beginSidebarDrag(
+        .folder(
+          sessionID: store.dragSessionID, sourceSpaceID: space.id, folderID: folder.id))
     )
     .dropDestination(for: SidebarTransfer.self) { items, _ in
       guard items.count == 1, let item = items.first else { return false }
@@ -1023,14 +1114,6 @@ struct BrowserSidebar: View {
         item, into: space.id, pinned: folder.isPinned, folderID: folder.id)
     } isTargeted: { targeted in
       targetedFolder = targetedFolder.updatingTarget(folder.id, isActive: targeted)
-    }
-    .dropDestination(for: ProfileFavoriteDrag.self) { items, _ in
-      guard items.count == 1 else { return false }
-      return moveFavoriteDrop(items[0], space: space, pinned: true, folderID: folder.id)
-    }
-    .dropDestination(for: URL.self) { urls, _ in
-      guard urls.count == 1 else { return false }
-      return openDroppedURL(urls[0], space: space, pinned: true, folderID: folder.id)
     }
     .background(
       targetedFolder == folder.id ? Color.accentColor.opacity(0.16) : .clear,

@@ -144,7 +144,9 @@ def main() -> int:
     checks = Commands(options.stage + suffix)
     try:
         if options.stage == "unit":
-            test_commands(checks)
+            if not test_commands(checks):
+                checks.run("sidebar-dnd-restart", [sys.executable, "scripts/sidebar-dnd-probe.py",
+                           "--skip-build", "--enable-code-coverage"])
         elif options.stage == "coverage":
             check_base_coverage(checks)
         elif options.stage == "engine":

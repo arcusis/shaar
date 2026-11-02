@@ -5,6 +5,57 @@
 import Foundation
 
 extension BrowserSession {
+  /// Moves an entire stack as one transaction, retaining pane order, layout and identity.
+  @discardableResult
+  public mutating func moveSplit(
+    _ id: UUID, from sourceID: UUID, to destinationID: UUID, before targetID: UUID? = nil,
+    pinned: Bool? = nil, folderID: UUID? = nil
+  ) -> Bool {
+    guard let source = spaces.first(where: { $0.id == sourceID }),
+      let destination = spaces.first(where: { $0.id == destinationID }),
+      source.profileID == destination.profileID,
+      let split = source.splits.first(where: { $0.id == id }),
+      !split.tabIDs.contains(where: { $0 == targetID }),
+      folderID == nil
+        || destination.folders.contains(where: {
+          $0.id == folderID && (pinned == nil || pinned == $0.isPinned)
+        })
+    else { return false }
+    let destinationPinned =
+      folderID.flatMap { folder in
+        destination.folders.first { $0.id == folder }?.isPinned
+      } ?? pinned ?? source.tabs.first { $0.id == split.tabIDs[0] }!.isPinned
+    if let targetID {
+      guard
+        destination.tabs.contains(where: {
+          $0.id == targetID && $0.isPinned == destinationPinned && $0.folderID == folderID
+        })
+      else { return false }
+    }
+    let followsSelection =
+      selectedSpaceID == sourceID && source.selectedFavoriteID == nil
+      && source.selectedTabID.map(split.tabIDs.contains) == true
+    var draft = self
+    for tab in split.tabIDs {
+      _ = draft.moveTab(
+        tab, from: sourceID, to: destinationID, before: targetID,
+        pinned: destinationPinned, folderID: folderID)
+    }
+    guard let index = draft.spaces.firstIndex(where: { $0.id == destinationID }) else {
+      return false
+    }
+    draft.spaces[index].splits.removeAll { $0.id == id }
+    draft.spaces[index].splits.append(split)
+    if followsSelection {
+      draft.selectedSpaceID = destinationID
+      draft.spaces[index].selectedTabID = source.selectedTabID
+      draft.spaces[index].selectedFavoriteID = nil
+    }
+    guard draft != self, (try? draft.validate()) != nil else { return false }
+    self = draft
+    return true
+  }
+
   /// Puts `second` to the right of `first`, joining `first`'s split when it has room.
   @discardableResult
   public mutating func splitTabs(_ first: UUID, _ second: UUID, in spaceID: UUID) -> Bool {
@@ -39,6 +90,14 @@ extension BrowserSession {
     }
     spaces[index].splits = splits
     spaces[index].reconcileSplits()
+    let targetTab = spaces[index].tabs.first { $0.id == target }!
+    if let joined = spaces[index].splits.first(where: { $0.tabIDs.contains(target) }) {
+      for position in spaces[index].tabs.indices
+      where joined.tabIDs.contains(spaces[index].tabs[position].id) {
+        spaces[index].tabs[position].isPinned = targetTab.isPinned
+        spaces[index].tabs[position].folderID = targetTab.folderID
+      }
+    }
     selectTab(tabID, in: spaceID)
     return true
   }

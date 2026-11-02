@@ -44,6 +44,7 @@ final class BrowserStore {
   var session: BrowserSession
   var splitTabRecency: [UUID] = []
   var pendingSplitPlacement: SplitPlacement?
+  var sidebarDrag: SidebarTransfer?
   var tabDrag: TabDrag?
   let dragSessionID = UUID()
   let library = BrowserLibraryModel()
@@ -602,17 +603,19 @@ final class BrowserStore {
     guard sheet == nil, !commandIsOpen, session.selectedSpaceID == spaceID,
       let space = session.spaces.first(where: { $0.id == spaceID }),
       session.favorites.contains(where: { $0.id == id && $0.profileID == space.profileID }),
-      let pageID = session.favoritePages.first(where: { $0.favoriteID == id })?.tab.id,
-      session.selectFavorite(id, in: spaceID),
-      session.removeFavorite(id, disposition: .preserveAsTab)
+      let pageID = session.favoritePages.first(where: { $0.favoriteID == id })?.tab.id
     else { return false }
-    let restoredTab = session.selectedSpace.tabs.first { $0.id == pageID }
-    if folderID != nil || restoredTab?.isPinned != pinned {
+    var draft = session
+    guard draft.selectFavorite(id, in: spaceID),
+      draft.removeFavorite(id, disposition: .preserveAsTab)
+    else { return false }
+    if tabID != nil || folderID != nil || pinned {
       guard
-        session.moveTab(
+        draft.moveTab(
           pageID, from: spaceID, to: spaceID, before: tabID, pinned: pinned, folderID: folderID)
       else { return false }
     }
+    session = draft
     save()
     return true
   }
@@ -899,17 +902,39 @@ final class BrowserStore {
     _ item: SidebarTransfer, into space: UUID, before targetTab: UUID? = nil,
     pinned: Bool? = nil, beforeSpace: UUID? = nil, folderID: UUID? = nil, beforeFolder: UUID? = nil
   ) -> Bool {
-    guard session.spaces.contains(where: { $0.id == space }) else { return false }
+    guard sheet == nil, !commandIsOpen,
+      session.spaces.contains(where: { $0.id == space })
+    else { return false }
     switch item {
     case .tab(let sessionID, let source, let tab):
       guard sessionID == dragSessionID else { return false }
-      let separated = separateDraggedPane(tab)
-      if moveTab(
-        tab, from: source, to: space, before: targetTab, pinned: pinned, folderID: folderID)
-      {
-        return true
-      }
-      guard separated else { return false }
+      guard
+        moveTab(
+          tab, from: source, to: space, before: targetTab, pinned: pinned, folderID: folderID)
+      else { return false }
+      tabDrag = nil
+      return true
+    case .split(let sessionID, let source, let split):
+      guard sessionID == dragSessionID,
+        session.moveSplit(
+          split, from: source, to: space, before: targetTab, pinned: pinned, folderID: folderID)
+      else { return false }
+      tabDrag = nil
+      save()
+      return true
+    case .favorite(let payload):
+      guard acceptsFavoriteDrag(payload, in: space) else { return false }
+      return restoreFavoriteAsTab(
+        payload.favoriteID, in: space, before: targetTab, pinned: pinned ?? false,
+        folderID: folderID)
+    case .url(let url):
+      guard NavigationInput.isWebURL(url), space == session.selectedSpaceID else { return false }
+      var draft = session
+      guard let tab = draft.open(url) else { return false }
+      let moved = draft.moveTab(
+        tab, from: space, to: space, before: targetTab, pinned: pinned, folderID: folderID)
+      guard moved || (targetTab == nil && folderID == nil && pinned != true) else { return false }
+      session = draft
       save()
       return true
     case .space(let sessionID, let id):
@@ -918,9 +943,72 @@ final class BrowserStore {
       else { return false }
       return moveSpace(id, before: beforeSpace)
     case .folder(let sessionID, let source, let folder):
-      guard sessionID == dragSessionID, targetTab == nil, pinned != false else { return false }
-      return moveFolder(folder, from: source, to: space, parentID: folderID, before: beforeFolder)
+      guard sessionID == dragSessionID, targetTab == nil else { return false }
+      return moveFolder(
+        folder, from: source, to: space, parentID: folderID, before: beforeFolder, pinned: pinned)
     }
+  }
+
+  func acceptsFavoriteDrag(_ payload: ProfileFavoriteDrag, in spaceID: UUID) -> Bool {
+    guard let space = session.spaces.first(where: { $0.id == spaceID }) else { return false }
+    return payload.dragSessionID == dragSessionID && payload.profileID == space.profileID
+      && payload.favoriteIDs == profileFavorites.map(\.id)
+      && payload.favoriteIDs.contains(payload.favoriteID) && session.selectedSpaceID == spaceID
+  }
+
+  @discardableResult
+  func acceptFavoritesDrop(_ item: SidebarTransfer, before target: UUID? = nil) -> Bool {
+    guard sheet == nil, !commandIsOpen else { return false }
+    let profile = session.selectedSpace.profileID
+    guard target == nil || profileFavorites.contains(where: { $0.id == target }) else {
+      return false
+    }
+    switch item {
+    case .tab(let token, let source, let tab):
+      guard token == dragSessionID, source == session.selectedSpaceID,
+        let page = session.selectedSpace.tabs.first(where: { $0.id == tab }),
+        NavigationInput.isWebURL(page.url),
+        let favorite = session.promoteTabToFavorite(tab, in: source)
+      else { return false }
+      if let target { _ = session.moveFavorite(favorite, in: profile, before: target) }
+    case .favorite(let payload):
+      guard acceptsFavoriteDrag(payload, in: session.selectedSpaceID) else { return false }
+      return moveFavorite(payload.favoriteID, before: target)
+    case .url(let url):
+      guard NavigationInput.isWebURL(url),
+        profileFavorites.count < BrowserSession.maximumFavoritesPerProfile
+      else { return false }
+      perform(.open(url))
+      guard addCurrentPageAsFavorite() else { return false }
+      if let favorite = session.selectedSpace.selectedFavoriteID, let target {
+        _ = session.moveFavorite(favorite, in: profile, before: target)
+      }
+    case .split, .folder, .space:
+      return false
+    }
+    tabDrag = nil
+    save()
+    return true
+  }
+
+  @discardableResult
+  func createFolderFromDrop(_ item: SidebarTransfer, onto target: UUID, name: String) -> UUID? {
+    guard sheet == nil, !commandIsOpen,
+      case .tab(let token, let source, let tab) = item, token == dragSessionID,
+      source == session.selectedSpaceID, tab != target,
+      let first = session.selectedSpace.tabs.first(where: { $0.id == target }), first.isPinned,
+      session.selectedSpace.tabs.contains(where: { $0.id == tab }),
+      !session.selectedSpace.splits.contains(where: { $0.tabIDs.contains(target) })
+    else { return nil }
+    var draft = session
+    guard let folder = draft.addFolder(name: name, in: source, parentID: first.folderID),
+      draft.moveTab(target, from: source, to: source, folderID: folder),
+      draft.moveTab(tab, from: source, to: source, folderID: folder)
+    else { return nil }
+    session = draft
+    tabDrag = nil
+    save()
+    return folder
   }
 
   func showFolderEditor(_ route: FolderEditorRoute) {
@@ -982,7 +1070,7 @@ final class BrowserStore {
   @discardableResult
   func moveFolder(
     _ id: UUID, from source: UUID, to destination: UUID, parentID: UUID? = nil,
-    before target: UUID? = nil
+    before target: UUID? = nil, pinned: Bool? = nil
   ) -> Bool {
     guard sheet == nil else { return false }
     sidebarNotice = nil
@@ -1000,7 +1088,9 @@ final class BrowserStore {
         return false
       }
     }
-    guard session.moveFolder(id, from: source, to: destination, parentID: parentID, before: target)
+    guard
+      session.moveFolder(
+        id, from: source, to: destination, parentID: parentID, before: target, pinned: pinned)
     else { return false }
     save()
     return true

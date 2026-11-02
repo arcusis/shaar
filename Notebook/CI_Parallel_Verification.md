@@ -29,3 +29,7 @@ Part 1 final [run 41458897983](https://github.com/arcusis/shaar/actions/runs/414
 After reboot, local heavy commands run one at a time with `swift build/test -j 4`, starting only below one-minute load 12. Native build and all four focused regression functions passed. Policy changes pass 45 pipeline tests, actionlint, license and diff checks. Hosted final-head results remain pending. No local app or visible window was launched.
 
 Sources: [compiled-language guidance](https://docs.github.com/en/code-security/reference/code-scanning/codeql/build-options-for-compiled-languages), [database import limitations](https://docs.github.com/en/code-security/reference/code-scanning/codeql/codeql-cli-manual/database-import).
+
+## Production language-change integration
+
+Integrate #385 (`9c2dee1`) with a normal merge. Preserve its restart/language-setting implementation and probes; resolve the generated inventory by running `python3 scripts/check-localization.py --write-inventory` against the merged sources. Nine catalogs and 2,093 inventory rows validate, with no unmerged paths. The prior head's required graph passed in 14m17s ([41482477207](https://github.com/arcusis/shaar/actions/runs/41482477207)); the production integration requires a fresh hosted run.

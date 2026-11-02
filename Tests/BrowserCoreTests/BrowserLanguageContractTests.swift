@@ -8,6 +8,67 @@ import XCTest
 @testable import BrowserCore
 
 final class BrowserLanguageContractTests: XCTestCase {
+  func testSelectionSetterPersistsOverrideWithoutChangingCachedLaunchLanguage() {
+    let defaults = UserDefaults.standard
+    let domain = Bundle.main.bundleIdentifier ?? ProcessInfo.processInfo.processName
+    let original = defaults.persistentDomain(forName: domain) ?? [:]
+    let keys = [
+      BrowserLanguage.selectionDefaultsKey, "AppleLanguages",
+      "BrowserLanguage.systemAppleLanguages",
+    ]
+    defer {
+      for key in keys { defaults.set(original[key], forKey: key) }
+      defaults.synchronize()
+    }
+    let launch = BrowserLanguage.currentLaunchLanguage
+    BrowserLanguage.selection = .hebrew
+    XCTAssertEqual(
+      defaults.persistentDomain(forName: domain)?["AppleLanguages"] as? [String], ["he"])
+    BrowserLanguage.selection = .english
+    XCTAssertEqual(
+      defaults.persistentDomain(forName: domain)?["AppleLanguages"] as? [String], ["en"])
+    XCTAssertEqual(BrowserLanguage.currentLaunchLanguage, launch)
+    XCTAssertTrue(defaults.synchronize())
+  }
+
+  func testStoredChoiceOverridesOnlyAppDomainAndSystemRestoresPerAppPreference() throws {
+    let name = "BrowserLanguageContractTests.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+    defer { defaults.removePersistentDomain(forName: name) }
+    defaults.set(["en-GB"], forKey: "AppleLanguages")
+    defaults.set("kept", forKey: "unrelated")
+
+    BrowserLanguage.store(.hebrew, defaults: defaults, domainName: name)
+    XCTAssertEqual(defaults.string(forKey: BrowserLanguage.selectionDefaultsKey), "he")
+    XCTAssertEqual(defaults.stringArray(forKey: "AppleLanguages"), ["he"])
+    BrowserLanguage.store(.english, defaults: defaults, domainName: name)
+    XCTAssertEqual(defaults.stringArray(forKey: "AppleLanguages"), ["en"])
+    XCTAssertTrue(defaults.synchronize())
+    let reopened = try XCTUnwrap(UserDefaults(suiteName: name))
+    XCTAssertEqual(reopened.stringArray(forKey: "AppleLanguages"), ["en"])
+
+    BrowserLanguage.store(.systemDefault, defaults: defaults, domainName: name)
+    XCTAssertEqual(defaults.stringArray(forKey: "AppleLanguages"), ["en-GB"])
+    XCTAssertEqual(defaults.string(forKey: BrowserLanguage.selectionDefaultsKey), "systemDefault")
+    XCTAssertEqual(defaults.string(forKey: "unrelated"), "kept")
+  }
+
+  func testSystemRemovesOwnedOverrideAndPreservesLaterMacOSPerAppEdits() throws {
+    let name = "BrowserLanguageContractTests.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+    defer { defaults.removePersistentDomain(forName: name) }
+    BrowserLanguage.store(.hebrew, defaults: defaults, domainName: name)
+    BrowserLanguage.store(.systemDefault, defaults: defaults, domainName: name)
+    XCTAssertNil(defaults.persistentDomain(forName: name)?["AppleLanguages"])
+
+    BrowserLanguage.store(.hebrew, defaults: defaults, domainName: name)
+    defaults.set(["en-US"], forKey: "AppleLanguages")
+    BrowserLanguage.store(.systemDefault, defaults: defaults, domainName: name)
+    XCTAssertEqual(defaults.stringArray(forKey: "AppleLanguages"), ["en-US"])
+    BrowserLanguage.store(.systemDefault, defaults: defaults, domainName: name)
+    XCTAssertEqual(defaults.stringArray(forKey: "AppleLanguages"), ["en-US"])
+  }
+
   func testPersistedIdentifiersRemainStableAndSupportedLanguagesExcludeSystemDefault() {
     XCTAssertEqual(BrowserLanguage.systemDefault.rawValue, "systemDefault")
     XCTAssertEqual(BrowserLanguage.english.rawValue, "en")

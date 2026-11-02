@@ -36,7 +36,15 @@ public enum BrowserLaunch {
     if let frameworks = Bundle.main.privateFrameworksURL {
       let framework = frameworks.appending(path: "Chromium Framework.framework")
       if FileManager.default.fileExists(atPath: framework.path) {
-        exit(NativeBrowserHost.run(frameworkURL: framework))
+        switch NativeBrowserHost.run(frameworkURL: framework) {
+        case .exited(let code): exit(code)
+        case .restart:
+          do { try BrowserRestart.relaunch() } catch {
+            FileHandle.standardError.write(
+              Data("Could not restart Shaar: \(error.localizedDescription)\n".utf8))
+            exit(1)
+          }
+        }
       }
     }
     BrowserApplication.main()

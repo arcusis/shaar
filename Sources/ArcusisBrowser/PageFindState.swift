@@ -23,11 +23,13 @@ struct PageFindState: Identifiable {
 
   var status: String {
     if query.isEmpty { return "" }
-    if unavailable { return "Page unavailable" }
-    guard let count = matchCount else { return "Searching…" }
-    if count == 0 { return searching ? "Searching…" : "No matches" }
-    if activeMatch > 0 { return "\(activeMatch) of \(count)" }
-    return count == 1 ? "1 match" : "\(count) matches"
+    if unavailable { return PanelsL10n.string("Page unavailable") }
+    guard let count = matchCount else { return PanelsL10n.string("Searching…") }
+    if count == 0 { return PanelsL10n.string(searching ? "Searching…" : "No matches") }
+    if activeMatch > 0 {
+      return PanelsL10n.format("%d of %d", .integer(activeMatch), .integer(count))
+    }
+    return PanelsL10n.plural("%d matches", count: count)
   }
 
   func matches(_ session: BrowserSession) -> Bool {

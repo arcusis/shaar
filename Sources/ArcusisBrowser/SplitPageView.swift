@@ -67,6 +67,7 @@ private struct SplitGroupView: View {
   @State private var liveWeights: [Double]?
   @State private var activeDivider: Int?
   @State private var hoveredDivider: Int?
+  @Environment(\.layoutDirection) private var layoutDirection
 
   var body: some View {
     let shown = liveWeights ?? weights
@@ -111,7 +112,10 @@ private struct SplitGroupView: View {
       DragGesture(minimumDistance: 0, coordinateSpace: .global)
         .onChanged { value in
           activeDivider = index
-          let delta = axis == .columns ? value.translation.width : value.translation.height
+          let physicalDelta = axis == .columns ? value.translation.width : value.translation.height
+          let delta = SplitResizeDecision.logicalDelta(
+            physicalDelta, isHorizontal: axis == .columns,
+            isRightToLeft: layoutDirection == .rightToLeft)
           liveWeights = Self.resized(weights, at: index, by: delta, available: available)
         }
         .onEnded { _ in
@@ -121,7 +125,7 @@ private struct SplitGroupView: View {
         }
     )
     .animation(.easeOut(duration: 0.12), value: highlighted)
-    .accessibilityLabel("Split divider")
+    .accessibilityLabel(ShellL10n.string("Split divider"))
   }
 
   /// Moves the divider after `index`, keeping both neighbours above the minimum size.
@@ -136,6 +140,14 @@ private struct SplitGroupView: View {
     next[index] = leading
     next[index + 1] = pair - leading
     return next
+  }
+}
+
+enum SplitResizeDecision {
+  static func logicalDelta(
+    _ physicalDelta: CGFloat, isHorizontal: Bool, isRightToLeft: Bool
+  ) -> CGFloat {
+    isHorizontal && isRightToLeft ? -physicalDelta : physicalDelta
   }
 }
 

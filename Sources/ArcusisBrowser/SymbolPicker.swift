@@ -35,9 +35,9 @@ struct SymbolPicker: View {
     VStack(alignment: .leading, spacing: 10) {
       HStack(spacing: 6) {
         Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-        TextField("Search icons", text: $query)
+        TextField(SettingsL10n.string("Search icons"), text: $query)
           .textFieldStyle(.plain)
-          .accessibilityLabel("Search icons")
+          .accessibilityLabel(SettingsL10n.string("Search icons"))
       }
       .padding(.horizontal, 10)
       .frame(height: 30)
@@ -45,7 +45,8 @@ struct SymbolPicker: View {
       ScrollView {
         LazyVStack(alignment: .leading, spacing: 12) {
           ForEach(SymbolCatalog.sections(matching: query), id: \.name) { section in
-            Text(section.name).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            Text(SettingsL10n.string(section.name)).font(.caption.weight(.semibold))
+              .foregroundStyle(.secondary)
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 34), spacing: 4)], spacing: 4) {
               ForEach(section.symbols, id: \.self) { value in iconButton(value) }
             }
@@ -245,7 +246,10 @@ enum SymbolCatalog {
   static func sections(matching query: String) -> [Section] {
     let needle = query.trimmingCharacters(in: .whitespaces).lowercased()
     return all.compactMap { section in
-      let sectionMatches = needle.isEmpty || section.name.lowercased().contains(needle)
+      let sectionMatches =
+        needle.isEmpty
+        || section.name.localizedCaseInsensitiveContains(needle)
+        || SettingsL10n.string(section.name).localizedCaseInsensitiveContains(needle)
       let symbols = section.symbols.filter { symbol in
         isAvailable(symbol) && (sectionMatches || searchText(for: symbol).contains(needle))
       }

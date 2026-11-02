@@ -33,3 +33,5 @@
 - [[Engine_Source_Build]]
 - [[Quit_Exit_Verification]]
 - [[Arc_Settings_Design]]
+- [[Hebrew_Localization]]
+- [[Hebrew_Glossary]]

@@ -13,6 +13,8 @@ enum LibraryMediaKind: String, CaseIterable, Identifiable {
 
   var id: String { rawValue }
 
+  var title: String { PanelsL10n.string(rawValue) }
+
   var symbol: String {
     switch self {
     case .image: "photo"
@@ -29,6 +31,8 @@ enum LibraryDownloadTypeFilter: String, CaseIterable, Identifiable {
   case documents = "Documents"
   case archives = "Archives"
   var id: String { rawValue }
+
+  var title: String { PanelsL10n.string(rawValue) }
 
   func includes(_ item: BrowserDownload) -> Bool {
     guard self != .all else { return true }
@@ -156,24 +160,24 @@ enum LibraryDownloadQuery {
         [.day], from: calendar.startOfDay(for: date),
         to: calendar.startOfDay(for: now)
       ).day ?? 0)
-    if days == 0 { return "Today" }
-    if days == 1 { return "Yesterday" }
-    if days < 7 { return "\(days) days ago" }
+    if days == 0 { return PanelsL10n.string("Today") }
+    if days == 1 { return PanelsL10n.string("Yesterday") }
+    if days < 7 { return PanelsL10n.plural("%d days ago", count: days) }
     if days < 30 {
       let weeks = days / 7
-      return "\(weeks) \(weeks == 1 ? "week" : "weeks") ago"
+      return PanelsL10n.plural(weeks == 1 ? "%d week ago" : "%d weeks ago", count: weeks)
     }
     let months = max(1, days / 30)
-    return "\(months) \(months == 1 ? "month" : "months") ago"
+    return PanelsL10n.plural(months == 1 ? "%d month ago" : "%d months ago", count: months)
   }
 
   static func status(_ item: BrowserDownload) -> String {
-    if item.dangerous { return "Blocked" }
+    if item.dangerous { return PanelsL10n.string("Blocked") }
     return switch item.state {
-    case .downloading: item.paused ? "Paused" : "Downloading"
-    case .finished: "Complete"
-    case .failed: "Interrupted"
-    case .cancelled: "Cancelled"
+    case .downloading: PanelsL10n.string(item.paused ? "Paused" : "Downloading")
+    case .finished: PanelsL10n.string("Complete")
+    case .failed: PanelsL10n.string("Interrupted")
+    case .cancelled: PanelsL10n.string("Cancelled")
     }
   }
 }

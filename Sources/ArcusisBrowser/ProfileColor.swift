@@ -82,7 +82,7 @@ struct ProfileColorPicker: View {
       clearOption: ThemeColorClearOption(isSelected: color == .none) { color = .none }
     )
     .accessibilityElement(children: .contain)
-    .accessibilityLabel("Profile color")
+    .accessibilityLabel(SettingsL10n.string("Profile color"))
   }
 
   private var draft: Binding<ThemeColorDraft> {

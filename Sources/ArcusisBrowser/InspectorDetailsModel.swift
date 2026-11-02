@@ -150,7 +150,10 @@ final class InspectorDetailsModel {
           next.aria.allSatisfy({ $0.name.count <= 128 && $0.value.count <= 512 }),
           next.warnings.count <= 16, next.warnings.allSatisfy({ $0.count <= 512 }),
           next.tabOrder.map({ (1...5000).contains($0) }) ?? true
-        else { throw InspectorFailure("Accessibility data exceeds supported limits.") }
+        else {
+          throw InspectorFailure(
+            InspectorDetailsL10n.string("Accessibility data exceeds supported limits."))
+        }
         let result = try await inspector.withSelectedNode { node in
           let description = try await inspector.call("DOM.describeNode", params: ["nodeId": node])
           let tree = try await inspector.call(
@@ -188,7 +191,10 @@ final class InspectorDetailsModel {
         let next: InspectorAssetsData = try await packet("assets()", inspector: inspector)
         guard next.images.count <= 16, next.images.allSatisfy(\.valid),
           (next.svg?.utf8.count ?? 0) <= 262_144
-        else { throw InspectorFailure("Asset data exceeds supported limits.") }
+        else {
+          throw InspectorFailure(
+            InspectorDetailsL10n.string("Asset data exceeds supported limits."))
+        }
         let resources = try await resourceList(inspector)
         var images = next.images
         for index in images.indices {
@@ -242,7 +248,8 @@ final class InspectorDetailsModel {
       try validateTree(tree)
       try validate(data)
       guard data == nil || tree.nodes.contains(where: { $0.id == data?.id }) else {
-        throw InspectorFailure("Component data does not belong to this tree.")
+        throw InspectorFailure(
+          InspectorDetailsL10n.string("Component data does not belong to this tree."))
       }
       self.tree = tree
       component = data
@@ -253,7 +260,10 @@ final class InspectorDetailsModel {
         (data.aria + data.properties).allSatisfy({ $0.name.count <= 128 && $0.value.count <= 512 }),
         data.warnings.count <= 20, data.warnings.allSatisfy({ $0.count <= 512 }),
         data.tabOrder.map({ (1...5000).contains($0) }) ?? true
-      else { throw InspectorFailure("Accessibility data exceeds supported limits.") }
+      else {
+        throw InspectorFailure(
+          InspectorDetailsL10n.string("Accessibility data exceeds supported limits."))
+      }
       accessibility = data
     case .assets(let data):
       guard data.images.count <= 16, data.images.allSatisfy(\.valid),
@@ -262,7 +272,9 @@ final class InspectorDetailsModel {
         data.fonts.allSatisfy({
           $0.url.count <= 16_384 && $0.mime.count <= 512 && $0.frameID.count <= 1024
         })
-      else { throw InspectorFailure("Asset data exceeds supported limits.") }
+      else {
+        throw InspectorFailure(InspectorDetailsL10n.string("Asset data exceeds supported limits."))
+      }
       assets = data
     }
     selectedID = selectionID
@@ -281,7 +293,10 @@ final class InspectorDetailsModel {
       next.nodes.allSatisfy({
         $0.id > 0 && $0.name.count <= 160 && ($0.source?.count ?? 0) <= 1024
       }), (next.limit?.count ?? 0) <= 512
-    else { throw InspectorFailure("Component tree exceeds supported limits.") }
+    else {
+      throw InspectorFailure(
+        InspectorDetailsL10n.string("Component tree exceeds supported limits."))
+    }
   }
 
   func selectComponent(_ identity: Int) async {
@@ -320,7 +335,10 @@ final class InspectorDetailsModel {
     guard value.id > 0, value.name.count <= 160, (value.source?.count ?? 0) <= 1024,
       (value.note?.count ?? 0) <= 512,
       [value.props, value.state, value.hooks].allSatisfy({ $0.utf8.count <= 262_144 })
-    else { throw InspectorFailure("Component values exceed supported limits.") }
+    else {
+      throw InspectorFailure(
+        InspectorDetailsL10n.string("Component values exceed supported limits."))
+    }
   }
 
   private func matches(
@@ -335,10 +353,14 @@ final class InspectorDetailsModel {
   {
     guard
       let value = try await inspector.evaluate("globalThis.__shaarInspectorDetails.\(expression)")
-    else { throw InspectorFailure("The selected element is no longer available.") }
+    else {
+      throw InspectorFailure(
+        InspectorDetailsL10n.string("The selected element is no longer available."))
+    }
     let data = try JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed])
     guard data.count <= 1_048_576 else {
-      throw InspectorFailure("Element details exceed the supported size.")
+      throw InspectorFailure(
+        InspectorDetailsL10n.string("Element details exceed the supported size."))
     }
     return try JSONDecoder().decode(T.self, from: data)
   }
@@ -384,19 +406,25 @@ final class InspectorDetailsModel {
     guard let inspector, inspector.isOpen,
       assets?.images.contains(where: { $0.url == url && $0.frameID == frameID }) == true
         || assets?.fonts.contains(where: { $0.url == url && $0.frameID == frameID }) == true
-    else { throw InspectorFailure("This asset is no longer selected.") }
+    else {
+      throw InspectorFailure(InspectorDetailsL10n.string("This asset is no longer selected."))
+    }
     let generation = inspector.documentGeneration
     let identity = selectedID
     let result = try await inspector.call(
       "Page.getResourceContent", params: ["url": url, "frameId": frameID])
     guard matches(inspector, id: identity, generation: generation, tab: .assets),
       let content = result["content"] as? String, content.utf8.count <= 44_739_244
-    else { throw InspectorFailure("Asset data is unavailable or exceeds 32 MiB.") }
+    else {
+      throw InspectorFailure(
+        InspectorDetailsL10n.string("Asset data is unavailable or exceeds 32 MiB."))
+    }
     if result["base64Encoded"] as? Bool == true, let data = Data(base64Encoded: content) {
       return data
     }
     if result["base64Encoded"] as? Bool == false { return Data(content.utf8) }
-    throw InspectorFailure("Chromium did not return this resource's content.")
+    throw InspectorFailure(
+      InspectorDetailsL10n.string("Chromium did not return this resource's content."))
   }
 
   func saveAsset(url: String, frameID: String) async {

@@ -45,7 +45,7 @@ static NSString *ARCPrivateOrigin(NSString *url) {
     }
   }
   if (!settingsOK) {
-    entry[@"privacyError"] = @"Private site protections could not be applied.";
+    entry[@"privacyError"] = ARCBridgeLocalizedString(@"Private site protections could not be applied.");
     if (self.onPrivateNavigationFailed)
       self.onPrivateNavigationFailed(contextID, windowID, tabID, entry[@"privacyError"]);
     return;

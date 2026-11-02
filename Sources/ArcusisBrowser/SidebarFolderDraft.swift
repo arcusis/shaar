@@ -8,7 +8,7 @@ import Foundation
 struct SidebarFolderDraft: Equatable {
   let route: FolderEditorRoute
   let section: SidebarSection
-  var name = "Untitled"
+  var name = ShellL10n.string("Untitled")
 
   init(route: FolderEditorRoute, section: SidebarSection = .pinned) {
     self.route = route

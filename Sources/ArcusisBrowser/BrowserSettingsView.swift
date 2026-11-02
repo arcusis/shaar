@@ -53,12 +53,12 @@ enum BrowserSettingsSection: String, CaseIterable, Identifiable {
 
   var title: String {
     switch self {
-    case .general: "General"
-    case .appearance: "Appearance"
-    case .privacy: "Privacy & Security"
-    case .profiles: "Profiles"
-    case .shortcuts: "Shortcuts"
-    case .about: "About"
+    case .general: SettingsL10n.string("General")
+    case .appearance: SettingsL10n.string("Appearance")
+    case .privacy: SettingsL10n.string("Privacy & Security")
+    case .profiles: SettingsL10n.string("Profiles")
+    case .shortcuts: SettingsL10n.string("Shortcuts")
+    case .about: SettingsL10n.string("About")
     }
   }
 
@@ -82,6 +82,20 @@ struct BrowserSettingsView: View {
   @AppStorage("settingsStartFresh") private var startFresh = false
   @AppStorage("settingsWarnBeforeQuit") private var warnBeforeQuit = false
   @AppStorage("settingsAppearance") private var appearance = "system"
+  @AppStorage(BrowserLanguage.selectionDefaultsKey) private var selectedLanguage =
+    BrowserLanguage.systemDefault.rawValue
+  private var languageSelection: Binding<String> {
+    Binding(
+      get: {
+        BrowserLanguage(rawValue: selectedLanguage)?.rawValue
+          ?? BrowserLanguage.systemDefault.rawValue
+      },
+      set: { rawValue in
+        if let selection = BrowserLanguage(rawValue: rawValue) {
+          selectedLanguage = selection.rawValue
+        }
+      })
+  }
   @State private var defaultStatus = false
   @State private var defaultError: String?
   @State private var historyMessage: String?
@@ -171,19 +185,22 @@ struct BrowserSettingsView: View {
     .foregroundStyle(.primary)
     .sheet(item: $deletingProfile) { profile in
       VStack(alignment: .leading, spacing: 16) {
-        Text("Delete \(profile.name)?").font(.headline)
+        Text(SettingsL10n.format("Delete %@?", .string(profile.name))).font(.headline)
         Text(
-          "Its Spaces will move to \(profiles.first(where: { $0.id == destinationID })?.name ?? "the selected profile"). Its favorites will be removed."
-        )
-        Picker("Move Spaces to", selection: $destinationID) {
+          SettingsL10n.format(
+            "Its Spaces will move to %@. Its favorites will be removed.",
+            .string(
+              profiles.first(where: { $0.id == destinationID })?.name
+                ?? SettingsL10n.string("the selected profile"))))
+        Picker(SettingsL10n.string("Move Spaces to"), selection: $destinationID) {
           ForEach(profiles.filter { $0.id != profile.id }) { candidate in
             Text(candidate.name).tag(Optional(candidate.id))
           }
         }
         HStack {
           Spacer()
-          Button("Cancel") { deletingProfile = nil }
-          Button("Delete", role: .destructive) {
+          Button(SettingsL10n.string("Cancel")) { deletingProfile = nil }
+          Button(SettingsL10n.string("Delete"), role: .destructive) {
             if let destinationID, onDeleteProfile(profile.id, destinationID) {
               deletingProfile = nil
             }
@@ -238,28 +255,44 @@ struct BrowserSettingsView: View {
 
   private var generalContent: some View {
     Form {
-      Section("Startup") {
-        Picker("On startup", selection: $startFresh) {
-          Text("Restore windows and tabs").tag(false)
-          Text("Start with a new tab").tag(true)
+      Section(SettingsL10n.string("Startup")) {
+        Picker(SettingsL10n.string("On startup"), selection: $startFresh) {
+          Text(SettingsL10n.string("Restore windows and tabs")).tag(false)
+          Text(SettingsL10n.string("Start with a new tab")).tag(true)
         }
-        LabeledContent("Default browser") {
+        LabeledContent(SettingsL10n.string("Default browser")) {
           HStack {
-            Text(defaultStatus ? "Default" : "Not default").foregroundStyle(.secondary)
-            Button("Make Default") { setDefaultBrowser() }.disabled(defaultStatus)
+            Text(SettingsL10n.string(defaultStatus ? "Default" : "Not default")).foregroundStyle(
+              .secondary)
+            Button(SettingsL10n.string("Make Default")) { setDefaultBrowser() }.disabled(
+              defaultStatus)
           }
         }
       }
-      Section("Windows") {
-        Picker("Links from other apps open in", selection: $externalLinksInMainWindow) {
-          Text("Mini window").tag(false)
-          Text("Main window").tag(true)
+      Section(SettingsL10n.string("Windows")) {
+        Picker(
+          SettingsL10n.string("Links from other apps open in"),
+          selection: $externalLinksInMainWindow
+        ) {
+          Text(SettingsL10n.string("Mini window")).tag(false)
+          Text(SettingsL10n.string("Main window")).tag(true)
         }
-        Toggle("Show sidebar in new windows", isOn: $sidebarInitiallyVisible)
-        Toggle("Warn before quitting with Command-Q", isOn: $warnBeforeQuit)
+        Toggle(SettingsL10n.string("Show sidebar in new windows"), isOn: $sidebarInitiallyVisible)
+        Toggle(SettingsL10n.string("Warn before quitting with Command-Q"), isOn: $warnBeforeQuit)
+      }
+      Section {
+        Picker(SettingsL10n.string("Language"), selection: languageSelection) {
+          Text(SettingsL10n.string("System Default")).tag(BrowserLanguage.systemDefault.rawValue)
+          Text("English").tag(BrowserLanguage.english.rawValue)
+          Text("עברית").tag(BrowserLanguage.hebrew.rawValue)
+        }
+        Text(SettingsL10n.string("Language changes after you restart the app."))
+          .font(.caption).foregroundStyle(.secondary)
       }
       if let defaultError { Section { Text(defaultError).foregroundStyle(.red) } }
-      if let storageNotice { Section { Text(storageNotice).foregroundStyle(.secondary) } }
+      if let storageNotice {
+        Section { Text(SettingsL10n.notice(storageNotice)).foregroundStyle(.secondary) }
+      }
     }
     .formStyle(.grouped)
     .onAppear { refreshDefaultStatus() }
@@ -293,15 +326,15 @@ struct BrowserSettingsView: View {
   private var appearanceContent: some View {
     Form {
       Section {
-        Picker("Theme", selection: $appearance) {
-          Text("System").tag("system")
-          Text("Light").tag("light")
-          Text("Dark").tag("dark")
+        Picker(SettingsL10n.string("Theme"), selection: $appearance) {
+          Text(SettingsL10n.string("System")).tag("system")
+          Text(SettingsL10n.string("Light")).tag("light")
+          Text(SettingsL10n.string("Dark")).tag("dark")
         }
       } header: {
-        Text("Appearance")
+        Text(SettingsL10n.string("Appearance"))
       } footer: {
-        Text("System follows your Mac appearance.")
+        Text(SettingsL10n.string("System follows your Mac appearance."))
       }
     }
     .formStyle(.grouped)
@@ -311,30 +344,39 @@ struct BrowserSettingsView: View {
   private var privacyContent: some View {
     Form {
       Section {
-        Picker("Profile", selection: $selectedProfileID) {
+        Picker(SettingsL10n.string("Profile"), selection: $selectedProfileID) {
           ForEach(profiles) { Text($0.name).tag(Optional($0.id)) }
         }
-        LabeledContent("Clear all history") {
-          Button(clearingHistory ? "Clearing…" : "Clear History…") { confirmHistory = true }
-            .disabled(clearHistory == nil || selectedProfileID == nil || clearingHistory)
+        LabeledContent(SettingsL10n.string("Clear all history")) {
+          Button(SettingsL10n.string(clearingHistory ? "Clearing…" : "Clear History…")) {
+            confirmHistory = true
+          }
+          .disabled(clearHistory == nil || selectedProfileID == nil || clearingHistory)
         }
         if let historyMessage { Text(historyMessage).foregroundStyle(.secondary) }
       } header: {
-        Text("Browsing History")
+        Text(SettingsL10n.string("Browsing History"))
       } footer: {
-        Text("Removes history for the selected profile. Cookies and cached files are not removed.")
+        Text(
+          SettingsL10n.string(
+            "Removes history for the selected profile. Cookies and cached files are not removed."))
       }
       MacPermissionsSection()
     }.formStyle(.grouped)
-      .confirmationDialog("Clear all history for this profile?", isPresented: $confirmHistory) {
-        Button("Clear History", role: .destructive) {
+      .confirmationDialog(
+        SettingsL10n.string("Clear all history for this profile?"), isPresented: $confirmHistory
+      ) {
+        Button(SettingsL10n.string("Clear History"), role: .destructive) {
           guard let id = selectedProfileID, let clearHistory else { return }
           clearingHistory = true
           Task {
             do {
               try await clearHistory(id)
-              historyMessage = "History cleared."
-            } catch { historyMessage = "Could not clear history: \(error.localizedDescription)" }
+              historyMessage = SettingsL10n.string("History cleared.")
+            } catch {
+              historyMessage = SettingsL10n.format(
+                "Could not clear history: %@", .string(error.localizedDescription))
+            }
             clearingHistory = false
           }
         }
@@ -345,14 +387,15 @@ struct BrowserSettingsView: View {
     Form {
       Section(ProductIdentity.name) {
         Text(ProductIdentity.meaning)
-        Text("© 2026 Arcusis. All rights reserved.")
+        Text(SettingsL10n.string("© 2026 Arcusis. All rights reserved."))
         LabeledContent(
-          "Version",
+          SettingsL10n.string("Version"),
           value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-            ?? "Unknown")
+            ?? SettingsL10n.string("Unknown"))
         LabeledContent(
-          "Build",
-          value: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown"
+          SettingsL10n.string("Build"),
+          value: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+            ?? SettingsL10n.string("Unknown")
         )
       }
     }.formStyle(.grouped)
@@ -362,12 +405,12 @@ struct BrowserSettingsView: View {
     HStack(spacing: 0) {
       VStack(alignment: .leading, spacing: 8) {
         HStack {
-          Text("Profiles").font(.headline)
+          Text(SettingsL10n.string("Profiles")).font(.headline)
           Spacer()
           Button(action: onAddProfile) {
             Image(systemName: "plus")
           }
-          .accessibilityLabel("Add Profile")
+          .accessibilityLabel(SettingsL10n.string("Add Profile"))
           .accessibilityIdentifier("settings.addProfile")
         }
         ForEach(profiles) { profile in
@@ -402,40 +445,42 @@ struct BrowserSettingsView: View {
       if let profile = profiles.first(where: { $0.id == selectedProfileID }) {
         profileDetails(profile)
       } else {
-        ContentUnavailableView("No Profile Selected", systemImage: "person.crop.circle")
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
+        ContentUnavailableView(
+          SettingsL10n.string("No Profile Selected"), systemImage: "person.crop.circle"
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
       }
     }
   }
 
   private func profileDetails(_ profile: BrowserSettingsProfile) -> some View {
     return Form {
-      Section("Profile") {
+      Section(SettingsL10n.string("Profile")) {
         HStack(spacing: 12) {
           SymbolPickerButton(
             symbol: profileSymbolBinding(profile), isPresented: $profileSymbolPickerIsPresented,
-            accessibilityLabel: "Change Profile Icon")
-          TextField("Name", text: profileNameBinding(profile))
+            accessibilityLabel: SettingsL10n.string("Change Profile Icon"))
+          TextField(SettingsL10n.string("Name"), text: profileNameBinding(profile))
             .accessibilityIdentifier("settings.renameProfile")
             .onSubmit { saveProfileName(profile) }
-          Button("Save") { saveProfileName(profile) }
+          Button(SettingsL10n.string("Save")) { saveProfileName(profile) }
             .disabled(profileNameEdits[profile.id] == nil)
         }
         ProfileColorPicker(color: profileColorBinding(profile))
           .accessibilityIdentifier("settings.profileColor")
-        Picker("Search engine", selection: $selectedSearchEngine) {
+        Picker(SettingsL10n.string("Search engine"), selection: $selectedSearchEngine) {
           ForEach(searchEngines) { Text($0.title).tag($0.id) }
         }
       }
-      Section("Spaces using this profile") {
+      Section(SettingsL10n.string("Spaces using this profile")) {
         if profile.spaces.isEmpty {
-          Text("No Spaces assigned").foregroundStyle(.secondary)
+          Text(SettingsL10n.string("No Spaces assigned")).foregroundStyle(.secondary)
         } else {
           ForEach(profile.spaces) { space in
             HStack {
               Label(space.name, systemImage: space.symbol)
               Spacer()
-              Button("Open") { onOpenSpace(space.id) }
+              Button(SettingsL10n.string("Open")) { onOpenSpace(space.id) }
             }
           }
         }
@@ -454,7 +499,7 @@ struct BrowserSettingsView: View {
               if let logo = provider.logo {
                 Image(nsImage: logo).resizable().frame(width: 18, height: 18)
               }
-              Text("Connect \(provider.title)")
+              Text(SettingsL10n.format("Connect %@", .string(provider.title)))
               Spacer(minLength: 0)
             }
             .contentShape(Rectangle())
@@ -463,19 +508,20 @@ struct BrowserSettingsView: View {
           .accessibilityIdentifier("settings.connect.\(provider.rawValue)")
         }
       } header: {
-        Text("Accounts")
+        Text(SettingsL10n.string("Accounts"))
       } footer: {
         Text(
-          "Sign in with the provider's own page. Gmail, Drive, Outlook, and Teams then open signed in for every Space using this profile."
-        )
+          SettingsL10n.string(
+            "Sign in with the provider's own page. Gmail, Drive, Outlook, and Teams then open signed in for every Space using this profile."
+          ))
       }
-      Section("Extensions") {
+      Section(SettingsL10n.string("Extensions")) {
         ProfileExtensionsSection(
           model: extensionManager(profile.id),
           onAddExtensions: { onAddExtensions(profile.id) })
       }
       Section {
-        Button("Delete Profile…", role: .destructive) {
+        Button(SettingsL10n.string("Delete Profile…"), role: .destructive) {
           destinationID = profiles.first(where: { $0.id != profile.id })?.id
           deletingProfile = profile
         }
@@ -517,7 +563,7 @@ struct BrowserSettingsView: View {
   }
 
   private func spaceCountLabel(_ count: Int) -> String {
-    "\(count) \(count == 1 ? "Space" : "Spaces")"
+    BrowserLocalization.plural("%d Spaces", count: count, table: "Settings")
   }
 
 }
@@ -530,12 +576,23 @@ struct ConnectedAccountRow: View {
     HStack(spacing: 10) {
       AccountAvatar(account: account)
       VStack(alignment: .leading, spacing: 1) {
-        Text(account.name ?? account.email).lineLimit(1)
-        Text(account.name == nil ? account.provider.title : account.email)
-          .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        if let name = account.name {
+          Text(name).lineLimit(1)
+        } else {
+          Text(account.email).lineLimit(1)
+            .environment(\.layoutDirection, .leftToRight)
+        }
+        if account.name == nil {
+          Text(account.provider.title)
+            .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        } else {
+          Text(account.email)
+            .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            .environment(\.layoutDirection, .leftToRight)
+        }
       }
       Spacer(minLength: 0)
-      if let disconnect { Button("Disconnect", action: disconnect) }
+      if let disconnect { Button(SettingsL10n.string("Disconnect"), action: disconnect) }
     }
   }
 }
@@ -567,17 +624,18 @@ private struct MacPermissionsSection: View {
       ForEach(MacPermission.allCases) { permission in
         LabeledContent {
           HStack(spacing: 10) {
-            Text(statuses[permission]?.label ?? "Checking…").foregroundStyle(.secondary)
+            Text(SettingsL10n.string(statuses[permission]?.label ?? "Checking…"))
+              .foregroundStyle(.secondary)
             if let url = permission.settingsURL {
-              Button("Open Settings") { NSWorkspace.shared.open(url) }
+              Button(SettingsL10n.string("Open Settings")) { NSWorkspace.shared.open(url) }
             }
           }
         } label: {
-          Label(permission.title, systemImage: permission.symbol)
+          Label(SettingsL10n.string(permission.title), systemImage: permission.symbol)
         }
       }
     } header: {
-      Text("macOS Permissions")
+      Text(SettingsL10n.string("macOS Permissions"))
     } footer: {
       Text(
         "Websites can only use what macOS allows. If a site's request is blocked here, change it in System Settings."

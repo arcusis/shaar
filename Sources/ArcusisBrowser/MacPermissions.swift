@@ -16,11 +16,11 @@ enum MacPermission: String, CaseIterable, Identifiable {
 
   var title: String {
     switch self {
-    case .camera: "Camera"
-    case .microphone: "Microphone"
-    case .location: "Location"
-    case .notifications: "Notifications"
-    case .screenRecording: "Screen Recording"
+    case .camera: PanelsL10n.string("Camera")
+    case .microphone: PanelsL10n.string("Microphone")
+    case .location: PanelsL10n.string("Location")
+    case .notifications: PanelsL10n.string("Notifications")
+    case .screenRecording: PanelsL10n.string("Screen Recording")
     }
   }
 
@@ -58,9 +58,9 @@ enum MacPermissionStatus: Equatable {
 
   var label: String {
     switch self {
-    case .allowed: "Allowed"
-    case .denied: "Not allowed"
-    case .notDetermined: "Not asked yet"
+    case .allowed: PanelsL10n.string("Allowed")
+    case .denied: PanelsL10n.string("Not allowed")
+    case .notDetermined: PanelsL10n.string("Not asked yet")
     }
   }
 }

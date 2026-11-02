@@ -34,12 +34,12 @@ enum SiteAction: String, CaseIterable, Identifiable {
 
   var title: String {
     switch self {
-    case .reload: "Reload"
-    case .hardReload: "Hard Reload"
-    case .clearCacheAndReload: "Clear Cache and Reload"
-    case .clearCookiesAndReload: "Clear Cookies and Reload"
-    case .clearSiteData: "Clear All Site Data"
-    case .restartPage: "Restart Page"
+    case .reload: ShellL10n.string("Reload")
+    case .hardReload: ShellL10n.string("Hard Reload")
+    case .clearCacheAndReload: ShellL10n.string("Clear Cache and Reload")
+    case .clearCookiesAndReload: ShellL10n.string("Clear Cookies and Reload")
+    case .clearSiteData: ShellL10n.string("Clear All Site Data")
+    case .restartPage: ShellL10n.string("Restart Page")
     }
   }
 
@@ -56,12 +56,14 @@ enum SiteAction: String, CaseIterable, Identifiable {
 
   var help: String {
     switch self {
-    case .reload: "Reload this page (Command-R)"
-    case .hardReload: "Reload without cached files (Command-Shift-R)"
-    case .clearCacheAndReload: "Empty this profile's cache, then reload without cached files"
-    case .clearCookiesAndReload: "Delete the cookies this page uses, then reload"
-    case .clearSiteData: "Delete cookies and stored data for this site in this profile"
-    case .restartPage: "Reload this page in a new renderer process"
+    case .reload: ShellL10n.string("Reload this page (Command-R)")
+    case .hardReload: ShellL10n.string("Reload without cached files (Command-Shift-R)")
+    case .clearCacheAndReload:
+      ShellL10n.string("Empty this profile's cache, then reload without cached files")
+    case .clearCookiesAndReload: ShellL10n.string("Delete the cookies this page uses, then reload")
+    case .clearSiteData:
+      ShellL10n.string("Delete cookies and stored data for this site in this profile")
+    case .restartPage: ShellL10n.string("Reload this page in a new renderer process")
     }
   }
 

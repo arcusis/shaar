@@ -54,6 +54,7 @@ def main() -> int:
         ("format", ["swift", "format", "lint", "--strict", "--recursive", "Package.swift", "Sources", "Tests"]),
         ("license", [sys.executable, "scripts/check-license-headers.py"]),
         ("notebook", [sys.executable, "scripts/check-notebook-links.py"]),
+        ("localization", [sys.executable, "scripts/check-localization.py"]),
         ("actionlint", ["actionlint", "-color"]),
         ("shellcheck", ["shellcheck", "-x", *tracked_shell_files()]),
         ("pins", [sys.executable, __file__, "--pins-only"]),

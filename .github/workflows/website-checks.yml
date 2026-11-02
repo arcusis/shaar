@@ -4,29 +4,7 @@
 name: Website checks
 
 on:
-  pull_request:
-    paths:
-      - 'website/**'
-      - '.github/workflows/website-*.yml'
-      - 'scripts/check-license-headers.py'
-      - 'Tests/LicenseHeaderTests/**'
-      - 'Branding/**'
-      - '.github/assets/**'
-      - 'LICENSE'
-      - 'NOTICE'
-      - 'THIRD_PARTY_NOTICES.md'
-  push:
-    branches: [production]
-    paths:
-      - 'website/**'
-      - '.github/workflows/website-*.yml'
-      - 'scripts/check-license-headers.py'
-      - 'Tests/LicenseHeaderTests/**'
-      - 'Branding/**'
-      - '.github/assets/**'
-      - 'LICENSE'
-      - 'NOTICE'
-      - 'THIRD_PARTY_NOTICES.md'
+  workflow_call:
 
 permissions:
   contents: read
@@ -38,7 +16,7 @@ concurrency:
 jobs:
   website:
     name: Website build, typecheck, lint and links
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     defaults:
       run:
@@ -56,6 +34,11 @@ jobs:
         run: |
           corepack enable
           corepack prepare pnpm@10.32.1 --activate
+      - name: Cache pnpm store for locked dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('website/pnpm-lock.yaml') }}
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
       - name: Typecheck

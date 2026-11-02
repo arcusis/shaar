@@ -40,9 +40,32 @@ PINS = load_script("ci-checks")
 PYTHON_TESTS = load_script("test-python")
 SBOM = load_script("ci-sbom")
 SWIFT_REPORTS = load_script("ci-swift-reports")
+EXTRACTION = load_script("check-codeql-extraction")
 
 
 class PipelineGateTests(unittest.TestCase):
+    def test_known_non_native_diffs_and_unknown_changes_select_required_coverage(self):
+        for paths in (["Notebook/Note.md"], ["README.md", "CONTRIBUTING.md"]):
+            self.assertEqual(PLAN.select_stages(paths, "pull_request"), (False, False, False))
+        for paths in (["website/src/Page.svelte"], ["website/package.json", "Notebook/Note.md"]):
+            self.assertEqual(PLAN.select_stages(paths, "pull_request"), (False, True, False))
+            self.assertEqual(PLAN.select_stages(paths, "merge_group"), (False, True, False))
+        for paths in (None, [], ["unclassified-input"]):
+            self.assertTrue(PLAN.select_stages(paths, "pull_request")[0])
+        self.assertEqual(PLAN.select_stages(["Sources/App.swift"], "pull_request"), (True, False, True))
+        self.assertEqual(PLAN.select_stages(["scripts/tool.py"], "pull_request"), (True, False, False))
+        for event in ("push", "schedule", "workflow_dispatch"):
+            self.assertEqual(PLAN.select_stages(["Notebook/Note.md"], event), (True, True, True))
+        self.assertTrue(PLAN.select_stages(["scripts/tool.py"], "merge_group")[2])
+
+    def test_website_gate_rejects_unexpected_skip_or_missing_result(self):
+        needs = self.results(native="skipped")
+        self.assertTrue(GATE.gate_errors(needs, False, False, True))
+        needs["website"] = {"result": "skipped"}
+        self.assertTrue(GATE.gate_errors(needs, False, False, True))
+        needs["website"] = {"result": "success"}
+        self.assertEqual(GATE.gate_errors(needs, False, False, True), [])
+
     def test_probe_count_normalizes_dispatch_strings_before_typed_workflow_call(self):
         for value in (1, "1", 10, "10"):
             self.assertEqual(PLAN.iteration_count({"inputs": {"probe_iterations": value}}, "workflow_dispatch"), int(value))
@@ -292,6 +315,18 @@ class SwiftReportTests(unittest.TestCase):
 
 
 class ProbeSoakTests(unittest.TestCase):
+    def test_shards_cover_every_original_iteration_once_without_retry(self):
+        from collections import Counter
+        from ci_engine import engine_shards, shard_modes
+        for iterations in (1, 2, 3, 10):
+            expected = Counter((mode, index) for mode in STAGES.ENGINE_MODES
+                               for index in range(1, max(iterations, STAGES.MINIMUM_REPETITIONS.get(mode, 1)) + 1))
+            actual = Counter((mode, index) for shard in engine_shards(iterations)
+                             for mode, indexes in shard_modes(shard, iterations) for index in indexes)
+            self.assertEqual(actual, expected)
+        with self.assertRaises(ValueError):
+            shard_modes("private-window-4", 1)
+
     def test_all_modes_share_one_build_and_preserve_each_iteration(self):
         checks = unittest.mock.Mock()
         checks.run.return_value = 0
@@ -354,6 +389,52 @@ class ProbeSoakTests(unittest.TestCase):
             self.assertEqual(suite.attrib["tests"], "3")
             self.assertEqual(len(suite.findall("testcase/failure")), 1)
             self.assertEqual(len(suite.findall("testcase/skipped")), 2)
+
+
+class EngineTransferTests(unittest.TestCase):
+    def test_transferred_bundle_preserves_exec_and_links_and_rejects_wrong_context_or_digest(self):
+        from ci_engine import BUNDLE_NAME, archive_bundle, restore_bundle
+        import shutil
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {
+            "GITHUB_SHA": "a" * 40, "CI_TOOLCHAIN_ID": "toolchain",
+        }):
+            root = Path(temporary)
+            pin = root / "ThirdParty/ArdiaCore/pin.json"
+            pin.parent.mkdir(parents=True)
+            pin.write_text(json.dumps({"sha256": "b" * 64}))
+            bundle = root / "build" / BUNDLE_NAME
+            bundle.mkdir(parents=True)
+            executable = bundle / "Main"
+            executable.write_bytes(b"authored executable")
+            executable.chmod(0o755)
+            (bundle / "Alias").symlink_to("Main")
+            directory = root / "evidence"
+            directory.mkdir()
+            archive_bundle(root, directory)
+            shutil.rmtree(bundle)
+            with patch.dict(os.environ, {"GITHUB_SHA": "c" * 40}), self.assertRaises(ValueError):
+                restore_bundle(root, directory)
+            restore_bundle(root, directory)
+            self.assertEqual(executable.read_bytes(), b"authored executable")
+            self.assertEqual(executable.stat().st_mode & 0o111, 0o111)
+            self.assertEqual((bundle / "Alias").readlink(), Path("Main"))
+            shutil.rmtree(bundle)
+            with (directory / "verification.tar.gz").open("ab") as archive:
+                archive.write(b"tampered")
+            with self.assertRaisesRegex(ValueError, "digest"):
+                restore_bundle(root, directory)
+
+
+class SwiftExtractionTests(unittest.TestCase):
+    def test_missing_source_fails_even_when_other_modules_have_more_files(self):
+        root = Path("/checkout")
+        report = {"#select": {"tuples": [[{"label": "/checkout/Sources/Core/One.swift"}, "extracted"],
+                                          [{"label": "One.swift", "url": {"uri": "file:///checkout/Sources/App/Two.swift"}}, "extracted"]]}}
+        expected = {"Sources/Core/One.swift", "Sources/App/Two.swift", "Sources/App/Missing.swift"}
+        self.assertEqual(EXTRACTION.missing_sources(report, expected, root), ["Sources/App/Missing.swift"])
+        self.assertEqual(EXTRACTION.missing_sources(report, expected - {"Sources/App/Missing.swift"}, root), [])
+        with self.assertRaises(ValueError):
+            EXTRACTION.missing_sources(report, set(), root)
 
 
 if __name__ == "__main__":

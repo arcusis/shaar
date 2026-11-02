@@ -4,6 +4,7 @@
 - [[CI_Pipeline_Design]]
 - [[CI_Pipeline]]
 - [[Commit_Gates]]
+- [[CI_Run_Time]]
 - [[Source_And_Native_Verification]]
 - [[Test_Coverage]]
 - [[Verification_Harness]]

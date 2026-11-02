@@ -21,8 +21,12 @@ struct SidebarFolderDraft: Equatable {
     return parentID
   }
 
+  var editingFolderID: UUID? {
+    guard case .edit(_, let folder) = route else { return nil }
+    return folder
+  }
+
   func isValid(in session: BrowserSession) -> Bool {
-    guard case .create = route else { return false }
     return route.matches(session)
   }
 }

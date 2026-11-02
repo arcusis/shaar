@@ -73,7 +73,7 @@ def expected_captures():
         names.add(f"settings-{scheme}.png")
         for section in ("appearance", "privacy", "profiles", "shortcuts", "about"):
             names.add(f"settings-{section}-{scheme}.png")
-        for step in ("details", "google", "microsoft", "done"):
+        for step in ("name", "icon", "color", "account", "done"):
             names.add(f"onboarding-{step}-{scheme}.png")
         for screen in ("site-control-center", "mini-player", "picture-in-picture"):
             names.add(f"{screen}-{scheme}.png")

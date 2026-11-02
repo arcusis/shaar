@@ -65,7 +65,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   private(set) var settingsController: BrowserSettingsController?
   private var privateHost: PrivateBrowserHost?
   private var miniWindows: [String: MiniBrowserController] = [:]
-  private var accountSignIns: [String: ProfileAccountSignIn] = [:]
+  private(set) var accountSignIns: [String: ProfileAccountSignIn] = [:]
   private(set) var profileOnboarding: ProfileOnboardingWindow?
   private var pendingURLs: [URL] = []
   private var claimedPrimary = false
@@ -168,8 +168,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       context.window.makeKeyAndOrderFront(nil)
     }
     settingsController?.setAccountHandlers(
-      connect: { [weak self] profile, provider in
-        self?.runSavedProfileSignIn(profile, provider: provider, purpose: .signIn)
+      connect: { [weak self] profile, option in
+        self?.runSavedProfileSignIn(
+          profile, provider: option.provider, purpose: .signIn, option: option)
       },
       disconnect: { [weak self] profile, provider in
         self?.runSavedProfileSignIn(profile, provider: provider, purpose: .signOut)
@@ -429,6 +430,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     shortcutMonitor = nil
     privateHost?.detach()
     privateHost = nil
+    profileOnboarding?.model.cancel()
+    for flow in Array(accountSignIns.values) { flow.cancel() }
     profileOnboarding?.close()
     profileOnboarding = nil
     events.onWindowRequest = nil
@@ -467,12 +470,20 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
 
   /// Connect or disconnect a provider account of a saved profile from Settings.
   private func runSavedProfileSignIn(
-    _ profileID: UUID, provider: AccountProvider, purpose: ProfileAccountSignIn.Purpose
+    _ profileID: UUID, provider: AccountProvider, purpose: ProfileAccountSignIn.Purpose,
+    option: AccountSignInOption? = nil
   ) {
     guard
       let profile = workspace.workspace.catalog.profiles.first(where: { $0.id == profileID })
     else { return }
-    runAccountSignIn(profile, provider: provider, purpose: purpose) { [weak self] account in
+    // Apple offers no public web logout URL. Disconnect the primary link; iCloud retains its
+    // own Sign Out control rather than pretending a visit to its home page clears cookies.
+    if purpose == .signOut, provider == .apple {
+      preferences.removeAccount(provider, for: profileID)
+      return
+    }
+    runAccountSignIn(profile, provider: provider, purpose: purpose, option: option) {
+      [weak self] account in
       guard let self else { return }
       switch (purpose, account) {
       case (.signIn, let account?): self.preferences.setAccount(account, for: profileID)
@@ -486,11 +497,13 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   /// saved yet, so onboarding can connect accounts before it creates the profile.
   private func runAccountSignIn(
     _ profile: BrowserProfile, provider: AccountProvider, purpose: ProfileAccountSignIn.Purpose,
+    option: AccountSignInOption? = nil,
     completion: @escaping (ConnectedAccount?) -> Void
   ) {
     do {
       let flow = try ProfileAccountSignIn(
-        events: events, profile: profile, provider: provider, purpose: purpose)
+        events: events, profile: profile, provider: provider, purpose: purpose,
+        visible: presentation == .visible, option: option)
       let id = flow.engine.windowID
       accountSignIns[id] = flow
       flow.onFinished = { [weak self] account in
@@ -518,9 +531,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
 
   private func profileOnboardingActions() -> ProfileOnboardingActions {
     ProfileOnboardingActions(
-      connect: { [weak self] profile, provider, completion in
+      connect: { [weak self] profile, option, completion in
         self?.runAccountSignIn(
-          profile, provider: provider, purpose: .signIn, completion: completion)
+          profile, provider: option.provider, purpose: .signIn, option: option,
+          completion: completion)
       },
       stopConnecting: { [weak self] in
         guard let profileID = self?.profileOnboarding?.model.profileID else { return }
@@ -533,7 +547,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   }
 
   private func cancelAccountSignIns(for profileID: UUID) {
-    for flow in accountSignIns.values where flow.profileID == profileID { flow.cancel() }
+    for flow in Array(accountSignIns.values) where flow.profileID == profileID { flow.cancel() }
   }
 
   private func profileOnboardingClosed(_ outcome: ProfileOnboardingModel.Outcome) {
@@ -657,6 +671,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   }
 
   private func requestedWindow(profile: String, type: String) -> String? {
+    if let flow = accountSignIns.values.first(where: { $0.profileID.uuidString == profile }) {
+      return flow.requestedWindow(type: type)
+    }
     guard started, !events.runtime.isQuitting, ["normal", "popup", "app"].contains(type),
       let profileID = UUID(uuidString: profile),
       let destination = workspace.workspace.catalog.spaces.first(where: {
@@ -702,6 +719,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     // The engine can request visibility during insertion. Present only once its
     // notification has unwound and the application has adopted the page.
     DispatchQueue.main.async { [weak self] in
+      if let flow = self?.accountSignIns.values.first(where: { $0.ownsWindow(nativeID) }) {
+        flow.showWindow(nativeID, active: active)
+        return
+      }
       guard let self, self.presentation == .visible,
         !self.events.runtime.isQuitting,
         let context = self.contexts.values.first(where: { $0.nativeID == nativeID }),

@@ -85,7 +85,7 @@ extension BrowserSession {
   @discardableResult
   public mutating func moveFolder(
     _ id: UUID, from sourceID: UUID, to destinationID: UUID,
-    parentID: UUID? = nil, before targetID: UUID? = nil
+    parentID: UUID? = nil, before targetID: UUID? = nil, pinned: Bool? = nil
   ) -> Bool {
     guard let source = spaces.firstIndex(where: { $0.id == sourceID }),
       let destination = spaces.firstIndex(where: { $0.id == destinationID }),
@@ -111,6 +111,24 @@ extension BrowserSession {
     if let root = movedFolders.firstIndex(where: { $0.id == id }) {
       movedFolders[root].parentID = parentID
     }
+    let destinationPinned =
+      parentID.flatMap { parent in
+        spaces[destination].folders.first { $0.id == parent }?.isPinned
+      } ?? pinned ?? movedFolders[0].isPinned
+    if let targetID,
+      !spaces[destination].folders.contains(where: {
+        $0.id == targetID && $0.isPinned == destinationPinned
+      })
+    {
+      return false
+    }
+    if let parentID, let pinned,
+      spaces[destination].folders.first(where: { $0.id == parentID })?.isPinned != pinned
+    {
+      return false
+    }
+    for index in movedFolders.indices { movedFolders[index].isPinned = destinationPinned }
+    let movedSplits = spaces[source].splits.filter { Set($0.tabIDs).isSubset(of: memberIDs) }
     var updated = spaces
     updated[source].folders.removeAll { tree.contains($0.id) }
     let insertion =
@@ -122,6 +140,7 @@ extension BrowserSession {
       updated[source].tabs.removeAll { memberIDs.contains($0.id) }
       updated[source].reconcileSplits()
       updated[destination].tabs += members
+      updated[destination].splits += movedSplits
       if selected.map(memberIDs.contains) == true {
         let remaining = updated[source].tabs
         updated[source].selectedTabID =
@@ -133,6 +152,10 @@ extension BrowserSession {
       } else if updated[destination].selectedTabID == nil {
         updated[destination].selectedTabID = members.first?.id
       }
+    }
+    for index in updated[destination].tabs.indices
+    where memberIDs.contains(updated[destination].tabs[index].id) {
+      updated[destination].tabs[index].isPinned = destinationPinned
     }
     updated[source].normalizeFolders()
     updated[destination].normalizeFolders()

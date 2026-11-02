@@ -6,6 +6,18 @@
     "Restart Shaar to apply": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Restart Shaar to apply"}},"he":{"stringUnit":{"state":"translated","value":"יש להפעיל מחדש את Shaar כדי להחיל את השינוי"}}}},
     "Your tabs could not be saved. Shaar has not restarted.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Your tabs could not be saved. Shaar has not restarted."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן לשמור את הלשוניות שלך. Shaar לא הופעל מחדש."}}}},
     "Your windows and tabs will be restored.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Your windows and tabs will be restored."}},"he":{"stringUnit":{"state":"translated","value":"החלונות והלשוניות שלך ישוחזרו."}}}},
+    "Microsoft — personal": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "Microsoft — אישי"}}}},
+    "Microsoft — work or school": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "Microsoft — עבודה או לימודים"}}}},
+
+    "Icon": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "סמל"}}}},
+    "Color": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "צבע"}}}},
+    "Account": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "חשבון"}}}},
+    "One primary account per profile. For another account, create another profile.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "חשבון ראשי אחד לכל פרופיל. כדי להשתמש בחשבון נוסף, יש ליצור פרופיל נוסף."}}}},
+    "Optional. Sign in on the provider’s own page, or connect later in Settings > Profiles.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לא חובה. אפשר להתחבר בדף של ספק החשבון, או מאוחר יותר בהגדרות > פרופילים."}}}},
+    "Personal or Google Workspace": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "חשבון אישי או Google Workspace"}}}},
+    "Personal, work or school": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "חשבון אישי, עבודה או לימודים"}}}},
+    "Apple Account and iCloud": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "חשבון Apple ו-iCloud"}}}},
+
     "Copy for AI": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copy for AI"}},"he":{"stringUnit":{"state":"translated","value":"העתקה ל-AI"}}}},
     "Developer Tools": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Developer Tools"}},"he":{"stringUnit":{"state":"translated","value":"כלים למפתחים"}}}},
     "General": {

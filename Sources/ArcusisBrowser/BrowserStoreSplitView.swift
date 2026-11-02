@@ -94,7 +94,8 @@ extension BrowserStore {
 
   @discardableResult
   func dropTabIntoSidebarSplit(_ item: SidebarTransfer, target: UUID) -> Bool {
-    guard case .tab(let sessionID, let source, let tabID) = item,
+    guard sheet == nil, !commandIsOpen,
+      case .tab(let sessionID, let source, let tabID) = item,
       sessionID == dragSessionID, source == session.selectedSpaceID,
       session.selectedSpace.tabs.contains(where: { $0.id == target }),
       session.addToSplit(tabID, beside: target, edge: .right, in: session.selectedSpaceID)
@@ -102,6 +103,25 @@ extension BrowserStore {
     tabDrag = nil
     save()
     return true
+  }
+
+  var favoritesDropIsRefused: Bool {
+    switch sidebarDrag {
+    case .folder?, .split?, .space?: true
+    default: false
+    }
+  }
+
+  func beginSidebarDrag(_ item: SidebarTransfer) -> SidebarTransfer {
+    sidebarDrag = item
+    Task { @MainActor [weak self] in
+      while NSEvent.pressedMouseButtons & 1 != 0 {
+        try? await Task.sleep(for: .milliseconds(80))
+      }
+      try? await Task.sleep(for: .milliseconds(300))
+      if self?.sidebarDrag == item { self?.sidebarDrag = nil }
+    }
+    return item
   }
 
   /// Records the drag so page drop zones can appear; cleared once the mouse button is up.
@@ -118,7 +138,7 @@ extension BrowserStore {
         if self?.tabDrag == drag { self?.tabDrag = nil }
       }
     }
-    return .tab(sessionID: dragSessionID, sourceSpaceID: spaceID, tabID: tabID)
+    return beginSidebarDrag(.tab(sessionID: dragSessionID, sourceSpaceID: spaceID, tabID: tabID))
   }
 
   /// Whether dropping the dragged tab beside `target` would change anything.
@@ -141,14 +161,6 @@ extension BrowserStore {
     return true
   }
 
-  /// A pane dragged into the sidebar leaves its split.
-  @discardableResult
-  func separateDraggedPane(_ tabID: UUID) -> Bool {
-    guard tabDrag?.tabID == tabID, tabDrag?.fromSplitPane == true else { return false }
-    tabDrag = nil
-    session.unsplitTab(tabID, in: session.selectedSpaceID)
-    return true
-  }
 }
 
 /// A tab being dragged from the sidebar or from a split pane's toolbar.

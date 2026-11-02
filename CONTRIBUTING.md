@@ -49,6 +49,36 @@ before submitting; CI rejects notes missing index links. See
 Start every new source file with the MPL-2.0 header used across the repository;
 `scripts/check-license-headers.py` enforces it.
 
+## Commit and push checks
+
+After configuring `.venv` with the hash-pinned release requirements, install the
+hooks and pinned lint/scan tools for this worktree:
+
+```sh
+.venv/bin/python scripts/install-hooks.py
+```
+
+The installer uses Git worktree configuration and preserves the previous hooks,
+including global identity and leak guards. Other worktrees keep their own hook
+configuration; install once in each checkout. No Git identity or global hook is
+changed. A stable launcher also preserves prior guards on older checkouts that
+predate this runner.
+
+Pre-commit runs the shared fast gates against the exact index, so partial staging
+and unstaged edits remain intact. Pre-push checks each outgoing tree and its new
+commit history. Checks include Swift formatting, license headers, Notebook links,
+actionlint, shellcheck, pins, Python tests and redacted Gitleaks scans. Run them
+manually with `PATH="$PWD/build/ci-tools:$PATH" .venv/bin/python scripts/ci-checks.py`.
+Missing tools fail rather than silently skipping checks.
+
+Private-key filenames (`.p8`, `.pem`, `.key`, `.p12`, `.pfx`, conventional SSH keys
+and Sparkle private/secret keys), environment files (`.env`, `.env.*`, `*.env`,
+`.dev.vars`), escaping symlinks and files larger than 10 MiB are blocked. The size
+limit applies regardless of extension. Store large distribution assets in releases.
+CI enforces the same tree policy and scans all new commits, including files or
+secrets added and deleted before the final revision. Bypassing a local hook does
+not bypass those CI gates. See [Commit gates](Notebook/Commit_Gates.md).
+
 ## Changes and commits
 
 Use imperative Conventional Commit subjects, for example:

@@ -91,6 +91,8 @@ private struct SplitGroupView: View {
 
   private func divider(after index: Int, available: CGFloat) -> some View {
     let highlighted = activeDivider == index || hoveredDivider == index
+    let pair = weights[index] + weights[index + 1]
+    let leadingPercent = pair > 0 ? weights[index] / pair : 0.5
     return ZStack {
       Capsule()
         .fill(Color.primary.opacity(highlighted ? 0.35 : 0))
@@ -126,6 +128,45 @@ private struct SplitGroupView: View {
     )
     .animation(.easeOut(duration: 0.12), value: highlighted)
     .accessibilityLabel(ShellL10n.string("Split divider"))
+    .accessibilityValue("\(Int((leadingPercent * 100).rounded()))%")
+    .accessibilityAdjustableAction { direction in
+      switch direction {
+      case .increment: adjustDivider(index, by: Self.keyboardStep, available: available)
+      case .decrement: adjustDivider(index, by: -Self.keyboardStep, available: available)
+      @unknown default: break
+      }
+    }
+    .focusable()
+    .onKeyPress(.leftArrow) {
+      adjustDivider(
+        index, by: SplitResizeDecision.logicalDelta(-Self.keyboardStep, isHorizontal: axis == .columns,
+          isRightToLeft: layoutDirection == .rightToLeft), available: available)
+      return .handled
+    }
+    .onKeyPress(.rightArrow) {
+      adjustDivider(
+        index, by: SplitResizeDecision.logicalDelta(Self.keyboardStep, isHorizontal: axis == .columns,
+          isRightToLeft: layoutDirection == .rightToLeft), available: available)
+      return .handled
+    }
+    .onKeyPress(.upArrow) {
+      guard axis == .rows else { return .ignored }
+      adjustDivider(index, by: -Self.keyboardStep, available: available)
+      return .handled
+    }
+    .onKeyPress(.downArrow) {
+      guard axis == .rows else { return .ignored }
+      adjustDivider(index, by: Self.keyboardStep, available: available)
+      return .handled
+    }
+  }
+
+  private static let keyboardStep: CGFloat = 32
+
+  private func adjustDivider(_ index: Int, by delta: CGFloat, available: CGFloat) {
+    let next = Self.resized(weights, at: index, by: delta, available: available)
+    guard next != weights else { return }
+    onWeightsChange(next)
   }
 
   /// Moves the divider after `index`, keeping both neighbours above the minimum size.

@@ -16,7 +16,7 @@ enum BrowserMenuCommand: String, CaseIterable {
     developerTools
   case splitView
   case extensions, help, minimizeWindow, zoomWindow, bringAllToFront, settings, quit, createFolder
-  case checkForUpdates, inspector
+  case checkForUpdates, inspector, inspectorCopy
 }
 
 @MainActor
@@ -233,6 +233,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       return context.engine.siteControlTarget != nil && (afterLauncher || !store.commandIsOpen)
     case .inspector:
       return context.engine.siteControlTarget != nil && (afterLauncher || !store.commandIsOpen)
+    case .inspectorCopy:
+      guard let target = context.engine.siteControlTarget else { return false }
+      return context.engine.inspectors[target.tabID]?.aiCopy.canCopy == true
     case .splitView: return store.session.selectedSpace.tabs.count >= 2
     case .reopenClosed: return store.canReopenClosedTab
     case .bookmarkPage: return store.canBookmarkCurrentPage
@@ -379,6 +382,12 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .hardReload: store.reloadCurrentPage(.bypassingCache)
     case .developerTools: context.engine.toggleDeveloperTools()
     case .inspector: context.engine.toggleInspector()
+    case .inspectorCopy:
+      if let target = context.engine.siteControlTarget,
+        let inspector = context.engine.inspectors[target.tabID]
+      {
+        Task { await inspector.aiCopy.copyElement() }
+      }
     case .splitView: store.splitSelectedTab()
     case .extensions: context.engine.showExtensionList()
     case .help:
@@ -863,6 +872,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     add(.hardReload, "Hard Reload", to: view)
     add(.developerTools, "Developer Tools", to: view)
     add(.inspector, "Inspect Element", to: view)
+    add(.inspectorCopy, "Copy for AI", to: view)
     let spaces = section("Spaces")
     add(.newSpace, "New space…", to: spaces)
     add(.editSpace, "Edit current space…", to: spaces)

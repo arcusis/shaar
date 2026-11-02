@@ -479,6 +479,14 @@ MEDIA_CLIP = Path(__file__).resolve().parent.parent / 'Tests/Fixtures/Media/seek
 class Fixture(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
+        if path in ('/inspector-ai', '/inspector-ai/second'):
+            self.html(b"""<!doctype html><html><meta charset="utf-8"><meta name="generator" content="Inspector AI fixture"><title>Inspector AI copy</title>
+<style>body{font:16px Arial;margin:24px;color:#172033;background:white}main{padding:20px;border:1px solid #ddd;width:340px}button{font:16px Arial;padding:10px;background:#2563eb;color:white}input,textarea,select{display:block;width:230px;height:32px;margin:12px 0}</style>
+<main id="ai-card"><h1>Review the account card</h1><button id="ai-save">Save changes</button><input id="ai-password" type="password" value="password-private-fixture"><input id="ai-input" value="input-private-fixture"><textarea id="ai-textarea">textarea-private-fixture</textarea><select id="ai-select"><option selected value="option-private-fixture">selected-private-fixture</option></select><p>Public nearby context.</p></main></html>""")
+            return
+        if path == '/inspector-ai-failure':
+            self.send_error(503, 'Inspector AI fixture error')
+            return
         if path == '/inspector-tools':
             self.html(b"""<!doctype html><html data-page-tools-fixture="v1"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="generator" content="Inspector fixture">
@@ -1380,7 +1388,7 @@ def main(argv=None):
                         code = wait_for_quit_exit(process, root, phase, timeout=90)
                     else:
                         timeout = (240 if options.private_window else 180 if options.external_app_consent else 180 if options.saved_tab_capacity
-                                   else 235)
+                                   else 280)
                         code = wait_for_probe(process, root, phase, timeout=timeout)
                 except subprocess.TimeoutExpired:
                     raise RuntimeError(f"{phase} timed out; see {root}/{phase}.log")

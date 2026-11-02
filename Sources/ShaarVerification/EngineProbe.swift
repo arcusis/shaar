@@ -750,7 +750,7 @@ final class EngineProbe {
     if externalAppConsentMode || savedTabCapacityMode { return 180 }
     if quitExitMode { return 90 }
     if sessionRecoveryMode { return 90 }
-    return 210
+    return privateWindowMode ? 210 : 255
   }
 
   private var probeMode: String {

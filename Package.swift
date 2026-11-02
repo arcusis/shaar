@@ -41,7 +41,8 @@ let package = Package(
     .testTarget(name: "BrowserCoreTests", dependencies: ["BrowserCore"]),
     .testTarget(
       name: "BrowserAppTests",
-      dependencies: ["ArcusisBrowser", "BrowserCore"]),
+      dependencies: ["ArcusisBrowser", "BrowserCore"],
+      resources: [.copy("Snapshots/InspectorAI")]),
     .testTarget(
       name: "ShaarVerificationTests",
       dependencies: ["ArcusisBrowser", "BrowserCore", "ChromiumBridge", "ShaarVerification"]),

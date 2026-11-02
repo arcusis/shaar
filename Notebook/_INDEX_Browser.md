@@ -19,6 +19,7 @@
 - [[Shaar_Inspector_CSS]]
 - [[Shaar_Inspector_Details]]
 - [[Shaar_Inspector_Page_Tools]]
+- [[Shaar_Inspector_AI_Copy]]
 - [[Private_Browsing]]
 - [[External_App_Consent]]
 - [[Find_In_Page]]

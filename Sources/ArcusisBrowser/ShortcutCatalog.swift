@@ -56,6 +56,7 @@ struct ShortcutCatalog {
     case .hardReload: ("r", [.command, .shift])
     case .developerTools: ("i", [.command, .option])
     case .inspector: ("c", [.command, .option])
+    case .inspectorCopy: ("c", [.command, .shift])
     case .newSpace: ("S", [.command, .shift])
     case .editSpace: ("s", [.command, .option])
     case .addFavorite: ("k", [.command, .option])
@@ -102,7 +103,7 @@ struct ShortcutCatalog {
     case "Copy": ("c", .command)
     case "Paste": ("v", .command)
     case "Select All": ("a", .command)
-    case "Copy URL": ("c", [.command, .shift])
+    case "Copy URL": ("c", [.command, .option, .shift])
     default: nil
     }
   }

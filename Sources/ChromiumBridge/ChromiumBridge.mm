@@ -36,8 +36,10 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     return [@[@"n", @"t", @"l", @"w", @"s", @"q", @"r", @"f", @"g", @"d", @"y", @","] containsObject:key.lowercaseString];
   }
   if (chord == (NSEventModifierFlagCommand | NSEventModifierFlagShift)) {
-    return [@[@"w", @"g", @"j", @"t", @"r"] containsObject:key.lowercaseString];
+    return [@[@"w", @"g", @"j", @"t", @"r", @"c"] containsObject:key.lowercaseString];
   }
+  if (chord == (NSEventModifierFlagCommand | NSEventModifierFlagOption | NSEventModifierFlagShift))
+    return [key.lowercaseString isEqualToString:@"c"];
   if (chord == (NSEventModifierFlagCommand | NSEventModifierFlagOption))
     return [key.lowercaseString isEqualToString:@"i"];
   return chord == (NSEventModifierFlagControl | NSEventModifierFlagOption) &&

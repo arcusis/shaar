@@ -46,39 +46,30 @@ RELEASE_CI = load_script("check-release-ci")
 
 
 class PipelineGateTests(unittest.TestCase):
-    def test_only_manual_timing_run_can_omit_swift(self):
-        for event_name, expected in (("workflow_dispatch", "false"), ("pull_request", "true")):
-            with tempfile.TemporaryDirectory() as directory:
-                root = Path(directory)
-                event = {"inputs": {"measure_without_swift": "true", "deep_checks": "false"}}
-                (root / "event.json").write_text(json.dumps(event))
-                env = {"GITHUB_EVENT_PATH": str(root / "event.json"), "GITHUB_EVENT_NAME": event_name,
-                       "GITHUB_SHA": "a" * 40, "GITHUB_OUTPUT": str(root / "output"),
-                       "GITHUB_STEP_SUMMARY": str(root / "summary")}
-                with (patch.dict(os.environ, env),
-                      patch.object(PLAN.subprocess, "check_output", return_value="b" * 40 + "\n"),
-                      patch.object(PLAN.subprocess, "run") as command):
-                    command.return_value.returncode = 0
-                    command.return_value.stdout = b"Notebook/Note.md\0"
-                    PLAN.main()
-                self.assertIn("swift=" + expected, (root / "output").read_text())
-
-    def test_prepared_release_gate_requires_exact_production_push_and_successful_swift_job(self):
+    def test_release_gate_requires_both_exact_production_workflows_and_zero_alerts(self):
         revision = "a" * 40
         valid = {"id": 9, "head_sha": revision, "head_branch": "production", "event": "push",
                  "status": "completed", "conclusion": "success"}
         for change in ({"head_sha": "b" * 40}, {"event": "pull_request"}, {"event": "workflow_dispatch"},
                        {"status": "in_progress"}, {"conclusion": "failure"}, {"head_branch": "feature"}):
             self.assertEqual(RELEASE_CI.production_runs({"workflow_runs": [dict(valid, **change)]}, revision), [])
-        for swift in ("success", "skipped", "failure"):
-            jobs = [{"name": "CI required", "status": "completed", "conclusion": "success"},
-                    {"name": "CodeQL / CodeQL swift", "status": "completed", "conclusion": swift}]
-            with patch.object(RELEASE_CI, "api", side_effect=[{"workflow_runs": [valid]}, {"jobs": jobs}]):
-                if swift == "success":
-                    self.assertEqual(RELEASE_CI.require_release_ci("arcusis/shaar", revision), 9)
-                else:
-                    with self.assertRaises(ValueError):
+        for alerts in ([], [{"number": 1, "state": "open"}]):
+            responses = [{"workflow_runs": [valid]},
+                         {"jobs": [{"name": "CI required", "status": "completed", "conclusion": "success"}]},
+                         {"workflow_runs": [dict(valid, id=10)]},
+                         {"jobs": [{"name": "Swift security required", "status": "completed", "conclusion": "success"}]},
+                         alerts]
+            with patch.object(RELEASE_CI, "api", side_effect=responses):
+                if alerts:
+                    with self.assertRaisesRegex(ValueError, "open code-scanning"):
                         RELEASE_CI.require_release_ci("arcusis/shaar", revision)
+                else:
+                    self.assertEqual(RELEASE_CI.require_release_ci("arcusis/shaar", revision),
+                                     {"Source checks": 9, "Swift security": 10})
+        with patch.object(RELEASE_CI, "api", side_effect=[{"workflow_runs": [valid]}, {"jobs": []}]):
+            with self.assertRaises(ValueError):
+                RELEASE_CI.require_release_ci("arcusis/shaar", revision)
+
     def test_known_non_native_diffs_and_unknown_changes_select_required_coverage(self):
         for paths in (["Notebook/Note.md"], ["README.md", "CONTRIBUTING.md"]):
             self.assertEqual(PLAN.select_stages(paths, "pull_request"), (False, False, True))
@@ -618,37 +609,12 @@ class SwiftCompilerPlanTests(unittest.TestCase):
             with patch.object(CODEQL_BUILD, "PLAN", plan), self.assertRaisesRegex(ValueError, "scope changed"):
                 CODEQL_BUILD.replay("shipping")
 
-    def test_compiler_inventory_includes_test_targets_for_complete_pr_analysis(self):
+    def test_support_module_is_retained_but_test_targets_are_outside_default_build_inventory(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             self.assertEqual(CODEQL_BUILD.command_sources([
                 "Tests/TestSupport/SeededGenerator.swift", "Tests/BrowserCoreTests/Cases.swift",
-            ], root), {"Tests/TestSupport/SeededGenerator.swift", "Tests/BrowserCoreTests/Cases.swift"})
-
-    def test_semantic_commands_drop_cached_outputs_but_keep_every_input_and_definition(self):
-        arguments = ["/toolchain/swiftc", "-module-name", "App", "-whole-module-optimization",
-                     "-target", "arm64-apple-macosx26.0", "-emit-module", "-emit-module-path", "old.swiftmodule",
-                     "-c", "@build/sources", "-output-file-map", "old.json", "-incremental",
-                     "-D", "FEATURE", "-module-cache-path", "old-cache", "-I", "Modules"]
-        actual = CODEQL_BUILD.typecheck_arguments(arguments)
-        for absent in ("-c", "-emit-module", "old.swiftmodule", "old.json", "-incremental", "old-cache"):
-            self.assertNotIn(absent, actual)
-        for retained in ("@build/sources", "FEATURE", "Modules", "-whole-module-optimization"):
-            self.assertIn(retained, actual)
-        self.assertEqual(actual[-1], "-typecheck")
-
-    def test_complete_inventory_includes_tests_manifest_plugins_and_unknown_swift_paths(self):
-        from ci_support import swift_source_files
-        names = b"Sources/App.swift\0Tests/Unit.swift\0Package.swift\0Plugins/Compile/Plugin.swift\0Other.swift\0"
-        with patch("ci_support.subprocess.check_output", return_value=names) as command:
-            self.assertEqual(len(swift_source_files(ROOT, "all")), 5)
-        self.assertEqual(command.call_args.args[0][-1], "*.swift")
-
-    def test_docs_prs_still_require_swift_analysis(self):
-        needs = PipelineGateTests().results(native="skipped")
-        self.assertEqual(GATE.gate_errors(needs, False, False), [])
-        needs["codeql"] = {"result": "skipped"}
-        self.assertIn("codeql: skipped", GATE.gate_errors(needs, False, False))
+            ], root), {"Tests/TestSupport/SeededGenerator.swift"})
 
     def test_plan_keeps_argument_arrays_and_rejects_missing_or_duplicate_sources(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -2,11 +2,29 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import ChromiumBridge.Verification
 import Testing
 
 @testable import ShaarVerification
 
 @Suite struct PrivatePrivacyEvidenceTests {
+  @Test func nativeQuitRetainsCDPHoldUntilDialogCancellationSucceeds() {
+    var held = true
+    var releases = 0
+    var rejections = 0
+    let release = {
+      held = false
+      releases += 1
+    }
+    let reject = { rejections += 1 }
+    ARCCompletePrivateQuitDialogCancellation(true, "No dialog is showing", release, reject)
+    #expect(held && releases == 0 && rejections == 1)
+    ARCCompletePrivateQuitDialogCancellation(false, nil, release, reject)
+    #expect(held && releases == 0 && rejections == 2)
+    ARCCompletePrivateQuitDialogCancellation(true, nil, release, reject)
+    #expect(!held && releases == 1 && rejections == 2)
+  }
+
   @Test func preferencesRequireBothPrivateDenialAndNormalPositiveControl() {
     let keys = [
       "credentials_enable_service", "autofill.profile_enabled", "autofill.credit_card_enabled",

@@ -20,10 +20,6 @@ on:
         description: Repetitions per mode (1-10; private/Quit minimum 3; no retries)
         type: number
         default: 1
-      measure_without_swift:
-        description: Timing benchmark only; omit Swift and do not publish CI required
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -252,7 +248,7 @@ jobs:
       security-events: write
     uses: ./.github/workflows/ci-codeql.yml
     with:
-      swift: ${{ fromJSON(needs.plan.outputs.swift || 'true') }}
+      swift: false
 
   sanitizers:
     name: Nightly ${{ matrix.sanitizer }} sanitizer
@@ -306,7 +302,7 @@ jobs:
           stage: dead-code
 
   required:
-    name: ${{ github.event_name == 'workflow_dispatch' && inputs.measure_without_swift && 'Timing only (Swift deferred)' || 'CI required' }}
+    name: CI required
     if: always()
     needs: [plan, fast, dependency-review, build, coverage, visuals, localization, engine, shipping, codeql, inspector-contracts, website, sanitizers, dead-code]
     runs-on: ubuntu-24.04

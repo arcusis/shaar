@@ -65,11 +65,6 @@ def main() -> None:
         if result.returncode == 0:
             paths = [path for path in result.stdout.decode().split("\0") if path]
     full, website, swift = select_stages(paths, name)
-    benchmark = name == "workflow_dispatch" and str(event.get("inputs", {}).get("measure_without_swift", False)).lower() == "true"
-    if benchmark:
-        if str(event.get("inputs", {}).get("deep_checks", True)).lower() != "false":
-            raise ValueError("Swift timing benchmark requires deep_checks=false")
-        swift = False
     with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
         output.write(f"full={str(full).lower()}\nbase={base}\niterations={iterations}\nwebsite={str(website).lower()}\nswift={str(swift).lower()}\n")
     with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as output:

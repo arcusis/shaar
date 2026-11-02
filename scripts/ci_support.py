@@ -21,13 +21,11 @@ SWIFT_SOURCE_ROOTS = ("Sources", "Tests/TestSupport")
 
 def swift_source_files(root: Path, scope: str = "full", *, tracked: bool = True,
                        include_build_inputs: bool = False) -> set[str]:
-    if scope not in {"all", "full", "shipping"}:
+    if scope not in {"full", "shipping"}:
         raise ValueError("Unknown Swift analysis scope")
-    roots = (("Sources", "Tests", "Package.swift", "Plugins") if scope == "all" else
-             (*SWIFT_SOURCE_ROOTS, *(("Package.swift", "Plugins") if include_build_inputs else ())))
+    roots = (*SWIFT_SOURCE_ROOTS, *(("Package.swift", "Plugins") if include_build_inputs else ()))
     if tracked:
-        patterns = ("*.swift",) if scope == "all" else roots
-        files = subprocess.check_output(["git", "ls-files", "-z", "--", *patterns], cwd=root).decode().split("\0")
+        files = subprocess.check_output(["git", "ls-files", "-z", "--", *roots], cwd=root).decode().split("\0")
     else:
         files = []
         for name in roots:
@@ -35,7 +33,7 @@ def swift_source_files(root: Path, scope: str = "full", *, tracked: bool = True,
             candidates = [entry] if entry.is_file() else entry.rglob("*.swift")
             files.extend(path.relative_to(root).as_posix() for path in candidates if path.is_file())
     return {name for name in files if name.endswith(".swift")
-            and (scope != "shipping" or not name.startswith("Sources/ShaarVerification/"))}
+            and (scope == "full" or not name.startswith("Sources/ShaarVerification/"))}
 
 
 def file_sha256(path: Path) -> str:

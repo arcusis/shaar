@@ -2224,6 +2224,22 @@
         }
       }
     },
+    "Search Provider": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search Provider"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חיפוש אצל הספק"
+          }
+        }
+      }
+    },
     "Search or enter address": {
       "localizations": {
         "en": {

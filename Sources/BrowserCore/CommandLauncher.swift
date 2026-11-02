@@ -111,15 +111,18 @@ public struct CommandSources: Equatable, Sendable {
   public var history: [BrowserHistoryEntry]
   public var commands: [LauncherCommand]
   public var searchEngine: BrowserSearchEngine
+  public var providerSearch: CommandSearchProvider?
 
   public init(
     bookmarks: [BrowserBookmark] = [], history: [BrowserHistoryEntry] = [],
-    commands: [LauncherCommand] = [], searchEngine: BrowserSearchEngine = .google
+    commands: [LauncherCommand] = [], searchEngine: BrowserSearchEngine = .google,
+    providerSearch: CommandSearchProvider? = nil
   ) {
     self.bookmarks = bookmarks
     self.history = history
     self.commands = commands
     self.searchEngine = searchEngine
+    self.providerSearch = providerSearch
   }
 }
 
@@ -211,13 +214,20 @@ public enum CommandLauncher {
   static func searchSections(
     for query: String, in session: BrowserSession, sources: CommandSources
   ) -> [CommandSection] {
-    let actions = actionSection(for: query, sources: sources, limit: searchActionLimit)
+    let actionLimit = searchActionLimit + (sources.providerSearch == nil ? 0 : 3)
+    let actions = actionSection(
+      for: query, sources: sources, limit: actionLimit)
+    let hasProviderSearch = actions.results.contains {
+      if case .providerSearch = $0.action { return true }
+      return false
+    }
     let results = CommandSearch.results(
       for: query, in: session, bookmarks: sources.bookmarks, history: sources.history,
       searchEngine: sources.searchEngine,
       limit: CommandSearch.resultLimit - actions.results.count)
     let hits = CommandSection(id: "top-hits", title: "", results: results.filter { !$0.isOpen })
     let open = CommandSection(id: "open", title: "", results: results.filter(\.isOpen))
+    if hasProviderSearch { return [hits, actions, open] }
     if hits.results.isEmpty { return [open, actions] }
     if results.first?.isOpen == true { return [open, hits, actions] }
     return [hits, actions, open]
@@ -287,11 +297,16 @@ public enum CommandLauncher {
   static func actionSection(for query: String, sources: CommandSources, limit: Int?)
     -> CommandSection
   {
-    let matching = sources.commands.filter { $0.matches(query) }
+    let providerSearches = CommandProviderSearch.results(
+      for: query, provider: sources.providerSearch)
+    let matching =
+      providerSearches
+      + sources.commands.filter { $0.matches(query) }
+      .map(CommandResult.command)
     let limited = limit.map { Array(matching.prefix($0)) } ?? matching
     return CommandSection(
       id: "actions", title: BrowserLocalization.string("Actions"),
-      results: limited.map(CommandResult.command))
+      results: limited)
   }
 
   // MARK: Shared helpers

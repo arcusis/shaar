@@ -20,6 +20,51 @@ struct CommandLauncherStoreTests {
     #expect(store.results.map(\.action).contains(.command(BrowserMenuCommand.splitView.rawValue)))
   }
 
+  @Test func providerSearchesUseOnlyTheSelectedProfilesConnectedProvider() throws {
+    let store = BrowserStore()
+    let profileID = store.session.selectedSpace.profileID
+    store.showCommand()
+    store.commandQuery = "quarterly plan"
+    #expect(!store.results.contains { if case .providerSearch = $0.action { true } else { false } })
+
+    store.preferences.setAccount(
+      ConnectedAccount(provider: .google, email: "work@example.test"), for: profileID)
+    let googleRows = store.results.filter {
+      if case .providerSearch = $0.action { return true }
+      return false
+    }
+    #expect(googleRows.map(\.subtitle) == ["Gmail", "Drive", "Calendar"])
+
+    store.preferences.setAccount(
+      ConnectedAccount(provider: .microsoft, email: "work@example.test"), for: profileID)
+    let microsoftRows = store.results.filter {
+      if case .providerSearch = $0.action { return true }
+      return false
+    }
+    #expect(microsoftRows.map(\.subtitle) == ["Outlook", "OneDrive", "Teams"])
+
+    store.preferences.setAccount(
+      ConnectedAccount(provider: .apple, email: "work@example.test"), for: profileID)
+    #expect(!store.results.contains { if case .providerSearch = $0.action { true } else { false } })
+  }
+
+  @Test func providerSearchOpensInTheSelectedSpaceAndClosesCommandT() throws {
+    let store = BrowserStore()
+    let profileID = store.session.selectedSpace.profileID
+    store.preferences.setAccount(
+      ConnectedAccount(provider: .google, email: "work@example.test"), for: profileID)
+    store.showCommand()
+    store.commandQuery = "gmail quarterly plan"
+
+    #expect(store.selectedCommandResult?.title == "Search Gmail for “quarterly plan”")
+    store.acceptCommand()
+
+    #expect(
+      store.session.selectedPage?.tab.url.absoluteString
+        == "https://mail.google.com/mail/u/0/#search/quarterly%20plan")
+    #expect(!store.commandIsOpen)
+  }
+
   @Test func actionsListOnlyWhatTheHostEnablesUnderItsCurrentTitle() {
     let store = BrowserStore()
     let closeTab = LauncherCommand(

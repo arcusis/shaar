@@ -206,7 +206,14 @@ final class BrowserStore {
     let sources = CommandSources(
       bookmarks: library.bookmarks[profile]?.items ?? [], history: library.history[profile] ?? [],
       commands: launcherActions?.available() ?? [],
-      searchEngine: preferences.searchEngine(for: profile))
+      searchEngine: preferences.searchEngine(for: profile),
+      providerSearch: preferences.accounts(for: profile).first.flatMap {
+        switch $0.provider {
+        case .google: .google
+        case .microsoft: .microsoft
+        case .apple: nil
+        }
+      })
     return CommandSectionsKey(
       query: commandQuery, filter: commandFilter, session: session, sources: sources)
   }
@@ -429,7 +436,7 @@ final class BrowserStore {
   func perform(_ action: CommandAction) {
     sidebarNotice = nil
     switch action {
-    case .open(let url):
+    case .open(let url), .providerSearch(let url):
       if let id = session.open(url) { placePendingSplitPane(id) }
     case .space(let id):
       closeLibraryDrawer()

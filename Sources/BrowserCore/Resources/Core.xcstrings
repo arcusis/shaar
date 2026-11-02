@@ -57,6 +57,16 @@
         }
       }
     },
+    "Search %@ for “%@”": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חיפוש %@ עבור „%@”"
+          }
+        }
+      }
+    },
     "Add extension": {
       "localizations": {
         "he": {

@@ -3,7 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import AppKit
-import ChromiumBridge.Verification
+import ChromiumBridge
+import ChromiumBridgeVerification
 import Foundation
 import SwiftUI
 

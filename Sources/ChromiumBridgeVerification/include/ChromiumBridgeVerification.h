@@ -2,12 +2,12 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-#import "ChromiumBridge.h"
+#import <ChromiumBridge/ChromiumBridge.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
 // Verification interface for the ShaarVerification harness, imported from Swift as
-// `ChromiumBridge.Verification`. The app never imports it. Each entry point does nothing
+// `ChromiumBridgeVerification`. The app never imports it. Each entry point does nothing
 // unless the runtime started in testing mode with an owned, marked disposable probe root.
 
 /// Test-only sanitizer for external-app audit fixtures; returns fixed primitive fields only.

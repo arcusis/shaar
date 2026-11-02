@@ -43,6 +43,7 @@ def tracked_shell_files() -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pins-only", action="store_true")
+    parser.add_argument("--snapshot-only", action="store_true", help="Check a staged tree before it has a commit")
     options = parser.parse_args()
     errors = pin_errors(ROOT)
     for error in errors:
@@ -51,6 +52,7 @@ def main() -> int:
         return int(bool(errors))
     checks = Commands("fast")
     commands = [
+        ("sensitive-files", [sys.executable, "scripts/check-sensitive-files.py"]),
         ("format", ["swift", "format", "lint", "--strict", "--recursive", "Package.swift", "Sources", "Tests"]),
         ("license", [sys.executable, "scripts/check-license-headers.py"]),
         ("notebook", [sys.executable, "scripts/check-notebook-links.py"]),
@@ -58,8 +60,10 @@ def main() -> int:
         ("actionlint", ["actionlint", "-color"]),
         ("shellcheck", ["shellcheck", "-x", *tracked_shell_files()]),
         ("pins", [sys.executable, __file__, "--pins-only"]),
-        ("gitleaks", ["gitleaks", "dir", "--no-banner", "--redact", "--log-level", "warn",
+        ("gitleaks", ["gitleaks", "dir", "--no-banner", "--redact", "--ignore-gitleaks-allow", "--log-level", "warn",
                       "--report-format", "json", "--report-path", "build/ci/fast/gitleaks.json", "."]),
+        ("secret-history", [sys.executable, "scripts/check-secret-history.py",
+                            *(["--tree-only"] if options.snapshot_only else [])]),
         ("python", [sys.executable, "scripts/test-python.py", "--junit", "build/ci/fast/python.xml"]),
     ]
     for name, arguments in commands:

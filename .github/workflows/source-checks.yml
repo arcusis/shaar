@@ -201,7 +201,7 @@ jobs:
 
   engine:
     name: Engine simulations
-    needs: [plan, fast]
+    needs: plan
     if: needs.plan.outputs.full == 'true'
     uses: ./.github/workflows/ci-engine.yml
     with:

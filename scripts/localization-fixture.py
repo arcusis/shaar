@@ -9,6 +9,7 @@ import argparse
 import http.server
 import json
 import os
+import plistlib
 import re
 import shlex
 import shutil
@@ -16,6 +17,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import uuid
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
@@ -139,6 +141,28 @@ def run():
         raise RuntimeError(f"verification executable missing: {executable}")
 
     outer = Path(tempfile.mkdtemp(prefix="arcusis-localization-probe-")).resolve()
+    # A unique app domain exercises the real picker setter across process launches without
+    # touching the installed browser's preferences or another verification run's defaults.
+    isolated_app = outer / "Localization.app"
+    subprocess.run(["cp", "-cR", str(APP), str(isolated_app)], check=True)
+    info_path = isolated_app / "Contents/Info.plist"
+    info = plistlib.loads(info_path.read_bytes())
+    domain = f"com.arcusis.localization-fixture.{uuid.uuid4().hex}"
+    info["CFBundleIdentifier"] = domain
+    info_path.write_bytes(plistlib.dumps(info))
+    subprocess.run(["codesign", "--force", "--timestamp=none", "--sign", "-", str(isolated_app)],
+                   check=True, capture_output=True)
+    executable = isolated_app / "Contents/MacOS/ShaarVerification"
+
+    def store_selection(selection):
+        subprocess.run([str(executable), "--probe-store-language", selection],
+                       env=safe_environment(), check=True, capture_output=True, timeout=30)
+        stored = plistlib.loads(subprocess.check_output(["defaults", "export", domain, "-"]))
+        if stored.get("BrowserLanguage.selection") != selection:
+            raise RuntimeError("Picker selection did not persist in the isolated app domain")
+        if selection != "systemDefault" and stored.get("AppleLanguages") != [selection]:
+            raise RuntimeError("Picker AppleLanguages override did not persist")
+
     state = FixtureState(outer)
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler_for(state))
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -152,60 +176,70 @@ def run():
         (profile_root / ".arcusis-probe").write_text("arcusis-engine-probe-v1\n", encoding="utf-8")
         roots[name] = profile_root
     scenarios = [
-        ("english", "en", "initial", "english-first-launch", "fresh launch"),
-        ("english", "en", "restart", "english-restart", "same-language restart"),
-        ("hebrew", "he", "initial", "hebrew-first-launch", "fresh launch"),
-        ("hebrew", "he", "restart", "hebrew-restart", "same-language restart"),
-        ("language-switch", "en", "initial", "switch-profile-english-first", "switch profile first launch"),
-        ("language-switch", "en", "restart", "switch-profile-english-restart", "switch profile restart"),
-        ("language-switch", "he", "restart", "switch-profile-to-hebrew", "existing-profile language switch"),
-        ("language-switch", "en", "restart", "switch-profile-back-to-english", "existing-profile language switch back"),
+        ("english", "en", "initial", "english-first-launch", "fresh launch", "en", None),
+        ("english", "en", "restart", "english-restart", "same-language restart", None, None),
+        ("hebrew", "he", "initial", "hebrew-first-launch", "fresh launch", "he", None),
+        ("hebrew", "he", "restart", "hebrew-restart", "same-language restart", None, None),
+        ("language-switch", "en", "initial", "switch-profile-english-first", "switch profile first launch", "en", None),
+        ("language-switch", "en", "restart", "switch-profile-english-restart", "switch profile restart", None, None),
+        ("language-switch", "he", "restart", "switch-profile-to-hebrew", "existing-profile language switch", "he", None),
+        ("language-switch", "en", "restart", "switch-profile-back-to-english", "existing-profile language switch back", "en", None),
+        ("language-switch", "en", "restart", "english-over-macos-hebrew", "explicit choice over macOS per-app language", "en", "he"),
+        ("language-switch", "he", "restart", "system-restores-macos-hebrew", "System restores macOS per-app language", "systemDefault", None),
     ]
     try:
-        for root_name, language, phase, case_name, relation in scenarios:
-                profile_root = roots[root_name]
-                output = profile_root / f"{case_name}.json"
-                url = f"http://127.0.0.1:{server.server_port}/?language={language}&phase={phase}&case={case_name}"
-                arguments = [
-                    str(executable), "--probe-data-dir", str(profile_root), "--probe-url", url,
-                    "--probe-phase", phase, "--probe-output", str(output), "--probe-localization",
-                    "-BrowserLanguage.selection", language,
-                ]
-                environment = safe_environment()
-                environment["ARDIA_DOWNLOADS_DIR"] = str(profile_root / "Downloads")
-                environment["ARDIA_BACKGROUND"] = "picture-in-picture"
-                (profile_root / "Downloads").mkdir(mode=0o700, exist_ok=True)
-                completed = subprocess.run(
-                    arguments, cwd=ROOT, env=environment, capture_output=True, text=True,
-                    timeout=240,
+        for root_name, language, phase, case_name, relation, selection, system_language in scenarios:
+            if system_language:
+                store_selection("systemDefault")
+                subprocess.run(["defaults", "write", domain, "AppleLanguages", "-array", system_language],
+                               check=True, capture_output=True)
+            if selection is not None:
+                store_selection(selection)
+            stored = plistlib.loads(subprocess.check_output(["defaults", "export", domain, "-"]))
+            profile_root = roots[root_name]
+            output = profile_root / f"{case_name}.json"
+            url = f"http://127.0.0.1:{server.server_port}/?language={language}&phase={phase}&case={case_name}"
+            arguments = [
+                str(executable), "--probe-data-dir", str(profile_root), "--probe-url", url,
+                "--probe-phase", phase, "--probe-output", str(output), "--probe-localization",
+            ]
+            environment = safe_environment()
+            environment["ARDIA_DOWNLOADS_DIR"] = str(profile_root / "Downloads")
+            environment["ARDIA_BACKGROUND"] = "picture-in-picture"
+            (profile_root / "Downloads").mkdir(mode=0o700, exist_ok=True)
+            completed = subprocess.run(
+                arguments, cwd=ROOT, env=environment, capture_output=True, text=True,
+                timeout=240,
+            )
+            if completed.returncode != 0 or not output.exists():
+                raise RuntimeError(
+                    f"{language} {phase} engine probe failed ({completed.returncode}): "
+                    f"{redact(completed.stderr[-1200:])}"
                 )
-                if completed.returncode != 0 or not output.exists():
-                    raise RuntimeError(
-                        f"{language} {phase} engine probe failed ({completed.returncode}): "
-                        f"{redact(completed.stderr[-1200:])}"
-                    )
-                report = json.loads(output.read_text(encoding="utf-8"))
-                deadline = time.monotonic() + 15
-                while case_name not in state.documents and time.monotonic() < deadline:
-                    time.sleep(0.05)
-                requests = state.requests.get(case_name, [])
-                document = state.documents.get(case_name)
-                expected_direction = "rtl" if language == "he" else "ltr"
-                if not report.get("passed") or report.get("probeMode") != "localization-only":
-                    raise RuntimeError(f"{language} {phase}: probe report failed or wrong mode")
-                if not requests or not all(
-                    value.split(",", 1)[0].strip().split("-", 1)[0] == language for value in requests
-                ):
-                    raise RuntimeError(f"{language} {phase}: loopback Accept-Language mismatch")
-                if not isinstance(document, dict) or document.get("language") != language:
-                    raise RuntimeError(f"{language} {phase}: browser language receipt missing/mismatched")
-                if document.get("htmlLanguage") != language or document.get("htmlDirection") != expected_direction:
-                    raise RuntimeError(f"{language} {phase}: fixture document lang/dir mismatch")
-                reports.append({"case": case_name, "language": language, "phase": phase,
-                                "profileRelation": relation,
-                                "acceptLanguage": sorted(set(requests)),
-                                "checks": report.get("checks", [])})
-                print(f"{case_name}: navigator, document direction, Accept-Language passed")
+            report = json.loads(output.read_text(encoding="utf-8"))
+            deadline = time.monotonic() + 15
+            while case_name not in state.documents and time.monotonic() < deadline:
+                time.sleep(0.05)
+            requests = state.requests.get(case_name, [])
+            document = state.documents.get(case_name)
+            expected_direction = "rtl" if language == "he" else "ltr"
+            if not report.get("passed") or report.get("probeMode") != "localization-only":
+                raise RuntimeError(f"{language} {phase}: probe report failed or wrong mode")
+            if len(requests) < 2 or not all(
+                value.split(",", 1)[0].strip().split("-", 1)[0] == language for value in requests
+            ):
+                raise RuntimeError(f"{language} {phase}: loopback Accept-Language mismatch")
+            if not isinstance(document, dict) or document.get("language") != language:
+                raise RuntimeError(f"{language} {phase}: browser language receipt missing/mismatched")
+            if document.get("htmlLanguage") != language or document.get("htmlDirection") != expected_direction:
+                raise RuntimeError(f"{language} {phase}: fixture document lang/dir mismatch")
+            reports.append({"case": case_name, "language": language, "phase": phase,
+                            "profileRelation": relation,
+                            "storedSelection": stored.get("BrowserLanguage.selection"),
+                            "storedAppleLanguages": stored.get("AppleLanguages"),
+                            "acceptLanguage": sorted(set(requests)),
+                            "checks": report.get("checks", [])})
+            print(f"{case_name}: persisted choice, navigator, direction, Accept-Language passed")
         receipt = outer / "localization-evidence.json"
         receipt.write_text(json.dumps(reports, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         artifact = ROOT / "build/Verification/localization-engine-evidence"
@@ -215,6 +249,8 @@ def run():
     finally:
         server.shutdown()
         server.server_close()
+        subprocess.run(["defaults", "delete", domain], capture_output=True, check=False)
+        shutil.rmtree(isolated_app)
 
 
 if __name__ == "__main__":

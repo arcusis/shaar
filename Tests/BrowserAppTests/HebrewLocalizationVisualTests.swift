@@ -19,6 +19,16 @@ final class HebrewLocalizationVisualTests: XCTestCase {
       isDirectory: true)
   }
 
+  func testLanguageRestartPromptRendersOffscreen() throws {
+    for (theme, appearance) in [(ColorScheme.light, NSAppearance.Name.aqua), (.dark, .darkAqua)] {
+      try capture(
+        BrowserLanguageRestartPrompt(onRestart: {}).settingsLocalization()
+          .environment(\.colorScheme, theme).padding(24),
+        name: "language-restart-\(theme == .dark ? "dark" : "light").png",
+        size: NSSize(width: 440, height: 160), appearance: appearance)
+    }
+  }
+
   override func setUpWithError() throws {
     let arguments = ProcessInfo.processInfo.arguments
     if let selectionIndex = arguments.firstIndex(of: "-BrowserLanguage.selection") {

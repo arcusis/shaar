@@ -9,6 +9,36 @@ import Testing
 @testable import ShaarVerification
 
 @Suite struct LocalizationProbeTests {
+  @Test @MainActor func languageDispatchPersistsOnlyForOwnedFixtureApplications() throws {
+    let domain = "com.arcusis.localization-fixture.\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: domain))
+    defer { defaults.removePersistentDomain(forName: domain) }
+    for (arguments, identifier) in [
+      ([String](), Optional(domain)),
+      (["--probe-store-language"], Optional(domain)),
+      (["--probe-store-language", "fr"], Optional(domain)),
+      (["--probe-store-language", "he"], Optional("com.arcusis.browser")),
+      (["--probe-store-language", "he"], nil),
+    ] {
+      #expect(
+        ShaarVerificationMain.storeLanguage(
+          arguments: arguments, bundleIdentifier: identifier, defaults: defaults, domainName: domain
+        )
+          == nil)
+      #expect(defaults.persistentDomain(forName: domain)?.isEmpty != false)
+    }
+    defaults.set(["he"], forKey: "AppleLanguages")
+    for selection in [BrowserLanguage.english, .hebrew, .systemDefault] {
+      #expect(
+        ShaarVerificationMain.storeLanguage(
+          arguments: ["probe", "--probe-store-language", selection.rawValue],
+          bundleIdentifier: domain, defaults: defaults, domainName: domain) == 0)
+      #expect(defaults.string(forKey: BrowserLanguage.selectionDefaultsKey) == selection.rawValue)
+      #expect(
+        defaults.stringArray(forKey: "AppleLanguages") == [selection == .english ? "en" : "he"])
+    }
+  }
+
   private func evidence(_ language: BrowserLanguage) -> [String: Any] {
     [
       "language": language.localeIdentifier,

@@ -11,6 +11,7 @@ public enum BrowserLanguage: String, CaseIterable, Sendable {
   case hebrew = "he"
 
   public static let selectionDefaultsKey = "BrowserLanguage.selection"
+  private static let systemLanguagesKey = "BrowserLanguage.systemAppleLanguages"
 
   /// Choice persisted for the next launch.
   public static var selection: BrowserLanguage {
@@ -20,12 +21,42 @@ public enum BrowserLanguage: String, CaseIterable, Sendable {
       else { return .systemDefault }
       return value
     }
-    set { UserDefaults.standard.set(newValue.rawValue, forKey: selectionDefaultsKey) }
+    set { store(newValue) }
   }
+
+  /// Keep the override in this app's domain so Cocoa sees it before framework startup.
+  /// Preserve an existing macOS per-app choice while an explicit Shaar choice owns the override.
+  public static func store(
+    _ selection: BrowserLanguage, defaults: UserDefaults = .standard,
+    domainName: String = Bundle.main.bundleIdentifier ?? ProcessInfo.processInfo.processName
+  ) {
+    let domain = defaults.persistentDomain(forName: domainName) ?? [:]
+    if selection == .systemDefault {
+      if let previous = domain[systemLanguagesKey] as? [String] {
+        let owned = domain[selectionDefaultsKey] as? String
+        if domain["AppleLanguages"] as? [String] == owned.map({ [$0] }) {
+          if previous.isEmpty {
+            defaults.removeObject(forKey: "AppleLanguages")
+          } else {
+            defaults.set(previous, forKey: "AppleLanguages")
+          }
+        }
+        defaults.removeObject(forKey: systemLanguagesKey)
+      }
+    } else {
+      if domain[systemLanguagesKey] == nil {
+        defaults.set(domain["AppleLanguages"] as? [String] ?? [], forKey: systemLanguagesKey)
+      }
+      defaults.set([selection.rawValue], forKey: "AppleLanguages")
+    }
+    defaults.set(selection.rawValue, forKey: selectionDefaultsKey)
+  }
+
+  public static let launchSelection = selection
 
   /// Locale chosen once for this process launch.
   public static let currentLaunchLanguage = resolve(
-    selection: selection,
+    selection: launchSelection,
     preferredLanguages: Locale.preferredLanguages)
 
   /// Pin Cocoa and Chromium to resolved launch language without changing persistent preferences.

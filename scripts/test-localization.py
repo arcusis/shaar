@@ -14,7 +14,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SUITES = {"HebrewLocalizationVisualTests": 5, "InspectorLocalizationVisualTests": 1,
+SUITES = {"HebrewLocalizationVisualTests": 6, "InspectorLocalizationVisualTests": 1,
           "InspectorDockWidthTests": 2}
 
 
@@ -59,6 +59,7 @@ def test_runtime():
 
 def expected_captures():
     names = {"space-pager-selected.png", "space-pager-drag.png",
+             "language-restart-light.png", "language-restart-dark.png",
              "sidebar-toggle-windowed.png", "sidebar-toggle-fullscreen.png",
              "private-start-page-light.png", "private-start-page-dark.png"}
     for scheme in ("light", "dark"):

@@ -19,6 +19,7 @@ private final class BrowserSettingsState {
   var onConnectAccount: (UUID, AccountProvider) -> Void = { _, _ in }
   var onDisconnectAccount: (UUID, AccountProvider) -> Void = { _, _ in }
   var onAddProfile: () -> Void = {}
+  var onRestart: (() -> String?)?
 
   init(
     workspace: BrowserWorkspaceStore, preferences: BrowserPreferencesStore,
@@ -167,6 +168,7 @@ private struct BrowserSettingsRoot: View {
       selectedSearchEngine: Binding(
         get: { state.selectedSearchEngine }, set: { _ = state.selectSearchEngine($0) }),
       storageNotice: state.storageNotice,
+      onRestart: state.onRestart,
       onAddProfile: state.onAddProfile,
       onRenameProfile: { state.renameProfile($0, name: $1) },
       onSetProfileColor: { state.setProfileColor($0, to: $1) },
@@ -235,6 +237,10 @@ final class BrowserSettingsController: NSObject {
 
   func setAddProfileHandler(_ handler: @escaping () -> Void) {
     state.onAddProfile = handler
+  }
+
+  func setRestartHandler(_ handler: @escaping () -> String?) {
+    state.onRestart = handler
   }
 
   @discardableResult

@@ -47,8 +47,14 @@ typedef NS_ENUM(NSInteger, ARCPageReloadMode) {
   ARCPageReloadModeNewRenderer,
 };
 
+/// Installs the package localization bundle before engine startup. English literals remain fallback.
+FOUNDATION_EXPORT void ARCConfigureLocalization(NSURL *bundleURL, NSString *languageIdentifier);
+FOUNDATION_EXPORT NSString *ARCBridgeLocalizedString(NSString *message);
+
 /// All methods and callbacks run on the main thread. The engine owns the AppKit run loop.
 @interface ARCChromiumRuntime : NSObject
+/// Set before `runWithDataDirectory:testing:`; configures Chromium UI locale and Accept-Language.
+@property(nonatomic, copy) NSString *languageIdentifier;
 /// Tab-scoped simulations and page diagnostics share the in-process protocol bridge.
 - (BOOL)beginDeveloperSessionForTabID:(NSString *)tabID profileID:(NSString *)profileID windowID:(NSString *)windowID;
 - (void)endDeveloperSessionForTabID:(NSString *)tabID profileID:(NSString *)profileID windowID:(NSString *)windowID;

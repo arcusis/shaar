@@ -24,7 +24,8 @@ extension DeveloperPageModel {
           as? [String: Any]
       else {
         throw DeveloperModeFailure(
-          "Page diagnostics are unavailable. Reload this page and try again.")
+          InspectorToolsL10n.string(
+            "Page diagnostics are unavailable. Reload this page and try again."))
       }
       let capture = try await call(
         "Page.captureScreenshot", params: ["format": "png", "captureBeyondViewport": false])
@@ -33,7 +34,8 @@ extension DeveloperPageModel {
         png.starts(with: [137, 80, 78, 71, 13, 10, 26, 10]),
         destination == target, generation == documentGeneration
       else {
-        throw DeveloperModeFailure("The page changed or its screenshot could not be captured.")
+        throw DeveloperModeFailure(
+          InspectorToolsL10n.string("The page changed or its screenshot could not be captured."))
       }
       let version =
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String

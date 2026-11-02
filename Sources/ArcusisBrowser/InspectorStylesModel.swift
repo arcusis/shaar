@@ -108,7 +108,7 @@ final class InspectorStylesModel {
         return (matched, values)
       }
       guard let rows = values["computedStyle"] as? [[String: Any]] else {
-        throw InspectorFailure("Computed styles are unavailable.")
+        throw InspectorFailure(InspectorL10n.string("Computed styles are unavailable."))
       }
       let nextComputed = rows.prefix(2048).compactMap { row -> InspectorDeclaration? in
         guard let name = row["name"] as? String, name.count <= 128,
@@ -156,7 +156,7 @@ final class InspectorStylesModel {
       failure = nil
     } catch {
       if inspector.documentGeneration == generation, !(error is CancellationError) {
-        failure = error.localizedDescription
+        failure = InspectorL10n.display(error.localizedDescription)
       }
     }
   }
@@ -175,7 +175,7 @@ final class InspectorStylesModel {
       (computed + rules.flatMap(\.declarations)).allSatisfy({
         $0.name.count <= 128 && $0.value.count <= 4110
       })
-    else { throw InspectorFailure("Style data exceeds the supported size.") }
+    else { throw InspectorFailure(InspectorL10n.string("Style data exceeds the supported size.")) }
     self.rules = rules
     self.computed = computed
     selectedID = selectionID
@@ -290,11 +290,12 @@ final class InspectorStylesModel {
         try await inspector.evaluate("globalThis.__shaarInspectorStyles.edit(...\(literal))")
         as? [String: Any]
       guard result?["ok"] as? Bool == true else {
-        throw InspectorFailure(result?["error"] as? String ?? "CSS could not be applied.")
+        throw InspectorFailure(
+          InspectorL10n.display(result?["error"] as? String ?? "CSS could not be applied."))
       }
       await refresh(force: true)
       await inspector.refresh()
-    } catch { failure = error.localizedDescription }
+    } catch { failure = InspectorL10n.display(error.localizedDescription) }
   }
 
   func undo() async {
@@ -303,11 +304,12 @@ final class InspectorStylesModel {
       let result =
         try await inspector.evaluate("globalThis.__shaarInspectorStyles.undo()") as? [String: Any]
       guard result?["ok"] as? Bool == true else {
-        throw InspectorFailure(result?["error"] as? String ?? "CSS could not be restored.")
+        throw InspectorFailure(
+          InspectorL10n.display(result?["error"] as? String ?? "CSS could not be restored."))
       }
       await refresh(force: true)
       await inspector.refresh()
-    } catch { failure = error.localizedDescription }
+    } catch { failure = InspectorL10n.display(error.localizedDescription) }
   }
 
   func clearOverlay(generation: Int? = nil) async {
@@ -375,15 +377,17 @@ final class InspectorStylesModel {
         inspector.selection?.id == identity
       else { throw CancellationError() }
       overlay = true
-    } catch { failure = error.localizedDescription }
+    } catch { failure = InspectorL10n.display(error.localizedDescription) }
   }
 
   func screenshot() async throws -> Data {
-    guard !capturing else { throw InspectorFailure("An element capture is already in progress.") }
+    guard !capturing else {
+      throw InspectorFailure(InspectorL10n.string("An element capture is already in progress."))
+    }
     capturing = true
     defer { capturing = false }
     guard let inspector, let selection = inspector.selection, selection.locked else {
-      throw InspectorFailure("Lock an element first.")
+      throw InspectorFailure(InspectorL10n.string("Lock an element first."))
     }
     let generation = inspector.documentGeneration
     guard
@@ -395,7 +399,8 @@ final class InspectorStylesModel {
       [x, y, width, height, dpr].allSatisfy(\.isFinite), width > 0, height > 0, dpr > 0,
       width * height * 4 <= 16_777_216, max(width, height) * 2 <= 16_384
     else {
-      throw InspectorFailure("Select an element smaller than 16 megapixels at 2×.")
+      throw InspectorFailure(
+        InspectorL10n.string("Select an element smaller than 16 megapixels at 2×."))
     }
     guard inspector.documentGeneration == generation, inspector.selection?.id == selection.id else {
       throw CancellationError()
@@ -419,7 +424,9 @@ final class InspectorStylesModel {
       if hadOverlay { await toggleOverlay() }
       guard let encoded = result["data"] as? String, encoded.count <= 44_739_244,
         let data = Data(base64Encoded: encoded)
-      else { throw InspectorFailure("Chromium could not capture this element.") }
+      else {
+        throw InspectorFailure(InspectorL10n.string("Chromium could not capture this element."))
+      }
       return data
     } catch {
       if inspector.documentGeneration == generation {
@@ -438,7 +445,7 @@ final class InspectorStylesModel {
       panel.nameFieldStringValue = "element@2x.png"
       guard await panel.begin() == .OK, let url = panel.url else { return }
       try data.write(to: url, options: .atomic)
-    } catch { failure = error.localizedDescription }
+    } catch { failure = InspectorL10n.display(error.localizedDescription) }
   }
 
   var exported: [InspectorDeclaration] {

@@ -1,7 +1,7 @@
 {
   "name": "Staged CI and merge queue for production",
   "target": "branch",
-  "enforcement": "disabled",
+  "enforcement": "active",
   "conditions": {
     "ref_name": {"include": ["refs/heads/production"], "exclude": []}
   },

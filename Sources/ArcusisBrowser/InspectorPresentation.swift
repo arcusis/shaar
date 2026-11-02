@@ -14,7 +14,8 @@ import SwiftUI
 
   func copied(_ subject: String) {
     toastTask?.cancel()
-    toast = "Copied \(subject) to clipboard"
+    toast = InspectorL10n.format(
+      "Copied %@ to clipboard", arguments: [.string(InspectorL10n.string(subject))])
     toastTask = Task { [weak self] in
       do { try await Task.sleep(for: .seconds(2.5)) } catch { return }
       self?.toast = nil

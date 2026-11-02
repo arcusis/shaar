@@ -49,7 +49,8 @@ struct InspectorSection<Content: View>: View {
             Text(title).font(.system(size: 11, weight: .semibold))
             Spacer(minLength: 0)
           }.contentShape(Rectangle())
-        }.buttonStyle(.plain).accessibilityValue(isCollapsed ? "Collapsed" : "Expanded")
+        }.buttonStyle(.plain).accessibilityValue(
+          InspectorL10n.string(isCollapsed ? "Collapsed" : "Expanded"))
         if let format {
           Menu {
             ForEach(InspectorColor.Format.allCases, id: \.self) { value in
@@ -59,14 +60,15 @@ struct InspectorSection<Content: View>: View {
                 if value == format.wrappedValue {
                   Label(value.rawValue, systemImage: "checkmark")
                 } else {
-                  Text(value.rawValue)
+                  InspectorL10n.text(value.rawValue)
                 }
               }
             }
           } label: {
             Text(format.wrappedValue.rawValue).font(.system(size: 10, design: .monospaced))
               .foregroundStyle(.secondary)
-          }.menuStyle(.borderlessButton).menuIndicator(.visible).fixedSize().help("Color format")
+          }.menuStyle(.borderlessButton).menuIndicator(.visible).fixedSize().help(
+            InspectorL10n.string("Color format"))
         }
         if code != nil, !isCollapsed {
           HStack(spacing: 1) {
@@ -75,8 +77,11 @@ struct InspectorSection<Content: View>: View {
           }.padding(2).background(.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 4))
         }
         if let copy, !isCode {
-          InspectorIconButton("Copy \(title)", symbol: "doc.on.doc", action: copy)
-            .focused($copyFocused).opacity(hovered || copyFocused ? 1 : 0)
+          InspectorIconButton(
+            InspectorL10n.format("Copy %@", arguments: [.string(title)]), symbol: "doc.on.doc",
+            action: copy
+          )
+          .focused($copyFocused).opacity(hovered || copyFocused ? 1 : 0)
         }
       }.frame(minHeight: 34).padding(.horizontal, 12)
       if !isCollapsed {
@@ -100,13 +105,13 @@ struct InspectorSection<Content: View>: View {
         showingCode = code
       }
     } label: {
-      Text(title).font(.system(size: 10, weight: isCode == code ? .medium : .regular))
+      InspectorL10n.text(title).font(.system(size: 10, weight: isCode == code ? .medium : .regular))
         .foregroundStyle(isCode == code ? .primary : .secondary)
-        .frame(width: 30, height: 18)
+        .padding(.horizontal, 4).frame(minWidth: 30, minHeight: 18)
         .background(
           isCode == code ? Color(nsColor: .controlBackgroundColor) : .clear,
           in: RoundedRectangle(cornerRadius: 3))
-    }.buttonStyle(.plain).help(code ? "Show CSS code" : "Show property list")
+    }.buttonStyle(.plain).help(InspectorL10n.string(code ? "Show CSS code" : "Show property list"))
       .accessibilityAddTraits(isCode == code ? .isSelected : [])
   }
 }
@@ -121,7 +126,9 @@ struct InspectorCodeBlock: View {
         Text("CSS").font(.system(size: 9, weight: .medium, design: .monospaced)).foregroundStyle(
           .tertiary)
         Spacer()
-        if let copy { InspectorIconButton("Copy code", symbol: "doc.on.doc", action: copy) }
+        if let copy {
+          InspectorIconButton(InspectorL10n.string("Copy code"), symbol: "doc.on.doc", action: copy)
+        }
       }.padding(.horizontal, 9).frame(height: 27)
       ScrollView([.horizontal, .vertical]) {
         VStack(alignment: .leading, spacing: 3) {
@@ -160,13 +167,15 @@ struct InspectorProperty: View {
       Text(title).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
       Spacer(minLength: 4)
       Text(value).font(.system(size: 11, design: .monospaced)).lineLimit(1).truncationMode(.middle)
+        .environment(\.layoutDirection, .leftToRight)
       Button {
         copy(value)
       } label: {
         Image(systemName: "doc.on.doc").font(.system(size: 10))
       }
       .buttonStyle(.plain).focused($copyFocused).opacity(hovered || copyFocused ? 1 : 0)
-      .accessibilityLabel("Copy \(copyLabel)").help("Copy \(copyLabel)")
+      .accessibilityLabel(InspectorL10n.format("Copy %@", arguments: [.string(copyLabel)]))
+      .help(InspectorL10n.format("Copy %@", arguments: [.string(copyLabel)]))
     }.frame(minHeight: 24).contentShape(Rectangle()).onHover { hovered = $0 }.help(value)
   }
 }
@@ -196,15 +205,20 @@ struct InspectorSwatch: View {
           }
           .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(.primary.opacity(0.14)))
           .frame(width: 21, height: 21)
-        Text(swatch.label).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+        Text(InspectorL10n.display(swatch.label)).font(.system(size: 11)).foregroundStyle(
+          .secondary
+        ).lineLimit(1)
         Spacer(minLength: 4)
-        Text(swatch.value.formatted(format)).font(.system(size: 11, design: .monospaced))
-          .lineLimit(1).truncationMode(.middle)
+        Text(swatch.value.formatted(format)).environment(\.layoutDirection, .leftToRight).font(
+          .system(size: 11, design: .monospaced)
+        )
+        .lineLimit(1).truncationMode(.middle)
         Text("\(Int(((swatch.value.rgba.last ?? 1) * 100).rounded()))%")
           .font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
           .frame(minWidth: 28, alignment: .trailing)
       }.frame(minHeight: 29).contentShape(Rectangle())
-    }.buttonStyle(.plain).help("Copy \(swatch.label)")
+    }.buttonStyle(.plain).help(
+      InspectorL10n.format("Copy %@", arguments: [.string(InspectorL10n.display(swatch.label))]))
   }
 }
 

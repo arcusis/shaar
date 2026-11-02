@@ -122,7 +122,10 @@ enum BugReportArchive {
       let manager = FileManager.default
       guard files.values.reduce(0, { $0 + $1.count }) <= 64 * 1024 * 1024,
         files.keys.allSatisfy({ !$0.contains("/") && !$0.contains("..") && !$0.isEmpty })
-      else { throw DeveloperModeFailure("The report exceeds its supported size.") }
+      else {
+        throw DeveloperModeFailure(
+          InspectorToolsL10n.string("The report exceeds its supported size."))
+      }
       let id = UUID().uuidString
       let staging = manager.temporaryDirectory.appending(path: "shaar-bug-report-" + id)
       let partial = directory.appending(path: ".Shaar-Bug-Report-" + id + ".zip")
@@ -147,7 +150,8 @@ enum BugReportArchive {
       try process.run()
       process.waitUntilExit()
       guard process.terminationStatus == 0 else {
-        throw DeveloperModeFailure("The bug report could not be archived.")
+        throw DeveloperModeFailure(
+          InspectorToolsL10n.string("The bug report could not be archived."))
       }
       try manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: partial.path)
       try manager.moveItem(at: partial, to: output)

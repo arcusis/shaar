@@ -23,7 +23,12 @@ struct InspectorBoxModel: View {
     }.frame(height: 142).environment(\.layoutDirection, .leftToRight)
       .accessibilityElement(children: .contain)
       .accessibilityLabel(
-        "Box model. Content \(InspectorColor.number(box.contentWidth.rounded())) by \(InspectorColor.number(box.contentHeight.rounded())) pixels."
+        InspectorL10n.format(
+          "Box model. Content %@ by %@ pixels.",
+          arguments: [
+            .string(InspectorColor.number(box.contentWidth.rounded())),
+            .string(InspectorColor.number(box.contentHeight.rounded())),
+          ])
       )
   }
 
@@ -37,7 +42,8 @@ struct InspectorBoxModel: View {
             RoundedRectangle(cornerRadius: 2).strokeBorder(
               .primary.opacity(0.13),
               style: StrokeStyle(lineWidth: 0.5, dash: name == "margin" ? [3, 2] : [])))
-        Text(name).font(.system(size: 9)).foregroundStyle(.tertiary).offset(x: 5, y: 3)
+        InspectorL10n.text(name.capitalized).font(.system(size: 9)).foregroundStyle(.tertiary)
+          .offset(x: 5, y: 3)
         if values.count == 4 {
           value(values[0], region: name, index: 0).position(x: width / 2, y: 10)
           value(values[1], region: name, index: 1).position(x: width - 10, y: height / 2)
@@ -60,7 +66,14 @@ struct InspectorBoxModel: View {
       .background(
         .primary.opacity(hovered == key ? 0.08 : 0), in: RoundedRectangle(cornerRadius: 3)
       )
-      .contentShape(Rectangle()).help("\(region) \(side): \(raw)")
+      .contentShape(Rectangle()).help(
+        InspectorL10n.format(
+          "%@ %@: %@",
+          arguments: [
+            .string(InspectorL10n.string(region.capitalized)),
+            .string(InspectorL10n.string(side.capitalized)), .string(raw),
+          ])
+      )
       .onHover { active in
         if active { hovered = key } else if hovered == key { hovered = nil }
         highlight?(region, index, active)

@@ -8,6 +8,10 @@ import SwiftUI
 struct PrivateHTTPWarning: ViewModifier {
   weak var store: PrivateBrowserStore?
 
+  private var hostForLocalization: String {
+    "\u{2066}\(store?.pendingHTTP?.host() ?? ShellL10n.string("this site"))\u{2069}"
+  }
+
   var isPresented: Binding<Bool> {
     Binding(
       get: { store?.pendingHTTP != nil },
@@ -15,14 +19,21 @@ struct PrivateHTTPWarning: ViewModifier {
   }
 
   func body(content: Content) -> some View {
-    content.alert("This connection would use HTTP", isPresented: isPresented) {
-      Button("Try HTTPS") { confirm(useHTTPS: true) }
-      Button("Continue with HTTP", role: .destructive) { confirm(useHTTPS: false) }
-      Button("Cancel", role: .cancel) { cancel() }
+    content.alert(
+      ShellL10n.text("This connection would use HTTP"), isPresented: isPresented
+    ) {
+      Button(ShellL10n.string("Try HTTPS")) { confirm(useHTTPS: true) }
+      Button(ShellL10n.string("Continue with HTTP"), role: .destructive) {
+        confirm(useHTTPS: false)
+      }
+      Button(ShellL10n.string("Cancel"), role: .cancel) { cancel() }
     } message: {
       Text(
-        "HTTP does not encrypt your connection to \(store?.pendingHTTP?.host() ?? "this site"). This warning covers addresses opened here. The engine cannot enforce HTTPS across page links and redirects."
-      )
+        ShellL10n.format(
+          "HTTP does not encrypt your connection to %1$@. This warning covers addresses opened here. The engine cannot enforce HTTPS across page links and redirects.",
+          arguments: [
+            .string(hostForLocalization)
+          ]))
     }
   }
 

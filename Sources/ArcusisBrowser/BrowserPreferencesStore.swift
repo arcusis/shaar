@@ -101,12 +101,16 @@ final class BrowserPreferencesStore {
       defer { try? handle.close() }
       let data = try handle.read(upToCount: Self.maximumFileSize + 1) ?? Data()
       guard data.count <= Self.maximumFileSize else {
-        preserveWithNotice("Saved preferences exceed the supported size; original file preserved.")
+        preserveWithNotice(
+          SettingsL10n.string(
+            "Saved preferences exceed the supported size; original file preserved."))
         return
       }
       let document = try JSONDecoder().decode(PreferencesDocument.self, from: data)
       guard document.version == 1 || document.version == 2 else {
-        preserveWithNotice("Saved preferences use an unsupported version; original file preserved.")
+        preserveWithNotice(
+          SettingsL10n.string(
+            "Saved preferences use an unsupported version; original file preserved."))
         return
       }
       sidebarInitiallyVisible = document.sidebarInitiallyVisible
@@ -116,7 +120,9 @@ final class BrowserPreferencesStore {
       autoPictureInPictureOffSites = document.autoPictureInPictureOffSites
       developerSimulations = document.developerSimulations
     } catch {
-      preserveWithNotice("Saved preferences are invalid or unreadable; original file preserved.")
+      preserveWithNotice(
+        SettingsL10n.string("Saved preferences are invalid or unreadable; original file preserved.")
+      )
     }
   }
 
@@ -146,7 +152,8 @@ final class BrowserPreferencesStore {
       encoder.outputFormatting = [.sortedKeys]
       let data = try encoder.encode(document)
       guard data.count <= Self.maximumFileSize else {
-        storageNotice = "Preferences changed in memory but exceed the supported storage size."
+        storageNotice = SettingsL10n.string(
+          "Preferences changed in memory but exceed the supported storage size.")
         return
       }
       try data.write(to: fileURL, options: .atomic)
@@ -154,8 +161,9 @@ final class BrowserPreferencesStore {
         [.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
       storageNotice = nil
     } catch {
-      storageNotice =
+      storageNotice = SettingsL10n.string(
         "Preferences changed in memory but could not be saved. Try again after fixing storage access."
+      )
     }
   }
 }

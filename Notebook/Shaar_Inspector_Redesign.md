@@ -36,3 +36,5 @@ The [capture receipt](Assets/Shaar_Inspector_Redesign/capture.json) pins the tes
 | Code | [PNG](Assets/Shaar_Inspector_Redesign/code-320-light.png) | [PNG](Assets/Shaar_Inspector_Redesign/code-320-dark.png) | [PNG](Assets/Shaar_Inspector_Redesign/code-420-light.png) | [PNG](Assets/Shaar_Inspector_Redesign/code-420-dark.png) |
 | Notes | [PNG](Assets/Shaar_Inspector_Redesign/notes-320-light.png) | [PNG](Assets/Shaar_Inspector_Redesign/notes-320-dark.png) | [PNG](Assets/Shaar_Inspector_Redesign/notes-420-light.png) | [PNG](Assets/Shaar_Inspector_Redesign/notes-420-dark.png) |
 | Copy Menu | [PNG](Assets/Shaar_Inspector_Redesign/copy-menu-320-light.png) | [PNG](Assets/Shaar_Inspector_Redesign/copy-menu-320-dark.png) | [PNG](Assets/Shaar_Inspector_Redesign/copy-menu-420-light.png) | [PNG](Assets/Shaar_Inspector_Redesign/copy-menu-420-dark.png) |
+
+Hebrew presentation uses the Inspector catalog while export formats remain data. Section state uses stable English identifiers. Copy-menu geometry stays in physical LTR coordinates, with its content following the launch language; isolated English/Hebrew captures assert tabs and menus stay within both dock widths.

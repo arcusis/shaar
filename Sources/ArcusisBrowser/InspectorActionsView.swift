@@ -15,19 +15,19 @@ struct InspectorActionsView: View {
         } label: {
           HStack(spacing: 5) {
             Image(systemName: "doc.on.clipboard").font(.system(size: 10))
-            Text(model.aiCopy.busy ? "Copying…" : "Copy for AI")
+            Text(InspectorL10n.string(model.aiCopy.busy ? "Copying…" : "Copy for AI"))
               .font(.system(size: 11, weight: .medium))
           }.padding(.horizontal, 8).frame(height: 27)
         }.buttonStyle(.plain).disabled(!model.aiCopy.canCopy)
-          .help("Copy context and screenshot (Command-Shift-C)")
+          .help(InspectorL10n.string("Copy context and screenshot (Command-Shift-C)"))
         Rectangle().fill(.primary.opacity(0.12)).frame(width: 0.5, height: 15)
         Button {
           model.presentation.copyMenuOpen.toggle()
         } label: {
           Image(systemName: "chevron.down").font(.system(size: 8, weight: .medium))
             .frame(width: 25, height: 27).contentShape(Rectangle())
-        }.buttonStyle(.plain).disabled(model.aiCopy.busy).help("Copy options")
-          .accessibilityLabel("Copy options")
+        }.buttonStyle(.plain).disabled(model.aiCopy.busy).help(InspectorL10n.string("Copy options"))
+          .accessibilityLabel(InspectorL10n.string("Copy options"))
       }
       .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 5))
       .overlay(
@@ -41,18 +41,22 @@ struct InspectorActionsView: View {
       Spacer(minLength: 0)
       Menu {
         if let selection = model.selection {
-          Button("CSS selector") { model.copy(selection.css, label: "CSS selector") }
-          Button("Playwright locator") {
+          Button(InspectorL10n.string("CSS selector")) {
+            model.copy(selection.css, label: "CSS selector")
+          }
+          Button(InspectorL10n.string("Playwright locator")) {
             model.copy(selection.playwright, label: "Playwright locator")
           }
-          Button("XPath") { model.copy(selection.xpath, label: "XPath") }
-          Button("JS path") { model.copy(selection.jsPath, label: "JS path") }
+          Button(InspectorL10n.string("XPath")) { model.copy(selection.xpath, label: "XPath") }
+          Button(InspectorL10n.string("JS path")) { model.copy(selection.jsPath, label: "JS path") }
         }
       } label: {
-        Text("Copy selector").font(.system(size: 11)).foregroundStyle(.secondary)
+        Text(InspectorL10n.string("Copy selector")).font(.system(size: 11)).foregroundStyle(
+          .secondary)
       }.menuStyle(.borderlessButton).menuIndicator(.visible).fixedSize()
-        .disabled(model.selection == nil || model.aiCopy.busy).help("Copy selector")
-      InspectorIconButton("Save element at 2×", symbol: "camera") {
+        .disabled(model.selection == nil || model.aiCopy.busy).help(
+          InspectorL10n.string("Copy selector"))
+      InspectorIconButton(InspectorL10n.string("Save element at 2×"), symbol: "camera") {
         Task { await model.styles.saveScreenshot() }
       }.disabled(model.selection?.locked != true || model.aiCopy.busy)
     }
@@ -81,20 +85,21 @@ struct InspectorCopyMenu: View {
         HStack(spacing: 8) {
           Image(systemName: "checkmark").font(.system(size: 10, weight: .semibold))
             .opacity(model.aiCopy.detailed ? 1 : 0).frame(width: 14)
-          Text("Detailed").font(.system(size: 11))
+          Text(InspectorL10n.string("Detailed")).font(.system(size: 11))
           Spacer()
         }.padding(.horizontal, 8).frame(height: 27).contentShape(Rectangle())
       }.buttonStyle(InspectorMenuItemStyle()).help(
-        "Include computed styles, CSS rules and page diagnostics"
+        InspectorL10n.string("Include computed styles, CSS rules and page diagnostics")
       )
-      .accessibilityValue(model.aiCopy.detailed ? "On" : "Off")
+      .accessibilityValue(InspectorL10n.string(model.aiCopy.detailed ? "On" : "Off"))
     }.padding(5)
       .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
       .overlay(
         RoundedRectangle(cornerRadius: 6).strokeBorder(.primary.opacity(0.14), lineWidth: 0.5)
       )
       .shadow(color: .black.opacity(0.17), radius: 8, y: 3)
-      .accessibilityElement(children: .contain).accessibilityLabel("Copy options")
+      .accessibilityElement(children: .contain).accessibilityLabel(
+        InspectorL10n.string("Copy options"))
   }
 
   private func perform(_ kind: InspectorAICopyModel.CopyKind) {
@@ -109,7 +114,7 @@ struct InspectorCopyMenu: View {
       HStack(spacing: 8) {
         Image(systemName: symbol).font(.system(size: 10)).foregroundStyle(.secondary).frame(
           width: 14)
-        Text(title).font(.system(size: 11))
+        InspectorL10n.text(title).font(.system(size: 11))
         Spacer()
       }.padding(.horizontal, 8).frame(height: 27).contentShape(Rectangle())
     }.buttonStyle(InspectorMenuItemStyle()).disabled(!enabled)

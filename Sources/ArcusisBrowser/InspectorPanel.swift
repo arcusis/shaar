@@ -47,7 +47,7 @@ struct InspectorPanel: View {
             Color.clear.contentShape(Rectangle()).onTapGesture {
               model.presentation.copyMenuOpen = false
             }
-            InspectorCopyMenu(model: model).frame(width: width)
+            InspectorCopyMenu(model: model).inspectorLocalization().frame(width: width)
               .offset(
                 x: max(
                   12, min(copyButtonFrame.minX, geometry.size.width - width - 12)
@@ -61,7 +61,7 @@ struct InspectorPanel: View {
                 layout?.copyMenuFrame = $0
               }
           }.frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
+        }.environment(\.layoutDirection, .leftToRight)
       }
     }
     .overlay(alignment: .bottom) {
@@ -79,20 +79,23 @@ struct InspectorPanel: View {
       }
     }
     .onMoveCommand(perform: moveAction)
+    .inspectorLocalization()
   }
 
   private var header: some View {
     HStack(spacing: 7) {
       Image(systemName: "viewfinder").font(.system(size: 12)).foregroundStyle(.secondary)
-      Text("Inspector").font(.system(size: 12, weight: .semibold))
+      Text(InspectorL10n.string("Inspector")).font(.system(size: 12, weight: .semibold))
       Spacer()
-      InspectorIconButton("Pick an element", symbol: "cursorarrow.rays", action: model.pick)
       InspectorIconButton(
-        model.mode == .locked ? "Unlock element" : "Lock element",
+        InspectorL10n.string("Pick an element"), symbol: "cursorarrow.rays", action: model.pick)
+      InspectorIconButton(
+        InspectorL10n.string(model.mode == .locked ? "Unlock element" : "Lock element"),
         symbol: model.mode == .locked ? "lock.fill" : "lock.open", action: model.toggleLock
       )
       .disabled(model.selection == nil || model.panelMode == .page)
-      InspectorIconButton("Close Inspector", symbol: "xmark", action: model.close)
+      InspectorIconButton(
+        InspectorL10n.string("Close Inspector"), symbol: "xmark", action: model.close)
     }.padding(.horizontal, 12).frame(height: 34)
   }
 
@@ -102,7 +105,7 @@ struct InspectorPanel: View {
         Button {
           model.setPanelMode(value)
         } label: {
-          Text(value.rawValue).font(
+          InspectorL10n.text(value.rawValue).font(
             .system(size: 11, weight: model.panelMode == value ? .medium : .regular)
           )
           .foregroundStyle(model.panelMode == value ? .primary : .secondary)
@@ -113,7 +116,7 @@ struct InspectorPanel: View {
         }.buttonStyle(.plain).accessibilityAddTraits(model.panelMode == value ? .isSelected : [])
       }
     }.padding(2).background(.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 6))
-      .accessibilityLabel("Inspector mode")
+      .accessibilityLabel(InspectorL10n.string("Inspector mode"))
   }
 
   private func elementHeader(_ selection: InspectorSelection) -> some View {
@@ -122,11 +125,13 @@ struct InspectorPanel: View {
         Text(elementChip(selection)).font(.system(size: 11, weight: .medium, design: .monospaced))
           .lineLimit(1).truncationMode(.middle).padding(.horizontal, 6).padding(.vertical, 3)
           .background(.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 4)).help(
-            String(elementChip(selection).characters))
+            String(elementChip(selection).characters)
+          )
+          .environment(\.layoutDirection, .leftToRight)
         Spacer(minLength: 0)
         Text(selection.dimensions).font(.system(size: 10, design: .monospaced)).foregroundStyle(
           .secondary
-        ).fixedSize()
+        ).fixedSize().environment(\.layoutDirection, .leftToRight)
       }
       if let component = selection.component, InspectorAIFormatter.readableComponent(component) {
         Label(component, systemImage: "cube").font(.system(size: 11)).foregroundStyle(.secondary)
@@ -170,7 +175,7 @@ struct InspectorPanel: View {
           HStack(spacing: 4) {
             Image(systemName: symbol(value)).font(.system(size: 10))
             if width >= 400 {
-              Text(value.rawValue).font(.system(size: 11)).lineLimit(1).fixedSize()
+              InspectorL10n.text(value.rawValue).font(.system(size: 11)).lineLimit(1).fixedSize()
             }
           }.fontWeight(model.tab == value ? .semibold : .regular)
             .foregroundStyle(model.tab == value ? .primary : .secondary)
@@ -183,15 +188,20 @@ struct InspectorPanel: View {
                 Rectangle().fill(.primary.opacity(0.8)).frame(height: 2).padding(.horizontal, 7)
               }
             }
-        }.buttonStyle(.plain).help(value.rawValue).accessibilityLabel(value.rawValue)
-          .accessibilityAddTraits(model.tab == value ? .isSelected : [])
-          .onGeometryChange(for: CGRect.self) {
-            $0.frame(in: .named("InspectorPanel"))
-          } action: {
-            layout?.tabFrames[value.rawValue] = $0
-          }
+        }.buttonStyle(.plain).help(
+          InspectorL10n.string(value == .accessibility ? "Accessibility" : value.rawValue)
+        ).accessibilityLabel(
+          InspectorL10n.string(value == .accessibility ? "Accessibility" : value.rawValue)
+        )
+        .accessibilityAddTraits(model.tab == value ? .isSelected : [])
+        .onGeometryChange(for: CGRect.self) {
+          $0.frame(in: .named("InspectorPanel"))
+        } action: {
+          layout?.tabFrames[value.rawValue] = $0
+        }
       }
-    }.frame(maxWidth: .infinity).padding(.horizontal, 6).accessibilityLabel("Inspector section")
+    }.frame(maxWidth: .infinity).padding(.horizontal, 6).accessibilityLabel(
+      InspectorL10n.string("Inspector section"))
   }
 
   private func symbol(_ tab: InspectorModel.Tab) -> String {
@@ -222,7 +232,9 @@ struct InspectorPanel: View {
                 .background(
                   .primary.opacity(ancestor.id == selection.id ? 0.05 : 0),
                   in: RoundedRectangle(cornerRadius: 3))
-            }.buttonStyle(.plain).help("Inspect \(ancestor.label)").id(ancestor.id)
+            }.buttonStyle(.plain).help(
+              InspectorL10n.format("Inspect %@", arguments: [.string(ancestor.label)])
+            ).id(ancestor.id)
           }
         }.fixedSize(horizontal: true, vertical: false)
       }.frame(height: 23).environment(\.layoutDirection, .leftToRight)
@@ -248,9 +260,12 @@ struct InspectorPanel: View {
       VStack(spacing: 10) {
         Image(systemName: "cursorarrow.rays").font(.system(size: 24, weight: .light))
           .foregroundStyle(.tertiary)
-        Text("Inspect any element").font(.system(size: 13, weight: .medium))
-        Text("Hover to preview. Click to lock.\nUse arrow keys to explore the DOM.")
-          .font(.system(size: 11)).foregroundStyle(.secondary).multilineTextAlignment(.center)
+        Text(InspectorL10n.string("Inspect any element")).font(.system(size: 13, weight: .medium))
+        Text(
+          InspectorL10n.string(
+            "Hover to preview. Click to lock.\nUse arrow keys to explore the DOM.")
+        )
+        .font(.system(size: 11)).foregroundStyle(.secondary).multilineTextAlignment(.center)
       }.frame(maxWidth: .infinity, maxHeight: .infinity).padding(24)
     }
   }
@@ -259,14 +274,14 @@ struct InspectorPanel: View {
     HStack(spacing: 4) {
       InspectorKeycap(key: "↑")
       InspectorKeycap(key: "↓")
-      Text("Parent / child").font(.system(size: 10))
+      Text(InspectorL10n.string("Parent / child")).font(.system(size: 10))
       Spacer(minLength: 2)
       InspectorKeycap(key: "←")
       InspectorKeycap(key: "→")
-      Text("Siblings").font(.system(size: 10))
+      Text(InspectorL10n.string("Siblings")).font(.system(size: 10))
       Spacer(minLength: 2)
       InspectorKeycap(key: "esc")
-      Text("Exit").font(.system(size: 10))
+      Text(InspectorL10n.string("Exit")).font(.system(size: 10))
     }.foregroundStyle(.secondary).padding(.horizontal, 10).frame(height: 29)
       .environment(\.layoutDirection, .leftToRight)
   }

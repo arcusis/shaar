@@ -37,7 +37,7 @@ final class InspectorAICopyModel {
     let includeDetails = captureDetails ?? detailed
     guard let inspector, inspector.isOpen, let selection = inspector.selection, selection.locked
     else {
-      throw InspectorFailure("Lock an element first.")
+      throw InspectorFailure(InspectorL10n.string("Lock an element first."))
     }
     let generation = inspector.documentGeneration
     _ = try await inspector.evaluate(InspectorAICopyScript.install)
@@ -45,14 +45,16 @@ final class InspectorAICopyModel {
       let raw = try await inspector.evaluate(
         "globalThis.__shaarInspectorCopy.context(\(selection.id))")
     else {
-      throw InspectorFailure("Element context is unavailable.")
+      throw InspectorFailure(InspectorL10n.string("Element context is unavailable."))
     }
     let data = try JSONSerialization.data(withJSONObject: raw)
     guard data.count < 524_288 else {
-      throw InspectorFailure("Element context exceeds the copy limit.")
+      throw InspectorFailure(InspectorL10n.string("Element context exceeds the copy limit."))
     }
     var context = try JSONDecoder().decode(Formatter.Context.self, from: data)
-    guard context.valid else { throw InspectorFailure("Choose an element outside form controls.") }
+    guard context.valid else {
+      throw InspectorFailure(InspectorL10n.string("Choose an element outside form controls."))
+    }
     if inspector.details.selectedID == selection.id {
       context.source = inspector.details.component?.source ?? context.source
       if let tree = inspector.details.tree, let selected = tree.selected {
@@ -73,7 +75,8 @@ final class InspectorAICopyModel {
     if includeDetails {
       await inspector.styles.refresh(force: true)
       guard inspector.styles.selectedID == selection.id, inspector.styles.failure == nil else {
-        throw InspectorFailure(inspector.styles.failure ?? "Computed styles are unavailable.")
+        throw InspectorFailure(
+          inspector.styles.failure ?? InspectorL10n.string("Computed styles are unavailable."))
       }
       context.details.computed = inspector.styles.computed.map {
         .init(name: $0.name, value: $0.value)
@@ -105,7 +108,9 @@ final class InspectorAICopyModel {
     guard literal.utf8.count <= 2_097_152,
       let safe = try await inspector.evaluate(
         "globalThis.__shaarInspectorCopy.sanitize(\(literal))")
-    else { throw InspectorFailure("Detailed context exceeds the copy limit.") }
+    else {
+      throw InspectorFailure(InspectorL10n.string("Detailed context exceeds the copy limit."))
+    }
     let envelope = try JSONDecoder().decode(
       Envelope.self, from: JSONSerialization.data(withJSONObject: safe))
     context = envelope.context
@@ -140,7 +145,7 @@ final class InspectorAICopyModel {
         let token = try await inspector.evaluate(
           "globalThis.__shaarInspectorCopy.begin(\(context.id))") as? String
       else {
-        throw InspectorFailure("The private element capture could not start.")
+        throw InspectorFailure(InspectorL10n.string("The private element capture could not start."))
       }
       let tokenJSON = String(data: try JSONEncoder().encode(token), encoding: .utf8)!
       let png: Data
@@ -153,7 +158,8 @@ final class InspectorAICopyModel {
         try await inspector.evaluate("globalThis.__shaarInspectorCopy?.end(\(tokenJSON))") as? Bool
           == true
       else {
-        throw InspectorFailure("The page changed during the private capture. Try again.")
+        throw InspectorFailure(
+          InspectorL10n.string("The page changed during the private capture. Try again."))
       }
       guard operation == revision, inspector.isOpen, inspector.documentGeneration == generation,
         inspector.selection?.id == context.id
@@ -164,9 +170,12 @@ final class InspectorAICopyModel {
         markdown += "\n" + Formatter.notes(notes, detailed: includeDetails)
       }
       try Self.write(kind == .image ? nil : markdown, png: png, to: pasteboard)
-      status = kind == .image ? "Copied image to clipboard" : "Copied element to clipboard"
+      status = InspectorL10n.string(
+        kind == .image ? "Copied image to clipboard" : "Copied element to clipboard")
       inspector.presentation.copied(kind == .image ? "image" : "element")
-    } catch { if operation == revision { failure = error.localizedDescription } }
+    } catch {
+      if operation == revision { failure = InspectorL10n.display(error.localizedDescription) }
+    }
   }
 
   func addNote() async {
@@ -184,8 +193,10 @@ final class InspectorAICopyModel {
       guard operation == revision else { throw CancellationError() }
       append(context: value, feedback: comment, intent: selectedIntent)
       if feedback == comment { feedback = "" }
-      status = "Note added"
-    } catch { if operation == revision { failure = error.localizedDescription } }
+      status = InspectorL10n.string("Note added")
+    } catch {
+      if operation == revision { failure = InspectorL10n.display(error.localizedDescription) }
+    }
   }
 
   func append(context: Formatter.Context, feedback: String, intent: Formatter.Intent) {
@@ -203,7 +214,7 @@ final class InspectorAICopyModel {
     guard !notes.isEmpty else { return }
     clearedNotes = notes
     notes = []
-    status = "Notes cleared"
+    status = InspectorL10n.string("Notes cleared")
   }
   func undoClear() {
     let existing = Set(notes.map(\.id))
@@ -213,7 +224,8 @@ final class InspectorAICopyModel {
     clearedNotes = Array(candidates.dropFirst(restored.count))
     status =
       clearedNotes.isEmpty
-      ? "Notes restored" : "Delete a note to restore the remaining cleared notes."
+      ? InspectorL10n.string("Notes restored")
+      : InspectorL10n.string("Delete a note to restore the remaining cleared notes.")
   }
 
   func copyNotes(to pasteboard: NSPasteboard = .general) {
@@ -221,9 +233,9 @@ final class InspectorAICopyModel {
     do {
       try Self.write(Formatter.notes(notes, detailed: detailed), png: nil, to: pasteboard)
       clear()
-      status = "Copied notes to clipboard"
+      status = InspectorL10n.string("Copied notes to clipboard")
       inspector?.presentation.copied("notes")
-    } catch { failure = error.localizedDescription }
+    } catch { failure = InspectorL10n.display(error.localizedDescription) }
   }
   static func write(_ markdown: String?, png: Data?, to pasteboard: NSPasteboard) throws {
     let text = NSPasteboardItem()
@@ -234,13 +246,13 @@ final class InspectorAICopyModel {
     if let png {
       guard png.starts(with: [137, 80, 78, 71, 13, 10, 26, 10]), NSBitmapImageRep(data: png) != nil
       else {
-        throw InspectorFailure("The element image is invalid.")
+        throw InspectorFailure(InspectorL10n.string("The element image is invalid."))
       }
       text.setData(png, forType: .png)
     }
     pasteboard.clearContents()
     guard pasteboard.writeObjects([text]) else {
-      throw InspectorFailure("The clipboard could not be written.")
+      throw InspectorFailure(InspectorL10n.string("The clipboard could not be written."))
     }
   }
 }

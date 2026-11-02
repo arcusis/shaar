@@ -42,6 +42,11 @@ class BundleAppTests(unittest.TestCase):
         icon.parent.mkdir(parents=True)
         shutil.copy2(ICON, icon)
         shutil.copytree(REPO / "Resources" / "ExtensionManager", self.root / "Resources" / "ExtensionManager")
+        shutil.copytree(REPO / "Resources" / "Localizations", self.root / "Resources" / "Localizations")
+        catalog_dir = self.root / "Sources" / "BrowserCore" / "Resources"
+        catalog_dir.mkdir(parents=True)
+        for catalog in (REPO / "Sources" / "BrowserCore" / "Resources").glob("*.xcstrings"):
+            shutil.copy2(catalog, catalog_dir / catalog.name)
         engine_script = self.root / "scripts" / "fetch-engine.sh"
         engine_script.write_text(
             "#!/bin/bash\n"
@@ -135,6 +140,14 @@ class BundleAppTests(unittest.TestCase):
         bundle = resources / "ArcusisBrowser_BrowserCore.bundle" / "Contents"
         self.assertEqual((bundle / "Resources" / "public_suffix_list.dat").read_bytes(), PSL.read_bytes())
         self.assertEqual((bundle / "Info.plist").read_text(), "fixture plist")
+        for language in ("en", "he"):
+            localized = bundle / "Resources" / f"{language}.lproj"
+            for table in ("Core", "Bridge", "Shell", "Settings", "Panels"):
+                # The native compiler omits English identity values that equal their keys.
+                self.assertTrue(any((localized / f"{table}.{suffix}").is_file()
+                                    for suffix in ("strings", "stringsdict")), table)
+            self.assertTrue((localized / "Core.stringsdict").is_file())
+            self.assertTrue((resources / f"{language}.lproj" / "InfoPlist.strings").is_file())
         for name in ("LICENSE", "pin.json"):
             self.assertEqual(
                 (resources / "PublicSuffix" / name).read_bytes(),

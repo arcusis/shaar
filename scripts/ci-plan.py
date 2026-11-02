@@ -39,7 +39,7 @@ def select_stages(paths: list[str] | None, event: str) -> tuple[bool, bool, bool
                     or path in {".gitignore", ".gitleaks.toml"} for path in paths)
     swift = native and (event != "pull_request" or not unrelated or any(
         path.startswith(("Sources/", "ThirdParty/")) or path.endswith(".swift")
-        or path in {"Package.resolved", "scripts/bundle-app.sh", "scripts/check-codeql-extraction.py",
+        or path in {"Package.resolved", "scripts/bundle-app.sh", "scripts/check-codeql-extraction.py", "scripts/codeql-build.py",
                     ".github/workflows/ci-codeql.yml", ".github/actions/ci-setup/action.yml"}
         for path in paths))
     return native, website, swift

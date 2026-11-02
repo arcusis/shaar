@@ -27,9 +27,9 @@ jobs:
         with:
           mode: codeql
           products: build/swiftpm/codeql
-      - name: Resolve immutable dependencies before tracing manifests
+      - name: Build and record native Swift compiler commands before tracing
         if: matrix.language == 'swift'
-        run: swift package --scratch-path build/swiftpm/codeql --force-resolved-versions resolve
+        run: .venv/bin/python scripts/codeql-build.py prepare
       - name: Initialize CodeQL
         id: init
         uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370
@@ -38,9 +38,7 @@ jobs:
           build-mode: ${{ matrix.language == 'swift' && 'manual' || 'none' }}
       - name: Trace a fresh Swift build
         if: matrix.language == 'swift'
-        run: >-
-          swift build --build-system native --jobs 2 --force-resolved-versions --scratch-path build/swiftpm/codeql
-          --disable-index-store -Xswiftc -whole-module-optimization -Xswiftc -Onone -Xswiftc -num-threads -Xswiftc 2
+        run: .venv/bin/python scripts/codeql-build.py replay
       - name: Analyze
         id: analyze
         uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370
@@ -59,3 +57,4 @@ jobs:
         if: always() && matrix.language == 'swift'
         with:
           stage: codeql-swift
+          extra-path: build/ci/codeql-prepare

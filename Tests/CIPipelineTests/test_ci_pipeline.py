@@ -41,6 +41,7 @@ PYTHON_TESTS = load_script("test-python")
 SBOM = load_script("ci-sbom")
 SWIFT_REPORTS = load_script("ci-swift-reports")
 EXTRACTION = load_script("check-codeql-extraction")
+CODEQL_BUILD = load_script("codeql-build")
 
 
 class PipelineGateTests(unittest.TestCase):
@@ -435,6 +436,47 @@ class SwiftExtractionTests(unittest.TestCase):
         self.assertEqual(EXTRACTION.missing_sources(report, expected - {"Sources/App/Missing.swift"}, root), [])
         with self.assertRaises(ValueError):
             EXTRACTION.missing_sources(report, set(), root)
+
+
+class SwiftCompilerPlanTests(unittest.TestCase):
+    def test_plan_keeps_argument_arrays_and_rejects_missing_or_duplicate_sources(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "Sources/Core/With Space.swift"
+            source.parent.mkdir(parents=True)
+            source.write_text("struct Example {}")
+            response = root / "build/sources"
+            response.parent.mkdir()
+            response.write_text(json.dumps(str(source)))
+            compiler = Path("/toolchain/swiftc")
+            line = f"{compiler} -module-name Core -whole-module-optimization @{response}"
+            expected = {"Sources/Core/With Space.swift"}
+            commands = CODEQL_BUILD.compiler_commands(line, root, compiler, expected)
+            self.assertEqual(commands[0][-1], "@" + str(response))
+            with self.assertRaisesRegex(ValueError, "omitted"):
+                CODEQL_BUILD.compiler_commands(line, root, compiler, expected | {"Sources/Other.swift"})
+            with self.assertRaisesRegex(ValueError, "Duplicate"):
+                CODEQL_BUILD.compiler_commands(line + "\n" + line, root, compiler, expected)
+
+    def test_response_file_cannot_escape_owned_build_directory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            response = root / "outside"
+            response.write_text("Sources/Core.swift")
+            with self.assertRaisesRegex(ValueError, "response file"):
+                CODEQL_BUILD.command_sources(["@" + str(response)], root)
+
+    def test_changed_source_or_toolchain_rejects_replay_before_compiling(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            plan = Path(temporary) / "plan.json"
+            plan.write_text(json.dumps({"revision": "a", "toolchain": "one", "sources": {"Sources/A.swift": "old"}}))
+            with (patch.object(CODEQL_BUILD, "PLAN", plan),
+                  patch.object(CODEQL_BUILD, "identity", return_value={"revision": "a", "toolchain": "one"}),
+                  patch.object(CODEQL_BUILD, "source_hashes", return_value={"Sources/A.swift": "new"}),
+                  patch.object(CODEQL_BUILD.subprocess, "check_output") as compile_command,
+                  self.assertRaisesRegex(ValueError, "source content changed")):
+                CODEQL_BUILD.replay()
+            compile_command.assert_not_called()
 
 
 if __name__ == "__main__":

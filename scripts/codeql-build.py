@@ -1,0 +1,119 @@
+#!/usr/bin/env python3
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+"""Replay fresh native Swift compilations without tracing SwiftPM's manifest interpreter."""
+
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import shlex
+import subprocess
+
+from ci_support import Commands, ROOT
+
+
+PLAN = ROOT / "build/ci/codeql-swift/compile-plan.json"
+
+
+def source_hashes(root: Path) -> dict[str, str]:
+    names = subprocess.check_output(["git", "ls-files", "-z", "--", "Sources"], cwd=root).decode().split("\0")
+    return {name: hashlib.sha256((root / name).read_bytes()).hexdigest()
+            for name in names if name.endswith(".swift")}
+
+
+def command_sources(arguments: list[str], root: Path) -> set[str]:
+    root = root.resolve()
+    expanded = []
+    for argument in arguments:
+        if argument.startswith("@"):
+            response = (root / argument[1:]).resolve()
+            if not response.is_relative_to(root / "build") or response.stat().st_size > 1024 * 1024:
+                raise ValueError("Unexpected Swift compiler response file")
+            expanded.extend(shlex.split(response.read_text()))
+        else:
+            expanded.append(argument)
+    sources = set()
+    for argument in expanded:
+        if argument.endswith(".swift"):
+            path = (root / argument).resolve()
+            if path.is_relative_to(root / "Sources"):
+                sources.add(path.relative_to(root).as_posix())
+    return sources
+
+
+def compiler_commands(log: str, root: Path, compiler: Path, expected: set[str]) -> list[list[str]]:
+    commands = []
+    covered = set()
+    for line in log.splitlines():
+        if not line.startswith(str(compiler) + " "):
+            continue
+        arguments = shlex.split(line)
+        if "-module-name" not in arguments or "-whole-module-optimization" not in arguments:
+            continue
+        sources = command_sources(arguments, root)
+        if not sources:
+            continue
+        if sources & covered:
+            raise ValueError("Duplicate Swift module compiler invocation")
+        commands.append(arguments)
+        covered |= sources
+    if not expected or covered != expected:
+        raise ValueError(f"Native compiler plan omitted Swift sources: {sorted(expected - covered)}")
+    return commands
+
+
+def identity() -> dict:
+    return {"revision": os.environ["GITHUB_SHA"], "toolchain": os.environ["CI_TOOLCHAIN_ID"]}
+
+
+def prepare() -> int:
+    checks = Commands("codeql-prepare")
+    compiler = Path(subprocess.check_output(["xcrun", "--find", "swiftc"], text=True).strip())
+    arguments = ["swift", "build", "--build-system", "native", "--jobs", "2", "--force-resolved-versions",
+                 "--scratch-path", "build/swiftpm/codeql", "--disable-index-store", "--verbose",
+                 "-Xswiftc", "-whole-module-optimization", "-Xswiftc", "-Onone",
+                 "-Xswiftc", "-num-threads", "-Xswiftc", "2",
+                 "-Xswiftc", "-no-emit-module-separately-wmo"]
+    if checks.run("native-build-plan", arguments):
+        return checks.finish()
+    sources = source_hashes(ROOT)
+    commands = compiler_commands((checks.directory / "native-build-plan.log").read_text(), ROOT, compiler, set(sources))
+    PLAN.parent.mkdir(parents=True, exist_ok=True)
+    PLAN.write_text(json.dumps(dict(identity(), compiler=str(compiler), sources=sources, commands=commands), indent=2) + "\n")
+    return checks.finish()
+
+
+def replay() -> int:
+    plan = json.loads(PLAN.read_text())
+    if any(plan.get(key) != value for key, value in identity().items()) or plan["sources"] != source_hashes(ROOT):
+        raise ValueError("Swift compiler plan commit, toolchain or source content changed")
+    compiler = Path(subprocess.check_output(["xcrun", "--find", "swiftc"], text=True).strip())
+    if str(compiler) != plan["compiler"]:
+        raise ValueError("Swift compiler changed after planning")
+    checks = Commands("codeql-swift")
+    covered = set()
+    for arguments in plan["commands"]:
+        if arguments[0] != str(compiler) or "-whole-module-optimization" not in arguments:
+            raise ValueError("Compiler plan must freshly compile whole Swift modules")
+        covered |= command_sources(arguments, ROOT)
+        module = arguments[arguments.index("-module-name") + 1]
+        if checks.run(module, arguments):
+            return checks.finish()
+    if covered != set(plan["sources"]):
+        raise ValueError("Compiler response files changed after planning")
+    return checks.finish()
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("mode", choices=("prepare", "replay"))
+    options = parser.parse_args()
+    return prepare() if options.mode == "prepare" else replay()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

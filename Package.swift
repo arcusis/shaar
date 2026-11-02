@@ -56,7 +56,9 @@ let package = Package(
     // target need -enable-testing: build it with `bundle-app.sh --with-engine --verification`.
     .executableTarget(
       name: "ShaarVerification",
-      dependencies: ["ArcusisBrowser", "BrowserCore", "ChromiumBridge", "ChromiumBridgeVerification"],
+      dependencies: [
+        "ArcusisBrowser", "BrowserCore", "ChromiumBridge", "ChromiumBridgeVerification",
+      ],
       linkerSettings: bundleFrameworksLinkerSettings),
     .target(name: "BrowserTestSupport", path: "Tests/TestSupport"),
     .testTarget(name: "BrowserCoreTests", dependencies: ["BrowserCore", "BrowserTestSupport"]),

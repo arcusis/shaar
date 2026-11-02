@@ -442,24 +442,14 @@ class SwiftExtractionTests(unittest.TestCase):
 
 
 class SwiftCompilerPlanTests(unittest.TestCase):
-    def test_app_batches_preserve_sources_and_disable_incremental_skipping(self):
-        arguments = ["swiftc", "-module-name", "ArcusisBrowser", "-whole-module-optimization",
-                     "-no-emit-module-separately-wmo", "-incremental", "-num-threads", "2",
-                     "-j", "2", "-Onone", "-c", "-emit-module", "-emit-module-path", "App.swiftmodule",
-                     "-output-file-map", "outputs.json",
-                     "Sources/ArcusisBrowser/A.swift", "Sources/ArcusisBrowser/B.swift"]
-        batched = CODEQL_BUILD.extraction_arguments(arguments)
-        self.assertEqual(CODEQL_BUILD.command_sources(batched, ROOT), CODEQL_BUILD.command_sources(arguments, ROOT))
-        self.assertNotIn("-incremental", batched)
-        self.assertNotIn("-whole-module-optimization", batched)
-        self.assertNotIn("-num-threads", batched)
-        self.assertNotIn("-emit-module", batched)
-        self.assertNotIn("-emit-module-path", batched)
-        self.assertTrue(CODEQL_BUILD.freshly_compiles_module(batched))
-        self.assertFalse(CODEQL_BUILD.freshly_compiles_module([*batched, "-incremental"]))
-        core = ["swiftc", "-module-name", "BrowserCore", "-whole-module-optimization"]
-        self.assertEqual(CODEQL_BUILD.extraction_arguments(core), core)
-        self.assertTrue(CODEQL_BUILD.freshly_compiles_module(core))
+    def test_analysis_target_matches_shipping_arm64_on_every_runner(self):
+        CODEQL_BUILD.validate_compilation([
+            "swiftc", "-whole-module-optimization", "-target", "arm64-apple-macosx26.0"])
+        for arguments in (["swiftc", "-whole-module-optimization", "-target", "x86_64-apple-macosx26.0"],
+                          ["swiftc", "-target", "arm64-apple-macosx26.0"],
+                          ["swiftc", "-whole-module-optimization"]):
+            with self.assertRaisesRegex(ValueError, "arm64"):
+                CODEQL_BUILD.validate_compilation(arguments)
 
     def test_native_graph_materializes_response_files_and_framework_links_without_compiling(self):
         from swift_build_plan import manifest_commands, prepare_inputs
@@ -562,7 +552,7 @@ class SwiftCompilerPlanTests(unittest.TestCase):
             response.parent.mkdir()
             response.write_text(json.dumps(str(source)))
             compiler = Path("/toolchain/swiftc")
-            line = f"{compiler} -module-name Core -whole-module-optimization @{response}"
+            line = f"{compiler} -module-name Core -whole-module-optimization -target arm64-apple-macosx26.0 @{response}"
             expected = {"Sources/Core/With Space.swift"}
             commands = CODEQL_BUILD.compiler_commands(line, root, compiler, expected)
             self.assertEqual(commands[0][-1], "@" + str(response))

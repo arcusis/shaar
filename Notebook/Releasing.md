@@ -22,7 +22,7 @@ Only `bundle-app.sh --with-engine --with-updates` in the release configuration w
 ## Cutting a release
 
 1. Raise `SHAAR_BUNDLE_VERSION` (Major.Minor.Patch, which also sets the tag `v<version>`) and `SHAAR_BUILD_VERSION`. Sparkle orders updates by the build number.
-2. Merge the change, then tag `v<version>` and push the tag.
+2. Merge the change and wait for Source checks on that exact production commit to pass, including full Swift CodeQL analysis. PR analysis covers shipping code; production analysis also covers verification and test-support modules. Then tag `v<version>` at that verified commit and push the tag.
 3. Write the release notes as `<li>` lines in an HTML file.
 4. Dry run: `bash scripts/release.sh --notes notes.html`. Add `--allow-unsigned-update` when the EdDSA key is not on this Mac.
 5. Real run, from a clean checkout of the tag: `bash scripts/release.sh --notes notes.html --notarize --upload`. It notarizes and staples the app and the DMG, then creates a **draft** release on the existing tag with all three assets.
@@ -48,4 +48,4 @@ Only `--notarize` contacts Apple, and only `--upload` writes to GitHub. `--uploa
 
 Next, `codesign --verify --deep --strict` runs. A check that every bundle and Mach-O file carries team `F9Z784RA6D` with the runtime flag follows, because an ad hoc nested signature still passes `--deep --strict`. The script then builds the DMG and the ditto ZIP. It confirms the keychain key matches `SHAAR_SPARKLE_PUBLIC_ED_KEY` and signs the ZIP with `sign_update`. Last, it writes the single-item appcast and runs the workflow's appcast, ZIP and signature checks on it.
 
-Related: [[Build_And_Run]], [[Product_Identity]].
+Related: [[Build_And_Run]], [[Product_Identity]], [[CI_Run_Time]].

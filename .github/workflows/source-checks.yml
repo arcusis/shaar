@@ -145,7 +145,7 @@ jobs:
 
   build:
     name: Build and unit tests
-    needs: [plan, fast, dependency-review]
+    needs: plan
     if: needs.plan.outputs.full == 'true'
     uses: ./.github/workflows/ci-build.yml
 
@@ -209,7 +209,7 @@ jobs:
 
   shipping:
     name: Shipping bundle
-    needs: [plan, build]
+    needs: [plan, fast, dependency-review]
     if: needs.plan.outputs.full == 'true'
     permissions:
       contents: read

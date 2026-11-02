@@ -45,6 +45,14 @@ def command_sources(arguments: list[str], root: Path) -> set[str]:
     return sources
 
 
+def validate_compilation(arguments: list[str]) -> None:
+    if "-whole-module-optimization" not in arguments or "-target" not in arguments:
+        raise ValueError("Swift analysis must freshly compile complete arm64 modules")
+    target = arguments[arguments.index("-target") + 1]
+    if not target.startswith("arm64-apple-macosx"):
+        raise ValueError("Swift analysis must target the shipping arm64 architecture")
+
+
 def compiler_commands(log: str, root: Path, compiler: Path, expected: set[str]) -> list[list[str]]:
     commands = []
     covered = set()
@@ -54,6 +62,7 @@ def compiler_commands(log: str, root: Path, compiler: Path, expected: set[str]) 
         arguments = shlex.split(line)
         if "-module-name" not in arguments or "-whole-module-optimization" not in arguments:
             continue
+        validate_compilation(arguments)
         sources = command_sources(arguments, root)
         if not sources:
             continue
@@ -72,41 +81,13 @@ def identity() -> dict:
     return {"revision": os.environ["GITHUB_SHA"], "toolchain": os.environ["CI_TOOLCHAIN_ID"]}
 
 
-def extraction_arguments(arguments: list[str]) -> list[str]:
-    if arguments[arguments.index("-module-name") + 1] != "ArcusisBrowser":
-        return arguments
-    result = []
-    index = 0
-    while index < len(arguments):
-        argument = arguments[index]
-        if argument in {"-num-threads", "-j", "-driver-batch-count", "-emit-module-path", "-emit-objc-header-path"}:
-            index += 2
-            continue
-        if argument not in {"-whole-module-optimization", "-no-emit-module-separately-wmo",
-                            "-incremental", "-enable-batch-mode", "-disable-batch-mode",
-                            "-emit-module", "-emit-objc-header"}:
-            result.append(argument)
-        index += 1
-    return [*result, "-enable-batch-mode", "-driver-batch-count", "2", "-j", "2"]
-
-
-def freshly_compiles_module(arguments: list[str]) -> bool:
-    if "-whole-module-optimization" in arguments:
-        return True
-    return (arguments[arguments.index("-module-name") + 1] == "ArcusisBrowser"
-            and "-enable-batch-mode" in arguments and "-incremental" not in arguments
-            and "-c" in arguments and "-emit-module" not in arguments
-            and "-driver-batch-count" in arguments
-            and arguments[arguments.index("-driver-batch-count") + 1] == "2")
-
-
 def prepare(scope: str) -> int:
     checks = Commands("codeql-prepare")
     compiler = Path(subprocess.check_output(["xcrun", "--find", "swiftc"], text=True).strip())
     if checks.run("clean", ["swift", "package", "--scratch-path", "build/swiftpm/codeql", "clean"]):
         return checks.finish()
     arguments = ["swift", "build", "--build-system", "native", "--jobs", "2", "--force-resolved-versions",
-                 "--scratch-path", "build/swiftpm/codeql", "--disable-index-store", "--verbose",
+                 "--scratch-path", "build/swiftpm/codeql", "--arch", "arm64", "--disable-index-store", "--verbose",
                  "-Xswiftc", "-whole-module-optimization", "-Xswiftc", "-Onone",
                  "-Xswiftc", "-num-threads", "-Xswiftc", "2",
                  "-Xswiftc", "-no-emit-module-separately-wmo", "--print-manifest-job-graph"]
@@ -120,13 +101,8 @@ def prepare(scope: str) -> int:
     commands = compiler_commands(native_command_log(manifest, compiler), ROOT, compiler, set(all_sources))
     commands = ordered_modules(manifest, commands)
     commands = [command for command in commands if command_sources(command, ROOT) <= set(sources)]
-    traced = []
-    for command in commands:
-        if command[command.index("-module-name") + 1] == "ArcusisBrowser":
-            traced.append(extraction_arguments(command))
-        traced.append(command)
     PLAN.parent.mkdir(parents=True, exist_ok=True)
-    PLAN.write_text(json.dumps(dict(identity(), scope=scope, compiler=str(compiler), compiler_sha256=file_sha256(compiler), sources=sources, commands=traced), indent=2) + "\n")
+    PLAN.write_text(json.dumps(dict(identity(), scope=scope, compiler=str(compiler), compiler_sha256=file_sha256(compiler), sources=sources, commands=commands), indent=2) + "\n")
     return checks.finish()
 
 
@@ -148,12 +124,11 @@ def replay(scope: str = "full") -> int:
     checks = Commands("codeql-swift")
     covered = set()
     for arguments in plan["commands"]:
-        if arguments[0] != str(compiler) or not freshly_compiles_module(arguments):
-            raise ValueError("Compiler plan must freshly compile complete Swift modules")
+        if arguments[0] != str(compiler):
+            raise ValueError("Compiler plan executable changed")
+        validate_compilation(arguments)
         covered |= command_sources(arguments, ROOT)
         module = arguments[arguments.index("-module-name") + 1]
-        if "-whole-module-optimization" not in arguments:
-            module += "-batches"
         if checks.run(module, arguments):
             return checks.finish()
     if covered != set(plan["sources"]):

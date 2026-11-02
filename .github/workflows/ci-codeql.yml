@@ -16,7 +16,7 @@ permissions:
 jobs:
   analyze:
     name: CodeQL ${{ matrix.language }}
-    runs-on: ${{ matrix.language == 'swift' && 'macos-26' || 'ubuntu-24.04' }}
+    runs-on: ${{ matrix.language == 'swift' && 'macos-26-intel' || 'ubuntu-24.04' }}
     env:
       CI_SWIFT_SCOPE: ${{ inputs.full && 'full' || 'shipping' }}
     timeout-minutes: ${{ matrix.language == 'swift' && 60 || 20 }}
@@ -33,7 +33,7 @@ jobs:
         with:
           mode: codeql
           products: build/swiftpm/codeql
-      - name: Build and record native Swift compiler commands before tracing
+      - name: Plan native Swift compiler commands before tracing
         if: matrix.language == 'swift'
         run: .venv/bin/python scripts/codeql-build.py prepare --scope "$CI_SWIFT_SCOPE"
       - name: Initialize CodeQL

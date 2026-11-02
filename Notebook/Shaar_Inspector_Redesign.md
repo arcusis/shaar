@@ -25,3 +25,14 @@ The spacing widget uses neutral rectangles, dim dashes for zero values and empha
 Formatter snapshots and headless renderer contracts cover authored names, selector uniqueness, minified-name fallback, pruned markup and screenshot references. Native tests cover the single-item pasteboard, cache age/ownership, per-tab section preferences and dock/menu bounds. `InspectorAICopyProbe` verifies actual PNG files and pasteboard bytes, image-only and notes export, edge highlighting, and the Design/Code/Notes/Copy-menu matrix at 320 and 420 points in both appearances. All capture windows remain unordered. These checks establish programmatic behavior and offscreen rendering, not physical terminal/chat paste acceptance.
 
 Related: [[Shaar_Inspector_CSS]], [[Shaar_Inspector_Details]], [[Shaar_Inspector_Page_Tools]], [[Engine_Interop_Boundary]], [[Verification_Harness]].
+
+## Offscreen captures
+
+The [capture receipt](Assets/Shaar_Inspector_Redesign/capture.json) pins the tested English source and both engine phases (836 initial checks, 838 after restart). The matrix covers 320/420-point docks in light and dark.
+
+| Panel | 320 light | 320 dark | 420 light | 420 dark |
+| --- | --- | --- | --- | --- |
+| Design | [PNG](Assets/Shaar_Inspector_Redesign/design-320-light.png) | [PNG](Assets/Shaar_Inspector_Redesign/design-320-dark.png) | [PNG](Assets/Shaar_Inspector_Redesign/design-420-light.png) | [PNG](Assets/Shaar_Inspector_Redesign/design-420-dark.png) |
+| Code | [PNG](Assets/Shaar_Inspector_Redesign/code-320-light.png) | [PNG](Assets/Shaar_Inspector_Redesign/code-320-dark.png) | [PNG](Assets/Shaar_Inspector_Redesign/code-420-light.png) | [PNG](Assets/Shaar_Inspector_Redesign/code-420-dark.png) |
+| Notes | [PNG](Assets/Shaar_Inspector_Redesign/notes-320-light.png) | [PNG](Assets/Shaar_Inspector_Redesign/notes-320-dark.png) | [PNG](Assets/Shaar_Inspector_Redesign/notes-420-light.png) | [PNG](Assets/Shaar_Inspector_Redesign/notes-420-dark.png) |
+| Copy Menu | [PNG](Assets/Shaar_Inspector_Redesign/copy-menu-320-light.png) | [PNG](Assets/Shaar_Inspector_Redesign/copy-menu-320-dark.png) | [PNG](Assets/Shaar_Inspector_Redesign/copy-menu-420-light.png) | [PNG](Assets/Shaar_Inspector_Redesign/copy-menu-420-dark.png) |

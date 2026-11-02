@@ -1,0 +1,137 @@
+{
+  "capturedUTC": "2026-11-02T11:57:45.126253+00:00",
+  "offscreen": true,
+  "phases": {
+    "initial": {
+      "checks": 836,
+      "chromiumVersion": "155.0.8059.84",
+      "copy": {
+        "clipboard": {
+          "height": 84,
+          "items": 1,
+          "markdown": true,
+          "png": true,
+          "width": 250
+        },
+        "notesPages": 2,
+        "passed": true,
+        "privateControlsMasked": 4
+      },
+      "panel": {
+        "images": [
+          "initial-inspector-redesign-design-320-light.png",
+          "initial-inspector-redesign-design-320-dark.png",
+          "initial-inspector-redesign-design-420-light.png",
+          "initial-inspector-redesign-design-420-dark.png",
+          "initial-inspector-redesign-code-320-light.png",
+          "initial-inspector-redesign-code-320-dark.png",
+          "initial-inspector-redesign-code-420-light.png",
+          "initial-inspector-redesign-code-420-dark.png",
+          "initial-inspector-redesign-notes-320-light.png",
+          "initial-inspector-redesign-notes-320-dark.png",
+          "initial-inspector-redesign-notes-420-light.png",
+          "initial-inspector-redesign-notes-420-dark.png",
+          "initial-inspector-redesign-copy-menu-320-light.png",
+          "initial-inspector-redesign-copy-menu-320-dark.png",
+          "initial-inspector-redesign-copy-menu-420-light.png",
+          "initial-inspector-redesign-copy-menu-420-dark.png"
+        ],
+        "offscreen": true,
+        "passed": true
+      },
+      "passed": true
+    },
+    "restart": {
+      "checks": 838,
+      "chromiumVersion": "155.0.8059.84",
+      "copy": {
+        "clipboard": {
+          "height": 84,
+          "items": 1,
+          "markdown": true,
+          "png": true,
+          "width": 250
+        },
+        "notesPages": 2,
+        "passed": true,
+        "privateControlsMasked": 4
+      },
+      "panel": {
+        "images": [
+          "restart-inspector-redesign-design-320-light.png",
+          "restart-inspector-redesign-design-320-dark.png",
+          "restart-inspector-redesign-design-420-light.png",
+          "restart-inspector-redesign-design-420-dark.png",
+          "restart-inspector-redesign-code-320-light.png",
+          "restart-inspector-redesign-code-320-dark.png",
+          "restart-inspector-redesign-code-420-light.png",
+          "restart-inspector-redesign-code-420-dark.png",
+          "restart-inspector-redesign-notes-320-light.png",
+          "restart-inspector-redesign-notes-320-dark.png",
+          "restart-inspector-redesign-notes-420-light.png",
+          "restart-inspector-redesign-notes-420-dark.png",
+          "restart-inspector-redesign-copy-menu-320-light.png",
+          "restart-inspector-redesign-copy-menu-320-dark.png",
+          "restart-inspector-redesign-copy-menu-420-light.png",
+          "restart-inspector-redesign-copy-menu-420-dark.png"
+        ],
+        "offscreen": true,
+        "passed": true
+      },
+      "passed": true
+    }
+  },
+  "scope": "English native SwiftUI Inspector on loopback inspector.localhost fixtures. Uniquely named pasteboards, isolated screenshot cache, unordered capture windows; programmatic behavior and rendering do not establish physical terminal/chat paste acceptance.",
+  "sha256": {
+    "code-320-dark.png": "753846b260040d034d98e858af2a13eb665b5360aad37b80f7274618e94dcec9",
+    "code-320-light.png": "4549cc7e01660b965d9c49db75fe678447ed8c37472af7d2492aad0f7b5a4cdb",
+    "code-420-dark.png": "b790fd27f6536fd65de7ae6d185466e2731306a087d55daa3774fb91e704f127",
+    "code-420-light.png": "3660f4970f895fdf3b2076cf451a3c17a59c9878da40787972028889d10d6e20",
+    "copy-menu-320-dark.png": "66c9d0b4fa424b5fc49144866954cf85064287f444820d0d5cad6c9c99d17662",
+    "copy-menu-320-light.png": "54151774fc0c8699ca954b685be60f298377c686a3959b23e2b9e89ad047dfe1",
+    "copy-menu-420-dark.png": "7caf80ab26f0f12de2d8434e5a759b7b588d6842b8500e95ee80d6f7370a6c08",
+    "copy-menu-420-light.png": "009e19250e9a222d40d04d78fca6c0194add0e053c616277880255e30e9cfcb1",
+    "design-320-dark.png": "30ecff5e03f68462d671d54aeddb2ee267f0436980c677a9f2b7bdc924619615",
+    "design-320-light.png": "f37536525369fc412ddc6ef7e1dec473a58bb542aedc807fccbb03d1be92d267",
+    "design-420-dark.png": "b93fb1be50a0fcf645a3d67c9754f14dc2a65ef0be0e7d5445517f4a3cda65a2",
+    "design-420-light.png": "12a6ea331e36af7444655a6e47a8d8f43faafba83e5146e2d05aecf0428941dc",
+    "notes-320-dark.png": "f6e570eee89e4af612affc5f53a656e79aa074faa68e75b47ee29b0ab8264fd0",
+    "notes-320-light.png": "23f2c2ede09206302a22741d2c759d417a43e7f4e8bf28f489a232642dab2cb0",
+    "notes-420-dark.png": "22d130ed33c707982afdb959320214f83e0e24a6ce5e7ae9bf9a96d83eca139f",
+    "notes-420-light.png": "4eacc80d9b221210ea5cc4a14081e1c460025d08b26cc0a4c32382ad2b22d64c"
+  },
+  "sourceCommit": "cd4f23bb0a3f1fcf56aa052a4bdd02fcadbe1d5f",
+  "sourceSHA256": {
+    "Sources/ArcusisBrowser/InspectorAICopyModel.swift": "142e086b53332968dc3512e73daaddd7f4889bb0ab0a53c2de6761d57f2b9fa6",
+    "Sources/ArcusisBrowser/InspectorAICopyScript.swift": "f69ed3da8969ed131aac70becf27e899d2b303d9687c1830cdafe96c1e16fa4a",
+    "Sources/ArcusisBrowser/InspectorAIFormatter.swift": "efcd454baed9920a3d175f578a10f72d006a84aa2a9fcb25601761dcd3389701",
+    "Sources/ArcusisBrowser/InspectorActionsView.swift": "57cd3b91897d3c0b98dc8cc039b3ed1b38ca18455490eb002ba7fc71443d70b0",
+    "Sources/ArcusisBrowser/InspectorBoxModel.swift": "cec125be4840d4096c54b81a60f97d05bbb3f7d12c86130cd76ec8f12bcff9a7",
+    "Sources/ArcusisBrowser/InspectorColor.swift": "fe7611933146d722c453f894c9ce334bb7bc0e9b69a49b3f23b87d2f30fd5dc2",
+    "Sources/ArcusisBrowser/InspectorDesignView.swift": "be9d64144dd29e460a53a41b5e35b98997aa038dd1e77234c34c004deea16225",
+    "Sources/ArcusisBrowser/InspectorDetailsModel.swift": "f4ffd28f6e68fd24d026e3a5c42ea2922101d4b36d1d37a42da755897fb4ff68",
+    "Sources/ArcusisBrowser/InspectorDetailsScript.swift": "19685a82c2711da8b011897c2b86dff31d13d089230a7337094c21086bf7d7ae",
+    "Sources/ArcusisBrowser/InspectorDetailsView.swift": "e74c38782d735ab8bff2422582f0a47ffc759d09e0353c772d1372dc435e0c55",
+    "Sources/ArcusisBrowser/InspectorDiagnosticsScript.swift": "48a37ad3bb08936775d91eb7a74f39475883043e4bc0d82988081e110143b1ae",
+    "Sources/ArcusisBrowser/InspectorModel.swift": "415b45afdf416cb40ed5c3778133850bf0b47a314b45eca0b6c7068c3cb39d0e",
+    "Sources/ArcusisBrowser/InspectorNotesView.swift": "5032b34fdb5f5133df9c5d1f420929e0a0780a522ffcab88ec931ca5933dbd2d",
+    "Sources/ArcusisBrowser/InspectorPage.swift": "a48e9e40c195e9912d525b418b179afc7eec48d1155090f5c1d950a2e8f1a9a4",
+    "Sources/ArcusisBrowser/InspectorPageScript.swift": "9aaf03eeab775e286880fc01111063d8dcfcedba0e61b06176232da893dd8cf6",
+    "Sources/ArcusisBrowser/InspectorPageToolsModel.swift": "e042f92b4d3d691ab13abcc82e18855bd18be8e9547e688b63567def6c46cfc5",
+    "Sources/ArcusisBrowser/InspectorPageToolsView.swift": "baad7b2ec988e22e03e9caa544f6f7622b4a65fc319e511a25f360f5862874ef",
+    "Sources/ArcusisBrowser/InspectorPanel.swift": "b6c190a3c99afef2ae3b09b903ea191e40d1980cf780629ba4ed6fdcc4d70237",
+    "Sources/ArcusisBrowser/InspectorPanelComponents.swift": "cc761387dd4c5944dc341abea3a2a6e6989a7582e75951a23b2675c279b5255c",
+    "Sources/ArcusisBrowser/InspectorPresentation.swift": "3604bc466c975ac07b5f63ec6072a0865bfe086a591dbe556a04a8e401c6c5fe",
+    "Sources/ArcusisBrowser/InspectorScreenshotCache.swift": "875c02e7f4ae57213812278d0c04793660444b9682a0cc02a926d9802e3a72ec",
+    "Sources/ArcusisBrowser/InspectorSelection.swift": "fa2d9d1714ce0bee3f4669a86d198636aced7774924723c8f2b7655e2f1b83e5",
+    "Sources/ArcusisBrowser/InspectorSimulationsView.swift": "e2c8476f366b45f7ba94dff41a21687fe8a488e697d289c47b25c6f768b3587c",
+    "Sources/ArcusisBrowser/InspectorStorageView.swift": "2fbabf9cd2bf8ac71bc4291fe9621f074aeaf5e72a30c7d712ab78f211352abe",
+    "Sources/ArcusisBrowser/InspectorStyleScript.swift": "cb95273eb8a79b0768802533e07fefda9da14b8badbc13ac597fc5dcb8395caf",
+    "Sources/ArcusisBrowser/InspectorStylesModel.swift": "a74b8f9f68310170ea5c688e385a8eaa612ecc5692e0f3b9b728341b78d5dc9e",
+    "Sources/ArcusisBrowser/InspectorStylesView.swift": "7b5c3ca8c8c0f444b7a2c9312705de564efee18f98cc651cc97e68182bb2619d",
+    "Sources/ShaarVerification/InspectorAICopyProbe.swift": "2b7bead90af9a9901cb756ad3c57ecc8c5664c612b32383bcb71707ad5b9bf13",
+    "Tests/InspectorContractTests/inspector.cjs": "57fbc0ee842ca6a904cc6812e9b62a52bf6ed6a887cdc19b01a464c0b4c57023",
+    "scripts/engine_fixture.py": "b0c6756fe7a8f992764a237b2030d13e776536a8da321cccd6c96939d714574b"
+  },
+  "visibleWindows": false
+}

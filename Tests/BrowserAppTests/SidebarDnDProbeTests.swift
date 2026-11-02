@@ -231,7 +231,9 @@ extension SidebarDnDProbeTests {
     // explicitly, as AppKit does throughout a real mouse or trackpad hold.
     let transfer = SidebarTransfer.tab(
       sessionID: store.dragSessionID, sourceSpaceID: space, tabID: second)
-    #expect(try await mounted.drop(transfer, on: target, hold: .milliseconds(750)))
+    // The sidebar arms folder creation after a 650 ms hover (BrowserSidebar.scheduleFolderHover).
+    // Hold well past it: under parallel CI load the main actor can run that timer late.
+    #expect(try await mounted.drop(transfer, on: target, hold: .milliseconds(1500)))
     let folder = try #require(store.session.selectedSpace.folders.first)
     #expect(store.session.selectedSpace.tabs.allSatisfy { $0.folderID == folder.id })
     #expect(store.renameFolder(folder.id, in: space, name: "Projects"))

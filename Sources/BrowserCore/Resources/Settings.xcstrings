@@ -1,6 +1,11 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Later": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Later"}},"he":{"stringUnit":{"state":"translated","value":"מאוחר יותר"}}}},
+    "Restart Shaar": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Restart Shaar"}},"he":{"stringUnit":{"state":"translated","value":"הפעלה מחדש של Shaar"}}}},
+    "Restart Shaar to apply": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Restart Shaar to apply"}},"he":{"stringUnit":{"state":"translated","value":"יש להפעיל מחדש את Shaar כדי להחיל את השינוי"}}}},
+    "Your tabs could not be saved. Shaar has not restarted.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Your tabs could not be saved. Shaar has not restarted."}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן לשמור את הלשוניות שלך. Shaar לא הופעל מחדש."}}}},
+    "Your windows and tabs will be restored.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Your windows and tabs will be restored."}},"he":{"stringUnit":{"state":"translated","value":"החלונות והלשוניות שלך ישוחזרו."}}}},
     "Copy for AI": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copy for AI"}},"he":{"stringUnit":{"state":"translated","value":"העתקה ל-AI"}}}},
     "Developer Tools": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Developer Tools"}},"he":{"stringUnit":{"state":"translated","value":"כלים למפתחים"}}}},
     "General": {

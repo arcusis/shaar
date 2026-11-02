@@ -8,7 +8,7 @@ import ChromiumBridge
 import SwiftUI
 
 enum BrowserMenuCommand: String, CaseIterable {
-  case newWindow, newPrivateWindow, newMiniWindow, newTab, search, newSpace, editSpace, closeTab,
+  case newPrivateWindow, newMiniWindow, newTab, search, newSpace, editSpace, closeTab,
     closeWindow,
     addFavorite
   case reopenClosed, recentlyClosed, bookmarkPage, bookmarks, history, downloads
@@ -17,6 +17,20 @@ enum BrowserMenuCommand: String, CaseIterable {
   case splitView
   case extensions, help, minimizeWindow, zoomWindow, bringAllToFront, settings, quit, createFolder
   case checkForUpdates, inspector, inspectorCopy
+}
+
+/// AppKit otherwise falls back from unbound Command-N to the private-window menu item.
+@MainActor
+final class NativeBrowserMenu: NSMenu {
+  override func performKeyEquivalent(with event: NSEvent) -> Bool {
+    let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+    if event.type == .keyDown, modifiers == .command,
+      event.charactersIgnoringModifiers?.lowercased() == "n"
+    {
+      return false
+    }
+    return super.performKeyEquivalent(with: event)
+  }
 }
 
 @MainActor
@@ -69,6 +83,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   private(set) var profileOnboarding: ProfileOnboardingWindow?
   private var pendingURLs: [URL] = []
   private var claimedPrimary = false
+  private var reopenHandlerInstalled = false
   private var started = false
   private var startupFailed = false
   private(set) var restartRequested = false
@@ -206,7 +221,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
 
   func canPerform(_ command: BrowserMenuCommand) -> Bool {
     guard !events.runtime.isQuitting else { return false }
-    if command == .newWindow || command == .newMiniWindow || command == .quit { return true }
+    if command == .newMiniWindow || command == .quit { return true }
     if command == .checkForUpdates { return canCheckForUpdates }
     if command == .newPrivateWindow {
       return activeContext != nil || privateHost?.hasActiveWindow == true
@@ -255,12 +270,12 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
 
   /// Commands that act on the app rather than one window and need no window to be enabled.
   private static let appCommands: Set<BrowserMenuCommand> = [
-    .newWindow, .newPrivateWindow, .newMiniWindow, .quit,
+    .newPrivateWindow, .newMiniWindow, .quit,
   ]
 
   func perform(_ command: BrowserMenuCommand) {
     guard canPerform(command) else { return }
-    if performAppCommand(command, from: activeContext) { return }
+    if performAppCommand(command) { return }
     if privateHost?.hasActiveWindow == true {
       privateHost?.perform(command)
       return
@@ -278,14 +293,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   }
 
   /// Runs app-wide commands; returns false for commands that belong to a window.
-  private func performAppCommand(
-    _ command: BrowserMenuCommand, from source: NativeBrowserContext?
-  ) -> Bool {
+  private func performAppCommand(_ command: BrowserMenuCommand) -> Bool {
     switch command {
     case .quit: quit()
     case .newMiniWindow: openMiniWindow(url: nil)
-    case .newWindow:
-      do { try newWindow(from: source?.id) } catch { report(error) }
     case .newPrivateWindow:
       do { try privateHost?.openWindow() } catch { report(error) }
     case .checkForUpdates: updater?.checkForUpdates()
@@ -341,7 +352,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     guard let command = BrowserMenuCommand(rawValue: name), let context = contexts[id],
       canPerformLauncherCommand(command, in: context)
     else { return }
-    if performAppCommand(command, from: context) { return }
+    if performAppCommand(command) { return }
     if command == .settings {
       settingsController?.show(for: context.store.session.selectedSpace.profileID)
       return
@@ -416,7 +427,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .bringAllToFront:
       for browser in contexts.values { browser.window.orderFront(nil) }
       context.window.makeKeyAndOrderFront(nil)
-    case .newWindow, .newPrivateWindow, .newMiniWindow, .settings, .quit, .checkForUpdates: break
+    case .newPrivateWindow, .newMiniWindow, .settings, .quit, .checkForUpdates: break
     }
   }
 
@@ -425,6 +436,11 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   }
 
   func detach() {
+    if reopenHandlerInstalled {
+      NSAppleEventManager.shared().removeEventHandler(
+        forEventClass: AEEventClass(kCoreEventClass), andEventID: AEEventID(kAEReopenApplication))
+      reopenHandlerInstalled = false
+    }
     events.runtime.onQuitCancelled = nil
     if let shortcutMonitor { NSEvent.removeMonitor(shortcutMonitor) }
     shortcutMonitor = nil
@@ -554,6 +570,36 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     profileOnboarding?.close()
     profileOnboarding = nil
     if case .created(let id) = outcome { settingsController?.selectProfile(id) }
+  }
+
+  /// Install after Chromium starts so Dock reopen cannot create an unmanaged blank window.
+  func installReopenHandler() {
+    NSAppleEventManager.shared().setEventHandler(
+      self, andSelector: #selector(handleReopen(_:reply:)),
+      forEventClass: AEEventClass(kCoreEventClass), andEventID: AEEventID(kAEReopenApplication))
+    reopenHandlerInstalled = true
+  }
+
+  @objc func handleReopen(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) {
+    guard started, !startupFailed, !events.runtime.isQuitting else { return }
+    do {
+      let context: NativeBrowserContext
+      if let existing = workspace.workspace.focusedWindowID.flatMap({ contexts[$0] })
+        ?? contexts.values.first
+      {
+        context = existing
+      } else {
+        let id = try newWindow()
+        guard let created = contexts[id] else { throw WorkspaceError.invalidState }
+        context = created
+        // Ignore the retired new-window preference when recovering the main window.
+        context.store.sidebarIsVisible = true
+      }
+      if presentation == .visible {
+        if context.window.isMiniaturized { context.window.deminiaturize(nil) }
+        context.window.makeKeyAndOrderFront(nil)
+      }
+    } catch { report(error) }
   }
 
   @objc func handleURL(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) {
@@ -866,7 +912,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   }
 
   static func makeMenu(target: AnyObject) -> NSMenu {
-    let main = NSMenu()
+    let main = NativeBrowserMenu()
     func localizedTitle(_ title: String) -> String {
       if title == "About \(ProductIdentity.name)" {
         return ShellL10n.format("About %@", arguments: [.string(ProductIdentity.name)])
@@ -930,7 +976,6 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     app.addItem(.separator())
     add(.quit, "Quit \(ProductIdentity.name)", to: app)
     let file = section("File")
-    add(.newWindow, "New window", to: file)
     add(.newPrivateWindow, "New Private Window", to: file)
     add(.newMiniWindow, "New Mini Window", to: file)
     add(.newTab, "New tab", to: file)
@@ -1100,7 +1145,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
         forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))
       runtime.onReady = { [weak host] in
         host?.updater = AppUpdater.forMainBundle()
-        do { try host?.restore() } catch {
+        do {
+          try host?.restore()
+          host?.installReopenHandler()
+        } catch {
           host?.startupFailed = true
           host?.report(error)
           host?.events.runtime.quit()

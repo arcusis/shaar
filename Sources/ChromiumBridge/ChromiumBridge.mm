@@ -71,6 +71,7 @@ NSString *ARCValidatedProfileID(NSString *profileID) {
 BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   NSEventModifierFlags chord = modifiers & (NSEventModifierFlagCommand | NSEventModifierFlagControl |
     NSEventModifierFlagOption | NSEventModifierFlagShift | NSEventModifierFlagFunction);
+  // Keep Command-N out of Chromium: Shaar intentionally leaves it without a menu action.
   if (chord == NSEventModifierFlagCommand) {
     return [@[@"n", @"t", @"l", @"w", @"s", @"q", @"r", @"f", @"g", @"d", @"y", @","] containsObject:key.lowercaseString];
   }

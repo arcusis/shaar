@@ -68,3 +68,37 @@ private final class ShortcutFocusableView: NSView {
   #expect(!ShortcutPageRouting.route(copy, menu: menu, responder: window.firstResponder))
   #expect(!ShortcutPageRouting.route(event, menu: menu, responder: NSView()))
 }
+
+@Test @MainActor func normalNewWindowIsAbsentFromShortcutSettingsAndLauncher() {
+  let entries = ShortcutCatalog.installed().entries
+  #expect(!entries.contains { $0.command == "newWindow" })
+  #expect(!entries.contains { $0.key.lowercased() == "n" && $0.modifiers == .command })
+  #expect(!LauncherCommands.catalog.contains { $0.id == "newWindow" })
+  #expect(LauncherCommands.catalog.contains { $0.id == "newPrivateWindow" })
+  #expect(LauncherCommands.catalog.contains { $0.id == "newMiniWindow" })
+  // Chromium must not run its built-in New Window command when no menu item handles Command-N.
+  let event = NSEvent.keyEvent(
+    with: .keyDown, location: .zero, modifierFlags: .command,
+    timestamp: 0, windowNumber: 0, context: nil, characters: "n", charactersIgnoringModifiers: "n",
+    isARepeat: false, keyCode: 45)!
+  let target = NewWindowMenuTarget()
+  let menu = NativeBrowserHost.makeMenu(target: target)
+  #expect(!menu.performKeyEquivalent(with: event))
+  #expect(target.invoked.isEmpty)
+  for modifiers: NSEvent.ModifierFlags in [[.command, .shift], [.command, .option]] {
+    let retained = NSEvent.keyEvent(
+      with: .keyDown, location: .zero, modifierFlags: modifiers,
+      timestamp: 0, windowNumber: 0, context: nil, characters: "n",
+      charactersIgnoringModifiers: "n",
+      isARepeat: false, keyCode: 45)!
+    #expect(menu.performKeyEquivalent(with: retained))
+  }
+  #expect(target.invoked == ["newPrivateWindow", "newMiniWindow"])
+}
+
+@MainActor private final class NewWindowMenuTarget: NSObject {
+  var invoked: [String] = []
+  @objc func menuAction(_ sender: NSMenuItem) {
+    invoked.append(sender.representedObject as? String ?? sender.title)
+  }
+}

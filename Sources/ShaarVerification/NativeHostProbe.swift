@@ -181,11 +181,11 @@ final class NativeHostProbe {
       focus(firstID)
       let initial = host.contexts[firstID]!
       _ = try await document(initial.store.session.selectedSpace.selectedTabID!)
-      try send(.newWindow)
+      try host.newWindow()
       secondID = manager.workspace.windows.first { $0.id != firstID }!.id
       try expect(
         host.contexts[secondID]!.store.session.spaces.flatMap(\.tabs).isEmpty,
-        "native New window menu creates a managed window without copying ordinary live pages")
+        "internal fixture creates a legacy managed window without copying ordinary live pages")
       focus(secondID)
       let secondStore = host.contexts[secondID]!.store
       secondStore.perform(.open(fixture.appending(path: "host-second-temporary")))
@@ -228,13 +228,33 @@ final class NativeHostProbe {
       )
       closedIDs = [firstID, secondID]
       focused = nil
-      try send(.newWindow)
+      host.preferences.setSidebarInitiallyVisible(false)
+      let reopen = NSAppleEventDescriptor(
+        eventClass: AEEventClass(kCoreEventClass), eventID: AEEventID(kAEReopenApplication),
+        targetDescriptor: nil, returnID: AEReturnID(kAutoGenerateReturnID),
+        transactionID: AETransactionID(kAnyTransactionID))
+      host.handleReopen(reopen, reply: .null())
       firstID = manager.workspace.windows[0].id
+      let recovered = host.contexts[firstID]!
+      recovered.window.contentView?.layoutSubtreeIfNeeded()
+      try expect(
+        host.contexts.count == 1 && recovered.store.sidebarIsVisible
+          && recovered.hosting.superview === recovered.contentView
+          && recovered.hosting.bounds.width >= 760 && recovered.hosting.bounds.height >= 520
+          && !recovered.store.commandIsOpen && !recovered.window.isVisible
+          && !recovered.window.isKeyWindow,
+        "Dock reopen builds one full hidden main window with sidebar despite retired preference")
+      try await capture(recovered.hosting, index: 5)
+      host.handleReopen(reopen, reply: .null())
+      try expect(
+        host.contexts.count == 1 && manager.workspace.windows.count == 1,
+        "repeated Dock reopen reuses the existing main window")
+      host.preferences.setSidebarInitiallyVisible(true)
       let first = host.contexts[firstID]!.store
       first.perform(.space(first.session.spaces[1].id))
       first.perform(.open(fixture.appending(path: "host-beta-final")))
       focus(firstID)
-      try send(.newWindow)
+      try host.newWindow()
       secondID = manager.workspace.windows.first { $0.id != firstID }!.id
       let second = host.contexts[secondID]!.store
       second.perform(.space(second.session.spaces[0].id))
@@ -286,7 +306,7 @@ final class NativeHostProbe {
         closedIDs.append(id)
       }
       focus(secondID)
-      try send(.newWindow)
+      try host.newWindow()
       let empty = host.contexts.keys.first { ![firstID, secondID].contains($0) }!
       focus(empty)
       try send(.closeTab)
@@ -352,19 +372,31 @@ final class NativeHostProbe {
     second.store.spaceEditor = .edit(second.store.session.selectedSpaceID)
     try expect(
       !host.canPerform(.newTab) && !host.canPerform(.closeWindow)
-        && !host.canPerform(.settings) && host.canPerform(.newWindow),
+        && !host.canPerform(.settings) && host.canPerform(.newPrivateWindow),
       "native menu validation respects the focused window's modal state")
     second.store.sheet = nil
     second.store.sheetDidDismiss()
-    let newWindowItem = try menuItem(.newWindow)
+    let menuItems = host.menu?.items.compactMap(\.submenu).flatMap(\.items) ?? []
+    try expect(
+      !menuItems.contains { $0.representedObject as? String == "newWindow" }
+        && !menuItems.contains {
+          $0.keyEquivalent.lowercased() == "n" && $0.keyEquivalentModifierMask == .command
+        }
+        && !host.launcherCommands(inWindow: secondID).contains { $0.id == "newWindow" },
+      "normal New window and Command-N are absent from menus and launcher Actions")
+    let privateWindowItem = try menuItem(.newPrivateWindow)
+    let miniWindowItem = try menuItem(.newMiniWindow)
     let closeWindowItem = try menuItem(.closeWindow)
     let settingsItem = try menuItem(.settings)
     try expect(
-      newWindowItem.keyEquivalent == "n" && newWindowItem.keyEquivalentModifierMask == .command
+      privateWindowItem.keyEquivalent == "n"
+        && privateWindowItem.keyEquivalentModifierMask == [.command, .shift]
+        && miniWindowItem.keyEquivalent == "n"
+        && miniWindowItem.keyEquivalentModifierMask == [.command, .option]
         && closeWindowItem.keyEquivalentModifierMask == [.command, .shift]
         && settingsItem.keyEquivalent == ","
         && settingsItem.keyEquivalentModifierMask == .command,
-      "native menus register exact Command-N, Shift-Command-W, and Command-Comma chords")
+      "native menus retain private, mini, close-window and Settings chords")
     guard let settings = host.settingsController else {
       throw HostProbeFailure("Native Settings controller is missing.")
     }
@@ -1359,7 +1391,7 @@ final class NativeHostProbe {
           uniqueKeysWithValues: closures.map { ($0.key.uuidString, $0.value) }),
         "error": error?.localizedDescription as Any? ?? NSNull(),
         "scope":
-          "Production host class with hidden native windows, actual NSMenu target actions, injected owned key-window identity and notifications, real native ordinary closures, managed restoration/geometry, cross-process lock, and engine-quit audit. Engine-requested normal-profile windows have a separate report. Physical input/focus, native close-cancellation dialogs, primary/last-engine-window macOS reopen policy, private sessions and third-party window flows are not covered.",
+          "Production host class with hidden native windows, actual NSMenu target actions, injected owned key-window identity and notifications, real native ordinary closures, managed restoration/geometry, direct Dock reopen handler with no managed windows, cross-process lock, and engine-quit audit. Engine-requested normal-profile windows have a separate report. Physical input/focus, native close-cancellation dialogs, OS delivery of Dock reopen and last-engine-window lifecycle, private sessions and third-party window flows are not covered.",
       ], options: [.prettyPrinted, .sortedKeys]
     ).write(to: root.appending(path: "\(phase)-native-host.json"), options: .atomic)
   }

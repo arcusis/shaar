@@ -19,6 +19,6 @@ import XCTest
     defer { mounted.close() }
     _ = try await mounted.capture(
       to: URL(fileURLWithPath: "/tmp/shortcuts-pane.png"),
-      requiredText: ["Shortcuts", "Search shortcuts", "New window"])
+      requiredText: ["Shortcuts", "Search shortcuts", "New Private Window"])
   }
 }

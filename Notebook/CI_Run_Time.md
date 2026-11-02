@@ -16,7 +16,8 @@ Durations use GitHub run creation/completion timestamps, not the sum of job time
 | [41437699136](https://github.com/arcusis/shaar/actions/runs/41437699136) | Planning without duplicate compilation | 18m09s | Swift passed in 17m40s, 178/178 files; Inspector restart failure kept run red |
 | [41441422985](https://github.com/arcusis/shaar/actions/runs/41441422985) | Two app batches, picker acknowledgement | Canceled after >24m | Every native gate passed; Swift tracing exceeded the budget |
 | [41438505574](https://github.com/arcusis/shaar/actions/runs/41438505574) | Production with Hebrew/RTL | 42m01s | Green; Swift 29m42s, localization stage 12m10s |
-| Pending hosted run | Integrated localization, standard Intel, explicit arm64 | Pending | Extraction and final wall time remain unproven |
+| [41458897983](https://github.com/arcusis/shaar/actions/runs/41458897983) | Part 1 final integrated PR | 32m30s | Green; serial engine 30m33s, Swift CodeQL 21m16s; part 2 in [[CI_Parallel_Verification]] |
+| [41482477207](https://github.com/arcusis/shaar/actions/runs/41482477207) | Part 2 required graph, head `100917f` | 14m17s | Green; all 18 selected jobs passed on attempt 1, without retries; Swift security runs independently |
 
 A [cold shipping-only trial](https://github.com/arcusis/shaar/actions/runs/41430145476) was canceled after exceeding the budget; it supplies no green timing claim. The original baseline included 1m52s before execution; its executing graph took 32m34s. Across measured runs, macOS build/probe durations vary substantially. Final acceptance depends on observed hosted execution.
 

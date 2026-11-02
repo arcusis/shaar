@@ -10,6 +10,10 @@ on:
         description: Trace Swift sources for this selected diff
         type: boolean
         default: true
+      swift_only:
+        description: Run Swift in its independent security workflow
+        type: boolean
+        default: false
 permissions:
   contents: read
   security-events: write
@@ -23,7 +27,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: ${{ inputs.swift && fromJSON('["swift","python","actions"]') || fromJSON('["python","actions"]') }}
+        language: ${{ inputs.swift_only && fromJSON('["swift"]') || inputs.swift && fromJSON('["swift","python","actions"]') || fromJSON('["python","actions"]') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -55,6 +59,7 @@ jobs:
         uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370
         with:
           category: /language:${{ matrix.language }}
+          wait-for-processing: true
       - name: Require extraction of every tracked Swift source
         if: matrix.language == 'swift'
         env:

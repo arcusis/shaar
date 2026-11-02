@@ -32,6 +32,8 @@ jobs:
     permissions:
       contents: read
       pages: read
+      actions: read
+      security-events: read
     env:
       RELEASE_TAG: ${{ github.ref_name }}
 
@@ -62,6 +64,13 @@ jobs:
           "$RUNNER_TEMP/venv/bin/python" -m pip install --quiet --require-hashes --only-binary=:all: \
             -r scripts/release-requirements.txt
           echo "PYTHON=$RUNNER_TEMP/venv/bin/python" >> "$GITHUB_ENV"
+
+      - name: Require exact production CI and no open code-scanning alerts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          "$PYTHON" scripts/check-release-ci.py --repository "$GITHUB_REPOSITORY" \
+            --revision "$(git rev-parse HEAD)"
 
       - name: Load tagged release contract
         run: |

@@ -10,6 +10,8 @@ import Observation
 final class InspectorAICopyModel {
   typealias Formatter = InspectorAIFormatter
   @ObservationIgnored weak var inspector: InspectorModel?
+  @ObservationIgnored var screenshotCache = InspectorScreenshotCache()
+  enum CopyKind { case element, withNotes, image }
   var detailed = false
   var intent = Formatter.Intent.change
   var feedback = ""
@@ -124,6 +126,10 @@ final class InspectorAICopyModel {
   }
 
   func copyElement(to pasteboard: NSPasteboard = .general) async {
+    await copy(.element, to: pasteboard)
+  }
+
+  func copy(_ kind: CopyKind, to pasteboard: NSPasteboard = .general) async {
     guard !busy else { return }
     busy = true
     failure = nil
@@ -132,7 +138,7 @@ final class InspectorAICopyModel {
     let operation = revision
     let includeDetails = detailed
     do {
-      let context = try await context(captureDetails: includeDetails)
+      let context = try await context(captureDetails: kind == .image ? false : includeDetails)
       guard let inspector else { throw CancellationError() }
       let generation = inspector.documentGeneration
       guard
@@ -158,8 +164,15 @@ final class InspectorAICopyModel {
       guard operation == revision, inspector.isOpen, inspector.documentGeneration == generation,
         inspector.selection?.id == context.id
       else { throw CancellationError() }
-      try Self.write(Formatter.element(context, detailed: includeDetails), png: png, to: pasteboard)
-      status = InspectorL10n.string("Element copied with PNG")
+      let file = try screenshotCache.save(png, tag: context.tag)
+      var markdown = Formatter.element(context, detailed: includeDetails, screenshotPath: file.path)
+      if kind == .withNotes, !notes.isEmpty {
+        markdown += "\n" + Formatter.notes(notes, detailed: includeDetails)
+      }
+      try Self.write(kind == .image ? nil : markdown, png: png, to: pasteboard)
+      status = InspectorL10n.string(
+        kind == .image ? "Copied image to clipboard" : "Copied element to clipboard")
+      inspector.presentation.copied(kind == .image ? "image" : "element")
     } catch {
       if operation == revision { failure = InspectorL10n.display(error.localizedDescription) }
     }
@@ -220,25 +233,25 @@ final class InspectorAICopyModel {
     do {
       try Self.write(Formatter.notes(notes, detailed: detailed), png: nil, to: pasteboard)
       clear()
-      status = InspectorL10n.string("Notes copied and cleared")
+      status = InspectorL10n.string("Copied notes to clipboard")
+      inspector?.presentation.copied("notes")
     } catch { failure = InspectorL10n.display(error.localizedDescription) }
   }
-  static func write(_ markdown: String, png: Data?, to pasteboard: NSPasteboard) throws {
+  static func write(_ markdown: String?, png: Data?, to pasteboard: NSPasteboard) throws {
     let text = NSPasteboardItem()
-    text.setString(markdown, forType: .string)
-    text.setString(markdown, forType: .init("net.daringfireball.markdown"))
-    var items = [text]
+    if let markdown {
+      text.setString(markdown, forType: .string)
+      text.setString(markdown, forType: .init("net.daringfireball.markdown"))
+    }
     if let png {
       guard png.starts(with: [137, 80, 78, 71, 13, 10, 26, 10]), NSBitmapImageRep(data: png) != nil
       else {
         throw InspectorFailure(InspectorL10n.string("The element image is invalid."))
       }
-      let image = NSPasteboardItem()
-      image.setData(png, forType: .png)
-      items.append(image)
+      text.setData(png, forType: .png)
     }
     pasteboard.clearContents()
-    guard pasteboard.writeObjects(items) else {
+    guard pasteboard.writeObjects([text]) else {
       throw InspectorFailure(InspectorL10n.string("The clipboard could not be written."))
     }
   }

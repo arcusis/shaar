@@ -72,7 +72,7 @@ import Testing
       model.notes.filter { $0.feedback == "New" }.count == 49 && model.clearedNotes.count == 49)
   }
 
-  @Test func clipboardHasMarkdownThenRealPNGAndCorruptionDoesNotReplaceIt() throws {
+  @Test func clipboardHasMarkdownAndRealPNGOnOneItemAndCorruptionDoesNotReplaceIt() throws {
     let board = NSPasteboard.withUniqueName()
     defer { board.releaseGlobally() }
     let bitmap = try #require(
@@ -83,16 +83,48 @@ import Testing
     let png = try #require(bitmap.representation(using: .png, properties: [:]))
     try InspectorAICopyModel.write("Markdown fixture", png: png, to: board)
     let items = try #require(board.pasteboardItems)
-    #expect(items.count == 2)
+    #expect(items.count == 1)
     #expect(items[0].string(forType: .string) == "Markdown fixture")
     #expect(items[0].string(forType: .init("net.daringfireball.markdown")) == "Markdown fixture")
-    #expect(items[1].data(forType: .png) == png)
+    #expect(items[0].data(forType: .png) == png)
     let count = board.changeCount
     #expect(throws: InspectorFailure.self) {
       try InspectorAICopyModel.write(
         "Bad image", png: Data([137, 80, 78, 71, 13, 10, 26, 10]), to: board)
     }
     #expect(board.changeCount == count)
+    try InspectorAICopyModel.write(nil, png: png, to: board)
+    #expect(board.pasteboardItems?.count == 1 && board.data(forType: .png) == png)
+    #expect(board.string(forType: .string) == nil)
+  }
+
+  @Test func screenshotCachePrunesOnlyOwnedOldFilesAndKeepsPrivatePermissions() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let now = Date.now
+    let old = root.appending(path: "123-section.png")
+    let recent = root.appending(path: "124-button.png")
+    let unrelated = root.appending(path: "unrelated.png")
+    for file in [old, recent, unrelated] { try Data([1, 2, 3]).write(to: file) }
+    for file in [old, unrelated] {
+      try FileManager.default.setAttributes(
+        [.modificationDate: now.addingTimeInterval(-8 * 24 * 60 * 60)], ofItemAtPath: file.path)
+    }
+    let link = root.appending(path: "125-section.png")
+    try FileManager.default.createSymbolicLink(at: link, withDestinationURL: unrelated)
+    let png = Data([137, 80, 78, 71, 13, 10, 26, 10])
+    let saved = try InspectorScreenshotCache(directory: root).save(
+      png, tag: "../../<SECTION>", now: now)
+    #expect(!FileManager.default.fileExists(atPath: old.path))
+    #expect(FileManager.default.fileExists(atPath: recent.path))
+    #expect(FileManager.default.fileExists(atPath: unrelated.path))
+    #expect(try FileManager.default.destinationOfSymbolicLink(atPath: link.path) == unrelated.path)
+    #expect(saved.lastPathComponent.hasSuffix("-section.png"))
+    #expect(try Data(contentsOf: saved) == png)
+    let permissions =
+      try FileManager.default.attributesOfItem(atPath: saved.path)[.posixPermissions] as? NSNumber
+    #expect(permissions?.intValue == 0o600)
   }
   @Test func unavailableOrClosedSelectionFailsWithoutTouchingClipboard() async throws {
     let model = inspector()

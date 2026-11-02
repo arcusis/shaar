@@ -17,15 +17,17 @@ struct InspectorPage: View {
         vertical ? AnyLayout(VStackLayout(spacing: 0)) : AnyLayout(HStackLayout(spacing: 0))
       layout {
         ChromiumPage(engine: engine, tabID: tabID, autofocus: autofocus)
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
+          .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
         if let model, model.isOpen {
           Divider()
           InspectorPanel(model: model)
             .frame(
-              width: vertical ? nil : 320,
-              height: vertical ? min(420, geometry.size.height * 0.62) : nil)
+              width: vertical ? geometry.size.width : 320,
+              height: vertical ? min(420, geometry.size.height * 0.62) : nil
+            )
+            .clipped()
         }
-      }
+      }.frame(width: geometry.size.width, height: geometry.size.height).clipped()
     }
   }
 }

@@ -1,0 +1,36 @@
+Attached browser context from https://example.com/account
+Screenshot: /Users/developer/Library/Caches/Shaar/Inspector/123-section.png
+
+Selected element:
+- Tag: section
+- Selector: ` [data-qa=account-card] `
+- React/components: React: ProductCard
+- Dimensions: 180 × 49
+
+Text content:
+```
+Account details
+```
+
+Nearby context:
+```
+button: Cancel
+```
+
+Computed styles:
+```css
+display: inline-block;
+```
+
+HTML:
+```html
+<section data-qa="account-card">
+  <h2>…</h2>
+  <div>…</div>
+  <img src="https://example.com/long/long/long/long/long/…/long/long/long/long/long/long/image.png">
+</section>
+```
+
+Ancestor path: html > body > section
+
+Full DOM path: ` html > body > section:nth-of-type(1) `

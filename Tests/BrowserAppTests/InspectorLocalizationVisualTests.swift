@@ -193,20 +193,74 @@ final class InspectorLocalizationVisualTests: XCTestCase {
     }
   }
 
-  private func capture<V: View>(_ view: V, name: String, directory: URL) throws {
+  func testRedesignedTabsAndCopyMenuFitBothWidthsInLaunchLanguage() throws {
+    let application = NSApplication.shared
+    let previousKeyWindow = application.keyWindow
+    defer { XCTAssertTrue(application.keyWindow === previousKeyWindow) }
+    let inspector = InspectorModel(
+      target: SiteControlTarget(
+        tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/inspect")!),
+      engine: nil)
+    inspector.open()
+    defer { inspector.close() }
+    var selection = InspectorPanelTests.fixtureSelection()
+    selection.display = "inline-block"
+    selection.identifier = "save"
+    selection.classNames = ["save", "primary"]
+    selection.renderedFonts = ["Arial"]
+    try inspector.receive(selection)
+    inspector.aiCopy.append(
+      context: InspectorAIFormatterTests.context(), feedback: "Keep the action clear.",
+      intent: .change)
+    let language = BrowserLanguage.currentLaunchLanguage.localeIdentifier
+    let directory = URL(fileURLWithPath: "build/Verification/localization-visuals/\(language)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    for width in [CGFloat(320), 420] {
+      for (name, tab, menu) in [
+        ("design", InspectorModel.Tab.design, false), ("code", .styles, false),
+        ("notes", .notes, false), ("copy-menu", .design, true),
+      ] {
+        inspector.tab = tab
+        if tab == .styles {
+          try inspector.styles.receive(
+            rules: [], computed: [.init(name: "display", value: "inline-block")],
+            selectionID: selection.id, generation: inspector.documentGeneration)
+        }
+        inspector.presentation.copyMenuOpen = menu
+        let layout = InspectorLayoutSnapshot()
+        try capture(
+          InspectorPanel(model: inspector, layout: layout),
+          name: "redesign-\(name)-\(Int(width))", directory: directory, width: width)
+        XCTAssertEqual(layout.tabFrames.count, 6)
+        for frame in layout.tabFrames.values {
+          XCTAssertGreaterThanOrEqual(frame.minX, -0.5)
+          XCTAssertLessThanOrEqual(frame.maxX, width + 0.5)
+        }
+        if menu {
+          XCTAssertGreaterThan(layout.copyMenuFrame.width, 180)
+          XCTAssertGreaterThanOrEqual(layout.copyMenuFrame.minX, 0)
+          XCTAssertLessThanOrEqual(layout.copyMenuFrame.maxX, width + 0.5)
+        }
+      }
+    }
+  }
+
+  private func capture<V: View>(_ view: V, name: String, directory: URL, width: CGFloat = 320)
+    throws
+  {
     for (appearance, suffix) in [(NSAppearance.Name.aqua, "light"), (.darkAqua, "dark")] {
       let url = directory.appending(path: "inspector-\(name)-\(suffix).png")
       let language = BrowserLanguage.currentLaunchLanguage
-      let root = view.frame(width: 320, height: 1000)
+      let root = view.frame(width: width, height: 1000)
         .background(Color(nsColor: .windowBackgroundColor))
         .environment(\.colorScheme, suffix == "dark" ? .dark : .light)
         .environment(\.locale, Locale(identifier: language.localeIdentifier))
         .environment(\.layoutDirection, language.isRightToLeft ? .rightToLeft : .leftToRight)
         .transaction { $0.disablesAnimations = true }
       let bitmap = try VisualCapture.renderOffscreen(
-        root, size: NSSize(width: 320, height: 1000),
+        root, size: NSSize(width: width, height: 1000),
         appearance: appearance, to: url)
-      XCTAssertEqual(bitmap.pixelsWide, 320)
+      XCTAssertEqual(bitmap.pixelsWide, Int(width))
       XCTAssertEqual(bitmap.pixelsHigh, 1000)
       XCTAssertTrue(hasVisiblePixels(bitmap), "Nonblank Inspector panel: \(name)-\(suffix)")
       XCTAssertTrue((try Data(contentsOf: url)).count > 4_096)

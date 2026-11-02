@@ -10,13 +10,71 @@ import Testing
 @Suite struct InspectorAIFormatterTests {
   typealias F = InspectorAIFormatter
   @Test func singleElementSnapshot() throws {
-    try snapshot(F.element(Self.context(), detailed: false), "element")
+    try snapshot(
+      F.element(
+        Self.context(), detailed: false,
+        screenshotPath: "/Users/developer/Library/Caches/Shaar/Inspector/123-button.png"), "element"
+    )
+  }
+  @Test func qualitySnapshotOmitsUnnecessaryFieldsAndPrunesWholeTags() throws {
+    var value = Self.context()
+    value.accessibleName = ""
+    value.tag = "section"
+    value.role = "Unavailable"
+    value.source = "Unavailable"
+    value.selector = "[data-qa=account-card]"
+    value.ancestors = ["html", "body", "section"]
+    value.domPath = "html > body > section:nth-of-type(1)"
+    value.components = ["bt", "React: ProductCard", "x", "ab12", "Anonymous"]
+    value.bounds = .init(x: 20.2, y: 40.9, width: 180.4, height: 48.7)
+    value.text = "Account details"
+    value.nearby = "main: Account details Cancel\nbutton: Cancel\nbutton: Cancel"
+    value.html = .init(
+      tag: "section", attributes: [.init(name: "data-qa", value: "account-card")],
+      children: [
+        .init(tag: "h2", children: [.init(text: "Account details")]),
+        .init(tag: "div", children: [.init(tag: "span", children: [.init(text: "Deep content")])]),
+        .init(
+          tag: "img",
+          attributes: [
+            .init(
+              name: "src",
+              value: "https://example.com/" + String(repeating: "long/", count: 35)
+                + "image.png?secret=value")
+          ]),
+      ])
+    let result = F.element(
+      value, detailed: false,
+      screenshotPath: "/Users/developer/Library/Caches/Shaar/Inspector/123-section.png")
+    try snapshot(result, "quality")
+    #expect(!result.contains("Unavailable") && !result.contains("Accessible name:"))
+    #expect(!result.contains("Deep content") && !result.contains("<span>"))
+    #expect(result.contains("Dimensions: 180 × 49"))
+    #expect(!result.contains("React/components: bt") && result.contains("React: ProductCard"))
+    #expect(F.excerpt("alpha beta gamma delta", limit: 13) == "alpha beta…")
+    value.accessibleName = value.text
+    #expect(!F.element(value, detailed: false).contains("Text content:"))
+    #expect(F.readableComponent("App") && !F.readableComponent("bt"))
+    #expect(F.html(value.html).hasSuffix("</section>"))
   }
   @Test func detailedOnAndOffSnapshots() throws {
     let context = Self.context()
     try snapshot(F.element(context, detailed: true), "detailed")
     #expect(!F.element(context, detailed: false).contains("Full computed styles"))
     #expect(F.element(context, detailed: true).contains("line-height: 24px"))
+  }
+  @Test func authoredContentIsNotMistakenForMetadataPlaceholders() {
+    var value = Self.context()
+    value.accessibleName = "Unavailable"
+    value.source = "UnavailableCard.tsx"
+    value.details.consoleErrors = [
+      "Unavailable backend after login", "Unavailable: Page diagnostics have not been enabled.",
+    ]
+    let result = F.element(value, detailed: true)
+    #expect(result.contains("Accessible name: Unavailable"))
+    #expect(result.contains("Source: UnavailableCard.tsx"))
+    #expect(result.contains("Unavailable backend after login"))
+    #expect(!result.contains("Page diagnostics have not been enabled"))
   }
   @Test func notesAcrossTwoPagesSnapshot() throws {
     let one = Self.context()

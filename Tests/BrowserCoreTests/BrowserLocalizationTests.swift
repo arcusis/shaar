@@ -71,6 +71,14 @@ import Testing
   #expect(BrowserLanguage.resolve(selection: .hebrew, preferredLanguages: ["en-US"]) == .hebrew)
 }
 
+@Test func missingCatalogPreservesFallbackKeyInBothLanguages() {
+  for language in [BrowserLanguage.english, .hebrew] {
+    #expect(
+      BrowserLocalization.string("Personal", table: "__missing_catalog__", language: language)
+        == "Personal")
+  }
+}
+
 @Test func computedCoreTitlesUseExplicitCatalogKeysInBothLanguages() {
   #expect(CommandFilter.allCases.map(\.title) == ["Tabs", "History", "Bookmarks", "Actions"])
   #expect(

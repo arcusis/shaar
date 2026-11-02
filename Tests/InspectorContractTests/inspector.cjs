@@ -290,6 +290,13 @@ async function serve() {
   for (const secret of ['password-private-fixture','input-private-fixture','textarea-private-fixture','selected-private-fixture','private-query','private-fragment']) assert(!aiText.includes(secret), secret + ' leaked into AI context');
   assert.match(ai.context.text, /Public nearby context/);
   assert.match(ai.context.domPath, /html:nth-of-type/);
+  assert.equal(ai.context.accessibleName, '', 'A section must not inherit its entire text as an accessible name');
+  assert.equal(await page.evaluate(() => {
+    const p=__shaarInspectorV2;p.highlightEdge('padding',1);
+    const edge=p.edgeHighlight();if(!edge.painted||edge.active.region!=='padding'||edge.active.index!==1)throw Error('Requested spacing edge was not highlighted');
+    p.suspend(true);if(p.edgeHighlight().painted)throw Error('Page mode retained a spacing highlight');
+    p.suspend(false);p.highlightEdge('margin',0);p.highlightEdge(null,0);return !p.edgeHighlight().painted;
+  }), true, 'Spacing edge highlight and cleanup');
   await page.evaluate(() => {
     const picker=__shaarInspectorV2,api=__shaarInspectorCopy,token=api.begin(picker.read().selection.id);
     const input=document.createElement('input'); input.value='late-private-control';picker.element().append(input);
@@ -308,6 +315,24 @@ async function serve() {
   const protectedContext = await page.evaluate(() => globalThis.__shaarInspectorCopy.context(globalThis.__shaarInspectorV2.read().selection.id));
   assert.equal(protectedContext.protected, true);
   assert.equal(protectedContext.text, '');
+  const quality = await page.evaluate(id => {
+    const p=__shaarInspectorV2,api=__shaarInspectorCopy,node=document.querySelector('#ai-card');
+    node.removeAttribute('id');node.className='via-canvas p-4 flex';node.setAttribute('data-testid','account-card');node.setAttribute('data-qa','authored-card');
+    node.__reactFiber$quality={type:function bt(){},return:{type:function ProductCard(){},_debugSource:{fileName:'/src/ProductCard.tsx'},return:null}};
+    p.choose(id);let context=api.context(id);
+    if(context.selector!=='[data-testid=account-card]'||document.querySelectorAll(context.selector).length!==1)throw Error('Stable unique test selector was not preferred');
+    if(context.components.join()!=='React: ProductCard')throw Error('Nearest readable component was not selected');
+    node.setAttribute('aria-label','Account details');const authored=api.context(id).accessibleName;
+    node.removeAttribute('aria-label');
+    const duplicate=document.createElement('div');duplicate.setAttribute('data-testid','account-card');document.body.append(duplicate);
+    p.choose(id);context=api.context(id);
+    if(context.selector!=='[data-qa=authored-card]'||document.querySelectorAll(context.selector).length!==1)throw Error('Duplicate selector was emitted');
+    node.removeAttribute('data-testid');node.removeAttribute('data-qa');p.choose(id);context=api.context(id);
+    if(context.selector.includes('.via-canvas')||context.selector.includes('.flex')||document.querySelectorAll(context.selector).length!==1)throw Error('Utility class selector was emitted');
+    duplicate.remove();return {authored,empty:context.accessibleName};
+  }, ai.context.id);
+  assert.equal(quality.authored, 'Account details');
+  assert.equal(quality.empty, '');
   await page.evaluate(() => { const p = globalThis.__shaarInspectorV2; p.stop(); if(globalThis.__shaarInspectorCopy) throw Error('Copy collector survived Inspector close'); });
   fs.mkdirSync(path.dirname(output), { recursive: true });
   fs.writeFileSync(output, JSON.stringify({

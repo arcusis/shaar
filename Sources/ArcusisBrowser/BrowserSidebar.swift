@@ -21,6 +21,7 @@ struct BrowserSidebar: View {
   @State private var folderHoverTask: Task<Void, Never>?
   @State private var folderHoverTab: UUID?
   @State private var folderHoverSession: DropSession.ID?
+  @State private var folderHoverDeadline: ContinuousClock.Instant?
   @State private var folderDropReady: UUID?
   @State private var targetedTabIntent: SidebarTabDropIntent?
   @State private var hoveredTabID: UUID?
@@ -662,8 +663,11 @@ struct BrowserSidebar: View {
       !space.splits.contains(where: { $0.tabIDs.contains(tab.id) }),
       let drag = store.tabDrag, drag.tabID != tab.id
     else { return }
+    // Measure the hold from the native event, even if other main-actor work delays the task.
+    let deadline = ContinuousClock.now + .milliseconds(650)
+    folderHoverDeadline = deadline
     folderHoverTask = Task { @MainActor in
-      try? await Task.sleep(for: .milliseconds(650))
+      try? await Task.sleep(until: deadline, clock: .continuous)
       guard !Task.isCancelled, folderHoverTab == tab.id,
         targetedTabIntent?.combinesTabs != false
       else { return }
@@ -677,6 +681,7 @@ struct BrowserSidebar: View {
     folderDropReady = nil
     folderHoverTab = nil
     folderHoverSession = nil
+    folderHoverDeadline = nil
   }
 
   private func folderDraftRow(depth: Int) -> some View {
@@ -866,7 +871,11 @@ struct BrowserSidebar: View {
             item, into: space.id, before: tab.id, pinned: tab.isPinned, folderID: tab.folderID)
         default: return false
         }
-        if folderDropReady == tab.id {
+        // A drop can reach the main actor before the hover task resumes after its deadline.
+        let heldOverTab =
+          folderHoverTab == tab.id
+          && folderHoverDeadline.map { ContinuousClock.now >= $0 } == true
+        if folderDropReady == tab.id || heldOverTab {
           defer { cancelFolderHover() }
           guard
             let folder = store.createFolderFromDrop(

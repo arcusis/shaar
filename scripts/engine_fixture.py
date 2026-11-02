@@ -482,7 +482,7 @@ class Fixture(http.server.BaseHTTPRequestHandler):
         if path in ('/inspector-ai', '/inspector-ai/second'):
             self.html(b"""<!doctype html><html><meta charset="utf-8"><meta name="generator" content="Inspector AI fixture"><title>Inspector AI copy</title>
 <style>body{font:16px Arial;margin:24px;color:#172033;background:white}main{padding:20px;border:1px solid #ddd;width:340px}button{font:16px Arial;padding:10px;background:#2563eb;color:white}input,textarea,select{display:block;width:230px;height:32px;margin:12px 0}</style>
-<main id="ai-card"><h1>Review the account card</h1><button id="ai-save">Save changes</button><input id="ai-password" type="password" value="password-private-fixture"><input id="ai-input" value="input-private-fixture"><textarea id="ai-textarea">textarea-private-fixture</textarea><select id="ai-select"><option selected value="option-private-fixture">selected-private-fixture</option></select><p>Public nearby context.</p></main></html>""")
+<main id="ai-card"><h1>Review the account card</h1><button id="ai-save" aria-label="Save changes">Save changes</button><input id="ai-password" type="password" value="password-private-fixture"><input id="ai-input" value="input-private-fixture"><textarea id="ai-textarea">textarea-private-fixture</textarea><select id="ai-select"><option selected value="option-private-fixture">selected-private-fixture</option></select><p>Public nearby context.</p></main></html>""")
             return
         if path == '/inspector-ai-failure':
             self.send_error(503, 'Inspector AI fixture error')

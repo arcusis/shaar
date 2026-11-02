@@ -18,7 +18,22 @@ struct InspectorStylesView: View {
       VStack(spacing: 0) {
         if inspector.selection?.locked == true {
           if model.selectedID == inspector.selection?.id {
-            InspectorSection(InspectorL10n.string("Layout")) {
+            InspectorSection(
+              InspectorL10n.string("Styles"), id: "Styles",
+              copy: { inspector.copy(model.css, label: "CSS") },
+              code: model.css
+            ) {
+              VStack(spacing: 2) {
+                ForEach(model.exported) { row in
+                  InspectorProperty(row.name, value: row.value, copy: inspector.copy)
+                }
+              }
+            }
+            InspectorSection(
+              InspectorL10n.string("Layout"), id: "Layout",
+              copy: { inspector.copy(layoutCSS, label: "layout") },
+              code: layoutCSS
+            ) {
               VStack(spacing: 2) {
                 ForEach(model.layout) { row in
                   InspectorProperty(row.name, value: row.value, copy: inspector.copy)
@@ -41,7 +56,7 @@ struct InspectorStylesView: View {
                 }
               }
             }
-            InspectorSection(InspectorL10n.string("Element overrides")) {
+            InspectorSection(InspectorL10n.string("Element overrides"), id: "Element overrides") {
               VStack(alignment: .leading, spacing: 9) {
                 HStack(spacing: 6) {
                   TextField(InspectorL10n.string("property"), text: $property)
@@ -72,7 +87,11 @@ struct InspectorStylesView: View {
                 .font(.system(size: 10)).foregroundStyle(.secondary)
               }
             }
-            InspectorSection(InspectorL10n.string("Matched rules")) {
+            InspectorSection(
+              InspectorL10n.string("Matched rules"), id: "Matched rules",
+              copy: { inspector.copy(matchedCSS, label: "matched rules") },
+              code: matchedCSS
+            ) {
               VStack(alignment: .leading, spacing: 12) {
                 if model.busy && model.rules.isEmpty {
                   ProgressView().controlSize(.small).frame(maxWidth: .infinity)
@@ -128,7 +147,10 @@ struct InspectorStylesView: View {
                 .font(.system(size: 10)).foregroundStyle(.secondary)
               }
             }
-            InspectorSection(InspectorL10n.string("Computed values")) {
+            InspectorSection(
+              InspectorL10n.string("Computed values"), id: "Computed values",
+              copy: { inspector.copy(model.css, label: "CSS") }, code: model.css
+            ) {
               VStack(alignment: .leading, spacing: 8) {
                 HStack {
                   Button(InspectorL10n.string("Copy CSS"), systemImage: "doc.on.doc") {
@@ -160,7 +182,7 @@ struct InspectorStylesView: View {
                 }.font(.system(size: 11))
               }
             }
-            InspectorSection(InspectorL10n.string("Tools")) {
+            InspectorSection(InspectorL10n.string("Tools"), id: "Tools") {
               VStack(alignment: .leading, spacing: 10) {
                 Button(InspectorL10n.string("Save element at 2×"), systemImage: "camera") {
                   Task { await model.saveScreenshot() }
@@ -210,15 +232,24 @@ struct InspectorStylesView: View {
   }
   private func sourceLabel(_ source: String) -> String {
     if source.hasPrefix("Stylesheet ") {
-      let suffix =
-        source.components(separatedBy: ":").last.flatMap(Int.init)
-        .map { InspectorL10n.format(" · line %d", arguments: [.integer($0)]) } ?? ""
-      return InspectorL10n.string("Source unavailable") + suffix
+      return InspectorL10n.format(
+        "Stylesheet %@", arguments: [.string(String(source.dropFirst(11)))])
     }
     if ["Inline overrides", "Browser default", "Source unavailable"].contains(source) {
       return InspectorL10n.display(source)
     }
     guard source.contains("://") else { return source }
     return source.components(separatedBy: "/").last ?? source
+  }
+
+  private var layoutCSS: String {
+    model.layout.map { "\($0.name): \($0.value);" }.joined(separator: "\n")
+  }
+  private var matchedCSS: String {
+    model.rules.map { rule in
+      let source = rule.source.replacingOccurrences(of: "*/", with: "* /")
+      return (source.isEmpty ? "" : "/* \(source) */\n") + rule.selector + " {\n"
+        + rule.declarations.map { "  \($0.name): \($0.value);" }.joined(separator: "\n") + "\n}"
+    }.joined(separator: "\n\n")
   }
 }

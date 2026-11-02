@@ -219,7 +219,7 @@ jobs:
 
   codeql:
     name: CodeQL
-    needs: [plan, fast]
+    needs: plan
     if: needs.plan.outputs.full == 'true'
     permissions:
       contents: read

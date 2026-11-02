@@ -6,22 +6,22 @@
 """Replay fresh native Swift compilations without tracing SwiftPM's manifest interpreter."""
 
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
 import shlex
 import subprocess
+import time
 
-from ci_support import Commands, ROOT, SWIFT_SOURCE_ROOTS, tracked_swift_sources
+from ci_support import Commands, ROOT, SWIFT_SOURCE_ROOTS, swift_source_files, file_sha256
 
 
 PLAN = ROOT / "build/ci/codeql-swift/compile-plan.json"
 
 
-def source_hashes(root: Path, scope: str = "full") -> dict[str, str]:
-    return {name: hashlib.sha256((root / name).read_bytes()).hexdigest()
-            for name in sorted(tracked_swift_sources(root, scope))}
+def source_hashes(root: Path, scope: str = "full", *, tracked: bool = True) -> dict[str, str]:
+    return {name: file_sha256(root / name)
+            for name in sorted(swift_source_files(root, scope, tracked=tracked))}
 
 
 def command_sources(arguments: list[str], root: Path) -> set[str]:
@@ -86,19 +86,25 @@ def prepare(scope: str) -> int:
     sources = source_hashes(ROOT, scope)
     commands = compiler_commands((checks.directory / "native-build-plan.log").read_text(), ROOT, compiler, set(sources))
     PLAN.parent.mkdir(parents=True, exist_ok=True)
-    PLAN.write_text(json.dumps(dict(identity(), scope=scope, compiler=str(compiler), sources=sources, commands=commands), indent=2) + "\n")
+    PLAN.write_text(json.dumps(dict(identity(), scope=scope, compiler=str(compiler), compiler_sha256=file_sha256(compiler), sources=sources, commands=commands), indent=2) + "\n")
     return checks.finish()
 
 
 def replay(scope: str = "full") -> int:
+    started = time.monotonic()
     plan = json.loads(PLAN.read_text())
     if plan.get("scope") != scope:
         raise ValueError("Swift compiler plan analysis scope changed")
-    if any(plan.get(key) != value for key, value in identity().items()) or plan["sources"] != source_hashes(ROOT, scope):
+    if any(plan.get(key) != value for key, value in identity().items()) or plan["sources"] != source_hashes(ROOT, scope, tracked=False):
         raise ValueError("Swift compiler plan commit, toolchain or source content changed")
-    compiler = Path(subprocess.check_output(["xcrun", "--find", "swiftc"], text=True).strip())
-    if str(compiler) != plan["compiler"]:
+    source_validation = time.monotonic() - started
+    compiler = Path(plan["compiler"])
+    if not compiler.is_absolute() or file_sha256(compiler) != plan["compiler_sha256"]:
         raise ValueError("Swift compiler changed after planning")
+    (PLAN.parent / "validation.json").write_text(json.dumps({
+        "source_seconds": round(source_validation, 3),
+        "compiler_seconds": round(time.monotonic() - started - source_validation, 3),
+    }, indent=2) + "\n")
     checks = Commands("codeql-swift")
     covered = set()
     for arguments in plan["commands"]:

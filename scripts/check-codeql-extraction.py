@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-from ci_support import tracked_swift_sources
+from ci_support import swift_source_files
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -52,7 +52,7 @@ def main() -> int:
     parser.add_argument("report", type=Path)
     parser.add_argument("--scope", choices=("full", "shipping"), default="full")
     options = parser.parse_args()
-    expected = tracked_swift_sources(ROOT, options.scope)
+    expected = swift_source_files(ROOT, options.scope, tracked=False)
     missing = missing_sources(json.loads(options.report.read_text()), expected, ROOT)
     result = {"scope": options.scope, "expected": len(expected), "missing": missing, "revision": os.environ.get("GITHUB_SHA", "local")}
     options.report.with_name("coverage.json").write_text(json.dumps(result, indent=2) + "\n")

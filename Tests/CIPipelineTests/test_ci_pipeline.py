@@ -439,14 +439,43 @@ class SwiftExtractionTests(unittest.TestCase):
 
 
 class SwiftCompilerPlanTests(unittest.TestCase):
+    def test_replay_inventory_detects_new_untracked_swift_file_without_running_git(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "Sources/App/A.swift"
+            source.parent.mkdir(parents=True)
+            source.write_text("struct A {}")
+            with patch("ci_support.subprocess.check_output", return_value=b"Sources/App/A.swift\0"):
+                before = CODEQL_BUILD.source_hashes(root)
+            source.with_name("B.swift").write_text("struct B {}")
+            with patch("ci_support.subprocess.check_output") as git_command:
+                after = CODEQL_BUILD.source_hashes(root, tracked=False)
+            git_command.assert_not_called()
+            self.assertNotEqual(before, after)
+            self.assertEqual(set(after), {"Sources/App/A.swift", "Sources/App/B.swift"})
+
+    def test_mutated_compiler_binary_rejects_replay_before_compiling(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            compiler = directory / "swiftc"
+            compiler.write_bytes(b"changed compiler")
+            plan = directory / "plan.json"
+            plan.write_text(json.dumps({"scope": "full", "compiler": str(compiler), "compiler_sha256": "old",
+                                        "revision": "a", "toolchain": "one", "sources": {}}))
+            with (patch.object(CODEQL_BUILD, "PLAN", plan),
+                  patch.object(CODEQL_BUILD, "identity", return_value={"revision": "a", "toolchain": "one"}),
+                  patch.object(CODEQL_BUILD, "source_hashes", return_value={}),
+                  self.assertRaisesRegex(ValueError, "compiler changed")):
+                CODEQL_BUILD.replay()
+
     def test_shipping_scope_excludes_only_verification_and_support_modules(self):
-        from ci_support import tracked_swift_sources
+        from ci_support import swift_source_files
         names = b"Sources/App/A.swift\0Sources/ShaarVerification/Probe.swift\0Tests/TestSupport/Seed.swift\0"
         with patch("ci_support.subprocess.check_output", return_value=names):
-            self.assertEqual(len(tracked_swift_sources(ROOT)), 3)
-            self.assertEqual(tracked_swift_sources(ROOT, "shipping"), {"Sources/App/A.swift"})
+            self.assertEqual(len(swift_source_files(ROOT)), 3)
+            self.assertEqual(swift_source_files(ROOT, "shipping"), {"Sources/App/A.swift"})
             with self.assertRaises(ValueError):
-                tracked_swift_sources(ROOT, "unknown")
+                swift_source_files(ROOT, "unknown")
 
     def test_scope_mismatch_rejects_plan_before_any_compiler_runs(self):
         with tempfile.TemporaryDirectory() as temporary:

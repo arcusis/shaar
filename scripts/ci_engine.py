@@ -4,11 +4,12 @@
 
 """Transfer one hosted verification bundle to independent probe shards."""
 
-import hashlib
 import json
 import os
 from pathlib import Path
 import tarfile
+
+from ci_support import file_sha256
 
 
 BUNDLE_NAME = "Shaar Verification.app"
@@ -43,8 +44,7 @@ def archive_bundle(root: Path, directory: Path) -> None:
     archive = directory / "verification.tar.gz"
     with tarfile.open(archive, "w:gz", compresslevel=1) as output:
         output.add(bundle, arcname=BUNDLE_NAME)
-    with archive.open("rb") as source:
-        metadata = dict(context(root), sha256=hashlib.file_digest(source, "sha256").hexdigest())
+    metadata = dict(context(root), sha256=file_sha256(archive))
     (directory / "bundle.json").write_text(json.dumps(metadata, indent=2) + "\n")
 
 
@@ -53,9 +53,8 @@ def restore_bundle(root: Path, directory: Path) -> None:
     if any(metadata.get(key) != value for key, value in context(root).items()):
         raise ValueError("Verification bundle commit, toolchain or engine pin differs")
     archive = directory / "verification.tar.gz"
-    with archive.open("rb") as source:
-        if hashlib.file_digest(source, "sha256").hexdigest() != metadata.get("sha256"):
-            raise ValueError("Verification bundle digest differs")
+    if file_sha256(archive) != metadata.get("sha256"):
+        raise ValueError("Verification bundle digest differs")
     destination = root / "build"
     if (destination / BUNDLE_NAME).exists():
         raise ValueError("Verification bundle destination already exists")

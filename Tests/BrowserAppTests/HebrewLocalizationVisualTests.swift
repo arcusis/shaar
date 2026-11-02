@@ -321,18 +321,16 @@ final class HebrewLocalizationVisualTests: XCTestCase {
     model.name = "פרופיל Test"
     model.color = ProfileColorChoice(tint: .ocean)
     model.symbol = "briefcase.fill"
-    guard step != .details else { return model }
-    model.continueToNext()
-    if step == .microsoft {
-      model.skip()
-      model.connect(.microsoft)
-      return model
+    while model.step != step {
+      if model.step == .account {
+        model.connect(.google)
+        pendingSignIn?(
+          ConnectedAccount(
+            provider: .google, email: "alex@example.test", name: "Alex Example",
+            photoData: try? AccountPhotoFixture.data()))
+      }
+      model.continueToNext()
     }
-    model.connect(.google)
-    pendingSignIn?(
-      ConnectedAccount(provider: .google, email: "alex@example.test", name: "Alex Example"))
-    guard step != .google else { return model }
-    model.continueToNext()
     return model
   }
 

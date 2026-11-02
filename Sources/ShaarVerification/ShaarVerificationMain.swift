@@ -13,6 +13,11 @@ enum ShaarVerificationMain {
     {
       exit(result)
     }
+    if CommandLine.arguments.contains("--probe-profile-providers")
+      || CommandLine.arguments.contains("--probe-profile-fixture")
+    {
+      exit(ProfileOnboardingProbe.runStandalone(arguments: CommandLine.arguments))
+    }
     if CommandLine.arguments.contains("--marketing-screenshots") {
       exit(MarketingScreenshots.run(arguments: CommandLine.arguments))
     }

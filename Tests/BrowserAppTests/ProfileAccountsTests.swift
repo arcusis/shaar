@@ -107,7 +107,7 @@ struct ProfileAccountsTests {
   @Test func connectButtonsHideOnceAnyProviderIsConnected() {
     let google = ConnectedAccount(provider: .google, email: "alex@example.com")
     let microsoft = ConnectedAccount(provider: .microsoft, email: "alex@example.org")
-    #expect(AccountProvider.connectable(alongside: []) == [.google, .microsoft])
+    #expect(AccountProvider.connectable(alongside: []) == [.google, .microsoft, .apple])
     #expect(AccountProvider.connectable(alongside: [google]).isEmpty)
     #expect(AccountProvider.connectable(alongside: [microsoft]).isEmpty)
   }

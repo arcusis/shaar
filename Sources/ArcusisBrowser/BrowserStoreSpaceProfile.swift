@@ -16,14 +16,14 @@ struct SpaceMenuContent: View {
     Button(ShellL10n.string("Edit Theme Color…")) { edit(.theme) }
     Menu(ShellL10n.string("Set Profile")) {
       ForEach(store.session.profiles) { profile in
-        Button {
-          _ = store.setSpaceProfile(space.id, to: profile.id)
-        } label: {
-          if profile.id == space.profileID {
-            Label(profile.name, systemImage: "checkmark")
-          } else {
-            Text(profile.name)
-          }
+        Toggle(
+          isOn: Binding(
+            get: { profile.id == space.profileID },
+            set: { selected in if selected { _ = store.setSpaceProfile(space.id, to: profile.id) } }
+          )
+        ) {
+          let account = store.preferences.accounts(for: profile.id).first
+          ProfileIdentityLabel(profile: profile, account: account)
         }
       }
       Divider()

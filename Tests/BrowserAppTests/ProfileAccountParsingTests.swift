@@ -46,8 +46,8 @@ struct ProfileAccountParsingTests {
     #expect(AccountProvider.microsoft.signOutURL.host() == "login.microsoftonline.com")
     let pages = AccountProvider.allCases.flatMap { [$0.signInURL, $0.signOutURL] }
     #expect(pages.allSatisfy { $0.scheme == "https" })
-    #expect(AccountProvider.allCases.map(\.title) == ["Google", "Microsoft"])
-    #expect(AccountProvider.allCases.map(\.id) == ["google", "microsoft"])
+    #expect(AccountProvider.allCases.map(\.title) == ["Google", "Microsoft", "Apple"])
+    #expect(AccountProvider.allCases.map(\.id) == ["google", "microsoft", "apple"])
   }
 
   @Test func microsoftLandingPagesCountOnlyAfterSignIn() {

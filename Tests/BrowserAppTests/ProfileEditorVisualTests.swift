@@ -47,7 +47,9 @@ final class ProfileEditorVisualTests: XCTestCase {
         symbol: "briefcase.fill",
         spaces: [BrowserSettingsSpace(id: UUID(), name: "Research", symbol: "book")],
         accounts: [
-          ConnectedAccount(provider: .google, email: "alex@acme.test", name: "Alex Example")
+          ConnectedAccount(
+            provider: .google, email: "alex@acme.test", name: "Alex Example",
+            photoData: try AccountPhotoFixture.data())
         ]),
       BrowserSettingsProfile(id: UUID(), name: "Uncolored", spaces: []),
     ]

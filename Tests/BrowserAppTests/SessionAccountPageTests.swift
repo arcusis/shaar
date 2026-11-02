@@ -90,24 +90,79 @@ struct SessionAccountPageTests {
     #expect(SessionAccountPage.photoScript(url: URL(string: "http://example.test/photo")!) == nil)
   }
 
-  private func snapshot(url: String, email: String) throws -> String {
-    String(
-      data: try JSONSerialization.data(withJSONObject: [
-        "url": url, "email": email, "name": "Alex Example",
-        "photo": "https://example.test/photo.png",
-      ]), encoding: .utf8)!
+  @Test func photoSourcesRequireAccountEvidenceAndKeepBlobImagesOnTheirOrigin() throws {
+    let page = "https://www.icloud.com/"
+    let sameOrigin = "blob:https://www.icloud.com/fixture-photo"
+    let remote = "https://images.example.test/avatar.png"
+    for source in [sameOrigin, remote] {
+      let body = try snapshot(url: page, email: "alex@example.test", photo: source)
+      #expect(
+        SessionAccountPage.photoSource(from: body, provider: .apple)?.absoluteString == source)
+      #expect(SessionAccountPage.photoScript(url: URL(string: source)!) != nil)
+    }
+    for source in [
+      "blob:https://other.example.test/fixture-photo", "blob:http://www.icloud.com/fixture-photo",
+      "http://images.example.test/avatar.png", "data:image/png;base64,AAAA", "relative-photo.png",
+    ] {
+      let body = try snapshot(url: page, email: "alex@example.test", photo: source)
+      #expect(SessionAccountPage.photoSource(from: body, provider: .apple) == nil, "\(source)")
+    }
+    for body in [
+      try snapshot(url: page, email: "", photo: sameOrigin),
+      try snapshot(
+        url: "https://www.icloud.com.evil.test/", email: "alex@example.test", photo: remote),
+      try snapshot(url: page, email: "alex@example.test", photo: nil),
+      "not json",
+    ] {
+      #expect(SessionAccountPage.photoSource(from: body, provider: .apple) == nil)
+    }
+    #expect(
+      SessionAccountPage.photoScript(url: URL(string: "blob:http://www.icloud.com/fixture")!) == nil
+    )
+  }
+
+  @Test func metadataTrimsAccountFieldsAndKeepsSessionPhotoBytes() throws {
+    let photo = try AccountPhotoFixture.data()
+    let body = try snapshot(
+      url: "https://www.icloud.com/", email: " \n alex@example.test \t", name: "  Alex Example \n",
+      photo: "http://images.example.test/avatar.png",
+      photoData: "data:image/png;base64," + photo.base64EncodedString())
+    let account = try #require(SessionAccountPage.account(from: body, provider: .apple))
+    #expect(account.email == "alex@example.test" && account.name == "Alex Example")
+    #expect(account.photoURL == nil && account.photoData == photo)
+    for name in [nil, " \n "] as [String?] {
+      let unnamed = try snapshot(url: "https://www.icloud.com/", email: account.email, name: name)
+      #expect(SessionAccountPage.account(from: unnamed, provider: .apple)?.name == nil)
+    }
+  }
+
+  @Test func redirectHintCannotReplaceTheAccountShownByProviderUI() throws {
+    let body = try snapshot(
+      url: "https://www.icloud.com/?login_hint=other%40example.test", email: "alex@example.test")
+    #expect(SessionAccountPage.account(from: body, provider: .apple) == nil)
+  }
+
+  private func snapshot(
+    url: String, email: String, name: String? = "Alex Example",
+    photo: String? = "https://example.test/photo.png", photoData: String? = nil
+  ) throws -> String {
+    var value: [String: Any] = ["url": url, "email": email]
+    value["name"] = name
+    value["photo"] = photo
+    value["photoData"] = photoData
+    return String(data: try JSONSerialization.data(withJSONObject: value), encoding: .utf8)!
   }
 }
 
 enum AccountPhotoFixture {
   /// Authored red thumbnail: no external account, credentials or network request.
-  static func data() throws -> Data {
+  static func data(width: Int = 32, height: Int = 32) throws -> Data {
     let bitmap = NSBitmapImageRep(
-      bitmapDataPlanes: nil, pixelsWide: 32, pixelsHigh: 32, bitsPerSample: 8,
+      bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height, bitsPerSample: 8,
       samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
       bytesPerRow: 0, bitsPerPixel: 0)!
     let red = NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 1)
-    for x in 0..<32 { for y in 0..<32 { bitmap.setColor(red, atX: x, y: y) } }
+    for x in 0..<width { for y in 0..<height { bitmap.setColor(red, atX: x, y: y) } }
     return try #require(bitmap.representation(using: .png, properties: [:]))
   }
 }

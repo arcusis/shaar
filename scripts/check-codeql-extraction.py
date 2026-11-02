@@ -9,8 +9,9 @@ import argparse
 import json
 import os
 from pathlib import Path
-import subprocess
 from urllib.parse import unquote, urlparse
+
+from ci_support import tracked_swift_sources
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -50,8 +51,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("report", type=Path)
     options = parser.parse_args()
-    files = subprocess.check_output(["git", "ls-files", "-z", "--", "Sources"], cwd=ROOT).decode().split("\0")
-    expected = {name for name in files if name.endswith(".swift")}
+    expected = tracked_swift_sources(ROOT)
     missing = missing_sources(json.loads(options.report.read_text()), expected, ROOT)
     result = {"expected": len(expected), "missing": missing, "revision": os.environ.get("GITHUB_SHA", "local")}
     options.report.with_name("coverage.json").write_text(json.dumps(result, indent=2) + "\n")

@@ -5,6 +5,7 @@
 - [[CI_Pipeline]]
 - [[Commit_Gates]]
 - [[CI_Run_Time]]
+- [[Sparkle_Update_Simulation]]
 - [[Source_And_Native_Verification]]
 - [[Test_Coverage]]
 - [[Verification_Harness]]

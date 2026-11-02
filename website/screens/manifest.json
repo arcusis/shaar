@@ -1,0 +1,332 @@
+{
+  "captureMethod": "Hidden production host; live Chromium in-process viewport PNG inserted at its exact native frame, then whole-window AppKit bitmap at 2x. Site controls use the production panel with live HTTPS state in a hidden host. Settings uses the production Profiles view with the same workspace profiles. Page-only images use the unmodified engine viewport PNG at exactly 1440x900 CSS pixels, 2x, before extension installation.",
+  "capturedAt": "2026-11-01T20:47:43Z",
+  "engineVersion": "155.0.8059.84",
+  "extensions": [
+    {
+      "id": "eimadpbcbfnmbkopoojfekhnkhdbieeh",
+      "name": "Dark Reader",
+      "sourceURL": "https://chromewebstore.google.com/detail/dark-reader/eimadpbcbfnmbkopoojfekhnkhdbieeh",
+      "version": "4.9.134"
+    },
+    {
+      "id": "nngceckbapebfimnlniiiahkandclblb",
+      "name": "Bitwarden Password Manager",
+      "sourceURL": "https://chromewebstore.google.com/detail/bitwarden-password-manager/nngceckbapebfimnlniiiahkandclblb",
+      "version": "2026.10.1"
+    }
+  ],
+  "images": [
+    {
+      "appearance": "light",
+      "bytes": 893970,
+      "description": "Public page viewport only; no Shaar chrome.",
+      "document": {
+        "dark": false,
+        "dpr": 2,
+        "fonts": "loaded",
+        "height": 900,
+        "images": true,
+        "ready": "complete",
+        "text": 1713,
+        "title": "Arcusis - AI Platforms, Enterprise Software & Game Development",
+        "url": "https://arcusis.com/",
+        "width": 1440
+      },
+      "engineVersion": "155.0.8059.84",
+      "file": "page-arcusis.png",
+      "maxChannelRMSE": 0,
+      "optimization": "Pillow lossless PNG optimization",
+      "pixelSize": {
+        "height": 1800,
+        "width": 2880
+      },
+      "scale": 2,
+      "sha256": "2e425e6e235421cc47cb0b38333e6a07824fcb3db1fa14cabb1bfd04bb7efabe",
+      "viewportSize": {
+        "height": 900,
+        "unit": "CSS pixels",
+        "width": 1440
+      }
+    },
+    {
+      "appearance": "light",
+      "bytes": 457484,
+      "description": "Public page viewport only; no Shaar chrome.",
+      "document": {
+        "dark": false,
+        "dpr": 2,
+        "fonts": "loaded",
+        "height": 900,
+        "images": true,
+        "ready": "complete",
+        "text": 4722,
+        "title": "Hasbara - Accurate Information About Israel | Trusted\u2026",
+        "url": "https://hasbara.co.il/",
+        "width": 1440
+      },
+      "engineVersion": "155.0.8059.84",
+      "file": "page-hasbara.png",
+      "maxChannelRMSE": 1.4249,
+      "optimization": "libimagequant 256-color palette, no resizing",
+      "pixelSize": {
+        "height": 1800,
+        "width": 2880
+      },
+      "scale": 2,
+      "sha256": "e10d0a5b3077cd603603e72a1ffa06b5b7dbce4e92c9be85c23cadb672c4d3cb",
+      "viewportSize": {
+        "height": 900,
+        "unit": "CSS pixels",
+        "width": 1440
+      }
+    },
+    {
+      "appearance": "light",
+      "bytes": 884273,
+      "description": "Public page viewport only; no Shaar chrome.",
+      "document": {
+        "dark": false,
+        "dpr": 2,
+        "fonts": "loaded",
+        "height": 900,
+        "images": true,
+        "ready": "complete",
+        "text": 13991,
+        "title": "FreightFTE \u2014 The freight operation that runs itself.",
+        "url": "https://freightfte.com/",
+        "width": 1440
+      },
+      "engineVersion": "155.0.8059.84",
+      "file": "page-freightfte.png",
+      "maxChannelRMSE": 1.2741,
+      "optimization": "libimagequant 80-color palette, no resizing",
+      "pixelSize": {
+        "height": 1800,
+        "width": 2880
+      },
+      "scale": 2,
+      "sha256": "f862a44fa8c759119ce69201fc0666670b0aca3222fc7027b2a841b8d9f1f2f1",
+      "viewportSize": {
+        "height": 900,
+        "unit": "CSS pixels",
+        "width": 1440
+      }
+    },
+    {
+      "appearance": "light",
+      "bytes": 405055,
+      "description": "Public page viewport only; no Shaar chrome.",
+      "document": {
+        "dark": false,
+        "dpr": 2,
+        "fonts": "loaded",
+        "height": 900,
+        "images": true,
+        "ready": "complete",
+        "text": 8874,
+        "title": "GitHub - arcusis/shaar: Shaar, a native macOS browser built on Chromium. \u00b7 GitHub",
+        "url": "https://github.com/arcusis/shaar",
+        "width": 1440
+      },
+      "engineVersion": "155.0.8059.84",
+      "file": "page-github.png",
+      "maxChannelRMSE": 0,
+      "optimization": "Pillow lossless PNG optimization",
+      "pixelSize": {
+        "height": 1800,
+        "width": 2880
+      },
+      "scale": 2,
+      "sha256": "e5fe3bef9d14d2c81d7b39042928ec799fa06e66ac835c2f72141441f1fce44f",
+      "viewportSize": {
+        "height": 900,
+        "unit": "CSS pixels",
+        "width": 1440
+      }
+    },
+    {
+      "appearance": "light",
+      "bytes": 752930,
+      "description": "Green Work Space with the public Arcusis website.",
+      "document": {
+        "dark": false,
+        "dpr": 2,
+        "fonts": "loaded",
+        "height": 877,
+        "images": true,
+        "ready": "complete",
+        "text": 1716,
+        "title": "Arcusis - AI Platforms, Enterprise Software & Game Development",
+        "url": "https://arcusis.com/",
+        "width": 1224
+      },
+      "engineVersion": "155.0.8059.84",
+      "file": "hero.png",
+      "maxChannelRMSE": 0,
+      "optimization": "Pillow lossless PNG optimization",
+      "pixelSize": {
+        "height": 1920,
+        "width": 2880
+      },
+      "scale": 2,
+      "sha256": "4158e15b8ddd68684f1740bcd20dbc08d3a2acb98aa73e014e4ba90dccf79d5c",
+      "windowSize": {
+        "height": 960,
+        "unit": "points",
+        "width": 1440
+      }
+    },
+    {
+      "appearance": "light",
+      "bytes": 462305,
+      "description": "Blue Hasbara Space with hasbara.co.il and the sidebar visible.",
+      "document": {
+        "dark": false,
+        "dpr": 2,
+        "fonts": "loaded",
+        "height": 877,
+        "images": true,
+        "ready": "complete",
+        "text": 4722,
+        "title": "Hasbara - Accurate Information About Israel | Trusted\u2026",
+        "url": "https://hasbara.co.il/",
+        "width": 1224
+      },
+      "engineVersion": "155.0.8059.84",
+      "file": "spaces.png",
+      "maxChannelRMSE": 1.5638,
+      "optimization": "libimagequant 256-color palette, no resizing",
+      "pixelSize": {
+        "height": 1920,
+        "width": 2880
+      },
+      "scale": 2,
+      "sha256": "38c8247b2bd5922f0ccbd0851d9c782e94920541fb0011e967dbb18f5d9ed5e0",
+      "windowSize": {
+        "height": 960,
+        "unit": "points",
+        "width": 1440
+      }
+    },
+    {
+      "appearance": "light",
+      "bytes": 687694,
+      "description": "Command-T searching freight across real public tabs over arcusis.com.",
+      "document": {
+        "dark": false,
+        "dpr": 2,
+        "fonts": "loaded",
+        "height": 877,
+        "images": true,
+        "ready": "complete",
+        "text": 1704,
+        "title": "Arcusis - AI Platforms, Enterprise Software & Game Development",
+        "url": "https://arcusis.com/",
+        "width": 1224
+      },
+      "engineVersion": "155.0.8059.84",
+      "file": "command-t.png",
+      "maxChannelRMSE": 0,
+      "optimization": "Pillow lossless PNG optimization",
+      "pixelSize": {
+        "height": 1920,
+        "width": 2880
+      },
+      "scale": 2,
+      "sha256": "aa6f1b7e96295942476474e6513a733bbf71c43c240006f0133ef8e7d047e15e",
+      "windowSize": {
+        "height": 960,
+        "unit": "points",
+        "width": 1440
+      }
+    },
+    {
+      "appearance": "light",
+      "bytes": 873083,
+      "description": "Live HTTPS site control center on https://arcusis.com.",
+      "document": {
+        "dark": false,
+        "dpr": 2,
+        "fonts": "loaded",
+        "height": 877,
+        "images": true,
+        "ready": "complete",
+        "text": 1713,
+        "title": "Arcusis - AI Platforms, Enterprise Software & Game Development",
+        "url": "https://arcusis.com/",
+        "width": 1224
+      },
+      "engineVersion": "155.0.8059.84",
+      "file": "site-controls.png",
+      "maxChannelRMSE": 0,
+      "optimization": "Pillow lossless PNG optimization",
+      "pixelSize": {
+        "height": 1920,
+        "width": 2880
+      },
+      "scale": 2,
+      "sha256": "865ae82d83a8b086243a7d008c52bcdeb658600b9a72744ac4beb74489c93414",
+      "windowSize": {
+        "height": 960,
+        "unit": "points",
+        "width": 1440
+      }
+    },
+    {
+      "appearance": "light",
+      "bytes": 362003,
+      "description": "Settings > Profiles with the disposable Work and Personal profiles.",
+      "engineVersion": "155.0.8059.84",
+      "file": "profiles.png",
+      "maxChannelRMSE": 0,
+      "optimization": "Pillow lossless PNG optimization",
+      "pixelSize": {
+        "height": 1464,
+        "width": 1800
+      },
+      "scale": 2,
+      "sha256": "c0c0530fc12c269ef1f342569fca29b1e887d55a25c2c6437955159b6415c480",
+      "windowSize": {
+        "height": 732,
+        "unit": "points",
+        "width": 900
+      }
+    },
+    {
+      "appearance": "light",
+      "bytes": 593172,
+      "description": "Real Dark Reader and Bitwarden toolbar icons on arcusis.com in the Work profile.",
+      "document": {
+        "dark": false,
+        "dpr": 2,
+        "fonts": "loaded",
+        "height": 877,
+        "images": true,
+        "ready": "complete",
+        "text": 1704,
+        "title": "Arcusis - AI Platforms, Enterprise Software & Game Development",
+        "url": "https://arcusis.com/",
+        "width": 1224
+      },
+      "engineVersion": "155.0.8059.84",
+      "file": "extensions.png",
+      "maxChannelRMSE": 0,
+      "optimization": "Pillow lossless PNG optimization",
+      "pixelSize": {
+        "height": 1920,
+        "width": 2880
+      },
+      "scale": 2,
+      "sha256": "97a9de71a713598c8ae8da1fb0863cf939fc6cf5a3fd25f786bde42a0e54980d",
+      "windowSize": {
+        "height": 960,
+        "unit": "points",
+        "width": 1440
+      }
+    }
+  ],
+  "privacy": "Fresh marked temporary data directory, mock keychain, no sign-ins or existing profiles, prohibited app activation, no windows ordered onscreen, audio muted by the engine harness.",
+  "schema": 2,
+  "skipped": []
+}

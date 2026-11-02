@@ -13,16 +13,15 @@ from pathlib import Path
 import shlex
 import subprocess
 
-from ci_support import Commands, ROOT
+from ci_support import Commands, ROOT, SWIFT_SOURCE_ROOTS, tracked_swift_sources
 
 
 PLAN = ROOT / "build/ci/codeql-swift/compile-plan.json"
 
 
 def source_hashes(root: Path) -> dict[str, str]:
-    names = subprocess.check_output(["git", "ls-files", "-z", "--", "Sources"], cwd=root).decode().split("\0")
     return {name: hashlib.sha256((root / name).read_bytes()).hexdigest()
-            for name in names if name.endswith(".swift")}
+            for name in tracked_swift_sources(root)}
 
 
 def command_sources(arguments: list[str], root: Path) -> set[str]:
@@ -40,7 +39,7 @@ def command_sources(arguments: list[str], root: Path) -> set[str]:
     for argument in expanded:
         if argument.endswith(".swift"):
             path = (root / argument).resolve()
-            if path.is_relative_to(root / "Sources"):
+            if any(path.is_relative_to(root / directory) for directory in SWIFT_SOURCE_ROOTS):
                 sources.add(path.relative_to(root).as_posix())
     return sources
 
@@ -73,6 +72,8 @@ def identity() -> dict:
 def prepare() -> int:
     checks = Commands("codeql-prepare")
     compiler = Path(subprocess.check_output(["xcrun", "--find", "swiftc"], text=True).strip())
+    if checks.run("clean", ["swift", "package", "--scratch-path", "build/swiftpm/codeql", "clean"]):
+        return checks.finish()
     arguments = ["swift", "build", "--build-system", "native", "--jobs", "2", "--force-resolved-versions",
                  "--scratch-path", "build/swiftpm/codeql", "--disable-index-store", "--verbose",
                  "-Xswiftc", "-whole-module-optimization", "-Xswiftc", "-Onone",

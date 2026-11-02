@@ -15,6 +15,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+SWIFT_SOURCE_ROOTS = ("Sources", "Tests/TestSupport")
+
+
+def tracked_swift_sources(root: Path) -> set[str]:
+    files = subprocess.check_output(["git", "ls-files", "-z", "--", *SWIFT_SOURCE_ROOTS], cwd=root).decode().split("\0")
+    return {name for name in files if name.endswith(".swift")}
+
+
 class Commands:
     def __init__(self, stage: str):
         self.directory = ROOT / "build/ci" / stage

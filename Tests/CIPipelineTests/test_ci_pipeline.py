@@ -439,6 +439,13 @@ class SwiftExtractionTests(unittest.TestCase):
 
 
 class SwiftCompilerPlanTests(unittest.TestCase):
+    def test_support_module_is_retained_but_test_targets_are_outside_default_build_inventory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.assertEqual(CODEQL_BUILD.command_sources([
+                "Tests/TestSupport/SeededGenerator.swift", "Tests/BrowserCoreTests/Cases.swift",
+            ], root), {"Tests/TestSupport/SeededGenerator.swift"})
+
     def test_plan_keeps_argument_arrays_and_rejects_missing_or_duplicate_sources(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

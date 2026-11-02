@@ -55,6 +55,18 @@ FOUNDATION_EXPORT NSString *ARCBridgeLocalizedString(NSString *message);
 @interface ARCChromiumRuntime : NSObject
 /// Set before `runWithDataDirectory:testing:`; configures Chromium UI locale and Accept-Language.
 @property(nonatomic, copy) NSString *languageIdentifier;
+/// Tab-scoped simulations and page diagnostics share the in-process protocol bridge.
+- (BOOL)beginDeveloperSessionForTabID:(NSString *)tabID profileID:(NSString *)profileID windowID:(NSString *)windowID;
+- (void)endDeveloperSessionForTabID:(NSString *)tabID profileID:(NSString *)profileID windowID:(NSString *)windowID;
+- (void)developerCall:(NSString *)method params:(NSDictionary *)params tabID:(NSString *)tabID
+           profileID:(NSString *)profileID windowID:(NSString *)windowID
+          completion:(void (NS_SWIFT_UI_ACTOR ^)(NSDictionary<NSString *, id> * _Nullable, NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
+/// Restricted Inspector commands. Each call validates the tab's profile and native window.
+- (BOOL)beginInspectorForTabID:(NSString *)tabID profileID:(NSString *)profileID windowID:(NSString *)windowID;
+- (void)endInspectorForTabID:(NSString *)tabID;
+- (void)inspectorCall:(NSString *)method params:(NSDictionary *)params tabID:(NSString *)tabID
+           profileID:(NSString *)profileID windowID:(NSString *)windowID
+          completion:(void (NS_SWIFT_UI_ACTOR ^)(NSDictionary<NSString *, id> * _Nullable, NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
 @property(copy, nullable) void (^onReady)(void);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onWindowClosed)(NSString *windowID, BOOL quitting);
 /// Synchronous: return a newly created window before Chromium attaches its browser.

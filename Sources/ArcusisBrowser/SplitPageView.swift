@@ -168,7 +168,7 @@ struct BrowserSplitPageView: View {
       if let failure = store.rendererFailures[id] {
         FailedPageView(store: store, failure: failure)
       } else if engine.pages[id] != nil {
-        ChromiumPage(
+        InspectorPage(
           engine: engine, tabID: id, autofocus: id == store.session.selectedSpace.selectedTabID
         )
         .overlay { SplitDropZone(store: store, targetID: id) }

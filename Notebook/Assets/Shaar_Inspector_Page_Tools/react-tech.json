@@ -1,0 +1,302 @@
+{
+  "url": "https://react.dev/learn",
+  "panelMode": "Page",
+  "pageTool": "Tech stack",
+  "pageDiagnostics": {
+    "requests": [
+      {
+        "bytes": 38442,
+        "duration": 1298.9000000003725,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/learn"
+      },
+      {
+        "bytes": 76648,
+        "duration": 202.70000000018626,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/fonts/Source-Code-Pro-Regular.woff2"
+      },
+      {
+        "bytes": null,
+        "duration": 517.6000000005588,
+        "method": "UNKNOWN",
+        "status": 0,
+        "url": "https://www.googletagmanager.com/gtag/js?id=G-B1E83PJ3RT"
+      },
+      {
+        "bytes": 23676,
+        "duration": 223,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/fonts/Optimistic_Display_W_Md.woff2"
+      },
+      {
+        "bytes": 77672,
+        "duration": 307.5,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/fonts/Source-Code-Pro-Bold.woff2"
+      },
+      {
+        "bytes": 22952,
+        "duration": 223,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/fonts/Optimistic_Text_W_Rg.woff2"
+      },
+      {
+        "bytes": 23828,
+        "duration": 274.90000000037253,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/fonts/Optimistic_Text_W_Bd.woff2"
+      },
+      {
+        "bytes": 23768,
+        "duration": 275.09999999962747,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/fonts/Optimistic_Text_W_Md.woff2"
+      },
+      {
+        "bytes": 25904,
+        "duration": 275.5,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/fonts/Optimistic_Text_W_It.woff2"
+      },
+      {
+        "bytes": 23896,
+        "duration": 307.90000000037253,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/fonts/Optimistic_Display_W_SBd.woff2"
+      },
+      {
+        "bytes": 23928,
+        "duration": 312,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/fonts/Optimistic_Display_W_Bd.woff2"
+      },
+      {
+        "bytes": 20689,
+        "duration": 276.5,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/_next/static/css/f647474d5749a6d8.css"
+      },
+      {
+        "bytes": 2116,
+        "duration": 423.6000000005588,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/_next/image?url=%2Fimages%2Fuwu.png&w=64&q=75"
+      },
+      {
+        "bytes": 1074,
+        "duration": 445.59999999962747,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/_next/static/chunks/pages/_app-6d7b64b3b21a9551.js"
+      },
+      {
+        "bytes": 39612,
+        "duration": 455.29999999981374,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/_next/static/chunks/main-8bc660a98b463b2d.js"
+      },
+      {
+        "bytes": 58699,
+        "duration": 467,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/_next/static/chunks/framework-76ad44d61c11f057.js"
+      },
+      {
+        "bytes": 2564,
+        "duration": 468.59999999962747,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/_next/static/chunks/webpack-95fc1f1713249e81.js"
+      },
+      {
+        "bytes": 34865,
+        "duration": 459.20000000018626,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/_next/static/chunks/668-9be9de6fa7660277.js"
+      },
+      {
+        "bytes": 96763,
+        "duration": 549.6000000005588,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/_next/static/chunks/928-132eeb57d328ee63.js"
+      },
+      {
+        "bytes": 899,
+        "duration": 563,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/_next/static/lc98YvCrV-kIUpI__QeXM/_buildManifest.js"
+      },
+      {
+        "bytes": 3611,
+        "duration": 567.4000000003725,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/_next/static/chunks/pages/%5B%5B...markdownPath%5D%5D-2d1a1f3dd79ac8eb.js"
+      },
+      {
+        "bytes": 454,
+        "duration": 586.4000000003725,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/_next/static/lc98YvCrV-kIUpI__QeXM/_ssgManifest.js"
+      },
+      {
+        "bytes": 736,
+        "duration": 594.9000000003725,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/site.webmanifest"
+      },
+      {
+        "bytes": null,
+        "duration": 171.90000000037253,
+        "method": "UNKNOWN",
+        "status": 0,
+        "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-B1E83PJ3RT&gtm=45je6as1v9119811439za208zd9119811439xf1&_p=1793572818694&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=1519724400.1793572819&frm=0&ngs=1&pscdl=noapi&rcb=9&sr=1920x1080&uaa=arm&uab=64&uafvl=Google%2520Chrome%3B155.0.8059.84%7CChromium%3B155.0.8059.84%7CNot(A%253ABrand%3B24.0.0.0&uam=&uamb=0&uap=macOS&uapv=27.0.1&uaw=0&ul=en-us&_s=1&tag_exp=115616986~115938465~115938469~118897920~118897930~120213116~120385423~120469145~120469153~121246026~121246034~123691370&sid=1793572818&sct=1&seg=0&dl=https%3A%2F%2Freact.dev%2Flearn&dt=Quick%20Start%20%E2%80%93%20React&en=page_view&_fv=1&_nsi=1&_ss=1&_ee=1&tfd=968"
+      },
+      {
+        "bytes": null,
+        "duration": 92.80000000074506,
+        "method": "UNKNOWN",
+        "status": 0,
+        "url": "https://www.googletagmanager.com/td?id=G-B1E83PJ3RT&v=3&t=t&pid=2094629570&gtm=45je6as1v9119811439za200zd9119811439xf1&seq=1&exp=115616986~115938465~115938469~118897920~118897930~120213116~120385423~120469145~120469153~121246026~121246034~123691370&dl=react.dev%2Flearn&tdp=G-B1E83PJ3RT;119811439;0;0;0&frm=0&rtg=119811439&slo=0&hlo=0&lst=3&bt=0&ct=3&z=0"
+      },
+      {
+        "bytes": 51253,
+        "duration": 135.20000000018626,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/_next/static/chunks/4ad82c5e.aa059996e264f809.js"
+      },
+      {
+        "bytes": 112208,
+        "duration": 135.40000000037253,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/_next/static/chunks/811.b2e5ca620a3f883e.js"
+      },
+      {
+        "bytes": 4752,
+        "duration": 136.09999999962747,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/_next/static/chunks/972.d10c430071e5a41c.js"
+      },
+      {
+        "bytes": 435,
+        "duration": 137.1000000005588,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/_next/data/lc98YvCrV-kIUpI__QeXM/index.json"
+      },
+      {
+        "bytes": 2082,
+        "duration": 116.59999999962747,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/_next/data/lc98YvCrV-kIUpI__QeXM/community/translations.json?markdownPath=community&markdownPath=translations"
+      },
+      {
+        "bytes": 5370,
+        "duration": 120.70000000018626,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/_next/data/lc98YvCrV-kIUpI__QeXM/versions.json?markdownPath=versions"
+      },
+      {
+        "bytes": 29075,
+        "duration": 242.29999999981374,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/_next/static/chunks/49ea8ca6.fbf16bbd46ce7906.js"
+      },
+      {
+        "bytes": 24673,
+        "duration": 242.79999999981374,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/_next/static/chunks/410.2ec2e9aced4b1bc5.js"
+      },
+      {
+        "bytes": 10674,
+        "duration": 257,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/_next/static/chunks/548.3a9f82dc9218d84f.js"
+      },
+      {
+        "bytes": 1959,
+        "duration": 259.3999999994412,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/_next/static/chunks/199.cb13f8cd80e90961.js"
+      },
+      {
+        "bytes": 6789,
+        "duration": 114.29999999981374,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/_next/data/lc98YvCrV-kIUpI__QeXM/learn.json?markdownPath=learn"
+      },
+      {
+        "bytes": 5076,
+        "duration": 109.20000000018626,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/_next/static/chunks/921.2a9510deb51459cd.js"
+      },
+      {
+        "bytes": 25584,
+        "duration": 136.40000000037253,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/_next/static/chunks/834.fdb5399aa041241a.js"
+      },
+      {
+        "bytes": 1974,
+        "duration": 128.1000000005588,
+        "method": "UNKNOWN",
+        "status": 200,
+        "url": "https://react.dev/favicon-32x32.png"
+      },
+      {
+        "bytes": null,
+        "duration": 222.79999999981374,
+        "method": "UNKNOWN",
+        "status": 0,
+        "url": "https://786946de.sandpack-bundler-4bw.pages.dev/"
+      }
+    ],
+    "technologies": [
+      {
+        "name": "Next.js",
+        "source": "Page bootstrap data",
+        "version": null
+      },
+      {
+        "name": "React",
+        "source": "DOM runtime marker",
+        "version": null
+      }
+    ],
+    "vitals": null
+  }
+}

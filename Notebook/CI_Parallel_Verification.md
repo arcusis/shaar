@@ -29,4 +29,10 @@ The default manual/PR/merge-group/production/nightly path keeps Swift. `measure_
 
 Local preparation covered all 396 Swift files; all ten fresh semantic compiler commands passed. Forty-seven pipeline regressions and all eleven shared fast gates passed, including 248 Python tests. These checks establish command validity, not hosted CodeQL extraction or the time target.
 
+## First clean-consumer result
+
+[Run 41470642284](https://github.com/arcusis/shaar/actions/runs/41470642284) verifies the transferred app's deep signature and starts the actual fixture, resolving the original resource fatal error. Baseline then failed `video without a seekable duration`. The bridge reports playing state before the canvas stream has decoded dimensions (`hasVideo` requires `videoWidth > 0`); the probe waited only for playing before asserting video readiness. Wait for playing and video readiness within the existing bounded session wait, then retain the original non-seekable assertion and all later checks. This is observation synchronization, not a fixture retry. All three Quit repetitions and session recovery passed on that failed shard; its baseline failure remains recorded.
+
+Visual and localization stages already perform their own complete test builds with separate cache modes and consume no unit artifact. Start both after stage selection; waiting for unit success adds build latency to their independent critical paths. Coverage still waits for the unit coverage artifact, and the final required check still requires unit, visuals and localization success independently.
+
 Sources: [Swift compilation guidance](https://docs.github.com/en/code-security/reference/code-scanning/codeql/build-options-for-compiled-languages), [database import limitations](https://docs.github.com/en/code-security/reference/code-scanning/codeql/codeql-cli-manual/database-import), [database finalization](https://docs.github.com/en/code-security/reference/code-scanning/codeql/codeql-cli-manual/database-finalize).

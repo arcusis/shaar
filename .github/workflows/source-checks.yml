@@ -184,7 +184,7 @@ jobs:
 
   visuals:
     name: Hosted sidebar component visuals
-    needs: [plan, build]
+    needs: plan
     if: needs.plan.outputs.full == 'true'
     runs-on: macos-26
     timeout-minutes: 20
@@ -205,7 +205,7 @@ jobs:
 
   localization:
     name: Hebrew localization, offscreen visuals, and engine locale
-    needs: [plan, build]
+    needs: plan
     if: needs.plan.outputs.full == 'true'
     runs-on: macos-26
     timeout-minutes: 90

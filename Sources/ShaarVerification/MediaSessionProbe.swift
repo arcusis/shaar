@@ -39,7 +39,7 @@ final class MediaSessionProbe {
     let home = store.session.spaces[0]
     let (space, media) = try await mediaTab(sharingProfileOf: home)
     try await startPlayback(media)
-    let state = try await waitForSession(media) { $0.isPlaying }
+    let state = try await waitForSession(media) { $0.isPlaying && $0.hasVideo }
     try expect(
       state.title == "Fixture Song" && state.artist == "Fixture Artist"
         && state.album == "Fixture Album",

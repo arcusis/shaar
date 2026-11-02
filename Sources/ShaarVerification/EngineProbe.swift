@@ -415,6 +415,7 @@ final class EngineProbe {
       let firstA = try await snapshot(tabA)
       bootstrapStage = .readingBeta
       let firstB = try await snapshot(tabB)
+      var firstShared: [String: Any]?
       if localizationMode {
         let language = BrowserLanguage.currentLaunchLanguage
         for tab in [tabA, tabB] {
@@ -470,6 +471,7 @@ final class EngineProbe {
         }
         try runtime.openTabID(sharedA, profileID: profileA, url: fixture.absoluteString)
         let shared = try await snapshot(sharedA)
+        firstShared = shared
         try expect(
           shared["cookie"] as? String == "account=alpha" && shared["local"] as? String == "alpha"
             && shared["session"] is NSNull,
@@ -479,6 +481,15 @@ final class EngineProbe {
           rejected = true
         }
         try expect(rejected, "live tab cannot be reassigned to another profile")
+      }
+      if runtime.nativeTabID(forID: sharedA) < 0 {
+        try runtime.openTabID(sharedA, profileID: profileA, url: fixture.absoluteString)
+      }
+      let sharedOriginal: [String: Any]
+      if let firstShared {
+        sharedOriginal = firstShared
+      } else {
+        sharedOriginal = try await snapshot(sharedA)
       }
       if privateWindowMode {
         fixtureStage = "private-window"
@@ -511,7 +522,44 @@ final class EngineProbe {
           store.session == before, "private fixture leaves normal model and selection unchanged")
       }
       fixtureStage = "normal-switches"
-      for iteration in 0..<20 {
+      for iteration in 0..<SwitchProbeMetrics.expectedSwitchCount {
+        let isShared = iteration.isMultiple(of: 2)
+        let tab = isShared ? sharedA : tabA
+        let original = isShared ? sharedOriginal : firstA
+        guard
+          let space = store.session.spaces.first(where: {
+            $0.tabs.contains { $0.id.uuidString == tab }
+          })
+        else { throw ProbeFailure("Native tab lost its owning Space.") }
+        let switchStart = ProcessInfo.processInfo.systemUptime
+        store.perform(.space(space.id))
+        try expect(
+          store.session.selectedSpace.selectedTabID?.uuidString == tab
+            && store.session.selectedSpace.profileID.uuidString == profileA,
+          "\(phase) Space switch \(iteration + 1) selects the correct native Space and profile")
+        let nativeSelection = runtime.normalProbeSelectionAudit(forTabID: tab)
+        try expect(
+          nativeSelection["selectedNativeTab"] as? Bool == true
+            && nativeSelection["displayedNativeWebContents"] as? Bool == true,
+          "\(phase) Space switch \(iteration + 1) displays the selected native tab")
+        let state = try await snapshot(tab)
+        let retainsAccountAndDocument =
+          state["cookie"] as? String == "account=alpha"
+          && state["local"] as? String == "alpha"
+          && state["instance"] as? String == original["instance"] as? String
+        try expect(
+          retainsAccountAndDocument,
+          "\(phase) Space switch \(iteration + 1) retains account and live document")
+        try expect(
+          phase == "initial" && !isShared
+            ? state["session"] as? String == "alpha" : state["session"] is NSNull,
+          "\(phase) Space switch \(iteration + 1) preserves tab session storage")
+        try switchMetrics.record(
+          kind: .space, iteration: iteration + 1,
+          latencySeconds: ProcessInfo.processInfo.systemUptime - switchStart,
+          residentMemoryBytes: NativeResidentMemory.currentBytes())
+      }
+      for iteration in 0..<SwitchProbeMetrics.expectedSwitchCount {
         let isA = iteration.isMultiple(of: 2)
         let tab = isA ? tabA : tabB
         let account = isA ? "alpha" : "beta"
@@ -519,13 +567,18 @@ final class EngineProbe {
           let space = store.session.spaces.first(where: {
             $0.tabs.contains { $0.id.uuidString == tab }
           })
-        else { throw ProbeFailure("Native tab lost its owning space.") }
+        else { throw ProbeFailure("Native tab lost its owning Space.") }
         let switchStart = ProcessInfo.processInfo.systemUptime
         store.perform(.space(space.id))
         try expect(
           store.session.selectedSpace.selectedTabID?.uuidString == tab
             && store.session.selectedSpace.profileID.uuidString == (isA ? profileA : profileB),
-          "\(phase) switch \(iteration + 1) selects the correct native space and profile")
+          "\(phase) Profile switch \(iteration + 1) selects the correct Space and profile")
+        let nativeSelection = runtime.normalProbeSelectionAudit(forTabID: tab)
+        try expect(
+          nativeSelection["selectedNativeTab"] as? Bool == true
+            && nativeSelection["displayedNativeWebContents"] as? Bool == true,
+          "\(phase) Profile switch \(iteration + 1) displays the selected native tab")
         let state = try await snapshot(tab)
         let original = isA ? firstA : firstB
         let retainsAccountAndDocument =
@@ -545,16 +598,25 @@ final class EngineProbe {
         }
         try expect(
           retainsAccountAndDocument,
-          "\(phase) switch \(iteration + 1) retains isolated account and live document")
+          "\(phase) Profile switch \(iteration + 1) retains isolated account and live document")
         try expect(
           phase == "initial"
             ? state["session"] as? String == account : state["session"] is NSNull,
-          "\(phase) switch \(iteration + 1) has expected tab session storage")
+          "\(phase) Profile switch \(iteration + 1) preserves tab session storage")
         try switchMetrics.record(
-          iteration: iteration + 1,
+          kind: .profile, iteration: iteration + 1,
           latencySeconds: ProcessInfo.processInfo.systemUptime - switchStart,
           residentMemoryBytes: NativeResidentMemory.currentBytes())
       }
+      let switchReport = switchMetrics.report(phase: phase)
+      try expect(
+        switchReport.spaceSwitchWithinBudget,
+        "\(phase) Space switch p95 \(switchReport.spaceSwitchLatency.p95Milliseconds ?? .infinity) ms is within the \(SwitchProbeMetrics.latencyBudgetMilliseconds) ms budget"
+      )
+      try expect(
+        switchReport.profileSwitchWithinBudget,
+        "\(phase) Profile switch p95 \(switchReport.profileSwitchLatency.p95Milliseconds ?? .infinity) ms is within the \(SwitchProbeMetrics.latencyBudgetMilliseconds) ms budget"
+      )
       let profileIDs = store.session.profiles.map(\.id)
       let restored = BrowserStore(
         sessionFile: SessionFile(url: root.appending(path: "session.json")))

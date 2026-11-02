@@ -122,6 +122,7 @@ final class BrowserStore {
   @ObservationIgnored private var commandSectionsCache: CommandSectionsCache?
   @ObservationIgnored var onInstallDecision: ((String, Bool) -> Void)?
   @ObservationIgnored var onWebsitePermissionDecision: ((String, Bool) -> Void)?
+  @ObservationIgnored var onDesktopCaptureDecision: ((String, String?) -> Void)?
   @ObservationIgnored var onExternalAppDecision: ((String, Bool) -> Void)?
   @ObservationIgnored var onFindRequest: ((PageFindState, Bool) -> Bool)?
   @ObservationIgnored var onStopFinding: ((UUID) -> Void)?
@@ -807,6 +808,37 @@ final class BrowserStore {
     enqueueConsent(.websitePermission(request))
   }
 
+  @discardableResult
+  func requestDesktopCapture(_ request: DesktopCaptureRequest) -> Bool {
+    enqueueConsent(.desktopCapture(request))
+  }
+
+  func resolveDesktopCapture(_ id: String, sourceID: String?) {
+    let sheetID = "desktop-capture-\(id)"
+    guard let request = consentRequests.first(where: { $0.id == sheetID }),
+      case .desktopCapture(let capture) = request
+    else { return }
+    let presented = sheet?.id == sheetID && presentedConsentID == sheetID
+    consentRequests.removeAll { $0.id == sheetID }
+    if presentedConsentID == sheetID { presentedConsentID = nil }
+    if presented { sheet = nil }
+    let valid = presented && capture.matches(session)
+      && rendererFailures[capture.tabID] == nil
+    onDesktopCaptureDecision?(id, valid ? sourceID : nil)
+    presentNextConsent()
+  }
+
+  func dismissDesktopCapture(_ id: String) {
+    let sheetID = "desktop-capture-\(id)"
+    guard consentRequests.contains(where: { $0.id == sheetID }) else { return }
+    consentRequests.removeAll { $0.id == sheetID }
+    if presentedConsentID == sheetID {
+      presentedConsentID = nil
+      if sheet?.id == sheetID { sheet = nil }
+    }
+    presentNextConsent()
+  }
+
   func resolveWebsitePermission(_ id: String, accepted: Bool) {
     resolveConsent("permission-\(id)", accepted: accepted)
   }
@@ -844,6 +876,7 @@ final class BrowserStore {
     switch request {
     case .extensionInstall(let request): onInstallDecision?(request.id, allow)
     case .websitePermission(let request): onWebsitePermissionDecision?(request.id, allow)
+    case .desktopCapture(let request): onDesktopCaptureDecision?(request.id, nil)
     case .externalApp(let request): onExternalAppDecision?(request.id, allow)
     case .space, .downloads, .folder, .recentlyClosed, .library, .bookmarkEditor: break
     }

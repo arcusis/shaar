@@ -80,6 +80,7 @@ NSString *ARCValidatedProfileID(NSString *profileID);
   NSURL *_probeRoot;
   NSMutableDictionary<NSString *, NSDictionary *> *_pendingInstalls;
   NSMutableDictionary<NSString *, NSDictionary *> *_pendingMedia;
+  NSMutableDictionary<NSString *, NSDictionary *> *_pendingDesktopCapture;
   NSMutableDictionary<NSString *, NSDictionary *> *_pendingExternal;
   NSMutableDictionary<NSString *, NSNumber *> *_documentGenerations;
   NSMutableDictionary<NSString *, NSMutableArray<NSDictionary *> *> *_probeExtensions;

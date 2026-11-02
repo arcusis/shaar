@@ -99,6 +99,7 @@ struct BrowserWindow: View {
       case .bookmarkEditor(let route): BookmarkEditor(store: store, route: route)
       case .extensionInstall(let request): ExtensionConsent(store: store, request: request)
       case .websitePermission(let request): WebsitePermissionConsent(store: store, request: request)
+      case .desktopCapture(let request): DesktopCapturePicker(request: request, store: store)
       case .externalApp(let request): ExternalAppConsent(store: store, request: request)
       case .downloads(let profile):
         if let engine = store.engine {

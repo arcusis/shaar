@@ -560,7 +560,7 @@ final class EngineProbe {
           residentMemoryBytes: NativeResidentMemory.currentBytes())
       }
       for iteration in 0..<SwitchProbeMetrics.expectedSwitchCount {
-        let isA = iteration.isMultiple(of: 2)
+        let isA = !iteration.isMultiple(of: 2)
         let tab = isA ? tabA : tabB
         let account = isA ? "alpha" : "beta"
         guard

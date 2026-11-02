@@ -114,15 +114,19 @@ struct BrowserSettingsView: View {
   let onRenameProfile: (UUID, String) -> Bool
   let onSetProfileColor: (UUID, ProfileColorChoice) -> Bool
   let onSetProfileSymbol: (UUID, String) -> Bool
-  let onDeleteProfile: (UUID, UUID) -> Bool
+  let onDeleteProfile: (UUID, UUID?) async throws -> Void
   let onOpenSpace: (UUID) -> Void
   let onConnectAccount: (UUID, AccountSignInOption) -> Void
   let onDisconnectAccount: (UUID, AccountProvider) -> Void
   let extensionManager: (UUID) -> ExtensionManagerModel?
   let onAddExtensions: (UUID) -> Void
   let clearHistory: ((UUID) async throws -> Void)?
+  let profileBackend: (any ProfileSettingsBackend)?
   @State private var deletingProfile: BrowserSettingsProfile?
   @State private var destinationID: UUID?
+  @State private var removeSpaces = false
+  @State private var deleting = false
+  @State private var deletionFailure: String?
   @State private var selectedSection: BrowserSettingsSection
   @State private var profileNameEdits: [UUID: String] = [:]
   @State private var profileSymbolPickerIsPresented = false
@@ -136,12 +140,15 @@ struct BrowserSettingsView: View {
     onRenameProfile: @escaping (UUID, String) -> Bool = { _, _ in false },
     onSetProfileColor: @escaping (UUID, ProfileColorChoice) -> Bool = { _, _ in false },
     onSetProfileSymbol: @escaping (UUID, String) -> Bool = { _, _ in false },
-    onDeleteProfile: @escaping (UUID, UUID) -> Bool = { _, _ in false },
+    onDeleteProfile: @escaping (UUID, UUID?) async throws -> Void = { _, _ in
+      throw CocoaError(.featureUnsupported)
+    },
     onOpenSpace: @escaping (UUID) -> Void = { _ in },
     onConnectAccount: @escaping (UUID, AccountSignInOption) -> Void = { _, _ in },
     onDisconnectAccount: @escaping (UUID, AccountProvider) -> Void = { _, _ in },
     extensionManager: @escaping (UUID) -> ExtensionManagerModel? = { _ in nil },
     onAddExtensions: @escaping (UUID) -> Void = { _ in },
+    profileBackend: (any ProfileSettingsBackend)? = nil,
     clearHistory: ((UUID) async throws -> Void)? = nil,
     initialSection: BrowserSettingsSection = .general
   ) {
@@ -163,6 +170,7 @@ struct BrowserSettingsView: View {
     self.extensionManager = extensionManager
     self.onAddExtensions = onAddExtensions
     self.clearHistory = clearHistory
+    self.profileBackend = profileBackend
     _selectedSection = State(initialValue: initialSection)
   }
 
@@ -203,26 +211,48 @@ struct BrowserSettingsView: View {
       VStack(alignment: .leading, spacing: 16) {
         Text(SettingsL10n.format("Delete %@?", .string(profile.name))).font(.headline)
         Text(
-          SettingsL10n.format(
-            "Its Spaces will move to %@. Its favorites will be removed.",
-            .string(
-              profiles.first(where: { $0.id == destinationID })?.name
-                ?? SettingsL10n.string("the selected profile"))))
-        Picker(SettingsL10n.string("Move Spaces to"), selection: $destinationID) {
-          ForEach(profiles.filter { $0.id != profile.id }) { candidate in
-            Text(candidate.name).tag(Optional(candidate.id))
-          }
+          SettingsL10n.string(
+            "Favorites and profile preferences will be removed. Chromium will schedule deletion of cookies, site data, history, cache and extensions. This cannot be undone."
+          ))
+        Picker(SettingsL10n.string("Spaces"), selection: $removeSpaces) {
+          Text(SettingsL10n.string("Move Spaces")).tag(false)
+          Text(SettingsL10n.string("Remove Spaces and close their tabs")).tag(true)
         }
+        .disabled(deleting)
+        if removeSpaces {
+          Text(SettingsL10n.string("All Spaces using this profile and their tabs will be removed."))
+          Text(
+            SettingsL10n.string(
+              "If no Spaces remain, an empty Space is created for a remaining profile."))
+        } else {
+          Picker(SettingsL10n.string("Move Spaces to"), selection: $destinationID) {
+            ForEach(profiles.filter { $0.id != profile.id }) { candidate in
+              Text(candidate.name).tag(Optional(candidate.id))
+            }
+          }
+          .disabled(deleting)
+        }
+        if let deletionFailure { Text(deletionFailure).foregroundStyle(.red) }
         HStack {
           Spacer()
-          Button(SettingsL10n.string("Cancel")) { deletingProfile = nil }
-          Button(SettingsL10n.string("Delete"), role: .destructive) {
-            if let destinationID, onDeleteProfile(profile.id, destinationID) {
-              deletingProfile = nil
+          Button(SettingsL10n.string("Cancel")) { deletingProfile = nil }.disabled(deleting)
+          Button(SettingsL10n.string(deleting ? "Deleting…" : "Delete"), role: .destructive) {
+            let destination = removeSpaces ? nil : destinationID
+            deleting = true
+            deletionFailure = nil
+            Task {
+              do {
+                try await onDeleteProfile(profile.id, destination)
+                deletingProfile = nil
+              } catch {
+                deletionFailure = error.localizedDescription
+              }
+              deleting = false
             }
-          }.disabled(destinationID == nil)
+          }.disabled(deleting || (!removeSpaces && destinationID == nil))
         }
       }.padding(24).frame(width: 420)
+        .interactiveDismissDisabled(deleting)
     }
   }
 
@@ -379,6 +409,12 @@ struct BrowserSettingsView: View {
         Text(
           SettingsL10n.string(
             "Removes history for the selected profile. Cookies and cached files are not removed."))
+      }
+      if let selectedProfileID, let profileBackend,
+        profiles.contains(where: { $0.id == selectedProfileID })
+      {
+        ProfilePrivacySections(profileID: selectedProfileID, backend: profileBackend)
+          .id(selectedProfileID)
       }
       MacPermissionsSection()
     }.formStyle(.grouped)
@@ -551,9 +587,11 @@ struct BrowserSettingsView: View {
       Section {
         Button(SettingsL10n.string("Delete Profile…"), role: .destructive) {
           destinationID = profiles.first(where: { $0.id != profile.id })?.id
+          removeSpaces = false
+          deletionFailure = nil
           deletingProfile = profile
         }
-        .disabled(profiles.count < 2)
+        .disabled(profiles.count < 2 || profileBackend == nil)
         .accessibilityIdentifier("settings.deleteProfile")
       }
     }

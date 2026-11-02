@@ -93,6 +93,25 @@ final class BrowserPreferencesStore {
     save()
   }
 
+  /// Removes every app-owned preference for this identity, retaining other profiles and globals.
+  func validateProfileRemoval() throws {
+    guard !preservesExistingFile else { throw CocoaError(.fileWriteNoPermission) }
+    // Refuse engine deletion when the existing preferences cannot be persisted.
+    save()
+    if storageNotice != nil { throw CocoaError(.fileWriteUnknown) }
+  }
+
+  func removeProfile(_ profileID: UUID) throws {
+    try validateProfileRemoval()
+    profileSearchEngines[profileID] = nil
+    connectedAccounts[profileID] = nil
+    pinnedExtensions[profileID] = nil
+    autoPictureInPictureOffSites[profileID] = nil
+    developerSimulations[profileID] = nil
+    save()
+    if storageNotice != nil { throw CocoaError(.fileWriteUnknown) }
+  }
+
   private func load() {
     guard let fileURL, FileManager.default.fileExists(atPath: fileURL.path) else { return }
 

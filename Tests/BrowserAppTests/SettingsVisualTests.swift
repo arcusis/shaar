@@ -10,6 +10,31 @@ import XCTest
 
 @MainActor
 final class SettingsVisualTests: XCTestCase {
+  func testPrivacyControls() async throws {
+    try XCTSkipUnless(SidebarVisualCaptureSupport.enabled, "Visual capture requires opt-in")
+    let id = UUID()
+    let backend = ProfileSettingsStub()
+    backend.exceptions[id] = [
+      "https://example.test": ["camera": ["value": "allow", "isDefault": false]]
+    ]
+    for scheme in [ColorScheme.light, .dark] {
+      let view = Form {
+        ProfilePrivacySections(profileID: id, backend: backend)
+      }
+      .formStyle(.grouped)
+      .environment(\.colorScheme, scheme)
+      let mounted = try MountedChromeSidebar(
+        view: view, size: NSSize(width: 600, height: 760),
+        appearance: scheme == .dark ? .darkAqua : .aqua)
+      defer { mounted.close() }
+      _ = try await mounted.capture(
+        to: URL(
+          fileURLWithPath:
+            "/tmp/settings-privacy-controls-\(scheme == .dark ? "dark" : "light").png"),
+        requiredText: ["Website Data", "Site Permissions", "https://example.test"])
+    }
+  }
+
   func testSections() async throws {
     try XCTSkipUnless(SidebarVisualCaptureSupport.enabled, "Visual capture requires opt-in")
     let profileID = UUID()
@@ -32,7 +57,8 @@ final class SettingsVisualTests: XCTestCase {
           ],
           searchEngines: [BrowserSettingsChoice(id: "google", title: "Google")],
           selectedProfileID: .constant(profileID), sidebarInitiallyVisible: .constant(true),
-          selectedSearchEngine: .constant("google"), initialSection: section
+          selectedSearchEngine: .constant("google"), profileBackend: ProfileSettingsStub(),
+          initialSection: section
         )
         .environment(\.colorScheme, scheme)
         .frame(width: size.width, height: size.height)

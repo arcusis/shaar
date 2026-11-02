@@ -426,7 +426,8 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 
 - (void)loadProfileID:(NSString *)profileID completion:(void (^)(NSError *))completion {
   NSAssert(NSThread.isMainThread, @"Profile loading must run on the main thread");
-  if (!ARCIsCanonicalID(profileID) || !_engine || [self isPrivateIdentity:profileID]) {
+  if (!ARCIsCanonicalID(profileID) || !_engine || [self isPrivateIdentity:profileID] ||
+      [_deletingProfileIDs containsObject:profileID]) {
     completion(ARCBridgeError(@"Invalid profile identity or engine not ready."));
     return;
   }
@@ -512,7 +513,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     if (!matches && error) *error = ARCBridgeError(@"A live tab cannot silently change its profile or native window.");
     return matches;
   }
-  if (!ARCIsCanonicalID(tabID) || !_profiles[profileID]) {
+  if (!ARCIsCanonicalID(tabID) || !_profiles[profileID] || [_deletingProfileIDs containsObject:profileID]) {
     if (error) *error = ARCBridgeError(@"The tab has no loaded profile; refusing a default-profile fallback.");
     return NO;
   }

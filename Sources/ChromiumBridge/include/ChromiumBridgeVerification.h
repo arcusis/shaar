@@ -22,6 +22,9 @@ FOUNDATION_EXPORT BOOL ARCDisableBackgroundMode(NSURL *userDataDirectory);
 FOUNDATION_EXPORT void ARCCompletePrivateQuitDialogCancellation(
   BOOL ownerCurrent, NSString * _Nullable dialogError, void (^releaseHold)(void), void (^reject)(void));
 
+/// The shipped media reporter, for deterministic JavaScript event-order tests without an engine.
+FOUNDATION_EXPORT NSString *ARCMediaSessionPageScript(void);
+
 @interface ARCChromiumRuntime (Verification)
 /// Grants geolocation only on the selected disposable Inspector loopback fixture.
 - (void)grantProbeGeolocationInTabID:(NSString *)tabID completion:(void (NS_SWIFT_UI_ACTOR ^)(NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;

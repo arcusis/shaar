@@ -19,9 +19,9 @@ from ci_support import Commands, ROOT, SWIFT_SOURCE_ROOTS, tracked_swift_sources
 PLAN = ROOT / "build/ci/codeql-swift/compile-plan.json"
 
 
-def source_hashes(root: Path) -> dict[str, str]:
+def source_hashes(root: Path, scope: str = "full") -> dict[str, str]:
     return {name: hashlib.sha256((root / name).read_bytes()).hexdigest()
-            for name in tracked_swift_sources(root)}
+            for name in sorted(tracked_swift_sources(root, scope))}
 
 
 def command_sources(arguments: list[str], root: Path) -> set[str]:
@@ -69,7 +69,7 @@ def identity() -> dict:
     return {"revision": os.environ["GITHUB_SHA"], "toolchain": os.environ["CI_TOOLCHAIN_ID"]}
 
 
-def prepare() -> int:
+def prepare(scope: str) -> int:
     checks = Commands("codeql-prepare")
     compiler = Path(subprocess.check_output(["xcrun", "--find", "swiftc"], text=True).strip())
     if checks.run("clean", ["swift", "package", "--scratch-path", "build/swiftpm/codeql", "clean"]):
@@ -79,18 +79,22 @@ def prepare() -> int:
                  "-Xswiftc", "-whole-module-optimization", "-Xswiftc", "-Onone",
                  "-Xswiftc", "-num-threads", "-Xswiftc", "2",
                  "-Xswiftc", "-no-emit-module-separately-wmo"]
+    if scope == "shipping":
+        arguments += ["--product", "ArcusisBrowser"]
     if checks.run("native-build-plan", arguments):
         return checks.finish()
-    sources = source_hashes(ROOT)
+    sources = source_hashes(ROOT, scope)
     commands = compiler_commands((checks.directory / "native-build-plan.log").read_text(), ROOT, compiler, set(sources))
     PLAN.parent.mkdir(parents=True, exist_ok=True)
-    PLAN.write_text(json.dumps(dict(identity(), compiler=str(compiler), sources=sources, commands=commands), indent=2) + "\n")
+    PLAN.write_text(json.dumps(dict(identity(), scope=scope, compiler=str(compiler), sources=sources, commands=commands), indent=2) + "\n")
     return checks.finish()
 
 
-def replay() -> int:
+def replay(scope: str = "full") -> int:
     plan = json.loads(PLAN.read_text())
-    if any(plan.get(key) != value for key, value in identity().items()) or plan["sources"] != source_hashes(ROOT):
+    if plan.get("scope") != scope:
+        raise ValueError("Swift compiler plan analysis scope changed")
+    if any(plan.get(key) != value for key, value in identity().items()) or plan["sources"] != source_hashes(ROOT, scope):
         raise ValueError("Swift compiler plan commit, toolchain or source content changed")
     compiler = Path(subprocess.check_output(["xcrun", "--find", "swiftc"], text=True).strip())
     if str(compiler) != plan["compiler"]:
@@ -112,8 +116,9 @@ def replay() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("mode", choices=("prepare", "replay"))
+    parser.add_argument("--scope", choices=("full", "shipping"), default="full")
     options = parser.parse_args()
-    return prepare() if options.mode == "prepare" else replay()
+    return prepare(options.scope) if options.mode == "prepare" else replay(options.scope)
 
 
 if __name__ == "__main__":

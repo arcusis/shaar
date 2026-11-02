@@ -50,12 +50,13 @@ def missing_sources(document: dict, expected: set[str], root: Path) -> list[str]
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("report", type=Path)
+    parser.add_argument("--scope", choices=("full", "shipping"), default="full")
     options = parser.parse_args()
-    expected = tracked_swift_sources(ROOT)
+    expected = tracked_swift_sources(ROOT, options.scope)
     missing = missing_sources(json.loads(options.report.read_text()), expected, ROOT)
-    result = {"expected": len(expected), "missing": missing, "revision": os.environ.get("GITHUB_SHA", "local")}
+    result = {"scope": options.scope, "expected": len(expected), "missing": missing, "revision": os.environ.get("GITHUB_SHA", "local")}
     options.report.with_name("coverage.json").write_text(json.dumps(result, indent=2) + "\n")
-    message = f"Swift CodeQL: {len(expected) - len(missing)}/{len(expected)} tracked source files extracted"
+    message = f"Swift CodeQL ({options.scope}): {len(expected) - len(missing)}/{len(expected)} tracked source files extracted"
     print(message)
     for name in missing:
         print(f"Missing extraction: {name}")

@@ -439,6 +439,22 @@ class SwiftExtractionTests(unittest.TestCase):
 
 
 class SwiftCompilerPlanTests(unittest.TestCase):
+    def test_shipping_scope_excludes_only_verification_and_support_modules(self):
+        from ci_support import tracked_swift_sources
+        names = b"Sources/App/A.swift\0Sources/ShaarVerification/Probe.swift\0Tests/TestSupport/Seed.swift\0"
+        with patch("ci_support.subprocess.check_output", return_value=names):
+            self.assertEqual(len(tracked_swift_sources(ROOT)), 3)
+            self.assertEqual(tracked_swift_sources(ROOT, "shipping"), {"Sources/App/A.swift"})
+            with self.assertRaises(ValueError):
+                tracked_swift_sources(ROOT, "unknown")
+
+    def test_scope_mismatch_rejects_plan_before_any_compiler_runs(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            plan = Path(temporary) / "plan.json"
+            plan.write_text(json.dumps({"scope": "full"}))
+            with patch.object(CODEQL_BUILD, "PLAN", plan), self.assertRaisesRegex(ValueError, "scope changed"):
+                CODEQL_BUILD.replay("shipping")
+
     def test_support_module_is_retained_but_test_targets_are_outside_default_build_inventory(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -476,7 +492,7 @@ class SwiftCompilerPlanTests(unittest.TestCase):
     def test_changed_source_or_toolchain_rejects_replay_before_compiling(self):
         with tempfile.TemporaryDirectory() as temporary:
             plan = Path(temporary) / "plan.json"
-            plan.write_text(json.dumps({"revision": "a", "toolchain": "one", "sources": {"Sources/A.swift": "old"}}))
+            plan.write_text(json.dumps({"scope": "full", "revision": "a", "toolchain": "one", "sources": {"Sources/A.swift": "old"}}))
             with (patch.object(CODEQL_BUILD, "PLAN", plan),
                   patch.object(CODEQL_BUILD, "identity", return_value={"revision": "a", "toolchain": "one"}),
                   patch.object(CODEQL_BUILD, "source_hashes", return_value={"Sources/A.swift": "new"}),

@@ -18,9 +18,12 @@ ROOT = Path(__file__).resolve().parents[1]
 SWIFT_SOURCE_ROOTS = ("Sources", "Tests/TestSupport")
 
 
-def tracked_swift_sources(root: Path) -> set[str]:
+def tracked_swift_sources(root: Path, scope: str = "full") -> set[str]:
+    if scope not in {"full", "shipping"}:
+        raise ValueError("Unknown Swift analysis scope")
     files = subprocess.check_output(["git", "ls-files", "-z", "--", *SWIFT_SOURCE_ROOTS], cwd=root).decode().split("\0")
-    return {name for name in files if name.endswith(".swift")}
+    return {name for name in files if name.endswith(".swift")
+            and (scope == "full" or not name.startswith(("Sources/ShaarVerification/", "Tests/TestSupport/")))}
 
 
 class Commands:

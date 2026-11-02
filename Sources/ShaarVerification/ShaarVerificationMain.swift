@@ -8,18 +8,27 @@ import Foundation
 @main
 enum ShaarVerificationMain {
   @MainActor static func main() {
-    if let index = CommandLine.arguments.firstIndex(of: "--probe-store-language"),
-      CommandLine.arguments.indices.contains(index + 1),
-      let selection = BrowserLanguage(rawValue: CommandLine.arguments[index + 1]),
-      Bundle.main.bundleIdentifier?.hasPrefix("com.arcusis.localization-fixture.") == true
+    if let result = storeLanguage(
+      arguments: CommandLine.arguments, bundleIdentifier: Bundle.main.bundleIdentifier)
     {
-      BrowserLanguage.selection = selection
-      guard UserDefaults.standard.synchronize() else { exit(1) }
-      exit(0)
+      exit(result)
     }
     if CommandLine.arguments.contains("--marketing-screenshots") {
       exit(MarketingScreenshots.run(arguments: CommandLine.arguments))
     }
     exit(EngineProbe.run(arguments: CommandLine.arguments))
+  }
+
+  static func storeLanguage(
+    arguments: [String], bundleIdentifier: String?, defaults: UserDefaults = .standard,
+    domainName: String = Bundle.main.bundleIdentifier ?? ProcessInfo.processInfo.processName
+  ) -> Int32? {
+    guard let index = arguments.firstIndex(of: "--probe-store-language"),
+      arguments.indices.contains(index + 1),
+      let selection = BrowserLanguage(rawValue: arguments[index + 1]),
+      bundleIdentifier?.hasPrefix("com.arcusis.localization-fixture.") == true
+    else { return nil }
+    BrowserLanguage.store(selection, defaults: defaults, domainName: domainName)
+    return defaults.synchronize() ? 0 : 1
   }
 }

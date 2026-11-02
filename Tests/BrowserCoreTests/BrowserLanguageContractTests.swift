@@ -8,6 +8,29 @@ import XCTest
 @testable import BrowserCore
 
 final class BrowserLanguageContractTests: XCTestCase {
+  func testSelectionSetterPersistsOverrideWithoutChangingCachedLaunchLanguage() {
+    let defaults = UserDefaults.standard
+    let domain = Bundle.main.bundleIdentifier ?? ProcessInfo.processInfo.processName
+    let original = defaults.persistentDomain(forName: domain) ?? [:]
+    let keys = [
+      BrowserLanguage.selectionDefaultsKey, "AppleLanguages",
+      "BrowserLanguage.systemAppleLanguages",
+    ]
+    defer {
+      for key in keys { defaults.set(original[key], forKey: key) }
+      defaults.synchronize()
+    }
+    let launch = BrowserLanguage.currentLaunchLanguage
+    BrowserLanguage.selection = .hebrew
+    XCTAssertEqual(
+      defaults.persistentDomain(forName: domain)?["AppleLanguages"] as? [String], ["he"])
+    BrowserLanguage.selection = .english
+    XCTAssertEqual(
+      defaults.persistentDomain(forName: domain)?["AppleLanguages"] as? [String], ["en"])
+    XCTAssertEqual(BrowserLanguage.currentLaunchLanguage, launch)
+    XCTAssertTrue(defaults.synchronize())
+  }
+
   func testStoredChoiceOverridesOnlyAppDomainAndSystemRestoresPerAppPreference() throws {
     let name = "BrowserLanguageContractTests.\(UUID().uuidString)"
     let defaults = try XCTUnwrap(UserDefaults(suiteName: name))

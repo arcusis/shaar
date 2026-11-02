@@ -25,8 +25,8 @@ enum BrowserRestart {
 
   /// Called only after the native runtime and workspace lock have been released.
   /// Replacing this process avoids Launch Services reusing the exiting instance.
-  static func relaunch() -> Never {
-    guard let executable = Bundle.main.executableURL else { exit(1) }
+  static func relaunch(executable: URL? = Bundle.main.executableURL) throws -> Never {
+    guard let executable else { throw CocoaError(.fileNoSuchFile) }
     let launchArguments = [executable.path, restoreArgument]
     let arguments = launchArguments.map { argument in
       argument.withCString { strdup($0) }
@@ -36,7 +36,6 @@ enum BrowserRestart {
     }
     var argv = arguments + [nil]
     _ = execv(executable.path, &argv)
-    FileHandle.standardError.write(Data("Could not restart Shaar (errno \(errno)).\n".utf8))
-    exit(1)
+    throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
   }
 }

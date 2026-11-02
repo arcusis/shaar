@@ -38,7 +38,12 @@ public enum BrowserLaunch {
       if FileManager.default.fileExists(atPath: framework.path) {
         switch NativeBrowserHost.run(frameworkURL: framework) {
         case .exited(let code): exit(code)
-        case .restart: BrowserRestart.relaunch()
+        case .restart:
+          do { try BrowserRestart.relaunch() } catch {
+            FileHandle.standardError.write(
+              Data("Could not restart Shaar: \(error.localizedDescription)\n".utf8))
+            exit(1)
+          }
         }
       }
     }

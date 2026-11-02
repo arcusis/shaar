@@ -27,7 +27,10 @@ enum BrowserRestart {
   /// Replacing this process avoids Launch Services reusing the exiting instance.
   static func relaunch() -> Never {
     guard let executable = Bundle.main.executableURL else { exit(1) }
-    let arguments = [executable.path, restoreArgument].map { strdup($0) }
+    let launchArguments = [executable.path, restoreArgument]
+    let arguments = launchArguments.map { argument in
+      argument.withCString { strdup($0) }
+    }
     defer {
       for argument in arguments { free(argument) }
     }

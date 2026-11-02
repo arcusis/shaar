@@ -55,6 +55,9 @@ class PipelineGateTests(unittest.TestCase):
             self.assertTrue(PLAN.select_stages(paths, "pull_request")[0])
         self.assertEqual(PLAN.select_stages(["Sources/App.swift"], "pull_request"), (True, False, True))
         self.assertEqual(PLAN.select_stages(["scripts/tool.py"], "pull_request"), (True, False, False))
+        for paths in (["scripts/codeql-build.py"], [".github/workflows/ci-codeql.yml"],
+                      [".github/actions/ci-setup/action.yml"]):
+            self.assertFalse(PLAN.select_stages(paths, "pull_request")[2])
         for event in ("push", "schedule", "workflow_dispatch"):
             self.assertEqual(PLAN.select_stages(["Notebook/Note.md"], event), (True, True, True))
         self.assertTrue(PLAN.select_stages(["scripts/tool.py"], "merge_group")[2])

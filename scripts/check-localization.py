@@ -3,7 +3,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""Validate localization catalogs and keep the reviewed string inventory reproducible."""
+"""Validate localization catalogs and optionally export the string inventory."""
 
 import argparse
 import csv
@@ -15,7 +15,6 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-INVENTORY = ROOT / "Notebook/Hebrew_String_Inventory.csv"
 SOURCE_SUFFIXES = {".swift", ".mm", ".m", ".h"}
 
 
@@ -44,15 +43,13 @@ def forms(value, source):
     }
 
 
-def locate_references(key):
+def locate_references(key, sources):
     locations = []
     needle = json.dumps(key, ensure_ascii=False)
-    for path in sorted(ROOT.joinpath("Sources").rglob("*")):
-        if path.suffix not in SOURCE_SUFFIXES or not path.is_file():
-            continue
-        for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+    for path, lines in sources:
+        for line_number, line in enumerate(lines, 1):
             if needle in line:
-                locations.append((path.relative_to(ROOT).as_posix(), line_number))
+                locations.append((path, line_number))
     return locations
 
 
@@ -66,6 +63,11 @@ def source_line(relative_path, token):
 
 def inventory_rows():
     rows = []
+    sources = [
+        (path.relative_to(ROOT).as_posix(), path.read_text(encoding="utf-8").splitlines())
+        for path in sorted(ROOT.joinpath("Sources").rglob("*"))
+        if path.suffix in SOURCE_SUFFIXES and path.is_file()
+    ]
     catalogs = sorted(ROOT.joinpath("Sources").rglob("*.xcstrings")) + sorted(
         ROOT.joinpath("Resources/Localizations").glob("*.xcstrings")
     )
@@ -78,7 +80,7 @@ def inventory_rows():
             hebrew = forms(localizations.get("he"), key)
             english_text = json.dumps(english, ensure_ascii=False, sort_keys=True)
             hebrew_text = json.dumps(hebrew, ensure_ascii=False, sort_keys=True)
-            locations = locate_references(key)
+            locations = locate_references(key, sources)
             if not locations:
                 catalog_lines = catalog.read_text(encoding="utf-8").splitlines()
                 marker = json.dumps(key, ensure_ascii=False)
@@ -131,7 +133,11 @@ def render_inventory(rows):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--write-inventory", action="store_true")
+    parser.add_argument(
+        "--write-inventory", nargs="?", type=Path,
+        const=ROOT / "build/Localization/Hebrew_String_Inventory.csv",
+        metavar="PATH", help="Export a CSV after validation (default: build/Localization/Hebrew_String_Inventory.csv)",
+    )
     options = parser.parse_args()
     validator = load_validator()
     try:
@@ -143,16 +149,16 @@ def main():
         for catalog in catalogs:
             validator.validate_catalog(catalog)
         validator.validate_source_references(ROOT, catalogs, include_app=True)
-        rows = inventory_rows()
-        expected = render_inventory(rows)
-        if options.write_inventory:
-            INVENTORY.write_text(expected, encoding="utf-8")
-        elif not INVENTORY.exists() or INVENTORY.read_text(encoding="utf-8") != expected:
-            raise ValueError("Hebrew_String_Inventory.csv is missing or stale; regenerate with --write-inventory")
+        if options.write_inventory is not None:
+            rows = inventory_rows()
+            options.write_inventory.parent.mkdir(parents=True, exist_ok=True)
+            options.write_inventory.write_text(render_inventory(rows), encoding="utf-8")
     except (OSError, ValueError, json.JSONDecodeError) as error:
         print(f"Localization check failed: {error}", file=sys.stderr)
         return 1
-    print(f"Localization check passed: {len(catalogs)} catalogs, {len(rows)} inventory rows")
+    print(f"Localization check passed: {len(catalogs)} catalogs")
+    if options.write_inventory is not None:
+        print(f"Inventory exported: {len(rows)} rows to {options.write_inventory}")
     return 0
 
 

@@ -6,6 +6,15 @@
 #import "ChromiumProbeRoot.h"
 #include <cmath>
 
+void ARCCompletePrivateQuitDialogCancellation(
+    BOOL ownerCurrent, NSString *dialogError, void (^releaseHold)(void), void (^reject)(void)) {
+  if (!ownerCurrent || dialogError) {
+    reject();
+    return;
+  }
+  releaseHold();
+}
+
 static void ClickProbeTarget(ArdiaCoreTab *tab, NSString *expression, BOOL (^current)(void),
                              void (^completion)(BOOL)) {
   [tab devToolsCall:@"Runtime.evaluate" params:@{@"expression": expression, @"returnByValue": @YES}
@@ -582,10 +591,11 @@ static BOOL ProbeViewIsVisibleInWindow(NSView *view, NSWindow *window) {
           ([lowerError containsString:@"dialog"] && [lowerError containsString:@"no"] ?
             @"no-dialog" : @"devtools-error") : @"cancelled";
     }
-    if (!current) { completion(NO); return; }
-    [self endPrivateQuitCDPHoldForTabID:tabID tab:tab completion:^(BOOL ended) {
-      completion(error == nil && ended);
-    }];
+    ARCCompletePrivateQuitDialogCancellation(current, error, ^{
+      [self endPrivateQuitCDPHoldForTabID:tabID tab:tab completion:^(BOOL ended) {
+        completion(ended);
+      }];
+    }, ^{ completion(NO); });
   }];
 }
 

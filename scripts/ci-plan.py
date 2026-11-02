@@ -33,15 +33,7 @@ def select_stages(paths: list[str] | None, event: str) -> tuple[bool, bool, bool
     native = not all(documentation_only([path]) or path.startswith("website/")
                      or path.startswith(".github/workflows/website-") and path.endswith(".yml") for path in paths)
     website = any(website_path(path) or path.startswith(".github/workflows/") for path in paths)
-    unrelated = all(documentation_only([path]) or website_path(path)
-                    or path.startswith(("scripts/", ".github/", ".githooks/"))
-                    or path.startswith("Tests/") and path.endswith(".py")
-                    or path in {".gitignore", ".gitleaks.toml"} for path in paths)
-    swift = native and (event != "pull_request" or not unrelated or any(
-        path.startswith(("Sources/", "ThirdParty/")) or path.endswith(".swift")
-        or path in {"Package.resolved", "scripts/bundle-app.sh"}
-        for path in paths))
-    return native, website, swift
+    return native, website, True
 
 
 def iteration_count(event: dict, name: str) -> int:

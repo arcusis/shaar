@@ -42,22 +42,47 @@ SBOM = load_script("ci-sbom")
 SWIFT_REPORTS = load_script("ci-swift-reports")
 EXTRACTION = load_script("check-codeql-extraction")
 CODEQL_BUILD = load_script("codeql-build")
+RELEASE_CI = load_script("check-release-ci")
 
 
 class PipelineGateTests(unittest.TestCase):
+    def test_release_gate_requires_both_exact_production_workflows_and_zero_alerts(self):
+        revision = "a" * 40
+        valid = {"id": 9, "head_sha": revision, "head_branch": "production", "event": "push",
+                 "status": "completed", "conclusion": "success"}
+        for change in ({"head_sha": "b" * 40}, {"event": "pull_request"}, {"event": "workflow_dispatch"},
+                       {"status": "in_progress"}, {"conclusion": "failure"}, {"head_branch": "feature"}):
+            self.assertEqual(RELEASE_CI.production_runs({"workflow_runs": [dict(valid, **change)]}, revision), [])
+        for alerts in ([], [{"number": 1, "state": "open"}]):
+            responses = [{"workflow_runs": [valid]},
+                         {"jobs": [{"name": "CI required", "status": "completed", "conclusion": "success"}]},
+                         {"workflow_runs": [dict(valid, id=10)]},
+                         {"jobs": [{"name": "Swift security required", "status": "completed", "conclusion": "success"}]},
+                         alerts]
+            with patch.object(RELEASE_CI, "api", side_effect=responses):
+                if alerts:
+                    with self.assertRaisesRegex(ValueError, "open code-scanning"):
+                        RELEASE_CI.require_release_ci("arcusis/shaar", revision)
+                else:
+                    self.assertEqual(RELEASE_CI.require_release_ci("arcusis/shaar", revision),
+                                     {"Source checks": 9, "Swift security": 10})
+        with patch.object(RELEASE_CI, "api", side_effect=[{"workflow_runs": [valid]}, {"jobs": []}]):
+            with self.assertRaises(ValueError):
+                RELEASE_CI.require_release_ci("arcusis/shaar", revision)
+
     def test_known_non_native_diffs_and_unknown_changes_select_required_coverage(self):
         for paths in (["Notebook/Note.md"], ["README.md", "CONTRIBUTING.md"]):
-            self.assertEqual(PLAN.select_stages(paths, "pull_request"), (False, False, False))
+            self.assertEqual(PLAN.select_stages(paths, "pull_request"), (False, False, True))
         for paths in (["website/src/Page.svelte"], ["website/package.json", "Notebook/Note.md"]):
-            self.assertEqual(PLAN.select_stages(paths, "pull_request"), (False, True, False))
-            self.assertEqual(PLAN.select_stages(paths, "merge_group"), (False, True, False))
+            self.assertEqual(PLAN.select_stages(paths, "pull_request"), (False, True, True))
+            self.assertEqual(PLAN.select_stages(paths, "merge_group"), (False, True, True))
         for paths in (None, [], ["unclassified-input"]):
             self.assertTrue(PLAN.select_stages(paths, "pull_request")[0])
         self.assertEqual(PLAN.select_stages(["Sources/App.swift"], "pull_request"), (True, False, True))
-        self.assertEqual(PLAN.select_stages(["scripts/tool.py"], "pull_request"), (True, False, False))
+        self.assertEqual(PLAN.select_stages(["scripts/tool.py"], "pull_request"), (True, False, True))
         for paths in (["scripts/codeql-build.py"], [".github/workflows/ci-codeql.yml"],
                       [".github/actions/ci-setup/action.yml"]):
-            self.assertFalse(PLAN.select_stages(paths, "pull_request")[2])
+            self.assertTrue(PLAN.select_stages(paths, "pull_request")[2])
         for event in ("push", "schedule", "workflow_dispatch"):
             self.assertEqual(PLAN.select_stages(["Notebook/Note.md"], event), (True, True, True))
         self.assertTrue(PLAN.select_stages(["scripts/tool.py"], "merge_group")[2])
@@ -132,6 +157,7 @@ class PipelineGateTests(unittest.TestCase):
         results = {name: {"result": "success"} for name in ("plan", "fast", "dependency-review")}
         results.update({name: {"result": native} for name in ("build", "coverage", "visuals", "localization", "engine", "shipping", "codeql", "inspector-contracts")})
         results.update({name: {"result": nightly} for name in ("sanitizers", "dead-code")})
+        results["codeql"] = {"result": "success"}
         return results
 
     def test_full_pipeline_rejects_failed_cancelled_skipped_or_missing_stage(self):
@@ -194,6 +220,11 @@ class CoverageGateTests(unittest.TestCase):
     def test_equal_ratio_and_improvement_pass(self):
         self.assertEqual(COVERAGE.regressions({"BrowserCore": (8, 10)}, {"BrowserCore": (16, 20)}), [])
         self.assertEqual(COVERAGE.regressions({"BrowserCore": (8, 10)}, {"BrowserCore": (9, 10)}), [])
+
+    def test_timing_noise_passes_but_real_drop_fails(self):
+        base = {"ArcusisBrowser": (22697, 36330)}
+        self.assertEqual(COVERAGE.regressions(base, {"ArcusisBrowser": (22694, 36330)}), [])
+        self.assertEqual(len(COVERAGE.regressions(base, {"ArcusisBrowser": (22680, 36330)})), 1)
 
     def test_missing_malformed_and_duplicate_source_data_fail(self):
         reports = [{}, {"type": "llvm.coverage.json.export", "data": [{"files": []}]}, self.report(core=(11, 10))]
@@ -355,6 +386,18 @@ class SwiftReportTests(unittest.TestCase):
 
 
 class ProbeSoakTests(unittest.TestCase):
+    def test_shards_cover_every_original_iteration_once_without_retry(self):
+        from collections import Counter
+        from ci_engine import engine_shards, shard_modes
+        for iterations in (1, 2, 3, 10):
+            expected = Counter((mode, index) for mode in STAGES.ENGINE_MODES
+                               for index in range(1, max(iterations, STAGES.MINIMUM_REPETITIONS.get(mode, 1)) + 1))
+            actual = Counter((mode, index) for shard in engine_shards(iterations)
+                             for mode, indexes in shard_modes(shard, iterations) for index in indexes)
+            self.assertEqual(actual, expected)
+        with self.assertRaises(ValueError):
+            shard_modes("private-window-4", 1)
+
     def test_all_modes_share_one_build_and_preserve_each_iteration(self):
         checks = unittest.mock.Mock()
         checks.run.return_value = 0
@@ -417,6 +460,40 @@ class ProbeSoakTests(unittest.TestCase):
             self.assertEqual(suite.attrib["tests"], "3")
             self.assertEqual(len(suite.findall("testcase/failure")), 1)
             self.assertEqual(len(suite.findall("testcase/skipped")), 2)
+
+
+class EngineTransferTests(unittest.TestCase):
+    def test_transferred_bundle_preserves_exec_and_links_and_rejects_wrong_context_or_digest(self):
+        from ci_engine import BUNDLE_NAME, archive_bundle, restore_bundle
+        import shutil
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {
+            "GITHUB_SHA": "a" * 40, "CI_TOOLCHAIN_ID": "toolchain",
+        }):
+            root = Path(temporary)
+            pin = root / "ThirdParty/ArdiaCore/pin.json"
+            pin.parent.mkdir(parents=True)
+            pin.write_text(json.dumps({"sha256": "b" * 64}))
+            bundle = root / "build" / BUNDLE_NAME
+            bundle.mkdir(parents=True)
+            executable = bundle / "Main"
+            executable.write_bytes(b"authored executable")
+            executable.chmod(0o755)
+            (bundle / "Alias").symlink_to("Main")
+            directory = root / "evidence"
+            directory.mkdir()
+            archive_bundle(root, directory)
+            shutil.rmtree(bundle)
+            with patch.dict(os.environ, {"GITHUB_SHA": "c" * 40}), self.assertRaises(ValueError):
+                restore_bundle(root, directory)
+            restore_bundle(root, directory)
+            self.assertEqual(executable.read_bytes(), b"authored executable")
+            self.assertEqual(executable.stat().st_mode & 0o111, 0o111)
+            self.assertEqual((bundle / "Alias").readlink(), Path("Main"))
+            shutil.rmtree(bundle)
+            with (directory / "verification.tar.gz").open("ab") as archive:
+                archive.write(b"tampered")
+            with self.assertRaisesRegex(ValueError, "digest"):
+                restore_bundle(root, directory)
 
 
 class SwiftExtractionTests(unittest.TestCase):

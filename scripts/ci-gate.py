@@ -11,8 +11,8 @@ from pathlib import Path
 
 
 def gate_errors(needs: dict, full: bool, nightly: bool, website: bool = False) -> list[str]:
-    expected = {"plan", "fast", "dependency-review"}
-    native = {"build", "coverage", "visuals", "localization", "engine", "shipping", "codeql", "inspector-contracts"}
+    expected = {"plan", "fast", "dependency-review", "codeql"}
+    native = {"build", "coverage", "visuals", "localization", "engine", "shipping", "inspector-contracts"}
     if full:
         expected |= native
     if website:

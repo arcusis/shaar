@@ -18,6 +18,10 @@ FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeExternalAppLaunchAuditForTest
 /// The runtime applies it before every launch. Exposed so tests can exercise the edit directly.
 FOUNDATION_EXPORT BOOL ARCDisableBackgroundMode(NSURL *userDataDirectory);
 
+/// Verification callback transition: a pending/rejected dialog must retain its CDP hold.
+FOUNDATION_EXPORT void ARCCompletePrivateQuitDialogCancellation(
+  BOOL ownerCurrent, NSString * _Nullable dialogError, void (^releaseHold)(void), void (^reject)(void));
+
 @interface ARCChromiumRuntime (Verification)
 /// Grants geolocation only on the selected disposable Inspector loopback fixture.
 - (void)grantProbeGeolocationInTabID:(NSString *)tabID completion:(void (NS_SWIFT_UI_ACTOR ^)(NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;

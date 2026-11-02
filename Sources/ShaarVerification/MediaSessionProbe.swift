@@ -39,7 +39,7 @@ final class MediaSessionProbe {
     let home = store.session.spaces[0]
     let (space, media) = try await mediaTab(sharingProfileOf: home)
     try await startPlayback(media)
-    let state = try await waitForSession(media) { $0.isPlaying }
+    let state = try await waitForSession(media, Self.isPlaybackReady)
     try expect(
       state.title == "Fixture Song" && state.artist == "Fixture Artist"
         && state.album == "Fixture Album",
@@ -88,6 +88,10 @@ final class MediaSessionProbe {
     }
     try await removeMediaSpace(space, returningTo: home.id)
     return checks
+  }
+
+  nonisolated static func isPlaybackReady(_ state: MediaSessionState) -> Bool {
+    state.isPlaying && state.hasVideo
   }
 
   private func checkVolume(_ media: UUID) async throws {

@@ -180,7 +180,7 @@ jobs:
 
   visuals:
     name: Hosted sidebar component visuals
-    needs: [plan, build]
+    needs: plan
     if: needs.plan.outputs.full == 'true'
     runs-on: macos-26
     timeout-minutes: 20
@@ -201,7 +201,7 @@ jobs:
 
   localization:
     name: Hebrew localization, offscreen visuals, and engine locale
-    needs: [plan, build]
+    needs: plan
     if: needs.plan.outputs.full == 'true'
     runs-on: macos-26
     timeout-minutes: 90
@@ -243,14 +243,12 @@ jobs:
   codeql:
     name: CodeQL
     needs: plan
-    if: needs.plan.outputs.full == 'true'
     permissions:
       contents: read
       security-events: write
     uses: ./.github/workflows/ci-codeql.yml
     with:
-      swift: ${{ fromJSON(needs.plan.outputs.swift || 'true') }}
-      full: ${{ github.event_name == 'push' || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.deep_checks) }}
+      swift: false
 
   sanitizers:
     name: Nightly ${{ matrix.sanitizer }} sanitizer

@@ -18,7 +18,7 @@ struct InspectorPanel: View {
             ? "Page tools" : (model.mode == .locked ? "Locked" : "Inspecting")
         )
         .font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
-        InspectorIconButton("Pick an element", symbol: "cursorarrow.rays", action: model.pick)
+        InspectorIconButton("Pick an element", symbol: "cursorarrow.rays") { model.pick() }
         InspectorIconButton("Close Inspector", symbol: "xmark", action: model.close)
       }
       .padding(.horizontal, 12).frame(height: 40)

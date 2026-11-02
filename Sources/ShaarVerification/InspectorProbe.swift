@@ -126,7 +126,7 @@ final class InspectorProbe {
       "breadcrumb exposes parent ancestry")
     model.selectAncestor(ancestor.id)
     try await wait("breadcrumb selects its ancestor") { model.selection?.tag == "main" }
-    model.pick()
+    await model.pick()?.value
     try expect(
       await pointer(model, selector: "#transparent", click: true),
       "transparent text can be selected")
@@ -134,14 +134,14 @@ final class InspectorProbe {
     try expect(
       model.selection?.foreground.rgba.last == 0.5 && model.selection?.contrastGrade == "Fail",
       "alpha is retained precisely when calculating contrast")
-    model.pick()
+    await model.pick()?.value
     try expect(
       await pointer(model, selector: "#gradient", click: true), "gradient element can be selected")
     try await wait("gradient data arrives") { model.selection?.css == "#gradient" }
     try expect(
       model.selection?.contrast == nil && model.selection?.contrastLimit != nil,
       "complex backgrounds do not receive a fabricated contrast pass")
-    model.pick()
+    await model.pick()?.value
     try expect(
       await pointer(model, selector: "#nested", frames: ["#frame"], click: true),
       "trusted input reaches same-origin iframe element")
@@ -216,7 +216,7 @@ final class InspectorProbe {
         model.details.accessibility?.role == "heading",
         "public heading has a Chromium accessibility role")
       try await capture(model, stem: "public-\(name)-a11y")
-      model.pick()
+      await model.pick()?.value
       try expect(
         await pointer(model, selector: "main img", click: true),
         "public image selected with trusted input")
@@ -400,7 +400,7 @@ final class InspectorProbe {
   }
 
   private func selectDetail(_ model: InspectorModel, selector: String) async throws {
-    model.pick()
+    await model.pick()?.value
     try expect(
       await pointer(model, selector: selector, click: true), "detail fixture element selected")
     try await wait("detail selection locks") {
@@ -468,7 +468,7 @@ final class InspectorProbe {
     try png.write(to: root.appending(path: "\(phase)-inspector-element@2x.png"))
     try await capture(model, stem: "\(phase)-inspector-css")
     for (selector, display) in [("#grid", "grid"), ("#flex", "flex")] {
-      model.pick()
+      await model.pick()?.value
       try expect(
         await pointer(model, selector: selector, click: true), "layout fixture can be selected")
       // The fixture's center can hit a child; choose the container through its ancestor.
@@ -498,7 +498,7 @@ final class InspectorProbe {
       await styles.clearOverlay()
       try expect(!styles.overlay, "layout overlay turns off")
     }
-    model.pick()
+    await model.pick()?.value
     try expect(
       await pointer(model, selector: "#save", click: true), "selection returns to button child")
     try await wait("button child selected again") { model.selection?.tag == "span" }

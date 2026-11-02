@@ -156,7 +156,7 @@ struct ProfileFavoritesGrid: View {
       .id(motionReduced ? String(describing: entries) : "favorites")
       .transition(.opacity)
       .padding(.vertical, favorites.isEmpty && insertionIndex == nil ? 0 : 1)
-      .frame(minHeight: favorites.isEmpty ? (activeDrag == nil ? 8 : 44) : 0)
+      .frame(minHeight: entries.isEmpty ? (activeDrag == nil ? 8 : 44) : 0)
       .contentShape(Rectangle())
       .accessibilityLabel(SettingsL10n.string("Favorite pages"))
       .coordinateSpace(name: "sidebarFavoriteViewport")
@@ -221,7 +221,7 @@ struct ProfileFavoritesGrid: View {
         DropConfiguration(operation: refusal == nil ? .move : .forbidden)
       }
       .overlay {
-        if favorites.isEmpty, activeDrag != nil, !isTargeted {
+        if entries.isEmpty, activeDrag != nil, !isTargeted {
           SidebarDropHint(
             title: refusal ?? ShellL10n.string("Drop to add to Favorites"),
             symbol: refusal == nil ? "star" : "nosign", isTargeted: false)

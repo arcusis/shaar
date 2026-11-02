@@ -501,9 +501,10 @@ extension SidebarDnDProbeTests {
     #expect(store.session == before)
   }
 
-  @Test(arguments: [false, true]) func nativeFavoriteDragOutReflows(pinned: Bool) async throws {
+  @Test(arguments: [false, true], [1, 5])
+  func nativeFavoriteDragOutReflows(pinned: Bool, favoriteCount: Int) async throws {
     let store = BrowserStore()
-    for index in 0..<5 {
+    for index in 0..<favoriteCount {
       _ = store.session.addFavorite(
         profileID: store.session.selectedSpace.profileID,
         originalURL: URL(string: "https://favorite\(index).example")!)
@@ -528,14 +529,16 @@ extension SidebarDnDProbeTests {
     _ = grid.draggingUpdated(info)
     grid.draggingExited(info)
     try await mounted.settle()
-    #expect(mounted.measurements.grid.ids.count == 4)
+    #expect(mounted.measurements.grid.ids.count == favoriteCount - 1)
     #expect(!mounted.measurements.grid.ids.contains(favorite))
+    // The empty grid remains a usable return target while its last tile is dragged out.
+    if favoriteCount == 1 { #expect(grid.bounds.height >= 40) }
     let target = try #require(
       mounted.receivers.first {
         abs($0.bounds.height - (pinned ? 8 : 32)) < 1 && $0.bounds.width > 100
       })
     #expect(try await mounted.drop(item, on: target))
-    #expect(store.profileFavorites.count == 4)
+    #expect(store.profileFavorites.count == favoriteCount - 1)
     #expect(store.session.selectedSpace.tabs.first { $0.id == pageID }?.isPinned == pinned)
     try store.session.validate()
   }

@@ -346,12 +346,21 @@ struct LibraryDownloadsView: View {
 }
 
 @MainActor @Observable
-private final class LibraryThumbnailLoader {
+final class LibraryThumbnailLoader {
   private var images: [String: NSImage] = [:]
   private var cacheOrder: [String] = []
   private var active: Set<String> = []
   private let maximumConcurrentRequests = 3
   private let maximumCachedImages = 64
+  private let makeRequest: (QLThumbnailGenerator.Request) -> LibraryThumbnailRequest
+
+  init(
+    makeRequest: @escaping (QLThumbnailGenerator.Request) -> LibraryThumbnailRequest = {
+      LibraryThumbnailRequest($0)
+    }
+  ) {
+    self.makeRequest = makeRequest
+  }
 
   func image(for item: BrowserDownload, media: LibraryMediaFile, profileID: UUID) -> NSImage? {
     images[key(item, media: media, profileID: profileID)]
@@ -396,7 +405,7 @@ private final class LibraryThumbnailLoader {
       scale: NSScreen.main?.backingScaleFactor ?? 2,
       representationTypes: .all)
     guard
-      let result = await generate(request)?.representation,
+      let result = await makeRequest(request).generate()?.representation,
       !Task.isCancelled,
       store.session.selectedSpace.profileID == profileID,
       downloads.libraryItem(id: item.id, profileID: profileID) == item,
@@ -412,35 +421,7 @@ private final class LibraryThumbnailLoader {
     }
   }
 
-  private func generate(_ request: QLThumbnailGenerator.Request) async -> ThumbnailResult? {
-    let handle = LibraryThumbnailRequest(request)
-    return await withTaskCancellationHandler {
-      await withCheckedContinuation { continuation in
-        QLThumbnailGenerator.shared.generateBestRepresentation(for: request) {
-          representation, _ in
-          continuation.resume(returning: representation.map(ThumbnailResult.init))
-        }
-      }
-    } onCancel: {
-      handle.cancel()
-    }
-  }
-
   private func key(_ item: BrowserDownload, media: LibraryMediaFile, profileID: UUID) -> String {
     "\(profileID.uuidString):\(item.id):\(media.url.path)"
   }
-}
-
-private final class LibraryThumbnailRequest: @unchecked Sendable {
-  private let request: QLThumbnailGenerator.Request
-
-  init(_ request: QLThumbnailGenerator.Request) { self.request = request }
-
-  func cancel() { QLThumbnailGenerator.shared.cancel(request) }
-}
-
-private final class ThumbnailResult: @unchecked Sendable {
-  let representation: QLThumbnailRepresentation
-
-  init(_ representation: QLThumbnailRepresentation) { self.representation = representation }
 }

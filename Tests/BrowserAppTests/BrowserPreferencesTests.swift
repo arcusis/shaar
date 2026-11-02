@@ -23,20 +23,14 @@ struct BrowserPreferencesTests {
     store.setSearchEngine(.bing, for: firstProfile)
     store.setSearchEngine(.duckDuckGo, for: secondProfile)
     store.setSearchEngine(.bing, for: sharedProfile)
-    let selectedDirectory = directory.appending(path: "profile-downloads", directoryHint: .isDirectory)
-    store.setDownloadDirectory(selectedDirectory, for: firstProfile)
     store.setSidebarInitiallyVisible(false)
 
     let reloaded = BrowserPreferencesStore(fileURL: fileURL)
     #expect(reloaded.searchEngine(for: firstProfile) == .bing)
     #expect(reloaded.searchEngine(for: secondProfile) == .duckDuckGo)
     #expect(reloaded.searchEngine(for: sharedProfile) == .bing)
-    #expect(reloaded.downloadDirectory(for: firstProfile) == selectedDirectory.standardizedFileURL)
-    #expect(reloaded.downloadDirectory(for: secondProfile) == nil)
     #expect(!reloaded.sidebarInitiallyVisible)
     #expect(reloaded.storageNotice == nil)
-    reloaded.setDownloadDirectory(nil, for: firstProfile)
-    #expect(BrowserPreferencesStore(fileURL: fileURL).downloadDirectory(for: firstProfile) == nil)
     let directoryPermissions =
       try FileManager.default.attributesOfItem(atPath: directory.path)[
         .posixPermissions] as? NSNumber

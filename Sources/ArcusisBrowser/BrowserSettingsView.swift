@@ -509,13 +509,15 @@ struct BrowserSettingsView: View {
       }
       Section(SettingsL10n.string("Download folder")) {
         LabeledContent(SettingsL10n.string("Current folder")) {
-          Text((profile.downloadDirectory ?? profile.defaultDownloadDirectory)?.path
-            ?? SettingsL10n.string("Unavailable"))
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .textSelection(.enabled)
-            .lineLimit(2)
-            .multilineTextAlignment(.trailing)
+          Text(
+            (profile.downloadDirectory ?? profile.defaultDownloadDirectory)?.path
+              ?? SettingsL10n.string("Unavailable")
+          )
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .textSelection(.enabled)
+          .lineLimit(2)
+          .multilineTextAlignment(.trailing)
         }
         HStack {
           Button(SettingsL10n.string("Choose Folder…")) {
@@ -529,9 +531,11 @@ struct BrowserSettingsView: View {
             .accessibilityIdentifier("settings.downloadFolder.reset")
           }
         }
-        Text(SettingsL10n.string(
-          "This folder is saved for this profile. Browser downloads will use it when engine support is available."
-        )).font(.caption).foregroundStyle(.secondary)
+        Text(
+          SettingsL10n.string(
+            "This folder is saved for this profile. Browser downloads will use it when engine support is available."
+          )
+        ).font(.caption).foregroundStyle(.secondary)
       }
       Section(SettingsL10n.string("Spaces using this profile")) {
         if profile.spaces.isEmpty {

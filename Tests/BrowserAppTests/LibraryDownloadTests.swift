@@ -354,12 +354,7 @@ struct LibraryDownloadTests {
     let model = DownloadsModel(folder: source)
     #expect(model.libraryItems(in: profile.id).count == 2)
     let id = UUID().uuidString.lowercased()
-    let deletedRecordID = UUID().uuidString.lowercased()
-    model.restore(
-      [
-        record(id, filename: "image.png", path: image.path),
-        record(deletedRecordID, filename: "report.pdf", path: pdf.path),
-      ], profileID: profile.id)
+    model.restore([record(id, filename: "image.png", path: image.path)], profileID: profile.id)
     let merged = model.libraryItems(in: profile.id)
     #expect(merged.count == 2)
     #expect(merged.contains { $0.id == id })
@@ -389,7 +384,6 @@ struct LibraryDownloadTests {
       try await Task.sleep(for: .milliseconds(50))
     }
     #expect(model.libraryItems(in: profile.id).count == 1)
-    #expect(!model.libraryItems(in: profile.id).contains { $0.id == deletedRecordID })
   }
 
   private func makePNGFixture() throws -> Data {

@@ -1048,6 +1048,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 }
 - (void)engineQuitCancelled {
   _closingBrowser = NO;
+  if (_onQuitCancelled) _onQuitCancelled();
   [_detachedTabSelections removeAllObjects];
   for (ARCNativeWindowState *state in _windows.allValues) if (!state.closed) state.closing = NO;
 }

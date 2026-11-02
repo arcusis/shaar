@@ -71,6 +71,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   private var claimedPrimary = false
   private var started = false
   private var startupFailed = false
+  private(set) var restartRequested = false
   private var shortcutMonitor: Any?
   private var previousMenu: NSMenu?
   private var previousServicesMenu: NSMenu?
@@ -96,6 +97,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     self.keyWindow = keyWindow
     self.screens = screens
     super.init()
+    events.runtime.onQuitCancelled = { [weak self] in self?.restartRequested = false }
   }
 
   var activeContext: NativeBrowserContext? {
@@ -118,7 +120,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   func restore() throws {
     guard !started else { throw WorkspaceError.invalidState }
     started = true
-    if presentation == .visible && UserDefaults.standard.bool(forKey: "settingsStartFresh") {
+    if presentation == .visible
+      && BrowserRestart.startsFresh(arguments: ProcessInfo.processInfo.arguments)
+    {
       let oldWindows = workspace.workspace.windows.map(\.id)
       _ = try workspace.newWindow(from: workspace.workspace.focusedWindowID)
       for id in oldWindows { try workspace.removeWindow(id) }
@@ -171,6 +175,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
         self?.runSavedProfileSignIn(profile, provider: provider, purpose: .signOut)
       })
     settingsController?.setAddProfileHandler { [weak self] in self?.presentNewProfile() }
+    settingsController?.setRestartHandler { [weak self] in
+      self?.restartForLanguageChange()
+    }
     installMenus()
     if presentation == .visible {
       for context in contexts.values where context.id != focused { context.window.orderFront(nil) }
@@ -303,6 +310,17 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     events.runtime.quit()
   }
 
+  func restartForLanguageChange() -> String? {
+    do {
+      try BrowserRestart.prepare(workspace: workspace, flushGeometry: flushGeometry)
+      restartRequested = true
+      events.runtime.quit()
+      return nil
+    } catch {
+      return SettingsL10n.string("Your tabs could not be saved. Shaar has not restarted.")
+    }
+  }
+
   // MARK: Launcher Actions
 
   /// Launcher Actions the window can run now, titled as its menu would show them.
@@ -406,6 +424,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   }
 
   func detach() {
+    events.runtime.onQuitCancelled = nil
     if let shortcutMonitor { NSEvent.removeMonitor(shortcutMonitor) }
     shortcutMonitor = nil
     privateHost?.detach()
@@ -1027,7 +1046,12 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     }
   }
 
-  static func run(frameworkURL: URL) -> Int32 {
+  enum LaunchResult {
+    case exited(Int32)
+    case restart
+  }
+
+  static func run(frameworkURL: URL) -> LaunchResult {
     BrowserLanguage.applyToCurrentProcess()
     let launchLanguage = BrowserLanguage.currentLaunchLanguage
     ARCConfigureLocalization(BrowserLocalization.resourceBundleURL, launchLanguage.localeIdentifier)
@@ -1067,11 +1091,11 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
         host.detach()
         // Saves run on a background queue; the process must not exit before the last one lands.
         try? workspace.flushSaves()
-        return host.startupFailed ? 1 : code
+        return host.restartRequested ? .restart : .exited(host.startupFailed ? 1 : code)
       }
     } catch {
       FileHandle.standardError.write(Data("\(StartupFailureMessage.text(for: error))\n".utf8))
-      return 1
+      return .exited(1)
     }
   }
 }

@@ -68,6 +68,7 @@ FOUNDATION_EXPORT NSString *ARCBridgeLocalizedString(NSString *message);
            profileID:(NSString *)profileID windowID:(NSString *)windowID
           completion:(void (NS_SWIFT_UI_ACTOR ^)(NSDictionary<NSString *, id> * _Nullable, NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
 @property(copy, nullable) void (^onReady)(void);
+@property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onQuitCancelled)(void);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onWindowClosed)(NSString *windowID, BOOL quitting);
 /// Synchronous: return a newly created window before Chromium attaches its browser.
 @property(copy, nullable) NSString * _Nullable (NS_SWIFT_UI_ACTOR ^onWindowRequest)(NSString *profileID, NSString *type);

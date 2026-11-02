@@ -417,9 +417,10 @@ final class EngineProbe {
       let firstB = try await snapshot(tabB)
       if localizationMode {
         let language = BrowserLanguage.currentLaunchLanguage
-        checks += try LocalizationProbe.validate(
-          try await evaluate(tabA, LocalizationProbe.script),
-          language: language)
+        for tab in [tabA, tabB] {
+          checks += try LocalizationProbe.validate(
+            try await evaluate(tab, LocalizationProbe.script), language: language)
+        }
         checks.append(try await inspectInternalLocalization(language))
         localFixturesPassed = true
         finish(error: nil)

@@ -16,7 +16,7 @@ private final class BrowserSettingsState {
   private(set) var selectedProfileID: UUID?
   private var didPresent = false
   var onOpenSpace: (UUID) -> Void = { _ in }
-  var onConnectAccount: (UUID, AccountProvider) -> Void = { _, _ in }
+  var onConnectAccount: (UUID, AccountSignInOption) -> Void = { _, _ in }
   var onDisconnectAccount: (UUID, AccountProvider) -> Void = { _, _ in }
   var onAddProfile: () -> Void = {}
   var onRestart: (() -> String?)?
@@ -228,7 +228,7 @@ final class BrowserSettingsController: NSObject {
   }
 
   func setAccountHandlers(
-    connect: @escaping (UUID, AccountProvider) -> Void,
+    connect: @escaping (UUID, AccountSignInOption) -> Void,
     disconnect: @escaping (UUID, AccountProvider) -> Void
   ) {
     state.onConnectAccount = connect

@@ -22,8 +22,8 @@ private final class OnboardingRecorder {
     ProfileOnboardingModel(
       spaceID: spaceID,
       actions: ProfileOnboardingActions(
-        connect: { [unowned self] profile, provider, completion in
-          signIns.append((profile, provider))
+        connect: { [unowned self] profile, option, completion in
+          signIns.append((profile, option.provider))
           pendingSignIn = completion
         },
         stopConnecting: { [unowned self] in
@@ -50,166 +50,142 @@ private struct CreationFailure: Error {}
 @Suite @MainActor struct ProfileOnboardingTests {
   @Test func stepsAdvanceSkipAndGoBackInOrder() {
     let model = OnboardingRecorder().model()
-    #expect(model.step == .details)
+    #expect(model.step == .name)
     #expect(!model.canContinue && !model.canGoBack && !model.canSkip)
-
     model.name = "   "
     model.continueToNext()
-    #expect(model.step == .details)
-
+    #expect(model.step == .name)
     model.name = "Work"
-    model.continueToNext()
-    #expect(model.step == .google)
+    for step in [ProfileOnboardingStep.icon, .color, .account] {
+      model.continueToNext()
+      #expect(model.step == step)
+    }
     #expect(model.canSkip && model.canGoBack && !model.canContinue)
-
     model.skip()
-    #expect(model.step == .microsoft)
-    model.skip()
-    #expect(model.step == .done)
-    #expect(!model.canSkip)
-
+    #expect(model.step == .done && !model.canSkip)
+    for step in [ProfileOnboardingStep.account, .color, .icon, .name] {
+      model.back()
+      #expect(model.step == step)
+    }
     model.back()
-    model.back()
-    #expect(model.step == .google)
-    model.back()
-    #expect(model.step == .details)
-    model.back()
-    #expect(model.step == .details)
+    #expect(model.step == .name)
   }
 
-  @Test func accountsConnectToTheNotYetCreatedProfileIdentity() {
+  @Test(arguments: AccountProvider.allCases)
+  func eachProviderConnectsOnlyAtAccountStepWithTheDraftIdentity(_ provider: AccountProvider) {
     let recorder = OnboardingRecorder()
     let model = recorder.model()
     model.name = "  Work  "
-    model.continueToNext()
-
-    model.connect(.microsoft)
+    model.color = ProfileColorChoice(tint: .ocean)
+    model.symbol = "💼"
+    model.connect(provider)
     #expect(recorder.signIns.isEmpty)
-    model.connect(.google)
-    #expect(recorder.signIns.map(\.provider) == [.google])
+    advanceToAccount(model)
+    model.connect(provider)
+    #expect(recorder.signIns.map(\.provider) == [provider])
     #expect(recorder.signIns.first?.profile.id == model.profileID)
     #expect(recorder.signIns.first?.profile.name == "Work")
-    #expect(model.connecting == .google)
+    #expect(recorder.signIns.first?.profile.symbol == "💼")
+    #expect(recorder.signIns.first?.profile.tint == .ocean)
     #expect(!model.canSkip && !model.canGoBack && !model.canContinue)
-
-    let workspaceAccount = ConnectedAccount(provider: .google, email: "alex@acme.test")
-    recorder.finishSignIn(workspaceAccount)
-    #expect(model.connecting == nil)
-    #expect(model.stepAccount == workspaceAccount)
-    #expect(model.canContinue && !model.canSkip)
-    #expect(recorder.drafts.isEmpty)
-  }
-
-  @Test func aConnectedAccountPassesOverTheOtherProvidersStep() {
-    let recorder = OnboardingRecorder()
-    let model = recorder.model()
-    model.name = "Work"
-    model.continueToNext()
-    model.connect(.google)
-    recorder.finishSignIn(ConnectedAccount(provider: .google, email: "alex@acme.test"))
-
+    let account = ConnectedAccount(provider: provider, email: "alex@example.test")
+    recorder.finishSignIn(account)
+    #expect(model.stepAccount == account && model.canContinue && !model.canSkip)
+    for other in AccountProvider.allCases { model.connect(other) }
+    #expect(recorder.signIns.count == 1)
     model.continueToNext()
     #expect(model.step == .done)
     model.back()
-    #expect(model.step == .google)
-    model.back()
-    #expect(model.step == .details)
-
-    let abandoned = recorder.model()
-    abandoned.name = "Client"
-    abandoned.continueToNext()
-    abandoned.skip()
-    abandoned.connect(.microsoft)
-    recorder.finishSignIn(nil)
-    #expect(abandoned.step == .microsoft)
-    #expect(abandoned.stepAccount == nil && abandoned.canSkip)
-    abandoned.back()
-    #expect(abandoned.step == .google)
+    #expect(model.step == .account && model.stepAccount == account)
+    #expect(recorder.drafts.isEmpty)
   }
 
-  @Test func doneCreatesTheProfileWithItsChosenSymbol() {
+  @Test func abandonedOrWrongProviderCompletionDoesNotConnect() {
     let recorder = OnboardingRecorder()
     let model = recorder.model()
-    #expect(model.symbol == BrowserProfile.defaultSymbol)
-    model.name = "Studio"
-    model.symbol = "paintpalette"
-    model.continueToNext()
-    model.skip()
-    model.skip()
-    model.continueToNext()
-
-    #expect(recorder.drafts.map(\.symbol) == ["paintpalette"])
-    #expect(recorder.drafts.first?.profile.symbol == "paintpalette")
+    model.name = "Work"
+    advanceToAccount(model)
+    model.connect(.apple)
+    recorder.finishSignIn(nil)
+    #expect(model.canSkip && model.stepAccount == nil)
+    model.connect(.apple)
+    recorder.finishSignIn(ConnectedAccount(provider: .google, email: "wrong@example.test"))
+    #expect(model.canSkip && model.stepAccount == nil)
   }
 
-  @Test func cancelCreatesNothingAndStopsARunningSignIn() {
+  @Test func retryIgnoresAnEarlierAttemptsLateCallback() {
+    let recorder = OnboardingRecorder()
+    let model = recorder.model()
+    model.name = "Work"
+    advanceToAccount(model)
+    model.connect(.apple)
+    let stale = recorder.pendingSignIn
+    recorder.finishSignIn(nil)
+    model.connect(.apple)
+    stale?(ConnectedAccount(provider: .apple, email: "stale@example.test"))
+    #expect(model.connecting == .apple && model.stepAccount == nil)
+    recorder.finishSignIn(ConnectedAccount(provider: .apple, email: "current@example.test"))
+    #expect(model.stepAccount?.email == "current@example.test")
+  }
+
+  @Test func cancelCreatesNothingAndIgnoresLateCompletion() {
     let recorder = OnboardingRecorder()
     let model = recorder.model(spaceID: UUID())
     model.name = "Work"
-    model.continueToNext()
+    advanceToAccount(model)
     model.connect(.google)
-
+    let late = recorder.pendingSignIn
     model.cancel()
-    #expect(recorder.stoppedSignIns == 1)
-    #expect(recorder.outcomes == [.cancelled])
-    #expect(model.outcome == .cancelled)
-
-    recorder.finishSignIn(ConnectedAccount(provider: .google, email: "late@example.test"))
+    late?(ConnectedAccount(provider: .google, email: "late@example.test"))
     model.skip()
     model.continueToNext()
     model.cancel()
-    #expect(model.connectedAccounts.isEmpty)
-    #expect(recorder.drafts.isEmpty)
+    #expect(recorder.stoppedSignIns == 1)
+    #expect(model.connectedAccounts.isEmpty && recorder.drafts.isEmpty)
     #expect(recorder.outcomes == [.cancelled])
   }
 
-  @Test func doneCreatesTheProfileExactlyOnceWithEverythingGathered() {
+  @Test func doneCreatesExactlyOnceWithAllChoicesAndOneAccount() {
     let recorder = OnboardingRecorder()
     let spaceID = UUID()
     let model = recorder.model(spaceID: spaceID)
-    let color = ProfileColorChoice(customRGB: SpaceRGBColor(red: 12, green: 34, blue: 56))
-    let microsoft = ConnectedAccount(provider: .microsoft, email: "worker@acme.test")
     model.name = " Client "
-    model.color = color
-    model.continueToNext()
-    model.skip()
+    model.symbol = "paintpalette"
+    model.color = ProfileColorChoice(customRGB: SpaceRGBColor(red: 12, green: 34, blue: 56))
+    advanceToAccount(model)
     model.connect(.microsoft)
-    recorder.finishSignIn(microsoft)
+    let account = ConnectedAccount(provider: .microsoft, email: "worker@example.test")
+    recorder.finishSignIn(account)
     model.continueToNext()
-    #expect(model.step == .done)
-    #expect(recorder.drafts.isEmpty)
-
+    #expect(recorder.drafts.isEmpty && model.step == .done)
     model.continueToNext()
     model.continueToNext()
     model.cancel()
-
     #expect(recorder.drafts.count == 1)
     let draft = recorder.drafts[0]
-    #expect(draft.id == model.profileID)
-    #expect(draft.name == "Client")
-    #expect(draft.color == color)
-    #expect(draft.accounts == [microsoft])
-    #expect(draft.spaceID == spaceID)
+    #expect(draft.id == model.profileID && draft.name == "Client")
+    #expect(draft.symbol == "paintpalette" && draft.profile.symbol == "paintpalette")
+    #expect(draft.color == model.color && draft.accounts == [account] && draft.spaceID == spaceID)
     #expect(recorder.outcomes == [.created(recorder.createdID)])
   }
 
-  @Test func failedCreationKeepsTheOnboardingOpenForAnotherTry() {
+  @Test func failedCreationAllowsRetryWithoutRepeatingSignIn() {
     let recorder = OnboardingRecorder()
     recorder.creationError = CreationFailure()
     let model = recorder.model()
     model.name = "Work"
-    model.continueToNext()
+    advanceToAccount(model)
     model.skip()
-    model.skip()
-
     model.continueToNext()
-    #expect(model.failure != nil)
-    #expect(model.outcome == nil && recorder.outcomes.isEmpty)
-
+    #expect(model.failure != nil && model.outcome == nil && recorder.outcomes.isEmpty)
     recorder.creationError = nil
     model.continueToNext()
-    #expect(recorder.drafts.count == 2)
+    #expect(recorder.drafts.count == 2 && recorder.signIns.isEmpty)
     #expect(recorder.outcomes == [.created(recorder.createdID)])
+  }
+
+  private func advanceToAccount(_ model: ProfileOnboardingModel) {
+    for _ in 0..<3 { model.continueToNext() }
   }
 
   @Test func draftCreatesTheProfileWithItsIdentityColorAccountsAndSpace() throws {

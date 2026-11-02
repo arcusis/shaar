@@ -113,7 +113,10 @@ struct SpaceEditor: View {
       Picker(SettingsL10n.string("Profile"), selection: $sharedProfileID) {
         Text(SettingsL10n.string("New profile")).tag(Optional<UUID>.none)
         ForEach(store.session.profiles) { profile in
-          Label(profile.name, systemImage: profile.displaySymbol).tag(Optional(profile.id))
+          ProfileIdentityLabel(
+            profile: profile, account: store.preferences.accounts(for: profile.id).first
+          )
+          .tag(Optional(profile.id))
         }
       }
       Text(

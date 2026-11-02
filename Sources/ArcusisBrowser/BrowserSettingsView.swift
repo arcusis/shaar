@@ -116,7 +116,7 @@ struct BrowserSettingsView: View {
   let onSetProfileSymbol: (UUID, String) -> Bool
   let onDeleteProfile: (UUID, UUID) -> Bool
   let onOpenSpace: (UUID) -> Void
-  let onConnectAccount: (UUID, AccountProvider) -> Void
+  let onConnectAccount: (UUID, AccountSignInOption) -> Void
   let onDisconnectAccount: (UUID, AccountProvider) -> Void
   let extensionManager: (UUID) -> ExtensionManagerModel?
   let onAddExtensions: (UUID) -> Void
@@ -138,7 +138,7 @@ struct BrowserSettingsView: View {
     onSetProfileSymbol: @escaping (UUID, String) -> Bool = { _, _ in false },
     onDeleteProfile: @escaping (UUID, UUID) -> Bool = { _, _ in false },
     onOpenSpace: @escaping (UUID) -> Void = { _ in },
-    onConnectAccount: @escaping (UUID, AccountProvider) -> Void = { _, _ in },
+    onConnectAccount: @escaping (UUID, AccountSignInOption) -> Void = { _, _ in },
     onDisconnectAccount: @escaping (UUID, AccountProvider) -> Void = { _, _ in },
     extensionManager: @escaping (UUID) -> ExtensionManagerModel? = { _ in nil },
     onAddExtensions: @escaping (UUID) -> Void = { _ in },
@@ -438,9 +438,14 @@ struct BrowserSettingsView: View {
             selectedProfileID = profile.id
           } label: {
             HStack(spacing: 9) {
-              ProfileBadge(color: profile.color.rgb, symbol: profile.symbol)
+              ProfileIdentityBadge(
+                account: profile.accounts.first, color: profile.color.rgb, symbol: profile.symbol)
               VStack(alignment: .leading, spacing: 2) {
                 Text(profile.name).lineLimit(1)
+                if let account = profile.accounts.first {
+                  Text(account.name ?? account.email).font(.caption).foregroundStyle(.secondary)
+                    .lineLimit(1)
+                }
                 Text(spaceCountLabel(profile.spaces.count)).font(.caption).foregroundStyle(
                   .secondary)
               }
@@ -507,25 +512,29 @@ struct BrowserSettingsView: View {
       }
       Section {
         ForEach(profile.accounts, id: \.provider) { account in
-          ConnectedAccountRow(account: account) {
+          ConnectedAccountRow(account: account, color: profile.color.rgb) {
             onDisconnectAccount(profile.id, account.provider)
           }
         }
-        ForEach(AccountProvider.connectable(alongside: profile.accounts)) { provider in
+        ForEach(
+          AccountSignInOption.allCases.filter {
+            AccountProvider.connectable(alongside: profile.accounts).contains($0.provider)
+          }
+        ) { option in
           Button {
-            onConnectAccount(profile.id, provider)
+            onConnectAccount(profile.id, option)
           } label: {
             HStack(spacing: 10) {
-              if let logo = provider.logo {
+              if let logo = option.provider.logo {
                 Image(nsImage: logo).resizable().frame(width: 18, height: 18)
               }
-              Text(SettingsL10n.format("Connect %@", .string(provider.title)))
+              Text(SettingsL10n.format("Connect %@", .string(option.title)))
               Spacer(minLength: 0)
             }
             .contentShape(Rectangle())
           }
           .buttonStyle(.plain)
-          .accessibilityIdentifier("settings.connect.\(provider.rawValue)")
+          .accessibilityIdentifier("settings.connect.\(option.rawValue)")
         }
       } header: {
         Text(SettingsL10n.string("Accounts"))
@@ -603,11 +612,12 @@ struct BrowserLanguageRestartPrompt: View {
 
 struct ConnectedAccountRow: View {
   let account: ConnectedAccount
+  var color: SpaceRGBColor?
   var disconnect: (() -> Void)?
 
   var body: some View {
     HStack(spacing: 10) {
-      AccountAvatar(account: account)
+      ProfileIdentityBadge(account: account, color: color)
       VStack(alignment: .leading, spacing: 1) {
         if let name = account.name {
           Text(name).lineLimit(1)
@@ -627,24 +637,6 @@ struct ConnectedAccountRow: View {
       Spacer(minLength: 0)
       if let disconnect { Button(SettingsL10n.string("Disconnect"), action: disconnect) }
     }
-  }
-}
-
-/// The account's photo, or the provider's mark while it loads, when it fails, or when the
-/// provider has none.
-private struct AccountAvatar: View {
-  let account: ConnectedAccount
-
-  var body: some View {
-    AsyncImage(url: account.photoURL) { phase in
-      if let image = phase.image {
-        image.resizable().scaledToFill()
-      } else if let logo = account.provider.logo {
-        Image(nsImage: logo).resizable().padding(5)
-      }
-    }
-    .frame(width: 28, height: 28)
-    .clipShape(Circle())
   }
 }
 

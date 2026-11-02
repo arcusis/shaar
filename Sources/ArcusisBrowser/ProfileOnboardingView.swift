@@ -6,8 +6,7 @@ import AppKit
 import BrowserCore
 import SwiftUI
 
-/// New Profile onboarding: name, icon and color, an optional Google or Microsoft sign-in, then
-/// done.
+/// One choice per step, followed by an optional account and a summary.
 struct ProfileOnboardingView: View {
   let model: ProfileOnboardingModel
 
@@ -32,12 +31,10 @@ struct ProfileOnboardingView: View {
 
   @ViewBuilder private var stepContent: some View {
     switch model.step {
-    case .details:
+    case .name, .icon, .color:
       ProfileDetailsStep(model: model)
-    case .google, .microsoft:
-      if let provider = model.step.provider {
-        AccountConnectStep(model: model, provider: provider)
-      }
+    case .account:
+      AccountConnectStep(model: model)
     case .done:
       ProfileSummaryStep(model: model)
     }
@@ -83,32 +80,44 @@ private struct ProfileDetailsStep: View {
       )
       .foregroundStyle(.secondary)
       HStack(spacing: 12) {
-        SymbolPickerButton(
-          symbol: $model.symbol, isPresented: $symbolPickerIsPresented,
-          accessibilityLabel: SettingsL10n.string("Change Profile Icon"))
+        ProfileBadge(color: model.color.rgb, symbol: model.symbol, size: 48)
+        Text(model.trimmedName).font(.headline).lineLimit(1)
+      }
+      switch model.step {
+      case .name:
         TextField(SettingsL10n.string("Profile name"), text: $model.name)
           .textFieldStyle(.roundedBorder)
           .focused($nameFocused)
           .onSubmit { model.continueToNext() }
           .accessibilityIdentifier("onboarding.name")
+      case .icon:
+        SymbolPickerButton(
+          symbol: $model.symbol, isPresented: $symbolPickerIsPresented,
+          accessibilityLabel: SettingsL10n.string("Change Profile Icon"))
+      case .color:
+        ProfileColorPicker(color: $model.color)
+      case .account, .done:
+        EmptyView()
       }
-      ProfileColorPicker(color: $model.color)
     }
-    .onAppear { nameFocused = true }
+    .onAppear { nameFocused = model.step == .name }
+    .onChange(of: model.step) { _, step in nameFocused = step == .name }
   }
 }
 
 private struct AccountConnectStep: View {
   let model: ProfileOnboardingModel
-  let provider: AccountProvider
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
-      Text(provider.onboardingDescription).foregroundStyle(.secondary)
-        .fixedSize(horizontal: false, vertical: true)
+      Text(
+        SettingsL10n.string(
+          "One primary account per profile. For another account, create another profile.")
+      )
+      .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
       if let account = model.stepAccount {
-        ConnectedAccountRow(account: account)
-      } else if model.connecting == provider {
+        ConnectedAccountRow(account: account, color: model.color.rgb)
+      } else if let provider = model.connecting {
         HStack(spacing: 10) {
           ProgressView().controlSize(.small)
           Text(
@@ -118,11 +127,18 @@ private struct AccountConnectStep: View {
           .foregroundStyle(.secondary)
         }
       } else {
-        ProviderConnectButton(provider: provider) { model.connect(provider) }
+        ForEach(AccountSignInOption.allCases) { option in
+          VStack(alignment: .leading, spacing: 4) {
+            ProviderConnectButton(option: option) { model.connect(option: option) }
+            if option.provider != .microsoft {
+              Text(option.provider.onboardingDescription).font(.caption).foregroundStyle(.secondary)
+            }
+          }
+        }
       }
       Text(
         SettingsL10n.string(
-          "Optional. A profile connects one account, Google or Microsoft. You can also connect it later in Settings > Profiles."
+          "Optional. Sign in on the provider’s own page, or connect later in Settings > Profiles."
         )
       )
       .font(.caption)
@@ -132,22 +148,22 @@ private struct AccountConnectStep: View {
 }
 
 private struct ProviderConnectButton: View {
-  let provider: AccountProvider
+  let option: AccountSignInOption
   let action: () -> Void
 
   var body: some View {
     Button(action: action) {
       HStack(spacing: 10) {
-        if let logo = provider.logo {
+        if let logo = option.provider.logo {
           Image(nsImage: logo).resizable().frame(width: 18, height: 18)
         }
-        Text(SettingsL10n.format("Connect %@", .string(provider.title)))
+        Text(SettingsL10n.format("Connect %@", .string(option.title)))
       }
       .padding(.horizontal, 6)
       .padding(.vertical, 2)
     }
     .controlSize(.large)
-    .accessibilityIdentifier("onboarding.connect.\(provider.rawValue)")
+    .accessibilityIdentifier("onboarding.connect.\(option.rawValue)")
   }
 }
 
@@ -157,7 +173,8 @@ private struct ProfileSummaryStep: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
       HStack(spacing: 12) {
-        ProfileBadge(color: model.color.rgb, symbol: model.symbol, size: 36)
+        ProfileIdentityBadge(
+          account: model.stepAccount, color: model.color.rgb, symbol: model.symbol, size: 48)
         Text(model.trimmedName).font(.headline).lineLimit(1)
       }
       if model.connectedAccounts.isEmpty {
@@ -167,7 +184,9 @@ private struct ProfileSummaryStep: View {
         )
         .foregroundStyle(.secondary)
       } else {
-        ForEach(model.connectedAccounts, id: \.provider) { ConnectedAccountRow(account: $0) }
+        ForEach(model.connectedAccounts, id: \.provider) {
+          ConnectedAccountRow(account: $0, color: model.color.rgb)
+        }
       }
       if let failure = model.failure {
         Text(failure).foregroundStyle(.red)
@@ -186,7 +205,7 @@ private struct OnboardingFooter: View {
       Spacer()
       Button(SettingsL10n.string("Back")) { model.back() }
         .disabled(!model.canGoBack)
-      if model.step.provider != nil {
+      if model.step == .account {
         Button(SettingsL10n.string("Skip")) { model.skip() }
           .disabled(!model.canSkip)
       }
@@ -205,13 +224,11 @@ extension AccountProvider {
   fileprivate var onboardingDescription: String {
     switch self {
     case .google:
-      SettingsL10n.string(
-        "Sign in with a personal Google account or a Google Workspace account. If your company signs in through its own identity provider, that page opens in the same window and returns to Google."
-      )
+      SettingsL10n.string("Personal or Google Workspace")
     case .microsoft:
-      SettingsL10n.string(
-        "Sign in with a personal Microsoft account or a work or school account. Company sign-in through Okta, Azure AD, ADFS, Ping or a similar provider opens in the same window and returns to Microsoft."
-      )
+      SettingsL10n.string("Personal, work or school")
+    case .apple:
+      SettingsL10n.string("Apple Account and iCloud")
     }
   }
 }

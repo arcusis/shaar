@@ -8,7 +8,7 @@ import Foundation
 /// Web accounts a profile can be signed in to. Sign-in runs on the provider's own page inside the
 /// profile, so its cookies stay in that profile; no OAuth client or sync is involved.
 enum AccountProvider: String, Codable, CaseIterable, Identifiable, Sendable {
-  case google, microsoft
+  case google, microsoft, apple
 
   var id: String { rawValue }
 
@@ -16,6 +16,7 @@ enum AccountProvider: String, Codable, CaseIterable, Identifiable, Sendable {
     switch self {
     case .google: "Google"
     case .microsoft: "Microsoft"
+    case .apple: "Apple"
     }
   }
 
@@ -26,6 +27,7 @@ enum AccountProvider: String, Codable, CaseIterable, Identifiable, Sendable {
         string:
           "https://accounts.google.com/AddSession?continue=https%3A%2F%2Fmyaccount.google.com%2F")!
     case .microsoft: URL(string: "https://www.microsoft365.com/login")!
+    case .apple: URL(string: "https://www.icloud.com/")!
     }
   }
 
@@ -33,20 +35,26 @@ enum AccountProvider: String, Codable, CaseIterable, Identifiable, Sendable {
     switch self {
     case .google: URL(string: "https://accounts.google.com/Logout")!
     case .microsoft: URL(string: "https://login.microsoftonline.com/common/oauth2/v2.0/logout")!
+    case .apple: URL(string: "https://www.icloud.com/")!
     }
   }
 
   /// The provider redirects here once sign-in has finished. Google may land on any of its pages
   /// (for example www.google.com after an error), so anything off the sign-in host counts.
   func isSignedInPage(_ url: URL) -> Bool {
+    guard url.scheme?.lowercased() == "https" else { return false }
     let host = url.host()?.lowercased() ?? ""
     switch self {
     case .google: return host.hasSuffix(".google.com") && host != "accounts.google.com"
     case .microsoft:
       return [
         "www.microsoft365.com", "m365.cloud.microsoft", "www.office.com", "outlook.live.com",
-        "outlook.office.com",
+        "outlook.office.com", "account.microsoft.com", "account.live.com", "www.microsoft.com",
+        "www.msn.com",
       ].contains(host) && !url.path().hasPrefix("/login")
+    case .apple:
+      return ["www.icloud.com", "icloud.com", "account.apple.com", "appleid.apple.com"].contains(
+        host)
     }
   }
 
@@ -55,7 +63,12 @@ enum AccountProvider: String, Codable, CaseIterable, Identifiable, Sendable {
     accounts.isEmpty ? allCases : []
   }
 
-  var logo: NSImage? { NSImage(data: Data(logoSVG.utf8)) }
+  var logo: NSImage? {
+    if self == .apple {
+      return NSImage(systemSymbolName: "apple.logo", accessibilityDescription: title)
+    }
+    return NSImage(data: Data(logoSVG.utf8))
+  }
 
   /// Official provider marks, used unmodified on the connect buttons.
   private var logoSVG: String {
@@ -76,6 +89,7 @@ enum AccountProvider: String, Codable, CaseIterable, Identifiable, Sendable {
       <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/><rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
       </svg>
       """
+    case .apple: ""
     }
   }
 }
@@ -85,6 +99,51 @@ struct ConnectedAccount: Codable, Equatable, Sendable {
   let email: String
   var name: String?
   var photoURL: URL?
+  /// A small image read by the profile's own signed-in page, including cookie-protected photos.
+  /// No credentials, tokens, or cookies are copied into preferences.
+  var photoData: Data?
+
+  var initials: String {
+    let words = (name?.isEmpty == false ? name! : email.components(separatedBy: "@")[0])
+      .split(whereSeparator: { $0.isWhitespace })
+    return words.prefix(2).compactMap(\.first).map(String.init).joined().uppercased()
+  }
+}
+
+/// Microsoft has separate first-party entry points for consumer and organizational accounts.
+/// Both choices still link the same Microsoft provider to the profile.
+enum AccountSignInOption: String, CaseIterable, Identifiable {
+  case google, microsoftPersonal, microsoftWork, apple
+
+  var id: Self { self }
+  var provider: AccountProvider {
+    switch self {
+    case .google: .google
+    case .microsoftPersonal, .microsoftWork: .microsoft
+    case .apple: .apple
+    }
+  }
+
+  var title: String {
+    switch self {
+    case .microsoftPersonal: SettingsL10n.string("Microsoft — personal")
+    case .microsoftWork: SettingsL10n.string("Microsoft — work or school")
+    case .google, .apple: provider.title
+    }
+  }
+
+  var signInURL: URL {
+    self == .microsoftPersonal
+      ? URL(string: "https://login.live.com/")! : provider.signInURL
+  }
+
+  static func standard(for provider: AccountProvider) -> Self {
+    switch provider {
+    case .google: .google
+    case .microsoft: .microsoftWork
+    case .apple: .apple
+    }
+  }
 }
 
 /// Google's signed-in account list for the profile's cookies, as Chromium's own sign-in reads it.

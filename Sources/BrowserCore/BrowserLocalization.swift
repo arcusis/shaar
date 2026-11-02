@@ -13,9 +13,18 @@ public enum BrowserFormatArgument: Sendable {
 
 /// Package-owned catalog lookup. Missing translations always fall back to English, then key.
 public enum BrowserLocalization {
-  public static let resourceBundleURL = Bundle.module.bundleURL
+  public static let resourceBundleURL = bundle.bundleURL
 
-  private static let bundle = Bundle.module
+  private static let bundle = resourceBundle(in: .main) { .module }
+
+  static func resourceBundle(in host: Bundle, fallback: () -> Bundle) -> Bundle {
+    if let url = host.url(forResource: "ArcusisBrowser_BrowserCore", withExtension: "bundle"),
+      let packaged = Bundle(url: url)
+    {
+      return packaged
+    }
+    return fallback()
+  }
 
   private static func localizedBundle(_ language: BrowserLanguage) -> Bundle {
     guard let url = bundle.url(forResource: language.localeIdentifier, withExtension: "lproj"),

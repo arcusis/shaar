@@ -42,9 +42,43 @@ SBOM = load_script("ci-sbom")
 SWIFT_REPORTS = load_script("ci-swift-reports")
 EXTRACTION = load_script("check-codeql-extraction")
 CODEQL_BUILD = load_script("codeql-build")
+RELEASE_CI = load_script("check-release-ci")
 
 
 class PipelineGateTests(unittest.TestCase):
+    def test_only_manual_timing_run_can_omit_swift(self):
+        for event_name, expected in (("workflow_dispatch", "false"), ("pull_request", "true")):
+            with tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                event = {"inputs": {"measure_without_swift": "true", "deep_checks": "false"}}
+                (root / "event.json").write_text(json.dumps(event))
+                env = {"GITHUB_EVENT_PATH": str(root / "event.json"), "GITHUB_EVENT_NAME": event_name,
+                       "GITHUB_SHA": "a" * 40, "GITHUB_OUTPUT": str(root / "output"),
+                       "GITHUB_STEP_SUMMARY": str(root / "summary")}
+                with (patch.dict(os.environ, env),
+                      patch.object(PLAN.subprocess, "check_output", return_value="b" * 40 + "\n"),
+                      patch.object(PLAN.subprocess, "run") as command):
+                    command.return_value.returncode = 0
+                    command.return_value.stdout = b"Notebook/Note.md\0"
+                    PLAN.main()
+                self.assertIn("swift=" + expected, (root / "output").read_text())
+
+    def test_prepared_release_gate_requires_exact_production_push_and_successful_swift_job(self):
+        revision = "a" * 40
+        valid = {"id": 9, "head_sha": revision, "head_branch": "production", "event": "push",
+                 "status": "completed", "conclusion": "success"}
+        for change in ({"head_sha": "b" * 40}, {"event": "pull_request"}, {"event": "workflow_dispatch"},
+                       {"status": "in_progress"}, {"conclusion": "failure"}, {"head_branch": "feature"}):
+            self.assertEqual(RELEASE_CI.production_runs({"workflow_runs": [dict(valid, **change)]}, revision), [])
+        for swift in ("success", "skipped", "failure"):
+            jobs = [{"name": "CI required", "status": "completed", "conclusion": "success"},
+                    {"name": "CodeQL / CodeQL swift", "status": "completed", "conclusion": swift}]
+            with patch.object(RELEASE_CI, "api", side_effect=[{"workflow_runs": [valid]}, {"jobs": jobs}]):
+                if swift == "success":
+                    self.assertEqual(RELEASE_CI.require_release_ci("arcusis/shaar", revision), 9)
+                else:
+                    with self.assertRaises(ValueError):
+                        RELEASE_CI.require_release_ci("arcusis/shaar", revision)
     def test_known_non_native_diffs_and_unknown_changes_select_required_coverage(self):
         for paths in (["Notebook/Note.md"], ["README.md", "CONTRIBUTING.md"]):
             self.assertEqual(PLAN.select_stages(paths, "pull_request"), (False, False, True))

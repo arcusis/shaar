@@ -35,4 +35,12 @@ Local preparation covered all 396 Swift files; all ten fresh semantic compiler c
 
 Visual and localization stages already perform their own complete test builds with separate cache modes and consume no unit artifact. Start both after stage selection; waiting for unit success adds build latency to their independent critical paths. Coverage still waits for the unit coverage artifact, and the final required check still requires unit, visuals and localization success independently.
 
+## Disabled production/nightly/release policy
+
+[CI_CodeQL_Production_Only.patch](CI_CodeQL_Production_Only.patch) is prepared and passes `git apply --check`, but is not applied or loaded as a workflow. It omits Swift only for PR/merge-group events, retains full-source production/nightly analysis, and adds a release workflow prerequisite using `scripts/check-release-ci.py`. That standalone helper is inactive in current workflows. It requires a successful production **push** run on the exact tagged commit with both `CI required` and the Swift job successful; PR, manual timing, missing, skipped, failed and other-commit runs cannot satisfy it. Release credentials and local signing/notarization remain unchanged.
+
+Choosing this policy delays the Swift security decision until after a change reaches production. The default remains full Swift analysis before merge. The manual timing benchmark measures runtime only and does not activate this policy. Apply the patch only after the repository owner chooses it from the measured comparison.
+
+Prepared-policy verification: 49 pipeline tests and all eleven fast gates passed, including 250 Python tests. The inactive patch passes `git apply --check`. The first transferred-bundle run passed all three private-window shards without retries; baseline exposed the separately corrected media readiness boundary. Final timing runs must use the corrected head.
+
 Sources: [Swift compilation guidance](https://docs.github.com/en/code-security/reference/code-scanning/codeql/build-options-for-compiled-languages), [database import limitations](https://docs.github.com/en/code-security/reference/code-scanning/codeql/codeql-cli-manual/database-import), [database finalization](https://docs.github.com/en/code-security/reference/code-scanning/codeql/codeql-cli-manual/database-finalize).

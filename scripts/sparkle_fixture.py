@@ -247,7 +247,10 @@ def assert_install(case: str, status: int, log: str, requests: list[str], before
         if not executable_changed or version != "2":
             raise AssertionError("Installed executable/version did not advance")
     elif case in CASES:
-        if status != 1 or not re.search(r"error 300[12] \(SUSparkleErrorDomain\)", log):
+        # Sparkle 2.10.1 wraps pre-extraction signature rejection in SUInstallationError (4005).
+        code = re.search(r"error (?:300[12]|4005) \(SUSparkleErrorDomain\)", log)
+        signature_error = re.search(r"signature.*(?:validation|invalid|failed)", log, re.IGNORECASE)
+        if status != 1 or not code or not signature_error:
             raise AssertionError("Negative case did not fail with a Sparkle signature/validation error")
         if after != before or "Installation Finished." in log or version != "1":
             raise AssertionError("Rejected update modified the installed application")

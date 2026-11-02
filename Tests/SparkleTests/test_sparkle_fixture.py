@@ -39,11 +39,14 @@ class SparkleFixtureTests(unittest.TestCase):
 
     def test_negative_proof_requires_signature_error_and_unchanged_bundle(self):
         negative = dict(case="wrong-signature", status=1,
-                        log="Error: Update has failed due to error 3001 (SUSparkleErrorDomain).",
+                        log="Error: Update has failed due to error 3001 (SUSparkleErrorDomain). EdDSA signature validation failed.",
                         requests=["/appcast.xml", "/update.zip"], before="old", after="old", expected="new",
                         data_before="data", data_after="data", executable_changed=False, version="1")
         fixture.assert_install(**negative)
+        fixture.assert_install(**(negative | dict(
+            log="Error: Update has failed due to error 4005 (SUSparkleErrorDomain). (Ed)DSA signature validation before unarchiving failed.")))
         for change in (dict(status=0), dict(status=4), dict(log="Network failed"), dict(after="new"),
+                       dict(log="Error: Update has failed due to error 4005 (SUSparkleErrorDomain). File copy failed."),
                        dict(log=negative["log"] + " Installation Finished."), dict(data_after="lost")):
             with self.subTest(change=change), self.assertRaises(AssertionError):
                 fixture.assert_install(**(negative | change))

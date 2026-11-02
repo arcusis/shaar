@@ -91,11 +91,16 @@ struct BrowserSettingsView: View {
           ?? BrowserLanguage.systemDefault.rawValue
       },
       set: { rawValue in
-        if let selection = BrowserLanguage(rawValue: rawValue) {
+        if let selection = BrowserLanguage(rawValue: rawValue), rawValue != selectedLanguage {
+          BrowserLanguage.selection = selection
           selectedLanguage = selection.rawValue
+          restartError = nil
+          confirmLanguageRestart = selection != BrowserLanguage.launchSelection
         }
       })
   }
+  @State private var confirmLanguageRestart = false
+  @State private var restartError: String?
   @State private var defaultStatus = false
   @State private var defaultError: String?
   @State private var historyMessage: String?
@@ -104,6 +109,7 @@ struct BrowserSettingsView: View {
   @Binding var sidebarInitiallyVisible: Bool
   @Binding var selectedSearchEngine: String
   let storageNotice: String?
+  let onRestart: (() -> String?)?
   let onAddProfile: () -> Void
   let onRenameProfile: (UUID, String) -> Bool
   let onSetProfileColor: (UUID, ProfileColorChoice) -> Bool
@@ -125,6 +131,7 @@ struct BrowserSettingsView: View {
     profiles: [BrowserSettingsProfile], searchEngines: [BrowserSettingsChoice],
     selectedProfileID: Binding<UUID?>, sidebarInitiallyVisible: Binding<Bool>,
     selectedSearchEngine: Binding<String>, storageNotice: String? = nil,
+    onRestart: (() -> String?)? = nil,
     onAddProfile: @escaping () -> Void = {},
     onRenameProfile: @escaping (UUID, String) -> Bool = { _, _ in false },
     onSetProfileColor: @escaping (UUID, ProfileColorChoice) -> Bool = { _, _ in false },
@@ -144,6 +151,7 @@ struct BrowserSettingsView: View {
     _sidebarInitiallyVisible = sidebarInitiallyVisible
     _selectedSearchEngine = selectedSearchEngine
     self.storageNotice = storageNotice
+    self.onRestart = onRestart
     self.onAddProfile = onAddProfile
     self.onRenameProfile = onRenameProfile
     self.onSetProfileColor = onSetProfileColor
@@ -183,6 +191,14 @@ struct BrowserSettingsView: View {
     .frame(minWidth: 600, minHeight: 440)
     .background(Color(nsColor: .windowBackgroundColor))
     .foregroundStyle(.primary)
+    .alert(SettingsL10n.string("Restart Shaar to apply"), isPresented: $confirmLanguageRestart) {
+      Button(SettingsL10n.string("Later"), role: .cancel) {}
+      if let onRestart {
+        Button(SettingsL10n.string("Restart Shaar")) { restartError = onRestart() }
+      }
+    } message: {
+      Text(SettingsL10n.string("Your windows and tabs will be restored."))
+    }
     .sheet(item: $deletingProfile) { profile in
       VStack(alignment: .leading, spacing: 16) {
         Text(SettingsL10n.format("Delete %@?", .string(profile.name))).font(.headline)
@@ -288,6 +304,10 @@ struct BrowserSettingsView: View {
         }
         Text(SettingsL10n.string("Language changes after you restart the app."))
           .font(.caption).foregroundStyle(.secondary)
+        if selectedLanguage != BrowserLanguage.launchSelection.rawValue, let onRestart {
+          BrowserLanguageRestartPrompt(onRestart: { restartError = onRestart() })
+        }
+        if let restartError { Text(restartError).foregroundStyle(.red) }
       }
       if let defaultError { Section { Text(defaultError).foregroundStyle(.red) } }
       if let storageNotice {
@@ -566,6 +586,19 @@ struct BrowserSettingsView: View {
     BrowserLocalization.plural("%d Spaces", count: count, table: "Settings")
   }
 
+}
+
+struct BrowserLanguageRestartPrompt: View {
+  let onRestart: () -> Void
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text(SettingsL10n.string("Restart Shaar to apply")).font(.headline)
+      Text(SettingsL10n.string("Your windows and tabs will be restored."))
+        .font(.caption).foregroundStyle(.secondary)
+      Button(SettingsL10n.string("Restart Shaar"), action: onRestart)
+    }
+  }
 }
 
 struct ConnectedAccountRow: View {

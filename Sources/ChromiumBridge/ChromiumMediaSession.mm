@@ -27,7 +27,8 @@ if(!/^(https?|file):$/.test(location.protocol))return function(){};
 const apply=Reflect.apply,stringify=JSON.stringify,parse=JSON.parse,finite=Number.isFinite;
 const later=setTimeout.bind(window),query=Document.prototype.querySelectorAll;
 const ACTIONS=['play','pause','previoustrack','nexttrack','seekbackward','seekforward','seekto'];
-const EVENTS=['play','playing','pause','ended','emptied','loadedmetadata','durationchange','volumechange',
+// A live video can gain decoded dimensions after the first playing report.
+const EVENTS=['play','playing','pause','ended','emptied','loadedmetadata','resize','durationchange','volumechange',
   'enterpictureinpicture','leavepictureinpicture'];
 const session=navigator.mediaSession,proto=session&&Object.getPrototypeOf(session);
 const handlers=new Map(),tracked=new WeakSet();

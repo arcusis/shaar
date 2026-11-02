@@ -35,6 +35,7 @@ struct SidebarDnDProbeTests {
     store.tabDrag = TabDrag(tabID: id, fromSplitPane: false)
     let item = SidebarTransfer.tab(
       sessionID: store.dragSessionID, sourceSpaceID: store.session.selectedSpaceID, tabID: id)
+    store.sidebarDrag = item
     let host = NSHostingView(rootView: BrowserSidebar(store: store))
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 260, height: 700), styleMask: .borderless,
@@ -134,10 +135,24 @@ private final class OffscreenSidebarMount {
   let host: NSHostingView<AnyView>
   let window: NSWindow
   private(set) var lastOperation: NSDragOperation = []
+  final class Measurements { var grid = FavoritesGridPresentation() }
+  let measurements = Measurements()
 
-  init(store: BrowserStore, draft: SidebarFolderDraft? = nil) {
+  init(
+    store: BrowserStore, draft: SidebarFolderDraft? = nil, rtl: Bool = false, reduced: Bool = false
+  ) {
     _ = NSApplication.shared
-    host = NSHostingView(rootView: AnyView(BrowserSidebar(store: store, previewFolderDraft: draft)))
+    let measurements = measurements
+    host = NSHostingView(
+      rootView: AnyView(
+        BrowserSidebar(store: store, previewFolderDraft: draft)
+          .environment(\.layoutDirection, rtl ? .rightToLeft : .leftToRight)
+          .environment(
+            \.browserChromeAccessibilityOverrides,
+            BrowserChromeAccessibilityOverrides(reduceMotion: reduced)
+          )
+          .onPreferenceChange(FavoritesGridPresentationKey.self) { measurements.grid = $0 }
+      ))
     window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 260, height: 700), styleMask: .borderless,
       backing: .buffered, defer: false)
@@ -161,13 +176,14 @@ private final class OffscreenSidebarMount {
 
   func drop(
     _ item: SidebarTransfer, on receiver: NSView, hold: Duration = .zero,
-    busyMainActor: Bool = false
+    busyMainActor: Bool = false, point: CGPoint? = nil,
+    duringHover: (() throws -> Void)? = nil
   ) async throws
     -> Bool
   {
     let info = try OffscreenSidebarDrag(window: window, item: item)
     info.location = receiver.convert(
-      NSPoint(x: receiver.bounds.midX, y: receiver.bounds.midY), to: nil)
+      point ?? NSPoint(x: receiver.bounds.midX, y: receiver.bounds.midY), to: nil)
     if busyMainActor {
       // Queue work ahead of the hover task, as other native suites do in a full test run.
       Task { @MainActor in Self.blockMainActor() }
@@ -178,6 +194,7 @@ private final class OffscreenSidebarMount {
       _ = receiver.draggingUpdated(info)
       try await Task.sleep(for: hold)
     }
+    try duringHover?()
     let accepted =
       !operation.isEmpty && receiver.prepareForDragOperation(info)
       && receiver.performDragOperation(info)
@@ -372,5 +389,202 @@ extension SidebarDnDProbeTests {
           "Native offscreen drop dispatch and separate-process workspace restoration; no physical mouse or trackpad input.",
       ], options: [.prettyPrinted, .sortedKeys]
     ).write(to: root.appending(path: "\(phase).json"), options: .atomic)
+  }
+}
+
+extension SidebarDnDProbeTests {
+  @Test(arguments: ["today", "pinned", "folder", "split"])
+  func favoriteInsertionGapReflowsBeforeNativeDrop(source: String) async throws {
+    let store = BrowserStore()
+    let space = store.session.selectedSpaceID
+    for index in 0..<4 {
+      _ = store.session.addFavorite(
+        profileID: store.session.selectedSpace.profileID,
+        originalURL: URL(string: "https://favorite\(index).example")!)
+    }
+    let tab = store.session.open(URL(string: "https://incoming.example")!)!
+    if source != "today" { store.togglePin(tab) }
+    if source == "folder" {
+      let folder = try #require(store.createFolder(name: "Projects", in: space))
+      #expect(store.moveTab(tab, from: space, to: space, folderID: folder))
+    }
+    if source == "split" {
+      let other = store.session.open(URL(string: "https://other.example")!)!
+      store.togglePin(other)
+      store.splitTabs(other, tab)
+    }
+    let item = SidebarTransfer.tab(
+      sessionID: store.dragSessionID, sourceSpaceID: space, tabID: tab)
+    store.sidebarDrag = item
+    let mounted = OffscreenSidebarMount(store: store)
+    defer { mounted.close() }
+    try await mounted.settle()
+    let receiver = try #require(
+      mounted.receivers.last {
+        $0.convert($0.bounds, to: mounted.host).minY < 10
+      })
+    let originalIDs = store.profileFavorites.map(\.id)
+    let before = store.session
+    let accepted = try await mounted.drop(
+      item, on: receiver, hold: .milliseconds(200), point: CGPoint(x: 1, y: 10),
+      duringHover: {
+        #expect(store.session == before)
+        #expect(mounted.measurements.grid.ids == [nil] + originalIDs.map(Optional.some))
+        #expect(FavoritesGridLayout.rows(for: mounted.measurements.grid.ids.count) == [3, 2])
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+          .appending(path: "build/Verification/sidebar-dnd")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try mounted.capture("insertion-\(source).png", root: root)
+      })
+    #expect(accepted)
+    #expect(store.profileFavorites.count == 5)
+    #expect(
+      store.session.favoritePages.first { $0.favoriteID == store.profileFavorites.first?.id }?.tab
+        .id == tab)
+    #expect(store.session.selectedSpace.splits.isEmpty)
+    try store.session.validate()
+  }
+
+  @Test(arguments: [false, true])
+  func nativeReorderAtCapacityAndThirteenthRefusal(rtl: Bool) async throws {
+    let store = BrowserStore()
+    for index in 0..<12 {
+      _ = store.session.addFavorite(
+        profileID: store.session.selectedSpace.profileID,
+        originalURL: URL(string: "https://favorite\(index).example")!)
+    }
+    let ids = store.profileFavorites.map(\.id)
+    let item = SidebarTransfer.favorite(
+      ProfileFavoriteDrag(
+        profileID: store.session.selectedSpace.profileID, dragSessionID: store.dragSessionID,
+        favoriteID: ids.last!, favoriteIDs: ids))
+    store.sidebarDrag = item
+    let mounted = OffscreenSidebarMount(store: store, rtl: rtl)
+    defer { mounted.close() }
+    try await mounted.settle()
+    let receiver = try #require(
+      mounted.receivers.last {
+        $0.convert($0.bounds, to: mounted.host).minY < 10
+      })
+    let accepted = try await mounted.drop(
+      item, on: receiver, hold: .milliseconds(200),
+      point: CGPoint(x: rtl ? receiver.bounds.maxX - 1 : 1, y: 10),
+      duringHover: {
+        #expect(mounted.measurements.grid.ids == [nil] + ids.dropLast().map(Optional.some))
+      })
+    #expect(accepted)
+    #expect(store.profileFavorites.map(\.id) == [ids.last!] + ids.dropLast())
+    let tab = store.session.open(URL(string: "https://thirteenth.example")!)!
+    let extra = SidebarTransfer.tab(
+      sessionID: store.dragSessionID, sourceSpaceID: store.session.selectedSpaceID, tabID: tab)
+    store.sidebarDrag = extra
+    try await mounted.settle()
+    let target = try #require(
+      mounted.receivers.last {
+        $0.convert($0.bounds, to: mounted.host).minY < 10
+      })
+    let before = store.session
+    let refused = try await mounted.drop(
+      extra, on: target, hold: .milliseconds(200),
+      duringHover: {
+        #expect(
+          mounted.measurements.grid.refusal
+            == "Favorites are full (12). Remove one to add another.")
+        #expect(mounted.measurements.grid.ids.count == 12)
+        #expect(!mounted.measurements.grid.ids.contains(nil))
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+          .appending(path: "build/Verification/sidebar-dnd")
+        try mounted.capture("thirteenth-refused.png", root: root)
+      })
+    #expect(!refused)
+    #expect(mounted.lastOperation.isEmpty)
+    #expect(store.session == before)
+  }
+
+  @Test(arguments: [false, true], [1, 5])
+  func nativeFavoriteDragOutReflows(pinned: Bool, favoriteCount: Int) async throws {
+    let store = BrowserStore()
+    for index in 0..<favoriteCount {
+      _ = store.session.addFavorite(
+        profileID: store.session.selectedSpace.profileID,
+        originalURL: URL(string: "https://favorite\(index).example")!)
+    }
+    let favorite = store.profileFavorites[0].id
+    let pageID = try #require(store.session.favoritePage(for: favorite)?.tab.id)
+    let item = SidebarTransfer.favorite(
+      ProfileFavoriteDrag(
+        profileID: store.session.selectedSpace.profileID, dragSessionID: store.dragSessionID,
+        favoriteID: favorite, favoriteIDs: store.profileFavorites.map(\.id)))
+    store.sidebarDrag = item
+    let mounted = OffscreenSidebarMount(store: store)
+    defer { mounted.close() }
+    try await mounted.settle()
+    let grid = try #require(
+      mounted.receivers.last {
+        $0.convert($0.bounds, to: mounted.host).minY < 10
+      })
+    let info = try OffscreenSidebarDrag(window: mounted.window, item: item)
+    info.location = grid.convert(CGPoint(x: 1, y: 10), to: nil)
+    _ = grid.draggingEntered(info)
+    _ = grid.draggingUpdated(info)
+    grid.draggingExited(info)
+    try await mounted.settle()
+    #expect(mounted.measurements.grid.ids.count == favoriteCount - 1)
+    #expect(!mounted.measurements.grid.ids.contains(favorite))
+    // The empty grid remains a usable return target while its last tile is dragged out.
+    if favoriteCount == 1 { #expect(grid.bounds.height >= 40) }
+    let target = try #require(
+      mounted.receivers.first {
+        abs($0.bounds.height - (pinned ? 8 : 32)) < 1 && $0.bounds.width > 100
+      })
+    #expect(try await mounted.drop(item, on: target))
+    #expect(store.profileFavorites.count == favoriteCount - 1)
+    #expect(store.session.selectedSpace.tabs.first { $0.id == pageID }?.isPinned == pinned)
+    try store.session.validate()
+  }
+}
+
+extension SidebarDnDProbeTests {
+  @Test(arguments: [false, true], [false, true])
+  func nativeGapFollowsPointerAndCancellationRestoresGrid(rtl: Bool, reduced: Bool) async throws {
+    let store = BrowserStore()
+    for index in 0..<4 {
+      _ = store.session.addFavorite(
+        profileID: store.session.selectedSpace.profileID,
+        originalURL: URL(string: "https://favorite\(index).example")!)
+    }
+    let tab = store.session.open(URL(string: "https://incoming.example")!)!
+    let item = SidebarTransfer.tab(
+      sessionID: store.dragSessionID, sourceSpaceID: store.session.selectedSpaceID, tabID: tab)
+    store.sidebarDrag = item
+    let mounted = OffscreenSidebarMount(store: store, rtl: rtl, reduced: reduced)
+    defer { mounted.close() }
+    try await mounted.settle()
+    let receiver = try #require(
+      mounted.receivers.last {
+        $0.convert($0.bounds, to: mounted.host).minY < 10
+      })
+    let ids = store.profileFavorites.map(\.id).map(Optional.some)
+    let before = store.session
+    let info = try OffscreenSidebarDrag(window: mounted.window, item: item)
+    info.location = receiver.convert(CGPoint(x: rtl ? receiver.bounds.maxX - 1 : 1, y: 10), to: nil)
+    #expect(!receiver.draggingEntered(info).isEmpty)
+    _ = receiver.draggingUpdated(info)
+    try await mounted.settle()
+    #expect(mounted.measurements.grid.ids == [nil] + ids)
+    let slots = FavoritesGridLayout.frames(
+      count: 5, width: receiver.bounds.width, isRightToLeft: rtl)
+    let last = try #require(slots.last)
+    info.location = receiver.convert(CGPoint(x: last.midX, y: last.midY), to: nil)
+    for _ in 0..<3 {
+      _ = receiver.draggingUpdated(info)
+      try await mounted.settle()
+      #expect(mounted.measurements.grid.ids == ids + [nil])
+    }
+    receiver.draggingExited(info)
+    store.sidebarDrag = nil
+    try await mounted.settle()
+    #expect(mounted.measurements.grid.ids == ids)
+    #expect(store.session == before)
   }
 }

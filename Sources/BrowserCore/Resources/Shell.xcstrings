@@ -166,18 +166,18 @@
         }
       }
     },
-    "A profile can have up to 16 favorites.": {
+    "Favorites are full (12). Remove one to add another.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A profile can have up to 16 favorites."
+            "value": "Favorites are full (12). Remove one to add another."
           }
         },
         "he": {
           "stringUnit": {
             "state": "translated",
-            "value": "אפשר להוסיף עד 16 מועדפים לפרופיל."
+            "value": "המועדפים מלאים (12). יש להסיר אחד כדי להוסיף אחר."
           }
         }
       }

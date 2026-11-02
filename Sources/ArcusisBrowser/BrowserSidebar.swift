@@ -13,6 +13,7 @@ struct BrowserSidebar: View {
   @Environment(\.browserWindowIsFullScreen) private var isFullScreen
   @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
   @Environment(\.browserChromeAccessibilityOverrides) private var accessibilityOverrides
+  @Namespace private var sidebarMotionNamespace
   @State private var pagerState = SpacePagerState()
   @State private var targetedTab: UUID?
   @State private var targetedSpace: UUID?
@@ -44,6 +45,20 @@ struct BrowserSidebar: View {
 
   private var sidebarReduceMotion: Bool {
     reduceMotion || accessibilityOverrides.reduceMotion == true
+  }
+
+  private var sidebarMotion: Animation {
+    sidebarReduceMotion ? .easeOut(duration: 0.16) : .spring(response: 0.32, dampingFraction: 0.82)
+  }
+
+  private var sidebarLayoutKey: [String] {
+    store.profileFavorites.map { $0.id.uuidString }
+      + store.session.selectedSpace.folders.map {
+        "\($0.id):\($0.parentID?.uuidString ?? "root"):\($0.isPinned):\($0.isCollapsed)"
+      }
+      + store.session.selectedSpace.tabs.map {
+        "\($0.id):\($0.isPinned):\($0.folderID?.uuidString ?? "root")"
+      }
   }
 
   private var activeSidebarSelectionKey: String {
@@ -86,6 +101,8 @@ struct BrowserSidebar: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
       profileFavorites
+        .id(sidebarReduceMotion ? sidebarLayoutKey.description : "favorites")
+        .transition(.opacity)
       VStack(alignment: .leading, spacing: 4) {
         HStack(spacing: 7) {
           Label(store.session.selectedSpace.name, systemImage: store.session.selectedSpace.symbol)
@@ -115,6 +132,8 @@ struct BrowserSidebar: View {
       }
       SpacePager(store: store, state: pagerState, reduceMotion: sidebarReduceMotion) { space in
         tabList(space)
+          .id(sidebarReduceMotion ? sidebarLayoutKey.description : "tabs")
+          .transition(.opacity)
       }
       Spacer(minLength: 0)
       if let item = store.miniPlayerItem {
@@ -151,6 +170,8 @@ struct BrowserSidebar: View {
       }
       .accessibilityIdentifier("sidebar-space-footer")
     }
+    .environment(\.sidebarMotionNamespace, sidebarMotionNamespace)
+    .animation(sidebarMotion, value: sidebarLayoutKey)
     .buttonStyle(.plain)
     .padding(.horizontal, 14)
     .padding(.top, isFullScreen ? BrowserChromeLayout.fullScreenToggleRowHeight : 4)
@@ -469,58 +490,29 @@ struct BrowserSidebar: View {
   }
 
   private var profileFavorites: some View {
-    let profileID = store.session.selectedSpace.profileID
     let favorites = store.profileFavorites.map { favorite in
       let page = store.session.favoritePages.first { $0.favoriteID == favorite.id }
       return FavoriteTile(
         id: favorite.id, title: favorite.title, url: page?.tab.url ?? favorite.originalURL,
-        image: store.favicon(for: favorite))
+        image: store.favicon(for: favorite), pageID: page?.tab.id)
     }
-    return Group {
-      if !favorites.isEmpty {
-        ProfileFavoritesGrid(
-          favorites: favorites,
-          selectedID: store.session.selectedSpace.selectedFavoriteID,
-          profileID: profileID,
-          dragSessionID: store.dragSessionID,
-          onSelect: { _ = store.selectFavorite($0) },
-          onReset: { _ = store.resetFavorite($0) },
-          onRemove: { _ = store.removeFavorite($0) },
-          onMoveBefore: { _ = store.moveFavorite($0, before: $1) },
-          onTabDrop: { store.acceptFavoritesDrop($0, before: $1) },
-          accessibilityOverrides: ProfileFavoritesAccessibilityOverrides(
-            reduceMotion: sidebarReduceMotion,
-            reduceTransparency: reduceTransparency
-              || accessibilityOverrides.reduceTransparency == true)
-        )
-      } else if store.tabDrag != nil || store.sidebarDrag != nil {
-        SidebarDropHint(
-          title: ShellL10n.string(
-            store.favoritesDropIsRefused ? "Single tabs only" : "Drop to add to Favorites"),
-          symbol: store.favoritesDropIsRefused ? "nosign" : "star",
-          isTargeted: targetedSection == "favorites")
-      } else {
-        Color.clear.frame(height: 8).contentShape(Rectangle())
-      }
-    }
-    .animation(sidebarReduceMotion ? nil : .smooth(duration: 0.2), value: store.tabDrag != nil)
-    .dropDestination(for: SidebarTransfer.self) { items, _ in
-      guard items.count == 1, let item = items.first else { return false }
-      return store.acceptFavoritesDrop(item)
-    } isTargeted: { targeted in
-      targetedSection = targetedSection.updatingTarget("favorites", isActive: targeted)
-    }
-    .dropConfiguration { _ in
-      DropConfiguration(operation: store.favoritesDropIsRefused ? .forbidden : .move)
-    }
-    .overlay {
-      if targetedSection == "favorites", store.favoritesDropIsRefused {
-        Label(ShellL10n.string("Single tabs only"), systemImage: "nosign")
-          .font(.caption).foregroundStyle(.red).padding(4)
-          .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 4))
-          .allowsHitTesting(false)
-      }
-    }
+    return ProfileFavoritesGrid(
+      favorites: favorites,
+      selectedID: store.session.selectedSpace.selectedFavoriteID,
+      profileID: store.session.selectedSpace.profileID,
+      dragSessionID: store.dragSessionID,
+      onSelect: { _ = store.selectFavorite($0) },
+      onReset: { _ = store.resetFavorite($0) },
+      onRemove: { _ = store.removeFavorite($0) },
+      onMoveBefore: { _ = store.moveFavorite($0, before: $1) },
+      onTabDrop: { store.acceptFavoritesDrop($0, before: $1) },
+      accessibilityOverrides: ProfileFavoritesAccessibilityOverrides(
+        reduceMotion: sidebarReduceMotion,
+        reduceTransparency: reduceTransparency
+          || accessibilityOverrides.reduceTransparency == true),
+      activeDrag: store.sidebarDrag,
+      dropRefusal: store.favoritesDropRefusal(for: store.sidebarDrag),
+      onBeginDrag: { store.beginSidebarDrag($0) })
   }
 
   private var recentDownloadsControls: some View {
@@ -815,6 +807,7 @@ struct BrowserSidebar: View {
           hoveredTabID = hoveredTabID.updatingTarget(tab.id, isActive: isHovered)
         }
       )
+      .sidebarPageMotion(id: tab.id, reduceMotion: sidebarReduceMotion)
       .draggable(store.beginTabDrag(tab.id, spaceID: space.id, fromSplitPane: false))
     }
   }
@@ -946,7 +939,8 @@ struct BrowserSidebar: View {
           tabDropIndicator(targetedTabIntent ?? .reorderBefore)
         }
       }
-      .animation(sidebarReduceMotion ? nil : .easeOut(duration: 0.12), value: targetedTab)
+      .animation(sidebarMotion, value: targetedTab)
+      .animation(sidebarMotion, value: folderDropReady)
       .contextMenu {
         splitMenu(for: tab, in: space)
         Button(ShellL10n.string("Add to Favorites")) {
@@ -1042,7 +1036,7 @@ struct BrowserSidebar: View {
         targetedSection = targetedSection.updatingTarget(zone, isActive: targeted)
       }
       .animation(sidebarReduceMotion ? nil : .easeOut(duration: 0.12), value: targetedSection)
-      .animation(sidebarReduceMotion ? nil : .smooth(duration: 0.2), value: showsHint)
+      .animation(sidebarMotion, value: showsHint)
       .accessibilityHidden(true)
   }
 
@@ -1103,6 +1097,7 @@ struct BrowserSidebar: View {
       }.padding(.vertical, 8).padding(.horizontal, 10).contentShape(Rectangle())
     }
     .padding(.leading, indentation(depth))
+    .sidebarPageMotion(id: folder.id, reduceMotion: sidebarReduceMotion)
     .accessibilityLabel(
       ShellL10n.format(
         "%@, %@",

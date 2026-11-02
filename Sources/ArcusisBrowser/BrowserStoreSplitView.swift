@@ -106,9 +106,19 @@ extension BrowserStore {
   }
 
   var favoritesDropIsRefused: Bool {
-    switch sidebarDrag {
-    case .folder?, .split?, .space?: true
-    default: false
+    favoritesDropRefusal(for: sidebarDrag) != nil
+  }
+
+  func favoritesDropRefusal(for item: SidebarTransfer?) -> String? {
+    switch item {
+    case .folder?, .split?, .space?:
+      return ShellL10n.string("Single tabs only")
+    case .favorite(let payload)?:
+      return acceptsFavoriteDrag(payload, in: session.selectedSpaceID)
+        ? nil : ShellL10n.string("Single tabs only")
+    default:
+      return profileFavorites.count >= BrowserSession.maximumFavoritesPerProfile
+        ? ShellL10n.string("Favorites are full (12). Remove one to add another.") : nil
     }
   }
 

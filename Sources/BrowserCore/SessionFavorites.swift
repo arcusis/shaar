@@ -5,7 +5,7 @@
 import Foundation
 
 extension BrowserSession {
-  public static let maximumFavoritesPerProfile = 16
+  public static let maximumFavoritesPerProfile = 12
 
   public var selectedFavorite: BrowserFavorite? {
     guard let id = selectedSpace.selectedFavoriteID else { return nil }

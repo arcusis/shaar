@@ -1,35 +1,35 @@
 {
-  "capturedUTC": "2026-11-02T12:34:15.567030+00:00",
+  "capturedUTC": "2026-11-02T14:52:37.675788+00:00",
   "hebrewSHA256": {
-    "he-code-320-dark.png": "3f77ab15e861d54a8d96f6d6b185a7163eb7fdd1c265941baecbc90e3dcd8a69",
-    "he-code-320-light.png": "83ec11b907642682509fb24b1f4e718b302ad13a5ef9bcedfa11d2592b6d9184",
-    "he-code-420-dark.png": "b9f165a7fc994c54fbcff9ba4128d87d672a26a588b2dc80f50c3b1c9eea9beb",
-    "he-code-420-light.png": "48d7b53416edff9f4cd9c7dfffbb7cc417529906107d4d7bf8902d32e5507a0f",
-    "he-copy-menu-320-dark.png": "ecea1cb97155a57939980b307dc17fc0cb49e54e100df7d04f105527d8276f4c",
-    "he-copy-menu-320-light.png": "200d1690edf2778ab4394f8e532ae9f4ca11c3072873a140d680f0c4283d6cb7",
-    "he-copy-menu-420-dark.png": "21ef6aa4d86f0ac71aeecc498cc2b7109b72449fa4f0bb9598a4e4627c6285af",
-    "he-copy-menu-420-light.png": "877e6262831d744bf401b1441fc132d4ed2c3a6fd511339b33ae1ed1e01a1565",
-    "he-design-320-dark.png": "282c37f5e500e4d113f89034e286e2e3b65adf03d1a4ba7e8328f0ae505a389a",
-    "he-design-320-light.png": "9f70616fb5dde25eafbe628ba6d579706ceafb06d6e7311498847a12677fca57",
-    "he-design-420-dark.png": "47e4e58a463c7a1f5dcc908448e3beefb12c194026dc0b26ee25b9881004bcd8",
-    "he-design-420-light.png": "2784f26a24f4c364b0f475e8312082ceb068b7882ae2f8d2c169169e700de0fa",
-    "he-notes-320-dark.png": "48a618fa2a3b9fa8870d08935d3f35eec967fd52866b5880d7a9ac436ebb232d",
-    "he-notes-320-light.png": "32367ffa58e1e496227776aa8a42f8ba87b659acb6e4397042dba23b1b53f63c",
-    "he-notes-420-dark.png": "a364fdc408ccd37b29458867b2ba209a3db8f29e942ee74570b4e823bda471d9",
-    "he-notes-420-light.png": "aa7b3452fb3d05a6d551bc0382579af0237d650cad6078a91d726839bbe4dae5"
+    "he-code-320-dark.png": "75e84eb1364e6e5a540dc80af18611598e6dc1d75a4dde122b081a336e3513ae",
+    "he-code-320-light.png": "e5a6b67a7965fe28308a9b3204a1be5d6dc344f595e60aa98f0b1e1b3c512d97",
+    "he-code-420-dark.png": "2dd5e38a2aec0a589250eb292b38e892f4d094079426fa122d030ea24d3d8fd9",
+    "he-code-420-light.png": "910fb2897512379e0186ef66c7d35b96d1405343c0a482bd26c4d457d732f762",
+    "he-copy-menu-320-dark.png": "6b42ad29db16e7f63dd7d8561a9cb7c8bbbd3451b6bf21054991830233f0725e",
+    "he-copy-menu-320-light.png": "8d42283eb187dfd4198f530c5fdc29e1a6099cb2128da9917d236056e27b345b",
+    "he-copy-menu-420-dark.png": "ffc4f6c4eac8454f851f87a0ede949ba8eccb128f05c1b513b4b5f171997c956",
+    "he-copy-menu-420-light.png": "cca2d02a95b88c690ad5efd7a27583f0b1632d7621f5b70d91380d6db74ad908",
+    "he-design-320-dark.png": "32040f268a41ac01655464771ce7d7534ce8d4d03d1f416e249dd0ef815b6b1d",
+    "he-design-320-light.png": "894d5b7b89c8ee85cc8c0fc17618054b0a43e686b27fc0c17893acb45c87d596",
+    "he-design-420-dark.png": "70f42da2642b593f98e389702c804c47430037b3af2fe2141d6aa327229b7dc1",
+    "he-design-420-light.png": "ca20c7e0c5eb63ec65253d5a1ee544f2ca91451f3df664edd414353eeb3e3912",
+    "he-notes-320-dark.png": "17207cc9c27e740f0544d0402321209b64a6e5efc7ffea6db93953242b141951",
+    "he-notes-320-light.png": "7a0302194451106773b372025103c3efc828f000d879c93386f4d80a7f023f5a",
+    "he-notes-420-dark.png": "41cff07441f9a2259af7425101ad90e4772ed02517810b5a5f1c558b9e9e9555",
+    "he-notes-420-light.png": "d20d9ccd0eabfac537bccb1010ffa8a9a8cbbef66f816bc0beaa57c48e3ca39d"
   },
   "localization": {
     "languages": [
       "en",
       "he"
     ],
-    "requiredCapturesPerLanguage": 88,
+    "requiredCapturesPerLanguage": 96,
     "tabAndCopyMenuBoundsPassed": true
   },
   "offscreen": true,
   "phases": {
     "initial": {
-      "checks": 836,
+      "checks": 837,
       "chromiumVersion": "155.0.8059.84",
       "copy": {
         "clipboard": {
@@ -68,7 +68,7 @@
       "passed": true
     },
     "restart": {
-      "checks": 838,
+      "checks": 839,
       "chromiumVersion": "155.0.8059.84",
       "copy": {
         "clipboard": {
@@ -109,24 +109,24 @@
   },
   "scope": "English native SwiftUI Inspector with live Chromium on loopback inspector.localhost fixtures; Hebrew native SwiftUI panels with seeded selections in isolated locale test children. Uniquely named pasteboards, isolated screenshot cache and unordered capture windows. Programmatic behavior/rendering do not establish physical terminal/chat paste acceptance.",
   "sha256": {
-    "code-320-dark.png": "de71641bad4ff80030b07580d257a8b2f43c8c487199a531217e38e59ec6d14d",
-    "code-320-light.png": "893b0457f32006357b21b77522648de220a627909284161a0b59575f09353e05",
-    "code-420-dark.png": "3f037e02326def22922190ded3ddfbf9e5f686c635dfc773ea08009cd0e16a9f",
-    "code-420-light.png": "f6c048f7e767c655d8ad066a840799a34c10615f94fe4d468bea6dbbdcd90d1c",
-    "copy-menu-320-dark.png": "8e4ba905b7cadcbee68ee75b5df8e271bb0caf46c11c8910daa5f228f97afb5e",
-    "copy-menu-320-light.png": "b09d04d2c9f44531939a7f337c37da51c2e0ea9af2bf774b7641f91411401182",
-    "copy-menu-420-dark.png": "14705939bc95a35dd5b4632717d9cb8364adaa57a15860e10c58f7a8a1f417af",
-    "copy-menu-420-light.png": "dbce099add032b1ba63c365d739b03e39af79a491df89399a565432778d9b1b5",
-    "design-320-dark.png": "c17bf1aac3577388a4c7455123ca169d9c2004c4e401067a2b47317a0b5e4eee",
-    "design-320-light.png": "f6e7eaffea16b6b4aed2d25ba98803adc947fc8160d619d18986be65364833a8",
-    "design-420-dark.png": "13c88265cf476ff543c9ae9f03f369c7f9132bd388b2fbd0fa5fda7e1e306af5",
-    "design-420-light.png": "62a9dcda3eaf49f2ede56756e9806923ad3dcab1ab91b77673cb74938030ebc9",
-    "notes-320-dark.png": "6c43d542919226e46ce4aea307369a87ec9f1a093e07369c9b318364d7efb649",
-    "notes-320-light.png": "33619f14709c20eea52b3d3e703a92b26bc4ac6e404acad977a37e978f7bb376",
-    "notes-420-dark.png": "29a7b6f2c48af72b46b1467f51b5e3c09ce298a8808f1be747d70e6cd5561273",
-    "notes-420-light.png": "bc845cf51b92e096b13fb50024590aa71dc6c8429ce0673de89790441685d864"
+    "code-320-dark.png": "aa0b9583ba3cb4017c589913fd5fe3792882bfe47918c8e56bc2181ea123e20d",
+    "code-320-light.png": "174c924900ade693c4288b040071eb5ab4898f03ce3ac40617ac9a52b1cd8033",
+    "code-420-dark.png": "789c51e25c55e83a49fca2750da0efc81a4c0810323b13a462736e42f700686d",
+    "code-420-light.png": "14f8a6fbf0c332dbfa53169c9507376ee7f0cf3921cb14497aecb791cb935b67",
+    "copy-menu-320-dark.png": "980acf16799116084c4afd08106e563c2de758c5ea2afa719d2914c28607476b",
+    "copy-menu-320-light.png": "08d20f95205e184c71bae1a8e2519b8a4f2c3203266f9f82753a42c1488dc8e3",
+    "copy-menu-420-dark.png": "49fa7a0db1089c34930246da03ff5625c196173fbacb80917810d0ce302da4d7",
+    "copy-menu-420-light.png": "f0daf4f92be5f3affb952cd017ad044b2efbe612bfa42d731a787eeaae2c5af4",
+    "design-320-dark.png": "3765aebb5155aebe72c8d7b8239b3c5b6b2a46b7febecae796c1aec99a6ba7bf",
+    "design-320-light.png": "65c2a09800afb8573861aa6e50a20b9e2dddbe27d002b049f1c53d311d55bf82",
+    "design-420-dark.png": "cfedc1fa1577dddad396393c6566eaf3cee6c4990ecd62d69e666942016bb374",
+    "design-420-light.png": "7c9acbe4ea1217a2a5d3678265fe9a99696b1684f05c6f9e6f7c2b10e257f373",
+    "notes-320-dark.png": "fab5a6fcc8ffc3b609b595c06f8f8317a1b23fe0569d6336c96215843131440e",
+    "notes-320-light.png": "3947ae08b06d502a4028dcb7d3364c80d67c3ded7baf3266a8eb23f29eccd48d",
+    "notes-420-dark.png": "5b8cafa60e415918337693adbc004952d33f80dd045951596879c00bd51677bf",
+    "notes-420-light.png": "d5fabc673940fa57ca8b3ad64a1c22fbe80d0905cdd3e9f3b6ccedd3c6d6364a"
   },
-  "sourceCommit": "cdde2384a467582663fa8313d8721106831f0989",
+  "sourceCommit": "f28a838dd16c36775f2c8517cc324bc79d4645a6",
   "sourceSHA256": {
     "Sources/ArcusisBrowser/InspectorAICopyModel.swift": "3003d3668876c3940c5fecfd5b316f7c6a5b12729b7bfa89cb5340ab9c9d1015",
     "Sources/ArcusisBrowser/InspectorAICopyScript.swift": "f69ed3da8969ed131aac70becf27e899d2b303d9687c1830cdafe96c1e16fa4a",
@@ -143,15 +143,15 @@
     "Sources/ArcusisBrowser/InspectorL10n.swift": "a665ca520a00a9474e57ba3db803f536b7eb71e298994366c15a41f66b00b882",
     "Sources/ArcusisBrowser/InspectorModel.swift": "3ad97992f0ab4aa5c8b453b12ddb96fb024d9a8b2d2736d1ac86a7ea5d319e24",
     "Sources/ArcusisBrowser/InspectorNotesView.swift": "88c1c81f85686b2ca7688dbfae73c23753edadc776d988d51e34340193745880",
-    "Sources/ArcusisBrowser/InspectorPage.swift": "a48e9e40c195e9912d525b418b179afc7eec48d1155090f5c1d950a2e8f1a9a4",
-    "Sources/ArcusisBrowser/InspectorPageScript.swift": "9aaf03eeab775e286880fc01111063d8dcfcedba0e61b06176232da893dd8cf6",
+    "Sources/ArcusisBrowser/InspectorPage.swift": "89dad58b79c67996e1f1f52847e262ea52c4511bd6aae93131e750bf32b7f68e",
+    "Sources/ArcusisBrowser/InspectorPageScript.swift": "4a1930a82c3ded49caad5299ef899343f3ac778f7cfe5248020ba11fb511efcc",
     "Sources/ArcusisBrowser/InspectorPageToolsModel.swift": "348202919757c465d3d70dea1601091026b0f660890f4a6016bf27e5fcd62504",
     "Sources/ArcusisBrowser/InspectorPageToolsView.swift": "3b689635048696c21546a36534e39ad1c6f45ec1c9e5f29d04fe6f3aafc198a0",
-    "Sources/ArcusisBrowser/InspectorPanel.swift": "daf1809e5729af95a1143f9497d17e3a29d93340c46036ef9861e0f699c6f11e",
+    "Sources/ArcusisBrowser/InspectorPanel.swift": "a0cc75a849c5ffb1fc585bbcf82271711b86fc988625e8b0c7cb3286fc60673e",
     "Sources/ArcusisBrowser/InspectorPanelComponents.swift": "a8936fbabbb069d60ba64e697f152cf7bb901a0767aadfeb1f93aaebf29ec04d",
-    "Sources/ArcusisBrowser/InspectorPresentation.swift": "3e4aee4afffdda42a4af307cca7fd08ef768ec9a1f07839570e90acdb23e6d5a",
+    "Sources/ArcusisBrowser/InspectorPresentation.swift": "3c342ebede15088d42402cc0b5c2b9a058013025c68d2827a4c7c1f0758ba622",
     "Sources/ArcusisBrowser/InspectorScreenshotCache.swift": "875c02e7f4ae57213812278d0c04793660444b9682a0cc02a926d9802e3a72ec",
-    "Sources/ArcusisBrowser/InspectorSelection.swift": "fa2d9d1714ce0bee3f4669a86d198636aced7774924723c8f2b7655e2f1b83e5",
+    "Sources/ArcusisBrowser/InspectorSelection.swift": "c0ecc6afd37745baaba633e7fef71f44b7dc6fde03438e3b2fb543029449c8df",
     "Sources/ArcusisBrowser/InspectorSimulationsView.swift": "9b6889c1629d31be4a82cddca6fabc3f48b5c3351d1b32cfea4db649d43375f1",
     "Sources/ArcusisBrowser/InspectorStorageView.swift": "6cdaf8ff3e3e87c49d09e549133b819c70441cb7c90ac90a6435f5c1df090d8c",
     "Sources/ArcusisBrowser/InspectorStyleScript.swift": "cb95273eb8a79b0768802533e07fefda9da14b8badbc13ac597fc5dcb8395caf",
@@ -159,11 +159,14 @@
     "Sources/ArcusisBrowser/InspectorStylesView.swift": "4897a6cd70d31410f045ccd6ceb9e7c7abf5cd6ebc43db538a5a1407ca9e2ed7",
     "Sources/ArcusisBrowser/InspectorToolsL10n.swift": "25672ebcba470604a912243065d48d625b7be513508daf5640804f90638ad95f",
     "Sources/BrowserCore/Resources/Inspector.xcstrings": "c3cac99bf5d8d6dbe2648999511c7bb29638b9112f73d772a824b198db550af4",
-    "Sources/ShaarVerification/InspectorAICopyProbe.swift": "2b7bead90af9a9901cb756ad3c57ecc8c5664c612b32383bcb71707ad5b9bf13",
+    "Sources/ShaarVerification/InspectorAICopyProbe.swift": "7b2612f6e1609d13b2e106456086d1d16e80fa61bb72203018859db0172b428b",
+    "Sources/ShaarVerification/InspectorProbe.swift": "275b68f5ff42e197265510d95e8ab3907fc0a5701da332af43af0e6fc17ae657",
+    "Tests/BrowserAppTests/InspectorDockWidthTests.swift": "889a6a5da7dea3f13258706e5f8a4095632921013cbef2ccf83db79fa6245fed",
     "Tests/BrowserAppTests/InspectorLocalizationVisualTests.swift": "bab7da4dcc9a0f1ed679ab68e11e2cd95c8ea73de27d6cfb1f12c6bd03cf9a36",
     "Tests/InspectorContractTests/inspector.cjs": "57fbc0ee842ca6a904cc6812e9b62a52bf6ed6a887cdc19b01a464c0b4c57023",
+    "Tests/ShaarVerificationTests/InspectorEvidenceTests.swift": "eac87cab5cc3720af7d5015e7e8bf98afdfa06255cec42b2db3772d2d19dc03a",
     "scripts/engine_fixture.py": "b0c6756fe7a8f992764a237b2030d13e776536a8da321cccd6c96939d714574b",
-    "scripts/test-localization.py": "513b23298f5bf716961a0a7ff40bcf84f0fc24b07dc981b076b289e5965393ab"
+    "scripts/test-localization.py": "9f82033fd8097e9a9a0f3db547428f4237b7f0f1a5999c44266f70304fcb2413"
   },
   "visibleWindows": false
 }

@@ -1,0 +1,132 @@
+{
+  "afterSourceCommit": "f28a838dd16c36775f2c8517cc324bc79d4645a6",
+  "beforeCompileFlag": "INSPECTOR_BEFORE_CAPTURE",
+  "beforeSourceCommit": "0735c02f97aca34dcdd9d364ed5a5d693c13e502",
+  "fixtureTestSHA256": "889a6a5da7dea3f13258706e5f8a4095632921013cbef2ccf83db79fa6245fed",
+  "images": {
+    "after-code-320-dark.png": {
+      "pixelsHigh": 960,
+      "pixelsWide": 320,
+      "sha256": "c102504da7d2ebcf9745d37d344eccf301500ff34b89706788a69309ee7b01ce"
+    },
+    "after-code-320-light.png": {
+      "pixelsHigh": 960,
+      "pixelsWide": 320,
+      "sha256": "1ca937406f1d65b560424a55bce1b7f0cab4be3c54ab8cf996b6a96a6a85654a"
+    },
+    "after-code-420-dark.png": {
+      "pixelsHigh": 960,
+      "pixelsWide": 420,
+      "sha256": "0ffa2cb2e3de29bb1becb0ed35e1fb6bc2e8096bb26986af711ad1a8e9b33b9c"
+    },
+    "after-code-420-light.png": {
+      "pixelsHigh": 960,
+      "pixelsWide": 420,
+      "sha256": "03c0b5368bb4cd1b5b18c56e2c3608c6ad202b4626b7c4d52fbf52a86d7ab067"
+    },
+    "after-design-320-dark.png": {
+      "pixelsHigh": 960,
+      "pixelsWide": 320,
+      "sha256": "b0db5a23936533dc9b373c8c04a309af83ed2fffbde320649e42245ba37822cc"
+    },
+    "after-design-320-light.png": {
+      "pixelsHigh": 960,
+      "pixelsWide": 320,
+      "sha256": "fe24d876173dc398185dcad4db8a86310e3ef37d467938d4e4dbbfcaa22b8ee1"
+    },
+    "after-design-420-dark.png": {
+      "pixelsHigh": 960,
+      "pixelsWide": 420,
+      "sha256": "0bb2a731d4ef7efa2a040943029db2bceacba1fc9087047f99ceab0fdb897626"
+    },
+    "after-design-420-light.png": {
+      "pixelsHigh": 960,
+      "pixelsWide": 420,
+      "sha256": "d15bf2df3df47fa61383b219f3a87b0c05e9497f87d5b9b47e5970ff496f68dd"
+    },
+    "before-code-320-dark.png": {
+      "pixelsHigh": 960,
+      "pixelsWide": 320,
+      "sha256": "976b351373b29667ee4deaed03268f24eb9eab1b48a46dae926079842f83ed60"
+    },
+    "before-code-320-light.png": {
+      "pixelsHigh": 960,
+      "pixelsWide": 320,
+      "sha256": "e657290ebe671a70b7eed92a0f6d9859f84f961fed1f2c116e0682c965081a8c"
+    },
+    "before-code-420-dark.png": {
+      "pixelsHigh": 960,
+      "pixelsWide": 420,
+      "sha256": "03c93a32e68eb96dd81e79908656ef0d510cca7f300e6d0b8357b1d5e7c8cc64"
+    },
+    "before-code-420-light.png": {
+      "pixelsHigh": 960,
+      "pixelsWide": 420,
+      "sha256": "fdfe355c1ca9cb7d37112cf5974dfe482026076dae3fceef2989a82d2900c54a"
+    },
+    "before-design-320-dark.png": {
+      "pixelsHigh": 960,
+      "pixelsWide": 320,
+      "sha256": "943be5a43af13a6af2e48512b29641d1ac659d66b36ae7853f8a9088cdd3560a"
+    },
+    "before-design-320-light.png": {
+      "pixelsHigh": 960,
+      "pixelsWide": 320,
+      "sha256": "19a3c317c82a30e742771a2280cb32d1faccb2c6d3ad0dc78b12a6cf55c59b62"
+    },
+    "before-design-420-dark.png": {
+      "pixelsHigh": 960,
+      "pixelsWide": 420,
+      "sha256": "d83b0d8b3c946323be0f2b7911b1ea984dff3456d74fae064a7e2f8d9997be38"
+    },
+    "before-design-420-light.png": {
+      "pixelsHigh": 960,
+      "pixelsWide": 420,
+      "sha256": "29479b59c6eac90cad9956ed578a2e07c28e7f2addce6ca03a31042fb183dff6"
+    },
+    "he-after-code-320-dark.png": {
+      "pixelsHigh": 960,
+      "pixelsWide": 320,
+      "sha256": "4088c7f2276e06dcc00e665db4a119247928881bc9ba4400d5bc928daa328e79"
+    },
+    "he-after-code-320-light.png": {
+      "pixelsHigh": 960,
+      "pixelsWide": 320,
+      "sha256": "adb22c0b821a0dc554cb9becd8a836121d4887093db4e148e4cf62080f3255b2"
+    },
+    "he-after-code-420-dark.png": {
+      "pixelsHigh": 960,
+      "pixelsWide": 420,
+      "sha256": "3270211a4752605c27b731ddbc5df069e9d87b6a61c230ed7bbaa11645f8f29a"
+    },
+    "he-after-code-420-light.png": {
+      "pixelsHigh": 960,
+      "pixelsWide": 420,
+      "sha256": "822f5b1fb3c2b1676e744704c691ce8a72853bd9527ed1c547266e9b48e65acd"
+    },
+    "he-after-design-320-dark.png": {
+      "pixelsHigh": 960,
+      "pixelsWide": 320,
+      "sha256": "0508e919fe8d788cb366809d9d04a7bece088bfcebe788163f22e1f8548d9089"
+    },
+    "he-after-design-320-light.png": {
+      "pixelsHigh": 960,
+      "pixelsWide": 320,
+      "sha256": "f178513be76e99e7e71fae1fe97be2d8311191277f4255adb353f6241cf076cc"
+    },
+    "he-after-design-420-dark.png": {
+      "pixelsHigh": 960,
+      "pixelsWide": 420,
+      "sha256": "83fb630b98f7dcfd3523ffa2966d1a65ef0b861a4718a4d459eccb223ef74135"
+    },
+    "he-after-design-420-light.png": {
+      "pixelsHigh": 960,
+      "pixelsWide": 420,
+      "sha256": "83d2ab10164408517dcb5b52dff13af94cadf1eba5d44630cd8018a6c33579fb"
+    }
+  },
+  "offscreen": true,
+  "productionSquash": "3d87530f7f6fa7730d2ef5f8c25894f822ac8174",
+  "scope": "Identical seeded selection and long CSS in native unordered windows. Before uses archived #376 UI source; after uses redesigned panel. Assertions cover fixed host/fitting/panel/content width through Design-Code-Design, tab gaps, and selected breadcrumb visibility. English/Hebrew after checks pass. Native engine checks all six tabs preserve page viewport.",
+  "visibleWindows": false
+}

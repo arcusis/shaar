@@ -28,7 +28,7 @@ Related: [[Shaar_Inspector_CSS]], [[Shaar_Inspector_Details]], [[Shaar_Inspector
 
 ## Offscreen captures
 
-The [capture receipt](Assets/Shaar_Inspector_Redesign/capture.json) pins the tested English source and both engine phases (836 initial checks, 838 after restart). The matrix covers 320/420-point docks in light and dark.
+The [capture receipt](Assets/Shaar_Inspector_Redesign/capture.json) pins the tested English source and both engine phases (837 initial checks, 839 after restart). The matrix covers 320/420-point docks in light and dark.
 
 | Panel | 320 light | 320 dark | 420 light | 420 dark |
 | --- | --- | --- | --- | --- |
@@ -53,3 +53,16 @@ Hebrew captures use seeded native selections in isolated locale test children; E
 The page card and Inspector content use explicit viewport bounds. Switching between Design and Code cannot increase dock width; long CSS stays inside the dock. Six tab hit areas retain visible gaps, with icons at narrow widths and labels at 420 points. Breadcrumb chips show tag/ID identity while preserving renderer IDs and original labels for navigation and exports. Initial scroll targets keep the selected chip visible.
 
 Offscreen width-stress captures compare production #376 with the redesign at 320/420 points in light/dark using the same seeded long-CSS selection. Native engine verification checks that all six Inspector tabs preserve the Chromium page viewport. Copy for AI and parent/child navigation handlers remain unchanged by this layout correction.
+
+The [width comparison receipt](Assets/Shaar_Inspector_Redesign/Width_Regressions/capture.json) identifies baseline and revised source, shared fixture, dimensions and image hashes.
+
+| Panel | Width | Appearance | Before (#376) | After |
+| --- | --- | --- | --- | --- |
+| Design | 320 pt | Light | [PNG](Assets/Shaar_Inspector_Redesign/Width_Regressions/before-design-320-light.png) | [PNG](Assets/Shaar_Inspector_Redesign/Width_Regressions/after-design-320-light.png) |
+| Design | 320 pt | Dark | [PNG](Assets/Shaar_Inspector_Redesign/Width_Regressions/before-design-320-dark.png) | [PNG](Assets/Shaar_Inspector_Redesign/Width_Regressions/after-design-320-dark.png) |
+| Design | 420 pt | Light | [PNG](Assets/Shaar_Inspector_Redesign/Width_Regressions/before-design-420-light.png) | [PNG](Assets/Shaar_Inspector_Redesign/Width_Regressions/after-design-420-light.png) |
+| Design | 420 pt | Dark | [PNG](Assets/Shaar_Inspector_Redesign/Width_Regressions/before-design-420-dark.png) | [PNG](Assets/Shaar_Inspector_Redesign/Width_Regressions/after-design-420-dark.png) |
+| Code | 320 pt | Light | [PNG](Assets/Shaar_Inspector_Redesign/Width_Regressions/before-code-320-light.png) | [PNG](Assets/Shaar_Inspector_Redesign/Width_Regressions/after-code-320-light.png) |
+| Code | 320 pt | Dark | [PNG](Assets/Shaar_Inspector_Redesign/Width_Regressions/before-code-320-dark.png) | [PNG](Assets/Shaar_Inspector_Redesign/Width_Regressions/after-code-320-dark.png) |
+| Code | 420 pt | Light | [PNG](Assets/Shaar_Inspector_Redesign/Width_Regressions/before-code-420-light.png) | [PNG](Assets/Shaar_Inspector_Redesign/Width_Regressions/after-code-420-light.png) |
+| Code | 420 pt | Dark | [PNG](Assets/Shaar_Inspector_Redesign/Width_Regressions/before-code-420-dark.png) | [PNG](Assets/Shaar_Inspector_Redesign/Width_Regressions/after-code-420-dark.png) |

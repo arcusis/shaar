@@ -104,40 +104,67 @@ struct DesktopCaptureConsentTests {
     #expect(store.requestDesktopCapture(first))
     #expect(store.requestDesktopCapture(second))
     #expect(store.sheet?.id == first.sheetID)
-    store.resolveDesktopCapture(second.id, sourceID: "screen:1:0")
-    #expect(decisions == ["\(second.id):cancel"])
-
     store.resolveDesktopCapture(first.id, sourceID: "screen:1:0")
-    #expect(decisions == ["\(second.id):cancel", "\(first.id):screen:1:0"])
+    #expect(decisions == ["\(first.id):screen:1:0"])
     #expect(store.sheet?.id == second.sheetID)
 
-    store.dismissDesktopCapture(second.id)
-    store.resolveDesktopCapture(second.id, sourceID: "window:1:0")
+    store.resolveDesktopCapture(second.id, sourceID: "window:2:0")
+    #expect(decisions == ["\(first.id):screen:1:0", "\(second.id):window:2:0"])
+
+    let third = try request(store, id: UUID().uuidString)
+    let fourth = try request(store, id: UUID().uuidString)
+    #expect(store.requestDesktopCapture(third))
+    #expect(store.requestDesktopCapture(fourth))
+    store.resolveDesktopCapture(fourth.id, sourceID: "window:4:0")
     #expect(
       decisions == [
-        "\(second.id):cancel", "\(first.id):screen:1:0", "\(second.id):cancel",
+        "\(first.id):screen:1:0", "\(second.id):window:2:0", "\(fourth.id):cancel",
+      ])
+    #expect(store.sheet?.id == third.sheetID)
+
+    store.dismissDesktopCapture(third.id)
+    store.resolveDesktopCapture(third.id, sourceID: "window:3:0")
+    #expect(
+      decisions == [
+        "\(first.id):screen:1:0", "\(second.id):window:2:0", "\(fourth.id):cancel",
+        "\(third.id):cancel",
       ])
     #expect(store.sheet == nil)
   }
 
   @Test func stalePageAndRendererFailureDenyDesktopCapture() throws {
-    let store = store()
-    let stale = try request(store, id: UUID().uuidString)
-    let failed = try request(store, id: UUID().uuidString)
+    let browser = store()
+    let stale = try request(browser, id: UUID().uuidString)
     var decisions: [String] = []
-    store.onDesktopCaptureDecision = { id, sourceID in
+    browser.onDesktopCaptureDecision = { id, sourceID in
       decisions.append("\(id):\(sourceID ?? "cancel")")
     }
 
-    #expect(store.requestDesktopCapture(stale))
-    store.perform(.open(URL(string: "https://meet.google.com/another")!))
-    store.resolveDesktopCapture(stale.id, sourceID: "screen:1:0")
+    #expect(browser.requestDesktopCapture(stale))
+    browser.perform(.open(URL(string: "https://meet.google.com/another")!))
+    browser.resolveDesktopCapture(stale.id, sourceID: "screen:1:0")
     #expect(decisions == ["\(stale.id):cancel"])
 
-    #expect(store.requestDesktopCapture(failed))
-    store.nativeRendererGone(
-      failed.tabID, profileID: failed.profileID, status: "crashed", exitCode: 1)
-    store.resolveDesktopCapture(failed.id, sourceID: "window:1:0")
-    #expect(decisions == ["\(stale.id):cancel", "\(failed.id):cancel"])
+    let failedStore = store()
+    let rendererFailure = try request(failedStore, id: UUID().uuidString)
+    var rendererDecisions: [String?] = []
+    failedStore.onDesktopCaptureDecision = { _, sourceID in rendererDecisions.append(sourceID) }
+    #expect(failedStore.requestDesktopCapture(rendererFailure))
+    failedStore.nativeRendererGone(
+      rendererFailure.tabID, profileID: rendererFailure.profileID, status: "crashed", exitCode: 1)
+    failedStore.resolveDesktopCapture(rendererFailure.id, sourceID: "window:1:0")
+    #expect(rendererDecisions == [nil])
+  }
+
+  @Test func staleProfileAndNavigationInvalidateRequestOwnership() throws {
+    let browser = store()
+    let capture = try request(browser, id: UUID().uuidString)
+    browser.cycleSpace(by: 1)
+    #expect(!capture.matches(browser.session))
+
+    let sameProfileStore = store()
+    let sameProfileRequest = try request(sameProfileStore, id: UUID().uuidString)
+    sameProfileStore.perform(.open(URL(string: "https://meet.google.com/another")!))
+    #expect(!sameProfileRequest.matches(sameProfileStore.session))
   }
 }

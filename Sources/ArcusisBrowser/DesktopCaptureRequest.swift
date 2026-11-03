@@ -22,7 +22,12 @@ struct DesktopCaptureRequest: Identifiable, Equatable {
       let requestingOrigin = (payload["origin"] as? String).flatMap(URL.init(string:)),
       let frameID = payload["frameID"] as? String,
       NavigationInput.isWebURL(pageURL),
-      requestingOrigin.host() != nil
+      requestingOrigin.host() != nil,
+      requestingOrigin.path.isEmpty || requestingOrigin.path == "/",
+      requestingOrigin.query == nil,
+      requestingOrigin.fragment == nil,
+      requestingOrigin.user == nil,
+      requestingOrigin.password == nil
     else { return nil }
     let scheme = requestingOrigin.scheme?.lowercased()
     let secureOrigin =

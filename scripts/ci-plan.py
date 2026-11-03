@@ -47,6 +47,16 @@ def iteration_count(event: dict, name: str) -> int:
     return int(raw)
 
 
+def merge_group_pr_number(event: dict, name: str) -> str:
+    if name != "merge_group":
+        return ""
+    head_ref = event.get("merge_group", {}).get("head_ref", "")
+    match = re.fullmatch(r"gh-readonly-queue/production/pr-([0-9]+)-[0-9a-f]{40}", head_ref)
+    if not match:
+        raise ValueError(f"Unexpected merge-group head ref: {head_ref!r}")
+    return match.group(1)
+
+
 def main() -> None:
     event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
     name = os.environ["GITHUB_EVENT_NAME"]
@@ -65,8 +75,9 @@ def main() -> None:
         if result.returncode == 0:
             paths = [path for path in result.stdout.decode().split("\0") if path]
     full, website, swift = select_stages(paths, name)
+    queue_pr = merge_group_pr_number(event, name)
     with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
-        output.write(f"full={str(full).lower()}\nbase={base}\niterations={iterations}\nwebsite={str(website).lower()}\nswift={str(swift).lower()}\n")
+        output.write(f"full={str(full).lower()}\nbase={base}\niterations={iterations}\nwebsite={str(website).lower()}\nswift={str(swift).lower()}\nqueue_pr={queue_pr}\n")
     with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as output:
         output.write(f"### CI selection\n\nFull native pipeline: **{full}**. Immutable baseline: `{base}`. "
                      f"Website checks: **{website}**. Swift CodeQL: **{swift}**. Requested probe repetitions: **{iterations}**; private/Quit minimum: **3**.\n")

@@ -33,7 +33,7 @@ def shard_modes(shard: str, iterations: int) -> list[tuple[str, range]]:
 
 def context(root: Path) -> dict:
     pin = json.loads((root / "ThirdParty/ArdiaCore/pin.json").read_text())
-    return {"revision": os.environ["GITHUB_SHA"], "toolchain": os.environ["CI_TOOLCHAIN_ID"],
+    return {"inputs": os.environ["CI_BUNDLE_INPUTS"], "toolchain": os.environ["CI_TOOLCHAIN_ID"],
             "engine": pin["sha256"]}
 
 
@@ -48,13 +48,18 @@ def archive_bundle(root: Path, directory: Path) -> None:
     (directory / "bundle.json").write_text(json.dumps(metadata, indent=2) + "\n")
 
 
-def restore_bundle(root: Path, directory: Path) -> None:
+def validate_bundle_archive(root: Path, directory: Path) -> Path:
     metadata = json.loads((directory / "bundle.json").read_text())
     if any(metadata.get(key) != value for key, value in context(root).items()):
-        raise ValueError("Verification bundle commit, toolchain or engine pin differs")
+        raise ValueError("Verification bundle build inputs, toolchain or engine pin differs")
     archive = directory / "verification.tar.gz"
     if file_sha256(archive) != metadata.get("sha256"):
         raise ValueError("Verification bundle digest differs")
+    return archive
+
+
+def restore_bundle(root: Path, directory: Path) -> None:
+    archive = validate_bundle_archive(root, directory)
     destination = root / "build"
     if (destination / BUNDLE_NAME).exists():
         raise ValueError("Verification bundle destination already exists")

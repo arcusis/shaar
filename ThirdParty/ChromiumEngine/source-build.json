@@ -46,7 +46,7 @@
   },
   "layer": {
     "path": "ThirdParty/ChromiumEngine/layer",
-    "sha256": "2d1ddf3f87f955cde3eda436fe2720def9d1f82020937023b8de4160fe56c616",
+    "sha256": "d3af34ce1a86cf6637396acc478209afeab56e264916b2d574a6d765038bf152",
     "files": {
       "chrome/browser/shaar/BUILD.gn": "f33590ba630d14841e24d2c77345fa00114f2e13401f6a658b276efc9057fb2b",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks.cc": "b349439951e01a866f2cc2d67db211a8dc30f7179d1095bc769fce5e32812b10",
@@ -75,10 +75,10 @@
       "chrome/browser/shaar/find/shaar_find.h": "9297ab09f872fab1a63f25d6ca041fb23cf0cff52e998377b4d38eabf83eb00f",
       "chrome/browser/shaar/find/shaar_find_lifecycle_adapter.cc": "11265dd2b69cead487b9873f6fb969cca137aad0e845f8d76a9df975d335f557",
       "chrome/browser/shaar/find/shaar_find_unittest.cc": "a5e837e6a2ce74857a8fa1b1fec4ec87e8f6ff7220b1bf8aca14dd5ffaed7e3d",
-      "chrome/browser/shaar/history/shaar_history.cc": "c846fef49f515c7b0ee39c38bb272d77d450d7e364338787bb422490b9a70da6",
-      "chrome/browser/shaar/history/shaar_history.h": "bcf4d93289c5ab26172d9f7506255d8d9c8656d826f8eeec2bbb6ae767b519a9",
+      "chrome/browser/shaar/history/shaar_history.cc": "3f7eda09c47702a1fc56b1d5c70af7f54e0c13be222ab5eefe7da3067a0cf653",
+      "chrome/browser/shaar/history/shaar_history.h": "6edd6f02f0cec60f7d706c161952306a0a20d63e38391327ba7a2daa51de1401",
       "chrome/browser/shaar/history/shaar_history_lifecycle_adapter.cc": "a84c4e8775c8d68e96f7c60912d0aafffa810db257d41db31c5a17337944d084",
-      "chrome/browser/shaar/history/shaar_history_unittest.cc": "d8240c5c32226f78c266be976a271172596a8953d7674135b7bc6dfde81034de",
+      "chrome/browser/shaar/history/shaar_history_unittest.cc": "bcda2785034535e38e94b7c7d3d7cfbccd848b9a739b687ece18e36bb73f1e54",
       "chrome/browser/shaar/lifecycle/shaar_lifecycle.cc": "50420a79e651743ce21eabc3efb4cbc1ba6c0a947c645c497750dd3b547f90f1",
       "chrome/browser/shaar/lifecycle/shaar_lifecycle.h": "3eee9d02f45c652807c3c247db8e8fc3f036470eb3fca02c2f55886edc56250a",
       "chrome/browser/shaar/lifecycle/shaar_module_registry.cc": "07db715919f0a2a9699b2b8885dfb119b97c7f17a4be2067eb2ce8ab177603f1",

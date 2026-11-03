@@ -83,6 +83,7 @@ final class InspectorPageToolsModel {
   private(set) var failure: String?
   private(set) var cpu: Double?
   private(set) var startedAt: Date?
+  private(set) var updateRevision = 0
   @ObservationIgnored private let owner = UUID().uuidString
   private var recordingScript: String {
     InspectorDiagnosticsScript.install.replacingOccurrences(
@@ -95,6 +96,7 @@ final class InspectorPageToolsModel {
   @ObservationIgnored private var epoch = -1
   @ObservationIgnored private var storageUpdated = Date.distantPast
   @ObservationIgnored private var pollTask: Task<Void, Never>?
+  @ObservationIgnored private var updateWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
 
   init(inspector: InspectorModel, developer: DeveloperPageModel) {
     self.inspector = inspector
@@ -123,6 +125,26 @@ final class InspectorPageToolsModel {
     startedAt = nil
     storageUpdated = .distantPast
     failure = nil
+    signalUpdate()
+  }
+
+  /// Suspends until page-tools state changes after the supplied revision.
+  func waitForUpdate(after revision: Int) async {
+    guard updateRevision == revision else { return }
+    await withCheckedContinuation { continuation in
+      guard updateRevision == revision else {
+        continuation.resume()
+        return
+      }
+      updateWaiters[UUID()] = continuation
+    }
+  }
+
+  private func signalUpdate() {
+    updateRevision &+= 1
+    let waiters = Array(updateWaiters.values)
+    updateWaiters.removeAll()
+    for waiter in waiters { waiter.resume() }
   }
 
   func stop() {
@@ -248,6 +270,7 @@ final class InspectorPageToolsModel {
     } catch {
       if active, generation == inspector.documentGeneration, !(error is CancellationError) {
         failure = error.localizedDescription
+        signalUpdate()
       }
     }
   }
@@ -293,6 +316,7 @@ final class InspectorPageToolsModel {
     console = nextConsole
     requests = nextRequests
     failure = nil
+    signalUpdate()
   }
 
   func receiveTechnologies(_ value: Any, generation: Int) throws {

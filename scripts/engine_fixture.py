@@ -17,7 +17,6 @@ import plistlib
 import re
 from pathlib import Path
 import random
-import select
 import signal
 import shutil
 import socket
@@ -655,7 +654,8 @@ border:2px solid #1e40af;border-radius:6px;background:#2563eb;color:white}
         account = account if account in ('alpha', 'beta') else 'none'
         slow = name == 'slow.txt'
         cancellation = name == 'cancel.txt'
-        body = f'account={account}\narcusis-download-fixture\n'.encode() + b'x' * (4 * 1024 * 1024 if slow or cancellation else 1024)
+        payload_size = 16 * 1024 * 1024 if cancellation else 4 * 1024 * 1024 if slow else 1024
+        body = f'account={account}\narcusis-download-fixture\n'.encode() + b'x' * payload_size
         offset = 0
         requested = self.headers.get('Range', '')
         if requested.startswith('bytes='):
@@ -665,6 +665,7 @@ border:2px solid #1e40af;border-radius:6px;background:#2563eb;color:white}
             return
         self.send_response(206 if offset else 200)
         self.send_header('Content-Type', 'text/plain')
+        self.send_header('Cache-Control', 'no-store')
         self.send_header('Content-Disposition', f'attachment; filename="{name}"')
         self.send_header('Accept-Ranges', 'bytes')
         self.send_header('ETag', f'"{account}-{name}-v1"')
@@ -676,19 +677,14 @@ border:2px solid #1e40af;border-radius:6px;background:#2563eb;color:white}
             started = time.monotonic()
             for start in range(offset, len(body), 16384):
                 self.wfile.write(body[start:start+16384])
-                if cancellation and start == offset:
-                    self.wfile.flush()
-                    # Keep the authored transfer live until Chromium closes it on cancel.
-                    # A timed stream can finish before the engine's download observer runs.
-                    while True:
-                        readable, _, _ = select.select([self.connection], [], [], 0.1)
-                        if readable and not self.connection.recv(1, socket.MSG_PEEK):
-                            return
-                if slow:
+                if slow or cancellation:
                     # Catch up after scheduler stalls instead of accumulating one
-                    # overslept delay per chunk on hosted virtual machines.
+                    # overslept delay per chunk on hosted virtual machines. The
+                    # cancellation fixture stays live long enough for Chromium's
+                    # download observer and probe to issue a cancel command.
                     sent = min(start + 16384, len(body)) - offset
-                    deadline = started + sent / (16384 / 0.02)
+                    interval = 0.05 if cancellation else 0.02
+                    deadline = started + sent / (16384 / interval)
                     delay = deadline - time.monotonic()
                     if delay > 0:
                         time.sleep(delay)

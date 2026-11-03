@@ -22,7 +22,7 @@ public enum ShaarEngineError: Error, Equatable, Sendable {
   case status(ShaarStatusCode, platformCode: Int32, message: String)
 }
 
-/// Numeric values are fixed by Design/shaar_engine.h and are never inferred from text.
+/// Numeric values are fixed by the Shaar layer's public shaar_engine.h.
 public enum ShaarStatusCode: UInt32, CaseIterable, Sendable {
   case ok = 0
   case invalidArgument = 1
@@ -126,6 +126,7 @@ public struct ShaarEngineLoader {
   public let implementation: ShaarEngineImplementation
   private let abiMajorFunction: @convention(c) () -> UInt32
   public let createSymbol: UnsafeRawPointer
+  private let symbolResolver: any ShaarSymbolResolving
 
   public init(resolver: ShaarSymbolResolving, implementation: ShaarEngineImplementation = .shaar)
     throws
@@ -141,6 +142,7 @@ public struct ShaarEngineLoader {
       throw ShaarEngineError.unsupportedABI(expected: Self.abiMajor, actual: major)
     }
     self.implementation = implementation
+    self.symbolResolver = resolver
     self.abiMajorFunction = unsafeBitCast(majorSymbol, to: (@convention(c) () -> UInt32).self)
     self.createSymbol = create
   }
@@ -155,6 +157,12 @@ public struct ShaarEngineLoader {
       throw ShaarEngineError.missingSymbol(String(cString: dlerror()))
     }
     return try Self(resolver: FrameworkSymbols(handle: handle), implementation: implementation)
+  }
+}
+
+extension ShaarEngineLoader: ShaarSymbolResolving {
+  public func symbol(named: String) -> UnsafeRawPointer? {
+    symbolResolver.symbol(named: named)
   }
 }
 

@@ -188,11 +188,20 @@ import SwiftUI
       "console.error('AI fixture console error');fetch('/inspector-ai-failure?token=network-private').then(r=>r.text()).then(()=>true)"
     )
     try await wait("AI fixture diagnostic collection") {
+      let revision = tools.updateRevision
       await tools.refresh()
-      return tools.console.contains {
-        $0.level == "error" && $0.message.contains("AI fixture console error")
-      } && tools.requests.contains { $0.status == 503 }
-        && tools.signals.contains { $0.name == "Inspector AI fixture" }
+      if Self.diagnosticsReady(
+        consoleMessages: tools.console.map(\.message),
+        requestStatuses: tools.requests.map(\.status),
+        signalNames: tools.signals.map(\.name))
+      {
+        return true
+      }
+      await tools.waitForUpdate(after: revision)
+      return Self.diagnosticsReady(
+        consoleMessages: tools.console.map(\.message),
+        requestStatuses: tools.requests.map(\.status),
+        signalNames: tools.signals.map(\.name))
     }
     ai.detailed = true
     await ai.copyElement(to: board)
@@ -238,6 +247,14 @@ import SwiftUI
     bitmap.getPixel(&channels, atX: x, y: y)
     // CSS #808080 is encoded in the PNG's channels; colorAt converts its embedded color profile.
     return channels.prefix(3).allSatisfy { (126...130).contains($0) }
+  }
+
+  static func diagnosticsReady(
+    consoleMessages: [String], requestStatuses: [Int], signalNames: [String]
+  ) -> Bool {
+    consoleMessages.contains { $0.contains("AI fixture console error") }
+      && requestStatuses.contains(503)
+      && signalNames.contains("Inspector AI fixture")
   }
 
   static func pasteboardReceipt(_ board: NSPasteboard) throws -> [String: Any] {

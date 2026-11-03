@@ -513,6 +513,35 @@ class ProbeSoakTests(unittest.TestCase):
 
 
 class EngineTransferTests(unittest.TestCase):
+    def test_engine_build_cache_reuse_records_success(self):
+        from ci_engine import BUNDLE_NAME, archive_bundle
+        from ci_support import Commands
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {
+            "CI_SOURCE_TREE": "a" * 40, "CI_TOOLCHAIN_ID": "toolchain", "GITHUB_OUTPUT": "",
+            "GITHUB_STEP_SUMMARY": "",
+        }):
+            root = Path(temporary)
+            pin = root / "ThirdParty/ArdiaCore/pin.json"
+            pin.parent.mkdir(parents=True)
+            pin.write_text(json.dumps({"sha256": "b" * 64}))
+            bundle = root / "build" / BUNDLE_NAME
+            bundle.mkdir(parents=True)
+            (bundle / "Main").write_bytes(b"authored executable")
+            directory = root / "build/ci/engine-build"
+            directory.mkdir(parents=True)
+            archive_bundle(root, directory)
+            output = root / "github-output"
+            os.environ["GITHUB_OUTPUT"] = str(output)
+            with patch.object(STAGES, "ROOT", root), patch("ci_support.ROOT", root), \
+                    patch.object(STAGES, "require_hosted_mac"):
+                checks = Commands("engine-build")
+                STAGES.build_engine_bundle(checks, 1)
+                self.assertEqual(checks.finish(), 0)
+            report = json.loads((directory / "commands.json").read_text())
+            self.assertEqual([item["name"] for item in report], ["verified-bundle-reuse"])
+            self.assertEqual(report[0]["status"], 0)
+            self.assertIn('"baseline-lifecycle"', output.read_text())
+
     def test_transferred_bundle_preserves_exec_and_links_and_rejects_wrong_context_or_digest(self):
         from ci_engine import BUNDLE_NAME, archive_bundle, restore_bundle
         import shutil

@@ -68,11 +68,14 @@ class Commands:
             log.write_text(str(error))
             print(error, flush=True)
             status = 127
-        self.results.append(dict(name=name, command=arguments, status=status,
-                                 seconds=round(time.monotonic() - started, 3)))
-        self.write_reports()
+        self.record(name, arguments, status=status, seconds=round(time.monotonic() - started, 3))
         print("::endgroup::", flush=True)
         return status
+
+    def record(self, name: str, arguments: list[str], *, status: int = 0, seconds: float = 0.0) -> None:
+        """Record successful non-process checks and keep command evidence consistent."""
+        self.results.append(dict(name=name, command=arguments, status=status, seconds=seconds))
+        self.write_reports()
 
     def write_reports(self) -> None:
         (self.directory / "commands.json").write_text(json.dumps(self.results, indent=2) + "\n")

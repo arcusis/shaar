@@ -17,9 +17,27 @@ struct DesktopCaptureSource: Identifiable {
 struct DesktopCapturePicker: View {
   let request: DesktopCaptureRequest
   let store: BrowserStore
+  private let hasScreenRecordingAccess: () -> Bool
+  private let shareableContent: () async throws -> SCShareableContent
   @State private var sources: [DesktopCaptureSource] = []
   @State private var loading = true
   @State private var error: String?
+
+  init(
+    request: DesktopCaptureRequest,
+    store: BrowserStore,
+    hasScreenRecordingAccess: @escaping () -> Bool = {
+      CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess()
+    },
+    shareableContent: @escaping () async throws -> SCShareableContent = {
+      try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+    }
+  ) {
+    self.request = request
+    self.store = store
+    self.hasScreenRecordingAccess = hasScreenRecordingAccess
+    self.shareableContent = shareableContent
+  }
 
   var body: some View {
     DesktopCapturePickerContent(
@@ -36,16 +54,15 @@ struct DesktopCapturePicker: View {
     .interactiveDismissDisabled()
   }
 
-  private func loadSources() async {
-    if !CGPreflightScreenCaptureAccess(), !CGRequestScreenCaptureAccess() {
+  func loadSources() async {
+    if !hasScreenRecordingAccess() {
       error = PanelsL10n.string(
         "Screen Recording access is unavailable. Check Privacy & Security settings.")
       loading = false
       return
     }
     do {
-      let content = try await SCShareableContent.excludingDesktopWindows(
-        false, onScreenWindowsOnly: true)
+      let content = try await shareableContent()
       let windows = content.windows.compactMap { window -> DesktopCaptureSource? in
         guard window.windowID != 0, window.isOnScreen
         else { return nil }

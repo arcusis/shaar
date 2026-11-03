@@ -76,6 +76,26 @@ struct DesktopCaptureConsentTests {
     for state in states { _ = state.body }
   }
 
+  @Test func sourceDiscoveryHandlesDeniedAndUnavailableScreenAccess() async throws {
+    let store = store()
+    let capture = try request(store)
+    let denied = DesktopCapturePicker(
+      request: capture,
+      store: store,
+      hasScreenRecordingAccess: { false },
+      shareableContent: { throw CocoaError(.fileReadUnknown) }
+    )
+    await denied.loadSources()
+
+    let unavailable = DesktopCapturePicker(
+      request: capture,
+      store: store,
+      hasScreenRecordingAccess: { true },
+      shareableContent: { throw CocoaError(.fileReadUnknown) }
+    )
+    await unavailable.loadSources()
+  }
+
   @Test func rejectsMalformedOrInsecureDesktopCapturePayloads() throws {
     let original = try request(store(), id: UUID().uuidString)
     let valid: [String: Any] = [

@@ -41,18 +41,22 @@ public enum ShaarLifecycleImplementationChoice {
   @usableFromInline var message: ShaarBytes
 }
 
-@usableFromInline typealias ShaarEventCallback = @convention(c) (
-  UnsafeMutableRawPointer?, UnsafeRawPointer?
-) -> Void
-@usableFromInline typealias ShaarCreateFunction = @convention(c) (
-  UnsafeRawPointer?, UnsafeMutablePointer<OpaquePointer?>?, UnsafeMutableRawPointer?
-) -> UInt32
-@usableFromInline typealias ShaarRunFunction = @convention(c) (
-  OpaquePointer?, UnsafeMutableRawPointer?
-) -> UInt32
-@usableFromInline typealias ShaarRequestQuitFunction = @convention(c) (
-  OpaquePointer?, UnsafeMutableRawPointer?
-) -> UInt32
+@usableFromInline typealias ShaarEventCallback =
+  @convention(c) (
+    UnsafeMutableRawPointer?, UnsafeRawPointer?
+  ) -> Void
+@usableFromInline typealias ShaarCreateFunction =
+  @convention(c) (
+    UnsafeRawPointer?, UnsafeMutablePointer<OpaquePointer?>?, UnsafeMutableRawPointer?
+  ) -> UInt32
+@usableFromInline typealias ShaarRunFunction =
+  @convention(c) (
+    OpaquePointer?, UnsafeMutableRawPointer?
+  ) -> UInt32
+@usableFromInline typealias ShaarRequestQuitFunction =
+  @convention(c) (
+    OpaquePointer?, UnsafeMutableRawPointer?
+  ) -> UInt32
 @usableFromInline typealias ShaarReleaseFunction = @convention(c) (OpaquePointer?) -> Void
 
 private struct LifecycleFrameworkSymbols: ShaarSymbolResolving {
@@ -121,7 +125,7 @@ private func receiveShaarEvent(
     guard major == ShaarEngineLoader.abiMajor else {
       throw ShaarEngineError.unsupportedABI(expected: ShaarEngineLoader.abiMajor, actual: major)
     }
-    _ = minor // Higher minor versions are backward-compatible; request our known prefix.
+    _ = minor  // Higher minor versions are backward-compatible; request our known prefix.
 
     createFunction = unsafeBitCast(createAddress, to: ShaarCreateFunction.self)
     runFunction = unsafeBitCast(runAddress, to: ShaarRunFunction.self)
@@ -145,16 +149,18 @@ private func receiveShaarEvent(
           eventContext: Unmanaged.passUnretained(eventDispatcher).toOpaque())
         return withUnsafePointer(to: config) { configPointer in
           withUnsafeMutablePointer(to: &error) { errorPointer in
-            createFunction(UnsafeRawPointer(configPointer), &createdEngine,
-                           UnsafeMutableRawPointer(errorPointer))
+            createFunction(
+              UnsafeRawPointer(configPointer), &createdEngine,
+              UnsafeMutableRawPointer(errorPointer))
           }
         }
       }
     }
     try Self.decode(result, error: error)
     guard let createdEngine else {
-      throw ShaarEngineError.status(.chromiumError, platformCode: 0,
-                                    message: "engine create returned no handle")
+      throw ShaarEngineError.status(
+        .chromiumError, platformCode: 0,
+        message: "engine create returned no handle")
     }
     engine = createdEngine
   }

@@ -72,27 +72,33 @@ private struct FakeLifecycleResolver: ShaarSymbolResolving {
   func symbol(named: String) -> UnsafeRawPointer? {
     switch named {
     case "shaar_abi_major":
-      return unsafeBitCast(fakeLifecycleABIMajor as @convention(c) () -> UInt32,
-                           to: UnsafeRawPointer.self)
+      return unsafeBitCast(
+        fakeLifecycleABIMajor as @convention(c) () -> UInt32,
+        to: UnsafeRawPointer.self)
     case "shaar_abi_minor":
-      return unsafeBitCast(fakeLifecycleABIMinor as @convention(c) () -> UInt32,
-                           to: UnsafeRawPointer.self)
+      return unsafeBitCast(
+        fakeLifecycleABIMinor as @convention(c) () -> UInt32,
+        to: UnsafeRawPointer.self)
     case "shaar_engine_create":
       return unsafeBitCast(fakeLifecycleCreate as ShaarCreateFunction, to: UnsafeRawPointer.self)
     case "shaar_engine_run":
       return unsafeBitCast(fakeLifecycleRun as ShaarRunFunction, to: UnsafeRawPointer.self)
     case "shaar_engine_request_quit":
-      return unsafeBitCast(fakeLifecycleRequestQuit as ShaarRequestQuitFunction,
-                           to: UnsafeRawPointer.self)
+      return unsafeBitCast(
+        fakeLifecycleRequestQuit as ShaarRequestQuitFunction,
+        to: UnsafeRawPointer.self)
     case "shaar_engine_release":
-      return unsafeBitCast(fakeLifecycleRelease as ShaarReleaseFunction,
-                           to: UnsafeRawPointer.self)
+      return unsafeBitCast(
+        fakeLifecycleRelease as ShaarReleaseFunction,
+        to: UnsafeRawPointer.self)
     case "shaar_submit":
-      return unsafeBitCast(fakeLifecycleABIMajor as @convention(c) () -> UInt32,
-                           to: UnsafeRawPointer.self)
+      return unsafeBitCast(
+        fakeLifecycleABIMajor as @convention(c) () -> UInt32,
+        to: UnsafeRawPointer.self)
     case "shaar_cancel_request":
-      return unsafeBitCast(fakeLifecycleABIMajor as @convention(c) () -> UInt32,
-                           to: UnsafeRawPointer.self)
+      return unsafeBitCast(
+        fakeLifecycleABIMajor as @convention(c) () -> UInt32,
+        to: UnsafeRawPointer.self)
     default: return nil
     }
   }
@@ -127,10 +133,14 @@ struct ShaarLifecycleRuntimeTests {
     try runtime.run()
     for _ in 0..<20 where delivered == nil { await Task.yield() }
     #expect(delivered?.sequence == 1)
-    #expect(String(decoding: delivered?.payloadJSON ?? Data(), as: UTF8.self)
-      == "{\"kind\":\"engine.ready\",\"schemaVersion\":1}")
-    #expect(throws: ShaarEngineError.status(.notReady, platformCode: 0,
-                                             message: "engine is not running")) {
+    #expect(
+      String(decoding: delivered?.payloadJSON ?? Data(), as: UTF8.self)
+        == "{\"kind\":\"engine.ready\",\"schemaVersion\":1}")
+    #expect(
+      throws: ShaarEngineError.status(
+        .notReady, platformCode: 0,
+        message: "engine is not running")
+    ) {
       try runtime.requestQuit()
     }
     runtime.release()

@@ -2,16 +2,37 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import("//testing/test.gni")
+
 assert(is_mac)
 
 source_set("engine") {
   public = [ "public/shaar_engine.h" ]
-  deps = [ "//base", "//content/public/browser", "//url" ]
+  deps = [
+    "//base",
+    "//content/public/browser",
+    "//net",
+    "//ui/base",
+    "//url",
+  ]
   sources = [
     "engine/shaar_engine.cc",
     "engine/shaar_event_bridge.cc",
     "engine/shaar_event_bridge.h",
+    "navigation/shaar_module_registry.h",
     "navigation/shaar_navigation.cc",
+    "navigation/shaar_navigation.h",
+  ]
+}
+
+test("navigation_unittests") {
+  sources = [ "navigation/shaar_navigation_unittest.cc" ]
+  deps = [
+    ":engine",
+    "//base",
+    "//content/public/browser",
+    "//testing/gtest",
+    "//testing/gtest:gtest_main",
   ]
 }
 

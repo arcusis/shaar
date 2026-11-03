@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import Foundation
+import ShaarEngineABIC
 import Testing
 
 @testable import ShaarEngineABI
@@ -26,6 +27,61 @@ private final class FakeNavigationEngine: ShaarNavigationSubmitting, @unchecked 
     lock.unlock()
     Task { completion(.success(Data("{}".utf8))) }
     return 77
+  }
+}
+
+private struct FakeHandleResolver: ShaarNavigationHandleResolving {
+  func resolve(
+    scope: ShaarNavigationScope, windowID: String, tabID: String
+  ) throws -> ShaarABINativeHandles {
+    let profile = OpaquePointer(bitPattern: 0x11)!
+    let window = OpaquePointer(bitPattern: 0x22)!
+    let tab = OpaquePointer(bitPattern: 0x33)!
+    let engine = OpaquePointer(bitPattern: 0x44)!
+    let nativeScope = shaar_scope(
+      size: UInt32(MemoryLayout<shaar_scope>.size), profile: profile, private_session: nil)
+    return ShaarABINativeHandles(
+      engine: engine, scope: nativeScope, window: window, tab: tab)
+  }
+}
+
+@_cdecl("fake_shaar_navigation_submit")
+private func fakeShaarNavigationSubmit(
+  _ engine: OpaquePointer?, _ scope: shaar_scope, _ window: OpaquePointer?, _ tab: OpaquePointer?,
+  _ operation: shaar_operation, _ args: shaar_bytes, _ requestID: UInt64,
+  _ reply: shaar_reply_fn?, _ replyContext: UnsafeMutableRawPointer?,
+  _ immediateError: UnsafeMutablePointer<shaar_error>?
+) -> shaar_error_code {
+  guard let reply, let replyContext else { return SHAAR_INVALID_ARGUMENT }
+  let replyContextAddress = UInt(bitPattern: replyContext)
+  DispatchQueue.global().async {
+    let replyContext = UnsafeMutableRawPointer(bitPattern: replyContextAddress)!
+    let response = Data("{\"schemaVersion\":1}".utf8)
+    response.withUnsafeBytes { rawBuffer in
+      let payload = rawBuffer.bindMemory(to: CChar.self)
+      var result = shaar_result(
+        size: UInt32(MemoryLayout<shaar_result>.size), request_id: requestID,
+        error: shaar_error(
+          size: UInt32(MemoryLayout<shaar_error>.size), code: SHAAR_OK,
+          platform_code: 0, message: shaar_bytes(data: nil, size: 0)),
+        payload_json: shaar_bytes(data: payload.baseAddress, size: payload.count))
+      reply(replyContext, &result)
+    }
+  }
+  return SHAAR_OK
+}
+
+private struct FakeNavigationSymbols: ShaarSymbolResolving {
+  func symbol(named: String) -> UnsafeRawPointer? {
+    guard named == "shaar_submit" else { return nil }
+    let function =
+      fakeShaarNavigationSubmit
+      as @convention(c) (
+        OpaquePointer?, shaar_scope, OpaquePointer?, OpaquePointer?, shaar_operation,
+        shaar_bytes, UInt64, shaar_reply_fn?, UnsafeMutableRawPointer?,
+        UnsafeMutablePointer<shaar_error>?
+      ) -> shaar_error_code
+    return unsafeBitCast(function, to: UnsafeRawPointer.self)
   }
 }
 
@@ -128,8 +184,39 @@ struct ShaarNavigationAdapterTests {
     #expect(throws: ShaarEngineError.self) { try ShaarNavigationSnapshot.decode(unknown) }
   }
 
+  @Test func snapshotPreservesTypedNavigationFailure() throws {
+    let raw = Data(
+      #"{"kind":"navigation","schemaVersion":1,"phase":"failed","navigationID":"nav-2","generation":2,"url":"https://example.test","title":null,"loading":false,"canGoBack":false,"canGoForward":false,"sameDocument":false,"failure":{"netError":-105,"isMainFrame":true,"descriptionCode":"navigation_failed"}}"#
+        .utf8)
+    let snapshot = try ShaarNavigationSnapshot.decode(raw)
+    #expect(
+      snapshot.failure
+        == .init(
+          netError: -105, isMainFrame: true, descriptionCode: "navigation_failed"))
+  }
+
   @Test func shippingChoiceRemainsOnArdiaUntilExplicitlySelected() {
     #expect(ShaarEngineImplementation.shippingDefault == .ardia)
     #expect(ShaarNavigationAdapter(transport: FakeNavigationEngine()) == nil)
+  }
+
+  @Test func concreteTransportCallsFakeABISymbolAndCopiesAsyncResult() async throws {
+    let transport = try ShaarNavigationABITransport(
+      resolver: FakeNavigationSymbols(), handleResolver: FakeHandleResolver())
+    let adapter = try #require(ShaarNavigationAdapter(implementation: .shaar, transport: transport))
+    let response = try await withCheckedThrowingContinuation {
+      (continuation: CheckedContinuation<Data, Error>) in
+      do {
+        _ = try adapter.submit(
+          .stop, scope: ShaarNavigationScope(profileID: "profile"), windowID: "window",
+          tabID: "tab"
+        ) { result in
+          continuation.resume(with: result.mapError { $0 as Error })
+        }
+      } catch {
+        continuation.resume(throwing: error)
+      }
+    }
+    #expect(String(decoding: response, as: UTF8.self) == "{\"schemaVersion\":1}")
   }
 }

@@ -136,9 +136,10 @@ private struct FrameworkSymbols: ShaarSymbolResolving {
   }
 }
 
-public struct ShaarEngineLoader {
+public struct ShaarEngineLoader: ShaarSymbolResolving {
   public static let abiMajor: UInt32 = 1
   public let implementation: ShaarEngineImplementation
+  private let resolver: any ShaarSymbolResolving
   private let abiMajorFunction: @convention(c) () -> UInt32
   public let createSymbol: UnsafeRawPointer
 
@@ -156,8 +157,13 @@ public struct ShaarEngineLoader {
       throw ShaarEngineError.unsupportedABI(expected: Self.abiMajor, actual: major)
     }
     self.implementation = implementation
+    self.resolver = resolver
     self.abiMajorFunction = unsafeBitCast(majorSymbol, to: (@convention(c) () -> UInt32).self)
     self.createSymbol = create
+  }
+
+  public func symbol(named: String) -> UnsafeRawPointer? {
+    resolver.symbol(named: named)
   }
 
   public func currentMajor() -> UInt32 { abiMajorFunction() }

@@ -36,7 +36,14 @@ let package = Package(
       cxxSettings: [.unsafeFlags(["-fobjc-arc"])],
       linkerSettings: [.linkedFramework("AppKit")]
     ),
-    .target(name: "ShaarEngineABI"),
+    .target(
+      name: "ShaarEngineABIC",
+      path: "Sources/ShaarEngineABI/navigation/CABI",
+      publicHeadersPath: "include"),
+    .target(
+      name: "ShaarEngineABI",
+      dependencies: ["ShaarEngineABIC"],
+      exclude: ["navigation/CABI"]),
     .target(
       name: "ChromiumBridgeVerification",
       dependencies: ["ChromiumBridge"],

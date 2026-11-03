@@ -32,6 +32,8 @@
 - [[Keyboard_Commands]]
 - [[Engine_Interop_Boundary]]
 - [[Engine_Source_Build]]
+- [[Engine_Ardia_Inventory]]
+- [[Engine_Shaar_Layer_Design]]
 - [[Quit_Exit_Verification]]
 - [[Arc_Settings_Design]]
 - [[Hebrew_Localization]]

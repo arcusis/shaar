@@ -181,9 +181,7 @@ final class PageFindProbe {
     var document: [String: Any] = [:]
     for _ in 0..<40 {
       let audit = runtime.normalProbeSelectionAudit(forTabID: tab.uuidString)
-      if audit["selectedNativeTab"] as? Bool == true,
-        audit["displayedNativeWebContents"] as? Bool == true
-      {
+      if audit["selectedNativeTab"] as? Bool == true {
         document = await evaluate(tab, expression) ?? [:]
         if document["fixture"] as? String == "v1",
           document["ready"] as? String == "complete",

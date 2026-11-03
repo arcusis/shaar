@@ -42,6 +42,9 @@ jobs:
     timeout-minutes: 90
     strategy:
       fail-fast: false
+      # Native Chromium fixtures are timing-sensitive and share hosted runner capacity. Keep
+      # baseline profile lifecycle checks isolated from concurrent private-window shards.
+      max-parallel: 1
       matrix:
         shard: ${{ fromJSON(needs.prepare.outputs.shards) }}
     steps:

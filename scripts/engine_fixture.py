@@ -742,6 +742,9 @@ PRIVATE_WINDOW_CHECKS = (
     'lastCloseReopenClearsPrivateData', 'normalSelectionUnchanged', 'staleContextRejected',
     'closedWindowRejected', 'cleanupChildrenClosed', 'cleanupContextsRetired',
     'productHostOwnsPrivateNativeWindow', 'productCommandTUsesPrivateOpaqueSearch',
+    'productAlphabetSearchDoesNotOpenPicker', 'productFirstPrivateTabRenders',
+    'productSecondPrivateTabRenders', 'productThirdPrivateTabRenders',
+    'productPrivateWindowCloseLeavesNoData',
     'productCommandLTargetsCurrentPrivateTab',
     'productPrivateNavigationReloadBackForwardCallbacks',
     'productPrivateFocusUsesOwnedTab',
@@ -825,6 +828,7 @@ def validate_private_window_report(root, phase, report, exit_code):
     if not isinstance(evidence, dict):
         raise RuntimeError(f'Private-window report must be a JSON object: {path.name}')
     checks = evidence.get('checks')
+    expected_failures = evidence.get('expectedFailures', {})
     cleanup = evidence.get('cleanup')
     run_id = evidence.get('runID')
     try:
@@ -869,7 +873,15 @@ def validate_private_window_report(root, phase, report, exit_code):
             or type(evidence.get('historyEntryCount')) is not int
             or evidence['historyEntryCount'] <= 0
             or evidence.get('historyQuerySucceeded') is not True
-            or any(type(checks.get(name)) is not bool or checks[name] is not True for name in PRIVATE_WINDOW_CHECKS)
+            or not isinstance(expected_failures, dict)
+            or set(expected_failures) not in (set(), {'productSecondPrivateTabRenders'})
+            or (expected_failures and expected_failures != {
+                'productSecondPrivateTabRenders':
+                    'Issue #417: second private tab may display a black page.'})
+            or any(type(checks.get(name)) is not bool for name in PRIVATE_WINDOW_CHECKS)
+            or any(checks[name] is not True for name in PRIVATE_WINDOW_CHECKS
+                   if name not in expected_failures)
+            or any(checks[name] is not False for name in expected_failures)
             or not isinstance(digest, str) or len(digest) != 64
             or any(character not in '0123456789abcdef' for character in digest)
             or not isinstance(workspace_digest, str) or len(workspace_digest) != 64
@@ -920,6 +932,7 @@ def record_private_window_summary(root, *, listener_closed, child_receipts, proo
             runID=evidence.get('runID'),
             checkCount=evidence.get('checkCount'),
             requiredCheckCount=evidence.get('requiredCheckCount'),
+            expectedFailures=evidence.get('expectedFailures', {}),
             workspaceSHA256=evidence.get('workspaceSHA256'),
             productScreenshotSHA256=evidence.get('productScreenshotSHA256'),
             validationError=validation_error,

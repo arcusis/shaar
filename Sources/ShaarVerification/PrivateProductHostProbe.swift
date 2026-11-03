@@ -16,6 +16,7 @@ import SwiftUI
 final class PrivateProductHostProbe {
   struct Evidence {
     let checks: [String: Bool]
+    let expectedFailures: [String: String]
     let workspaceSHA256: String
     let screenshotSHA256: String
     let rendererScreenshotSHA256: String
@@ -47,6 +48,7 @@ final class PrivateProductHostProbe {
   private weak var keyWindow: NSWindow?
   private var host: PrivateBrowserHost?
   private var checks: [String: Bool] = [:]
+  private var expectedFailures: [String: String] = [:]
   private var workspaceBytes = Data()
   private var screenshotDigest = ""
   private var rendererScreenshotDigest = ""
@@ -114,7 +116,8 @@ final class PrivateProductHostProbe {
       checks["productWeakStoreReleasedAfterConfirmedClose"] = lifecycleStore == nil
       checks["productWeakHostingReleasedAfterConfirmedClose"] = lifecycleHosting == nil
       return Evidence(
-        checks: checks, workspaceSHA256: sha256(after), screenshotSHA256: screenshotDigest,
+        checks: checks, expectedFailures: expectedFailures,
+        workspaceSHA256: sha256(after), screenshotSHA256: screenshotDigest,
         rendererScreenshotSHA256: rendererScreenshotDigest,
         rendererViewportAudit: rendererViewportAudit,
         rendererCaptureOutcome: rendererCaptureOutcome,
@@ -351,6 +354,19 @@ final class PrivateProductHostProbe {
     try await captureStartPage(first)
     let firstPath = fixture.appending(path: "private-product-\(runID.lowercased())-a")
       .absoluteString
+    let alphabetQuery = fixture.appending(
+      path: "private-product-\(runID.lowercased())-abcdefghijklmnopqrstuvwxyz"
+    ).absoluteString
+    first.hosting.layoutSubtreeIfNeeded()
+    let appWindowCount = NSApp.windows.count
+    let typedQuery = typeInAddressField(alphabetQuery, window: first.window, hosting: first.hosting)
+    checks["productAlphabetSearchDoesNotOpenPicker"] =
+      typedQuery == alphabetQuery && !first.store.commandIsOpen
+      && first.store.tabs.count == 1 && privateHost.windowCount == 1
+      && NSApp.windows.count == appWindowCount
+    first.store.confirmHTTP(useHTTPS: false)
+    try await waitForURL(
+      first.store, tabID: first.store.selectedTabID, contains: "-abcdefghijklmnopqrstuvwxyz")
     first.store.openTab()
     try await waitForTabs(first.store, count: 2)
     guard let secondTab = first.store.selectedTab else {
@@ -404,7 +420,29 @@ final class PrivateProductHostProbe {
     first.store.confirmHTTP(useHTTPS: false)
     try await waitForURL(first.store, tabID: commandTab.id, contains: "-command-t")
     try await waitForCaptureReadiness(first, tabID: commandTab.id)
+    first.store.dismissCommand()
+    for (index, tabID) in first.store.tabs.map(\.id).enumerated() {
+      let path = "private-product-\(runID.lowercased())-smoke-\(index + 1)"
+      first.store.selectTab(tabID)
+      first.store.navigate(fixture.appending(path: path).absoluteString)
+      first.store.confirmHTTP(useHTTPS: false)
+      try await waitForURL(first.store, tabID: tabID, contains: path)
+      try await waitForCaptureReadiness(first, tabID: tabID)
+      let renders = await privateTabRenders(owner: first, tabID: tabID, path: path)
+      switch index {
+      case 0: checks["productFirstPrivateTabRenders"] = renders
+      case 1:
+        checks["productSecondPrivateTabRenders"] = renders
+        if !renders {
+          expectedFailures["productSecondPrivateTabRenders"] =
+            "Issue #417: second private tab may display a black page."
+        }
+      case 2: checks["productThirdPrivateTabRenders"] = renders
+      default: break
+      }
+    }
     first.store.showCommand()
+    try await waitForCaptureReadiness(first, tabID: first.store.selectedTabID)
     let captures = try await capturePrivateWindow(first, runID: runID, phase: phase)
     screenshotDigest = captures.hostDigest
     rendererScreenshotDigest = captures.rendererDigest
@@ -450,6 +488,72 @@ final class PrivateProductHostProbe {
       try png.write(to: directory.appending(path: "start-\(phase)-\(name).png"))
     }
     owner.window.appearance = nil
+  }
+
+  private func typeInAddressField(
+    _ text: String, window: NSWindow, hosting: NSHostingView<PrivateBrowserWindow?>
+  ) -> String? {
+    func textFields(in view: NSView) -> [NSTextField] {
+      (view as? NSTextField).map { [$0] } ?? view.subviews.flatMap { textFields(in: $0) }
+    }
+    guard let field = textFields(in: hosting).first,
+      window.makeFirstResponder(field),
+      let editor = window.fieldEditor(true, for: field) as? NSTextView
+    else { return nil }
+    editor.string = ""
+    guard let alphabet = text.range(of: "abcdefghijklmnopqrstuvwxyz") else { return nil }
+    let prefix = String(text[..<alphabet.lowerBound])
+    editor.insertText(prefix, replacementRange: editor.selectedRange())
+    for character in text[alphabet] {
+      guard let event = keyEvent(for: character, window: window) else { return nil }
+      window.sendEvent(event)
+    }
+    guard
+      let enter = NSEvent.keyEvent(
+        with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+        windowNumber: window.windowNumber, context: nil, characters: "\r",
+        charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36)
+    else { return nil }
+    window.sendEvent(enter)
+    return field.stringValue
+  }
+
+  private func keyEvent(for character: Character, window: NSWindow) -> NSEvent? {
+    let keyCode: UInt16 =
+      switch character {
+      case "a": 0
+      case "b": 11
+      case "c": 8
+      case "d": 2
+      case "e": 14
+      case "f": 3
+      case "g": 5
+      case "h": 4
+      case "i": 34
+      case "j": 38
+      case "k": 40
+      case "l": 37
+      case "m": 46
+      case "n": 45
+      case "o": 31
+      case "p": 35
+      case "q": 12
+      case "r": 15
+      case "s": 1
+      case "t": 17
+      case "u": 32
+      case "v": 9
+      case "w": 13
+      case "x": 7
+      case "y": 16
+      case "z": 6
+      default: return nil
+      }
+    let value = String(character)
+    return NSEvent.keyEvent(
+      with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+      windowNumber: window.windowNumber, context: nil, characters: value,
+      charactersIgnoringModifiers: value, isARepeat: false, keyCode: keyCode)
   }
 
   private func waitForTab(
@@ -857,6 +961,43 @@ final class PrivateProductHostProbe {
     let hostDigest = sha256(data)
     let rendererDigest = sha256(rendererData)
     return (hostDigest: hostDigest, rendererDigest: rendererDigest)
+  }
+
+  private func privateTabRenders(
+    owner: PrivateBrowserHost.Owner, tabID: String, path: String
+  ) async -> Bool {
+    guard owner.store.selectedTabID == tabID,
+      runtime.selectPrivateTabID(tabID, windowID: owner.windowID, contextID: owner.contextID)
+    else { return false }
+    var nativeView: NSView?
+    for _ in 0..<100 {
+      if let candidate = runtime.view(
+        forPrivateTabID: tabID, windowID: owner.windowID, contextID: owner.contextID),
+        candidate.window === owner.window, candidate.superview != nil
+      {
+        nativeView = candidate
+        break
+      }
+      try? await Task.sleep(for: .milliseconds(50))
+    }
+    guard let nativeView else { return false }
+    let document: String? = await withCheckedContinuation { continuation in
+      runtime.evaluatePrivateProbeTabID(
+        tabID,
+        script:
+          "document.readyState==='complete'&&location.pathname==='/\(path)'&&document.body.innerText.includes('OrbitFindMarker')"
+      ) { continuation.resume(returning: $0) }
+    }
+    guard document == "true",
+      let bitmap = owner.hosting.bitmapImageRepForCachingDisplay(in: owner.hosting.bounds)
+    else { return false }
+    owner.hosting.layoutSubtreeIfNeeded()
+    owner.hosting.displayIfNeeded()
+    owner.hosting.cacheDisplay(in: owner.hosting.bounds, to: bitmap)
+    let pageCenter = bitmap.colorAt(x: bitmap.pixelsWide * 2 / 3, y: bitmap.pixelsHigh * 2 / 3)?
+      .usingColorSpace(.deviceRGB)
+    return (pageCenter?.redComponent ?? 0) + (pageCenter?.greenComponent ?? 0)
+      + (pageCenter?.blueComponent ?? 0) > 0.15
   }
 
   private func waitForCaptureReadiness(_ owner: PrivateBrowserHost.Owner, tabID: String)

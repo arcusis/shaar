@@ -822,7 +822,9 @@ final class BrowserStore {
     consentRequests.removeAll { $0.id == sheetID }
     if presentedConsentID == sheetID { presentedConsentID = nil }
     if presented { sheet = nil }
-    let valid = presented && capture.matches(session)
+    let valid =
+      presented
+      && capture.matches(session)
       && rendererFailures[capture.tabID] == nil
     onDesktopCaptureDecision?(id, valid ? sourceID : nil)
     presentNextConsent()

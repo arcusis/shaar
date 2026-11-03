@@ -25,7 +25,10 @@ struct DesktopCapturePicker: View {
     VStack(alignment: .leading, spacing: 16) {
       Text(PanelsL10n.string("Choose what to share"))
         .font(.title2.weight(.semibold))
-      Text(request.requestingOrigin.host() ?? request.pageURL.host() ?? request.pageURL.absoluteString)
+      Text(
+        request.requestingOrigin.host() ?? request.pageURL.host()
+          ?? request.pageURL.absoluteString
+      )
         .font(.callout).foregroundStyle(.secondary)
         .textSelection(.enabled)
       if loading {
@@ -79,14 +82,23 @@ struct DesktopCapturePicker: View {
         else { return nil }
         let owner = window.owningApplication?.applicationName ?? PanelsL10n.string("Window")
         let title = window.title?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let name = title?.isEmpty == false ? "\(owner) — \(title!)" : owner
+        let name: String
+        if let title, !title.isEmpty {
+          name = "\(owner) — \(title)"
+        } else {
+          name = owner
+        }
         return DesktopCaptureSource(id: "window:\(window.windowID):0", name: name, kind: .window)
       }
-      sources = content.displays.map {
-        let name = $0.displayID == CGMainDisplayID()
-          ? PanelsL10n.string("Main Display")
-          : PanelsL10n.format("Display %d", .integer(Int($0.displayID)))
-        return DesktopCaptureSource(id: "screen:\($0.displayID):0", name: name, kind: .display)
+      sources = content.displays.map { display in
+        let name: String
+        if display.displayID == CGMainDisplayID() {
+          name = PanelsL10n.string("Main Display")
+        } else {
+          name = PanelsL10n.format("Display %d", .integer(Int(display.displayID)))
+        }
+        return DesktopCaptureSource(
+          id: "screen:\(display.displayID):0", name: name, kind: .display)
       } + windows
     } catch {
       self.error = PanelsL10n.string(
@@ -96,8 +108,8 @@ struct DesktopCapturePicker: View {
   }
 }
 
-private extension DesktopCaptureSource {
-  var label: String {
+extension DesktopCaptureSource {
+  fileprivate var label: String {
     switch kind {
     case .display: PanelsL10n.format("Screen: %@", .string(name))
     case .window: PanelsL10n.format("Window: %@", .string(name))

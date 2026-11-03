@@ -9,7 +9,7 @@ struct SwitchProbeMetrics: Codable {
   static let expectedSwitchCount = 20
   static let latencyBudgetMilliseconds = 100.0
   static let measurementScope =
-    "Each phase records 20 same-profile Space switches and 20 cross-profile switches. Latency is Host-plus-IPC time from native store selection through verification that the selected native WebContents is displayed; each p95 must be at most 100 ms. Authored JavaScript snapshots separately verify account, document, and session continuity and are excluded from latency. Excludes physical paint, energy and real accounts. Resident memory measures the main browser process only, excluding renderer, GPU, and other helper processes."
+    "Each phase records 20 same-profile Space switches and 20 cross-profile switches. Latency is Host-plus-IPC time from native store selection through native selection acknowledgment; each p95 must be at most 100 ms. Displayed-WebContents audits and authored JavaScript snapshots separately verify presentation, account, document, and session continuity and are excluded from latency. Excludes physical paint, energy and real accounts. Resident memory measures the main browser process only, excluding renderer, GPU, and other helper processes."
 
   enum SwitchKind: String, Codable {
     case space

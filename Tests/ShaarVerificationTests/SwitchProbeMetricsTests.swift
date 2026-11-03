@@ -50,7 +50,7 @@ import Testing
     #expect(decoded.spaceSwitchLatency == report.spaceSwitchLatency)
     #expect(decoded.profileSwitchLatency == report.profileSwitchLatency)
     #expect(decoded.residentMemory == report.residentMemory)
-    #expect(decoded.measurementScope.contains("native WebContents is displayed"))
+    #expect(decoded.measurementScope.contains("native selection acknowledgment"))
     #expect(
       decoded.samples.allSatisfy {
         $0.latencyMilliseconds.isFinite && $0.latencyMilliseconds >= 0

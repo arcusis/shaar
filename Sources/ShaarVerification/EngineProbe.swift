@@ -558,12 +558,16 @@ final class EngineProbe {
           store.session.selectedSpace.selectedTabID?.uuidString == tab
             && store.session.selectedSpace.profileID.uuidString == profileA,
           "\(phase) Space switch \(iteration + 1) selects the correct native Space and profile")
-        try await waitForDisplayedNativeTab(
-          tab, "\(phase) Space switch \(iteration + 1) displays the selected native tab")
+        let nativeSelection = runtime.normalProbeSelectionAudit(forTabID: tab)
+        try expect(
+          nativeSelection["selectedNativeTab"] as? Bool == true,
+          "\(phase) Space switch \(iteration + 1) selects the native tab")
         try switchMetrics.record(
           kind: .space, iteration: iteration + 1,
           latencySeconds: ProcessInfo.processInfo.systemUptime - switchStart,
           residentMemoryBytes: NativeResidentMemory.currentBytes())
+        try await waitForDisplayedNativeTab(
+          tab, "\(phase) Space switch \(iteration + 1) displays the selected native tab")
         let state = try await snapshot(tab)
         let retainsAccountAndDocument =
           state["cookie"] as? String == "account=alpha"
@@ -592,12 +596,16 @@ final class EngineProbe {
           store.session.selectedSpace.selectedTabID?.uuidString == tab
             && store.session.selectedSpace.profileID.uuidString == (isA ? profileA : profileB),
           "\(phase) Profile switch \(iteration + 1) selects the correct Space and profile")
-        try await waitForDisplayedNativeTab(
-          tab, "\(phase) Profile switch \(iteration + 1) displays the selected native tab")
+        let nativeSelection = runtime.normalProbeSelectionAudit(forTabID: tab)
+        try expect(
+          nativeSelection["selectedNativeTab"] as? Bool == true,
+          "\(phase) Profile switch \(iteration + 1) selects the native tab")
         try switchMetrics.record(
           kind: .profile, iteration: iteration + 1,
           latencySeconds: ProcessInfo.processInfo.systemUptime - switchStart,
           residentMemoryBytes: NativeResidentMemory.currentBytes())
+        try await waitForDisplayedNativeTab(
+          tab, "\(phase) Profile switch \(iteration + 1) displays the selected native tab")
         let state = try await snapshot(tab)
         let original = isA ? firstA : firstB
         let retainsAccountAndDocument =

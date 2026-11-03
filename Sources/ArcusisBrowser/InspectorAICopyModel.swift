@@ -74,19 +74,23 @@ final class InspectorAICopyModel {
     }
     if includeDetails {
       // Keep the collected page diagnostics from changing while style collection awaits the engine.
-      let pageDiagnostics: (
-        consoleErrors: [String], networkErrors: [String], technologies: [String])
+      let pageDiagnostics:
+        (
+          consoleErrors: [String], networkErrors: [String], technologies: [String]
+        )
       if let tools = inspector.pageTools {
         pageDiagnostics = (
           tools.console.filter { ["error", "unhandledrejection"].contains($0.level) }
             .suffix(30).map(\.message),
           tools.requests.filter { $0.status >= 400 }.suffix(30)
             .map { "\($0.method) \($0.url) — status \($0.status)" },
-          tools.signals.map { $0.name + ($0.version.map { " \($0)" } ?? "") })
+          tools.signals.map { $0.name + ($0.version.map { " \($0)" } ?? "") }
+        )
       } else {
         pageDiagnostics = (
           ["Unavailable: Page diagnostics have not been enabled."],
-          ["Unavailable: Page diagnostics have not been enabled."], [])
+          ["Unavailable: Page diagnostics have not been enabled."], []
+        )
       }
       await inspector.styles.refresh(force: true)
       guard inspector.styles.selectedID == selection.id, inspector.styles.failure == nil else {

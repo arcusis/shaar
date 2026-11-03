@@ -35,6 +35,21 @@ import Testing
     }
   }
 
+  @Test func updateWaitResumesWhenACompletedSnapshotArrives() async throws {
+    let (inspector, _, tools) = makeModels()
+    defer {
+      tools.stop()
+      inspector.close()
+    }
+    let revision = tools.updateRevision
+    let waiter = Task { await tools.waitForUpdate(after: revision) }
+    await Task.yield()
+    try tools.receive(snapshot(), generation: inspector.documentGeneration)
+    await waiter.value
+    #expect(tools.updateRevision > revision)
+    #expect(tools.startedAt != nil)
+  }
+
   @Test func technologiesAndStorageValidateBoundedUntrustedData() throws {
     let (inspector, _, tools) = makeModels()
     defer {

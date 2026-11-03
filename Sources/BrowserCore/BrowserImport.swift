@@ -166,7 +166,7 @@ public enum BrowserImport {
       if let addressRange = Range(match.range(at: 2), in: html),
         let titleRange = Range(match.range(at: 3), in: html)
       {
-        let address = String(html[addressRange])
+        let address = htmlText(String(html[addressRange]))
         guard valid(address) else { continue }
         let title = htmlText(String(html[titleRange]))
         let folder = folderStack.isEmpty ? nil : folderStack.joined(separator: " / ")

@@ -36,6 +36,7 @@ let package = Package(
       cxxSettings: [.unsafeFlags(["-fobjc-arc"])],
       linkerSettings: [.linkedFramework("AppKit")]
     ),
+    .target(name: "ShaarEngineABI"),
     .target(
       name: "ShaarEngineABIC",
       path: "Sources/ShaarEngineABI/navigation/CABI",

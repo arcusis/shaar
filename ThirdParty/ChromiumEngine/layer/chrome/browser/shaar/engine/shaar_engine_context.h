@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_SHAAR_ENGINE_SHAAR_ENGINE_CONTEXT_H_
 
 #include <string_view>
+#include <unordered_map>
 
 #include "chrome/browser/shaar/public/shaar_engine.h"
 
@@ -27,6 +28,8 @@ class ProfileServices {
   virtual ~ProfileServices() = default;
   virtual Profile* ResolveProfile(shaar_engine* engine,
                                   shaar_profile* handle) = 0;
+  virtual std::string_view ProfileID(shaar_engine* engine,
+                                     shaar_profile* handle) = 0;
   virtual KeyedService* GetKeyedService(
       shaar_engine* engine,
       shaar_profile* handle,
@@ -43,6 +46,17 @@ class BrowserTabRegistry {
   virtual content::WebContents* FindWebContents(shaar_engine* engine,
                                                  shaar_window* window,
                                                  shaar_tab* tab) = 0;
+  virtual content::WebContents* FindWebContentsByID(
+      shaar_engine* engine,
+      shaar_window* window,
+      std::string_view tab_id) = 0;
+  virtual std::string_view TabID(shaar_engine* engine,
+                                 shaar_window* window,
+                                 shaar_tab* tab) = 0;
+  virtual void GetTabs(
+      shaar_engine* engine,
+      shaar_window* window,
+      std::unordered_map<std::string, content::WebContents*>* tabs) = 0;
 };
 
 struct ShaarEngineContext {

@@ -50,6 +50,9 @@ TEST(ShaarModuleRegistryTest, PassesProfileAndTabServicesThroughContext) {
     Profile* ResolveProfile(shaar_engine*, shaar_profile*) override {
       return reinterpret_cast<Profile*>(0x11);
     }
+    std::string_view ProfileID(shaar_engine*, shaar_profile*) override {
+      return "fake-profile";
+    }
     KeyedService* GetKeyedService(shaar_engine*, shaar_profile*,
                                   KeyedServiceLookup lookup) override {
       return lookup ? lookup(ResolveProfile(nullptr, nullptr)) : nullptr;
@@ -63,6 +66,19 @@ TEST(ShaarModuleRegistryTest, PassesProfileAndTabServicesThroughContext) {
     content::WebContents* FindWebContents(shaar_engine*, shaar_window*,
                                           shaar_tab*) override {
       return reinterpret_cast<content::WebContents*>(0x13);
+    }
+    content::WebContents* FindWebContentsByID(shaar_engine*, shaar_window*,
+                                               std::string_view) override {
+      return reinterpret_cast<content::WebContents*>(0x14);
+    }
+    std::string_view TabID(shaar_engine*, shaar_window*, shaar_tab*) override {
+      return "fake-tab";
+    }
+    void GetTabs(shaar_engine*, shaar_window*,
+                 std::unordered_map<std::string, content::WebContents*>* tabs)
+        override {
+      if (tabs)
+        tabs->emplace("fake-tab", reinterpret_cast<content::WebContents*>(0x15));
     }
   } tabs;
   shaar::ShaarEngineContext context{&profiles, &tabs};

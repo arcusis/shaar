@@ -19,8 +19,7 @@
 #define SHAAR_DECLARE_OPTIONAL_MODULE(name)                 \
   extern "C" void name(ShaarModuleRegistry*) __attribute__((weak_import))
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_profiles_register);
-SHAAR_DECLARE_OPTIONAL_MODULE(shaar_windows_register);
-SHAAR_DECLARE_OPTIONAL_MODULE(shaar_tabs_register);
+SHAAR_DECLARE_OPTIONAL_MODULE(shaar_windows_tabs_register);
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_navigation_register);
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_downloads_register);
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_bookmarks_register);
@@ -155,10 +154,8 @@ void RegisterLinkedModules(ShaarModuleRegistry* registry) {
     return;
   if (shaar_profiles_register)
     shaar_profiles_register(registry);
-  if (shaar_windows_register)
-    shaar_windows_register(registry);
-  if (shaar_tabs_register)
-    shaar_tabs_register(registry);
+  if (shaar_windows_tabs_register)
+    shaar_windows_tabs_register(registry);
   if (shaar_navigation_register)
     shaar_navigation_register(registry);
   if (shaar_downloads_register)

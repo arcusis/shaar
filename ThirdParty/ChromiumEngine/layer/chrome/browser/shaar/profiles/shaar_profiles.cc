@@ -74,6 +74,12 @@ class ProfileServicesImpl final : public shaar::ProfileServices {
     return handle->native;
   }
 
+  std::string_view ProfileID(shaar_engine* engine,
+                              shaar_profile* handle) override {
+    return ResolveProfile(engine, handle) ? std::string_view(handle->id)
+                                          : std::string_view();
+  }
+
   KeyedService* GetKeyedService(shaar_engine* engine,
                                 shaar_profile* handle,
                                 KeyedServiceLookup lookup) override {

@@ -40,6 +40,23 @@ struct TabSuspensionTests {
     #expect(runtime.evaluatedScripts[1].contains(",420"))
   }
 
+  @Test func restorePreservesNegativeRTLHorizontalScroll() throws {
+    let active = BrowserTab(url: URL(string: "https://active.example")!)
+    let inactive = BrowserTab(url: URL(string: "https://rtl.example")!)
+    let (store, engine, runtime) = try makeEngine(tabs: [active, inactive])
+    defer { engine.suspensionTask?.cancel() }
+    engine.liveTabs = Set([active.id, inactive.id])
+    runtime.evaluationResult = "{\"x\":-240,\"y\":420}"
+
+    let start = Date(timeIntervalSince1970: 1_800_000_000)
+    engine.suspendInactiveTabs(now: start)
+    engine.suspendInactiveTabs(now: start.addingTimeInterval(5 * 60 + 1))
+    engine.restoreSuspendedScrollPosition(for: inactive.id)
+
+    #expect(runtime.evaluatedScripts.last?.contains("scrollTo(-240") == true)
+    _ = store
+  }
+
   private func makeEngine(tabs: [BrowserTab]) throws -> (
     BrowserStore, BrowserEngine, SuspensionTestRuntime
   ) {
@@ -60,13 +77,14 @@ struct TabSuspensionTests {
 private final class SuspensionTestRuntime: ARCChromiumRuntime {
   nonisolated(unsafe) var evaluatedScripts: [String] = []
   nonisolated(unsafe) var discardedTabIDs: [String] = []
+  nonisolated(unsafe) var evaluationResult = "{\"x\":18,\"y\":420}"
 
   override func evaluate(
     inTabID tabID: String, script: String,
     completion: @escaping @Sendable (String?) -> Void
   ) {
     evaluatedScripts.append(script)
-    completion("{\"x\":18,\"y\":420}")
+    completion(evaluationResult)
   }
 
   override func discardTabID(_ tabID: String) {

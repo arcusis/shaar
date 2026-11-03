@@ -1956,13 +1956,19 @@ class Runner:
                                           bootstrap_name: str) -> list[str]:
         return [str(python), str(script), "--bootstrap-name", bootstrap_name]
 
+    @staticmethod
+    def built_framework_binary(out: pathlib.Path, version: str) -> pathlib.Path:
+        versions = out / "Chromium Framework.framework/Versions"
+        current = versions / "Current"
+        binary = versions / version / "Chromium Framework"
+        if (not current.is_symlink() or os.readlink(current) != version or
+                binary.is_symlink() or not binary.is_file()):
+            raise BuildError(f"built Chromium Framework binary missing for {version}")
+        return binary
+
     def collect_framework(self) -> None:
         out = self.output / "chromium_git/chromium/src/out/Release_GN_arm64"
-        candidates = list(out.glob("**/Chromium Framework.framework/Versions/A/Chromium Framework"))
-        candidates = [p for p in candidates if p.is_file() and not p.is_symlink()]
-        if len(candidates) != 1:
-            raise BuildError(f"expected one built Chromium Framework binary, found {len(candidates)}")
-        binary = candidates[0]
+        binary = self.built_framework_binary(out, self.config["chromium"]["version"])
         file_hashes = {}
         framework = binary.parents[2]
         for path in sorted(p for p in framework.rglob("*") if p.is_file() and not p.is_symlink()):

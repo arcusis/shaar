@@ -333,6 +333,18 @@ class SourceBuildTests(unittest.TestCase):
                 BUILD.Runner.adapt_build_priority_script(script)
                 self.assertEqual(script.read_text(), "exec autoninja -j 6 target\n")
 
+    def test_built_framework_binary_uses_pinned_version_layout(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            out = pathlib.Path(temporary)
+            versions = out / "Chromium Framework.framework/Versions"
+            binary = versions / "155.0.8059.84/Chromium Framework"
+            binary.parent.mkdir(parents=True)
+            binary.write_bytes(b"test")
+            (versions / "Current").symlink_to("155.0.8059.84")
+            self.assertEqual(BUILD.Runner.built_framework_binary(out, "155.0.8059.84"), binary)
+            with self.assertRaisesRegex(BUILD.BuildError, "binary missing"):
+                BUILD.Runner.built_framework_binary(out, "155.0.8059.85")
+
     def test_depot_tools_python_bootstrap_uses_resolved_pinned_cipd_and_exact_args(self):
         self.assertEqual(BUILD.Runner.depot_tools_python_ensure_args(
             pathlib.Path("depot_tools/cipd"), pathlib.Path("inputs/python.ensure"),

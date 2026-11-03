@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 import pathlib
+import subprocess
 import tempfile
 import time
 import unittest
@@ -223,7 +224,13 @@ class SourceBuildTests(unittest.TestCase):
             BUILD.Runner.adapt_symbol_level(script, 1)
             self.assertEqual(script.read_text(),
                              "_gn_args=(\n  use_thin_lto=true\n  symbol_level=1 blink_symbol_level=0 v8_symbol_level=0\n)\n")
-            self.assertNotIn("concurrent_links", script.read_text())
+            generated_args = subprocess.run(
+                ["/bin/bash", "-c", 'source "$1"; printf "%s\\n" "${_gn_args[@]}"',
+                 "bash", str(script)],
+                capture_output=True, text=True, check=True,
+            ).stdout.splitlines()
+            self.assertIn("use_thin_lto=true", generated_args)
+            self.assertFalse(any(arg.startswith("concurrent_links=") for arg in generated_args))
             with self.assertRaisesRegex(BUILD.BuildError, "anchor mismatch"):
                 BUILD.Runner.adapt_symbol_level(script, 1)
             with self.assertRaisesRegex(BUILD.BuildError, "unsupported symbol level"):

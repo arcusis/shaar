@@ -22,6 +22,18 @@ fixture = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fixture)
 
 
+class ProbeEnvironmentTests(unittest.TestCase):
+    def test_probe_environment_keeps_application_state_inside_transferred_root(self):
+        with tempfile.TemporaryDirectory(prefix='arcusis-engine-probe-') as directory:
+            root = Path(directory)
+            environment = fixture.probe_environment(root)
+            self.assertEqual(environment['HOME'], str(root / '.home'))
+            self.assertEqual(environment['ARDIA_TEST_PROBE_ROOT'], str(root))
+            self.assertEqual(environment['ARDIA_DOWNLOADS_DIR'], str(root / 'Downloads'))
+            self.assertEqual(environment['ARDIA_BACKGROUND'], 'picture-in-picture')
+            self.assertTrue((root / '.home').is_dir())
+
+
 class SavedTabCapacityRunnerTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory(prefix='arcusis-engine-probe-')

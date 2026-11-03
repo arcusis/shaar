@@ -56,6 +56,7 @@
   NSAssert(NSThread.isMainThread, @"Private probe creation requires the UI thread");
   ArdiaCoreProfile *source = _profiles[sourceProfileID];
   if (![self privateContextEnabled] || !ARCIsCanonicalID(contextID) || !ARCIsCanonicalID(sourceProfileID) ||
+      [_deletingProfileIDs containsObject:sourceProfileID] ||
       !source || source.destroyed || source.offTheRecord ||
       ![self privateIdentityIsAvailable:contextID]) {
     completion(NO, ARCBridgeError(@"Invalid private probe context or source profile."));

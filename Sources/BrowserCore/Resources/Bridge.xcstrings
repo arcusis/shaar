@@ -1,6 +1,11 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Site permissions could not be read for this profile.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לא ניתן לקרוא את הרשאות האתרים בפרופיל הזה."}}}},
+    "Third-party cookie controls are unavailable in this engine.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "בקרת קובצי Cookie של צד שלישי לא זמינה במנוע הזה."}}}},
+    "The cookie policy was not saved.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "מדיניות קובצי ה-Cookie לא נשמרה."}}}},
+    "Close private windows before deleting this profile.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "יש לסגור חלונות פרטיים לפני מחיקת הפרופיל הזה."}}}},
+    "The engine could not delete this profile.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "המנוע לא הצליח למחוק את הפרופיל הזה."}}}},
     "Downloads are still running" : { "localizations" : { "he" : { "stringUnit" : { "state" : "translated", "value" : "ההורדות עדיין פעילות" } } } },
     "Keep Browser Open" : { "localizations" : { "he" : { "stringUnit" : { "state" : "translated", "value" : "השארת הדפדפן פתוח" } } } },
     "Close and Cancel Downloads" : { "localizations" : { "he" : { "stringUnit" : { "state" : "translated", "value" : "סגירה וביטול ההורדות" } } } },

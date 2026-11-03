@@ -53,6 +53,7 @@ NSString *ARCValidatedProfileID(NSString *profileID);
   NSMutableDictionary<NSString *, id> *_windowCloseObservers;
   NSMutableSet<NSString *> *_retiredWindowIDs;
   NSMutableDictionary<NSString *, ArdiaCoreProfile *> *_profiles;
+  NSMutableSet<NSString *> *_deletingProfileIDs;
   NSMutableDictionary<NSString *, ArdiaCoreTab *> *_tabs;
   NSMutableDictionary<NSString *, ARCDevToolsPageView *> *_pageCards;
   NSMutableDictionary<NSString *, NSString *> *_inspectorLeases;

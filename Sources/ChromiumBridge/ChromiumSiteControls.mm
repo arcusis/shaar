@@ -21,6 +21,85 @@ static NSError *ARCServiceFailure(NSDictionary *result, NSString *message) {
 
 @implementation ARCChromiumRuntime (SiteControls)
 
+- (void)clearProfileSiteDataForProfileID:(NSString *)profileID completion:(void (^)(NSError *))completion {
+  [_services call:@"browsing_data.clear" profileID:profileID args:@{@"types": @[@"siteData"]} completion:^(NSDictionary *result) {
+    completion(ARCServiceFailure(result, @"Site data was not fully cleared."));
+  }];
+}
+
+- (void)sitePermissionOriginsForProfileID:(NSString *)profileID
+                             completion:(void (^)(NSArray<NSString *> *, NSError *))completion {
+  [_services call:@"site_settings.origins" profileID:profileID args:@{} completion:^(NSDictionary *result) {
+    NSArray *origins = result[@"origins"];
+    if (result[@"error"] || ![origins isKindOfClass:NSArray.class]) {
+      completion(nil, ARCBridgeError(@"Site permissions could not be read for this profile."));
+      return;
+    }
+    for (id origin in origins) {
+      if (!ARCIsSiteOrigin(origin)) {
+        completion(nil, ARCBridgeError(@"Site permissions could not be read for this profile."));
+        return;
+      }
+    }
+    completion(origins, nil);
+  }];
+}
+
+- (void)resetSitePermissionsForOrigin:(NSString *)origin profileID:(NSString *)profileID
+                          completion:(void (^)(NSError *))completion {
+  if (!ARCIsSiteOrigin(origin)) {
+    completion(ARCBridgeError(@"Invalid site setting."));
+    return;
+  }
+  [_services call:@"site_settings.reset" profileID:profileID args:@{@"origin": origin} completion:^(NSDictionary *result) {
+    completion(ARCServiceFailure(result, @"The site setting was not saved."));
+  }];
+}
+
+- (NSNumber *)thirdPartyCookiesBlockedForProfileID:(NSString *)profileID {
+  ArdiaCoreProfile *profile = _profiles[profileID];
+  if (!profile || profile.destroyed || profile.offTheRecord) return nil;
+  return [profile boolPreference:@"profile.block_third_party_cookies"];
+}
+
+- (void)setThirdPartyCookiesBlocked:(BOOL)blocked profileID:(NSString *)profileID
+                        completion:(void (^)(NSError *))completion {
+  if (![self thirdPartyCookiesBlockedForProfileID:profileID]) {
+    completion(ARCBridgeError(@"Third-party cookie controls are unavailable in this engine."));
+    return;
+  }
+  [_profiles[profileID] setBoolPreference:@"profile.block_third_party_cookies" value:blocked];
+  NSNumber *effective = [self thirdPartyCookiesBlockedForProfileID:profileID];
+  completion(effective && effective.boolValue == blocked ? nil : ARCBridgeError(@"The cookie policy was not saved."));
+}
+
+- (void)deleteEngineProfileID:(NSString *)profileID completion:(void (^)(NSError *))completion {
+  ArdiaCoreProfile *profile = _profiles[profileID];
+  if (!ARCIsCanonicalID(profileID) || !profile || profile.destroyed || profile.offTheRecord ||
+      [_deletingProfileIDs containsObject:profileID] || _privateProbeSourceLeases[profileID] ||
+      [_privateProbePendingContexts.allValues containsObject:profileID]) {
+    completion(ARCBridgeError(@"Close private windows before deleting this profile."));
+    return;
+  }
+  if (!_deletingProfileIDs) _deletingProfileIDs = [NSMutableSet set];
+  [_deletingProfileIDs addObject:profileID];
+  for (NSString *tabID in [_owners.allKeys copy]) {
+    if ([_owners[tabID] isEqualToString:profileID]) [self discardTabID:tabID];
+  }
+  [_extensionManagers[profileID] closeNow];
+  [_extensionManagers removeObjectForKey:profileID];
+  [_engine deleteProfile:profile completion:^(BOOL deleted) {
+    if (!deleted) {
+      [self->_deletingProfileIDs removeObject:profileID];
+      completion(ARCBridgeError(@"The engine could not delete this profile."));
+      return;
+    }
+    [self->_profiles removeObjectForKey:profileID];
+    [self->_services unbindProfileID:profileID];
+    completion(nil);
+  }];
+}
+
 /// The selected tab when it belongs to `profileID`; site controls never act on background tabs.
 - (ArdiaCoreTab *)siteControlTabForID:(NSString *)tabID profileID:(NSString *)profileID {
   ArdiaCoreTab *tab = _tabs[tabID];

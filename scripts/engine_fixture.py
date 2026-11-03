@@ -480,6 +480,15 @@ MEDIA_CLIP = Path(__file__).resolve().parent.parent / 'Tests/Fixtures/Media/seek
 class Fixture(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
+        if path == '/profile-privacy-cache':
+            body = str(time.time_ns()).encode('ascii')
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/plain')
+            self.send_header('Cache-Control', 'public, max-age=3600, immutable')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if path in ('/inspector-ai', '/inspector-ai/second'):
             self.html(b"""<!doctype html><html><meta charset="utf-8"><meta name="generator" content="Inspector AI fixture"><title>Inspector AI copy</title>
 <style>body{font:16px Arial;margin:24px;color:#172033;background:white}main{padding:20px;border:1px solid #ddd;width:340px}button{font:16px Arial;padding:10px;background:#2563eb;color:white}input,textarea,select{display:block;width:230px;height:32px;margin:12px 0}</style>

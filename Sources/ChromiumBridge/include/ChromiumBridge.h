@@ -249,6 +249,21 @@ FOUNDATION_EXPORT NSString *ARCBridgeLocalizedString(NSString *message);
 /// Site controls for the selected tab of a regular profile. Origins are http(s) origins; settings
 /// and site data are Chromium's own per-profile content settings and storage.
 @interface ARCChromiumRuntime (SiteControls)
+/// Profile-wide settings actions first load the exact normal profile, including unused profiles.
+- (void)clearProfileSiteDataForProfileID:(NSString *)profileID
+                    completion:(void (NS_SWIFT_UI_ACTOR ^)(NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
+/// Exact-origin exceptions exposed by the pinned engine; wildcard/policy rules are not enumerated.
+- (void)sitePermissionOriginsForProfileID:(NSString *)profileID
+                    completion:(void (NS_SWIFT_UI_ACTOR ^)(NSArray<NSString *> * _Nullable, NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
+- (void)resetSitePermissionsForOrigin:(NSString *)origin profileID:(NSString *)profileID
+                    completion:(void (NS_SWIFT_UI_ACTOR ^)(NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
+/// nil means the pinned host preference allowlist cannot read this policy.
+- (nullable NSNumber *)thirdPartyCookiesBlockedForProfileID:(NSString *)profileID;
+- (void)setThirdPartyCookiesBlocked:(BOOL)blocked profileID:(NSString *)profileID
+                    completion:(void (NS_SWIFT_UI_ACTOR ^)(NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
+/// Schedules Chromium's profile deletion. Completion does not prove on-disk erasure has finished.
+- (void)deleteEngineProfileID:(NSString *)profileID
+                    completion:(void (NS_SWIFT_UI_ACTOR ^)(NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
 /// Chromium's security summary for the selected tab: `level`, `origin` and, for HTTPS pages, a
 /// `certificate` summary with the leaf's `sha256` fingerprint.
 - (nullable NSDictionary<NSString *, id> *)securityInfoForTabID:(NSString *)tabID profileID:(NSString *)profileID;

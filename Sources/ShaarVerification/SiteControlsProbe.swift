@@ -58,7 +58,12 @@ final class SiteControlsProbe {
     try await checkAutoPictureInPicture(model)
     try await capture(model)
     try await checkActions(tab)
+    try await checkProfilePrivacy()
     try await removeFixtureSpace(returningTo: returnSpace)
+  }
+
+  private func checkProfilePrivacy() async throws {
+    checks += try await ProfilePrivacyProbe(runtime: engine.runtime, fixture: fixture).run()
   }
 
   /// Leaves no extra live tab behind, so the restart phase restores the same load it would

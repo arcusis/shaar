@@ -59,6 +59,12 @@ static void ServiceEvent(void *context, const char *topic, const char *json) {
     return nil;
   }
   _calls = calls;
+  // These services are exported by the pinned engine but were not required by older shells.
+  for (NSString *method in @[@"site_settings.origins", @"site_settings.reset"]) {
+    NSString *symbol = [@"ac_" stringByAppendingString:[method stringByReplacingOccurrencesOfString:@"." withString:@"_"]];
+    void *address = dlsym(library, symbol.UTF8String);
+    if (address) calls[method] = [NSValue valueWithPointer:address];
+  }
   _paths = [NSMutableDictionary dictionary];
   _profilesByPath = [NSMutableDictionary dictionary];
   return self;
@@ -101,6 +107,12 @@ static void ServiceEvent(void *context, const char *topic, const char *json) {
     return;
   }
   call(path.UTF8String, json.UTF8String, ServiceReply, (__bridge_retained void *)[completion copy]);
+}
+
+- (void)unbindProfileID:(NSString *)profileID {
+  NSString *path = _paths[profileID];
+  if (path) [_profilesByPath removeObjectForKey:path];
+  [_paths removeObjectForKey:profileID];
 }
 
 - (void)receiveTopic:(NSString *)topic payload:(NSDictionary *)payload {

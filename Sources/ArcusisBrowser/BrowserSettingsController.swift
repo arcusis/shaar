@@ -9,10 +9,12 @@ import Observation
 import SwiftUI
 
 @MainActor @Observable
-private final class BrowserSettingsState {
+final class BrowserSettingsState {
   let workspace: BrowserWorkspaceStore
   let preferences: BrowserPreferencesStore
   let runtime: ARCChromiumRuntime?
+  let profileBackend: (any ProfileSettingsBackend)?
+  private(set) var deletingProfileID: UUID?
   private(set) var selectedProfileID: UUID?
   private var didPresent = false
   var onOpenSpace: (UUID) -> Void = { _ in }
@@ -23,11 +25,12 @@ private final class BrowserSettingsState {
 
   init(
     workspace: BrowserWorkspaceStore, preferences: BrowserPreferencesStore,
-    runtime: ARCChromiumRuntime? = nil
+    runtime: ARCChromiumRuntime? = nil, profileBackend: (any ProfileSettingsBackend)? = nil
   ) {
     self.workspace = workspace
     self.preferences = preferences
     self.runtime = runtime
+    self.profileBackend = profileBackend ?? runtime.map { EngineProfileSettings(runtime: $0) }
   }
 
   var profiles: [BrowserSettingsProfile] {
@@ -170,12 +173,26 @@ private final class BrowserSettingsState {
     } catch { return false }
   }
 
-  func deleteProfile(_ id: UUID, movingSpacesTo destinationID: UUID) -> Bool {
-    do {
-      try workspace.deleteProfile(id, movingSpacesTo: destinationID)
-      if selectedProfileID == id { _ = selectProfile(destinationID) }
-      return true
-    } catch { return false }
+  func deleteProfile(_ id: UUID, movingSpacesTo destinationID: UUID?) async throws {
+    guard deletingProfileID == nil, let profileBackend else {
+      throw CocoaError(.featureUnsupported)
+    }
+    deletingProfileID = id
+    defer { deletingProfileID = nil }
+    // Validate before touching engine data; revalidate after loading an unused profile.
+    var draft = workspace.workspace
+    try draft.deleteProfile(id, movingSpacesTo: destinationID)
+    try preferences.validateProfileRemoval()
+    try await profileBackend.loadProfile(id)
+    draft = workspace.workspace
+    try draft.deleteProfile(id, movingSpacesTo: destinationID)
+    try await profileBackend.deleteProfile(id)
+    try workspace.deleteProfile(id, movingSpacesTo: destinationID)
+    if selectedProfileID == id {
+      _ = selectProfile(destinationID ?? workspace.workspace.catalog.profiles.first?.id)
+    }
+    try preferences.removeProfile(id)
+    try workspace.flushSaves()
   }
 
 }
@@ -200,12 +217,13 @@ private struct BrowserSettingsRoot: View {
       onSetProfileSymbol: { state.setProfileSymbol($0, to: $1) },
       onChooseDownloadDirectory: { state.chooseDownloadDirectory(for: $0) },
       onResetDownloadDirectory: { state.resetDownloadDirectory(for: $0) },
-      onDeleteProfile: { state.deleteProfile($0, movingSpacesTo: $1) },
+      onDeleteProfile: { try await state.deleteProfile($0, movingSpacesTo: $1) },
       onOpenSpace: state.onOpenSpace,
       onConnectAccount: state.onConnectAccount,
       onDisconnectAccount: state.onDisconnectAccount,
       extensionManager: state.extensionManager(for:),
       onAddExtensions: { state.openExtensions(for: $0) },
+      profileBackend: state.profileBackend,
       clearHistory: state.runtime.map { runtime in
         { profileID in try await SettingsHistory.clear(runtime: runtime, profileID: profileID) }
       })

@@ -104,7 +104,7 @@ final class BrowserWorkspaceStore {
     return true
   }
 
-  func deleteProfile(_ id: UUID, movingSpacesTo destinationID: UUID) throws {
+  func deleteProfile(_ id: UUID, movingSpacesTo destinationID: UUID?) throws {
     try workspace.deleteProfile(id, movingSpacesTo: destinationID)
     saveAndBroadcast()
   }

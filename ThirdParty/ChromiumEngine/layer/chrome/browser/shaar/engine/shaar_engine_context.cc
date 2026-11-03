@@ -20,4 +20,10 @@ void SetProfileServices(ProfileServices* services) {
 void SetBrowserTabRegistry(BrowserTabRegistry* registry) {
   g_context.browser_tabs = registry;
 }
+
+// BEGIN devtools
+void SetDevToolsTargetScopeResolver(DevToolsTargetScopeResolver* resolver) {
+  g_context.devtools_scope = resolver;
+}
+// END devtools
 }  // namespace shaar

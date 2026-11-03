@@ -59,14 +59,34 @@ class BrowserTabRegistry {
       std::unordered_map<std::string, content::WebContents*>* tabs) = 0;
 };
 
+// BEGIN devtools
+// The tab registry resolves window/tab handles, while this service confirms
+// that the supplied profile or private-session scope owns that exact target.
+class DevToolsTargetScopeResolver {
+ public:
+  virtual ~DevToolsTargetScopeResolver() = default;
+  virtual bool OwnsTarget(shaar_engine* engine,
+                          shaar_scope scope,
+                          shaar_window* window,
+                          shaar_tab* tab,
+                          content::WebContents* contents) = 0;
+};
+// END devtools
+
 struct ShaarEngineContext {
   ProfileServices* profile_services = nullptr;
   BrowserTabRegistry* browser_tabs = nullptr;
+  // BEGIN devtools
+  DevToolsTargetScopeResolver* devtools_scope = nullptr;
+  // END devtools
 };
 
 ShaarEngineContext& EngineContext();
 void SetProfileServices(ProfileServices* services);
 void SetBrowserTabRegistry(BrowserTabRegistry* registry);
+// BEGIN devtools
+void SetDevToolsTargetScopeResolver(DevToolsTargetScopeResolver* resolver);
+// END devtools
 
 }  // namespace shaar
 

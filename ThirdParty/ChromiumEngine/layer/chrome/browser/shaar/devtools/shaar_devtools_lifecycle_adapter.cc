@@ -1,0 +1,20 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+#include "chrome/browser/shaar/devtools/shaar_devtools.h"
+
+extern "C" void shaar_devtools_register(ShaarModuleRegistry* registry) {
+  if (!registry)
+    return;
+  static const shaar::devtools::ModuleHandlers handlers{
+      .handle_operation = &shaar::devtools::HandleDevToolsOperation};
+  registry->RegisterModule(SHAAR_MODULE_DEVTOOLS, &handlers);
+  registry->Register(SHAAR_OP_DEVTOOLS_CALL, SHAAR_OP_DEVTOOLS_CALL,
+                     &shaar::devtools::HandleDevToolsOperation);
+  registry->Register(SHAAR_OP_DEVTOOLS_UI_SHOW, SHAAR_OP_DEVTOOLS_UI_STATE,
+                     &shaar::devtools::HandleDevToolsOperation);
+  registry->Register(SHAAR_OP_DEVTOOLS_UI_SET_DOCK,
+                     SHAAR_OP_DEVTOOLS_CONTROL_STATUS,
+                     &shaar::devtools::HandleDevToolsOperation);
+}

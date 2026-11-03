@@ -60,6 +60,11 @@ source_set("engine") {
     "history/shaar_history.h",
     "history/shaar_history_lifecycle_adapter.cc",
     # END Shaar history module.
+    # BEGIN devtools
+    "devtools/shaar_devtools.cc",
+    "devtools/shaar_devtools.h",
+    "devtools/shaar_devtools_lifecycle_adapter.cc",
+    # END devtools
   ]
   deps = [
     "//base",
@@ -67,6 +72,9 @@ source_set("engine") {
     "//chrome/browser:browser",
     "//chrome/browser:main_extra_parts",
     "//chrome/browser:chrome_content_browser_client",
+    # BEGIN devtools
+    "//chrome/browser/devtools",
+    # END devtools
     "//chrome/browser:lifetime",
     "//chrome/browser/profiles",
     "//chrome/browser/history:impl",
@@ -132,6 +140,13 @@ test("history_unittests") {
   deps = [ ":engine", "//base/test:test_support",
            "//components/history/core/browser", "//testing/gtest" ]
 }
+
+# BEGIN devtools
+test("devtools_unittests") {
+  sources = [ "devtools/shaar_devtools_unittest.cc" ]
+  deps = [ ":engine", "//testing/gtest" ]
+}
+# END devtools
 
 config("exports") {
   inputs = [ "shaar_engine.exports" ]

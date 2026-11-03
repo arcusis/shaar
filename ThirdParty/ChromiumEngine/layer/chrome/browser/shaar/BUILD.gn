@@ -39,6 +39,12 @@ source_set("engine") {
     "windows_tabs/shaar_windows_tabs_handlers.h",
     "windows_tabs/shaar_windows_tabs_lifecycle_adapter.cc",
     # END Shaar windows-tabs module.
+    # BEGIN Shaar navigation module.
+    "navigation/shaar_navigation_context.h",
+    "navigation/shaar_navigation.cc",
+    "navigation/shaar_navigation.h",
+    "navigation/shaar_navigation_lifecycle_adapter.cc",
+    # END Shaar navigation module.
   ]
   deps = [
     "//base",
@@ -76,6 +82,11 @@ test("profiles_unittests") {
 test("windows_tabs_unittests") {
   sources = [ "windows_tabs/shaar_windows_tabs_handlers_unittest.cc" ]
   deps = [ ":engine", "//testing/gtest" ]
+}
+
+test("navigation_unittests") {
+  sources = [ "navigation/shaar_navigation_unittest.cc" ]
+  deps = [ ":engine", "//testing/gtest", "//testing/gtest:gtest_main" ]
 }
 
 config("exports") {

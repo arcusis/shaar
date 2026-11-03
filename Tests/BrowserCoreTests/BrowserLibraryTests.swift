@@ -133,3 +133,105 @@ private func bookmarkPayload(children: [[String: Any]]) -> [String: Any] {
   #expect(LibraryDataError.invalidBookmarks.errorDescription?.contains("bookmark") == true)
   #expect(LibraryDataError.invalidHistory.errorDescription?.contains("history") == true)
 }
+
+@Test func browserImportReadsChromiumAndFirefoxBookmarksAndBuildsNestedOperations() throws {
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  let chrome = directory.appendingPathComponent("Bookmarks.json")
+  let chromeData = try JSONSerialization.data(withJSONObject: [
+    "roots": [
+      "bookmark_bar": [
+        "children": [
+          [
+            "type": "folder", "name": "Work",
+            "children": [
+              ["type": "url", "name": "Portal", "url": "https://work.example.com"]
+            ],
+          ]
+        ]
+      ]
+    ]
+  ])
+  try chromeData.write(to: chrome)
+  let chromiumItems = try BrowserImport.read(chrome)
+  #expect(chromiumItems.count == 1)
+  #expect(chromiumItems[0].folder == "Work")
+
+  let firefox = directory.appendingPathComponent("Bookmarks.html")
+  try #"<DL><DT><H3>Personal</H3><DL><DT><A HREF="https://home.example.com">Home</A></DL></DL>"#
+    .write(
+      to: firefox, atomically: true, encoding: .utf8)
+  let firefoxItems = try BrowserImport.read(firefox)
+  #expect(firefoxItems.map(\.address) == ["https://home.example.com"])
+
+  let rootID = UUID()
+  let operations = BrowserImport.operations(
+    for: chromiumItems + firefoxItems, otherFolderID: rootID)
+  #expect(operations.count == 3)
+  #expect(operations[0]["t"] as? String == "Work")
+  #expect(operations[0]["parent"] as? String == rootID.uuidString.lowercased())
+  #expect(operations[1]["parent"] as? String == operations[0]["id"] as? String)
+}
+
+@Test func browserImportReadsSafariPlistsAndFirefoxJSONAndRejectsUnsupportedFiles() throws {
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  let safari = directory.appendingPathComponent("Bookmarks.plist")
+  let plist: [String: Any] = [
+    "Children": [
+      [
+        "Title": "Safari", "URLString": "https://safari.example.com",
+      ]
+    ]
+  ]
+  try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0).write(
+    to: safari)
+  #expect(try BrowserImport.read(safari).map(\.title) == ["Safari"])
+
+  let firefoxJSON = directory.appendingPathComponent("Firefox.json")
+  try JSONSerialization.data(withJSONObject: [
+    "type": "text/x-moz-place-container", "title": "Root",
+    "children": [
+      ["type": "text/x-moz-place", "title": "Firefox", "uri": "https://firefox.example.com"]
+    ],
+  ]).write(to: firefoxJSON)
+  #expect(try BrowserImport.read(firefoxJSON).map(\.address) == ["https://firefox.example.com"])
+
+  let unsupported = directory.appendingPathComponent("History.sqlite")
+  try Data("not a supported bookmark export".utf8).write(to: unsupported)
+  #expect(throws: BrowserImport.ImportError.self) { try BrowserImport.read(unsupported) }
+}
+
+@MainActor
+@Test func browserImportBatchAppliesInOrderAndStopsAfterAnError() {
+  let operations: [[String: Any]] = [["id": "first"], ["id": "second"], ["id": "third"]]
+  var applied: [String] = []
+  var result: Error?
+  BrowserImport.apply(
+    operations,
+    using: { operation, done in
+      applied.append(operation["id"] as? String ?? "")
+      done(nil)
+    }, completion: { result = $0 })
+  #expect(applied == ["first", "second", "third"] && result == nil)
+
+  let failure = NSError(domain: "test", code: 1)
+  applied = []
+  BrowserImport.apply(
+    operations,
+    using: { operation, done in
+      applied.append(operation["id"] as? String ?? "")
+      done(applied.count == 2 ? failure : nil)
+    }, completion: { result = $0 })
+  #expect(applied == ["first", "second"] && (result as NSError?) == failure)
+
+  applied = []
+  BrowserImport.apply(
+    [],
+    using: { operation, _ in
+      applied.append(operation["id"] as? String ?? "")
+    }, completion: { result = $0 })
+  #expect(applied.isEmpty && result == nil)
+}

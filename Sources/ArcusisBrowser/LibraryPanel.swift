@@ -166,46 +166,16 @@ struct LibraryPanel: View {
   }
 
   private var importPreviewSheet: some View {
-    VStack(alignment: .leading, spacing: 14) {
-      Text(PanelsL10n.string("Import from another browser")).font(.title2.weight(.semibold))
-      if let importError {
-        Text(importError).foregroundStyle(.secondary)
-      } else {
-        Text(
-          PanelsL10n.format(
-            "%d bookmarks are ready to import into %@.", .integer(importPreview.count),
-            .string(store.profileName)))
-        List(importPreview.prefix(40)) { item in
-          VStack(alignment: .leading) {
-            Text(item.title).lineLimit(1)
-            Text(item.address).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-          }
-        }
-        Text(
-          PanelsL10n.string(
-            "History import requires an engine feature that is not available in this build.")
-        )
-        .font(.caption).foregroundStyle(.secondary)
-      }
-      HStack {
-        Spacer()
-        Button(PanelsL10n.string("Cancel")) { showingImportPreview = false }
-        if importError == nil {
-          Button(PanelsL10n.string("Import Bookmarks")) { applyImport() }
-            .keyboardShortcut(.defaultAction)
-            .disabled(importPreview.isEmpty || busy || loading)
-        }
-      }
-    }
-    .padding(24).frame(width: 520, height: 440)
+    BrowserImportPreviewView(
+      items: importPreview, profileName: store.profileName, error: importError,
+      canImport: !importPreview.isEmpty && !busy && !loading,
+      onCancel: { showingImportPreview = false }, onImport: applyImport)
   }
 
   private func applyImport() {
     guard ownsContext, let tree, !importPreview.isEmpty else { return }
-    let operations = BrowserImport.operations(for: importPreview, otherFolderID: tree.otherID)
-    guard !operations.isEmpty else { return }
-    store.library.mutate(
-      .bookmarks(operations), profile: profileID,
+    store.library.importBookmarks(
+      importPreview, profile: profileID, otherFolderID: tree.otherID,
       completion: { success in
         if success { showingImportPreview = false }
       })

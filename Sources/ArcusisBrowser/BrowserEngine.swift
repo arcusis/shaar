@@ -763,19 +763,16 @@ final class BrowserEngine {
     _ operations: [[String: Any]], profileID: UUID,
     completion: @escaping @MainActor (Error?) -> Void
   ) {
-    guard let first = operations.first else {
-      completion(nil)
-      return
-    }
-    events.applyBookmarkOperation(first, profileID: profileID.uuidString) { [weak self] error in
-      guard let self else { return }
-      if let error {
-        completion(error)
-      } else {
-        self.applyImportedBookmarks(
-          Array(operations.dropFirst()), profileID: profileID, completion: completion)
-      }
-    }
+    BrowserImport.apply(
+      operations,
+      using: { [weak self] operation, done in
+        guard let self else {
+          done(LibraryDataError.invalidBookmarks)
+          return
+        }
+        self.events.applyBookmarkOperation(
+          operation, profileID: profileID.uuidString, completion: done)
+      }, completion: completion)
   }
 
   static func externalAppRequest(

@@ -11,6 +11,16 @@ public struct BrowserImportItem: Identifiable, Equatable, Sendable {
   public let title: String
   public let address: String
   public let folder: String?
+
+  public init(
+    id: UUID = UUID(), kind: Kind = .bookmark, title: String, address: String, folder: String? = nil
+  ) {
+    self.id = id
+    self.kind = kind
+    self.title = title
+    self.address = address
+    self.folder = folder
+  }
 }
 
 /// Reads browser export files without opening the source browser's profile database.
@@ -72,6 +82,29 @@ public enum BrowserImport {
       ])
     }
     return operations
+  }
+
+  @MainActor
+  public static func apply(
+    _ operations: [[String: Any]],
+    using applyOperation:
+      @escaping @MainActor (
+        [String: Any], @escaping @MainActor (Error?) -> Void
+      ) -> Void,
+    completion: @escaping @MainActor (Error?) -> Void
+  ) {
+    guard let first = operations.first else {
+      completion(nil)
+      return
+    }
+    applyOperation(first) { error in
+      guard error == nil else {
+        completion(error)
+        return
+      }
+      apply(
+        Array(operations.dropFirst()), using: applyOperation, completion: completion)
+    }
   }
 
   private static func chromium(_ roots: [String: Any]) -> [BrowserImportItem] {
@@ -155,9 +188,9 @@ public enum BrowserImport {
     LibraryAddress.destination(value) != nil
   }
 
-  enum ImportError: Error, LocalizedError {
+  public enum ImportError: Error, LocalizedError {
     case unsupported
-    var errorDescription: String? {
+    public var errorDescription: String? {
       "Choose a Safari Bookmarks.plist, a Chrome or Arc Bookmarks file, or an exported Firefox bookmarks HTML or JSON file."
     }
   }

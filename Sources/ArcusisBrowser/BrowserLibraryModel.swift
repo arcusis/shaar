@@ -120,6 +120,16 @@ final class BrowserLibraryModel {
   }
 
   @discardableResult
+  func importBookmarks(
+    _ items: [BrowserImportItem], profile: UUID, otherFolderID: UUID,
+    completion: @escaping @MainActor (Bool) -> Void
+  ) -> Bool {
+    let operations = BrowserImport.operations(for: items, otherFolderID: otherFolderID)
+    guard !operations.isEmpty else { return false }
+    return mutate(.bookmarks(operations), profile: profile, completion: completion)
+  }
+
+  @discardableResult
   func mutate(
     _ mutation: LibraryMutation, profile: UUID, completion: @escaping @MainActor (Bool) -> Void
   )

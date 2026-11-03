@@ -134,24 +134,16 @@ final class ProfileOnboardingProbe {
     }
     defer { host.events.onNewTabWillAdopt = previous }
     let token = UUID().uuidString
+    _ = await value(
+      tab,
+      "(()=>{document.cookie='shaarOnboarding=\(token);path=/';window.fixtureReply=null;window.addEventListener('message',e=>{if(e.source===window.fixturePopup&&e.origin===location.origin)window.fixtureReply=e.data});return {};})()"
+    )
     let address = String(data: try JSONEncoder().encode(fixture.absoluteString), encoding: .utf8)!
-    // Install the opener listener in the same renderer task as window.open. A separate evaluate
-    // could fail to install it while the later user-gesture evaluation still opened the popup.
     let reply: String? = await withCheckedContinuation { continuation in
       runtime.evaluateProbeUserGesture(
         inTabID: tab.uuidString,
-        script: """
-          (()=>{
-            document.cookie='shaarOnboarding=\(token);path=/';
-            window.fixtureReply=null;
-            window.addEventListener('message',e=>{
-              if(e.source===window.fixturePopup&&e.origin===location.origin)
-                window.fixtureReply=e.data;
-            });
-            window.fixturePopup=window.open(\(address),'_blank','popup,width=520,height=680');
-            return !!window.fixturePopup;
-          })()
-          """
+        script:
+          "(()=>{window.fixturePopup=window.open(\(address),'_blank','popup,width=520,height=680');return !!window.fixturePopup;})()"
       ) {
         continuation.resume(returning: $0)
       }

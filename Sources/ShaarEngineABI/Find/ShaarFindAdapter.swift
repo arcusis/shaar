@@ -40,24 +40,27 @@ public struct ShaarFindUpdate: Equatable, Sendable {
     _ request: ShaarFindRequest,
     completion: @escaping @MainActor (Result<Data, Error>) -> Void
   )
+  func setEventHandler(_ handler: @escaping @MainActor (ShaarCopiedEvent) -> Void)
 }
 
 @MainActor public protocol ArdiaFindBackend {
   func find(
     query: String, forward: Bool,
+    profileID: String, tabID: String, requestToken: String,
     completion: @escaping @MainActor (Result<Void, Error>) -> Void
   )
   func stop(
-    clearSelection: Bool,
+    clearSelection: Bool, profileID: String, tabID: String,
     completion: @escaping @MainActor (Result<Void, Error>) -> Void
   )
 }
 
 @MainActor public final class ShaarFindAdapter {
-  private let implementation: ShaarEngineImplementation
+  private static var nextEngineRequestID: UInt64 = 1
+  public let implementation: ShaarEngineImplementation
+  public var onEvent: (@MainActor (ShaarCopiedEvent) -> Void)?
   private let ardia: any ArdiaFindBackend
   private let shaar: any ShaarFindTransport
-  private var nextRequestID: UInt64 = 1
 
   public init(
     implementation: ShaarEngineImplementation = .shippingDefault,
@@ -67,14 +70,19 @@ public struct ShaarFindUpdate: Equatable, Sendable {
     self.implementation = implementation
     self.ardia = ardia
     self.shaar = shaar
+    shaar.setEventHandler { [weak self] event in self?.onEvent?(event) }
   }
 
   @discardableResult public func find(
     query: String, forward: Bool, scope: ShaarFindScope, windowID: String,
-    tabID: String, completion: @escaping @MainActor (Result<UInt64, Error>) -> Void
+    tabID: String, requestToken: String = "",
+    completion: @escaping @MainActor (Result<UInt64, Error>) -> Void
   ) -> UInt64? {
     guard implementation == .shaar else {
-      ardia.find(query: query, forward: forward) { result in
+      ardia.find(
+        query: query, forward: forward, profileID: scope.profileID,
+        tabID: tabID, requestToken: requestToken
+      ) { result in
         completion(result.map { 0 })
       }
       return nil
@@ -94,7 +102,9 @@ public struct ShaarFindUpdate: Equatable, Sendable {
     completion: @escaping @MainActor (Result<Void, Error>) -> Void
   ) -> UInt64? {
     guard implementation == .shaar else {
-      ardia.stop(clearSelection: clearSelection, completion: completion)
+      ardia.stop(
+        clearSelection: clearSelection, profileID: scope.profileID, tabID: tabID,
+        completion: completion)
       return nil
     }
     let requestID = allocateRequestID()
@@ -108,11 +118,12 @@ public struct ShaarFindUpdate: Equatable, Sendable {
   /// Decodes an event only when its exact ownership and caller token match.
   public func decode(
     _ event: ShaarCopiedEvent, expectedScope: ShaarFindScope,
-    expectedTabID: String, expectedRequestID: UInt64
+    expectedWindowID: String, expectedTabID: String, expectedRequestID: UInt64
   ) -> ShaarFindUpdate? {
     guard event.kind == 7,
       String(decoding: event.profileID, as: UTF8.self) == expectedScope.profileID,
       String(decoding: event.sessionID, as: UTF8.self) == (expectedScope.sessionID ?? ""),
+      String(decoding: event.windowID, as: UTF8.self) == expectedWindowID,
       String(decoding: event.tabID, as: UTF8.self) == expectedTabID,
       let object = try? JSONSerialization.jsonObject(with: event.payloadJSON) as? [String: Any],
       object["kind"] as? String == "result",
@@ -129,14 +140,15 @@ public struct ShaarFindUpdate: Equatable, Sendable {
   }
 
   private func allocateRequestID() -> UInt64 {
-    let value = nextRequestID
-    nextRequestID &+= 1
-    if nextRequestID == 0 { nextRequestID = 1 }
+    let value = Self.nextEngineRequestID
+    Self.nextEngineRequestID &+= 1
+    if Self.nextEngineRequestID == 0 { Self.nextEngineRequestID = 1 }
     return value
   }
 
   private func submit(
-    _ requestID: UInt64, _ operation: ShaarFindOperation, fields: [String: Any], scope: ShaarFindScope,
+    _ requestID: UInt64, _ operation: ShaarFindOperation, fields: [String: Any],
+    scope: ShaarFindScope,
     windowID: String, tabID: String,
     completion: @escaping @MainActor (Result<Data, Error>) -> Void
   ) {

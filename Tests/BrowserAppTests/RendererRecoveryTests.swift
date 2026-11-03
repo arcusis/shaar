@@ -83,7 +83,7 @@ struct RendererRecoveryTests {
     let space = store.session.selectedSpace
     let tab = try #require(space.selectedTab)
     var stopped: [UUID] = []
-    store.onStopFinding = { stopped.append($0) }
+    store.onStopFinding = { request, _ in stopped.append(request.tabID) }
     store.showPageFind()
     store.updatePageFindQuery("draft")
     store.nativeRendererGone(tab.id, profileID: space.profileID, status: "crashed", exitCode: 1)

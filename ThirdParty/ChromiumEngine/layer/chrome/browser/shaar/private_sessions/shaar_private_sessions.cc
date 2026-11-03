@@ -13,10 +13,17 @@
 
 namespace shaar {
 
-PrivateSessionRegistry::PrivateSessionRegistry(EventSink event_sink)
-    : event_sink_(std::move(event_sink)) {}
+// BEGIN find
+PrivateSessionRegistry::PrivateSessionRegistry(EventSink event_sink,
+                                               shaar_engine* engine)
+    : engine_(engine), event_sink_(std::move(event_sink)) {}
+// END find
 PrivateSessionRegistry::~PrivateSessionRegistry() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // BEGIN find
+  if (EngineContext().private_session_services == this)
+    SetPrivateSessionServices(nullptr);
+  // END find
   DCHECK(sessions_.empty());
 }
 
@@ -136,6 +143,37 @@ PrivateSessionRegistry::Session* PrivateSessionRegistry::Find(
   return found->second;
 }
 
+// BEGIN find
+bool PrivateSessionRegistry::Resolve(shaar_engine* engine,
+                                     shaar_private_session* handle,
+                                     Profile** parent,
+                                     Profile** otr,
+                                     std::string_view* profile_id,
+                                     std::string_view* session_id) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (parent)
+    *parent = nullptr;
+  if (otr)
+    *otr = nullptr;
+  if (profile_id)
+    *profile_id = {};
+  if (session_id)
+    *session_id = {};
+  if (!engine || engine != engine_ || !handle || !parent || !otr ||
+      !profile_id || !session_id)
+    return false;
+  auto* session = reinterpret_cast<Session*>(handle);
+  if (!IsLive(session) || session->closing || !session->parent ||
+      !session->otr)
+    return false;
+  *parent = session->parent;
+  *otr = session->otr;
+  *profile_id = session->profile_id;
+  *session_id = session->id;
+  return true;
+}
+// END find
+
 bool PrivateSessionRegistry::IsLive(const Session* session) const {
   if (!session)
     return false;
@@ -246,11 +284,16 @@ shaar_error_code EmitPrivateSessionStateEvent(
 
 std::unique_ptr<PrivateSessionRegistry> CreatePrivateSessionRegistry(
     shaar_engine* engine) {
-  return std::make_unique<PrivateSessionRegistry>(
+  // BEGIN find
+  auto registry = std::make_unique<PrivateSessionRegistry>(
       [engine](const std::string& profile_id, const std::string& session_id,
                PrivateSessionRegistry::EventState state) {
         EmitPrivateSessionStateEvent(engine, profile_id, session_id, state);
-      });
+      },
+      engine);
+  SetPrivateSessionServices(registry.get());
+  return registry;
+  // END find
 }
 
 shaar_error_code ClosePrivateSessionHandler(

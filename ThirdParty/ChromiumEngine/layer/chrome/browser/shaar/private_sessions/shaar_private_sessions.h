@@ -16,13 +16,20 @@
 #include "base/sequence_checker.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_observer.h"
+// BEGIN find
+#include "chrome/browser/shaar/engine/shaar_engine_context.h"
+// END find
 
 namespace shaar {
 
 // Owns Shaar's identity and lease for Chromium's primary OTR profile. The
 // ProfileManager remains the owner of the Profile itself; this registry keeps
 // it alive by retaining a live session until every child handle is closed.
-class PrivateSessionRegistry : public ProfileObserver {
+class PrivateSessionRegistry : public ProfileObserver
+// BEGIN find
+                              , public PrivateSessionServices
+// END find
+{
  public:
   enum class EventState { kOpened, kClosing, kClosed };
   using EventSink = std::function<void(const std::string&, const std::string&,
@@ -38,7 +45,12 @@ class PrivateSessionRegistry : public ProfileObserver {
     bool closing = false;
   };
 
-  explicit PrivateSessionRegistry(EventSink event_sink = {});
+  explicit PrivateSessionRegistry(
+      EventSink event_sink = {}
+      // BEGIN find
+      , shaar_engine* engine = nullptr
+      // END find
+  );
   ~PrivateSessionRegistry();
   PrivateSessionRegistry(const PrivateSessionRegistry&) = delete;
   PrivateSessionRegistry& operator=(const PrivateSessionRegistry&) = delete;
@@ -54,6 +66,14 @@ class PrivateSessionRegistry : public ProfileObserver {
   bool RetainChild(Session* session);
   bool ReleaseChild(Session* session);
   Session* Find(Profile* parent, const std::string& session_id) const;
+  // BEGIN find
+  bool Resolve(shaar_engine* engine,
+               shaar_private_session* handle,
+               Profile** parent,
+               Profile** otr,
+               std::string_view* profile_id,
+               std::string_view* session_id) override;
+  // END find
   void OnProfileWillBeDestroyed(Profile* profile) override;
 
  private:
@@ -62,6 +82,9 @@ class PrivateSessionRegistry : public ProfileObserver {
   void Emit(const Session& session, EventState state);
 
   SEQUENCE_CHECKER(sequence_checker_);
+  // BEGIN find
+  shaar_engine* const engine_;
+  // END find
   std::unordered_map<std::string, Session*> sessions_;
   // Keep retired handle storage alive until engine shutdown so a stale opaque
   // pointer can be compared safely and can never alias a newly opened session.

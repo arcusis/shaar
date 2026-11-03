@@ -3,6 +3,10 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import AppKit
+// BEGIN find
+import ShaarEngineABI
+
+// END find
 
 /// One window's subscriptions. The dispatcher keeps this object weakly.
 @MainActor
@@ -26,6 +30,9 @@ final class BrowserRuntimeClient {
   var onPictureInPictureChanged: ((String, Bool) -> Void)?
   var onTabActivationRequest: ((String, String) -> Void)?
   var onFindResult: ((String, String, Int32, Int32, Bool) -> Void)?
+  // BEGIN find
+  var onShaarFindEvent: ((ShaarCopiedEvent) -> Void)?
+  // END find
   var onDownloadChanged: ((String, [String: Any]) -> Void)?
   var onDownloadRemoved: ((String, String) -> Void)?
   var onDownloadsRestored: ((String, [[String: Any]]) -> Void)?

@@ -148,6 +148,20 @@ TEST(PrivateSessionRegistryTest, EventsRetainParentAndSessionIDsThroughTeardown)
   ASSERT_EQ(registry->Open(&profile, "profile-uuid", "session-uuid", &session),
             SHAAR_OK);
   ASSERT_NE(session, nullptr);
+  // BEGIN find
+  Profile* resolved_parent = nullptr;
+  Profile* resolved_otr = nullptr;
+  std::string_view resolved_profile_id;
+  std::string_view resolved_session_id;
+  EXPECT_TRUE(registry->Resolve(
+      &engine, reinterpret_cast<shaar_private_session*>(session),
+      &resolved_parent, &resolved_otr, &resolved_profile_id,
+      &resolved_session_id));
+  EXPECT_EQ(resolved_parent, &profile);
+  EXPECT_EQ(resolved_otr, session->otr);
+  EXPECT_EQ(resolved_profile_id, "profile-uuid");
+  EXPECT_EQ(resolved_session_id, "session-uuid");
+  // END find
   ASSERT_TRUE(registry->RetainChild(session));
   ASSERT_TRUE(registry->Close(session));
   ASSERT_TRUE(registry->ReleaseChild(session));

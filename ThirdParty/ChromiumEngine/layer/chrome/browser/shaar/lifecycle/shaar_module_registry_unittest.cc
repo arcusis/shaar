@@ -71,6 +71,11 @@ TEST(ShaarModuleRegistryTest, PassesProfileAndTabServicesThroughContext) {
                                                std::string_view) override {
       return reinterpret_cast<content::WebContents*>(0x14);
     }
+    // BEGIN find
+    std::string_view WindowID(shaar_engine*, shaar_window*) override {
+      return "fake-window";
+    }
+    // END find
     std::string_view TabID(shaar_engine*, shaar_window*, shaar_tab*) override {
       return "fake-tab";
     }

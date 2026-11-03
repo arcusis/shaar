@@ -3,6 +3,10 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import ChromiumBridge
+// BEGIN find
+import ShaarEngineABI
+
+// END find
 
 /// Installs the shared runtime callbacks once, before any window client is created.
 @MainActor
@@ -17,6 +21,14 @@ final class BrowserRuntimeEvents {
     didSet { runtime.onWindowShowRequest = onWindowShowRequest }
   }
   var onNewTabWillAdopt: ((String, String, String?) -> Void)?
+  // BEGIN find
+  func receiveShaarFindEvent(_ event: ShaarCopiedEvent) {
+    guard let tabID = String(data: event.tabID, encoding: .utf8),
+      let windowID = String(data: event.windowID, encoding: .utf8)
+    else { return }
+    router.client(forTab: tabID, nativeWindowID: windowID)?.onShaarFindEvent?(event)
+  }
+  // END find
 
   init(runtime: ARCChromiumRuntime) {
     self.runtime = runtime

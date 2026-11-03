@@ -21,6 +21,9 @@
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "chrome/browser/shaar/engine/shaar_module_registry.h"
+// BEGIN find
+#include "chrome/browser/shaar/private_sessions/shaar_private_sessions_module.h"
+// END find
 #include "content/public/browser/browser_main_parts.h"
 
 extern "C" int ChromeMain(int argc, const char** argv);
@@ -40,6 +43,9 @@ constexpr char kStartupFailed[] =
 
 struct State {
   shaar_engine* engine = nullptr;
+  // BEGIN find
+  std::unique_ptr<shaar::PrivateSessionRegistry> private_sessions;
+  // END find
   bool ready = false;
   bool closing = false;
   bool shutting_down = false;
@@ -173,8 +179,15 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_engine_run(
 
   g_run_was_started = true;
   g_state = State{.engine = engine};
+  // BEGIN find
+  g_state.private_sessions =
+      shaar::CreatePrivateSessionRegistry(engine);
+  // END find
   std::string executable_path;
   if (!MakeExecutablePath(&executable_path)) {
+    // BEGIN find
+    g_state.private_sessions.reset();
+    // END find
     g_state.engine = nullptr;
     return Fail(SHAAR_IO_ERROR, "could not resolve app executable path", 0,
                 error);

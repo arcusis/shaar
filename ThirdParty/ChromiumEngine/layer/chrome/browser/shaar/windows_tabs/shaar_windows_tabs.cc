@@ -49,6 +49,16 @@ content::WebContents* BrowserTabRegistryImpl::FindWebContentsByID(
   return nullptr;
 }
 
+// BEGIN find
+std::string_view BrowserTabRegistryImpl::WindowID(shaar_engine* engine,
+                                                  shaar_window* window) {
+  for (const auto& entry : windows_)
+    if (entry.engine == engine && entry.handle == window)
+      return entry.id;
+  return {};
+}
+// END find
+
 std::string_view BrowserTabRegistryImpl::TabID(shaar_engine* engine,
                                                shaar_window* window,
                                                shaar_tab* tab) {
@@ -84,8 +94,23 @@ void BrowserTabRegistryImpl::BindWindow(shaar_engine* engine,
       return;
     }
   }
-  windows_.push_back({engine, window, browser, browser, {}, {}});
+  windows_.push_back({engine, window, browser, {}, browser, {}, {}});
 }
+
+// BEGIN find
+void BrowserTabRegistryImpl::BindWindowID(shaar_engine* engine,
+                                          shaar_window* window,
+                                          std::string id) {
+  if (!engine || !window || id.empty())
+    return;
+  for (auto& entry : windows_) {
+    if (entry.engine == engine && entry.handle == window) {
+      entry.id = std::move(id);
+      return;
+    }
+  }
+}
+// END find
 
 BrowserTabRegistryImpl::WindowState* BrowserTabRegistryImpl::EnsureWindowState(
     shaar_engine* engine,

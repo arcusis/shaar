@@ -74,7 +74,17 @@ class FindState final : public base::SupportsUserData::Data,
       helper_->RemoveObserver(this);
   }
 
-  void SetRequest(shaar_request_id request) { request_id_ = request; }
+  void SetTarget(shaar_request_id request,
+                 std::string profile_id,
+                 std::string session_id,
+                 std::string window_id,
+                 std::string tab_id) {
+    request_id_ = request;
+    profile_id_ = std::move(profile_id);
+    session_id_ = std::move(session_id);
+    window_id_ = std::move(window_id);
+    tab_id_ = std::move(tab_id);
+  }
 
   void OnFindResultAvailable(content::WebContents*) override {
     if (!helper_ || !request_id_)
@@ -119,10 +129,10 @@ class FindState final : public base::SupportsUserData::Data,
 
  private:
   shaar_engine* const engine_;
-  const std::string profile_id_;
-  const std::string session_id_;
-  const std::string window_id_;
-  const std::string tab_id_;
+  std::string profile_id_;
+  std::string session_id_;
+  std::string window_id_;
+  std::string tab_id_;
   raw_ptr<find_in_page::FindTabHelper> helper_;
   shaar_request_id request_id_ = 0;
   int chromium_request_id_ = 0;
@@ -224,8 +234,11 @@ shaar_error_code HandleFindOperation(
     return SHAAR_INVALID_ARGUMENT;
   }
 
-  const std::string window_id;
+  const std::string window_id(
+      context->browser_tabs->WindowID(engine, window));
   const std::string tab_id(context->browser_tabs->TabID(engine, window, tab));
+  if (window_id.empty())
+    return SHAAR_NOT_READY;
   if (tab_id.empty())
     return SHAAR_NOT_FOUND;
   auto* state = static_cast<FindState*>(contents->GetUserData(
@@ -248,7 +261,8 @@ shaar_error_code HandleFindOperation(
   }
 
   if (operation == SHAAR_OP_TAB_FIND) {
-    state->SetRequest(request_id);
+    state->SetTarget(request_id, std::string(profile_id),
+                     std::string(session_id), window_id, tab_id);
     if (args.query.empty()) {
       state->SetRequest(0);
       helper->StopFinding(find_in_page::SelectionAction::kClear);

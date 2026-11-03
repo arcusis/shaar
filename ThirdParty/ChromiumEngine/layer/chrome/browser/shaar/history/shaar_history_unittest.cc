@@ -37,6 +37,9 @@ class FakeBrowserTabs final : public shaar::BrowserTabRegistry {
                                              std::string_view) override {
     return nullptr;
   }
+  // BEGIN find
+  std::string_view WindowID(shaar_engine*, shaar_window*) override { return {}; }
+  // END find
   std::string_view TabID(shaar_engine*, shaar_window*, shaar_tab*) override {
     return {};
   }

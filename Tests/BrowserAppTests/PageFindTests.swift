@@ -70,7 +70,7 @@ struct PageFindTests {
     let store = store()
     let original = store.session.selectedSpace
     var stopped: [UUID] = []
-    store.onStopFinding = { stopped.append($0) }
+    store.onStopFinding = { request, _ in stopped.append(request.tabID) }
     store.showPageFind()
     store.updatePageFindQuery("account-specific query")
     let first = try #require(store.pageFind)
@@ -94,8 +94,9 @@ struct PageFindTests {
     let store = store()
     let tab = try #require(store.session.selectedSpace.selectedTab)
     var stopped = 0
-    store.onStopFinding = { id in
-      #expect(id == tab.id)
+    store.onStopFinding = { request, keepSelection in
+      #expect(request.tabID == tab.id)
+      #expect(keepSelection)
       stopped += 1
     }
     store.showPageFind()
@@ -136,7 +137,10 @@ struct PageFindTests {
     store.updatePageFindQuery("sensitive query")
     let current = try #require(store.pageFind)
     var stopped = 0
-    store.onStopFinding = { _ in stopped += 1 }
+    store.onStopFinding = { _, keepSelection in
+      #expect(!keepSelection)
+      stopped += 1
+    }
     store.updatePageFindQuery("")
     store.receiveFindResult(
       tabID: current.tabID, requestID: current.requestID, count: 3, active: 1, final: true)

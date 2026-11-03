@@ -6,6 +6,9 @@ import AppKit
 import BrowserCore
 import ChromiumBridge
 import Observation
+// BEGIN find
+import ShaarEngineABI
+// END find
 import SwiftUI
 
 struct PageState: Equatable {
@@ -26,6 +29,58 @@ private struct NativeTabPlacement: Equatable {
   let pinned: Bool
 }
 
+// BEGIN find
+@MainActor private final class RuntimeFindBackend: ArdiaFindBackend {
+  private weak var runtime: ARCChromiumRuntime?
+
+  init(runtime: ARCChromiumRuntime) { self.runtime = runtime }
+
+  func find(
+    query: String, forward: Bool, profileID: String, tabID: String, requestToken: String,
+    completion: @escaping @MainActor (Result<Void, Error>) -> Void
+  ) {
+    guard let runtime,
+      runtime.find(
+        inTabID: tabID, profileID: profileID, requestID: requestToken,
+        text: query, forward: forward)
+    else {
+      completion(.failure(ShaarEngineError.invalidEvent("Ardia find request was rejected")))
+      return
+    }
+    completion(.success(()))
+  }
+
+  func stop(
+    clearSelection: Bool, profileID: String, tabID: String,
+    completion: @escaping @MainActor (Result<Void, Error>) -> Void
+  ) {
+    guard let runtime else {
+      completion(.failure(ShaarEngineError.invalidEvent("browser runtime is unavailable")))
+      return
+    }
+    if clearSelection {
+      _ = runtime.find(
+        inTabID: tabID, profileID: profileID, requestID: UUID().uuidString,
+        text: "", forward: true)
+    } else {
+      runtime.stopFinding(inTabID: tabID)
+    }
+    completion(.success(()))
+  }
+}
+
+@MainActor private struct UnavailableShaarFindTransport: ShaarFindTransport {
+  func submit(
+    _ request: ShaarFindRequest,
+    completion: @escaping @MainActor (Result<Data, Error>) -> Void
+  ) {
+    completion(.failure(ShaarEngineError.missingSymbol("shaar_submit")))
+  }
+
+  func setEventHandler(_ handler: @escaping @MainActor (ShaarCopiedEvent) -> Void) {}
+}
+// END find
+
 /// Owns one window's live tabs independently of its selected SwiftUI space.
 @MainActor @Observable
 final class BrowserEngine {
@@ -41,6 +96,17 @@ final class BrowserEngine {
   var inspectors: [UUID: InspectorModel] = [:]
   var developerModels: [UUID: DeveloperPageModel] = [:]
   let downloads: DownloadsModel
+  // BEGIN find
+  private let findAdapter: ShaarFindAdapter
+  private let findScopeResolver: ((PageFindState) -> ShaarFindScope?)?
+  private struct PendingFindRequest {
+    let uiRequestID: UUID
+    let scope: ShaarFindScope
+    let windowID: String
+    let tabID: String
+  }
+  @ObservationIgnored private var pendingFindRequests: [UInt64: PendingFindRequest] = [:]
+  // END find
   private(set) var pages: [UUID: PageState] = [:]
   private(set) var notice: String?
   private(set) var mediaAccess: [UUID: MediaAccessState] = [:]
@@ -99,12 +165,24 @@ final class BrowserEngine {
 
   init(
     events: BrowserRuntimeEvents, windowID: String? = nil, store: BrowserStore,
-    presentsNativePanels: Bool = true, lazyPinnedTabs: Bool = false
+    presentsNativePanels: Bool = true, lazyPinnedTabs: Bool = false,
+    // BEGIN find
+    findImplementation: ShaarEngineImplementation = .shippingDefault,
+    shaarFindTransport: (any ShaarFindTransport)? = nil,
+    findScopeResolver: ((PageFindState) -> ShaarFindScope?)? = nil
+      // END find
   ) throws {
     let runtime = events.runtime
     self.runtime = runtime
     self.events = events
     self.windowID = windowID ?? runtime.primaryWindowID
+    // BEGIN find
+    findAdapter = ShaarFindAdapter(
+      implementation: findImplementation,
+      ardia: RuntimeFindBackend(runtime: runtime),
+      shaar: shaarFindTransport ?? UnavailableShaarFindTransport())
+    self.findScopeResolver = findScopeResolver
+    // END find
     autoPictureInPicture = AutoPictureInPicture(engine: .chromium(runtime))
     callbacks = BrowserRuntimeClient(windowID: self.windowID) { [weak store] in
       Set(store?.session.profiles.map { $0.id.uuidString } ?? [])
@@ -117,6 +195,9 @@ final class BrowserEngine {
     self.presentsNativePanels = presentsNativePanels
     self.lazyPinnedTabs = lazyPinnedTabs
     try events.router.register(callbacks)
+    // BEGIN find
+    findAdapter.onEvent = { [weak events] event in events?.receiveShaarFindEvent(event) }
+    // END find
     store.engine = self
     store.onReloadPage = { [weak self] tab, profile, mode in
       self?.runtime.reloadTabID(
@@ -269,21 +350,59 @@ final class BrowserEngine {
       else { return }
       self.downloads.restore(rows, profileID: profile)
     }
+    // BEGIN find
     store.onFindRequest = { [weak self] request, forward in
-      self?.runtime.find(
-        inTabID: request.tabID.uuidString, profileID: request.profileID.uuidString,
-        requestID: request.requestID.uuidString, text: request.query, forward: forward) ?? false
+      guard let self, !self.isClosed,
+        let scope = self.findScope(for: request)
+      else { return false }
+      var accepted = false
+      let requestID = self.findAdapter.find(
+        query: request.query, forward: forward, scope: scope,
+        windowID: self.windowID, tabID: request.tabID.uuidString,
+        requestToken: request.requestID.uuidString
+      ) { [weak self] result in
+        switch result {
+        case .success: accepted = true
+        case .failure:
+          self?.store?.failFindRequest(tabID: request.tabID, requestID: request.requestID)
+        }
+      }
+      guard let requestID else { return accepted }
+      self.pendingFindRequests = self.pendingFindRequests.filter {
+        $0.value.tabID != request.tabID.uuidString
+      }
+      self.pendingFindRequests[requestID] = PendingFindRequest(
+        uiRequestID: request.requestID, scope: scope, windowID: self.windowID,
+        tabID: request.tabID.uuidString)
+      return true
     }
-    store.onStopFinding = { [weak self] tabID in
-      self?.runtime.stopFinding(inTabID: tabID.uuidString)
+    store.onStopFinding = { [weak self] request, keepSelection in
+      guard let self else { return }
+      self.pendingFindRequests = self.pendingFindRequests.filter {
+        $0.value.tabID != request.tabID.uuidString
+      }
+      guard let scope = self.findScope(for: request) else { return }
+      _ = self.findAdapter.stop(
+        clearSelection: !keepSelection, scope: scope, windowID: self.windowID,
+        tabID: request.tabID.uuidString
+      ) { [weak self] result in
+        if case .failure = result { self?.notice = PanelsL10n.string("Page unavailable") }
+      }
     }
-    callbacks.onFindResult = { [weak store] identity, token, count, active, final in
+    // END find
+    callbacks.onFindResult = { [weak self, weak store] identity, token, count, active, final in
+      // BEGIN find
+      guard self?.findAdapter.implementation == .ardia else { return }
+      // END find
       guard let tabID = UUID(uuidString: identity), let requestID = UUID(uuidString: token) else {
         return
       }
       store?.receiveFindResult(
         tabID: tabID, requestID: requestID, count: Int(count), active: Int(active), final: final)
     }
+    // BEGIN find
+    callbacks.onShaarFindEvent = { [weak self] event in self?.receiveShaarFindEvent(event) }
+    // END find
     store.onWebsitePermissionDecision = { [weak self] id, accepted in
       guard let self else { return }
       self.events.resolveMedia(id, windowID: self.windowID, accepted: accepted)
@@ -851,6 +970,37 @@ final class BrowserEngine {
       return
     }
   }
+
+  // BEGIN find
+  private func findScope(for request: PageFindState) -> ShaarFindScope? {
+    if findAdapter.implementation == .ardia {
+      return ShaarFindScope(profileID: request.profileID.uuidString)
+    }
+    guard let scope = findScopeResolver?(request),
+      scope.profileID == request.profileID.uuidString,
+      scope.sessionID.map({ !$0.isEmpty }) ?? true
+    else { return nil }
+    return scope
+  }
+
+  private func receiveShaarFindEvent(_ event: ShaarCopiedEvent) {
+    guard findAdapter.implementation == .shaar,
+      let object = try? JSONSerialization.jsonObject(with: event.payloadJSON) as? [String: Any],
+      let rawID = object["requestID"] as? String,
+      let requestID = UInt64(rawID),
+      let request = pendingFindRequests[requestID],
+      request.windowID == windowID,
+      let tabID = UUID(uuidString: request.tabID),
+      let update = findAdapter.decode(
+        event, expectedScope: request.scope, expectedWindowID: request.windowID,
+        expectedTabID: request.tabID, expectedRequestID: requestID)
+    else { return }
+    store?.receiveFindResult(
+      tabID: tabID, requestID: request.uiRequestID,
+      count: update.matchCount, active: update.activeMatch, final: update.isFinal)
+    if update.isFinal { pendingFindRequests.removeValue(forKey: requestID) }
+  }
+  // END find
 
   private func requestExternalApp(_ payload: [String: Any]) {
     guard let id = payload["id"] as? String else { return }

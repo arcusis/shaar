@@ -92,6 +92,9 @@ TEST(ShaarWindowsTabsHandlersTest, RegistryResolvesBoundWindowAndTabIDs) {
   auto* browser = reinterpret_cast<Browser*>(4);
   auto* contents = reinterpret_cast<content::WebContents*>(5);
   registry.BindWindow(engine, window, browser);
+  // BEGIN find
+  registry.BindWindowID(engine, window, "window-a");
+  // END find
   auto* state = registry.EnsureWindowState(engine, window, browser, "profile-a");
   registry.BindTab(engine, window, tab, "tab-a", contents);
   ASSERT_NE(state, nullptr);
@@ -99,6 +102,9 @@ TEST(ShaarWindowsTabsHandlersTest, RegistryResolvesBoundWindowAndTabIDs) {
   EXPECT_EQ(state->active_profile_id, "profile-a");
   EXPECT_EQ(state->browsers_by_profile.at("profile-a"), browser);
   EXPECT_EQ(registry.FindBrowser(engine, window), browser);
+  // BEGIN find
+  EXPECT_EQ(registry.WindowID(engine, window), "window-a");
+  // END find
   EXPECT_EQ(registry.FindWebContents(engine, window, tab), contents);
   EXPECT_EQ(registry.FindWebContentsByID(engine, window, "tab-a"), contents);
   EXPECT_EQ(registry.TabID(engine, window, tab), "tab-a");
@@ -107,6 +113,9 @@ TEST(ShaarWindowsTabsHandlersTest, RegistryResolvesBoundWindowAndTabIDs) {
   EXPECT_EQ(tabs.at("tab-a"), contents);
   registry.UnbindWindow(engine, window);
   EXPECT_EQ(registry.FindBrowser(engine, window), nullptr);
+  // BEGIN find
+  EXPECT_TRUE(registry.WindowID(engine, window).empty());
+  // END find
   EXPECT_EQ(registry.FindWebContents(engine, window, tab), nullptr);
 }
 

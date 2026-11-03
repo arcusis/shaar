@@ -125,7 +125,9 @@ final class BrowserStore {
   @ObservationIgnored var onDesktopCaptureDecision: ((String, String?) -> Void)?
   @ObservationIgnored var onExternalAppDecision: ((String, Bool) -> Void)?
   @ObservationIgnored var onFindRequest: ((PageFindState, Bool) -> Bool)?
-  @ObservationIgnored var onStopFinding: ((UUID) -> Void)?
+  // BEGIN find
+  @ObservationIgnored var onStopFinding: ((PageFindState, Bool) -> Void)?
+  // END find
   @ObservationIgnored var onNavigatePage: ((UUID, UUID, URL) -> Bool)?
   @ObservationIgnored var onReloadPage: ((UUID, UUID, PageReloadMode) -> Bool)?
   /// Sends a media command to a live tab; false when the engine cannot deliver it.
@@ -382,7 +384,9 @@ final class BrowserStore {
     current.searching = !current.query.isEmpty
     pageFind = current
     if current.query.isEmpty {
-      onStopFinding?(current.tabID)
+      // BEGIN find
+      onStopFinding?(current, false)
+      // END find
     } else if onFindRequest?(current, forward) == false {
       current.searching = false
       current.unavailable = true
@@ -401,10 +405,23 @@ final class BrowserStore {
     pageFind = current
   }
 
+  // BEGIN find
+  func failFindRequest(tabID: UUID, requestID: UUID) {
+    guard var current = pageFind, current.tabID == tabID,
+      current.requestID == requestID
+    else { return }
+    current.searching = false
+    current.unavailable = true
+    pageFind = current
+  }
+  // END find
+
   func dismissPageFind() {
     guard let current = pageFind else { return }
     pageFind = nil
-    onStopFinding?(current.tabID)
+    // BEGIN find
+    onStopFinding?(current, true)
+    // END find
   }
 
   func moveCommandSelection(by amount: Int) {

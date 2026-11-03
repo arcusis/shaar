@@ -76,7 +76,7 @@ struct NativeTabSelectionTests {
     store.showPageFind()
     store.updatePageFindQuery("old document")
     var stopped: [UUID] = []
-    store.onStopFinding = { stopped.append($0) }
+    store.onStopFinding = { request, _ in stopped.append(request.tabID) }
     #expect(store.nativeTabActivated(second, profileID: profile))
     #expect(stopped == [first.id] && store.pageFind == nil)
     store.perform(.tab(space: space, tab: first.id))

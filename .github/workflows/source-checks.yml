@@ -188,7 +188,7 @@ jobs:
 
   basic-browsing:
     name: Normal window browsing smoke
-    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    if: needs.plan.outputs.full == 'true' && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
     runs-on: macos-26
     timeout-minutes: 35
     steps:
@@ -344,7 +344,7 @@ jobs:
   required:
     name: CI required
     if: always()
-    needs: [plan, fast, python-tests, dependency-review, build, coverage, visuals, localization, engine, shipping, codeql, inspector-contracts, website, sanitizers, dead-code]
+    needs: [plan, fast, python-tests, dependency-review, build, coverage, visuals, localization, engine, basic-browsing, shipping, codeql, inspector-contracts, website, sanitizers, dead-code]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -356,5 +356,6 @@ jobs:
           CI_NEEDS: ${{ toJSON(needs) }}
           CI_FULL: ${{ needs.plan.outputs.full }}
           CI_WEBSITE: ${{ needs.plan.outputs.website }}
+          CI_BROWSING: ${{ needs.plan.outputs.full == 'true' && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
           CI_NIGHTLY: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.deep_checks) }}
         run: python3 scripts/ci-gate.py

@@ -87,6 +87,35 @@ class PipelineGateTests(unittest.TestCase):
             self.assertEqual(PLAN.select_stages(["Notebook/Note.md"], event), (True, True, True))
         self.assertTrue(PLAN.select_stages(["scripts/tool.py"], "merge_group")[2])
 
+    def test_draft_pull_requests_skip_native_stages_and_preserve_website_checks(self):
+        for paths in (None, [], ["Sources/App.swift"], ["unclassified-input"]):
+            self.assertEqual(PLAN.select_stages(paths, "pull_request", draft=True), (False, True, True))
+        self.assertEqual(PLAN.select_stages(["website/src/Page.svelte"], "pull_request", draft=True),
+                         (False, True, True))
+        self.assertEqual(PLAN.select_stages(["Sources/App.swift"], "pull_request"), (True, False, True))
+        self.assertEqual(PLAN.select_stages(["Sources/App.swift"], "merge_group", draft=True),
+                         (True, False, True))
+        needs = self.results(native="skipped")
+        needs["basic-browsing"]["result"] = "skipped"
+        self.assertEqual(GATE.gate_errors(needs, False, False, browsing=False), [])
+        self.assertTrue(GATE.gate_errors(needs, True, False, browsing=True))
+
+    def test_draft_pull_request_event_outputs_reduced_plan(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "event.json").write_text(json.dumps({"pull_request": {
+                "draft": True, "base": {"sha": "b" * 40},
+            }}))
+            env = {"GITHUB_EVENT_PATH": str(root / "event.json"), "GITHUB_EVENT_NAME": "pull_request",
+                   "GITHUB_SHA": "c" * 40, "GITHUB_OUTPUT": str(root / "output"),
+                   "GITHUB_STEP_SUMMARY": str(root / "summary")}
+            with patch.dict(os.environ, env), patch.object(PLAN.subprocess, "run") as command:
+                command.return_value.returncode = 0
+                command.return_value.stdout = b"Sources/App.swift\0"
+                PLAN.main()
+            self.assertIn("full=false", (root / "output").read_text())
+            self.assertIn("Draft pull request: **True**", (root / "summary").read_text())
+
     def test_website_gate_rejects_unexpected_skip_or_missing_result(self):
         needs = self.results(native="skipped")
         self.assertTrue(GATE.gate_errors(needs, False, False, True))
@@ -157,14 +186,14 @@ class PipelineGateTests(unittest.TestCase):
         results = {name: {"result": "success"} for name in ("plan", "fast", "dependency-review")}
         results.update({name: {"result": native} for name in (
             "python-tests", "build", "coverage", "visuals", "localization", "engine",
-            "shipping", "codeql", "inspector-contracts",
+            "shipping", "codeql", "inspector-contracts", "basic-browsing",
         )})
         results.update({name: {"result": nightly} for name in ("sanitizers", "dead-code")})
         results["codeql"] = {"result": "success"}
         return results
 
     def test_full_pipeline_rejects_failed_cancelled_skipped_or_missing_stage(self):
-        for stage in ("engine", "localization", "inspector-contracts"):
+        for stage in ("engine", "localization", "inspector-contracts", "basic-browsing"):
             for result in ("failure", "cancelled", "skipped", None):
                 with self.subTest(stage=stage, result=result):
                     needs = self.results()
@@ -172,13 +201,17 @@ class PipelineGateTests(unittest.TestCase):
                         del needs[stage]
                     else:
                         needs[stage]["result"] = result
-                    self.assertTrue(GATE.gate_errors(needs, True, False))
+                    self.assertTrue(GATE.gate_errors(needs, True, False, browsing=stage == "basic-browsing"))
 
     def test_docs_skip_native_but_never_skip_fast_gates(self):
         needs = self.results(native="skipped")
+        needs["basic-browsing"]["result"] = "skipped"
         self.assertEqual(GATE.gate_errors(needs, False, False), [])
-        needs["fast"]["result"] = "skipped"
-        self.assertTrue(GATE.gate_errors(needs, False, False))
+        for stage in ("fast", "dependency-review", "codeql"):
+            with self.subTest(stage=stage):
+                changed = {name: dict(result) for name, result in needs.items()}
+                changed[stage]["result"] = "skipped"
+                self.assertTrue(GATE.gate_errors(changed, False, False))
 
     def test_nightly_requires_deep_checks(self):
         self.assertTrue(GATE.gate_errors(self.results(), True, True))

@@ -11,6 +11,33 @@ import XCTest
 
 @MainActor
 final class SplitPageVisualTests: XCTestCase {
+  func testSplitDividerKeyboardInputRespectsAxisAndDirection() {
+    XCTAssertEqual(
+      SplitDividerInput.keyboardDelta(for: .left, axis: .columns, isRightToLeft: false, step: 32),
+      -32)
+    XCTAssertEqual(
+      SplitDividerInput.keyboardDelta(for: .right, axis: .columns, isRightToLeft: false, step: 32),
+      32)
+    XCTAssertEqual(
+      SplitDividerInput.keyboardDelta(for: .left, axis: .columns, isRightToLeft: true, step: 32),
+      32)
+    XCTAssertEqual(
+      SplitDividerInput.keyboardDelta(for: .right, axis: .columns, isRightToLeft: true, step: 32),
+      -32)
+    XCTAssertEqual(
+      SplitDividerInput.keyboardDelta(for: .up, axis: .rows, isRightToLeft: false, step: 32), -32)
+    XCTAssertEqual(
+      SplitDividerInput.keyboardDelta(for: .down, axis: .rows, isRightToLeft: false, step: 32), 32)
+    XCTAssertNil(
+      SplitDividerInput.keyboardDelta(for: .up, axis: .columns, isRightToLeft: false, step: 32))
+    XCTAssertNil(
+      SplitDividerInput.keyboardDelta(for: .left, axis: .rows, isRightToLeft: false, step: 32))
+    XCTAssertEqual(
+      SplitDividerInput.accessibilityDelta(for: .increment, step: 32), 32)
+    XCTAssertEqual(
+      SplitDividerInput.accessibilityDelta(for: .decrement, step: 32), -32)
+  }
+
   func testMixedLayoutCapture() async throws {
     try XCTSkipUnless(
       SidebarVisualCaptureSupport.enabled, "Visual capture requires explicit opt-in")

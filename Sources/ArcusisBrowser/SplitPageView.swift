@@ -130,37 +130,45 @@ private struct SplitGroupView: View {
     .accessibilityLabel(ShellL10n.string("Split divider"))
     .accessibilityValue("\(Int((leadingPercent * 100).rounded()))%")
     .accessibilityAdjustableAction { direction in
-      switch direction {
-      case .increment: adjustDivider(index, by: Self.keyboardStep, available: available)
-      case .decrement: adjustDivider(index, by: -Self.keyboardStep, available: available)
-      @unknown default: break
+      if let delta = SplitDividerInput.accessibilityDelta(for: direction, step: Self.keyboardStep) {
+        adjustDivider(index, by: delta, available: available)
       }
     }
     .focusable()
     .onKeyPress(.leftArrow) {
-      adjustDivider(
-        index,
-        by: SplitResizeDecision.logicalDelta(
-          -Self.keyboardStep, isHorizontal: axis == .columns,
-          isRightToLeft: layoutDirection == .rightToLeft), available: available)
+      guard
+        let delta = SplitDividerInput.keyboardDelta(
+          for: .left, axis: axis, isRightToLeft: layoutDirection == .rightToLeft,
+          step: Self.keyboardStep)
+      else { return .ignored }
+      adjustDivider(index, by: delta, available: available)
       return .handled
     }
     .onKeyPress(.rightArrow) {
-      adjustDivider(
-        index,
-        by: SplitResizeDecision.logicalDelta(
-          Self.keyboardStep, isHorizontal: axis == .columns,
-          isRightToLeft: layoutDirection == .rightToLeft), available: available)
+      guard
+        let delta = SplitDividerInput.keyboardDelta(
+          for: .right, axis: axis, isRightToLeft: layoutDirection == .rightToLeft,
+          step: Self.keyboardStep)
+      else { return .ignored }
+      adjustDivider(index, by: delta, available: available)
       return .handled
     }
     .onKeyPress(.upArrow) {
-      guard axis == .rows else { return .ignored }
-      adjustDivider(index, by: -Self.keyboardStep, available: available)
+      guard
+        let delta = SplitDividerInput.keyboardDelta(
+          for: .up, axis: axis, isRightToLeft: layoutDirection == .rightToLeft,
+          step: Self.keyboardStep)
+      else { return .ignored }
+      adjustDivider(index, by: delta, available: available)
       return .handled
     }
     .onKeyPress(.downArrow) {
-      guard axis == .rows else { return .ignored }
-      adjustDivider(index, by: Self.keyboardStep, available: available)
+      guard
+        let delta = SplitDividerInput.keyboardDelta(
+          for: .down, axis: axis, isRightToLeft: layoutDirection == .rightToLeft,
+          step: Self.keyboardStep)
+      else { return .ignored }
+      adjustDivider(index, by: delta, available: available)
       return .handled
     }
   }
@@ -185,6 +193,36 @@ private struct SplitGroupView: View {
     next[index] = leading
     next[index + 1] = pair - leading
     return next
+  }
+}
+
+enum SplitDividerInput {
+  enum Key {
+    case left, right, up, down
+  }
+
+  static func keyboardDelta(
+    for key: Key, axis: SplitAxis, isRightToLeft: Bool, step: CGFloat
+  ) -> CGFloat? {
+    switch (key, axis) {
+    case (.left, .columns):
+      SplitResizeDecision.logicalDelta(-step, isHorizontal: true, isRightToLeft: isRightToLeft)
+    case (.right, .columns):
+      SplitResizeDecision.logicalDelta(step, isHorizontal: true, isRightToLeft: isRightToLeft)
+    case (.up, .rows): -step
+    case (.down, .rows): step
+    default: nil
+    }
+  }
+
+  static func accessibilityDelta(
+    for direction: AccessibilityAdjustmentDirection, step: CGFloat
+  ) -> CGFloat? {
+    switch direction {
+    case .increment: step
+    case .decrement: -step
+    @unknown default: nil
+    }
   }
 }
 

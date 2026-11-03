@@ -1,9 +1,10 @@
 --- a/chrome/BUILD.gn
 +++ b/chrome/BUILD.gn
-@@ -77,4 +77,8 @@
+@@ -77,4 +77,9 @@
  assert(!is_ios, "Chromium/iOS shouldn't use anything in //chrome")
 
 +group("shaar_layer_unittests") {
++  testonly = true
 +  deps = [ "//chrome/browser/shaar:shaar_layer_unittests" ]
 +}
 +

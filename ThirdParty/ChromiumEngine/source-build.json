@@ -227,7 +227,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0003-shaar-layer-tests.patch",
-      "sha256": "caec2fc8029696ebcf67e8bfdcc0a874f0816848b9e0c544f514b4a3d24a0c51"
+      "sha256": "6b79c7d6dec3be2ed7b21a8801b104fc9873161406f45f18d3f60948f7a3d4eb"
     }
   ],
   "requiredExports": [

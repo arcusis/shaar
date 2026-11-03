@@ -84,8 +84,8 @@ bool Downloads::IsReady() const {
   return ready_ && manager_;
 }
 
-base::Value::Dict Downloads::Record(const download::DownloadItem& item) {
-  base::Value::Dict record;
+base::DictValue Downloads::Record(const download::DownloadItem& item) {
+  base::DictValue record;
   const base::FilePath& target = item.GetTargetFilePath();
   const base::FilePath& full = item.GetFullPath();
   const base::FilePath& shown = target.empty() ? full : target;
@@ -113,10 +113,10 @@ base::Value::Dict Downloads::Record(const download::DownloadItem& item) {
   return record;
 }
 
-base::Value::Dict Downloads::List() const {
-  base::Value::Dict result;
+base::DictValue Downloads::List() const {
+  base::DictValue result;
   result.Set("schemaVersion", 1);
-  base::Value::List items;
+  base::ListValue items;
   if (IsReady()) {
     download::SimpleDownloadManager::DownloadVector downloads;
     manager_->GetAllDownloads(&downloads);
@@ -254,12 +254,12 @@ bool Downloads::Handle(shaar_operation operation,
                        std::string* error_code) {
   if (!payload_json || !error_code) return false;
   *payload_json = "";
-  std::optional<base::Value> parsed = base::JSONReader::Read(arguments_json);
+  std::optional<base::Value> parsed = base::JSONReader::Read(arguments_json, base::JSON_PARSE_RFC);
   if (!parsed || !parsed->is_dict()) {
     *error_code = "SHAAR_INVALID_ARGUMENT";
     return false;
   }
-  const base::Value::Dict& args = parsed->GetDict();
+  const base::DictValue& args = parsed->GetDict();
   const std::optional<int> version = args.FindInt("schemaVersion");
   if (!version || *version != 1) {
     *error_code = "SHAAR_INVALID_ARGUMENT";
@@ -312,7 +312,7 @@ bool Downloads::Handle(shaar_operation operation,
     std::string effective_path;
     if (!Directory(*action, path ? *path : "", &effective_path, error_code))
       return false;
-    base::Value::Dict result;
+    base::DictValue result;
     result.Set("schemaVersion", 1);
     result.Set("directory", effective_path);
     if (!base::JSONWriter::Write(result, payload_json)) {
@@ -397,7 +397,7 @@ void Downloads::FlushProgress() {
 void Downloads::EmitUpsert(download::DownloadItem* item) {
   if (!event_callback_)
     return;
-  base::Value::Dict payload;
+  base::DictValue payload;
   payload.Set("schemaVersion", 1);
   payload.Set("kind", "downloads.changed");
   payload.Set("change", "upsert");
@@ -408,7 +408,7 @@ void Downloads::EmitUpsert(download::DownloadItem* item) {
 void Downloads::EmitRemove(download::DownloadItem* item) {
   if (!event_callback_)
     return;
-  base::Value::Dict payload;
+  base::DictValue payload;
   payload.Set("schemaVersion", 1);
   payload.Set("kind", "downloads.removed");
   payload.Set("change", "remove");
@@ -416,7 +416,7 @@ void Downloads::EmitRemove(download::DownloadItem* item) {
   PostEvent(std::move(payload));
 }
 
-void Downloads::PostEvent(base::Value::Dict event) {
+void Downloads::PostEvent(base::DictValue event) {
   if (!event_callback_)
     return;
   EventCallback callback = event_callback_;
@@ -429,7 +429,7 @@ void Downloads::PostEvent(base::Value::Dict event) {
       base::BindOnce(
           [](base::WeakPtr<Downloads> owner, EventCallback callback, void* context,
              std::string profile_id, std::string session_id,
-             base::Value::Dict event) {
+             base::DictValue event) {
             if (owner)
               callback(context, profile_id, session_id, event);
           },

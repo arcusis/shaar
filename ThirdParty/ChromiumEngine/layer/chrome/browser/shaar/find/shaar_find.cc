@@ -82,7 +82,7 @@ class FindState final : public base::SupportsUserData::Data,
     const auto& update = helper_->find_result();
     if (update.request_id() != chromium_request_id_)
       return;
-    base::Value::Dict payload;
+    base::DictValue payload;
     payload.Set("kind", "result");
     payload.Set("schemaVersion", 1);
     payload.Set("requestID", std::to_string(request_id_));
@@ -144,10 +144,10 @@ bool ParseArguments(shaar_operation operation, shaar_bytes bytes,
   if (!out || (bytes.size && !bytes.data))
     return false;
   auto value = base::JSONReader::Read(
-      std::string_view(bytes.data ? bytes.data : "", bytes.size));
+      std::string_view(bytes.data ? bytes.data : "", bytes.size), base::JSON_PARSE_RFC);
   if (!value || !value->is_dict())
     return false;
-  const base::Value::Dict& dict = value->GetDict();
+  const base::DictValue& dict = value->GetDict();
   const std::optional<int> version = dict.FindInt("schemaVersion");
   if (!version || *version != 1)
     return false;

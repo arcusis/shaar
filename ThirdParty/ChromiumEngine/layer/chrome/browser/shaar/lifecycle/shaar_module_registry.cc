@@ -247,7 +247,7 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_submit(
   }
 
   const std::string_view json(args_json.data, args_json.size);
-  std::optional<base::Value> parsed = base::JSONReader::Read(json);
+  std::optional<base::Value> parsed = base::JSONReader::Read(json, base::JSON_PARSE_RFC);
   if (!parsed || !parsed->is_dict())
     return Fail(SHAAR_INVALID_ARGUMENT, "args_json must be a JSON object",
                 immediate_error);

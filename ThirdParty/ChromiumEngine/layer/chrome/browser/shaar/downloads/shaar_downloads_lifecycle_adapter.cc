@@ -39,7 +39,7 @@ class PerEngineDownloads final : public base::SupportsUserData::Data {
   static void EmitDownloadEvent(void* context,
                                 const std::string& profile_id,
                                 const std::string& session_id,
-                                const base::Value::Dict& event) {
+                                const base::DictValue& event) {
     std::string payload;
     if (!base::JSONWriter::Write(event, &payload))
       return;

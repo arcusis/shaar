@@ -98,7 +98,7 @@ TEST(ShaarStorageKeychainTest, ReturnsOnlyNonSecretIdentityStatusForLiveProfile)
   ASSERT_TRUE(reply.called);
   EXPECT_EQ(reply.code, SHAAR_OK);
   EXPECT_EQ(profiles.resolve_calls, 2);
-  auto payload = base::JSONReader::ReadDict(reply.payload);
+  auto payload = base::JSONReader::ReadDict(reply.payload, base::JSON_PARSE_RFC);
   ASSERT_TRUE(payload);
   EXPECT_EQ(payload->size(), 2u);
   EXPECT_EQ(payload->FindInt("schemaVersion"), 1);

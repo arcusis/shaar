@@ -127,7 +127,7 @@ shaar_error_code Fail(shaar_error* error, shaar_error_code code,
   return code;
 }
 
-bool ExactKeys(const base::Value::Dict& dict,
+bool ExactKeys(const base::DictValue& dict,
                std::initializer_list<std::string_view> keys) {
   for (const auto item : dict) {
     bool found = false;
@@ -139,13 +139,13 @@ bool ExactKeys(const base::Value::Dict& dict,
   return true;
 }
 
-bool ParamsHaveOnly(const base::Value::Dict& params,
+bool ParamsHaveOnly(const base::DictValue& params,
                     std::initializer_list<std::string_view> keys) {
   return ExactKeys(params, keys);
 }
 
 bool ValidateParams(shaar_devtools_command command,
-                    const base::Value::Dict& params) {
+                    const base::DictValue& params) {
   switch (command) {
     case SHAAR_DEVTOOLS_RUNTIME_EVALUATE:
       return ParamsHaveOnly(params, {"expression", "objectGroup",
@@ -238,30 +238,30 @@ bool ValidateParams(shaar_devtools_command command,
   return false;
 }
 
-bool HasRequiredString(const base::Value::Dict& params,
+bool HasRequiredString(const base::DictValue& params,
                        std::string_view key) {
   const std::string* value = params.FindString(key);
   return value && !value->empty();
 }
 
-bool HasRequiredInteger(const base::Value::Dict& params,
+bool HasRequiredInteger(const base::DictValue& params,
                         std::string_view key) {
   return params.FindInt(key).has_value();
 }
 
-bool HasRequiredBoolean(const base::Value::Dict& params,
+bool HasRequiredBoolean(const base::DictValue& params,
                         std::string_view key) {
   return params.FindBool(key).has_value();
 }
 
-bool HasNumericValue(const base::Value::Dict& params,
+bool HasNumericValue(const base::DictValue& params,
                      std::string_view key) {
   const base::Value* value = params.Find(key);
   return value && (value->is_int() || value->is_double());
 }
 
 bool HasRequiredFields(shaar_devtools_command command,
-                       const base::Value::Dict& params) {
+                       const base::DictValue& params) {
   switch (command) {
     case SHAAR_DEVTOOLS_RUNTIME_EVALUATE:
       return HasRequiredString(params, "expression");
@@ -334,7 +334,7 @@ bool HasEmptyVersionedSchema(shaar_bytes args_json) {
       args_json.size > kMaxArgumentsBytes)
     return false;
   auto parsed = base::JSONReader::Read(
-      std::string_view(args_json.data, args_json.size));
+      std::string_view(args_json.data, args_json.size), base::JSON_PARSE_RFC);
   if (!parsed || !parsed->is_dict())
     return false;
   const auto& root = parsed->GetDict();
@@ -363,12 +363,12 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
                                base::span<const uint8_t> message) override {
     const std::string_view input(reinterpret_cast<const char*>(message.data()),
                                  message.size());
-    auto parsed = base::JSONReader::Read(input);
+    auto parsed = base::JSONReader::Read(input, base::JSON_PARSE_RFC);
     if (!parsed || !parsed->is_dict()) {
       Finish(SHAAR_CHROMIUM_ERROR, {}, "invalid protocol response");
       return;
     }
-    const base::Value::Dict& dict = parsed->GetDict();
+    const base::DictValue& dict = parsed->GetDict();
     const auto response_id = dict.FindInt("id");
     if (!response_id || *response_id != static_cast<int>(request_.request_id))
       return;
@@ -376,12 +376,12 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
       Finish(SHAAR_CHROMIUM_ERROR, {}, "protocol command failed");
       return;
     }
-    const base::Value::Dict* result = dict.FindDict("result");
+    const base::DictValue* result = dict.FindDict("result");
     if (!result) {
       Finish(SHAAR_CHROMIUM_ERROR, {}, "protocol response has no result");
       return;
     }
-    base::Value::Dict wrapped;
+    base::DictValue wrapped;
     wrapped.Set("schemaVersion", 1);
     wrapped.Set("result", result->Clone());
     std::string output;
@@ -423,14 +423,14 @@ shaar_error_code DecodeOperation(shaar_operation operation,
                                  shaar_bytes args_json,
                                  shaar_devtools_capability* capability,
                                  shaar_devtools_command* command,
-                                 base::Value::Dict* params,
+                                 base::DictValue* params,
                                  std::string* reason) {
   if (!args_json.data || args_json.size == 0 || args_json.size > kMaxArgumentsBytes) {
     *reason = "invalid DevTools arguments";
     return SHAAR_INVALID_ARGUMENT;
   }
   auto parsed = base::JSONReader::Read(
-      std::string_view(args_json.data, args_json.size));
+      std::string_view(args_json.data, args_json.size), base::JSON_PARSE_RFC);
   if (!parsed || !parsed->is_dict()) {
     *reason = "invalid DevTools JSON";
     return SHAAR_INVALID_ARGUMENT;
@@ -536,13 +536,13 @@ shaar_error_code EncodeProtocolRequest(shaar_bytes args_json,
     return SHAAR_INVALID_ARGUMENT;
   shaar_devtools_capability capability;
   shaar_devtools_command command;
-  base::Value::Dict params;
+  base::DictValue params;
   const auto status = DecodeOperation(SHAAR_OP_DEVTOOLS_CALL, args_json,
                                       &capability, &command, &params, reason);
   if (status != SHAAR_OK)
     return status;
-  base::Value::Dict protocol;
-  protocol.Set("id", static_cast<int64_t>(request_id));
+  base::DictValue protocol;
+  protocol.Set("id", static_cast<int>(request_id));
   protocol.Set("method", ProtocolMethod(capability, command));
   protocol.Set("params", std::move(params));
   if (!base::JSONWriter::Write(base::Value(std::move(protocol)), request_json)) {
@@ -641,7 +641,7 @@ shaar_error_code HandleDevToolsOperation(
   if (operation == SHAAR_OP_DEVTOOLS_CALL) {
     shaar_devtools_capability parsed_capability;
     shaar_devtools_command parsed_command;
-    base::Value::Dict params;
+    base::DictValue params;
     std::string reason;
     const shaar_error_code decode_status = DecodeOperation(
         operation, args_json, &parsed_capability, &parsed_command, &params,

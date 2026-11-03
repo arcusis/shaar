@@ -50,7 +50,7 @@ void DeliverReply(ReplyContext request,
   request.callback(request.context, &result);
 }
 
-void Reply(const ReplyContext& request, base::Value::Dict payload) {
+void Reply(const ReplyContext& request, base::DictValue payload) {
   std::string json;
   base::JSONWriter::Write(base::Value(std::move(payload)), &json);
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
@@ -73,17 +73,17 @@ shaar_error_code Fail(shaar_error* error,
   return code;
 }
 
-std::optional<base::Value::Dict> ParseArguments(shaar_bytes bytes) {
+std::optional<base::DictValue> ParseArguments(shaar_bytes bytes) {
   if (!bytes.data || bytes.size == 0 || bytes.size > kMaximumArgumentsBytes)
     return std::nullopt;
   auto parsed = base::JSONReader::Read(
-      std::string_view(bytes.data, bytes.size));
+      std::string_view(bytes.data, bytes.size), base::JSON_PARSE_RFC);
   if (!parsed || !parsed->is_dict())
     return std::nullopt;
   return std::move(parsed->GetDict());
 }
 
-bool HasOnlyKeys(const base::Value::Dict& dict,
+bool HasOnlyKeys(const base::DictValue& dict,
                  std::initializer_list<std::string_view> allowed) {
   for (const auto item : dict) {
     if (std::find(allowed.begin(), allowed.end(), item.first) == allowed.end())
@@ -120,15 +120,15 @@ std::optional<uint32_t> AbiAction(
   }
 }
 
-base::Value::Dict StateFor(content::WebContents* contents) {
-  base::Value::Dict state;
+base::DictValue StateFor(content::WebContents* contents) {
+  base::DictValue state;
   state.Set("schemaVersion", 1);
   state.Set("playbackState", "none");
   state.Set("title", "");
   state.Set("artist", "");
   state.Set("album", "");
   state.Set("artwork", base::Value());
-  state.Set("supportedActions", base::Value::List());
+  state.Set("supportedActions", base::ListValue());
   state.Set("canSeek", false);
   state.Set("hasVideo", false);
   state.Set("tabMuted", contents->IsAudioMuted());
@@ -161,7 +161,7 @@ base::Value::Dict StateFor(content::WebContents* contents) {
   state.Set("artist", base::UTF16ToUTF8(metadata.artist));
   state.Set("album", base::UTF16ToUTF8(metadata.album));
   const auto actions = session->GetMediaSessionActionsSync();
-  base::Value::List supported_actions;
+  base::ListValue supported_actions;
   for (auto action : actions) {
     if (const auto abi_action = AbiAction(action))
       supported_actions.Append(static_cast<int>(*abi_action));
@@ -314,7 +314,7 @@ shaar_error_code HandleMediaOperation(
         return Fail(immediate_error, SHAAR_INVALID_ARGUMENT,
                     "tab mute requires a boolean value");
       contents->SetAudioMuted(value != 0);
-      Reply(request, base::Value::Dict().Set("schemaVersion", 1));
+      Reply(request, base::DictValue().Set("schemaVersion", 1));
       return SHAAR_OK;
     }
     if (*command == SHAAR_MEDIA_SET_ELEMENT_VOLUME)
@@ -336,7 +336,7 @@ shaar_error_code HandleMediaOperation(
                   "media session does not advertise this action");
     }
     session->DidReceiveAction(action);
-    Reply(request, base::Value::Dict().Set("schemaVersion", 1));
+    Reply(request, base::DictValue().Set("schemaVersion", 1));
     return SHAAR_OK;
   }
   if (operation == SHAAR_OP_MEDIA_ENTER_PIP ||
@@ -352,7 +352,7 @@ shaar_error_code HandleMediaOperation(
       return Fail(immediate_error, SHAAR_UNSUPPORTED_CAPABILITY,
                   "tab media session does not advertise the PiP action");
     session->DidReceiveAction(action);
-    Reply(request, base::Value::Dict().Set("schemaVersion", 1));
+    Reply(request, base::DictValue().Set("schemaVersion", 1));
     return SHAAR_OK;
   }
   if (operation == SHAAR_OP_MEDIA_SET_AUTO_PIP) {

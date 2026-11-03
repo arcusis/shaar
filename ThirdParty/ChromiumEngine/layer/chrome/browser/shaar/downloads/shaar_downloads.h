@@ -36,7 +36,7 @@ class Downloads final : private download::AllDownloadItemNotifier::Observer {
   using EventCallback = void (*)(void* context,
                                  const std::string& profile_id,
                                  const std::string& session_id,
-                                 const base::Value::Dict& event);
+                                 const base::DictValue& event);
 
   Downloads(content::BrowserContext* browser_context,
             std::string profile_id,
@@ -49,7 +49,7 @@ class Downloads final : private download::AllDownloadItemNotifier::Observer {
 
   // Returns false until Chromium has initialized history for this manager.
   bool IsReady() const;
-  base::Value::Dict List() const;
+  base::DictValue List() const;
   bool Control(const std::string& guid,
                const std::string& action,
                std::string* error_code);
@@ -65,7 +65,7 @@ class Downloads final : private download::AllDownloadItemNotifier::Observer {
               std::string* payload_json,
               std::string* error_code);
 
-  static base::Value::Dict Record(const download::DownloadItem& item);
+  static base::DictValue Record(const download::DownloadItem& item);
 
  private:
   struct Transition {
@@ -87,7 +87,7 @@ class Downloads final : private download::AllDownloadItemNotifier::Observer {
 
   void EmitUpsert(download::DownloadItem* item);
   void EmitRemove(download::DownloadItem* item);
-  void PostEvent(base::Value::Dict event);
+  void PostEvent(base::DictValue event);
   void FlushProgress();
   static Transition GetTransition(const download::DownloadItem& item);
 

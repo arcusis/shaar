@@ -41,7 +41,7 @@ shaar_error_code Fail(shaar_error* error,
   return code;
 }
 
-bool HasOnlyKeys(const base::Value::Dict& dict,
+bool HasOnlyKeys(const base::DictValue& dict,
                  std::initializer_list<std::string_view> allowed) {
   for (const auto item : dict) {
     if (std::find(allowed.begin(), allowed.end(), item.first) == allowed.end())
@@ -107,7 +107,7 @@ shaar_error_code HandleIdentityStatus(
   }
 
   const auto arguments = base::JSONReader::ReadDict(
-      std::string_view(args.data ? args.data : "", args.size));
+      std::string_view(args.data ? args.data : "", args.size), base::JSON_PARSE_RFC);
   if (!arguments || !HasOnlyKeys(*arguments, {"schemaVersion"}) ||
       arguments->FindInt("schemaVersion") != 1) {
     return Fail(error, SHAAR_INVALID_ARGUMENT,
@@ -128,7 +128,7 @@ shaar_error_code HandleIdentityStatus(
                 "engine Safe Storage identity is not Shaar");
   }
 
-  base::Value::Dict result;
+  base::DictValue result;
   result.Set("schemaVersion", 1);
   result.Set("identity", "shaar");
   std::string payload;

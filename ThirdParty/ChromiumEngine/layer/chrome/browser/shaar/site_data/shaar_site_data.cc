@@ -46,7 +46,7 @@ namespace {
 
 constexpr size_t kMaxArguments = 64 * 1024;
 
-using Dict = base::Value::Dict;
+using Dict = base::DictValue;
 
 shaar_error_code Fail(shaar_error* error,
                       shaar_error_code code,
@@ -74,7 +74,7 @@ bool OnlyKeys(const Dict& dict, std::initializer_list<std::string_view> keys) {
 std::optional<Dict> Parse(shaar_bytes bytes) {
   if (!bytes.data || !bytes.size || bytes.size > kMaxArguments)
     return std::nullopt;
-  auto value = base::JSONReader::Read(std::string_view(bytes.data, bytes.size));
+  auto value = base::JSONReader::Read(std::string_view(bytes.data, bytes.size), base::JSON_PARSE_RFC);
   if (!value || !value->is_dict())
     return std::nullopt;
   Dict dict = std::move(value->GetDict());
@@ -237,7 +237,7 @@ shaar_error_code Clear(Profile* profile, const GURL* origin, uint64_t mask,
   payload.Set("schemaVersion", 1);
   payload.Set("complete", true);
   if (!origin) {
-    base::Value::List types;
+    base::ListValue types;
     if (mask & content::BrowsingDataRemover::DATA_TYPE_CACHE)
       types.Append("cache");
     if (mask & chrome_browsing_data_remover::DATA_TYPE_SITE_DATA)
@@ -451,7 +451,7 @@ shaar_error_code HandleSiteDataOperation(
     }
     std::sort(origins.begin(), origins.end());
     origins.erase(std::unique(origins.begin(), origins.end()), origins.end());
-    base::Value::List list;
+    base::ListValue list;
     for (const auto& origin : origins) list.Append(origin);
     Dict payload;
     payload.Set("schemaVersion", 1);
@@ -465,7 +465,7 @@ shaar_error_code HandleSiteDataOperation(
                   "profile browsing-data clearing is regular-only");
     if (!OnlyKeys(*args, {"schemaVersion", "types", "sinceUnixMs"}))
       return Fail(error, SHAAR_INVALID_ARGUMENT, "unknown browsing-data fields");
-    const base::Value::List* types = args->FindList("types");
+    const base::ListValue* types = args->FindList("types");
     if (!types || types->empty() || types->size() > 2)
       return Fail(error, SHAAR_INVALID_ARGUMENT, "types must be a nonempty list");
     uint64_t mask = 0;

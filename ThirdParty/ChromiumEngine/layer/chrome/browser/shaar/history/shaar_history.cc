@@ -98,7 +98,7 @@ void DeliverReply(ReplyContext request, shaar_error_code code, std::string json,
 }
 
 void Reply(const ReplyContext &request, shaar_error_code code,
-           base::Value::Dict payload = {}) {
+           base::DictValue payload = {}) {
   std::string json;
   if (code == SHAAR_OK)
     base::JSONWriter::Write(base::Value(std::move(payload)), &json);
@@ -129,7 +129,7 @@ shaar_error_code Fail(shaar_error *error, shaar_error_code code,
   return code;
 }
 
-bool HasOnlyKeys(const base::Value::Dict &dict,
+bool HasOnlyKeys(const base::DictValue &dict,
                  std::initializer_list<std::string_view> allowed) {
   for (const auto item : dict) {
     if (std::find(allowed.begin(), allowed.end(), item.first) == allowed.end())
@@ -138,17 +138,17 @@ bool HasOnlyKeys(const base::Value::Dict &dict,
   return true;
 }
 
-std::optional<base::Value::Dict> ParseArguments(shaar_bytes bytes) {
+std::optional<base::DictValue> ParseArguments(shaar_bytes bytes) {
   if (!bytes.data || bytes.size == 0 || bytes.size > kMaximumArgumentsBytes)
     return std::nullopt;
   auto parsed =
-      base::JSONReader::Read(std::string_view(bytes.data, bytes.size));
+      base::JSONReader::Read(std::string_view(bytes.data, bytes.size), base::JSON_PARSE_RFC);
   if (!parsed || !parsed->is_dict())
     return std::nullopt;
   return std::move(parsed->GetDict());
 }
 
-bool HasVersionOne(const base::Value::Dict &dict) {
+bool HasVersionOne(const base::DictValue &dict) {
   return dict.FindInt("schemaVersion") == 1;
 }
 
@@ -300,19 +300,19 @@ shaar_error_code Query(HistoryContext *registry, shaar_scope scope,
           if (row.visits.size() < static_cast<size_t>(max_visits))
             row.visits.push_back(EpochMilliseconds(result.visit_time()));
         }
-        base::Value::List entries;
+        base::ListValue entries;
         for (const QueryRow &row : rows) {
-          base::Value::List visits;
+          base::ListValue visits;
           for (int64_t visit : row.visits)
-            visits.Append(visit);
-          entries.Append(base::Value::Dict()
+            visits.Append(static_cast<double>(visit));
+          entries.Append(base::DictValue()
                              .Set("url", row.url)
                              .Set("title", row.title)
                              .Set("visitCount", row.visit_count)
                              .Set("visits", std::move(visits)));
         }
         Reply(request, SHAAR_OK,
-              base::Value::Dict()
+              base::DictValue()
                   .Set("schemaVersion", 1)
                   .Set("entries", std::move(entries)));
       }),
@@ -334,7 +334,7 @@ shaar_error_code Delete(HistoryContext *registry, shaar_scope scope,
     return Fail(immediate_error, SHAAR_INVALID_ARGUMENT,
                 "invalid history delete schema");
   }
-  const base::Value::List *values = args->FindList("urls");
+  const base::ListValue *values = args->FindList("urls");
   if (!values || values->empty() || values->size() > kMaximumDeleteURLs) {
     return Fail(immediate_error, SHAAR_INVALID_ARGUMENT,
                 "invalid history URL list");
@@ -379,7 +379,7 @@ shaar_error_code Delete(HistoryContext *registry, shaar_scope scope,
           return;
         }
         Reply(request, SHAAR_OK,
-              base::Value::Dict()
+              base::DictValue()
                   .Set("schemaVersion", 1)
                   .Set("deleted", deleted));
       }),
@@ -429,10 +429,10 @@ struct ImportState : public std::enable_shared_from_this<ImportState> {
       return;
     }
     if (index == urls.size()) {
-      base::Value::List rejected;
+      base::ListValue rejected;
       for (size_t row = 0; row < rejection_codes.size(); ++row) {
         if (!rejection_codes[row].empty())
-          rejected.Append(base::Value::Dict()
+          rejected.Append(base::DictValue()
                               .Set("index", static_cast<int>(row))
                               .Set("code", rejection_codes[row]));
       }
@@ -442,7 +442,7 @@ struct ImportState : public std::enable_shared_from_this<ImportState> {
         return;
       }
       Reply(request, SHAAR_OK,
-            base::Value::Dict()
+            base::DictValue()
                 .Set("schemaVersion", 1)
                 .Set("accepted", accepted)
                 .Set("insertedVisits", inserted)
@@ -546,7 +546,7 @@ shaar_error_code Insert(HistoryContext *registry, shaar_scope scope,
                 "invalid history import schema");
   }
   const std::string *source = args->FindString("source");
-  const base::Value::List *pages = args->FindList("pages");
+  const base::ListValue *pages = args->FindList("pages");
   if (!source ||
       (*source != "safari" && *source != "chrome" && *source != "arc" &&
        *source != "firefox") ||
@@ -583,7 +583,7 @@ shaar_error_code Insert(HistoryContext *registry, shaar_scope scope,
     }
     const std::string *raw_url = page.GetDict().FindString("url");
     const std::string *raw_title = page.GetDict().FindString("title");
-    const base::Value::List *raw_visits = page.GetDict().FindList("visits");
+    const base::ListValue *raw_visits = page.GetDict().FindList("visits");
     GURL url(raw_url ? *raw_url : std::string());
     if (!raw_url || raw_url->size() > 16 * 1024 || !IsWebURL(url) ||
         !CanAddURLToHistory(url)) {
@@ -752,7 +752,7 @@ shaar_error_code Watch(HistoryContext *registry,
   state->subscriptions.emplace(token, service);
   Reply(
       request, SHAAR_OK,
-      base::Value::Dict().Set("schemaVersion", 1).Set("subscriptionId", token));
+      base::DictValue().Set("schemaVersion", 1).Set("subscriptionId", token));
   return SHAAR_OK;
 }
 
@@ -781,7 +781,7 @@ shaar_error_code Unwatch(HistoryContext *registry,
     return ErrorCodeOr(immediate_error, SHAAR_NOT_FOUND);
   auto subscription = state->subscriptions.find(*token);
   if (subscription == state->subscriptions.end()) {
-    Reply(request, SHAAR_OK, base::Value::Dict().Set("schemaVersion", 1));
+    Reply(request, SHAAR_OK, base::DictValue().Set("schemaVersion", 1));
     return SHAAR_OK;
   }
   auto *service = ResolveHistory(registry, scope.profile, immediate_error);
@@ -798,7 +798,7 @@ shaar_error_code Unwatch(HistoryContext *registry,
       [service](const auto &item) { return item.second == service; });
   if (!still_used)
     state->observers.erase(service);
-  Reply(request, SHAAR_OK, base::Value::Dict().Set("schemaVersion", 1));
+  Reply(request, SHAAR_OK, base::DictValue().Set("schemaVersion", 1));
   return SHAAR_OK;
 }
 

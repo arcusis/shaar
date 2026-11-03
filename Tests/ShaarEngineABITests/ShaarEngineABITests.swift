@@ -64,7 +64,7 @@ struct ShaarEngineABITests {
     #expect(throws: ShaarEngineError.invalidStatusCode(99)) { try ShaarStatusCode.decode(99) }
   }
 
-  @Test func SwiftEventTypesUseTheImportedCLayouts() {
+  @Test func swiftEventTypesUseTheImportedCLayouts() {
     #expect(MemoryLayout<ShaarBytes>.size == MemoryLayout<shaar_bytes>.size)
     #expect(MemoryLayout<ShaarABIEvent>.size == MemoryLayout<shaar_event>.size)
     #expect(MemoryLayout<ShaarABIEvent>.alignment == MemoryLayout<shaar_event>.alignment)

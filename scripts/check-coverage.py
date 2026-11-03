@@ -12,6 +12,8 @@ from pathlib import Path
 
 
 MODULES = ("BrowserCore", "ArcusisBrowser", "ChromiumBridge", "Shaar", "ShaarVerification")
+# This engine-only flow is exercised by the hosted normal-window smoke, not Swift unit tests.
+UNIT_COVERAGE_EXCLUDES = {("ShaarVerification", "BasicBrowsingProbe.swift")}
 # Engine-driven UI tests cover a few timing-dependent lines nondeterministically (merge group run
 # 41492941258 dropped ArcusisBrowser by 3 of 36,330 lines with no source change). Tolerate drops
 # up to 0.025 percentage points; anything larger is a real regression.
@@ -34,6 +36,8 @@ def module_coverage(report: dict) -> dict[str, tuple[int, int]]:
                 if identity in seen:
                     raise ValueError(f"Duplicate source coverage: {identity}")
                 seen.add(identity)
+                if identity in UNIT_COVERAGE_EXCLUDES:
+                    continue
                 lines = file["summary"]["lines"]
                 covered, count = lines["covered"], lines["count"]
                 if type(count) is not int or type(covered) is not int or not 0 <= covered <= count:

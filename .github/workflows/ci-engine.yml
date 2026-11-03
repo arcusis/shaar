@@ -18,7 +18,6 @@ jobs:
     timeout-minutes: 30
     outputs:
       shards: ${{ steps.bundle.outputs.shards }}
-      split-shards: ${{ steps.bundle.outputs.split-shards }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -85,7 +84,7 @@ jobs:
           artifact-name: ci-engine-build-${{ github.run_id }}
           overwrite: 'true'
   probes-initial:
-    name: Engine ${{ matrix.shard }} initial phase
+    name: Engine shard ${{ matrix.shard }}
     needs: prepare
     runs-on: macos-26
     timeout-minutes: 90
@@ -113,57 +112,8 @@ jobs:
         env:
           CI_ITERATIONS: ${{ inputs.iterations }}
           CI_SHARD: ${{ matrix.shard }}
-        run: .venv/bin/python scripts/ci-stage.py engine-shard --iterations "$CI_ITERATIONS" --shard "$CI_SHARD" --phase initial
-      - name: Upload profile state for the restart phase
-        if: >-
-          success() &&
-          (startsWith(matrix.shard, 'baseline-') || startsWith(matrix.shard, 'private-window-'))
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        with:
-          name: ci-engine-state-${{ matrix.shard }}-${{ github.run_id }}
-          path: build/ci/engine-state/${{ matrix.shard }}.tar.gz
-          if-no-files-found: error
-          retention-days: 1
+        run: .venv/bin/python scripts/ci-stage.py engine-shard --iterations "$CI_ITERATIONS" --shard "$CI_SHARD"
       - uses: ./.github/actions/ci-evidence
         if: always()
         with:
-          stage: engine-shard-${{ matrix.shard }}-initial
-
-  probes-restart:
-    name: Engine ${{ matrix.shard }} restart phase
-    needs: [prepare, probes-initial]
-    runs-on: macos-26
-    timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      max-parallel: 4
-      matrix:
-        shard: ${{ fromJSON(needs.prepare.outputs.split-shards) }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - name: Identify verification bundle build inputs
-        run: echo "CI_BUNDLE_INPUTS=${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**', 'Resources/**', 'Plugins/**', 'ThirdParty/ArdiaCore/**', 'scripts/bundle-app.sh', 'scripts/ci-stage.py', 'scripts/release-config.sh', 'scripts/engine-signing.sh', 'scripts/fetch-engine.sh', 'scripts/stage-browser-resources.py', 'scripts/release_feed.py') }}" >> "$GITHUB_ENV"
-      - uses: ./.github/actions/ci-setup
-        with:
-          mode: engine-probe
-      - name: Identify exact source tree for bundle validation
-        run: echo "CI_SOURCE_TREE=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_ENV"
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
-        with:
-          name: ci-engine-build-${{ github.run_id }}
-          path: build/ci/engine-build
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
-        with:
-          name: ci-engine-state-${{ matrix.shard }}-${{ github.run_id }}
-          path: build/ci/engine-state
-      - name: Verify shared bundle and run restart phase without retries
-        env:
-          CI_ITERATIONS: ${{ inputs.iterations }}
-          CI_SHARD: ${{ matrix.shard }}
-        run: .venv/bin/python scripts/ci-stage.py engine-shard --iterations "$CI_ITERATIONS" --shard "$CI_SHARD" --phase restart
-      - uses: ./.github/actions/ci-evidence
-        if: always()
-        with:
-          stage: engine-shard-${{ matrix.shard }}-restart
+          stage: engine-shard-${{ matrix.shard }}

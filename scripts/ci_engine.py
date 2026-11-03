@@ -25,11 +25,6 @@ def engine_shards(iterations: int) -> list[str]:
             *(f"session-recovery-{index}" for index in range(1, iterations + 1))]
 
 
-def split_engine_shards(iterations: int) -> list[str]:
-    return [*(f"baseline-{index}" for index in range(1, iterations + 1)),
-            *(f"private-window-{index}" for index in range(1, max(3, iterations) + 1))]
-
-
 def shard_modes(shard: str, iterations: int) -> list[tuple[str, range]]:
     if shard not in engine_shards(iterations):
         raise ValueError(f"Unknown engine shard: {shard}")

@@ -8,6 +8,6 @@
 class ShaarModuleRegistry;
 
 // Registers operations 600-604 with the engine's module handler table.
-void shaar_history_register(ShaarModuleRegistry* registry);
+void shaar_history_register(ShaarModuleRegistry *registry);
 
-#endif  // CHROME_BROWSER_SHAAR_HISTORY_SHAAR_HISTORY_H_
+#endif // CHROME_BROWSER_SHAAR_HISTORY_SHAAR_HISTORY_H_

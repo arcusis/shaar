@@ -117,12 +117,15 @@ private actor FakeHistoryEngine: ShaarHistorySubmitting {
 struct ShaarHistoryAdapterTests {
   @Test func queryDecodesStrictRowsAndUsesSelectedProfile() async throws {
     let profile = UUID()
-    let fake = FakeHistoryEngine(reply: #"{"schemaVersion":1,"entries":[{"url":"https://example.test/a","title":"A","visitCount":3,"visits":[1700000000123]}]}"#)
+    let fake = FakeHistoryEngine(
+      reply:
+        #"{"schemaVersion":1,"entries":[{"url":"https://example.test/a","title":"A","visitCount":3,"visits":[1700000000123]}]}"#
+    )
     let adapter = ShaarHistoryAdapter(engine: fake)
     let entries = try await adapter.query(profileID: profile, maxUrls: 100, maxVisitsPerURL: 1)
     #expect(entries.count == 1)
     #expect(entries[0].visitCount == 3)
-    #expect(entries[0].visits == [1700000000123])
+    #expect(entries[0].visits == [1_700_000_000_123])
     let calls = await fake.calls
     #expect(calls.first?.profileID == profile)
     #expect(calls.first?.operation == .query)
@@ -131,28 +134,41 @@ struct ShaarHistoryAdapterTests {
   }
 
   @Test func queryRejectsDuplicateURLsAndUnsupportedSchemes() async throws {
-    let duplicate = #"{"schemaVersion":1,"entries":[{"url":"https://example.test/","title":"A","visitCount":1,"visits":[1]},{"url":"https://example.test/","title":"A","visitCount":1,"visits":[2]}]}"#
+    let duplicate =
+      #"{"schemaVersion":1,"entries":[{"url":"https://example.test/","title":"A","visitCount":1,"visits":[1]},{"url":"https://example.test/","title":"A","visitCount":1,"visits":[2]}]}"#
     let fake = FakeHistoryEngine(reply: duplicate)
     let adapter = ShaarHistoryAdapter(engine: fake)
-    await #expect(throws: ShaarHistoryAdapterError.invalidResponse("malformed or duplicate history row")) {
+    await #expect(
+      throws: ShaarHistoryAdapterError.invalidResponse("malformed or duplicate history row")
+    ) {
       try await adapter.query(profileID: UUID())
     }
-    await fake.setReply(#"{"schemaVersion":1,"entries":[{"url":"file:///tmp/a","title":"A","visitCount":1,"visits":[1]}]}"#)
-    await #expect(throws: ShaarHistoryAdapterError.invalidResponse("malformed or duplicate history row")) {
+    await fake.setReply(
+      #"{"schemaVersion":1,"entries":[{"url":"file:///tmp/a","title":"A","visitCount":1,"visits":[1]}]}"#
+    )
+    await #expect(
+      throws: ShaarHistoryAdapterError.invalidResponse("malformed or duplicate history row")
+    ) {
       try await adapter.query(profileID: UUID())
     }
   }
 
   @Test func insertDeleteWatchAreBoundToExplicitProfile() async throws {
     let profile = UUID()
-    let fake = FakeHistoryEngine(reply: #"{"schemaVersion":1,"accepted":1,"insertedVisits":2,"duplicateVisits":0,"rejected":[]}"#)
+    let fake = FakeHistoryEngine(
+      reply:
+        #"{"schemaVersion":1,"accepted":1,"insertedVisits":2,"duplicateVisits":0,"rejected":[]}"#)
     let adapter = ShaarHistoryAdapter(engine: fake)
-    let imported = try await adapter.insert(profileID: profile, source: "firefox", pages: [
-      .init(url: "https://import.example/", title: "Imported", visits: [1, 2])
-    ])
+    let imported = try await adapter.insert(
+      profileID: profile, source: "firefox",
+      pages: [
+        .init(url: "https://import.example/", title: "Imported", visits: [1, 2])
+      ])
     #expect(imported.insertedVisits == 2)
     await fake.setReply(#"{"schemaVersion":1,"deleted":1}"#)
-    #expect(try await adapter.delete(profileID: profile, urls: [URL(string: "https://import.example/")!]) == 1)
+    #expect(
+      try await adapter.delete(profileID: profile, urls: [URL(string: "https://import.example/")!])
+        == 1)
     await fake.setReply(#"{"schemaVersion":1,"subscriptionId":"sub-1"}"#)
     let token = try await adapter.watch(profileID: profile)
     #expect(token == "sub-1")
@@ -175,13 +191,17 @@ struct ShaarHistoryAdapterTests {
     let profile = UUID()
     let id = Data(profile.uuidString.utf8)
     let payload = Data(#"{"schemaVersion":1,"kind":"changed"}"#.utf8)
-    let regular = ShaarCopiedEvent(sequence: 2, kind: 11, profileID: id, sessionID: Data(),
-                                   windowID: Data(), tabID: Data(), payloadJSON: payload)
-    #expect(ShaarHistoryEventRouter.changedProfile(for: regular, knownProfiles: [profile]) == profile)
-    let privateEvent = ShaarCopiedEvent(sequence: 3, kind: 11, profileID: id,
-                                        sessionID: Data("private-session".utf8), windowID: Data(),
-                                        tabID: Data(), payloadJSON: payload)
-    #expect(ShaarHistoryEventRouter.changedProfile(for: privateEvent, knownProfiles: [profile]) == nil)
+    let regular = ShaarCopiedEvent(
+      sequence: 2, kind: 11, profileID: id, sessionID: Data(),
+      windowID: Data(), tabID: Data(), payloadJSON: payload)
+    #expect(
+      ShaarHistoryEventRouter.changedProfile(for: regular, knownProfiles: [profile]) == profile)
+    let privateEvent = ShaarCopiedEvent(
+      sequence: 3, kind: 11, profileID: id,
+      sessionID: Data("private-session".utf8), windowID: Data(),
+      tabID: Data(), payloadJSON: payload)
+    #expect(
+      ShaarHistoryEventRouter.changedProfile(for: privateEvent, knownProfiles: [profile]) == nil)
     #expect(ShaarHistoryEventRouter.changedProfile(for: regular, knownProfiles: []) == nil)
   }
 }

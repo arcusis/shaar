@@ -45,14 +45,15 @@ public struct ShaarHistoryInsertResult: Equatable, Sendable {
 public enum ShaarHistoryEventRouter {
   /// Returns only a known regular-profile invalidation. Private-session and
   /// malformed event envelopes never enter a regular library cache.
-  public static func changedProfile(for event: ShaarCopiedEvent, knownProfiles: Set<UUID>) -> UUID? {
+  public static func changedProfile(for event: ShaarCopiedEvent, knownProfiles: Set<UUID>) -> UUID?
+  {
     guard event.kind == 11, event.sessionID.isEmpty,
-          let profileString = String(data: event.profileID, encoding: .utf8),
-          let profileID = UUID(uuidString: profileString), knownProfiles.contains(profileID),
-          let object = try? JSONSerialization.jsonObject(with: event.payloadJSON) as? [String: Any],
-          object["schemaVersion"] as? Int == 1,
-          let kind = object["kind"] as? String,
-          ["changed", "visit", "modified", "deleted"].contains(kind)
+      let profileString = String(data: event.profileID, encoding: .utf8),
+      let profileID = UUID(uuidString: profileString), knownProfiles.contains(profileID),
+      let object = try? JSONSerialization.jsonObject(with: event.payloadJSON) as? [String: Any],
+      object["schemaVersion"] as? Int == 1,
+      let kind = object["kind"] as? String,
+      ["changed", "visit", "modified", "deleted"].contains(kind)
     else { return nil }
     return profileID
   }
@@ -76,23 +77,28 @@ public struct ShaarHistoryAdapter: Sendable {
   private let engine: any ShaarHistorySubmitting
   public init(engine: any ShaarHistorySubmitting) { self.engine = engine }
 
-  public func query(profileID: UUID, maxUrls: Int = 500, maxVisitsPerURL: Int = 1,
-                    search: String? = nil)
+  public func query(
+    profileID: UUID, maxUrls: Int = 500, maxVisitsPerURL: Int = 1,
+    search: String? = nil
+  )
     async throws -> [ShaarHistoryEntry]
   {
     guard (1...5000).contains(maxUrls), (1...50).contains(maxVisitsPerURL) else {
       throw ShaarHistoryAdapterError.invalidResponse("invalid query bounds")
     }
-    var args: [String: Any] = ["schemaVersion": 1, "maxUrls": maxUrls,
-                               "maxVisitsPerUrl": maxVisitsPerURL]
+    var args: [String: Any] = [
+      "schemaVersion": 1, "maxUrls": maxUrls,
+      "maxVisitsPerUrl": maxVisitsPerURL,
+    ]
     if let search {
       guard search.utf8.count <= 4096 else {
         throw ShaarHistoryAdapterError.invalidResponse("search query is too long")
       }
       args["search"] = search
     }
-    let data = try await engine.submitHistory(profileID: profileID, operation: .query,
-                                               argsJSON: try json(args))
+    let data = try await engine.submitHistory(
+      profileID: profileID, operation: .query,
+      argsJSON: try json(args))
     let root = try object(data, required: ["schemaVersion", "entries"], optional: ["nextCursor"])
     try version(root)
     guard let rows = root["entries"] as? [[String: Any]], rows.count <= maxUrls else {
@@ -101,12 +107,12 @@ public struct ShaarHistoryAdapter: Sendable {
     var seen = Set<String>()
     return try rows.map { row in
       guard Set(row.keys) == Set(["url", "title", "visitCount", "visits"]),
-            let rawURL = row["url"] as? String, let url = URL(string: rawURL),
-            ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
-            let title = row["title"] as? String,
-            let count = row["visitCount"] as? Int, count >= 0,
-            let visits = row["visits"] as? [Int64], visits.count <= maxVisitsPerURL,
-            visits.allSatisfy({ $0 >= 0 }), seen.insert(rawURL).inserted
+        let rawURL = row["url"] as? String, let url = URL(string: rawURL),
+        ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+        let title = row["title"] as? String,
+        let count = row["visitCount"] as? Int, count >= 0,
+        let visits = row["visits"] as? [Int64], visits.count <= maxVisitsPerURL,
+        visits.allSatisfy({ $0 >= 0 }), seen.insert(rawURL).inserted
       else { throw ShaarHistoryAdapterError.invalidResponse("malformed or duplicate history row") }
       return ShaarHistoryEntry(url: url, title: title, visitCount: count, visits: visits)
     }
@@ -115,7 +121,8 @@ public struct ShaarHistoryAdapter: Sendable {
   public func delete(profileID: UUID, urls: [URL]) async throws -> Int {
     let strings = urls.map(\.absoluteString)
     guard (1...500).contains(urls.count), Set(strings).count == strings.count,
-          urls.allSatisfy({ ["http", "https"].contains($0.scheme?.lowercased() ?? "") }) else {
+      urls.allSatisfy({ ["http", "https"].contains($0.scheme?.lowercased() ?? "") })
+    else {
       throw ShaarHistoryAdapterError.invalidResponse("invalid delete URLs")
     }
     let data = try await engine.submitHistory(
@@ -133,7 +140,8 @@ public struct ShaarHistoryAdapter: Sendable {
     -> ShaarHistoryInsertResult
   {
     guard ["safari", "chrome", "arc", "firefox"].contains(source),
-          (1...5000).contains(pages.count), pages.allSatisfy({ !$0.visits.isEmpty }) else {
+      (1...5000).contains(pages.count), pages.allSatisfy({ !$0.visits.isEmpty })
+    else {
       throw ShaarHistoryAdapterError.invalidResponse("invalid import batch")
     }
     let encoder = JSONEncoder()
@@ -142,20 +150,26 @@ public struct ShaarHistoryAdapter: Sendable {
       throw ShaarHistoryAdapterError.invalidResponse("could not encode import pages")
     }
     let request = try json(["schemaVersion": 1, "source": source, "pages": payload])
-    let data = try await engine.submitHistory(profileID: profileID, operation: .insert, argsJSON: request)
-    let root = try object(data, required: ["schemaVersion", "accepted", "insertedVisits", "duplicateVisits", "rejected"], optional: [])
+    let data = try await engine.submitHistory(
+      profileID: profileID, operation: .insert, argsJSON: request)
+    let root = try object(
+      data,
+      required: ["schemaVersion", "accepted", "insertedVisits", "duplicateVisits", "rejected"],
+      optional: [])
     try version(root)
     guard let accepted = root["accepted"] as? Int, accepted >= 0,
-          let inserted = root["insertedVisits"] as? Int, inserted >= 0,
-          let duplicates = root["duplicateVisits"] as? Int, duplicates >= 0,
-          let rawRejected = root["rejected"] as? [[String: Any]] else {
+      let inserted = root["insertedVisits"] as? Int, inserted >= 0,
+      let duplicates = root["duplicateVisits"] as? Int, duplicates >= 0,
+      let rawRejected = root["rejected"] as? [[String: Any]]
+    else {
       throw ShaarHistoryAdapterError.invalidResponse("malformed insert result")
     }
     var rejectedIndexes = Set<Int>()
     let rejected = try rawRejected.map { item -> ShaarHistoryInsertResult.Rejection in
       guard Set(item.keys) == Set(["index", "code"]), let index = item["index"] as? Int,
-            pages.indices.contains(index), rejectedIndexes.insert(index).inserted,
-            let code = item["code"] as? String, !code.isEmpty else {
+        pages.indices.contains(index), rejectedIndexes.insert(index).inserted,
+        let code = item["code"] as? String, !code.isEmpty
+      else {
         throw ShaarHistoryAdapterError.invalidResponse("malformed row rejection")
       }
       return .init(index: index, code: code)
@@ -163,12 +177,14 @@ public struct ShaarHistoryAdapter: Sendable {
     guard accepted + rejected.count == pages.count else {
       throw ShaarHistoryAdapterError.invalidResponse("inconsistent insert counts")
     }
-    return .init(accepted: accepted, insertedVisits: inserted, duplicateVisits: duplicates, rejected: rejected)
+    return .init(
+      accepted: accepted, insertedVisits: inserted, duplicateVisits: duplicates, rejected: rejected)
   }
 
   public func watch(profileID: UUID) async throws -> String {
-    let data = try await engine.submitHistory(profileID: profileID, operation: .watch,
-                                               argsJSON: try json(["schemaVersion": 1]))
+    let data = try await engine.submitHistory(
+      profileID: profileID, operation: .watch,
+      argsJSON: try json(["schemaVersion": 1]))
     let root = try object(data, required: ["schemaVersion", "subscriptionId"], optional: [])
     try version(root)
     guard let token = root["subscriptionId"] as? String, !token.isEmpty else {
@@ -178,9 +194,12 @@ public struct ShaarHistoryAdapter: Sendable {
   }
 
   public func unwatch(profileID: UUID, subscriptionID: String) async throws {
-    guard !subscriptionID.isEmpty else { throw ShaarHistoryAdapterError.invalidResponse("empty subscription token") }
-    let data = try await engine.submitHistory(profileID: profileID, operation: .unwatch,
-                                               argsJSON: try json(["schemaVersion": 1, "subscriptionId": subscriptionID]))
+    guard !subscriptionID.isEmpty else {
+      throw ShaarHistoryAdapterError.invalidResponse("empty subscription token")
+    }
+    let data = try await engine.submitHistory(
+      profileID: profileID, operation: .unwatch,
+      argsJSON: try json(["schemaVersion": 1, "subscriptionId": subscriptionID]))
     let root = try object(data, required: ["schemaVersion"], optional: [])
     try version(root)
   }
@@ -188,9 +207,12 @@ public struct ShaarHistoryAdapter: Sendable {
   private func json(_ value: [String: Any]) throws -> Data {
     try JSONSerialization.data(withJSONObject: value, options: [.sortedKeys])
   }
-  private func object(_ data: Data, required: Set<String>, optional: Set<String>) throws -> [String: Any] {
+  private func object(_ data: Data, required: Set<String>, optional: Set<String>) throws -> [String:
+    Any]
+  {
     guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-          required.isSubset(of: Set(root.keys)), Set(root.keys).isSubset(of: required.union(optional)) else {
+      required.isSubset(of: Set(root.keys)), Set(root.keys).isSubset(of: required.union(optional))
+    else {
       throw ShaarHistoryAdapterError.invalidResponse("invalid response object")
     }
     return root

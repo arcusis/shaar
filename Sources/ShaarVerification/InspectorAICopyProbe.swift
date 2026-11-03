@@ -24,7 +24,7 @@ import SwiftUI
     address.query = "token=private-query-fixture"
     address.fragment = "private-fragment-fixture"
     store.perform(.open(address.url!))
-    try await wait {
+    try await wait("AI fixture document") {
       engine.siteControlTarget?.url.path == "/inspector-ai"
         && engine.pages[engine.siteControlTarget!.tabID]?.loading == false
     }
@@ -36,7 +36,7 @@ import SwiftUI
       throw InspectorFailure("AI Inspector is missing.")
     }
     defer { inspector.close() }
-    try await wait {
+    try await wait("AI Inspector bootstrap") {
       try await inspector.evaluate("!!globalThis.__shaarInspectorV2") as? Bool == true
     }
     try await pick(inspector, "#ai-save")
@@ -68,11 +68,11 @@ import SwiftUI
     // The same tab navigates to a second page; notes survive and retain their original page.
     address.path = "/inspector-ai/second"
     try check(engine.navigateCurrentPage(to: address.url!), "AI fixture navigation failed.")
-    try await wait {
+    try await wait("AI fixture second navigation") {
       inspector.target.url.path == "/inspector-ai/second"
         && engine.pages[target.tabID]?.loading == false && inspector.selection == nil
     }
-    try await wait {
+    try await wait("AI Inspector after second navigation") {
       try await inspector.evaluate("!!globalThis.__shaarInspectorV2") as? Bool == true
     }
     try await pick(inspector, "#ai-save")
@@ -95,11 +95,11 @@ import SwiftUI
         && board.string(forType: .string) == nil && board.data(forType: .png) != nil,
       "Copy image did not export one image-only item.")
     inspector.highlightEdge("padding", 0, active: true)
-    try await wait {
+    try await wait("AI padding highlight") {
       try await inspector.evaluate("__shaarInspectorV2.edgeHighlight().painted") as? Bool == true
     }
     inspector.highlightEdge("padding", 0, active: false)
-    try await wait {
+    try await wait("AI padding highlight cleanup") {
       try await inspector.evaluate("__shaarInspectorV2.edgeHighlight().painted") as? Bool == false
     }
     try await captureRedesign(inspector)
@@ -180,14 +180,14 @@ import SwiftUI
       throw InspectorFailure("Page diagnostics missing.")
     }
     tools.tool = .overview
-    try await wait {
+    try await wait("Page diagnostics startup") {
       await tools.refresh()
       return tools.startedAt != nil
     }
     _ = try await inspector.evaluate(
       "console.error('AI fixture console error');fetch('/inspector-ai-failure?token=network-private').then(r=>r.text()).then(()=>true)"
     )
-    try await wait {
+    try await wait("AI fixture diagnostic collection") {
       await tools.refresh()
       return tools.console.contains {
         $0.level == "error" && $0.message.contains("AI fixture console error")
@@ -278,12 +278,12 @@ import SwiftUI
   private func check(_ value: Bool, _ message: String) throws {
     if !value { throw InspectorFailure(message) }
   }
-  private func wait(_ predicate: () async throws -> Bool) async throws {
+  private func wait(_ label: String, _ predicate: () async throws -> Bool) async throws {
     for _ in 0..<Int(150 * ProbeTimeout.scale) {
       if try await predicate() { return }
       try await Task.sleep(for: .milliseconds(100))
     }
-    throw InspectorFailure("AI copy probe condition did not settle.")
+    throw InspectorFailure("AI copy probe timed out waiting for \(label).")
   }
   private func pick(_ inspector: InspectorModel, _ selector: String) async throws {
     let targetSelector = selector == "#ai-card" ? "#ai-save" : selector
@@ -296,7 +296,7 @@ import SwiftUI
       ) { continuation.resume(returning: $0) }
     }
     try check(accepted, "Trusted AI fixture selection failed.")
-    try await wait {
+    try await wait("selection lock for \(selector)") {
       guard inspector.selection?.locked == true,
         let state = try await inspector.evaluate("globalThis.__shaarInspectorV2.read().selection")
           as? [String: Any]
@@ -308,7 +308,7 @@ import SwiftUI
         let ancestor = inspector.selection?.ancestors.first(where: { $0.label.hasPrefix("main") })
       else { throw InspectorFailure("Container breadcrumb is missing.") }
       inspector.selectAncestor(ancestor.id)
-      try await wait {
+      try await wait("container selection for \(selector)") {
         inspector.selection?.id == ancestor.id && inspector.selection?.tag == "main"
       }
     }

@@ -1,3 +1,6 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
 /* Shaar engine C ABI v1 design draft for issue #418. Not included in a build. */
 #ifndef SHAAR_ENGINE_H_
 #define SHAAR_ENGINE_H_

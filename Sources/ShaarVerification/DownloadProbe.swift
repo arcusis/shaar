@@ -72,7 +72,7 @@ final class DownloadProbe {
         "profile B does not inherit A's download history")
     }
     store.perform(.space(a.id))
-    try await waitForNativeSelection(tabA, "Profile A native tab is selected before downloads")
+    try await waitForDownloadTarget(tabA, "Profile A download target is ready")
     let priorA = Set(engine.downloads.items(in: a.profileID).map(\.id))
     try await begin(tabA, name: "slow.txt")
     let active = try await wait(a.profileID, "profile A receives a live authenticated download") {
@@ -105,7 +105,7 @@ final class DownloadProbe {
       $0.id == active.id && !$0.paused
     }
     store.perform(.space(b.id))
-    try await waitForNativeSelection(tabB, "Profile B native tab is selected before download")
+    try await waitForDownloadTarget(tabB, "Profile B download target is ready")
     try expect(
       !engine.downloads.perform(
         .cancel, id: active.id, profileID: a.profileID,
@@ -146,7 +146,7 @@ final class DownloadProbe {
     )
     try verifyBytes(beta, account: "beta", large: false)
     store.perform(.space(a.id))
-    try await waitForNativeSelection(tabA, "Profile A native tab is selected before cancellation")
+    try await waitForDownloadTarget(tabA, "Profile A cancellation target is ready")
     let beforeCancel = Set(engine.downloads.items(in: a.profileID).map(\.id))
     try await begin(tabA, name: "cancel.txt")
     let cancellable = try await wait(
@@ -196,14 +196,31 @@ final class DownloadProbe {
     guard clicked else { throw DownloadProbeFailure("Could not click the authored download link.") }
   }
 
-  private func waitForNativeSelection(_ tabID: UUID, _ check: String) async throws {
-    for _ in 0..<20 {
+  /// Native tab selection can precede the restored renderer's document commit.
+  /// Wait for both signals before installing and clicking a download link.
+  private func waitForDownloadTarget(_ tabID: UUID, _ check: String) async throws {
+    for _ in 0..<40 {
       let selection = runtime.normalProbeSelectionAudit(forTabID: tabID.uuidString)
       if selection["selectedNativeTab"] as? Bool == true {
-        checks.append(check)
-        return
+        let document: String? = await withCheckedContinuation { continuation in
+          runtime.evaluate(
+            inTabID: tabID.uuidString,
+            script:
+              "({fixture:document.documentElement.dataset.arcusisFixture,ready:document.readyState,marker:document.body?.textContent.includes('OrbitFindMarker')===true})"
+          ) { continuation.resume(returning: $0) }
+        }
+        if let document, let data = document.data(using: .utf8),
+          let state = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          state["fixture"] as? String == "v1",
+          state["ready"] as? String == "complete",
+          state["marker"] as? Bool == true
+        {
+          try await Task.sleep(for: .milliseconds(100))
+          checks.append(check)
+          return
+        }
       }
-      try await Task.sleep(for: .milliseconds(5))
+      try await Task.sleep(for: .milliseconds(100))
     }
     let selection = runtime.normalProbeSelectionAudit(forTabID: tabID.uuidString)
     throw DownloadProbeFailure("\(check); native selection audit: \(selection)")

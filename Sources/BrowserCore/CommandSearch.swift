@@ -48,6 +48,7 @@ public enum NavigationInput {
 
 public enum CommandAction: Hashable, Sendable {
   case open(URL)
+  case providerSearch(URL)
   case tab(space: UUID, tab: UUID)
   case favorite(profile: UUID, id: UUID)
   case space(UUID)
@@ -57,6 +58,109 @@ public enum CommandAction: Hashable, Sendable {
   case history(profile: UUID, address: String)
   /// A host menu command, identified by its menu command name.
   case command(String)
+}
+
+/// A connected provider whose signed-in pages can handle a search without an app registration.
+public enum CommandSearchProvider: String, Equatable, Sendable {
+  case google
+  case microsoft
+}
+
+/// First-party search pages available for a connected profile.
+public enum CommandProviderSearch {
+  private struct Service {
+    let name: String
+    let keyword: String
+    let baseURL: String
+    let queryName: String?
+    let fragmentPrefix: String?
+  }
+
+  private static let google: [Service] = [
+    Service(
+      name: "Gmail", keyword: "gmail", baseURL: "https://mail.google.com/mail/u/0/", queryName: nil,
+      fragmentPrefix: "search/"),
+    Service(
+      name: "Drive", keyword: "drive", baseURL: "https://drive.google.com/drive/u/0/search",
+      queryName: "q", fragmentPrefix: nil),
+    Service(
+      name: "Calendar", keyword: "calendar",
+      baseURL: "https://calendar.google.com/calendar/u/0/r/search", queryName: "q",
+      fragmentPrefix: nil),
+  ]
+
+  private static let microsoft: [Service] = [
+    Service(
+      name: "Outlook", keyword: "outlook", baseURL: "https://outlook.office.com/mail/search",
+      queryName: "q", fragmentPrefix: nil),
+    Service(
+      name: "OneDrive", keyword: "onedrive", baseURL: "https://onedrive.live.com/?qt=search",
+      queryName: "q", fragmentPrefix: nil),
+    Service(
+      name: "Teams", keyword: "teams", baseURL: "https://teams.microsoft.com/v2/",
+      queryName: "search", fragmentPrefix: nil),
+  ]
+
+  /// Builds service rows for a query. A service keyword followed by a space narrows to that row.
+  public static func results(
+    for query: String, provider: CommandSearchProvider?
+  ) -> [CommandResult] {
+    guard let provider else { return [] }
+    let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !query.isEmpty else { return [] }
+    let services = provider == .google ? google : microsoft
+    let lowered = query.lowercased()
+    let requestedService = (google + microsoft).first {
+      lowered.hasPrefix($0.keyword + " ")
+    }
+    if let requestedService,
+      !services.contains(where: { $0.keyword == requestedService.keyword })
+    {
+      return []
+    }
+    let narrowed = services.first { lowered.hasPrefix($0.keyword + " ") }
+    return services.compactMap { service in
+      if let narrowed, narrowed.keyword != service.keyword { return nil }
+      let term =
+        narrowed == nil
+        ? query
+        : String(query.dropFirst(service.keyword.count + 1))
+          .trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !term.isEmpty else { return nil }
+      guard let url = url(for: service, query: term) else { return nil }
+      return CommandResult(
+        title: BrowserLocalization.format(
+          "Search %@ for “%@”", arguments: [.string(service.name), .string(term)]),
+        subtitle: service.name,
+        symbol: "magnifyingglass",
+        action: .providerSearch(url))
+    }
+  }
+
+  /// URL construction is public for focused coverage of service-specific encoding.
+  public static func url(for serviceName: String, query: String) -> URL? {
+    let service = (google + microsoft).first { $0.name == serviceName }
+    guard let service else { return nil }
+    return url(for: service, query: query)
+  }
+
+  private static func url(for service: Service, query: String) -> URL? {
+    guard var components = URLComponents(string: service.baseURL) else { return nil }
+    if let queryName = service.queryName {
+      components.queryItems =
+        (components.queryItems ?? []) + [
+          URLQueryItem(name: queryName, value: query)
+        ]
+    } else if let fragmentPrefix = service.fragmentPrefix {
+      let allowed = CharacterSet(
+        charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")
+      guard let encoded = query.addingPercentEncoding(withAllowedCharacters: allowed) else {
+        return nil
+      }
+      components.percentEncodedFragment = fragmentPrefix + encoded
+    }
+    return components.url
+  }
 }
 
 public struct CommandResult: Identifiable, Equatable, Sendable {

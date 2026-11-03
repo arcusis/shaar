@@ -217,6 +217,84 @@ private final class OffscreenSidebarMount {
 }
 
 extension SidebarDnDProbeTests {
+  @Test func nativeFavoritePinnedAndTodayDropsCoverEveryDirection() async throws {
+    let store = BrowserStore()
+    let space = store.session.selectedSpaceID
+    let favoriteNames: [String] = ["favorite-a", "favorite-b"]
+    let favorites = favoriteNames.compactMap { name in
+      store.session.addFavorite(
+        profileID: store.session.selectedSpace.profileID,
+        originalURL: URL(string: "https://\(name).example")!, title: name)
+    }
+    #expect(favorites.count == 2)
+    let today = ["today-a", "today-b"].map {
+      store.session.open(URL(string: "https://\($0).example")!)!
+    }
+    let pinned = ["pinned-a", "pinned-b"].map {
+      store.session.open(URL(string: "https://\($0).example")!)!
+    }
+    for tab in pinned { store.togglePin(tab) }
+
+    let mounted = OffscreenSidebarMount(store: store)
+    defer { mounted.close() }
+    try await mounted.settle()
+
+    func favoriteReceiver() throws -> NSView {
+      let receiver = mounted.receivers.last {
+        $0.convert($0.bounds, to: mounted.host).minY < 10
+      }
+      return try #require(receiver)
+    }
+    func sectionReceiver(pinned: Bool) throws -> NSView {
+      let receiver = mounted.receivers.first {
+        abs($0.bounds.height - (pinned ? 8 : 32)) < 1 && $0.bounds.width > 100
+      }
+      return try #require(receiver)
+    }
+    func transfer(_ tab: UUID) -> SidebarTransfer {
+      .tab(sessionID: store.dragSessionID, sourceSpaceID: space, tabID: tab)
+    }
+    func favoriteTransfer(_ favorite: UUID) -> SidebarTransfer {
+      .favorite(
+        ProfileFavoriteDrag(
+          profileID: store.session.selectedSpace.profileID,
+          dragSessionID: store.dragSessionID,
+          favoriteID: favorite,
+          favoriteIDs: store.profileFavorites.map(\.id)))
+    }
+
+    // Today -> Favorites and Pinned -> Favorites use the native grid receiver.
+    #expect(try await mounted.drop(transfer(today[0]), on: favoriteReceiver()))
+    try await mounted.settle()
+    #expect(try await mounted.drop(transfer(pinned[0]), on: favoriteReceiver()))
+    try await mounted.settle()
+
+    // Favorites -> Pinned and Favorites -> Today use the native section receivers.
+    #expect(
+      try await mounted.drop(favoriteTransfer(favorites[0]), on: sectionReceiver(pinned: true)))
+    try await mounted.settle()
+    #expect(
+      try await mounted.drop(favoriteTransfer(favorites[1]), on: sectionReceiver(pinned: false)))
+    try await mounted.settle()
+
+    // Today -> Pinned and Pinned -> Today complete the remaining cross-zone directions.
+    #expect(try await mounted.drop(transfer(today[1]), on: sectionReceiver(pinned: true)))
+    try await mounted.settle()
+    #expect(try await mounted.drop(transfer(pinned[1]), on: sectionReceiver(pinned: false)))
+
+    #expect(
+      store.profileFavorites.map(\.originalURL.host) == ["pinned-a.example", "today-a.example"])
+    #expect(
+      store.session.selectedSpace.tabs.filter(\.isPinned).map(\.url.host) == [
+        "favorite-a.example", "today-b.example",
+      ])
+    #expect(
+      store.session.selectedSpace.tabs.filter { !$0.isPinned }.map(\.url.host) == [
+        "favorite-b.example", "pinned-b.example",
+      ])
+    try store.session.validate()
+  }
+
   @Test func nativeSplitMemberOutAfterDragPresentationExpires() async throws {
     let store = BrowserStore()
     let space = store.session.selectedSpaceID
@@ -296,6 +374,9 @@ extension SidebarDnDProbeTests {
     let file = WorkspaceFile(
       url: root.appending(path: "workspace.json"),
       legacySessionURL: root.appending(path: "legacy.json"))
+    let zoneFile = WorkspaceFile(
+      url: root.appending(path: "zone-order-workspace.json"),
+      legacySessionURL: root.appending(path: "zone-order-legacy.json"))
     if phase == "initial" {
       let store = BrowserStore()
       let space = store.session.selectedSpaceID
@@ -340,6 +421,78 @@ extension SidebarDnDProbeTests {
       try liveFile.save(workspace)
       try workspace.removeWindow(workspace.windows[0].id)
       try file.save(workspace)
+
+      let zoneStore = BrowserStore()
+      let zoneSpace = zoneStore.session.selectedSpaceID
+      let zoneFavoriteNames: [String] = ["favorite-a", "favorite-b"]
+      let zoneFavorites = zoneFavoriteNames.compactMap { name in
+        zoneStore.session.addFavorite(
+          profileID: zoneStore.session.selectedSpace.profileID,
+          originalURL: URL(string: "https://\(name).example")!, title: name)
+      }
+      let zoneToday = ["today-a", "today-b"].map {
+        zoneStore.session.open(URL(string: "https://\($0).example")!)!
+      }
+      let zonePinned = ["pinned-a", "pinned-b"].map {
+        zoneStore.session.open(URL(string: "https://\($0).example")!)!
+      }
+      for tab in zonePinned { zoneStore.togglePin(tab) }
+      let zoneMount = OffscreenSidebarMount(store: zoneStore)
+      defer { zoneMount.close() }
+      try await zoneMount.settle()
+      func zoneTransfer(_ tab: UUID) -> SidebarTransfer {
+        .tab(sessionID: zoneStore.dragSessionID, sourceSpaceID: zoneSpace, tabID: tab)
+      }
+      func zoneFavoriteTransfer(_ favorite: UUID) -> SidebarTransfer {
+        .favorite(
+          ProfileFavoriteDrag(
+            profileID: zoneStore.session.selectedSpace.profileID,
+            dragSessionID: zoneStore.dragSessionID,
+            favoriteID: favorite,
+            favoriteIDs: zoneStore.profileFavorites.map(\.id)))
+      }
+      func zoneTarget(_ predicate: (NSView) -> Bool) throws -> NSView {
+        let receiver = zoneMount.receivers.first(where: predicate)
+        return try #require(receiver)
+      }
+      func favoriteTarget() throws -> NSView {
+        try zoneTarget { $0.convert($0.bounds, to: zoneMount.host).minY < 10 }
+      }
+      func sectionTarget(pinned: Bool) throws -> NSView {
+        try zoneTarget {
+          abs($0.bounds.height - (pinned ? 8 : 32)) < 1 && $0.bounds.width > 100
+        }
+      }
+      #expect(try await zoneMount.drop(zoneTransfer(zoneToday[0]), on: favoriteTarget()))
+      try await zoneMount.settle()
+      #expect(try await zoneMount.drop(zoneTransfer(zonePinned[0]), on: favoriteTarget()))
+      try await zoneMount.settle()
+      #expect(
+        try await zoneMount.drop(
+          zoneFavoriteTransfer(zoneFavorites[0]), on: sectionTarget(pinned: true)))
+      try await zoneMount.settle()
+      #expect(
+        try await zoneMount.drop(
+          zoneFavoriteTransfer(zoneFavorites[1]), on: sectionTarget(pinned: false)))
+      try await zoneMount.settle()
+      #expect(try await zoneMount.drop(zoneTransfer(zoneToday[1]), on: sectionTarget(pinned: true)))
+      try await zoneMount.settle()
+      #expect(
+        try await zoneMount.drop(zoneTransfer(zonePinned[1]), on: sectionTarget(pinned: false)))
+      #expect(
+        zoneStore.profileFavorites.map(\.originalURL.host) == [
+          "pinned-a.example", "today-a.example",
+        ])
+      #expect(
+        zoneStore.session.selectedSpace.tabs.filter(\.isPinned).map(\.url.host) == [
+          "favorite-a.example", "today-b.example",
+        ])
+      #expect(
+        zoneStore.session.selectedSpace.tabs.filter { !$0.isPinned }.map(\.url.host) == [
+          "favorite-b.example", "pinned-b.example",
+        ])
+      let zoneWorkspace = try BrowserWorkspace(session: zoneStore.session)
+      try zoneFile.save(zoneWorkspace)
     } else {
       let liveFile = WorkspaceFile(
         url: root.appending(path: "open-workspace.json"),
@@ -381,6 +534,22 @@ extension SidebarDnDProbeTests {
       defer { mounted.close() }
       try await mounted.settle()
       try mounted.capture("restart.png", root: root)
+
+      let zoneLoaded = try zoneFile.load()
+      let zoneWorkspace = try #require(zoneLoaded)
+      let zoneWindow = try #require(zoneWorkspace.windows.first)
+      let zoneSession = zoneWindow.session
+      #expect(
+        zoneSession.favorites.map(\.originalURL.host) == ["pinned-a.example", "today-a.example"])
+      #expect(
+        zoneSession.selectedSpace.tabs.filter(\.isPinned).map(\.url.host) == [
+          "favorite-a.example", "today-b.example",
+        ])
+      #expect(
+        zoneSession.selectedSpace.tabs.filter { !$0.isPinned }.map(\.url.host) == [
+          "favorite-b.example", "pinned-b.example",
+        ])
+      try zoneSession.validate()
     }
     try JSONSerialization.data(
       withJSONObject: [

@@ -4,7 +4,9 @@
 
 #import "ChromiumRuntimeInternal.h"
 #import "ChromiumProbeRoot.h"
+#import "ChromiumDesktopCapture.h"
 #import <dlfcn.h>
+#import <objc/message.h>
 #include <string>
 #include <vector>
 #include <cmath>
@@ -136,6 +138,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   _profileWaiters = [NSMutableDictionary dictionary];
   _pendingInstalls = [NSMutableDictionary dictionary];
   _pendingMedia = [NSMutableDictionary dictionary];
+  _pendingDesktopCapture = [NSMutableDictionary dictionary];
   _pendingExternal = [NSMutableDictionary dictionary];
   _documentGenerations = [NSMutableDictionary dictionary];
   _pendingHostClosures = [NSMutableSet set];
@@ -239,7 +242,8 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 - (void)engineDidStart {
   _engine = [_engineClass sharedEngine];
   [_services start];
-  NSMutableArray<NSString *> *pageScripts = [NSMutableArray arrayWithObject:ARCMediaSessionPageScript()];
+  NSMutableArray<NSString *> *pageScripts = [NSMutableArray arrayWithObjects:
+    ARCMediaSessionPageScript(), ARCDesktopCapturePageScript(), nil];
   if (_testing) {
     // Diagnostics only for the empty Bitwarden store-probe profile. No credential entry occurs.
     [pageScripts addObject:@"(function(post){"
@@ -345,6 +349,10 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     for (NSString *requestID in [self->_pendingMedia.allKeys copy]) {
       if ([self->_pendingMedia[requestID][@"windowID"] isEqualToString:identity]) [self resolveWebsiteMediaRequestID:requestID accepted:NO];
     }
+    for (NSString *requestID in [self->_pendingDesktopCapture.allKeys copy]) {
+      if ([self->_pendingDesktopCapture[requestID][@"windowID"] isEqualToString:identity])
+        [self resolveDesktopCaptureRequestID:requestID sourceID:nil];
+    }
     [self closeExtensionPopupForWindowID:identity];
     for (NSString *tabID in [self->_detachedTabSelections.allKeys copy]) {
       NSDictionary *transfer = self->_detachedTabSelections[tabID];
@@ -427,7 +435,8 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 
 - (void)loadProfileID:(NSString *)profileID completion:(void (^)(NSError *))completion {
   NSAssert(NSThread.isMainThread, @"Profile loading must run on the main thread");
-  if (!ARCIsCanonicalID(profileID) || !_engine || [self isPrivateIdentity:profileID]) {
+  if (!ARCIsCanonicalID(profileID) || !_engine || [self isPrivateIdentity:profileID] ||
+      [_deletingProfileIDs containsObject:profileID]) {
     completion(ARCBridgeError(@"Invalid profile identity or engine not ready."));
     return;
   }
@@ -513,7 +522,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     if (!matches && error) *error = ARCBridgeError(@"A live tab cannot silently change its profile or native window.");
     return matches;
   }
-  if (!ARCIsCanonicalID(tabID) || !_profiles[profileID]) {
+  if (!ARCIsCanonicalID(tabID) || !_profiles[profileID] || [_deletingProfileIDs containsObject:profileID]) {
     if (error) *error = ARCBridgeError(@"The tab has no loaded profile; refusing a default-profile fallback.");
     return NO;
   }
@@ -1160,6 +1169,62 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   [_engine resolvePermission:requestID result:accepted && current && supported ? @"accept" : @"deny" remember:NO];
 }
 
+- (void)resolveDesktopCaptureRequestID:(NSString *)requestID sourceID:(NSString *)sourceID {
+  NSDictionary *request = _pendingDesktopCapture[requestID];
+  if (!request) return;
+  [_pendingDesktopCapture removeObjectForKey:requestID];
+  NSString *tabID = request[@"tabID"];
+  ArdiaCoreTab *tab = _tabs[tabID];
+  NSURL *originURL = [NSURL URLWithString:request[@"origin"] ?: @""];
+  NSString *scheme = originURL.scheme.lowercaseString;
+  BOOL secureOrigin = [scheme isEqualToString:@"https"] ||
+    ([scheme isEqualToString:@"http"] &&
+     [@[@"localhost", @"127.0.0.1", @"[::1]"] containsObject:originURL.host.lowercaseString ?: @""]);
+  NSRegularExpression *sourcePattern = [NSRegularExpression regularExpressionWithPattern:
+    @"^(screen|window):[0-9]{1,20}:0$" options:0 error:nil];
+  BOOL validSource = sourceID.length > 0 &&
+    [sourcePattern numberOfMatchesInString:sourceID options:0 range:NSMakeRange(0, sourceID.length)] == 1;
+  BOOL current = tab && !tab.closed && [self isSelectedTabID:tabID] &&
+    [_tabWindows[tabID] isEqualToString:request[@"windowID"]] &&
+    [_owners[tabID] isEqualToString:request[@"profileID"]] &&
+    [tab.url isEqualToString:request[@"pageURL"]] && secureOrigin;
+  if (validSource && current) {
+    SEL selector = NSSelectorFromString(@"allowDesktopCapture:tab:frame:origin:");
+    if ([_engineClass respondsToSelector:selector]) {
+      ((void (*)(id, SEL, NSString *, ArdiaCoreTab *, NSString *, NSString *))objc_msgSend)(
+        _engineClass, selector, sourceID, tab, request[@"frameID"] ?: @"", request[@"origin"]);
+    } else {
+      validSource = NO;
+    }
+  } else {
+    validSource = NO;
+  }
+  NSDictionary *reply = @{ @"id": requestID,
+    @"sourceId": validSource ? sourceID : NSNull.null };
+  NSData *data = [NSJSONSerialization dataWithJSONObject:reply options:0 error:nil];
+  NSString *json = data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
+  if (json && tab && !tab.closed)
+    [tab callFrame:request[@"frameID"] ?: @"" kind:ARCDesktopCaptureResultMessage json:json];
+}
+
+- (void)replyToDesktopCaptureID:(NSString *)requestID tab:(ArdiaCoreTab *)tab
+                         frame:(NSString *)frameID sourceID:(NSString *)sourceID {
+  if (!tab || tab.closed) return;
+  NSDictionary *reply = @{ @"id": requestID,
+    @"sourceId": sourceID.length ? sourceID : NSNull.null };
+  NSData *data = [NSJSONSerialization dataWithJSONObject:reply options:0 error:nil];
+  NSString *json = data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
+  if (json) [tab callFrame:frameID ?: @"" kind:ARCDesktopCaptureResultMessage json:json];
+}
+
+- (void)dismissDesktopCaptureRequestsForTabID:(NSString *)tabID {
+  for (NSString *requestID in [_pendingDesktopCapture.allKeys copy]) {
+    if (![_pendingDesktopCapture[requestID][@"tabID"] isEqualToString:tabID]) continue;
+    [_pendingDesktopCapture removeObjectForKey:requestID];
+    if (_onDesktopCaptureDismissed) _onDesktopCaptureDismissed(requestID);
+  }
+}
+
 - (NSURL *)downloadsDirectoryForProfileID:(NSString *)profileID {
   NSString *validatedProfileID = ARCValidatedProfileID(profileID);
   ArdiaCoreProfile *profile = validatedProfileID ? _profiles[validatedProfileID] : nil;
@@ -1206,6 +1271,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   NSString *identity = [self identityForTab:tab];
   NSString *profile = identity ? _owners[identity] : nil;
   if (identity) {
+    [self dismissDesktopCaptureRequestsForTabID:identity];
     [self advanceDocumentGenerationForTabID:identity];
     [self invalidateExternalRequestsForTabID:identity windowID:nil];
     [self resetMediaSessionForTabID:identity notify:YES];
@@ -1273,6 +1339,40 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     [self receiveMediaSessionJSON:json frameID:frameID tab:tab];
     return;
   }
+  if ([kind isEqualToString:ARCDesktopCaptureRequestMessage]) {
+    NSData *data = [json dataUsingEncoding:NSUTF8StringEncoding];
+    id message = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+    NSString *requestID = [message isKindOfClass:NSDictionary.class] ? message[@"id"] : nil;
+    NSString *origin = [message isKindOfClass:NSDictionary.class] ? message[@"origin"] : nil;
+    NSString *identity = [self identityForTab:tab];
+    NSString *profileID = identity ? _owners[identity] : nil;
+    NSString *windowID = identity ? _tabWindows[identity] : nil;
+    NSURL *pageURL = [NSURL URLWithString:tab.url ?: @""];
+    if (![requestID isKindOfClass:NSString.class] || ![[NSUUID alloc] initWithUUIDString:requestID]) return;
+    if (![origin isKindOfClass:NSString.class] || origin.length > 2048 || !identity || !profileID ||
+        !windowID || ![self isSelectedTabID:identity] || tab.closed ||
+        _pendingDesktopCapture.count >= 10 || _pendingDesktopCapture[requestID] ||
+        !pageURL.host.length) {
+      [self replyToDesktopCaptureID:requestID tab:tab frame:frameID sourceID:nil];
+      return;
+    }
+    NSURL *originURL = [NSURL URLWithString:origin];
+    NSString *scheme = originURL.scheme.lowercaseString;
+    BOOL secureOrigin = [scheme isEqualToString:@"https"] ||
+      ([scheme isEqualToString:@"http"] &&
+       [@[@"localhost", @"127.0.0.1", @"[::1]"] containsObject:originURL.host.lowercaseString ?: @""]);
+    if (!secureOrigin) {
+      [self replyToDesktopCaptureID:requestID tab:tab frame:frameID sourceID:nil];
+      return;
+    }
+    NSDictionary *request = @{@"id": requestID, @"tabID": identity, @"profileID": profileID,
+      @"windowID": windowID, @"pageURL": tab.url ?: @"", @"frameID": frameID ?: @"",
+      @"origin": origin};
+    _pendingDesktopCapture[requestID] = request;
+    if (_onDesktopCaptureRequest) _onDesktopCaptureRequest(request);
+    else [self resolveDesktopCaptureRequestID:requestID sourceID:nil];
+    return;
+  }
   if (!main || !_testing || ![kind isEqualToString:@"arcusisProbeDiagnostic"] || _probeDiagnostics.count >= 100 ||
       ![tab.url hasPrefix:@"chrome-extension://nngceckbapebfimnlniiiahkandclblb/"]) return;
   NSData *data = [json dataUsingEncoding:NSUTF8StringEncoding];
@@ -1317,6 +1417,7 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   }
   NSString *identity = [self identityForTab:tab];
   if (!identity) return;
+  [self dismissDesktopCaptureRequestsForTabID:identity];
   [self invalidateExternalRequestsForTabID:identity windowID:nil];
   [_detachedTabSelections removeObjectForKey:identity];
   ARCNativeWindowState *state = [self stateForTabID:identity];

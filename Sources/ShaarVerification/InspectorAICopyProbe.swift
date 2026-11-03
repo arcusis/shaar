@@ -3,7 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import AppKit
-import ChromiumBridge.Verification
+import ChromiumBridge
+import ChromiumBridgeVerification
 import Foundation
 import SwiftUI
 
@@ -188,7 +189,10 @@ import SwiftUI
     )
     try await wait {
       await tools.refresh()
-      return tools.requests.contains { $0.status == 503 }
+      return tools.console.contains {
+        $0.level == "error" && $0.message.contains("AI fixture console error")
+      } && tools.requests.contains { $0.status == 503 }
+        && tools.signals.contains { $0.name == "Inspector AI fixture" }
     }
     ai.detailed = true
     await ai.copyElement(to: board)

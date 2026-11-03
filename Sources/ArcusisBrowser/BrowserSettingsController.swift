@@ -9,10 +9,12 @@ import Observation
 import SwiftUI
 
 @MainActor @Observable
-private final class BrowserSettingsState {
+final class BrowserSettingsState {
   let workspace: BrowserWorkspaceStore
   let preferences: BrowserPreferencesStore
   let runtime: ARCChromiumRuntime?
+  let profileBackend: (any ProfileSettingsBackend)?
+  private(set) var deletingProfileID: UUID?
   private(set) var selectedProfileID: UUID?
   private var didPresent = false
   var onOpenSpace: (UUID) -> Void = { _ in }
@@ -23,11 +25,12 @@ private final class BrowserSettingsState {
 
   init(
     workspace: BrowserWorkspaceStore, preferences: BrowserPreferencesStore,
-    runtime: ARCChromiumRuntime? = nil
+    runtime: ARCChromiumRuntime? = nil, profileBackend: (any ProfileSettingsBackend)? = nil
   ) {
     self.workspace = workspace
     self.preferences = preferences
     self.runtime = runtime
+    self.profileBackend = profileBackend ?? runtime.map { EngineProfileSettings(runtime: $0) }
   }
 
   var profiles: [BrowserSettingsProfile] {
@@ -37,7 +40,9 @@ private final class BrowserSettingsState {
         id: profile.id, name: profile.name, color: ProfileColorChoice(profile: profile),
         symbol: profile.displaySymbol,
         spaces: spaces.map { BrowserSettingsSpace(id: $0.id, name: $0.name, symbol: $0.symbol) },
-        accounts: preferences.accounts(for: profile.id))
+        accounts: preferences.accounts(for: profile.id),
+        downloadDirectory: preferences.downloadDirectory(for: profile.id),
+        defaultDownloadDirectory: runtime?.downloadsDirectory(forProfileID: profile.id.uuidString))
     }
   }
 
@@ -112,6 +117,29 @@ private final class BrowserSettingsState {
     preferences.setSidebarInitiallyVisible(value)
   }
 
+  func chooseDownloadDirectory(for profileID: UUID) {
+    guard workspace.workspace.catalog.profiles.contains(where: { $0.id == profileID }) else {
+      return
+    }
+    let panel = NSOpenPanel()
+    panel.canChooseFiles = false
+    panel.canChooseDirectories = true
+    panel.allowsMultipleSelection = false
+    panel.canCreateDirectories = true
+    panel.prompt = SettingsL10n.string("Choose")
+    panel.message = SettingsL10n.string("Choose a download folder for this profile.")
+    if panel.runModal() == .OK, let url = panel.url {
+      preferences.setDownloadDirectory(url, for: profileID)
+    }
+  }
+
+  func resetDownloadDirectory(for profileID: UUID) {
+    guard workspace.workspace.catalog.profiles.contains(where: { $0.id == profileID }) else {
+      return
+    }
+    preferences.setDownloadDirectory(nil, for: profileID)
+  }
+
   @discardableResult
   func createProfile(name: String) -> UUID? {
     do {
@@ -145,12 +173,26 @@ private final class BrowserSettingsState {
     } catch { return false }
   }
 
-  func deleteProfile(_ id: UUID, movingSpacesTo destinationID: UUID) -> Bool {
-    do {
-      try workspace.deleteProfile(id, movingSpacesTo: destinationID)
-      if selectedProfileID == id { _ = selectProfile(destinationID) }
-      return true
-    } catch { return false }
+  func deleteProfile(_ id: UUID, movingSpacesTo destinationID: UUID?) async throws {
+    guard deletingProfileID == nil, let profileBackend else {
+      throw CocoaError(.featureUnsupported)
+    }
+    deletingProfileID = id
+    defer { deletingProfileID = nil }
+    // Validate before touching engine data; revalidate after loading an unused profile.
+    var draft = workspace.workspace
+    try draft.deleteProfile(id, movingSpacesTo: destinationID)
+    try preferences.validateProfileRemoval()
+    try await profileBackend.loadProfile(id)
+    draft = workspace.workspace
+    try draft.deleteProfile(id, movingSpacesTo: destinationID)
+    try await profileBackend.deleteProfile(id)
+    try workspace.deleteProfile(id, movingSpacesTo: destinationID)
+    if selectedProfileID == id {
+      _ = selectProfile(destinationID ?? workspace.workspace.catalog.profiles.first?.id)
+    }
+    try preferences.removeProfile(id)
+    try workspace.flushSaves()
   }
 
 }
@@ -173,12 +215,15 @@ private struct BrowserSettingsRoot: View {
       onRenameProfile: { state.renameProfile($0, name: $1) },
       onSetProfileColor: { state.setProfileColor($0, to: $1) },
       onSetProfileSymbol: { state.setProfileSymbol($0, to: $1) },
-      onDeleteProfile: { state.deleteProfile($0, movingSpacesTo: $1) },
+      onChooseDownloadDirectory: { state.chooseDownloadDirectory(for: $0) },
+      onResetDownloadDirectory: { state.resetDownloadDirectory(for: $0) },
+      onDeleteProfile: { try await state.deleteProfile($0, movingSpacesTo: $1) },
       onOpenSpace: state.onOpenSpace,
       onConnectAccount: state.onConnectAccount,
       onDisconnectAccount: state.onDisconnectAccount,
       extensionManager: state.extensionManager(for:),
       onAddExtensions: { state.openExtensions(for: $0) },
+      profileBackend: state.profileBackend,
       clearHistory: state.runtime.map { runtime in
         { profileID in try await SettingsHistory.clear(runtime: runtime, profileID: profileID) }
       })

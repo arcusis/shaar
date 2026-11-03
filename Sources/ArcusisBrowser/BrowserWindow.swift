@@ -19,11 +19,18 @@ extension SpaceTint {
 struct BrowserWindow: View {
   @Bindable var store: BrowserStore
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.browserChromeAccessibilityOverrides) private var accessibilityOverrides
   @Environment(\.colorScheme) private var colorScheme
   @FocusState private var pageIsFocused: Bool
   @State private var webContentFrame: CGRect = .zero
   @State private var sidebarVisibility: SidebarVisibility = .pinned
   @State private var isFullScreen = false
+  @State private var spacePagerState = SpacePagerState()
+  @State private var pageEntryEdge: Edge = .trailing
+
+  private var spaceReduceMotion: Bool {
+    reduceMotion || accessibilityOverrides.reduceMotion == true
+  }
 
   var body: some View {
     ZStack(alignment: .top) {
@@ -45,15 +52,26 @@ struct BrowserWindow: View {
             }
           }
           .animation(
-            reduceMotion ? .easeOut(duration: 0.12) : nil, value: store.libraryDrawerSection
+            reduceMotion ? nil : .easeOut(duration: 0.12), value: store.libraryDrawerSection
           )
+          .transaction { transaction in
+            if reduceMotion {
+              transaction.animation = nil
+              transaction.disablesAnimations = true
+            }
+          }
           .frame(width: leadingWidth)
           page
             .padding(BrowserChromeLayout.pageCardInset)
             .frame(width: pageWidth)
+            .offset(x: spaceReduceMotion ? 0 : spacePagerState.offset)
         }
         .frame(width: geometry.size.width, height: geometry.size.height, alignment: .leading)
         .clipped()
+        .animation(
+          spaceReduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.85),
+          value: store.session.selectedSpaceID
+        )
         .animation(reduceMotion ? nil : .spring(duration: 0.3), value: store.libraryDrawerSection)
       }
       sidebarLayer
@@ -85,6 +103,14 @@ struct BrowserWindow: View {
     .onChange(of: store.sidebarIsVisible) { _, pinned in
       sidebarVisibility.setPinned(pinned)
     }
+    .onChange(of: store.session.selectedSpaceID) { oldID, newID in
+      let spaces = store.session.spaces
+      if let oldIndex = spaces.firstIndex(where: { $0.id == oldID }),
+        let newIndex = spaces.firstIndex(where: { $0.id == newID }), oldIndex != newIndex
+      {
+        pageEntryEdge = newIndex > oldIndex ? .trailing : .leading
+      }
+    }
     .modifier(SpaceMenuDialogs(store: store))
     .sheet(
       item: store.engine?.presentsNativePanels == false ? .constant(nil) : $store.sheet,
@@ -99,6 +125,7 @@ struct BrowserWindow: View {
       case .bookmarkEditor(let route): BookmarkEditor(store: store, route: route)
       case .extensionInstall(let request): ExtensionConsent(store: store, request: request)
       case .websitePermission(let request): WebsitePermissionConsent(store: store, request: request)
+      case .desktopCapture(let request): DesktopCapturePicker(request: request, store: store)
       case .externalApp(let request): ExternalAppConsent(store: store, request: request)
       case .downloads(let profile):
         if let engine = store.engine {
@@ -211,6 +238,13 @@ struct BrowserWindow: View {
         Text(notice).font(.caption).foregroundStyle(.orange).padding(12)
       }
     }
+    .id(store.session.selectedSpaceID)
+    .transition(
+      .asymmetric(
+        insertion: .move(edge: pageEntryEdge),
+        removal: .move(edge: pageEntryEdge == .trailing ? .leading : .trailing)
+      )
+    )
     .background(Color(nsColor: .textBackgroundColor))
     .clipShape(RoundedRectangle(cornerRadius: BrowserChromeLayout.pageCardRadius))
     .overlay(
@@ -238,7 +272,7 @@ struct BrowserWindow: View {
             }
           }
           HStack(spacing: 0) {
-            BrowserSidebar(store: store)
+            BrowserSidebar(store: store, pagerState: spacePagerState)
               .frame(width: BrowserChromeLayout.sidebarWidth)
               .modifier(SidebarHiddenOffset(isHidden: sidebarVisibility == .hidden))
               .allowsHitTesting(sidebarVisibility != .hidden)

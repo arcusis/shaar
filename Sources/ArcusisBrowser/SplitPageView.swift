@@ -56,7 +56,7 @@ struct SplitPageView<Pane: View, Header: View>: View {
 /// Children of one group laid out along its axis, separated by draggable dividers.
 /// A drag resizes from local state and commits once on release, so the session is not
 /// rewritten on every frame.
-private struct SplitGroupView: View {
+struct SplitGroupView: View {
   static let dividerThickness: CGFloat = 8
   static let minimumPane: CGFloat = 160
 
@@ -91,6 +91,8 @@ private struct SplitGroupView: View {
 
   private func divider(after index: Int, available: CGFloat) -> some View {
     let highlighted = activeDivider == index || hoveredDivider == index
+    let pair = weights[index] + weights[index + 1]
+    let leadingPercent = pair > 0 ? weights[index] / pair : 0.5
     return ZStack {
       Capsule()
         .fill(Color.primary.opacity(highlighted ? 0.35 : 0))
@@ -126,6 +128,48 @@ private struct SplitGroupView: View {
     )
     .animation(.easeOut(duration: 0.12), value: highlighted)
     .accessibilityLabel(ShellL10n.string("Split divider"))
+    .accessibilityValue("\(Int((leadingPercent * 100).rounded()))%")
+    .accessibilityAdjustableAction(
+      SplitDividerInput.accessibilityAction(step: Self.keyboardStep) {
+        adjustDivider(index, by: $0, available: available)
+      }
+    )
+    .focusable()
+    .onKeyPress(
+      .leftArrow,
+      action: SplitDividerInput.keyboardAction(
+        for: .left, axis: axis, isRightToLeft: layoutDirection == .rightToLeft,
+        step: Self.keyboardStep
+      ) { adjustDivider(index, by: $0, available: available) }
+    )
+    .onKeyPress(
+      .rightArrow,
+      action: SplitDividerInput.keyboardAction(
+        for: .right, axis: axis, isRightToLeft: layoutDirection == .rightToLeft,
+        step: Self.keyboardStep
+      ) { adjustDivider(index, by: $0, available: available) }
+    )
+    .onKeyPress(
+      .upArrow,
+      action: SplitDividerInput.keyboardAction(
+        for: .up, axis: axis, isRightToLeft: layoutDirection == .rightToLeft,
+        step: Self.keyboardStep
+      ) { adjustDivider(index, by: $0, available: available) }
+    )
+    .onKeyPress(
+      .downArrow,
+      action: SplitDividerInput.keyboardAction(
+        for: .down, axis: axis, isRightToLeft: layoutDirection == .rightToLeft,
+        step: Self.keyboardStep
+      ) { adjustDivider(index, by: $0, available: available) })
+  }
+
+  private static let keyboardStep: CGFloat = 32
+
+  private func adjustDivider(_ index: Int, by delta: CGFloat, available: CGFloat) {
+    let next = Self.resized(weights, at: index, by: delta, available: available)
+    guard next != weights else { return }
+    onWeightsChange(next)
   }
 
   /// Moves the divider after `index`, keeping both neighbours above the minimum size.
@@ -140,6 +184,59 @@ private struct SplitGroupView: View {
     next[index] = leading
     next[index + 1] = pair - leading
     return next
+  }
+}
+
+enum SplitDividerInput {
+  enum Key {
+    case left, right, up, down
+  }
+
+  static func keyboardDelta(
+    for key: Key, axis: SplitAxis, isRightToLeft: Bool, step: CGFloat
+  ) -> CGFloat? {
+    switch (key, axis) {
+    case (.left, .columns):
+      SplitResizeDecision.logicalDelta(-step, isHorizontal: true, isRightToLeft: isRightToLeft)
+    case (.right, .columns):
+      SplitResizeDecision.logicalDelta(step, isHorizontal: true, isRightToLeft: isRightToLeft)
+    case (.up, .rows): -step
+    case (.down, .rows): step
+    default: nil
+    }
+  }
+
+  static func keyboardAction(
+    for key: Key, axis: SplitAxis, isRightToLeft: Bool, step: CGFloat,
+    resize: @escaping (CGFloat) -> Void
+  ) -> () -> KeyPress.Result {
+    {
+      guard
+        let delta = keyboardDelta(
+          for: key, axis: axis, isRightToLeft: isRightToLeft, step: step)
+      else { return .ignored }
+      resize(delta)
+      return .handled
+    }
+  }
+
+  static func accessibilityDelta(
+    for direction: AccessibilityAdjustmentDirection, step: CGFloat
+  ) -> CGFloat? {
+    switch direction {
+    case .increment: step
+    case .decrement: -step
+    @unknown default: nil
+    }
+  }
+
+  static func accessibilityAction(
+    step: CGFloat, resize: @escaping (CGFloat) -> Void
+  ) -> (AccessibilityAdjustmentDirection) -> Void {
+    { direction in
+      guard let delta = accessibilityDelta(for: direction, step: step) else { return }
+      resize(delta)
+    }
   }
 }
 
@@ -163,7 +260,7 @@ struct BrowserSplitPageView: View {
       onFocus: { focus($0) },
       onWeightsChange: { store.setSplitWeights($0, at: $1, splitID: split.id) }
     ) { id in
-      SplitPaneToolbar(store: store, engine: engine, tabID: id)
+      SplitPaneToolbar(store: store, tabID: id)
     } pane: { id in
       if let failure = store.rendererFailures[id] {
         FailedPageView(store: store, failure: failure)

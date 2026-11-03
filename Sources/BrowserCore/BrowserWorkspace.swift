@@ -409,16 +409,32 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
     try validate()
   }
 
-  /// Deletes a profile and moves its Spaces to an existing profile atomically.
-  public mutating func deleteProfile(_ id: UUID, movingSpacesTo destinationID: UUID) throws {
+  /// Deletes a profile atomically. A nil destination removes its Spaces and their pages.
+  public mutating func deleteProfile(_ id: UUID, movingSpacesTo destinationID: UUID?) throws {
     guard catalog.profiles.count > 1, id != destinationID,
       catalog.profiles.contains(where: { $0.id == id }),
-      catalog.profiles.contains(where: { $0.id == destinationID })
+      destinationID == nil || catalog.profiles.contains(where: { $0.id == destinationID })
     else { throw WorkspaceError.invalidState }
     var draft = self
-    for space in draft.catalog.spaces.filter({ $0.profileID == id }) {
-      guard try draft.setSpaceProfile(space.id, to: destinationID) else {
-        throw WorkspaceError.invalidState
+    if let destinationID {
+      for space in draft.catalog.spaces.filter({ $0.profileID == id }) {
+        guard try draft.setSpaceProfile(space.id, to: destinationID) else {
+          throw WorkspaceError.invalidState
+        }
+      }
+    } else {
+      draft.catalog.spaces.removeAll { $0.profileID == id }
+      // Sessions need one Space. Removing all of the deleted profile's Spaces must not keep
+      // one of its pages alive merely to satisfy that invariant.
+      if draft.catalog.spaces.isEmpty,
+        let remaining = draft.catalog.profiles.first(where: { $0.id != id })
+      {
+        var allocated = draft.allocatedIDs
+        draft.catalog.spaces.append(
+          BrowserSpace(
+            id: Self.allocate(&allocated), profileID: remaining.id, name: remaining.name,
+            symbol: "square.stack.3d.up", tint: remaining.tint ?? .ocean,
+            customRGB: remaining.customRGB))
       }
     }
     draft.catalog.favorites.removeAll { $0.profileID == id }

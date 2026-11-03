@@ -12,6 +12,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (nullable instancetype)initWithLibrary:(void *)library error:(NSError **)error;
 - (void)start;
 - (BOOL)bindProfileID:(NSString *)profileID path:(NSString *)path error:(NSError **)error;
+- (void)unbindProfileID:(NSString *)profileID;
 - (void)call:(NSString *)method profileID:(NSString *)profileID args:(NSDictionary *)args
   completion:(void (^)(NSDictionary *result))completion;
 @property(readonly) BOOL privatePrivacyAvailable;

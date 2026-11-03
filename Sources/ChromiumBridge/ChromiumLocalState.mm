@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-#import "include/ChromiumBridgeVerification.h"
+#import "ChromiumLocalState.h"
 
 // Chromium's local-state preference that lets extensions with the "background" permission keep
 // the browser running after its windows close. Chromium 155 has no switch for it.

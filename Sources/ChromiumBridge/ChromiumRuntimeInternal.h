@@ -4,8 +4,9 @@
 
 // Shared by the runtime's implementation files; not part of the module's public interface.
 
-#import "include/ChromiumBridgeVerification.h"
+#import "include/ChromiumBridge.h"
 #import "ChromiumDownloads.h"
+#import "ChromiumLocalState.h"
 #import "ChromiumLibrary.h"
 #import "ChromiumShutdownGuard.h"
 #import "ChromiumMediaSession.h"
@@ -53,6 +54,7 @@ NSString *ARCValidatedProfileID(NSString *profileID);
   NSMutableSet<NSString *> *_retiredWindowIDs;
   NSMutableDictionary<NSString *, ArdiaCoreProfile *> *_profiles;
   NSMutableSet<NSString *> *_privateTrackerPreparedSources;
+  NSMutableSet<NSString *> *_deletingProfileIDs;
   NSMutableDictionary<NSString *, ArdiaCoreTab *> *_tabs;
   NSMutableDictionary<NSString *, ARCDevToolsPageView *> *_pageCards;
   NSMutableDictionary<NSString *, NSString *> *_inspectorLeases;
@@ -81,6 +83,7 @@ NSString *ARCValidatedProfileID(NSString *profileID);
   NSURL *_probeRoot;
   NSMutableDictionary<NSString *, NSDictionary *> *_pendingInstalls;
   NSMutableDictionary<NSString *, NSDictionary *> *_pendingMedia;
+  NSMutableDictionary<NSString *, NSDictionary *> *_pendingDesktopCapture;
   NSMutableDictionary<NSString *, NSDictionary *> *_pendingExternal;
   NSMutableDictionary<NSString *, NSNumber *> *_documentGenerations;
   NSMutableDictionary<NSString *, NSMutableArray<NSDictionary *> *> *_probeExtensions;

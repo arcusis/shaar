@@ -14,7 +14,7 @@ struct BrowserSidebar: View {
   @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
   @Environment(\.browserChromeAccessibilityOverrides) private var accessibilityOverrides
   @Namespace private var sidebarMotionNamespace
-  @State private var pagerState = SpacePagerState()
+  @State private var pagerState: SpacePagerState
   @State private var targetedTab: UUID?
   @State private var targetedSpace: UUID?
   @State private var targetedSection: String?
@@ -47,8 +47,8 @@ struct BrowserSidebar: View {
     reduceMotion || accessibilityOverrides.reduceMotion == true
   }
 
-  private var sidebarMotion: Animation {
-    sidebarReduceMotion ? .easeOut(duration: 0.16) : .spring(response: 0.32, dampingFraction: 0.82)
+  private var sidebarMotion: Animation? {
+    sidebarReduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.82)
   }
 
   private var sidebarLayoutKey: [String] {
@@ -89,10 +89,11 @@ struct BrowserSidebar: View {
 
   init(
     store: BrowserStore, previewRecentDownloads: [BrowserDownload]? = nil,
-    previewFolderDraft: SidebarFolderDraft? = nil
+    previewFolderDraft: SidebarFolderDraft? = nil, pagerState: SpacePagerState? = nil
   ) {
     self.store = store
     self.previewRecentDownloads = previewRecentDownloads
+    _pagerState = State(initialValue: pagerState ?? SpacePagerState())
     _recentDownloads = State(
       initialValue: RecentDownloadsPresentation(profileID: store.session.selectedSpace.profileID))
     _folderDraft = State(initialValue: previewFolderDraft)
@@ -185,7 +186,7 @@ struct BrowserSidebar: View {
           value: SpaceChromeTint(space: store.session.selectedSpace))
     }
     .animation(
-      sidebarReduceMotion ? .easeOut(duration: 0.12) : .easeInOut(duration: 0.22),
+      sidebarReduceMotion ? nil : .easeInOut(duration: 0.22),
       value: store.session.selectedSpaceID
     )
     .zIndex(1)

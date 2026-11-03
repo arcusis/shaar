@@ -1,0 +1,184 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+import BrowserCore
+import ChromiumBridge
+import Foundation
+import Observation
+
+@MainActor
+protocol ProfileSettingsBackend {
+  func loadProfile(_ id: UUID) async throws
+  func clearSiteData(_ id: UUID) async throws
+  func clearCache(_ id: UUID) async throws
+  func permissionOrigins(_ id: UUID) async throws -> [String]
+  func permissions(_ id: UUID, origin: String) async throws -> [String: NSDictionary]
+  func resetPermissions(_ id: UUID, origin: String) async throws
+  func thirdPartyCookiesBlocked(_ id: UUID) -> Bool?
+  func setThirdPartyCookiesBlocked(_ blocked: Bool, profileID: UUID) async throws
+  func deleteProfile(_ id: UUID) async throws
+}
+
+@MainActor
+struct EngineProfileSettings: ProfileSettingsBackend {
+  let runtime: ARCChromiumRuntime
+
+  func loadProfile(_ id: UUID) async throws { try await runtime.loadProfileID(id.uuidString) }
+  func clearSiteData(_ id: UUID) async throws {
+    try await runtime.clearProfileSiteData(forProfileID: id.uuidString)
+  }
+  func clearCache(_ id: UUID) async throws {
+    try await runtime.clearCache(forProfileID: id.uuidString)
+  }
+  func permissionOrigins(_ id: UUID) async throws -> [String] {
+    try await runtime.sitePermissionOrigins(forProfileID: id.uuidString)
+  }
+  func permissions(_ id: UUID, origin: String) async throws -> [String: NSDictionary] {
+    try await runtime.siteSettings(forOrigin: origin, profileID: id.uuidString)
+      .mapValues { $0 as NSDictionary }
+  }
+  func resetPermissions(_ id: UUID, origin: String) async throws {
+    try await runtime.resetSitePermissions(forOrigin: origin, profileID: id.uuidString)
+  }
+  func thirdPartyCookiesBlocked(_ id: UUID) -> Bool? {
+    runtime.thirdPartyCookiesBlocked(forProfileID: id.uuidString)?.boolValue
+  }
+  func setThirdPartyCookiesBlocked(_ blocked: Bool, profileID: UUID) async throws {
+    try await runtime.setThirdPartyCookiesBlocked(blocked, profileID: profileID.uuidString)
+  }
+  func deleteProfile(_ id: UUID) async throws {
+    try await runtime.deleteEngineProfileID(id.uuidString)
+  }
+}
+
+struct ProfileSitePermission: Identifiable, Equatable {
+  let id: String
+  let value: SitePermissionValue
+
+  var title: String {
+    if let permission = SitePermission(rawValue: id) { return permission.title }
+    switch id {
+    case "autoplay": return SettingsL10n.string("Autoplay")
+    case "javascript": return "JavaScript"
+    case "images": return SettingsL10n.string("Images")
+    case "clipboard": return SettingsL10n.string("Clipboard")
+    case "automaticDownloads": return SettingsL10n.string("Automatic Downloads")
+    case "cookies": return SettingsL10n.string("Cookies")
+    case "midi": return "MIDI"
+    case "sensors": return SettingsL10n.string("Sensors")
+    case "windowManagement": return SettingsL10n.string("Window Management")
+    case "localFonts": return SettingsL10n.string("Local Fonts")
+    case "idleDetection": return SettingsL10n.string("Idle Detection")
+    case "storageAccess": return SettingsL10n.string("Storage Access")
+    case "fileSystem": return SettingsL10n.string("File System")
+    case "keyboardLock": return SettingsL10n.string("Keyboard Lock")
+    case "pointerLock": return SettingsL10n.string("Pointer Lock")
+    case "cameraPanTiltZoom": return SettingsL10n.string("Camera Pan, Tilt and Zoom")
+    default: return id
+    }
+  }
+
+  var valueLabel: String {
+    switch value {
+    case .allow: SettingsL10n.string("Allowed")
+    case .block: SettingsL10n.string("Blocked")
+    case .ask: SettingsL10n.string("Ask")
+    }
+  }
+
+  static func exceptions(_ settings: [String: NSDictionary]) throws -> [Self] {
+    try settings.sorted { $0.key < $1.key }.compactMap { name, entry in
+      guard let isDefault = entry["isDefault"] as? Bool else {
+        throw CocoaError(.coderInvalidValue)
+      }
+      if isDefault { return nil }
+      guard let rawValue = entry["value"] as? String,
+        let value = SitePermissionValue(rawValue: rawValue)
+      else { throw CocoaError(.coderInvalidValue) }
+      return Self(id: name, value: value)
+    }
+  }
+}
+
+struct ProfilePermissionSite: Identifiable, Equatable {
+  let id: String
+  let permissions: [ProfileSitePermission]
+}
+
+/// One immutable profile identity per pane prevents late completions crossing profile selection.
+@MainActor @Observable
+final class ProfilePrivacyModel {
+  let profileID: UUID
+  private let backend: any ProfileSettingsBackend
+  private(set) var sites: [ProfilePermissionSite] = []
+  private(set) var cookiesBlocked: Bool?
+  private(set) var busy = false
+  private(set) var loaded = false
+  private(set) var failure: String?
+  private(set) var message: String?
+
+  init(profileID: UUID, backend: any ProfileSettingsBackend) {
+    self.profileID = profileID
+    self.backend = backend
+  }
+
+  func load() async {
+    await run {
+      try await self.backend.loadProfile(self.profileID)
+      self.cookiesBlocked = self.backend.thirdPartyCookiesBlocked(self.profileID)
+      try await self.refreshPermissions()
+      self.loaded = true
+    }
+  }
+
+  func clear(siteData: Bool) async {
+    await run {
+      try await self.backend.loadProfile(self.profileID)
+      if siteData {
+        try await self.backend.clearSiteData(self.profileID)
+      } else {
+        try await self.backend.clearCache(self.profileID)
+      }
+      self.message = SettingsL10n.string(siteData ? "Site data cleared." : "Cache cleared.")
+    }
+  }
+
+  func resetPermissions(origin: String) async {
+    guard sites.contains(where: { $0.id == origin }) else { return }
+    await run {
+      try await self.backend.loadProfile(self.profileID)
+      try await self.backend.resetPermissions(self.profileID, origin: origin)
+      try await self.refreshPermissions()
+      self.message = SettingsL10n.string("Site permissions reset to defaults.")
+    }
+  }
+
+  func setCookiesBlocked(_ blocked: Bool) async {
+    guard cookiesBlocked != nil else { return }
+    await run {
+      try await self.backend.setThirdPartyCookiesBlocked(blocked, profileID: self.profileID)
+      self.cookiesBlocked = self.backend.thirdPartyCookiesBlocked(self.profileID)
+    }
+  }
+
+  private func refreshPermissions() async throws {
+    let origins = try await backend.permissionOrigins(profileID)
+    var result: [ProfilePermissionSite] = []
+    for origin in Set(origins).sorted() {
+      let settings = try await backend.permissions(profileID, origin: origin)
+      let permissions = try ProfileSitePermission.exceptions(settings)
+      if !permissions.isEmpty { result.append(.init(id: origin, permissions: permissions)) }
+    }
+    sites = result
+  }
+
+  private func run(_ operation: () async throws -> Void) async {
+    guard !busy else { return }
+    busy = true
+    failure = nil
+    message = nil
+    defer { busy = false }
+    do { try await operation() } catch { failure = error.localizedDescription }
+  }
+}

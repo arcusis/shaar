@@ -1,9 +1,4 @@
 module ChromiumBridge {
   header "ChromiumBridge.h"
   export *
-
-  explicit module Verification {
-    header "ChromiumBridgeVerification.h"
-    export *
-  }
 }

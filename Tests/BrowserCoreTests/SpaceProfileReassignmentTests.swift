@@ -62,4 +62,54 @@ import Testing
     }
     #expect(workspace == after)
   }
+
+  @Test func deletingProfileRemovesItsSpacesPagesPinsAndRecoveryAcrossWindows() throws {
+    var session = BrowserSession.fresh()
+    let source = session.profiles[0].id
+    let removedSpace = session.selectedSpaceID
+    let opened = session.open(URL(string: "https://remove.example.test")!)
+    let tab = try #require(opened)
+    session.togglePin(tab)
+    let openedForRecovery = session.open(URL(string: "https://closed.example.test")!)
+    let closed = try #require(openedForRecovery)
+    session.closeTab(closed)
+    var workspace = try BrowserWorkspace(session: session)
+    _ = try workspace.addWindow(from: workspace.windows[0].id)
+    try workspace.deleteProfile(source, movingSpacesTo: nil)
+    #expect(!workspace.catalog.profiles.contains { $0.id == source })
+    #expect(!workspace.catalog.spaces.contains { $0.id == removedSpace })
+    for window in workspace.windows {
+      #expect(!window.session.spaces.contains { $0.profileID == source })
+      #expect(!window.session.closedTabs.contains { $0.profileID == source })
+      #expect(window.session.profileID(forTabID: tab) == nil)
+      #expect(window.pins.isEmpty)
+      #expect(window.session.selectedSpace.profileID != source)
+    }
+    try workspace.validate()
+    #expect(
+      try JSONDecoder().decode(BrowserWorkspace.self, from: JSONEncoder().encode(workspace))
+        == workspace)
+  }
+
+  @Test func removingLastSpacesCreatesEmptyReplacementAndWorksWithoutWindows() throws {
+    var workspace = try BrowserWorkspace(session: .fresh())
+    let source = workspace.catalog.profiles[0].id
+    let other = workspace.catalog.profiles[1].id
+    let sourceSpace = try #require(workspace.catalog.spaces.first { $0.profileID == source })
+    try workspace.setSpaceProfile(sourceSpace.id, to: other)
+    let removedIDs = Set(workspace.catalog.spaces.map(\.id))
+    try workspace.deleteProfile(other, movingSpacesTo: nil)
+    #expect(workspace.catalog.spaces.count == 1)
+    #expect(workspace.catalog.spaces[0].profileID == source)
+    #expect(workspace.catalog.spaces[0].tabs.isEmpty)
+    #expect(!removedIDs.contains(workspace.catalog.spaces[0].id))
+    let beforeLastProfile = workspace
+    #expect(throws: (any Error).self) { try workspace.deleteProfile(source, movingSpacesTo: nil) }
+    #expect(workspace == beforeLastProfile)
+    try workspace.removeWindow(workspace.windows[0].id)
+    let unused = try workspace.createProfile(name: "Unused")
+    try workspace.deleteProfile(unused, movingSpacesTo: nil)
+    #expect(workspace.windows.isEmpty)
+    try workspace.validate()
+  }
 }

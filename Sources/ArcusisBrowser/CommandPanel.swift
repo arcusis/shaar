@@ -230,6 +230,7 @@ struct CommandPanel: View {
     case .bookmark: ShellL10n.string("Open Bookmark")
     case .history: ShellL10n.string("Open")
     case .command: ShellL10n.string("Run Action")
+    case .providerSearch: ShellL10n.string("Search Provider")
     case .open(let url):
       ShellL10n.string(isWebSearch(url) ? "Search Web" : "Open")
     }

@@ -13,11 +13,12 @@ struct LibraryKey: Hashable {
 
 enum LibraryMutation {
   case bookmark([String: Any])
+  case bookmarks([[String: Any]])
   case deleteHistory(String)
 
   var section: LibrarySection {
     switch self {
-    case .bookmark: .bookmarks
+    case .bookmark, .bookmarks: .bookmarks
     case .deleteHistory: .history
     }
   }
@@ -116,6 +117,16 @@ final class BrowserLibraryModel {
     guard !loading.contains(key), hasMoreHistory(profile) else { return }
     historyLimits[profile] = min((historyLimits[profile] ?? 500) * 2, Int(Int32.max))
     refresh(profile, section: .history)
+  }
+
+  @discardableResult
+  func importBookmarks(
+    _ items: [BrowserImportItem], profile: UUID, otherFolderID: UUID,
+    completion: @escaping @MainActor (Bool) -> Void
+  ) -> Bool {
+    let operations = BrowserImport.operations(for: items, otherFolderID: otherFolderID)
+    guard !operations.isEmpty else { return false }
+    return mutate(.bookmarks(operations), profile: profile, completion: completion)
   }
 
   @discardableResult

@@ -75,7 +75,8 @@ Downloads::Downloads(content::BrowserContext* browser_context,
       event_context_(event_context),
       manager_(browser_context ? browser_context->GetDownloadManager() : nullptr) {
   if (manager_)
-    notifier_ = std::make_unique<download::AllDownloadItemNotifier>(manager_, this);
+    notifier_ = std::make_unique<download::AllDownloadItemNotifier>(
+        manager_, static_cast<download::AllDownloadItemNotifier::Observer*>(this));
 }
 
 Downloads::~Downloads() = default;

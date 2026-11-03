@@ -111,7 +111,7 @@ struct BookmarksAdapterTests {
     var disabled: Result<Void, Error>?
     adapter.watch(enabled: false) { disabled = $0 }
     #expect((try? disabled?.get()) != nil)
-    #expect(transport.calls.map(\.0) == [.watch, .watch])
+    #expect(transport.calls.map { $0.0 } == [.watch, .watch])
     let arguments = try transport.calls.map { call in
       try #require(JSONSerialization.jsonObject(with: call.1) as? [String: Any])
     }

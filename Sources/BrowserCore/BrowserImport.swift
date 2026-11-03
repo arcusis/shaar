@@ -157,6 +157,8 @@ public enum BrowserImport {
         let titleRange = Range(match.range(at: 2), in: html)
       else { return nil }
       let address = String(html[urlRange])
+        .replacingOccurrences(of: "&amp;", with: "&")
+        .replacingOccurrences(of: "&quot;", with: "\"")
       guard valid(address) else { return nil }
       let title = String(html[titleRange]).replacingOccurrences(
         of: "<[^>]+>", with: "", options: .regularExpression

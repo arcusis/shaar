@@ -293,7 +293,7 @@ private func bookmarkPayload(children: [[String: Any]]) -> [String: Any] {
     .write(to: html, atomically: true, encoding: .utf8)
   let htmlItems = try BrowserImport.read(html)
   #expect(htmlItems.count == 1)
-  #expect(htmlItems[0].address == "https://example.com/?a=1&amp;b=2")
+  #expect(htmlItems[0].address == "https://example.com/?a=1&b=2")
   #expect(htmlItems[0].title == "A & B")
 
   let emptyHTML = directory.appendingPathComponent("Empty.html")

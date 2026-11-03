@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <limits.h>
 
+#include <cstdio>
 #include <cstring>
 #include <initializer_list>
 #include <string_view>
@@ -23,6 +24,7 @@
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
+#include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/web_contents.h"
 
@@ -32,6 +34,8 @@ namespace {
 constexpr size_t kMaxArgumentsBytes = 1024 * 1024;
 constexpr int kInspector = 1;
 constexpr int kDeveloper = 2;
+constexpr char kFrontendStateEvent[] =
+    "{\"schemaVersion\":1,\"kind\":\"frontendState\",\"open\":%s}";
 
 struct CommandEntry {
   shaar_devtools_command command;
@@ -145,10 +149,9 @@ bool ValidateParams(shaar_devtools_command command,
   switch (command) {
     case SHAAR_DEVTOOLS_RUNTIME_EVALUATE:
       return ParamsHaveOnly(params, {"expression", "objectGroup",
-          "includeCommandLineAPI", "silent", "contextId", "returnByValue",
-          "generatePreview", "userGesture", "awaitPromise", "throwOnSideEffect",
-          "timeout", "disableBreaks", "replMode", "allowUnsafeEvalBlockedByCSP",
-          "uniqueContextId", "serializationOptions"});
+          "silent", "contextId", "returnByValue", "generatePreview",
+          "awaitPromise", "timeout", "uniqueContextId",
+          "serializationOptions"});
     case SHAAR_DEVTOOLS_RUNTIME_RELEASE_OBJECT:
       return ParamsHaveOnly(params, {"objectId"});
     case SHAAR_DEVTOOLS_RUNTIME_GET_PROPERTIES:
@@ -233,6 +236,97 @@ bool ValidateParams(shaar_devtools_command command,
       return false;
   }
   return false;
+}
+
+bool HasRequiredString(const base::Value::Dict& params,
+                       std::string_view key) {
+  const std::string* value = params.FindString(key);
+  return value && !value->empty();
+}
+
+bool HasRequiredInteger(const base::Value::Dict& params,
+                        std::string_view key) {
+  return params.FindInt(key).has_value();
+}
+
+bool HasRequiredBoolean(const base::Value::Dict& params,
+                        std::string_view key) {
+  return params.FindBool(key).has_value();
+}
+
+bool HasNumericValue(const base::Value::Dict& params,
+                     std::string_view key) {
+  const base::Value* value = params.Find(key);
+  return value && (value->is_int() || value->is_double());
+}
+
+bool HasRequiredFields(shaar_devtools_command command,
+                       const base::Value::Dict& params) {
+  switch (command) {
+    case SHAAR_DEVTOOLS_RUNTIME_EVALUATE:
+      return HasRequiredString(params, "expression");
+    case SHAAR_DEVTOOLS_RUNTIME_RELEASE_OBJECT:
+    case SHAAR_DEVTOOLS_RUNTIME_GET_PROPERTIES:
+      return HasRequiredString(params, "objectId");
+    case SHAAR_DEVTOOLS_RUNTIME_RELEASE_OBJECT_GROUP:
+      return HasRequiredString(params, "objectGroup");
+    case SHAAR_DEVTOOLS_DOM_GET_BOX_MODEL:
+      return HasRequiredInteger(params, "nodeId") ||
+             HasRequiredInteger(params, "backendNodeId") ||
+             HasRequiredString(params, "objectId");
+    case SHAAR_DEVTOOLS_DOM_REQUEST_NODE:
+      return HasRequiredString(params, "objectId");
+    case SHAAR_DEVTOOLS_CSS_GET_MATCHED_STYLES_FOR_NODE:
+    case SHAAR_DEVTOOLS_CSS_GET_PLATFORM_FONTS_FOR_NODE:
+    case SHAAR_DEVTOOLS_CSS_GET_BACKGROUND_COLORS:
+    case SHAAR_DEVTOOLS_CSS_GET_COMPUTED_STYLE_FOR_NODE:
+      return HasRequiredInteger(params, "nodeId");
+    case SHAAR_DEVTOOLS_CSS_GET_STYLESHEET_TEXT:
+      return HasRequiredString(params, "styleSheetId");
+    case SHAAR_DEVTOOLS_PAGE_GET_RESOURCE_CONTENT:
+      return HasRequiredString(params, "frameId") &&
+             HasRequiredString(params, "url");
+    case SHAAR_DEVTOOLS_OVERLAY_SET_SHOW_GRID_OVERLAYS:
+      return params.FindList("gridNodeHighlightConfigs") != nullptr;
+    case SHAAR_DEVTOOLS_OVERLAY_SET_SHOW_FLEX_OVERLAYS:
+      return params.FindList("flexNodeHighlightConfigs") != nullptr;
+    case SHAAR_DEVTOOLS_DOM_DESCRIBE_NODE:
+    case SHAAR_DEVTOOLS_ACCESSIBILITY_GET_PARTIAL_AX_TREE:
+      return HasRequiredInteger(params, "nodeId") ||
+             HasRequiredInteger(params, "backendNodeId") ||
+             HasRequiredString(params, "objectId");
+    case SHAAR_DEVTOOLS_EMULATION_SET_DEVICE_METRICS_OVERRIDE:
+      return HasRequiredInteger(params, "width") &&
+             HasRequiredInteger(params, "height") &&
+             HasNumericValue(params, "deviceScaleFactor") &&
+             HasRequiredBoolean(params, "mobile");
+    case SHAAR_DEVTOOLS_NETWORK_EMULATE_NETWORK_CONDITIONS:
+      return params.FindBool("offline").has_value() &&
+             HasNumericValue(params, "latency") &&
+             HasNumericValue(params, "downloadThroughput") &&
+             HasNumericValue(params, "uploadThroughput");
+    case SHAAR_DEVTOOLS_EMULATION_SET_CPU_THROTTLING_RATE:
+      return HasNumericValue(params, "rate");
+    case SHAAR_DEVTOOLS_EMULATION_SET_GEOLOCATION_OVERRIDE:
+      return HasNumericValue(params, "latitude") &&
+             HasNumericValue(params, "longitude") &&
+             HasNumericValue(params, "accuracy");
+    case SHAAR_DEVTOOLS_EMULATION_SET_TIMEZONE_OVERRIDE:
+      return HasRequiredString(params, "timezoneId");
+    case SHAAR_DEVTOOLS_EMULATION_SET_LOCALE_OVERRIDE:
+      return HasRequiredString(params, "locale");
+    case SHAAR_DEVTOOLS_EMULATION_SET_USER_AGENT_OVERRIDE:
+      return HasRequiredString(params, "userAgent");
+    case SHAAR_DEVTOOLS_EMULATION_SET_EMULATED_MEDIA:
+      return params.FindString("media") != nullptr ||
+             params.FindList("features") != nullptr;
+    case SHAAR_DEVTOOLS_PAGE_ADD_SCRIPT_TO_EVALUATE_ON_NEW_DOCUMENT:
+      return HasRequiredString(params, "source");
+    case SHAAR_DEVTOOLS_PAGE_REMOVE_SCRIPT_TO_EVALUATE_ON_NEW_DOCUMENT:
+      return HasRequiredString(params, "identifier");
+    default:
+      return true;
+  }
 }
 
 bool HasEmptyVersionedSchema(shaar_bytes args_json) {
@@ -366,6 +460,10 @@ shaar_error_code DecodeOperation(shaar_operation operation,
     *reason = "DevTools command parameters are invalid";
     return SHAAR_INVALID_ARGUMENT;
   }
+  if (!HasRequiredFields(*command, *root.FindDict("params"))) {
+    *reason = "DevTools command is missing required parameters";
+    return SHAAR_INVALID_ARGUMENT;
+  }
   *params = root.FindDict("params")->Clone();
   return SHAAR_OK;
 }
@@ -382,6 +480,51 @@ const char* ProtocolMethod(shaar_devtools_capability capability,
       return entry.method;
   }
   return nullptr;
+}
+
+bool IsValidTargetIdentity(shaar_scope scope,
+                           std::string_view registered_tab_id,
+                           const DevToolsTargetIdentity& identity) {
+  if ((scope.profile == nullptr) == (scope.private_session == nullptr) ||
+      identity.profile_id.empty() || identity.window_id.empty() ||
+      identity.tab_id.empty() || identity.tab_id != registered_tab_id)
+    return false;
+  if (identity.profile_id.find('\0') != std::string::npos ||
+      identity.session_id.find('\0') != std::string::npos ||
+      identity.window_id.find('\0') != std::string::npos ||
+      identity.tab_id.find('\0') != std::string::npos)
+    return false;
+  return scope.private_session ? !identity.session_id.empty()
+                               : identity.session_id.empty();
+}
+
+bool PolicyAllowsOperation(DevToolsRuntimeServices* runtime,
+                           shaar_engine* engine,
+                           shaar_scope scope,
+                           content::WebContents* contents,
+                           shaar_operation operation,
+                           int capability) {
+  if (!runtime || !engine || !contents)
+    return false;
+  switch (operation) {
+    case SHAAR_OP_DEVTOOLS_CALL:
+    case SHAAR_OP_DEVTOOLS_UI_SHOW:
+    case SHAAR_OP_DEVTOOLS_UI_CLOSE:
+    case SHAAR_OP_DEVTOOLS_UI_STATE:
+      break;
+    case SHAAR_OP_DEVTOOLS_UI_SET_DOCK:
+    case SHAAR_OP_DEVTOOLS_CONTROL_ENABLE:
+    case SHAAR_OP_DEVTOOLS_CONTROL_DISABLE:
+    case SHAAR_OP_DEVTOOLS_CONTROL_STATUS:
+    default:
+      return false;
+  }
+  if ((operation == SHAAR_OP_DEVTOOLS_CALL && capability != kInspector &&
+       capability != kDeveloper) ||
+      (operation != SHAAR_OP_DEVTOOLS_CALL && capability != 0))
+    return false;
+  return runtime->IsOperationAllowed(engine, scope, contents, operation,
+                                     capability);
 }
 
 shaar_error_code EncodeProtocolRequest(shaar_bytes args_json,
@@ -407,6 +550,25 @@ shaar_error_code EncodeProtocolRequest(shaar_bytes args_json,
     return SHAAR_INVALID_ARGUMENT;
   }
   return SHAAR_OK;
+}
+
+void EmitFrontendStateEvent(shaar_engine* engine,
+                            const DevToolsTargetIdentity& identity,
+                            bool open) {
+  if (identity.profile_id.empty() || identity.window_id.empty() ||
+      identity.tab_id.empty())
+    return;
+  char payload[sizeof(kFrontendStateEvent) + 8];
+  const int length = std::snprintf(payload, sizeof(payload), kFrontendStateEvent,
+                                   open ? "true" : "false");
+  if (length <= 0 || static_cast<size_t>(length) >= sizeof(payload))
+    return;
+  const shaar_bytes profile{identity.profile_id.data(), identity.profile_id.size()};
+  const shaar_bytes session{identity.session_id.data(), identity.session_id.size()};
+  const shaar_bytes window{identity.window_id.data(), identity.window_id.size()};
+  const shaar_bytes tab{identity.tab_id.data(), identity.tab_id.size()};
+  const shaar_bytes body{payload, static_cast<size_t>(length)};
+  EmitEvent(engine, SHAAR_EVENT_DEVTOOLS, profile, session, window, tab, body);
 }
 
 shaar_error_code HandleDevToolsOperation(
@@ -444,9 +606,9 @@ shaar_error_code HandleDevToolsOperation(
     if (contents->GetBrowserContext() != profile)
       return Fail(error, SHAAR_WRONG_PROFILE, "DevTools tab is outside profile scope");
   } else {
-    if (!context->devtools_scope)
+    if (!context->devtools_runtime)
       return Fail(error, SHAAR_NOT_READY,
-                  "private DevTools scope resolver is unavailable");
+                  "DevTools runtime services are unavailable");
     Profile* target_profile =
         contents->GetBrowserContext()
             ? Profile::FromBrowserContext(contents->GetBrowserContext())
@@ -454,11 +616,44 @@ shaar_error_code HandleDevToolsOperation(
     if (!target_profile || !target_profile->IsOffTheRecord())
       return Fail(error, SHAAR_WRONG_SESSION,
                   "DevTools tab is outside private scope");
-    if (!context->devtools_scope->OwnsTarget(engine, scope, window, tab,
-                                             contents))
-      return Fail(error, SHAAR_WRONG_SESSION,
-                  "DevTools tab is outside private session scope");
   }
+
+  if (!context->devtools_runtime)
+    return Fail(error, SHAAR_NOT_READY,
+                "DevTools runtime services are unavailable");
+  DevToolsTargetIdentity identity;
+  if (!context->devtools_runtime->ResolveTarget(engine, scope, window, tab,
+                                                contents, &identity))
+    return Fail(error, scope.private_session ? SHAAR_WRONG_SESSION
+                                             : SHAAR_WRONG_PROFILE,
+                "DevTools target is outside the requested scope");
+  if (!IsValidTargetIdentity(
+          scope, context->browser_tabs->TabID(engine, window, tab), identity))
+    return Fail(error, SHAAR_WRONG_SESSION,
+                "DevTools target identity is incomplete or inconsistent");
+  if (scope.profile && context->profile_services &&
+      identity.profile_id != context->profile_services->ProfileID(engine,
+                                                                  scope.profile))
+    return Fail(error, SHAAR_WRONG_PROFILE,
+                "DevTools profile identity does not match the requested scope");
+
+  int capability = 0;
+  if (operation == SHAAR_OP_DEVTOOLS_CALL) {
+    shaar_devtools_capability parsed_capability;
+    shaar_devtools_command parsed_command;
+    base::Value::Dict params;
+    std::string reason;
+    const shaar_error_code decode_status = DecodeOperation(
+        operation, args_json, &parsed_capability, &parsed_command, &params,
+        &reason);
+    if (decode_status != SHAAR_OK)
+      return Fail(error, decode_status, reason.c_str());
+    capability = static_cast<int>(parsed_capability);
+  }
+  if (!PolicyAllowsOperation(context->devtools_runtime, engine, scope,
+                              contents, operation, capability))
+    return Fail(error, SHAAR_POLICY_BLOCKED,
+                "DevTools operation is blocked by runtime policy");
 
   const ReplyContext request{request_id, reply, reply_context};
   if (operation == SHAAR_OP_DEVTOOLS_CALL) {
@@ -496,6 +691,8 @@ shaar_error_code HandleDevToolsOperation(
                 "DevTools docking is not available");
   }
 
+  const bool frontend_was_open =
+      DevToolsWindow::GetInstanceForInspectedWebContents(contents) != nullptr;
   if (operation == SHAAR_OP_DEVTOOLS_UI_SHOW) {
     DevToolsWindow::OpenDevToolsWindow(contents, DevToolsOpenedByAction::kUnknown);
   } else if (operation == SHAAR_OP_DEVTOOLS_UI_CLOSE) {
@@ -519,6 +716,14 @@ shaar_error_code HandleDevToolsOperation(
                 "DevTools remote control or docking is not available");
   } else {
     return Fail(error, SHAAR_INVALID_ARGUMENT, "unknown DevTools operation");
+  }
+  if ((operation == SHAAR_OP_DEVTOOLS_UI_SHOW ||
+       operation == SHAAR_OP_DEVTOOLS_UI_CLOSE) &&
+      frontend_was_open !=
+          (DevToolsWindow::GetInstanceForInspectedWebContents(contents) != nullptr)) {
+    const bool open =
+        DevToolsWindow::GetInstanceForInspectedWebContents(contents) != nullptr;
+    EmitFrontendStateEvent(engine, identity, open);
   }
   Reply(request, SHAAR_OK, "{\"schemaVersion\":1}");
   return SHAAR_OK;

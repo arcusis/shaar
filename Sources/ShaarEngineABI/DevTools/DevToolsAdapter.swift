@@ -253,9 +253,57 @@ public struct ShaarDevToolsAdapter: Sendable {
         payload: Data("{\"schemaVersion\":1}".utf8)),
       completion: completion)
   }
+
+  public func frontendState(
+    scope: ShaarNavigationScope, windowID: String, tabID: String,
+    completion: @escaping @Sendable (Result<Data, ShaarEngineError>) -> Void
+  ) throws -> UInt64 {
+    guard !scope.profileID.isEmpty, scope.sessionID.map({ !$0.isEmpty }) ?? true,
+      !windowID.isEmpty, !tabID.isEmpty
+    else { throw ShaarEngineError.invalidEvent("invalid DevTools target") }
+    return try engine.submit(
+      ShaarDevToolsRequest(
+        operation: .state, scope: scope, windowID: windowID, tabID: tabID,
+        payload: Data("{\"schemaVersion\":1}".utf8)), completion: completion)
+  }
+}
+
+public struct ShaarDevToolsFrontendState: Equatable, Sendable {
+  public let open: Bool
+}
+
+public enum ShaarDevToolsEventRouter {
+  public static func decodeFrontendState(
+    _ event: ShaarCopiedEvent,
+    scope: ShaarNavigationScope,
+    windowID: String,
+    tabID: String
+  ) -> ShaarDevToolsFrontendState? {
+    guard event.kind == 14,
+      event.profileID == Data(scope.profileID.utf8),
+      event.sessionID == Data((scope.sessionID ?? "").utf8),
+      event.windowID == Data(windowID.utf8),
+      event.tabID == Data(tabID.utf8),
+      let payload = try? JSONSerialization.jsonObject(with: event.payloadJSON) as? [String: Any],
+      payload["schemaVersion"] as? Int == 1,
+      payload["kind"] as? String == "frontendState",
+      let open = payload["open"] as? Bool,
+      Set(payload.keys) == ["schemaVersion", "kind", "open"]
+    else { return nil }
+    return ShaarDevToolsFrontendState(open: open)
+  }
 }
 
 extension ShaarEngineLoader {
+  public func makeDevToolsAdapter(
+    handleResolver: any ShaarNavigationHandleResolving
+  ) throws -> ShaarDevToolsAdapter? {
+    guard implementation == .shaar,
+      let transport = try makeDevToolsTransport(handleResolver: handleResolver)
+    else { return nil }
+    return ShaarDevToolsAdapter(implementation: .shaar, engine: transport)
+  }
+
   public func makeDevToolsTransport(
     handleResolver: any ShaarNavigationHandleResolving
   ) throws -> ShaarDevToolsABITransport? {

@@ -144,7 +144,7 @@ test("history_unittests") {
 # BEGIN devtools
 test("devtools_unittests") {
   sources = [ "devtools/shaar_devtools_unittest.cc" ]
-  deps = [ ":engine", "//testing/gtest" ]
+  deps = [ ":engine", "//content/test:test_support", "//testing/gtest" ]
 }
 # END devtools
 

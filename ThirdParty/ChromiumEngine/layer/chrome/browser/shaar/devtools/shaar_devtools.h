@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_SHAAR_DEVTOOLS_SHAAR_DEVTOOLS_H_
 
 #include <string>
+#include <string_view>
 
 #include "chrome/browser/shaar/engine/shaar_module_registry.h"
 #include "chrome/browser/shaar/public/shaar_engine.h"
@@ -24,6 +25,19 @@ struct ModuleHandlers {
 // requested capability. Cookie commands are reserved for site-data.
 const char* ProtocolMethod(shaar_devtools_capability capability,
                            shaar_devtools_command command);
+
+bool IsValidTargetIdentity(shaar_scope scope,
+                           std::string_view registered_tab_id,
+                           const DevToolsTargetIdentity& identity);
+bool PolicyAllowsOperation(DevToolsRuntimeServices* runtime,
+                           shaar_engine* engine,
+                           shaar_scope scope,
+                           content::WebContents* contents,
+                           shaar_operation operation,
+                           int capability);
+void EmitFrontendStateEvent(shaar_engine* engine,
+                            const DevToolsTargetIdentity& identity,
+                            bool open);
 
 // Validates the versioned ABI envelope and serializes a protocol request.
 shaar_error_code EncodeProtocolRequest(shaar_bytes args_json,

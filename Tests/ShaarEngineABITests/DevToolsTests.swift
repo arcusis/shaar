@@ -82,11 +82,41 @@ struct DevToolsTests {
       open: true, scope: ShaarNavigationScope(profileID: "profile-a"),
       windowID: "window-a", tabID: "tab-a", completion: { _ in })
     #expect(fake.request?.operation == .show)
+    _ = try adapter.frontendState(
+      scope: ShaarNavigationScope(profileID: "profile-a"),
+      windowID: "window-a", tabID: "tab-a", completion: { _ in })
+    #expect(fake.request?.operation == .state)
     #expect(throws: ShaarEngineError.self) {
       try adapter.setFrontend(
         open: false, scope: ShaarNavigationScope(profileID: ""),
         windowID: "window-a", tabID: "tab-a", completion: { _ in })
     }
+  }
+
+  @Test func frontendStateEventsRequireExactScopeAndMinimalPayload() {
+    let scope = ShaarNavigationScope(profileID: "profile-a", sessionID: "private-a")
+    let event = ShaarCopiedEvent(
+      sequence: 18, kind: 14, profileID: Data("profile-a".utf8),
+      sessionID: Data("private-a".utf8), windowID: Data("window-a".utf8),
+      tabID: Data("tab-a".utf8),
+      payloadJSON: Data(#"{"schemaVersion":1,"kind":"frontendState","open":true}"#.utf8))
+    #expect(
+      ShaarDevToolsEventRouter.decodeFrontendState(
+        event, scope: scope, windowID: "window-a", tabID: "tab-a")?.open == true)
+    #expect(
+      ShaarDevToolsEventRouter.decodeFrontendState(
+        event, scope: ShaarNavigationScope(profileID: "profile-a"),
+        windowID: "window-a", tabID: "tab-a") == nil)
+
+    let withSensitiveField = ShaarCopiedEvent(
+      sequence: event.sequence, kind: event.kind, profileID: event.profileID,
+      sessionID: event.sessionID, windowID: event.windowID, tabID: event.tabID,
+      payloadJSON: Data(
+        #"{"schemaVersion":1,"kind":"frontendState","open":true,"url":"https://private.test"}"#.utf8
+      ))
+    #expect(
+      ShaarDevToolsEventRouter.decodeFrontendState(
+        withSensitiveField, scope: scope, windowID: "window-a", tabID: "tab-a") == nil)
   }
 
   @Test func ardiaRemainsDefaultAndDoesNotConstructShaarAdapter() {

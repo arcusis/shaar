@@ -22,8 +22,8 @@ void SetBrowserTabRegistry(BrowserTabRegistry* registry) {
 }
 
 // BEGIN devtools
-void SetDevToolsTargetScopeResolver(DevToolsTargetScopeResolver* resolver) {
-  g_context.devtools_scope = resolver;
+void SetDevToolsRuntimeServices(DevToolsRuntimeServices* services) {
+  g_context.devtools_runtime = services;
 }
 // END devtools
 }  // namespace shaar

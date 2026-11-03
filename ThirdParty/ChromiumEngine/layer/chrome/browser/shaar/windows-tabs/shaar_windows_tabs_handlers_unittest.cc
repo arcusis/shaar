@@ -91,6 +91,48 @@ TEST(ShaarWindowsTabsHandlersTest, ProfileBindingRejectsPrivateScope) {
   EXPECT_EQ(HandleWindowBindProfile(&call, &error), SHAAR_WRONG_SESSION);
 }
 
+TEST(ShaarWindowsTabsHandlersTest, ProfileBindingRejectsUnexpectedFields) {
+  shaar::ModuleCall call = {};
+  call.engine = reinterpret_cast<shaar_engine*>(1);
+  call.scope.size = sizeof(shaar_scope);
+  call.scope.profile = reinterpret_cast<shaar_profile*>(1);
+  call.window = reinterpret_cast<shaar_window*>(1);
+  call.operation = SHAAR_OP_WINDOW_BIND_PROFILE;
+  static constexpr char kArgs[] =
+      R"({"schemaVersion":1,"profileID":"p","sessionID":"s"})";
+  call.args_json = {kArgs, sizeof(kArgs) - 1};
+  call.scope_profile_id = "p";
+  call.scoped_browser = reinterpret_cast<Browser*>(1);
+  std::unordered_map<std::string, Browser*> browsers;
+  call.browsers_by_profile = &browsers;
+  shaar_error error = {};
+  error.size = sizeof(error);
+
+  EXPECT_EQ(HandleWindowBindProfile(&call, &error), SHAAR_INVALID_ARGUMENT);
+  EXPECT_TRUE(browsers.empty());
+}
+
+TEST(ShaarWindowsTabsHandlersTest, ProfileBindingRejectsConflictingBrowser) {
+  shaar::ModuleCall call = {};
+  call.engine = reinterpret_cast<shaar_engine*>(1);
+  call.scope.size = sizeof(shaar_scope);
+  call.scope.profile = reinterpret_cast<shaar_profile*>(1);
+  call.window = reinterpret_cast<shaar_window*>(1);
+  call.operation = SHAAR_OP_WINDOW_BIND_PROFILE;
+  static constexpr char kArgs[] = R"({"schemaVersion":1,"profileID":"p"})";
+  call.args_json = {kArgs, sizeof(kArgs) - 1};
+  call.scope_profile_id = "p";
+  call.scoped_browser = reinterpret_cast<Browser*>(2);
+  std::unordered_map<std::string, Browser*> browsers = {
+      {"p", reinterpret_cast<Browser*>(1)}};
+  call.browsers_by_profile = &browsers;
+  shaar_error error = {};
+  error.size = sizeof(error);
+
+  EXPECT_EQ(HandleWindowBindProfile(&call, &error), SHAAR_CONFLICT);
+  EXPECT_EQ(browsers.at("p"), reinterpret_cast<Browser*>(1));
+}
+
 TEST(ShaarWindowsTabsHandlersTest, ActiveProfileMustAlreadyBeBound) {
   shaar::ModuleCall call = {};
   Browser* const browser = reinterpret_cast<Browser*>(1);

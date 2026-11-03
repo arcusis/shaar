@@ -229,6 +229,10 @@ shaar_error_code HandleTabMove(const ModuleCall* call, shaar_error* error) {
   const int from = call->tab_strip_model->GetIndexOfWebContents(it->second);
   if (from < 0)
     return Fail(SHAAR_NOT_FOUND, error);
+  const bool is_pinned = call->tab_strip_model->IsTabPinned(from);
+  const bool target_is_pinned = call->tab_strip_model->IsTabPinned(*to_index);
+  if (is_pinned != target_is_pinned)
+    return Fail(SHAAR_CONFLICT, error);
   call->tab_strip_model->MoveWebContentsAt(from, *to_index, false);
   return SHAAR_OK;
 }

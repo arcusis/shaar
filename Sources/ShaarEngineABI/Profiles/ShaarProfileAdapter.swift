@@ -24,11 +24,12 @@ public enum ShaarProfileError: Error, Equatable, Sendable {
   func getProfileState(_ handle: UInt64, key: String) throws -> Data
   func setProfileState(_ handle: UInt64, key: String, valueJSON: Data) throws
   func profilePath(_ handle: UInt64) throws -> Data
+  func storageKeychainProfile(_ handle: UInt64) throws -> ShaarStorageKeychainNativeProfile
 }
 
 /// UUID to native handle registry used by the Shaar implementation choice. Shipping remains
 /// on `.ardia`; callers construct this only after selecting `.shaar` explicitly.
-@MainActor public final class ShaarProfileAdapter {
+@MainActor public final class ShaarProfileAdapter: ShaarStorageKeychainProfileResolving {
   private let engine: any ShaarProfileEngine
   private let onProfileEvent: @MainActor (ShaarCopiedEvent) -> Void
   private var handles: [String: UInt64] = [:]
@@ -44,6 +45,12 @@ public enum ShaarProfileError: Error, Equatable, Sendable {
   }
 
   public var loadedProfileIDs: Set<String> { Set(handles.keys) }
+
+  public func resolve(profileID: UUID) async throws -> ShaarStorageKeychainNativeProfile {
+    let id = profileID.uuidString.lowercased()
+    guard let handle = handles[id] else { throw ShaarProfileError.notOpen }
+    return try engine.storageKeychainProfile(handle)
+  }
 
   /// Receives events only after `ShaarEventDispatcher` copied all borrowed C bytes.
   /// The callback is the seam used by the existing BrowserRuntimeRouter facade.

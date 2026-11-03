@@ -41,10 +41,26 @@ let package = Package(
       name: "ShaarEngineABIC",
       path: "Sources/ShaarEngineABI/Navigation/CABI",
       publicHeadersPath: "include"),
+    // BEGIN storage_keychain
+    .target(
+      name: "ShaarStorageKeychainABIC",
+      path: "Sources/ShaarEngineABI/StorageKeychain/CABI",
+      publicHeadersPath: "include"),
+    // END storage_keychain
     .target(
       name: "ShaarEngineABI",
-      dependencies: ["ShaarEngineABIC"],
-      exclude: ["Navigation/CABI"]),
+      dependencies: [
+        "ShaarEngineABIC",
+        // BEGIN storage_keychain
+        "ShaarStorageKeychainABIC",
+        // END storage_keychain
+      ],
+      exclude: [
+        "Navigation/CABI",
+        // BEGIN storage_keychain
+        "StorageKeychain/CABI",
+        // END storage_keychain
+      ]),
     // END Shaar navigation C ABI shim.
     .target(
       name: "ChromiumBridgeVerification",

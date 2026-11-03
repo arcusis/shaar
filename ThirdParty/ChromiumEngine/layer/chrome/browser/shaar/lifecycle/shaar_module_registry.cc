@@ -36,6 +36,9 @@ SHAAR_DECLARE_OPTIONAL_MODULE(shaar_find_register);
 // END find
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_devtools_register);
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_media_register);
+// BEGIN storage_keychain
+SHAAR_DECLARE_OPTIONAL_MODULE(shaar_storage_keychain_register);
+// END storage_keychain
 #undef SHAAR_DECLARE_OPTIONAL_MODULE
 
 namespace {
@@ -200,6 +203,10 @@ void RegisterLinkedModules(ShaarModuleRegistry* registry) {
     shaar_devtools_register(registry);
   if (shaar_media_register)
     shaar_media_register(registry);
+  // BEGIN storage_keychain
+  if (shaar_storage_keychain_register)
+    shaar_storage_keychain_register(registry);
+  // END storage_keychain
 }
 
 ShaarModuleRegistry& ModuleRegistry() {

@@ -85,6 +85,11 @@ source_set("engine") {
     "media/shaar_media.h",
     "media/shaar_media_lifecycle_adapter.cc",
     # END media
+    # BEGIN storage_keychain
+    "storage_keychain/shaar_storage_keychain.cc",
+    "storage_keychain/shaar_storage_keychain.h",
+    "storage_keychain/shaar_storage_keychain_lifecycle_adapter.cc",
+    # END storage_keychain
   ]
   deps = [
     "//base",
@@ -114,6 +119,9 @@ source_set("engine") {
     # BEGIN find
     "//components/find_in_page",
     # END find
+    # BEGIN storage_keychain
+    "//components/os_crypt/common:keychain_password_mac",
+    # END storage_keychain
     "//content/public/browser",
     # BEGIN media
     "//services/media_session/public/cpp",
@@ -131,6 +139,23 @@ source_set("engine") {
     # END extensions
   ]
 }
+
+# BEGIN storage_keychain
+test("storage_keychain_unittests") {
+  sources = [
+    "storage_keychain/shaar_storage_keychain_unittest.cc",
+    "storage_keychain/shaar_storage_keychain_migration_probe_unittest.mm",
+  ]
+  deps = [
+    ":engine",
+    "//base",
+    "//base/test:test_support",
+    "//crypto",
+    "//components/os_crypt/common:keychain_password_mac",
+    "//testing/gtest",
+  ]
+}
+# END storage_keychain
 
 test("lifecycle_unittests") {
   sources = [ "lifecycle/shaar_module_registry_unittest.cc" ]

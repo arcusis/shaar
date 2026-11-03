@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import Foundation
+import ShaarEngineABIC
 import Testing
 
 @testable import ShaarEngineABI
@@ -39,6 +40,13 @@ import Testing
   func getProfileState(_ handle: UInt64, key: String) throws -> Data { Data("true".utf8) }
   func setProfileState(_ handle: UInt64, key: String, valueJSON: Data) throws {}
   func profilePath(_ handle: UInt64) throws -> Data { Data("/fake/Profile".utf8) }
+  func storageKeychainProfile(_ handle: UInt64) throws -> ShaarStorageKeychainNativeProfile {
+    ShaarStorageKeychainNativeProfile(
+      engine: OpaquePointer(bitPattern: 0x44)!,
+      scope: shaar_scope(
+        size: UInt32(MemoryLayout<shaar_scope>.size),
+        profile: OpaquePointer(bitPattern: Int(handle)), private_session: nil))
+  }
 }
 
 @Suite("Shaar profile adapter")
@@ -69,6 +77,22 @@ struct ShaarProfileAdapterTests {
     try await adapter.delete(profileID: id)
     #expect(fake.deleted == [1])
     #expect(adapter.loadedProfileIDs.isEmpty)
+  }
+
+  @Test @MainActor func storageKeychainResolutionUsesOnlyAnOpenProfile() async throws {
+    let fake = FakeProfileEngine()
+    let adapter = ShaarProfileAdapter(engine: fake, implementation: .shaar)
+    let id = "4a4d4885-d38a-4b4a-bc03-b12f634bff07"
+    let uuid = try #require(UUID(uuidString: id))
+    await #expect(throws: ShaarProfileError.notOpen) {
+      try await adapter.resolve(profileID: uuid)
+    }
+
+    try await adapter.open(profileID: id)
+    let native = try await adapter.resolve(profileID: uuid)
+    #expect(native.scope.size == UInt32(MemoryLayout<shaar_scope>.size))
+    #expect(native.scope.profile == OpaquePointer(bitPattern: 1))
+    #expect(native.scope.private_session == nil)
   }
 
   @Test @MainActor func malformedAndNoncanonicalUUIDsAreRejected() async {

@@ -14,6 +14,8 @@ Test-only engine entry points live in the explicit Clang submodule `ChromiumBrid
 
 The separate identifier was merged in [PR #330](https://github.com/arcusis/shaar/pull/330). Shipping verification still requires `com.arcusis.browser`; Chromium helper identifiers remain the pinned engine's `com.ardia.browser.*`. Identifier separation prevents shared macOS crash/restoration attribution and preferences domains; it does not fix the pending-navigation shutdown crash described in [[Quit_Exit_Verification]].
 
+The Source Checks workflow also runs a short normal-window browsing smoke on every pull request and merge-group check. It uses the same hidden verification bundle, performs an unauthenticated Google search, and opens three authored loopback pages. It checks alphabet input through the address launcher and Command-T, captures each authored page for non-black pixels, reopens a closed tab, and audits clean engine shutdown. It makes no visible window or desktop-input claim.
+
 Tests for harness code are in `Tests/ShaarVerificationTests`.
 
 ## Space and Profile switch latency

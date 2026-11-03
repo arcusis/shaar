@@ -155,7 +155,10 @@ class PipelineGateTests(unittest.TestCase):
 
     def results(self, native="success", nightly="skipped"):
         results = {name: {"result": "success"} for name in ("plan", "fast", "dependency-review")}
-        results.update({name: {"result": native} for name in ("build", "coverage", "visuals", "localization", "engine", "shipping", "codeql", "inspector-contracts")})
+        results.update({name: {"result": native} for name in (
+            "python-tests", "build", "coverage", "visuals", "localization", "engine",
+            "shipping", "codeql", "inspector-contracts",
+        )})
         results.update({name: {"result": nightly} for name in ("sanitizers", "dead-code")})
         results["codeql"] = {"result": "success"}
         return results
@@ -220,6 +223,17 @@ class CoverageGateTests(unittest.TestCase):
     def test_equal_ratio_and_improvement_pass(self):
         self.assertEqual(COVERAGE.regressions({"BrowserCore": (8, 10)}, {"BrowserCore": (16, 20)}), [])
         self.assertEqual(COVERAGE.regressions({"BrowserCore": (8, 10)}, {"BrowserCore": (9, 10)}), [])
+
+    def test_engine_only_browsing_smoke_is_excluded_from_unit_coverage(self):
+        report = self.report()
+        report["data"][0]["files"] += [
+            {"filename": "/checkout/Sources/ShaarVerification/BasicBrowsingProbe.swift",
+             "summary": {"lines": {"covered": 0, "count": 168}}},
+            {"filename": "/checkout/Sources/ShaarVerification/EngineProbe.swift",
+             "summary": {"lines": {"covered": 0, "count": 1093}}},
+        ]
+        coverage = COVERAGE.module_coverage(report)
+        self.assertEqual(coverage["ShaarVerification"], (0, 1093))
 
     def test_timing_noise_passes_but_real_drop_fails(self):
         base = {"ArcusisBrowser": (22697, 36330)}

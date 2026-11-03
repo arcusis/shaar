@@ -20,6 +20,18 @@ spec.loader.exec_module(fixture)
 
 
 class FixtureReadinessTests(unittest.TestCase):
+    def test_download_responses_are_not_cached_between_probe_phases(self):
+        handler = object.__new__(fixture.Fixture)
+        handler.headers = {'Cookie': 'account=alpha'}
+        handler.wfile = io.BytesIO()
+        handler.send_response = Mock()
+        handler.send_header = Mock()
+        handler.end_headers = Mock()
+
+        handler.download('profile.txt')
+
+        handler.send_header.assert_any_call('Cache-Control', 'no-store')
+
     def test_slow_download_catches_up_after_coarse_scheduler_wakes(self):
         clock = [0.0]
 

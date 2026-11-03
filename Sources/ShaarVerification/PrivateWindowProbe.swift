@@ -30,6 +30,7 @@ final class PrivateWindowProbe {
   private var productRendererScreenshotSHA256: String?
   private var productRendererViewportAudit: [String: Any] = [:]
   private var productRendererCaptureOutcome = "not-attempted"
+  private var productSmokeDiagnostics: [String: Any] = [:]
   private var productLifecycleBlocker: String?
   private var stage = "preflight"
   private var lastDocumentAudit: [String: Any] = [:]
@@ -430,6 +431,7 @@ final class PrivateWindowProbe {
     productRendererScreenshotSHA256 = product.rendererScreenshotSHA256
     productRendererViewportAudit = product.rendererViewportAudit
     productRendererCaptureOutcome = product.rendererCaptureOutcome
+    productSmokeDiagnostics = product.smokeDiagnostics
     productLifecycleBlocker = product.lifecycleBlocker
     checks["productPrivateWindowCloseLeavesNoData"] =
       checks["productNormalHistoryExcludesPrivateVisit"] == true
@@ -960,6 +962,7 @@ final class PrivateWindowProbe {
       "productRendererScreenshotSHA256": productRendererScreenshotSHA256 ?? "",
       "productRendererViewportAudit": productRendererViewportAudit,
       "productRendererCaptureOutcome": productRendererCaptureOutcome,
+      "productSmokeDiagnostics": productSmokeDiagnostics,
       "productLifecycleBlocker": productLifecycleBlocker ?? "",
       "cleanup": [
         "windowsRemaining": privateWindows.count, "contextsRemaining": privateContexts.count,

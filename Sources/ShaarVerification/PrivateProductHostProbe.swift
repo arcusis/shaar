@@ -22,6 +22,7 @@ final class PrivateProductHostProbe {
     let rendererScreenshotSHA256: String
     let rendererViewportAudit: [String: Any]
     let rendererCaptureOutcome: String
+    let smokeDiagnostics: [String: Any]
     let lifecycleBlocker: String
   }
 
@@ -54,6 +55,7 @@ final class PrivateProductHostProbe {
   private var rendererScreenshotDigest = ""
   private var rendererViewportAudit: [String: Any] = [:]
   private var rendererCaptureOutcome = "not-attempted"
+  private var smokeDiagnostics: [String: Any] = [:]
   private var lifecycleBlocker = ""
   private var quitDiagnosticStages: [[String: Any]] = []
   private var nativeCloseObservations: [String: NativeCloseObservation] = [:]
@@ -121,6 +123,7 @@ final class PrivateProductHostProbe {
         rendererScreenshotSHA256: rendererScreenshotDigest,
         rendererViewportAudit: rendererViewportAudit,
         rendererCaptureOutcome: rendererCaptureOutcome,
+        smokeDiagnostics: smokeDiagnostics,
         lifecycleBlocker: lifecycleBlocker)
     } catch {
       if let tabID = normalSession.selectedSpace.selectedTabID?.uuidString {
@@ -361,6 +364,12 @@ final class PrivateProductHostProbe {
     first.hosting.layoutSubtreeIfNeeded()
     let appWindowCount = NSApp.windows.count
     let typedQuery = typeInAddressField(alphabetQuery, window: first.window, hosting: first.hosting)
+    smokeDiagnostics["alphabetSearch"] = [
+      "typedQuery": typedQuery.map { $0 as Any } ?? NSNull(), "expectedQuery": alphabetQuery,
+      "commandIsOpen": first.store.commandIsOpen, "tabCount": first.store.tabs.count,
+      "privateWindowCount": privateHost.windowCount, "appWindowCountBefore": appWindowCount,
+      "appWindowCountAfter": NSApp.windows.count,
+    ]
     checks["productAlphabetSearchDoesNotOpenPicker"] =
       typedQuery == alphabetQuery && !first.store.commandIsOpen
       && first.store.tabs.count == 1 && privateHost.windowCount == 1
@@ -974,7 +983,10 @@ final class PrivateProductHostProbe {
   ) async -> Bool {
     guard owner.store.selectedTabID == tabID,
       runtime.selectPrivateTabID(tabID, windowID: owner.windowID, contextID: owner.contextID)
-    else { return false }
+    else {
+      smokeDiagnostics["render-\(path)"] = ["selected": false]
+      return false
+    }
     let document: String? = await withCheckedContinuation { continuation in
       runtime.evaluatePrivateProbeTabID(
         tabID,
@@ -982,7 +994,12 @@ final class PrivateProductHostProbe {
           "document.readyState==='complete'&&location.pathname==='/\(path)'&&document.body.innerText.includes('OrbitFindMarker')"
       ) { continuation.resume(returning: $0) }
     }
-    guard document == "true" else { return false }
+    guard document == "true" else {
+      smokeDiagnostics["render-\(path)"] = [
+        "selected": true, "document": document.map { $0 as Any } ?? NSNull(),
+      ]
+      return false
+    }
     let (screenshot, outcome): (Data?, String?) = await withCheckedContinuation {
       continuation in
       runtime.capturePrivateProbeTabID(tabID, windowID: owner.windowID, contextID: owner.contextID)
@@ -991,7 +1008,14 @@ final class PrivateProductHostProbe {
     guard outcome == nil || outcome == "captured", let screenshot,
       let bitmap = NSBitmapImageRep(data: screenshot), bitmap.pixelsWide > 0,
       bitmap.pixelsHigh > 0
-    else { return false }
+    else {
+      smokeDiagnostics["render-\(path)"] = [
+        "selected": true, "document": document.map { $0 as Any } ?? NSNull(),
+        "captureOutcome": outcome ?? "nil",
+        "captureBytes": screenshot?.count ?? 0,
+      ]
+      return false
+    }
     var nonBlackSamples = 0
     let stride = max(1, min(bitmap.pixelsWide, bitmap.pixelsHigh) / 16)
     for y in Swift.stride(from: 0, to: bitmap.pixelsHigh, by: stride) {
@@ -1004,6 +1028,12 @@ final class PrivateProductHostProbe {
         }
       }
     }
+    smokeDiagnostics["render-\(path)"] = [
+      "selected": true, "document": document.map { $0 as Any } ?? NSNull(),
+      "captureOutcome": outcome ?? "nil",
+      "captureBytes": screenshot.count, "width": bitmap.pixelsWide,
+      "height": bitmap.pixelsHigh, "nonBlackSamples": nonBlackSamples,
+    ]
     return nonBlackSamples > 8
   }
 

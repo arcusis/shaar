@@ -4,43 +4,57 @@
 
 assert(is_mac)
 
+import("//testing/test.gni")
+
 source_set("engine") {
   public = [ "public/shaar_engine.h" ]
   sources = [
     "engine/shaar_engine.cc",
     "engine/shaar_event_bridge.cc",
     "engine/shaar_event_bridge.h",
-    # Private sessions module.
-    "private_sessions/shaar_private_sessions.h",
-    "private_sessions/shaar_private_sessions_module.h",
-    "private_sessions/shaar_private_sessions.cc",
-    # --- lifecycle module ---
+    # BEGIN Shaar lifecycle module.
     "lifecycle/shaar_lifecycle.cc",
     "lifecycle/shaar_lifecycle.h",
     "lifecycle/shaar_module_registry.cc",
     "lifecycle/shaar_module_registry.h",
+    # END Shaar lifecycle module.
+    # BEGIN Shaar private sessions module.
+    "private_sessions/shaar_private_sessions.h",
+    "private_sessions/shaar_private_sessions_module.h",
+    "private_sessions/shaar_private_sessions.cc",
+    # END Shaar private sessions module.
+    # BEGIN Shaar profiles module.
+    "profiles/shaar_profiles.cc",
+    "profiles/shaar_profiles.h",
+    # END Shaar profiles module.
   ]
-  # --- lifecycle module dependencies ---
   deps = [
     "//base",
     "//chrome/browser:chrome_browser_main",
     "//chrome/browser:main_extra_parts",
     "//chrome/browser:chrome_content_browser_client",
     "//chrome/browser:lifetime",
+    "//chrome/browser/profiles",
+    "//chrome/browser/ui/browser_window",
+    "//components/content_settings/core/browser",
+    "//components/content_settings/core/common",
+    "//components/prefs",
     "//content/public/browser",
   ]
 }
 
-import("//testing/test.gni")
+test("lifecycle_unittests") {
+  sources = [ "lifecycle/shaar_module_registry_unittest.cc" ]
+  deps = [ ":engine", "//testing/gtest" ]
+}
 
 test("private_sessions_unittests") {
   sources = [ "private_sessions/shaar_private_sessions_unittest.cc" ]
   deps = [ ":engine", "//chrome/test:test_support", "//testing/gtest" ]
 }
 
-test("lifecycle_unittests") {
-  # --- lifecycle module ---
-  sources = [ "lifecycle/shaar_module_registry_unittest.cc" ]
+test("profiles_unittests") {
+  sources = [ "profiles/shaar_profiles_unittest.cc" ]
   deps = [ ":engine", "//testing/gtest" ]
 }
 

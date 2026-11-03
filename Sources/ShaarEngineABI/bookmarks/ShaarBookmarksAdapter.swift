@@ -50,17 +50,21 @@ public enum ShaarBookmarkOperation: UInt32, Sendable {
   public func tree(
     completion: @escaping @MainActor (Result<[String: Any], Error>) -> Void
   ) {
-    guard implementation == .shaar else { ardia.tree(completion: completion); return }
+    guard implementation == .shaar else {
+      ardia.tree(completion: completion)
+      return
+    }
     call(.tree, arguments: [:]) { result in
-      completion(result.flatMap { data in
-        do {
-          guard let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-            (payload["schemaVersion"] as? Int) == 1,
-            payload["bar"] is [String: Any], payload["other"] is [String: Any]
-          else { throw ShaarBookmarksAdapterError.invalidTree }
-          return .success(payload)
-        } catch { return .failure(error) }
-      })
+      completion(
+        result.flatMap { data in
+          do {
+            guard let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              (payload["schemaVersion"] as? Int) == 1,
+              payload["bar"] is [String: Any], payload["other"] is [String: Any]
+            else { throw ShaarBookmarksAdapterError.invalidTree }
+            return .success(payload)
+          } catch { return .failure(error) }
+        })
     }
   }
 
@@ -70,19 +74,23 @@ public enum ShaarBookmarkOperation: UInt32, Sendable {
     _ operation: [String: Any],
     completion: @escaping @MainActor (Result<Void, Error>) -> Void
   ) {
-    guard implementation == .shaar else { ardia.apply(operation, completion: completion); return }
+    guard implementation == .shaar else {
+      ardia.apply(operation, completion: completion)
+      return
+    }
     call(.apply, arguments: ["ops": [operation]]) { result in
-      completion(result.flatMap { data in
-        do {
-          guard let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-            (payload["schemaVersion"] as? Int) == 1,
-            (payload["applied"] as? Int) == 1,
-            (payload["skipped"] as? Int) == 0,
-            (payload["invalid"] as? [Any])?.isEmpty == true
-          else { throw ShaarBookmarksAdapterError.mutationNotConfirmed }
-          return .success(())
-        } catch { return .failure(error) }
-      })
+      completion(
+        result.flatMap { data in
+          do {
+            guard let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              (payload["schemaVersion"] as? Int) == 1,
+              (payload["applied"] as? Int) == 1,
+              (payload["skipped"] as? Int) == 0,
+              (payload["invalid"] as? [Any])?.isEmpty == true
+            else { throw ShaarBookmarksAdapterError.mutationNotConfirmed }
+            return .success(())
+          } catch { return .failure(error) }
+        })
     }
   }
 
@@ -90,17 +98,21 @@ public enum ShaarBookmarkOperation: UInt32, Sendable {
     enabled: Bool,
     completion: @escaping @MainActor (Result<Void, Error>) -> Void
   ) {
-    guard implementation == .shaar else { ardia.watch(enabled: enabled, completion: completion); return }
+    guard implementation == .shaar else {
+      ardia.watch(enabled: enabled, completion: completion)
+      return
+    }
     call(.watch, arguments: ["enabled": enabled]) { result in
-      completion(result.flatMap { data in
-        do {
-          guard let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-            (payload["schemaVersion"] as? Int) == 1,
-            (payload["watching"] as? Bool) == enabled
-          else { throw ShaarBookmarksAdapterError.watchNotConfirmed }
-          return .success(())
-        } catch { return .failure(error) }
-      })
+      completion(
+        result.flatMap { data in
+          do {
+            guard let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              (payload["schemaVersion"] as? Int) == 1,
+              (payload["watching"] as? Bool) == enabled
+            else { throw ShaarBookmarksAdapterError.watchNotConfirmed }
+            return .success(())
+          } catch { return .failure(error) }
+        })
     }
   }
 

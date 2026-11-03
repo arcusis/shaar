@@ -88,7 +88,8 @@ struct BookmarksAdapterTests {
 
   @Test @MainActor func shaarTreeRejectsMalformedPayload() {
     let fake = FakeBookmarksTransport(["schemaVersion": 1, "bar": []])
-    let adapter = ShaarBookmarksAdapter(implementation: .shaar, ardia: FakeArdiaBookmarks(), shaar: fake)
+    let adapter = ShaarBookmarksAdapter(
+      implementation: .shaar, ardia: FakeArdiaBookmarks(), shaar: fake)
     var rejected = false
     adapter.tree { result in
       if case .failure(ShaarBookmarksAdapterError.invalidTree) = result { rejected = true }

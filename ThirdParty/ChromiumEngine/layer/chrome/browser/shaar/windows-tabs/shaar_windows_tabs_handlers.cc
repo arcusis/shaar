@@ -331,28 +331,38 @@ shaar_error_code HandleWindowSetBounds(const ModuleCall* call,
   return Succeed(error);
 }
 
+shaar_error_code HandleModuleOperation(const ModuleCall* call,
+                                       shaar_error* error) {
+  if (!call)
+    return Fail(SHAAR_INVALID_ARGUMENT, error);
+  switch (call->operation) {
+    case SHAAR_OP_WINDOW_BIND_PROFILE:
+      return HandleWindowBindProfile(call, error);
+    case SHAAR_OP_WINDOW_SET_ACTIVE_PROFILE:
+      return HandleWindowSetActiveProfile(call, error);
+    case SHAAR_OP_WINDOW_ACTIVATE_TAB:
+      return HandleWindowActivateTab(call, error);
+    case SHAAR_OP_WINDOW_PLACE_TABS:
+      return HandleWindowPlaceTabs(call, error);
+    case SHAAR_OP_WINDOW_REQUEST_RESOLVE:
+      return HandleWindowRequestResolve(call, error);
+    case SHAAR_OP_TAB_MOVE:
+      return HandleTabMove(call, error);
+    case SHAAR_OP_TAB_ACTIVATION_RESOLVE:
+      return HandleTabActivationResolve(call, error);
+    case SHAAR_OP_WINDOW_SET_BOUNDS:
+      return HandleWindowSetBounds(call, error);
+  }
+  return Fail(SHAAR_UNSUPPORTED_CAPABILITY, error);
+}
+
 }  // namespace shaar::windows_tabs
 
 void shaar_windows_tabs_register(ShaarModuleRegistry* registry) {
   if (!registry || registry->size < sizeof(ShaarModuleRegistry) ||
-      !registry->register_handler)
+      !registry->register_range)
     return;
-  registry->register_handler(registry->context, SHAAR_OP_WINDOW_BIND_PROFILE,
-                             shaar::windows_tabs::HandleWindowBindProfile);
-  registry->register_handler(
-      registry->context, SHAAR_OP_WINDOW_SET_ACTIVE_PROFILE,
-      shaar::windows_tabs::HandleWindowSetActiveProfile);
-  registry->register_handler(registry->context, SHAAR_OP_WINDOW_ACTIVATE_TAB,
-                             shaar::windows_tabs::HandleWindowActivateTab);
-  registry->register_handler(registry->context, SHAAR_OP_WINDOW_PLACE_TABS,
-                             shaar::windows_tabs::HandleWindowPlaceTabs);
-  registry->register_handler(registry->context, SHAAR_OP_WINDOW_REQUEST_RESOLVE,
-                             shaar::windows_tabs::HandleWindowRequestResolve);
-  registry->register_handler(registry->context, SHAAR_OP_TAB_MOVE,
-                             shaar::windows_tabs::HandleTabMove);
-  registry->register_handler(
-      registry->context, SHAAR_OP_TAB_ACTIVATION_RESOLVE,
-      shaar::windows_tabs::HandleTabActivationResolve);
-  registry->register_handler(registry->context, SHAAR_OP_WINDOW_SET_BOUNDS,
-                             shaar::windows_tabs::HandleWindowSetBounds);
+  registry->register_range(registry->context, SHAAR_OP_WINDOW_BIND_PROFILE,
+                           SHAAR_OP_WINDOW_SET_BOUNDS,
+                           shaar::windows_tabs::HandleModuleOperation);
 }

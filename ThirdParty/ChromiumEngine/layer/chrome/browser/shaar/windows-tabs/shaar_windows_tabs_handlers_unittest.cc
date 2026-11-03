@@ -15,7 +15,10 @@ namespace shaar::windows_tabs {
 namespace {
 
 struct CapturedHandlers {
-  std::unordered_map<int, shaar::ModuleHandler> by_operation;
+  uint32_t first = 0;
+  uint32_t last = 0;
+  shaar::ModuleHandler handler = nullptr;
+  size_t registration_count = 0;
 };
 
 struct CapturedWindowRequest {
@@ -65,11 +68,15 @@ shaar_error_code CaptureTabActivation(void* context,
   return SHAAR_OK;
 }
 
-void CaptureHandler(void* context,
-                    shaar_operation operation,
-                    shaar::ModuleHandler handler) {
-  static_cast<CapturedHandlers*>(context)->by_operation.emplace(operation,
-                                                                 handler);
+void CaptureRange(void* context,
+                  uint32_t first,
+                  uint32_t last,
+                  shaar::ModuleHandler handler) {
+  auto* captured = static_cast<CapturedHandlers*>(context);
+  captured->first = first;
+  captured->last = last;
+  captured->handler = handler;
+  ++captured->registration_count;
 }
 
 TEST(ShaarWindowsTabsHandlersTest, PlacementRequiresExactUniqueMembership) {
@@ -98,13 +105,17 @@ TEST(ShaarWindowsTabsHandlersTest, PlaceHandlerRejectsWrongOperationBeforeMutati
 TEST(ShaarWindowsTabsHandlersTest, RegistersEveryWindowsTabsOperation) {
   CapturedHandlers captured;
   ShaarModuleRegistry registry = {sizeof(ShaarModuleRegistry), &captured,
-                                  CaptureHandler};
+                                  CaptureRange};
   shaar_windows_tabs_register(&registry);
-  EXPECT_EQ(captured.by_operation.size(), 8u);
-  EXPECT_NE(captured.by_operation.find(SHAAR_OP_WINDOW_PLACE_TABS),
-            captured.by_operation.end());
-  EXPECT_NE(captured.by_operation.find(SHAAR_OP_TAB_MOVE),
-            captured.by_operation.end());
+  EXPECT_EQ(captured.registration_count, 1u);
+  EXPECT_EQ(captured.first, SHAAR_OP_WINDOW_BIND_PROFILE);
+  EXPECT_EQ(captured.last, SHAAR_OP_WINDOW_SET_BOUNDS);
+  ASSERT_NE(captured.handler, nullptr);
+  shaar::ModuleCall call = {};
+  call.operation = SHAAR_OP_WINDOW_SET_BOUNDS;
+  shaar_error error = {};
+  error.size = sizeof(error);
+  EXPECT_EQ(captured.handler(&call, &error), SHAAR_INVALID_ARGUMENT);
 }
 
 TEST(ShaarWindowsTabsHandlersTest, RegularProfileBindingIsExplicitAndStable) {

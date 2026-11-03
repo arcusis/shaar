@@ -17,6 +17,7 @@ shaar_error_code HandleWindowRequestResolve(const ModuleCall*, shaar_error*);
 shaar_error_code HandleTabMove(const ModuleCall*, shaar_error*);
 shaar_error_code HandleTabActivationResolve(const ModuleCall*, shaar_error*);
 shaar_error_code HandleWindowSetBounds(const ModuleCall*, shaar_error*);
+shaar_error_code HandleModuleOperation(const ModuleCall*, shaar_error*);
 
 }  // namespace shaar::windows_tabs
 

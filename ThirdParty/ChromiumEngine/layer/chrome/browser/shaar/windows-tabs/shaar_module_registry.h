@@ -64,14 +64,18 @@ struct ModuleCall {
 using ModuleHandler = shaar_error_code (*)(const ModuleCall*, shaar_error*);
 }  // namespace shaar
 
-// Temporary declaration until the lifecycle module's registry lands. It keeps
-// the dispatcher independent of any particular engine implementation.
+// Temporary range-based registry declaration matching the lifecycle module's
+// ownership of operation dispatch. It is replaced by lifecycle's shared type
+// when that module lands.
 struct ShaarModuleRegistry {
+  using RegisterRange = void (*)(void* context,
+                                 uint32_t first,
+                                 uint32_t last,
+                                 shaar::ModuleHandler handler);
+
   uint32_t size;
   void* context;
-  void (*register_handler)(void* context,
-                           shaar_operation operation,
-                           shaar::ModuleHandler handler);
+  RegisterRange register_range;
 };
 
 void shaar_windows_tabs_register(ShaarModuleRegistry* registry);

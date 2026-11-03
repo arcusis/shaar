@@ -8,136 +8,11 @@ Place the new implementation under `chrome/browser/shaar/` in the Chromium check
 
 The Swift package keeps `ChromiumBridge` as its adapter module. It loads the framework, checks the ABI, owns opaque handles, converts the single event stream to existing Swift callbacks/models, and hands a borrowed `NSView *` to existing AppKit windows. The engine owns Chromium `Profile`, `Browser`, `WebContents`, and embedded native host objects. The adapter owns Shaar IDs, SwiftUI/AppKit shell state, permissions/consent presentation, and durable workspace metadata. The engine must not infer a profile from a tab, download or bookmark ID when an operation supplies a profile/session scope.
 
-## Proposed `shaar_engine.h` (ABI v1)
+## Consolidated `shaar_engine.h` draft
 
-This is an interface sketch to review before implementation. All strings/byte slices supplied by callers are UTF-8, length-delimited and borrowed for the duration of a call; the engine copies input needed later. `shaar_result` and event payload slices are borrowed until the callback returns; synchronous error text is borrowed until the next ABI call and must be copied immediately. Swift copies anything it keeps. Handles are opaque and invalid after explicit close/release or engine shutdown. All entry points and callbacks are serialized on the Chromium UI thread; asynchronous callbacks are delivered later, never inline. No C++ exceptions cross the ABI.
+The single reviewable C header is [Design/shaar_engine.h](../Design/shaar_engine.h). It is a design artifact and is not included in a build. It assigns explicit numeric IDs by module range and combines the lifecycle, profile, window/tab, navigation, service, extension, find, DevTools and media proposals under one ABI. The operation payloads remain versioned JSON with the validation and ownership rules in the module specs. [[Engine_ABI_Conventions]] defines the cross-cutting contract.
 
-```c
-#ifndef SHAAR_ENGINE_H_
-#define SHAAR_ENGINE_H_
-#include <stddef.h>
-#include <stdint.h>
-#ifdef __cplusplus
-extern "C" {
-#endif
-#define SHAAR_ENGINE_ABI_MAJOR 1u
-#define SHAAR_ENGINE_ABI_MINOR 0u
-#define SHAAR_EXPORT __attribute__((visibility("default")))
-
-typedef struct shaar_engine shaar_engine;
-typedef struct shaar_profile shaar_profile;
-typedef struct shaar_private_session shaar_private_session;
-typedef struct shaar_window shaar_window;
-typedef struct shaar_tab shaar_tab;
-typedef struct { const char *data; size_t size; } shaar_bytes;
-typedef uint64_t shaar_request_id;
-
-typedef enum {
-  SHAAR_OK = 0, SHAAR_INVALID_ARGUMENT, SHAAR_UNSUPPORTED_ABI,
-  SHAAR_NOT_READY, SHAAR_NOT_FOUND, SHAAR_WRONG_PROFILE,
-  SHAAR_WRONG_SESSION, SHAAR_PRIVATE_DISALLOWED, SHAAR_POLICY_BLOCKED,
-  SHAAR_PERMISSION_DENIED, SHAAR_CONFLICT, SHAAR_CANCELLED,
-  SHAAR_IO_ERROR, SHAAR_CHROMIUM_ERROR, SHAAR_SHUTTING_DOWN
-} shaar_error_code;
-typedef struct {
-  uint32_t size;                 /* sizeof(shaar_error) supplied by caller */
-  shaar_error_code code;
-  int32_t platform_code;         /* errno/Chromium code when relevant; else 0 */
-  shaar_bytes message;           /* diagnostic, not UI copy; borrowed */
-} shaar_error;
-typedef struct {
-  uint32_t size;                 /* sizeof(shaar_result) */
-  shaar_request_id request_id;
-  shaar_error error;
-  shaar_bytes payload_json;      /* versioned operation result, UTF-8 */
-} shaar_result;
-typedef void (*shaar_reply_fn)(void *context, const shaar_result *result);
-
-typedef enum {
-  SHAAR_EVENT_ENGINE, SHAAR_EVENT_PROFILE, SHAAR_EVENT_PRIVATE_SESSION,
-  SHAAR_EVENT_WINDOW, SHAAR_EVENT_TAB, SHAAR_EVENT_NAVIGATION,
-  SHAAR_EVENT_FIND, SHAAR_EVENT_PERMISSION, SHAAR_EVENT_DOWNLOAD,
-  SHAAR_EVENT_BOOKMARK, SHAAR_EVENT_HISTORY, SHAAR_EVENT_SITE_DATA,
-  SHAAR_EVENT_EXTENSION, SHAAR_EVENT_DEVTOOLS, SHAAR_EVENT_MEDIA
-} shaar_event_kind;
-typedef struct {
-  uint32_t size;                 /* sizeof(shaar_event) */
-  uint64_t sequence;             /* monotonic within this engine instance */
-  shaar_event_kind kind;
-  shaar_bytes profile_id;        /* Shaar UUID; never a filesystem path */
-  shaar_bytes session_id;        /* empty for regular; UUID for private */
-  shaar_bytes window_id;         /* empty if event is profile-wide */
-  shaar_bytes tab_id;            /* empty if event is not tab-scoped */
-  shaar_bytes payload_json;      /* kind + schemaVersion in payload */
-} shaar_event;
-typedef void (*shaar_event_fn)(void *context, const shaar_event *event);
-
-typedef struct {
-  uint32_t size;                 /* sizeof(shaar_config) */
-  uint32_t requested_major;
-  uint32_t requested_minor;
-  shaar_bytes data_root;         /* absolute, validated; no implicit default */
-  shaar_bytes locale;
-  shaar_event_fn on_event;       /* exactly one stream for this engine */
-  void *event_context;
-} shaar_config;
-SHAAR_EXPORT uint32_t shaar_abi_major(void);
-SHAAR_EXPORT uint32_t shaar_abi_minor(void);
-SHAAR_EXPORT shaar_error_code shaar_engine_create(
-    const shaar_config *, shaar_engine **out, shaar_error *error);
-SHAAR_EXPORT shaar_error_code shaar_engine_run(shaar_engine *, shaar_error *error);
-SHAAR_EXPORT shaar_error_code shaar_engine_request_quit(shaar_engine *, shaar_error *error);
-SHAAR_EXPORT void shaar_engine_release(shaar_engine *);
-
-SHAAR_EXPORT shaar_error_code shaar_profile_open(
-    shaar_engine *, shaar_bytes profile_id, shaar_bytes directory,
-    shaar_profile **out, shaar_error *error);
-SHAAR_EXPORT shaar_error_code shaar_profile_close(shaar_profile *, shaar_error *error);
-SHAAR_EXPORT shaar_error_code shaar_private_session_open(
-    shaar_profile *, shaar_bytes session_id, shaar_private_session **out,
-    shaar_error *error);
-SHAAR_EXPORT shaar_error_code shaar_private_session_close(
-    shaar_private_session *, shaar_error *error);
-
-/* Exactly one scope is set: regular profile or its private session. */
-typedef struct {
-  uint32_t size;
-  shaar_profile *profile;
-  shaar_private_session *private_session;
-} shaar_scope;
-SHAAR_EXPORT shaar_error_code shaar_window_open(
-    shaar_scope, shaar_bytes window_id, shaar_window **out, shaar_error *error);
-SHAAR_EXPORT shaar_error_code shaar_window_close(shaar_window *, shaar_error *error);
-SHAAR_EXPORT void *shaar_window_host_view(shaar_window *); /* borrowed NSView* on macOS */
-SHAAR_EXPORT shaar_error_code shaar_tab_open(
-    shaar_window *, shaar_bytes tab_id, shaar_bytes url,
-    shaar_tab **out, shaar_error *error);
-SHAAR_EXPORT shaar_error_code shaar_tab_close(shaar_tab *, shaar_error *error);
-
-typedef enum {
-  SHAAR_OP_TAB_NAVIGATE, SHAAR_OP_TAB_GO, SHAAR_OP_TAB_RELOAD,
-  SHAAR_OP_TAB_FIND, SHAAR_OP_TAB_STOP_FIND, SHAAR_OP_TAB_EVALUATE,
-  SHAAR_OP_WINDOW_ACTIVATE_TAB, SHAAR_OP_WINDOW_PLACE_TABS,
-  SHAAR_OP_DOWNLOAD_LIST, SHAAR_OP_DOWNLOAD_CONTROL, SHAAR_OP_DOWNLOAD_DIRECTORY,
-  SHAAR_OP_BOOKMARK_TREE, SHAAR_OP_BOOKMARK_APPLY,
-  SHAAR_OP_HISTORY_QUERY, SHAAR_OP_HISTORY_INSERT, SHAAR_OP_HISTORY_DELETE,
-  SHAAR_OP_SITE_SETTINGS_GET, SHAAR_OP_SITE_SETTINGS_SET,
-  SHAAR_OP_SITE_SETTINGS_RESET, SHAAR_OP_SITE_DATA_CLEAR,
-  SHAAR_OP_BROWSING_DATA_CLEAR, SHAAR_OP_EXTENSION_LIST,
-  SHAAR_OP_EXTENSION_MANAGE, SHAAR_OP_EXTENSION_ACTION,
-  SHAAR_OP_DEVTOOLS_CALL, SHAAR_OP_MEDIA_CONTROL
-} shaar_operation;
-SHAAR_EXPORT shaar_error_code shaar_submit(
-    shaar_engine *, shaar_scope, shaar_window *, shaar_tab *,
-    shaar_operation, shaar_bytes args_json, shaar_request_id,
-    shaar_reply_fn, void *reply_context, shaar_error *immediate_error);
-SHAAR_EXPORT shaar_error_code shaar_cancel_request(
-    shaar_engine *, shaar_request_id, shaar_error *error);
-#ifdef __cplusplus
-}
-#endif
-#endif
-```
+All caller-supplied strings and JSON are length-delimited UTF-8 and borrowed only for the call; the engine copies input needed later. Result/event slices are borrowed until the callback returns; synchronous error text must be copied before the next ABI call. Swift copies anything it keeps. No C++ exceptions or Chromium objects cross the ABI. The one macOS UI exception is a borrowed `NSView *`, returned opaquely as `void *` from host-view accessors.
 
 `shaar_submit` is a versioned dispatch point, not a license to use unvalidated string methods: operation IDs are compile-time enums, and each operation has a documented JSON schema, allowed scopes/handles and typed result. Reject unknown fields where they might weaken ownership or permissions. A call checks that the supplied window/tab belongs to the supplied scope; no fallback to the default or most-recent profile. `SHAAR_OP_HISTORY_INSERT` is reserved for #299, `SHAAR_OP_DOWNLOAD_DIRECTORY` for exact profile get/set, and site settings/data for #289. Each operation either reports `SHAAR_OK` in its async result or a typed error; no success-shaped empty response. The adapter maps typed errors to localized Swift errors.
 
@@ -147,15 +22,20 @@ The event stream is registered once at engine creation. Every **profile-scoped**
 
 ### Reconciliation rules for module proposals
 
-The sketch above establishes shapes, not final signatures. The consolidated header will assign explicit numeric enum values and resolve these cross-module cases before implementation:
+The draft header assigns explicit numeric enum values and resolves these cross-module cases for review before implementation:
 
 | Case | Decision for the consolidated draft |
 | --- | --- |
-| Regular window changes Spaces/profiles | A regular `shaar_window` is an app-owned host that can prepare and activate multiple **regular** profiles; each tab remains bound to exactly one profile. A private window binds one private session for its full lifetime. `shaar_window_open(scope, ...)` in the sketch must be revised to express those two modes; the operation scope plus tab/window binding is checked on every call. |
+| Regular window changes Spaces/profiles | A regular `shaar_window` is an app-owned host that can prepare and activate multiple **regular** profiles; each tab remains bound to exactly one profile. A private window binds one private session for its full lifetime. The draft `shaar_window_open` takes an explicit window kind and private-session handle; the operation scope plus tab/window binding is checked on every call. |
 | Private windows share one OTR store | Use one live `shaar_private_session` identity per parent regular profile at a time, with multiple private windows attached to it. A different concurrent session ID for that parent is a conflict unless the implementation deliberately creates a separate Chromium OTR context. This makes profile-wide cookie and permission events attributable to exactly one session. Window-level Swift context IDs can remain separate. |
 | Bookmark/history watch operations | Opening a regular profile attaches the model observers; their invalidations go through the one engine event stream. No per-module watch/unwatch export is needed for ABI v1. The Swift adapter may keep its old watch-shaped facade until its callers migrate. |
-| Chromium async profile creation | `ProfileManager::CreateProfileAsync` cannot be made into a blocking UI-thread call. The final `shaar_profile_open` contract should return a reserved handle in `NOT_READY` state and complete asynchronously with a request ID, or use an async open function. The consolidated signature must be explicit before code is written. |
-| Error and enum stability | `SHAAR_UNSUPPORTED_ABI` means version negotiation failure, not an unavailable setting. Every enum value receives a fixed integer. `SHAAR_CONFLICT` is for valid requests prevented by current state; malformed values are `SHAAR_INVALID_ARGUMENT`, managed choices `SHAAR_POLICY_BLOCKED`. |
+| Chromium async profile creation | `ProfileManager::CreateProfileAsync` cannot be made into a blocking UI-thread call. The draft `shaar_profile_open` returns a reserved handle in `NOT_READY` state on accepted submission and completes asynchronously with a request ID. Its final lifecycle semantics must be confirmed before code is written. |
+| Error and enum stability | `SHAAR_UNSUPPORTED_ABI` means version negotiation failure, not an unavailable setting. Every enum value has a fixed integer. `SHAAR_CONFLICT` is for valid requests prevented by current state; malformed values are `SHAAR_INVALID_ARGUMENT`, managed choices `SHAAR_POLICY_BLOCKED`. |
+| Profile CRUD suggestions | `shaar_profile_open(..., create_if_missing, ...)` covers creation from the app's profile UUID/directory; the app owns display names. `PROFILE_DELETE` is asynchronous. `PROFILE_GET_STATE`/`SET_STATE` use a fixed key allowlist. `WINDOW_SET_ACTIVE_PROFILE` covers activation in a regular host. The app already knows the directory it opened, so the header omits `profile_get_path`. |
+| Window/tab opening and native views | The explicit `shaar_tab_open(..., foreground, ...)` handles background creation without a second `TAB_OPEN` operation. Borrowed window and tab host views are separate accessors for the same macOS UI exception; extension popup views use a scoped tab/view handle. |
+| Bookmark/history watch suggestions | Profile-open observers emit `SHAAR_EVENT_BOOKMARK` and `SHAAR_EVENT_HISTORY` through the one stream; the header omits `BOOKMARK_WATCH` and `HISTORY_WATCH/UNWATCH`. Swift may retain watch-shaped compatibility methods during migration. |
+| Cookie and site-data overlap | One `SITE_COOKIES_CLEAR` operation takes the selected tab and exact origin. It subsumes the storage spec's `COOKIE_DELETE_FOR_TAB`; third-party cookie preferences have separate profile-wide GET/SET operations rather than overloading origin settings. |
+| Media and DevTools calls | Module-specific actions use `shaar_submit` with fixed operation and command enum IDs. `shaar_media_pip_window` is a narrow synchronous handle lookup because JSON cannot return an opaque handle. `TAB_EVALUATE` is reserved for an app-owned, audited script capability and must not become unrestricted page or remote protocol access. |
 
 ## Build runner and packaging path
 

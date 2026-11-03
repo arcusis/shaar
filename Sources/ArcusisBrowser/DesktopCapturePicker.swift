@@ -29,8 +29,8 @@ struct DesktopCapturePicker: View {
         request.requestingOrigin.host() ?? request.pageURL.host()
           ?? request.pageURL.absoluteString
       )
-        .font(.callout).foregroundStyle(.secondary)
-        .textSelection(.enabled)
+      .font(.callout).foregroundStyle(.secondary)
+      .textSelection(.enabled)
       if loading {
         ProgressView(PanelsL10n.string("Looking for screens and windows…"))
           .frame(maxWidth: .infinity, minHeight: 120)
@@ -90,16 +90,17 @@ struct DesktopCapturePicker: View {
         }
         return DesktopCaptureSource(id: "window:\(window.windowID):0", name: name, kind: .window)
       }
-      sources = content.displays.map { display in
-        let name: String
-        if display.displayID == CGMainDisplayID() {
-          name = PanelsL10n.string("Main Display")
-        } else {
-          name = PanelsL10n.format("Display %d", .integer(Int(display.displayID)))
-        }
-        return DesktopCaptureSource(
-          id: "screen:\(display.displayID):0", name: name, kind: .display)
-      } + windows
+      sources =
+        content.displays.map { display in
+          let name: String
+          if display.displayID == CGMainDisplayID() {
+            name = PanelsL10n.string("Main Display")
+          } else {
+            name = PanelsL10n.format("Display %d", .integer(Int(display.displayID)))
+          }
+          return DesktopCaptureSource(
+            id: "screen:\(display.displayID):0", name: name, kind: .display)
+        } + windows
     } catch {
       self.error = PanelsL10n.string(
         "Screen Recording access is unavailable. Check Privacy & Security settings.")

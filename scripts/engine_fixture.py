@@ -794,6 +794,8 @@ def argument_parser():
                       help="Quit-exit probe with a navigation pending in every host window")
     mode.add_argument("--session-recovery", action="store_true",
                       help="SIGKILL the exact probe PID while it saves a managed workspace, then verify the restored session")
+    mode.add_argument("--basic-browsing", action="store_true",
+                      help="Run the normal-window address/search/tab/close/reopen/quit smoke")
     return parser
 
 
@@ -802,7 +804,7 @@ def build_engine_probe_arguments(executable, root, fixture_url, phase, *, includ
                                  external_app_consent=False, private_window=False,
                                  private_window_run_id=None, quit_exit=False,
                                  quit_pending_navigation=False, session_recovery=False,
-                                 private_multitab=False):
+                                 private_multitab=False, basic_browsing=False):
     arguments = [str(executable), "--probe-data-dir", str(root),
                  "--probe-url", fixture_url, "--probe-phase", phase,
                  "--probe-output", str(root / f"{phase}.json")]
@@ -830,6 +832,8 @@ def build_engine_probe_arguments(executable, root, fixture_url, phase, *, includ
         arguments.append('--probe-quit-pending-navigation')
     if session_recovery:
         arguments.append('--probe-session-recovery')
+    if basic_browsing:
+        arguments.append('--probe-basic-browsing')
     return arguments
 
 
@@ -1462,6 +1466,8 @@ def main(argv=None):
         print('QUIT PENDING NAVIGATION: every host window has a navigation in flight at Quit', flush=True)
     if options.session_recovery:
         print('SESSION RECOVERY ONLY: SIGKILL of the exact probe PID during saves, then restore', flush=True)
+    if options.basic_browsing:
+        print('BASIC BROWSING: hidden normal window, authored pages, real renderer captures, clean quit', flush=True)
     app = VERIFICATION_APP.resolve()
     require_verification_bundle_identity(app)
     root = Path(tempfile.mkdtemp(prefix="arcusis-engine-probe-"))
@@ -1482,7 +1488,8 @@ def main(argv=None):
     failures = []
     private_window_children = []
     try:
-        for phase in ("initial", "restart"):
+        phases = ("initial",) if options.basic_browsing else ("initial", "restart")
+        for phase in phases:
             if options.private_window and phase == 'restart' and failures:
                 print('SKIPPED restart: initial fixture failed; no valid seeded restart baseline', flush=True)
                 break
@@ -1497,7 +1504,8 @@ def main(argv=None):
                 private_window_run_id=private_window_run_id, quit_exit=quit_exit,
                 quit_pending_navigation=options.quit_pending_navigation,
                 session_recovery=options.session_recovery,
-                private_multitab=options.private_multitab)
+                private_multitab=options.private_multitab,
+                basic_browsing=options.basic_browsing)
             with (root / f"{phase}.log").open("w") as log:
                 process = subprocess.Popen(arguments, stdout=log, stderr=log, start_new_session=True, env=probe_env)
                 print(f"Probe PID: {process.pid}", flush=True)
@@ -1557,6 +1565,25 @@ def main(argv=None):
                 validate_session_recovery_report(report, phase)
             elif options.private_multitab:
                 validate_private_multitab_report(root, phase, report, code)
+            elif options.basic_browsing:
+                checks = report.get('checks') if isinstance(report, dict) else None
+                required = {
+                    'address bar accepts every letter a-z',
+                    'address bar typing opens no menu or picker',
+                    'Command-T search accepts every letter a-z',
+                    'Command-T typing opens no menu or picker',
+                    'normal window searches and lands on live results',
+                    'smoke-one renders live, non-black web contents',
+                    'smoke-two renders live, non-black web contents',
+                    'smoke-three renders live, non-black web contents',
+                    'closed tab reopens and renders live web contents',
+                    'clean quit closes the normal window and engine client',
+                }
+                if (not isinstance(report, dict) or report.get('phase') != phase
+                        or report.get('probeMode') != 'basic-browsing' or report.get('passed') is not True
+                        or not isinstance(checks, list) or not required.issubset(checks)
+                        or any(not isinstance(check, str) or not check for check in checks)):
+                    raise RuntimeError('Basic browsing report has wrong phase, mode, or check evidence')
             elif options.private_window:
                 try:
                     validate_private_window_report(root, phase, report, code)

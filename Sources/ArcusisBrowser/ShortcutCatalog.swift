@@ -177,6 +177,9 @@ enum ShortcutPageRouting {
     let pageHasFocus = ancestor != nil
     let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
       .intersection([.command, .option, .control, .shift])
+    // Typing (no command, control or option) always belongs to the focused field. AppKit's
+    // Edit > Emoji & Symbols is fn-E; once fn is masked off it would match a plain E keystroke.
+    guard !flags.isDisjoint(with: [.command, .control, .option]) else { return false }
     let key = (event.charactersIgnoringModifiers ?? "").lowercased()
     for section in menu.items.compactMap(\.submenu) {
       for item in section.items {

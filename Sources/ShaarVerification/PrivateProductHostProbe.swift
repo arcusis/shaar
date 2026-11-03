@@ -519,7 +519,7 @@ final class PrivateProductHostProbe {
   }
 
   private func keyEvent(for character: Character, window: NSWindow) -> NSEvent? {
-    let keyCode: UInt16 =
+    let keyCode: UInt16? =
       switch character {
       case "a": 0
       case "b": 11
@@ -547,8 +547,9 @@ final class PrivateProductHostProbe {
       case "x": 7
       case "y": 16
       case "z": 6
-      default: return nil
+      default: nil
       }
+    guard let keyCode else { return nil }
     let value = String(character)
     return NSEvent.keyEvent(
       with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,

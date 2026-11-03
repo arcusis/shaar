@@ -44,6 +44,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pins-only", action="store_true")
     parser.add_argument("--snapshot-only", action="store_true", help="Check a staged tree before it has a commit")
+    parser.add_argument("--docs-only", action="store_true", help="Run checks needed for a docs-only diff")
+    parser.add_argument("--skip-python", action="store_true", help="Run platform-independent gates without Python tests")
     options = parser.parse_args()
     errors = pin_errors(ROOT)
     for error in errors:
@@ -66,6 +68,12 @@ def main() -> int:
                             *(["--tree-only"] if options.snapshot_only else [])]),
         ("python", [sys.executable, "scripts/test-python.py", "--junit", "build/ci/fast/python.xml"]),
     ]
+    if options.docs_only:
+        commands = [command for command in commands if command[0] in {
+            "sensitive-files", "notebook", "gitleaks", "secret-history"
+        }]
+    elif options.skip_python:
+        commands = [command for command in commands if command[0] != "python"]
     for name, arguments in commands:
         checks.run(name, arguments)
     return checks.finish()

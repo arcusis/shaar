@@ -1,6 +1,15 @@
 name: Build and tests
 on:
   workflow_call:
+    inputs:
+      base_sha:
+        description: Immutable source revision used for the coverage baseline
+        type: string
+        required: true
+    outputs:
+      coverage:
+        description: Whether the no-regression coverage comparison passed
+        value: ${{ jobs.unit.outputs.coverage }}
 permissions:
   contents: read
 jobs:
@@ -8,9 +17,12 @@ jobs:
     name: Swift build and unit tests
     runs-on: macos-26
     timeout-minutes: 30
+    outputs:
+      coverage: ${{ steps.coverage.outputs.result }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: ./.github/actions/ci-setup
         with:
@@ -22,3 +34,19 @@ jobs:
         with:
           stage: unit
           extra-path: build/Verification/sidebar-dnd
+      - uses: ./.github/actions/ci-setup
+        with:
+          mode: coverage-base
+          products: build/swiftpm/coverage-base
+      - name: Build immutable base and compare module line coverage
+        id: coverage
+        env:
+          CI_BASE_SHA: ${{ inputs.base_sha }}
+        run: |
+          .venv/bin/python scripts/ci-stage.py coverage
+          echo "result=passed" >> "$GITHUB_OUTPUT"
+      - uses: ./.github/actions/ci-evidence
+        if: always()
+        with:
+          stage: coverage
+          extra-path: build/ci/coverage-base

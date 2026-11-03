@@ -223,10 +223,14 @@ final class PrivateWindowProbe {
       throw PrivateWindowFailure("Private added tab could not be selected.")
     }
     try await waitForFixture(tabID: t5, privateTab: true, contextID: contextA)
+    let secondTabRendererIsLive = await privateTabHasNonBlackRenderer(
+      tabID: t5, windowID: w2, contextID: contextA)
+    lastDocumentAudit["newPrivateTabRendererIsNonBlack"] = secondTabRendererIsLive
     checks["multipleTabsShareNativePrivateWindow"] =
       runtime.privateProbeAudit(forContextID: contextA)?["windowCount"] as? Int == 2
       && runtime.privateProbeAudit(forContextID: contextA)?["tabCount"] as? Int == 3
       && runtime.view(forPrivateTabID: t5, windowID: w2, contextID: contextA) != nil
+      && secondTabRendererIsLive
     checks["releaseWhileOwnedWindowRejected"] = !runtime.releasePrivateContextID(contextA)
     let normalProfileRejected = await rejectedNormalProfile(contextA)
     checks["normalFactoriesRejectPrivateIdentities"] =
@@ -733,6 +737,55 @@ final class PrivateWindowProbe {
     guard json != nil else {
       throw PrivateWindowFailure("Could not author private storage markers.")
     }
+  }
+
+  /// The tab-model and JavaScript checks alone can pass while a newly attached
+  /// private native view is still black. Inspect hidden renderer output after
+  /// selecting the additional tab in the same private window.
+  private func privateTabHasNonBlackRenderer(
+    tabID: String, windowID: String, contextID: String
+  ) async -> Bool {
+    var ready = false
+    for _ in 0..<Int(100 * ProbeTimeout.scale) {
+      ready = runtime.privateProbeCaptureIsReady(
+        forTabID: tabID, windowID: windowID, contextID: contextID)
+      if ready { break }
+      try? await Task.sleep(for: .milliseconds(50))
+    }
+    guard ready,
+      let audit = runtime.privateProbeAudit(forContextID: contextID),
+      audit["allTabsInNativeProfileBrowser"] as? Bool == true,
+      audit["allWindowsDisplayOwnedWebContents"] as? Bool == true,
+      audit["visibleNativeViewportCount"] as? Int == 1,
+      audit["tabCount"] as? Int == 3
+    else { return false }
+
+    let (data, error): (Data?, String?) = await withCheckedContinuation { continuation in
+      runtime.capturePrivateProbeTabID(
+        tabID, windowID: windowID, contextID: contextID
+      ) { data, error in
+        continuation.resume(returning: (data, error))
+      }
+    }
+    guard error == nil, let data, data.count > 4096,
+      let bitmap = NSBitmapImageRep(data: data), bitmap.pixelsWide > 100,
+      bitmap.pixelsHigh > 100
+    else { return false }
+
+    var lightSamples = 0
+    for row in 1...8 {
+      for column in 1...8 {
+        let x = bitmap.pixelsWide * column / 9
+        let y = bitmap.pixelsHigh * row / 9
+        guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else {
+          return false
+        }
+        if (color.redComponent + color.greenComponent + color.blueComponent) / 3 > 0.5 {
+          lightSamples += 1
+        }
+      }
+    }
+    return lightSamples >= 48
   }
 
   private func waitForFixture(tabID: String, privateTab: Bool, contextID: String? = nil)

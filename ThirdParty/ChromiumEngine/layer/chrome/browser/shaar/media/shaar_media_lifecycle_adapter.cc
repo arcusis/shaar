@@ -8,6 +8,7 @@
 // handlers never reach into lifecycle globals or retain borrowed ABI handles.
 extern "C" void shaar_media_register(ShaarModuleRegistry* registry) {
   if (registry) {
+    shaar::media::InstallRuntimeServices();
     registry->Register(SHAAR_OP_MEDIA_GET_STATE, SHAAR_OP_MEDIA_CAPTURE_REPLY,
                        &HandleMediaOperation);
   }

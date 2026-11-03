@@ -19,6 +19,8 @@ class WebContents;
 
 namespace shaar {
 
+struct ShaarEngineContext;
+
 // Resolves public ABI profile handles only while they belong to the supplied
 // engine. The keyed-service lookup goes through Chromium's profile factory so
 // modules do not need to know how profiles are owned by the profiles module.
@@ -57,6 +59,11 @@ class BrowserTabRegistry {
       shaar_engine* engine,
       shaar_window* window,
       std::unordered_map<std::string, content::WebContents*>* tabs) = 0;
+  // BEGIN media
+  // The batch-2 window handle has no ID accessor yet; registries that carry
+  // stable window identities override this when that lifecycle surface lands.
+  virtual std::string_view WindowID(shaar_engine*, shaar_window*) { return {}; }
+  // END media
 };
 
 // BEGIN media
@@ -67,11 +74,13 @@ class MediaRuntimeServices {
  public:
   virtual ~MediaRuntimeServices() = default;
   virtual bool OwnsPrivateTab(shaar_engine* engine,
+                              ShaarEngineContext* context,
                               shaar_scope scope,
                               shaar_window* window,
                               shaar_tab* tab,
                               content::WebContents* contents) = 0;
   virtual shaar_error_code SubmitSupplementalOperation(
+      ShaarEngineContext* context,
       shaar_engine* engine,
       shaar_scope scope,
       shaar_window* window,

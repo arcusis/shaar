@@ -6,6 +6,7 @@ import AppKit
 import BrowserCore
 import ChromiumBridge
 import Foundation
+import ShaarEngineABI
 
 extension BrowserEngine {
   func receiveMediaSession(_ identity: String, payload: [String: Any]?) {
@@ -19,6 +20,9 @@ extension BrowserEngine {
 
   func performMedia(_ command: MediaCommand, tabID: UUID) -> Bool {
     guard let identity = ownedLiveTab(tabID.uuidString).map(\.uuidString) else { return false }
+    if mediaImplementation == .shaar {
+      return performShaarMedia(command, tabID: tabID)
+    }
     switch command {
     case .perform(let action, let seconds):
       return runtime.sendMediaSessionAction(action.bridgeAction, seconds: seconds, tabID: identity)
@@ -49,6 +53,7 @@ extension BrowserEngine {
     guard let id = ownedLiveTab(identity) else { return }
     autoPictureInPicture.pictureInPictureChanged(id, active: active)
     if active {
+      guard mediaImplementation == .ardia else { return }
       let identity = id.uuidString
       pictureInPictureControls.attach(
         tabID: id,
@@ -61,6 +66,10 @@ extension BrowserEngine {
 
   func performPictureInPicture(_ command: PictureInPictureControls.Command, tabID: UUID) {
     guard let identity = ownedLiveTab(tabID.uuidString)?.uuidString else { return }
+    if mediaImplementation == .shaar {
+      performShaarPictureInPicture(command, tabID: tabID)
+      return
+    }
     switch command {
     case .play:
       runtime.sendPictureInPictureCommand(.play, seconds: 0, tabID: identity)
@@ -94,6 +103,10 @@ extension BrowserEngine {
       let profileID = store.session.profileID(forTabID: tabID),
       !store.automaticPictureInPictureAllowed(for: url, profileID: profileID)
     else { return }
+    if mediaImplementation == .shaar {
+      updateShaarAutomaticPictureInPicture(false, tabID: tabID)
+      return
+    }
     runtime.setAutoPictureInPictureAllowed(false, tabID: tabID.uuidString)
   }
 
@@ -103,6 +116,11 @@ extension BrowserEngine {
       guard let url = store.session.page(forTabID: tabID)?.tab.url,
         SiteSettingKey.site(for: url) == site
       else { continue }
+      if mediaImplementation == .shaar {
+        updateShaarAutomaticPictureInPicture(
+          store.automaticPictureInPictureAllowed(for: url, profileID: profileID), tabID: tabID)
+        continue
+      }
       runtime.setAutoPictureInPictureAllowed(
         store.automaticPictureInPictureAllowed(for: url, profileID: profileID),
         tabID: tabID.uuidString)
@@ -116,6 +134,122 @@ extension BrowserEngine {
     else { return nil }
     return id
   }
+
+  // BEGIN media
+  private func performShaarMedia(_ command: MediaCommand, tabID: UUID) -> Bool {
+    guard let adapter = shaarMediaAdapter, let scope = shaarMediaScope(for: tabID) else {
+      return false
+    }
+    let mapped: (ShaarMediaCommand, Double?)
+    switch command {
+    case .perform(let action, let seconds):
+      switch action {
+      case .play: mapped = (.play, nil)
+      case .pause: mapped = (.pause, nil)
+      case .previousTrack: mapped = (.previousTrack, nil)
+      case .nextTrack: mapped = (.nextTrack, nil)
+      case .seekBackward: mapped = (.seekBackward, nil)
+      case .seekForward: mapped = (.seekForward, nil)
+      case .seekTo: mapped = (.seekTo, seconds)
+      }
+    case .setMuted(let muted): mapped = (.setTabMuted, muted ? 1 : 0)
+    case .setVolume:
+      // Chromium's public MediaSession API has no page-element volume operation.
+      return false
+    }
+    Task { @MainActor [weak self] in
+      do {
+        try await adapter.control(mapped.0, scope: scope, value: mapped.1)
+        let state = try await adapter.state(scope: scope)
+        self?.applyShaarMediaState(state, to: tabID)
+      } catch {
+        // A rejected engine command does not become a success-shaped model update.
+      }
+    }
+    return true
+  }
+
+  private func performShaarPictureInPicture(
+    _ command: PictureInPictureControls.Command, tabID: UUID
+  ) {
+    guard let adapter = shaarMediaAdapter, let scope = shaarMediaScope(for: tabID) else { return }
+    Task { @MainActor in
+      do {
+        switch command {
+        case .play: try await adapter.control(.pipPlay, scope: scope)
+        case .pause: try await adapter.control(.pipPause, scope: scope)
+        case .skip(let seconds): try await adapter.control(.pipSkip, scope: scope, value: seconds)
+        case .close, .backToTab: try await adapter.exitPictureInPicture(scope: scope)
+        }
+        if case .backToTab = command { self.showRequestedTab(tabID.uuidString) }
+      } catch {
+        return
+      }
+    }
+  }
+
+  private func updateShaarAutomaticPictureInPicture(_ allowed: Bool, tabID: UUID) {
+    guard let adapter = shaarMediaAdapter, let scope = shaarMediaScope(for: tabID) else { return }
+    Task { @MainActor in
+      try? await adapter.setAutoPictureInPicture(allowed, scope: scope)
+    }
+  }
+
+  func receiveShaarMediaEvent(_ event: ShaarCopiedEvent) {
+    guard mediaImplementation == .shaar, let adapter = shaarMediaAdapter,
+      let tabString = String(data: event.tabID, encoding: .utf8),
+      let tabID = UUID(uuidString: tabString), ownedLiveTab(tabString) == tabID,
+      let scope = shaarMediaScope(for: tabID),
+      let change = try? adapter.decodeEvent(event, scope: scope)
+    else { return }
+    switch change {
+    case .stateChanged(let state): applyShaarMediaState(state, to: tabID)
+    case .pictureInPictureChanged(let state):
+      receivePictureInPicture(tabString, active: state == "inPictureInPicture")
+    case .captureChanged: break
+    }
+  }
+
+  private func applyShaarMediaState(_ state: ShaarMediaState, to tabID: UUID) {
+    let actions = Set(
+      state.supportedActions.compactMap { raw -> MediaSessionAction? in
+        switch raw {
+        case 0: .play
+        case 1: .pause
+        case 2: .previousTrack
+        case 3: .nextTrack
+        case 4: .seekBackward
+        case 5: .seekForward
+        case 6: .seekTo
+        default: nil
+        }
+      })
+    let pictureInPicture: PictureInPictureVideo? =
+      state.pipVideoState == "inPictureInPicture"
+      ? .init(isPlaying: state.playbackState == .playing, isLive: false) : nil
+    let model = MediaSessionState(
+      playbackState: MediaPlaybackState(rawValue: state.playbackState.rawValue) ?? .none,
+      title: state.title, artist: state.artist, album: state.album,
+      artwork: state.artwork.flatMap { URL(string: $0) }, actions: actions,
+      hasVideo: state.hasVideo, canSeek: state.canSeek, muted: state.tabMuted,
+      // Do not auto-open a PiP window when the native layer cannot report page silence.
+      silent: state.silent ?? true, pictureInPicture: pictureInPicture,
+      volume: state.pageVolume)
+    store?.media.update(tabID, state: model)
+    if pictureInPictureControls.tabID == tabID {
+      pictureInPictureControls.update(pictureInPicture)
+    }
+  }
+
+  private func shaarMediaScope(for tabID: UUID) -> ShaarMediaScope? {
+    guard ownedLiveTab(tabID.uuidString) == tabID,
+      let expectedProfileID = store?.session.profileID(forTabID: tabID)?.uuidString,
+      let scope = shaarMediaScopeForTab?(tabID),
+      scope.profileID == expectedProfileID, scope.tabID == tabID.uuidString
+    else { return nil }
+    return scope
+  }
+  // END media
 }
 
 extension MediaSessionAction {

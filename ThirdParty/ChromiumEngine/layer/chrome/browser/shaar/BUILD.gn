@@ -72,6 +72,9 @@ source_set("engine") {
     "//chrome/browser:browser",
     "//chrome/browser:main_extra_parts",
     "//chrome/browser:chrome_content_browser_client",
+    # BEGIN media
+    "//chrome/browser/content_settings:content_settings_factory",
+    # END media
     "//chrome/browser:lifetime",
     "//chrome/browser/profiles",
     "//chrome/browser/history:impl",
@@ -88,6 +91,8 @@ source_set("engine") {
     # BEGIN media
     "//services/media_session/public/cpp",
     "//services/media_session/public/mojom",
+    "//components/content_settings/core/browser",
+    "//mojo/public/cpp/bindings",
     # END media
     "//components/download/content/public",
     "//components/download/public/common",
@@ -145,7 +150,14 @@ test("history_unittests") {
 # BEGIN media
 test("media_unittests") {
   sources = [ "media/shaar_media_unittest.cc" ]
-  deps = [ ":engine", "//testing/gtest" ]
+  deps = [
+    ":engine",
+    "//base/test:test_support",
+    "//chrome/test:test_support",
+    "//components/content_settings/core/browser",
+    "//content/public/test:test_support",
+    "//testing/gtest",
+  ]
 }
 # END media
 

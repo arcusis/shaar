@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import ChromiumBridge
+import ShaarEngineABI
 
 /// Installs the shared runtime callbacks once, before any window client is created.
 @MainActor
@@ -173,6 +174,22 @@ final class BrowserRuntimeEvents {
   private func tabClient(_ id: String) -> BrowserRuntimeClient? {
     router.client(forTab: id, nativeWindowID: runtime.windowID(forTabID: id))
   }
+
+  // BEGIN media
+  /// Routes a copied Shaar ABI media event through the same per-window tab ownership map used by
+  /// the Ardia callbacks. The media adapter performs the exact profile/session/tab match.
+  func receiveShaarMediaEvent(_ event: ShaarCopiedEvent) {
+    guard event.kind == 15,
+      let tabID = String(data: event.tabID, encoding: .utf8),
+      let client = tabClient(tabID),
+      let profileID = String(data: event.profileID, encoding: .utf8),
+      client.profileIDs().contains(profileID),
+      event.windowID.isEmpty
+        || String(data: event.windowID, encoding: .utf8) == client.windowID
+    else { return }
+    client.onShaarMediaEvent?(event)
+  }
+  // END media
 
   func resolveInstall(_ id: String, windowID: String, accepted: Bool) {
     guard router.consume(.installation, id: id, windowID: windowID) else { return }

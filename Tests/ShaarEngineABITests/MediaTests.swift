@@ -99,3 +99,22 @@ private actor FakeMediaTransport: ShaarMediaTransport {
   #expect(ShaarMediaAdapter.selected(implementation: .ardia, transport: fake) == nil)
   #expect(ShaarMediaAdapter.selected(implementation: .shaar, transport: fake) != nil)
 }
+
+@Test func policyAndPictureInPictureCallsUseVersionedScopedOperations() async throws {
+  let fake = FakeMediaTransport("{}")
+  let scope = ShaarMediaScope(profileID: "profile", tabID: "tab")
+  let adapter = try #require(
+    ShaarMediaAdapter.selected(implementation: .shaar, transport: fake))
+  try await adapter.setAutoPictureInPicture(false, scope: scope)
+  try await adapter.enterPictureInPicture(scope: scope)
+  try await adapter.exitPictureInPicture(scope: scope)
+  await #expect(throws: ShaarMediaAdapterError.invalidControl) {
+    try await adapter.control(.pipSkip, scope: scope, value: 0)
+  }
+  let calls = await fake.calls
+  #expect(
+    calls.map(\.1) == [.setAutoPictureInPicture, .enterPictureInPicture, .exitPictureInPicture])
+  #expect(calls.allSatisfy { $0.0 == scope })
+  let policy = try #require(JSONSerialization.jsonObject(with: calls[0].2) as? [String: Any])
+  #expect(policy["allowed"] as? Bool == false)
+}

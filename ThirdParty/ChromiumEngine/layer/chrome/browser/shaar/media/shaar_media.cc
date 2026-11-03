@@ -9,21 +9,34 @@
 #include <cstddef>
 #include <cstring>
 #include <initializer_list>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
+#include "base/containers/flat_map.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "content/public/browser/media_session.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/receiver.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/common/content_settings.h"
+#include "components/content_settings/core/common/content_settings_types.h"
 #include "services/media_session/public/mojom/media_session.mojom.h"
+#include "services/media_session/public/cpp/media_image.h"
+#include "url/gurl.h"
 
 namespace {
 
@@ -180,6 +193,98 @@ base::Value::Dict StateFor(content::WebContents* contents) {
   return state;
 }
 
+void EmitStateChanged(shaar::ShaarEngineContext* context,
+                      shaar_engine* engine,
+                      shaar_scope scope,
+                      shaar_window* window,
+                      shaar_tab* tab,
+                      content::WebContents* contents) {
+  if (!context || !context->profile_services || !context->browser_tabs ||
+      !scope.profile || scope.private_session)
+    return;
+  const std::string_view profile_id =
+      context->profile_services->ProfileID(engine, scope.profile);
+  const std::string_view window_id =
+      context->browser_tabs->WindowID(engine, window);
+  const std::string_view tab_id =
+      context->browser_tabs->TabID(engine, window, tab);
+  if (profile_id.empty() || tab_id.empty())
+    return;
+  std::string state_json;
+  base::JSONWriter::Write(base::Value(StateFor(contents)), &state_json);
+  const std::string payload =
+      shaar::media::SerializeStateChangedEvent(state_json);
+  shaar::EmitEvent(engine, SHAAR_EVENT_MEDIA,
+                   {profile_id.data(), profile_id.size()}, {nullptr, 0},
+                   {window_id.data(), window_id.size()}, {tab_id.data(), tab_id.size()},
+                   {payload.data(), payload.size()});
+}
+
+class MediaSessionEventObserver final
+    : public content::WebContentsObserver,
+      public media_session::mojom::MediaSessionObserver {
+ public:
+  MediaSessionEventObserver(content::WebContents* contents,
+                            shaar_engine* engine,
+                            std::string profile_id,
+                            std::string window_id,
+                            std::string tab_id)
+      : content::WebContentsObserver(contents),
+        engine_(engine),
+        profile_id_(std::move(profile_id)),
+        window_id_(std::move(window_id)),
+        tab_id_(std::move(tab_id)) {}
+
+  void Start(content::MediaSession* session) {
+    mojo::PendingRemote<media_session::mojom::MediaSessionObserver> remote;
+    receiver_.Bind(remote.InitWithNewPipeAndPassReceiver());
+    session->AddObserver(std::move(remote));
+  }
+
+  bool Observes(content::WebContents* contents) const {
+    return web_contents() == contents;
+  }
+
+  void MediaSessionInfoChanged(
+      media_session::mojom::MediaSessionInfoPtr) override { Publish(); }
+  void MediaSessionMetadataChanged(
+      const std::optional<media_session::MediaMetadata>&) override { Publish(); }
+  void MediaSessionActionsChanged(
+      const std::vector<media_session::mojom::MediaSessionAction>&) override {
+    Publish();
+  }
+  void MediaSessionImagesChanged(
+      const base::flat_map<media_session::mojom::MediaSessionImageType,
+                           std::vector<media_session::MediaImage>>&) override {
+    Publish();
+  }
+  void MediaSessionPositionChanged(
+      const std::optional<media_session::MediaPosition>&) override {
+    Publish();
+  }
+
+ private:
+  void Publish() {
+    if (!web_contents())
+      return;
+    std::string state_json;
+    base::JSONWriter::Write(base::Value(StateFor(web_contents())), &state_json);
+    const std::string payload =
+        shaar::media::SerializeStateChangedEvent(state_json);
+    shaar::EmitEvent(engine_, SHAAR_EVENT_MEDIA,
+                     {profile_id_.data(), profile_id_.size()}, {nullptr, 0},
+                     {window_id_.data(), window_id_.size()},
+                     {tab_id_.data(), tab_id_.size()},
+                     {payload.data(), payload.size()});
+  }
+
+  shaar_engine* engine_;
+  const std::string profile_id_;
+  const std::string window_id_;
+  const std::string tab_id_;
+  mojo::Receiver<media_session::mojom::MediaSessionObserver> receiver_{this};
+};
+
 bool ValidScopeForTab(shaar::ShaarEngineContext* context,
                       shaar_engine* engine,
                       shaar_scope scope,
@@ -203,9 +308,125 @@ bool ValidScopeForTab(shaar::ShaarEngineContext* context,
   }
   return (*contents)->GetBrowserContext()->IsOffTheRecord() &&
          context->media_services &&
-         context->media_services->OwnsPrivateTab(engine, scope, window, tab,
-                                                  *contents);
+         context->media_services->OwnsPrivateTab(engine, context, scope, window,
+                                                 tab, *contents);
 }
+
+class ShaarMediaRuntimeServices final : public shaar::MediaRuntimeServices {
+ public:
+  void ObserveTab(shaar::ShaarEngineContext* context,
+                  shaar_engine* engine,
+                  shaar_scope scope,
+                  shaar_window* window,
+                  shaar_tab* tab,
+                  content::WebContents* contents) {
+    std::erase_if(observers_, [](const auto& observer) {
+      return !observer->web_contents();
+    });
+    if (!context || !context->profile_services || !context->browser_tabs ||
+        !scope.profile || scope.private_session)
+      return;
+    const std::string_view profile_id =
+        context->profile_services->ProfileID(engine, scope.profile);
+    const std::string_view window_id =
+        context->browser_tabs->WindowID(engine, window);
+    const std::string_view tab_id =
+        context->browser_tabs->TabID(engine, window, tab);
+    content::MediaSession* session = content::MediaSession::GetIfExists(contents);
+    if (profile_id.empty() || tab_id.empty() || !session ||
+        std::any_of(observers_.begin(), observers_.end(),
+                    [contents](const auto& observer) {
+                      return observer->Observes(contents);
+                    }))
+      return;
+    auto observer = std::make_unique<MediaSessionEventObserver>(
+        contents, engine, std::string(profile_id), std::string(window_id),
+        std::string(tab_id));
+    observer->Start(session);
+    observers_.push_back(std::move(observer));
+  }
+
+  bool OwnsPrivateTab(shaar_engine*,
+                      shaar::ShaarEngineContext*,
+                      shaar_scope,
+                      shaar_window*,
+                      shaar_tab*,
+                      content::WebContents*) override {
+    // The batch-2 private-session ABI has no resolver for its opaque handle.
+    // Fail closed until lifecycle provides one; checking only IsOffTheRecord()
+    // would let one private session address another session's tab.
+    return false;
+  }
+
+  shaar_error_code SubmitSupplementalOperation(
+      shaar::ShaarEngineContext* context,
+      shaar_engine* engine,
+      shaar_scope scope,
+      shaar_window* window,
+      shaar_tab* tab,
+      shaar_operation operation,
+      shaar_bytes args_json,
+      shaar_request_id request_id,
+      shaar_reply_fn reply,
+      void* reply_context,
+      shaar_error* immediate_error) override {
+    if (!context || !context->browser_tabs || !engine || !window || !tab ||
+        !reply || !request_id)
+      return Fail(immediate_error, SHAAR_INVALID_ARGUMENT,
+                  "invalid supplemental media request");
+    if (scope.private_session)
+      return Fail(immediate_error, SHAAR_PRIVATE_DISALLOWED,
+                  "media policy and capture are not available in private scope");
+    if (!scope.profile || !context->profile_services)
+      return Fail(immediate_error, SHAAR_WRONG_PROFILE,
+                  "media operation requires a regular profile");
+    Profile* profile =
+        context->profile_services->ResolveProfile(engine, scope.profile);
+    content::WebContents* contents =
+        context->browser_tabs->FindWebContents(engine, window, tab);
+    if (!profile || profile->IsOffTheRecord() || !contents ||
+        Profile::FromBrowserContext(contents->GetBrowserContext()) != profile)
+      return Fail(immediate_error, SHAAR_WRONG_PROFILE,
+                  "media tab does not belong to the supplied profile");
+
+    const ReplyContext request{request_id, reply, reply_context};
+    if (operation == SHAAR_OP_MEDIA_SET_AUTO_PIP) {
+      auto args = ParseArguments(args_json);
+      if (!args || args->FindInt("schemaVersion") != 1 ||
+          !HasOnlyKeys(*args, {"schemaVersion", "allowed"}) ||
+          !args->FindBool("allowed"))
+        return Fail(immediate_error, SHAAR_INVALID_ARGUMENT,
+                    "setAutoPiP requires an allowed boolean");
+      const GURL url = contents->GetLastCommittedURL();
+      if (!shaar::media::IsAllowedAutoPiPURL(url.spec()))
+        return Fail(immediate_error, SHAAR_POLICY_BLOCKED,
+                    "auto PiP policy requires a committed HTTP or HTTPS page");
+      auto* settings = HostContentSettingsMapFactory::GetForProfile(profile);
+      if (!settings)
+        return Fail(immediate_error, SHAAR_NOT_READY,
+                    "profile content settings are not ready");
+      settings->SetContentSettingDefaultScope(
+          url, GURL(), ContentSettingsType::AUTO_PICTURE_IN_PICTURE,
+          *args->FindBool("allowed") ? CONTENT_SETTING_ALLOW
+                                      : CONTENT_SETTING_BLOCK);
+      Reply(request, base::Value::Dict().Set("schemaVersion", 1));
+      return SHAAR_OK;
+    }
+    if (operation == SHAAR_OP_MEDIA_LIST_CAPTURE_SOURCES)
+      return Fail(immediate_error, SHAAR_UNSUPPORTED_CAPABILITY,
+                  "native capture source enumeration is not connected");
+    if (operation == SHAAR_OP_MEDIA_CAPTURE_REPLY)
+      return Fail(immediate_error, SHAAR_PERMISSION_DENIED,
+                  "capture reply has no matching engine-issued source grant");
+    return Fail(immediate_error, SHAAR_INVALID_ARGUMENT,
+                "unknown supplemental media operation");
+  }
+
+ private:
+  std::vector<std::unique_ptr<MediaSessionEventObserver>> observers_;
+};
+
+ShaarMediaRuntimeServices g_media_runtime_services;
 
 bool HasAction(content::MediaSession* session,
                media_session::mojom::MediaSessionAction action) {
@@ -216,6 +437,20 @@ bool HasAction(content::MediaSession* session,
 }  // namespace
 
 namespace shaar::media {
+
+bool IsAllowedAutoPiPURL(std::string_view raw_url) {
+  const GURL url(raw_url);
+  return url.is_valid() && url.SchemeIsHTTPOrHTTPS() && url.has_host();
+}
+
+std::string SerializeStateChangedEvent(std::string_view state_json) {
+  return "{\"kind\":\"state_changed\",\"schemaVersion\":1,\"state\":" +
+         std::string(state_json) + "}";
+}
+
+void InstallRuntimeServices() {
+  shaar::SetMediaRuntimeServices(&g_media_runtime_services);
+}
 
 bool IsValidControl(uint32_t command, double value, bool has_value) {
   if (command > SHAAR_MEDIA_PIP_EXIT)
@@ -289,6 +524,9 @@ shaar_error_code HandleMediaOperation(
     if (!HasOnlyKeys(*args, {"schemaVersion"}))
       return Fail(immediate_error, SHAAR_INVALID_ARGUMENT,
                   "getState accepts no additional fields");
+    g_media_runtime_services.ObserveTab(context, engine, scope, window, tab,
+                                        contents);
+    EmitStateChanged(context, engine, scope, window, tab, contents);
     Reply(request, StateFor(contents));
     return SHAAR_OK;
   }
@@ -313,7 +551,10 @@ shaar_error_code HandleMediaOperation(
       if (!value_item || !value_item->is_bool())
         return Fail(immediate_error, SHAAR_INVALID_ARGUMENT,
                     "tab mute requires a boolean value");
+      g_media_runtime_services.ObserveTab(context, engine, scope, window, tab,
+                                          contents);
       contents->SetAudioMuted(value != 0);
+      EmitStateChanged(context, engine, scope, window, tab, contents);
       Reply(request, base::Value::Dict().Set("schemaVersion", 1));
       return SHAAR_OK;
     }
@@ -335,7 +576,10 @@ shaar_error_code HandleMediaOperation(
       return Fail(immediate_error, SHAAR_UNSUPPORTED_CAPABILITY,
                   "media session does not advertise this action");
     }
+    g_media_runtime_services.ObserveTab(context, engine, scope, window, tab,
+                                        contents);
     session->DidReceiveAction(action);
+    EmitStateChanged(context, engine, scope, window, tab, contents);
     Reply(request, base::Value::Dict().Set("schemaVersion", 1));
     return SHAAR_OK;
   }
@@ -351,7 +595,10 @@ shaar_error_code HandleMediaOperation(
     if (!session || !HasAction(session, action))
       return Fail(immediate_error, SHAAR_UNSUPPORTED_CAPABILITY,
                   "tab media session does not advertise the PiP action");
+    g_media_runtime_services.ObserveTab(context, engine, scope, window, tab,
+                                        contents);
     session->DidReceiveAction(action);
+    EmitStateChanged(context, engine, scope, window, tab, contents);
     Reply(request, base::Value::Dict().Set("schemaVersion", 1));
     return SHAAR_OK;
   }
@@ -389,8 +636,8 @@ shaar_error_code HandleMediaOperation(
       return Fail(immediate_error, SHAAR_UNSUPPORTED_CAPABILITY,
                   "media runtime services are not connected");
     return context->media_services->SubmitSupplementalOperation(
-        engine, scope, window, tab, operation, bytes, request_id, reply,
-        reply_context, immediate_error);
+        context, engine, scope, window, tab, operation, bytes, request_id,
+        reply, reply_context, immediate_error);
   }
   return Fail(immediate_error, SHAAR_INVALID_ARGUMENT,
               "unknown media operation");

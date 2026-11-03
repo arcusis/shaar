@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import AppKit
+import ShaarEngineABI
 
 /// One window's subscriptions. The dispatcher keeps this object weakly.
 @MainActor
@@ -23,6 +24,9 @@ final class BrowserRuntimeClient {
   var onExternalAppDismissed: ((String) -> Void)?
   var onMediaAccess: ((String, [String: NSNumber]) -> Void)?
   var onMediaSessionChanged: ((String, [String: Any]?) -> Void)?
+  // BEGIN media
+  var onShaarMediaEvent: ((ShaarCopiedEvent) -> Void)?
+  // END media
   var onPictureInPictureChanged: ((String, Bool) -> Void)?
   var onTabActivationRequest: ((String, String) -> Void)?
   var onFindResult: ((String, String, Int32, Int32, Bool) -> Void)?

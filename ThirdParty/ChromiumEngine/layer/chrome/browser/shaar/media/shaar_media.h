@@ -5,6 +5,9 @@
 #ifndef CHROME_BROWSER_SHAAR_MEDIA_SHAAR_MEDIA_H_
 #define CHROME_BROWSER_SHAAR_MEDIA_SHAAR_MEDIA_H_
 
+#include <string>
+#include <string_view>
+
 #include "chrome/browser/shaar/engine/shaar_module_registry.h"
 #include "services/media_session/public/mojom/media_session.mojom.h"
 
@@ -18,6 +21,9 @@ namespace shaar::media {
 bool IsValidControl(uint32_t command, double value, bool has_value);
 bool MapSessionAction(uint32_t command,
                      media_session::mojom::MediaSessionAction* action);
+bool IsAllowedAutoPiPURL(std::string_view url);
+std::string SerializeStateChangedEvent(std::string_view state_json);
+void InstallRuntimeServices();
 
 }  // namespace shaar::media
 

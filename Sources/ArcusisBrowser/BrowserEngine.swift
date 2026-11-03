@@ -6,6 +6,7 @@ import AppKit
 import BrowserCore
 import ChromiumBridge
 import Observation
+import ShaarEngineABI
 import SwiftUI
 
 struct PageState: Equatable {
@@ -32,6 +33,11 @@ final class BrowserEngine {
   private static let tabSuspensionDelay: TimeInterval = 5 * 60
   let runtime: ARCChromiumRuntime
   let events: BrowserRuntimeEvents
+  // BEGIN media
+  @ObservationIgnored let mediaImplementation: ShaarEngineImplementation
+  @ObservationIgnored let shaarMediaAdapter: ShaarMediaAdapter?
+  @ObservationIgnored let shaarMediaScopeForTab: ((UUID) -> ShaarMediaScope?)?
+  // END media
   let windowID: String
   private let callbacks: BrowserRuntimeClient
   let autoPictureInPicture: AutoPictureInPicture
@@ -99,13 +105,56 @@ final class BrowserEngine {
 
   init(
     events: BrowserRuntimeEvents, windowID: String? = nil, store: BrowserStore,
-    presentsNativePanels: Bool = true, lazyPinnedTabs: Bool = false
+    presentsNativePanels: Bool = true, lazyPinnedTabs: Bool = false,
+    // BEGIN media
+    mediaImplementation: ShaarEngineImplementation = .shippingDefault,
+    shaarMediaAdapter: ShaarMediaAdapter? = nil,
+    shaarMediaScopeForTab: ((UUID) -> ShaarMediaScope?)? = nil
+      // END media
   ) throws {
     let runtime = events.runtime
     self.runtime = runtime
     self.events = events
+    // BEGIN media
+    let activeShaarMediaAdapter =
+      mediaImplementation == .shaar && shaarMediaAdapter?.implementation == .shaar
+      ? shaarMediaAdapter : nil
+    self.mediaImplementation = mediaImplementation
+    self.shaarMediaAdapter = activeShaarMediaAdapter
+    self.shaarMediaScopeForTab = shaarMediaScopeForTab
+    // END media
     self.windowID = windowID ?? runtime.primaryWindowID
-    autoPictureInPicture = AutoPictureInPicture(engine: .chromium(runtime))
+    // BEGIN media
+    if mediaImplementation == .shaar {
+      autoPictureInPicture = AutoPictureInPicture(
+        engine: .init(
+          enter: { [weak store] tabID in
+            guard let store,
+              let expectedProfileID = store.session.profileID(forTabID: tabID)?.uuidString,
+              let activeShaarMediaAdapter,
+              let scope = shaarMediaScopeForTab?(tabID),
+              scope.profileID == expectedProfileID, scope.tabID == tabID.uuidString
+            else {
+              return
+            }
+            Task { try? await activeShaarMediaAdapter.enterPictureInPicture(scope: scope) }
+          },
+          exit: { [weak store] tabID in
+            guard let store,
+              let expectedProfileID = store.session.profileID(forTabID: tabID)?.uuidString,
+              let activeShaarMediaAdapter,
+              let scope = shaarMediaScopeForTab?(tabID),
+              scope.profileID == expectedProfileID, scope.tabID == tabID.uuidString
+            else {
+              return
+            }
+            Task { try? await activeShaarMediaAdapter.exitPictureInPicture(scope: scope) }
+          },
+          handlesAutomatically: { _ in false }))
+    } else {
+      autoPictureInPicture = AutoPictureInPicture(engine: .chromium(runtime))
+    }
+    // END media
     callbacks = BrowserRuntimeClient(windowID: self.windowID) { [weak store] in
       Set(store?.session.profiles.map { $0.id.uuidString } ?? [])
     }
@@ -330,6 +379,11 @@ final class BrowserEngine {
     callbacks.onMediaSessionChanged = { [weak self] identity, payload in
       self?.receiveMediaSession(identity, payload: payload)
     }
+    // BEGIN media
+    callbacks.onShaarMediaEvent = { [weak self] event in
+      self?.receiveShaarMediaEvent(event)
+    }
+    // END media
     store.onMediaCommand = { [weak self] tab, command in
       self?.performMedia(command, tabID: tab) ?? false
     }

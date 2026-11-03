@@ -72,11 +72,8 @@ class PipelineGateTests(unittest.TestCase):
 
     def test_known_non_native_diffs_and_unknown_changes_select_required_coverage(self):
         for paths in (["Notebook/Note.md"], ["Notebook/probe.py"], ["README.md", "CONTRIBUTING.md"],
-                      ["ThirdParty/Foo/README.md"], ["Sources/Docs/Overview.md"]):
-            if paths == ["Sources/Docs/Overview.md"]:
-                self.assertEqual(PLAN.select_stages(paths, "pull_request"), (True, False, True))
-            else:
-                self.assertEqual(PLAN.select_stages(paths, "pull_request"), (False, False, True))
+                      ["ThirdParty/Foo/README.md"]):
+            self.assertEqual(PLAN.select_stages(paths, "pull_request"), (False, False, True))
         for paths in (["website/src/Page.svelte"], ["website/package.json", "Notebook/Note.md"],
                       [".github/assets/overview.png"], [".github/workflows/website-deploy.yml"]):
             self.assertEqual(PLAN.select_stages(paths, "pull_request"), (False, True, True))

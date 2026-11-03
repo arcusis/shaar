@@ -46,9 +46,18 @@
   },
   "layer": {
     "path": "ThirdParty/ChromiumEngine/layer",
-    "sha256": "51a02c302da97d4143f252b1bd9dccb4c5120dfc60731a2318350ff5c054accc",
+    "sha256": "5bc88e499a35573974faee7928acc996b57ce95b4b989e86fa2582117e878351",
+    "moduleBlocks": {
+      "lifecycle": [
+        "chrome/browser/shaar/lifecycle/shaar_lifecycle.cc",
+        "chrome/browser/shaar/lifecycle/shaar_lifecycle.h",
+        "chrome/browser/shaar/lifecycle/shaar_module_registry.cc",
+        "chrome/browser/shaar/lifecycle/shaar_module_registry.h",
+        "chrome/browser/shaar/lifecycle/shaar_module_registry_unittest.cc"
+      ]
+    },
     "files": {
-      "chrome/browser/shaar/BUILD.gn": "8c98377ab7a284824ee736f5d534d9fd9653746229ec72fb16e861d10de613a3",
+      "chrome/browser/shaar/BUILD.gn": "73e2a64861fb9068f3e1eafcc79d4223ddbe9bc2eaac674ba3f8791aabea8eae",
       "chrome/browser/shaar/engine/shaar_engine.cc": "e502047c22f740a707438d1daac69a18bbbd61914293f59d084db0ada63866a6",
       "chrome/browser/shaar/engine/shaar_event_bridge.cc": "4a6e12be0631c3bab7e0ebc23c7c3a085bd0840439c12921314b853b0ed8d6d6",
       "chrome/browser/shaar/engine/shaar_event_bridge.h": "e0f787aea3c72e3a6ece1e5ec3b1ad1f77c5ea2781d23950fc0da61abecae67b",

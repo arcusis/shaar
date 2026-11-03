@@ -50,6 +50,7 @@ let package = Package(
     .target(
       name: "ShaarEngineABI",
       dependencies: [
+        "ShaarEngineC",
         "ShaarEngineABIC",
         // BEGIN storage_keychain
         "ShaarStorageKeychainABIC",
@@ -62,6 +63,7 @@ let package = Package(
         // END storage_keychain
       ]),
     // END Shaar navigation C ABI shim.
+    .target(name: "ShaarEngineC", publicHeadersPath: "include"),
     .target(
       name: "ChromiumBridgeVerification",
       dependencies: ["ChromiumBridge"],
@@ -98,6 +100,6 @@ let package = Package(
         "ArcusisBrowser", "BrowserCore", "ChromiumBridge", "ChromiumBridgeVerification",
         "ShaarVerification",
       ]),
-    .testTarget(name: "ShaarEngineABITests", dependencies: ["ShaarEngineABI"]),
+    .testTarget(name: "ShaarEngineABITests", dependencies: ["ShaarEngineABI", "ShaarEngineC"]),
   ]
 )

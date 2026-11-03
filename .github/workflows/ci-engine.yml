@@ -19,6 +19,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - name: Identify verification bundle build inputs
+        run: echo "CI_BUNDLE_INPUTS=${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**', 'Resources/**', 'Plugins/**', 'ThirdParty/ArdiaCore/**', 'scripts/bundle-app.sh', 'scripts/ci-stage.py', 'scripts/release-config.sh', 'scripts/engine-signing.sh', 'scripts/fetch-engine.sh', 'scripts/stage-browser-resources.py', 'scripts/release_feed.py') }}" >> "$GITHUB_ENV"
       - uses: ./.github/actions/ci-setup
         with:
           mode: verification
@@ -29,14 +31,14 @@ jobs:
           tree=$(git rev-parse 'HEAD^{tree}')
           echo "tree=$tree" >> "$GITHUB_OUTPUT"
           echo "CI_SOURCE_TREE=$tree" >> "$GITHUB_ENV"
-      - name: Restore exact-tree verification bundle
+      - name: Restore verification bundle for identical source and build inputs
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: |
             build/ci/engine-build/bundle.json
             build/ci/engine-build/verification.tar.gz
-          key: engine-bundle-${{ runner.os }}-${{ runner.arch }}-${{ env.CI_TOOLCHAIN_ID }}-${{ steps.source-tree.outputs.tree }}-${{ hashFiles('ThirdParty/ArdiaCore/pin.json') }}
-      - name: Build or reuse bundle bound to source tree, engine and toolchain
+          key: engine-bundle-${{ runner.os }}-${{ runner.arch }}-${{ env.CI_TOOLCHAIN_ID }}-${{ steps.source-tree.outputs.tree }}-${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**', 'Resources/**', 'Plugins/**', 'ThirdParty/ArdiaCore/**', 'scripts/bundle-app.sh', 'scripts/ci-stage.py', 'scripts/release-config.sh', 'scripts/engine-signing.sh', 'scripts/fetch-engine.sh', 'scripts/stage-browser-resources.py', 'scripts/release_feed.py') }}-${{ hashFiles('ThirdParty/ArdiaCore/pin.json') }}
+      - name: Build or reuse bundle bound to source tree, build inputs, engine and toolchain
         id: bundle
         env:
           CI_ITERATIONS: ${{ inputs.iterations }}
@@ -61,6 +63,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - name: Identify verification bundle build inputs
+        run: echo "CI_BUNDLE_INPUTS=${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**', 'Resources/**', 'Plugins/**', 'ThirdParty/ArdiaCore/**', 'scripts/bundle-app.sh', 'scripts/ci-stage.py', 'scripts/release-config.sh', 'scripts/engine-signing.sh', 'scripts/fetch-engine.sh', 'scripts/stage-browser-resources.py', 'scripts/release_feed.py') }}" >> "$GITHUB_ENV"
       - uses: ./.github/actions/ci-setup
         with:
           mode: engine-probe

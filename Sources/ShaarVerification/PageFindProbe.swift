@@ -93,6 +93,7 @@ final class PageFindProbe {
     try picture.write(to: root.appending(path: "\(phase)-find-page.png"), options: .atomic)
 
     store.perform(.space(b.id))
+    try await waitForDisplayedNativeTab(tabB)
     try expect(store.pageFind == nil, "switching profiles closes find and discards its query")
     store.receiveFindResult(
       tabID: original.tabID, requestID: original.requestID, count: 2, active: 1, final: true)
@@ -165,6 +166,20 @@ final class PageFindProbe {
       try await Task.sleep(for: .milliseconds(100))
     }
     throw PageFindProbeFailure("\(message): \(store.pageFind?.status ?? "find closed")")
+  }
+
+  private func waitForDisplayedNativeTab(_ tabID: UUID) async throws {
+    for _ in 0..<200 {
+      let selection = runtime.normalProbeSelectionAudit(forTabID: tabID.uuidString)
+      if selection["selectedNativeTab"] as? Bool == true,
+        selection["displayedNativeWebContents"] as? Bool == true
+      {
+        return
+      }
+      try await Task.sleep(for: .milliseconds(10))
+    }
+    let selection = runtime.normalProbeSelectionAudit(forTabID: tabID.uuidString)
+    throw PageFindProbeFailure("Profile B native tab did not become active: \(selection)")
   }
 
   private func evaluate(_ tab: UUID, _ expression: String) async -> [String: Any]? {

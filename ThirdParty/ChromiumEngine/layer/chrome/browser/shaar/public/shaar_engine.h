@@ -187,11 +187,20 @@ typedef enum {
   SHAAR_OP_MEDIA_ENTER_PIP = 1103,
   SHAAR_OP_MEDIA_EXIT_PIP = 1104,
   SHAAR_OP_MEDIA_LIST_CAPTURE_SOURCES = 1105,
-  SHAAR_OP_MEDIA_CAPTURE_REPLY = 1106
+  SHAAR_OP_MEDIA_CAPTURE_REPLY = 1106,
+
+  // BEGIN storage_keychain
+  SHAAR_OP_STORAGE_KEYCHAIN_IDENTITY = 1400
+  // END storage_keychain
 } shaar_operation;
 
 // Private sessions module IDs.
-typedef enum { SHAAR_MODULE_PRIVATE_SESSIONS = 1200 } shaar_module_id;
+typedef enum {
+  SHAAR_MODULE_PRIVATE_SESSIONS = 1200,
+  // BEGIN storage_keychain
+  SHAAR_MODULE_STORAGE_KEYCHAIN = 1400
+  // END storage_keychain
+} shaar_module_id;
 
 typedef enum {
   SHAAR_DEVTOOLS_CAPABILITY_INSPECTOR = 1,

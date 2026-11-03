@@ -90,4 +90,54 @@ struct ShaarEngineABITests {
     #expect(delivered?.profileID == Data(profile))
     #expect(delivered?.payloadJSON == Data(payload))
   }
+
+  @Test @MainActor func eventsReachMainActorInSequenceOrder() async {
+    let count = 256
+    let sequences = await withCheckedContinuation { continuation in
+      var received: [UInt64] = []
+      let dispatcher = ShaarEventDispatcher { event in
+        received.append(event.sequence)
+        if received.count == count { continuation.resume(returning: received) }
+      }
+      for sequence in 1...count {
+        dispatcher.receive(engineEvent(sequence: UInt64(sequence)))
+      }
+    }
+    #expect(sequences == (1...count).map(UInt64.init))
+  }
+
+  @Test @MainActor func invalidEventsAreReported() async {
+    let reported = await withCheckedContinuation { continuation in
+      let dispatcher = ShaarEventDispatcher(
+        handler: { _ in Issue.record("invalid event was dispatched") },
+        onError: { error in continuation.resume(returning: error) })
+      dispatcher.receive(engineEvent(sequence: 1, kind: 5))
+    }
+    #expect(reported == .invalidEvent("profile-scoped event has no profile ID"))
+  }
+
+  @Test func frameworkLoadFailureHasItsOwnTypedError() {
+    let frameworkURL = URL(fileURLWithPath: "/no/such/Shaar.framework")
+    do {
+      _ = try ShaarEngineLoader.load(frameworkURL: frameworkURL)
+      Issue.record("loading a missing framework unexpectedly succeeded")
+    } catch let error as ShaarEngineError {
+      guard case .frameworkLoadFailed(let path, let reason) = error else {
+        Issue.record("expected frameworkLoadFailed, got \(error)")
+        return
+      }
+      #expect(path == frameworkURL.appending(path: "Versions/Current/Chromium Framework").path)
+      #expect(!reason.isEmpty)
+    } catch {
+      Issue.record("expected ShaarEngineError, got \(error)")
+    }
+  }
+
+  private func engineEvent(sequence: UInt64, kind: UInt32 = 1) -> ShaarABIEvent {
+    ShaarABIEvent(
+      size: UInt32(MemoryLayout<ShaarABIEvent>.size), sequence: sequence, kind: kind,
+      profileID: ShaarBytes(data: nil, size: 0), sessionID: ShaarBytes(data: nil, size: 0),
+      windowID: ShaarBytes(data: nil, size: 0), tabID: ShaarBytes(data: nil, size: 0),
+      payloadJSON: ShaarBytes(data: nil, size: 0))
+  }
 }

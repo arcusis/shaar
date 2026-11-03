@@ -57,7 +57,7 @@ final class BrowserEngine {
   @ObservationIgnored private var loadedProfiles: Set<UUID> = []
   @ObservationIgnored private var loadingProfiles: Set<UUID> = []
   @ObservationIgnored private var failedProfiles: Set<UUID> = []
-  @ObservationIgnored private(set) var liveTabs: Set<UUID> = []
+  @ObservationIgnored var liveTabs: Set<UUID> = []
   @ObservationIgnored private var failedTabs: Set<UUID> = []
   @ObservationIgnored private var reconciling = false
   @ObservationIgnored private var receivingNativeSelection = false
@@ -67,7 +67,7 @@ final class BrowserEngine {
   @ObservationIgnored private var inactiveSince: [UUID: Date] = [:]
   @ObservationIgnored private var suspendedScrollPositions: [UUID: CGPoint] = [:]
   @ObservationIgnored private var suspendingTabs: Set<UUID> = []
-  @ObservationIgnored private var suspensionTask: Task<Void, Never>?
+  @ObservationIgnored var suspensionTask: Task<Void, Never>?
   private(set) var favicons: [UUID: NSImage] = [:]
 
   func seedFavicon(_ image: NSImage, for tabID: UUID) {
@@ -451,10 +451,9 @@ final class BrowserEngine {
     }
   }
 
-  private func suspendInactiveTabs() {
+  func suspendInactiveTabs(now: Date = Date()) {
     guard !isClosed, let store else { return }
     let visible = store.visiblePageIDs
-    let now = Date()
     let candidates =
       store.session.spaces.flatMap(\.tabs)
       + store.session.favoritePages.map(\.tab)
@@ -509,7 +508,7 @@ final class BrowserEngine {
     }
   }
 
-  private func restoreSuspendedScrollPosition(for tabID: UUID) {
+  func restoreSuspendedScrollPosition(for tabID: UUID) {
     guard let position = suspendedScrollPositions.removeValue(forKey: tabID) else { return }
     let x = max(0, position.x)
     let y = max(0, position.y)

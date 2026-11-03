@@ -53,6 +53,27 @@ struct DesktopCaptureConsentTests {
     let capture = try request(store)
     let picker = DesktopCapturePicker(request: capture, store: store)
     _ = picker.body
+
+    let display = DesktopCaptureSource(id: "screen:1:0", name: "Main Display", kind: .display)
+    let window = DesktopCaptureSource(id: "window:4:0", name: "Browser — Meet", kind: .window)
+    #expect(display.label.contains("Main Display"))
+    #expect(window.label.contains("Browser"))
+
+    let states = [
+      DesktopCapturePickerContent(
+        request: capture, sources: [], loading: true, error: nil, onSelect: { _ in },
+        onCancel: {}),
+      DesktopCapturePickerContent(
+        request: capture, sources: [], loading: false, error: "Screen Recording unavailable",
+        onSelect: { _ in }, onCancel: {}),
+      DesktopCapturePickerContent(
+        request: capture, sources: [], loading: false, error: nil, onSelect: { _ in },
+        onCancel: {}),
+      DesktopCapturePickerContent(
+        request: capture, sources: [display, window], loading: false, error: nil,
+        onSelect: { _ in }, onCancel: {}),
+    ]
+    for state in states { _ = state.body }
   }
 
   @Test func rejectsMalformedOrInsecureDesktopCapturePayloads() throws {

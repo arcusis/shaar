@@ -6,7 +6,7 @@ import CoreGraphics
 import ScreenCaptureKit
 import SwiftUI
 
-private struct DesktopCaptureSource: Identifiable {
+struct DesktopCaptureSource: Identifiable {
   enum Kind: Equatable { case display, window }
   let id: String
   let name: String
@@ -22,45 +22,14 @@ struct DesktopCapturePicker: View {
   @State private var error: String?
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 16) {
-      Text(PanelsL10n.string("Choose what to share"))
-        .font(.title2.weight(.semibold))
-      Text(
-        request.requestingOrigin.host() ?? request.pageURL.host()
-          ?? request.pageURL.absoluteString
-      )
-      .font(.callout).foregroundStyle(.secondary)
-      .textSelection(.enabled)
-      if loading {
-        ProgressView(PanelsL10n.string("Looking for screens and windows…"))
-          .frame(maxWidth: .infinity, minHeight: 120)
-      } else if let error {
-        ContentUnavailableView(error, systemImage: "rectangle.dashed.badge.record")
-      } else if sources.isEmpty {
-        ContentUnavailableView(
-          PanelsL10n.string("No screens or windows are available"), systemImage: "display")
-      } else {
-        List(sources) { source in
-          Button {
-            store.resolveDesktopCapture(request.id, sourceID: source.id)
-          } label: {
-            Label(source.label, systemImage: source.kind == .display ? "display" : "macwindow")
-              .frame(maxWidth: .infinity, alignment: .leading)
-              .contentShape(Rectangle())
-          }
-          .buttonStyle(.plain)
-        }
-        .listStyle(.inset)
-        .frame(minHeight: 150, maxHeight: 330)
-      }
-      HStack {
-        Spacer()
-        Button(PanelsL10n.string("Cancel"), role: .cancel) {
-          store.resolveDesktopCapture(request.id, sourceID: nil)
-        }
-        .keyboardShortcut(.cancelAction)
-      }
-    }
+    DesktopCapturePickerContent(
+      request: request,
+      sources: sources,
+      loading: loading,
+      error: error,
+      onSelect: { store.resolveDesktopCapture(request.id, sourceID: $0) },
+      onCancel: { store.resolveDesktopCapture(request.id, sourceID: nil) }
+    )
     .padding(24)
     .frame(width: 480)
     .task { await loadSources() }
@@ -109,8 +78,59 @@ struct DesktopCapturePicker: View {
   }
 }
 
+struct DesktopCapturePickerContent: View {
+  let request: DesktopCaptureRequest
+  let sources: [DesktopCaptureSource]
+  let loading: Bool
+  let error: String?
+  let onSelect: (String) -> Void
+  let onCancel: () -> Void
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 16) {
+      Text(PanelsL10n.string("Choose what to share"))
+        .font(.title2.weight(.semibold))
+      Text(
+        request.requestingOrigin.host() ?? request.pageURL.host()
+          ?? request.pageURL.absoluteString
+      )
+      .font(.callout).foregroundStyle(.secondary)
+      .textSelection(.enabled)
+      if loading {
+        ProgressView(PanelsL10n.string("Looking for screens and windows…"))
+          .frame(maxWidth: .infinity, minHeight: 120)
+      } else if let error {
+        ContentUnavailableView(error, systemImage: "rectangle.dashed.badge.record")
+      } else if sources.isEmpty {
+        ContentUnavailableView(
+          PanelsL10n.string("No screens or windows are available"), systemImage: "display")
+      } else {
+        List(sources) { source in
+          Button {
+            onSelect(source.id)
+          } label: {
+            Label(source.label, systemImage: source.kind == .display ? "display" : "macwindow")
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .contentShape(Rectangle())
+          }
+          .buttonStyle(.plain)
+        }
+        .listStyle(.inset)
+        .frame(minHeight: 150, maxHeight: 330)
+      }
+      HStack {
+        Spacer()
+        Button(PanelsL10n.string("Cancel"), role: .cancel) {
+          onCancel()
+        }
+        .keyboardShortcut(.cancelAction)
+      }
+    }
+  }
+}
+
 extension DesktopCaptureSource {
-  fileprivate var label: String {
+  var label: String {
     switch kind {
     case .display: PanelsL10n.format("Screen: %@", .string(name))
     case .window: PanelsL10n.format("Window: %@", .string(name))

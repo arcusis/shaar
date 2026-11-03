@@ -153,7 +153,7 @@ def run_visuals(checks: Commands) -> None:
 
 def run_localization(checks: Commands) -> None:
     require_hosted_mac()
-    if checks.run("localization-build", ["swift", "build", "--build-tests", "--jobs", "1", "--force-resolved-versions"]):
+    if checks.run("localization-build", ["swift", "build", "--build-tests", "--jobs", "2", "--force-resolved-versions"]):
         return
     if checks.run("localization-captures", [sys.executable, "scripts/test-localization.py"]):
         return

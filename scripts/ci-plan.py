@@ -14,7 +14,11 @@ from pathlib import Path
 
 def documentation_only(paths: list[str]) -> bool:
     return bool(paths) and all(
-        path.startswith(("Notebook/", "Design/")) or path.endswith(".md")
+        path.startswith("Notebook/")
+        or "/" not in path and path.endswith(".md")
+        or len(path.split("/")) == 3
+        and path.startswith("ThirdParty/")
+        and path.endswith("/README.md")
         for path in paths
     )
 

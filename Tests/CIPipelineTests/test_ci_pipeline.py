@@ -72,8 +72,11 @@ class PipelineGateTests(unittest.TestCase):
 
     def test_known_non_native_diffs_and_unknown_changes_select_required_coverage(self):
         for paths in (["Notebook/Note.md"], ["Notebook/probe.py"], ["README.md", "CONTRIBUTING.md"],
-                      ["Design/Mockup.sketch"], ["Sources/Docs/Overview.md"]):
-            self.assertEqual(PLAN.select_stages(paths, "pull_request"), (False, False, True))
+                      ["ThirdParty/Foo/README.md"], ["Sources/Docs/Overview.md"]):
+            if paths == ["Sources/Docs/Overview.md"]:
+                self.assertEqual(PLAN.select_stages(paths, "pull_request"), (True, False, True))
+            else:
+                self.assertEqual(PLAN.select_stages(paths, "pull_request"), (False, False, True))
         for paths in (["website/src/Page.svelte"], ["website/package.json", "Notebook/Note.md"],
                       [".github/assets/overview.png"], [".github/workflows/website-deploy.yml"]):
             self.assertEqual(PLAN.select_stages(paths, "pull_request"), (False, True, True))
@@ -81,6 +84,8 @@ class PipelineGateTests(unittest.TestCase):
         for paths in (None, [], ["unclassified-input"]):
             self.assertTrue(PLAN.select_stages(paths, "pull_request")[0])
         self.assertEqual(PLAN.select_stages(["Sources/App.swift"], "pull_request"), (True, False, True))
+        self.assertEqual(PLAN.select_stages(["Design/shaar_engine.h"], "pull_request"), (True, False, True))
+        self.assertEqual(PLAN.select_stages(["Sources/X.md"], "pull_request"), (True, False, True))
         self.assertEqual(PLAN.select_stages(["Design/Mockup.sketch", "Sources/App.swift"], "pull_request"),
                          (True, False, True))
         self.assertEqual(PLAN.select_stages(["scripts/tool.py"], "pull_request"), (True, False, True))
@@ -190,9 +195,12 @@ class PipelineGateTests(unittest.TestCase):
         self.assertEqual(GATE.gate_errors(self.results(nightly="success"), True, True), [])
 
     def test_known_documentation_paths_skip_native_stages(self):
-        self.assertTrue(PLAN.documentation_only(["README.md", "Notebook/_INDEX_Main.md", "Design/file.fig"]))
+        self.assertTrue(PLAN.documentation_only(["README.md", "Notebook/_INDEX_Main.md",
+                                                 "ThirdParty/Foo/README.md"]))
         for paths in ([], ["scripts/tool.py"], [".github/workflows/ci.yml"],
-                      ["Notebook/Note.md", "Package.resolved"], ["Design/file.fig", "Sources/App.swift"]):
+                      ["Notebook/Note.md", "Package.resolved"], ["Design/shaar_engine.h"],
+                      ["Sources/X.md"], ["Tests/Fixture.md"], ["ThirdParty/README.md"],
+                      ["ThirdParty/Foo/README.txt"]):
             self.assertFalse(PLAN.documentation_only(paths))
 
 

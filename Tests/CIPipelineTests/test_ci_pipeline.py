@@ -509,6 +509,13 @@ class SwiftExtractionTests(unittest.TestCase):
 
 
 class SwiftCompilerPlanTests(unittest.TestCase):
+    def test_traced_modules_share_the_four_cpu_codeql_runner_budget(self):
+        command = ["swiftc", "-num-threads", "2", "-module-name", "ArcusisBrowser"]
+        self.assertEqual(CODEQL_BUILD.compiler_threads(command, 1)[2], "4")
+        self.assertEqual(CODEQL_BUILD.compiler_threads(command, 2)[2], "2")
+        with self.assertRaisesRegex(ValueError, "CPU budget"):
+            CODEQL_BUILD.compiler_threads(command, 5)
+
     def test_analysis_target_matches_shipping_arm64_on_every_runner(self):
         CODEQL_BUILD.validate_compilation([
             "swiftc", "-whole-module-optimization", "-target", "arm64-apple-macosx26.0"])

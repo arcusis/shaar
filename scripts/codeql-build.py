@@ -19,6 +19,7 @@ from swift_build_plan import manifest_commands, native_command_log, parallel_mod
 
 
 PLAN = ROOT / "build/ci/codeql-swift/compile-plan.json"
+SWIFT_COMPILER_CORES = 4
 
 
 def source_hashes(root: Path, scope: str = "full", *, tracked: bool = True) -> dict[str, str]:
@@ -52,6 +53,19 @@ def validate_compilation(arguments: list[str]) -> None:
     target = arguments[arguments.index("-target") + 1]
     if not target.startswith("arm64-apple-macosx"):
         raise ValueError("Swift analysis must target the shipping arm64 architecture")
+
+
+def compiler_threads(arguments: list[str], concurrent_modules: int) -> list[str]:
+    if not 1 <= concurrent_modules <= SWIFT_COMPILER_CORES:
+        raise ValueError("Swift module concurrency exceeds the CodeQL runner CPU budget")
+    result = list(arguments)
+    try:
+        threads_index = result.index("-num-threads") + 1
+        int(result[threads_index])
+    except (ValueError, IndexError) as error:
+        raise ValueError("Swift compiler command is missing its thread budget") from error
+    result[threads_index] = str(SWIFT_COMPILER_CORES // concurrent_modules)
+    return result
 
 
 def compiler_commands(log: str, root: Path, compiler: Path, expected: set[str]) -> list[list[str]]:
@@ -129,13 +143,14 @@ def replay(scope: str = "full") -> int:
     checks = Commands("codeql-swift")
     covered = set()
     for batch in plan["batches"]:
+        execution_batch = [compiler_threads(arguments, len(batch)) for arguments in batch]
         for arguments in batch:
             if arguments[0] != str(compiler):
                 raise ValueError("Compiler plan executable changed")
             validate_compilation(arguments)
             covered |= command_sources(arguments, ROOT)
         with ThreadPoolExecutor(max_workers=len(batch)) as pool:
-            results = list(pool.map(lambda arguments: run_compiler(checks, arguments), batch))
+            results = list(pool.map(lambda arguments: run_compiler(checks, arguments), execution_batch))
         for module, arguments, status, seconds, output in results:
             (checks.directory / f"{module}.log").write_text(output)
             print(f"::group::{module}", flush=True)

@@ -42,6 +42,8 @@ Migration step 0 adds `ThirdParty/ChromiumEngine/source-build.json` and a separa
 
 The runner replacement is a **new output generation**, not an in-place reinterpretation of an old `build/EngineSource/receipt.json`. Existing receipts bind the Ardia source, its script substitutions and patch hash; a new config/schema and owner record must reject those receipts or use a separate ignored output root. In particular, the shared read-only `engine-333-364/build/EngineSource` is never a resume or cleanup target. The proposed stage mapping is:
 
+For the step-0 native proof, the optional `--relink-from-reference` mode uses the succeeded pinned reference's object artifacts only after copying them into the Shaar-owned output. It checks the full GN link input list, compiles the two Shaar objects with GN-generated commands, relinks with the GN-generated framework command and six ThinLTO jobs, and records this strategy in the receipt. The export scan and headless Swift loader still gate success. This is a temporary dual-export build, not the final Shaar-only packaging path.
+
 | Existing runner input or stage | Shaar-owned replacement |
 | --- | --- |
 | `ThirdParty/ArdiaCore/source-build.json` with `source.repository`, `engineTree`, and one overlay patch digest | New immutable config pins Chromium, ungoogled/macOS, depot_tools/Siso/Git LFS, ordered Shaar patch manifest, Shaar layer tree digest, GN args and output identity; no Ardia repository or tree field. |

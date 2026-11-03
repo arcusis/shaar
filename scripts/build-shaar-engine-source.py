@@ -443,7 +443,109 @@ def install_layer(repo: Path, source: Path, config: dict) -> None:
             raise BuildError("Shaar GN patch neither applies nor matches installed source")
 
 
-def run_dual_export(repo: Path, reference: Path, config: dict) -> dict:
+def ninja_command(ninja: Path, out: Path, target: str) -> str:
+    """Read the last GN-generated command for one target without building it."""
+    process = subprocess.Popen([str(ninja), "-C", str(out), "-t", "commands", target],
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               text=True, errors="replace")
+    last = ""
+    count = 0
+    assert process.stdout is not None and process.stderr is not None
+    for line in process.stdout:
+        last = line.strip()
+        count += 1
+    errors = process.stderr.read()
+    if process.wait(timeout=180) or not last or count == 0:
+        raise BuildError(f"cannot read GN command for {target}: {errors[-500:]}")
+    return last
+
+
+def link_inputs_and_variables(out: Path) -> tuple[list[str], dict[str, str]]:
+    target = out / "obj/chrome/chrome_framework_shared_library.ninja"
+    lines = target.read_text().splitlines()
+    prefix = "build obj/chrome/chrome_framework_shared_library/Chromium$ Framework "
+    edges = [line for line in lines if line.startswith(prefix) and ": solink " in line]
+    if len(edges) != 1:
+        raise BuildError("GN framework link edge missing or ambiguous")
+    raw = edges[0].split(": solink ", 1)[1].split(" | ", 1)[0]
+    paths = [part.replace("\0", " ") for part in
+             raw.replace("$ ", "\0").split()]
+    if len(paths) < 10000 or any("$" in part or Path(part).is_absolute() for part in paths):
+        raise BuildError("unexpected GN framework link input list")
+    expected_shaar = {
+        "obj/chrome/browser/shaar/engine/shaar_engine.o",
+        "obj/chrome/browser/shaar/engine/shaar_event_bridge.o",
+    }
+    if not expected_shaar.issubset(paths):
+        raise BuildError("Shaar objects missing from GN framework link inputs")
+    variables = {key.strip(): value.strip() for line in lines[1:]
+                 if " = " in line for key, value in [line.split(" = ", 1)]}
+    for key in ("frameworks", "swiftmodules", "solibs", "libs"):
+        if "$" in variables.get(key, ""):
+            raise BuildError(f"unexpanded GN link variable: {key}")
+    return paths, variables
+
+
+def relink_from_reference_objects(output: Path, source: Path, config: dict,
+                                  env: dict[str, str]) -> dict:
+    """Build only new Shaar objects, then use the pinned completed object graph."""
+    out = source / "out" / config["build"]["configuration"]
+    ninja = source / "third_party/ninja/ninja"
+    if not ninja.is_file() or not (out / "obj/build/modules/system/module.pcm").is_file():
+        raise BuildError("pinned compiler prerequisites missing")
+    objects = (
+        "obj/chrome/browser/shaar/engine/shaar_engine.o",
+        "obj/chrome/browser/shaar/engine/shaar_event_bridge.o",
+    )
+    for index, target in enumerate(objects):
+        command = ninja_command(ninja, out, target)
+        if (not command.startswith("../../third_party/llvm-build/Release+Asserts/bin/clang++ ")
+                or f"-o {target}" not in command or " -c ../../chrome/browser/shaar/engine/" not in command):
+            raise BuildError(f"unexpected GN compile command for {target}")
+        run_logged(["/usr/sbin/taskpolicy", "-b", "/bin/sh", "-c", command], out,
+                   output / f"shaar-compile-{index}.log", env=env, timeout=1800)
+        if not (out / target).is_file():
+            raise BuildError(f"Shaar compile output missing: {target}")
+    inputs, variables = link_inputs_and_variables(out)
+    missing = [name for name in inputs if not (out / name).is_file()]
+    if missing:
+        raise BuildError("pinned framework link inputs missing: " + ", ".join(missing[:8]))
+    for key in ("libs",):
+        for token in variables.get(key, "").split():
+            if token.endswith((".a", ".rlib")) and not (out / token).is_file():
+                raise BuildError(f"GN link library missing: {token}")
+    rsp = out / "obj/chrome/chrome_framework_shared_library/Chromium Framework.rsp"
+    if rsp.exists() or rsp.is_symlink():
+        raise BuildError("unexpected pre-existing framework response file")
+    response = inputs + [variables.get(key, "") for key in
+                         ("frameworks", "swiftmodules", "solibs", "libs")]
+    rsp.write_text(" ".join(part for part in response if part) + "\n")
+    link_target = "obj/chrome/chrome_framework_shared_library/Chromium Framework"
+    command = ninja_command(ninja, out, link_target)
+    if ("../../build/toolchain/apple/linker_driver.py" not in command or
+            f'"@{link_target}.rsp"' not in command or
+            "-Wl,-exported_symbols_list,../../chrome/browser/shaar/shaar_engine.exports"
+            not in command or "-Wl,--thinlto-jobs=all" not in command):
+        raise BuildError("unexpected GN framework link command")
+    command = command.replace("-Wl,--thinlto-jobs=all", "-Wl,--thinlto-jobs=6", 1)
+    try:
+        run_logged(["/usr/sbin/taskpolicy", "-b", "/bin/sh", "-c", command], out,
+                   output / "relink.log", env=env,
+                   timeout=config["build"]["timeoutsSeconds"]["build"])
+    finally:
+        rsp.unlink(missing_ok=True)
+    linked = out / link_target
+    binary = output / config["build"]["frameworkBinary"]
+    if not linked.is_file() or linked.is_symlink() or binary.is_symlink():
+        raise BuildError("GN linked framework binary missing or unsafe")
+    shutil.copy2(linked, binary)
+    return {"strategy": "validated-reference-objects-relink",
+            "gnLinkInputCount": len(inputs), "shaarObjectsCompiled": len(objects),
+            "thinLTOJobs": 6}
+
+
+def run_dual_export(repo: Path, reference: Path, config: dict,
+                    relink_only: bool = False) -> dict:
     """Temporary phase-3 development build; the final target keeps its no-Ardia gate."""
     output = guarded_output(repo)
     source, reference_root, reference_record = validate_reference(
@@ -456,6 +558,7 @@ def run_dual_export(repo: Path, reference: Path, config: dict) -> dict:
     output = prepare_owned_output(repo)
     receipt = output / RECEIPT_FILE
     record = {"schemaVersion": 1, "sourceKind": "shaar", "mode": "dual-export",
+              "buildStrategy": "validated-reference-objects-relink" if relink_only else "full-siso",
               "status": "running", "startedAt": now_utc(), "output": str(output),
               "reference": str(source),
               "referenceReceiptSha256": sha256(reference_root / RECEIPT_FILE),
@@ -489,12 +592,17 @@ def run_dual_export(repo: Path, reference: Path, config: dict) -> dict:
             ["/usr/sbin/taskpolicy", "-b", str(gn), "gen",
              "out/" + config["build"]["configuration"]], copied, output / "gn.log",
             env=env, timeout=config["build"]["timeoutsSeconds"]["gn"]))
-        stage("build", lambda: run_logged(
-            ["/usr/sbin/taskpolicy", "-b",
-             str(output / "depot_tools/autoninja"), "-j", "6", "-k", "0", "-C",
-             "out/" + config["build"]["configuration"], "chrome_framework"],
-            copied, output / "build.log", env=env,
-            timeout=config["build"]["timeoutsSeconds"]["build"]))
+        if relink_only:
+            record["relink"] = stage("build", lambda: relink_from_reference_objects(
+                output, copied, config, env))
+            write_receipt(receipt, record)
+        else:
+            stage("build", lambda: run_logged(
+                ["/usr/sbin/taskpolicy", "-b",
+                 str(output / "depot_tools/autoninja"), "-j", "6", "-k", "0", "-C",
+                 "out/" + config["build"]["configuration"], "chrome_framework"],
+                copied, output / "build.log", env=env,
+                timeout=config["build"]["timeoutsSeconds"]["build"]))
         binary = output / config["build"]["frameworkBinary"]
         verified = stage("exports", lambda: verify_framework(
             repo, binary, receipt, config, "dual-export"))
@@ -550,6 +658,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--run", action="store_true", help="run a temporary dual-export source build")
     parser.add_argument("--reference-source", type=Path, metavar="CHROMIUM_SRC",
                         help="read-only pinned source checkout to copy-on-write snapshot")
+    parser.add_argument("--relink-from-reference", action="store_true",
+                        help="reuse verified pinned objects and relink only the Shaar layer")
     parser.add_argument("--verify-framework", type=Path, metavar="BINARY")
     parser.add_argument("--receipt", type=Path)
     options = parser.parse_args(argv)
@@ -559,9 +669,10 @@ def main(argv: list[str] | None = None) -> int:
         if options.run:
             if not options.reference_source or options.verify_framework or options.receipt:
                 raise BuildError("--run requires only --reference-source")
-            print(json.dumps(run_dual_export(repo, options.reference_source, config), indent=2))
-        elif options.reference_source:
-            raise BuildError("--reference-source requires --run")
+            print(json.dumps(run_dual_export(repo, options.reference_source, config,
+                                             options.relink_from_reference), indent=2))
+        elif options.reference_source or options.relink_from_reference:
+            raise BuildError("--reference-source and --relink-from-reference require --run")
         elif options.verify_framework:
             if not options.receipt:
                 raise BuildError("--verify-framework requires --receipt")

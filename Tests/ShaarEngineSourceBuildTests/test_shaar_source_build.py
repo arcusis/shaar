@@ -49,6 +49,7 @@ class ShaarSourceBuildTests(unittest.TestCase):
     def test_execution_requires_reference_before_any_output_is_created(self):
         with mock.patch.object(BUILD, "prepare_owned_output") as prepare_output:
             self.assertEqual(BUILD.main(["--run"]), 1)
+            self.assertEqual(BUILD.main(["--relink-from-reference"]), 1)
             prepare_output.assert_not_called()
 
     def test_manifest_and_output_guards_reject_tamper_and_symlinks(self):

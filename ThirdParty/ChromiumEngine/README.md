@@ -22,6 +22,13 @@ and succeeds only after the loader reports ABI major 1. The independent
 `--verify-framework` final-target check still rejects all `ac_*` and
 `ArdiaCore*` symbols.
 
+For a completed pinned reference build, add `--relink-from-reference` to reuse
+the copied object graph. The runner checks every GN framework link input, builds
+the two new Shaar objects with GN's compile commands, relinks with GN's framework
+command and six ThinLTO jobs, then updates the versioned framework binary in its
+owned output. The receipt identifies this incremental strategy. It remains a
+dual-export development build, with the final no-Ardia framework still pending.
+
 The current Ardia source runner and production engine pin remain in place for
 the app's existing CI lane. `build/ShaarEngineSource` is a distinct ignored,
 owner-bound output root. The dual-export runner reads the separate reference

@@ -29,6 +29,14 @@ import Testing
   func placeTabs(_ ids: [String], pinnedIDs: Set<String>, windowID: String) throws {
     calls.append("place:\(ids.joined(separator: ","))")
   }
+  func resolveWindowRequest(requestID: UInt64, accepted: Bool, windowID: String?) throws {
+    calls.append("resolve-window:\(requestID):\(accepted):\(windowID ?? "none")")
+  }
+  func resolveTabActivation(
+    requestID: UInt64, accepted: Bool, windowID: String, tabID: String
+  ) throws {
+    calls.append("resolve-tab:\(requestID):\(accepted):\(windowID):\(tabID)")
+  }
 }
 
 @MainActor private func makeShaarAdapter(
@@ -155,5 +163,35 @@ struct WindowTabsAdapterTests {
     #expect(adapter.snapshot(windowID: "window-a")?.orderedTabIDs == [])
     try adapter.setActiveProfile(id: "profile-b", windowID: "window-a")
     #expect(adapter.snapshot(windowID: "window-a")?.activeTabID == "tab-b")
+  }
+
+  @Test @MainActor func requestRepliesRequireLiveScopedTargets() throws {
+    let fake = FakeWindowTabsEngine()
+    let adapter = makeShaarAdapter(fake)
+    let scope = ShaarTabScope.profile("profile-a")
+    try adapter.openWindow(id: "window-a", scope: scope)
+    try adapter.openTab(
+      id: "tab-a", windowID: "window-a", scope: scope,
+      url: URL(string: "https://a.example")!, foreground: true)
+
+    try adapter.resolveWindowRequest(requestID: 10, accepted: true, windowID: "window-a")
+    try adapter.resolveWindowRequest(requestID: 11, accepted: false, windowID: nil)
+    try adapter.resolveTabActivation(
+      requestID: 12, accepted: true, windowID: "window-a", tabID: "tab-a")
+    #expect(
+      fake.calls.suffix(3) == [
+        "resolve-window:10:true:window-a", "resolve-window:11:false:none",
+        "resolve-tab:12:true:window-a:tab-a",
+      ])
+    #expect(throws: ShaarWindowTabsError.invalidRequest) {
+      try adapter.resolveWindowRequest(requestID: 0, accepted: false, windowID: nil)
+    }
+    #expect(throws: ShaarWindowTabsError.invalidRequest) {
+      try adapter.resolveWindowRequest(requestID: 13, accepted: false, windowID: "window-a")
+    }
+    #expect(throws: ShaarWindowTabsError.scopeMismatch) {
+      try adapter.resolveTabActivation(
+        requestID: 14, accepted: false, windowID: "other-window", tabID: "tab-a")
+    }
   }
 }

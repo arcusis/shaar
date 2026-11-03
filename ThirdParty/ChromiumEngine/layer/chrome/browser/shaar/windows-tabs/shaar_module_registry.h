@@ -21,6 +21,20 @@ class WebContents;
 
 namespace shaar {
 
+using WindowRequestResolver = shaar_error_code (*)(
+    void* context,
+    shaar_request_id request_id,
+    const shaar_scope* scope,
+    shaar_window* window,
+    bool accepted);
+using TabActivationResolver = shaar_error_code (*)(
+    void* context,
+    shaar_request_id request_id,
+    const shaar_scope* scope,
+    shaar_window* window,
+    shaar_tab* tab,
+    bool accepted);
+
 struct ModuleCall {
   shaar_engine* engine;
   shaar_scope scope;
@@ -40,6 +54,11 @@ struct ModuleCall {
   Browser** active_browser;
   std::string* active_profile_id;
   std::unordered_map<std::string, Browser*>* browsers_by_profile;
+  // Lifecycle supplies these callbacks from its pending-request registry.
+  // A resolver validates request ownership and consumes a request exactly once.
+  void* request_registry_context;
+  WindowRequestResolver resolve_window_request;
+  TabActivationResolver resolve_tab_activation;
 };
 
 using ModuleHandler = shaar_error_code (*)(const ModuleCall*, shaar_error*);

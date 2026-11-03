@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <charconv>
 #include <initializer_list>
 #include <optional>
 #include <string_view>
@@ -37,6 +38,10 @@ shaar_error_code Fail(shaar_error_code code, shaar_error* error) {
 
 shaar_error_code Succeed(shaar_error* error) {
   return Fail(SHAAR_OK, error);
+}
+
+shaar_error_code Complete(shaar_error_code code, shaar_error* error) {
+  return code == SHAAR_OK ? Succeed(error) : Fail(code, error);
 }
 
 bool HasOneScope(const shaar_scope& scope) {
@@ -76,6 +81,20 @@ bool ReadStringList(const base::Value::Dict& dict,
     output->push_back(value.GetString());
   }
   return true;
+}
+
+std::optional<shaar_request_id> ReadRequestID(
+    const base::Value::Dict& dict) {
+  const std::string* text = dict.FindString("requestID");
+  if (!text || text->empty() || text->size() > 20)
+    return std::nullopt;
+  shaar_request_id request_id = 0;
+  const auto [end, error] =
+      std::from_chars(text->data(), text->data() + text->size(), request_id);
+  if (error != std::errc() || end != text->data() + text->size() ||
+      request_id == 0)
+    return std::nullopt;
+  return request_id;
 }
 
 shaar_error_code ValidateCall(const shaar::ModuleCall* call,
@@ -217,8 +236,25 @@ shaar_error_code HandleWindowPlaceTabs(const ModuleCall* call,
 
 shaar_error_code HandleWindowRequestResolve(const ModuleCall* call,
                                             shaar_error* error) {
-  return ValidateCall(call, SHAAR_OP_WINDOW_REQUEST_RESOLVE, true, false,
-                      error);
+  const shaar_error_code validation = ValidateCall(
+      call, SHAAR_OP_WINDOW_REQUEST_RESOLVE, false, false, error);
+  if (validation != SHAAR_UNSUPPORTED_CAPABILITY)
+    return validation;
+  auto args = ParseArguments(call);
+  if (!args ||
+      !HasOnlyKeys(args->GetDict(), {"schemaVersion", "requestID", "accepted"}))
+    return Fail(SHAAR_INVALID_ARGUMENT, error);
+  const auto request_id = ReadRequestID(args->GetDict());
+  const std::optional<bool> accepted = args->GetDict().FindBool("accepted");
+  if (!request_id || !accepted || (*accepted && !call->window) ||
+      (!*accepted && call->window))
+    return Fail(SHAAR_INVALID_ARGUMENT, error);
+  if (!call->resolve_window_request || !call->request_registry_context)
+    return Fail(SHAAR_NOT_READY, error);
+  return Complete(call->resolve_window_request(
+                      call->request_registry_context, *request_id, &call->scope,
+                      call->window, *accepted),
+                  error);
 }
 
 shaar_error_code HandleTabMove(const ModuleCall* call, shaar_error* error) {
@@ -251,8 +287,24 @@ shaar_error_code HandleTabMove(const ModuleCall* call, shaar_error* error) {
 
 shaar_error_code HandleTabActivationResolve(const ModuleCall* call,
                                             shaar_error* error) {
-  return ValidateCall(call, SHAAR_OP_TAB_ACTIVATION_RESOLVE, true, true,
-                      error);
+  const shaar_error_code validation = ValidateCall(
+      call, SHAAR_OP_TAB_ACTIVATION_RESOLVE, true, true, error);
+  if (validation != SHAAR_UNSUPPORTED_CAPABILITY)
+    return validation;
+  auto args = ParseArguments(call);
+  if (!args ||
+      !HasOnlyKeys(args->GetDict(), {"schemaVersion", "requestID", "accepted"}))
+    return Fail(SHAAR_INVALID_ARGUMENT, error);
+  const auto request_id = ReadRequestID(args->GetDict());
+  const std::optional<bool> accepted = args->GetDict().FindBool("accepted");
+  if (!request_id || !accepted)
+    return Fail(SHAAR_INVALID_ARGUMENT, error);
+  if (!call->resolve_tab_activation || !call->request_registry_context)
+    return Fail(SHAAR_NOT_READY, error);
+  return Complete(call->resolve_tab_activation(
+                      call->request_registry_context, *request_id, &call->scope,
+                      call->window, call->tab, *accepted),
+                  error);
 }
 
 shaar_error_code HandleWindowSetBounds(const ModuleCall* call,

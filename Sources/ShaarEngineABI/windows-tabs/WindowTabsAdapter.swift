@@ -17,6 +17,10 @@ import Foundation
   func closeTab(id: String) throws
   func activateTab(id: String, windowID: String) throws
   func placeTabs(_ ids: [String], pinnedIDs: Set<String>, windowID: String) throws
+  func resolveWindowRequest(requestID: UInt64, accepted: Bool, windowID: String?) throws
+  func resolveTabActivation(
+    requestID: UInt64, accepted: Bool, windowID: String, tabID: String
+  ) throws
 }
 
 public enum ShaarTabScope: Equatable, Sendable {
@@ -216,6 +220,32 @@ public struct ShaarWindowTabsSnapshot: Equatable, Sendable {
     windows[windowID] = state
   }
 
+  public func resolveWindowRequest(
+    requestID: UInt64, accepted: Bool, windowID: String?
+  ) throws {
+    guard requestID > 0 else { throw ShaarWindowTabsError.invalidRequest }
+    if accepted {
+      guard let windowID, windows[windowID] != nil else {
+        throw ShaarWindowTabsError.unknownWindow
+      }
+    } else if windowID != nil {
+      throw ShaarWindowTabsError.invalidRequest
+    }
+    try engine.resolveWindowRequest(
+      requestID: requestID, accepted: accepted, windowID: windowID)
+  }
+
+  public func resolveTabActivation(
+    requestID: UInt64, accepted: Bool, windowID: String, tabID: String
+  ) throws {
+    guard requestID > 0 else { throw ShaarWindowTabsError.invalidRequest }
+    guard let owner = tabOwners[tabID], owner.windowID == windowID,
+      windows[windowID]?.boundProfileIDs.contains(owner.profileID) == true
+    else { throw ShaarWindowTabsError.scopeMismatch }
+    try engine.resolveTabActivation(
+      requestID: requestID, accepted: accepted, windowID: windowID, tabID: tabID)
+  }
+
   public func snapshot(windowID: String) -> ShaarWindowTabsSnapshot? {
     guard let state = windows[windowID] else { return nil }
     let profileID = state.activeProfileID
@@ -228,5 +258,6 @@ public struct ShaarWindowTabsSnapshot: Equatable, Sendable {
 }
 
 public enum ShaarWindowTabsError: Error, Equatable {
-  case duplicateWindow, unknownWindow, duplicateTab, unknownTab, scopeMismatch, invalidPlacement
+  case duplicateWindow, unknownWindow, duplicateTab, unknownTab, scopeMismatch, invalidPlacement,
+    invalidRequest
 }

@@ -18,6 +18,53 @@ struct CapturedHandlers {
   std::unordered_map<int, shaar::ModuleHandler> by_operation;
 };
 
+struct CapturedWindowRequest {
+  shaar_request_id request_id = 0;
+  shaar_window* window = nullptr;
+  bool accepted = false;
+  bool called = false;
+};
+
+struct CapturedTabActivation {
+  shaar_request_id request_id = 0;
+  shaar_window* window = nullptr;
+  shaar_tab* tab = nullptr;
+  bool accepted = false;
+  bool called = false;
+};
+
+shaar_error_code CaptureWindowRequest(void* context,
+                                      shaar_request_id request_id,
+                                      const shaar_scope* scope,
+                                      shaar_window* window,
+                                      bool accepted) {
+  auto* captured = static_cast<CapturedWindowRequest*>(context);
+  if (!scope || !scope->profile || scope->private_session)
+    return SHAAR_WRONG_PROFILE;
+  captured->request_id = request_id;
+  captured->window = window;
+  captured->accepted = accepted;
+  captured->called = true;
+  return SHAAR_OK;
+}
+
+shaar_error_code CaptureTabActivation(void* context,
+                                      shaar_request_id request_id,
+                                      const shaar_scope* scope,
+                                      shaar_window* window,
+                                      shaar_tab* tab,
+                                      bool accepted) {
+  auto* captured = static_cast<CapturedTabActivation*>(context);
+  if (!scope || !scope->private_session || scope->profile)
+    return SHAAR_WRONG_SESSION;
+  captured->request_id = request_id;
+  captured->window = window;
+  captured->tab = tab;
+  captured->accepted = accepted;
+  captured->called = true;
+  return SHAAR_OK;
+}
+
 void CaptureHandler(void* context,
                     shaar_operation operation,
                     shaar::ModuleHandler handler) {
@@ -165,6 +212,74 @@ TEST(ShaarWindowsTabsHandlersTest, ActiveProfileMustAlreadyBeBound) {
   call.scope_profile_id = "other-profile";
   call.args_json = {kWrongScope, sizeof(kWrongScope) - 1};
   EXPECT_EQ(HandleWindowSetActiveProfile(&call, &error), SHAAR_WRONG_PROFILE);
+}
+
+TEST(ShaarWindowsTabsHandlersTest, WindowRequestResolutionUsesLifecycleRegistry) {
+  shaar::ModuleCall call = {};
+  CapturedWindowRequest captured;
+  shaar_window* const window = reinterpret_cast<shaar_window*>(1);
+  call.engine = reinterpret_cast<shaar_engine*>(1);
+  call.scope.size = sizeof(shaar_scope);
+  call.scope.profile = reinterpret_cast<shaar_profile*>(1);
+  call.operation = SHAAR_OP_WINDOW_REQUEST_RESOLVE;
+  call.window = window;
+  static constexpr char kArgs[] =
+      R"({"schemaVersion":1,"requestID":"4294967298","accepted":true})";
+  call.args_json = {kArgs, sizeof(kArgs) - 1};
+  call.request_registry_context = &captured;
+  call.resolve_window_request = CaptureWindowRequest;
+  shaar_error error = {};
+  error.size = sizeof(error);
+
+  EXPECT_EQ(HandleWindowRequestResolve(&call, &error), SHAAR_OK);
+  EXPECT_EQ(error.code, SHAAR_OK);
+  EXPECT_TRUE(captured.called);
+  EXPECT_EQ(captured.request_id, 4294967298ULL);
+  EXPECT_EQ(captured.window, window);
+  EXPECT_TRUE(captured.accepted);
+}
+
+TEST(ShaarWindowsTabsHandlersTest, WindowRequestResolutionRejectsMissingRegistry) {
+  shaar::ModuleCall call = {};
+  call.engine = reinterpret_cast<shaar_engine*>(1);
+  call.scope.size = sizeof(shaar_scope);
+  call.scope.profile = reinterpret_cast<shaar_profile*>(1);
+  call.operation = SHAAR_OP_WINDOW_REQUEST_RESOLVE;
+  static constexpr char kArgs[] =
+      R"({"schemaVersion":1,"requestID":"7","accepted":false})";
+  call.args_json = {kArgs, sizeof(kArgs) - 1};
+  shaar_error error = {};
+  error.size = sizeof(error);
+
+  EXPECT_EQ(HandleWindowRequestResolve(&call, &error), SHAAR_NOT_READY);
+  EXPECT_EQ(error.code, SHAAR_NOT_READY);
+}
+
+TEST(ShaarWindowsTabsHandlersTest, TabActivationResolutionUsesExactScope) {
+  shaar::ModuleCall call = {};
+  CapturedTabActivation captured;
+  shaar_window* const window = reinterpret_cast<shaar_window*>(1);
+  shaar_tab* const tab = reinterpret_cast<shaar_tab*>(2);
+  call.engine = reinterpret_cast<shaar_engine*>(1);
+  call.scope.size = sizeof(shaar_scope);
+  call.scope.private_session = reinterpret_cast<shaar_private_session*>(1);
+  call.window = window;
+  call.tab = tab;
+  call.operation = SHAAR_OP_TAB_ACTIVATION_RESOLVE;
+  static constexpr char kArgs[] =
+      R"({"schemaVersion":1,"requestID":"19","accepted":false})";
+  call.args_json = {kArgs, sizeof(kArgs) - 1};
+  call.request_registry_context = &captured;
+  call.resolve_tab_activation = CaptureTabActivation;
+  shaar_error error = {};
+  error.size = sizeof(error);
+
+  EXPECT_EQ(HandleTabActivationResolve(&call, &error), SHAAR_OK);
+  EXPECT_TRUE(captured.called);
+  EXPECT_EQ(captured.request_id, 19u);
+  EXPECT_EQ(captured.window, window);
+  EXPECT_EQ(captured.tab, tab);
+  EXPECT_FALSE(captured.accepted);
 }
 
 }  // namespace

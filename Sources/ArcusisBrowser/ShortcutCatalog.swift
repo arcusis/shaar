@@ -178,8 +178,12 @@ enum ShortcutPageRouting {
     let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
       .intersection([.command, .option, .control, .shift])
     let key = (event.charactersIgnoringModifiers ?? "").lowercased()
+    let functionHeld = event.modifierFlags.contains(.function)
     for section in menu.items.compactMap(\.submenu) {
       for item in section.items {
+        // AppKit's Edit > Emoji & Symbols is fn-E. Without this check the fn requirement is
+        // dropped below and a plain E keystroke opens the emoji picker.
+        if item.keyEquivalentModifierMask.contains(.function) && !functionHeld { continue }
         let standardEditItem =
           !(item.representedObject is String)
           && ShortcutCatalog.isEditMenu(

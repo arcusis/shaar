@@ -71,6 +71,34 @@ private final class ShortcutFocusableView: NSView {
   #expect(ShortcutPageRouting.route(event, menu: menu, responder: NSView()))
 }
 
+@Test @MainActor func plainKeystrokeNeverTriggersFunctionKeyMenuItem() {
+  _ = NSApplication.shared
+  let target = ShortcutTestTarget()
+  let menu = NSMenu()
+  let group = NSMenuItem()
+  let section = NSMenu(title: "Edit")
+  let emoji = NSMenuItem(
+    title: "Emoji & Symbols", action: #selector(ShortcutTestTarget.invoke(_:)), keyEquivalent: "e")
+  emoji.keyEquivalentModifierMask = .function
+  emoji.target = target
+  section.addItem(emoji)
+  group.submenu = section
+  menu.addItem(group)
+  let field = NSTextField()
+  let plain = NSEvent.keyEvent(
+    with: .keyDown, location: .zero, modifierFlags: [],
+    timestamp: 0, windowNumber: 0, context: nil, characters: "e", charactersIgnoringModifiers: "e",
+    isARepeat: false, keyCode: 14)!
+  #expect(!ShortcutPageRouting.route(plain, menu: menu, responder: field))
+  #expect(target.invoked.isEmpty)
+  let withFunction = NSEvent.keyEvent(
+    with: .keyDown, location: .zero, modifierFlags: .function,
+    timestamp: 0, windowNumber: 0, context: nil, characters: "e", charactersIgnoringModifiers: "e",
+    isARepeat: false, keyCode: 14)!
+  #expect(ShortcutPageRouting.route(withFunction, menu: menu, responder: field))
+  #expect(target.invoked == ["Emoji & Symbols"])
+}
+
 @Test @MainActor func everyAssignedMenuShortcutWorksWithPageFocus() {
   _ = NSApplication.shared
   let target = ShortcutTestTarget()

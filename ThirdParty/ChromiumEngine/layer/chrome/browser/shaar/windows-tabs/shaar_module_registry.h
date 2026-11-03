@@ -43,6 +43,7 @@ struct ModuleCall {
 };
 
 using ModuleHandler = shaar_error_code (*)(const ModuleCall*, shaar_error*);
+}  // namespace shaar
 
 // Temporary declaration until the lifecycle module's registry lands. It keeps
 // the dispatcher independent of any particular engine implementation.
@@ -51,11 +52,9 @@ struct ShaarModuleRegistry {
   void* context;
   void (*register_handler)(void* context,
                            shaar_operation operation,
-                           ModuleHandler handler);
+                           shaar::ModuleHandler handler);
 };
 
-}  // namespace shaar
-
-void shaar_windows_tabs_register(shaar::ShaarModuleRegistry* registry);
+void shaar_windows_tabs_register(ShaarModuleRegistry* registry);
 
 #endif  // CHROME_BROWSER_SHAAR_WINDOWS_TABS_SHAAR_MODULE_REGISTRY_H_

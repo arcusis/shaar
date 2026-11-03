@@ -102,6 +102,12 @@ struct WindowTabsAdapterTests {
         id: "tab-a", windowID: "private-window", scope: .profile("profile-a"),
         url: URL(string: "about:blank")!, foreground: true)
     }
+    #expect(throws: ShaarWindowTabsError.scopeMismatch) {
+      try adapter.openTab(
+        id: "tab-b", windowID: "private-window",
+        scope: .privateSession(profileID: "profile-a", sessionID: "session-b"),
+        url: URL(string: "about:blank")!, foreground: true)
+    }
     try adapter.openTab(
       id: "tab-a", windowID: "private-window", scope: privateScope,
       url: URL(string: "about:blank")!, foreground: true)

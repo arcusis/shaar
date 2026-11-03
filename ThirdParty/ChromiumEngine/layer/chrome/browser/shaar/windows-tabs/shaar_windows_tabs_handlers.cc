@@ -265,8 +265,8 @@ shaar_error_code HandleWindowSetBounds(const ModuleCall* call,
 
 }  // namespace shaar::windows_tabs
 
-void shaar_windows_tabs_register(shaar::ShaarModuleRegistry* registry) {
-  if (!registry || registry->size < sizeof(shaar::ShaarModuleRegistry) ||
+void shaar_windows_tabs_register(ShaarModuleRegistry* registry) {
+  if (!registry || registry->size < sizeof(ShaarModuleRegistry) ||
       !registry->register_handler)
     return;
   registry->register_handler(registry->context, SHAAR_OP_WINDOW_BIND_PROFILE,

@@ -50,8 +50,8 @@ TEST(ShaarWindowsTabsHandlersTest, PlaceHandlerRejectsWrongOperationBeforeMutati
 
 TEST(ShaarWindowsTabsHandlersTest, RegistersEveryWindowsTabsOperation) {
   CapturedHandlers captured;
-  shaar::ShaarModuleRegistry registry = {
-      sizeof(shaar::ShaarModuleRegistry), &captured, CaptureHandler};
+  ShaarModuleRegistry registry = {sizeof(ShaarModuleRegistry), &captured,
+                                  CaptureHandler};
   shaar_windows_tabs_register(&registry);
   EXPECT_EQ(captured.by_operation.size(), 8u);
   EXPECT_NE(captured.by_operation.find(SHAAR_OP_WINDOW_PLACE_TABS),

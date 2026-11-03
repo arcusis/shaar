@@ -166,7 +166,11 @@ final class EngineProbe {
       let phase = try value("--probe-phase")
       let temporary = FileManager.default.temporaryDirectory.standardizedFileURL
         .resolvingSymlinksInPath()
-      guard root.path.hasPrefix(temporary.path + "/"),
+      let runnerTemporary = ProcessInfo.processInfo.environment["RUNNER_TEMP"].map {
+        URL(fileURLWithPath: $0).standardizedFileURL.resolvingSymlinksInPath()
+      }
+      let allowedTemporaryRoots = [temporary] + (runnerTemporary.map { [$0] } ?? [])
+      guard allowedTemporaryRoots.contains(where: { root.path.hasPrefix($0.path + "/") }),
         output.deletingLastPathComponent().path == root.path,
         try String(contentsOf: root.appending(path: ".arcusis-probe"), encoding: .utf8)
           == "arcusis-engine-probe-v1\n",

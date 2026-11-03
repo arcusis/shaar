@@ -131,6 +131,8 @@ shaar_error_code HandleWindowSetActiveProfile(const ModuleCall* call,
   const std::string* profile_id = args->GetDict().FindString("profileID");
   if (!profile_id || profile_id->empty())
     return Fail(SHAAR_INVALID_ARGUMENT, error);
+  if (!call->scope_profile_id || *profile_id != call->scope_profile_id)
+    return Fail(SHAAR_WRONG_PROFILE, error);
   const auto it = call->browsers_by_profile->find(*profile_id);
   if (it == call->browsers_by_profile->end())
     return Fail(SHAAR_WRONG_PROFILE, error);

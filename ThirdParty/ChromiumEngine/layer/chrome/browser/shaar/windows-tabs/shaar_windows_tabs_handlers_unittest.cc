@@ -146,6 +146,7 @@ TEST(ShaarWindowsTabsHandlersTest, ActiveProfileMustAlreadyBeBound) {
   call.operation = SHAAR_OP_WINDOW_SET_ACTIVE_PROFILE;
   static constexpr char kArgs[] = R"({"schemaVersion":1,"profileID":"p"})";
   call.args_json = {kArgs, sizeof(kArgs) - 1};
+  call.scope_profile_id = "p";
   call.active_browser = &active_browser;
   call.active_profile_id = &active_profile_id;
   call.browsers_by_profile = &browsers;
@@ -158,6 +159,11 @@ TEST(ShaarWindowsTabsHandlersTest, ActiveProfileMustAlreadyBeBound) {
   static constexpr char kUnknown[] =
       R"({"schemaVersion":1,"profileID":"missing"})";
   call.args_json = {kUnknown, sizeof(kUnknown) - 1};
+  EXPECT_EQ(HandleWindowSetActiveProfile(&call, &error), SHAAR_WRONG_PROFILE);
+  static constexpr char kWrongScope[] =
+      R"({"schemaVersion":1,"profileID":"p"})";
+  call.scope_profile_id = "other-profile";
+  call.args_json = {kWrongScope, sizeof(kWrongScope) - 1};
   EXPECT_EQ(HandleWindowSetActiveProfile(&call, &error), SHAAR_WRONG_PROFILE);
 }
 

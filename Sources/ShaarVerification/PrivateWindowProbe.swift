@@ -144,8 +144,9 @@ final class PrivateWindowProbe {
     let runnerTemporary = ProcessInfo.processInfo.environment["RUNNER_TEMP"].map {
       URL(fileURLWithPath: $0).resolvingSymlinksInPath().path
     }
-    let allowedTemporaryRoots = [FileManager.default.temporaryDirectory.resolvingSymlinksInPath().path]
-      + (runnerTemporary.map { [$0] } ?? [])
+    let systemTemporaryRoot = FileManager.default.temporaryDirectory
+      .resolvingSymlinksInPath().path
+    let allowedTemporaryRoots = [systemTemporaryRoot] + (runnerTemporary.map { [$0] } ?? [])
     guard
       allowedTemporaryRoots.contains(where: { root.path.hasPrefix($0 + "/") }),
       (try? String(contentsOf: root.appending(path: ".arcusis-probe"), encoding: .utf8))

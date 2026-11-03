@@ -72,13 +72,16 @@ def load_config(repo: pathlib.Path) -> dict:
         value = config[section][field]
         if not PIN_RE.fullmatch(value):
             raise BuildError(f"invalid pinned commit {section}.{field}")
-    if config["patch"]["sha256"] == "REPLACE_AFTER_PATCH_REVIEW":
-        raise BuildError("source-build.json has no reviewed patch digest")
     if not re.fullmatch(r"[0-9a-f]{64}", config["gitLfs"]["archiveSha256"]):
         raise BuildError("invalid pinned git-lfs archive digest")
-    patch = repo / config["patch"]["file"]
-    if sha256(patch) != config["patch"]["sha256"]:
-        raise BuildError("profile download patch digest mismatch")
+    if "patch" in config:
+        patch = repo / config["patch"]["file"]
+        if sha256(patch) != config["patch"]["sha256"]:
+            raise BuildError("profile download patch digest mismatch")
+    for item in config.get("patches", []):
+        if (not re.fullmatch(r"[0-9a-f]{64}", item["sha256"]) or
+                sha256(repo / item["file"]) != item["sha256"]):
+            raise BuildError(f"engine patch digest mismatch: {item['file']}")
     if "latest" in json.dumps(config).lower():
         raise BuildError("floating latest input rejected")
     return config
@@ -309,7 +312,31 @@ def source_precondition_errors(contents: dict[str, str]) -> list[str]:
     return errors
 
 
+def metal_toolchain_identity(toolchain: dict) -> dict:
+    """Ignore Apple's per-boot Cryptex mount suffix, retaining the mounted version."""
+    identity = json.loads(json.dumps(toolchain))
+    component = identity.get("component", {})
+    mount = component.get("toolchainSearchPath", "")
+    match = re.fullmatch(
+        r"/private/var/run/com\.apple\.security\.cryptexd/mnt/"
+        r"com\.apple\.MobileAsset\.MetalToolchain-v(\d+\.\d+\.\d+\.\d+)\.[A-Za-z0-9]{6}",
+        mount,
+    )
+    if match is None:
+        return identity
+    stable_mount = f"<MetalToolchain-v{match.group(1)}>"
+    component["toolchainSearchPath"] = stable_mount
+    for field in ("metalPath", "metalRealPath", "metalVersion", "codesignDisplay"):
+        value = identity.get(field)
+        if isinstance(value, str):
+            identity[field] = value.replace(mount, stable_mount).replace(
+                mount.removeprefix("/private"), stable_mount)
+    return identity
+
+
 def metal_toolchain_precondition_errors(expected: dict, actual: dict) -> list[str]:
+    expected = metal_toolchain_identity(expected)
+    actual = metal_toolchain_identity(actual)
     errors = []
     for field in ("component", "metalPath", "metalRealPath", "metalVersion",
                   "metalSha256", "codesignVerifyReturnCode", "codesignDisplay",
@@ -416,10 +443,17 @@ def terminate_process_group(process: subprocess.Popen, grace: float = 10.0) -> N
 
 
 class Runner:
-    def __init__(self, repo: pathlib.Path, output: pathlib.Path, config: dict):
+    def __init__(self, repo: pathlib.Path, output: pathlib.Path, config: dict,
+                 update_patches: bool = False, jobs: int | None = None,
+                 build_timeout_seconds: int | None = None):
         self.repo = repo.resolve(strict=True)
         self.output = output
         self.config = config
+        self.update_patches = update_patches
+        self.build_jobs = self.checked_build_jobs(config, jobs)
+        if build_timeout_seconds is not None and build_timeout_seconds <= 0:
+            raise BuildError("build timeout must be positive")
+        self.build_timeout_seconds = build_timeout_seconds
         self.receipt_path = output / RECEIPT_FILE
         self.receipt = self._load_receipt()
         recovery = recover_stale_lock(output, owner_record(self.repo), self.receipt)
@@ -436,8 +470,20 @@ class Runner:
             data = json.loads(self.receipt_path.read_text())
             if data.get("owner") != owner_record(self.repo):
                 raise BuildError("build receipt owner does not match checkout")
+            if self.update_patches:
+                self.accept_patch_update(data)
             current_config_digest = sha256(self.repo / "ThirdParty/ArdiaCore/source-build.json")
             if data.get("configDigest") != current_config_digest:
+                if self.accept_failed_patch_append(data, current_config_digest):
+                    current_runner = sha256(pathlib.Path(__file__))
+                    if data.get("runnerSha256") != current_runner:
+                        data.setdefault("runnerUpdates", []).append({
+                            "previousSha256": data.get("runnerSha256"),
+                            "currentSha256": current_runner,
+                            "at": utc_now(),
+                        })
+                        data["runnerSha256"] = current_runner
+                    return data
                 old_pins = json.loads(json.dumps(data.get("pins", {})))
                 new_pins = json.loads(json.dumps(self.config))
                 old_pins.pop("gitLfs", None)
@@ -518,6 +564,110 @@ class Runner:
             "status": "started",
             "startedAt": utc_now(),
         }
+
+    @staticmethod
+    def checked_build_jobs(config: dict, jobs: int | None) -> int:
+        """The pinned job count is a ceiling; a resume may build with fewer jobs to bound host load."""
+        ceiling = config["build"]["buildJobs"]
+        if jobs is None:
+            return ceiling
+        if not 1 <= jobs <= ceiling:
+            raise BuildError(f"build jobs must be between 1 and the pinned {ceiling}")
+        return jobs
+
+    @staticmethod
+    def build_command_without_jobs(command: list[str] | None) -> list[str] | None:
+        if not command or "-j" not in command:
+            return command
+        index = command.index("-j") + 1
+        return command[:index] + ["*"] + command[index + 1:]
+
+    def accept_patch_update(self, data: dict) -> None:
+        """Reopen a finished build whose config differs only by appended engine patches."""
+        if data.get("status") != "succeeded":
+            raise BuildError("--update-patches requires a successful build receipt")
+        old_pins = json.loads(json.dumps(data.get("pins", {})))
+        new_pins = json.loads(json.dumps(self.config))
+        old_patches = old_pins.pop("patches", [])
+        new_patches = new_pins.pop("patches", [])
+        old_base_patch = old_pins.pop("patch", None)
+        new_base_patch = new_pins.pop("patch", None)
+        retire_base_patch = old_base_patch is not None and new_base_patch is None
+        if (old_pins != new_pins or
+                (old_base_patch != new_base_patch and not retire_base_patch) or
+                len(new_patches) <= len(old_patches) or
+                new_patches[:len(old_patches)] != old_patches):
+            raise BuildError("--update-patches accepts only appended engine patches")
+        if retire_base_patch:
+            old_patch = self.repo / old_base_patch["file"]
+            if sha256(old_patch) != old_base_patch["sha256"]:
+                raise BuildError("retired profile patch digest mismatch")
+            chromium = self.output / "chromium_git/chromium/src"
+            assert_real_owned_path(chromium, self.output)
+            command = ["/usr/bin/git", "-C", str(chromium), "apply"]
+            timeout = self.config["build"]["timeoutsSeconds"]["patches"]
+            reverse = subprocess.run(command + ["--reverse", "--check", str(old_patch)],
+                                     cwd=self.output, capture_output=True, text=True, timeout=timeout)
+            if reverse.returncode == 0:
+                applied = subprocess.run(command + ["--reverse", str(old_patch)], cwd=self.output,
+                                         capture_output=True, text=True, timeout=timeout)
+                if applied.returncode:
+                    raise BuildError("could not retire profile patch: " + applied.stderr)
+            else:
+                forward = subprocess.run(command + ["--check", str(old_patch)], cwd=self.output,
+                                         capture_output=True, text=True, timeout=timeout)
+                if forward.returncode:
+                    raise BuildError("profile patch retirement state is ambiguous")
+            data.setdefault("inputs", {})["profilePatchApplied"] = False
+            data["inputs"]["patchSha256"] = None
+        data.setdefault("patchUpdates", []).append({
+            "previousConfigDigest": data.get("configDigest"),
+            "previousRunnerSha256": data.get("runnerSha256"),
+            "addedPatches": new_patches[len(old_patches):],
+            "retiredProfilePatch": old_base_patch if retire_base_patch else None,
+            "previousFramework": data.get("framework"),
+            "previousFinishedAt": data.get("finishedAt"),
+            "at": utc_now(),
+        })
+        data["stages"]["05-build"]["status"] = "superseded"
+        data["configDigest"] = sha256(self.repo / "ThirdParty/ArdiaCore/source-build.json")
+        data["runnerSha256"] = sha256(pathlib.Path(__file__))
+        data["pins"] = self.config
+        data["framework"] = None
+        data["status"] = "started"
+        data.pop("finishedAt", None)
+
+    def accept_failed_patch_append(self, data: dict, current_config_digest: str) -> bool:
+        """Allow a failed incremental build to resume with one or more appended fixes."""
+        if data.get("status") != "failed":
+            return False
+        old_pins = json.loads(json.dumps(data.get("pins", {})))
+        new_pins = json.loads(json.dumps(self.config))
+        old_patches = old_pins.pop("patches", [])
+        new_patches = new_pins.pop("patches", [])
+        if (old_pins != new_pins or len(new_patches) <= len(old_patches)
+                or new_patches[:len(old_patches)] != old_patches):
+            return False
+        recorded = data.get("inputs", {}).get("enginePatches", [])
+        if [(item["file"], item["sha256"]) for item in recorded] != [
+                (item["file"], item["sha256"]) for item in old_patches]:
+            raise BuildError("failed build patch receipt differs from the configured prefix")
+        for item in new_patches[len(old_patches):]:
+            if sha256(self.repo / item["file"]) != item["sha256"]:
+                raise BuildError("appended engine patch digest mismatch")
+        updates = data.setdefault("patchUpdates", [])
+        previous_framework = updates[-1].get("previousFramework") if updates else None
+        updates.append({
+            "previousConfigDigest": data["configDigest"],
+            "previousRunnerSha256": data.get("runnerSha256"),
+            "addedPatches": new_patches[len(old_patches):],
+            "previousFramework": previous_framework,
+            "at": utc_now(),
+            "failedBuildAppend": True,
+        })
+        data["configDigest"] = current_config_digest
+        data["pins"] = self.config
+        return True
 
     @staticmethod
     def host_inputs(repo: pathlib.Path) -> dict:
@@ -696,7 +846,7 @@ class Runner:
         if log.exists() or log.is_symlink():
             raise BuildError(f"stage log already exists or is symlinked: {log.name}")
         started = utc_now()
-        record = {"attempt": attempt, "status": "running", "args": args,
+        record = {"attempt": attempt, "status": "running", "args": args, "jobs": self.build_jobs,
                   "cwd": str(cwd.relative_to(self.output)),
                   "timeoutSeconds": timeout_seconds, "startedAt": started,
                   "log": str(log.relative_to(self.output))}
@@ -707,7 +857,7 @@ class Runner:
         base_env = self.child_environment()
         base_env.update({"CB": str(self.output), "ENGINE_BUILD_ROOT": str(self.output),
             "AC_REPO": str(self.output / "source/ardia-build"),
-                         "JOBS": str(self.config["build"]["buildJobs"]),
+                         "JOBS": str(self.build_jobs),
                          })
         if env:
             base_env.update(env)
@@ -879,10 +1029,12 @@ class Runner:
                 build_script = scripts / "05-build.sh"
                 build_text = build_script.read_text()
                 needs_priority_adaptation = (
-                    "exec autoninja " in build_text or "exec lowprio autoninja " in build_text)
+                    "exec taskpolicy -b nice -n 19 autoninja " in build_text or
+                    "exec lowprio autoninja " in build_text)
+                needs_link_adaptation = " concurrent_links=1" in (scripts / "gn_defines.sh").read_text()
                 if (not self.has_unadapted_home_paths(scripts) and not needs_cache_adaptation
                         and not needs_resume_adaptation and not needs_pinned_gn
-                        and not needs_priority_adaptation):
+                        and not needs_priority_adaptation and not needs_link_adaptation):
                     return scripts
                 if self.has_unadapted_home_paths(scripts):
                     self.checked_replace(
@@ -927,6 +1079,8 @@ class Runner:
                     self.adapt_pinned_gn_script(gn_script)
                 if needs_priority_adaptation:
                     self.adapt_build_priority_script(build_script)
+                if needs_link_adaptation:
+                    self.checked_replace(scripts / "gn_defines.sh", " concurrent_links=1", "", 1)
                 self.validate_staged_paths(scripts)
                 self.record_staged_scripts(scripts)
                 substitutions = self.receipt["inputs"].setdefault("scriptSubstitutions", [])
@@ -938,6 +1092,7 @@ class Runner:
                     "Ardia series paths -> owned CHROMIUM_SRC and AC_SERIES_BASE",
                     "series base capture -> resumable in owned AC_SERIES_BASE",
                     "GN invocation -> Chromium pinned buildtools/mac/gn",
+                    "autoninja restored to normal priority for dedicated build host",
                 ):
                     if item not in substitutions:
                         substitutions.append(item)
@@ -949,7 +1104,15 @@ class Runner:
                     "cloudsdk": str(self.output / "cloudsdk"),
                     "luciContext": str(self.output / ".no-auth-luci-context.json"),
                 }
-                self.receipt["inputs"]["effectiveCommands"] = self.effective_commands()
+                old_build_command = self.receipt["inputs"].get("effectiveCommands", {}).get("build")
+                current_commands = self.effective_commands()
+                if old_build_command != current_commands["build"] and needs_priority_adaptation:
+                    self.receipt.setdefault("buildCommandUpdates", []).append({
+                        "previous": old_build_command,
+                        "current": current_commands["build"],
+                        "at": utc_now(),
+                    })
+                self.receipt["inputs"]["effectiveCommands"] = current_commands
                 self.save()
                 return scripts
             raise BuildError("existing staged scripts lack a matching receipt")
@@ -963,16 +1126,15 @@ class Runner:
                 raise BuildError(f"upstream script symlink rejected: {path.relative_to(self.output)}")
         self.checked_replace(scripts / "env.sh", "export CB=~/chromium-build",
                              'export CB="$ENGINE_BUILD_ROOT"', 1)
-        replacements = [
-            ("source ~/chromium-build/scripts/env.sh", 'source "$CB/scripts/env.sh"', 1),
-            ("source ~/chromium-build/scripts/gn_defines.sh",
-             'source "$CB/scripts/gn_defines.sh"', 1),
-        ]
+        env_source = ("source ~/chromium-build/scripts/env.sh", 'source "$CB/scripts/env.sh"', 1)
+        gn_defines_source = ("source ~/chromium-build/scripts/gn_defines.sh",
+                             'source "$CB/scripts/gn_defines.sh"', 1)
         for name in ("01-sync.sh", "02-gn-args.sh", "04-domain-substitution.sh",
                      "05-build.sh", "apply-chromium-patches.sh", "game-resource.sh"):
             path = scripts / name
             if not path.exists():
                 continue
+            replacements = [env_source, gn_defines_source] if name == "02-gn-args.sh" else [env_source]
             for old, new, count in replacements:
                 self.checked_replace(path, old, new, count)
         sync = scripts / "01-sync.sh"
@@ -1018,6 +1180,7 @@ class Runner:
         self.adapt_build_priority_script(build)
         gn_script = scripts / "02-gn-args.sh"
         self.adapt_pinned_gn_script(gn_script)
+        self.adapt_symbol_level(scripts / "gn_defines.sh", self.config["build"]["symbolLevel"])
         self.validate_staged_paths(scripts)
         self.receipt["inputs"]["upstreamBuildScriptSha256"] = upstream_digests
         self.receipt["inputs"]["scriptSubstitutions"] = [
@@ -1028,7 +1191,8 @@ class Runner:
             "series base capture -> resumable in owned AC_SERIES_BASE",
             "GN invocation -> Chromium pinned buildtools/mac/gn",
             "network wrappers retain runner process-group timeout",
-            "autoninja runs at background QoS with 6 jobs",
+            "autoninja runs at normal priority with pinned job ceiling",
+            f"symbol_level 0 -> {self.config['build']['symbolLevel']} (stripped framework plus dSYM)",
         ]
         self.receipt["inputs"]["cacheRoots"] = {
             "gclient": str(self.output / "gclient-cache"),
@@ -1056,7 +1220,7 @@ class Runner:
                          "gclient", "runhooks"],
             "gn": ["chromium_git/chromium/src/buildtools/mac/gn", "gen",
                    "out/Release_GN_arm64"],
-            "build": ["taskpolicy", "-b", "nice", "-n", "19", "autoninja", "-j", "6",
+            "build": ["autoninja", "-j", str(self.build_jobs),
                       "-k", "0", "-C", "out/Release_GN_arm64", "chrome_framework"],
         }
 
@@ -1106,19 +1270,26 @@ class Runner:
             raise BuildError("pinned Chromium GN invocation adaptation anchor mismatch")
 
     @staticmethod
+    def adapt_symbol_level(path: pathlib.Path, level: int) -> None:
+        if level not in (0, 1, 2):
+            raise BuildError(f"unsupported symbol level: {level}")
+        Runner.checked_replace(path, "  symbol_level=0 blink_symbol_level=0",
+                               f"  symbol_level={level} blink_symbol_level=0", 1)
+
+    @staticmethod
     def adapt_build_priority_script(path: pathlib.Path) -> None:
         old = "exec autoninja "
         incorrect = "exec lowprio autoninja "
-        adapted = "exec taskpolicy -b nice -n 19 autoninja "
+        background = "exec taskpolicy -b nice -n 19 autoninja "
         text = path.read_text()
         if incorrect in text:
-            Runner.checked_replace(path, incorrect, adapted, 1)
+            Runner.checked_replace(path, incorrect, old, 1)
             text = path.read_text()
-        if old in text:
-            Runner.checked_replace(path, old, adapted, 1)
+        if background in text:
+            Runner.checked_replace(path, background, old, 1)
             text = path.read_text()
-        if adapted not in text:
-            raise BuildError("background QoS build invocation adaptation anchor mismatch")
+        if old not in text:
+            raise BuildError("normal-priority build invocation adaptation anchor mismatch")
 
     def verify_engine_tree(self, aria: pathlib.Path) -> None:
         tree = self.git("ardia-engine-tree", aria, "rev-parse", "HEAD:engine")
@@ -1187,7 +1358,8 @@ class Runner:
         self.receipt["sources"]["ungoogled"]["tag"] = self.config["ungoogled"]["tag"]
         self.receipt["inputs"] = {
             **self.receipt.get("inputs", {}),
-            "patchSha256": sha256(self.repo / self.config["patch"]["file"]),
+            "patchSha256": sha256(self.repo / self.config["patch"]["file"])
+            if "patch" in self.config else None,
             "chromiumVersion": self.config["chromium"]["version"],
             "sisoVersion": self.config["chromium"]["sisoVersion"],
             "depotToolsCommit": self.config["depotTools"]["commit"],
@@ -1200,6 +1372,8 @@ class Runner:
 
     def source_stage(self, scripts: pathlib.Path, name: str, timeout: str) -> None:
         stage_timeout = self.config["build"]["timeoutsSeconds"][timeout]
+        if timeout == "build" and getattr(self, "build_timeout_seconds", None) is not None:
+            stage_timeout = self.build_timeout_seconds
         entry = scripts / name
         assert_real_owned_path(scripts, self.output)
         assert_real_owned_path(entry, self.output)
@@ -1408,6 +1582,42 @@ class Runner:
     def patch_overlay(self) -> None:
         chromium = self.output / "chromium_git/chromium/src"
         verify_source_preconditions(self.output / "source/ardia", chromium)
+        if "patch" in self.config:
+            self.apply_profile_patch(chromium)
+        self.apply_engine_patches(chromium)
+
+    def apply_engine_patches(self, chromium: pathlib.Path) -> None:
+        """Apply the configured engine fixes in order; a patch already in the tree is kept."""
+        timeout = self.config["build"]["timeoutsSeconds"]["patches"]
+        records = []
+        patch_paths = [set(re.findall(r"^diff --git a/(\S+) b/", (self.repo / item["file"]).read_text(), re.M))
+                       for item in self.config.get("patches", [])]
+        previous_framework = self.receipt.get("patchUpdates", [])[-1].get("previousFramework", {}) if self.receipt.get("patchUpdates") else {}
+        previous_digests = previous_framework.get("enginePatchSha256", [])
+        for index, item in enumerate(self.config.get("patches", []), start=1):
+            patch = self.repo / item["file"]
+            stage = f"engine-patch-{index:02d}"
+            reverse = subprocess.run(
+                ["/usr/bin/git", "-C", str(chromium), "apply", "--reverse", "--check", str(patch)],
+                cwd=self.output, env=self.child_environment(), capture_output=True, text=True,
+                timeout=timeout)
+            state = "already-applied"
+            if reverse.returncode:
+                overlaps_later = bool(patch_paths[index - 1].intersection(
+                    set().union(*patch_paths[index:]))) if index < len(patch_paths) else False
+                if item["sha256"] in previous_digests and overlaps_later:
+                    state = "already-applied-overlapped"
+                else:
+                    self.run(f"{stage}-check", ["/usr/bin/git", "-C", str(chromium), "apply", "--check",
+                                                str(patch)], self.output, timeout)
+                    self.run(f"{stage}-apply", ["/usr/bin/git", "-C", str(chromium), "apply", str(patch)],
+                             self.output, timeout)
+                    state = "applied"
+            records.append({"file": item["file"], "sha256": sha256(patch), "state": state})
+            self.receipt["inputs"]["enginePatches"] = records
+            self.save()
+
+    def apply_profile_patch(self, chromium: pathlib.Path) -> None:
         patch = self.repo / self.config["patch"]["file"]
         reverse_args = ["/usr/bin/git", "-C", str(chromium), "apply", "--reverse", "--check", str(patch)]
         reverse = subprocess.run(reverse_args, cwd=self.output, env=self.child_environment(),
@@ -1613,17 +1823,22 @@ class Runner:
         """Bind incremental Ninja resume to the inputs recorded before reboot."""
         build = self.receipt.get("stages", {}).get("05-build", {})
         attempts = build.get("attempts", [])
-        if not attempts or attempts[-1].get("status") not in ("running", "failed"):
+        if not attempts:
+            return
+        if attempts[-1].get("status") not in ("running", "failed") and build.get("status") != "superseded":
             return
         chromium = self.verify_chromium_checkout()
         aria = self.output / "source/ardia"
         self.verify_engine_tree(aria)
         expected = self.receipt.get("inputs", {})
-        if not expected.get("profilePatchApplied"):
-            raise BuildError("interrupted build lacks applied profile patch receipt")
-        patch = self.repo / self.config["patch"]["file"]
-        if sha256(patch) != expected.get("patchSha256"):
-            raise BuildError("profile patch changed after interrupted build")
+        if "patch" in self.config:
+            if not expected.get("profilePatchApplied"):
+                raise BuildError("interrupted build lacks applied profile patch receipt")
+            patch = self.repo / self.config["patch"]["file"]
+            if sha256(patch) != expected.get("patchSha256"):
+                raise BuildError("profile patch changed after interrupted build")
+        elif expected.get("profilePatchApplied") or expected.get("patchSha256") is not None:
+            raise BuildError("retired profile patch remains in interrupted build receipt")
         args_file = chromium / "out/Release_GN_arm64/args.gn"
         if (not args_file.is_file() or args_file.is_symlink() or
                 sha256(args_file) != expected.get("gnArgsSha256") or
@@ -1660,11 +1875,29 @@ class Runner:
             assert_real_owned_path(path, self.output)
             if path.is_symlink() or not path.is_file() or sha256(path) != digest:
                 raise BuildError(f"staged upstream build input changed after interruption: {name}")
-        command = ["/usr/bin/git", "-C", str(chromium), "apply", "--reverse", "--check", str(patch)]
-        self.run("resume-profile-patch-check", command, self.output,
-                 self.config["build"]["timeoutsSeconds"]["patches"])
+        if "patch" in self.config:
+            command = ["/usr/bin/git", "-C", str(chromium), "apply", "--reverse", "--check", str(patch)]
+            self.run("resume-profile-patch-check", command, self.output,
+                     self.config["build"]["timeoutsSeconds"]["patches"])
+        configured = {item["file"]: item["sha256"] for item in self.config.get("patches", [])}
+        applied_patches = expected.get("enginePatches", [])
+        patch_paths = [set(re.findall(r"^diff --git a/(\S+) b/", (self.repo / item["file"]).read_text(), re.M))
+                       for item in applied_patches]
+        for index, item in enumerate(applied_patches, start=1):
+            engine_patch = self.repo / item["file"]
+            if configured.get(item["file"]) != item["sha256"] or sha256(engine_patch) != item["sha256"]:
+                raise BuildError(f"engine patch changed after the recorded build: {item['file']}")
+            check = subprocess.run(
+                ["/usr/bin/git", "-C", str(chromium), "apply", "--reverse", "--check",
+                 str(engine_patch)], cwd=self.output, capture_output=True, text=True,
+                timeout=self.config["build"]["timeoutsSeconds"]["patches"])
+            overlaps_later = bool(patch_paths[index - 1].intersection(
+                set().union(*patch_paths[index:]))) if index < len(patch_paths) else False
+            if check.returncode and not overlaps_later:
+                raise BuildError(f"recorded engine patch no longer applies in reverse: {item['file']}: {check.stderr}")
         recorded_build = expected.get("effectiveCommands", {}).get("build")
-        if recorded_build != self.effective_commands()["build"]:
+        if (self.build_command_without_jobs(recorded_build) !=
+                self.build_command_without_jobs(self.effective_commands()["build"])):
             raise BuildError("effective Chromium build command changed after interruption")
 
     def bootstrap_depot_tools_python(self) -> None:
@@ -1815,13 +2048,19 @@ class Runner:
                                           bootstrap_name: str) -> list[str]:
         return [str(python), str(script), "--bootstrap-name", bootstrap_name]
 
+    @staticmethod
+    def built_framework_binary(out: pathlib.Path, version: str) -> pathlib.Path:
+        versions = out / "Chromium Framework.framework/Versions"
+        current = versions / "Current"
+        binary = versions / version / "Chromium Framework"
+        if (not current.is_symlink() or os.readlink(current) != version or
+                binary.is_symlink() or not binary.is_file()):
+            raise BuildError(f"built Chromium Framework binary missing for {version}")
+        return binary
+
     def collect_framework(self) -> None:
         out = self.output / "chromium_git/chromium/src/out/Release_GN_arm64"
-        candidates = list(out.glob("**/Chromium Framework.framework/Versions/A/Chromium Framework"))
-        candidates = [p for p in candidates if p.is_file() and not p.is_symlink()]
-        if len(candidates) != 1:
-            raise BuildError(f"expected one built Chromium Framework binary, found {len(candidates)}")
-        binary = candidates[0]
+        binary = self.built_framework_binary(out, self.config["chromium"]["version"])
         file_hashes = {}
         framework = binary.parents[2]
         for path in sorted(p for p in framework.rglob("*") if p.is_file() and not p.is_symlink()):
@@ -1835,7 +2074,7 @@ class Runner:
         symbols = subprocess.run(["/usr/bin/nm", "-gU", str(binary)], capture_output=True,
                                  text=True, timeout=60, check=True).stdout.splitlines()
         exported = sorted({line.split()[-1].lstrip("_") for line in symbols if line.split()})
-        required = ["ac_downloads_directory_get", "ac_downloads_directory_set"]
+        required = ["ac_downloads_directory_get", "ac_downloads_directory_set"] if "patch" in self.config else []
         missing = [symbol for symbol in required if symbol not in exported]
         if missing:
             raise BuildError(f"built framework lacks expected exports: {', '.join(missing)}")
@@ -1849,6 +2088,7 @@ class Runner:
             "exports": exported,
             "requiredExports": required,
             "sourcePatchSha256": self.receipt["inputs"]["patchSha256"],
+            "enginePatchSha256": [item["sha256"] for item in self.receipt["inputs"].get("enginePatches", [])],
         }
         self.save()
 
@@ -1923,6 +2163,12 @@ def utc_now() -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true", help="run pinned source preparation and build")
+    parser.add_argument("--update-patches", action="store_true",
+                        help="with --run, rebuild a finished output after appending engine patches")
+    parser.add_argument("--jobs", type=int,
+                        help="with --run, build with fewer than the pinned build jobs")
+    parser.add_argument("--build-timeout-seconds", type=int,
+                        help="with --run, override only the build stage timeout without changing pins")
     args = parser.parse_args(argv)
     repo = pathlib.Path(__file__).resolve().parents[1]
     try:
@@ -1932,7 +2178,8 @@ def main(argv: list[str] | None = None) -> int:
                               "execution": "opt-in; pass --run"}, indent=2))
             return 0
         output, _ = prepare_owned_output(repo)
-        runner = Runner(repo, output, config)
+        runner = Runner(repo, output, config, update_patches=args.update_patches, jobs=args.jobs,
+                        build_timeout_seconds=args.build_timeout_seconds)
         try:
             runner.execute()
         except Exception as exc:

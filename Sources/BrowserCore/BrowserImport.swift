@@ -149,23 +149,49 @@ public enum BrowserImport {
   private static func htmlBookmarks(_ html: String) -> [BrowserImportItem] {
     guard
       let expression = try? NSRegularExpression(
-        pattern: #"(?is)<A\b[^>]*HREF\s*=\s*["']([^"']+)["'][^>]*>(.*?)</A>"#)
+        pattern:
+          #"(?is)<H3\b[^>]*>(.*?)</H3>|<A\b[^>]*\bHREF\s*=\s*["']([^"']+)["'][^>]*>(.*?)</A>|</?DL\b[^>]*>"#
+      )
     else { return [] }
     let range = NSRange(html.startIndex..., in: html)
-    return expression.matches(in: html, range: range).compactMap { match in
-      guard let urlRange = Range(match.range(at: 1), in: html),
-        let titleRange = Range(match.range(at: 2), in: html)
-      else { return nil }
-      let address = String(html[urlRange])
-      guard valid(address) else { return nil }
-      let title = String(html[titleRange]).replacingOccurrences(
-        of: "<[^>]+>", with: "", options: .regularExpression
-      )
+    var result: [BrowserImportItem] = []
+    var folderStack: [String] = []
+    var pendingFolder: String?
+
+    for match in expression.matches(in: html, range: range) {
+      if let headingRange = Range(match.range(at: 1), in: html) {
+        pendingFolder = htmlText(String(html[headingRange]))
+        continue
+      }
+      if let addressRange = Range(match.range(at: 2), in: html),
+        let titleRange = Range(match.range(at: 3), in: html)
+      {
+        let address = htmlText(String(html[addressRange]))
+        guard valid(address) else { continue }
+        let title = htmlText(String(html[titleRange]))
+        let folder = folderStack.isEmpty ? nil : folderStack.joined(separator: " / ")
+        result.append(
+          BrowserImportItem(
+            id: UUID(), kind: .bookmark, title: title, address: address, folder: folder))
+        continue
+      }
+
+      guard let tokenRange = Range(match.range, in: html) else { continue }
+      let token = html[tokenRange].lowercased()
+      if token.hasPrefix("</dl") {
+        if !folderStack.isEmpty { folderStack.removeLast() }
+      } else if token.hasPrefix("<dl"), let folder = pendingFolder {
+        folderStack.append(folder)
+        pendingFolder = nil
+      }
+    }
+    return result
+  }
+
+  private static func htmlText(_ value: String) -> String {
+    value.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
       .replacingOccurrences(of: "&amp;", with: "&")
       .replacingOccurrences(of: "&quot;", with: "\"")
-      return BrowserImportItem(
-        id: UUID(), kind: .bookmark, title: title, address: address, folder: nil)
-    }
   }
 
   private static func walk(

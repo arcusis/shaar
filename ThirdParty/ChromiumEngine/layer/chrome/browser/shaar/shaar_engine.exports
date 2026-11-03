@@ -1,0 +1,15 @@
+_shaar_abi_major
+_shaar_abi_minor
+_shaar_engine_create
+_shaar_engine_run
+_shaar_engine_request_quit
+_shaar_engine_release
+_shaar_submit
+_shaar_cancel_request
+_shaar_profile_open
+_shaar_profile_create
+_shaar_profile_close
+_shaar_profile_delete
+_shaar_profile_get_state
+_shaar_profile_set_state
+_shaar_profile_get_path

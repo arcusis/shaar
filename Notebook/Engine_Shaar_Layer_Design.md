@@ -8,146 +8,49 @@ Place the new implementation under `chrome/browser/shaar/` in the Chromium check
 
 The Swift package keeps `ChromiumBridge` as its adapter module. It loads the framework, checks the ABI, owns opaque handles, converts the single event stream to existing Swift callbacks/models, and hands a borrowed `NSView *` to existing AppKit windows. The engine owns Chromium `Profile`, `Browser`, `WebContents`, and embedded native host objects. The adapter owns Shaar IDs, SwiftUI/AppKit shell state, permissions/consent presentation, and durable workspace metadata. The engine must not infer a profile from a tab, download or bookmark ID when an operation supplies a profile/session scope.
 
-## Proposed `shaar_engine.h` (ABI v1)
+## Consolidated `shaar_engine.h` draft
 
-This is an interface sketch to review before implementation. All strings/byte slices supplied by callers are UTF-8, length-delimited and borrowed for the duration of a call; the engine copies input needed later. `shaar_result` and event payload slices are borrowed until the callback returns; synchronous error text is borrowed until the next ABI call and must be copied immediately. Swift copies anything it keeps. Handles are opaque and invalid after explicit close/release or engine shutdown. All entry points and callbacks are serialized on the Chromium UI thread; asynchronous callbacks are delivered later, never inline. No C++ exceptions cross the ABI.
+The single reviewable C header is [Design/shaar_engine.h](../Design/shaar_engine.h). Migration step 0 mirrors it into the Shaar-owned layer at `ThirdParty/ChromiumEngine/layer/chrome/browser/shaar/public/shaar_engine.h`; the source runner checks the two copies match. This step has not built a Chromium framework. It assigns explicit numeric IDs by module range and combines the lifecycle, profile, window/tab, navigation, service, extension, find, DevTools and media proposals under one ABI. The operation payloads remain versioned JSON with the validation and ownership rules in the module specs. [[Engine_ABI_Conventions]] defines the cross-cutting contract.
 
-```c
-#ifndef SHAAR_ENGINE_H_
-#define SHAAR_ENGINE_H_
-#include <stddef.h>
-#include <stdint.h>
-#ifdef __cplusplus
-extern "C" {
-#endif
-#define SHAAR_ENGINE_ABI_MAJOR 1u
-#define SHAAR_ENGINE_ABI_MINOR 0u
-#define SHAAR_EXPORT __attribute__((visibility("default")))
+All caller-supplied strings and JSON are length-delimited UTF-8 and borrowed only for the call; the engine copies input needed later. Result/event slices are borrowed until the callback returns; synchronous error text must be copied before the next ABI call. Swift copies anything it keeps. No C++ exceptions or Chromium objects cross the ABI. The one macOS UI exception is a borrowed `NSView *`, returned opaquely as `void *` from host-view accessors.
 
-typedef struct shaar_engine shaar_engine;
-typedef struct shaar_profile shaar_profile;
-typedef struct shaar_private_session shaar_private_session;
-typedef struct shaar_window shaar_window;
-typedef struct shaar_tab shaar_tab;
-typedef struct { const char *data; size_t size; } shaar_bytes;
-typedef uint64_t shaar_request_id;
-
-typedef enum {
-  SHAAR_OK = 0, SHAAR_INVALID_ARGUMENT, SHAAR_UNSUPPORTED_ABI,
-  SHAAR_NOT_READY, SHAAR_NOT_FOUND, SHAAR_WRONG_PROFILE,
-  SHAAR_WRONG_SESSION, SHAAR_PRIVATE_DISALLOWED, SHAAR_POLICY_BLOCKED,
-  SHAAR_PERMISSION_DENIED, SHAAR_CONFLICT, SHAAR_CANCELLED,
-  SHAAR_IO_ERROR, SHAAR_CHROMIUM_ERROR, SHAAR_SHUTTING_DOWN
-} shaar_error_code;
-typedef struct {
-  uint32_t size;                 /* sizeof(shaar_error) supplied by caller */
-  shaar_error_code code;
-  int32_t platform_code;         /* errno/Chromium code when relevant; else 0 */
-  shaar_bytes message;           /* diagnostic, not UI copy; borrowed */
-} shaar_error;
-typedef struct {
-  uint32_t size;                 /* sizeof(shaar_result) */
-  shaar_request_id request_id;
-  shaar_error error;
-  shaar_bytes payload_json;      /* versioned operation result, UTF-8 */
-} shaar_result;
-typedef void (*shaar_reply_fn)(void *context, const shaar_result *result);
-
-typedef enum {
-  SHAAR_EVENT_ENGINE, SHAAR_EVENT_PROFILE, SHAAR_EVENT_PRIVATE_SESSION,
-  SHAAR_EVENT_WINDOW, SHAAR_EVENT_TAB, SHAAR_EVENT_NAVIGATION,
-  SHAAR_EVENT_FIND, SHAAR_EVENT_PERMISSION, SHAAR_EVENT_DOWNLOAD,
-  SHAAR_EVENT_BOOKMARK, SHAAR_EVENT_HISTORY, SHAAR_EVENT_SITE_DATA,
-  SHAAR_EVENT_EXTENSION, SHAAR_EVENT_DEVTOOLS, SHAAR_EVENT_MEDIA
-} shaar_event_kind;
-typedef struct {
-  uint32_t size;                 /* sizeof(shaar_event) */
-  uint64_t sequence;             /* monotonic within this engine instance */
-  shaar_event_kind kind;
-  shaar_bytes profile_id;        /* Shaar UUID; never a filesystem path */
-  shaar_bytes session_id;        /* empty for regular; UUID for private */
-  shaar_bytes window_id;         /* empty if event is profile-wide */
-  shaar_bytes tab_id;            /* empty if event is not tab-scoped */
-  shaar_bytes payload_json;      /* kind + schemaVersion in payload */
-} shaar_event;
-typedef void (*shaar_event_fn)(void *context, const shaar_event *event);
-
-typedef struct {
-  uint32_t size;                 /* sizeof(shaar_config) */
-  uint32_t requested_major;
-  uint32_t requested_minor;
-  shaar_bytes data_root;         /* absolute, validated; no implicit default */
-  shaar_bytes locale;
-  shaar_event_fn on_event;       /* exactly one stream for this engine */
-  void *event_context;
-} shaar_config;
-SHAAR_EXPORT uint32_t shaar_abi_major(void);
-SHAAR_EXPORT uint32_t shaar_abi_minor(void);
-SHAAR_EXPORT shaar_error_code shaar_engine_create(
-    const shaar_config *, shaar_engine **out, shaar_error *error);
-SHAAR_EXPORT shaar_error_code shaar_engine_run(shaar_engine *, shaar_error *error);
-SHAAR_EXPORT shaar_error_code shaar_engine_request_quit(shaar_engine *, shaar_error *error);
-SHAAR_EXPORT void shaar_engine_release(shaar_engine *);
-
-SHAAR_EXPORT shaar_error_code shaar_profile_open(
-    shaar_engine *, shaar_bytes profile_id, shaar_bytes directory,
-    shaar_profile **out, shaar_error *error);
-SHAAR_EXPORT shaar_error_code shaar_profile_close(shaar_profile *, shaar_error *error);
-SHAAR_EXPORT shaar_error_code shaar_private_session_open(
-    shaar_profile *, shaar_bytes session_id, shaar_private_session **out,
-    shaar_error *error);
-SHAAR_EXPORT shaar_error_code shaar_private_session_close(
-    shaar_private_session *, shaar_error *error);
-
-/* Exactly one scope is set: regular profile or its private session. */
-typedef struct {
-  uint32_t size;
-  shaar_profile *profile;
-  shaar_private_session *private_session;
-} shaar_scope;
-SHAAR_EXPORT shaar_error_code shaar_window_open(
-    shaar_scope, shaar_bytes window_id, shaar_window **out, shaar_error *error);
-SHAAR_EXPORT shaar_error_code shaar_window_close(shaar_window *, shaar_error *error);
-SHAAR_EXPORT void *shaar_window_host_view(shaar_window *); /* borrowed NSView* on macOS */
-SHAAR_EXPORT shaar_error_code shaar_tab_open(
-    shaar_window *, shaar_bytes tab_id, shaar_bytes url,
-    shaar_tab **out, shaar_error *error);
-SHAAR_EXPORT shaar_error_code shaar_tab_close(shaar_tab *, shaar_error *error);
-
-typedef enum {
-  SHAAR_OP_TAB_NAVIGATE, SHAAR_OP_TAB_GO, SHAAR_OP_TAB_RELOAD,
-  SHAAR_OP_TAB_FIND, SHAAR_OP_TAB_STOP_FIND, SHAAR_OP_TAB_EVALUATE,
-  SHAAR_OP_WINDOW_ACTIVATE_TAB, SHAAR_OP_WINDOW_PLACE_TABS,
-  SHAAR_OP_DOWNLOAD_LIST, SHAAR_OP_DOWNLOAD_CONTROL, SHAAR_OP_DOWNLOAD_DIRECTORY,
-  SHAAR_OP_BOOKMARK_TREE, SHAAR_OP_BOOKMARK_APPLY,
-  SHAAR_OP_HISTORY_QUERY, SHAAR_OP_HISTORY_INSERT, SHAAR_OP_HISTORY_DELETE,
-  SHAAR_OP_SITE_SETTINGS_GET, SHAAR_OP_SITE_SETTINGS_SET,
-  SHAAR_OP_SITE_SETTINGS_RESET, SHAAR_OP_SITE_DATA_CLEAR,
-  SHAAR_OP_BROWSING_DATA_CLEAR, SHAAR_OP_EXTENSION_LIST,
-  SHAAR_OP_EXTENSION_MANAGE, SHAAR_OP_EXTENSION_ACTION,
-  SHAAR_OP_DEVTOOLS_CALL, SHAAR_OP_MEDIA_CONTROL
-} shaar_operation;
-SHAAR_EXPORT shaar_error_code shaar_submit(
-    shaar_engine *, shaar_scope, shaar_window *, shaar_tab *,
-    shaar_operation, shaar_bytes args_json, shaar_request_id,
-    shaar_reply_fn, void *reply_context, shaar_error *immediate_error);
-SHAAR_EXPORT shaar_error_code shaar_cancel_request(
-    shaar_engine *, shaar_request_id, shaar_error *error);
-#ifdef __cplusplus
-}
-#endif
-#endif
-```
-
-`shaar_submit` is a versioned dispatch point, not a license to use unvalidated string methods: operation IDs are compile-time enums, and each operation has a documented JSON schema, allowed scopes/handles and typed result. Reject unknown fields where they might weaken ownership or permissions. A call checks that the supplied window/tab belongs to the supplied scope; no fallback to the default or most-recent profile. `SHAAR_OP_HISTORY_INSERT` is reserved for #299, `SHAAR_OP_DOWNLOAD_DIRECTORY` for exact profile get/set, and site settings/data for #289. Each operation either reports `SHAAR_OK` in its async result or a typed error; no success-shaped empty response. The adapter maps typed errors to localized Swift errors.
+`shaar_submit` is a versioned dispatch point, not a license to use unvalidated string methods: operation IDs are compile-time enums, and each operation has a documented JSON schema, allowed scopes/handles and typed result. Every request and successful result JSON object carries `schemaVersion`; short JSON examples in module notes omit this common field for readability. Reject unknown fields where they might weaken ownership or permissions. A call checks that the supplied window/tab belongs to the supplied scope; no fallback to the default or most-recent profile. `SHAAR_OP_HISTORY_INSERT` is reserved for #299, `SHAAR_OP_DOWNLOAD_DIRECTORY` for exact profile get/set, and site settings/data for #289. Each operation either reports `SHAAR_OK` in its async result or a typed error; no success-shaped empty response. The adapter maps typed errors to localized Swift errors.
 
 The event stream is registered once at engine creation. Every **profile-scoped** event has a regular profile ID and, for OTR, a separate private session ID; only engine-wide events may have an empty profile ID. Private events are never labeled solely with the parent profile. Events are ordered by sequence and dispatched after state mutation, with a final close event before handle invalidation. The adapter never treats an event without an expected scope/ID as a regular-profile event. Requests carry caller-generated IDs for cancellation and stale-result rejection. Prompt requests carry event IDs, target handles and an expiry; replies use a dedicated typed operation added with that module. Never emit secrets or raw profile paths in events. Page scripts and DevTools commands are restricted by allowlisted capabilities rather than arbitrary remote access.
 
 `shaar_engine_create` checks major version and struct sizes; minor versions may append fields and enum members. A newer engine must accept smaller known structs and ignore appended fields it does not understand only when negotiated minor permits it. Framework exports are checked at load and recorded in source-build receipts. At shutdown, cancel outstanding requests, emit close events, detach borrowed views, invalidate handles, then release callbacks. `shaar_engine_run` owns the same AppKit run loop boundary the existing adapter expects; the bridge keeps its startup and quit callback facade until Swift is migrated.
 
+### Reconciliation rules for module proposals
+
+The draft header assigns explicit numeric enum values and resolves these cross-module cases for review before implementation:
+
+| Case | Decision for the consolidated draft |
+| --- | --- |
+| Regular window changes Spaces/profiles | A regular `shaar_window` is an app-owned host that can prepare and activate multiple **regular** profiles; each tab remains bound to exactly one profile. A private window binds one private session for its full lifetime. The draft `shaar_window_open` takes an explicit window kind and private-session handle; the operation scope plus tab/window binding is checked on every call. |
+| Private windows share one OTR store | Use one live `shaar_private_session` identity per parent regular profile at a time, with multiple private windows attached to it. A different concurrent session ID for that parent is a conflict unless the implementation deliberately creates a separate Chromium OTR context. This makes profile-wide cookie and permission events attributable to exactly one session. Window-level Swift context IDs can remain separate. |
+| Bookmark/history watch operations | Opening a regular profile attaches the model observers; their invalidations go through the one engine event stream. No per-module watch/unwatch export is needed for ABI v1. The Swift adapter may keep its old watch-shaped facade until its callers migrate. |
+| Chromium async profile creation | `ProfileManager::CreateProfileAsync` cannot be made into a blocking UI-thread call. The draft `shaar_profile_open` returns a reserved handle in `NOT_READY` state on accepted submission and completes asynchronously with a request ID. Its final lifecycle semantics must be confirmed before code is written. |
+| Error and enum stability | `SHAAR_UNSUPPORTED_ABI` means version negotiation failure; `SHAAR_UNSUPPORTED_CAPABILITY` means an otherwise valid ABI operation lacks an implementation in the pinned engine or platform. Every enum value has a fixed integer. `SHAAR_CONFLICT` is for valid requests prevented by current state; malformed values are `SHAAR_INVALID_ARGUMENT`, managed choices `SHAAR_POLICY_BLOCKED`. |
+| Profile CRUD suggestions | `shaar_profile_open(..., create_if_missing, ...)` replaces the proposed separate `shaar_profile_create` and synchronous `shaar_profile_open`, using the app's profile UUID/directory; the app owns display names. `PROFILE_DELETE` is asynchronous. `PROFILE_GET_STATE`/`SET_STATE` use a fixed key allowlist. `WINDOW_SET_ACTIVE_PROFILE` covers proposed `shaar_profile_activate` in a regular host. The app already knows the directory it opened, so the header omits `shaar_profile_get_path`. |
+| Window/tab opening and native views | The explicit `shaar_tab_open(..., foreground, ...)` handles background creation without a second `TAB_OPEN` operation. Borrowed window and tab host views are separate accessors for the same macOS UI exception; extension popup views use a scoped tab/view handle. |
+| Cookie and site-data overlap | One `SHAAR_OP_SITE_COOKIES_CLEAR` operation takes the selected tab and exact origin. It replaces the storage module's initial `SHAAR_OP_COOKIE_DELETE_FOR_TAB` proposal; third-party cookie preferences have separate profile-wide GET/SET operations rather than overloading origin settings. |
+| Media and DevTools calls | The proposed `shaar_media_get_state`, `shaar_media_control`, `shaar_media_set_auto_pip`, `shaar_media_list_capture_sources`, and `shaar_media_capture_reply` are `SHAAR_OP_MEDIA_*` calls through `shaar_submit`, with fixed command enum IDs. DevTools also uses fixed operations and commands. `shaar_media_pip_window` is a narrow synchronous handle lookup because JSON cannot return an opaque handle. `TAB_EVALUATE` is reserved for an app-owned, audited script capability and must not become unrestricted page or remote protocol access. |
+
 ## Build runner and packaging path
 
-The final runner should use a new Shaar-owned config, e.g. `ThirdParty/ChromiumEngine/source-build.json`, pinning Chromium, ungoogled/macOS, depot_tools, Siso, toolchain and Shaar patch/layer digests. `scripts/build-engine-source.py` retains owner-only ignored output, exact revision/tree checks, path guards, cache isolation, timeouts, job limits, free-space floor, recovery logs, framework hashes and exported-ABI receipt. It no longer clones `mantrakp04/ardia`, verifies Ardia's engine tree, stages Ardia scripts, invokes `series.py`, copies either Ardia layer, or applies `profile-download-directory.patch`. Replace those stages with Shaar-maintained scripts: pinned Chromium sync, ungoogled patches/domain substitution, ordered **Shaar-owned** patches, Shaar layer copy/verification, GN generation and `chrome_framework` build. Keep the `chrome_framework` target/name initially; framework renaming is a separate packaging decision.
+Migration step 0 adds `ThirdParty/ChromiumEngine/source-build.json` and a separate dry-run/receipt verifier at `scripts/build-shaar-engine-source.py`, with `build/ShaarEngineSource` as its own owner-bound output. It validates pinned Chromium, ungoogled/macOS, depot_tools, Git LFS, the Shaar layer tree, ordered patch digests, and final framework exports. Source execution remains disabled until the Shaar sync, patch, GN and build stages have been implemented and reviewed. The final runner should use this Shaar-owned config, pinning Chromium, ungoogled/macOS, depot_tools, Siso, toolchain and Shaar patch/layer digests. `scripts/build-engine-source.py` retains owner-only ignored output, exact revision/tree checks, path guards, cache isolation, timeouts, job limits, free-space floor, recovery logs, framework hashes and exported-ABI receipt. It no longer clones `mantrakp04/ardia`, verifies Ardia's engine tree, stages Ardia scripts, invokes `series.py`, copies either Ardia layer, or applies `profile-download-directory.patch`. Replace those stages with Shaar-maintained scripts: pinned Chromium sync, ungoogled patches/domain substitution, ordered **Shaar-owned** patches, Shaar layer copy/verification, GN generation and `chrome_framework` build. Keep the `chrome_framework` target/name initially; framework renaming is a separate packaging decision.
+
+The runner replacement is a **new output generation**, not an in-place reinterpretation of an old `build/EngineSource/receipt.json`. Existing receipts bind the Ardia source, its script substitutions and patch hash; a new config/schema and owner record must reject those receipts or use a separate ignored output root. In particular, the shared read-only `engine-333-364/build/EngineSource` is never a resume or cleanup target. The proposed stage mapping is:
+
+| Existing runner input or stage | Shaar-owned replacement |
+| --- | --- |
+| `ThirdParty/ArdiaCore/source-build.json` with `source.repository`, `engineTree`, and one overlay patch digest | New immutable config pins Chromium, ungoogled/macOS, depot_tools/Siso/Git LFS, ordered Shaar patch manifest, Shaar layer tree digest, GN args and output identity; no Ardia repository or tree field. |
+| `prepare_sources()` clones `source/ardia`, verifies `HEAD:engine`, then stages `source/ardia-build` | Clone only pinned tool and ungoogled sources; read Shaar build scripts and layer from this repository after validating their committed hashes. Never fetch a later Ardia release. |
+| Adapted upstream `01-sync.sh` and Ardia `03-ungoogled.py` / `04-domain-substitution.sh` | Shaar-maintained sync/ungoogled/domain stages with explicit owned paths, pinned revision checks and captured script hashes. Keep `gclient` cache, no-auth environment, job cap and runhooks receipt checks. |
+| Ardia `series.py`, `AC_SERIES_BASE`, `engine/chromium` and `engine/ardiacore` layer copies | Deterministic ordered Shaar patch manifest after ungoogled/domain substitution, then Shaar layer installation into `chrome/browser/shaar/` (and reviewed renderer hooks only where necessary). Record pre/post patch tree hashes and per-file hashes; reject unexpected touched paths. |
+| `profile-patch` overlay and its interrupted-build reverse check | Remove the Ardia-specific stage. Implement #288 through Shaar's profile-scoped downloads module and include it in the Shaar patch/layer manifest; resume checks validate exactly that manifest. |
+| Adapted `02-gn-args.sh`, `05-build.sh`, `chrome_framework` collection | Shaar-owned GN args/build commands; keep the pinned GN binary, background QoS, six-job cap, framework architecture/minimum-OS checks and full artifact hashes. Require `shaar_abi_major`, `shaar_engine_create` and the reviewed export set in the receipt; reject `ac_*` and `ArdiaCore*` exports in the final artifact. |
+| `scripts/fetch-engine.sh`, `scripts/engine_payload.py`, `scripts/bundle-app.sh` use Ardia archive/pin/notices | At final cutover, fetch a Shaar-pinned archive by digest, validate payload/ABI/resource layout, package current Chromium/third-party notices, and keep the verification executable separate from the shipping bundle. Normal CI stays on its known-good pin until native probes pass. |
 
 Source patches should be rebased from pinned Chromium/ungoogled inputs and reviewed one behavior at a time. Rewrite the needed CEF-derived behavior from its BSD-licensed patch with attribution if retained; independently assess Ardia patch behavior and implement it in new Shaar code rather than copying its text. Preserve the existing Safe Storage keychain identity until a tested migration is available. Explicitly decide how security components and extension updates are served; do not silently inherit Chromium/ungoogled defaults. Tests for runner stages must assert no Ardia URL/path/import in final inputs or receipt and no new source or binary under `engine-333-364`.
 
@@ -160,17 +63,20 @@ These are rough engineering ranges for implementation plus focused validation, e
 | Order / module | Compatibility step and acceptance gate | Rough effort |
 | --- | --- | --- |
 | 0. ABI scaffold, build hooks and event bridge | Add header, GN export, framework load/ABI checks, event copying/dispatch, typed Swift errors, source-build receipt assertions. Keep existing `ARCChromiumRuntime` facade. Runner dry-run/unit tests and Swift compile. | 1–2 weeks |
-| 1. Lifecycle and normal profiles | New engine start/quit, profile open/close, exact directory/ID binding; preserve current run-loop and shutdown callbacks. Verify startup, profile switch, quit/cancel, profile deletion preconditions. | 2–3 weeks |
-| 2. Windows and tabs | AppKit host view, Browser/TabStrip ownership, open/adopt/place/select/close, popup and extension-view requests. Preserve callback ordering and deferred tab-strip reconciliation. Window/tab order and native-window probes. | 3–5 weeks |
-| 3. Navigation and recovery | URL/load/reload/back/forward, restore/duplicate, renderer-gone, document commit, favicon, security summary and page channel. Maintain saved-workspace IDs; replay recovery and abrupt-restart probes. | 2–4 weeks |
-| 4. Private sessions | Explicit OTR handle per parent profile, unique session/window/tab IDs, refcounted lease and teardown, scoped permissions; never persist private history/downloads or route OTR events to regular caches. Private fixture and privacy probes. | 2–4 weeks |
-| 5. Downloads | List/control/events, target selection and per-profile directory read/write with policy validation for #288; no process-wide path authority. Download and folder probes, restart persistence. | 2–3 weeks |
-| 6. Bookmarks and history | Tree/apply/watch, query/delete/watch plus #299 insertion; refresh after mutation until event semantics are proven. Library and favorites probes, profile isolation. | 2–3 weeks |
-| 7. Site settings and data | Origin-scoped get/set/reset, exact-origin enumeration, cookies/cache/site-data clearing and private cookie exceptions; typed policy errors. Site-control and profile-privacy probes. | 2–3 weeks |
-| 8. Extensions | Installed list/actions, Web Store consent, managed install/update/unpacked-path policy, hidden popup/side-panel host, install once for every profile (#287), and component extensions. Extension storage, Bitwarden and consent probes. | 4–7 weeks |
-| 9. Find | Find request IDs, count/active/final event, stop/cancel across navigation and tab close. Find-in-page probe. | 0.5–1 week |
-| 10. DevTools and Inspector | Docked view, in-process protocol allowlist, tab-bound token/target, external remote endpoint policy and developer diagnostics. DevTools/Inspector probes and unauthorized-token negatives. | 2–4 weeks |
-| 11. Media | Permission/capture, Media Session and frame ownership, PiP, tab sharing, casting and rendering/power behavior; remove page-script fallback only after equivalent native events. Media, PiP and capture probes. | 4–7 weeks |
-| 12. Ardia removal and final packaging | Shaar-only runner, pin/archive verification, NOTICE/credits, exported-symbol scan, full headless native fixture matrix, signed/notarized release review. Treat the #312 keychain rename as a separate tested data migration, keeping the old item readable until it succeeds. | 2–3 weeks |
+| 1. Lifecycle | New engine start/quit, event dispatch and shutdown callbacks; keep the current runtime facade. Startup and quit/cancel probes. | 1–2 weeks |
+| 2. Profiles | Exact directory/UUID binding, profile load/release/delete and preference ownership. Profile switch and deletion probes. | 1–2 weeks |
+| 3. Windows and tabs | AppKit host view, Browser/TabStrip ownership, open/adopt/place/select/close, popup and extension-view requests. Preserve deferred tab-strip reconciliation. Window/tab order and native-window probes. | 3–5 weeks |
+| 4. Navigation | URL/load/reload/back/forward, restore/duplicate, renderer-gone, document commit, favicon, security summary and page channel. Maintain saved-workspace IDs; recovery and abrupt-restart probes. | 2–4 weeks |
+| 5. Private sessions | Explicit OTR handle per parent profile, unique session/window/tab IDs, lease and teardown, scoped permissions; never persist private history/downloads or route OTR events to regular caches. Private fixture and privacy probes. | 2–4 weeks |
+| 6. Downloads | List/control/events, target selection and per-profile directory read/write with policy validation for #288; no process-wide path authority. Download and folder probes, restart persistence. | 2–3 weeks |
+| 7. Bookmarks | Tree/apply/watch with acknowledged mutation and refresh semantics. Library and favorites probes, profile isolation. | 1–2 weeks |
+| 8. History | Query/delete/watch plus #299 insertion, with explicit private-session rejection and source attribution. History/import and profile-isolation probes. | 1–2 weeks |
+| 9. Site data | Origin-scoped settings get/set/reset, exact-origin enumeration, cookies/cache/site-data clearing and private cookie exceptions for #289; typed policy errors. Site-control and profile-privacy probes. | 2–3 weeks |
+| 10. Extensions | Installed list/actions, Web Store consent, managed install/update/unpacked-path policy, hidden popup/side-panel host, install once for every profile (#287), and component extensions. Extension storage, Bitwarden and consent probes. | 4–7 weeks |
+| 11. Find | Find request IDs, count/active/final event, stop/cancel across navigation and tab close. Find-in-page probe. | 0.5–1 week |
+| 12. DevTools and Inspector | Docked view, in-process protocol allowlist, tab-bound token/target, external remote endpoint policy and developer diagnostics. DevTools/Inspector probes and unauthorized-token negatives. | 2–4 weeks |
+| 13. Media | Permission/capture, Media Session and frame ownership, PiP, tab sharing, casting and rendering/power behavior; remove page-script fallback only after equivalent native events. Media, PiP and capture probes. | 4–7 weeks |
+| 14. Storage and keychain | Preserve readable cookies/passwords during #312 migration from the Ardia Safe Storage identity to Shaar's; verify upgrade, rollback and fresh install. Storage and keychain probes. | 2–4 weeks |
+| 15. Ardia removal and final packaging | Shaar-only runner, pin/archive verification, NOTICE/credits, exported-symbol scan, full headless native fixture matrix, signed/notarized release review. | 2–3 weeks |
 
-Total rough implementation effort is about **29–49 engineer-weeks** across modules, with overlap possible after the ABI and window foundations. The highest risk is macOS Browser/AppKit hosting, private teardown, extension update/policy behavior, and media/DevTools hooks. Each has a dedicated native probe before the old adapter is removed. A successful compile alone does not establish privacy isolation, data readability, update security, signing, or release readiness.
+Total rough implementation effort is about **30–54 engineer-weeks** across modules, with overlap possible after the ABI and window foundations. The highest risk is macOS Browser/AppKit hosting, private teardown, extension update/policy behavior, storage key migration, and media/DevTools hooks. Each has a dedicated native probe before the old adapter is removed. A successful compile alone does not establish privacy isolation, data readability, update security, signing, or release readiness.

@@ -18,7 +18,8 @@ BUNDLE_NAME = "Shaar Verification.app"
 def engine_shards(iterations: int) -> list[str]:
     if not 1 <= iterations <= 10:
         raise ValueError("Engine iterations must be between 1 and 10")
-    return ["baseline-lifecycle", *(f"private-window-{index}" for index in range(1, max(3, iterations) + 1))]
+    return ["baseline-lifecycle", "private-multitab",
+            *(f"private-window-{index}" for index in range(1, max(3, iterations) + 1))]
 
 
 def shard_modes(shard: str, iterations: int) -> list[tuple[str, range]]:
@@ -27,13 +28,15 @@ def shard_modes(shard: str, iterations: int) -> list[tuple[str, range]]:
     if shard == "baseline-lifecycle":
         return [("baseline", range(1, iterations + 1)), ("quit-exit", range(1, max(3, iterations) + 1)),
                 ("session-recovery", range(1, iterations + 1))]
+    if shard == "private-multitab":
+        return [("private-multitab", range(1, iterations + 1))]
     index = int(shard.rsplit("-", 1)[1])
     return [("private-window", range(index, index + 1))]
 
 
 def context(root: Path) -> dict:
     pin = json.loads((root / "ThirdParty/ArdiaCore/pin.json").read_text())
-    return {"revision": os.environ["GITHUB_SHA"], "toolchain": os.environ["CI_TOOLCHAIN_ID"],
+    return {"sourceTree": os.environ["CI_SOURCE_TREE"], "toolchain": os.environ["CI_TOOLCHAIN_ID"],
             "engine": pin["sha256"]}
 
 
@@ -48,13 +51,18 @@ def archive_bundle(root: Path, directory: Path) -> None:
     (directory / "bundle.json").write_text(json.dumps(metadata, indent=2) + "\n")
 
 
-def restore_bundle(root: Path, directory: Path) -> None:
+def validate_bundle_archive(root: Path, directory: Path) -> Path:
     metadata = json.loads((directory / "bundle.json").read_text())
     if any(metadata.get(key) != value for key, value in context(root).items()):
-        raise ValueError("Verification bundle commit, toolchain or engine pin differs")
+        raise ValueError("Verification bundle source tree, toolchain or engine pin differs")
     archive = directory / "verification.tar.gz"
     if file_sha256(archive) != metadata.get("sha256"):
         raise ValueError("Verification bundle digest differs")
+    return archive
+
+
+def restore_bundle(root: Path, directory: Path) -> None:
+    archive = validate_bundle_archive(root, directory)
     destination = root / "build"
     if (destination / BUNDLE_NAME).exists():
         raise ValueError("Verification bundle destination already exists")

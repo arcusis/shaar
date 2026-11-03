@@ -532,7 +532,8 @@ final class BrowserEngine {
 
   func restoreSuspendedScrollPosition(for tabID: UUID) {
     guard let position = suspendedScrollPositions.removeValue(forKey: tabID) else { return }
-    let x = max(0, position.x)
+    // RTL documents can have a negative horizontal scroll offset in Chromium.
+    let x = position.x
     let y = max(0, position.y)
     runtime.evaluate(
       inTabID: tabID.uuidString,

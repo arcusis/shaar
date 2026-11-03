@@ -21,13 +21,60 @@ Durations use GitHub run creation/completion timestamps, not the sum of job time
 
 A [cold shipping-only trial](https://github.com/arcusis/shaar/actions/runs/41430145476) was canceled after exceeding the budget; it supplies no green timing claim. The original baseline included 1m52s before execution; its executing graph took 32m34s. Across measured runs, macOS build/probe durations vary substantially. Final acceptance depends on observed hosted execution.
 
+## Runner queue under concurrent PRs
+
+Run [41556161778](https://github.com/arcusis/shaar/actions/runs/41556161778) passed in 38m34s. GitHub job `created_at` to `started_at` timestamps show 11 macOS jobs waited a combined 2h13m28s for runners (median 12m34s, maximum 23m25s). This is aggregate runner queue time across parallel jobs, not extra run wall time.
+
+| macOS job | Queue wait | Running |
+| --- | ---: | ---: |
+| Fast gates | 23m25s | 1m27s |
+| Build and unit tests | 2m36s | 6m54s |
+| Coverage no regression | 15m08s | 6m45s |
+| Hosted sidebar visuals | 21m11s | 6m36s |
+| Hebrew localization | 8m45s | 14m38s |
+| Engine bundle build | 4m53s | 7m27s |
+| Engine baseline/lifecycle | 13m52s | 7m30s |
+| Engine private-window 1 | 11m02s | 9m13s |
+| Engine private-window 2 | 12m34s | 8m19s |
+| Engine private-window 3 | 17m28s | 7m05s |
+| Shipping bundle | 2m34s | 6m39s |
+
+Fast gates, visuals, and coverage each waited longer than they ran. The localization and probe jobs still take substantial native execution time.
+
+The updated graph sends platform-independent fast checks to Ubuntu, keeps the complete Python/resource test suite on macOS, and runs the immutable-base coverage comparison in the unit-test macOS job. A docs-only fast gate runs on Ubuntu with Notebook-link, sensitive-file, secret-scan, and history checks. Known docs/site-only PRs select zero macOS jobs; that path has not yet had a dedicated hosted PR run.
+
+Post-change [run 41608902696](https://github.com/arcusis/shaar/actions/runs/41608902696) passed `CI required` in 18m37s from run creation. It used 10 macOS jobs, down from 11. Their aggregate `created_at` to `started_at` wait was 61s (median 3s, maximum 29s), versus 2h13m28s (median 12m34s, maximum 23m25s) before. The wall time fell 19m57s (52%) in this before/after pair. Per-job timings:
+
+| macOS job | Queue wait | Running |
+| --- | ---: | ---: |
+| Python and Apple resource tests | 3s | 1m06s |
+| Build, unit tests and coverage comparison | 29s | 10m03s |
+| Hosted sidebar visuals | 2s | 5m04s |
+| Hebrew localization | 3s | 13m27s |
+| Engine bundle build | 3s | 6m44s |
+| Engine baseline/lifecycle | 2s | 9m15s |
+| Engine private-window 1 | 2s | 8m06s |
+| Engine private-window 2 | 2s | 7m41s |
+| Engine private-window 3 | 12s | 9m36s |
+| Shipping bundle | 3s | 7m58s |
+
+This single comparison shows the queue delay was substantially reduced; the after wall time remains 3m37s above the 15-minute goal. Localization (13m27s) is now the critical path. The before and after runs had different concurrent workloads, so their wall-time change is observational rather than a controlled benchmark.
+
+## Localization parallelism follow-up (#378)
+
+Before changing the localization build's SwiftPM worker count, I sampled the ten newest merge-group Source checks runs on 2026-11-03. Their run-creation-to-completion wall times were 17m12s, 17m00s, 16m16s, 17m29s, 16m08s, 16m38s, 16m48s, 16m49s, 15m55s and 16m55s (median 16m48.5s; seven green, three failed). Links, in order: [41630910862](https://github.com/arcusis/shaar/actions/runs/41630910862), [41628267121](https://github.com/arcusis/shaar/actions/runs/41628267121), [41627787375](https://github.com/arcusis/shaar/actions/runs/41627787375), [41625822248](https://github.com/arcusis/shaar/actions/runs/41625822248), [41622875847](https://github.com/arcusis/shaar/actions/runs/41622875847), [41622872869](https://github.com/arcusis/shaar/actions/runs/41622872869), [41618999061](https://github.com/arcusis/shaar/actions/runs/41618999061), [41616703297](https://github.com/arcusis/shaar/actions/runs/41616703297), [41616699731](https://github.com/arcusis/shaar/actions/runs/41616699731), [41616659643](https://github.com/arcusis/shaar/actions/runs/41616659643). The current longest recurring task is the localization stage, which builds test products serially before its English/Hebrew captures and real engine-locale fixture. In run 41630910862 it occupied 16m14s; the engine graph occupied a similar interval, so both remain relevant to whole-run time.
+
+The first hosted run after this change, [PR run 41633988050](https://github.com/arcusis/shaar/actions/runs/41633988050), passed `CI required` in 16m41s (down 7.5 seconds from the ten-run median, still above the goal). Localization completed in 10m15s, versus the previous 16m14s stage observation. The engine bundle took 7m01s and its four probe shards finished 9m17s after they started, so engine preparation and probes now set whole-run time. The PR records this comparison.
+
+To address that remaining chain, the follow-up caches only the verification archive and metadata under the exact Git tree, engine pin, and Swift toolchain. The metadata and archive digest are revalidated on reuse, and all four engine probe shards still run. Hosted verification of this cache path is pending. No local Swift build, test suite, or engine build was run.
+
 ## Pipeline structure
 
 Start unit build, verification preparation and CodeQL immediately after stage selection. Start shipping after fast/dependency review; it consumes no unit artifact. Coverage and visuals still require unit success. `CI required` still requires every selected stage, including fast/dependency checks, probes, coverage, visuals, website checks and shipping. Independent candidate preparation cannot authorize a merge.
 
 Keep production's single engine job and runner unchanged: build the verification bundle and run baseline, private-window, Quit and recovery modes on the same machine. Preserve requested counts, the private/Quit minimum three, fresh roots and every failure without retries. Engine sharding and cross-runner bundle transfer are deferred to the follow-up. Shipping runs independently; final CI still requires the complete engine result.
 
-Use Ubuntu 24.04 for every Linux workflow. Fast gates remain on macOS because the integrated resource tests exercise Apple's real catalog compiler. Dependency review v5 and download-artifact v8 use Node 24 and full SHA pins. Keep dependency severity policy and synthetic merge-group review. Use a separate stdlib-only Python environment for Swift CodeQL helpers; signing/release dependencies remain hash-synchronized in native/check jobs. Cache locked Python environments, SwiftPM dependencies/products, engine archives by pin digest and pnpm stores. Always execute required build/test commands after restoration. Known docs/site PR diffs skip native work; unknown or empty diffs select full work. Website validation is required for relevant PR and merge-group changes. Ruleset 26350516 remains owner-managed: ALLGREEN groups up to five, no ruleset mutation.
+Use Ubuntu 24.04 for every Linux workflow. Run platform-independent fast checks on Ubuntu and the complete Python/resource test suite on macOS because those tests exercise Apple's real catalog compiler. Dependency review v5 and download-artifact v8 use Node 24 and full SHA pins. Keep dependency severity policy and synthetic merge-group review. Use a separate stdlib-only Python environment for Swift CodeQL helpers; signing/release dependencies remain hash-synchronized in native/check jobs. Cache locked Python environments, SwiftPM dependencies/products, engine archives by pin digest and pnpm stores. Always execute required build/test commands after restoration. Known docs/site PR diffs skip native work and retain docs-focused fast checks; unknown or empty diffs select full work. Website validation is required for relevant PR and merge-group changes. Ruleset 26350516 remains owner-managed: ALLGREEN groups up to five, no ruleset mutation.
 
 ## Fresh Swift extraction
 

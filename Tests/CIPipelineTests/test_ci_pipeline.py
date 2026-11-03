@@ -530,7 +530,7 @@ class EngineTransferTests(unittest.TestCase):
         from ci_engine import BUNDLE_NAME, archive_bundle, restore_bundle
         import shutil
         with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {
-            "CI_BUNDLE_INPUTS": "a" * 64, "CI_TOOLCHAIN_ID": "toolchain",
+            "CI_SOURCE_TREE": "a" * 40, "CI_BUNDLE_INPUTS": "b" * 64, "CI_TOOLCHAIN_ID": "toolchain",
         }):
             root = Path(temporary)
             pin = root / "ThirdParty/ArdiaCore/pin.json"
@@ -546,6 +546,8 @@ class EngineTransferTests(unittest.TestCase):
             directory.mkdir()
             archive_bundle(root, directory)
             shutil.rmtree(bundle)
+            with patch.dict(os.environ, {"CI_SOURCE_TREE": "c" * 40}), self.assertRaises(ValueError):
+                restore_bundle(root, directory)
             with patch.dict(os.environ, {"CI_BUNDLE_INPUTS": "c" * 64}), self.assertRaises(ValueError):
                 restore_bundle(root, directory)
             restore_bundle(root, directory)
@@ -570,7 +572,7 @@ class EngineTransferTests(unittest.TestCase):
             evidence.mkdir(parents=True)
             output = root / "outputs"
             with (patch.object(STAGES, "ROOT", root), patch.object(STAGES, "require_hosted_mac"),
-                  patch.dict(os.environ, {"CI_BUNDLE_INPUTS": "a" * 64, "CI_TOOLCHAIN_ID": "toolchain",
+                  patch.dict(os.environ, {"CI_SOURCE_TREE": "a" * 40, "CI_BUNDLE_INPUTS": "a" * 64, "CI_TOOLCHAIN_ID": "toolchain",
                                           "GITHUB_OUTPUT": str(output)})):
                 archive_bundle(root, evidence)
                 checks = SimpleNamespace(directory=evidence, results=[], write_reports=lambda: None)

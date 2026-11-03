@@ -128,13 +128,13 @@ def build_engine_bundle(checks: Commands, iterations: int) -> None:
         validate_bundle_archive(ROOT, checks.directory)
         checks.results.append({
             "name": "verification-bundle-cache-validation",
-            "command": ["validate cached build inputs and archive digest"],
+            "command": ["validate cached source tree, build inputs and archive digest"],
             "status": 0,
             "seconds": 0.0,
         })
         with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
             output.write(f"shards={json.dumps(engine_shards(iterations))}\n")
-        print("Reusing integrity-checked verification bundle for identical build inputs")
+        print("Reusing integrity-checked verification bundle for this exact source tree and build inputs")
         return
     if checks.run("verification-build", ["bash", "scripts/bundle-app.sh", "--with-engine", "--verification"]):
         return
@@ -165,7 +165,7 @@ def run_visuals(checks: Commands) -> None:
 
 def run_localization(checks: Commands) -> None:
     require_hosted_mac()
-    if checks.run("localization-build", ["swift", "build", "--build-tests", "--jobs", "1", "--force-resolved-versions"]):
+    if checks.run("localization-build", ["swift", "build", "--build-tests", "--jobs", "2", "--force-resolved-versions"]):
         return
     if checks.run("localization-captures", [sys.executable, "scripts/test-localization.py"]):
         return

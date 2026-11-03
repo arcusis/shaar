@@ -194,6 +194,8 @@ import SwiftUI
       } && tools.requests.contains { $0.status == 503 }
         && tools.signals.contains { $0.name == "Inspector AI fixture" }
     }
+    // Keep the verified diagnostics stable while detailed copy awaits style collection.
+    tools.stop()
     ai.detailed = true
     await ai.copyElement(to: board)
     let detailed = board.string(forType: .string) ?? ""

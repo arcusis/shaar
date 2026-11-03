@@ -8,7 +8,8 @@
 
 namespace {
 
-shaar_error_code FakeProfileHandler(shaar_engine*,
+shaar_error_code FakeProfileHandler(shaar::ShaarEngineContext*,
+                                    shaar_engine*,
                                     shaar_scope,
                                     shaar_window*,
                                     shaar_tab*,
@@ -38,9 +39,37 @@ TEST(ShaarModuleRegistryTest, DispatchesOperationsInsideRegisteredRange) {
 
   auto handler = registry.Find(SHAAR_OP_PROFILE_GET_STATE);
   ASSERT_NE(handler, nullptr);
-  EXPECT_EQ(handler(nullptr, {}, nullptr, nullptr, SHAAR_OP_PROFILE_GET_STATE,
+  EXPECT_EQ(handler(nullptr, nullptr, {}, nullptr, nullptr, SHAAR_OP_PROFILE_GET_STATE,
                     {}, 1, nullptr, nullptr, nullptr),
             SHAAR_OK);
+}
+
+TEST(ShaarModuleRegistryTest, PassesProfileAndTabServicesThroughContext) {
+  class FakeProfiles final : public shaar::ProfileServices {
+   public:
+    Profile* ResolveProfile(shaar_engine*, shaar_profile*) override {
+      return reinterpret_cast<Profile*>(0x11);
+    }
+    KeyedService* GetKeyedService(shaar_engine*, shaar_profile*,
+                                  KeyedServiceLookup lookup) override {
+      return lookup ? lookup(ResolveProfile(nullptr, nullptr)) : nullptr;
+    }
+  } profiles;
+  class FakeTabs final : public shaar::BrowserTabRegistry {
+   public:
+    Browser* FindBrowser(shaar_engine*, shaar_window*) override {
+      return reinterpret_cast<Browser*>(0x12);
+    }
+    content::WebContents* FindWebContents(shaar_engine*, shaar_window*,
+                                          shaar_tab*) override {
+      return reinterpret_cast<content::WebContents*>(0x13);
+    }
+  } tabs;
+  shaar::ShaarEngineContext context{&profiles, &tabs};
+  EXPECT_NE(context.profile_services->ResolveProfile(nullptr, nullptr), nullptr);
+  EXPECT_NE(context.browser_tabs->FindBrowser(nullptr, nullptr), nullptr);
+  EXPECT_NE(context.browser_tabs->FindWebContents(nullptr, nullptr, nullptr),
+            nullptr);
 }
 
 TEST(ShaarModuleRegistryTest, RejectsInvalidAndOverlappingRanges) {

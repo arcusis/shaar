@@ -239,8 +239,8 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_submit(
   auto* relay = new ReplyRelay{&registry, engine, request_id, reply,
                                reply_context};
   const shaar_error_code status = handler(
-      engine, scope, window, tab, operation, args_json, request_id, &ForwardReply,
-      relay, immediate_error);
+      &shaar::EngineContext(), engine, scope, window, tab, operation,
+      args_json, request_id, &ForwardReply, relay, immediate_error);
   if (status != SHAAR_OK) {
     registry.FinishCompletion(request_id);
     // A handler returning an immediate error must not retain or call its reply.

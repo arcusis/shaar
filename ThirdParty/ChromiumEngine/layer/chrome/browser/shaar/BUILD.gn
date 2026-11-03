@@ -10,6 +10,10 @@ source_set("engine") {
   public = [ "public/shaar_engine.h" ]
   sources = [
     "engine/shaar_engine.cc",
+    # BEGIN Shaar engine context.
+    "engine/shaar_engine_context.cc",
+    "engine/shaar_engine_context.h",
+    # END Shaar engine context.
     "engine/shaar_event_bridge.cc",
     "engine/shaar_event_bridge.h",
     # BEGIN Shaar lifecycle module.

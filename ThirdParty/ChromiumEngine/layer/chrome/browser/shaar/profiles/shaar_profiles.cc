@@ -30,6 +30,7 @@
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
+#include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "chrome/browser/shaar/engine/shaar_module_registry.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/prefs/pref_service.h"
@@ -59,6 +60,29 @@ std::map<std::pair<shaar_engine*, std::string>, std::unique_ptr<shaar_profile>>
 std::vector<std::unique_ptr<shaar_profile>> g_retired_profiles;
 thread_local std::string g_path_result;
 thread_local std::string g_state_result;
+
+bool IsRegisteredProfile(const shaar_profile* profile);
+
+class ProfileServicesImpl final : public shaar::ProfileServices {
+ public:
+  Profile* ResolveProfile(shaar_engine* engine,
+                          shaar_profile* handle) override {
+    if (!engine || !IsRegisteredProfile(handle) || handle->engine != engine ||
+        !handle->ready || handle->deleting) {
+      return nullptr;
+    }
+    return handle->native;
+  }
+
+  KeyedService* GetKeyedService(shaar_engine* engine,
+                                shaar_profile* handle,
+                                KeyedServiceLookup lookup) override {
+    Profile* profile = ResolveProfile(engine, handle);
+    return profile && lookup ? lookup(profile) : nullptr;
+  }
+};
+
+ProfileServicesImpl g_profile_services;
 
 bool ValidBytes(shaar_bytes bytes) {
   return bytes.size == 0 || bytes.data != nullptr;
@@ -273,6 +297,7 @@ shaar_error_code ReserveAndLoad(shaar_engine* engine,
 namespace {
 
 shaar_error_code HandleProfileOperation(
+    shaar::ShaarEngineContext*,
     shaar_engine* engine,
     shaar_scope scope,
     shaar_window*,
@@ -373,6 +398,7 @@ shaar_error_code HandleProfileOperation(
 void shaar_profiles_register(shaar::ShaarModuleRegistry* registry) {
   if (!registry)
     return;
+  shaar::SetProfileServices(&g_profile_services);
   registry->Register(SHAAR_OP_PROFILE_DELETE, SHAAR_OP_PROFILE_DELETE,
                     &HandleProfileOperation);
   registry->Register(SHAAR_OP_PROFILE_GET_STATE, SHAAR_OP_PROFILE_GET_STATE,

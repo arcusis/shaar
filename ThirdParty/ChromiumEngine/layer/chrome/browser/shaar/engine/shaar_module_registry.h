@@ -9,14 +9,16 @@
 
 #include <map>
 
+#include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "chrome/browser/shaar/public/shaar_engine.h"
 
 // Internal C++ dispatch contract shared by independently implemented Shaar
 // modules. It is not part of the public C ABI.
 struct ShaarModuleRegistry {
   using Handler = shaar_error_code (*)(
-      shaar_engine*, shaar_scope, shaar_window*, shaar_tab*, shaar_operation,
-      shaar_bytes, shaar_request_id, shaar_reply_fn, void*, shaar_error*);
+      shaar::ShaarEngineContext*, shaar_engine*, shaar_scope, shaar_window*,
+      shaar_tab*, shaar_operation, shaar_bytes, shaar_request_id,
+      shaar_reply_fn, void*, shaar_error*);
   using CancelHandler = shaar_error_code (*)(shaar_engine*, shaar_request_id,
                                               shaar_error*);
 

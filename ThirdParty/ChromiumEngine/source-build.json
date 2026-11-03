@@ -46,7 +46,7 @@
   },
   "layer": {
     "path": "ThirdParty/ChromiumEngine/layer",
-    "sha256": "153873004bd2c0b6b7859785ff514abafec7297f9b5775ffebc757d29af8b8a0",
+    "sha256": "ad0b64dc6ba6bd97069fc3ff32486b255863065606382d06e22f0035155b3cb7",
     "files": {
       "chrome/browser/shaar/BUILD.gn": "1861673919f3f27402a1b81518a6542c36ff5269ed5e6eac58d3856ecccc7fd4",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks.cc": "041a334e684e0157f348d56642e5f70217e4feb07833e2ca3154103ce62ca347",

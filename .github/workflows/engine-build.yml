@@ -2,6 +2,11 @@ name: Self-hosted engine build
 
 on:
   workflow_dispatch:
+    inputs:
+      label:
+        description: Build label, such as shaar.1
+        required: true
+        type: string
 
 concurrency:
   group: shaar-self-hosted-engine-build
@@ -52,21 +57,34 @@ jobs:
         shell: bash
         run: cd "$HOME/shaar-engine-cache/shaar" && python3 scripts/build-engine-source.py --run
 
-      - name: Package engine
+      - name: Validate build label
         shell: bash
-        run: cd "$HOME/shaar-engine-cache/shaar" && bash scripts/package-engine.sh
+        env:
+          LABEL: ${{ inputs.label }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$LABEL" =~ ^shaar\.[0-9]+$ ]]; then
+            echo "Build label must match shaar.<number>" >&2
+            exit 1
+          fi
+
+      - name: Package engine archive
+        shell: bash
+        env:
+          LABEL: ${{ inputs.label }}
+        run: cd "$HOME/shaar-engine-cache/shaar" && bash scripts/package-engine.sh "$LABEL"
 
       - name: Stage package for artifact upload
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p "$GITHUB_WORKSPACE/engine-artifact"
-          cp "$HOME/shaar-engine-cache/shaar/build/EnginePackage"/ShaarEngine-*.zip "$GITHUB_WORKSPACE/engine-artifact/"
+          cp "$HOME/shaar-engine-cache/shaar/build/EnginePackage"/ArdiaCore-*.tar.xz "$GITHUB_WORKSPACE/engine-artifact/"
 
       - name: Upload engine package artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: shaar-engine-${{ github.sha }}
-          path: engine-artifact/ShaarEngine-*.zip
+          name: shaar-engine-${{ inputs.label }}-${{ github.sha }}
+          path: engine-artifact/ArdiaCore-*.tar.xz
           if-no-files-found: error
           retention-days: 7

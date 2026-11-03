@@ -155,7 +155,10 @@ class PipelineGateTests(unittest.TestCase):
 
     def results(self, native="success", nightly="skipped"):
         results = {name: {"result": "success"} for name in ("plan", "fast", "dependency-review")}
-        results.update({name: {"result": native} for name in ("build", "coverage", "visuals", "localization", "engine", "shipping", "codeql", "inspector-contracts")})
+        results.update({name: {"result": native} for name in (
+            "python-tests", "build", "coverage", "visuals", "localization", "engine",
+            "shipping", "codeql", "inspector-contracts",
+        )})
         results.update({name: {"result": nightly} for name in ("sanitizers", "dead-code")})
         results["codeql"] = {"result": "success"}
         return results

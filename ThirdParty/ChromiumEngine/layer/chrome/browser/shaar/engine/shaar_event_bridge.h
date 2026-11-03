@@ -7,12 +7,14 @@
 
 #include <stdint.h>
 
-#include <string>
+#include <string>  // Shaar profiles module stores the configured data root.
 
 #include "chrome/browser/shaar/public/shaar_engine.h"
 
 struct shaar_engine {
+  // BEGIN Shaar profiles module state.
   std::string data_root;
+  // END Shaar profiles module state.
   shaar_event_fn on_event = nullptr;
   void* event_context = nullptr;
   uint64_t next_sequence = 0;

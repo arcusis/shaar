@@ -2,7 +2,9 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+# BEGIN Shaar profiles module build block.
 import("//testing/test.gni")
+# END Shaar profiles module build block.
 
 assert(is_mac)
 
@@ -12,15 +14,19 @@ source_set("engine") {
     "engine/shaar_engine.cc",
     "engine/shaar_event_bridge.cc",
     "engine/shaar_event_bridge.h",
+    # BEGIN Shaar profiles module sources.
     "profiles/shaar_profiles.cc",
     "profiles/shaar_profiles.h",
+    # END Shaar profiles module sources.
   ]
   deps = [
+    # BEGIN Shaar profiles module dependencies.
     "//chrome/browser/profiles",
     "//chrome/browser/ui/browser_window",
     "//components/content_settings/core/browser",
     "//components/content_settings/core/common",
     "//components/prefs",
+    # END Shaar profiles module dependencies.
   ]
 }
 
@@ -30,6 +36,7 @@ config("exports") {
               rebase_path("shaar_engine.exports", root_build_dir) ]
 }
 
+# BEGIN Shaar profiles module tests.
 test("profiles_unittests") {
   sources = [ "profiles/shaar_profiles_unittest.cc" ]
   deps = [
@@ -37,3 +44,4 @@ test("profiles_unittests") {
     "//testing/gtest",
   ]
 }
+# END Shaar profiles module tests.

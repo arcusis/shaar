@@ -323,14 +323,15 @@ class SourceBuildTests(unittest.TestCase):
             self.assertEqual((chromium / "first.txt").read_text(), "one\ntwo\n")
             self.assertEqual((chromium / "second.txt").read_text(), "one\ntwo\n")
 
-    def test_build_priority_adaptation_calls_taskpolicy_directly(self):
+    def test_build_priority_adaptation_restores_normal_priority(self):
         with tempfile.TemporaryDirectory() as temporary:
             script = pathlib.Path(temporary) / "05-build.sh"
-            script.write_text("exec lowprio autoninja -j 6 target\n")
-            BUILD.Runner.adapt_build_priority_script(script)
-            BUILD.Runner.adapt_build_priority_script(script)
-            self.assertEqual(script.read_text(),
-                             "exec taskpolicy -b nice -n 19 autoninja -j 6 target\n")
+            for original in ("exec lowprio autoninja -j 6 target\n",
+                             "exec taskpolicy -b nice -n 19 autoninja -j 6 target\n"):
+                script.write_text(original)
+                BUILD.Runner.adapt_build_priority_script(script)
+                BUILD.Runner.adapt_build_priority_script(script)
+                self.assertEqual(script.read_text(), "exec autoninja -j 6 target\n")
 
     def test_depot_tools_python_bootstrap_uses_resolved_pinned_cipd_and_exact_args(self):
         self.assertEqual(BUILD.Runner.depot_tools_python_ensure_args(

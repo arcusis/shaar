@@ -960,7 +960,8 @@ class Runner:
                 build_script = scripts / "05-build.sh"
                 build_text = build_script.read_text()
                 needs_priority_adaptation = (
-                    "exec autoninja " in build_text or "exec lowprio autoninja " in build_text)
+                    "exec taskpolicy -b nice -n 19 autoninja " in build_text or
+                    "exec lowprio autoninja " in build_text)
                 needs_link_adaptation = " concurrent_links=1" in (scripts / "gn_defines.sh").read_text()
                 if (not self.has_unadapted_home_paths(scripts) and not needs_cache_adaptation
                         and not needs_resume_adaptation and not needs_pinned_gn
@@ -1022,6 +1023,7 @@ class Runner:
                     "Ardia series paths -> owned CHROMIUM_SRC and AC_SERIES_BASE",
                     "series base capture -> resumable in owned AC_SERIES_BASE",
                     "GN invocation -> Chromium pinned buildtools/mac/gn",
+                    "autoninja restored to normal priority for dedicated build host",
                 ):
                     if item not in substitutions:
                         substitutions.append(item)
@@ -1033,7 +1035,15 @@ class Runner:
                     "cloudsdk": str(self.output / "cloudsdk"),
                     "luciContext": str(self.output / ".no-auth-luci-context.json"),
                 }
-                self.receipt["inputs"]["effectiveCommands"] = self.effective_commands()
+                old_build_command = self.receipt["inputs"].get("effectiveCommands", {}).get("build")
+                current_commands = self.effective_commands()
+                if old_build_command != current_commands["build"] and needs_priority_adaptation:
+                    self.receipt.setdefault("buildCommandUpdates", []).append({
+                        "previous": old_build_command,
+                        "current": current_commands["build"],
+                        "at": utc_now(),
+                    })
+                self.receipt["inputs"]["effectiveCommands"] = current_commands
                 self.save()
                 return scripts
             raise BuildError("existing staged scripts lack a matching receipt")
@@ -1112,7 +1122,7 @@ class Runner:
             "series base capture -> resumable in owned AC_SERIES_BASE",
             "GN invocation -> Chromium pinned buildtools/mac/gn",
             "network wrappers retain runner process-group timeout",
-            "autoninja runs at background QoS with 6 jobs",
+            "autoninja runs at normal priority with pinned job ceiling",
             f"symbol_level 0 -> {self.config['build']['symbolLevel']} (stripped framework plus dSYM)",
         ]
         self.receipt["inputs"]["cacheRoots"] = {
@@ -1141,7 +1151,7 @@ class Runner:
                          "gclient", "runhooks"],
             "gn": ["chromium_git/chromium/src/buildtools/mac/gn", "gen",
                    "out/Release_GN_arm64"],
-            "build": ["taskpolicy", "-b", "nice", "-n", "19", "autoninja", "-j", str(self.build_jobs),
+            "build": ["autoninja", "-j", str(self.build_jobs),
                       "-k", "0", "-C", "out/Release_GN_arm64", "chrome_framework"],
         }
 
@@ -1201,16 +1211,16 @@ class Runner:
     def adapt_build_priority_script(path: pathlib.Path) -> None:
         old = "exec autoninja "
         incorrect = "exec lowprio autoninja "
-        adapted = "exec taskpolicy -b nice -n 19 autoninja "
+        background = "exec taskpolicy -b nice -n 19 autoninja "
         text = path.read_text()
         if incorrect in text:
-            Runner.checked_replace(path, incorrect, adapted, 1)
+            Runner.checked_replace(path, incorrect, old, 1)
             text = path.read_text()
-        if old in text:
-            Runner.checked_replace(path, old, adapted, 1)
+        if background in text:
+            Runner.checked_replace(path, background, old, 1)
             text = path.read_text()
-        if adapted not in text:
-            raise BuildError("background QoS build invocation adaptation anchor mismatch")
+        if old not in text:
+            raise BuildError("normal-priority build invocation adaptation anchor mismatch")
 
     def verify_engine_tree(self, aria: pathlib.Path) -> None:
         tree = self.git("ardia-engine-tree", aria, "rev-parse", "HEAD:engine")

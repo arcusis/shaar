@@ -90,14 +90,45 @@ final class ProfilePrivacyProbe {
         && secondData?["cookie"] as? String == "siteControl=kept"
         && secondData?["local"] as? String == "kept",
       "Settings clears only the selected profile's cookies and site storage")
-    for profile in [first, second] { try await backend.deleteProfile(profile) }
+    var directories: [UUID: URL] = [:]
+    for profile in [first, second] {
+      guard
+        let directory = runtime.downloadsDirectory(forProfileID: profile.uuidString)?
+          .deletingLastPathComponent(), directory.isFileURL,
+        directory.lastPathComponent.lowercased() == "profile \(profile.uuidString.lowercased())",
+        FileManager.default.fileExists(atPath: directory.path)
+      else {
+        throw ProfilePrivacyProbeFailure(
+          message: "The disposable engine profile directory could not be verified.")
+      }
+      directories[profile] = directory
+    }
+    for profile in [first, second] {
+      try await backend.deleteProfile(profile)
+      let directory = directories[profile]!
+      for _ in 0..<Int(300 * ProbeTimeout.scale) {
+        if !FileManager.default.fileExists(atPath: directory.path) { break }
+        try await Task.sleep(for: .milliseconds(100))
+      }
+      try expect(
+        !FileManager.default.fileExists(atPath: directory.path),
+        "Chromium deletes the selected profile's engine directory, including its stored preferences and site data"
+      )
+      if profile == first {
+        let retained = try await backend.permissions(second, origin: origin)
+        try expect(
+          FileManager.default.fileExists(atPath: directories[second]!.path)
+            && retained["camera"]?["value"] as? String == "allow",
+          "deleting one profile retains the other profile's engine directory and permissions")
+      }
+    }
     var retired = false
     do {
       _ = try await backend.permissionOrigins(first)
     } catch { retired = true }
     try expect(
       retired,
-      "Chromium accepts profile deletion and the bridge rejects services for its retired identity; disk erasure is scheduled by Chromium"
+      "the bridge rejects services for the deleted engine profile's retired identity"
     )
     return checks
   }

@@ -199,11 +199,16 @@ import SwiftUI
     ai.detailed = true
     await ai.copyElement(to: board)
     let detailed = board.string(forType: .string) ?? ""
+    var missing: [String] = []
+    if ai.failure != nil { missing.append("copy operation") }
+    if !detailed.contains("Full computed styles:") { missing.append("computed styles") }
+    if !detailed.contains("Matched CSS rules:") { missing.append("matched CSS rules") }
+    if !detailed.contains("AI fixture console error") { missing.append("console errors") }
+    if !detailed.contains("status 503") { missing.append("HTTP errors") }
+    if !detailed.contains("Inspector AI fixture") { missing.append("technology signals") }
     try check(
-      ai.failure == nil && detailed.contains("Full computed styles:")
-        && detailed.contains("Matched CSS rules:") && detailed.contains("AI fixture console error")
-        && detailed.contains("status 503") && detailed.contains("Inspector AI fixture"),
-      "Detailed context is missing collected diagnostics.")
+      missing.isEmpty,
+      "Detailed context is missing collected diagnostics: \(missing.joined(separator: ", ")).")
     try check(!detailed.contains("network-private"), "Detailed request query was not stripped.")
     try check(
       try await inspector.evaluate(

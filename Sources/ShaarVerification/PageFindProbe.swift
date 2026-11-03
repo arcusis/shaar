@@ -61,7 +61,7 @@ final class PageFindProbe {
       else { throw PageFindProbeFailure("Could not prepare authored find text.") }
     }
     store.perform(.space(a.id))
-    try await waitForDisplayedNativeTab(tabA, "Profile A WebContents is displayed before find")
+    try await waitForFindTarget(tabA, containing: "OrbitFindMarker")
     store.showPageFind()
     store.updatePageFindQuery("OrbitFindMarker")
     try await expectResult(count: 3, active: 1, "Chromium finds three authored text matches")
@@ -94,7 +94,7 @@ final class PageFindProbe {
     try picture.write(to: root.appending(path: "\(phase)-find-page.png"), options: .atomic)
 
     store.perform(.space(b.id))
-    try await waitForNativeSelection(tabB, "Profile B native tab is selected before find")
+    try await waitForFindTarget(tabB, containing: "BetaOnlyNeedle")
     try expect(store.pageFind == nil, "switching profiles closes find and discards its query")
     store.receiveFindResult(
       tabID: original.tabID, requestID: original.requestID, count: 2, active: 1, final: true)
@@ -116,8 +116,7 @@ final class PageFindProbe {
     store.updatePageFindQuery("BetaOnlyNeedle")
     try await expectResult(count: 1, active: 1, "profile B searches its own document")
     store.perform(.space(shared.id))
-    try await waitForNativeSelection(
-      shared.selectedTabID!, "Shared profile native tab is selected before find")
+    try await waitForFindTarget(shared.selectedTabID!)
     try expect(
       shared.profileID == a.profileID && store.pageFind == nil,
       "an explicitly shared profile still clears find when its selected tab changes")
@@ -132,7 +131,7 @@ final class PageFindProbe {
       "clearing the query leaves no stale count or active search")
 
     store.perform(.space(a.id))
-    try await waitForDisplayedNativeTab(tabA, "Profile A WebContents is displayed before find")
+    try await waitForFindTarget(tabA, containing: "OrbitFindMarker")
     store.showPageFind()
     store.updatePageFindQuery("OrbitFindMarker")
     try await expectResult(count: 3, active: 1, "returning to A starts a new native search")
@@ -172,34 +171,33 @@ final class PageFindProbe {
     throw PageFindProbeFailure("\(message): \(store.pageFind?.status ?? "find closed")")
   }
 
-  /// Model selection changes before BrowserEngine.reconcile updates Chromium's
-  /// native selected tab. The native find bridge rejects requests until it does.
-  private func waitForNativeSelection(_ tabID: UUID, _ check: String) async throws {
-    for _ in 0..<20 {
-      let selection = runtime.normalProbeSelectionAudit(forTabID: tabID.uuidString)
-      if selection["selectedNativeTab"] as? Bool == true {
-        checks.append(check)
-        return
+  /// Wait for native selection and restored document content before starting
+  /// Chromium find, which can otherwise race tab activation and renderer commit.
+  private func waitForFindTarget(_ tab: UUID, containing text: String? = nil) async throws {
+    let literal =
+      text.flatMap { value in
+        try? String(data: JSONEncoder().encode(value), encoding: .utf8)
+      } ?? "null"
+    let expression =
+      "({fixture:document.documentElement.dataset.arcusisFixture,ready:document.readyState,text:\(literal)===null||document.body?.textContent.includes(\(literal))===true})"
+    var document: [String: Any] = [:]
+    for _ in 0..<40 {
+      let audit = runtime.normalProbeSelectionAudit(forTabID: tab.uuidString)
+      if audit["selectedNativeTab"] as? Bool == true {
+        document = await evaluate(tab, expression) ?? [:]
+        if document["fixture"] as? String == "v1",
+          document["ready"] as? String == "complete",
+          document["text"] as? Bool == true
+        {
+          checks.append("native find target is selected and its authored document text is ready")
+          try await Task.sleep(for: .milliseconds(100))
+          return
+        }
       }
-      try await Task.sleep(for: .milliseconds(5))
+      try await Task.sleep(for: .milliseconds(100))
     }
-    let selection = runtime.normalProbeSelectionAudit(forTabID: tabID.uuidString)
-    throw PageFindProbeFailure("\(check); native selection audit: \(selection)")
-  }
-
-  private func waitForDisplayedNativeTab(_ tabID: UUID, _ check: String) async throws {
-    for _ in 0..<20 {
-      let selection = runtime.normalProbeSelectionAudit(forTabID: tabID.uuidString)
-      if selection["selectedNativeTab"] as? Bool == true,
-        selection["displayedNativeWebContents"] as? Bool == true
-      {
-        checks.append(check)
-        return
-      }
-      try await Task.sleep(for: .milliseconds(5))
-    }
-    let selection = runtime.normalProbeSelectionAudit(forTabID: tabID.uuidString)
-    throw PageFindProbeFailure("\(check); native selection audit: \(selection)")
+    let audit = runtime.normalProbeSelectionAudit(forTabID: tab.uuidString)
+    throw PageFindProbeFailure("Find target was not ready: \(audit), document: \(document).")
   }
 
   private func evaluate(_ tab: UUID, _ expression: String) async -> [String: Any]? {

@@ -5,9 +5,12 @@
 #ifndef CHROME_BROWSER_SHAAR_DOWNLOADS_SHAAR_DOWNLOADS_H_
 #define CHROME_BROWSER_SHAAR_DOWNLOADS_SHAAR_DOWNLOADS_H_
 
-#include <string>
+#include <initializer_list>
 #include <map>
+#include <memory>
 #include <set>
+#include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/timer/timer.h"
@@ -50,6 +53,9 @@ class Downloads final : private download::AllDownloadItemNotifier::Observer {
   bool Control(const std::string& guid,
                const std::string& action,
                std::string* error_code);
+  static bool ControlItem(download::DownloadItem* item,
+                          const std::string& action,
+                          std::string* error_code);
   bool Directory(const std::string& action,
                  const std::string& requested_path,
                  std::string* effective_path,

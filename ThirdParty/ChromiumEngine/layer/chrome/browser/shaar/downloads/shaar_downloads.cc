@@ -148,6 +148,17 @@ bool Downloads::Control(const std::string& guid,
     *error_code = "SHAAR_NOT_FOUND";
     return false;
   }
+  return ControlItem(item, action, error_code);
+}
+
+bool Downloads::ControlItem(download::DownloadItem* item,
+                            const std::string& action,
+                            std::string* error_code) {
+  if (!item || !error_code) {
+    if (error_code)
+      *error_code = "SHAAR_NOT_FOUND";
+    return false;
+  }
   if (action == "pause") {
     if (!item->IsPaused() && item->GetState() == download::DownloadItem::IN_PROGRESS)
       item->Pause();
@@ -270,7 +281,11 @@ bool Downloads::Handle(shaar_operation operation,
       *error_code = "SHAAR_NOT_READY";
       return false;
     }
-    return base::JSONWriter::Write(List(), payload_json);
+    if (!base::JSONWriter::Write(List(), payload_json)) {
+      *error_code = "SHAAR_CHROMIUM_ERROR";
+      return false;
+    }
+    return true;
   }
   if (operation == SHAAR_OP_DOWNLOAD_CONTROL) {
     const std::string* id = args.FindString("downloadId");
@@ -300,7 +315,11 @@ bool Downloads::Handle(shaar_operation operation,
     base::Value::Dict result;
     result.Set("schemaVersion", 1);
     result.Set("directory", effective_path);
-    return base::JSONWriter::Write(result, payload_json);
+    if (!base::JSONWriter::Write(result, payload_json)) {
+      *error_code = "SHAAR_CHROMIUM_ERROR";
+      return false;
+    }
+    return true;
   }
   *error_code = "SHAAR_UNSUPPORTED_CAPABILITY";
   return false;

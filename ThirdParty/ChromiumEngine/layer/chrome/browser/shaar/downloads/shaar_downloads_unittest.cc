@@ -4,6 +4,8 @@
 
 #include "chrome/browser/shaar/downloads/shaar_downloads.h"
 
+#include <utility>
+
 #include "base/time/time.h"
 #include "components/download/public/common/mock_download_item.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -89,6 +91,39 @@ TEST(ShaarDownloadsHandlerTest, RejectsMalformedArgumentsAndUnknownOperation) {
   EXPECT_FALSE(downloads.Handle(static_cast<shaar_operation>(999),
                                 R"({"schemaVersion":1})", &payload, &error));
   EXPECT_EQ(error, "SHAAR_UNSUPPORTED_CAPABILITY");
+}
+
+TEST(ShaarDownloadsControlTest, EnforcesResumeAndRemoveStateConstraints) {
+  NiceMock<download::MockDownloadItem> item;
+  std::string error;
+
+  ON_CALL(item, CanResume()).WillByDefault(Return(false));
+  EXPECT_FALSE(Downloads::ControlItem(&item, "resume", &error));
+  EXPECT_EQ(error, "SHAAR_CONFLICT");
+
+  ON_CALL(item, IsDone()).WillByDefault(Return(false));
+  EXPECT_FALSE(Downloads::ControlItem(&item, "remove", &error));
+  EXPECT_EQ(error, "SHAAR_CONFLICT");
+
+  ON_CALL(item, CanResume()).WillByDefault(Return(true));
+  EXPECT_CALL(item, Resume(true));
+  EXPECT_TRUE(Downloads::ControlItem(&item, "resume", &error));
+
+  ON_CALL(item, IsDone()).WillByDefault(Return(true));
+  EXPECT_CALL(item, Remove());
+  EXPECT_TRUE(Downloads::ControlItem(&item, "remove", &error));
+}
+
+TEST(ShaarDownloadsControlTest, PauseAndCancelAreIdempotent) {
+  NiceMock<download::MockDownloadItem> item;
+  std::string error;
+  ON_CALL(item, IsPaused()).WillByDefault(Return(true));
+  ON_CALL(item, GetState()).WillByDefault(Return(download::DownloadItem::CANCELLED));
+
+  EXPECT_TRUE(Downloads::ControlItem(&item, "pause", &error));
+  EXPECT_TRUE(Downloads::ControlItem(&item, "cancel", &error));
+  EXPECT_FALSE(Downloads::ControlItem(&item, "keep", &error));
+  EXPECT_EQ(error, "SHAAR_INVALID_ARGUMENT");
 }
 
 }  // namespace

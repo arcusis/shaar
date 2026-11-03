@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "sourceKind": "shaar",
+  "chromium": {
+    "repository": "https://chromium.googlesource.com/chromium/src.git",
+    "version": "155.0.8059.84",
+    "tag": "refs/tags/155.0.8059.84",
+    "commit": "5869fe313571d75152b77813cf0a4ee26a4e6df0",
+    "sisoVersion": "git_revision:d38036b64e81c5fdb5d25a92081e6f98a020163d",
+    "checkoutPgoProfiles": true
+  },
+  "ungoogled": {
+    "repository": "https://github.com/ungoogled-software/ungoogled-chromium.git",
+    "tag": "155.0.8059.84-1",
+    "commit": "c7b4b99027bb6f9f33848fdbee8a319a3ba3b238",
+    "macosRepository": "https://github.com/ungoogled-software/ungoogled-chromium-macos.git",
+    "macosTag": "155.0.8059.39-1.1",
+    "macosCommit": "b1238bb72b02cd36219991d9029c1c65183ea295"
+  },
+  "depotTools": {
+    "repository": "https://chromium.googlesource.com/chromium/tools/depot_tools.git",
+    "commit": "b86fc981b72ab966f8260f73b4eca600b3b12677",
+    "pythonPackage": "infra/3pp/tools/cpython3/mac-arm64",
+    "pythonVersionTag": "version:2@3.11.8.chromium.35"
+  },
+  "gitLfs": {
+    "version": "3.8.1",
+    "url": "https://github.com/git-lfs/git-lfs/releases/download/v3.8.1/git-lfs-darwin-arm64-v3.8.1.zip",
+    "archiveSha256": "0ba10e897e0496412cd86eacaed4ed554c97ddc29bc5c709d28faa5eaaa2222c"
+  },
+  "build": {
+    "output": "build/ShaarEngineSource",
+    "configuration": "Release_GN_arm64",
+    "target": "chrome_framework",
+    "syncJobs": 4,
+    "buildJobs": 6,
+    "minimumFreeBytes": 107374182400,
+    "timeoutsSeconds": {
+      "clone": 900,
+      "sync": 28800,
+      "patches": 14400,
+      "gn": 1800,
+      "build": 43200
+    },
+    "frameworkBinary": "chromium_git/chromium/src/out/Release_GN_arm64/Chromium Framework.framework/Versions/A/Chromium Framework"
+  },
+  "layer": {
+    "path": "ThirdParty/ChromiumEngine/layer",
+    "sha256": "7301c0d6d98c49b9ccffd2e6cb9a4f51816e3b55e0120be7489c70b0e10c2d82",
+    "files": {
+      "chrome/browser/shaar/BUILD.gn": "e900133dbc081ba2d29829d6dcfa23d7adf08c22a28cb96d294a92af9531be85",
+      "chrome/browser/shaar/engine/shaar_engine.cc": "07205a696ec84c0d9f210510c2e2fc9b9915c02e6ac4d06af2d6614ff7cb9d86",
+      "chrome/browser/shaar/engine/shaar_event_bridge.cc": "4a6e12be0631c3bab7e0ebc23c7c3a085bd0840439c12921314b853b0ed8d6d6",
+      "chrome/browser/shaar/engine/shaar_event_bridge.h": "e9651cf93b46c65f7c1cb46651d838b4f9684a69d44e22134481dbe76a3055ec",
+      "chrome/browser/shaar/public/shaar_engine.h": "87c1254600be0101dbe1b5a61732ec9a96bddc5cb0403879442be417f67eee88",
+      "chrome/browser/shaar/shaar_engine.exports": "cb7f101b30c3ed4ef138e358071fd881f7b76e1b18ab088192bcd18e65f03c7d"
+    }
+  },
+  "patches": [
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0001-shaar-framework-hook.patch",
+      "sha256": "0eac45319ff87614ffa493e0c6f2e27d7a5148614675054789434a8c067b16cb"
+    }
+  ],
+  "requiredExports": [
+    "_shaar_abi_major",
+    "_shaar_abi_minor",
+    "_shaar_engine_create",
+    "_shaar_engine_release"
+  ]
+}

@@ -385,7 +385,7 @@ final class EngineProbe {
     throw ProbeFailure("\(check); native selection audit: \(selection)")
   }
 
-  private func waitForNativeTabSelection(_ tabID: String) async throws -> [String: Any] {
+  private func waitForNativeTabSelection(_ tabID: String) async throws -> [AnyHashable: Any] {
     for _ in 0..<100 {
       let selection = runtime.normalProbeSelectionAudit(forTabID: tabID)
       if selection["selectedNativeTab"] as? Bool == true { return selection }

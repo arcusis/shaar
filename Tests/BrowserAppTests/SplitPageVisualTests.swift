@@ -11,6 +11,79 @@ import XCTest
 
 @MainActor
 final class SplitPageVisualTests: XCTestCase {
+  func testSplitDividerKeyboardInputRespectsAxisAndDirection() {
+    XCTAssertEqual(
+      SplitDividerInput.keyboardDelta(for: .left, axis: .columns, isRightToLeft: false, step: 32),
+      -32)
+    XCTAssertEqual(
+      SplitDividerInput.keyboardDelta(for: .right, axis: .columns, isRightToLeft: false, step: 32),
+      32)
+    XCTAssertEqual(
+      SplitDividerInput.keyboardDelta(for: .left, axis: .columns, isRightToLeft: true, step: 32),
+      32)
+    XCTAssertEqual(
+      SplitDividerInput.keyboardDelta(for: .right, axis: .columns, isRightToLeft: true, step: 32),
+      -32)
+    XCTAssertEqual(
+      SplitDividerInput.keyboardDelta(for: .up, axis: .rows, isRightToLeft: false, step: 32), -32)
+    XCTAssertEqual(
+      SplitDividerInput.keyboardDelta(for: .down, axis: .rows, isRightToLeft: false, step: 32), 32)
+    XCTAssertNil(
+      SplitDividerInput.keyboardDelta(for: .up, axis: .columns, isRightToLeft: false, step: 32))
+    XCTAssertNil(
+      SplitDividerInput.keyboardDelta(for: .left, axis: .rows, isRightToLeft: false, step: 32))
+    XCTAssertEqual(
+      SplitDividerInput.accessibilityDelta(for: .increment, step: 32), 32)
+    XCTAssertEqual(
+      SplitDividerInput.accessibilityDelta(for: .decrement, step: 32), -32)
+  }
+
+  func testSplitDividerActionsApplyKeyboardAndAccessibilityChanges() {
+    var changes: [CGFloat] = []
+    let right = SplitDividerInput.keyboardAction(
+      for: .right, axis: .columns, isRightToLeft: false, step: 32
+    ) { changes.append($0) }
+    XCTAssertEqual(right(), .handled)
+    XCTAssertEqual(changes, [32])
+
+    let leftToRight = SplitDividerInput.keyboardAction(
+      for: .left, axis: .columns, isRightToLeft: true, step: 32
+    ) { changes.append($0) }
+    XCTAssertEqual(leftToRight(), .handled)
+    XCTAssertEqual(changes, [32, 32])
+
+    let wrongAxis = SplitDividerInput.keyboardAction(
+      for: .up, axis: .columns, isRightToLeft: false, step: 32
+    ) { changes.append($0) }
+    XCTAssertEqual(wrongAxis(), .ignored)
+    XCTAssertEqual(changes, [32, 32])
+
+    let adjust = SplitDividerInput.accessibilityAction(step: 32) { changes.append($0) }
+    adjust(.increment)
+    adjust(.decrement)
+    XCTAssertEqual(changes, [32, 32, 32, -32])
+  }
+
+  func testSplitDividerResizeKeepsBothPanesAboveMinimum() {
+    let initial = [0.5, 0.5]
+    XCTAssertEqual(SplitGroupView.resized(initial, at: 0, by: 40, available: 400), [0.6, 0.4])
+    XCTAssertEqual(SplitGroupView.resized(initial, at: 0, by: 400, available: 400), [0.6, 0.4])
+    XCTAssertEqual(SplitGroupView.resized(initial, at: 2, by: 40, available: 400), initial)
+    XCTAssertEqual(SplitGroupView.resized(initial, at: 0, by: 40, available: 0), initial)
+  }
+
+  func testSplitDividerViewBuildsInHeadlessHost() {
+    let ids = [UUID(), UUID()]
+    let view = SplitPageView(
+      split: BrowserSplit(tabIDs: ids), focusedID: ids[0], onFocus: { _ in },
+      onWeightsChange: { _, _ in }, header: { _ in Text("Pane header") },
+      pane: { _ in Text("Pane content") })
+    let host = NSHostingView(rootView: view.frame(width: 500, height: 300))
+    host.frame = NSRect(x: 0, y: 0, width: 500, height: 300)
+    host.layoutSubtreeIfNeeded()
+    XCTAssertGreaterThan(host.fittingSize.width, 0)
+  }
+
   func testMixedLayoutCapture() async throws {
     try XCTSkipUnless(
       SidebarVisualCaptureSupport.enabled, "Visual capture requires explicit opt-in")

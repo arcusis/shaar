@@ -88,7 +88,7 @@ bool ValidOrigin(std::string_view text, GURL* origin) {
   GURL parsed{std::string(text)};
   if (!parsed.is_valid() || !parsed.SchemeIsHTTPOrHTTPS() ||
       parsed.has_username() || parsed.has_password() || parsed.has_ref() ||
-      parsed.has_query() || parsed.path_piece() != "/")
+      parsed.has_query() || parsed.path() != "/")
     return false;
   *origin = parsed;
   return true;

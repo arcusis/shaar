@@ -115,7 +115,7 @@ def owner_record(repo: Path) -> dict:
 
 
 def prepare_owned_output(repo: Path) -> Path:
-    """Reserved for the future build runner; never called by the dry run."""
+    """Create or validate the private, unindexed Shaar build output."""
     output = guarded_output(repo)
     expected = owner_record(repo)
     if output.exists():
@@ -124,6 +124,10 @@ def prepare_owned_output(repo: Path) -> Path:
         owner = output / OWNER_FILE
         if owner.is_symlink() or not owner.is_file() or json.loads(owner.read_text()) != expected:
             raise BuildError("Shaar output owner record mismatch")
+        marker = output / ".metadata_never_index"
+        if marker.is_symlink():
+            raise BuildError("symlinked Spotlight exclusion in Shaar output")
+        marker.touch(exist_ok=True)
         return output
     output.parent.mkdir(parents=True, exist_ok=True)
     if output.parent.is_symlink():
@@ -137,6 +141,7 @@ def prepare_owned_output(repo: Path) -> Path:
         stream.write("\n")
         stream.flush()
         os.fsync(stream.fileno())
+    (output / ".metadata_never_index").touch()
     return output
 
 

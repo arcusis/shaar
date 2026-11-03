@@ -77,6 +77,7 @@ class ShaarSourceBuildTests(unittest.TestCase):
             sentinel.write_text("legacy receipt must remain unchanged")
             output = BUILD.prepare_owned_output(repo)
             self.assertEqual(output, repo.resolve() / "build/ShaarEngineSource")
+            self.assertTrue((output / ".metadata_never_index").is_file())
             self.assertEqual(sentinel.read_text(), "legacy receipt must remain unchanged")
             self.assertEqual(BUILD.prepare_owned_output(repo), output)
             owner = output / BUILD.OWNER_FILE

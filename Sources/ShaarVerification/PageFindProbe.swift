@@ -61,6 +61,7 @@ final class PageFindProbe {
       else { throw PageFindProbeFailure("Could not prepare authored find text.") }
     }
     store.perform(.space(a.id))
+    try await waitForDisplayedNativeTab(tabA)
     store.showPageFind()
     store.updatePageFindQuery("OrbitFindMarker")
     try await expectResult(count: 3, active: 1, "Chromium finds three authored text matches")
@@ -165,6 +166,20 @@ final class PageFindProbe {
       try await Task.sleep(for: .milliseconds(100))
     }
     throw PageFindProbeFailure("\(message): \(store.pageFind?.status ?? "find closed")")
+  }
+
+  private func waitForDisplayedNativeTab(_ tabID: UUID) async throws {
+    for _ in 0..<20 {
+      let selection = runtime.normalProbeSelectionAudit(forTabID: tabID.uuidString)
+      if selection["selectedNativeTab"] as? Bool == true,
+        selection["displayedNativeWebContents"] as? Bool == true
+      {
+        return
+      }
+      try await Task.sleep(for: .milliseconds(5))
+    }
+    let selection = runtime.normalProbeSelectionAudit(forTabID: tabID.uuidString)
+    throw PageFindProbeFailure("Native tab was not displayed before find: \(selection)")
   }
 
   private func evaluate(_ tab: UUID, _ expression: String) async -> [String: Any]? {

@@ -5,8 +5,7 @@
 #ifndef CHROME_BROWSER_SHAAR_PRIVATE_SESSIONS_SHAAR_PRIVATE_SESSIONS_MODULE_H_
 #define CHROME_BROWSER_SHAAR_PRIVATE_SESSIONS_SHAAR_PRIVATE_SESSIONS_MODULE_H_
 
-#include <unordered_map>
-
+#include "chrome/browser/shaar/engine/shaar_module_registry.h"
 #include "chrome/browser/shaar/private_sessions/shaar_private_sessions.h"
 #include "chrome/browser/shaar/public/shaar_engine.h"
 
@@ -21,18 +20,6 @@ struct PrivateSessionModuleHandlers {
   Open open = nullptr;
   Close close = nullptr;
   ScopePolicy scope_policy = nullptr;
-};
-
-// Temporary module registry declaration. The lifecycle module owns the shared
-// definition when it lands; private-sessions contributes its registration
-// entry and direct handlers to this contract.
-class ShaarModuleRegistry {
- public:
-  bool Register(uint32_t module_id, PrivateSessionModuleHandlers handlers);
-  const PrivateSessionModuleHandlers* Find(uint32_t module_id) const;
-
- private:
-  std::unordered_map<uint32_t, PrivateSessionModuleHandlers> handlers_;
 };
 
 shaar_error_code OpenPrivateSessionHandler(
@@ -57,6 +44,6 @@ std::unique_ptr<PrivateSessionRegistry> CreatePrivateSessionRegistry(
 }  // namespace shaar
 
 extern "C" void shaar_private_sessions_register(
-    shaar::ShaarModuleRegistry* registry);
+    ShaarModuleRegistry* registry);
 
 #endif  // CHROME_BROWSER_SHAAR_PRIVATE_SESSIONS_SHAAR_PRIVATE_SESSIONS_MODULE_H_

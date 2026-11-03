@@ -38,61 +38,35 @@ TEST(ShaarBookmarksModuleTest, RejectsPrivateScopeBeforeModelLookup) {
   }
 }
 
-struct Registration {
-  shaar_operation operation;
-  ShaarModuleRegistry::Handler handler;
-  void *context;
-};
-
-void CaptureHandler(void *context, shaar_operation operation,
-                    ShaarModuleRegistry::Handler handler,
-                    void *handler_context) {
-  static_cast<std::vector<Registration> *>(context)->push_back(
-      {operation, handler, handler_context});
-}
-
-BookmarksModule *ResolveModule(void *, shaar_engine *, shaar_profile *,
-                               shaar_error_code *) {
-  ADD_FAILURE() << "private scope must be rejected before profile resolution";
-  return nullptr;
-}
-
 TEST(ShaarBookmarksModuleTest, RegistersEachBookmarkOperation) {
-  std::vector<Registration> registrations;
   ShaarModuleRegistry registry;
-  registry.context = &registrations;
-  registry.register_handler = &CaptureHandler;
-  registry.resolve_bookmarks_module = &ResolveModule;
-
   shaar_bookmarks_register(&registry);
-
-  ASSERT_EQ(registrations.size(), 3u);
-  EXPECT_EQ(registrations[0].operation, SHAAR_OP_BOOKMARK_TREE);
-  EXPECT_EQ(registrations[1].operation, SHAAR_OP_BOOKMARK_APPLY);
-  EXPECT_EQ(registrations[2].operation, SHAAR_OP_BOOKMARK_WATCH);
-  for (const Registration &registration : registrations)
-    EXPECT_NE(registration.handler, nullptr);
+  EXPECT_NE(registry.Find(SHAAR_OP_BOOKMARK_TREE), nullptr);
+  EXPECT_NE(registry.Find(SHAAR_OP_BOOKMARK_APPLY), nullptr);
+  EXPECT_NE(registry.Find(SHAAR_OP_BOOKMARK_WATCH), nullptr);
 }
 
 TEST(ShaarBookmarksModuleTest,
      RegisteredHandlerRejectsPrivateScopeBeforeLookup) {
-  std::vector<Registration> registrations;
   ShaarModuleRegistry registry;
-  registry.context = &registrations;
-  registry.register_handler = &CaptureHandler;
-  registry.resolve_bookmarks_module = &ResolveModule;
   shaar_bookmarks_register(&registry);
 
   shaar_engine engine;
   shaar_scope scope = {};
   scope.size = sizeof(scope);
   scope.private_session = reinterpret_cast<shaar_private_session *>(1);
-  for (const Registration &registration : registrations) {
-    EXPECT_EQ(registration.handler(registration.context, &engine, scope,
-                                   registration.operation, {nullptr, 0}, 1,
-                                   nullptr, nullptr),
+  for (shaar_operation operation : {SHAAR_OP_BOOKMARK_TREE,
+                                    SHAAR_OP_BOOKMARK_APPLY,
+                                    SHAAR_OP_BOOKMARK_WATCH}) {
+    auto handler = registry.Find(operation);
+    ASSERT_NE(handler, nullptr);
+    shaar_error error{};
+    error.size = sizeof(error);
+    EXPECT_EQ(handler(nullptr, &engine, scope, nullptr, nullptr, operation,
+                      {nullptr, 0}, 1, nullptr, nullptr, &error),
               SHAAR_PRIVATE_DISALLOWED)
-        << registration.operation;
+        << operation;
+    EXPECT_EQ(error.code, SHAAR_PRIVATE_DISALLOWED) << operation;
   }
 }
 

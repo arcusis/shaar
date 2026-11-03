@@ -5,6 +5,8 @@
 #include "chrome/browser/shaar/bookmarks/shaar_bookmarks.h"
 
 #include <map>
+#include <cstddef>
+#include <cstring>
 #include <memory>
 #include <string>
 
@@ -15,6 +17,21 @@
 namespace {
 
 const int kBookmarksUserDataKey = 0;
+
+shaar_error_code Fail(shaar_error_code code,
+                      const char* message,
+                      shaar_error* error) {
+  if (error) {
+    const uint32_t size = error->size;
+    if (size >= offsetof(shaar_error, code) + sizeof(error->code))
+      error->code = code;
+    if (size >= offsetof(shaar_error, platform_code) + sizeof(error->platform_code))
+      error->platform_code = 0;
+    if (size >= offsetof(shaar_error, message) + sizeof(error->message))
+      error->message = {message, strlen(message)};
+  }
+  return code;
+}
 
 class PerEngineBookmarks final : public base::SupportsUserData::Data {
  public:
@@ -78,20 +95,21 @@ shaar_error_code HandleLifecycleBookmark(
     shaar_request_id request_id,
     shaar_reply_fn reply,
     void* reply_context,
-    shaar_error*) {
+    shaar_error* error) {
   if (scope.profile && scope.private_session)
-    return SHAAR_INVALID_ARGUMENT;
+    return Fail(SHAAR_INVALID_ARGUMENT, "ambiguous bookmark scope", error);
   if (scope.private_session)
-    return SHAAR_PRIVATE_DISALLOWED;
+    return Fail(SHAAR_PRIVATE_DISALLOWED,
+                "bookmarks are unavailable in private sessions", error);
   if (!context || !context->profile_services || !engine || !scope.profile ||
       !reply || (args.size && !args.data))
-    return SHAAR_INVALID_ARGUMENT;
+    return Fail(SHAAR_INVALID_ARGUMENT, "invalid bookmark request", error);
   Profile* profile =
       context->profile_services->ResolveProfile(engine, scope.profile);
   const std::string_view profile_id =
       context->profile_services->ProfileID(engine, scope.profile);
   if (!profile || profile_id.empty())
-    return SHAAR_NOT_FOUND;
+    return Fail(SHAAR_NOT_FOUND, "profile handle is stale", error);
   auto* module = GetBookmarksData(profile)->Get(
       profile, engine, std::string(profile_id));
   auto reply_state = std::make_unique<AbiReplyContext>(
@@ -100,7 +118,7 @@ shaar_error_code HandleLifecycleBookmark(
   const shaar_error_code status = module->Submit(
       operation, arguments, &ReplyThroughABI, reply_state.get());
   if (status != SHAAR_OK)
-    return status;
+    return Fail(status, "bookmark operation was rejected", error);
   reply_state.release();
   return SHAAR_OK;
 }

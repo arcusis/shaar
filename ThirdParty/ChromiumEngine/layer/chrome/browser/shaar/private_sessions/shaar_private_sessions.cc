@@ -175,21 +175,6 @@ void PrivateSessionRegistry::MaybeRetire(Session* session) {
 
 namespace shaar {
 
-bool ShaarModuleRegistry::Register(uint32_t module_id,
-                                  PrivateSessionModuleHandlers handlers) {
-  if (module_id != SHAAR_MODULE_PRIVATE_SESSIONS || !handlers.open ||
-      !handlers.close || !handlers.scope_policy) {
-    return false;
-  }
-  return handlers_.emplace(module_id, handlers).second;
-}
-
-const PrivateSessionModuleHandlers* ShaarModuleRegistry::Find(
-    uint32_t module_id) const {
-  auto found = handlers_.find(module_id);
-  return found == handlers_.end() ? nullptr : &found->second;
-}
-
 shaar_error_code OpenPrivateSessionHandler(
     void* context,
     Profile* parent,
@@ -281,12 +266,12 @@ shaar_error_code ClosePrivateSessionHandler(
 }  // namespace shaar
 
 extern "C" void shaar_private_sessions_register(
-    shaar::ShaarModuleRegistry* registry) {
+    ShaarModuleRegistry* registry) {
   if (!registry)
     return;
-  registry->Register(
-      SHAAR_MODULE_PRIVATE_SESSIONS,
-      {.open = &shaar::OpenPrivateSessionHandler,
-       .close = &shaar::ClosePrivateSessionHandler,
-       .scope_policy = &shaar::PrivateSessionScopePolicy});
+  static const shaar::PrivateSessionModuleHandlers handlers{
+      .open = &shaar::OpenPrivateSessionHandler,
+      .close = &shaar::ClosePrivateSessionHandler,
+      .scope_policy = &shaar::PrivateSessionScopePolicy};
+  registry->RegisterModule(SHAAR_MODULE_PRIVATE_SESSIONS, &handlers);
 }

@@ -83,6 +83,12 @@ TEST(ShaarModuleRegistryTest, PassesProfileAndTabServicesThroughContext) {
   } tabs;
   shaar::ShaarEngineContext context{&profiles, &tabs};
   EXPECT_NE(context.profile_services->ResolveProfile(nullptr, nullptr), nullptr);
+  EXPECT_NE(context.profile_services->GetKeyedService(
+                nullptr, nullptr,
+                +[](Profile*) -> KeyedService* {
+                  return reinterpret_cast<KeyedService*>(0x16);
+                }),
+            nullptr);
   EXPECT_NE(context.browser_tabs->FindBrowser(nullptr, nullptr), nullptr);
   EXPECT_NE(context.browser_tabs->FindWebContents(nullptr, nullptr, nullptr),
             nullptr);
@@ -97,6 +103,17 @@ TEST(ShaarModuleRegistryTest, RejectsInvalidAndOverlappingRanges) {
   EXPECT_FALSE(registry.Register(101, 105, &FakeProfileHandler));
   EXPECT_FALSE(registry.Register(99, 100, &FakeProfileHandler));
   EXPECT_TRUE(registry.Register(200, 207, &FakeProfileHandler));
+}
+
+TEST(ShaarModuleRegistryTest, StoresModuleContractsByModuleID) {
+  ShaarModuleRegistry registry;
+  static const int handlers = 7;
+  EXPECT_TRUE(registry.RegisterModule(SHAAR_MODULE_PRIVATE_SESSIONS, &handlers));
+  EXPECT_EQ(registry.FindModule(SHAAR_MODULE_PRIVATE_SESSIONS), &handlers);
+  EXPECT_FALSE(
+      registry.RegisterModule(SHAAR_MODULE_PRIVATE_SESSIONS, &handlers));
+  EXPECT_FALSE(registry.RegisterModule(0, &handlers));
+  EXPECT_FALSE(registry.RegisterModule(1201, nullptr));
 }
 
 TEST(ShaarModuleRegistryTest, TracksRequestsForModuleOwnedCancellation) {

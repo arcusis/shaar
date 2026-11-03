@@ -33,6 +33,8 @@ struct ShaarModuleRegistry {
                 uint32_t last,
                 Handler handler,
                 CancelHandler cancel_handler = nullptr);
+  bool RegisterModule(uint32_t module_id, const void* handlers);
+  const void* FindModule(uint32_t module_id) const;
   Handler Find(shaar_operation operation) const;
   CancelHandler FindCancel(shaar_operation operation) const;
   bool Reserve(shaar_engine* engine, shaar_request_id request_id,
@@ -46,6 +48,7 @@ struct ShaarModuleRegistry {
 
  private:
   std::map<uint32_t, Range> ranges_;
+  std::map<uint32_t, const void*> modules_;
   struct PendingRequest {
     shaar_engine* engine;
     CancelHandler cancel_handler;

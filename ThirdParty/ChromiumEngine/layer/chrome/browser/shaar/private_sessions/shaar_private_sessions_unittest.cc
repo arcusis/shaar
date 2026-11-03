@@ -126,7 +126,8 @@ TEST(PrivateSessionRegistryTest, ModuleRegistrationExposesDirectHandlers) {
   PrivateSessionRegistry sessions;
   ShaarModuleRegistry modules;
   shaar_private_sessions_register(&modules);
-  const auto* handlers = modules.Find(SHAAR_MODULE_PRIVATE_SESSIONS);
+  const auto* handlers = static_cast<const PrivateSessionModuleHandlers*>(
+      modules.FindModule(SHAAR_MODULE_PRIVATE_SESSIONS));
   ASSERT_NE(handlers, nullptr);
   PrivateSessionRegistry::Session* session = nullptr;
   EXPECT_EQ(handlers->open(&sessions, &profile, "profile-a", "session-a", &session),

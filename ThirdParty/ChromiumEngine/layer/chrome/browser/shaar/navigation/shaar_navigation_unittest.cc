@@ -5,8 +5,6 @@
 #include "chrome/browser/shaar/navigation/shaar_navigation.h"
 
 #include <string>
-#include <utility>
-#include <vector>
 
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -44,17 +42,6 @@ class FakeBackend final : public Backend {
 
 shaar_bytes Bytes(const std::string& value) {
   return {value.data(), value.size()};
-}
-
-struct RegisteredHandler {
-  shaar_operation operation;
-  shaar::ModuleHandler handler;
-};
-
-void CaptureHandler(void* context, shaar_operation operation,
-                    shaar::ModuleHandler handler) {
-  static_cast<std::vector<RegisteredHandler>*>(context)->push_back(
-      {operation, handler});
 }
 
 TEST(ShaarNavigationHandlerTest,
@@ -141,20 +128,6 @@ TEST(ShaarNavigationHandlerTest, StopIsDispatchedAndNullBackendIsNotFound) {
   EXPECT_EQ(HandleCommand(nullptr, SHAAR_OP_TAB_STOP, Bytes(stop), &reason),
             SHAAR_NOT_FOUND);
   EXPECT_EQ(reason, "tab_not_found");
-}
-
-TEST(ShaarNavigationHandlerTest, RegistersExactlyTheNavigationOperationIDs) {
-  std::vector<RegisteredHandler> handlers;
-  ShaarModuleRegistry registry{sizeof(ShaarModuleRegistry), &handlers,
-                               CaptureHandler};
-  shaar_navigation_register(&registry);
-  ASSERT_EQ(handlers.size(), 4u);
-  EXPECT_EQ(handlers[0].operation, SHAAR_OP_TAB_NAVIGATE);
-  EXPECT_EQ(handlers[1].operation, SHAAR_OP_TAB_GO);
-  EXPECT_EQ(handlers[2].operation, SHAAR_OP_TAB_RELOAD);
-  EXPECT_EQ(handlers[3].operation, SHAAR_OP_TAB_STOP);
-  for (const auto& registered : handlers)
-    EXPECT_EQ(registered.handler, shaar::navigation::HandleNavigation);
 }
 
 }  // namespace

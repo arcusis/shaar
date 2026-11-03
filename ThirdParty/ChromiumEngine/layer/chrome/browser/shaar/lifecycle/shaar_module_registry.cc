@@ -19,6 +19,7 @@
 #define SHAAR_DECLARE_OPTIONAL_MODULE(name)                 \
   extern "C" void name(ShaarModuleRegistry*) __attribute__((weak_import))
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_profiles_register);
+SHAAR_DECLARE_OPTIONAL_MODULE(shaar_private_sessions_register);
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_windows_tabs_register);
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_navigation_register);
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_downloads_register);
@@ -87,6 +88,17 @@ bool ShaarModuleRegistry::Register(uint32_t first,
   return true;
 }
 
+bool ShaarModuleRegistry::RegisterModule(uint32_t module_id,
+                                         const void* handlers) {
+  return module_id != 0 && handlers &&
+         modules_.emplace(module_id, handlers).second;
+}
+
+const void* ShaarModuleRegistry::FindModule(uint32_t module_id) const {
+  auto module = modules_.find(module_id);
+  return module == modules_.end() ? nullptr : module->second;
+}
+
 ShaarModuleRegistry::Handler ShaarModuleRegistry::Find(
     shaar_operation operation) const {
   const uint32_t id = static_cast<uint32_t>(operation);
@@ -152,6 +164,8 @@ namespace shaar::lifecycle {
 void RegisterLinkedModules(ShaarModuleRegistry* registry) {
   if (!registry)
     return;
+  if (shaar_private_sessions_register)
+    shaar_private_sessions_register(registry);
   if (shaar_profiles_register)
     shaar_profiles_register(registry);
   if (shaar_windows_tabs_register)

@@ -39,6 +39,12 @@ PRs, merge groups and timing runs cover all shipping modules plus support warm-u
 
 The next hardware variant runs only CodeQL Swift on standard `macos-26-intel` (4 CPUs/14 GB), leaving native build/runtime jobs on M1 `macos-26` (3 CPUs/7 GB). Both are standard public-repository runners. Explicitly compile arm64 and reject a plan targeting another architecture, preserving shipping conditional code. [GitHub runner specifications](https://docs.github.com/en/actions/reference/runners/github-hosted-runners) establish hardware availability, not a speed claim.
 
+## CodeQL PR follow-up (#378)
+
+The successful shipping-scope baseline [run 41538992824](https://github.com/arcusis/shaar/actions/runs/41538992824) took 30m08s for the CodeQL Swift job, including setup and analysis; traced compilation took 22m31s. Two hosted compiler experiments preserved the existing extracted-file gate but did not improve the result: two independent module jobs completed tracing in 23m45s, and allocating four threads to the serial `ArcusisBrowser` module completed tracing in 23m09s. The latter job completed in 30m24s and extracted all 200/200 selected Swift sources. The experiments are not retained as speedups.
+
+SwiftPM dependency downloads were already cached, compiled first-party products cannot be reused without risking skipped traced source compilation, and PR analysis already uses shipping scope. Keep those boundaries. Run the PR scan only when shipping Swift or its package inputs change, and reserve full Swift scans for production pushes and nightly runs; this avoids spending a full scan on documentation/CI-only PRs and duplicate feature-branch pushes without narrowing any selected scan's source inventory. Full production/nightly analysis continues to include verification sources, the manifest, and plugins.
+
 The two-batch trial completed baseline/lifecycle at 13m44s, shipping at 14m38s and visuals at exactly 15m00s. Its unit job waited about 79 seconds for fast checks. Independent unit/unsigned-candidate preparation now starts earlier; the final gate still requires fast, dependency review, build and every downstream check. These changes remove idle dependencies, not validation.
 
 ## Coverage and readiness

@@ -6,10 +6,12 @@ assert(is_mac)
 
 source_set("engine") {
   public = [ "public/shaar_engine.h" ]
+  deps = [ "//base", "//content/public/browser", "//url" ]
   sources = [
     "engine/shaar_engine.cc",
     "engine/shaar_event_bridge.cc",
     "engine/shaar_event_bridge.h",
+    "navigation/shaar_navigation.cc",
   ]
 }
 

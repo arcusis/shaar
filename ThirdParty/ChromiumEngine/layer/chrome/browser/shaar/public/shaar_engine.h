@@ -183,6 +183,9 @@ typedef enum {
   SHAAR_OP_MEDIA_CAPTURE_REPLY = 1106
 } shaar_operation;
 
+// Private sessions module IDs.
+typedef enum { SHAAR_MODULE_PRIVATE_SESSIONS = 1200 } shaar_module_id;
+
 typedef enum {
   SHAAR_DEVTOOLS_CAPABILITY_INSPECTOR = 1,
   SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER = 2
@@ -266,6 +269,22 @@ SHAAR_EXPORT shaar_error_code shaar_profile_open(
     shaar_profile **out, shaar_error *immediate_error);
 SHAAR_EXPORT shaar_error_code shaar_profile_close(
     shaar_profile *, shaar_error *error);
+/* BEGIN Shaar profiles module ABI exports. */
+SHAAR_EXPORT shaar_error_code shaar_profile_create(
+    shaar_engine *, shaar_bytes profile_id, shaar_bytes display_name,
+    shaar_request_id, shaar_reply_fn, void *reply_context,
+    shaar_profile **out, shaar_error *immediate_error);
+SHAAR_EXPORT shaar_error_code shaar_profile_delete(
+    shaar_profile *, shaar_error *error);
+SHAAR_EXPORT shaar_error_code shaar_profile_get_state(
+    shaar_profile *, shaar_bytes state_key, shaar_bytes *value_json,
+    shaar_error *error);
+SHAAR_EXPORT shaar_error_code shaar_profile_set_state(
+    shaar_profile *, shaar_bytes state_key, shaar_bytes value_json,
+    shaar_error *error);
+SHAAR_EXPORT shaar_error_code shaar_profile_get_path(
+    shaar_profile *, shaar_bytes *path, shaar_error *error);
+/* END Shaar profiles module ABI exports. */
 SHAAR_EXPORT shaar_error_code shaar_private_session_open(
     shaar_profile *, shaar_bytes session_id, shaar_private_session **out,
     shaar_error *error);

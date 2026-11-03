@@ -4,6 +4,7 @@
 
 import Darwin
 import Foundation
+import ShaarEngineC
 
 /// Step 0 deliberately leaves shipping builds on the existing ChromiumBridge path.
 public enum ShaarEngineImplementation: Equatable, Sendable {
@@ -64,28 +65,11 @@ public struct ShaarCopiedEvent: Equatable, Sendable {
   }
 }
 
-/// Public layout mirrors the size-prefixed v1 ABI event, while exposing only copied data.
-public struct ShaarBytes {
-  public var data: UnsafePointer<CChar>?
-  public var size: Int
-  public init(data: UnsafePointer<CChar>?, size: Int) {
-    self.data = data
-    self.size = size
-  }
-}
+/// Compatibility names that refer directly to the imported C ABI types.
+public typealias ShaarBytes = shaar_bytes
+public typealias ShaarABIEvent = shaar_event
 
-public struct ShaarABIEvent {
-  public var size: UInt32
-  public var sequence: UInt64
-  public var kind: UInt32
-  public var profileID: ShaarBytes
-  public var sessionID: ShaarBytes
-  public var windowID: ShaarBytes
-  public var tabID: ShaarBytes
-  public var payloadJSON: ShaarBytes
-}
-
-private func copyBytes(_ bytes: ShaarBytes, field: String) throws -> Data {
+private func copyBytes(_ bytes: shaar_bytes, field: String) throws -> Data {
   guard bytes.size >= 0, bytes.size == 0 || bytes.data != nil else {
     throw ShaarEngineError.invalidEvent("invalid \(field) slice")
   }
@@ -99,17 +83,18 @@ public enum ShaarEventCopy {
     guard event.size >= requiredSize else {
       throw ShaarEngineError.invalidEvent("short event struct")
     }
-    let profile = try copyBytes(event.profileID, field: "profile ID")
-    let session = try copyBytes(event.sessionID, field: "session ID")
-    if event.kind != 1 && profile.isEmpty {
+    let profile = try copyBytes(event.profile_id, field: "profile ID")
+    let session = try copyBytes(event.session_id, field: "session ID")
+    let kind = UInt32(event.kind.rawValue)
+    if kind != UInt32(SHAAR_EVENT_ENGINE.rawValue) && profile.isEmpty {
       throw ShaarEngineError.invalidEvent("profile-scoped event has no profile ID")
     }
     return ShaarCopiedEvent(
-      sequence: event.sequence, kind: event.kind, profileID: profile,
+      sequence: event.sequence, kind: kind, profileID: profile,
       sessionID: session,
-      windowID: try copyBytes(event.windowID, field: "window ID"),
-      tabID: try copyBytes(event.tabID, field: "tab ID"),
-      payloadJSON: try copyBytes(event.payloadJSON, field: "payload JSON"))
+      windowID: try copyBytes(event.window_id, field: "window ID"),
+      tabID: try copyBytes(event.tab_id, field: "tab ID"),
+      payloadJSON: try copyBytes(event.payload_json, field: "payload JSON"))
   }
 }
 

@@ -1,0 +1,63 @@
+--- a/chrome/app/chrome_main.cc
++++ b/chrome/app/chrome_main.cc
+@@ -24,6 +24,8 @@
+ #endif
+ #include "chrome/app/startup_timestamps.h"
+ #include "chrome/browser/headless/headless_mode_init.h"
++#include "chrome/browser/chrome_content_browser_client.h"
++#include "chrome/browser/shaar/lifecycle/shaar_lifecycle.h"
+ #include "chrome/common/buildflags.h"
+ #include "chrome/common/chrome_result_codes.h"
+ #include "chrome/common/chrome_switches.h"
+@@ -70,6 +72,20 @@
+ }
+ 
+ }  // namespace
++
++#if BUILDFLAG(IS_MAC)
++class ShaarMainDelegate final : public ChromeMainDelegate {
++ public:
++  using ChromeMainDelegate::ChromeMainDelegate;
++
++ protected:
++  content::ContentBrowserClient* CreateContentBrowserClient() override {
++    chrome_content_browser_client_ =
++        shaar::lifecycle::CreateContentBrowserClient();
++    return chrome_content_browser_client_.get();
++  }
++};
++#endif  // BUILDFLAG(IS_MAC)
+ 
+ const base::CommandLine& GetInitialBrowserCommandLine() {
+   // Will `CHECK` if called without a previous assignment during browser
+@@ -131,7 +147,7 @@
+       base::TimeTicks::FromInternalValue(preread_end_ticks)};
+   ChromeMainDelegate chrome_main_delegate(timestamps);
+ #else  // BUILDFLAG(IS_WIN)
+-  ChromeMainDelegate chrome_main_delegate(
++  ShaarMainDelegate chrome_main_delegate(
+       {.exe_entry_point_ticks = base::TimeTicks::Now()});
+ #endif
+   content::ContentMainParams params(&chrome_main_delegate);
+--- a/chrome/browser/lifetime/browser_close_manager.cc
++++ b/chrome/browser/lifetime/browser_close_manager.cc
+@@ -37,6 +37,10 @@
+ #include "chrome/browser/notifications/notification_ui_manager.h"
+ #endif
+ 
++namespace shaar::lifecycle {
++void EngineQuitCancelled() __attribute__((weak_import));
++}  // namespace shaar::lifecycle
++
+ namespace {
+ 
+ // Navigates a browser window for |profile|, creating one if necessary, to the
+@@ -79,6 +83,8 @@
+   }
+ 
+   browser_shutdown::SetTryingToQuit(false);
++  if (shaar::lifecycle::EngineQuitCancelled)
++    shaar::lifecycle::EngineQuitCancelled();
+   GlobalBrowserCollection::GetInstance()->ForEach(
+       [](BrowserWindowInterface* browser) {
+         UnloadController::From(browser)->ResetTryToCloseWindow();

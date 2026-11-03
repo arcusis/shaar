@@ -16,7 +16,7 @@ import tarfile
 from pathlib import Path
 
 from ci_support import Commands, ROOT
-from ci_engine import BUNDLE_NAME, archive_bundle, engine_shards, restore_bundle, shard_modes
+from ci_engine import BUNDLE_NAME, archive_bundle, engine_shards, restore_bundle, shard_modes, validate_bundle_archive
 from sidebar_dnd_fixture import registered_sidebar_type
 
 
@@ -124,6 +124,12 @@ def run_probe_iterations(checks: Commands, mode: str, iterations: range) -> None
 
 def build_engine_bundle(checks: Commands, iterations: int) -> None:
     require_hosted_mac()
+    if (checks.directory / "bundle.json").is_file():
+        validate_bundle_archive(ROOT, checks.directory)
+        with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
+            output.write(f"shards={json.dumps(engine_shards(iterations))}\n")
+        print("Reusing integrity-checked verification bundle for this exact source tree")
+        return
     if checks.run("verification-build", ["bash", "scripts/bundle-app.sh", "--with-engine", "--verification"]):
         return
     archive_bundle(ROOT, checks.directory)

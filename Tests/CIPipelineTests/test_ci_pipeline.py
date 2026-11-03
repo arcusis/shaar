@@ -481,7 +481,7 @@ class EngineTransferTests(unittest.TestCase):
         from ci_engine import BUNDLE_NAME, archive_bundle, restore_bundle
         import shutil
         with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {
-            "GITHUB_SHA": "a" * 40, "CI_TOOLCHAIN_ID": "toolchain",
+            "CI_SOURCE_TREE": "a" * 40, "CI_TOOLCHAIN_ID": "toolchain",
         }):
             root = Path(temporary)
             pin = root / "ThirdParty/ArdiaCore/pin.json"
@@ -497,7 +497,7 @@ class EngineTransferTests(unittest.TestCase):
             directory.mkdir()
             archive_bundle(root, directory)
             shutil.rmtree(bundle)
-            with patch.dict(os.environ, {"GITHUB_SHA": "c" * 40}), self.assertRaises(ValueError):
+            with patch.dict(os.environ, {"CI_SOURCE_TREE": "c" * 40}), self.assertRaises(ValueError):
                 restore_bundle(root, directory)
             restore_bundle(root, directory)
             self.assertEqual(executable.read_bytes(), b"authored executable")

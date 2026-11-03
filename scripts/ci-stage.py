@@ -23,6 +23,7 @@ from sidebar_dnd_fixture import registered_sidebar_type
 VISUAL_FILTERS = (
     "SidebarChromeLayoutTests", "SpaceEditorVisualTests", "ExtensionManagerVisualTests",
     "SpaceIconPickerVisualTests", "SidebarFoldersVisualTests", "CommandPanelVisualTests",
+    "SettingsVisualTests",
 )
 ENGINE_MODES = ("baseline", "private-window", "quit-exit", "session-recovery")
 MINIMUM_REPETITIONS = {"private-window": 3, "quit-exit": 3}

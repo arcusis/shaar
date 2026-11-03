@@ -17,9 +17,11 @@ final class SettingsVisualTests: XCTestCase {
     backend.exceptions[id] = [
       "https://example.test": ["camera": ["value": "allow", "isDefault": false]]
     ]
+    let model = ProfilePrivacyModel(profileID: id, backend: backend)
+    await model.load()
     for scheme in [ColorScheme.light, .dark] {
       let view = Form {
-        ProfilePrivacySections(profileID: id, backend: backend)
+        ProfilePrivacySections(model: model, expandedSites: ["https://example.test"])
       }
       .formStyle(.grouped)
       .environment(\.colorScheme, scheme)
@@ -31,7 +33,34 @@ final class SettingsVisualTests: XCTestCase {
         to: URL(
           fileURLWithPath:
             "/tmp/settings-privacy-controls-\(scheme == .dark ? "dark" : "light").png"),
-        requiredText: ["Website Data", "Site Permissions", "https://example.test"])
+        requiredText: ["Website Data", "Site Permissions", "https://example.test", "Camera"])
+    }
+  }
+
+  func testProfileDeletionConfirmation() async throws {
+    try XCTSkipUnless(SidebarVisualCaptureSupport.enabled, "Visual capture requires opt-in")
+    let profiles = [
+      BrowserSettingsProfile(id: UUID(), name: "Personal", spaces: []),
+      BrowserSettingsProfile(id: UUID(), name: "Work", spaces: []),
+    ]
+    for scheme in [ColorScheme.light, .dark] {
+      for remove in [false, true] {
+        let view = ProfileDeletionConfirmation(
+          profile: profiles[0], profiles: profiles, removeSpaces: remove,
+          onDeleteProfile: { _, _ in XCTFail("Capture must not delete a profile") }, onDismiss: {}
+        )
+        .environment(\.colorScheme, scheme)
+        let mounted = try MountedChromeSidebar(
+          view: view, size: NSSize(width: 420, height: 500),
+          appearance: scheme == .dark ? .darkAqua : .aqua)
+        defer { mounted.close() }
+        _ = try await mounted.capture(
+          to: URL(
+            fileURLWithPath:
+              "/tmp/settings-delete-\(remove ? "remove" : "move")-\(scheme == .dark ? "dark" : "light").png"
+          ),
+          requiredText: ["Delete Personal?", "Chromium"])
+      }
     }
   }
 

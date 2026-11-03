@@ -93,7 +93,7 @@ final class BrowserPreferencesStore {
     save()
   }
 
-  /// Removes every app-owned preference for this identity, retaining other profiles and globals.
+  /// Verifies preferences can be persisted before engine deletion becomes irreversible.
   func validateProfileRemoval() throws {
     guard !preservesExistingFile else { throw CocoaError(.fileWriteNoPermission) }
     // Refuse engine deletion when the existing preferences cannot be persisted.
@@ -101,6 +101,7 @@ final class BrowserPreferencesStore {
     if storageNotice != nil { throw CocoaError(.fileWriteUnknown) }
   }
 
+  /// Removes every app-owned preference for this identity, retaining other profiles and globals.
   func removeProfile(_ profileID: UUID) throws {
     try validateProfileRemoval()
     profileSearchEngines[profileID] = nil

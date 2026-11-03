@@ -10,9 +10,15 @@ struct ProfilePrivacySections: View {
   @State private var confirmClear = false
   @State private var clearSiteData = true
   @State private var resettingOrigin: String?
+  @State private var expandedSites: Set<String> = []
 
   init(profileID: UUID, backend: any ProfileSettingsBackend) {
     _model = State(initialValue: ProfilePrivacyModel(profileID: profileID, backend: backend))
+  }
+
+  init(model: ProfilePrivacyModel, expandedSites: Set<String> = []) {
+    _model = State(initialValue: model)
+    _expandedSites = State(initialValue: expandedSites)
   }
 
   var body: some View {
@@ -86,7 +92,13 @@ struct ProfilePrivacySections: View {
             .foregroundStyle(.secondary)
         }
         ForEach(model.sites) { site in
-          DisclosureGroup {
+          DisclosureGroup(
+            isExpanded: Binding(
+              get: { expandedSites.contains(site.id) },
+              set: {
+                if $0 { expandedSites.insert(site.id) } else { expandedSites.remove(site.id) }
+              })
+          ) {
             ForEach(site.permissions) { permission in
               LabeledContent(permission.title, value: permission.valueLabel)
             }

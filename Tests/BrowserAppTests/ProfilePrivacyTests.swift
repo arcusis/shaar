@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import BrowserCore
+import ChromiumBridge
 import Foundation
 import Testing
 
@@ -10,6 +11,31 @@ import Testing
 
 @Suite @MainActor
 struct ProfilePrivacyTests {
+  @Test func unavailableEngineFailsClosedForProfileAndCookieMutations() async {
+    let backend = EngineProfileSettings(runtime: ARCChromiumRuntime())
+    let id = UUID()
+    await #expect(throws: (any Error).self) { try await backend.loadProfile(id) }
+    #expect(backend.thirdPartyCookiesBlocked(id) == nil)
+    await #expect(throws: (any Error).self) {
+      try await backend.setThirdPartyCookiesBlocked(true, profileID: id)
+    }
+    await #expect(throws: (any Error).self) { try await backend.deleteProfile(id) }
+  }
+
+  @Test func supportedCookiePolicyReadsBackAndFailureKeepsPreviousValue() async {
+    let backend = ProfileSettingsStub()
+    let id = UUID()
+    let other = UUID()
+    backend.cookiePolicies = [id: false, other: false]
+    let model = ProfilePrivacyModel(profileID: id, backend: backend)
+    await model.load()
+    await model.setCookiesBlocked(true)
+    #expect(model.cookiesBlocked == true && backend.cookiePolicies[other] == false)
+    backend.failureAction = "cookies"
+    await model.setCookiesBlocked(false)
+    #expect(model.cookiesBlocked == true && model.failure != nil)
+  }
+
   @Test func selectedProfileOwnsEveryPrivacyActionAndUnsupportedCookiePolicyStaysUnknown() async {
     let backend = ProfileSettingsStub()
     let selected = UUID()
@@ -173,6 +199,7 @@ final class ProfileSettingsStub: ProfileSettingsBackend {
   var exceptions: [UUID: [String: [String: NSDictionary]]] = [:]
   var calls: [(String, UUID)] = []
   var failureAction: String?
+  var cookiePolicies: [UUID: Bool] = [:]
   var delayedProfile: UUID?
   var loadContinuation: CheckedContinuation<Void, Never>?
 
@@ -200,9 +227,10 @@ final class ProfileSettingsStub: ProfileSettingsBackend {
     try record("reset", id)
     exceptions[id]?[origin] = nil
   }
-  func thirdPartyCookiesBlocked(_ id: UUID) -> Bool? { nil }
+  func thirdPartyCookiesBlocked(_ id: UUID) -> Bool? { cookiePolicies[id] }
   func setThirdPartyCookiesBlocked(_ blocked: Bool, profileID: UUID) async throws {
     try record("cookies", profileID)
+    cookiePolicies[profileID] = blocked
   }
   func deleteProfile(_ id: UUID) async throws { try record("delete", id) }
 }

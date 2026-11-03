@@ -199,13 +199,12 @@ private func bookmarkPayload(children: [[String: Any]]) -> [String: Any] {
   ]).write(to: firefoxJSON)
   #expect(try BrowserImport.read(firefoxJSON).map(\.address) == ["https://firefox.example.com"])
 
-  let unsupported = directory.appendingPathComponent("History.sqlite")
-  try Data("not a supported bookmark export".utf8).write(to: unsupported)
+  let unsupported = directory.appendingPathComponent("Unsupported.json")
+  try Data("{}".utf8).write(to: unsupported)
   #expect(throws: BrowserImport.ImportError.self) { try BrowserImport.read(unsupported) }
 }
 
-@MainActor
-@Test func browserImportBatchAppliesInOrderAndStopsAfterAnError() {
+@Test @MainActor func browserImportBatchAppliesInOrderAndStopsAfterAnError() {
   let operations: [[String: Any]] = [["id": "first"], ["id": "second"], ["id": "third"]]
   var applied: [String] = []
   var result: Error?

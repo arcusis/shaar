@@ -32,7 +32,37 @@ REQUIRED_EXPORTS = (
     "_shaar_abi_major",
     "_shaar_abi_minor",
     "_shaar_engine_create",
+    "_shaar_engine_run",
+    "_shaar_engine_request_quit",
     "_shaar_engine_release",
+    "_shaar_submit",
+    "_shaar_cancel_request",
+    "_shaar_profile_open",
+    "_shaar_profile_create",
+    "_shaar_profile_close",
+    "_shaar_profile_delete",
+    "_shaar_profile_get_state",
+    "_shaar_profile_set_state",
+    "_shaar_profile_get_path",
+)
+PROFILE_MODULE_EXPORTS = (
+    "_shaar_profile_open",
+    "_shaar_profile_create",
+    "_shaar_profile_close",
+    "_shaar_profile_delete",
+    "_shaar_profile_get_state",
+    "_shaar_profile_set_state",
+    "_shaar_profile_get_path",
+)
+PROFILE_MODULE_LAYER_FILES = (
+    "chrome/browser/shaar/BUILD.gn",
+    "chrome/browser/shaar/engine/shaar_engine.cc",
+    "chrome/browser/shaar/engine/shaar_event_bridge.h",
+    "chrome/browser/shaar/profiles/shaar_profiles.cc",
+    "chrome/browser/shaar/profiles/shaar_profiles.h",
+    "chrome/browser/shaar/profiles/shaar_profiles_unittest.cc",
+    "chrome/browser/shaar/public/shaar_engine.h",
+    "chrome/browser/shaar/shaar_engine.exports",
 )
 COMMIT = re.compile(r"[0-9a-f]{40}\Z")
 DIGEST = re.compile(r"[0-9a-f]{64}\Z")
@@ -171,6 +201,12 @@ def load_config(repo: Path) -> dict:
         raise BuildError("Shaar export list differs from step-0 ABI")
     if config.get("requiredExports") != list(REQUIRED_EXPORTS):
         raise BuildError("required export receipt list mismatch")
+    if config.get("moduleBlocks", {}).get("profiles") != {
+        "operationRange": [100, 199],
+        "layerFiles": list(PROFILE_MODULE_LAYER_FILES),
+        "requiredExports": list(PROFILE_MODULE_EXPORTS),
+    }:
+        raise BuildError("profiles module block is missing or inconsistent")
 
     patches = config.get("patches")
     if not isinstance(patches, list) or not patches:

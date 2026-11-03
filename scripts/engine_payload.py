@@ -107,7 +107,7 @@ def _same_archive_stat(left: os.stat_result, right: os.stat_result) -> bool:
 def _check_archive_unchanged(stream: BinaryIO, path: Path, initial: os.stat_result) -> None:
     try:
         current = _archive_stat(stream)
-        named = path.stat(follow_symlinks=False)
+        named = path.lstat()
     except OSError as error:
         raise PayloadError("archive changed during comparison") from error
     if (not _same_archive_stat(initial, current) or not stat.S_ISREG(named.st_mode)
@@ -118,7 +118,7 @@ def _check_archive_unchanged(stream: BinaryIO, path: Path, initial: os.stat_resu
 def _open_archive(path: Path) -> BinaryIO:
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
     try:
-        named = path.stat(follow_symlinks=False)
+        named = path.lstat()
         if not stat.S_ISREG(named.st_mode):
             raise PayloadError("archive is not a supported regular file")
         descriptor = os.open(path, flags)
@@ -877,7 +877,7 @@ def compare_payload(archive: Path, framework: Path, pin: dict) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--archive", type=Path, default=Path("build/EngineCache/ArdiaCore-0fd438ac5e78.tar.xz"))
+    parser.add_argument("--archive", type=Path, required=True)
     parser.add_argument("--framework", type=Path,
                         default=Path("build/Shaar Candidate.app/Contents/Frameworks") / FRAMEWORK_NAME)
     parser.add_argument("--pin", type=Path, default=Path("ThirdParty/ArdiaCore/pin.json"))

@@ -7,14 +7,19 @@
 
 #include <stdint.h>
 
+#include <string>
+
 #include "chrome/browser/shaar/public/shaar_engine.h"
 
 struct shaar_engine {
   shaar_event_fn on_event = nullptr;
   void* event_context = nullptr;
+  std::string data_root;
+  std::string locale;
   uint64_t next_sequence = 0;
   bool emitting = false;
   bool release_requested = false;
+  bool run_active = false;
 };
 
 namespace shaar {

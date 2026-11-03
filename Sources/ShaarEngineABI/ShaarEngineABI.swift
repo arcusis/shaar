@@ -65,7 +65,7 @@ public struct ShaarCopiedEvent: Equatable, Sendable {
 }
 
 /// Public layout mirrors the size-prefixed v1 ABI event, while exposing only copied data.
-public struct ShaarBytes {
+@frozen public struct ShaarBytes {
   public var data: UnsafePointer<CChar>?
   public var size: Int
   public init(data: UnsafePointer<CChar>?, size: Int) {
@@ -74,7 +74,7 @@ public struct ShaarBytes {
   }
 }
 
-public struct ShaarABIEvent {
+@frozen public struct ShaarABIEvent {
   public var size: UInt32
   public var sequence: UInt64
   public var kind: UInt32

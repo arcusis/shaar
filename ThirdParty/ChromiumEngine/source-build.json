@@ -46,18 +46,26 @@
   },
   "layer": {
     "path": "ThirdParty/ChromiumEngine/layer",
-    "sha256": "4431e295ecc3471752c91282b0fd1d36ee968990322eeb0b515a5b57cf98ffb7",
+    "sha256": "e8a7a03896e94b224c918c4edd080c3e41d0287c76278c8a1aae9487b1230497",
     "files": {
-      "chrome/browser/shaar/BUILD.gn": "0be29fb251b8cd19f7201afba0a4819e286fc83e81ce8523daa24cc7cec920e5",
-      "chrome/browser/shaar/engine/shaar_engine.cc": "07205a696ec84c0d9f210510c2e2fc9b9915c02e6ac4d06af2d6614ff7cb9d86",
+      "chrome/browser/shaar/BUILD.gn": "da306354bab378e52ef1414d7416c6062225b38ab06072e792c8c89e478a0408",
+      "chrome/browser/shaar/engine/shaar_engine.cc": "e502047c22f740a707438d1daac69a18bbbd61914293f59d084db0ada63866a6",
       "chrome/browser/shaar/engine/shaar_event_bridge.cc": "4a6e12be0631c3bab7e0ebc23c7c3a085bd0840439c12921314b853b0ed8d6d6",
-      "chrome/browser/shaar/engine/shaar_event_bridge.h": "e9651cf93b46c65f7c1cb46651d838b4f9684a69d44e22134481dbe76a3055ec",
+      "chrome/browser/shaar/engine/shaar_event_bridge.h": "e0f787aea3c72e3a6ece1e5ec3b1ad1f77c5ea2781d23950fc0da61abecae67b",
+      "chrome/browser/shaar/engine/shaar_module_registry.h": "5d239545d01bd7b20a3584ac419ff2a05b75477fb9be04bad38953b8b4501703",
+      "chrome/browser/shaar/lifecycle/shaar_lifecycle.cc": "50420a79e651743ce21eabc3efb4cbc1ba6c0a947c645c497750dd3b547f90f1",
+      "chrome/browser/shaar/lifecycle/shaar_lifecycle.h": "3eee9d02f45c652807c3c247db8e8fc3f036470eb3fca02c2f55886edc56250a",
+      "chrome/browser/shaar/lifecycle/shaar_module_registry.cc": "5f063c1c4d08fc87491b0ea9686826ca76d191a9baca9fc201162bd335b8714f",
+      "chrome/browser/shaar/lifecycle/shaar_module_registry_unittest.cc": "6f519d211ccbc8bdb97599a838b7a788c969cf25f0b319d2a2763af1d29f868a",
       "chrome/browser/shaar/private_sessions/shaar_private_sessions.cc": "dcef2a8610cc968692bc91037d85d8337931d6dbeff9c08609ab4781c3a743e5",
       "chrome/browser/shaar/private_sessions/shaar_private_sessions.h": "a714a63219469f78faa4549d098e30bdef93e0e2faa1294e95d7140a8f82e537",
       "chrome/browser/shaar/private_sessions/shaar_private_sessions_module.h": "adc2e0b88da5027d6dc92aef559f81f2148c561158ab559ff326ac4464f3881a",
       "chrome/browser/shaar/private_sessions/shaar_private_sessions_unittest.cc": "73d28dd18c5693215449c6ccf07778ed9976d8ed888921193575faf6ca1b6251",
-      "chrome/browser/shaar/public/shaar_engine.h": "10dbe77c17e27d594e084cac65c2588375eeeebbdae90625df897ddc1f38e643",
-      "chrome/browser/shaar/shaar_engine.exports": "cb7f101b30c3ed4ef138e358071fd881f7b76e1b18ab088192bcd18e65f03c7d"
+      "chrome/browser/shaar/profiles/shaar_profiles.cc": "a1de33e920601287913b7bef67179719fd3fb46acf81939703ff872501f9633f",
+      "chrome/browser/shaar/profiles/shaar_profiles.h": "47ff08c2f0f87f761e10a1a03f205baf9c3c97cfc8c9a46edfe9106bc41d90e0",
+      "chrome/browser/shaar/profiles/shaar_profiles_unittest.cc": "460f9af4b4ac86abf52667a271d586d14af3a90a70b05272018b97379ff6a3e9",
+      "chrome/browser/shaar/public/shaar_engine.h": "8bdb99c60e7b131ac38364fe6b03161dde4ac66c454444bb46614417fb1287d8",
+      "chrome/browser/shaar/shaar_engine.exports": "51ae96d35fdd010cd205bbea4a96f0ebd984a5430ec5957217671590506f23f7"
     },
     "moduleGroups": {
       "private_sessions": [
@@ -65,6 +73,17 @@
         "chrome/browser/shaar/private_sessions/shaar_private_sessions.h",
         "chrome/browser/shaar/private_sessions/shaar_private_sessions_module.h",
         "chrome/browser/shaar/private_sessions/shaar_private_sessions_unittest.cc"
+      ],
+      "lifecycle": [
+        "chrome/browser/shaar/lifecycle/shaar_lifecycle.cc",
+        "chrome/browser/shaar/lifecycle/shaar_lifecycle.h",
+        "chrome/browser/shaar/lifecycle/shaar_module_registry.cc",
+        "chrome/browser/shaar/lifecycle/shaar_module_registry_unittest.cc"
+      ],
+      "profiles": [
+        "chrome/browser/shaar/profiles/shaar_profiles.cc",
+        "chrome/browser/shaar/profiles/shaar_profiles.h",
+        "chrome/browser/shaar/profiles/shaar_profiles_unittest.cc"
       ]
     }
   },
@@ -72,12 +91,63 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0001-shaar-framework-hook.patch",
       "sha256": "0eac45319ff87614ffa493e0c6f2e27d7a5148614675054789434a8c067b16cb"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0002-shaar-lifecycle-hooks.patch",
+      "sha256": "ccc93512f6e7143dc9b420118990d0ebc7021bebe1fa5925f74004607be91493"
     }
   ],
   "requiredExports": [
     "_shaar_abi_major",
     "_shaar_abi_minor",
     "_shaar_engine_create",
-    "_shaar_engine_release"
-  ]
+    "_shaar_engine_run",
+    "_shaar_engine_request_quit",
+    "_shaar_engine_release",
+    "_shaar_submit",
+    "_shaar_cancel_request",
+    "_shaar_profile_open",
+    "_shaar_profile_create",
+    "_shaar_profile_close",
+    "_shaar_profile_delete",
+    "_shaar_profile_get_state",
+    "_shaar_profile_set_state",
+    "_shaar_profile_get_path"
+  ],
+  "moduleBlocks": {
+    "lifecycle": {
+      "layerFiles": [
+        "chrome/browser/shaar/engine/shaar_module_registry.h",
+        "chrome/browser/shaar/lifecycle/shaar_lifecycle.cc",
+        "chrome/browser/shaar/lifecycle/shaar_lifecycle.h",
+        "chrome/browser/shaar/lifecycle/shaar_module_registry.cc",
+        "chrome/browser/shaar/lifecycle/shaar_module_registry_unittest.cc"
+      ]
+    },
+    "profiles": {
+      "operationRange": [
+        100,
+        199
+      ],
+      "layerFiles": [
+        "chrome/browser/shaar/BUILD.gn",
+        "chrome/browser/shaar/engine/shaar_engine.cc",
+        "chrome/browser/shaar/engine/shaar_event_bridge.h",
+        "chrome/browser/shaar/profiles/shaar_profiles.cc",
+        "chrome/browser/shaar/profiles/shaar_profiles.h",
+        "chrome/browser/shaar/profiles/shaar_profiles_unittest.cc",
+        "chrome/browser/shaar/public/shaar_engine.h",
+        "chrome/browser/shaar/shaar_engine.exports"
+      ],
+      "requiredExports": [
+        "_shaar_profile_open",
+        "_shaar_profile_create",
+        "_shaar_profile_close",
+        "_shaar_profile_delete",
+        "_shaar_profile_get_state",
+        "_shaar_profile_set_state",
+        "_shaar_profile_get_path"
+      ]
+    }
+  }
 }

@@ -191,9 +191,10 @@ public struct ShaarWindowTabsSnapshot: Equatable, Sendable {
     else { throw ShaarWindowTabsError.scopeMismatch }
     if state.activeProfileID != owner.profileID {
       try engine.setActiveProfile(id: owner.profileID, windowID: windowID)
+      state.activeProfileID = owner.profileID
+      windows[windowID] = state
     }
     try engine.activateTab(id: id, windowID: windowID)
-    state.activeProfileID = owner.profileID
     state.activeTabByProfile[owner.profileID] = id
     windows[windowID] = state
   }

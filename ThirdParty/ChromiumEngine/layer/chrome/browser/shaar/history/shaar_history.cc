@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <initializer_list>
 #include <map>
 #include <memory>
@@ -50,34 +51,52 @@ struct ReplyContext {
   void* context;
 };
 
+void DeliverReply(ReplyContext request,
+                  shaar_error_code code,
+                  std::string json,
+                  std::string message) {
+  shaar_result result{};
+  result.size = sizeof(result);
+  result.request_id = request.request_id;
+  result.error.size = sizeof(result.error);
+  result.error.code = code;
+  result.error.message = {message.data(), message.size()};
+  result.payload_json = {json.data(), json.size()};
+  if (request.reply)
+    request.reply(request.context, &result);
+}
+
 void Reply(const ReplyContext& request,
            shaar_error_code code,
            base::Value::Dict payload = {}) {
   std::string json;
   if (code == SHAAR_OK)
     base::JSONWriter::Write(base::Value(std::move(payload)), &json);
-  shaar_result result{};
-  result.size = sizeof(result);
-  result.request_id = request.request_id;
-  result.error.size = sizeof(result.error);
-  result.error.code = code;
-  result.payload_json = {json.data(), json.size()};
-  if (request.reply)
-    request.reply(request.context, &result);
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&DeliverReply, request, code, std::move(json), std::string()));
 }
 
 void ReplyError(const ReplyContext& request,
                 shaar_error_code code,
                 const char* message) {
-  std::string text(message);
-  shaar_result result{};
-  result.size = sizeof(result);
-  result.request_id = request.request_id;
-  result.error.size = sizeof(result.error);
-  result.error.code = code;
-  result.error.message = {text.data(), text.size()};
-  if (request.reply)
-    request.reply(request.context, &result);
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&DeliverReply, request, code, std::string(),
+                                std::string(message)));
+}
+
+shaar_error_code Fail(shaar_error* error,
+                      shaar_error_code code,
+                      const char* message) {
+  if (error) {
+    const size_t size = error->size;
+    if (size >= offsetof(shaar_error, code) + sizeof(error->code))
+      error->code = code;
+    if (size >= offsetof(shaar_error, platform_code) + sizeof(error->platform_code))
+      error->platform_code = 0;
+    if (size >= offsetof(shaar_error, message) + sizeof(error->message))
+      error->message = {message, std::strlen(message)};
+  }
+  return code;
 }
 
 bool HasOnlyKeys(const base::Value::Dict& dict,
@@ -111,39 +130,32 @@ bool RegularProfileScope(shaar_scope scope) {
          !scope.private_session;
 }
 
-bool ValidateRegularScope(shaar_scope scope, const ReplyContext& request) {
+shaar_error_code ValidateRegularScope(shaar_scope scope, shaar_error* error) {
   if (scope.private_session) {
-    ReplyError(request, SHAAR_PRIVATE_DISALLOWED,
-               "history is unavailable in private sessions");
-    return false;
+    return Fail(error, SHAAR_PRIVATE_DISALLOWED,
+                "history is unavailable in private sessions");
   }
   if (!RegularProfileScope(scope)) {
-    ReplyError(request, SHAAR_INVALID_ARGUMENT, "invalid history scope");
-    return false;
+    return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid history scope");
   }
-  return true;
+  return SHAAR_OK;
 }
 
 Profile* ResolveProfile(ShaarModuleRegistry* registry,
                         shaar_scope scope,
-                        const ReplyContext& request) {
-  if (scope.private_session) {
-    ReplyError(request, SHAAR_PRIVATE_DISALLOWED,
-               "history is unavailable in private sessions");
-    return nullptr;
-  }
-  if (!RegularProfileScope(scope)) {
-    ReplyError(request, SHAAR_INVALID_ARGUMENT, "invalid history scope");
+                        shaar_error* error) {
+  if (const auto scope_result = ValidateRegularScope(scope, error);
+      scope_result != SHAAR_OK) {
     return nullptr;
   }
   Profile* profile = registry->ResolveRegularProfile(scope.profile);
   if (!profile) {
-    ReplyError(request, SHAAR_NOT_FOUND, "profile is not available");
+    Fail(error, SHAAR_NOT_FOUND, "profile is not available");
     return nullptr;
   }
   if (profile->IsOffTheRecord()) {
-    ReplyError(request, SHAAR_PRIVATE_DISALLOWED,
-               "history is unavailable in private profiles");
+    Fail(error, SHAAR_PRIVATE_DISALLOWED,
+         "history is unavailable in private profiles");
     return nullptr;
   }
   return profile;
@@ -151,11 +163,11 @@ Profile* ResolveProfile(ShaarModuleRegistry* registry,
 
 history::HistoryService* ResolveHistory(ShaarModuleRegistry* registry,
                                         Profile* profile,
-                                        const ReplyContext& request) {
+                                        shaar_error* error) {
   history::HistoryService* service =
       HistoryServiceFactory::GetForProfile(profile, ServiceAccessType::EXPLICIT_ACCESS);
   if (!service) {
-    ReplyError(request, SHAAR_NOT_READY, "history service is not ready");
+    Fail(error, SHAAR_NOT_READY, "history service is not ready");
     return nullptr;
   }
   return service;
@@ -172,35 +184,37 @@ struct QueryRow {
   std::vector<int64_t> visits;
 };
 
-void Query(ShaarModuleRegistry* registry,
-           shaar_scope scope,
-           shaar_bytes bytes,
-           shaar_request_id request_id,
-           shaar_reply_fn reply,
-           void* context) {
+shaar_error_code Query(ShaarModuleRegistry* registry,
+                       shaar_scope scope,
+                       shaar_bytes bytes,
+                       shaar_request_id request_id,
+                       shaar_reply_fn reply,
+                       void* context,
+                       shaar_error* immediate_error) {
   const ReplyContext request{request_id, reply, context};
-  if (!ValidateRegularScope(scope, request))
-    return;
+  if (const auto status = ValidateRegularScope(scope, immediate_error);
+      status != SHAAR_OK)
+    return status;
   auto args = ParseArguments(bytes);
   if (!args || !HasVersionOne(*args) ||
       !HasOnlyKeys(*args, {"schemaVersion", "maxUrls", "maxVisitsPerUrl", "search"})) {
-    ReplyError(request, SHAAR_INVALID_ARGUMENT, "invalid history query schema");
-    return;
+    return Fail(immediate_error, SHAAR_INVALID_ARGUMENT,
+                "invalid history query schema");
   }
   const int max_urls = args->FindInt("maxUrls").value_or(5000);
   const int max_visits = args->FindInt("maxVisitsPerUrl").value_or(50);
   const std::string* search = args->FindString("search");
   if (max_urls < 1 || max_urls > kMaximumURLs || max_visits < 1 ||
       max_visits > kMaximumVisitsPerURL || (search && search->size() > 4096)) {
-    ReplyError(request, SHAAR_INVALID_ARGUMENT, "history query is out of range");
-    return;
+    return Fail(immediate_error, SHAAR_INVALID_ARGUMENT,
+                "history query is out of range");
   }
-  Profile* profile = ResolveProfile(registry, scope, request);
+  Profile* profile = ResolveProfile(registry, scope, immediate_error);
   if (!profile)
-    return;
-  history::HistoryService* service = ResolveHistory(registry, profile, request);
+    return immediate_error ? immediate_error->code : SHAAR_NOT_FOUND;
+  history::HistoryService* service = ResolveHistory(registry, profile, immediate_error);
   if (!service)
-    return;
+    return immediate_error ? immediate_error->code : SHAAR_NOT_READY;
 
   history::QueryOptions options;
   options.max_count = max_urls * max_visits;
@@ -250,47 +264,50 @@ void Query(ShaarModuleRegistry* registry,
                                                                     std::move(entries)));
           }),
       tracker.get());
+  return SHAAR_OK;
 }
 
-void Delete(ShaarModuleRegistry* registry,
-            shaar_scope scope,
-            shaar_bytes bytes,
-            shaar_request_id request_id,
-            shaar_reply_fn reply,
-            void* context) {
+shaar_error_code Delete(ShaarModuleRegistry* registry,
+                        shaar_scope scope,
+                        shaar_bytes bytes,
+                        shaar_request_id request_id,
+                        shaar_reply_fn reply,
+                        void* context,
+                        shaar_error* immediate_error) {
   const ReplyContext request{request_id, reply, context};
-  if (!ValidateRegularScope(scope, request))
-    return;
+  if (const auto status = ValidateRegularScope(scope, immediate_error);
+      status != SHAAR_OK)
+    return status;
   auto args = ParseArguments(bytes);
   if (!args || !HasVersionOne(*args) || !HasOnlyKeys(*args, {"schemaVersion", "urls"})) {
-    ReplyError(request, SHAAR_INVALID_ARGUMENT, "invalid history delete schema");
-    return;
+    return Fail(immediate_error, SHAAR_INVALID_ARGUMENT,
+                "invalid history delete schema");
   }
   const base::Value::List* values = args->FindList("urls");
   if (!values || values->empty() || values->size() > kMaximumDeleteURLs) {
-    ReplyError(request, SHAAR_INVALID_ARGUMENT, "invalid history URL list");
-    return;
+    return Fail(immediate_error, SHAAR_INVALID_ARGUMENT,
+                "invalid history URL list");
   }
   std::vector<GURL> urls;
   std::map<std::string, bool> seen;
   for (const base::Value& value : *values) {
     if (!value.is_string()) {
-      ReplyError(request, SHAAR_INVALID_ARGUMENT, "history URL must be a string");
-      return;
+      return Fail(immediate_error, SHAAR_INVALID_ARGUMENT,
+                  "history URL must be a string");
     }
     GURL url(value.GetString());
     if (!IsWebURL(url) || !seen.emplace(url.spec(), true).second) {
-      ReplyError(request, SHAAR_INVALID_ARGUMENT, "invalid or duplicate history URL");
-      return;
+      return Fail(immediate_error, SHAAR_INVALID_ARGUMENT,
+                  "invalid or duplicate history URL");
     }
     urls.push_back(std::move(url));
   }
-  Profile* profile = ResolveProfile(registry, scope, request);
+  Profile* profile = ResolveProfile(registry, scope, immediate_error);
   if (!profile)
-    return;
-  history::HistoryService* service = ResolveHistory(registry, profile, request);
+    return immediate_error ? immediate_error->code : SHAAR_NOT_FOUND;
+  history::HistoryService* service = ResolveHistory(registry, profile, immediate_error);
   if (!service)
-    return;
+    return immediate_error ? immediate_error->code : SHAAR_NOT_READY;
   auto tracker = std::make_shared<base::CancelableTaskTracker>();
   service->DeleteURLs(urls);
   service->QueryUrlIds(
@@ -310,6 +327,7 @@ void Delete(ShaarModuleRegistry* registry,
               base::Value::Dict().Set("schemaVersion", 1).Set("deleted", deleted));
       }),
       tracker.get());
+  return SHAAR_OK;
 }
 
 history::VisitSource ImportSource(const std::string& source) {
@@ -433,41 +451,44 @@ struct ImportState : public std::enable_shared_from_this<ImportState> {
   }
 };
 
-void Insert(ShaarModuleRegistry* registry,
-            shaar_scope scope,
-            shaar_bytes bytes,
-            shaar_request_id request_id,
-            shaar_reply_fn reply,
-            void* context) {
+shaar_error_code Insert(ShaarModuleRegistry* registry,
+                        shaar_scope scope,
+                        shaar_bytes bytes,
+                        shaar_request_id request_id,
+                        shaar_reply_fn reply,
+                        void* context,
+                        shaar_error* immediate_error) {
   const ReplyContext request{request_id, reply, context};
-  if (!ValidateRegularScope(scope, request))
-    return;
+  if (const auto status = ValidateRegularScope(scope, immediate_error);
+      status != SHAAR_OK)
+    return status;
   auto args = ParseArguments(bytes);
   if (!args || !HasVersionOne(*args) ||
       !HasOnlyKeys(*args, {"schemaVersion", "source", "pages"})) {
-    ReplyError(request, SHAAR_INVALID_ARGUMENT, "invalid history import schema");
-    return;
+    return Fail(immediate_error, SHAAR_INVALID_ARGUMENT,
+                "invalid history import schema");
   }
   const std::string* source = args->FindString("source");
   const base::Value::List* pages = args->FindList("pages");
   if (!source || (*source != "safari" && *source != "chrome" && *source != "arc" &&
                   *source != "firefox") ||
       !pages || pages->empty() || pages->size() > kMaximumImportPages) {
-    ReplyError(request, SHAAR_INVALID_ARGUMENT, "invalid history import batch");
-    return;
+    return Fail(immediate_error, SHAAR_INVALID_ARGUMENT,
+                "invalid history import batch");
   }
-  Profile* profile = ResolveProfile(registry, scope, request);
+  Profile* profile = ResolveProfile(registry, scope, immediate_error);
   if (!profile)
-    return;
-  history::HistoryService* service = ResolveHistory(registry, profile, request);
+    return immediate_error ? immediate_error->code : SHAAR_NOT_FOUND;
+  history::HistoryService* service = ResolveHistory(registry, profile, immediate_error);
   if (!service)
-    return;
+    return immediate_error ? immediate_error->code : SHAAR_NOT_READY;
 
   auto state = std::make_shared<ImportState>();
   state->request = request;
   state->service = service;
   state->source = ImportSource(*source);
   state->rejection_codes.resize(pages->size());
+  size_t valid_rows = 0;
   for (size_t page_index = 0; page_index < pages->size(); ++page_index) {
     const base::Value& page = (*pages)[page_index];
     auto reject_row = [&](const char* code) {
@@ -517,8 +538,13 @@ void Insert(ShaarModuleRegistry* registry,
     state->urls.push_back(std::move(url));
     state->titles.push_back(base::UTF8ToUTF16(raw_title ? *raw_title : std::string()));
     state->times.push_back(std::move(visits));
+    ++valid_rows;
   }
+  if (valid_rows == 0)
+    return Fail(immediate_error, SHAAR_INVALID_ARGUMENT,
+                "history import has no valid rows");
   state->Next();
+  return SHAAR_OK;
 }
 
 struct WatchState;
@@ -575,27 +601,29 @@ struct WatchState {
   uint64_t next_id = 1;
 };
 
-void Watch(ShaarModuleRegistry* registry,
-           const std::shared_ptr<WatchState>& state,
-           shaar_scope scope,
-           shaar_bytes bytes,
-           shaar_request_id request_id,
-           shaar_reply_fn reply,
-           void* context) {
+shaar_error_code Watch(ShaarModuleRegistry* registry,
+                       const std::shared_ptr<WatchState>& state,
+                       shaar_scope scope,
+                       shaar_bytes bytes,
+                       shaar_request_id request_id,
+                       shaar_reply_fn reply,
+                       void* context,
+                       shaar_error* immediate_error) {
   const ReplyContext request{request_id, reply, context};
-  if (!ValidateRegularScope(scope, request))
-    return;
+  if (const auto status = ValidateRegularScope(scope, immediate_error);
+      status != SHAAR_OK)
+    return status;
   auto args = ParseArguments(bytes);
   if (!args || !HasVersionOne(*args) || !HasOnlyKeys(*args, {"schemaVersion"})) {
-    ReplyError(request, SHAAR_INVALID_ARGUMENT, "invalid history watch schema");
-    return;
+    return Fail(immediate_error, SHAAR_INVALID_ARGUMENT,
+                "invalid history watch schema");
   }
-  Profile* profile = ResolveProfile(registry, scope, request);
+  Profile* profile = ResolveProfile(registry, scope, immediate_error);
   if (!profile)
-    return;
-  history::HistoryService* service = ResolveHistory(registry, profile, request);
+    return immediate_error ? immediate_error->code : SHAAR_NOT_FOUND;
+  history::HistoryService* service = ResolveHistory(registry, profile, immediate_error);
   if (!service)
-    return;
+    return immediate_error ? immediate_error->code : SHAAR_NOT_READY;
   if (!state->observers.contains(service)) {
     std::weak_ptr<WatchState> weak_state = state;
     state->observers.emplace(
@@ -622,42 +650,47 @@ void Watch(ShaarModuleRegistry* registry,
   state->subscriptions.emplace(token, service);
   Reply(request, SHAAR_OK,
         base::Value::Dict().Set("schemaVersion", 1).Set("subscriptionId", token));
+  return SHAAR_OK;
 }
 
-void Unwatch(ShaarModuleRegistry* registry,
-             const std::shared_ptr<WatchState>& state,
-             shaar_scope scope,
-             shaar_bytes bytes,
-             shaar_request_id request_id,
-             shaar_reply_fn reply,
-             void* context) {
+shaar_error_code Unwatch(ShaarModuleRegistry* registry,
+                         const std::shared_ptr<WatchState>& state,
+                         shaar_scope scope,
+                         shaar_bytes bytes,
+                         shaar_request_id request_id,
+                         shaar_reply_fn reply,
+                         void* context,
+                         shaar_error* immediate_error) {
   const ReplyContext request{request_id, reply, context};
-  if (!ValidateRegularScope(scope, request))
-    return;
+  if (const auto status = ValidateRegularScope(scope, immediate_error);
+      status != SHAAR_OK)
+    return status;
   auto args = ParseArguments(bytes);
   if (!args || !HasVersionOne(*args) ||
       !HasOnlyKeys(*args, {"schemaVersion", "subscriptionId"})) {
-    ReplyError(request, SHAAR_INVALID_ARGUMENT, "invalid history unwatch schema");
-    return;
+    return Fail(immediate_error, SHAAR_INVALID_ARGUMENT,
+                "invalid history unwatch schema");
   }
   const std::string* token = args->FindString("subscriptionId");
   if (!token || token->empty()) {
-    ReplyError(request, SHAAR_INVALID_ARGUMENT, "missing history subscription ID");
-    return;
+    return Fail(immediate_error, SHAAR_INVALID_ARGUMENT,
+                "missing history subscription ID");
   }
-  Profile* profile = ResolveProfile(registry, scope, request);
+  Profile* profile = ResolveProfile(registry, scope, immediate_error);
   if (!profile)
-    return;
+    return immediate_error ? immediate_error->code : SHAAR_NOT_FOUND;
   auto subscription = state->subscriptions.find(*token);
   if (subscription == state->subscriptions.end()) {
     Reply(request, SHAAR_OK, base::Value::Dict().Set("schemaVersion", 1));
-    return;
+    return SHAAR_OK;
   }
   history::HistoryService* service =
       HistoryServiceFactory::GetForProfile(profile, ServiceAccessType::EXPLICIT_ACCESS);
+  if (!service)
+    return Fail(immediate_error, SHAAR_NOT_READY, "history service is not ready");
   if (subscription->second != service) {
-    ReplyError(request, SHAAR_WRONG_PROFILE, "history subscription belongs to another profile");
-    return;
+    return Fail(immediate_error, SHAAR_WRONG_PROFILE,
+                "history subscription belongs to another profile");
   }
   state->subscriptions.erase(subscription);
   const bool still_used = std::any_of(state->subscriptions.begin(), state->subscriptions.end(),
@@ -667,6 +700,7 @@ void Unwatch(ShaarModuleRegistry* registry,
   if (!still_used)
     state->observers.erase(service);
   Reply(request, SHAAR_OK, base::Value::Dict().Set("schemaVersion", 1));
+  return SHAAR_OK;
 }
 
 }  // namespace
@@ -676,25 +710,25 @@ void shaar_history_register(ShaarModuleRegistry* registry) {
     return;
   auto watches = std::make_shared<WatchState>();
   registry->RegisterHandler(SHAAR_OP_HISTORY_QUERY,
-                            [registry](auto scope, auto args, auto id, auto reply, auto context) {
-                              Query(registry, scope, args, id, reply, context);
+                            [registry](auto scope, auto args, auto id, auto reply, auto context, auto* error) {
+                              return Query(registry, scope, args, id, reply, context, error);
                             });
   registry->RegisterHandler(SHAAR_OP_HISTORY_INSERT,
-                            [registry](auto scope, auto args, auto id, auto reply, auto context) {
-                              Insert(registry, scope, args, id, reply, context);
+                            [registry](auto scope, auto args, auto id, auto reply, auto context, auto* error) {
+                              return Insert(registry, scope, args, id, reply, context, error);
                             });
   registry->RegisterHandler(SHAAR_OP_HISTORY_DELETE,
-                            [registry](auto scope, auto args, auto id, auto reply, auto context) {
-                              Delete(registry, scope, args, id, reply, context);
+                            [registry](auto scope, auto args, auto id, auto reply, auto context, auto* error) {
+                              return Delete(registry, scope, args, id, reply, context, error);
                             });
   registry->RegisterHandler(SHAAR_OP_HISTORY_WATCH,
                             [registry, watches](auto scope, auto args, auto id, auto reply,
-                                               auto context) {
-                              Watch(registry, watches, scope, args, id, reply, context);
+                                               auto context, auto* error) {
+                              return Watch(registry, watches, scope, args, id, reply, context, error);
                             });
   registry->RegisterHandler(SHAAR_OP_HISTORY_UNWATCH,
                             [registry, watches](auto scope, auto args, auto id, auto reply,
-                                               auto context) {
-                              Unwatch(registry, watches, scope, args, id, reply, context);
+                                               auto context, auto* error) {
+                              return Unwatch(registry, watches, scope, args, id, reply, context, error);
                             });
 }

@@ -8,7 +8,6 @@
 #include <string>
 
 #include "chrome/browser/shaar/history/shaar_history_registry.h"
-#include "components/history/core/browser/history_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
@@ -58,9 +57,12 @@ TEST(ShaarHistoryModuleTest, RejectsPrivateScopeForEveryHistoryOperation) {
   const std::string args = "{\"schemaVersion\":1}";
   for (const auto& [operation, handler] : registry.handlers) {
     CapturedReply result;
-    handler(private_scope, Bytes(args), 42, Capture, &result);
-    EXPECT_EQ(result.code, SHAAR_PRIVATE_DISALLOWED) << operation;
-    EXPECT_TRUE(result.payload.empty()) << operation;
+    shaar_error immediate{};
+    immediate.size = sizeof(immediate);
+    EXPECT_EQ(handler(private_scope, Bytes(args), 42, Capture, &result, &immediate),
+              SHAAR_PRIVATE_DISALLOWED) << operation;
+    EXPECT_EQ(immediate.code, SHAAR_PRIVATE_DISALLOWED) << operation;
+    EXPECT_EQ(result.code, SHAAR_OK) << "immediate failures have no callback";
   }
 }
 
@@ -72,9 +74,13 @@ TEST(ShaarHistoryModuleTest, RejectsUnknownQueryFieldsBeforeProfileLookup) {
   const std::string args =
       "{\"schemaVersion\":1,\"maxUrls\":20,\"ignored\":true}";
   CapturedReply result;
-  registry.handlers.at(SHAAR_OP_HISTORY_QUERY)(regular_scope, Bytes(args), 7,
-                                                Capture, &result);
-  EXPECT_EQ(result.code, SHAAR_INVALID_ARGUMENT);
+  shaar_error immediate{};
+  immediate.size = sizeof(immediate);
+  EXPECT_EQ(registry.handlers.at(SHAAR_OP_HISTORY_QUERY)(regular_scope, Bytes(args), 7,
+                                                          Capture, &result, &immediate),
+            SHAAR_INVALID_ARGUMENT);
+  EXPECT_EQ(immediate.code, SHAAR_INVALID_ARGUMENT);
+  EXPECT_EQ(result.code, SHAAR_OK);
 }
 
 TEST(ShaarHistoryModuleTest, RejectsInvalidDeleteURLBatchBeforeProfileLookup) {
@@ -85,9 +91,13 @@ TEST(ShaarHistoryModuleTest, RejectsInvalidDeleteURLBatchBeforeProfileLookup) {
   const std::string args =
       "{\"schemaVersion\":1,\"urls\":[\"file:///tmp/private\"]}";
   CapturedReply result;
-  registry.handlers.at(SHAAR_OP_HISTORY_DELETE)(regular_scope, Bytes(args), 8,
-                                                 Capture, &result);
-  EXPECT_EQ(result.code, SHAAR_INVALID_ARGUMENT);
+  shaar_error immediate{};
+  immediate.size = sizeof(immediate);
+  EXPECT_EQ(registry.handlers.at(SHAAR_OP_HISTORY_DELETE)(regular_scope, Bytes(args), 8,
+                                                          Capture, &result, &immediate),
+            SHAAR_INVALID_ARGUMENT);
+  EXPECT_EQ(immediate.code, SHAAR_INVALID_ARGUMENT);
+  EXPECT_EQ(result.code, SHAAR_OK);
 }
 
 }  // namespace

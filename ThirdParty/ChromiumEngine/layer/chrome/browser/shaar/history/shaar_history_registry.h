@@ -16,8 +16,11 @@ class Profile;
 // registry interface when that module lands; its handler signature is stable.
 class ShaarModuleRegistry {
  public:
-  using Handler = std::function<void(shaar_scope, shaar_bytes, shaar_request_id,
-                                     shaar_reply_fn, void*)>;
+  // A non-OK return is the shaar_submit immediate error and must not reply.
+  // SHAAR_OK accepts the request and requires one later, non-inline reply.
+  using Handler = std::function<shaar_error_code(shaar_scope, shaar_bytes,
+                                                shaar_request_id, shaar_reply_fn,
+                                                void*, shaar_error*)>;
   using HistoryEvent = std::function<void(const std::string& profile_id,
                                           const std::string& payload)>;
 

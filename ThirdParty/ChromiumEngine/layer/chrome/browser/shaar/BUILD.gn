@@ -10,18 +10,20 @@ source_set("engine") {
     "engine/shaar_engine.cc",
     "engine/shaar_event_bridge.cc",
     "engine/shaar_event_bridge.h",
-    "private-sessions/shaar_private_sessions.h",
-    "private-sessions/shaar_private_sessions_module.h",
-    "private-sessions/shaar_private_sessions.cc",
+    # Private sessions module.
+    "private_sessions/shaar_private_sessions.h",
+    "private_sessions/shaar_private_sessions_module.h",
+    "private_sessions/shaar_private_sessions.cc",
   ]
 }
 
+# Private sessions module tests.
 test("private_sessions_unittests") {
   public = [
-    "private-sessions/shaar_private_sessions.h",
-    "private-sessions/shaar_private_sessions_module.h",
+    "private_sessions/shaar_private_sessions.h",
+    "private_sessions/shaar_private_sessions_module.h",
   ]
-  sources = [ "private-sessions/shaar_private_sessions_unittest.cc" ]
+  sources = [ "private_sessions/shaar_private_sessions_unittest.cc" ]
   deps = [
     ":engine",
     "//chrome/test:test_support",

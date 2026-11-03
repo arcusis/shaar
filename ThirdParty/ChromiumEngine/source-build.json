@@ -46,18 +46,26 @@
   },
   "layer": {
     "path": "ThirdParty/ChromiumEngine/layer",
-    "sha256": "b8d9587ef597e8dac2acf577db7606e3588b1c00cbfcd3b63726c08ada72be73",
+    "sha256": "4431e295ecc3471752c91282b0fd1d36ee968990322eeb0b515a5b57cf98ffb7",
     "files": {
-      "chrome/browser/shaar/BUILD.gn": "d981dfd6b1e8463dbecb75c1386257c826f49c1e7c43036ef5c6eb2f4f6f4b78",
+      "chrome/browser/shaar/BUILD.gn": "0be29fb251b8cd19f7201afba0a4819e286fc83e81ce8523daa24cc7cec920e5",
       "chrome/browser/shaar/engine/shaar_engine.cc": "07205a696ec84c0d9f210510c2e2fc9b9915c02e6ac4d06af2d6614ff7cb9d86",
       "chrome/browser/shaar/engine/shaar_event_bridge.cc": "4a6e12be0631c3bab7e0ebc23c7c3a085bd0840439c12921314b853b0ed8d6d6",
       "chrome/browser/shaar/engine/shaar_event_bridge.h": "e9651cf93b46c65f7c1cb46651d838b4f9684a69d44e22134481dbe76a3055ec",
-      "chrome/browser/shaar/private-sessions/shaar_private_sessions.cc": "7574c503e4008c86462eeee55ca14ff65bcf017c9633564556ed32c3b1dd5bdf",
-      "chrome/browser/shaar/private-sessions/shaar_private_sessions.h": "a714a63219469f78faa4549d098e30bdef93e0e2faa1294e95d7140a8f82e537",
-      "chrome/browser/shaar/private-sessions/shaar_private_sessions_module.h": "06417eda5073a67f3a6ec73be2e921ce9e97185d480219a2ed6da0635be66384",
-      "chrome/browser/shaar/private-sessions/shaar_private_sessions_unittest.cc": "af3c70dd02ddf61ec17edf601a97e4e9778a44d3a4e4718dfb31c337a565583a",
-      "chrome/browser/shaar/public/shaar_engine.h": "498af37d6b3a48959cf70d28f0929cf5bc3fbd6cf77093ef93ff47e348794759",
+      "chrome/browser/shaar/private_sessions/shaar_private_sessions.cc": "dcef2a8610cc968692bc91037d85d8337931d6dbeff9c08609ab4781c3a743e5",
+      "chrome/browser/shaar/private_sessions/shaar_private_sessions.h": "a714a63219469f78faa4549d098e30bdef93e0e2faa1294e95d7140a8f82e537",
+      "chrome/browser/shaar/private_sessions/shaar_private_sessions_module.h": "adc2e0b88da5027d6dc92aef559f81f2148c561158ab559ff326ac4464f3881a",
+      "chrome/browser/shaar/private_sessions/shaar_private_sessions_unittest.cc": "73d28dd18c5693215449c6ccf07778ed9976d8ed888921193575faf6ca1b6251",
+      "chrome/browser/shaar/public/shaar_engine.h": "10dbe77c17e27d594e084cac65c2588375eeeebbdae90625df897ddc1f38e643",
       "chrome/browser/shaar/shaar_engine.exports": "cb7f101b30c3ed4ef138e358071fd881f7b76e1b18ab088192bcd18e65f03c7d"
+    },
+    "moduleGroups": {
+      "private_sessions": [
+        "chrome/browser/shaar/private_sessions/shaar_private_sessions.cc",
+        "chrome/browser/shaar/private_sessions/shaar_private_sessions.h",
+        "chrome/browser/shaar/private_sessions/shaar_private_sessions_module.h",
+        "chrome/browser/shaar/private_sessions/shaar_private_sessions_unittest.cc"
+      ]
     }
   },
   "patches": [

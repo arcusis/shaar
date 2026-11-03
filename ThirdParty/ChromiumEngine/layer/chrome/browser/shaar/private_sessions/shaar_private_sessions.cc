@@ -2,8 +2,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-#include "chrome/browser/shaar/private-sessions/shaar_private_sessions.h"
-#include "chrome/browser/shaar/private-sessions/shaar_private_sessions_module.h"
+#include "chrome/browser/shaar/private_sessions/shaar_private_sessions.h"
+#include "chrome/browser/shaar/private_sessions/shaar_private_sessions_module.h"
 
 #include <utility>
 

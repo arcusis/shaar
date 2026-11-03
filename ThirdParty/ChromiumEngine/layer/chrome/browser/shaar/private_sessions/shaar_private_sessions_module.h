@@ -7,7 +7,7 @@
 
 #include <unordered_map>
 
-#include "chrome/browser/shaar/private-sessions/shaar_private_sessions.h"
+#include "chrome/browser/shaar/private_sessions/shaar_private_sessions.h"
 #include "chrome/browser/shaar/public/shaar_engine.h"
 
 namespace shaar {

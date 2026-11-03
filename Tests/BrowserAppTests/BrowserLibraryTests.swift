@@ -50,6 +50,34 @@ struct BrowserLibraryTests {
     #expect(model.bookmarks[profile]?.items.contains { $0.title == "Confirmed" } == true)
   }
 
+  @Test func importedBookmarkBatchRefreshesOnlyAfterEveryOperationIsAcknowledged() {
+    let model = BrowserLibraryModel()
+    let profile = UUID()
+    let rootID = UUID()
+    let items = [
+      BrowserImportItem(title: "Imported", address: "https://import.example", folder: "Work")
+    ]
+    var applied: [[String: Any]] = []
+    var refreshed = false
+    model.onMutation = { owner, mutation, done in
+      #expect(owner == profile)
+      if case .bookmarks(let batch) = mutation { applied = batch }
+      done(nil)
+    }
+    model.onLoad = { _, _, done in
+      refreshed = true
+      done(.success(tree(title: "Imported")))
+    }
+    var completed: Bool?
+    let accepted = model.importBookmarks(items, profile: profile, otherFolderID: rootID) {
+      completed = $0
+    }
+    #expect(accepted && completed == true && refreshed && applied.count == 2)
+    #expect(applied[0]["parent"] as? String == rootID.uuidString.lowercased())
+    #expect(model.bookmarks[profile]?.items.contains { $0.title == "Imported" } == true)
+    #expect(!model.importBookmarks([], profile: profile, otherFolderID: rootID) { _ in })
+  }
+
   @Test(.timeLimit(.minutes(1)))
   func eventsDuringReadCoalesceIntoFollowupAndWatchErrorsRemainProfileBound() async throws {
     let model = BrowserLibraryModel()

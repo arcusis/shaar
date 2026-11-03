@@ -4,6 +4,7 @@
 
 import BrowserCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct LibraryPanel: View {
   let store: BrowserStore
@@ -13,6 +14,10 @@ struct LibraryPanel: View {
   @State private var query = ""
   @State private var collapsed: Set<UUID> = []
   @State private var removing: UUID?
+  @State private var choosingImport = false
+  @State private var importPreview: [BrowserImportItem] = []
+  @State private var importError: String?
+  @State private var showingImportPreview = false
 
   init(store: BrowserStore, profileID: UUID, section: LibrarySection) {
     self.store = store
@@ -110,6 +115,7 @@ struct LibraryPanel: View {
           }
         }
         Spacer()
+        Button(PanelsL10n.string("Import…")) { choosingImport = true }
         if loading || busy { ProgressView().controlSize(.small) }
         Button(PanelsL10n.string("Refresh")) { store.library.refresh(profileID, section: section) }
       }
@@ -117,6 +123,28 @@ struct LibraryPanel: View {
     }
     .padding(24).frame(width: 600, height: 480)
     .background(Color(nsColor: .windowBackgroundColor))
+    .fileImporter(isPresented: $choosingImport, allowedContentTypes: [.item]) { result in
+      do {
+        let url = try result.get()
+        let access = url.startAccessingSecurityScopedResource()
+        defer { if access { url.stopAccessingSecurityScopedResource() } }
+        importPreview = try BrowserImport.read(url)
+        importError = nil
+        showingImportPreview = true
+      } catch {
+        importError = error.localizedDescription
+        showingImportPreview = true
+      }
+    }
+    .sheet(
+      isPresented: $showingImportPreview,
+      onDismiss: {
+        importPreview = []
+        importError = nil
+      }
+    ) {
+      importPreviewSheet
+    }
     .onChange(of: section) { _, section in
       query = ""
       if ownsContext { store.library.refresh(profileID, section: section) }
@@ -135,6 +163,22 @@ struct LibraryPanel: View {
       Text(
         PanelsL10n.string("Saved bookmarks are removed from this profile. Open pages stay open."))
     }
+  }
+
+  private var importPreviewSheet: some View {
+    BrowserImportPreviewView(
+      items: importPreview, profileName: store.profileName, error: importError,
+      canImport: !importPreview.isEmpty && !busy && !loading,
+      onCancel: { showingImportPreview = false }, onImport: applyImport)
+  }
+
+  private func applyImport() {
+    guard ownsContext, let tree, !importPreview.isEmpty else { return }
+    store.library.importBookmarks(
+      importPreview, profile: profileID, otherFolderID: tree.otherID,
+      completion: { success in
+        if success { showingImportPreview = false }
+      })
   }
 
   private func bookmarkRow(_ item: BrowserBookmark) -> some View {

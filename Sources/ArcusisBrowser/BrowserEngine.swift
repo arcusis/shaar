@@ -222,6 +222,8 @@ final class BrowserEngine {
       case .bookmark(let operation):
         self.events.applyBookmarkOperation(
           operation, profileID: profile.uuidString, completion: done)
+      case .bookmarks(let operations):
+        self.applyImportedBookmarks(operations, profileID: profile, completion: done)
       case .deleteHistory(let url):
         self.events.deleteHistoryURL(url, profileID: profile.uuidString, completion: done)
       }
@@ -862,6 +864,22 @@ final class BrowserEngine {
       events.resolveExternalApp(id, windowID: windowID, accepted: false)
       return
     }
+  }
+
+  private func applyImportedBookmarks(
+    _ operations: [[String: Any]], profileID: UUID,
+    completion: @escaping @MainActor (Error?) -> Void
+  ) {
+    BrowserImport.apply(
+      operations,
+      using: { [weak self] operation, done in
+        guard let self else {
+          done(LibraryDataError.invalidBookmarks)
+          return
+        }
+        self.events.applyBookmarkOperation(
+          operation, profileID: profileID.uuidString, completion: done)
+      }, completion: completion)
   }
 
   static func externalAppRequest(

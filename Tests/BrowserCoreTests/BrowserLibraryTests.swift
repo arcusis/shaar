@@ -133,3 +133,223 @@ private func bookmarkPayload(children: [[String: Any]]) -> [String: Any] {
   #expect(LibraryDataError.invalidBookmarks.errorDescription?.contains("bookmark") == true)
   #expect(LibraryDataError.invalidHistory.errorDescription?.contains("history") == true)
 }
+
+@Test func browserImportReadsChromiumAndFirefoxBookmarksAndBuildsNestedOperations() throws {
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  let chrome = directory.appendingPathComponent("Bookmarks.json")
+  let chromeData = try JSONSerialization.data(withJSONObject: [
+    "roots": [
+      "bookmark_bar": [
+        "children": [
+          [
+            "type": "folder", "name": "Work",
+            "children": [
+              ["type": "url", "name": "Portal", "url": "https://work.example.com"]
+            ],
+          ]
+        ]
+      ]
+    ]
+  ])
+  try chromeData.write(to: chrome)
+  let chromiumItems = try BrowserImport.read(chrome)
+  #expect(chromiumItems.count == 1)
+  #expect(chromiumItems[0].folder == "Work")
+
+  let firefox = directory.appendingPathComponent("Bookmarks.html")
+  try #"<DL><DT><H3>Personal</H3><DL><DT><A HREF="https://home.example.com">Home</A></DL></DL>"#
+    .write(
+      to: firefox, atomically: true, encoding: .utf8)
+  let firefoxItems = try BrowserImport.read(firefox)
+  #expect(firefoxItems.map(\.address) == ["https://home.example.com"])
+
+  let rootID = UUID()
+  let operations = BrowserImport.operations(
+    for: chromiumItems + firefoxItems, otherFolderID: rootID)
+  #expect(operations.count == 3)
+  #expect(operations[0]["t"] as? String == "Work")
+  #expect(operations[0]["parent"] as? String == rootID.uuidString.lowercased())
+  #expect(operations[1]["parent"] as? String == operations[0]["id"] as? String)
+}
+
+@Test func browserImportReadsSafariPlistsAndFirefoxJSONAndRejectsUnsupportedFiles() throws {
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  let safari = directory.appendingPathComponent("Bookmarks.plist")
+  let plist: [String: Any] = [
+    "Children": [
+      [
+        "Title": "Safari", "URLString": "https://safari.example.com",
+      ]
+    ]
+  ]
+  try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0).write(
+    to: safari)
+  #expect(try BrowserImport.read(safari).map(\.title) == ["Safari"])
+
+  let firefoxJSON = directory.appendingPathComponent("Firefox.json")
+  try JSONSerialization.data(withJSONObject: [
+    "type": "text/x-moz-place-container", "title": "Root",
+    "children": [
+      ["type": "text/x-moz-place", "title": "Firefox", "uri": "https://firefox.example.com"]
+    ],
+  ]).write(to: firefoxJSON)
+  #expect(try BrowserImport.read(firefoxJSON).map(\.address) == ["https://firefox.example.com"])
+
+  let unsupported = directory.appendingPathComponent("Unsupported.json")
+  try Data("{}".utf8).write(to: unsupported)
+  #expect(throws: BrowserImport.ImportError.self) { try BrowserImport.read(unsupported) }
+}
+
+@Test func browserImportCoversNestedAndMalformedExportShapes() throws {
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: directory) }
+
+  let chromium = directory.appendingPathComponent("Arc.json")
+  try JSONSerialization.data(withJSONObject: [
+    "roots": [
+      "bookmark_bar": [
+        "children": [
+          [
+            "name": "Repeated",
+            "children": [
+              ["title": "First", "url": "https://first.example.com"],
+              ["name": "Invalid", "url": "javascript:alert(1)"],
+              ["name": "Untitled child", "c": [["uri": "https://second.example.com"]]],
+            ],
+          ]
+        ]
+      ],
+      "other": ["children": [["name": "Other", "url": "https://other.example.com"]]],
+      "synced": ["children": [["name": "Synced", "url": "https://synced.example.com"]]],
+    ]
+  ]).write(to: chromium)
+  let chromiumItems = try BrowserImport.read(chromium)
+  #expect(chromiumItems.count == 4)
+  #expect(
+    chromiumItems.contains { $0.title == "Untitled" && $0.folder == "Repeated / Untitled child" })
+  #expect(!chromiumItems.contains { $0.title == "Invalid" })
+
+  let emptyChromium = directory.appendingPathComponent("EmptyChrome.json")
+  try JSONSerialization.data(withJSONObject: ["roots": ["bookmark_bar": [:]]]).write(
+    to: emptyChromium)
+  #expect(try BrowserImport.read(emptyChromium).isEmpty)
+
+  let safari = directory.appendingPathComponent("Nested.plist")
+  try PropertyListSerialization.data(
+    fromPropertyList: [
+      "Children": [
+        [
+          "Title": "Folder",
+          "Children": [
+            ["Title": "Nested page", "URLString": "https://nested.example.com"],
+            ["Title": "Bad URL", "URLString": "file:///private/data"],
+            ["Children": [["URLString": "https://untitled.example.com"]]],
+          ],
+        ]
+      ]
+    ], format: .xml, options: 0
+  ).write(to: safari)
+  let safariItems = try BrowserImport.read(safari)
+  #expect(safariItems.map(\.folder) == ["Folder", "Folder / Untitled"])
+  #expect(safariItems[1].title == "Untitled")
+
+  let emptySafari = directory.appendingPathComponent("EmptySafari.plist")
+  try PropertyListSerialization.data(
+    fromPropertyList: ["Unexpected": "root"], format: .xml, options: 0
+  )
+  .write(to: emptySafari)
+  #expect(try BrowserImport.read(emptySafari).isEmpty)
+
+  let firefox = directory.appendingPathComponent("Nested.json")
+  try JSONSerialization.data(withJSONObject: [
+    "children": [
+      [
+        "title": "Folder",
+        "children": [
+          ["name": "Page", "uri": "https://firefox.example.com"],
+          ["title": "Bad", "uri": "javascript:void(0)"],
+        ],
+      ],
+      ["name": "Empty folder", "children": []],
+    ]
+  ]).write(to: firefox)
+  let firefoxItems = try BrowserImport.read(firefox)
+  #expect(firefoxItems.count == 1 && firefoxItems[0].folder == "Untitled / Folder")
+
+  let emptyFirefox = directory.appendingPathComponent("EmptyFirefox.json")
+  try JSONSerialization.data(withJSONObject: [
+    "type": "text/x-moz-place-container", "children": [],
+  ]).write(to: emptyFirefox)
+  #expect(try BrowserImport.read(emptyFirefox).isEmpty)
+
+  let html = directory.appendingPathComponent("Encoded.html")
+  try
+    #"<A href='https://example.com/?a=1&amp;b=2' title='ignored'>A &amp; B</A><A HREF="javascript:bad()">bad</A>"#
+    .write(to: html, atomically: true, encoding: .utf8)
+  let htmlItems = try BrowserImport.read(html)
+  #expect(htmlItems.count == 1)
+  #expect(htmlItems[0].address == "https://example.com/?a=1&amp;b=2")
+  #expect(htmlItems[0].title == "A & B")
+
+  let emptyHTML = directory.appendingPathComponent("Empty.html")
+  try "<DL><DT>No bookmarks</DT></DL>".write(
+    to: emptyHTML, atomically: true, encoding: .utf8)
+  #expect(try BrowserImport.read(emptyHTML).isEmpty)
+
+  let nonDictionaryJSON = directory.appendingPathComponent("Array.json")
+  try JSONSerialization.data(withJSONObject: ["bookmarks"]).write(to: nonDictionaryJSON)
+  #expect(throws: BrowserImport.ImportError.self) { try BrowserImport.read(nonDictionaryJSON) }
+
+  let nonDictionaryPlist = directory.appendingPathComponent("Array.plist")
+  try PropertyListSerialization.data(fromPropertyList: ["bookmarks"], format: .xml, options: 0)
+    .write(to: nonDictionaryPlist)
+  #expect(throws: BrowserImport.ImportError.self) { try BrowserImport.read(nonDictionaryPlist) }
+  #expect(BrowserImport.ImportError.unsupported.errorDescription?.contains("Firefox") == true)
+
+  let nonUTF8HTML = directory.appendingPathComponent("Binary.html")
+  try Data([0xFF, 0xFE]).write(to: nonUTF8HTML)
+  #expect(throws: BrowserImport.ImportError.self) { try BrowserImport.read(nonUTF8HTML) }
+
+  let ignoredHistory = BrowserImportItem(
+    kind: .history, title: "History", address: "https://history.example.com")
+  let sharedFolderOperations = BrowserImport.operations(
+    for: [chromiumItems[0], chromiumItems[1], ignoredHistory], otherFolderID: UUID())
+  #expect(sharedFolderOperations.filter { $0["k"] as? String == "f" }.count == 2)
+  #expect(sharedFolderOperations.filter { $0["k"] as? String == "u" }.count == 2)
+}
+
+@Test @MainActor func browserImportBatchAppliesInOrderAndStopsAfterAnError() {
+  let operations: [[String: Any]] = [["id": "first"], ["id": "second"], ["id": "third"]]
+  var applied: [String] = []
+  var result: Error?
+  BrowserImport.apply(
+    operations,
+    using: { operation, done in
+      applied.append(operation["id"] as? String ?? "")
+      done(nil)
+    }, completion: { result = $0 })
+  #expect(applied == ["first", "second", "third"] && result == nil)
+
+  let failure = NSError(domain: "test", code: 1)
+  applied = []
+  BrowserImport.apply(
+    operations,
+    using: { operation, done in
+      applied.append(operation["id"] as? String ?? "")
+      done(applied.count == 2 ? failure : nil)
+    }, completion: { result = $0 })
+  #expect(applied == ["first", "second"] && (result as NSError?) == failure)
+
+  applied = []
+  BrowserImport.apply(
+    [],
+    using: { operation, _ in
+      applied.append(operation["id"] as? String ?? "")
+    }, completion: { result = $0 })
+  #expect(applied.isEmpty && result == nil)
+}

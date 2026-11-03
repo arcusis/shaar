@@ -14,6 +14,7 @@
 #import "../../ThirdParty/ArdiaCore/ArdiaCore.h"
 
 NSError *ARCBridgeError(NSString *message);
+BOOL ARCDisableBackgroundMode(NSURL *userDataDirectory);
 BOOL ARCIsCanonicalID(NSString *value);
 /// The canonical uppercase form of a profile UUID, or nil when `profileID` is not a UUID.
 NSString *ARCValidatedProfileID(NSString *profileID);

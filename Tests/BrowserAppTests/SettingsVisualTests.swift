@@ -70,12 +70,12 @@ final class SettingsVisualTests: XCTestCase {
     try XCTSkipUnless(SidebarVisualCaptureSupport.enabled, "Visual capture requires opt-in")
     let output = try SidebarVisualCaptureSupport.prepare()
     let profileID = UUID()
-    let size = NSSize(width: 720, height: 560)
     for scheme in [ColorScheme.light, .dark] {
       for section in [
         BrowserSettingsSection.general, .appearance, .profiles, .shortcuts, .about,
         .privacy,
       ] {
+        let size = NSSize(width: 720, height: section == .profiles ? 900 : 560)
         let view = BrowserSettingsView(
           profiles: [
             BrowserSettingsProfile(
@@ -100,7 +100,8 @@ final class SettingsVisualTests: XCTestCase {
         let name = "settings-\(section.rawValue)-\(scheme == .dark ? "dark" : "light").png"
         _ = try await mounted.capture(
           to: output.appending(path: name),
-          requiredText: section == .profiles ? ["Personal", "Spaces"] : [section.title])
+          requiredText: section == .profiles
+            ? ["Personal", "Download folder", "Spaces"] : [section.title])
       }
     }
   }

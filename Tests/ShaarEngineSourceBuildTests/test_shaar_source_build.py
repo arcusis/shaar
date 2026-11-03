@@ -86,6 +86,22 @@ class ShaarSourceBuildTests(unittest.TestCase):
             with self.assertRaisesRegex(BUILD.BuildError, "owner record mismatch"):
                 BUILD.prepare_owned_output(repo)
 
+    def test_resume_removes_only_a_dead_siso_lock(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            lock = output / ".siso_lock"
+            lock.write_text("pid=12345")
+            with mock.patch.object(BUILD.os, "kill", return_value=None):
+                with self.assertRaisesRegex(BUILD.BuildError, "still owns"):
+                    BUILD.clear_stale_siso_lock(output)
+            self.assertTrue(lock.exists())
+            with mock.patch.object(BUILD.os, "kill", side_effect=ProcessLookupError):
+                BUILD.clear_stale_siso_lock(output)
+            self.assertFalse(lock.exists())
+            lock.symlink_to(output / "outside")
+            with self.assertRaisesRegex(BUILD.BuildError, "symlinked Siso lock"):
+                BUILD.clear_stale_siso_lock(output)
+
     def test_export_receipt_requires_shaar_symbols_and_rejects_legacy(self):
         symbols = "\n".join(BUILD.REQUIRED_EXPORTS) + "\n_ChromeMain\n"
         checked = BUILD.check_exports(symbols)

@@ -357,6 +357,27 @@ def run_logged(command: list[str], cwd: Path, log: Path, *, env: dict[str, str] 
         raise BuildError(f"command failed ({result.returncode}): {' '.join(command)}; see {log}")
 
 
+def clear_stale_siso_lock(copied_out: Path) -> None:
+    lock = copied_out / ".siso_lock"
+    if lock.is_symlink():
+        raise BuildError("symlinked Siso lock in Shaar output")
+    if lock.exists():
+        match = re.fullmatch(r"pid=(\d+)\s*", lock.read_text())
+        if not match:
+            raise BuildError("unrecognized Siso lock in Shaar output")
+        try:
+            os.kill(int(match.group(1)), 0)
+        except ProcessLookupError:
+            lock.unlink()
+        except PermissionError as exc:
+            raise BuildError("cannot verify Siso lock owner") from exc
+        else:
+            raise BuildError("a Siso build still owns the Shaar output")
+    for stale_log in copied_out.glob("siso*.INFO"):
+        if stale_log.is_symlink():
+            stale_log.unlink()
+
+
 def snapshot_source(output: Path, source: Path, reference_root: Path, config: dict,
                     receipt: Path, record: dict) -> Path:
     destination = owned_child(output, "chromium_git/chromium/src")
@@ -369,6 +390,7 @@ def snapshot_source(output: Path, source: Path, reference_root: Path, config: di
                 snapshot.get("chromiumCommit") != config["chromium"]["commit"] or
                 snapshot.get("referenceReceiptSha256") != record["referenceReceiptSha256"]):
             raise BuildError("existing Shaar source snapshot does not match reference")
+        clear_stale_siso_lock(destination / "out" / config["build"]["configuration"])
         return destination
     if destination.exists() or depot.exists():
         raise BuildError("incomplete Shaar source snapshot; refusing to overwrite")
@@ -387,10 +409,7 @@ def snapshot_source(output: Path, source: Path, reference_root: Path, config: di
     if copied_head != config["chromium"]["commit"]:
         raise BuildError("copied Chromium checkout differs from pin")
     copied_out = destination / "out" / config["build"]["configuration"]
-    (copied_out / ".siso_lock").unlink(missing_ok=True)
-    for stale_log in copied_out.glob("siso*.INFO"):
-        if stale_log.is_symlink():
-            stale_log.unlink()
+    clear_stale_siso_lock(copied_out)
     marker_record = {"reference": str(source), "chromiumCommit": config["chromium"]["commit"],
                      "referenceReceiptSha256": record["referenceReceiptSha256"],
                      "completedAt": now_utc()}
@@ -462,11 +481,11 @@ def run_dual_export(repo: Path, reference: Path, config: dict) -> dict:
         env["VPYTHON_VIRTUALENV_ROOT"] = str(output / "vpython-root")
         gn = copied / "buildtools/mac/gn"
         stage("gn", lambda: run_logged(
-            ["/usr/sbin/taskpolicy", "-b", "nice", "-n", "19", str(gn), "gen",
+            ["/usr/sbin/taskpolicy", "-b", str(gn), "gen",
              "out/" + config["build"]["configuration"]], copied, output / "gn.log",
             env=env, timeout=config["build"]["timeoutsSeconds"]["gn"]))
         stage("build", lambda: run_logged(
-            ["/usr/sbin/taskpolicy", "-b", "nice", "-n", "19",
+            ["/usr/sbin/taskpolicy", "-b",
              str(output / "depot_tools/autoninja"), "-j", "6", "-k", "0", "-C",
              "out/" + config["build"]["configuration"], "chrome_framework"],
             copied, output / "build.log", env=env,
@@ -511,11 +530,11 @@ def probe_swift_loader(repo: Path, output: Path, binary: Path) -> None:
 }
 ''')
     executable = output / "shaar-loader-probe"
-    run_logged(["/usr/sbin/taskpolicy", "-b", "nice", "-n", "19", "/usr/bin/swiftc",
+    run_logged(["/usr/sbin/taskpolicy", "-b", "/usr/bin/swiftc",
                 str(loader), str(probe), "-o", str(executable)], output,
                output / "swift-probe-build.log", timeout=300)
     framework = binary.parents[2]
-    run_logged(["/usr/sbin/taskpolicy", "-b", "nice", "-n", "19", str(executable),
+    run_logged(["/usr/sbin/taskpolicy", "-b", str(executable),
                 str(framework)], output, output / "swift-probe.log", timeout=120)
     if "shaar_loader_abi_major=1" not in (output / "swift-probe.log").read_text():
         raise BuildError("Swift loader did not report ABI major 1")

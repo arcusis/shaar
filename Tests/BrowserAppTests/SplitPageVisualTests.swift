@@ -38,6 +38,32 @@ final class SplitPageVisualTests: XCTestCase {
       SplitDividerInput.accessibilityDelta(for: .decrement, step: 32), -32)
   }
 
+  func testSplitDividerActionsApplyKeyboardAndAccessibilityChanges() {
+    var changes: [CGFloat] = []
+    let right = SplitDividerInput.keyboardAction(
+      for: .right, axis: .columns, isRightToLeft: false, step: 32
+    ) { changes.append($0) }
+    XCTAssertEqual(right(), .handled)
+    XCTAssertEqual(changes, [32])
+
+    let leftToRight = SplitDividerInput.keyboardAction(
+      for: .left, axis: .columns, isRightToLeft: true, step: 32
+    ) { changes.append($0) }
+    XCTAssertEqual(leftToRight(), .handled)
+    XCTAssertEqual(changes, [32, 32])
+
+    let wrongAxis = SplitDividerInput.keyboardAction(
+      for: .up, axis: .columns, isRightToLeft: false, step: 32
+    ) { changes.append($0) }
+    XCTAssertEqual(wrongAxis(), .ignored)
+    XCTAssertEqual(changes, [32, 32])
+
+    let adjust = SplitDividerInput.accessibilityAction(step: 32) { changes.append($0) }
+    adjust(.increment)
+    adjust(.decrement)
+    XCTAssertEqual(changes, [32, 32, 32, -32])
+  }
+
   func testMixedLayoutCapture() async throws {
     try XCTSkipUnless(
       SidebarVisualCaptureSupport.enabled, "Visual capture requires explicit opt-in")

@@ -129,48 +129,39 @@ private struct SplitGroupView: View {
     .animation(.easeOut(duration: 0.12), value: highlighted)
     .accessibilityLabel(ShellL10n.string("Split divider"))
     .accessibilityValue("\(Int((leadingPercent * 100).rounded()))%")
-    .accessibilityAdjustableAction { direction in
-      if let delta = SplitDividerInput.accessibilityDelta(for: direction, step: Self.keyboardStep) {
-        adjustDivider(index, by: delta, available: available)
+    .accessibilityAdjustableAction(
+      SplitDividerInput.accessibilityAction(step: Self.keyboardStep) {
+        adjustDivider(index, by: $0, available: available)
       }
-    }
+    )
     .focusable()
-    .onKeyPress(.leftArrow) {
-      guard
-        let delta = SplitDividerInput.keyboardDelta(
-          for: .left, axis: axis, isRightToLeft: layoutDirection == .rightToLeft,
-          step: Self.keyboardStep)
-      else { return .ignored }
-      adjustDivider(index, by: delta, available: available)
-      return .handled
-    }
-    .onKeyPress(.rightArrow) {
-      guard
-        let delta = SplitDividerInput.keyboardDelta(
-          for: .right, axis: axis, isRightToLeft: layoutDirection == .rightToLeft,
-          step: Self.keyboardStep)
-      else { return .ignored }
-      adjustDivider(index, by: delta, available: available)
-      return .handled
-    }
-    .onKeyPress(.upArrow) {
-      guard
-        let delta = SplitDividerInput.keyboardDelta(
-          for: .up, axis: axis, isRightToLeft: layoutDirection == .rightToLeft,
-          step: Self.keyboardStep)
-      else { return .ignored }
-      adjustDivider(index, by: delta, available: available)
-      return .handled
-    }
-    .onKeyPress(.downArrow) {
-      guard
-        let delta = SplitDividerInput.keyboardDelta(
-          for: .down, axis: axis, isRightToLeft: layoutDirection == .rightToLeft,
-          step: Self.keyboardStep)
-      else { return .ignored }
-      adjustDivider(index, by: delta, available: available)
-      return .handled
-    }
+    .onKeyPress(
+      .leftArrow,
+      action: SplitDividerInput.keyboardAction(
+        for: .left, axis: axis, isRightToLeft: layoutDirection == .rightToLeft,
+        step: Self.keyboardStep
+      ) { adjustDivider(index, by: $0, available: available) }
+    )
+    .onKeyPress(
+      .rightArrow,
+      action: SplitDividerInput.keyboardAction(
+        for: .right, axis: axis, isRightToLeft: layoutDirection == .rightToLeft,
+        step: Self.keyboardStep
+      ) { adjustDivider(index, by: $0, available: available) }
+    )
+    .onKeyPress(
+      .upArrow,
+      action: SplitDividerInput.keyboardAction(
+        for: .up, axis: axis, isRightToLeft: layoutDirection == .rightToLeft,
+        step: Self.keyboardStep
+      ) { adjustDivider(index, by: $0, available: available) }
+    )
+    .onKeyPress(
+      .downArrow,
+      action: SplitDividerInput.keyboardAction(
+        for: .down, axis: axis, isRightToLeft: layoutDirection == .rightToLeft,
+        step: Self.keyboardStep
+      ) { adjustDivider(index, by: $0, available: available) })
   }
 
   private static let keyboardStep: CGFloat = 32
@@ -215,6 +206,20 @@ enum SplitDividerInput {
     }
   }
 
+  static func keyboardAction(
+    for key: Key, axis: SplitAxis, isRightToLeft: Bool, step: CGFloat,
+    resize: @escaping (CGFloat) -> Void
+  ) -> () -> KeyPress.Result {
+    {
+      guard
+        let delta = keyboardDelta(
+          for: key, axis: axis, isRightToLeft: isRightToLeft, step: step)
+      else { return .ignored }
+      resize(delta)
+      return .handled
+    }
+  }
+
   static func accessibilityDelta(
     for direction: AccessibilityAdjustmentDirection, step: CGFloat
   ) -> CGFloat? {
@@ -222,6 +227,15 @@ enum SplitDividerInput {
     case .increment: step
     case .decrement: -step
     @unknown default: nil
+    }
+  }
+
+  static func accessibilityAction(
+    step: CGFloat, resize: @escaping (CGFloat) -> Void
+  ) -> (AccessibilityAdjustmentDirection) -> Void {
+    { direction in
+      guard let delta = accessibilityDelta(for: direction, step: step) else { return }
+      resize(delta)
     }
   }
 }

@@ -173,7 +173,7 @@ void OnProfileReady(shaar_profile* handle,
     const std::string payload = "{\"kind\":\"load_failed\",\"schemaVersion\":1}";
     shaar::EmitEvent(handle->engine, SHAAR_EVENT_PROFILE,
                      {handle->id.data(), handle->id.size()}, {}, {},
-                     {payload.data(), payload.size()});
+                     {}, {payload.data(), payload.size()});
     Reply(callback, context, request_id, SHAAR_CHROMIUM_ERROR, handle->id);
     for (const auto& waiter : handle->waiters)
       Reply(waiter.callback, waiter.context, waiter.request_id,
@@ -190,7 +190,7 @@ void OnProfileReady(shaar_profile* handle,
   const std::string payload = "{\"kind\":\"loaded\",\"schemaVersion\":1}";
   shaar::EmitEvent(handle->engine, SHAAR_EVENT_PROFILE,
                    {handle->id.data(), handle->id.size()}, {}, {},
-                   {payload.data(), payload.size()});
+                   {}, {payload.data(), payload.size()});
   Reply(callback, context, request_id, SHAAR_OK, handle->id);
   for (const auto& waiter : handle->waiters)
     Reply(waiter.callback, waiter.context, waiter.request_id, SHAAR_OK, handle->id);
@@ -287,7 +287,7 @@ shaar_error_code ReserveAndLoad(shaar_engine* engine,
                   "{\"kind\":\"created\",\"schemaVersion\":1}";
               shaar::EmitEvent(handle->engine, SHAAR_EVENT_PROFILE,
                                {handle->id.data(), handle->id.size()}, {}, {},
-                               {payload.data(), payload.size()});
+                               {}, {payload.data(), payload.size()});
             },
             path, name, raw_handle));
   } else if (!manager->LoadProfileByPath(path, false, std::move(loaded))) {
@@ -334,12 +334,12 @@ shaar_error_code HandleProfileOperation(
   if (scope.profile->deleting)
     return Fail(SHAAR_CONFLICT, "profile deletion is pending", error);
 
-  auto parsed = base::JSONReader::Read(BytesToString(args_json));
+  auto parsed = base::JSONReader::Read(BytesToString(args_json), base::JSON_PARSE_RFC);
   if (!parsed || !parsed->is_dict() ||
       parsed->GetDict().FindInt("schemaVersion") != 1) {
     return Fail(SHAAR_INVALID_ARGUMENT, "invalid profile operation payload", error);
   }
-  const base::Value::Dict& args = parsed->GetDict();
+  const base::DictValue& args = parsed->GetDict();
   if (operation == SHAAR_OP_PROFILE_DELETE) {
     if (args.size() != 1)
       return Fail(SHAAR_INVALID_ARGUMENT, "unknown profile delete fields", error);
@@ -401,7 +401,7 @@ shaar_error_code HandleProfileOperation(
 
 }  // namespace
 
-extern "C" void shaar_profiles_register(shaar::ShaarModuleRegistry* registry) {
+extern "C" void shaar_profiles_register(ShaarModuleRegistry* registry) {
   if (!registry)
     return;
   shaar::SetProfileServices(&g_profile_services);
@@ -485,7 +485,7 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_profile_close(
     const std::string payload = "{\"kind\":\"closed\",\"schemaVersion\":1}";
     shaar::EmitEvent(profile->engine, SHAAR_EVENT_PROFILE,
                      {profile->id.data(), profile->id.size()}, {}, {},
-                     {payload.data(), payload.size()});
+                     {}, {payload.data(), payload.size()});
     g_retired_profiles.push_back(std::move(found->second));
     g_profiles.erase(found);
   }
@@ -562,7 +562,7 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_profile_set_state(
         std::string(kThirdPartyCookiesKey) + "\"}";
     shaar::EmitEvent(profile->engine, SHAAR_EVENT_PROFILE,
                      {profile->id.data(), profile->id.size()}, {}, {},
-                     {payload.data(), payload.size()});
+                     {}, {payload.data(), payload.size()});
   }
   return Fail(SHAAR_OK, "", error);
 }
@@ -601,7 +601,7 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_profile_delete(
   const std::string deleting = "{\"kind\":\"deleting\",\"schemaVersion\":1}";
   shaar::EmitEvent(profile->engine, SHAAR_EVENT_PROFILE,
                    {profile->id.data(), profile->id.size()}, {}, {},
-                   {deleting.data(), deleting.size()});
+                   {}, {deleting.data(), deleting.size()});
   manager->GetDeleteProfileHelper().MaybeScheduleProfileForDeletion(
       profile->native->GetPath(),
       base::BindOnce(
@@ -613,7 +613,7 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_profile_delete(
                                             ? "{\"kind\":\"deleted\",\"schemaVersion\":1}"
                                             : "{\"kind\":\"delete_failed\",\"schemaVersion\":1}";
             shaar::EmitEvent(engine, SHAAR_EVENT_PROFILE, {id.data(), id.size()},
-                             {}, {}, {payload.data(), payload.size()});
+                             {}, {}, {}, {payload.data(), payload.size()});
             if (deleted_profile) {
               g_retired_profiles.push_back(std::move(found->second));
               g_profiles.erase(found);
@@ -621,7 +621,7 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_profile_delete(
               found->second->deleting = false;
             }
           },
-          profile->engine, profile->id,
-          ProfileMetrics::DELETE_PROFILE_SETTINGS));
+          profile->engine, profile->id),
+      ProfileMetrics::DELETE_PROFILE_SETTINGS);
   return Fail(SHAAR_OK, "", error);
 }

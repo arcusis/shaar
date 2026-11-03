@@ -16,4 +16,7 @@ bool CanonicalDirectory(shaar_bytes profile_id, std::string* directory);
 
 }  // namespace shaar::profiles
 
+struct ShaarModuleRegistry;
+extern "C" void shaar_profiles_register(ShaarModuleRegistry* registry);
+
 #endif  // CHROME_BROWSER_SHAAR_PROFILES_SHAAR_PROFILES_H_

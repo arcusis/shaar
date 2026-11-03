@@ -55,7 +55,7 @@ TEST(ShaarDownloadsRecordTest, MapsAllStatesAndKeepsUnknownSize) {
   for (const auto& [state, expected] : cases) {
     NiceMock<download::MockDownloadItem> item;
     SetRecordDefaults(item, state);
-    const base::Value::Dict record = Downloads::Record(item);
+    const base::DictValue record = Downloads::Record(item);
     ASSERT_NE(record.FindString("state"), nullptr);
     EXPECT_EQ(*record.FindString("state"), expected);
     EXPECT_EQ(record.FindDouble("total"), -1.0);
@@ -75,7 +75,7 @@ TEST(ShaarDownloadsRecordTest, UsesFullPathWhenTargetPathIsEmpty) {
   ON_CALL(item, GetTargetFilePath())
       .WillByDefault(ReturnRefOfCopy(base::FilePath()));
 
-  const base::Value::Dict record = Downloads::Record(item);
+  const base::DictValue record = Downloads::Record(item);
   ASSERT_NE(record.FindString("path"), nullptr);
   EXPECT_EQ(*record.FindString("path"), "/temporary/file.bin");
 }

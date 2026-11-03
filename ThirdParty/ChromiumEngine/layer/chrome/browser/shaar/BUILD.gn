@@ -100,7 +100,7 @@ source_set("engine") {
     # BEGIN devtools
     "//chrome/browser/devtools",
     # END devtools
-    "//chrome/browser:lifetime",
+    "//chrome/browser/lifetime",
     "//chrome/browser/profiles",
     "//chrome/browser/history:impl",
     "//chrome/browser/ui/browser_window",
@@ -128,7 +128,7 @@ source_set("engine") {
     "//services/media_session/public/mojom",
     # END media
     "//components/download/content/public",
-    "//components/download/public/common",
+    "//components/download/public/common:public",
     "//extensions/browser",
     "//net",
     "//ui/base",
@@ -141,7 +141,7 @@ source_set("engine") {
 }
 
 # BEGIN storage_keychain
-test("storage_keychain_unittests") {
+test("shaar_storage_keychain_unittests") {
   sources = [
     "storage_keychain/shaar_storage_keychain_unittest.cc",
     "storage_keychain/shaar_storage_keychain_migration_probe_unittest.mm",
@@ -157,80 +157,114 @@ test("storage_keychain_unittests") {
 }
 # END storage_keychain
 
-test("lifecycle_unittests") {
+test("shaar_lifecycle_unittests") {
   sources = [ "lifecycle/shaar_module_registry_unittest.cc" ]
   deps = [ ":engine", "//testing/gtest" ]
 }
 
-test("private_sessions_unittests") {
+test("shaar_private_sessions_unittests") {
   sources = [ "private_sessions/shaar_private_sessions_unittest.cc" ]
   deps = [ ":engine", "//chrome/test:test_support", "//testing/gtest" ]
 }
 
-test("profiles_unittests") {
+test("shaar_profiles_unittests") {
   sources = [ "profiles/shaar_profiles_unittest.cc" ]
   deps = [ ":engine", "//testing/gtest" ]
 }
 
-test("windows_tabs_unittests") {
+test("shaar_windows_tabs_unittests") {
   sources = [ "windows_tabs/shaar_windows_tabs_handlers_unittest.cc" ]
   deps = [ ":engine", "//testing/gtest" ]
 }
 
-test("navigation_unittests") {
+test("shaar_navigation_unittests") {
   sources = [ "navigation/shaar_navigation_unittest.cc" ]
   deps = [ ":engine", "//testing/gtest", "//testing/gtest:gtest_main" ]
 }
 
-test("downloads_unittests") {
+test("shaar_downloads_unittests") {
   sources = [ "downloads/shaar_downloads_unittest.cc" ]
   deps = [ ":engine", "//components/download/public/common:test_support",
            "//testing/gmock", "//testing/gtest" ]
 }
 
-test("bookmarks_unittests") {
+test("shaar_bookmarks_unittests") {
   sources = [ "bookmarks/shaar_bookmarks_unittest.cc" ]
   deps = [ ":engine", "//base/test:test_support", "//chrome/test:test_support",
            "//components/bookmarks/test", "//content/test:test_support",
            "//testing/gtest" ]
 }
 
-test("history_unittests") {
+test("shaar_history_unittests") {
   sources = [ "history/shaar_history_unittest.cc" ]
   deps = [ ":engine", "//base/test:test_support",
            "//components/history/core/browser", "//testing/gtest" ]
 }
 
 # BEGIN site_data
-test("site_data_unittests") {
+test("shaar_site_data_unittests") {
   sources = [ "site_data/shaar_site_data_unittest.cc" ]
   deps = [ ":engine", "//chrome/test:test_support", "//testing/gtest" ]
 }
 # END site_data
 # BEGIN extensions
-test("extensions_unittests") {
+test("shaar_extensions_unittests") {
   sources = [ "extensions/shaar_extensions_unittest.cc" ]
   deps = [ ":engine", "//testing/gtest" ]
 }
 # END extensions
 # BEGIN find
-test("find_unittests") {
+test("shaar_find_unittests") {
   sources = [ "find/shaar_find_unittest.cc" ]
   deps = [ ":engine", "//testing/gtest" ]
 }
 # END find
 # BEGIN devtools
-test("devtools_unittests") {
+test("shaar_devtools_unittests") {
   sources = [ "devtools/shaar_devtools_unittest.cc" ]
   deps = [ ":engine", "//content/test:test_support", "//testing/gtest" ]
 }
 # END devtools
 # BEGIN media
-test("media_unittests") {
+test("shaar_media_unittests") {
   sources = [ "media/shaar_media_unittest.cc" ]
   deps = [ ":engine", "//testing/gtest" ]
 }
 # END media
+
+test("shaar_layer_unittests") {
+  sources = [
+    "bookmarks/shaar_bookmarks_unittest.cc",
+    "devtools/shaar_devtools_unittest.cc",
+    "downloads/shaar_downloads_unittest.cc",
+    "extensions/shaar_extensions_unittest.cc",
+    "find/shaar_find_unittest.cc",
+    "history/shaar_history_unittest.cc",
+    "lifecycle/shaar_module_registry_unittest.cc",
+    "media/shaar_media_unittest.cc",
+    "navigation/shaar_navigation_unittest.cc",
+    "private_sessions/shaar_private_sessions_unittest.cc",
+    "profiles/shaar_profiles_unittest.cc",
+    "site_data/shaar_site_data_unittest.cc",
+    "storage_keychain/shaar_storage_keychain_unittest.cc",
+    "windows_tabs/shaar_windows_tabs_handlers_unittest.cc",
+  ]
+  deps = [
+    ":engine",
+    "//base",
+    "//base/test:test_support",
+    "//chrome/test:test_support",
+    "//components/bookmarks/test",
+    "//components/download/public/common:test_support",
+    "//components/history/core/browser",
+    "//components/os_crypt/common:keychain_password_mac",
+    "//content/test:test_support",
+    "//crypto",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//testing/gtest:gtest_main",
+  ]
+}
 
 config("exports") {
   inputs = [ "shaar_engine.exports" ]

@@ -17,6 +17,7 @@ import plistlib
 import re
 from pathlib import Path
 import random
+import select
 import signal
 import shutil
 import socket
@@ -628,8 +629,9 @@ border:2px solid #1e40af;border-radius:6px;background:#2563eb;color:white}
         cookies = SimpleCookie(self.headers.get('Cookie', ''))
         account = cookies['account'].value if 'account' in cookies else 'none'
         account = account if account in ('alpha', 'beta') else 'none'
-        slow = name in ('slow.txt', 'cancel.txt')
-        body = f'account={account}\narcusis-download-fixture\n'.encode() + b'x' * (4 * 1024 * 1024 if slow else 1024)
+        slow = name == 'slow.txt'
+        cancellation = name == 'cancel.txt'
+        body = f'account={account}\narcusis-download-fixture\n'.encode() + b'x' * (4 * 1024 * 1024 if slow or cancellation else 1024)
         offset = 0
         requested = self.headers.get('Range', '')
         if requested.startswith('bytes='):
@@ -650,6 +652,14 @@ border:2px solid #1e40af;border-radius:6px;background:#2563eb;color:white}
             started = time.monotonic()
             for start in range(offset, len(body), 16384):
                 self.wfile.write(body[start:start+16384])
+                if cancellation and start == offset:
+                    self.wfile.flush()
+                    # Keep the authored transfer live until Chromium closes it on cancel.
+                    # A timed stream can finish before the engine's download observer runs.
+                    while True:
+                        readable, _, _ = select.select([self.connection], [], [], 0.1)
+                        if readable and not self.connection.recv(1, socket.MSG_PEEK):
+                            return
                 if slow:
                     # Catch up after scheduler stalls instead of accumulating one
                     # overslept delay per chunk on hosted virtual machines.
@@ -1387,7 +1397,7 @@ def main(argv=None):
                     if options.quit_exit:
                         code = wait_for_quit_exit(process, root, phase, timeout=90)
                     else:
-                        timeout = (240 if options.private_window else 180 if options.external_app_consent else 180 if options.saved_tab_capacity
+                        timeout = (280 if options.private_window else 180 if options.external_app_consent else 180 if options.saved_tab_capacity
                                    else 280)
                         code = wait_for_probe(process, root, phase, timeout=timeout)
                 except subprocess.TimeoutExpired:

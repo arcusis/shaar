@@ -33,6 +33,8 @@ jobs:
         with:
           stage: engine-build
           compression-level: '0'
+          artifact-name: ci-engine-build-${{ github.run_id }}
+          overwrite: 'true'
   probes:
     name: Engine ${{ matrix.shard }}
     needs: prepare
@@ -51,7 +53,7 @@ jobs:
           mode: engine-probe
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
-          name: ci-engine-build-${{ github.run_id }}-${{ github.run_attempt }}
+          name: ci-engine-build-${{ github.run_id }}
           path: build/ci/engine-build
       - name: Verify shared bundle and run assigned iterations without retries
         env:

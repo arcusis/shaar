@@ -32,6 +32,8 @@
 #include "extensions/browser/management_policy.h"
 #include "extensions/browser/uninstall_reason.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/permissions/permissions_data.h"
+#include "extensions/common/url_pattern_set.h"
 
 namespace {
 
@@ -119,6 +121,7 @@ std::optional<std::string> EncodeList(Profile* profile,
     row.Set("id", extension->id());
     row.Set("name", extension->name());
     row.Set("version", extension->version().GetString());
+    row.Set("description", extension->description());
     row.Set("enabled", registry->GetExtensionById(
                             extension->id(), extensions::ExtensionRegistry::ENABLED) !=
                             nullptr);
@@ -126,7 +129,27 @@ std::optional<std::string> EncodeList(Profile* profile,
                                service->UserCanDisableInstalledExtension(extension->id()));
     row.Set("incognitoEnabled",
             extensions::util::IsIncognitoEnabled(extension.get(), profile));
+    base::Value::List permissions;
+    for (const auto& permission :
+         extension->permissions_data()->active_permissions().apis()) {
+      permissions.Append(permission->name());
+    }
+    row.Set("permissions", std::move(permissions));
+    base::Value::List host_permissions;
+    for (const auto& pattern : extension->permissions_data()
+                                   ->active_permissions()
+                                   .effective_hosts()) {
+      host_permissions.Append(pattern.GetAsString());
+    }
+    row.Set("hostPermissions", std::move(host_permissions));
     row.Set("source", static_cast<int>(extension->location()));
+    const auto* policy = extension_system ? extension_system->management_policy()
+                                          : nullptr;
+    row.Set("managementState",
+            !policy ? "unknown"
+                    : policy->UserMayModifySettings(extension.get(), nullptr)
+                          ? "user"
+                          : "managed");
     entries.Append(std::move(row));
   }
   base::Value::Dict result;
@@ -178,6 +201,10 @@ shaar_error_code HandleExtensionsOperation(
     shaar_reply_fn reply,
     void* reply_context,
     shaar_error* error) {
+  // This migration slice deliberately exposes install/action/consent/popup
+  // dispatch only through an injected host. Until the Chromium-backed host is
+  // installed at engine startup, these operations fail closed below rather
+  // than claiming step-10 parity.
   if (scope.size < sizeof(shaar_scope) ||
       ((scope.profile != nullptr) == (scope.private_session != nullptr)))
     return Fail(SHAAR_INVALID_ARGUMENT, "invalid extension scope", error);

@@ -16,23 +16,36 @@ public struct ShaarExtensionSummary: Equatable, Sendable, Identifiable {
   public let id: String
   public let name: String
   public let version: String
+  public let description: String
   public let enabled: Bool
   public let mayDisable: Bool
+  public let permissions: [String]
+  public let hostPermissions: [String]
   public let incognitoEnabled: Bool
   public let source: Int
+  public let managementState: ShaarExtensionManagementState
 
   public init(
-    id: String, name: String, version: String, enabled: Bool,
-    mayDisable: Bool, incognitoEnabled: Bool, source: Int
+    id: String, name: String, version: String, description: String = "", enabled: Bool,
+    mayDisable: Bool, permissions: [String] = [], hostPermissions: [String] = [],
+    incognitoEnabled: Bool, source: Int, managementState: ShaarExtensionManagementState = .unknown
   ) {
     self.id = id
     self.name = name
     self.version = version
+    self.description = description
     self.enabled = enabled
     self.mayDisable = mayDisable
+    self.permissions = permissions
+    self.hostPermissions = hostPermissions
     self.incognitoEnabled = incognitoEnabled
     self.source = source
+    self.managementState = managementState
   }
+}
+
+public enum ShaarExtensionManagementState: String, Sendable, Equatable {
+  case user, managed, unknown
 }
 
 public enum ShaarExtensionManagementAction: Sendable, Equatable {
@@ -146,19 +159,28 @@ public struct ShaarExtensionsAdapter: Sendable {
       guard
         Set(row.keys)
           == Set([
-            "id", "name", "version", "enabled", "mayDisable", "incognitoEnabled", "source",
+            "id", "name", "version", "description", "enabled", "mayDisable",
+            "permissions", "hostPermissions", "incognitoEnabled", "source", "managementState",
           ]),
         let id = row["id"] as? String, Self.isValidExtensionID(id), ids.insert(id).inserted,
         let name = row["name"] as? String, name.utf8.count <= 4096,
         let version = row["version"] as? String, version.utf8.count <= 256,
+        let description = row["description"] as? String, description.utf8.count <= 16_384,
         let enabled = row["enabled"] as? Bool,
         let mayDisable = row["mayDisable"] as? Bool,
+        let permissions = row["permissions"] as? [String], permissions.count <= 1024,
+        permissions.allSatisfy({ $0.utf8.count <= 1024 }),
+        let hostPermissions = row["hostPermissions"] as? [String], hostPermissions.count <= 1024,
+        hostPermissions.allSatisfy({ $0.utf8.count <= 4096 }),
         let incognitoEnabled = row["incognitoEnabled"] as? Bool,
-        let source = row["source"] as? Int
+        let source = row["source"] as? Int,
+        let managementRaw = row["managementState"] as? String,
+        let managementState = ShaarExtensionManagementState(rawValue: managementRaw)
       else { throw ShaarExtensionsAdapterError.invalidResponse("malformed extension row") }
       return ShaarExtensionSummary(
-        id: id, name: name, version: version, enabled: enabled,
-        mayDisable: mayDisable, incognitoEnabled: incognitoEnabled, source: source)
+        id: id, name: name, version: version, description: description, enabled: enabled,
+        mayDisable: mayDisable, permissions: permissions, hostPermissions: hostPermissions,
+        incognitoEnabled: incognitoEnabled, source: source, managementState: managementState)
     }
   }
 

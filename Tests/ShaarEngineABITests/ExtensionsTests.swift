@@ -68,7 +68,7 @@ struct ShaarExtensionsAdapterTests {
   @Test func listDecodesStrictRowsAndUsesExplicitProfile() async throws {
     let profile = UUID()
     let fake = FakeExtensionsTransport(
-      #"{"schemaVersion":1,"extensions":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"Example","version":"2.1","enabled":false,"mayDisable":true,"incognitoEnabled":false,"source":4}]}"#
+      #"{"schemaVersion":1,"extensions":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"Example","version":"2.1","description":"Example extension","enabled":false,"mayDisable":true,"permissions":["storage","tabs"],"hostPermissions":["https://example.com/*"],"incognitoEnabled":false,"source":4,"managementState":"user"}]}"#
     )
     let adapter = ShaarExtensionsAdapter(
       implementation: .shaar, ardia: FakeArdiaExtensions(), shaar: fake)
@@ -76,8 +76,10 @@ struct ShaarExtensionsAdapterTests {
     #expect(
       extensions == [
         .init(
-          id: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", name: "Example", version: "2.1", enabled: false,
-          mayDisable: true, incognitoEnabled: false, source: 4)
+          id: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", name: "Example", version: "2.1",
+          description: "Example extension", enabled: false, mayDisable: true,
+          permissions: ["storage", "tabs"], hostPermissions: ["https://example.com/*"],
+          incognitoEnabled: false, source: 4, managementState: .user)
       ])
     let call = try #require(await fake.calls.first)
     #expect(call.profileID == profile)
@@ -88,6 +90,23 @@ struct ShaarExtensionsAdapterTests {
       try JSONSerialization.jsonObject(with: call.arguments) as? [String: Int] == [
         "schemaVersion": 1
       ])
+  }
+
+  @Test func listRejectsMissingOrUnknownManagementMetadata() async throws {
+    let fake = FakeExtensionsTransport(
+      #"{"schemaVersion":1,"extensions":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"Example","version":"1","enabled":true,"mayDisable":true,"incognitoEnabled":false,"source":0}]}"#
+    )
+    let adapter = ShaarExtensionsAdapter(
+      implementation: .shaar, ardia: FakeArdiaExtensions(), shaar: fake)
+    await #expect(throws: ShaarExtensionsAdapterError.self) {
+      try await adapter.list(profileID: UUID())
+    }
+    await fake.setReply(
+      #"{"schemaVersion":1,"extensions":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"Example","version":"1","description":"","enabled":true,"mayDisable":true,"permissions":[],"hostPermissions":[],"incognitoEnabled":false,"source":0,"managementState":"future"}]}"#
+    )
+    await #expect(throws: ShaarExtensionsAdapterError.self) {
+      try await adapter.list(profileID: UUID())
+    }
   }
 
   @Test func actionConsentAndPopupCallsCarryExactOwners() async throws {

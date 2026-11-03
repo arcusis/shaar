@@ -112,9 +112,9 @@ final class ExtensionManagerModel {
             guard let self, self.requestID == request else { return }
             self.extensions = summaries.map {
               ManagedExtension(
-                id: $0.id, name: $0.name, version: $0.version, description: "",
+                id: $0.id, name: $0.name, version: $0.version, description: $0.description,
                 enabled: $0.enabled, mayDisable: $0.mayDisable,
-                permissions: [], hostPermissions: [])
+                permissions: $0.permissions, hostPermissions: $0.hostPermissions)
             }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
             self.loadIcons()
           }

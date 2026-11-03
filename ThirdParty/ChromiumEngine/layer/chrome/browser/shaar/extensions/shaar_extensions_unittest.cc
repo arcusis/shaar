@@ -209,4 +209,34 @@ TEST(ShaarExtensionsModuleTest, HostOperationsKeepExactOpaqueOwnership) {
   task_environment.RunUntilIdle();
 }
 
+TEST(ShaarExtensionsModuleTest, HostOperationsFailClosedUntilHostIsInstalled) {
+  EmptyProfileServices profiles;
+  shaar::ShaarEngineContext context{&profiles, nullptr, nullptr};
+  shaar_scope scope = {};
+  scope.size = sizeof(scope);
+  scope.profile = reinterpret_cast<shaar_profile*>(1);
+  shaar_error error = {};
+  error.size = sizeof(error);
+
+  EXPECT_EQ(Submit(&context, scope, SHAAR_OP_EXTENSION_MANAGE,
+                   R"({"schemaVersion":1,"action":"install","extensionId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","source":"webStore"})",
+                   &error, reinterpret_cast<shaar_window*>(2),
+                   reinterpret_cast<shaar_tab*>(3)),
+            SHAAR_UNSUPPORTED_CAPABILITY);
+  EXPECT_EQ(Submit(&context, scope, SHAAR_OP_EXTENSION_ACTION,
+                   R"({"schemaVersion":1,"action":"invoke","extensionId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"})",
+                   &error, reinterpret_cast<shaar_window*>(2),
+                   reinterpret_cast<shaar_tab*>(3)),
+            SHAAR_UNSUPPORTED_CAPABILITY);
+  EXPECT_EQ(Submit(&context, scope, SHAAR_OP_EXTENSION_INSTALL_DECISION,
+                   R"({"schemaVersion":1,"consentRequestId":"consent-1","accepted":false})",
+                   &error),
+            SHAAR_UNSUPPORTED_CAPABILITY);
+  EXPECT_EQ(Submit(&context, scope, SHAAR_OP_EXTENSION_POPUP_CLOSE,
+                   R"({"schemaVersion":1,"popupId":"popup-1"})",
+                   &error, reinterpret_cast<shaar_window*>(2)),
+            SHAAR_UNSUPPORTED_CAPABILITY);
+  EXPECT_EQ(profiles.resolve_calls, 0);
+}
+
 }  // namespace

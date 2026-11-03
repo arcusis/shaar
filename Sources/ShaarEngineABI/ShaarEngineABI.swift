@@ -5,6 +5,7 @@
 import Darwin
 import Dispatch
 import Foundation
+import ShaarEngineC
 
 /// Step 0 deliberately leaves shipping builds on the existing ChromiumBridge path.
 public enum ShaarEngineImplementation: Equatable, Sendable {
@@ -23,7 +24,7 @@ public enum ShaarEngineError: Error, Equatable, Sendable {
   case status(ShaarStatusCode, platformCode: Int32, message: String)
 }
 
-/// Numeric values are fixed by Design/shaar_engine.h and are never inferred from text.
+/// Numeric values are fixed by the Shaar layer's public shaar_engine.h.
 public enum ShaarStatusCode: UInt32, CaseIterable, Sendable {
   case ok = 0
   case invalidArgument = 1
@@ -66,28 +67,11 @@ public struct ShaarCopiedEvent: Equatable, Sendable {
   }
 }
 
-/// Public layout mirrors the size-prefixed v1 ABI event, while exposing only copied data.
-public struct ShaarBytes {
-  public var data: UnsafePointer<CChar>?
-  public var size: Int
-  public init(data: UnsafePointer<CChar>?, size: Int) {
-    self.data = data
-    self.size = size
-  }
-}
+/// Compatibility names that refer directly to the imported C ABI types.
+public typealias ShaarBytes = shaar_bytes
+public typealias ShaarABIEvent = shaar_event
 
-public struct ShaarABIEvent {
-  public var size: UInt32
-  public var sequence: UInt64
-  public var kind: UInt32
-  public var profileID: ShaarBytes
-  public var sessionID: ShaarBytes
-  public var windowID: ShaarBytes
-  public var tabID: ShaarBytes
-  public var payloadJSON: ShaarBytes
-}
-
-private func copyBytes(_ bytes: ShaarBytes, field: String) throws -> Data {
+private func copyBytes(_ bytes: shaar_bytes, field: String) throws -> Data {
   guard bytes.size >= 0, bytes.size == 0 || bytes.data != nil else {
     throw ShaarEngineError.invalidEvent("invalid \(field) slice")
   }
@@ -101,17 +85,18 @@ public enum ShaarEventCopy {
     guard event.size >= requiredSize else {
       throw ShaarEngineError.invalidEvent("short event struct")
     }
-    let profile = try copyBytes(event.profileID, field: "profile ID")
-    let session = try copyBytes(event.sessionID, field: "session ID")
-    if event.kind != 1 && profile.isEmpty {
+    let profile = try copyBytes(event.profile_id, field: "profile ID")
+    let session = try copyBytes(event.session_id, field: "session ID")
+    let kind = UInt32(event.kind.rawValue)
+    if kind != UInt32(SHAAR_EVENT_ENGINE.rawValue) && profile.isEmpty {
       throw ShaarEngineError.invalidEvent("profile-scoped event has no profile ID")
     }
     return ShaarCopiedEvent(
-      sequence: event.sequence, kind: event.kind, profileID: profile,
+      sequence: event.sequence, kind: kind, profileID: profile,
       sessionID: session,
-      windowID: try copyBytes(event.windowID, field: "window ID"),
-      tabID: try copyBytes(event.tabID, field: "tab ID"),
-      payloadJSON: try copyBytes(event.payloadJSON, field: "payload JSON"))
+      windowID: try copyBytes(event.window_id, field: "window ID"),
+      tabID: try copyBytes(event.tab_id, field: "tab ID"),
+      payloadJSON: try copyBytes(event.payload_json, field: "payload JSON"))
   }
 }
 
@@ -160,6 +145,7 @@ public struct ShaarEngineLoader {
   public let implementation: ShaarEngineImplementation
   private let abiMajorFunction: @convention(c) () -> UInt32
   public let createSymbol: UnsafeRawPointer
+  private let symbolResolver: any ShaarSymbolResolving
 
   public init(resolver: ShaarSymbolResolving, implementation: ShaarEngineImplementation = .shaar)
     throws
@@ -175,6 +161,7 @@ public struct ShaarEngineLoader {
       throw ShaarEngineError.unsupportedABI(expected: Self.abiMajor, actual: major)
     }
     self.implementation = implementation
+    self.symbolResolver = resolver
     self.abiMajorFunction = unsafeBitCast(majorSymbol, to: (@convention(c) () -> UInt32).self)
     self.createSymbol = create
   }
@@ -190,6 +177,12 @@ public struct ShaarEngineLoader {
         path: binary.path, reason: String(cString: dlerror()))
     }
     return try Self(resolver: FrameworkSymbols(handle: handle), implementation: implementation)
+  }
+}
+
+extension ShaarEngineLoader: ShaarSymbolResolving {
+  public func symbol(named: String) -> UnsafeRawPointer? {
+    symbolResolver.symbol(named: named)
   }
 }
 

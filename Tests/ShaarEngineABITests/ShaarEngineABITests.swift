@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import Foundation
+import ShaarEngineC
 import Testing
 
 @testable import ShaarEngineABI
@@ -63,28 +64,41 @@ struct ShaarEngineABITests {
     #expect(throws: ShaarEngineError.invalidStatusCode(99)) { try ShaarStatusCode.decode(99) }
   }
 
+  @Test func swiftEventTypesUseTheImportedCLayouts() {
+    #expect(MemoryLayout<ShaarBytes>.size == MemoryLayout<shaar_bytes>.size)
+    #expect(MemoryLayout<ShaarABIEvent>.size == MemoryLayout<shaar_event>.size)
+    #expect(MemoryLayout<ShaarABIEvent>.alignment == MemoryLayout<shaar_event>.alignment)
+  }
+
   @Test @MainActor func eventIsCopiedBeforeMainActorDispatch() async throws {
     var delivered: ShaarCopiedEvent?
     let dispatcher = ShaarEventDispatcher { delivered = $0 }
     let profile = Array("profile".utf8)
     let payload = Array("{\"kind\":\"tab\",\"schemaVersion\":1}".utf8)
-    let event = profile.withUnsafeBufferPointer { profileBuffer in
+    profile.withUnsafeBufferPointer { profileBuffer in
       payload.withUnsafeBufferPointer { payloadBuffer in
-        ShaarABIEvent(
-          size: UInt32(MemoryLayout<ShaarABIEvent>.size), sequence: 42, kind: 5,
-          profileID: ShaarBytes(
-            data: profileBuffer.baseAddress.map {
-              UnsafeRawPointer($0).assumingMemoryBound(to: CChar.self)
-            }, size: profile.count),
-          sessionID: ShaarBytes(data: nil, size: 0), windowID: ShaarBytes(data: nil, size: 0),
-          tabID: ShaarBytes(data: nil, size: 0),
-          payloadJSON: ShaarBytes(
-            data: payloadBuffer.baseAddress.map {
-              UnsafeRawPointer($0).assumingMemoryBound(to: CChar.self)
-            }, size: payload.count))
+        var event = shaar_event()
+        event.size = UInt32(MemoryLayout<shaar_event>.size)
+        event.sequence = 42
+        event.kind = shaar_event_kind(rawValue: 5)
+
+        var profileBytes = shaar_bytes()
+        profileBytes.data = profileBuffer.baseAddress.map {
+          UnsafeRawPointer($0).assumingMemoryBound(to: CChar.self)
+        }
+        profileBytes.size = profile.count
+        event.profile_id = profileBytes
+
+        var payloadBytes = shaar_bytes()
+        payloadBytes.data = payloadBuffer.baseAddress.map {
+          UnsafeRawPointer($0).assumingMemoryBound(to: CChar.self)
+        }
+        payloadBytes.size = payload.count
+        event.payload_json = payloadBytes
+
+        dispatcher.receive(event)
       }
     }
-    dispatcher.receive(event)
     for _ in 0..<20 where delivered == nil { await Task.yield() }
     #expect(delivered?.sequence == 42)
     #expect(delivered?.profileID == Data(profile))
@@ -133,11 +147,12 @@ struct ShaarEngineABITests {
     }
   }
 
-  private func engineEvent(sequence: UInt64, kind: UInt32 = 1) -> ShaarABIEvent {
-    ShaarABIEvent(
-      size: UInt32(MemoryLayout<ShaarABIEvent>.size), sequence: sequence, kind: kind,
-      profileID: ShaarBytes(data: nil, size: 0), sessionID: ShaarBytes(data: nil, size: 0),
-      windowID: ShaarBytes(data: nil, size: 0), tabID: ShaarBytes(data: nil, size: 0),
-      payloadJSON: ShaarBytes(data: nil, size: 0))
+  private func engineEvent(sequence: UInt64, kind: UInt32 = 1) -> shaar_event {
+    var event = shaar_event()
+    event.size = UInt32(MemoryLayout<shaar_event>.size)
+    event.sequence = sequence
+    event.kind = shaar_event_kind(rawValue: kind)
+    return event
   }
+
 }

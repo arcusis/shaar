@@ -4,6 +4,24 @@
 
 /// Interprets observations collected by the engine probe; missing evidence never passes.
 enum PrivatePrivacyEvidence {
+  static func engineStatus(_ status: [AnyHashable: Any]) -> [String: Bool] {
+    [
+      "privateEngineProfileIsOffTheRecord": status["offTheRecord"] as? Bool == true,
+      "privateEngineGlobalCookiesBlocked": status["globalCookies"] as? String == "block",
+      "privateEngineHTTPSOnlyEnabled": status["httpsOnly"] as? Bool == true,
+      "privateEngineReferrersDisabled": status["referrersEnabled"] as? Bool == false,
+      "privateEngineWebRTCPublicIPOnly":
+        status["webRTCIPHandlingPolicy"] as? String == "disable_non_proxied_udp"
+        && status["webRTCPolicyExceptionCount"] as? Int == 0
+        && status["localIPExceptionCount"] as? Int == 0,
+      "privateEngineExtensionsDisabled": status["extensionsDisabled"] as? Bool == true,
+      "privateEngineTrackerRulesLoaded":
+        status["trackerProtectionEnabled"] as? Bool == true
+        && (status["trackerDomainCount"] as? Int ?? 0) > 0
+        && !(status["trackerRulesRevision"] as? String ?? "").isEmpty,
+    ]
+  }
+
   static func preferences(_ observations: [AnyHashable: Any]) -> [String: Bool] {
     let keys = [
       "credentials_enable_service", "autofill.profile_enabled", "autofill.credit_card_enabled",

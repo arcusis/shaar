@@ -7,6 +7,43 @@
 
 @implementation ARCChromiumRuntime (PrivateBrowsing)
 
+- (BOOL)privatePrivacyAvailable { return _services.privatePrivacyAvailable; }
+
+- (void)privatePrivacyCall:(NSString *)method contextID:(NSString *)contextID
+                     args:(NSDictionary *)args completion:(void (^)(NSDictionary *))completion {
+  NSAssert(NSThread.isMainThread, @"Private settings require the UI thread");
+  NSDictionary *context = _privateProbeContexts[contextID];
+  NSString *sourceID = context[@"sourceProfileID"];
+  if (!_services.privatePrivacyAvailable || !context || !_profiles[sourceID] ||
+      [context[@"profile"] destroyed]) {
+    completion(@{@"error": @"Private context is unavailable."});
+    return;
+  }
+  NSMutableDictionary *payload = [args mutableCopy];
+  payload[@"offTheRecord"] = @YES;
+  [_services call:method profileID:sourceID args:payload completion:completion];
+}
+
+- (void)privatePrivacyStatusForContextID:(NSString *)contextID
+  completion:(void (^)(NSDictionary *))completion {
+  [self privatePrivacyCall:@"private.privacy.get" contextID:contextID args:@{}
+                completion:completion];
+}
+
+- (void)setPrivateCookieSettingForContextID:(NSString *)contextID origin:(NSString *)origin
+  value:(NSString *)value completion:(void (^)(NSDictionary *))completion {
+  [self privatePrivacyCall:@"site_settings.set" contextID:contextID
+                     args:@{@"origin": origin ?: @"", @"type": @"cookies", @"value": value ?: @""}
+               completion:completion];
+}
+
+- (void)setPrivateTrackerAllowanceForContextID:(NSString *)contextID origin:(NSString *)origin
+  allow:(BOOL)allow completion:(void (^)(NSDictionary *))completion {
+  [self privatePrivacyCall:@"private.tracker.site.set" contextID:contextID
+                     args:@{@"origin": origin ?: @"", @"allow": @(allow)}
+               completion:completion];
+}
+
 - (BOOL)privateContextEnabled { return _engine != nil && !_closingBrowser; }
 
 - (BOOL)privateIdentityOccupied:(NSString *)identity {
@@ -64,6 +101,18 @@
   }
   if (_privateProbePendingContexts[contextID]) {
     completion(NO, ARCBridgeError(@"Private probe context identity is already pending."));
+    return;
+  }
+  if (_services.privatePrivacyAvailable &&
+      ![_privateTrackerPreparedSources containsObject:sourceProfileID]) {
+    [_services preparePrivateTrackerRulesForProfileID:sourceProfileID completion:^(BOOL ready) {
+      if (!ready) {
+        completion(NO, ARCBridgeError(@"Private site protections could not be applied."));
+        return;
+      }
+      [self->_privateTrackerPreparedSources addObject:sourceProfileID];
+      [self createPrivateContextID:contextID sourceProfileID:sourceProfileID completion:completion];
+    }];
     return;
   }
   NSMutableDictionary *lease = _privateProbeSourceLeases[sourceProfileID];

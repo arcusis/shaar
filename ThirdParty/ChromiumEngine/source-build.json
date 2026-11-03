@@ -46,13 +46,13 @@
   },
   "layer": {
     "path": "ThirdParty/ChromiumEngine/layer",
-    "sha256": "a902cb39cab4c8ef006261eb5ddac23d944f37c970d320935426609aa012791b",
+    "sha256": "9302c0b7b1cc8f375a8bb4a496b4d3fd61d0d2355bb60ec5b6bffd609df8ebf4",
     "files": {
       "chrome/browser/shaar/BUILD.gn": "f62899737698ce041626a81d930c959a9ef2d8407ce269fff259e51d9240378d",
       "chrome/browser/shaar/engine/shaar_engine.cc": "07205a696ec84c0d9f210510c2e2fc9b9915c02e6ac4d06af2d6614ff7cb9d86",
       "chrome/browser/shaar/engine/shaar_event_bridge.cc": "4a6e12be0631c3bab7e0ebc23c7c3a085bd0840439c12921314b853b0ed8d6d6",
       "chrome/browser/shaar/engine/shaar_event_bridge.h": "e9651cf93b46c65f7c1cb46651d838b4f9684a69d44e22134481dbe76a3055ec",
-      "chrome/browser/shaar/history/shaar_history.cc": "d7303372847543115f6760121bf6ec2f7cad589aba8fb4d4c8f344a0e84be8e8",
+      "chrome/browser/shaar/history/shaar_history.cc": "f55a3f9e64e7ad53d9fa5247c37f4d45580247e4eb7dd1374c4cecf6b688a977",
       "chrome/browser/shaar/history/shaar_history.h": "f1482a171e11a89aacd14a51126c3065f9c9a75a93638164e395205444c08d65",
       "chrome/browser/shaar/history/shaar_history_registry.h": "5d47b654e9b402b275efbe628b48d5b31f29ee163463230f5ad82681bc4f9fc9",
       "chrome/browser/shaar/history/shaar_history_unittest.cc": "5d30d06c795f4279ffa9af411728fb2f0efbaa34be75137a93a952cdc28f9585",

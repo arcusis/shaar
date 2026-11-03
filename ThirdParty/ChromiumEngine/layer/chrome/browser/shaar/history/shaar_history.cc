@@ -20,6 +20,7 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
@@ -357,7 +358,7 @@ history::VisitSource ImportSource(const std::string &source) {
 // success.
 struct ImportState : public std::enable_shared_from_this<ImportState> {
   ReplyContext request;
-  history::HistoryService *service = nullptr;
+  base::WeakPtr<history::HistoryService> service;
   std::shared_ptr<base::CancelableTaskTracker> tracker =
       std::make_shared<base::CancelableTaskTracker>();
   std::vector<GURL> urls;
@@ -371,6 +372,11 @@ struct ImportState : public std::enable_shared_from_this<ImportState> {
   size_t index = 0;
 
   void Next() {
+    if (!service) {
+      ReplyError(request, SHAAR_CANCELLED,
+                 "profile closed during history import");
+      return;
+    }
     if (index == urls.size()) {
       base::Value::List rejected;
       for (size_t row = 0; row < rejection_codes.size(); ++row) {
@@ -507,7 +513,7 @@ shaar_error_code Insert(ShaarModuleRegistry *registry, shaar_scope scope,
 
   auto state = std::make_shared<ImportState>();
   state->request = request;
-  state->service = service;
+  state->service = service->AsWeakPtr();
   state->source = ImportSource(*source);
   state->rejection_codes.resize(pages->size());
   size_t valid_rows = 0;

@@ -107,6 +107,25 @@ final class BrowserRuntimeEvents {
     runtime.onWebsiteMediaDismissed = { [weak self] id in
       self?.router.client(for: .media, id: id, removing: true)?.onWebsiteMediaDismissed?(id)
     }
+    runtime.onDesktopCaptureRequest = { [weak self] payload in
+      guard let self, let id = payload["id"] as? String else { return }
+      guard let client = self.router.claim(.desktopCapture, id: id, payload: payload) else {
+        self.runtime.resolveDesktopCaptureRequestID(id, sourceID: nil)
+        return
+      }
+      guard let receive = client.onDesktopCaptureRequest else {
+        _ = self.router.consume(.desktopCapture, id: id, windowID: client.windowID)
+        self.runtime.resolveDesktopCaptureRequestID(id, sourceID: nil)
+        return
+      }
+      receive(payload)
+    }
+    runtime.onDesktopCaptureDismissed = { [weak self] id in
+      guard let client = self?.router.client(for: .desktopCapture, id: id, removing: true) else {
+        return
+      }
+      client.onDesktopCaptureDismissed?(id)
+    }
     runtime.onExternalAppRequest = { [weak self] payload in
       guard let self, let id = payload["id"] as? String else { return }
       guard !self.router.owns(.externalApp, id: id) else { return }
@@ -163,6 +182,11 @@ final class BrowserRuntimeEvents {
   func resolveMedia(_ id: String, windowID: String, accepted: Bool) {
     guard router.consume(.media, id: id, windowID: windowID) else { return }
     runtime.resolveWebsiteMediaRequestID(id, accepted: accepted)
+  }
+
+  func resolveDesktopCapture(_ id: String, windowID: String, sourceID: String?) {
+    guard router.consume(.desktopCapture, id: id, windowID: windowID) else { return }
+    runtime.resolveDesktopCaptureRequestID(id, sourceID: sourceID)
   }
 
   func resolveExternalApp(_ id: String, windowID: String, accepted: Bool) {

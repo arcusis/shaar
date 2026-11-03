@@ -80,6 +80,9 @@ FOUNDATION_EXPORT NSString *ARCBridgeLocalizedString(NSString *message);
 @property(copy, nullable) void (^onExtensionPopupSize)(NSString *popupID, NSSize size);
 @property(copy, nullable) void (^onWebsiteMediaRequest)(NSDictionary<NSString *, id> *request);
 @property(copy, nullable) void (^onWebsiteMediaDismissed)(NSString *requestID);
+/// A page called getDisplayMedia; the request is bound to its live tab and frame.
+@property(copy, nullable) void (^onDesktopCaptureRequest)(NSDictionary<NSString *, id> *request);
+@property(copy, nullable) void (^onDesktopCaptureDismissed)(NSString *requestID);
 @property(copy, nullable) void (^onExternalAppRequest)(NSDictionary<NSString *, id> *request);
 @property(copy, nullable) void (^onExternalAppDismissed)(NSString *requestID);
 @property(copy, nullable) void (^onMediaAccess)(NSString *tabID, NSDictionary<NSString *, NSNumber *> *access);
@@ -168,6 +171,7 @@ FOUNDATION_EXPORT NSString *ARCBridgeLocalizedString(NSString *message);
             completion:(void (^)(NSString * _Nullable))completion;
 - (void)resolveInstallRequestID:(NSString *)requestID accepted:(BOOL)accepted;
 - (void)resolveWebsiteMediaRequestID:(NSString *)requestID accepted:(BOOL)accepted;
+- (void)resolveDesktopCaptureRequestID:(NSString *)requestID sourceID:(nullable NSString *)sourceID;
 - (void)resolveExternalAppRequestID:(NSString *)requestID accepted:(BOOL)accepted;
 /// Canonical browser-managed download directory for a regular profile.
 - (nullable NSURL *)downloadsDirectoryForProfileID:(NSString *)profileID;

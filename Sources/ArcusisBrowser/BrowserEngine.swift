@@ -286,6 +286,22 @@ final class BrowserEngine {
       guard let self else { return }
       self.events.resolveMedia(id, windowID: self.windowID, accepted: accepted)
     }
+    store.onDesktopCaptureDecision = { [weak self] id, sourceID in
+      guard let self else { return }
+      self.events.resolveDesktopCapture(id, windowID: self.windowID, sourceID: sourceID)
+    }
+    callbacks.onDesktopCaptureRequest = { [weak self] payload in
+      guard let self, let id = payload["id"] as? String else { return }
+      guard let request = DesktopCaptureRequest(payload: payload),
+        let store = self.store, store.requestDesktopCapture(request)
+      else {
+        self.events.resolveDesktopCapture(id, windowID: self.windowID, sourceID: nil)
+        return
+      }
+    }
+    callbacks.onDesktopCaptureDismissed = { [weak store] id in
+      store?.dismissDesktopCapture(id)
+    }
     callbacks.onWebsiteMediaRequest = { [weak self] payload in
       self?.requestWebsitePermission(payload)
     }

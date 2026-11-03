@@ -10,6 +10,20 @@ source_set("engine") {
     "engine/shaar_engine.cc",
     "engine/shaar_event_bridge.cc",
     "engine/shaar_event_bridge.h",
+    "bookmarks/shaar_bookmarks.cc",
+    "bookmarks/shaar_bookmarks.h",
+  ]
+}
+
+source_set("bookmarks_unittests") {
+  testonly = true
+  sources = [ "bookmarks/shaar_bookmarks_unittest.cc" ]
+  deps = [
+    ":engine",
+    "//base",
+    "//chrome/browser",
+    "//components/bookmarks/browser",
+    "//testing/gtest",
   ]
 }
 

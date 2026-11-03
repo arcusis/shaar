@@ -1,0 +1,20 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+assert(is_mac)
+
+source_set("engine") {
+  public = [ "public/shaar_engine.h" ]
+  sources = [
+    "engine/shaar_engine.cc",
+    "engine/shaar_event_bridge.cc",
+    "engine/shaar_event_bridge.h",
+  ]
+}
+
+config("exports") {
+  inputs = [ "shaar_engine.exports" ]
+  ldflags = [ "-Wl,-exported_symbols_list," +
+              rebase_path("shaar_engine.exports", root_build_dir) ]
+}

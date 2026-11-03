@@ -16,6 +16,8 @@ MODULES = ("BrowserCore", "ArcusisBrowser", "ChromiumBridge", "Shaar", "ShaarVer
 # for this comparison. Keep it out of the unit-test coverage denominator so new smoke assertions
 # are checked by their owning engine job rather than appearing as unexecuted unit-test code.
 EXCLUDED_UNIT_TEST_SOURCES = {("ShaarVerification", "PrivateProductHostProbe.swift")}
+# This engine-only flow is exercised by the hosted normal-window smoke, not Swift unit tests.
+UNIT_COVERAGE_EXCLUDES = {("ShaarVerification", "BasicBrowsingProbe.swift")}
 # Engine-driven UI tests cover a few timing-dependent lines nondeterministically (merge group run
 # 41492941258 dropped ArcusisBrowser by 3 of 36,330 lines with no source change). Tolerate drops
 # up to 0.025 percentage points; anything larger is a real regression.
@@ -40,6 +42,8 @@ def module_coverage(report: dict) -> dict[str, tuple[int, int]]:
                 if identity in seen:
                     raise ValueError(f"Duplicate source coverage: {identity}")
                 seen.add(identity)
+                if identity in UNIT_COVERAGE_EXCLUDES:
+                    continue
                 lines = file["summary"]["lines"]
                 covered, count = lines["covered"], lines["count"]
                 if type(count) is not int or type(covered) is not int or not 0 <= covered <= count:

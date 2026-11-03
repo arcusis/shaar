@@ -102,6 +102,13 @@ def run_engine(checks: Commands, mode: str, iterations: int) -> None:
         run_probe_iterations(checks, selected, range(1, repetitions + 1))
 
 
+def run_basic_browsing(checks: Commands) -> None:
+    require_hosted_mac()
+    if checks.run("verification-build", ["bash", "scripts/bundle-app.sh", "--with-engine", "--verification"]):
+        return
+    checks.run("normal-window-browsing", [sys.executable, "scripts/engine_fixture.py", "--basic-browsing"])
+
+
 def run_probe_iterations(checks: Commands, mode: str, iterations: range) -> None:
     environment = dict(os.environ, SHAAR_PROBE_TIMEOUT_SCALE="3", ARCUSIS_PRIVATE_WINDOW_CI="1")
     for iteration in iterations:
@@ -162,7 +169,7 @@ def run_sanitizer(checks: Commands, sanitizer: str) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("stage", choices=("unit", "coverage", "engine", "engine-build", "engine-shard", "visual", "localization", "shipping", "sanitize", "dead-code"))
+    parser.add_argument("stage", choices=("unit", "coverage", "engine", "engine-build", "engine-shard", "basic-browsing", "visual", "localization", "shipping", "sanitize", "dead-code"))
     parser.add_argument("--shard", choices=engine_shards(10), default="baseline-lifecycle")
     parser.add_argument("--mode", choices=("all", *ENGINE_MODES), default="all")
     parser.add_argument("--iterations", type=int, choices=range(1, 11), default=1)
@@ -186,6 +193,8 @@ def main() -> int:
             build_engine_bundle(checks, options.iterations)
         elif options.stage == "engine-shard":
             run_engine_shard(checks, options.shard, options.iterations)
+        elif options.stage == "basic-browsing":
+            run_basic_browsing(checks)
         elif options.stage == "visual":
             run_visuals(checks)
         elif options.stage == "localization":

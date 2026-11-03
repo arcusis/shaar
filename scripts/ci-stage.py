@@ -128,6 +128,8 @@ def build_engine_bundle(checks: Commands, iterations: int) -> None:
         validate_bundle_archive(ROOT, checks.directory)
         with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
             output.write(f"shards={json.dumps(engine_shards(iterations))}\n")
+        checks.results.append(dict(name="cached-verification-bundle", command=[],
+                                    status=0, seconds=0.0))
         print("Reusing integrity-checked verification bundle for this exact source tree")
         return
     if checks.run("verification-build", ["bash", "scripts/bundle-app.sh", "--with-engine", "--verification"]):

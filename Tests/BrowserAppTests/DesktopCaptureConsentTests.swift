@@ -58,6 +58,8 @@ struct DesktopCaptureConsentTests {
     let window = DesktopCaptureSource(id: "window:4:0", name: "Browser — Meet", kind: .window)
     #expect(display.label.contains("Main Display"))
     #expect(window.label.contains("Browser"))
+    #expect(display.systemImageName == "display")
+    #expect(window.systemImageName == "macwindow")
 
     let states = [
       DesktopCapturePickerContent(

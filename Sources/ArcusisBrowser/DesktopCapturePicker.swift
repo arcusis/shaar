@@ -11,6 +11,13 @@ struct DesktopCaptureSource: Identifiable {
   let id: String
   let name: String
   let kind: Kind
+
+  var systemImageName: String {
+    switch kind {
+    case .display: "display"
+    case .window: "macwindow"
+    }
+  }
 }
 
 @MainActor
@@ -126,7 +133,7 @@ struct DesktopCapturePickerContent: View {
           Button {
             onSelect(source.id)
           } label: {
-            Label(source.label, systemImage: source.kind == .display ? "display" : "macwindow")
+            Label(source.label, systemImage: source.systemImageName)
               .frame(maxWidth: .infinity, alignment: .leading)
               .contentShape(Rectangle())
           }

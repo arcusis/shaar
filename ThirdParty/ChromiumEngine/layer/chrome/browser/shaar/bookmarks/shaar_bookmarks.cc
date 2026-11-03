@@ -504,7 +504,10 @@ void BookmarksModule::BookmarkModelLoaded(bool) {
     observation_.Reset();
 }
 void BookmarksModule::BookmarkModelBeingDeleted() {
-  StopWatching();
+  weak_factory_.InvalidateWeakPtrs();
+  if (observation_.IsObserving())
+    observation_.Reset();
+  watching_ = false;
   model_ = nullptr;
   auto pending = std::move(pending_requests_);
   pending_requests_.clear();

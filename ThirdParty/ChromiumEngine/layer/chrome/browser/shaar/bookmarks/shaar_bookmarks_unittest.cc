@@ -16,8 +16,12 @@ TEST(ShaarBookmarksModuleTest, RejectsPrivateScopeBeforeModelLookup) {
   shaar_engine engine;
   BookmarksModule module(nullptr, true, &engine, "regular-profile-id");
 
-  EXPECT_EQ(module.Submit(SHAAR_OP_BOOKMARK_TREE, "{}", nullptr, nullptr),
-            SHAAR_PRIVATE_DISALLOWED);
+  for (shaar_operation operation :
+       {SHAAR_OP_BOOKMARK_TREE, SHAAR_OP_BOOKMARK_APPLY,
+        SHAAR_OP_BOOKMARK_WATCH}) {
+    EXPECT_EQ(module.Submit(operation, "{}", nullptr, nullptr),
+              SHAAR_PRIVATE_DISALLOWED);
+  }
 }
 
 struct Registration {
@@ -69,10 +73,13 @@ TEST(ShaarBookmarksModuleTest,
   shaar_scope scope = {};
   scope.size = sizeof(scope);
   scope.private_session = reinterpret_cast<shaar_private_session *>(1);
-  EXPECT_EQ(registrations[0].handler(registrations[0].context, &engine, scope,
-                                     SHAAR_OP_BOOKMARK_TREE, {nullptr, 0}, 1,
-                                     nullptr, nullptr),
-            SHAAR_PRIVATE_DISALLOWED);
+  for (const Registration &registration : registrations) {
+    EXPECT_EQ(registration.handler(registration.context, &engine, scope,
+                                   registration.operation, {nullptr, 0}, 1,
+                                   nullptr, nullptr),
+              SHAAR_PRIVATE_DISALLOWED)
+        << registration.operation;
+  }
 }
 
 } // namespace

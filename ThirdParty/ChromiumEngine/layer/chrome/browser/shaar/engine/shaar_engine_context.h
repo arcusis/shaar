@@ -83,6 +83,7 @@ class DevToolsRuntimeServices {
                              shaar_window* window,
                              shaar_tab* tab,
                              content::WebContents* contents,
+                             const DevToolsTargetIdentity& requested,
                              DevToolsTargetIdentity* identity) = 0;
   virtual bool IsOperationAllowed(shaar_engine* engine,
                                   shaar_scope scope,

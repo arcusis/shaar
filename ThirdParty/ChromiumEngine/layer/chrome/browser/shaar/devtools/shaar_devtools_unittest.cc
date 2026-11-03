@@ -24,10 +24,12 @@ class FakeDevToolsRuntime final : public DevToolsRuntimeServices {
  public:
   bool ResolveTarget(shaar_engine*, shaar_scope, shaar_window*, shaar_tab*,
                      content::WebContents*,
+                     const DevToolsTargetIdentity& requested,
                      DevToolsTargetIdentity* identity) override {
     if (!allow_target || !identity)
       return false;
-    *identity = {"profile-a", session_id, "window-a", "tab-a"};
+    *identity = {requested.profile_id, session_id, requested.window_id,
+                 requested.tab_id};
     return true;
   }
   bool IsOperationAllowed(shaar_engine*, shaar_scope, content::WebContents*,
@@ -169,16 +171,19 @@ TEST(ShaarDevToolsTest, ScopeIdentityAndRuntimePolicyFailClosed) {
   auto* contents = reinterpret_cast<content::WebContents*>(1);
   auto* window = reinterpret_cast<shaar_window*>(2);
   auto* tab = reinterpret_cast<shaar_tab*>(3);
+  const DevToolsTargetIdentity requested{"profile-a", "", "window-a", "tab-a"};
   DevToolsTargetIdentity resolved;
   EXPECT_TRUE(runtime.ResolveTarget(engine, regular, window, tab, contents,
-                                    &resolved));
+                                    requested, &resolved));
   EXPECT_TRUE(IsValidTargetIdentity(regular, "tab-a", resolved));
   runtime.allow_target = false;
   EXPECT_FALSE(runtime.ResolveTarget(engine, regular, window, tab, contents,
-                                     &resolved));
+                                     requested, &resolved));
   runtime.allow_target = true;
   EXPECT_TRUE(PolicyAllowsOperation(&runtime, engine, regular, contents,
                                     SHAAR_OP_DEVTOOLS_UI_SHOW, 0));
+  EXPECT_TRUE(PolicyAllowsOperation(&runtime, engine, regular, contents,
+                                    SHAAR_OP_DEVTOOLS_UI_SET_DOCK, 0));
   EXPECT_FALSE(PolicyAllowsOperation(nullptr, engine, regular, contents,
                                      SHAAR_OP_DEVTOOLS_UI_SHOW, 0));
   EXPECT_FALSE(PolicyAllowsOperation(&runtime, engine, regular, contents,
@@ -190,8 +195,10 @@ TEST(ShaarDevToolsTest, ScopeIdentityAndRuntimePolicyFailClosed) {
   shaar_scope private_scope{sizeof(shaar_scope), nullptr,
                             reinterpret_cast<shaar_private_session*>(4)};
   runtime.session_id = "private-a";
+  const DevToolsTargetIdentity requested_private{"profile-a", "private-a",
+                                                   "window-a", "tab-a"};
   EXPECT_TRUE(runtime.ResolveTarget(engine, private_scope, window, tab, contents,
-                                    &resolved));
+                                    requested_private, &resolved));
   EXPECT_TRUE(IsValidTargetIdentity(private_scope, "tab-a", resolved));
 }
 
@@ -202,14 +209,15 @@ TEST(ShaarDevToolsTest, FrontendStateEventCarriesOnlyExactScopeAndState) {
   engine.event_context = &captured;
   const DevToolsTargetIdentity identity{"profile-a", "private-a", "window-a",
                                         "tab-a"};
-  EmitFrontendStateEvent(&engine, identity, true);
+  EmitFrontendStateEvent(&engine, identity, true, SHAAR_DEVTOOLS_DOCK_RIGHT,
+                         720);
   EXPECT_EQ(SHAAR_EVENT_DEVTOOLS, captured.event.kind);
   EXPECT_EQ("profile-a", captured.profile);
   EXPECT_EQ("private-a", captured.session);
   EXPECT_EQ("window-a", captured.window);
   EXPECT_EQ("tab-a", captured.tab);
   EXPECT_EQ(
-      R"({"schemaVersion":1,"kind":"frontendState","open":true})",
+      R"({"schemaVersion":1,"kind":"frontendState","open":true,"dockSide":1,"extent":720})",
       captured.payload);
   EXPECT_EQ(1u, captured.event.sequence);
 }
@@ -230,11 +238,23 @@ TEST_F(ShaarDevToolsAgentHostTest, AttachesAndDetachesFromTheExactTabTarget) {
 TEST(ShaarDevToolsTest, LifecycleEntryRegistersOnlyItsOperationRange) {
   ShaarModuleRegistry registry;
   shaar_devtools_register(&registry);
+  EXPECT_NE(nullptr, EngineContext().devtools_runtime);
   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_CALL));
+  EXPECT_EQ(&CancelDevToolsRequest,
+            registry.FindCancel(SHAAR_OP_DEVTOOLS_CALL));
   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_UI_SHOW));
   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_CONTROL_STATUS));
   EXPECT_EQ(nullptr, registry.Find(SHAAR_OP_MEDIA_GET_STATE));
   EXPECT_NE(nullptr, registry.FindModule(SHAAR_MODULE_DEVTOOLS));
+}
+
+TEST(ShaarDevToolsTest, CancelRejectsRequestsThatHaveAlreadyCompleted) {
+  shaar_error error{};
+  error.size = sizeof(error);
+  EXPECT_EQ(SHAAR_NOT_FOUND,
+            CancelDevToolsRequest(reinterpret_cast<shaar_engine*>(1), 99,
+                                  &error));
+  EXPECT_EQ(SHAAR_NOT_FOUND, error.code);
 }
 
 }  // namespace

@@ -44,6 +44,10 @@ REQUIRED_EXPORTS = (
     "_shaar_profile_get_state",
     "_shaar_profile_set_state",
     "_shaar_profile_get_path",
+    # BEGIN devtools exports.
+    "_shaar_devtools_frontend_view",
+    "_shaar_devtools_set_frontend_bounds",
+    # END devtools exports.
 )
 PROFILE_MODULE_EXPORTS = (
     "_shaar_profile_open",
@@ -63,6 +67,19 @@ PROFILE_MODULE_LAYER_FILES = (
     "chrome/browser/shaar/profiles/shaar_profiles.cc",
     "chrome/browser/shaar/profiles/shaar_profiles.h",
     "chrome/browser/shaar/profiles/shaar_profiles_unittest.cc",
+)
+DEVTOOLS_MODULE_EXPORTS = (
+    "_shaar_devtools_frontend_view",
+    "_shaar_devtools_set_frontend_bounds",
+)
+DEVTOOLS_MODULE_LAYER_FILES = (
+    "chrome/browser/shaar/BUILD.gn",
+    "chrome/browser/shaar/engine/shaar_engine_context.cc",
+    "chrome/browser/shaar/engine/shaar_engine_context.h",
+    "chrome/browser/shaar/devtools/shaar_devtools.cc",
+    "chrome/browser/shaar/devtools/shaar_devtools.h",
+    "chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc",
+    "chrome/browser/shaar/devtools/shaar_devtools_unittest.cc",
 )
 COMMIT = re.compile(r"[0-9a-f]{40}\Z")
 DIGEST = re.compile(r"[0-9a-f]{64}\Z")
@@ -197,8 +214,12 @@ def load_config(repo: Path) -> dict:
     if sha256(header) != actual_files.get("chrome/browser/shaar/public/shaar_engine.h"):
         raise BuildError("installed ABI header differs from reviewed draft")
     exports = checked_repo_file(repo, (LAYER / "chrome/browser/shaar/shaar_engine.exports").as_posix())
-    if tuple(exports.read_text().splitlines()) != REQUIRED_EXPORTS:
-        raise BuildError("Shaar export list differs from step-0 ABI")
+    export_lines = tuple(
+        line.strip() for line in exports.read_text().splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    )
+    if export_lines != REQUIRED_EXPORTS:
+        raise BuildError("Shaar export list differs from the module manifest")
     if config.get("requiredExports") != list(REQUIRED_EXPORTS):
         raise BuildError("required export receipt list mismatch")
     if config.get("moduleBlocks", {}).get("profiles") != {
@@ -207,6 +228,13 @@ def load_config(repo: Path) -> dict:
         "requiredExports": list(PROFILE_MODULE_EXPORTS),
     }:
         raise BuildError("profiles module block is missing or inconsistent")
+    if config.get("moduleBlocks", {}).get("devtools") != {
+        "moduleID": 1201,
+        "operationRange": [1000, 1007],
+        "layerFiles": list(DEVTOOLS_MODULE_LAYER_FILES),
+        "requiredExports": list(DEVTOOLS_MODULE_EXPORTS),
+    }:
+        raise BuildError("devtools module block is missing or inconsistent")
 
     patches = config.get("patches")
     if not isinstance(patches, list) or not patches:

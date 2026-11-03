@@ -8,25 +8,33 @@
 #include <stdint.h>
 #include <limits.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <functional>
 #include <initializer_list>
+#include <map>
 #include <string_view>
 #include <utility>
 
 #include "base/functional/bind.h"
+#include "base/no_destructor.h"
 #include "base/containers/span.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/devtools/devtools_window.h"
+#include "chrome/browser/devtools/devtools_settings.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "content/public/browser/devtools_agent_host.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/browser/web_contents_observer.h"
 
 namespace shaar::devtools {
 namespace {
@@ -35,7 +43,8 @@ constexpr size_t kMaxArgumentsBytes = 1024 * 1024;
 constexpr int kInspector = 1;
 constexpr int kDeveloper = 2;
 constexpr char kFrontendStateEvent[] =
-    "{\"schemaVersion\":1,\"kind\":\"frontendState\",\"open\":%s}";
+    "{\"schemaVersion\":1,\"kind\":\"frontendState\",\"open\":%s,"
+    "\"dockSide\":%u,\"extent\":%d}";
 
 struct CommandEntry {
   shaar_devtools_command command;
@@ -88,6 +97,7 @@ constexpr CommandEntry kCommands[] = {
 };
 
 struct ReplyContext {
+  shaar_engine* engine;
   shaar_request_id request_id;
   shaar_reply_fn reply;
   void* context;
@@ -338,20 +348,198 @@ bool HasEmptyVersionedSchema(shaar_bytes args_json) {
   if (!parsed || !parsed->is_dict())
     return false;
   const auto& root = parsed->GetDict();
-  return ExactKeys(root, {"schemaVersion"}) &&
-         root.FindInt("schemaVersion") == 1;
+  return ExactKeys(root, {"schemaVersion", "profileID", "sessionID",
+                          "windowID", "tabID"}) &&
+         root.FindInt("schemaVersion") == 1 &&
+         root.FindString("profileID") && !root.FindString("profileID")->empty() &&
+         root.FindString("sessionID") && root.FindString("windowID") &&
+         !root.FindString("windowID")->empty() && root.FindString("tabID") &&
+         !root.FindString("tabID")->empty();
 }
 
-class ProtocolClient final : public content::DevToolsAgentHostClient {
+bool DecodeRequestedIdentity(shaar_bytes args_json,
+                             DevToolsTargetIdentity* requested) {
+  if (!requested || !args_json.data || args_json.size <= 0 ||
+      args_json.size > kMaxArgumentsBytes)
+    return false;
+  auto parsed = base::JSONReader::Read(
+      std::string_view(args_json.data, args_json.size));
+  if (!parsed || !parsed->is_dict())
+    return false;
+  const auto& root = parsed->GetDict();
+  const std::string* profile = root.FindString("profileID");
+  const std::string* session = root.FindString("sessionID");
+  const std::string* window = root.FindString("windowID");
+  const std::string* tab = root.FindString("tabID");
+  if (!profile || profile->empty() || !session || !window || window->empty() ||
+      !tab || tab->empty())
+    return false;
+  *requested = {*profile, *session, *window, *tab};
+  return true;
+}
+
+bool DecodeDockRequest(shaar_bytes args_json,
+                       uint32_t* dock_side,
+                       int* extent) {
+  if (!args_json.data || args_json.size <= 0 || !dock_side || !extent)
+    return false;
+  auto parsed = base::JSONReader::Read(
+      std::string_view(args_json.data, args_json.size));
+  if (!parsed || !parsed->is_dict())
+    return false;
+  const auto& root = parsed->GetDict();
+  const auto version = root.FindInt("schemaVersion");
+  const auto side = root.FindInt("dockSide");
+  const auto requested_extent = root.FindInt("extent");
+  if (!ExactKeys(root, {"schemaVersion", "profileID", "sessionID", "windowID",
+                        "tabID", "dockSide", "extent"}) ||
+      !version || *version != 1 || !side || *side < SHAAR_DEVTOOLS_DOCK_RIGHT ||
+      *side > SHAAR_DEVTOOLS_DOCK_UNDOCKED || !requested_extent ||
+      *requested_extent < 100 || *requested_extent > 4096)
+    return false;
+  *dock_side = static_cast<uint32_t>(*side);
+  *extent = *requested_extent;
+  return true;
+}
+
+uint32_t DockSideValue(Profile* profile) {
+  switch (DevToolsSettings::GetDockSide(profile)) {
+    case devtools::DockSide::kRight:
+      return SHAAR_DEVTOOLS_DOCK_RIGHT;
+    case devtools::DockSide::kBottom:
+      return SHAAR_DEVTOOLS_DOCK_BOTTOM;
+    case devtools::DockSide::kLeft:
+      return SHAAR_DEVTOOLS_DOCK_LEFT;
+    case devtools::DockSide::kNone:
+      return SHAAR_DEVTOOLS_DOCK_UNDOCKED;
+  }
+  return SHAAR_DEVTOOLS_DOCK_RIGHT;
+}
+
+int DockExtent(Profile* profile) {
+  DevToolsSettings settings(profile);
+  settings.Register("shaarDockExtent",
+                    {RegisterOptions::SyncMode::kDontSync});
+  const auto value = settings.Get("shaarDockExtent");
+  if (!value || !value->is_string())
+    return 0;
+  int extent = 0;
+  if (!base::StringToInt(value->GetString(), &extent) || extent < 0 ||
+      extent > 4096)
+    return 0;
+  return extent;
+}
+
+void SetDockState(Profile* profile, uint32_t dock_side, int extent) {
+  DevToolsSettings settings(profile);
+  settings.Register("currentDockState",
+                    {RegisterOptions::SyncMode::kDontSync});
+  settings.Register("shaarDockExtent",
+                    {RegisterOptions::SyncMode::kDontSync});
+  const char* setting = "\"right\"";
+  switch (dock_side) {
+    case SHAAR_DEVTOOLS_DOCK_BOTTOM:
+      setting = "\"bottom\"";
+      break;
+    case SHAAR_DEVTOOLS_DOCK_LEFT:
+      setting = "\"left\"";
+      break;
+    case SHAAR_DEVTOOLS_DOCK_UNDOCKED:
+      setting = "\"undocked\"";
+      break;
+    default:
+      break;
+  }
+  settings.Set("currentDockState", setting);
+  settings.Set("shaarDockExtent", base::NumberToString(extent));
+}
+
+class ContextDevToolsRuntime final : public DevToolsRuntimeServices {
+ public:
+  bool ResolveTarget(shaar_engine* engine,
+                     shaar_scope scope,
+                     shaar_window* window,
+                     shaar_tab* tab,
+                     content::WebContents* contents,
+                     const DevToolsTargetIdentity& requested,
+                     DevToolsTargetIdentity* identity) override {
+    ShaarEngineContext& context = EngineContext();
+    if (!engine || !window || !tab || !contents || !identity ||
+        !context.browser_tabs || requested.window_id.empty() ||
+        requested.tab_id.empty() ||
+        context.browser_tabs->FindWebContents(engine, window, tab) != contents ||
+        context.browser_tabs->TabID(engine, window, tab) != requested.tab_id)
+      return false;
+
+    if (scope.profile) {
+      if (!context.profile_services || !requested.session_id.empty())
+        return false;
+      Profile* profile = context.profile_services->ResolveProfile(engine,
+                                                                   scope.profile);
+      if (!profile || contents->GetBrowserContext() != profile ||
+          context.profile_services->ProfileID(engine, scope.profile) !=
+              requested.profile_id)
+        return false;
+      *identity = {requested.profile_id, {}, requested.window_id,
+                   requested.tab_id};
+      return true;
+    }
+
+    // Private session handles are opaque and must be resolved by the owning
+    // private-session service. Until that service is part of ShaarEngineContext,
+    // refusing private DevTools is safer than trusting the caller's session ID.
+    return false;
+  }
+
+  bool IsOperationAllowed(shaar_engine*,
+                          shaar_scope scope,
+                          content::WebContents* contents,
+                          shaar_operation operation,
+                          int capability) override {
+    if (!scope.profile || scope.private_session || !contents ||
+        (operation != SHAAR_OP_DEVTOOLS_CALL &&
+         operation != SHAAR_OP_DEVTOOLS_UI_SHOW &&
+         operation != SHAAR_OP_DEVTOOLS_UI_CLOSE &&
+         operation != SHAAR_OP_DEVTOOLS_UI_STATE &&
+         operation != SHAAR_OP_DEVTOOLS_UI_SET_DOCK) ||
+        (operation == SHAAR_OP_DEVTOOLS_CALL && capability != kInspector &&
+         capability != kDeveloper))
+      return false;
+    Profile* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
+    return profile && !profile->IsOffTheRecord() &&
+           DevToolsWindow::AllowDevToolsFor(profile, contents);
+  }
+};
+
+DevToolsRuntimeServices& ContextRuntime() {
+  static base::NoDestructor<ContextDevToolsRuntime> runtime;
+  return *runtime;
+}
+
+using PendingKey = std::pair<shaar_engine*, shaar_request_id>;
+class ProtocolClient;
+std::map<PendingKey, ProtocolClient*>* PendingRequests() {
+  static base::NoDestructor<std::map<PendingKey, ProtocolClient*>> requests;
+  return requests.get();
+}
+
+class ProtocolClient final : public content::DevToolsAgentHostClient,
+                             public content::WebContentsObserver {
  public:
   ProtocolClient(scoped_refptr<content::DevToolsAgentHost> host,
-                 ReplyContext request)
-      : host_(std::move(host)), request_(request) {}
+                 content::WebContents* contents,
+                 ReplyContext request,
+                 std::function<bool()> target_is_current)
+      : content::WebContentsObserver(contents),
+        host_(std::move(host)),
+        request_(request),
+        target_is_current_(std::move(target_is_current)) {}
 
   bool Start(const std::string& protocol_request) {
     if (!host_->AttachClient(this))
       return false;
     attached_ = true;
+    (*PendingRequests())[PendingKey(request_.engine, request_.request_id)] = this;
     timer_.Start(FROM_HERE, base::Seconds(15), this,
                  &ProtocolClient::OnTimeout);
     host_->DispatchProtocolMessage(
@@ -372,6 +560,10 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
     const auto response_id = dict.FindInt("id");
     if (!response_id || *response_id != static_cast<int>(request_.request_id))
       return;
+    if (!target_is_current_ || !target_is_current_()) {
+      Finish(SHAAR_NOT_FOUND, {}, "DevTools target changed before response");
+      return;
+    }
     if (dict.Find("error")) {
       Finish(SHAAR_CHROMIUM_ERROR, {}, "protocol command failed");
       return;
@@ -394,6 +586,19 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
     Finish(SHAAR_NOT_FOUND, {}, "DevTools target closed");
   }
 
+  void DidFinishNavigation(content::NavigationHandle* navigation) override {
+    if (navigation->HasCommitted() && navigation->IsInPrimaryMainFrame())
+      Finish(SHAAR_CANCELLED, {}, "DevTools request canceled by navigation");
+  }
+
+  void WebContentsDestroyed() override {
+    Finish(SHAAR_NOT_FOUND, {}, "DevTools target closed");
+  }
+
+  void Cancel() {
+    Finish(SHAAR_CANCELLED, {}, "DevTools request canceled");
+  }
+
  private:
   void OnTimeout() {
     Finish(SHAAR_NOT_READY, {}, "DevTools protocol request timed out");
@@ -404,6 +609,7 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
     if (finished_)
       return;
     finished_ = true;
+    PendingRequests()->erase(PendingKey(request_.engine, request_.request_id));
     if (attached_) {
       attached_ = false;
       host_->DetachClient(this);
@@ -414,6 +620,7 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
 
   scoped_refptr<content::DevToolsAgentHost> host_;
   ReplyContext request_;
+  std::function<bool()> target_is_current_;
   base::OneShotTimer timer_;
   bool attached_ = false;
   bool finished_ = false;
@@ -436,8 +643,11 @@ shaar_error_code DecodeOperation(shaar_operation operation,
     return SHAAR_INVALID_ARGUMENT;
   }
   const auto& root = parsed->GetDict();
-  if (operation != SHAAR_OP_DEVTOOLS_CALL ||
-      !ExactKeys(root, {"schemaVersion", "capability", "command", "params"}) ||
+  const bool command_schema =
+      ExactKeys(root, {"schemaVersion", "capability", "command", "params"}) ||
+      ExactKeys(root, {"schemaVersion", "capability", "command", "params",
+                       "profileID", "sessionID", "windowID", "tabID"});
+  if (operation != SHAAR_OP_DEVTOOLS_CALL || !command_schema ||
       root.FindInt("schemaVersion") != 1 ||
       !root.FindInt("capability") || !root.FindInt("command") ||
       !root.FindDict("params")) {
@@ -511,8 +721,8 @@ bool PolicyAllowsOperation(DevToolsRuntimeServices* runtime,
     case SHAAR_OP_DEVTOOLS_UI_SHOW:
     case SHAAR_OP_DEVTOOLS_UI_CLOSE:
     case SHAAR_OP_DEVTOOLS_UI_STATE:
-      break;
     case SHAAR_OP_DEVTOOLS_UI_SET_DOCK:
+      break;
     case SHAAR_OP_DEVTOOLS_CONTROL_ENABLE:
     case SHAAR_OP_DEVTOOLS_CONTROL_DISABLE:
     case SHAAR_OP_DEVTOOLS_CONTROL_STATUS:
@@ -525,6 +735,20 @@ bool PolicyAllowsOperation(DevToolsRuntimeServices* runtime,
     return false;
   return runtime->IsOperationAllowed(engine, scope, contents, operation,
                                      capability);
+}
+
+shaar_error_code CancelDevToolsRequest(shaar_engine* engine,
+                                       shaar_request_id request_id,
+                                       shaar_error* error) {
+  auto found = PendingRequests()->find(PendingKey(engine, request_id));
+  if (found == PendingRequests()->end())
+    return Fail(error, SHAAR_NOT_FOUND, "DevTools request is not pending");
+  found->second->Cancel();
+  return SHAAR_OK;
+}
+
+void InstallContextRuntimeServices() {
+  SetDevToolsRuntimeServices(&ContextRuntime());
 }
 
 shaar_error_code EncodeProtocolRequest(shaar_bytes args_json,
@@ -554,13 +778,16 @@ shaar_error_code EncodeProtocolRequest(shaar_bytes args_json,
 
 void EmitFrontendStateEvent(shaar_engine* engine,
                             const DevToolsTargetIdentity& identity,
-                            bool open) {
+                            bool open,
+                            uint32_t dock_side,
+                            int extent) {
   if (identity.profile_id.empty() || identity.window_id.empty() ||
       identity.tab_id.empty())
     return;
-  char payload[sizeof(kFrontendStateEvent) + 8];
+  char payload[sizeof(kFrontendStateEvent) + 32];
   const int length = std::snprintf(payload, sizeof(payload), kFrontendStateEvent,
-                                   open ? "true" : "false");
+                                   open ? "true" : "false", dock_side,
+                                   extent);
   if (length <= 0 || static_cast<size_t>(length) >= sizeof(payload))
     return;
   const shaar_bytes profile{identity.profile_id.data(), identity.profile_id.size()};
@@ -621,9 +848,13 @@ shaar_error_code HandleDevToolsOperation(
   if (!context->devtools_runtime)
     return Fail(error, SHAAR_NOT_READY,
                 "DevTools runtime services are unavailable");
+  DevToolsTargetIdentity requested;
+  if (!DecodeRequestedIdentity(args_json, &requested))
+    return Fail(error, SHAAR_INVALID_ARGUMENT,
+                "DevTools target identity is invalid");
   DevToolsTargetIdentity identity;
   if (!context->devtools_runtime->ResolveTarget(engine, scope, window, tab,
-                                                contents, &identity))
+                                                contents, requested, &identity))
     return Fail(error, scope.private_session ? SHAAR_WRONG_SESSION
                                              : SHAAR_WRONG_PROFILE,
                 "DevTools target is outside the requested scope");
@@ -655,7 +886,7 @@ shaar_error_code HandleDevToolsOperation(
     return Fail(error, SHAAR_POLICY_BLOCKED,
                 "DevTools operation is blocked by runtime policy");
 
-  const ReplyContext request{request_id, reply, reply_context};
+  const ReplyContext request{engine, request_id, reply, reply_context};
   if (operation == SHAAR_OP_DEVTOOLS_CALL) {
     std::string protocol_request;
     std::string reason;
@@ -666,7 +897,19 @@ shaar_error_code HandleDevToolsOperation(
     auto host = content::DevToolsAgentHost::GetOrCreateForTab(contents);
     if (!host || host->GetWebContents() != contents)
       return Fail(error, SHAAR_NOT_READY, "DevTools protocol target is unavailable");
-    auto* client = new ProtocolClient(std::move(host), request);
+    auto target_is_current = [context, engine, scope, window, tab, contents,
+                              requested, identity]() {
+      DevToolsTargetIdentity current;
+      return context->devtools_runtime &&
+             context->devtools_runtime->ResolveTarget(
+                 engine, scope, window, tab, contents, requested, &current) &&
+             current.profile_id == identity.profile_id &&
+             current.session_id == identity.session_id &&
+             current.window_id == identity.window_id &&
+             current.tab_id == identity.tab_id;
+    };
+    auto* client = new ProtocolClient(std::move(host), contents, request,
+                                      std::move(target_is_current));
     if (!client->Start(protocol_request)) {
       delete client;
       return Fail(error, SHAAR_NOT_READY, "DevTools protocol attach was denied");
@@ -684,28 +927,54 @@ shaar_error_code HandleDevToolsOperation(
       return Fail(error, SHAAR_INVALID_ARGUMENT,
                   "invalid DevTools operation schema");
   }
-  if (operation == SHAAR_OP_DEVTOOLS_UI_SET_DOCK) {
-    // Docking remains unavailable until Chromium exposes Shaar's borrowed
-    // frontend view and resize strategy through the shared window host.
-    return Fail(error, SHAAR_UNSUPPORTED_CAPABILITY,
-                "DevTools docking is not available");
-  }
+  uint32_t requested_dock_side = 0;
+  int requested_extent = 0;
+  if (operation == SHAAR_OP_DEVTOOLS_UI_SET_DOCK &&
+      !DecodeDockRequest(args_json, &requested_dock_side, &requested_extent))
+    return Fail(error, SHAAR_INVALID_ARGUMENT,
+                "invalid DevTools dock schema");
+
+  Profile* profile = scope.profile && context->profile_services
+                         ? context->profile_services->ResolveProfile(
+                               engine, scope.profile)
+                         : nullptr;
+  if (!profile)
+    return Fail(error, SHAAR_WRONG_PROFILE,
+                "DevTools UI requires a regular profile");
 
   const bool frontend_was_open =
       DevToolsWindow::GetInstanceForInspectedWebContents(contents) != nullptr;
+  const uint32_t old_dock_side = DockSideValue(profile);
+  const int old_extent = DockExtent(profile);
   if (operation == SHAAR_OP_DEVTOOLS_UI_SHOW) {
+    if (old_dock_side == SHAAR_DEVTOOLS_DOCK_UNDOCKED)
+      SetDockState(profile, SHAAR_DEVTOOLS_DOCK_RIGHT, old_extent);
     DevToolsWindow::OpenDevToolsWindow(contents, DevToolsOpenedByAction::kUnknown);
+    if (auto* devtools = DevToolsWindow::GetInstanceForInspectedWebContents(contents))
+      devtools->SetIsDocked(true);
   } else if (operation == SHAAR_OP_DEVTOOLS_UI_CLOSE) {
     if (auto* devtools = DevToolsWindow::GetInstanceForInspectedWebContents(contents))
       devtools->Close(DevToolsClosedByAction::kUnknown);
   } else if (operation == SHAAR_OP_DEVTOOLS_UI_STATE) {
     const bool open =
         DevToolsWindow::GetInstanceForInspectedWebContents(contents) != nullptr;
-    std::string payload = open
-                              ? "{\"schemaVersion\":1,\"open\":true}"
-                              : "{\"schemaVersion\":1,\"open\":false}";
+    const uint32_t dock_side = DockSideValue(profile);
+    const int extent = DockExtent(profile);
+    char json[128];
+    const int length = std::snprintf(
+        json, sizeof(json),
+        "{\"schemaVersion\":1,\"open\":%s,\"dockSide\":%u,\"extent\":%d}",
+        open ? "true" : "false", dock_side, extent);
+    if (length <= 0 || static_cast<size_t>(length) >= sizeof(json))
+      return Fail(error, SHAAR_CHROMIUM_ERROR,
+                  "could not serialize DevTools state");
+    std::string payload(json, static_cast<size_t>(length));
     Reply(request, SHAAR_OK, std::move(payload));
     return SHAAR_OK;
+  } else if (operation == SHAAR_OP_DEVTOOLS_UI_SET_DOCK) {
+    SetDockState(profile, requested_dock_side, requested_extent);
+    if (auto* devtools = DevToolsWindow::GetInstanceForInspectedWebContents(contents))
+      devtools->SetIsDocked(requested_dock_side != SHAAR_DEVTOOLS_DOCK_UNDOCKED);
   } else if (operation == SHAAR_OP_DEVTOOLS_CONTROL_ENABLE ||
              operation == SHAAR_OP_DEVTOOLS_CONTROL_DISABLE ||
              operation == SHAAR_OP_DEVTOOLS_CONTROL_STATUS) {
@@ -717,16 +986,143 @@ shaar_error_code HandleDevToolsOperation(
   } else {
     return Fail(error, SHAAR_INVALID_ARGUMENT, "unknown DevTools operation");
   }
-  if ((operation == SHAAR_OP_DEVTOOLS_UI_SHOW ||
-       operation == SHAAR_OP_DEVTOOLS_UI_CLOSE) &&
-      frontend_was_open !=
-          (DevToolsWindow::GetInstanceForInspectedWebContents(contents) != nullptr)) {
-    const bool open =
-        DevToolsWindow::GetInstanceForInspectedWebContents(contents) != nullptr;
-    EmitFrontendStateEvent(engine, identity, open);
+  const bool frontend_is_open =
+      DevToolsWindow::GetInstanceForInspectedWebContents(contents) != nullptr;
+  const uint32_t current_dock_side = DockSideValue(profile);
+  const int current_extent = DockExtent(profile);
+  if ((operation == SHAAR_OP_DEVTOOLS_UI_SET_DOCK &&
+       (old_dock_side != current_dock_side || old_extent != current_extent ||
+        frontend_was_open != frontend_is_open)) ||
+      ((operation == SHAAR_OP_DEVTOOLS_UI_SHOW ||
+        operation == SHAAR_OP_DEVTOOLS_UI_CLOSE) &&
+       (frontend_was_open != frontend_is_open ||
+        old_dock_side != current_dock_side || old_extent != current_extent))) {
+    EmitFrontendStateEvent(engine, identity,
+                           frontend_is_open, current_dock_side,
+                           current_extent);
+  }
+  if (operation == SHAAR_OP_DEVTOOLS_UI_SET_DOCK) {
+    char json[128];
+    const int length = std::snprintf(
+        json, sizeof(json),
+        "{\"schemaVersion\":1,\"open\":%s,\"dockSide\":%u,\"extent\":%d}",
+        frontend_is_open ? "true" : "false", current_dock_side,
+        current_extent);
+    if (length <= 0 || static_cast<size_t>(length) >= sizeof(json))
+      return Fail(error, SHAAR_CHROMIUM_ERROR,
+                  "could not serialize DevTools state");
+    Reply(request, SHAAR_OK, std::string(json, static_cast<size_t>(length)));
+    return SHAAR_OK;
   }
   Reply(request, SHAAR_OK, "{\"schemaVersion\":1}");
   return SHAAR_OK;
 }
 
+namespace {
+bool ResolveFrontendTarget(shaar_engine* engine,
+                           shaar_scope scope,
+                           shaar_window* window,
+                           shaar_tab* tab,
+                           shaar_bytes profile_id,
+                           shaar_bytes session_id,
+                           shaar_bytes window_id,
+                           shaar_bytes tab_id,
+                           content::WebContents** contents_out,
+                           DevToolsWindow** devtools_out) {
+  if (!engine || scope.size < sizeof(shaar_scope) || !window || !tab ||
+      (scope.profile == nullptr) == (scope.private_session == nullptr) ||
+      !profile_id.data || !profile_id.size || profile_id.size > 256 ||
+      !window_id.data || !window_id.size || window_id.size > 256 ||
+      !tab_id.data || !tab_id.size || tab_id.size > 256 ||
+      session_id.size > 256 ||
+      (session_id.size && !session_id.data) || !contents_out || !devtools_out)
+    return false;
+  ShaarEngineContext& context = EngineContext();
+  if (!context.browser_tabs || !context.devtools_runtime)
+    return false;
+  content::WebContents* contents =
+      context.browser_tabs->FindWebContents(engine, window, tab);
+  if (!contents)
+    return false;
+  DevToolsTargetIdentity requested{
+      std::string(profile_id.data, profile_id.size),
+      std::string(session_id.data ? session_id.data : "", session_id.size),
+      std::string(window_id.data, window_id.size),
+      std::string(tab_id.data, tab_id.size)};
+  DevToolsTargetIdentity resolved;
+  if (!context.devtools_runtime->ResolveTarget(
+          engine, scope, window, tab, contents, requested, &resolved) ||
+      !IsValidTargetIdentity(scope,
+                             context.browser_tabs->TabID(engine, window, tab),
+                             resolved) ||
+      !PolicyAllowsOperation(context.devtools_runtime, engine, scope, contents,
+                             SHAAR_OP_DEVTOOLS_UI_STATE, 0))
+    return false;
+  auto* devtools = DevToolsWindow::GetInstanceForInspectedWebContents(contents);
+  if (!devtools || !devtools->IsDocked())
+    return false;
+  *contents_out = contents;
+  *devtools_out = devtools;
+  return true;
+}
+}  // namespace
+
 }  // namespace shaar::devtools
+
+extern "C" void* shaar_devtools_frontend_view(
+    shaar_engine* engine,
+    shaar_scope scope,
+    shaar_window* window,
+    shaar_tab* tab,
+    shaar_bytes profile_id,
+    shaar_bytes session_id,
+    shaar_bytes window_id,
+    shaar_bytes tab_id) {
+  content::WebContents* inspected = nullptr;
+  DevToolsWindow* devtools = nullptr;
+  if (!shaar::devtools::ResolveFrontendTarget(
+          engine, scope, window, tab, profile_id, session_id, window_id, tab_id,
+          &inspected, &devtools))
+    return nullptr;
+  DevToolsContentsResizingStrategy strategy;
+  content::WebContents* frontend =
+      DevToolsWindow::GetInTabWebContents(inspected, &strategy);
+  return frontend ? static_cast<void*>(frontend->GetNativeView()) : nullptr;
+}
+
+extern "C" shaar_error_code shaar_devtools_set_frontend_bounds(
+    shaar_engine* engine,
+    shaar_scope scope,
+    shaar_window* window,
+    shaar_tab* tab,
+    shaar_bytes profile_id,
+    shaar_bytes session_id,
+    shaar_bytes window_id,
+    shaar_bytes tab_id,
+    int width,
+    int height) {
+  content::WebContents* inspected = nullptr;
+  DevToolsWindow* devtools = nullptr;
+  if (!shaar::devtools::ResolveFrontendTarget(
+          engine, scope, window, tab, profile_id, session_id, window_id, tab_id,
+          &inspected, &devtools))
+    return SHAAR_NOT_FOUND;
+  if (width < 0 || height < 0 || width > 8192 || height > 8192)
+    return SHAAR_INVALID_ARGUMENT;
+  devtools->SetInspectedPageBounds(gfx::Rect(0, 0, width, height));
+  Profile* profile = Profile::FromBrowserContext(inspected->GetBrowserContext());
+  if (!profile)
+    return SHAAR_NOT_FOUND;
+  const uint32_t dock_side = DockSideValue(profile);
+  const int extent = std::min(
+      dock_side == SHAAR_DEVTOOLS_DOCK_BOTTOM ? height : width, 4096);
+  SetDockState(profile, dock_side, extent);
+  const shaar::devtools::DevToolsTargetIdentity identity{
+      std::string(profile_id.data, profile_id.size),
+      std::string(session_id.data ? session_id.data : "", session_id.size),
+      std::string(window_id.data, window_id.size),
+      std::string(tab_id.data, tab_id.size)};
+  shaar::devtools::EmitFrontendStateEvent(engine, identity, true, dock_side,
+                                          extent);
+  return SHAAR_OK;
+}

@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import Foundation
+import ShaarDevToolsABIC
 import ShaarEngineABIC
 
 public enum ShaarDevToolsOperation: UInt32, Sendable {
@@ -14,6 +15,13 @@ public enum ShaarDevToolsOperation: UInt32, Sendable {
   case controlEnable = 1005
   case controlDisable = 1006
   case controlStatus = 1007
+}
+
+public enum ShaarDevToolsDockSide: UInt32, Equatable, Sendable {
+  case right = 1
+  case bottom = 2
+  case left = 3
+  case undocked = 4
 }
 
 public enum ShaarDevToolsCapability: UInt32, Sendable {
@@ -91,6 +99,15 @@ public protocol ShaarDevToolsSubmitting: Sendable {
   ) throws -> UInt64
 }
 
+public protocol ShaarDevToolsFrontendHosting: Sendable {
+  func frontendView(scope: ShaarNavigationScope, windowID: String, tabID: String)
+    throws -> UnsafeMutableRawPointer?
+  func setFrontendBounds(
+    width: Int, height: Int, scope: ShaarNavigationScope,
+    windowID: String, tabID: String
+  ) throws
+}
+
 private final class ShaarDevToolsReplyBox: @unchecked Sendable {
   let expectedRequestID: UInt64
   let completion: @Sendable (Result<Data, ShaarEngineError>) -> Void
@@ -123,6 +140,17 @@ private func copyDevToolsBytes(_ bytes: shaar_bytes) throws -> Data {
   return Data(bytes: pointer, count: bytes.size)
 }
 
+private func devToolsTargetFields(
+  scope: ShaarNavigationScope, windowID: String, tabID: String
+) -> [String: Any] {
+  [
+    "profileID": scope.profileID,
+    "sessionID": scope.sessionID ?? "",
+    "windowID": windowID,
+    "tabID": tabID,
+  ]
+}
+
 private let shaarDevToolsABICallback: shaar_reply_fn = { context, result in
   guard let context else { return }
   let box = Unmanaged<ShaarDevToolsReplyBox>.fromOpaque(context).takeRetainedValue()
@@ -152,8 +180,12 @@ private let shaarDevToolsABICallback: shaar_reply_fn = { context, result in
 
 /// Concrete transport. Scope and target resolution are delegated to the same
 /// engine-owned handle resolver used by navigation; this adapter never guesses.
-public struct ShaarDevToolsABITransport: ShaarDevToolsSubmitting, @unchecked Sendable {
+public struct ShaarDevToolsABITransport: ShaarDevToolsSubmitting,
+  ShaarDevToolsFrontendHosting, @unchecked Sendable
+{
   private let submitSymbol: UnsafeRawPointer
+  private let frontendViewSymbol: UnsafeRawPointer?
+  private let frontendBoundsSymbol: UnsafeRawPointer?
   private let handleResolver: any ShaarNavigationHandleResolving
   private let requestIDs: ShaarDevToolsRequestIDs
 
@@ -164,6 +196,8 @@ public struct ShaarDevToolsABITransport: ShaarDevToolsSubmitting, @unchecked Sen
       throw ShaarEngineError.missingSymbol("shaar_submit")
     }
     submitSymbol = symbol
+    frontendViewSymbol = resolver.symbol(named: "shaar_devtools_frontend_view")
+    frontendBoundsSymbol = resolver.symbol(named: "shaar_devtools_set_frontend_bounds")
     self.handleResolver = handleResolver
     requestIDs = ShaarDevToolsRequestIDs()
   }
@@ -201,6 +235,67 @@ public struct ShaarDevToolsABITransport: ShaarDevToolsSubmitting, @unchecked Sen
     }
     return requestID
   }
+
+  public func frontendView(
+    scope: ShaarNavigationScope, windowID: String, tabID: String
+  ) throws -> UnsafeMutableRawPointer? {
+    guard let frontendViewSymbol else {
+      throw ShaarEngineError.missingSymbol("shaar_devtools_frontend_view")
+    }
+    let handles = try handleResolver.resolve(
+      scope: scope, windowID: windowID, tabID: tabID)
+    var nativeScope = handles.scope
+    return scope.profileID.withCString { profile in
+      (scope.sessionID ?? "").withCString { session in
+        windowID.withCString { window in
+          tabID.withCString { tab in
+            shaar_devtools_frontend_view_invoke(
+              frontendViewSymbol, handles.engine, &nativeScope,
+              handles.window, handles.tab,
+              shaar_bytes(data: profile, size: scope.profileID.utf8.count),
+              shaar_bytes(data: session, size: (scope.sessionID ?? "").utf8.count),
+              shaar_bytes(data: window, size: windowID.utf8.count),
+              shaar_bytes(data: tab, size: tabID.utf8.count))
+          }
+        }
+      }
+    }
+  }
+
+  public func setFrontendBounds(
+    width: Int, height: Int, scope: ShaarNavigationScope,
+    windowID: String, tabID: String
+  ) throws {
+    guard let frontendBoundsSymbol else {
+      throw ShaarEngineError.missingSymbol("shaar_devtools_set_frontend_bounds")
+    }
+    guard (0...8192).contains(width), (0...8192).contains(height) else {
+      throw ShaarEngineError.invalidEvent("invalid DevTools frontend bounds")
+    }
+    let handles = try handleResolver.resolve(
+      scope: scope, windowID: windowID, tabID: tabID)
+    var nativeScope = handles.scope
+    let status = scope.profileID.withCString { profile in
+      (scope.sessionID ?? "").withCString { session in
+        windowID.withCString { window in
+          tabID.withCString { tab in
+            shaar_devtools_frontend_bounds_invoke(
+              frontendBoundsSymbol, handles.engine, &nativeScope,
+              handles.window, handles.tab,
+              shaar_bytes(data: profile, size: scope.profileID.utf8.count),
+              shaar_bytes(data: session, size: (scope.sessionID ?? "").utf8.count),
+              shaar_bytes(data: window, size: windowID.utf8.count),
+              shaar_bytes(data: tab, size: tabID.utf8.count),
+              Int32(width), Int32(height))
+          }
+        }
+      }
+    }
+    guard status == UInt32(SHAAR_OK.rawValue) else {
+      try ShaarStatusCode.decode(status, platformCode: 0, message: "")
+      throw ShaarEngineError.invalidStatusCode(status)
+    }
+  }
 }
 
 public struct ShaarDevToolsAdapter: Sendable {
@@ -228,10 +323,10 @@ public struct ShaarDevToolsAdapter: Sendable {
       let params = try JSONSerialization.jsonObject(with: parametersJSON) as? [String: Any]
     else { throw ShaarEngineError.invalidEvent("invalid or disallowed DevTools command") }
     let payload = try JSONSerialization.data(
-      withJSONObject: [
+      withJSONObject: devToolsTargetFields(scope: scope, windowID: windowID, tabID: tabID).merging([
         "schemaVersion": 1, "capability": capability.rawValue,
         "command": command.rawValue, "params": params,
-      ],
+      ]) { _, value in value },
       options: [.sortedKeys])
     return try engine.submit(
       ShaarDevToolsRequest(
@@ -250,7 +345,11 @@ public struct ShaarDevToolsAdapter: Sendable {
       ShaarDevToolsRequest(
         operation: open ? .show : .close, scope: scope,
         windowID: windowID, tabID: tabID,
-        payload: Data("{\"schemaVersion\":1}".utf8)),
+        payload: try JSONSerialization.data(
+          withJSONObject: devToolsTargetFields(
+            scope: scope, windowID: windowID, tabID: tabID
+          ).merging(["schemaVersion": 1]) { _, value in value },
+          options: [.sortedKeys])),
       completion: completion)
   }
 
@@ -264,12 +363,57 @@ public struct ShaarDevToolsAdapter: Sendable {
     return try engine.submit(
       ShaarDevToolsRequest(
         operation: .state, scope: scope, windowID: windowID, tabID: tabID,
-        payload: Data("{\"schemaVersion\":1}".utf8)), completion: completion)
+        payload: try JSONSerialization.data(
+          withJSONObject: devToolsTargetFields(
+            scope: scope, windowID: windowID, tabID: tabID
+          ).merging(["schemaVersion": 1]) { _, value in value },
+          options: [.sortedKeys])), completion: completion)
+  }
+
+  public func setDock(
+    side: ShaarDevToolsDockSide, extent: Int, scope: ShaarNavigationScope,
+    windowID: String, tabID: String,
+    completion: @escaping @Sendable (Result<Data, ShaarEngineError>) -> Void
+  ) throws -> UInt64 {
+    guard (100...4096).contains(extent), !scope.profileID.isEmpty,
+      !windowID.isEmpty, !tabID.isEmpty
+    else { throw ShaarEngineError.invalidEvent("invalid DevTools dock geometry") }
+    let payload = try JSONSerialization.data(
+      withJSONObject: devToolsTargetFields(scope: scope, windowID: windowID, tabID: tabID)
+        .merging(["schemaVersion": 1, "dockSide": side.rawValue, "extent": extent]) {
+          _, value in value
+        }, options: [.sortedKeys])
+    return try engine.submit(
+      ShaarDevToolsRequest(
+        operation: .setDock, scope: scope, windowID: windowID, tabID: tabID,
+        payload: payload), completion: completion)
+  }
+
+  public func frontendView(
+    scope: ShaarNavigationScope, windowID: String, tabID: String
+  ) throws -> UnsafeMutableRawPointer? {
+    guard let hosting = engine as? any ShaarDevToolsFrontendHosting else {
+      throw ShaarEngineError.missingSymbol("shaar_devtools_frontend_view")
+    }
+    return try hosting.frontendView(scope: scope, windowID: windowID, tabID: tabID)
+  }
+
+  public func setFrontendBounds(
+    width: Int, height: Int, scope: ShaarNavigationScope,
+    windowID: String, tabID: String
+  ) throws {
+    guard let hosting = engine as? any ShaarDevToolsFrontendHosting else {
+      throw ShaarEngineError.missingSymbol("shaar_devtools_set_frontend_bounds")
+    }
+    try hosting.setFrontendBounds(
+      width: width, height: height, scope: scope, windowID: windowID, tabID: tabID)
   }
 }
 
 public struct ShaarDevToolsFrontendState: Equatable, Sendable {
   public let open: Bool
+  public let dockSide: ShaarDevToolsDockSide
+  public let extent: Int
 }
 
 public enum ShaarDevToolsEventRouter {
@@ -288,9 +432,13 @@ public enum ShaarDevToolsEventRouter {
       payload["schemaVersion"] as? Int == 1,
       payload["kind"] as? String == "frontendState",
       let open = payload["open"] as? Bool,
-      Set(payload.keys) == ["schemaVersion", "kind", "open"]
+      let dockRaw = payload["dockSide"] as? UInt32,
+      let dockSide = ShaarDevToolsDockSide(rawValue: dockRaw),
+      let extent = payload["extent"] as? Int,
+      (0...4096).contains(extent),
+      Set(payload.keys) == ["schemaVersion", "kind", "open", "dockSide", "extent"]
     else { return nil }
-    return ShaarDevToolsFrontendState(open: open)
+    return ShaarDevToolsFrontendState(open: open, dockSide: dockSide, extent: extent)
   }
 }
 

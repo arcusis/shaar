@@ -41,11 +41,19 @@ let package = Package(
       name: "ShaarEngineABIC",
       path: "Sources/ShaarEngineABI/Navigation/CABI",
       publicHeadersPath: "include"),
+    // END Shaar navigation C ABI shim.
+    // BEGIN devtools C ABI shim.
+    .target(
+      name: "ShaarDevToolsABIC",
+      path: "Sources/ShaarEngineABI/DevTools/CABI",
+      publicHeadersPath: "include"),
+    // END devtools C ABI shim.
+    // BEGIN devtools ABI dependency.
     .target(
       name: "ShaarEngineABI",
-      dependencies: ["ShaarEngineABIC"],
-      exclude: ["Navigation/CABI"]),
-    // END Shaar navigation C ABI shim.
+      dependencies: ["ShaarEngineABIC", "ShaarDevToolsABIC"],
+      exclude: ["Navigation/CABI", "DevTools/CABI"]),
+    // END devtools ABI dependency.
     .target(
       name: "ChromiumBridgeVerification",
       dependencies: ["ChromiumBridge"],

@@ -7,13 +7,37 @@ import Testing
 
 @testable import ShaarEngineABI
 
-private final class FakeDevToolsEngine: ShaarDevToolsSubmitting, @unchecked Sendable {
+private final class FakeDevToolsEngine: ShaarDevToolsSubmitting,
+  ShaarDevToolsFrontendHosting, @unchecked Sendable
+{
   private let lock = NSLock()
   private var stored: ShaarDevToolsRequest?
+  private var storedBounds: (Int, Int)?
   var request: ShaarDevToolsRequest? {
     lock.lock()
     defer { lock.unlock() }
     return stored
+  }
+  var bounds: (Int, Int)? {
+    lock.lock()
+    defer { lock.unlock() }
+    return storedBounds
+  }
+  func frontendView(
+    scope: ShaarNavigationScope, windowID: String, tabID: String
+  ) throws -> UnsafeMutableRawPointer? {
+    guard !scope.profileID.isEmpty, !windowID.isEmpty, !tabID.isEmpty else {
+      throw ShaarEngineError.invalidEvent("invalid frontend target")
+    }
+    return UnsafeMutableRawPointer(bitPattern: 7)
+  }
+  func setFrontendBounds(
+    width: Int, height: Int, scope: ShaarNavigationScope,
+    windowID: String, tabID: String
+  ) throws {
+    lock.lock()
+    storedBounds = (width, height)
+    lock.unlock()
   }
   func submit(
     _ request: ShaarDevToolsRequest,
@@ -99,10 +123,11 @@ struct DevToolsTests {
       sequence: 18, kind: 14, profileID: Data("profile-a".utf8),
       sessionID: Data("private-a".utf8), windowID: Data("window-a".utf8),
       tabID: Data("tab-a".utf8),
-      payloadJSON: Data(#"{"schemaVersion":1,"kind":"frontendState","open":true}"#.utf8))
+      payloadJSON: Data(
+        #"{"schemaVersion":1,"kind":"frontendState","open":true,"dockSide":1,"extent":720}"#.utf8))
     #expect(
       ShaarDevToolsEventRouter.decodeFrontendState(
-        event, scope: scope, windowID: "window-a", tabID: "tab-a")?.open == true)
+        event, scope: scope, windowID: "window-a", tabID: "tab-a")?.dockSide == .right)
     #expect(
       ShaarDevToolsEventRouter.decodeFrontendState(
         event, scope: ShaarNavigationScope(profileID: "profile-a"),
@@ -112,11 +137,35 @@ struct DevToolsTests {
       sequence: event.sequence, kind: event.kind, profileID: event.profileID,
       sessionID: event.sessionID, windowID: event.windowID, tabID: event.tabID,
       payloadJSON: Data(
-        #"{"schemaVersion":1,"kind":"frontendState","open":true,"url":"https://private.test"}"#.utf8
+        #"{"schemaVersion":1,"kind":"frontendState","open":true,"dockSide":1,"extent":720,"url":"https://private.test"}"#
+          .utf8
       ))
     #expect(
       ShaarDevToolsEventRouter.decodeFrontendState(
         withSensitiveField, scope: scope, windowID: "window-a", tabID: "tab-a") == nil)
+  }
+
+  @Test func dockAndFrontendHostUseScopedRequests() throws {
+    let fake = FakeDevToolsEngine()
+    let adapter = try #require(ShaarDevToolsAdapter(implementation: .shaar, engine: fake))
+    let scope = ShaarNavigationScope(profileID: "profile-a")
+    _ = try adapter.setDock(
+      side: .bottom, extent: 640, scope: scope, windowID: "window-a", tabID: "tab-a",
+      completion: { _ in })
+    let request = try #require(fake.request)
+    #expect(request.operation == .setDock)
+    let root = try #require(JSONSerialization.jsonObject(with: request.payload) as? [String: Any])
+    #expect(root["dockSide"] as? UInt32 == ShaarDevToolsDockSide.bottom.rawValue)
+    #expect(root["extent"] as? Int == 640)
+    #expect(root["profileID"] as? String == "profile-a")
+
+    #expect(
+      try adapter.frontendView(
+        scope: scope, windowID: "window-a", tabID: "tab-a") != nil)
+    try adapter.setFrontendBounds(
+      width: 1200, height: 720, scope: scope, windowID: "window-a", tabID: "tab-a")
+    #expect(fake.bounds?.0 == 1200)
+    #expect(fake.bounds?.1 == 720)
   }
 
   @Test func ardiaRemainsDefaultAndDoesNotConstructShaarAdapter() {

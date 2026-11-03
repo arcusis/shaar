@@ -13,3 +13,7 @@ _shaar_profile_delete
 _shaar_profile_get_state
 _shaar_profile_set_state
 _shaar_profile_get_path
+# BEGIN devtools
+_shaar_devtools_frontend_view
+_shaar_devtools_set_frontend_bounds
+# END devtools

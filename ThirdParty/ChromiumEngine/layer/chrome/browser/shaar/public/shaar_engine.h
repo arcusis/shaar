@@ -316,6 +316,17 @@ SHAAR_EXPORT shaar_error_code shaar_tab_open(
 SHAAR_EXPORT shaar_error_code shaar_tab_close(
     shaar_tab *, shaar_error *error);
 SHAAR_EXPORT void *shaar_tab_host_view(shaar_tab *); /* borrowed NSView* */
+/* BEGIN devtools host seam. The view is borrowed and valid while this docked
+ * frontend remains attached to the supplied tab. */
+SHAAR_EXPORT void *shaar_devtools_frontend_view(
+    shaar_engine *, shaar_scope, shaar_window *, shaar_tab *,
+    shaar_bytes profile_id, shaar_bytes session_id, shaar_bytes window_id,
+    shaar_bytes tab_id);
+SHAAR_EXPORT shaar_error_code shaar_devtools_set_frontend_bounds(
+    shaar_engine *, shaar_scope, shaar_window *, shaar_tab *,
+    shaar_bytes profile_id, shaar_bytes session_id, shaar_bytes window_id,
+    shaar_bytes tab_id, int width, int height);
+/* END devtools host seam. */
 SHAAR_EXPORT shaar_error_code shaar_media_pip_window(
     shaar_scope, shaar_tab *, shaar_window **out, shaar_error *error);
 

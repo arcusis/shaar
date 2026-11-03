@@ -7,11 +7,13 @@
 extern "C" void shaar_devtools_register(ShaarModuleRegistry* registry) {
   if (!registry)
     return;
+  shaar::devtools::InstallContextRuntimeServices();
   static const shaar::devtools::ModuleHandlers handlers{
       .handle_operation = &shaar::devtools::HandleDevToolsOperation};
   registry->RegisterModule(SHAAR_MODULE_DEVTOOLS, &handlers);
   registry->Register(SHAAR_OP_DEVTOOLS_CALL, SHAAR_OP_DEVTOOLS_CALL,
-                     &shaar::devtools::HandleDevToolsOperation);
+                     &shaar::devtools::HandleDevToolsOperation,
+                     &shaar::devtools::CancelDevToolsRequest);
   registry->Register(SHAAR_OP_DEVTOOLS_UI_SHOW, SHAAR_OP_DEVTOOLS_UI_STATE,
                      &shaar::devtools::HandleDevToolsOperation);
   registry->Register(SHAAR_OP_DEVTOOLS_UI_SET_DOCK,

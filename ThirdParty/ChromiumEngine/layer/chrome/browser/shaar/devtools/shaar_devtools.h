@@ -35,9 +35,15 @@ bool PolicyAllowsOperation(DevToolsRuntimeServices* runtime,
                            content::WebContents* contents,
                            shaar_operation operation,
                            int capability);
+shaar_error_code CancelDevToolsRequest(shaar_engine* engine,
+                                       shaar_request_id request_id,
+                                       shaar_error* error);
+void InstallContextRuntimeServices();
 void EmitFrontendStateEvent(shaar_engine* engine,
                             const DevToolsTargetIdentity& identity,
-                            bool open);
+                            bool open,
+                            uint32_t dock_side,
+                            int extent);
 
 // Validates the versioned ABI envelope and serializes a protocol request.
 shaar_error_code EncodeProtocolRequest(shaar_bytes args_json,

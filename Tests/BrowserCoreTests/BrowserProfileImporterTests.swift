@@ -2,10 +2,11 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-import BrowserCore
 import CSQLite
 import Foundation
 import Testing
+
+@testable import BrowserCore
 
 @Test func chromiumFamilyProfilesImportBookmarksAndHistoryWithSourceAttribution() throws {
   for source in [BrowserImportSource.chrome, .edge, .brave, .arc] {
@@ -67,6 +68,55 @@ import Testing
     #expect(throws: BrowserImport.ImportError.self) {
       try BrowserImport.readProfile(at: profile, source: .chrome)
     }
+  }
+  #expect(BrowserImport.ImportError.privateProfile.errorDescription?.contains("Private") == true)
+}
+
+@Test func browserImportAttributesBookmarkExportsAndReportsImporterErrors() throws {
+  let export = FileManager.default.temporaryDirectory.appending(path: "Bookmarks-\(UUID()).json")
+  try copyFixture("ChromiumBookmarks", to: export)
+  let batch = try BrowserImport.read(export, source: .edge)
+  #expect(batch.source == .edge)
+  #expect(batch.bookmarks.count == 1 && batch.bookmarks[0].source == .edge)
+
+  #expect(BrowserImport.ImportError.databaseUnavailable("fixture").errorDescription != nil)
+  #expect(BrowserImport.ImportError.tooManyRows.errorDescription?.contains("at once") == true)
+}
+
+@Test func sqliteSnapshotDecodesTypedColumnsAndEnforcesTheRowLimit() throws {
+  let profile = try profileDirectory(name: "SQLite")
+  let database = profile.appending(path: "History")
+  try createDatabase(sqlFixture: "ChromiumHistory.sql", at: database)
+  let rows = try BrowserImportSQLite.rows(
+    at: database,
+    query: "SELECT 7 AS integer_value, 2.5 AS real_value, 'text' AS text_value, NULL AS null_value"
+  )
+  #expect(rows.count == 1)
+  if case .integer(7) = rows[0]["integer_value"] {
+  } else {
+    Issue.record("Integer column was lost.")
+  }
+  if case .real(2.5) = rows[0]["real_value"] {} else { Issue.record("Real column was lost.") }
+  if case .text("text") = rows[0]["text_value"] {} else { Issue.record("Text column was lost.") }
+  if case .null = rows[0]["null_value"] {} else { Issue.record("Null column was lost.") }
+
+  #expect(throws: BrowserImport.ImportError.self) {
+    try BrowserImportSQLite.rows(
+      at: database, query: "SELECT 1 UNION ALL SELECT 2", limit: 1)
+  }
+}
+
+@Test func sqliteSnapshotRejectsMissingSourcesAndInvalidQueries() throws {
+  let absent = FileManager.default.temporaryDirectory.appending(path: "missing-\(UUID()).sqlite")
+  #expect(throws: BrowserImport.ImportError.self) {
+    try BrowserImportSQLite.rows(at: absent, query: "SELECT 1")
+  }
+
+  let profile = try profileDirectory(name: "SQLiteQuery")
+  let database = profile.appending(path: "History")
+  try createDatabase(sqlFixture: "ChromiumHistory.sql", at: database)
+  #expect(throws: BrowserImport.ImportError.self) {
+    try BrowserImportSQLite.rows(at: database, query: "SELECT FROM")
   }
 }
 

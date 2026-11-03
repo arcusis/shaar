@@ -45,6 +45,11 @@ source_set("engine") {
     "navigation/shaar_navigation.h",
     "navigation/shaar_navigation_lifecycle_adapter.cc",
     # END Shaar navigation module.
+    # BEGIN Shaar downloads module.
+    "downloads/shaar_downloads.cc",
+    "downloads/shaar_downloads.h",
+    "downloads/shaar_downloads_lifecycle_adapter.cc",
+    # END Shaar downloads module.
   ]
   deps = [
     "//base",
@@ -58,6 +63,9 @@ source_set("engine") {
     "//components/content_settings/core/common",
     "//components/prefs",
     "//content/public/browser",
+    "//components/download/content/public",
+    "//components/download/public/common",
+    "//extensions/browser",
     "//net",
     "//ui/base",
     "//url",
@@ -87,6 +95,12 @@ test("windows_tabs_unittests") {
 test("navigation_unittests") {
   sources = [ "navigation/shaar_navigation_unittest.cc" ]
   deps = [ ":engine", "//testing/gtest", "//testing/gtest:gtest_main" ]
+}
+
+test("downloads_unittests") {
+  sources = [ "downloads/shaar_downloads_unittest.cc" ]
+  deps = [ ":engine", "//components/download/public/common:test_support",
+           "//testing/gmock", "//testing/gtest" ]
 }
 
 config("exports") {

@@ -18,8 +18,8 @@
 #include "base/memory/weak_ptr.h"
 #include "components/download/content/public/all_download_item_notifier.h"
 #include "components/download/public/common/download_item.h"
+#include "chrome/browser/shaar/engine/shaar_module_registry.h"
 #include "chrome/browser/shaar/public/shaar_engine.h"
-#include "chrome/browser/shaar/downloads/shaar_module_registry.h"
 
 namespace content {
 class BrowserContext;
@@ -107,6 +107,6 @@ class Downloads final : private download::AllDownloadItemNotifier::Observer {
 
 }  // namespace shaar
 
-void shaar_downloads_register(shaar::ShaarModuleRegistry* registry);
+extern "C" void shaar_downloads_register(ShaarModuleRegistry* registry);
 
 #endif  // CHROME_BROWSER_SHAAR_DOWNLOADS_SHAAR_DOWNLOADS_H_

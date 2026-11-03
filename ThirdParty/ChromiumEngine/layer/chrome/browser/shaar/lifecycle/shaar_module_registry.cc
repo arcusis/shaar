@@ -27,7 +27,9 @@ SHAAR_DECLARE_OPTIONAL_MODULE(shaar_bookmarks_register);
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_history_register);
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_site_data_register);
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_extensions_register);
+// BEGIN find
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_find_register);
+// END find
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_devtools_register);
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_media_register);
 #undef SHAAR_DECLARE_OPTIONAL_MODULE
@@ -182,8 +184,10 @@ void RegisterLinkedModules(ShaarModuleRegistry* registry) {
     shaar_site_data_register(registry);
   if (shaar_extensions_register)
     shaar_extensions_register(registry);
+  // BEGIN find
   if (shaar_find_register)
     shaar_find_register(registry);
+  // END find
   if (shaar_devtools_register)
     shaar_devtools_register(registry);
   if (shaar_media_register)

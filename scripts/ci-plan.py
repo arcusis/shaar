@@ -30,7 +30,11 @@ def website_path(path: str) -> bool:
             or path.startswith(".github/workflows/website-") and path.endswith(".yml"))
 
 
-def select_stages(paths: list[str] | None, event: str) -> tuple[bool, bool, bool]:
+def select_stages(paths: list[str] | None, event: str, draft: bool = False) -> tuple[bool, bool, bool]:
+    if event == "pull_request" and draft:
+        website = (any(website_path(path) or path.startswith(".github/workflows/") for path in paths)
+                   if paths else True)
+        return False, website, True
     if not paths or event in {"push", "schedule", "workflow_dispatch"}:
         return True, True, True
     native = not all(documentation_only([path]) or path.startswith(("website/", ".github/assets/"))
@@ -67,11 +71,13 @@ def main() -> None:
         result = subprocess.run(["git", "diff", "--name-only", "-z", base, "HEAD"], capture_output=True, check=False)
         if result.returncode == 0:
             paths = [path for path in result.stdout.decode().split("\0") if path]
-    full, website, swift = select_stages(paths, name)
+    draft = name == "pull_request" and event.get("pull_request", {}).get("draft") is True
+    full, website, swift = select_stages(paths, name, draft)
     with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
         output.write(f"full={str(full).lower()}\nbase={base}\niterations={iterations}\nwebsite={str(website).lower()}\nswift={str(swift).lower()}\n")
     with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as output:
-        output.write(f"### CI selection\n\nFull native pipeline: **{full}**. Immutable baseline: `{base}`. "
+        output.write(f"### CI selection\n\nFull native pipeline: **{full}**. Draft pull request: **{draft}**. "
+                     f"Immutable baseline: `{base}`. "
                      f"Website checks: **{website}**. Swift CodeQL: **{swift}**. Requested probe repetitions: **{iterations}**; private/Quit minimum: **3**.\n")
 
 

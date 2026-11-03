@@ -24,9 +24,19 @@ namespace {
 constexpr size_t kMaximumArgumentsSize = 1024 * 1024;
 
 shaar_error_code Fail(shaar_error_code code, shaar_error* error) {
-  if (error && error->size >= offsetof(shaar_error, code) + sizeof(error->code))
+  if (error && error->size >= offsetof(shaar_error, code) + sizeof(error->code)) {
     error->code = code;
+    if (error->size >=
+        offsetof(shaar_error, platform_code) + sizeof(error->platform_code))
+      error->platform_code = 0;
+    if (error->size >= offsetof(shaar_error, message) + sizeof(error->message))
+      error->message = {nullptr, 0};
+  }
   return code;
+}
+
+shaar_error_code Succeed(shaar_error* error) {
+  return Fail(SHAAR_OK, error);
 }
 
 bool HasOneScope(const shaar_scope& scope) {
@@ -111,7 +121,7 @@ shaar_error_code HandleWindowBindProfile(const ModuleCall* call,
   const auto [it, inserted] =
       call->browsers_by_profile->emplace(*profile_id, call->scoped_browser);
   return inserted || it->second == call->scoped_browser
-             ? SHAAR_OK
+             ? Succeed(error)
              : Fail(SHAAR_CONFLICT, error);
 }
 
@@ -138,7 +148,7 @@ shaar_error_code HandleWindowSetActiveProfile(const ModuleCall* call,
     return Fail(SHAAR_WRONG_PROFILE, error);
   *call->active_browser = it->second;
   *call->active_profile_id = *profile_id;
-  return SHAAR_OK;
+  return Succeed(error);
 }
 
 shaar_error_code HandleWindowActivateTab(const ModuleCall* call,
@@ -162,7 +172,7 @@ shaar_error_code HandleWindowActivateTab(const ModuleCall* call,
   if (index < 0)
     return Fail(SHAAR_NOT_FOUND, error);
   call->tab_strip_model->ActivateTabAt(index);
-  return SHAAR_OK;
+  return Succeed(error);
 }
 
 shaar_error_code HandleWindowPlaceTabs(const ModuleCall* call,
@@ -201,7 +211,7 @@ shaar_error_code HandleWindowPlaceTabs(const ModuleCall* call,
     return Fail(SHAAR_INVALID_ARGUMENT, error);
   return ApplyPlacement(call->tab_strip_model, tab_ids, *call->bound_tabs,
                         pinned_ids)
-             ? SHAAR_OK
+             ? Succeed(error)
              : Fail(SHAAR_CONFLICT, error);
 }
 
@@ -236,7 +246,7 @@ shaar_error_code HandleTabMove(const ModuleCall* call, shaar_error* error) {
   if (is_pinned != target_is_pinned)
     return Fail(SHAAR_CONFLICT, error);
   call->tab_strip_model->MoveWebContentsAt(from, *to_index, false);
-  return SHAAR_OK;
+  return Succeed(error);
 }
 
 shaar_error_code HandleTabActivationResolve(const ModuleCall* call,
@@ -266,7 +276,7 @@ shaar_error_code HandleWindowSetBounds(const ModuleCall* call,
       *y < -100000 || *y > 100000)
     return Fail(SHAAR_INVALID_ARGUMENT, error);
   call->native_window->SetBounds(gfx::Rect(*x, *y, *width, *height));
-  return SHAAR_OK;
+  return Succeed(error);
 }
 
 }  // namespace shaar::windows_tabs

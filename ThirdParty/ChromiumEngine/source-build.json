@@ -46,7 +46,7 @@
   },
   "layer": {
     "path": "ThirdParty/ChromiumEngine/layer",
-    "sha256": "838c0db52d8c3f7d856b4a5e55e2238aa0b2da875bc98e722d11c97d0f5b8cdd",
+    "sha256": "17c92a5c715396419f0e7513723eda9e0cc2bbb22a47b487bc555845ccb5ddf8",
     "files": {
       "chrome/browser/shaar/BUILD.gn": "035c57076968c3b4bdbdc14d367e5386cc28b28a41519b77c733c56ae62b888c",
       "chrome/browser/shaar/engine/shaar_engine.cc": "07205a696ec84c0d9f210510c2e2fc9b9915c02e6ac4d06af2d6614ff7cb9d86",
@@ -57,7 +57,7 @@
       "chrome/browser/shaar/windows-tabs/shaar_module_registry.h": "f5843fc20f0f398874a7359b912172a60240691c95495d106adda97e649abeed",
       "chrome/browser/shaar/windows-tabs/shaar_windows_tabs.cc": "cd9ffbc35840260540e1c3c201ed6a6325623488075a6b0c5d857eeb237977ea",
       "chrome/browser/shaar/windows-tabs/shaar_windows_tabs.h": "b8d5f5ea658aae658a7ea96b146405d4700800a22b23632ff7c7274b0c1bc2ad",
-      "chrome/browser/shaar/windows-tabs/shaar_windows_tabs_handlers.cc": "50a5455440543ae9aefc80510ad4f9e1c9bfe9c317884cd1bf900b8727938a5a",
+      "chrome/browser/shaar/windows-tabs/shaar_windows_tabs_handlers.cc": "94c3d23367137f54e12df9f303eda2cd939cf2ba88261caa7167113856dee7a6",
       "chrome/browser/shaar/windows-tabs/shaar_windows_tabs_handlers.h": "c2c6f6cf257647730b417743b6fed68a4cbe706a5cc76e72f8d4cd28376bfee0",
       "chrome/browser/shaar/windows-tabs/shaar_windows_tabs_handlers_unittest.cc": "41cdf0afad867e406f4081a82a40855085fea8f511478c95a1d8aaa331f7160c"
     }

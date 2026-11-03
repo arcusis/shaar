@@ -234,6 +234,11 @@ private func bookmarkPayload(children: [[String: Any]]) -> [String: Any] {
     chromiumItems.contains { $0.title == "Untitled" && $0.folder == "Repeated / Untitled child" })
   #expect(!chromiumItems.contains { $0.title == "Invalid" })
 
+  let emptyChromium = directory.appendingPathComponent("EmptyChrome.json")
+  try JSONSerialization.data(withJSONObject: ["roots": ["bookmark_bar": [:]]]).write(
+    to: emptyChromium)
+  #expect(try BrowserImport.read(emptyChromium).isEmpty)
+
   let safari = directory.appendingPathComponent("Nested.plist")
   try PropertyListSerialization.data(
     fromPropertyList: [
@@ -252,6 +257,13 @@ private func bookmarkPayload(children: [[String: Any]]) -> [String: Any] {
   let safariItems = try BrowserImport.read(safari)
   #expect(safariItems.map(\.folder) == ["Folder", "Folder / Untitled"])
   #expect(safariItems[1].title == "Untitled")
+
+  let emptySafari = directory.appendingPathComponent("EmptySafari.plist")
+  try PropertyListSerialization.data(
+    fromPropertyList: ["Unexpected": "root"], format: .xml, options: 0
+  )
+  .write(to: emptySafari)
+  #expect(try BrowserImport.read(emptySafari).isEmpty)
 
   let firefox = directory.appendingPathComponent("Nested.json")
   try JSONSerialization.data(withJSONObject: [
@@ -286,6 +298,7 @@ private func bookmarkPayload(children: [[String: Any]]) -> [String: Any] {
   try PropertyListSerialization.data(fromPropertyList: ["bookmarks"], format: .xml, options: 0)
     .write(to: nonDictionaryPlist)
   #expect(throws: BrowserImport.ImportError.self) { try BrowserImport.read(nonDictionaryPlist) }
+  #expect(BrowserImport.ImportError.unsupported.errorDescription?.contains("Firefox") == true)
 
   let nonUTF8HTML = directory.appendingPathComponent("Binary.html")
   try Data([0xFF, 0xFE]).write(to: nonUTF8HTML)

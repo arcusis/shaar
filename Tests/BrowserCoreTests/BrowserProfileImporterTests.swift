@@ -1,0 +1,106 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+import BrowserCore
+import CSQLite
+import Foundation
+import Testing
+
+@Test func chromiumFamilyProfilesImportBookmarksAndHistoryWithSourceAttribution() throws {
+  for source in [BrowserImportSource.chrome, .edge, .brave, .arc] {
+    let profile = try profileDirectory(name: source.rawValue)
+    try copyFixture("ChromiumBookmarks", to: profile.appending(path: "Bookmarks"))
+    try createDatabase(
+      sqlFixture: "ChromiumHistory.sql", at: profile.appending(path: "History"))
+    let originalHistory = try Data(contentsOf: profile.appending(path: "History"))
+
+    let batch = try BrowserImport.readProfile(at: profile, source: source)
+    #expect(batch.source == source)
+    #expect(batch.bookmarks.count == 1 && batch.bookmarks[0].source == source)
+    #expect(batch.bookmarks[0].folder == "Work")
+    #expect(batch.history.count == 1 && batch.history[0].source == source)
+    #expect(batch.history[0].visitTimes.count == 2)
+    #expect(batch.history[0].visitTimes.last == Date(timeIntervalSince1970: 1_700_000_002))
+    #expect(try Data(contentsOf: profile.appending(path: "History")) == originalHistory)
+
+    let rows = BrowserImport.historyRows(for: batch.history)
+    #expect(rows.count == 1)
+    #expect(rows[0]["s"] as? String == source.rawValue)
+    #expect((rows[0]["v"] as? [Double])?.count == 2)
+    #expect(rows[0]["n"] as? Int == 2)
+  }
+}
+
+@Test func safariProfileImportsItsBookmarkPlistAndSafariEpochHistory() throws {
+  let profile = try profileDirectory(name: "Safari")
+  try copyFixture("SafariBookmarks.plist", to: profile.appending(path: "Bookmarks.plist"))
+  try createDatabase(sqlFixture: "SafariHistory.sql", at: profile.appending(path: "History.db"))
+
+  let batch = try BrowserImport.readProfile(at: profile, source: .safari)
+  #expect(batch.bookmarks.map(\.address) == ["https://safari.example.test/"])
+  #expect(batch.bookmarks[0].folder == "Reading")
+  #expect(batch.history.map(\.address) == ["https://safari-history.example.test/"])
+  #expect(batch.history[0].visitTimes == [Date(timeIntervalSince1970: 1_678_307_200)])
+  #expect(batch.items.allSatisfy { $0.source == .safari })
+}
+
+@Test func firefoxPlacesImportsBookmarkFoldersAndUnixMicrosecondVisits() throws {
+  let profile = try databaseURLProfile(name: "Firefox", databaseName: "places.sqlite")
+  try createDatabase(sqlFixture: "FirefoxPlaces.sql", at: profile)
+
+  let batch = try BrowserImport.readProfile(at: profile, source: .firefox)
+  #expect(batch.bookmarks.count == 2)
+  #expect(batch.bookmarks[0].folder == nil)
+  #expect(batch.bookmarks[0].address == "https://firefox-bookmark.example.test/")
+  #expect(batch.bookmarks[1].folder == "Research")
+  #expect(batch.bookmarks[1].address == "https://firefox-bookmark.example.test/")
+  #expect(batch.history.count == 1)
+  #expect(batch.history[0].visitTimes.count == 2)
+  #expect(batch.history[0].visitTimes.last == Date(timeIntervalSince1970: 1_700_000_000.2))
+  #expect(batch.items.allSatisfy { $0.source == .firefox })
+}
+
+@Test func privateBrowserProfileDirectoriesAreRejectedBeforeReading() throws {
+  for name in ["Incognito", "InPrivate", "Guest Profile", "Private Browsing"] {
+    let profile = try profileDirectory(name: name)
+    #expect(throws: BrowserImport.ImportError.self) {
+      try BrowserImport.readProfile(at: profile, source: .chrome)
+    }
+  }
+}
+
+private func profileDirectory(name: String) throws -> URL {
+  let root = FileManager.default.temporaryDirectory.appending(path: "BrowserImport-\(UUID())")
+  let profile = root.appending(path: name)
+  try FileManager.default.createDirectory(at: profile, withIntermediateDirectories: true)
+  return profile
+}
+
+private func databaseURLProfile(name: String, databaseName: String) throws -> URL {
+  let root = FileManager.default.temporaryDirectory.appending(path: "BrowserImport-\(UUID())")
+  try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+  return root.appending(path: databaseName)
+}
+
+private func copyFixture(_ name: String, to destination: URL) throws {
+  let source = try #require(Bundle.module.resourceURL?.appending(path: "BrowserImport/\(name)"))
+  try FileManager.default.copyItem(at: source, to: destination)
+}
+
+private func createDatabase(sqlFixture: String, at destination: URL) throws {
+  let source = try #require(
+    Bundle.module.resourceURL?.appending(path: "BrowserImport/\(sqlFixture)"))
+  let sql = try String(contentsOf: source, encoding: .utf8)
+  var database: OpaquePointer?
+  guard
+    sqlite3_open_v2(
+      destination.path, &database,
+      SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX,
+      nil) == SQLITE_OK, let database
+  else { throw BrowserImport.ImportError.databaseUnavailable("fixture setup") }
+  defer { sqlite3_close(database) }
+  guard sqlite3_exec(database, sql, nil, nil, nil) == SQLITE_OK else {
+    throw BrowserImport.ImportError.databaseUnavailable("fixture setup")
+  }
+}

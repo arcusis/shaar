@@ -1003,6 +1003,10 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 - (void)deleteHistoryURL:(NSString *)url profileID:(NSString *)profileID completion:(void (^)(NSError *))completion {
   [_libraryService deleteHistoryURL:url profileID:profileID completion:completion];
 }
+- (void)importHistoryRows:(NSArray<NSDictionary *> *)rows source:(NSString *)source
+  profileID:(NSString *)profileID completion:(void (^)(NSError *))completion {
+  [_libraryService importHistoryRows:rows source:source profileID:profileID completion:completion];
+}
 - (BOOL)findInTabID:(NSString *)tabID profileID:(NSString *)profileID requestID:(NSString *)requestID
               text:(NSString *)text forward:(BOOL)forward {
   ArdiaCoreTab *tab = _tabs[tabID];

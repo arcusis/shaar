@@ -8,18 +8,23 @@ public struct BrowserImportItem: Identifiable, Equatable, Sendable {
   public enum Kind: String, Sendable { case bookmark, history }
   public let id: UUID
   public let kind: Kind
+  public let source: BrowserImportSource
   public let title: String
   public let address: String
   public let folder: String?
+  public let visitTimes: [Date]
 
   public init(
-    id: UUID = UUID(), kind: Kind = .bookmark, title: String, address: String, folder: String? = nil
+    id: UUID = UUID(), kind: Kind = .bookmark, source: BrowserImportSource = .chrome,
+    title: String, address: String, folder: String? = nil, visitTimes: [Date] = []
   ) {
     self.id = id
     self.kind = kind
+    self.source = source
     self.title = title
     self.address = address
     self.folder = folder
+    self.visitTimes = visitTimes
   }
 }
 
@@ -46,6 +51,33 @@ public enum BrowserImport {
       return firefox(root)
     }
     throw ImportError.unsupported
+  }
+
+  public static func readProfile(at url: URL, source: BrowserImportSource) throws
+    -> BrowserImportBatch
+  {
+    try BrowserProfileImporters.importer(for: source).read(profileAt: url)
+  }
+
+  public static func read(_ url: URL, source: BrowserImportSource) throws -> BrowserImportBatch {
+    let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+    if isDirectory { return try readProfile(at: url, source: source) }
+    let items = try read(url).map { $0.with(source: source) }
+    return BrowserImportBatch(source: source, items: items)
+  }
+
+  public static func historyRows(for items: [BrowserImportItem]) -> [[String: Any]] {
+    items.compactMap { item in
+      guard item.kind == .history, !item.visitTimes.isEmpty,
+        let latest = item.visitTimes.max()
+      else { return nil }
+      let visits = item.visitTimes.map { $0.timeIntervalSince1970 * 1_000 }
+      return [
+        "u": item.address, "t": item.title, "n": visits.count,
+        "l": latest.timeIntervalSince1970 * 1_000,
+        "v": visits, "s": item.source.rawValue,
+      ]
+    }
   }
 
   public static func operations(for items: [BrowserImportItem], otherFolderID: UUID) -> [[String:
@@ -216,8 +248,28 @@ public enum BrowserImport {
 
   public enum ImportError: Error, LocalizedError {
     case unsupported
+    case privateProfile
+    case databaseUnavailable(String)
+    case tooManyRows
     public var errorDescription: String? {
-      "Choose a Safari Bookmarks.plist, a Chrome or Arc Bookmarks file, or an exported Firefox bookmarks HTML or JSON file."
+      switch self {
+      case .unsupported:
+        "Choose a supported browser profile folder or bookmark export."
+      case .privateProfile:
+        "Private browser profiles cannot be imported. Choose a regular profile."
+      case .databaseUnavailable:
+        "The selected browser history database could not be read safely."
+      case .tooManyRows:
+        "The selected browser profile contains more data than can be imported at once."
+      }
     }
+  }
+}
+
+extension BrowserImportItem {
+  func with(source: BrowserImportSource) -> BrowserImportItem {
+    BrowserImportItem(
+      id: id, kind: kind, source: source, title: title, address: address, folder: folder,
+      visitTimes: visitTimes)
   }
 }

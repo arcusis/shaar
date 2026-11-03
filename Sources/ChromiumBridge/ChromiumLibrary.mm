@@ -4,7 +4,9 @@
 
 #import "ChromiumLibrary.h"
 #import "include/ChromiumBridge.h"
+#import <CoreFoundation/CoreFoundation.h>
 #include <limits.h>
+#include <math.h>
 
 static NSError *LibraryError(NSString *message) {
   return [NSError errorWithDomain:@"com.arcusis.browser.library" code:1 userInfo:@{NSLocalizedDescriptionKey: ARCBridgeLocalizedString(message)}];
@@ -90,5 +92,33 @@ static BOOL LibraryURL(id value, BOOL webOnly) {
   [_services call:@"history.delete_urls" profileID:profileID args:@{@"urls": @[url]} completion:^(NSDictionary *result) {
     completion([result[@"ok"] isEqual:@YES] ? nil : LibraryError(@"History deletion was not confirmed."));
   }];
+}
+
+- (void)importHistoryRows:(NSArray<NSDictionary *> *)rows source:(NSString *)source
+  profileID:(NSString *)profileID completion:(void (^)(NSError *))completion {
+  NSSet *sources = [NSSet setWithArray:@[@"chrome", @"edge", @"brave", @"arc", @"safari", @"firefox"]];
+  if (![sources containsObject:source] || !rows.count || rows.count > 10000) {
+    completion(LibraryError(@"Invalid browser history import.")); return;
+  }
+  for (id value in rows) {
+    if (![value isKindOfClass:NSDictionary.class]) {
+      completion(LibraryError(@"Invalid browser history import.")); return;
+    }
+    NSDictionary *row = value;
+    id url = row[@"u"], title = row[@"t"], count = row[@"n"], last = row[@"l"];
+    if (!LibraryURL(url, YES) || ![title isKindOfClass:NSString.class] || [title length] > 4096 ||
+        ![count isKindOfClass:NSNumber.class] || CFGetTypeID((__bridge CFTypeRef)count) == CFBooleanGetTypeID() ||
+        !isfinite([count doubleValue]) || [count doubleValue] >= (double)LLONG_MAX ||
+        [count longLongValue] < 1 || [count doubleValue] != (double)[count longLongValue] ||
+        ![last isKindOfClass:NSNumber.class] || CFGetTypeID((__bridge CFTypeRef)last) == CFBooleanGetTypeID() ||
+        !isfinite([last doubleValue]) || [last doubleValue] <= 0) {
+      completion(LibraryError(@"Invalid browser history import row.")); return;
+    }
+  }
+  [_services call:@"history.import" profileID:profileID args:@{@"source": source, @"rows": rows}
+    completion:^(NSDictionary *result) {
+      completion([result[@"ok"] isEqual:@YES] ? nil :
+        LibraryError(@"Browser history could not be imported into this profile."));
+    }];
 }
 @end

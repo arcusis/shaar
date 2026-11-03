@@ -16,6 +16,7 @@ struct LibraryPanel: View {
   @State private var removing: UUID?
   @State private var choosingImport = false
   @State private var importPreview: [BrowserImportItem] = []
+  @State private var importSource: BrowserImportSource = .chrome
   @State private var importError: String?
   @State private var showingImportPreview = false
 
@@ -115,7 +116,18 @@ struct LibraryPanel: View {
           }
         }
         Spacer()
-        Button(PanelsL10n.string("Import…")) { choosingImport = true }
+        Menu {
+          ForEach(BrowserImportSource.allCases) { source in
+            Button {
+              importSource = source
+              choosingImport = true
+            } label: {
+              Text(verbatim: source.title)
+            }
+          }
+        } label: {
+          Label(PanelsL10n.string("Import…"), systemImage: "square.and.arrow.down")
+        }
         if loading || busy { ProgressView().controlSize(.small) }
         Button(PanelsL10n.string("Refresh")) { store.library.refresh(profileID, section: section) }
       }
@@ -123,12 +135,14 @@ struct LibraryPanel: View {
     }
     .padding(24).frame(width: 600, height: 480)
     .background(Color(nsColor: .windowBackgroundColor))
-    .fileImporter(isPresented: $choosingImport, allowedContentTypes: [.item]) { result in
+    .fileImporter(
+      isPresented: $choosingImport, allowedContentTypes: [.item, .folder]
+    ) { result in
       do {
         let url = try result.get()
         let access = url.startAccessingSecurityScopedResource()
         defer { if access { url.stopAccessingSecurityScopedResource() } }
-        importPreview = try BrowserImport.read(url)
+        importPreview = try BrowserImport.read(url, source: importSource).items
         importError = nil
         showingImportPreview = true
       } catch {
@@ -167,15 +181,16 @@ struct LibraryPanel: View {
 
   private var importPreviewSheet: some View {
     BrowserImportPreviewView(
-      items: importPreview, profileName: store.profileName, error: importError,
+      items: importPreview, source: importSource, profileName: store.profileName,
+      error: importError,
       canImport: !importPreview.isEmpty && !busy && !loading,
       onCancel: { showingImportPreview = false }, onImport: applyImport)
   }
 
   private func applyImport() {
-    guard ownsContext, let tree, !importPreview.isEmpty else { return }
-    store.library.importBookmarks(
-      importPreview, profile: profileID, otherFolderID: tree.otherID,
+    guard ownsContext, !importPreview.isEmpty else { return }
+    store.library.importBrowserData(
+      importPreview, profile: profileID, otherFolderID: tree?.otherID ?? UUID(),
       completion: { success in
         if success { showingImportPreview = false }
       })

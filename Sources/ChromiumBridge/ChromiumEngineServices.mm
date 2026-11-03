@@ -69,6 +69,8 @@ static void ServiceEvent(void *context, const char *topic, const char *json) {
     void *address = dlsym(library, symbol.UTF8String);
     if (address) calls[method] = [NSValue valueWithPointer:address];
   }
+  void *historyImport = dlsym(library, "ac_history_import");
+  if (historyImport) calls[@"history.import"] = [NSValue valueWithPointer:historyImport];
   _paths = [NSMutableDictionary dictionary];
   _profilesByPath = [NSMutableDictionary dictionary];
   return self;

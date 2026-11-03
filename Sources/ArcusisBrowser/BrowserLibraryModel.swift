@@ -15,11 +15,12 @@ enum LibraryMutation {
   case bookmark([String: Any])
   case bookmarks([[String: Any]])
   case deleteHistory(String)
+  case importHistory(source: BrowserImportSource, rows: [[String: Any]])
 
   var section: LibrarySection {
     switch self {
     case .bookmark, .bookmarks: .bookmarks
-    case .deleteHistory: .history
+    case .deleteHistory, .importHistory: .history
     }
   }
 }
@@ -127,6 +128,39 @@ final class BrowserLibraryModel {
     let operations = BrowserImport.operations(for: items, otherFolderID: otherFolderID)
     guard !operations.isEmpty else { return false }
     return mutate(.bookmarks(operations), profile: profile, completion: completion)
+  }
+
+  @discardableResult
+  func importBrowserData(
+    _ items: [BrowserImportItem], profile: UUID, otherFolderID: UUID,
+    completion: @escaping @MainActor (Bool) -> Void
+  ) -> Bool {
+    guard let source = items.first?.source else { return false }
+    var mutations: [LibraryMutation] = []
+    let bookmarkOperations = BrowserImport.operations(for: items, otherFolderID: otherFolderID)
+    if !bookmarkOperations.isEmpty { mutations.append(.bookmarks(bookmarkOperations)) }
+    let historyRows = BrowserImport.historyRows(for: items)
+    if !historyRows.isEmpty { mutations.append(.importHistory(source: source, rows: historyRows)) }
+    guard !mutations.isEmpty else { return false }
+
+    func apply(_ index: Int) {
+      guard index < mutations.count else {
+        completion(true)
+        return
+      }
+      guard
+        mutate(
+          mutations[index], profile: profile,
+          completion: { succeeded in
+            if succeeded { apply(index + 1) } else { completion(false) }
+          })
+      else {
+        completion(false)
+        return
+      }
+    }
+    apply(0)
+    return true
   }
 
   @discardableResult

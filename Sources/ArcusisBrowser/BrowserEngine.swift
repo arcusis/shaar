@@ -226,6 +226,9 @@ final class BrowserEngine {
         self.applyImportedBookmarks(operations, profileID: profile, completion: done)
       case .deleteHistory(let url):
         self.events.deleteHistoryURL(url, profileID: profile.uuidString, completion: done)
+      case .importHistory(let source, let rows):
+        self.runtime.importHistoryRows(
+          rows, source: source.rawValue, profileID: profile.uuidString, completion: done)
       }
     }
     callbacks.onLibraryChanged = { [weak store] owner, value in

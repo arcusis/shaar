@@ -3,8 +3,8 @@
   "sourceCommit": "91e17a5655519d2dc385ec8452432469232ff9af",
   "sourceTag": "v0.2.39",
   "engineTree": "0fd438ac5e7847948832ff6dd080ce9ab0206464",
-  "archiveURL": "https://github.com/mantrakp04/ardia/releases/download/v0.2.39-nightly.9/ArdiaCore-0fd438ac5e78.tar.xz",
-  "sha256": "90217217a1156e0ae70deec1f9e54b0f1e6686b3f890a8581f1aa7c6e44f8aba",
+  "archiveURL": "https://github.com/arcusis/shaar/releases/download/engine-155.0.8059.84-shaar.1/ArdiaCore-0fd438ac5e78-shaar.1.tar.xz",
+  "sha256": "32adef80bd02324f186cda13ab226fa2cb8fdb5334cb4fd346e67266642fd2f6",
   "chromiumVersion": "155.0.8059.84",
   "architecture": "arm64"
 }

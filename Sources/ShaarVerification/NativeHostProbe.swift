@@ -112,6 +112,7 @@ final class NativeHostProbe {
   private let lock: WorkspaceProcessLock
   private let file: WorkspaceFile
   private var host: NativeBrowserHost?
+  private var quitReadiness = NativeHostQuitReadiness()
   private var focused: NSWindow?
   private var closures: [UUID: Bool] = [:]
   private var checks: [String] = []
@@ -262,6 +263,7 @@ final class NativeHostProbe {
     } else {
       let saved = try JSONDecoder().decode(
         HostProbeIdentity.self, from: Data(contentsOf: checkpoint))
+      quitReadiness.markIdentityCheckpointReady()
       authoredProfile = saved.authoredProfile
       renamedProfile = saved.renamedProfile
       firstID = saved.first
@@ -605,6 +607,7 @@ final class NativeHostProbe {
         engineTab: host.contexts[requested.retained]?.store.session.selectedSpace.selectedTabID,
         authoredProfile: authoredProfile, renamedProfile: renamedProfile)
     ).write(to: checkpoint, options: .atomic)
+    quitReadiness.markIdentityCheckpointReady()
     try expect(
       host.lastError == nil && manager.storageNotice == nil,
       "native host completes without startup, geometry, or persistence errors")
@@ -1038,7 +1041,9 @@ final class NativeHostProbe {
   }
 
   func prepareForQuit() throws {
-    guard let host else { return }
+    // Earlier fixture failures can finish before exercise() creates or loads this checkpoint.
+    // Preserve the original failure and do not turn an unready host into a snapshot failure.
+    guard quitReadiness.canPrepareQuitSnapshot, let host else { return }
     host.flushGeometry()
     guard host.workspace.persistSnapshot() else {
       throw HostProbeFailure("Host quit snapshot failed.")

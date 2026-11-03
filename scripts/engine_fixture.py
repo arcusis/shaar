@@ -638,7 +638,11 @@ border:2px solid #1e40af;border-radius:6px;background:#2563eb;color:white}
             self.send_header("Set-Cookie", cookie)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            # Chromium can leave a fixture request in flight while switching tabs.
+            pass
 
     def download(self, name):
         cookies = SimpleCookie(self.headers.get('Cookie', ''))

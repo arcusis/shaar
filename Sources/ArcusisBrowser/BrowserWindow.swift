@@ -19,11 +19,18 @@ extension SpaceTint {
 struct BrowserWindow: View {
   @Bindable var store: BrowserStore
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.browserChromeAccessibilityOverrides) private var accessibilityOverrides
   @Environment(\.colorScheme) private var colorScheme
   @FocusState private var pageIsFocused: Bool
   @State private var webContentFrame: CGRect = .zero
   @State private var sidebarVisibility: SidebarVisibility = .pinned
   @State private var isFullScreen = false
+  @State private var spacePagerState = SpacePagerState()
+  @State private var pageEntryEdge: Edge = .trailing
+
+  private var spaceReduceMotion: Bool {
+    reduceMotion || accessibilityOverrides.reduceMotion == true
+  }
 
   var body: some View {
     ZStack(alignment: .top) {
@@ -57,9 +64,14 @@ struct BrowserWindow: View {
           page
             .padding(BrowserChromeLayout.pageCardInset)
             .frame(width: pageWidth)
+            .offset(x: spaceReduceMotion ? 0 : spacePagerState.offset)
         }
         .frame(width: geometry.size.width, height: geometry.size.height, alignment: .leading)
         .clipped()
+        .animation(
+          spaceReduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.85),
+          value: store.session.selectedSpaceID
+        )
         .animation(reduceMotion ? nil : .spring(duration: 0.3), value: store.libraryDrawerSection)
       }
       sidebarLayer
@@ -90,6 +102,14 @@ struct BrowserWindow: View {
     .onAppear { sidebarVisibility.setPinned(store.sidebarIsVisible) }
     .onChange(of: store.sidebarIsVisible) { _, pinned in
       sidebarVisibility.setPinned(pinned)
+    }
+    .onChange(of: store.session.selectedSpaceID) { oldID, newID in
+      let spaces = store.session.spaces
+      if let oldIndex = spaces.firstIndex(where: { $0.id == oldID }),
+        let newIndex = spaces.firstIndex(where: { $0.id == newID }), oldIndex != newIndex
+      {
+        pageEntryEdge = newIndex > oldIndex ? .trailing : .leading
+      }
     }
     .modifier(SpaceMenuDialogs(store: store))
     .sheet(
@@ -218,6 +238,13 @@ struct BrowserWindow: View {
         Text(notice).font(.caption).foregroundStyle(.orange).padding(12)
       }
     }
+    .id(store.session.selectedSpaceID)
+    .transition(
+      .asymmetric(
+        insertion: .move(edge: pageEntryEdge),
+        removal: .move(edge: pageEntryEdge == .trailing ? .leading : .trailing)
+      )
+    )
     .background(Color(nsColor: .textBackgroundColor))
     .clipShape(RoundedRectangle(cornerRadius: BrowserChromeLayout.pageCardRadius))
     .overlay(
@@ -245,7 +272,7 @@ struct BrowserWindow: View {
             }
           }
           HStack(spacing: 0) {
-            BrowserSidebar(store: store)
+            BrowserSidebar(store: store, pagerState: spacePagerState)
               .frame(width: BrowserChromeLayout.sidebarWidth)
               .modifier(SidebarHiddenOffset(isHidden: sidebarVisibility == .hidden))
               .allowsHitTesting(sidebarVisibility != .hidden)

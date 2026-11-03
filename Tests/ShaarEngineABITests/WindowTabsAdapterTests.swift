@@ -10,11 +10,19 @@ import Testing
 @MainActor private final class FakeWindowTabsEngine: ShaarWindowTabsEngine {
   var calls: [String] = []
   func openWindow(id: String, scope: ShaarTabScope) throws { calls.append("window+\(id)") }
+  func borrowedWindowHostView(id: String) throws -> UnsafeMutableRawPointer? {
+    calls.append("view-window:\(id)")
+    return UnsafeMutableRawPointer(bitPattern: 0x1234)
+  }
   func bindProfile(id: String, windowID: String) throws { calls.append("bind:\(id)") }
   func setActiveProfile(id: String, windowID: String) throws { calls.append("profile:\(id)") }
   func closeWindow(id: String) throws { calls.append("window-\(id)") }
   func openTab(id: String, windowID: String, url: URL, foreground: Bool) throws {
     calls.append("tab+\(id):\(foreground)")
+  }
+  func borrowedTabHostView(id: String) throws -> UnsafeMutableRawPointer? {
+    calls.append("view-tab:\(id)")
+    return UnsafeMutableRawPointer(bitPattern: 0x5678)
   }
   func closeTab(id: String) throws { calls.append("tab-\(id)") }
   func activateTab(id: String, windowID: String) throws { calls.append("activate:\(id)") }
@@ -23,11 +31,34 @@ import Testing
   }
 }
 
+@MainActor private func makeShaarAdapter(
+  _ engine: ShaarWindowTabsEngine
+) -> ShaarWindowTabsAdapter {
+  ShaarWindowTabsAdapter.makeIfSelected(engine: engine, implementation: .shaar)!
+}
+
 @Suite("Shaar windows and tabs adapter")
 struct WindowTabsAdapterTests {
+  @Test @MainActor func adapterIsUnavailableOnArdiaShippingDefault() {
+    #expect(
+      ShaarWindowTabsAdapter.makeIfSelected(engine: FakeWindowTabsEngine()) == nil)
+  }
+
+  @Test @MainActor func hostViewsRemainBorrowedAndRequireLiveHandles() throws {
+    let fake = FakeWindowTabsEngine()
+    let adapter = makeShaarAdapter(fake)
+    try adapter.openWindow(id: "window-a", scope: .profile("profile-a"))
+    #expect(
+      try adapter.borrowedWindowHostView(id: "window-a")
+        == UnsafeMutableRawPointer(bitPattern: 0x1234))
+    #expect(throws: ShaarWindowTabsError.unknownTab) {
+      try adapter.borrowedTabHostView(id: "missing")
+    }
+  }
+
   @Test @MainActor func foregroundAndBackgroundTabsKeepStableOrderAndSelection() throws {
     let fake = FakeWindowTabsEngine()
-    let adapter = ShaarWindowTabsAdapter(engine: fake)
+    let adapter = makeShaarAdapter(fake)
     let scope = ShaarTabScope.profile("profile-a")
     try adapter.openWindow(id: "window-a", scope: scope)
     try adapter.openTab(
@@ -43,7 +74,7 @@ struct WindowTabsAdapterTests {
 
   @Test @MainActor func placementRejectsDuplicatesAndNonPrefixPinnedIDsAtomically() throws {
     let fake = FakeWindowTabsEngine()
-    let adapter = ShaarWindowTabsAdapter(engine: fake)
+    let adapter = makeShaarAdapter(fake)
     let scope = ShaarTabScope.profile("profile-a")
     try adapter.openWindow(id: "window-a", scope: scope)
     for id in ["a", "b"] {
@@ -63,7 +94,7 @@ struct WindowTabsAdapterTests {
 
   @Test @MainActor func privateScopeAndTabOwnershipAreChecked() throws {
     let fake = FakeWindowTabsEngine()
-    let adapter = ShaarWindowTabsAdapter(engine: fake)
+    let adapter = makeShaarAdapter(fake)
     let privateScope = ShaarTabScope.privateSession(profileID: "profile-a", sessionID: "session-a")
     try adapter.openWindow(id: "private-window", scope: privateScope)
     #expect(throws: ShaarWindowTabsError.scopeMismatch) {
@@ -81,7 +112,7 @@ struct WindowTabsAdapterTests {
 
   @Test @MainActor func closeRequestsKeepHandlesUntilChromiumConfirmsRemoval() throws {
     let fake = FakeWindowTabsEngine()
-    let adapter = ShaarWindowTabsAdapter(engine: fake)
+    let adapter = makeShaarAdapter(fake)
     let scope = ShaarTabScope.profile("profile-a")
     try adapter.openWindow(id: "window-a", scope: scope)
     try adapter.openTab(
@@ -102,7 +133,7 @@ struct WindowTabsAdapterTests {
 
   @Test @MainActor func regularWindowRequiresBindingBeforeProfileSwitchOrTabOpen() throws {
     let fake = FakeWindowTabsEngine()
-    let adapter = ShaarWindowTabsAdapter(engine: fake)
+    let adapter = makeShaarAdapter(fake)
     try adapter.openWindow(id: "window-a", scope: .profile("profile-a"))
     #expect(throws: ShaarWindowTabsError.scopeMismatch) {
       try adapter.setActiveProfile(id: "profile-b", windowID: "window-a")
@@ -114,5 +145,9 @@ struct WindowTabsAdapterTests {
       url: URL(string: "https://b.example")!, foreground: true)
     #expect(adapter.snapshot(windowID: "window-a")?.boundProfileIDs == ["profile-a", "profile-b"])
     #expect(adapter.snapshot(windowID: "window-a")?.activeProfileID == "profile-b")
+    try adapter.setActiveProfile(id: "profile-a", windowID: "window-a")
+    #expect(adapter.snapshot(windowID: "window-a")?.orderedTabIDs == [])
+    try adapter.setActiveProfile(id: "profile-b", windowID: "window-a")
+    #expect(adapter.snapshot(windowID: "window-a")?.activeTabID == "tab-b")
   }
 }

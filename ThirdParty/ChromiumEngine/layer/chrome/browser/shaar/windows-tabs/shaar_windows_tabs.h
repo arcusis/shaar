@@ -26,7 +26,8 @@ bool ValidatePlacement(const std::vector<std::string>& requested_ids,
 // TabStripModel API. Tab IDs are caller-owned identities, never Chromium IDs.
 bool ApplyPlacement(TabStripModel* model,
                     const std::vector<std::string>& requested_ids,
-                    const std::unordered_map<std::string, content::WebContents*>& current_tabs,
+                    const std::unordered_map<std::string,
+                                             content::WebContents*>& current_tabs,
                     const std::vector<std::string>& pinned_ids);
 
 }  // namespace shaar::windows_tabs

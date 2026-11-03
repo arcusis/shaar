@@ -1,0 +1,269 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+#include "chrome/browser/shaar/windows-tabs/shaar_windows_tabs_handlers.h"
+
+#include <stddef.h>
+
+#include <algorithm>
+#include <initializer_list>
+#include <optional>
+#include <string_view>
+#include <unordered_set>
+#include <vector>
+
+#include "base/json/json_reader.h"
+#include "chrome/browser/shaar/windows-tabs/shaar_windows_tabs.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
+
+namespace {
+
+constexpr size_t kMaximumArgumentsSize = 1024 * 1024;
+
+shaar_error_code Fail(shaar_error_code code, shaar_error* error) {
+  if (error && error->size >= offsetof(shaar_error, code) + sizeof(error->code))
+    error->code = code;
+  return code;
+}
+
+bool HasOneScope(const shaar_scope& scope) {
+  return (scope.profile != nullptr) != (scope.private_session != nullptr);
+}
+
+std::optional<base::Value> ParseArguments(const shaar::ModuleCall* call) {
+  if (!call || !call->args_json.data || !call->args_json.size ||
+      call->args_json.size > kMaximumArgumentsSize)
+    return std::nullopt;
+  auto value = base::JSONReader::Read(
+      std::string_view(call->args_json.data, call->args_json.size), 0);
+  if (!value || !value->is_dict() ||
+      value->GetDict().FindInt("schemaVersion") != 1)
+    return std::nullopt;
+  return value;
+}
+
+bool HasOnlyKeys(const base::Value::Dict& dict,
+                 std::initializer_list<std::string_view> keys) {
+  for (const auto& entry : dict) {
+    if (std::find(keys.begin(), keys.end(), entry.first) == keys.end())
+      return false;
+  }
+  return true;
+}
+
+bool ReadStringList(const base::Value::Dict& dict,
+                    std::string_view key,
+                    std::vector<std::string>* output) {
+  const base::Value::List* list = dict.FindList(key);
+  if (!list)
+    return false;
+  for (const auto& value : *list) {
+    if (!value.is_string() || value.GetString().empty())
+      return false;
+    output->push_back(value.GetString());
+  }
+  return true;
+}
+
+shaar_error_code ValidateCall(const shaar::ModuleCall* call,
+                              shaar_operation expected,
+                              bool needs_window,
+                              bool needs_tab,
+                              shaar_error* error) {
+  if (!call || !call->engine || call->operation != expected ||
+      !HasOneScope(call->scope) || (needs_window && !call->window) ||
+      (needs_tab && !call->tab) || call->scope.size < sizeof(shaar_scope))
+    return Fail(SHAAR_INVALID_ARGUMENT, error);
+  if (!call->args_json.data || !call->args_json.size ||
+      call->args_json.size > kMaximumArgumentsSize)
+    return Fail(SHAAR_INVALID_ARGUMENT, error);
+  auto value = base::JSONReader::Read(
+      std::string_view(call->args_json.data, call->args_json.size), 0);
+  if (!value || !value->is_dict() ||
+      value->GetDict().FindInt("schemaVersion") != 1)
+    return Fail(SHAAR_INVALID_ARGUMENT, error);
+  return SHAAR_UNSUPPORTED_CAPABILITY;
+}
+
+}  // namespace
+
+namespace shaar::windows_tabs {
+
+shaar_error_code HandleWindowBindProfile(const ModuleCall* call,
+                                         shaar_error* error) {
+  if (call && call->scope.private_session && !call->scope.profile)
+    return Fail(SHAAR_WRONG_SESSION, error);
+  const shaar_error_code validation =
+      ValidateCall(call, SHAAR_OP_WINDOW_BIND_PROFILE, true, false, error);
+  if (validation != SHAAR_UNSUPPORTED_CAPABILITY)
+    return validation;
+  auto args = ParseArguments(call);
+  if (!args || !HasOnlyKeys(args->GetDict(), {"schemaVersion", "profileID"}) ||
+      !call->scope_profile_id || !call->scoped_browser ||
+      !call->browsers_by_profile)
+    return Fail(SHAAR_INVALID_ARGUMENT, error);
+  const std::string* profile_id = args->GetDict().FindString("profileID");
+  if (!profile_id || profile_id->empty() || *profile_id != call->scope_profile_id)
+    return Fail(SHAAR_WRONG_PROFILE, error);
+  const auto [it, inserted] =
+      call->browsers_by_profile->emplace(*profile_id, call->scoped_browser);
+  return inserted || it->second == call->scoped_browser
+             ? SHAAR_OK
+             : Fail(SHAAR_CONFLICT, error);
+}
+
+shaar_error_code HandleWindowSetActiveProfile(const ModuleCall* call,
+                                              shaar_error* error) {
+  if (call && call->scope.private_session && !call->scope.profile)
+    return Fail(SHAAR_WRONG_SESSION, error);
+  const shaar_error_code validation = ValidateCall(
+      call, SHAAR_OP_WINDOW_SET_ACTIVE_PROFILE, true, false, error);
+  if (validation != SHAAR_UNSUPPORTED_CAPABILITY)
+    return validation;
+  auto args = ParseArguments(call);
+  if (!args || !HasOnlyKeys(args->GetDict(), {"schemaVersion", "profileID"}) ||
+      !call->active_browser || !call->active_profile_id ||
+      !call->browsers_by_profile)
+    return Fail(SHAAR_INVALID_ARGUMENT, error);
+  const std::string* profile_id = args->GetDict().FindString("profileID");
+  if (!profile_id || profile_id->empty())
+    return Fail(SHAAR_INVALID_ARGUMENT, error);
+  const auto it = call->browsers_by_profile->find(*profile_id);
+  if (it == call->browsers_by_profile->end())
+    return Fail(SHAAR_WRONG_PROFILE, error);
+  *call->active_browser = it->second;
+  *call->active_profile_id = *profile_id;
+  return SHAAR_OK;
+}
+
+shaar_error_code HandleWindowActivateTab(const ModuleCall* call,
+                                         shaar_error* error) {
+  const shaar_error_code validation =
+      ValidateCall(call, SHAAR_OP_WINDOW_ACTIVATE_TAB, true, true, error);
+  if (validation != SHAAR_UNSUPPORTED_CAPABILITY)
+    return validation;
+  auto args = ParseArguments(call);
+  if (!args || !call->tab_strip_model || !call->bound_tabs)
+    return Fail(SHAAR_INVALID_ARGUMENT, error);
+  if (!HasOnlyKeys(args->GetDict(), {"schemaVersion", "tabID"}))
+    return Fail(SHAAR_INVALID_ARGUMENT, error);
+  const std::string* tab_id = args->GetDict().FindString("tabID");
+  if (!tab_id || tab_id->empty() || *tab_id != call->tab_id)
+    return Fail(SHAAR_INVALID_ARGUMENT, error);
+  const auto it = call->bound_tabs->find(*tab_id);
+  if (it == call->bound_tabs->end())
+    return Fail(SHAAR_NOT_FOUND, error);
+  const int index = call->tab_strip_model->GetIndexOfWebContents(it->second);
+  if (index < 0)
+    return Fail(SHAAR_NOT_FOUND, error);
+  call->tab_strip_model->ActivateTabAt(index);
+  return SHAAR_OK;
+}
+
+shaar_error_code HandleWindowPlaceTabs(const ModuleCall* call,
+                                       shaar_error* error) {
+  const shaar_error_code validation =
+      ValidateCall(call, SHAAR_OP_WINDOW_PLACE_TABS, true, false, error);
+  if (validation != SHAAR_UNSUPPORTED_CAPABILITY)
+    return validation;
+  auto args = ParseArguments(call);
+  if (!args || !call->tab_strip_model || !call->bound_tabs)
+    return Fail(SHAAR_INVALID_ARGUMENT, error);
+  if (!HasOnlyKeys(args->GetDict(),
+                   {"schemaVersion", "tabIDs", "pinnedIDs"}))
+    return Fail(SHAAR_INVALID_ARGUMENT, error);
+  std::vector<std::string> tab_ids;
+  std::vector<std::string> pinned_ids;
+  if (!ReadStringList(args->GetDict(), "tabIDs", &tab_ids) ||
+      !ReadStringList(args->GetDict(), "pinnedIDs", &pinned_ids))
+    return Fail(SHAAR_INVALID_ARGUMENT, error);
+  const std::unordered_set<std::string> requested(tab_ids.begin(), tab_ids.end());
+  const std::unordered_set<std::string> pinned(pinned_ids.begin(), pinned_ids.end());
+  std::vector<std::string> current_ids;
+  current_ids.reserve(call->bound_tabs->size());
+  for (const auto& [id, contents] : *call->bound_tabs) {
+    if (id.empty() || !contents)
+      return Fail(SHAAR_CONFLICT, error);
+    current_ids.push_back(id);
+  }
+  const std::unordered_set<std::string> current(current_ids.begin(),
+                                                 current_ids.end());
+  if (requested.size() != tab_ids.size() || pinned.size() != pinned_ids.size())
+    return Fail(SHAAR_INVALID_ARGUMENT, error);
+  if (requested != current)
+    return Fail(SHAAR_CONFLICT, error);
+  if (!ValidatePlacement(tab_ids, current_ids, pinned_ids))
+    return Fail(SHAAR_INVALID_ARGUMENT, error);
+  return ApplyPlacement(call->tab_strip_model, tab_ids, *call->bound_tabs,
+                        pinned_ids)
+             ? SHAAR_OK
+             : Fail(SHAAR_CONFLICT, error);
+}
+
+shaar_error_code HandleWindowRequestResolve(const ModuleCall* call,
+                                            shaar_error* error) {
+  return ValidateCall(call, SHAAR_OP_WINDOW_REQUEST_RESOLVE, true, false,
+                      error);
+}
+
+shaar_error_code HandleTabMove(const ModuleCall* call, shaar_error* error) {
+  const shaar_error_code validation =
+      ValidateCall(call, SHAAR_OP_TAB_MOVE, true, true, error);
+  if (validation != SHAAR_UNSUPPORTED_CAPABILITY)
+    return validation;
+  auto args = ParseArguments(call);
+  if (!args || !HasOnlyKeys(args->GetDict(), {"schemaVersion", "tabID", "toIndex"}) ||
+      !call->tab_strip_model || !call->bound_tabs)
+    return Fail(SHAAR_INVALID_ARGUMENT, error);
+  const std::string* tab_id = args->GetDict().FindString("tabID");
+  const std::optional<int> to_index = args->GetDict().FindInt("toIndex");
+  if (!tab_id || tab_id->empty() || *tab_id != call->tab_id || !to_index ||
+      *to_index < 0 || *to_index >= call->tab_strip_model->count())
+    return Fail(SHAAR_INVALID_ARGUMENT, error);
+  const auto it = call->bound_tabs->find(*tab_id);
+  if (it == call->bound_tabs->end())
+    return Fail(SHAAR_NOT_FOUND, error);
+  const int from = call->tab_strip_model->GetIndexOfWebContents(it->second);
+  if (from < 0)
+    return Fail(SHAAR_NOT_FOUND, error);
+  call->tab_strip_model->MoveWebContentsAt(from, *to_index, false);
+  return SHAAR_OK;
+}
+
+shaar_error_code HandleTabActivationResolve(const ModuleCall* call,
+                                            shaar_error* error) {
+  return ValidateCall(call, SHAAR_OP_TAB_ACTIVATION_RESOLVE, true, true,
+                      error);
+}
+
+shaar_error_code HandleWindowSetBounds(const ModuleCall* call,
+                                       shaar_error* error) {
+  return ValidateCall(call, SHAAR_OP_WINDOW_SET_BOUNDS, true, false, error);
+}
+
+}  // namespace shaar::windows_tabs
+
+void shaar_windows_tabs_register(shaar::ShaarModuleRegistry* registry) {
+  if (!registry || registry->size < sizeof(shaar::ShaarModuleRegistry) ||
+      !registry->register_handler)
+    return;
+  registry->register_handler(registry->context, SHAAR_OP_WINDOW_BIND_PROFILE,
+                             shaar::windows_tabs::HandleWindowBindProfile);
+  registry->register_handler(
+      registry->context, SHAAR_OP_WINDOW_SET_ACTIVE_PROFILE,
+      shaar::windows_tabs::HandleWindowSetActiveProfile);
+  registry->register_handler(registry->context, SHAAR_OP_WINDOW_ACTIVATE_TAB,
+                             shaar::windows_tabs::HandleWindowActivateTab);
+  registry->register_handler(registry->context, SHAAR_OP_WINDOW_PLACE_TABS,
+                             shaar::windows_tabs::HandleWindowPlaceTabs);
+  registry->register_handler(registry->context, SHAAR_OP_WINDOW_REQUEST_RESOLVE,
+                             shaar::windows_tabs::HandleWindowRequestResolve);
+  registry->register_handler(registry->context, SHAAR_OP_TAB_MOVE,
+                             shaar::windows_tabs::HandleTabMove);
+  registry->register_handler(
+      registry->context, SHAAR_OP_TAB_ACTIVATION_RESOLVE,
+      shaar::windows_tabs::HandleTabActivationResolve);
+  registry->register_handler(registry->context, SHAAR_OP_WINDOW_SET_BOUNDS,
+                             shaar::windows_tabs::HandleWindowSetBounds);
+}

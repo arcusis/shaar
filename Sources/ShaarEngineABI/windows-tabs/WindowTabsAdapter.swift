@@ -4,14 +4,16 @@
 
 import Foundation
 
-/// The narrow window and tab surface used while callers migrate from ChromiumBridge.
-/// Implementations must keep the underlying NSView borrowed and scoped to the window life.
+/// Narrow window and tab surface used while callers migrate from ChromiumBridge.
+/// The host view remains borrowed and scoped to the lifetime of its window handle.
 @MainActor public protocol ShaarWindowTabsEngine: AnyObject {
   func openWindow(id: String, scope: ShaarTabScope) throws
+  func borrowedWindowHostView(id: String) throws -> UnsafeMutableRawPointer?
   func bindProfile(id: String, windowID: String) throws
   func setActiveProfile(id: String, windowID: String) throws
   func closeWindow(id: String) throws
   func openTab(id: String, windowID: String, url: URL, foreground: Bool) throws
+  func borrowedTabHostView(id: String) throws -> UnsafeMutableRawPointer?
   func closeTab(id: String) throws
   func activateTab(id: String, windowID: String) throws
   func placeTabs(_ ids: [String], pinnedIDs: Set<String>, windowID: String) throws
@@ -38,23 +40,37 @@ public struct ShaarWindowTabsSnapshot: Equatable, Sendable {
   public let activeTabID: String?
 }
 
-/// State adapter for the Shaar implementation. Selection and placement validation happens
-/// before calling the native engine so a rejected request never partially changes Swift state.
 @MainActor public final class ShaarWindowTabsAdapter {
   private struct TabOwner {
     let windowID: String
     let profileID: String
   }
 
+  private struct WindowState {
+    let scope: ShaarTabScope
+    var boundProfileIDs: Set<String>
+    var activeProfileID: String
+    var tabIDsByProfile: [String: [String]]
+    var pinnedIDsByProfile: [String: Set<String>]
+    var activeTabByProfile: [String: String]
+  }
+
   public let implementation: ShaarEngineImplementation
   private let engine: ShaarWindowTabsEngine
-  private var windows: [String: ShaarWindowTabsSnapshot] = [:]
+  private var windows: [String: WindowState] = [:]
   private var tabOwners: [String: TabOwner] = [:]
 
-  public init(
+  /// The Shaar adapter is constructed only when the existing explicit choice selects Shaar.
+  /// The default remains Ardia, so un-migrated callers keep their current implementation.
+  public static func makeIfSelected(
     engine: ShaarWindowTabsEngine,
-    implementation: ShaarEngineImplementation = .shaar
-  ) {
+    implementation: ShaarEngineImplementation = .shippingDefault
+  ) -> ShaarWindowTabsAdapter? {
+    guard implementation == .shaar else { return nil }
+    return ShaarWindowTabsAdapter(engine: engine, implementation: implementation)
+  }
+
+  private init(engine: ShaarWindowTabsEngine, implementation: ShaarEngineImplementation) {
     self.engine = engine
     self.implementation = implementation
   }
@@ -62,36 +78,33 @@ public struct ShaarWindowTabsSnapshot: Equatable, Sendable {
   public func openWindow(id: String, scope: ShaarTabScope) throws {
     guard !id.isEmpty, windows[id] == nil else { throw ShaarWindowTabsError.duplicateWindow }
     try engine.openWindow(id: id, scope: scope)
-    windows[id] = .init(
-      windowID: id, scope: scope, boundProfileIDs: [scope.profileID],
-      activeProfileID: scope.profileID, orderedTabIDs: [], pinnedTabIDs: [], activeTabID: nil)
+    windows[id] = WindowState(
+      scope: scope, boundProfileIDs: [scope.profileID], activeProfileID: scope.profileID,
+      tabIDsByProfile: [scope.profileID: []], pinnedIDsByProfile: [scope.profileID: []],
+      activeTabByProfile: [:])
   }
 
   public func bindProfile(id: String, windowID: String) throws {
-    guard let current = windows[windowID] else { throw ShaarWindowTabsError.unknownWindow }
-    guard case .profile = current.scope, !id.isEmpty else {
+    guard var state = windows[windowID] else { throw ShaarWindowTabsError.unknownWindow }
+    guard case .profile = state.scope, !id.isEmpty else {
       throw ShaarWindowTabsError.scopeMismatch
     }
-    guard !current.boundProfileIDs.contains(id) else { return }
+    guard !state.boundProfileIDs.contains(id) else { return }
     try engine.bindProfile(id: id, windowID: windowID)
-    windows[windowID] = .init(
-      windowID: current.windowID, scope: current.scope,
-      boundProfileIDs: current.boundProfileIDs.union([id]),
-      activeProfileID: current.activeProfileID,
-      orderedTabIDs: current.orderedTabIDs, pinnedTabIDs: current.pinnedTabIDs,
-      activeTabID: current.activeTabID)
+    state.boundProfileIDs.insert(id)
+    state.tabIDsByProfile[id] = []
+    state.pinnedIDsByProfile[id] = []
+    windows[windowID] = state
   }
 
   public func setActiveProfile(id: String, windowID: String) throws {
-    guard let current = windows[windowID] else { throw ShaarWindowTabsError.unknownWindow }
-    guard case .profile = current.scope, current.boundProfileIDs.contains(id) else {
+    guard var state = windows[windowID] else { throw ShaarWindowTabsError.unknownWindow }
+    guard case .profile = state.scope, state.boundProfileIDs.contains(id) else {
       throw ShaarWindowTabsError.scopeMismatch
     }
     try engine.setActiveProfile(id: id, windowID: windowID)
-    windows[windowID] = .init(
-      windowID: current.windowID, scope: current.scope, boundProfileIDs: current.boundProfileIDs,
-      activeProfileID: id, orderedTabIDs: current.orderedTabIDs,
-      pinnedTabIDs: current.pinnedTabIDs, activeTabID: current.activeTabID)
+    state.activeProfileID = id
+    windows[windowID] = state
   }
 
   public func closeWindow(id: String) throws {
@@ -99,35 +112,45 @@ public struct ShaarWindowTabsSnapshot: Equatable, Sendable {
     try engine.closeWindow(id: id)
   }
 
+  /// Returns Chromium's NSView without retaining or taking ownership of it.
+  public func borrowedWindowHostView(id: String) throws -> UnsafeMutableRawPointer? {
+    guard windows[id] != nil else { throw ShaarWindowTabsError.unknownWindow }
+    return try engine.borrowedWindowHostView(id: id)
+  }
+
   /// Apply only after Chromium confirms final closure on the ordered event stream.
   public func confirmWindowClosed(id: String) throws {
-    guard let current = windows[id] else { throw ShaarWindowTabsError.unknownWindow }
-    for tabID in current.orderedTabIDs {
+    guard windows.removeValue(forKey: id) != nil else {
+      throw ShaarWindowTabsError.unknownWindow
+    }
+    let closedTabIDs = tabOwners.compactMap { tabID, owner in
+      owner.windowID == id ? tabID : nil
+    }
+    for tabID in closedTabIDs {
       tabOwners.removeValue(forKey: tabID)
     }
-    windows.removeValue(forKey: id)
   }
 
   public func openTab(
     id: String, windowID: String, scope: ShaarTabScope, url: URL, foreground: Bool
   ) throws {
     guard !id.isEmpty, tabOwners[id] == nil else { throw ShaarWindowTabsError.duplicateTab }
-    guard let current = windows[windowID] else { throw ShaarWindowTabsError.unknownWindow }
-    switch current.scope {
+    guard var state = windows[windowID] else { throw ShaarWindowTabsError.unknownWindow }
+    switch state.scope {
     case .profile:
-      guard current.boundProfileIDs.contains(scope.profileID),
-        case .profile = scope
-      else { throw ShaarWindowTabsError.scopeMismatch }
+      guard state.boundProfileIDs.contains(scope.profileID), case .profile = scope else {
+        throw ShaarWindowTabsError.scopeMismatch
+      }
     case .privateSession:
-      guard current.scope == scope else { throw ShaarWindowTabsError.scopeMismatch }
+      guard state.scope == scope else { throw ShaarWindowTabsError.scopeMismatch }
     }
     try engine.openTab(id: id, windowID: windowID, url: url, foreground: foreground)
-    let active = foreground ? id : current.activeTabID
-    let activeProfile = foreground ? scope.profileID : current.activeProfileID
-    windows[windowID] = .init(
-      windowID: windowID, scope: current.scope, boundProfileIDs: current.boundProfileIDs,
-      activeProfileID: activeProfile, orderedTabIDs: current.orderedTabIDs + [id],
-      pinnedTabIDs: current.pinnedTabIDs, activeTabID: active)
+    state.tabIDsByProfile[scope.profileID, default: []].append(id)
+    if foreground {
+      state.activeProfileID = scope.profileID
+      state.activeTabByProfile[scope.profileID] = id
+    }
+    windows[windowID] = state
     tabOwners[id] = TabOwner(windowID: windowID, profileID: scope.profileID)
   }
 
@@ -136,42 +159,50 @@ public struct ShaarWindowTabsSnapshot: Equatable, Sendable {
     try engine.closeTab(id: id)
   }
 
+  /// Returns the active tab's NSView without retaining or taking ownership of it.
+  public func borrowedTabHostView(id: String) throws -> UnsafeMutableRawPointer? {
+    guard tabOwners[id] != nil else { throw ShaarWindowTabsError.unknownTab }
+    return try engine.borrowedTabHostView(id: id)
+  }
+
   /// Apply only after the tab-strip observer reports the confirmed removal.
   public func confirmTabClosed(id: String) throws {
-    guard let owner = tabOwners[id], let current = windows[owner.windowID],
-      let index = current.orderedTabIDs.firstIndex(of: id)
+    guard let owner = tabOwners[id], var state = windows[owner.windowID],
+      let index = state.tabIDsByProfile[owner.profileID]?.firstIndex(of: id)
     else { throw ShaarWindowTabsError.unknownTab }
-    let remaining = current.orderedTabIDs.filter { $0 != id }
-    let active =
-      current.activeTabID == id
-      ? (remaining.isEmpty ? nil : remaining[min(index, remaining.count - 1)])
-      : current.activeTabID
-    windows[owner.windowID] = .init(
-      windowID: owner.windowID, scope: current.scope, boundProfileIDs: current.boundProfileIDs,
-      activeProfileID: current.activeProfileID, orderedTabIDs: remaining,
-      pinnedTabIDs: current.pinnedTabIDs.subtracting([id]), activeTabID: active)
+    var order = state.tabIDsByProfile[owner.profileID] ?? []
+    order.remove(at: index)
+    state.tabIDsByProfile[owner.profileID] = order
+    state.pinnedIDsByProfile[owner.profileID]?.remove(id)
+    if state.activeTabByProfile[owner.profileID] == id {
+      if order.isEmpty {
+        state.activeTabByProfile.removeValue(forKey: owner.profileID)
+      } else {
+        state.activeTabByProfile[owner.profileID] = order[min(index, order.count - 1)]
+      }
+    }
+    windows[owner.windowID] = state
     tabOwners.removeValue(forKey: id)
   }
 
   public func activateTab(id: String, windowID: String) throws {
     guard let owner = tabOwners[id], owner.windowID == windowID,
-      let current = windows[windowID], current.boundProfileIDs.contains(owner.profileID)
-    else {
-      throw ShaarWindowTabsError.scopeMismatch
-    }
-    if current.activeProfileID != owner.profileID {
+      var state = windows[windowID], state.boundProfileIDs.contains(owner.profileID)
+    else { throw ShaarWindowTabsError.scopeMismatch }
+    if state.activeProfileID != owner.profileID {
       try engine.setActiveProfile(id: owner.profileID, windowID: windowID)
     }
     try engine.activateTab(id: id, windowID: windowID)
-    windows[windowID] = .init(
-      windowID: windowID, scope: current.scope, boundProfileIDs: current.boundProfileIDs,
-      activeProfileID: owner.profileID, orderedTabIDs: current.orderedTabIDs,
-      pinnedTabIDs: current.pinnedTabIDs, activeTabID: id)
+    state.activeProfileID = owner.profileID
+    state.activeTabByProfile[owner.profileID] = id
+    windows[windowID] = state
   }
 
   public func placeTabs(_ ids: [String], pinnedIDs: Set<String>, windowID: String) throws {
-    guard let current = windows[windowID] else { throw ShaarWindowTabsError.unknownWindow }
-    guard ids.count == Set(ids).count, Set(ids) == Set(current.orderedTabIDs),
+    guard var state = windows[windowID] else { throw ShaarWindowTabsError.unknownWindow }
+    let profileID = state.activeProfileID
+    let currentIDs = state.tabIDsByProfile[profileID] ?? []
+    guard ids.count == Set(ids).count, Set(ids) == Set(currentIDs),
       pinnedIDs.isSubset(of: Set(ids))
     else { throw ShaarWindowTabsError.invalidPlacement }
     let prefixCount = ids.prefix { pinnedIDs.contains($0) }.count
@@ -179,14 +210,20 @@ public struct ShaarWindowTabsSnapshot: Equatable, Sendable {
       throw ShaarWindowTabsError.invalidPlacement
     }
     try engine.placeTabs(ids, pinnedIDs: pinnedIDs, windowID: windowID)
-    windows[windowID] = .init(
-      windowID: windowID, scope: current.scope, boundProfileIDs: current.boundProfileIDs,
-      activeProfileID: current.activeProfileID, orderedTabIDs: ids,
-      pinnedTabIDs: pinnedIDs, activeTabID: current.activeTabID)
+    state.tabIDsByProfile[profileID] = ids
+    state.pinnedIDsByProfile[profileID] = pinnedIDs
+    windows[windowID] = state
   }
 
-  public func snapshot(windowID: String) -> ShaarWindowTabsSnapshot? { windows[windowID] }
-
+  public func snapshot(windowID: String) -> ShaarWindowTabsSnapshot? {
+    guard let state = windows[windowID] else { return nil }
+    let profileID = state.activeProfileID
+    return ShaarWindowTabsSnapshot(
+      windowID: windowID, scope: state.scope, boundProfileIDs: state.boundProfileIDs,
+      activeProfileID: profileID, orderedTabIDs: state.tabIDsByProfile[profileID] ?? [],
+      pinnedTabIDs: state.pinnedIDsByProfile[profileID] ?? [],
+      activeTabID: state.activeTabByProfile[profileID])
+  }
 }
 
 public enum ShaarWindowTabsError: Error, Equatable {

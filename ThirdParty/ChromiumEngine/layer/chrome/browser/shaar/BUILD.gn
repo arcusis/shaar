@@ -4,6 +4,8 @@
 
 assert(is_mac)
 
+import("//testing/test.gni")
+
 source_set("engine") {
   public = [ "public/shaar_engine.h" ]
   sources = [
@@ -11,7 +13,19 @@ source_set("engine") {
     "engine/shaar_event_bridge.cc",
     "engine/shaar_event_bridge.h",
   ]
-  sources += [ "windows-tabs/shaar_windows_tabs.cc", "windows-tabs/shaar_windows_tabs.h" ]
+  deps = [ "//base", "//chrome/browser/ui/tabs:tab_strip" ]
+  sources += [
+    "windows-tabs/shaar_module_registry.h",
+    "windows-tabs/shaar_windows_tabs.cc",
+    "windows-tabs/shaar_windows_tabs.h",
+    "windows-tabs/shaar_windows_tabs_handlers.cc",
+    "windows-tabs/shaar_windows_tabs_handlers.h",
+  ]
+}
+
+test("windows_tabs_unittests") {
+  sources = [ "windows-tabs/shaar_windows_tabs_handlers_unittest.cc" ]
+  deps = [ ":engine", "//base", "//testing/gtest", "//testing/gtest:gtest_main" ]
 }
 
 config("exports") {

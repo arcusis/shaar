@@ -126,9 +126,15 @@ def build_engine_bundle(checks: Commands, iterations: int) -> None:
     require_hosted_mac()
     if (checks.directory / "bundle.json").is_file():
         validate_bundle_archive(ROOT, checks.directory)
+        checks.results.append({
+            "name": "verification-bundle-cache-validation",
+            "command": ["validate cached source tree, build inputs and archive digest"],
+            "status": 0,
+            "seconds": 0.0,
+        })
         with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
             output.write(f"shards={json.dumps(engine_shards(iterations))}\n")
-        print("Reusing integrity-checked verification bundle for this exact source tree")
+        print("Reusing integrity-checked verification bundle for this exact source tree and build inputs")
         return
     if checks.run("verification-build", ["bash", "scripts/bundle-app.sh", "--with-engine", "--verification"]):
         return

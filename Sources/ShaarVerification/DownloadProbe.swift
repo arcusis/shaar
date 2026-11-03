@@ -72,6 +72,7 @@ final class DownloadProbe {
         "profile B does not inherit A's download history")
     }
     store.perform(.space(a.id))
+    try await waitForNativeSelection(tabA, "Profile A native tab is selected before downloads")
     let priorA = Set(engine.downloads.items(in: a.profileID).map(\.id))
     try await begin(tabA, name: "slow.txt")
     let active = try await wait(a.profileID, "profile A receives a live authenticated download") {
@@ -104,6 +105,7 @@ final class DownloadProbe {
       $0.id == active.id && !$0.paused
     }
     store.perform(.space(b.id))
+    try await waitForNativeSelection(tabB, "Profile B native tab is selected before download")
     try expect(
       !engine.downloads.perform(
         .cancel, id: active.id, profileID: a.profileID,
@@ -144,6 +146,7 @@ final class DownloadProbe {
     )
     try verifyBytes(beta, account: "beta", large: false)
     store.perform(.space(a.id))
+    try await waitForNativeSelection(tabA, "Profile A native tab is selected before cancellation")
     let beforeCancel = Set(engine.downloads.items(in: a.profileID).map(\.id))
     try await begin(tabA, name: "cancel.txt")
     let cancellable = try await wait(
@@ -191,6 +194,19 @@ final class DownloadProbe {
       }
     }
     guard clicked else { throw DownloadProbeFailure("Could not click the authored download link.") }
+  }
+
+  private func waitForNativeSelection(_ tabID: UUID, _ check: String) async throws {
+    for _ in 0..<20 {
+      let selection = runtime.normalProbeSelectionAudit(forTabID: tabID.uuidString)
+      if selection["selectedNativeTab"] as? Bool == true {
+        checks.append(check)
+        return
+      }
+      try await Task.sleep(for: .milliseconds(5))
+    }
+    let selection = runtime.normalProbeSelectionAudit(forTabID: tabID.uuidString)
+    throw DownloadProbeFailure("\(check); native selection audit: \(selection)")
   }
 
   private func wait(_ profile: UUID, _ message: String, predicate: (BrowserDownload) -> Bool)

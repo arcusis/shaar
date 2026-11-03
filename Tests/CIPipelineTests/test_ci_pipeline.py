@@ -224,6 +224,17 @@ class CoverageGateTests(unittest.TestCase):
         self.assertEqual(COVERAGE.regressions({"BrowserCore": (8, 10)}, {"BrowserCore": (16, 20)}), [])
         self.assertEqual(COVERAGE.regressions({"BrowserCore": (8, 10)}, {"BrowserCore": (9, 10)}), [])
 
+    def test_engine_only_browsing_smoke_is_excluded_from_unit_coverage(self):
+        report = self.report()
+        report["data"][0]["files"] += [
+            {"filename": "/checkout/Sources/ShaarVerification/BasicBrowsingProbe.swift",
+             "summary": {"lines": {"covered": 0, "count": 168}}},
+            {"filename": "/checkout/Sources/ShaarVerification/EngineProbe.swift",
+             "summary": {"lines": {"covered": 0, "count": 1093}}},
+        ]
+        coverage = COVERAGE.module_coverage(report)
+        self.assertEqual(coverage["ShaarVerification"], (0, 1093))
+
     def test_timing_noise_passes_but_real_drop_fails(self):
         base = {"ArcusisBrowser": (22697, 36330)}
         self.assertEqual(COVERAGE.regressions(base, {"ArcusisBrowser": (22694, 36330)}), [])

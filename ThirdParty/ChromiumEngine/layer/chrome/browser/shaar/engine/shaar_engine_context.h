@@ -8,6 +8,10 @@
 #include <string_view>
 #include <unordered_map>
 
+// BEGIN devtools
+#include <string>
+// END devtools
+
 #include "chrome/browser/shaar/public/shaar_engine.h"
 
 class Browser;
@@ -74,12 +78,44 @@ class BrowserTabRegistry {
       std::unordered_map<std::string, content::WebContents*>* tabs) = 0;
 };
 
+// BEGIN devtools
+// Resolved, copied identities used for DevTools policy and event envelopes.
+// These strings must be stable for the duration of one UI-thread operation.
+struct DevToolsTargetIdentity {
+  std::string profile_id;
+  std::string session_id;
+  std::string window_id;
+  std::string tab_id;
+};
+
+// DevTools runtime services bind the opaque ABI scope to the exact Chromium
+// target, enforce app policy, and supply the public IDs used in events.
+class DevToolsRuntimeServices {
+ public:
+  virtual ~DevToolsRuntimeServices() = default;
+  virtual bool ResolveTarget(shaar_engine* engine,
+                             shaar_scope scope,
+                             shaar_window* window,
+                             shaar_tab* tab,
+                             content::WebContents* contents,
+                             DevToolsTargetIdentity* identity) = 0;
+  virtual bool IsOperationAllowed(shaar_engine* engine,
+                                  shaar_scope scope,
+                                  content::WebContents* contents,
+                                  shaar_operation operation,
+                                  int capability) = 0;
+};
+// END devtools
+
 struct ShaarEngineContext {
   ProfileServices* profile_services = nullptr;
   BrowserTabRegistry* browser_tabs = nullptr;
   // BEGIN site_data
   PrivateSessionServices* private_sessions = nullptr;
   // END site_data
+  // BEGIN devtools
+  DevToolsRuntimeServices* devtools_runtime = nullptr;
+  // END devtools
 };
 
 ShaarEngineContext& EngineContext();
@@ -88,6 +124,9 @@ void SetBrowserTabRegistry(BrowserTabRegistry* registry);
 // BEGIN site_data
 void SetPrivateSessionServices(PrivateSessionServices* services);
 // END site_data
+// BEGIN devtools
+void SetDevToolsRuntimeServices(DevToolsRuntimeServices* services);
+// END devtools
 
 }  // namespace shaar
 

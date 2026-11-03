@@ -25,4 +25,9 @@ void SetPrivateSessionServices(PrivateSessionServices* services) {
   g_context.private_sessions = services;
 }
 // END site_data
+// BEGIN devtools
+void SetDevToolsRuntimeServices(DevToolsRuntimeServices* services) {
+  g_context.devtools_runtime = services;
+}
+// END devtools
 }  // namespace shaar

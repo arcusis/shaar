@@ -75,6 +75,11 @@ source_set("engine") {
     "find/shaar_find.h",
     "find/shaar_find_lifecycle_adapter.cc",
     # END find
+    # BEGIN devtools
+    "devtools/shaar_devtools.cc",
+    "devtools/shaar_devtools.h",
+    "devtools/shaar_devtools_lifecycle_adapter.cc",
+    # END devtools
   ]
   deps = [
     "//base",
@@ -82,6 +87,9 @@ source_set("engine") {
     "//chrome/browser:browser",
     "//chrome/browser:main_extra_parts",
     "//chrome/browser:chrome_content_browser_client",
+    # BEGIN devtools
+    "//chrome/browser/devtools",
+    # END devtools
     "//chrome/browser:lifetime",
     "//chrome/browser/profiles",
     "//chrome/browser/history:impl",
@@ -177,6 +185,12 @@ test("find_unittests") {
   deps = [ ":engine", "//testing/gtest" ]
 }
 # END find
+# BEGIN devtools
+test("devtools_unittests") {
+  sources = [ "devtools/shaar_devtools_unittest.cc" ]
+  deps = [ ":engine", "//content/test:test_support", "//testing/gtest" ]
+}
+# END devtools
 
 config("exports") {
   inputs = [ "shaar_engine.exports" ]

@@ -176,6 +176,7 @@ typedef enum {
   SHAAR_OP_TAB_STOP_FIND = 901,
   // END find
 
+  // BEGIN devtools operation IDs.
   SHAAR_OP_DEVTOOLS_CALL = 1000,
   SHAAR_OP_DEVTOOLS_UI_SHOW = 1001,
   SHAAR_OP_DEVTOOLS_UI_CLOSE = 1002,
@@ -184,6 +185,7 @@ typedef enum {
   SHAAR_OP_DEVTOOLS_CONTROL_ENABLE = 1005,
   SHAAR_OP_DEVTOOLS_CONTROL_DISABLE = 1006,
   SHAAR_OP_DEVTOOLS_CONTROL_STATUS = 1007,
+  // END devtools operation IDs.
 
   SHAAR_OP_MEDIA_GET_STATE = 1100,
   SHAAR_OP_MEDIA_CONTROL = 1101,
@@ -205,6 +207,7 @@ typedef enum {
 enum { SHAAR_MODULE_SITE_DATA = 1201 };
 // END site_data
 
+// BEGIN devtools command and module IDs.
 typedef enum {
   SHAAR_DEVTOOLS_CAPABILITY_INSPECTOR = 1,
   SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER = 2
@@ -260,6 +263,8 @@ typedef enum {
   SHAAR_DEVTOOLS_NETWORK_SET_COOKIE = 42,
   SHAAR_DEVTOOLS_NETWORK_DELETE_COOKIES = 43
 } shaar_devtools_command;
+typedef enum { SHAAR_MODULE_DEVTOOLS = 1202 } shaar_devtools_module_id;
+// END devtools command and module IDs.
 
 typedef enum {
   SHAAR_MEDIA_PLAY = 0, SHAAR_MEDIA_PAUSE = 1,

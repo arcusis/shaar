@@ -60,6 +60,10 @@
     {
       "file": "ThirdParty/ArdiaCore/patches/private-profile-privacy.patch",
       "sha256": "77f2a6fa096326b8781ecb145acb7cb09cc68d425a48113f2c54aa6f0e2d73d5"
+    },
+    {
+      "file": "ThirdParty/ArdiaCore/patches/private-request-proxy-completion.patch",
+      "sha256": "6b7248fc34fd447b9d169cf5c50dc8dc8ba8b817605a0c9b31f740e94e90c45f"
     }
   ]
 }

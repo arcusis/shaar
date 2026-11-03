@@ -120,6 +120,36 @@ import Testing
   }
 }
 
+@Test func profileImportersRejectMissingOrMalformedProfileFiles() throws {
+  let regularFile = FileManager.default.temporaryDirectory.appending(path: "Chrome-\(UUID())")
+  try Data("not a profile".utf8).write(to: regularFile)
+  #expect(throws: BrowserImport.ImportError.self) {
+    try BrowserImport.readProfile(at: regularFile, source: .chrome)
+  }
+
+  let chromiumProfile = try profileDirectory(name: "ChromeIncomplete")
+  try copyFixture("ChromiumBookmarks", to: chromiumProfile.appending(path: "Bookmarks"))
+  #expect(throws: BrowserImport.ImportError.self) {
+    try BrowserImport.readProfile(at: chromiumProfile, source: .chrome)
+  }
+
+  let safariDirectory = try profileDirectory(name: "SafariHistoryFile")
+  try copyFixture("SafariBookmarks.plist", to: safariDirectory.appending(path: "Bookmarks.plist"))
+  let safariHistory = safariDirectory.appending(path: "History.db")
+  try createDatabase(sqlFixture: "SafariHistory.sql", at: safariHistory)
+  #expect(try BrowserImport.readProfile(at: safariHistory, source: .safari).history.count == 1)
+
+  let incompleteSafari = try profileDirectory(name: "SafariIncomplete")
+  #expect(throws: BrowserImport.ImportError.self) {
+    try BrowserImport.readProfile(at: incompleteSafari, source: .safari)
+  }
+
+  let incompleteFirefox = try profileDirectory(name: "FirefoxIncomplete")
+  #expect(throws: BrowserImport.ImportError.self) {
+    try BrowserImport.readProfile(at: incompleteFirefox, source: .firefox)
+  }
+}
+
 private func profileDirectory(name: String) throws -> URL {
   let root = FileManager.default.temporaryDirectory.appending(path: "BrowserImport-\(UUID())")
   let profile = root.appending(path: name)

@@ -73,6 +73,21 @@ final class InspectorAICopyModel {
       context.components.contains { $0.hasPrefix(framework + ": ") }
     }
     if includeDetails {
+      // Keep the collected page diagnostics from changing while style collection awaits the engine.
+      let pageDiagnostics: (
+        consoleErrors: [String], networkErrors: [String], technologies: [String])
+      if let tools = inspector.pageTools {
+        pageDiagnostics = (
+          tools.console.filter { ["error", "unhandledrejection"].contains($0.level) }
+            .suffix(30).map(\.message),
+          tools.requests.filter { $0.status >= 400 }.suffix(30)
+            .map { "\($0.method) \($0.url) — status \($0.status)" },
+          tools.signals.map { $0.name + ($0.version.map { " \($0)" } ?? "") })
+      } else {
+        pageDiagnostics = (
+          ["Unavailable: Page diagnostics have not been enabled."],
+          ["Unavailable: Page diagnostics have not been enabled."], [])
+      }
       await inspector.styles.refresh(force: true)
       guard inspector.styles.selectedID == selection.id, inspector.styles.failure == nil else {
         throw InspectorFailure(
@@ -86,20 +101,9 @@ final class InspectorAICopyModel {
           selector: rule.selector, source: rule.source,
           declarations: rule.declarations.map { .init(name: $0.name, value: $0.value) })
       }
-      if let tools = inspector.pageTools {
-        context.details.consoleErrors = tools.console.filter {
-          ["error", "unhandledrejection"].contains($0.level)
-        }.suffix(30).map(\.message)
-        context.details.networkErrors = tools.requests.filter {
-          $0.status >= 400
-        }.suffix(30).map { "\($0.method) \($0.url) — status \($0.status)" }
-        context.details.technologies = tools.signals.map {
-          $0.name + ($0.version.map { " " + $0 } ?? "")
-        }
-      } else {
-        context.details.consoleErrors = ["Unavailable: Page diagnostics have not been enabled."]
-        context.details.networkErrors = ["Unavailable: Page diagnostics have not been enabled."]
-      }
+      context.details.consoleErrors = pageDiagnostics.consoleErrors
+      context.details.networkErrors = pageDiagnostics.networkErrors
+      context.details.technologies = pageDiagnostics.technologies
     }
     // Enrichments use existing Inspector data, then pass through the page's current form-value scrubber.
     let full = try JSONSerialization.jsonObject(

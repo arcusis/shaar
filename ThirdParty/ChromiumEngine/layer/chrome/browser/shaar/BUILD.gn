@@ -11,6 +11,7 @@ source_set("engine") {
     "engine/shaar_event_bridge.cc",
     "engine/shaar_event_bridge.h",
   ]
+  sources += [ "windows-tabs/shaar_windows_tabs.cc", "windows-tabs/shaar_windows_tabs.h" ]
 }
 
 config("exports") {

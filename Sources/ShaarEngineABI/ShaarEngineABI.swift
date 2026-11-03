@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import Darwin
+import Dispatch
 import Foundation
 import ShaarEngineC
 
@@ -15,6 +16,7 @@ public enum ShaarEngineImplementation: Equatable, Sendable {
 }
 
 public enum ShaarEngineError: Error, Equatable, Sendable {
+  case frameworkLoadFailed(path: String, reason: String)
   case missingSymbol(String)
   case unsupportedABI(expected: UInt32, actual: UInt32)
   case invalidStatusCode(UInt32)
@@ -100,13 +102,30 @@ public enum ShaarEventCopy {
 
 @MainActor public final class ShaarEventDispatcher {
   private let handler: @MainActor (ShaarCopiedEvent) -> Void
-  public init(handler: @escaping @MainActor (ShaarCopiedEvent) -> Void) { self.handler = handler }
+  private let errorHandler: @MainActor (ShaarEngineError) -> Void
 
-  /// Call from the C callback. Borrowed bytes are copied before the callback returns.
+  public init(
+    handler: @escaping @MainActor (ShaarCopiedEvent) -> Void,
+    onError: @escaping @MainActor (ShaarEngineError) -> Void = {
+      NSLog("Shaar engine event rejected: %@", String(describing: $0))
+    }
+  ) {
+    self.handler = handler
+    self.errorHandler = onError
+  }
+
+  /// Call serially from the C callback. Copies borrowed bytes before enqueueing on the main queue.
   public nonisolated func receive(_ borrowed: ShaarABIEvent) {
-    let copied = try? ShaarEventCopy.copy(borrowed)
-    guard let copied else { return }
-    Task { @MainActor [weak self] in self?.handler(copied) }
+    let delivery = Result { try ShaarEventCopy.copy(borrowed) }
+    DispatchQueue.main.async { [self] in
+      MainActor.assumeIsolated {
+        switch delivery {
+        case .success(let event): self.handler(event)
+        case .failure(let error as ShaarEngineError): self.errorHandler(error)
+        case .failure: self.errorHandler(.invalidEvent("event copy failed"))
+        }
+      }
+    }
   }
 }
 
@@ -154,7 +173,8 @@ public struct ShaarEngineLoader {
   {
     let binary = frameworkURL.appending(path: "Versions/Current/Chromium Framework")
     guard let handle = dlopen(binary.path, RTLD_NOW | RTLD_LOCAL) else {
-      throw ShaarEngineError.missingSymbol(String(cString: dlerror()))
+      throw ShaarEngineError.frameworkLoadFailed(
+        path: binary.path, reason: String(cString: dlerror()))
     }
     return try Self(resolver: FrameworkSymbols(handle: handle), implementation: implementation)
   }

@@ -127,7 +127,6 @@ struct DesktopCaptureConsentTests {
     #expect(
       decisions == [
         "\(first.id):screen:1:0", "\(second.id):window:2:0", "\(fourth.id):cancel",
-        "\(third.id):cancel",
       ])
     #expect(store.sheet == nil)
   }

@@ -168,10 +168,13 @@ private func bookmarkPayload(children: [[String: Any]]) -> [String: Any] {
   let rootID = UUID()
   let operations = BrowserImport.operations(
     for: chromiumItems + firefoxItems, otherFolderID: rootID)
-  #expect(operations.count == 3)
+  #expect(operations.count == 4)
   #expect(operations[0]["t"] as? String == "Work")
   #expect(operations[0]["parent"] as? String == rootID.uuidString.lowercased())
   #expect(operations[1]["parent"] as? String == operations[0]["id"] as? String)
+  #expect(operations[2]["t"] as? String == "Personal")
+  #expect(operations[2]["parent"] as? String == rootID.uuidString.lowercased())
+  #expect(operations[3]["parent"] as? String == operations[2]["id"] as? String)
 }
 
 @Test func browserImportReadsSafariPlistsAndFirefoxJSONAndRejectsUnsupportedFiles() throws {

@@ -276,8 +276,11 @@ shaar_error_code Query(HistoryContext *registry, shaar_scope scope,
       search ? base::UTF8ToUTF16(*search) : std::u16string();
   service->QueryHistory(
       text, options,
-      base::BindOnce([request, tracker, max_urls,
-                      max_visits](history::QueryResults results) {
+      base::BindOnce(
+          [](ReplyContext request,
+             std::shared_ptr<base::CancelableTaskTracker> tracker,
+             int max_urls, int max_visits, history::QueryResults results) {
+        (void)tracker;
         if (results.size() >= static_cast<size_t>(max_urls * max_visits)) {
           ReplyError(
               request, SHAAR_POLICY_BLOCKED,
@@ -315,7 +318,7 @@ shaar_error_code Query(HistoryContext *registry, shaar_scope scope,
               base::DictValue()
                   .Set("schemaVersion", 1)
                   .Set("entries", std::move(entries)));
-      }),
+      }, request, tracker, max_urls, max_visits),
       tracker.get());
   return SHAAR_OK;
 }
@@ -364,8 +367,12 @@ shaar_error_code Delete(HistoryContext *registry, shaar_scope scope,
   service->DeleteURLs(urls);
   service->QueryUrlIds(
       urls,
-      base::BindOnce([request, tracker, count = urls.size()](
-                         std::optional<std::vector<history::URLID>> ids) {
+      base::BindOnce(
+          [](ReplyContext request,
+             std::shared_ptr<base::CancelableTaskTracker> tracker,
+             size_t count,
+             std::optional<std::vector<history::URLID>> ids) {
+        (void)tracker;
         if (!ids || ids->size() != count) {
           ReplyError(request, SHAAR_IO_ERROR,
                      "history deletion could not be confirmed");
@@ -382,7 +389,7 @@ shaar_error_code Delete(HistoryContext *registry, shaar_scope scope,
               base::DictValue()
                   .Set("schemaVersion", 1)
                   .Set("deleted", deleted));
-      }),
+      }, request, tracker, urls.size()),
       tracker.get());
   return SHAAR_OK;
 }
@@ -458,7 +465,9 @@ struct ImportState : public std::enable_shared_from_this<ImportState> {
     auto self = shared_from_this();
     service->QueryURLAndVisits(
         urls[row], history::VisitQuery404sPolicy::kExclude404s,
-        base::BindOnce([self, row](history::QueryURLAndVisitsResult found) {
+        base::BindOnce(
+            [](std::shared_ptr<ImportState> self, size_t row,
+               history::QueryURLAndVisitsResult found) {
           std::vector<base::Time> additions;
           std::vector<base::Time> known;
           if (found.success) {
@@ -497,8 +506,10 @@ struct ImportState : public std::enable_shared_from_this<ImportState> {
           }
           self->service->QueryURLAndVisits(
               self->urls[row], history::VisitQuery404sPolicy::kExclude404s,
-              base::BindOnce([self, row, count = additions.size()](
-                                 history::QueryURLAndVisitsResult verified) {
+              base::BindOnce(
+                  [](std::shared_ptr<ImportState> self, size_t row,
+                     size_t count,
+                     history::QueryURLAndVisitsResult verified) {
                 if (!verified.success) {
                   ReplyError(self->request, SHAAR_IO_ERROR,
                              "history import write could not be confirmed");
@@ -524,9 +535,9 @@ struct ImportState : public std::enable_shared_from_this<ImportState> {
                 ++self->accepted;
                 self->inserted += static_cast<int>(count);
                 self->Next();
-              }),
+              }, self, row, additions.size()),
               self->tracker.get());
-        }),
+            }, self, row),
         tracker.get());
   }
 };

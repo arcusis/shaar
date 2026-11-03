@@ -21,8 +21,12 @@ source_set("bookmarks_unittests") {
   deps = [
     ":engine",
     "//base",
+    "//base/test:test_support",
     "//chrome/browser",
+    "//chrome/test:test_support",
     "//components/bookmarks/browser",
+    "//components/bookmarks/test",
+    "//content/test:test_support",
     "//testing/gtest",
   ]
 }

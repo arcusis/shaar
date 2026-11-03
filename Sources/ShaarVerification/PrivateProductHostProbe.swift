@@ -369,6 +369,13 @@ final class PrivateProductHostProbe {
       "commandIsOpen": first.store.commandIsOpen, "tabCount": first.store.tabs.count,
       "privateWindowCount": privateHost.windowCount, "appWindowCountBefore": appWindowCount,
       "appWindowCountAfter": NSApp.windows.count,
+      "windows": NSApp.windows.map { window in
+        [
+          "class": String(reflecting: type(of: window)), "title": window.title,
+          "visible": window.isVisible, "panel": window is NSPanel,
+          "level": window.level.rawValue, "styleMask": window.styleMask.rawValue,
+        ]
+      },
     ]
     checks["productAlphabetSearchDoesNotOpenPicker"] =
       typedQuery == alphabetQuery && !first.store.commandIsOpen
@@ -991,7 +998,7 @@ final class PrivateProductHostProbe {
       runtime.evaluatePrivateProbeTabID(
         tabID,
         script:
-          "document.readyState==='complete'&&location.pathname==='/\(path)'&&document.body.innerText.includes('OrbitFindMarker')"
+          "document.readyState==='complete'&&location.pathname==='\(fixture.appending(path: path).path)'&&document.body.innerText.includes('OrbitFindMarker')"
       ) { continuation.resume(returning: $0) }
     }
     guard document == "true" else {

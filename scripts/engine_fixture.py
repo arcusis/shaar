@@ -661,6 +661,7 @@ border:2px solid #1e40af;border-radius:6px;background:#2563eb;color:white}
             return
         self.send_response(206 if offset else 200)
         self.send_header('Content-Type', 'text/plain')
+        self.send_header('Cache-Control', 'no-store')
         self.send_header('Content-Disposition', f'attachment; filename="{name}"')
         self.send_header('Accept-Ranges', 'bytes')
         self.send_header('ETag', f'"{account}-{name}-v1"')

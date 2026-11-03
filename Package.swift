@@ -37,7 +37,16 @@ let package = Package(
       linkerSettings: [.linkedFramework("AppKit")]
     ),
     .target(name: "ShaarEngineC", publicHeadersPath: "include"),
-    .target(name: "ShaarEngineABI", dependencies: ["ShaarEngineC"]),
+    // BEGIN Shaar navigation C ABI shim.
+    .target(
+      name: "ShaarEngineABIC",
+      path: "Sources/ShaarEngineABI/Navigation/CABI",
+      publicHeadersPath: "include"),
+    .target(
+      name: "ShaarEngineABI",
+      dependencies: ["ShaarEngineC", "ShaarEngineABIC"],
+      exclude: ["Navigation/CABI"]),
+    // END Shaar navigation C ABI shim.
     .target(
       name: "ChromiumBridgeVerification",
       dependencies: ["ChromiumBridge"],

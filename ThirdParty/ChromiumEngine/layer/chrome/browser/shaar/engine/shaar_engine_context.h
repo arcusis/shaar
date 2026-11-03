@@ -36,18 +36,18 @@ class ProfileServices {
       KeyedServiceLookup lookup) = 0;
 };
 
+// Site-data and find resolve private handles through the owning registry.
+// Find also needs both IDs to attribute results without exposing the query.
 // BEGIN site_data
-// Site-data operations may resolve a private scope only through the owning
-// session service; opaque handles are never cast to Chromium Profile pointers.
 class PrivateSessionServices {
  public:
   virtual ~PrivateSessionServices() = default;
-  virtual Profile* ResolvePrivateProfile(shaar_engine* engine,
-                                         shaar_private_session* handle) = 0;
-  virtual std::string_view ProfileID(shaar_engine* engine,
-                                     shaar_private_session* handle) = 0;
-  virtual std::string_view SessionID(shaar_engine* engine,
-                                     shaar_private_session* handle) = 0;
+  virtual bool Resolve(shaar_engine* engine,
+                       shaar_private_session* handle,
+                       Profile** parent,
+                       Profile** otr,
+                       std::string_view* profile_id,
+                       std::string_view* session_id) = 0;
 };
 // END site_data
 

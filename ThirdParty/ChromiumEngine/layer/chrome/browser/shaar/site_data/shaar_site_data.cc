@@ -284,12 +284,18 @@ shaar_error_code HandleSiteDataOperation(
     if (!context || !context->private_sessions)
       return Fail(error, SHAAR_UNSUPPORTED_CAPABILITY,
                   "private-session profile resolver is not installed");
-    profile = context->private_sessions->ResolvePrivateProfile(
-        engine, scope.private_session);
-    profile_id = std::string(context->private_sessions->ProfileID(
-        engine, scope.private_session));
-    session_id = std::string(context->private_sessions->SessionID(
-        engine, scope.private_session));
+    Profile* parent = nullptr;
+    std::string_view resolved_profile_id;
+    std::string_view resolved_session_id;
+    if (!context->private_sessions->Resolve(
+            engine, scope.private_session, &parent, &profile,
+            &resolved_profile_id, &resolved_session_id) ||
+        !parent) {
+      return Fail(error, SHAAR_WRONG_SESSION,
+                  "private session is unavailable");
+    }
+    profile_id = std::string(resolved_profile_id);
+    session_id = std::string(resolved_session_id);
     if (!profile || !profile->IsOffTheRecord() || profile_id.empty() ||
         session_id.empty())
       return Fail(error, SHAAR_WRONG_SESSION, "private session is unavailable");

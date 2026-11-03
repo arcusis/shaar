@@ -70,6 +70,11 @@ source_set("engine") {
     "extensions/shaar_extensions.h",
     "extensions/shaar_extensions_lifecycle_adapter.cc",
     # END extensions
+    # BEGIN find
+    "find/shaar_find.cc",
+    "find/shaar_find.h",
+    "find/shaar_find_lifecycle_adapter.cc",
+    # END find
   ]
   deps = [
     "//base",
@@ -93,6 +98,9 @@ source_set("engine") {
     "//chrome/browser/browsing_data:constants",
     "//chrome/browser/content_settings:content_settings_factory_impl",
     # END site_data
+    # BEGIN find
+    "//components/find_in_page",
+    # END find
     "//content/public/browser",
     "//components/download/content/public",
     "//components/download/public/common",
@@ -163,6 +171,12 @@ test("extensions_unittests") {
   deps = [ ":engine", "//testing/gtest" ]
 }
 # END extensions
+# BEGIN find
+test("find_unittests") {
+  sources = [ "find/shaar_find_unittest.cc" ]
+  deps = [ ":engine", "//testing/gtest" ]
+}
+# END find
 
 config("exports") {
   inputs = [ "shaar_engine.exports" ]

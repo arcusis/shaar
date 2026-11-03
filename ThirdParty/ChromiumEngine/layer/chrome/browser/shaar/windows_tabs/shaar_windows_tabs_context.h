@@ -65,6 +65,6 @@ struct ModuleCall {
 using ModuleHandler = shaar_error_code (*)(const ModuleCall*, shaar_error*);
 }  // namespace shaar
 
-void shaar_windows_tabs_register(ShaarModuleRegistry* registry);
+extern "C" void shaar_windows_tabs_register(ShaarModuleRegistry* registry);
 
 #endif  // CHROME_BROWSER_SHAAR_WINDOWS_TABS_SHAAR_WINDOWS_TABS_CONTEXT_H_

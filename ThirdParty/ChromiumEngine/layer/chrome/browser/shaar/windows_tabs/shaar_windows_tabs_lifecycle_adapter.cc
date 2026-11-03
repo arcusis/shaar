@@ -67,11 +67,10 @@ shaar_error_code HandleLifecycleOperation(
   if (scope.profile && context->profile_services) {
     profile_id = context->profile_services->ProfileID(engine, scope.profile);
   }
-  Browser* active_browser = browser;
-  std::string active_profile_id = profile_id;
-  std::unordered_map<std::string, Browser*> browsers_by_profile;
-  if (!profile_id.empty())
-    browsers_by_profile.emplace(profile_id, browser);
+  auto* state = shaar::windows_tabs::Registry().EnsureWindowState(
+      engine, window, browser, profile_id);
+  if (!state)
+    return SHAAR_NOT_READY;
 
   shaar::ModuleCall call = {};
   call.engine = engine;
@@ -89,9 +88,9 @@ shaar_error_code HandleLifecycleOperation(
   call.scope_profile_id = profile_id.empty() ? nullptr : profile_id.c_str();
   call.scoped_browser = browser;
   call.native_window = browser->GetWindow();
-  call.active_browser = &active_browser;
-  call.active_profile_id = &active_profile_id;
-  call.browsers_by_profile = &browsers_by_profile;
+  call.active_browser = &state->active_browser;
+  call.active_profile_id = &state->active_profile_id;
+  call.browsers_by_profile = &state->browsers_by_profile;
 
   const shaar_error_code status =
       shaar::windows_tabs::HandleModuleOperation(&call, error);

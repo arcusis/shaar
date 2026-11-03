@@ -198,15 +198,26 @@ Profile *ResolveProfile(HistoryContext *registry, shaar_scope scope,
   return profile;
 }
 
-history::HistoryService *ResolveHistory(HistoryContext *registry,
-                                        Profile *profile, shaar_error *error) {
-  history::HistoryService *service = HistoryServiceFactory::GetForProfile(
+KeyedService* LookupHistoryService(Profile* profile) {
+  return HistoryServiceFactory::GetForProfile(
       profile, ServiceAccessType::EXPLICIT_ACCESS);
+}
+
+history::HistoryService* ResolveHistory(HistoryContext* context,
+                                        shaar_profile* handle,
+                                        shaar_error* error) {
+  auto* services = context->engine_context
+                       ? context->engine_context->profile_services
+                       : nullptr;
+  auto* service = services ? services->GetKeyedService(
+                                 context->engine, handle,
+                                 &LookupHistoryService)
+                           : nullptr;
   if (!service) {
     Fail(error, SHAAR_NOT_READY, "history service is not ready");
     return nullptr;
   }
-  return service;
+  return static_cast<history::HistoryService*>(service);
 }
 
 int64_t EpochMilliseconds(base::Time time) {
@@ -251,7 +262,7 @@ shaar_error_code Query(HistoryContext *registry, shaar_scope scope,
   if (!profile)
     return ErrorCodeOr(immediate_error, SHAAR_NOT_FOUND);
   history::HistoryService *service =
-      ResolveHistory(registry, profile, immediate_error);
+      ResolveHistory(registry, scope.profile, immediate_error);
   if (!service)
     return ErrorCodeOr(immediate_error, SHAAR_NOT_READY);
 
@@ -346,7 +357,7 @@ shaar_error_code Delete(HistoryContext *registry, shaar_scope scope,
   if (!profile)
     return ErrorCodeOr(immediate_error, SHAAR_NOT_FOUND);
   history::HistoryService *service =
-      ResolveHistory(registry, profile, immediate_error);
+      ResolveHistory(registry, scope.profile, immediate_error);
   if (!service)
     return ErrorCodeOr(immediate_error, SHAAR_NOT_READY);
   auto tracker = std::make_shared<base::CancelableTaskTracker>();
@@ -547,7 +558,7 @@ shaar_error_code Insert(HistoryContext *registry, shaar_scope scope,
   if (!profile)
     return ErrorCodeOr(immediate_error, SHAAR_NOT_FOUND);
   history::HistoryService *service =
-      ResolveHistory(registry, profile, immediate_error);
+      ResolveHistory(registry, scope.profile, immediate_error);
   if (!service)
     return ErrorCodeOr(immediate_error, SHAAR_NOT_READY);
 
@@ -703,7 +714,7 @@ shaar_error_code Watch(HistoryContext *registry,
   if (!profile)
     return ErrorCodeOr(immediate_error, SHAAR_NOT_FOUND);
   history::HistoryService *service =
-      ResolveHistory(registry, profile, immediate_error);
+      ResolveHistory(registry, scope.profile, immediate_error);
   if (!service)
     return ErrorCodeOr(immediate_error, SHAAR_NOT_READY);
   if (!state->observers.contains(service)) {
@@ -773,8 +784,7 @@ shaar_error_code Unwatch(HistoryContext *registry,
     Reply(request, SHAAR_OK, base::Value::Dict().Set("schemaVersion", 1));
     return SHAAR_OK;
   }
-  history::HistoryService *service = HistoryServiceFactory::GetForProfile(
-      profile, ServiceAccessType::EXPLICIT_ACCESS);
+  auto *service = ResolveHistory(registry, scope.profile, immediate_error);
   if (!service)
     return Fail(immediate_error, SHAAR_NOT_READY,
                 "history service is not ready");

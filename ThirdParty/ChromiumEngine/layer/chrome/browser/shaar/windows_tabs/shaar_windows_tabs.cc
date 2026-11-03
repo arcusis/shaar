@@ -79,10 +79,31 @@ void BrowserTabRegistryImpl::BindWindow(shaar_engine* engine,
   for (auto& entry : windows_) {
     if (entry.engine == engine && entry.handle == window) {
       entry.browser = browser;
+      if (!entry.active_browser)
+        entry.active_browser = browser;
       return;
     }
   }
-  windows_.push_back({engine, window, browser});
+  windows_.push_back({engine, window, browser, browser, {}, {}});
+}
+
+BrowserTabRegistryImpl::WindowState* BrowserTabRegistryImpl::EnsureWindowState(
+    shaar_engine* engine,
+    shaar_window* window,
+    Browser* browser,
+    std::string_view profile_id) {
+  BindWindow(engine, window, browser);
+  for (auto& entry : windows_) {
+    if (entry.engine == engine && entry.handle == window) {
+      if (!profile_id.empty()) {
+        entry.browsers_by_profile.emplace(std::string(profile_id), browser);
+        if (entry.active_profile_id.empty())
+          entry.active_profile_id = profile_id;
+      }
+      return &entry;
+    }
+  }
+  return nullptr;
 }
 
 void BrowserTabRegistryImpl::BindTab(shaar_engine* engine,
@@ -108,7 +129,7 @@ void BrowserTabRegistryImpl::UnbindWindow(shaar_engine* engine,
   std::erase_if(tabs_, [engine, window](const TabEntry& entry) {
     return entry.engine == engine && entry.window == window;
   });
-  std::erase_if(windows_, [engine, window](const WindowEntry& entry) {
+  std::erase_if(windows_, [engine, window](const WindowState& entry) {
     return entry.engine == engine && entry.handle == window;
   });
 }

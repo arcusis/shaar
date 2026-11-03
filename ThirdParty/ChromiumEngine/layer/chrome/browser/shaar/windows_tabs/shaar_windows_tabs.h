@@ -22,6 +22,14 @@ namespace shaar::windows_tabs {
 
 class BrowserTabRegistryImpl final : public shaar::BrowserTabRegistry {
  public:
+  struct WindowState {
+    shaar_engine* engine;
+    shaar_window* handle;
+    Browser* browser;
+    Browser* active_browser = nullptr;
+    std::string active_profile_id;
+    std::unordered_map<std::string, Browser*> browsers_by_profile;
+  };
   Browser* FindBrowser(shaar_engine*, shaar_window*) override;
   content::WebContents* FindWebContents(shaar_engine*, shaar_window*,
                                          shaar_tab*) override;
@@ -31,16 +39,13 @@ class BrowserTabRegistryImpl final : public shaar::BrowserTabRegistry {
   void GetTabs(shaar_engine*, shaar_window*,
                std::unordered_map<std::string, content::WebContents*>*) override;
   void BindWindow(shaar_engine*, shaar_window*, Browser*);
+  WindowState* EnsureWindowState(shaar_engine*, shaar_window*, Browser*,
+                                 std::string_view profile_id);
   void BindTab(shaar_engine*, shaar_window*, shaar_tab*, std::string id,
                content::WebContents*);
   void UnbindWindow(shaar_engine*, shaar_window*);
 
  private:
-  struct WindowEntry {
-    shaar_engine* engine;
-    shaar_window* handle;
-    Browser* browser;
-  };
   struct TabEntry {
     shaar_engine* engine;
     shaar_window* window;
@@ -48,7 +53,7 @@ class BrowserTabRegistryImpl final : public shaar::BrowserTabRegistry {
     std::string id;
     content::WebContents* contents;
   };
-  std::vector<WindowEntry> windows_;
+  std::vector<WindowState> windows_;
   std::vector<TabEntry> tabs_;
 };
 

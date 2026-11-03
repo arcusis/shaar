@@ -92,7 +92,12 @@ TEST(ShaarWindowsTabsHandlersTest, RegistryResolvesBoundWindowAndTabIDs) {
   auto* browser = reinterpret_cast<Browser*>(4);
   auto* contents = reinterpret_cast<content::WebContents*>(5);
   registry.BindWindow(engine, window, browser);
+  auto* state = registry.EnsureWindowState(engine, window, browser, "profile-a");
   registry.BindTab(engine, window, tab, "tab-a", contents);
+  ASSERT_NE(state, nullptr);
+  EXPECT_EQ(state->active_browser, browser);
+  EXPECT_EQ(state->active_profile_id, "profile-a");
+  EXPECT_EQ(state->browsers_by_profile.at("profile-a"), browser);
   EXPECT_EQ(registry.FindBrowser(engine, window), browser);
   EXPECT_EQ(registry.FindWebContents(engine, window, tab), contents);
   EXPECT_EQ(registry.FindWebContentsByID(engine, window, "tab-a"), contents);

@@ -86,8 +86,9 @@ class SourceBuildTests(unittest.TestCase):
         self.assertEqual(config["gitLfs"]["version"], "3.8.1")
         self.assertEqual(config["gitLfs"]["archiveSha256"],
                          "0ba10e897e0496412cd86eacaed4ed554c97ddc29bc5c709d28faa5eaaa2222c")
-        patch = ROOT / config["patch"]["file"]
-        self.assertEqual(BUILD.sha256(patch), config["patch"]["sha256"])
+        self.assertNotIn("patch", config)
+        self.assertTrue(any(item["file"].endswith("shaar-safe-storage-migration.patch")
+                            for item in config["patches"]))
         self.assertNotIn("latest", json.dumps(config).lower())
 
     def test_patch_preconditions_bind_existing_api_and_chromium_downloadprefs(self):
@@ -276,6 +277,29 @@ class SourceBuildTests(unittest.TestCase):
         self.assertEqual(update["addedPatches"], [fix])
         self.assertEqual(update["previousFramework"], {"sha256": "old"})
 
+    def test_patch_update_retires_existing_profile_patch_before_rebuild(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = pathlib.Path(temporary)
+            chromium = repo / "build/EngineSource/chromium_git/chromium/src"
+            chromium.mkdir(parents=True)
+            target = chromium / "profile.txt"
+            target.write_text("patched\n")
+            patch = repo / "old.patch"
+            patch.write_text("diff --git a/profile.txt b/profile.txt\n"
+                             "--- a/profile.txt\n+++ b/profile.txt\n"
+                             "@@ -1 +1 @@\n-original\n+patched\n")
+            old = {"file": "old.patch", "sha256": BUILD.sha256(patch)}
+            appended = {"file": "new.patch", "sha256": "a" * 64}
+            runner, data = self._patch_update_runner(
+                repo, {"build": {"buildJobs": 6, "timeoutsSeconds": {"patches": 30}},
+                       "patch": old}, [appended])
+            runner.output = repo / "build/EngineSource"
+            runner.config.pop("patch")
+            runner.accept_patch_update(data)
+            self.assertEqual(target.read_text(), "original\n")
+            self.assertFalse(data["inputs"]["profilePatchApplied"])
+            self.assertEqual(data["patchUpdates"][-1]["retiredProfilePatch"], old)
+
     def test_patch_update_rejects_other_config_changes_and_unfinished_builds(self):
         fix = {"file": "fix.patch", "sha256": "a" * 64}
         cases = (
@@ -294,6 +318,30 @@ class SourceBuildTests(unittest.TestCase):
                 data["status"] = status
                 with self.assertRaises(BUILD.BuildError):
                     runner.accept_patch_update(data)
+
+    def test_failed_incremental_build_accepts_only_verified_appended_patch(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = pathlib.Path(temporary)
+            (repo / "ThirdParty/ArdiaCore").mkdir(parents=True)
+            (repo / "ThirdParty/ArdiaCore/source-build.json").write_text("{}")
+            appended_file = repo / "repair.patch"
+            appended_file.write_text("repair\n")
+            original = {"file": "original.patch", "sha256": "a" * 64}
+            appended = {"file": "repair.patch", "sha256": BUILD.sha256(appended_file)}
+            runner = BUILD.Runner.__new__(BUILD.Runner)
+            runner.repo = repo
+            runner.config = {"build": {"buildJobs": 12}, "patches": [original, appended]}
+            data = {"status": "failed", "pins": {"build": {"buildJobs": 12},
+                    "patches": [original]}, "inputs": {"enginePatches": [original]},
+                    "configDigest": "old", "runnerSha256": "old",
+                    "patchUpdates": [{"previousFramework": {"enginePatchSha256": [original["sha256"]]}}]}
+            self.assertTrue(runner.accept_failed_patch_append(data, "new"))
+            self.assertEqual(data["configDigest"], "new")
+            self.assertEqual(data["patchUpdates"][-1]["addedPatches"], [appended])
+            self.assertEqual(data["patchUpdates"][-1]["previousFramework"],
+                             {"enginePatchSha256": [original["sha256"]]})
+            runner.config = {"build": {"buildJobs": 11}, "patches": [original, appended]}
+            self.assertFalse(runner.accept_failed_patch_append(data, "other"))
 
     def test_engine_patches_apply_in_order_and_keep_already_applied_ones(self):
         with tempfile.TemporaryDirectory() as temporary:

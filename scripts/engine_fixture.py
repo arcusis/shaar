@@ -29,7 +29,7 @@ import threading
 import time
 import uuid
 import zlib
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 VERIFICATION_APP = Path('build/Shaar Verification.app')
 RELEASE_FEED = Path(__file__).resolve().with_name('release_feed.py')
@@ -475,7 +475,7 @@ for(const action of ['play','pause','previoustrack','nexttrack']){
 }
 </script></html>"""
 
-PAGE_CSP = "default-src 'none'; img-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self' http://tracker.localhost:* http://localhost:*"
+PAGE_CSP = "default-src 'none'; img-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self' http://trackertest.org:* http://localhost:*"
 MEDIA_SESSION_CSP = PAGE_CSP + "; media-src blob:"
 MEDIA_CLIP = Path(__file__).resolve().parent.parent / 'Tests/Fixtures/Media/seekable-clip.webm'
 
@@ -722,6 +722,7 @@ EXTERNAL_APP_CONSENT_CLEANUP_KEYS = {
     'routerClientCount', 'pendingRequests', 'passed',
 }
 PRIVATE_WINDOW_MODE = 'private-window-owned-engine-fixture'
+PRIVATE_MULTITAB_MODE = 'private-multitab-owned-engine-fixture'
 PRIVATE_WINDOW_SCOPE = (
     'Owned hidden native product and engine windows on synthetic loopback origin. No real accounts, '
     'third-party endpoints or physical input.'
@@ -785,6 +786,8 @@ def argument_parser():
                       help="Run only the external-app consent probe with native no-launch guard")
     mode.add_argument("--private-window", action="store_true",
                       help="Compose owned native OTR windows with both normal engine fixture phases")
+    mode.add_argument("--private-multitab", action="store_true",
+                      help="Verify three navigated and rendered tabs in one hidden private window")
     mode.add_argument("--quit-exit", action="store_true",
                       help="Quit through the host menu with an extension installed; assert main and helper exit")
     mode.add_argument("--quit-pending-navigation", action="store_true",
@@ -798,7 +801,8 @@ def build_engine_probe_arguments(executable, root, fixture_url, phase, *, includ
                                  onboarding_control, abrupt, saved_tab_capacity,
                                  external_app_consent=False, private_window=False,
                                  private_window_run_id=None, quit_exit=False,
-                                 quit_pending_navigation=False, session_recovery=False):
+                                 quit_pending_navigation=False, session_recovery=False,
+                                 private_multitab=False):
     arguments = [str(executable), "--probe-data-dir", str(root),
                  "--probe-url", fixture_url, "--probe-phase", phase,
                  "--probe-output", str(root / f"{phase}.json")]
@@ -818,6 +822,8 @@ def build_engine_probe_arguments(executable, root, fixture_url, phase, *, includ
             raise RuntimeError('Private window mode requires a run identity')
         arguments.append('--probe-private-window')
         arguments.extend(('--probe-private-window-run-id', private_window_run_id))
+    if private_multitab:
+        arguments.append('--probe-private-multitab')
     if quit_exit or quit_pending_navigation:
         arguments.append('--probe-quit-exit')
     if quit_pending_navigation:
@@ -1391,6 +1397,50 @@ def record_external_app_consent_summary(root):
     return summary
 
 
+
+def validate_private_multitab_report(root, phase, report, exit_code):
+    path = root / f'{phase}-private-multitab.json'
+    try:
+        evidence = json.loads(path.read_text())
+    except (OSError, ValueError) as error:
+        raise RuntimeError(
+            f"{phase} private multitab evidence is missing or malformed: {report.get('error')}"
+        ) from error
+    if (exit_code != 0 or report.get('passed') is not True
+            or report.get('probeMode') != PRIVATE_MULTITAB_MODE
+            or report.get('privateMultiTabOnly') is not True
+            or report.get('localFixturesPassed') is not True
+            or evidence.get('schema') != 1 or evidence.get('phase') != phase
+            or evidence.get('passed') is not True or evidence.get('windowHidden') is not True
+            or evidence.get('tabCount') != 3 or evidence.get('cleanupPassed') is not True
+            or 'three normal tabs navigate and render in one hidden window' not in report.get('checks', [])
+            or 'normal address bar search opens a live native tab' not in report.get('checks', [])
+            or parse_qs(urlparse(evidence.get('addressSearchURL', '')).query).get('q')
+                != ['shaar private smoke search']):
+        raise RuntimeError(f'{phase} private multitab report failed')
+    for visit, entries in (('opened', evidence.get('tabs')),
+                           ('reselected', evidence.get('reselected'))):
+        if not isinstance(entries, list) or len(entries) != 3:
+            raise RuntimeError(f'{phase} private multitab {visit} captures are incomplete')
+        if sorted(entry.get('index') for entry in entries if isinstance(entry, dict)) != [0, 1, 2]:
+            raise RuntimeError(f'{phase} private multitab {visit} tab indexes differ')
+        for entry in entries:
+            index = entry['index']
+            filename = f'{phase}-private-multitab-{index}-{visit}.png'
+            image = root / filename
+            if (entry.get('capture') != filename
+                    or entry.get('path') != f'/account/private-multitab-{phase}-{index}'
+                    or not isinstance(entry.get('tabID'), str)
+                    or type(entry.get('lightSamples')) is not int or entry['lightSamples'] < 48
+                    or not image.is_file() or not image.read_bytes().startswith(b'\x89PNG\r\n\x1a\n')
+                    or hashlib.sha256(image.read_bytes()).hexdigest() != entry.get('sha256')):
+                raise RuntimeError(f'{phase} private multitab {visit} tab {index} failed capture validation')
+    opened_ids = [entry['tabID'] for entry in evidence['tabs']]
+    if len(set(opened_ids)) != 3 or {entry['tabID'] for entry in evidence['reselected']} != set(opened_ids):
+        raise RuntimeError(f'{phase} private multitab identities differ')
+    return evidence
+
+
 def main(argv=None):
     options = argument_parser().parse_args(argv)
     include_bitwarden = options.bitwarden or options.bitwarden_onboarding_control
@@ -1404,6 +1454,8 @@ def main(argv=None):
         print('EXTERNAL APP CONSENT ONLY: owned loopback; native no-launch guard enabled', flush=True)
     if options.private_window:
         print('PRIVATE WINDOW FIXTURE: owned hidden OTR windows; synthetic loopback only', flush=True)
+    if options.private_multitab:
+        print('PRIVATE MULTITAB: one hidden OTR window; three navigated renderer captures', flush=True)
     if quit_exit:
         print('QUIT EXIT ONLY: host Quit command with an extension installed; process exit is timed', flush=True)
     if options.quit_pending_navigation:
@@ -1444,7 +1496,8 @@ def main(argv=None):
                 private_window=options.private_window,
                 private_window_run_id=private_window_run_id, quit_exit=quit_exit,
                 quit_pending_navigation=options.quit_pending_navigation,
-                session_recovery=options.session_recovery)
+                session_recovery=options.session_recovery,
+                private_multitab=options.private_multitab)
             with (root / f"{phase}.log").open("w") as log:
                 process = subprocess.Popen(arguments, stdout=log, stderr=log, start_new_session=True, env=probe_env)
                 print(f"Probe PID: {process.pid}", flush=True)
@@ -1458,7 +1511,7 @@ def main(argv=None):
                     if quit_exit:
                         code = wait_for_quit_exit(process, root, phase, timeout=90)
                     else:
-                        timeout = (280 if options.private_window else 180 if options.external_app_consent else 180 if options.saved_tab_capacity
+                        timeout = (280 if options.private_window else 90 if options.private_multitab else 180 if options.external_app_consent else 180 if options.saved_tab_capacity
                                    else 280)
                         code = wait_for_probe(process, root, phase, timeout=timeout)
                 except subprocess.TimeoutExpired:
@@ -1502,6 +1555,8 @@ def main(argv=None):
                       f"helpers {receipt['helpersExitSeconds']:.2f}s later", flush=True)
             elif options.session_recovery:
                 validate_session_recovery_report(report, phase)
+            elif options.private_multitab:
+                validate_private_multitab_report(root, phase, report, code)
             elif options.private_window:
                 try:
                     validate_private_window_report(root, phase, report, code)

@@ -48,10 +48,6 @@
       "build": 43200
     }
   },
-  "patch": {
-    "file": "ThirdParty/ArdiaCore/patches/profile-download-directory.patch",
-    "sha256": "be7185ea26fa81164c2407f9055a260f96c1f0aafffa204878e16cf984758545"
-  },
   "patches": [
     {
       "file": "ThirdParty/ArdiaCore/patches/quit-pending-navigation-window-controller.patch",
@@ -64,6 +60,14 @@
     {
       "file": "ThirdParty/ArdiaCore/patches/private-request-proxy-completion.patch",
       "sha256": "6b7248fc34fd447b9d169cf5c50dc8dc8ba8b817605a0c9b31f740e94e90c45f"
+    },
+    {
+      "file": "ThirdParty/ArdiaCore/patches/shaar-safe-storage-migration.patch",
+      "sha256": "89fc258da55624d7b3490ef467c454c8529ec2c416539429377534939bac36dc"
+    },
+    {
+      "file": "ThirdParty/ArdiaCore/patches/private-profile-call-compatibility.patch",
+      "sha256": "bcb0a2114c6a77304fe26f6c30b4c48136a7a6479f5b5ae87984e539f7e2ca62"
     }
   ]
 }

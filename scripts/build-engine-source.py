@@ -72,13 +72,12 @@ def load_config(repo: pathlib.Path) -> dict:
         value = config[section][field]
         if not PIN_RE.fullmatch(value):
             raise BuildError(f"invalid pinned commit {section}.{field}")
-    if config["patch"]["sha256"] == "REPLACE_AFTER_PATCH_REVIEW":
-        raise BuildError("source-build.json has no reviewed patch digest")
     if not re.fullmatch(r"[0-9a-f]{64}", config["gitLfs"]["archiveSha256"]):
         raise BuildError("invalid pinned git-lfs archive digest")
-    patch = repo / config["patch"]["file"]
-    if sha256(patch) != config["patch"]["sha256"]:
-        raise BuildError("profile download patch digest mismatch")
+    if "patch" in config:
+        patch = repo / config["patch"]["file"]
+        if sha256(patch) != config["patch"]["sha256"]:
+            raise BuildError("profile download patch digest mismatch")
     for item in config.get("patches", []):
         if (not re.fullmatch(r"[0-9a-f]{64}", item["sha256"]) or
                 sha256(repo / item["file"]) != item["sha256"]):
@@ -475,6 +474,16 @@ class Runner:
                 self.accept_patch_update(data)
             current_config_digest = sha256(self.repo / "ThirdParty/ArdiaCore/source-build.json")
             if data.get("configDigest") != current_config_digest:
+                if self.accept_failed_patch_append(data, current_config_digest):
+                    current_runner = sha256(pathlib.Path(__file__))
+                    if data.get("runnerSha256") != current_runner:
+                        data.setdefault("runnerUpdates", []).append({
+                            "previousSha256": data.get("runnerSha256"),
+                            "currentSha256": current_runner,
+                            "at": utc_now(),
+                        })
+                        data["runnerSha256"] = current_runner
+                    return data
                 old_pins = json.loads(json.dumps(data.get("pins", {})))
                 new_pins = json.loads(json.dumps(self.config))
                 old_pins.pop("gitLfs", None)
@@ -581,13 +590,41 @@ class Runner:
         new_pins = json.loads(json.dumps(self.config))
         old_patches = old_pins.pop("patches", [])
         new_patches = new_pins.pop("patches", [])
-        if (old_pins != new_pins or len(new_patches) <= len(old_patches) or
+        old_base_patch = old_pins.pop("patch", None)
+        new_base_patch = new_pins.pop("patch", None)
+        retire_base_patch = old_base_patch is not None and new_base_patch is None
+        if (old_pins != new_pins or
+                (old_base_patch != new_base_patch and not retire_base_patch) or
+                len(new_patches) <= len(old_patches) or
                 new_patches[:len(old_patches)] != old_patches):
             raise BuildError("--update-patches accepts only appended engine patches")
+        if retire_base_patch:
+            old_patch = self.repo / old_base_patch["file"]
+            if sha256(old_patch) != old_base_patch["sha256"]:
+                raise BuildError("retired profile patch digest mismatch")
+            chromium = self.output / "chromium_git/chromium/src"
+            assert_real_owned_path(chromium, self.output)
+            command = ["/usr/bin/git", "-C", str(chromium), "apply"]
+            timeout = self.config["build"]["timeoutsSeconds"]["patches"]
+            reverse = subprocess.run(command + ["--reverse", "--check", str(old_patch)],
+                                     cwd=self.output, capture_output=True, text=True, timeout=timeout)
+            if reverse.returncode == 0:
+                applied = subprocess.run(command + ["--reverse", str(old_patch)], cwd=self.output,
+                                         capture_output=True, text=True, timeout=timeout)
+                if applied.returncode:
+                    raise BuildError("could not retire profile patch: " + applied.stderr)
+            else:
+                forward = subprocess.run(command + ["--check", str(old_patch)], cwd=self.output,
+                                         capture_output=True, text=True, timeout=timeout)
+                if forward.returncode:
+                    raise BuildError("profile patch retirement state is ambiguous")
+            data.setdefault("inputs", {})["profilePatchApplied"] = False
+            data["inputs"]["patchSha256"] = None
         data.setdefault("patchUpdates", []).append({
             "previousConfigDigest": data.get("configDigest"),
             "previousRunnerSha256": data.get("runnerSha256"),
             "addedPatches": new_patches[len(old_patches):],
+            "retiredProfilePatch": old_base_patch if retire_base_patch else None,
             "previousFramework": data.get("framework"),
             "previousFinishedAt": data.get("finishedAt"),
             "at": utc_now(),
@@ -599,6 +636,38 @@ class Runner:
         data["framework"] = None
         data["status"] = "started"
         data.pop("finishedAt", None)
+
+    def accept_failed_patch_append(self, data: dict, current_config_digest: str) -> bool:
+        """Allow a failed incremental build to resume with one or more appended fixes."""
+        if data.get("status") != "failed":
+            return False
+        old_pins = json.loads(json.dumps(data.get("pins", {})))
+        new_pins = json.loads(json.dumps(self.config))
+        old_patches = old_pins.pop("patches", [])
+        new_patches = new_pins.pop("patches", [])
+        if (old_pins != new_pins or len(new_patches) <= len(old_patches)
+                or new_patches[:len(old_patches)] != old_patches):
+            return False
+        recorded = data.get("inputs", {}).get("enginePatches", [])
+        if [(item["file"], item["sha256"]) for item in recorded] != [
+                (item["file"], item["sha256"]) for item in old_patches]:
+            raise BuildError("failed build patch receipt differs from the configured prefix")
+        for item in new_patches[len(old_patches):]:
+            if sha256(self.repo / item["file"]) != item["sha256"]:
+                raise BuildError("appended engine patch digest mismatch")
+        updates = data.setdefault("patchUpdates", [])
+        previous_framework = updates[-1].get("previousFramework") if updates else None
+        updates.append({
+            "previousConfigDigest": data["configDigest"],
+            "previousRunnerSha256": data.get("runnerSha256"),
+            "addedPatches": new_patches[len(old_patches):],
+            "previousFramework": previous_framework,
+            "at": utc_now(),
+            "failedBuildAppend": True,
+        })
+        data["configDigest"] = current_config_digest
+        data["pins"] = self.config
+        return True
 
     @staticmethod
     def host_inputs(repo: pathlib.Path) -> dict:
@@ -1289,7 +1358,8 @@ class Runner:
         self.receipt["sources"]["ungoogled"]["tag"] = self.config["ungoogled"]["tag"]
         self.receipt["inputs"] = {
             **self.receipt.get("inputs", {}),
-            "patchSha256": sha256(self.repo / self.config["patch"]["file"]),
+            "patchSha256": sha256(self.repo / self.config["patch"]["file"])
+            if "patch" in self.config else None,
             "chromiumVersion": self.config["chromium"]["version"],
             "sisoVersion": self.config["chromium"]["sisoVersion"],
             "depotToolsCommit": self.config["depotTools"]["commit"],
@@ -1512,13 +1582,18 @@ class Runner:
     def patch_overlay(self) -> None:
         chromium = self.output / "chromium_git/chromium/src"
         verify_source_preconditions(self.output / "source/ardia", chromium)
-        self.apply_profile_patch(chromium)
+        if "patch" in self.config:
+            self.apply_profile_patch(chromium)
         self.apply_engine_patches(chromium)
 
     def apply_engine_patches(self, chromium: pathlib.Path) -> None:
         """Apply the configured engine fixes in order; a patch already in the tree is kept."""
         timeout = self.config["build"]["timeoutsSeconds"]["patches"]
         records = []
+        patch_paths = [set(re.findall(r"^diff --git a/(\S+) b/", (self.repo / item["file"]).read_text(), re.M))
+                       for item in self.config.get("patches", [])]
+        previous_framework = self.receipt.get("patchUpdates", [])[-1].get("previousFramework", {}) if self.receipt.get("patchUpdates") else {}
+        previous_digests = previous_framework.get("enginePatchSha256", [])
         for index, item in enumerate(self.config.get("patches", []), start=1):
             patch = self.repo / item["file"]
             stage = f"engine-patch-{index:02d}"
@@ -1528,11 +1603,16 @@ class Runner:
                 timeout=timeout)
             state = "already-applied"
             if reverse.returncode:
-                self.run(f"{stage}-check", ["/usr/bin/git", "-C", str(chromium), "apply", "--check",
-                                            str(patch)], self.output, timeout)
-                self.run(f"{stage}-apply", ["/usr/bin/git", "-C", str(chromium), "apply", str(patch)],
-                         self.output, timeout)
-                state = "applied"
+                overlaps_later = bool(patch_paths[index - 1].intersection(
+                    set().union(*patch_paths[index:]))) if index < len(patch_paths) else False
+                if item["sha256"] in previous_digests and overlaps_later:
+                    state = "already-applied-overlapped"
+                else:
+                    self.run(f"{stage}-check", ["/usr/bin/git", "-C", str(chromium), "apply", "--check",
+                                                str(patch)], self.output, timeout)
+                    self.run(f"{stage}-apply", ["/usr/bin/git", "-C", str(chromium), "apply", str(patch)],
+                             self.output, timeout)
+                    state = "applied"
             records.append({"file": item["file"], "sha256": sha256(patch), "state": state})
             self.receipt["inputs"]["enginePatches"] = records
             self.save()
@@ -1751,11 +1831,14 @@ class Runner:
         aria = self.output / "source/ardia"
         self.verify_engine_tree(aria)
         expected = self.receipt.get("inputs", {})
-        if not expected.get("profilePatchApplied"):
-            raise BuildError("interrupted build lacks applied profile patch receipt")
-        patch = self.repo / self.config["patch"]["file"]
-        if sha256(patch) != expected.get("patchSha256"):
-            raise BuildError("profile patch changed after interrupted build")
+        if "patch" in self.config:
+            if not expected.get("profilePatchApplied"):
+                raise BuildError("interrupted build lacks applied profile patch receipt")
+            patch = self.repo / self.config["patch"]["file"]
+            if sha256(patch) != expected.get("patchSha256"):
+                raise BuildError("profile patch changed after interrupted build")
+        elif expected.get("profilePatchApplied") or expected.get("patchSha256") is not None:
+            raise BuildError("retired profile patch remains in interrupted build receipt")
         args_file = chromium / "out/Release_GN_arm64/args.gn"
         if (not args_file.is_file() or args_file.is_symlink() or
                 sha256(args_file) != expected.get("gnArgsSha256") or
@@ -1792,17 +1875,26 @@ class Runner:
             assert_real_owned_path(path, self.output)
             if path.is_symlink() or not path.is_file() or sha256(path) != digest:
                 raise BuildError(f"staged upstream build input changed after interruption: {name}")
-        command = ["/usr/bin/git", "-C", str(chromium), "apply", "--reverse", "--check", str(patch)]
-        self.run("resume-profile-patch-check", command, self.output,
-                 self.config["build"]["timeoutsSeconds"]["patches"])
+        if "patch" in self.config:
+            command = ["/usr/bin/git", "-C", str(chromium), "apply", "--reverse", "--check", str(patch)]
+            self.run("resume-profile-patch-check", command, self.output,
+                     self.config["build"]["timeoutsSeconds"]["patches"])
         configured = {item["file"]: item["sha256"] for item in self.config.get("patches", [])}
-        for index, item in enumerate(expected.get("enginePatches", []), start=1):
+        applied_patches = expected.get("enginePatches", [])
+        patch_paths = [set(re.findall(r"^diff --git a/(\S+) b/", (self.repo / item["file"]).read_text(), re.M))
+                       for item in applied_patches]
+        for index, item in enumerate(applied_patches, start=1):
             engine_patch = self.repo / item["file"]
             if configured.get(item["file"]) != item["sha256"] or sha256(engine_patch) != item["sha256"]:
                 raise BuildError(f"engine patch changed after the recorded build: {item['file']}")
-            self.run(f"resume-engine-patch-{index:02d}-check",
-                     ["/usr/bin/git", "-C", str(chromium), "apply", "--reverse", "--check",
-                      str(engine_patch)], self.output, self.config["build"]["timeoutsSeconds"]["patches"])
+            check = subprocess.run(
+                ["/usr/bin/git", "-C", str(chromium), "apply", "--reverse", "--check",
+                 str(engine_patch)], cwd=self.output, capture_output=True, text=True,
+                timeout=self.config["build"]["timeoutsSeconds"]["patches"])
+            overlaps_later = bool(patch_paths[index - 1].intersection(
+                set().union(*patch_paths[index:]))) if index < len(patch_paths) else False
+            if check.returncode and not overlaps_later:
+                raise BuildError(f"recorded engine patch no longer applies in reverse: {item['file']}: {check.stderr}")
         recorded_build = expected.get("effectiveCommands", {}).get("build")
         if (self.build_command_without_jobs(recorded_build) !=
                 self.build_command_without_jobs(self.effective_commands()["build"])):
@@ -1982,7 +2074,7 @@ class Runner:
         symbols = subprocess.run(["/usr/bin/nm", "-gU", str(binary)], capture_output=True,
                                  text=True, timeout=60, check=True).stdout.splitlines()
         exported = sorted({line.split()[-1].lstrip("_") for line in symbols if line.split()})
-        required = ["ac_downloads_directory_get", "ac_downloads_directory_set"]
+        required = ["ac_downloads_directory_get", "ac_downloads_directory_set"] if "patch" in self.config else []
         missing = [symbol for symbol in required if symbol not in exported]
         if missing:
             raise BuildError(f"built framework lacks expected exports: {', '.join(missing)}")

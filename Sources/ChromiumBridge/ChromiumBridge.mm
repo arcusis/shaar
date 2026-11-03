@@ -224,6 +224,10 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
     strings.push_back("--use-fake-device-for-media-stream");
     strings.push_back("--ardia-test-system-media-permission=granted");
     if (ARCProbeRootIsOwned(_probeRoot) &&
+        [NSProcessInfo.processInfo.arguments containsObject:@"--probe-private-window"]) {
+      strings.push_back("--host-resolver-rules=MAP trackertest.org 127.0.0.1");
+    }
+    if (ARCProbeRootIsOwned(_probeRoot) &&
         [NSProcessInfo.processInfo.arguments containsObject:@"--marketing-screenshots"]) {
       strings.push_back("--force-device-scale-factor=2");
     }

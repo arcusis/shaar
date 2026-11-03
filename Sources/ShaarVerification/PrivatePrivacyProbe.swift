@@ -176,7 +176,7 @@ struct PrivatePrivacyProbe {
     return """
       (async()=>{const r={};try {await fetch('/private-privacy/cookie',{credentials:'include'});
       const v=await (await fetch('/private-privacy/cookie',{credentials:'include'})).json();r.cookieReturned=v.cookie.includes('privacyHttp=1');
-      for(const [key,host] of [['tracker','tracker.localhost'],['otherHTTP','localhost']]){
+      for(const [key,host] of [['tracker','trackertest.org'],['otherHTTP','localhost']]){
         try{const q=await fetch('http://'+host+':\(port)/private-privacy/resource');r[key]=q.ok&&(await q.json()).fixture==='privacy'}catch{r[key]=false}
       }} catch(e) {r.error=String(e)} return r})()
       """

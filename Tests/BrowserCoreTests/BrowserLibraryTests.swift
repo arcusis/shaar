@@ -281,6 +281,12 @@ private func bookmarkPayload(children: [[String: Any]]) -> [String: Any] {
   let firefoxItems = try BrowserImport.read(firefox)
   #expect(firefoxItems.count == 1 && firefoxItems[0].folder == "Untitled / Folder")
 
+  let emptyFirefox = directory.appendingPathComponent("EmptyFirefox.json")
+  try JSONSerialization.data(withJSONObject: [
+    "type": "text/x-moz-place-container", "children": [],
+  ]).write(to: emptyFirefox)
+  #expect(try BrowserImport.read(emptyFirefox).isEmpty)
+
   let html = directory.appendingPathComponent("Encoded.html")
   try
     #"<A href='https://example.com/?a=1&amp;b=2' title='ignored'>A &amp; B</A><A HREF="javascript:bad()">bad</A>"#
@@ -289,6 +295,11 @@ private func bookmarkPayload(children: [[String: Any]]) -> [String: Any] {
   #expect(htmlItems.count == 1)
   #expect(htmlItems[0].address == "https://example.com/?a=1&amp;b=2")
   #expect(htmlItems[0].title == "A & B")
+
+  let emptyHTML = directory.appendingPathComponent("Empty.html")
+  try "<DL><DT>No bookmarks</DT></DL>".write(
+    to: emptyHTML, atomically: true, encoding: .utf8)
+  #expect(try BrowserImport.read(emptyHTML).isEmpty)
 
   let nonDictionaryJSON = directory.appendingPathComponent("Array.json")
   try JSONSerialization.data(withJSONObject: ["bookmarks"]).write(to: nonDictionaryJSON)

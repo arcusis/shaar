@@ -80,7 +80,7 @@ struct ShaarEngineABITests {
         var event = shaar_event()
         event.size = UInt32(MemoryLayout<shaar_event>.size)
         event.sequence = 42
-        event.kind = SHAAR_EVENT_TAB
+        event.kind = shaar_event_kind(rawValue: 5)
 
         var profileBytes = shaar_bytes()
         profileBytes.data = profileBuffer.baseAddress.map {

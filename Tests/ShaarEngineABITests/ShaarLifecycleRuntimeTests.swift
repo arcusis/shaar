@@ -43,7 +43,7 @@ private func fakeLifecycleRun(
     var event = ShaarABIEvent()
     event.size = UInt32(MemoryLayout<ShaarABIEvent>.size)
     event.sequence = 1
-    event.kind = SHAAR_EVENT_ENGINE
+    event.kind = shaar_event_kind(rawValue: 1)
     var payloadBytes = ShaarBytes()
     payloadBytes.data = buffer.baseAddress.map {
       UnsafeRawPointer($0).assumingMemoryBound(to: CChar.self)

@@ -88,8 +88,10 @@ class PipelineGateTests(unittest.TestCase):
         self.assertTrue(PLAN.select_stages(["scripts/tool.py"], "merge_group")[2])
 
     def test_draft_pull_requests_skip_native_stages_and_preserve_website_checks(self):
-        for paths in (None, [], ["Sources/App.swift"], ["unclassified-input"]):
+        for paths in (None, []):
             self.assertEqual(PLAN.select_stages(paths, "pull_request", draft=True), (False, True, True))
+        for paths in (["Sources/App.swift"], ["unclassified-input"]):
+            self.assertEqual(PLAN.select_stages(paths, "pull_request", draft=True), (False, False, True))
         self.assertEqual(PLAN.select_stages(["website/src/Page.svelte"], "pull_request", draft=True),
                          (False, True, True))
         self.assertEqual(PLAN.select_stages(["Sources/App.swift"], "pull_request"), (True, False, True))

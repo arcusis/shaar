@@ -10,12 +10,15 @@ source_set("engine") {
     "engine/shaar_engine.cc",
     "engine/shaar_event_bridge.cc",
     "engine/shaar_event_bridge.h",
+    # BEGIN SHAAR DOWNLOADS MODULE
     "downloads/shaar_downloads.cc",
     "downloads/shaar_downloads.h",
     "downloads/shaar_module_registry.h",
+    # END SHAAR DOWNLOADS MODULE
   ]
 }
 
+# BEGIN SHAAR DOWNLOADS MODULE
 source_set("unit_tests") {
   testonly = true
   sources = [ "downloads/shaar_downloads_unittest.cc" ]
@@ -28,6 +31,7 @@ source_set("unit_tests") {
     "//testing/gtest",
   ]
 }
+# END SHAAR DOWNLOADS MODULE
 
 config("exports") {
   inputs = [ "shaar_engine.exports" ]

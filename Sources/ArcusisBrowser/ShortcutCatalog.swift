@@ -169,29 +169,39 @@ struct ShortcutCatalog {
 @MainActor
 enum ShortcutPageRouting {
   static func route(_ event: NSEvent, menu: NSMenu, responder: NSResponder?) -> Bool {
-    guard event.type == .keyDown, let view = responder as? NSView else { return false }
-    var ancestor: NSView? = view
+    guard event.type == .keyDown else { return false }
+    var ancestor = (responder as? NSView)
     while let current = ancestor, !(current is ChromiumPageContainerView) {
       ancestor = current.superview
     }
-    guard ancestor != nil else { return false }
+    let pageHasFocus = ancestor != nil
     let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
       .intersection([.command, .option, .control, .shift])
     let key = (event.charactersIgnoringModifiers ?? "").lowercased()
-    let matches = menu.items.compactMap(\.submenu).contains { section in
-      section.items.contains { item in
-        guard
-          item.representedObject is String
-            || !ShortcutCatalog.isEditMenu(
-              identifier: section.identifier?.rawValue, title: section.title)
-        else { return false }
-        let itemFlags = item.keyEquivalentModifierMask.intersection([
+    for section in menu.items.compactMap(\.submenu) {
+      for item in section.items {
+        let standardEditItem =
+          !(item.representedObject is String)
+          && ShortcutCatalog.isEditMenu(
+            identifier: section.identifier?.rawValue, title: section.title)
+        var itemFlags = item.keyEquivalentModifierMask.intersection([
           .command, .option, .control, .shift,
         ])
-        return !item.keyEquivalent.isEmpty && item.keyEquivalent.lowercased() == key
-          && itemFlags == flags
+        if item.keyEquivalent != item.keyEquivalent.lowercased() { itemFlags.insert(.shift) }
+        guard
+          !item.keyEquivalent.isEmpty && item.keyEquivalent.lowercased() == key
+            && itemFlags == flags
+        else { continue }
+        if pageHasFocus && standardEditItem { return false }
+        if let validator = item.target as? NSMenuItemValidation,
+          !validator.validateMenuItem(item)
+        {
+          return false
+        }
+        guard let action = item.action else { return false }
+        return NSApp.sendAction(action, to: item.target, from: item)
       }
     }
-    return matches && menu.performKeyEquivalent(with: event)
+    return false
   }
 }

@@ -156,6 +156,26 @@ jobs:
     if: needs.plan.outputs.full == 'true'
     uses: ./.github/workflows/ci-build.yml
 
+  basic-browsing:
+    name: Normal window browsing smoke
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    runs-on: macos-26
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/ci-setup
+        with:
+          mode: verification
+          products: build/swiftpm/verification
+      - name: Build verification bundle and run normal browsing smoke
+        run: .venv/bin/python scripts/ci-stage.py basic-browsing
+      - uses: ./.github/actions/ci-evidence
+        if: always()
+        with:
+          stage: basic-browsing
+
   coverage:
     name: Coverage no regression
     needs: [plan, build]

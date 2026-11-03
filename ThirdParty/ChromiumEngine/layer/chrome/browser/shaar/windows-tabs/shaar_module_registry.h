@@ -12,6 +12,9 @@
 
 class TabStripModel;
 class Browser;
+namespace ui {
+class BaseWindow;
+}
 namespace content {
 class WebContents;
 }
@@ -33,6 +36,7 @@ struct ModuleCall {
   const std::unordered_map<std::string, content::WebContents*>* bound_tabs;
   const char* scope_profile_id;
   Browser* scoped_browser;
+  ui::BaseWindow* native_window;
   Browser** active_browser;
   std::string* active_profile_id;
   std::unordered_map<std::string, Browser*>* browsers_by_profile;

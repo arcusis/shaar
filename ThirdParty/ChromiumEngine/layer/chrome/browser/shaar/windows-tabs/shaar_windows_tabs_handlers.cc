@@ -16,6 +16,8 @@
 #include "base/json/json_reader.h"
 #include "chrome/browser/shaar/windows-tabs/shaar_windows_tabs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "ui/base/base_window.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace {
 
@@ -239,7 +241,26 @@ shaar_error_code HandleTabActivationResolve(const ModuleCall* call,
 
 shaar_error_code HandleWindowSetBounds(const ModuleCall* call,
                                        shaar_error* error) {
-  return ValidateCall(call, SHAAR_OP_WINDOW_SET_BOUNDS, true, false, error);
+  const shaar_error_code validation =
+      ValidateCall(call, SHAAR_OP_WINDOW_SET_BOUNDS, true, false, error);
+  if (validation != SHAAR_UNSUPPORTED_CAPABILITY)
+    return validation;
+  auto args = ParseArguments(call);
+  if (!args || !HasOnlyKeys(args->GetDict(),
+                            {"schemaVersion", "x", "y", "width", "height"}) ||
+      !call->native_window)
+    return Fail(SHAAR_INVALID_ARGUMENT, error);
+  const auto& dict = args->GetDict();
+  const std::optional<int> x = dict.FindInt("x");
+  const std::optional<int> y = dict.FindInt("y");
+  const std::optional<int> width = dict.FindInt("width");
+  const std::optional<int> height = dict.FindInt("height");
+  if (!x || !y || !width || !height || *width <= 0 || *height <= 0 ||
+      *width > 16384 || *height > 16384 || *x < -100000 || *x > 100000 ||
+      *y < -100000 || *y > 100000)
+    return Fail(SHAAR_INVALID_ARGUMENT, error);
+  call->native_window->SetBounds(gfx::Rect(*x, *y, *width, *height));
+  return SHAAR_OK;
 }
 
 }  // namespace shaar::windows_tabs

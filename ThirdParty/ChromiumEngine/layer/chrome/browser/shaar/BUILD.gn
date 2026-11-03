@@ -13,7 +13,12 @@ source_set("engine") {
     "engine/shaar_event_bridge.cc",
     "engine/shaar_event_bridge.h",
   ]
-  deps = [ "//base", "//chrome/browser/ui/tabs:tab_strip" ]
+  deps = [
+    "//base",
+    "//chrome/browser/ui/tabs:tab_strip",
+    "//ui/base",
+    "//ui/gfx/geometry",
+  ]
   sources += [
     "windows-tabs/shaar_module_registry.h",
     "windows-tabs/shaar_windows_tabs.cc",

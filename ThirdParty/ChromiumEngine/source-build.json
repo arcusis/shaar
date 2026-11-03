@@ -46,9 +46,9 @@
   },
   "layer": {
     "path": "ThirdParty/ChromiumEngine/layer",
-    "sha256": "f1cdd67b45c4f8adfab4dcbbe180711cd4c3c0abc9745b9e050f0ab6e9c5d4b4",
+    "sha256": "6f565c0d53d0ae2f052f8ed2b11960f77df3e30a3357c34023290713e114a358",
     "files": {
-      "chrome/browser/shaar/BUILD.gn": "9baed621f5be1d6e2c64d79605fd0bcd82cf259d9d60ea5fc396127ef871e578",
+      "chrome/browser/shaar/BUILD.gn": "b6fe86a1d4a26162cd99485166cfac4b1b7bb40defadf240565761932ff185c2",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks.cc": "b349439951e01a866f2cc2d67db211a8dc30f7179d1095bc769fce5e32812b10",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks.h": "15cd5f6fc6ee7c998f5c04e8e0bb9e6c9d5c276cd7ab810a22b83c6ef849cdb5",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks_lifecycle_adapter.cc": "02f28526c3d8d14b9efc59973dd8269650d079613085f4d910c2901aba020de7",
@@ -88,6 +88,7 @@
       "chrome/browser/shaar/storage_keychain/shaar_storage_keychain.cc": "4c5dd464242661f0b14cf9f62285c3459abd3e80c03f23a7da5431fc659d1976",
       "chrome/browser/shaar/storage_keychain/shaar_storage_keychain.h": "0a12f7796ef1d27a3ebfd0e34fca0a997ec0e8cf4ab2252b02628a38e8f4e416",
       "chrome/browser/shaar/storage_keychain/shaar_storage_keychain_lifecycle_adapter.cc": "577f1ddc985da0a54e5cd32e6e2b63ce41d4b88b8b2e10263948dd8c18b77a09",
+      "chrome/browser/shaar/storage_keychain/shaar_storage_keychain_migration_probe_unittest.mm": "ca1f4c09bfd4c53e23f326909659c7f5809899753b617b51f94f01b69038b886",
       "chrome/browser/shaar/storage_keychain/shaar_storage_keychain_unittest.cc": "843551143f46dba544e3e30c0e9d04e5ccc3c44e6cc37321e5219f1300ad6ef1",
       "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.cc": "3a18bf0ea16f481471bcebd1f91901b6e9f112c0457523a21e319a42668dcb20",
       "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h": "3fff0dcf47e27deadfa896b3c1f60bc8630af6ee066912bbbb457ed038593e23",
@@ -156,7 +157,8 @@
         "chrome/browser/shaar/storage_keychain/shaar_storage_keychain.cc",
         "chrome/browser/shaar/storage_keychain/shaar_storage_keychain.h",
         "chrome/browser/shaar/storage_keychain/shaar_storage_keychain_lifecycle_adapter.cc",
-        "chrome/browser/shaar/storage_keychain/shaar_storage_keychain_unittest.cc"
+        "chrome/browser/shaar/storage_keychain/shaar_storage_keychain_unittest.cc",
+        "chrome/browser/shaar/storage_keychain/shaar_storage_keychain_migration_probe_unittest.mm"
       ]
     }
   },

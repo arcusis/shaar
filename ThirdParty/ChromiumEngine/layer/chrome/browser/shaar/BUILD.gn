@@ -99,11 +99,15 @@ source_set("engine") {
 
 # BEGIN storage_keychain
 test("storage_keychain_unittests") {
-  sources = [ "storage_keychain/shaar_storage_keychain_unittest.cc" ]
+  sources = [
+    "storage_keychain/shaar_storage_keychain_unittest.cc",
+    "storage_keychain/shaar_storage_keychain_migration_probe_unittest.mm",
+  ]
   deps = [
     ":engine",
     "//base",
     "//base/test:test_support",
+    "//crypto",
     "//components/os_crypt/common:keychain_password_mac",
     "//testing/gtest",
   ]

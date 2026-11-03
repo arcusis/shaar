@@ -696,8 +696,10 @@ shaar_error_code HandleDevToolsOperation(
   if (operation == SHAAR_OP_DEVTOOLS_UI_SHOW) {
     DevToolsWindow::OpenDevToolsWindow(contents, DevToolsOpenedByAction::kUnknown);
   } else if (operation == SHAAR_OP_DEVTOOLS_UI_CLOSE) {
-    if (auto* devtools = DevToolsWindow::GetInstanceForInspectedWebContents(contents))
-      devtools->Close(DevToolsClosedByAction::kUnknown);
+    if (auto* devtools =
+            DevToolsWindow::GetInstanceForInspectedWebContents(contents)) {
+      devtools->GetDevToolsWebContents()->ClosePage();
+    }
   } else if (operation == SHAAR_OP_DEVTOOLS_UI_STATE) {
     const bool open =
         DevToolsWindow::GetInstanceForInspectedWebContents(contents) != nullptr;

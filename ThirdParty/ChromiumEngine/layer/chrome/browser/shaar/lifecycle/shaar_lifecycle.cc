@@ -21,6 +21,7 @@
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "chrome/browser/shaar/engine/shaar_module_registry.h"
+#include "chrome/browser/shaar/private_sessions/shaar_private_sessions_module.h"
 #include "content/public/browser/browser_main_parts.h"
 
 extern "C" int ChromeMain(int argc, const char** argv);
@@ -40,6 +41,9 @@ constexpr char kStartupFailed[] =
 
 struct State {
   shaar_engine* engine = nullptr;
+  // BEGIN site_data
+  std::unique_ptr<shaar::PrivateSessionRegistry> private_sessions;
+  // END site_data
   bool ready = false;
   bool closing = false;
   bool shutting_down = false;
@@ -120,6 +124,9 @@ std::unique_ptr<ChromeContentBrowserClient> CreateContentBrowserClient() {
 void EngineReady(shaar_engine* engine) {
   if (g_state.engine != engine || g_state.ready || g_state.closing)
     return;
+  // BEGIN site_data
+  g_state.private_sessions = shaar::CreatePrivateSessionRegistry(engine);
+  // END site_data
   g_state.ready = true;
   Emit(engine, kReady);
 }

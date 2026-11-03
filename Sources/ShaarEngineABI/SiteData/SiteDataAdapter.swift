@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import Foundation
+import ShaarEngineABIC
 
 public enum ShaarSiteDataOperation: UInt32, Sendable {
   case settingsGet = 700
@@ -38,14 +39,23 @@ public struct ShaarThirdPartyCookiePolicy: Equatable, Sendable {
   }
 }
 
+public struct ShaarSiteDataEvent: Equatable, Sendable {
+  public enum Kind: String, Sendable {
+    case settingsChanged
+    case thirdPartyCookiePolicyChanged
+    case clearCompleted
+    case clearFailed
+  }
+  public let kind: Kind
+  public let profileID: String
+  public let privateSessionID: String?
+  public let requestID: UInt64?
+}
+
 public enum ShaarSiteDataError: Error, Equatable, Sendable {
   case malformedResponse
   case invalidOrigin
   case unsupportedCapability
-}
-
-public protocol ShaarSiteDataTransport: Sendable {
-  func submit(operation: ShaarSiteDataOperation, arguments: Data) async throws -> Data
 }
 
 /// Typed site-data calls over the Shaar ABI. The application keeps its Ardia
@@ -53,21 +63,35 @@ public protocol ShaarSiteDataTransport: Sendable {
 public struct ShaarSiteDataAdapter: Sendable {
   private let transport: any ShaarSiteDataTransport
   public let implementation: ShaarEngineImplementation
+  private let scope: ShaarSiteDataScope
+  private let windowID: String?
+  private let tabID: String?
 
   public init(
     implementation: ShaarEngineImplementation = .shippingDefault,
+    scope: ShaarSiteDataScope,
+    windowID: String? = nil,
+    tabID: String? = nil,
     transport: any ShaarSiteDataTransport
   ) {
     self.implementation = implementation
+    self.scope = scope
+    self.windowID = windowID
+    self.tabID = tabID
     self.transport = transport
   }
 
   public static func selected(
     implementation: ShaarEngineImplementation,
+    scope: ShaarSiteDataScope,
+    windowID: String? = nil,
+    tabID: String? = nil,
     transport: any ShaarSiteDataTransport
   ) -> Self? {
     guard implementation == .shaar else { return nil }
-    return Self(implementation: implementation, transport: transport)
+    return Self(
+      implementation: implementation, scope: scope, windowID: windowID, tabID: tabID,
+      transport: transport)
   }
 
   public func settings(origin: String) async throws -> [String: ShaarSiteSetting] {
@@ -178,6 +202,35 @@ public struct ShaarSiteDataAdapter: Sendable {
       await submit(.thirdPartyCookiesSet, ["blocked": blocked]))
   }
 
+  /// Route only site-data invalidations whose copied event envelope matches this adapter's scope.
+  /// Private invalidations cannot refresh a regular profile and vice versa.
+  @discardableResult public func receive(
+    _ event: ShaarCopiedEvent, handler: (ShaarSiteDataEvent) -> Void
+  ) -> Bool {
+    guard event.kind == 12,
+      let profileID = String(data: event.profileID, encoding: .utf8),
+      profileID == scope.profileID,
+      let payload = try? JSONSerialization.jsonObject(with: event.payloadJSON) as? [String: Any],
+      payload["schemaVersion"] as? Int == 1,
+      let rawKind = payload["kind"] as? String,
+      let kind = ShaarSiteDataEvent.Kind(rawValue: rawKind)
+    else { return false }
+    let requestID = (payload["requestId"] as? NSNumber)?.uint64Value
+    let isClearEvent = kind == .clearCompleted || kind == .clearFailed
+    let expectedKeys: Set<String> =
+      isClearEvent
+      ? ["kind", "requestId", "schemaVersion"] : ["kind", "schemaVersion"]
+    guard Set(payload.keys) == expectedKeys else { return false }
+    if isClearEvent && (requestID ?? 0) == 0 { return false }
+    let decodedSession = String(data: event.sessionID, encoding: .utf8)
+    let sessionID = decodedSession?.isEmpty == true ? nil : decodedSession
+    guard sessionID == scope.privateSessionID else { return false }
+    handler(
+      ShaarSiteDataEvent(
+        kind: kind, profileID: profileID, privateSessionID: sessionID, requestID: requestID))
+    return true
+  }
+
   private static let settingNames: Set<String> = [
     "microphone", "camera", "location", "notifications", "popups", "sound",
   ]
@@ -197,7 +250,8 @@ public struct ShaarSiteDataAdapter: Sendable {
     var arguments = body
     arguments["schemaVersion"] = 1
     let data = try JSONSerialization.data(withJSONObject: arguments, options: [.sortedKeys])
-    let response = try await transport.submit(operation: operation, arguments: data)
+    let response = try await transport.submit(
+      operation: operation, scope: scope, windowID: windowID, tabID: tabID, arguments: data)
     guard let object = try JSONSerialization.jsonObject(with: response) as? [String: Any],
       object["schemaVersion"] as? Int == 1
     else { throw ShaarSiteDataError.malformedResponse }

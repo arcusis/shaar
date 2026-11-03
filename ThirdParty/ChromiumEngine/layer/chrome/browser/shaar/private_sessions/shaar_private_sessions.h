@@ -14,6 +14,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/sequence_checker.h"
+#include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_observer.h"
 
@@ -22,7 +23,8 @@ namespace shaar {
 // Owns Shaar's identity and lease for Chromium's primary OTR profile. The
 // ProfileManager remains the owner of the Profile itself; this registry keeps
 // it alive by retaining a live session until every child handle is closed.
-class PrivateSessionRegistry : public ProfileObserver {
+class PrivateSessionRegistry : public ProfileObserver,
+                               public PrivateSessionServices {
  public:
   enum class EventState { kOpened, kClosing, kClosed };
   using EventSink = std::function<void(const std::string&, const std::string&,
@@ -38,7 +40,8 @@ class PrivateSessionRegistry : public ProfileObserver {
     bool closing = false;
   };
 
-  explicit PrivateSessionRegistry(EventSink event_sink = {});
+  explicit PrivateSessionRegistry(EventSink event_sink = {},
+                                  shaar_engine* engine = nullptr);
   ~PrivateSessionRegistry();
   PrivateSessionRegistry(const PrivateSessionRegistry&) = delete;
   PrivateSessionRegistry& operator=(const PrivateSessionRegistry&) = delete;
@@ -54,6 +57,12 @@ class PrivateSessionRegistry : public ProfileObserver {
   bool RetainChild(Session* session);
   bool ReleaseChild(Session* session);
   Session* Find(Profile* parent, const std::string& session_id) const;
+  Profile* ResolvePrivateProfile(shaar_engine* engine,
+                                 shaar_private_session* handle) override;
+  std::string_view ProfileID(shaar_engine* engine,
+                             shaar_private_session* handle) override;
+  std::string_view SessionID(shaar_engine* engine,
+                             shaar_private_session* handle) override;
   void OnProfileWillBeDestroyed(Profile* profile) override;
 
  private:
@@ -69,6 +78,7 @@ class PrivateSessionRegistry : public ProfileObserver {
   std::unordered_map<Profile*, std::unordered_set<std::string>> parent_sessions_;
   std::unordered_set<std::string> retired_ids_;
   EventSink event_sink_;
+  raw_ptr<shaar_engine> engine_ = nullptr;
 };
 
 }  // namespace shaar

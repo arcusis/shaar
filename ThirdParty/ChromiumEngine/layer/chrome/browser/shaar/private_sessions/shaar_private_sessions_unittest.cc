@@ -161,6 +161,30 @@ TEST(PrivateSessionRegistryTest, EventsRetainParentAndSessionIDsThroughTeardown)
   EXPECT_NE(events[2].payload.find("privateSession.closed"), std::string::npos);
 }
 
+TEST(PrivateSessionRegistryTest, InstallsScopedSiteDataProfileService) {
+  TestingProfile profile;
+  shaar_engine engine;
+  auto registry = CreatePrivateSessionRegistry(&engine);
+  ASSERT_EQ(EngineContext().private_sessions, registry.get());
+
+  PrivateSessionRegistry::Session* session = nullptr;
+  ASSERT_EQ(registry->Open(&profile, "profile-a", "session-a", &session),
+            SHAAR_OK);
+  auto* handle = reinterpret_cast<shaar_private_session*>(session);
+  EXPECT_EQ(registry->ResolvePrivateProfile(&engine, handle), session->otr);
+  EXPECT_EQ(registry->ProfileID(&engine, handle), "profile-a");
+  EXPECT_EQ(registry->SessionID(&engine, handle), "session-a");
+  EXPECT_EQ(registry->ResolvePrivateProfile(reinterpret_cast<shaar_engine*>(1),
+                                            handle),
+            nullptr);
+
+  ASSERT_TRUE(registry->Close(session));
+  EXPECT_EQ(registry->ResolvePrivateProfile(&engine, handle), nullptr);
+  EXPECT_EQ(registry->ProfileID(&engine, handle), "");
+  registry.reset();
+  EXPECT_EQ(EngineContext().private_sessions, nullptr);
+}
+
 TEST(PrivateSessionRegistryTest, PersistenceOperationsAreRejectedOnlyForPrivateScope) {
   shaar_scope regular = {};
   regular.size = sizeof(regular);

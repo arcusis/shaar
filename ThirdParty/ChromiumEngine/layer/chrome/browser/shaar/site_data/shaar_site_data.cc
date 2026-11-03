@@ -201,9 +201,11 @@ class ClearObserver final : public content::BrowsingDataRemover::Observer {
     result.error.code = failed ? SHAAR_CHROMIUM_ERROR : SHAAR_OK;
     result.payload_json = failed ? shaar_bytes{nullptr, 0}
                                  : shaar_bytes{response_.data(), response_.size()};
-    const std::string event = failed
-        ? "{\"kind\":\"clearFailed\",\"schemaVersion\":1}"
-        : "{\"kind\":\"clearCompleted\",\"schemaVersion\":1}";
+    const std::string event =
+        std::string("{\"kind\":\"") +
+        (failed ? "clearFailed" : "clearCompleted") +
+        "\",\"requestId\":" + std::to_string(request_id) +
+        ",\"schemaVersion\":1}";
     shaar::EmitEvent(engine_, SHAAR_EVENT_SITE_DATA,
         {profile_id_.data(), profile_id_.size()},
         {session_id_.data(), session_id_.size()}, {},

@@ -55,6 +55,11 @@ source_set("engine") {
     "bookmarks/shaar_bookmarks.h",
     "bookmarks/shaar_bookmarks_lifecycle_adapter.cc",
     # END Shaar bookmarks module.
+    # BEGIN Shaar history module.
+    "history/shaar_history.cc",
+    "history/shaar_history.h",
+    "history/shaar_history_lifecycle_adapter.cc",
+    # END Shaar history module.
   ]
   deps = [
     "//base",
@@ -64,11 +69,13 @@ source_set("engine") {
     "//chrome/browser:chrome_content_browser_client",
     "//chrome/browser:lifetime",
     "//chrome/browser/profiles",
+    "//chrome/browser/history:impl",
     "//chrome/browser/ui/browser_window",
     "//components/content_settings/core/browser",
     "//components/bookmarks/browser",
     "//components/content_settings/core/common",
     "//components/prefs",
+    "//components/history/core/browser",
     "//content/public/browser",
     "//components/download/content/public",
     "//components/download/public/common",
@@ -115,6 +122,12 @@ test("bookmarks_unittests") {
   deps = [ ":engine", "//base/test:test_support", "//chrome/test:test_support",
            "//components/bookmarks/test", "//content/test:test_support",
            "//testing/gtest" ]
+}
+
+test("history_unittests") {
+  sources = [ "history/shaar_history_unittest.cc" ]
+  deps = [ ":engine", "//base/test:test_support",
+           "//components/history/core/browser", "//testing/gtest" ]
 }
 
 config("exports") {

@@ -21,6 +21,8 @@ import re
 import stat
 import subprocess
 import sys
+import tempfile
+from datetime import datetime, timezone
 
 
 CONFIG = Path("ThirdParty/ChromiumEngine/source-build.json")
@@ -183,6 +185,9 @@ def load_config(repo: Path) -> dict:
     )
     if config["build"].get("frameworkBinary") != expected_binary:
         raise BuildError("unexpected framework binary path")
+    if (config["build"].get("layerTestLabel") != "//chrome:shaar_layer_unittests" or
+            config["build"].get("layerTestBinary") != "shaar_layer_unittests"):
+        raise BuildError("unexpected Shaar layer test target")
     for section, field in (
         ("chromium", "commit"), ("ungoogled", "commit"),
         ("ungoogled", "macosCommit"), ("depotTools", "commit"),
@@ -256,6 +261,7 @@ def dry_run(repo: Path, config: dict) -> dict:
             "verified Shaar layer installation at chrome/browser/shaar",
             "GN generation for chrome_framework",
             "framework build and export receipt verification",
+            "optional --layer-tests target build and gtest JSON run",
         ],
         "requiredExports": config["requiredExports"],
         "forbiddenExports": ["ac_*", "ArdiaCore*"],
@@ -337,14 +343,126 @@ def verify_framework(repo: Path, binary: Path, receipt: Path, config: dict) -> d
     return record
 
 
+def save_receipt(receipt: Path, record: dict) -> None:
+    temporary = receipt.with_name(receipt.name + ".tmp")
+    if temporary.exists() or temporary.is_symlink() or receipt.is_symlink():
+        raise BuildError("unsafe receipt path")
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "w") as stream:
+            json.dump(record, stream, indent=2, sort_keys=True)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, receipt)
+        os.chmod(receipt, 0o600)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def reject_symlink_components(root: Path, path: Path) -> None:
+    try:
+        relative = path.relative_to(root)
+    except ValueError as exc:
+        raise BuildError("Shaar layer test path escaped output") from exc
+    current = root
+    for part in relative.parts:
+        current = current / part
+        if current.is_symlink():
+            raise BuildError(f"symlink rejected in Shaar test path: {current}")
+
+
+def run_layer_tests(repo: Path, config: dict, runner=subprocess.run) -> dict:
+    """Build and run the aggregate layer test target in an existing owned output."""
+    output = guarded_output(repo)
+    if not output.is_dir() or output.is_symlink():
+        raise BuildError("Shaar output does not exist")
+    if output.stat().st_uid != os.getuid() or stat.S_IMODE(output.stat().st_mode) & 0o077:
+        raise BuildError("Shaar output ownership or mode rejected")
+    owner = output / OWNER_FILE
+    if owner.is_symlink() or not owner.is_file() or json.loads(owner.read_text()) != owner_record(repo):
+        raise BuildError("Shaar output owner record mismatch")
+
+    receipt = output / RECEIPT_FILE
+    if receipt.is_symlink() or not receipt.is_file():
+        raise BuildError("Shaar build receipt is missing or unsafe")
+    record = json.loads(receipt.read_text())
+    if (record.get("sourceKind") != "shaar" or record.get("output") != str(output) or
+            record.get("configSha256") != sha256(repo / CONFIG) or
+            record.get("layerSha256") != config["layer"]["sha256"]):
+        raise BuildError("Shaar build receipt does not match the current source inputs")
+
+    chromium = output / "chromium_git/chromium/src"
+    build_dir = chromium / "out" / config["build"]["configuration"]
+    autoninja = output / "depot_tools/autoninja"
+    executable = build_dir / config["build"].get("layerTestBinary", "shaar_layer_unittests")
+    for path in (chromium, build_dir, autoninja):
+        reject_symlink_components(output, path)
+    if not chromium.is_dir() or not build_dir.is_dir() or not autoninja.is_file():
+        raise BuildError("existing Shaar Chromium output is incomplete")
+
+    target = config["build"].get("layerTestLabel", "//chrome:shaar_layer_unittests")
+    build_command = [str(autoninja), "-C", str(build_dir), "-j",
+                     str(config["build"]["buildJobs"]), target]
+    stage = {
+        "status": "running",
+        "startedAt": datetime.now(timezone.utc).isoformat(),
+        "target": target,
+        "buildCommand": build_command,
+    }
+    record.setdefault("stages", {})["layer-tests"] = stage
+    save_receipt(receipt, record)
+    try:
+        build_result = runner(
+            build_command, cwd=chromium, check=False, capture_output=True, text=True,
+            timeout=config["build"]["timeoutsSeconds"]["build"])
+        stage["buildExitCode"] = build_result.returncode
+        if build_result.returncode != 0:
+            raise BuildError(f"layer test target build failed with {build_result.returncode}")
+        if executable.is_symlink() or not executable.is_file():
+            raise BuildError("layer test executable was not produced")
+
+        with tempfile.TemporaryDirectory(prefix="shaar-layer-tests-", dir=output) as temp_dir:
+            result_path = Path(temp_dir) / "gtest-results.json"
+            test_command = [str(executable), f"--gtest_output=json:{result_path}"]
+            stage["testCommand"] = test_command
+            result = runner(
+                test_command, cwd=build_dir, check=False, capture_output=True, text=True,
+                timeout=config["build"]["timeoutsSeconds"].get("layerTests", 1800))
+            stage["testExitCode"] = result.returncode
+            if not result_path.is_file() or result_path.is_symlink():
+                raise BuildError("layer test did not write its gtest JSON report")
+            stage["result"] = json.loads(result_path.read_text())
+        if stage["testExitCode"] != 0:
+            raise BuildError(f"layer tests failed with {stage['testExitCode']}")
+        stage["status"] = "succeeded"
+        stage["finishedAt"] = datetime.now(timezone.utc).isoformat()
+        save_receipt(receipt, record)
+        return stage
+    except (BuildError, OSError, ValueError, subprocess.SubprocessError) as exc:
+        stage["status"] = "failed"
+        stage["failure"] = str(exc)
+        stage["finishedAt"] = datetime.now(timezone.utc).isoformat()
+        save_receipt(receipt, record)
+        raise
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true", help="reserved until Shaar source stages are reviewed")
+    parser.add_argument("--layer-tests", action="store_true",
+                        help="build and run native Shaar tests in an existing source output")
     parser.add_argument("--verify-framework", type=Path, metavar="BINARY")
     parser.add_argument("--receipt", type=Path)
     options = parser.parse_args(argv)
     repo = Path(__file__).resolve().parents[1]
     try:
+        if options.layer_tests:
+            if options.run or options.verify_framework or options.receipt:
+                raise BuildError("--layer-tests cannot be combined with build or verification flags")
+            config = load_config(repo)
+            print(json.dumps(run_layer_tests(repo, config), indent=2))
+            return 0
         if options.run:
             raise BuildError("source execution is not enabled in migration step 0")
         config = load_config(repo)

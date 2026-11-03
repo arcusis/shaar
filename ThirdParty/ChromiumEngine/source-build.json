@@ -42,13 +42,15 @@
       "gn": 1800,
       "build": 43200
     },
-    "frameworkBinary": "chromium_git/chromium/src/out/Release_GN_arm64/Chromium Framework.framework/Versions/A/Chromium Framework"
+    "frameworkBinary": "chromium_git/chromium/src/out/Release_GN_arm64/Chromium Framework.framework/Versions/A/Chromium Framework",
+    "layerTestLabel": "//chrome:shaar_layer_unittests",
+    "layerTestBinary": "shaar_layer_unittests"
   },
   "layer": {
     "path": "ThirdParty/ChromiumEngine/layer",
-    "sha256": "2d1ddf3f87f955cde3eda436fe2720def9d1f82020937023b8de4160fe56c616",
+    "sha256": "8168db8e6607083e87ba996c3175e6bfbc33f5da7a4983efdd4d99302bd25859",
     "files": {
-      "chrome/browser/shaar/BUILD.gn": "f33590ba630d14841e24d2c77345fa00114f2e13401f6a658b276efc9057fb2b",
+      "chrome/browser/shaar/BUILD.gn": "ac2d8817ae63c0eaa92ffc97600bc425c3771739595c80fa0ff63d0e4d100af8",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks.cc": "b349439951e01a866f2cc2d67db211a8dc30f7179d1095bc769fce5e32812b10",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks.h": "15cd5f6fc6ee7c998f5c04e8e0bb9e6c9d5c276cd7ab810a22b83c6ef849cdb5",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks_lifecycle_adapter.cc": "02f28526c3d8d14b9efc59973dd8269650d079613085f4d910c2901aba020de7",
@@ -222,6 +224,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0002-shaar-lifecycle-hooks.patch",
       "sha256": "ccc93512f6e7143dc9b420118990d0ebc7021bebe1fa5925f74004607be91493"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0003-shaar-layer-tests.patch",
+      "sha256": "caec2fc8029696ebcf67e8bfdcc0a874f0816848b9e0c544f514b4a3d24a0c51"
     }
   ],
   "requiredExports": [

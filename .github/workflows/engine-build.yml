@@ -64,7 +64,7 @@ jobs:
           cp "$HOME/shaar-engine-cache/shaar/build/EnginePackage"/ShaarEngine-*.zip "$GITHUB_WORKSPACE/engine-artifact/"
 
       - name: Upload engine package artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: shaar-engine-${{ github.sha }}
           path: engine-artifact/ShaarEngine-*.zip

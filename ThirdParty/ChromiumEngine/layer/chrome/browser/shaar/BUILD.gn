@@ -4,12 +4,34 @@
 
 assert(is_mac)
 
+import("//testing/test.gni")
+
 source_set("engine") {
   public = [ "public/shaar_engine.h" ]
   sources = [
     "engine/shaar_engine.cc",
     "engine/shaar_event_bridge.cc",
     "engine/shaar_event_bridge.h",
+    "history/shaar_history.cc",
+    "history/shaar_history.h",
+    "history/shaar_history_registry.h",
+  ]
+  deps = [
+    "//base",
+    "//chrome/browser/history:impl",
+    "//chrome/browser/profiles:profile",
+    "//components/history/core/browser",
+    "//ui/base",
+  ]
+}
+
+test("history_unittests") {
+  sources = [ "history/shaar_history_unittest.cc" ]
+  deps = [
+    ":engine",
+    "//base/test:test_support",
+    "//components/history/core/browser",
+    "//testing/gtest",
   ]
 }
 

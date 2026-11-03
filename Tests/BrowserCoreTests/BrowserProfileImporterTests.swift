@@ -51,11 +51,12 @@ import Testing
   try createDatabase(sqlFixture: "FirefoxPlaces.sql", at: profile)
 
   let batch = try BrowserImport.readProfile(at: profile, source: .firefox)
-  #expect(batch.bookmarks.count == 2)
+  #expect(batch.bookmarks.count == 3)
   #expect(batch.bookmarks[0].folder == nil)
   #expect(batch.bookmarks[0].address == "https://firefox-bookmark.example.test/")
   #expect(batch.bookmarks[1].folder == "Research")
   #expect(batch.bookmarks[1].address == "https://firefox-bookmark.example.test/")
+  #expect(batch.bookmarks[2].title == "Untitled")
   #expect(batch.history.count == 1)
   #expect(batch.history[0].visitTimes.count == 2)
   #expect(batch.history[0].visitTimes.last == Date(timeIntervalSince1970: 1_700_000_000.2))

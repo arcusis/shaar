@@ -22,3 +22,10 @@ condition = "AND"
 paths = ['''^scripts/release\-config\.sh$''']
 regexTarget = "match"
 regexes = ['''^SHAAR_SPARKLE_PUBLIC_ED_KEY=mAZzywTpmIBYZQRU9LERPRlNASVCm8X31EF9ZmDYX9Y=$''']
+
+[[allowlists]]
+description = "Known public private-window fixture extension identity key"
+condition = "AND"
+paths = ['''^Tests/Fixtures/PrivatePrivacyExtension/manifest\.json$''']
+regexTarget = "match"
+regexes = ['''^key":\ "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA6eJ8yffTgqiny/Tnkjy5CNi3uX2CyE7b2mkhKRoSzu3j4DApFGL3V2zMkA0zRqmxxaWd0FXHp3IGqPjrzzP/CrMdWpL16iB39AC/9sOsyChQEDagtU\+miaK5P37kdBSixyc4Cg9t7YtK80eFVNxtxM84OvrnTNmCQbP1rB6Ue\+mUBBLuSOxj4hQgv6r7IUfQ3J8kQCAzz5jUubERHCYQlgDzwrquH3gzXLKibuYqdEGvoLmmh/a98Qzhz/TJvuIdVi5t/pv89EQc7PQGZuhVMrajiaQaxblTnpv1ICv7CTZ3nfLF5WQbwizt9id\+kWlU3HNJDt3maTj1aybwlujTvQIDAQAB"$''']

@@ -16,7 +16,10 @@ import tarfile
 from pathlib import Path
 
 from ci_support import Commands, ROOT
-from ci_engine import BUNDLE_NAME, archive_bundle, engine_shards, restore_bundle, shard_modes, validate_bundle_archive
+from ci_engine import (
+    BUNDLE_NAME, archive_bundle, engine_shards, restore_bundle, shard_modes,
+    split_engine_shards, validate_bundle_archive,
+)
 from sidebar_dnd_fixture import registered_sidebar_type
 
 
@@ -25,7 +28,7 @@ VISUAL_FILTERS = (
     "SpaceIconPickerVisualTests", "SidebarFoldersVisualTests", "CommandPanelVisualTests",
     "SettingsVisualTests",
 )
-ENGINE_MODES = ("baseline", "private-window", "quit-exit", "session-recovery")
+ENGINE_MODES = ("baseline", "private-multitab", "private-window", "quit-exit", "session-recovery")
 MINIMUM_REPETITIONS = {"private-window": 3, "quit-exit": 3}
 
 
@@ -134,6 +137,7 @@ def build_engine_bundle(checks: Commands, iterations: int) -> None:
         else:
             with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
                 output.write(f"shards={json.dumps(engine_shards(iterations))}\n")
+                output.write(f"split-shards={json.dumps(split_engine_shards(iterations))}\n")
             print("Reusing integrity-checked verification bundle for this exact source tree and toolchain")
             return
     if checks.run("verification-build", ["bash", "scripts/bundle-app.sh", "--with-engine", "--verification"]):
@@ -141,6 +145,7 @@ def build_engine_bundle(checks: Commands, iterations: int) -> None:
     archive_bundle(ROOT, checks.directory)
     with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
         output.write(f"shards={json.dumps(engine_shards(iterations))}\n")
+        output.write(f"split-shards={json.dumps(split_engine_shards(iterations))}\n")
 
 
 def run_split_engine_probe(checks: Commands, shard: str, mode: str, iteration: int, phase: str) -> None:
@@ -188,19 +193,20 @@ def run_engine_shard(checks: Commands, shard: str, iterations: int, phase: str |
         return
     primary = next((mode for mode, _ in modes if mode in {"baseline", "private-window"}), None)
     if phase is not None:
-        if phase not in {"initial", "restart"} or primary is None:
-            raise ValueError("Split engine shards require a baseline or private-window probe")
+        if phase not in {"initial", "restart"}:
+            raise ValueError("Engine shard phase must be initial or restart")
+        if primary is None:
+            if phase == "initial":
+                for mode, repetitions in modes:
+                    run_probe_iterations(checks, mode, repetitions)
+                    if checks.results[-1]["status"]:
+                        return
+            return
         repetitions = next(indexes for mode, indexes in modes if mode == primary)
         for iteration in repetitions:
             run_split_engine_probe(checks, shard, primary, iteration, phase)
             if checks.results[-1]["status"]:
                 return
-        if phase == "initial" and shard == "baseline-1":
-            for mode, indexes in modes:
-                if mode in {"quit-exit", "session-recovery"}:
-                    run_probe_iterations(checks, mode, indexes)
-                    if checks.results[-1]["status"]:
-                        return
         return
     for mode, repetitions in modes:
         run_probe_iterations(checks, mode, repetitions)

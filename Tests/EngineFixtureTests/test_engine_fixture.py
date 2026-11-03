@@ -716,10 +716,16 @@ class QuitExitRunnerTests(unittest.TestCase):
         self.directory = tempfile.TemporaryDirectory(prefix='arcusis-engine-probe-')
         self.addCleanup(self.directory.cleanup)
         self.root = Path(self.directory.name)
+        self.reports = self.root / 'DiagnosticReports'
+        self.reports.mkdir()
+        directory = patch.object(fixture, 'CRASH_REPORT_DIRECTORY', self.reports)
+        directory.start()
+        self.addCleanup(directory.stop)
 
-    def main_report(self, phase):
+    def main_report(self, phase, pending_navigation=False):
         return dict(phase=phase, passed=True, probeMode=fixture.QUIT_EXIT_MODE, quitExitOnly=True,
-                    quitEventLoopStopped=False, savedTabCapacityOnly=False,
+                    quitEventLoopStopped=False, quitPendingNavigation=pending_navigation,
+                    savedTabCapacityOnly=False,
                     externalAppConsentOnly=False, privateWindowOnly=False,
                     bitwardenStoreProbe=False, checks=['quit'], chromiumVersion='test')
 
@@ -749,6 +755,83 @@ class QuitExitRunnerTests(unittest.TestCase):
             self.assertEqual(args[args.index('--probe-phase') + 1], phase)
             self.assertNotIn('--probe-external-app-consent', args)
 
+    def write_crash_report(self, name, pid):
+        path = self.reports / name
+        path.write_text(json.dumps(dict(bug_type='309')) + '\n' + json.dumps(dict(pid=pid)))
+        return path
+
+    def test_pending_navigation_mode_forwards_both_probe_flags(self):
+        options = fixture.argument_parser().parse_args(['--quit-pending-navigation'])
+        self.assertTrue(options.quit_pending_navigation)
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            fixture.argument_parser().parse_args(['--quit-pending-navigation', '--quit-exit'])
+        args = fixture.build_engine_probe_arguments(
+            '/tmp/ShaarVerification', self.root, 'http://127.0.0.1:43123/account', 'initial',
+            include_bitwarden=False, onboarding_control=False, abrupt=False,
+            saved_tab_capacity=False, quit_pending_navigation=True)
+        self.assertIn('--probe-quit-exit', args)
+        self.assertIn('--probe-quit-pending-navigation', args)
+        plain = fixture.build_engine_probe_arguments(
+            '/tmp/ShaarVerification', self.root, 'http://127.0.0.1:43123/account', 'initial',
+            include_bitwarden=False, onboarding_control=False, abrupt=False,
+            saved_tab_capacity=False, quit_exit=True)
+        self.assertNotIn('--probe-quit-pending-navigation', plain)
+
+    def test_crash_reports_match_only_this_process_since_quit(self):
+        self.write_crash_report('ShaarVerification-2026-11-01-120000.ips', 4242)
+        self.write_crash_report('ShaarVerification-2026-11-01-120001.ips', 4343)
+        self.write_crash_report('Chromium Helper (Renderer)-2026-11-01-120002.ips', 4242)
+        (self.reports / 'ShaarVerification-2026-11-01-120003.ips').write_text('not json')
+        old = self.write_crash_report('ShaarVerification-2026-11-01-110000.ips', 4242)
+        os.utime(old, (1, 1))
+        self.assertEqual(fixture.crash_reports_for(4242, since=100),
+                         ['ShaarVerification-2026-11-01-120000.ips'])
+
+    def test_crash_during_quit_fails_and_names_the_report(self):
+        self.write_checkpoint('initial', 4242)
+        self.write_crash_report('ShaarVerification-2026-11-01-120000.ips', 4242)
+        process = self.process([-11, -11])
+        process.returncode = -11
+        with patch.object(fixture, 'process_group_exists', return_value=False), \
+                self.assertRaisesRegex(RuntimeError, 'exited -11 after Quit; crash reports: '
+                                       'ShaarVerification-2026-11-01-120000.ips'):
+            fixture.wait_for_quit_exit(process, self.root, 'initial', timeout=5)
+        receipt = json.loads((self.root / 'initial-quit-exit.json').read_text())
+        self.assertFalse(receipt['passed'])
+        self.assertEqual(receipt['crashReports'], ['ShaarVerification-2026-11-01-120000.ips'])
+
+    def test_retired_reports_keep_process_and_time_filters(self):
+        (self.reports / 'Retired').mkdir()
+        name = 'Retired/ShaarVerification-2026-11-01-120000.ips'
+        self.write_crash_report(name, 4242)
+        self.write_crash_report('Retired/ShaarVerification-2026-11-01-120001.ips', 4343)
+        old = self.write_crash_report('Retired/ShaarVerification-2026-11-01-110000.ips', 4242)
+        os.utime(old, (1, 1))
+        (self.reports / 'Retired/ShaarVerification-malformed.ips').write_text('not json')
+        self.assertEqual(fixture.crash_reports_for(4242, since=100), [name])
+
+    def test_retired_crash_report_fails_even_with_clean_exit(self):
+        self.write_checkpoint('initial', 4242)
+        (self.reports / 'Retired').mkdir()
+        name = 'Retired/ShaarVerification-2026-11-01-120000.ips'
+        self.write_crash_report(name, 4242)
+        process = self.process([0, 0])
+        with patch.object(fixture, 'process_group_exists', return_value=False), \
+                self.assertRaisesRegex(RuntimeError, 'exited 0 after Quit; crash reports: Retired/'):
+            fixture.wait_for_quit_exit(process, self.root, 'initial', timeout=5)
+        receipt = json.loads((self.root / 'initial-quit-exit.json').read_text())
+        self.assertFalse(receipt['passed'])
+        self.assertEqual(receipt['crashReports'], [name])
+
+    def test_abnormal_exit_without_report_still_fails(self):
+        self.write_checkpoint('initial', 4242)
+        process = self.process([70, 70])
+        process.returncode = 70
+        with patch.object(fixture, 'process_group_exists', return_value=False), \
+                patch.object(fixture, 'CRASH_REPORT_SETTLE_SECONDS', 0.1), \
+                self.assertRaisesRegex(RuntimeError, 'exited 70 after Quit; crash reports: none'):
+            fixture.wait_for_quit_exit(process, self.root, 'initial', timeout=5)
+
     def test_exit_within_bounds_writes_passing_receipt(self):
         self.write_checkpoint('initial', 4242)
         process = self.process([None, 0, 0])
@@ -758,8 +841,12 @@ class QuitExitRunnerTests(unittest.TestCase):
         self.assertTrue(receipt['passed'])
         self.assertIsNotNone(receipt['mainExitSeconds'])
         self.assertIsNotNone(receipt['helpersExitSeconds'])
+        self.assertEqual(receipt['crashReports'], [])
         report = self.main_report('initial')
         self.assertEqual(fixture.validate_quit_exit_report(self.root, 'initial', report, 0), receipt)
+        pending = self.main_report('initial', pending_navigation=True)
+        self.assertEqual(fixture.validate_quit_exit_report(
+            self.root, 'initial', pending, 0, pending_navigation=True), receipt)
 
     def test_process_that_outlives_quit_fails_with_last_keep_alive_sample(self):
         self.write_checkpoint('initial', 4242)
@@ -797,6 +884,7 @@ class QuitExitRunnerTests(unittest.TestCase):
             ('mode', lambda report: report.update(probeMode='full-fixture')),
             ('flag', lambda report: report.update(quitExitOnly=False)),
             ('phase', lambda report: report.update(phase='restart')),
+            ('pending navigation', lambda report: report.update(quitPendingNavigation=True)),
         )
         for label, mutate in cases:
             with self.subTest(label=label), self.assertRaises(RuntimeError):

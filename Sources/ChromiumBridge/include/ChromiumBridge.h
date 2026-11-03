@@ -299,6 +299,14 @@ FOUNDATION_EXPORT NSString *ARCBridgeLocalizedString(NSString *message);
 @end
 
 @interface ARCChromiumRuntime (PrivateBrowsing)
+@property(readonly) BOOL privatePrivacyAvailable;
+- (void)privatePrivacyStatusForContextID:(NSString *)contextID
+  completion:(void (NS_SWIFT_UI_ACTOR ^)(NSDictionary *result))completion NS_SWIFT_UI_ACTOR;
+- (void)setPrivateCookieSettingForContextID:(NSString *)contextID origin:(NSString *)origin
+  value:(NSString *)value completion:(void (NS_SWIFT_UI_ACTOR ^)(NSDictionary *result))completion
+  NS_SWIFT_UI_ACTOR NS_SWIFT_NAME(setPrivateCookieSetting(contextID:origin:value:completion:));
+- (void)setPrivateTrackerAllowanceForContextID:(NSString *)contextID origin:(NSString *)origin
+  allow:(BOOL)allow completion:(void (NS_SWIFT_UI_ACTOR ^)(NSDictionary *result))completion NS_SWIFT_UI_ACTOR;
 - (void)createPrivateContextID:(NSString *)contextID sourceProfileID:(NSString *)sourceProfileID
                     completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL, NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
 - (BOOL)createPrivateWindowID:(NSString *)windowID contextID:(NSString *)contextID tabID:(NSString *)tabID

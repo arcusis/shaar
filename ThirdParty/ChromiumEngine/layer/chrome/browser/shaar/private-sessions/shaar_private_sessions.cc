@@ -48,9 +48,6 @@ shaar_error_code PrivateSessionRegistry::Open(
   }
   if (retired_ids_.contains(session_id))
     return SHAAR_CONFLICT;
-  auto parent_session = parent_sessions_.find(parent);
-  if (parent_session != parent_sessions_.end())
-    return SHAAR_CONFLICT;
 
   Profile* otr = parent->GetPrimaryOTRProfile(/*create_if_needed=*/true);
   if (!otr || !otr->IsOffTheRecord() || otr->GetOriginalProfile() != parent)
@@ -62,12 +59,14 @@ shaar_error_code PrivateSessionRegistry::Open(
   session->parent = parent;
   session->otr = otr;
   session->open_handles = 1;
-  parent->AddObserver(this);
+  auto [parent_entry, new_parent] = parent_sessions_.try_emplace(parent);
+  if (new_parent)
+    parent->AddObserver(this);
   Session* handle = session.get();
   storage_.push_back(std::move(session));
   auto [inserted, ok] = sessions_.emplace(session_id, handle);
   CHECK(ok);
-  parent_sessions_.emplace(parent, session_id);
+  parent_entry->second.insert(session_id);
   Emit(*inserted->second, EventState::kOpened);
   *out = inserted->second;
   return SHAAR_OK;
@@ -108,8 +107,10 @@ void PrivateSessionRegistry::OnProfileWillBeDestroyed(Profile* profile) {
   auto parent = parent_sessions_.find(profile);
   if (parent == parent_sessions_.end())
     return;
-  auto session = sessions_.find(parent->second);
-  if (session != sessions_.end()) {
+  for (const std::string& session_id : parent->second) {
+    auto session = sessions_.find(session_id);
+    if (session == sessions_.end())
+      continue;
     if (!session->second->closing)
       Emit(*session->second, EventState::kClosing);
     Emit(*session->second, EventState::kClosed);
@@ -157,10 +158,15 @@ void PrivateSessionRegistry::MaybeRetire(Session* session) {
   retired_ids_.insert(session->id);
   Profile* parent = session->parent;
   Profile* otr = session->otr;
-  parent_sessions_.erase(parent);
+  auto parent_sessions = parent_sessions_.find(parent);
+  CHECK(parent_sessions != parent_sessions_.end());
+  parent_sessions->second.erase(session->id);
   sessions_.erase(session->id);
-  parent->RemoveObserver(this);
-  parent->DestroyOffTheRecordProfile(otr);
+  if (parent_sessions->second.empty()) {
+    parent_sessions_.erase(parent_sessions);
+    parent->RemoveObserver(this);
+    parent->DestroyOffTheRecordProfile(otr);
+  }
   session->parent = nullptr;
   session->otr = nullptr;
 }

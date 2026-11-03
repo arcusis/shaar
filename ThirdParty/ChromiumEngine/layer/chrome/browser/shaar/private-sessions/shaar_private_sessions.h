@@ -66,7 +66,7 @@ class PrivateSessionRegistry : public ProfileObserver {
   // Keep retired handle storage alive until engine shutdown so a stale opaque
   // pointer can be compared safely and can never alias a newly opened session.
   std::vector<std::unique_ptr<Session>> storage_;
-  std::unordered_map<Profile*, std::string> parent_sessions_;
+  std::unordered_map<Profile*, std::unordered_set<std::string>> parent_sessions_;
   std::unordered_set<std::string> retired_ids_;
   EventSink event_sink_;
 };

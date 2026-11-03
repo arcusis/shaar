@@ -169,4 +169,17 @@ struct ShaarEngineABITests {
     #expect(delivered?.profileID == Data(profile))
     #expect(delivered?.payloadJSON == Data(payload))
   }
+
+  @Test @MainActor func privateSessionsWithDistinctIDsCoexistPerProfile() throws {
+    let engine = FakePrivateSessionsEngine()
+    let adapter = ShaarPrivateSessionsAdapter(engine: engine)
+    let profile = Data("profile-a".utf8)
+    let first = try adapter.openSession(profileID: profile, sessionID: Data("session-a".utf8))
+    let second = try adapter.openSession(profileID: profile, sessionID: Data("session-b".utf8))
+    #expect(first.profileID == second.profileID)
+    #expect(first.sessionID != second.sessionID)
+    try adapter.closeSession(profileID: profile, sessionID: first.sessionID)
+    _ = try adapter.openWindow(sessionID: second.sessionID, windowID: Data("window-b".utf8))
+    #expect(engine.calls == ["open-session", "open-session", "close-session-11", "open-window"])
+  }
 }

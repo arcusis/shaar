@@ -79,11 +79,6 @@ public struct ShaarPrivateSessionHandles: Equatable, Sendable {
       throw ShaarEngineError.status(
         .wrongProfile, platformCode: 0, message: "session belongs to another profile")
     }
-    guard !sessions.keys.contains(where: { $0.profile == profileID && $0.session != sessionID })
-    else {
-      throw ShaarEngineError.status(
-        .conflict, platformCode: 0, message: "profile already has a live private session")
-    }
     let handle = try engine.openSession(profileID: profileID, sessionID: sessionID)
     let result = ShaarPrivateSessionHandles(
       profileID: profileID, sessionID: sessionID, session: handle)

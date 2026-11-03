@@ -44,14 +44,19 @@ TEST(PrivateSessionRegistryTest, SameParentAndIDShareOnePrimaryOTRLease) {
   EXPECT_EQ(first, second);
   PrivateSessionRegistry::Session* other = nullptr;
   EXPECT_EQ(registry.Open(&profile, "profile-a", "session-b", &other),
-            SHAAR_CONFLICT);
-  EXPECT_EQ(other, nullptr);
+            SHAAR_OK);
+  ASSERT_NE(other, nullptr);
+  EXPECT_NE(first, other);
+  EXPECT_EQ(first->otr, other->otr);
   EXPECT_EQ(first->otr, profile.GetPrimaryOTRProfile(/*create_if_needed=*/false));
   EXPECT_EQ(first->open_handles, 2u);
   EXPECT_TRUE(registry.Close(first));
   EXPECT_NE(registry.Find(&profile, "session-a"), nullptr);
   EXPECT_TRUE(registry.Close(second));
   EXPECT_EQ(registry.Find(&profile, "session-a"), nullptr);
+  EXPECT_EQ(profile.GetPrimaryOTRProfile(/*create_if_needed=*/false), other->otr);
+  EXPECT_TRUE(registry.Close(other));
+  EXPECT_EQ(profile.GetPrimaryOTRProfile(/*create_if_needed=*/false), nullptr);
 }
 
 TEST(PrivateSessionRegistryTest, RejectsWrongParentAndRetiredSessionIDs) {

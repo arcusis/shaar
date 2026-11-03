@@ -75,10 +75,21 @@ public struct ShaarMediaCaptureSource: Decodable, Equatable, Sendable {
   public let token: String
 }
 
+public struct ShaarMediaCapturePrompt: Decodable, Equatable, Sendable {
+  public let promptID: String
+  public let origin: String
+  public let pageURL: String
+  public let frameID: String
+  public let documentID: String
+  public let expiresAtUnixMilliseconds: Int64
+}
+
 public enum ShaarMediaChange: Equatable, Sendable {
   case stateChanged(ShaarMediaState)
   case pictureInPictureChanged(String?)
   case captureChanged(String)
+  case captureRequested(ShaarMediaCapturePrompt)
+  case captureDismissed(promptID: String, reason: String?)
 }
 
 public protocol ShaarMediaTransport: Sendable {
@@ -204,6 +215,19 @@ public struct ShaarMediaAdapter: Sendable {
         throw ShaarMediaAdapterError.malformedResponse
       }
       return .captureChanged(capture)
+    case "capture_request":
+      guard let promptData = try? JSONSerialization.data(withJSONObject: root),
+        let prompt = try? JSONDecoder().decode(ShaarMediaCapturePrompt.self, from: promptData),
+        !prompt.promptID.isEmpty, !prompt.origin.isEmpty, !prompt.pageURL.isEmpty,
+        !prompt.frameID.isEmpty, !prompt.documentID.isEmpty,
+        prompt.expiresAtUnixMilliseconds > Int64(Date().timeIntervalSince1970 * 1_000)
+      else { throw ShaarMediaAdapterError.malformedResponse }
+      return .captureRequested(prompt)
+    case "capture_dismissed":
+      guard let promptID = root["promptID"] as? String, !promptID.isEmpty else {
+        throw ShaarMediaAdapterError.malformedResponse
+      }
+      return .captureDismissed(promptID: promptID, reason: root["reason"] as? String)
     default:
       throw ShaarMediaAdapterError.malformedResponse
     }
@@ -227,6 +251,8 @@ public struct ShaarMediaAdapter: Sendable {
       return value.map { $0.isFinite && (0...1).contains($0) } ?? false
     case .seekTo:
       return value.map { $0.isFinite && (0...86_400).contains($0) } ?? false
+    case .seekBackward, .seekForward:
+      return value.map { $0.isFinite && $0 > 0 && $0 <= 86_400 } ?? true
     case .pipSkip:
       return value.map {
         $0.isFinite && $0 != 0 && (-86_400...86_400).contains($0)
@@ -237,7 +263,8 @@ public struct ShaarMediaAdapter: Sendable {
   }
 
   private static func requireEmptySuccess(_ data: Data) throws {
-    guard data.isEmpty || data == Data("{}".utf8) || data == Data(#"{"schemaVersion":1}"#.utf8)
+    guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      object["schemaVersion"] as? Int == 1
     else { throw ShaarMediaAdapterError.malformedResponse }
   }
 

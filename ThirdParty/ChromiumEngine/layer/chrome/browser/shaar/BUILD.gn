@@ -93,6 +93,8 @@ source_set("engine") {
     "//services/media_session/public/mojom",
     "//components/content_settings/core/browser",
     "//mojo/public/cpp/bindings",
+    "//content/browser",
+    "//third_party/blink/public/mojom:mojom_platform_blink",
     # END media
     "//components/download/content/public",
     "//components/download/public/common",

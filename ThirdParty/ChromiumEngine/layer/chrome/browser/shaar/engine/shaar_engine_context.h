@@ -73,6 +73,12 @@ class BrowserTabRegistry {
 class MediaRuntimeServices {
  public:
   virtual ~MediaRuntimeServices() = default;
+  virtual void ObserveMediaTab(ShaarEngineContext* context,
+                               shaar_engine* engine,
+                               shaar_scope scope,
+                               shaar_window* window,
+                               shaar_tab* tab,
+                               content::WebContents* contents) = 0;
   virtual bool OwnsPrivateTab(shaar_engine* engine,
                               ShaarEngineContext* context,
                               shaar_scope scope,

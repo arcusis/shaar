@@ -7,6 +7,7 @@
 
 #include <string>
 #include <string_view>
+#include <optional>
 
 #include "chrome/browser/shaar/engine/shaar_module_registry.h"
 #include "services/media_session/public/mojom/media_session.mojom.h"
@@ -17,13 +18,21 @@ class WebContents;
 
 namespace shaar::media {
 
+struct ModuleHandlers {
+  ShaarModuleRegistry::Handler operation_handler;
+};
+
 // Pure helpers used by the handler and its focused unit tests.
 bool IsValidControl(uint32_t command, double value, bool has_value);
 bool MapSessionAction(uint32_t command,
                      media_session::mojom::MediaSessionAction* action);
 bool IsAllowedAutoPiPURL(std::string_view url);
 std::string SerializeStateChangedEvent(std::string_view state_json);
-void InstallRuntimeServices();
+std::optional<double> SeekTarget(uint32_t command,
+                                 double value,
+                                 bool has_value,
+                                 double current_position);
+void InstallRuntimeServices(shaar::ShaarEngineContext* context = nullptr);
 
 }  // namespace shaar::media
 

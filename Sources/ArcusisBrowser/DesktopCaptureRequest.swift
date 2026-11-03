@@ -12,6 +12,8 @@ struct DesktopCaptureRequest: Identifiable, Equatable {
   let pageURL: URL
   let requestingOrigin: URL
   let frameID: String
+  let documentID: String?
+  let expiresAt: Date?
 
   init?(payload: [String: Any]) {
     guard let id = payload["id"] as? String,
@@ -42,12 +44,21 @@ struct DesktopCaptureRequest: Identifiable, Equatable {
     self.pageURL = pageURL
     self.requestingOrigin = requestingOrigin
     self.frameID = frameID
+    self.documentID = payload["documentID"] as? String
+    if let expiry = payload["expiresAtUnixMilliseconds"] as? Int64 {
+      let date = Date(timeIntervalSince1970: TimeInterval(expiry) / 1_000)
+      guard date > Date() else { return nil }
+      self.expiresAt = date
+    } else {
+      self.expiresAt = nil
+    }
   }
 
   var sheetID: String { "desktop-capture-\(id)" }
 
   func matches(_ session: BrowserSession) -> Bool {
-    session.selectedSpace.profileID == profileID
+    (expiresAt == nil || expiresAt! > Date())
+      && session.selectedSpace.profileID == profileID
       && session.selectedPage?.tab.id == tabID
       && session.selectedPage?.tab.url == pageURL
       && session.profileID(forTabID: tabID) == profileID

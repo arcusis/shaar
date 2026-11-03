@@ -99,6 +99,30 @@ TEST(ShaarMediaTest, ValidatesValueBoundsAndPresenceByCommand) {
   EXPECT_FALSE(shaar::media::IsValidControl(SHAAR_MEDIA_PLAY, 0, true));
   EXPECT_TRUE(shaar::media::IsValidControl(SHAAR_MEDIA_PLAY, 0, false));
   EXPECT_FALSE(shaar::media::IsValidControl(1199, 0, false));
+  EXPECT_TRUE(shaar::media::IsValidControl(SHAAR_MEDIA_SEEK_FORWARD, 15, true));
+  EXPECT_FALSE(shaar::media::IsValidControl(SHAAR_MEDIA_SEEK_FORWARD, 0, true));
+}
+
+TEST(ShaarMediaTest, RelativeSeekUsesTheRequestedOffset) {
+  EXPECT_DOUBLE_EQ(*shaar::media::SeekTarget(SHAAR_MEDIA_SEEK_TO, 37.5, true, 8),
+                   37.5);
+  EXPECT_DOUBLE_EQ(
+      *shaar::media::SeekTarget(SHAAR_MEDIA_SEEK_BACKWARD, 12, true, 30), 18);
+  EXPECT_DOUBLE_EQ(
+      *shaar::media::SeekTarget(SHAAR_MEDIA_SEEK_FORWARD, 12, true, 30), 42);
+  EXPECT_DOUBLE_EQ(*shaar::media::SeekTarget(SHAAR_MEDIA_PIP_SKIP, -12, true, 30),
+                   18);
+}
+
+TEST(ShaarMediaTest, LifecycleRegistersTheMediaModuleAndOperations) {
+  ShaarModuleRegistry registry;
+  shaar_media_register(&registry);
+  const auto* handlers = static_cast<const shaar::media::ModuleHandlers*>(
+      registry.FindModule(SHAAR_MODULE_MEDIA));
+  ASSERT_NE(handlers, nullptr);
+  EXPECT_EQ(handlers->operation_handler, &HandleMediaOperation);
+  EXPECT_EQ(registry.Find(SHAAR_OP_MEDIA_GET_STATE), &HandleMediaOperation);
+  EXPECT_EQ(registry.Find(SHAAR_OP_MEDIA_CAPTURE_REPLY), &HandleMediaOperation);
 }
 
 TEST(ShaarMediaTest, MapsOnlySupportedChromiumSessionActions) {
@@ -141,7 +165,7 @@ TEST(ShaarMediaTest, AutoPiPPolicyIsProfileScopedAndCompletesAsynchronously) {
   shaar::ShaarEngineContext context;
   context.profile_services = &profiles;
   context.browser_tabs = &tabs;
-  shaar::media::InstallRuntimeServices();
+  shaar::media::InstallRuntimeServices(&context);
   shaar_scope scope{sizeof(shaar_scope), profile_handle, nullptr};
   constexpr char kRequest[] = R"({"schemaVersion":1,"allowed":false})";
   ReplyCapture capture;

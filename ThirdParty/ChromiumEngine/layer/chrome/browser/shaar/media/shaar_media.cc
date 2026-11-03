@@ -16,6 +16,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/time/time.h"
 #include "base/containers/flat_map.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
@@ -27,6 +28,8 @@
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "content/public/browser/media_session.h"
+#include "content/public/browser/navigation_handle.h"
+#include "content/browser/media/session/media_session_impl.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -36,6 +39,7 @@
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "services/media_session/public/mojom/media_session.mojom.h"
 #include "services/media_session/public/cpp/media_image.h"
+#include "third_party/blink/public/mojom/mediasession/media_session.mojom.h"
 #include "url/gurl.h"
 
 namespace {
@@ -245,6 +249,22 @@ class MediaSessionEventObserver final
     return web_contents() == contents;
   }
 
+  void DidFinishNavigation(content::NavigationHandle* navigation) override {
+    if (!navigation->HasCommitted() || !navigation->IsInPrimaryMainFrame())
+      return;
+    receiver_.reset();
+    if (auto* session = content::MediaSession::GetIfExists(web_contents()))
+      Start(session);
+    Publish();
+  }
+
+  void PrimaryMainFrameRenderProcessGone(base::TerminationStatus) override {
+    receiver_.reset();
+    Publish();
+  }
+
+  void WebContentsDestroyed() override { receiver_.reset(); }
+
   void MediaSessionInfoChanged(
       media_session::mojom::MediaSessionInfoPtr) override { Publish(); }
   void MediaSessionMetadataChanged(
@@ -314,12 +334,12 @@ bool ValidScopeForTab(shaar::ShaarEngineContext* context,
 
 class ShaarMediaRuntimeServices final : public shaar::MediaRuntimeServices {
  public:
-  void ObserveTab(shaar::ShaarEngineContext* context,
+  void ObserveMediaTab(shaar::ShaarEngineContext* context,
                   shaar_engine* engine,
                   shaar_scope scope,
                   shaar_window* window,
                   shaar_tab* tab,
-                  content::WebContents* contents) {
+                  content::WebContents* contents) override {
     std::erase_if(observers_, [](const auto& observer) {
       return !observer->web_contents();
     });
@@ -448,8 +468,10 @@ std::string SerializeStateChangedEvent(std::string_view state_json) {
          std::string(state_json) + "}";
 }
 
-void InstallRuntimeServices() {
+void InstallRuntimeServices(shaar::ShaarEngineContext* context) {
   shaar::SetMediaRuntimeServices(&g_media_runtime_services);
+  if (context)
+    context->media_services = &g_media_runtime_services;
 }
 
 bool IsValidControl(uint32_t command, double value, bool has_value) {
@@ -465,7 +487,32 @@ bool IsValidControl(uint32_t command, double value, bool has_value) {
   if (command == SHAAR_MEDIA_PIP_SKIP)
     return has_value && std::isfinite(value) && value != 0 && value >= -86400 &&
            value <= 86400;
+  if (command == SHAAR_MEDIA_SEEK_BACKWARD ||
+      command == SHAAR_MEDIA_SEEK_FORWARD)
+    return !has_value || (std::isfinite(value) && value > 0 && value <= 86400);
   return !has_value;
+}
+
+std::optional<double> SeekTarget(uint32_t command,
+                                 double value,
+                                 bool has_value,
+                                 double current_position) {
+  if (!std::isfinite(current_position))
+    return std::nullopt;
+  if (command == SHAAR_MEDIA_SEEK_TO)
+    return has_value && std::isfinite(value) && value >= 0 && value <= 86400
+               ? std::optional<double>(value)
+               : std::nullopt;
+  const bool backward = command == SHAAR_MEDIA_SEEK_BACKWARD ||
+                        (command == SHAAR_MEDIA_PIP_SKIP && value < 0);
+  const bool forward = command == SHAAR_MEDIA_SEEK_FORWARD ||
+                       (command == SHAAR_MEDIA_PIP_SKIP && value > 0);
+  const double offset = command == SHAAR_MEDIA_PIP_SKIP ? std::abs(value) : value;
+  if (!has_value || (!backward && !forward) || !std::isfinite(offset) ||
+      offset <= 0 || offset > 86400)
+    return std::nullopt;
+  return std::clamp(current_position + (backward ? -offset : offset), 0.0,
+                    86400.0);
 }
 
 bool MapSessionAction(uint32_t command,
@@ -514,6 +561,9 @@ shaar_error_code HandleMediaOperation(
     return Fail(immediate_error,
                 scope.private_session ? SHAAR_WRONG_SESSION : SHAAR_WRONG_PROFILE,
                 "media tab does not belong to the supplied scope");
+  if (!context->media_services)
+    return Fail(immediate_error, SHAAR_UNSUPPORTED_CAPABILITY,
+                "media runtime services are not connected");
   auto args = ParseArguments(bytes);
   if (!args || args->FindInt("schemaVersion") != 1 || !reply || !request_id)
     return Fail(immediate_error, SHAAR_INVALID_ARGUMENT,
@@ -524,8 +574,8 @@ shaar_error_code HandleMediaOperation(
     if (!HasOnlyKeys(*args, {"schemaVersion"}))
       return Fail(immediate_error, SHAAR_INVALID_ARGUMENT,
                   "getState accepts no additional fields");
-    g_media_runtime_services.ObserveTab(context, engine, scope, window, tab,
-                                        contents);
+    context->media_services->ObserveMediaTab(context, engine, scope, window,
+                                              tab, contents);
     EmitStateChanged(context, engine, scope, window, tab, contents);
     Reply(request, StateFor(contents));
     return SHAAR_OK;
@@ -544,6 +594,10 @@ shaar_error_code HandleMediaOperation(
       value = value_item->GetInt();
     else if (value_item && value_item->is_bool())
       value = value_item->GetBool() ? 1 : 0;
+    if (command && *command != SHAAR_MEDIA_SET_TAB_MUTED && value_item &&
+        !value_item->is_double() && !value_item->is_int())
+      return Fail(immediate_error, SHAAR_INVALID_ARGUMENT,
+                  "numeric media controls require a numeric value");
     if (!command || !shaar::media::IsValidControl(*command, value, has_value))
       return Fail(immediate_error, SHAAR_INVALID_ARGUMENT,
                   "media control value is invalid");
@@ -551,8 +605,8 @@ shaar_error_code HandleMediaOperation(
       if (!value_item || !value_item->is_bool())
         return Fail(immediate_error, SHAAR_INVALID_ARGUMENT,
                     "tab mute requires a boolean value");
-      g_media_runtime_services.ObserveTab(context, engine, scope, window, tab,
-                                          contents);
+      context->media_services->ObserveMediaTab(context, engine, scope, window,
+                                                tab, contents);
       contents->SetAudioMuted(value != 0);
       EmitStateChanged(context, engine, scope, window, tab, contents);
       Reply(request, base::Value::Dict().Set("schemaVersion", 1));
@@ -572,13 +626,42 @@ shaar_error_code HandleMediaOperation(
     } else {
       action_mapped = shaar::media::MapSessionAction(*command, &action);
     }
+    blink::mojom::MediaSessionActionDetailsPtr action_details;
+    const bool detailed_seek =
+        *command == SHAAR_MEDIA_SEEK_TO ||
+        ((*command == SHAAR_MEDIA_SEEK_BACKWARD ||
+          *command == SHAAR_MEDIA_SEEK_FORWARD ||
+          *command == SHAAR_MEDIA_PIP_SKIP) && has_value);
+    if (session && detailed_seek) {
+      const auto position = session->GetMediaSessionPosition();
+      if (*command != SHAAR_MEDIA_SEEK_TO && !position)
+        return Fail(immediate_error, SHAAR_NOT_READY,
+                    "relative seek requires a current media position");
+      const double current_position =
+          position ? position->position.InSecondsF() : 0.0;
+      const auto target = shaar::media::SeekTarget(
+          *command, value, has_value, current_position);
+      if (!target)
+        return Fail(immediate_error, SHAAR_UNSUPPORTED_CAPABILITY,
+                    "relative seek requires a current media position");
+      action = media_session::mojom::MediaSessionAction::kSeekTo;
+      action_mapped = true;
+      action_details = blink::mojom::MediaSessionActionDetails::NewSeekTo(
+          blink::mojom::MediaSessionSeekToDetails::New(base::Seconds(*target),
+                                                       false));
+    }
     if (!session || !action_mapped || !HasAction(session, action)) {
       return Fail(immediate_error, SHAAR_UNSUPPORTED_CAPABILITY,
                   "media session does not advertise this action");
     }
-    g_media_runtime_services.ObserveTab(context, engine, scope, window, tab,
-                                        contents);
-    session->DidReceiveAction(action);
+    context->media_services->ObserveMediaTab(context, engine, scope, window,
+                                              tab, contents);
+    if (detailed_seek) {
+      static_cast<content::MediaSessionImpl*>(session)->DidReceiveAction(
+          action, std::move(action_details));
+    } else {
+      session->DidReceiveAction(action);
+    }
     EmitStateChanged(context, engine, scope, window, tab, contents);
     Reply(request, base::Value::Dict().Set("schemaVersion", 1));
     return SHAAR_OK;
@@ -595,8 +678,8 @@ shaar_error_code HandleMediaOperation(
     if (!session || !HasAction(session, action))
       return Fail(immediate_error, SHAAR_UNSUPPORTED_CAPABILITY,
                   "tab media session does not advertise the PiP action");
-    g_media_runtime_services.ObserveTab(context, engine, scope, window, tab,
-                                        contents);
+    context->media_services->ObserveMediaTab(context, engine, scope, window,
+                                              tab, contents);
     session->DidReceiveAction(action);
     EmitStateChanged(context, engine, scope, window, tab, contents);
     Reply(request, base::Value::Dict().Set("schemaVersion", 1));

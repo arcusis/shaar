@@ -148,8 +148,8 @@ extension BrowserEngine {
       case .pause: mapped = (.pause, nil)
       case .previousTrack: mapped = (.previousTrack, nil)
       case .nextTrack: mapped = (.nextTrack, nil)
-      case .seekBackward: mapped = (.seekBackward, nil)
-      case .seekForward: mapped = (.seekForward, nil)
+      case .seekBackward: mapped = (.seekBackward, seconds == 0 ? nil : abs(seconds))
+      case .seekForward: mapped = (.seekForward, seconds == 0 ? nil : abs(seconds))
       case .seekTo: mapped = (.seekTo, seconds)
       }
     case .setMuted(let muted): mapped = (.setTabMuted, muted ? 1 : 0)
@@ -207,6 +207,52 @@ extension BrowserEngine {
     case .pictureInPictureChanged(let state):
       receivePictureInPicture(tabString, active: state == "inPictureInPicture")
     case .captureChanged: break
+    case .captureRequested(let prompt):
+      pendingShaarCaptureScopes[prompt.promptID] = scope
+      let payload: [String: Any] = [
+        "id": prompt.promptID,
+        "profileID": scope.profileID,
+        "tabID": scope.tabID,
+        "pageURL": prompt.pageURL,
+        "origin": prompt.origin,
+        "frameID": prompt.frameID,
+        "documentID": prompt.documentID,
+        "expiresAtUnixMilliseconds": prompt.expiresAtUnixMilliseconds,
+      ]
+      guard let request = DesktopCaptureRequest(payload: payload),
+        store?.requestDesktopCapture(request) == true
+      else {
+        resolveShaarCapture(prompt.promptID, sourceToken: nil)
+        return
+      }
+    case .captureDismissed(let promptID, _):
+      pendingShaarCaptureScopes.removeValue(forKey: promptID)
+      store?.dismissDesktopCapture(promptID)
+    }
+  }
+
+  func resolveShaarCapture(_ promptID: String, sourceToken: String?) {
+    guard let adapter = shaarMediaAdapter,
+      let scope = pendingShaarCaptureScopes.removeValue(forKey: promptID)
+    else { return }
+    Task { @MainActor in
+      guard let sourceToken else {
+        try? await adapter.replyToCapture(scope: scope, promptID: promptID, token: nil)
+        return
+      }
+      // The legacy picker returns platform source identifiers. Never forward those through the
+      // Shaar ABI; only an opaque token minted by the engine for this scope can approve a prompt.
+      guard !sourceToken.hasPrefix("screen:"), !sourceToken.hasPrefix("window:") else {
+        try? await adapter.replyToCapture(scope: scope, promptID: promptID, token: nil)
+        return
+      }
+      guard let sources = try? await adapter.captureSources(scope: scope),
+        sources.contains(where: { $0.token == sourceToken })
+      else {
+        try? await adapter.replyToCapture(scope: scope, promptID: promptID, token: nil)
+        return
+      }
+      try? await adapter.replyToCapture(scope: scope, promptID: promptID, token: sourceToken)
     }
   }
 

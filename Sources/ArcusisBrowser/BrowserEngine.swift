@@ -37,6 +37,7 @@ final class BrowserEngine {
   @ObservationIgnored let mediaImplementation: ShaarEngineImplementation
   @ObservationIgnored let shaarMediaAdapter: ShaarMediaAdapter?
   @ObservationIgnored let shaarMediaScopeForTab: ((UUID) -> ShaarMediaScope?)?
+  @ObservationIgnored var pendingShaarCaptureScopes: [String: ShaarMediaScope] = [:]
   // END media
   let windowID: String
   private let callbacks: BrowserRuntimeClient
@@ -339,6 +340,10 @@ final class BrowserEngine {
     }
     store.onDesktopCaptureDecision = { [weak self] id, sourceID in
       guard let self else { return }
+      if self.mediaImplementation == .shaar {
+        self.resolveShaarCapture(id, sourceToken: sourceID)
+        return
+      }
       self.events.resolveDesktopCapture(id, windowID: self.windowID, sourceID: sourceID)
     }
     callbacks.onDesktopCaptureRequest = { [weak self] payload in

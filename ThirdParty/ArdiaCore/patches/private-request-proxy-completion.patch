@@ -1,0 +1,22 @@
+diff --git a/ardia/core/ac_private_requests.mm b/ardia/core/ac_private_requests.mm
+--- a/ardia/core/ac_private_requests.mm
++++ b/ardia/core/ac_private_requests.mm
+@@ -192,8 +192,6 @@ class PrivateRequest : public network::mojom::URLLoader,
+     clean_request.headers.RemoveHeader("Referer");
+     clean_request.cors_exempt_headers.RemoveHeader("Referer");
+     auto upstream_receiver = upstream_loader_.BindNewPipeAndPassReceiver();
+-    upstream_loader_.set_disconnect_handler(base::BindOnce(
+-        &PrivateRequest::OnUpstreamDisconnect, base::Unretained(this)));
+     factory->CreateLoaderAndStart(
+         std::move(upstream_receiver), request_id, options, clean_request,
+         upstream_client_.BindNewPipeAndPassRemote(), annotation);
+@@ -267,9 +265,6 @@ class PrivateRequest : public network::mojom::URLLoader,
+  private:
+   ~PrivateRequest() override = default;
+   void OnDisconnect() { delete this; }
+-  void OnUpstreamDisconnect() {
+-    Finish(network::URLLoaderCompletionStatus(net::ERR_ABORTED));
+-  }
+   void Finish(const network::URLLoaderCompletionStatus& status) {
+     client_->OnComplete(status);
+     delete this;

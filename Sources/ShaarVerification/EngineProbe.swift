@@ -25,8 +25,10 @@ final class EngineProbe {
   private let savedTabCapacityMode: Bool
   private let externalAppConsentMode: Bool
   private let privateWindowMode: Bool
+  private let privateMultiTabMode: Bool
   private let privateWindowRunID: String?
   private let quitExitMode: Bool
+  private let quitPendingNavigation: Bool
   private let sessionRecoveryMode: Bool
   private let localizationMode: Bool
   private let basicBrowsingMode: Bool
@@ -67,9 +69,10 @@ final class EngineProbe {
     root: URL, fixture: URL, phase: String, output: URL, includeBitwarden: Bool,
     bitwardenOnboardingControl: Bool,
     awaitAbruptTermination: Bool, expectAbruptRecovery: Bool, savedTabCapacityMode: Bool,
-    externalAppConsentMode: Bool, privateWindowMode: Bool, privateWindowRunID: String?,
-    quitExitMode: Bool, sessionRecoveryMode: Bool, localizationMode: Bool,
-    basicBrowsingMode: Bool
+    externalAppConsentMode: Bool, privateWindowMode: Bool, privateMultiTabMode: Bool,
+    privateWindowRunID: String?,
+    quitExitMode: Bool, quitPendingNavigation: Bool, sessionRecoveryMode: Bool,
+    localizationMode: Bool, basicBrowsingMode: Bool
   ) throws {
     self.root = root
     self.fixture = fixture
@@ -80,8 +83,10 @@ final class EngineProbe {
     self.savedTabCapacityMode = savedTabCapacityMode
     self.externalAppConsentMode = externalAppConsentMode
     self.privateWindowMode = privateWindowMode
+    self.privateMultiTabMode = privateMultiTabMode
     self.privateWindowRunID = privateWindowRunID
     self.quitExitMode = quitExitMode
+    self.quitPendingNavigation = quitPendingNavigation
     self.sessionRecoveryMode = sessionRecoveryMode
     self.localizationMode = localizationMode
     self.basicBrowsingMode = basicBrowsingMode
@@ -183,7 +188,9 @@ final class EngineProbe {
       let savedTabCapacityMode = arguments.contains("--probe-saved-tab-capacity")
       let externalAppConsentMode = arguments.contains("--probe-external-app-consent")
       let privateWindowMode = arguments.contains("--probe-private-window")
+      let privateMultiTabMode = arguments.contains("--probe-private-multitab")
       let quitExitMode = arguments.contains("--probe-quit-exit")
+      let quitPendingNavigation = arguments.contains("--probe-quit-pending-navigation")
       let sessionRecoveryMode = arguments.contains("--probe-session-recovery")
       let basicBrowsingMode = arguments.contains("--probe-basic-browsing")
       guard localizationMode == arguments.contains("--probe-localization") else {
@@ -202,6 +209,7 @@ final class EngineProbe {
         "--probe-await-abrupt-termination", "--probe-expect-abrupt-recovery",
         "--probe-saved-tab-capacity",
         "--probe-private-window", "--probe-session-recovery",
+        "--probe-private-multitab",
         "--probe-quit-exit",
         "--probe-localization",
         "--probe-basic-browsing",
@@ -212,10 +220,14 @@ final class EngineProbe {
           || !conflictingFlags.filter({ $0 != "--probe-private-window" }).contains(
             where: arguments.contains),
         !privateWindowMode || (!externalAppConsentMode && !noLaunchGuard),
+        !privateMultiTabMode
+          || !conflictingFlags.filter({ $0 != "--probe-private-multitab" }).contains(
+            where: arguments.contains),
         !quitExitMode
           || !conflictingFlags.filter({ $0 != "--probe-quit-exit" }).contains(
             where: arguments.contains),
         !quitExitMode || !noLaunchGuard,
+        !quitPendingNavigation || quitExitMode,
         !sessionRecoveryMode
           || !conflictingFlags.filter({ $0 != "--probe-session-recovery" }).contains(
             where: arguments.contains),
@@ -239,7 +251,9 @@ final class EngineProbe {
         awaitAbruptTermination: awaitAbruptTermination,
         expectAbruptRecovery: expectAbruptRecovery, savedTabCapacityMode: savedTabCapacityMode,
         externalAppConsentMode: externalAppConsentMode, privateWindowMode: privateWindowMode,
+        privateMultiTabMode: privateMultiTabMode,
         privateWindowRunID: privateWindowRunID, quitExitMode: quitExitMode,
+        quitPendingNavigation: quitPendingNavigation,
         sessionRecoveryMode: sessionRecoveryMode, localizationMode: localizationMode,
         basicBrowsingMode: basicBrowsingMode)
       probe.runtime.onReady = { [weak probe] in
@@ -353,7 +367,7 @@ final class EngineProbe {
   }
 
   private func waitForDisplayedNativeTab(_ tabID: String, _ check: String) async throws {
-    for _ in 0..<20 {
+    for _ in 0..<100 {
       let selection = runtime.normalProbeSelectionAudit(forTabID: tabID)
       if selection["selectedNativeTab"] as? Bool == true,
         selection["displayedNativeWebContents"] as? Bool == true
@@ -361,7 +375,7 @@ final class EngineProbe {
         checks.append(check)
         return
       }
-      try await Task.sleep(for: .milliseconds(5))
+      try await Task.sleep(for: .milliseconds(50))
     }
     let selection = runtime.normalProbeSelectionAudit(forTabID: tabID)
     throw ProbeFailure("\(check); native selection audit: \(selection)")
@@ -398,7 +412,7 @@ final class EngineProbe {
         guard let browserEngine else { throw ProbeFailure("Quit probe engine is missing.") }
         let probe = try QuitExitProbe(
           runtime: runtime, primary: browserEngine, store: store, root: root, fixture: fixture,
-          phase: phase)
+          phase: phase, pendingNavigation: quitPendingNavigation)
         quitExitProbe = probe
         checks += try await probe.run()
         finish(error: nil)
@@ -440,6 +454,19 @@ final class EngineProbe {
       let firstA = try await snapshot(tabA)
       bootstrapStage = .readingBeta
       let firstB = try await snapshot(tabB)
+      if privateMultiTabMode {
+        bootstrapStage = .ready
+        fixtureStage = "private-multitab"
+        try await normalBrowsingSmoke()
+        try await PrivateMultiTabProbe(
+          runtime: runtime, root: root, fixture: fixture, phase: phase,
+          sourceProfileID: profileA
+        ).run()
+        checks.append("one hidden private window opens, navigates, and renders three live tabs")
+        localFixturesPassed = true
+        finish(error: nil)
+        return
+      }
       var firstShared: [String: Any]?
       if localizationMode {
         let language = BrowserLanguage.currentLaunchLanguage
@@ -846,6 +873,72 @@ final class EngineProbe {
     }
   }
 
+  private func normalBrowsingSmoke() async throws {
+    let space = store.session.selectedSpaceID
+    guard store.session.selectedSpace.profileID.uuidString == profileA else {
+      throw ProbeFailure("Normal smoke did not start in its owned profile.")
+    }
+    while store.session.selectedSpace.tabs.count < 3 {
+      let previousCount = store.session.selectedSpace.tabs.count
+      store.perform(.open(fixture))
+      guard store.session.selectedSpace.tabs.count == previousCount + 1 else {
+        throw ProbeFailure("Normal smoke could not open a product tab.")
+      }
+    }
+    let tabs = store.session.selectedSpace.tabs.prefix(3).map { $0.id.uuidString }
+    guard tabs.contains(tabA), tabs.count == 3, Set(tabs).count == 3 else {
+      throw ProbeFailure("Normal smoke did not retain three tabs in one space.")
+    }
+    for tab in tabs {
+      store.perform(.tab(space: space, tab: UUID(uuidString: tab)!))
+      _ = try await snapshot(tab)
+      try await waitForDisplayedNativeTab(tab, "normal smoke tab owns live displayed WebContents")
+      let data: Data? = await withCheckedContinuation { continuation in
+        runtime.captureProbeTabID(tab) { continuation.resume(returning: $0) }
+      }
+      guard let data, data.count > 4096, let bitmap = NSBitmapImageRep(data: data),
+        bitmap.pixelsWide > 100, bitmap.pixelsHigh > 100,
+        runtime.windowID(forTabID: tab) == runtime.primaryWindowID
+      else { throw ProbeFailure("Normal smoke tab did not render in its hidden window.") }
+      let center = bitmap.colorAt(x: bitmap.pixelsWide / 2, y: bitmap.pixelsHigh / 2)?
+        .usingColorSpace(.deviceRGB)
+      guard let center,
+        (center.redComponent + center.greenComponent + center.blueComponent) / 3 > 0.5
+      else { throw ProbeFailure("Normal smoke tab rendered a dark page.") }
+    }
+    checks.append("three normal tabs navigate and render in one hidden window")
+    store.showCommand()
+    store.commandQuery = "shaar normal smoke search"
+    guard
+      let action = store.results.compactMap({ result -> CommandAction? in
+        if case .open(let url) = result.action,
+          URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.contains(where: {
+            $0.name == "q" && $0.value == "shaar normal smoke search"
+          }) == true
+        {
+          return result.action
+        }
+        return nil
+      }).first
+    else { throw ProbeFailure("Normal address bar did not offer a web search.") }
+    store.perform(action)
+    guard let selected = store.session.selectedSpace.selectedTab else {
+      throw ProbeFailure("Normal address bar did not open its search tab.")
+    }
+    for _ in 0..<100 {
+      if runtime.nativeTabID(forID: selected.id.uuidString) >= 0,
+        runtime.normalProbeSelectionAudit(forTabID: selected.id.uuidString)[
+          "displayedNativeWebContents"]
+          as? Bool == true
+      {
+        checks.append("normal address bar search opens a live native tab")
+        return
+      }
+      try await Task.sleep(for: .milliseconds(50))
+    }
+    throw ProbeFailure("Normal address bar search did not create live WebContents.")
+  }
+
   private func auditNativeHostShutdown() {
     if let quitExitProbe {
       let closures = quitExitProbe.auditAfterQuit()
@@ -936,6 +1029,7 @@ final class EngineProbe {
     if externalAppConsentMode || savedTabCapacityMode { return 180 }
     if quitExitMode { return 90 }
     if sessionRecoveryMode { return 90 }
+    if privateMultiTabMode { return 45 }
     return privateWindowMode ? 210 : 255
   }
 
@@ -943,6 +1037,7 @@ final class EngineProbe {
     if basicBrowsingMode { return "basic-browsing" }
     if localizationMode { return "localization-only" }
     if privateWindowMode { return PrivateWindowProbe.mode }
+    if privateMultiTabMode { return "private-multitab-owned-engine-fixture" }
     if quitExitMode { return QuitExitProbe.mode }
     if externalAppConsentMode { return ExternalAppConsentProbe.mode }
     if sessionRecoveryMode { return SessionRecoveryProbe.mode }
@@ -960,11 +1055,17 @@ final class EngineProbe {
     }
     if savedTabCapacityMode { return SavedTabCapacityFixture.scope }
     if externalAppConsentMode { return ExternalAppConsentProbe.scope }
-    if quitExitMode { return QuitExitProbe.scope }
+    if quitExitMode {
+      return quitPendingNavigation ? QuitExitProbe.pendingNavigationScope : QuitExitProbe.scope
+    }
     if sessionRecoveryMode { return SessionRecoveryProbe.scope }
     if privateWindowMode {
       return
         "Owned private-window fixture composed with normal engine fixture. No real account or third-party service."
+    }
+    if privateMultiTabMode {
+      return
+        "One hidden private window, three rendered authored loopback tabs, and a disposable profile."
     }
     if includeBitwarden {
       return
@@ -996,7 +1097,9 @@ final class EngineProbe {
       "externalAppConsentProbe": externalAppConsentMode,
       "externalAppConsentRunID": externalAppEvidence?.runID as Any? ?? NSNull(),
       "privateWindowOnly": privateWindowMode,
+      "privateMultiTabOnly": privateMultiTabMode,
       "quitExitOnly": quitExitMode,
+      "quitPendingNavigation": quitPendingNavigation,
       "quitEventLoopStopped": quitExitProbe?.stoppedEventLoop ?? false,
       "privateWindowProbe": privateWindowMode,
       "sessionRecoveryOnly": sessionRecoveryMode,

@@ -29,6 +29,9 @@ struct PrivatePrivacyProbe {
     do {
       let prefs = runtime.privatePrivacyPreferences(forContextID: contextID) ?? [:]
       observations["preferences"] = prefs
+      let engineStatus = await runtime.privatePrivacyStatus(forContextID: contextID)
+      observations["engineStatus"] = engineStatus
+      checks.merge(PrivatePrivacyEvidence.engineStatus(engineStatus)) { _, value in value }
       checks.merge(PrivatePrivacyEvidence.preferences(prefs)) { _, value in value }
       let normal = try await evaluate(normalTabID, storageScript)
       observations["normalStorage"] = normal
@@ -39,22 +42,17 @@ struct PrivatePrivacyProbe {
       checks["privateFirstPartyCookieAndStorageBlocked"] =
         PrivatePrivacyEvidence.storage(blocked, allowed: false, includesIndexedDB: true)
       let normalNetwork = try await evaluate(normalTabID, networkScript)
-      let acknowledged: Bool = await withCheckedContinuation { continuation in
-        runtime.probePrivateNetworkControls(forTabID: tabID) { continuation.resume(returning: $0) }
-      }
-      checks["cdpNetworkCommandsAcknowledged"] = acknowledged
-      try await Task.sleep(for: .milliseconds(100))
       let privateNetwork = try await evaluate(tabID, networkScript)
       observations["normalNetwork"] = normalNetwork
       observations["privateNetwork"] = privateNetwork
       checks["normalNetworkCookiePositiveControl"] =
         normalNetwork["cookieReturned"] as? Bool == true
+      checks["privateFirstPartyNetworkReachable"] = privateNetwork["error"] == nil
       checks["privateNetworkCookiesBlocked"] = privateNetwork["cookieReturned"] as? Bool == false
-      checks["trackerBlockingUnavailableAfterCDPDetach"] =
-        normalNetwork["tracker"] as? Bool == true && privateNetwork["tracker"] as? Bool == true
-      checks["thirdPartyHTTPRequestsRemainAllowedAfterCDPDetach"] =
+      checks["privateTrackerRequestsBlocked"] =
+        normalNetwork["tracker"] as? Bool == true && privateNetwork["tracker"] as? Bool == false
+      checks["unlistedHTTPRequestsRemainAllowed"] =
         normalNetwork["otherHTTP"] as? Bool == true && privateNetwork["otherHTTP"] as? Bool == true
-      checks["httpsOnlyUnavailableAfterCDPDetach"] = try await checkHTTPBlock()
       let permissions = try await evaluate(
         tabID,
         """
@@ -155,44 +153,6 @@ struct PrivatePrivacyProbe {
     """
   }
 
-  private func checkHTTPBlock() async throws -> Bool {
-    let id = UUID().uuidString.uppercased()
-    try runtime.openPrivateTabID(id, windowID: windowID, contextID: contextID, url: "about:blank")
-    for _ in 0..<100 {
-      if runtime.privatePrivacyStatus(forProbeTabID: id)?["ready"] as? Bool == true { break }
-      try await Task.sleep(for: .milliseconds(50))
-    }
-    let acknowledged: Bool = await withCheckedContinuation { continuation in
-      runtime.probePrivateNetworkControls(forTabID: id) { continuation.resume(returning: $0) }
-    }
-    try await Task.sleep(for: .milliseconds(100))
-    let address = try String(decoding: JSONEncoder().encode(fixture.absoluteString), as: UTF8.self)
-    _ = try await evaluate(
-      id, "(()=>{setTimeout(()=>location.href=\(address),0);return {scheduled:true}})()")
-    var blocked = false
-    var loaded = false
-    for _ in 0..<100 {
-      let failure = runtime.privatePrivacyStatus(forProbeTabID: id)?["failure"] as? [String: Any]
-      if let value = try? await evaluate(id, "({instance:window.arcusisInstance})"),
-        value["instance"] is String
-      {
-        loaded = true
-        break
-      }
-      if failure?["code"] as? Int == -20 {
-        blocked = true
-        break
-      }
-      try await Task.sleep(for: .milliseconds(50))
-    }
-    let closed: Bool = await withCheckedContinuation { continuation in
-      runtime.closePrivateTabID(id, windowID: windowID, contextID: contextID) {
-        continuation.resume(returning: $0)
-      }
-    }
-    return acknowledged && loaded && !blocked && closed
-  }
-
   private func reload() async throws {
     let before =
       try await evaluate(tabID, "({instance:window.arcusisInstance})")["instance"] as? String
@@ -214,11 +174,11 @@ struct PrivatePrivacyProbe {
   private var networkScript: String {
     let port = fixture.port!
     return """
-      (async()=>{const r={};await fetch('/private-privacy/cookie',{credentials:'include'});
+      (async()=>{const r={};try {await fetch('/private-privacy/cookie',{credentials:'include'});
       const v=await (await fetch('/private-privacy/cookie',{credentials:'include'})).json();r.cookieReturned=v.cookie.includes('privacyHttp=1');
-      for(const [key,host] of [['tracker','tracker.localhost'],['otherHTTP','localhost']]){
+      for(const [key,host] of [['tracker','trackertest.org'],['otherHTTP','localhost']]){
         try{const q=await fetch('http://'+host+':\(port)/private-privacy/resource');r[key]=q.ok&&(await q.json()).fixture==='privacy'}catch{r[key]=false}
-      }return r})()
+      }} catch(e) {r.error=String(e)} return r})()
       """
   }
 
@@ -242,19 +202,14 @@ struct PrivatePrivacyProbe {
         "hostOpenedOriginCookieAndStorageBlock": "enforced",
         "perSiteCookieAndStorageAllow": "enforced-after-reload",
         "privateAutofillAndPasswordSaving": "disabled",
-        "globalCookieAndStorageBlock": "unsupported",
-        "trackerAndThirdPartyRequestBlocking": "unsupported",
-        "engineWideHTTPSOnly": "unsupported",
-        "privateReferrerAndWebRTCPolicy": "unsupported",
-        "disablePreviouslyPermittedPrivateExtensions": "unsupported",
+        "globalCookieAndStorageBlock": "engine-enforced",
+        "trackerRequestBlocking": "engine-enforced",
+        "engineWideHTTPSOnly": "engine-enforced",
+        "privateReferrerAndWebRTCPolicy": "engine-enforced",
+        "disablePreviouslyPermittedPrivateExtensions": "engine-enforced",
       ],
       "checks": checks, "observations": observations, "error": error as Any? ?? NSNull(),
-      "limits": [
-        "Global OTR cookie/storage defaults cannot be set; per-origin navigation guards do not cover every redirect, page link, frame or worker.",
-        "CDP auto-detaches when idle, dropping network rules and cookie overrides. Tracker blocking, blanket third-party blocking and forced HTTPS cannot be enforced.",
-        "Referrer and WebRTC policy are outside the host preference allowlist. Process-wide switches would affect regular browsing.",
-        "Previously incognito-enabled extensions cannot be disabled through an OTR-only API.",
-      ],
+      "limits": [],
     ]
     try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
       .write(to: root.appending(path: "\(phase)-private-privacy.json"), options: .atomic)

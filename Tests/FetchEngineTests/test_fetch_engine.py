@@ -57,10 +57,7 @@ class FetchEngineTests(unittest.TestCase):
         self.third_party.mkdir(parents=True)
         self.pin_path = self.third_party / "pin.json"
         self.tree = "a1b2c3d4e5f6789012345678901234567890abcd"
-        self.key = self.tree[:12]
         self.cache = self.root / "build/EngineCache"
-        self.destination = self.cache / self.key
-        self.archive = self.cache / f"ArdiaCore-{self.key}.tar.xz"
         self.tools = self.root / "tools"
         self.tools.mkdir()
         self.tool_log = self.root / "tool.log"
@@ -70,12 +67,18 @@ class FetchEngineTests(unittest.TestCase):
         self.env.update(PATH=f"{self.tools}:{self.env['PATH']}", FETCH_TEST_TOOL_LOG=str(self.tool_log))
 
         self.cache.mkdir(parents=True)
-        write_archive(self.archive)
+        staged = self.root / "staged.tar.xz"
+        write_archive(staged)
+        checksum = hashlib.sha256(staged.read_bytes()).hexdigest()
+        self.key = f"{self.tree[:12]}-{checksum[:12]}"
+        self.destination = self.cache / self.key
+        self.archive = self.cache / f"ArdiaCore-{self.key}.tar.xz"
+        staged.rename(self.archive)
         self.pin = {
             "sourceCommit": "0" * 40,
             "engineTree": self.tree,
             "archiveURL": "https://invalid.example/never-fetched.tar.xz",
-            "sha256": hashlib.sha256(self.archive.read_bytes()).hexdigest(),
+            "sha256": checksum,
         }
         self._write_pin()
         self._extract_fixture()

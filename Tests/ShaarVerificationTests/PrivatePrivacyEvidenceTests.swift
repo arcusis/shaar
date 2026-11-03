@@ -9,6 +9,23 @@ import Testing
 @testable import ShaarVerification
 
 @Suite struct PrivatePrivacyEvidenceTests {
+  @Test func engineStatusRequiresEveryPrivatePolicy() {
+    let status: [AnyHashable: Any] = [
+      "offTheRecord": true, "globalCookies": "block", "httpsOnly": true,
+      "referrersEnabled": false, "webRTCIPHandlingPolicy": "disable_non_proxied_udp",
+      "webRTCPolicyExceptionCount": 0, "localIPExceptionCount": 0,
+      "extensionsDisabled": true, "trackerProtectionEnabled": true,
+      "trackerDomainCount": 6913, "trackerRulesRevision": "domain-rules-v1",
+    ]
+    #expect(PrivatePrivacyEvidence.engineStatus(status).values.allSatisfy { $0 })
+    for key in status.keys {
+      var changed = status
+      changed.removeValue(forKey: key)
+      #expect(PrivatePrivacyEvidence.engineStatus(changed).values.contains(false))
+    }
+    #expect(PrivatePrivacyEvidence.engineStatus([:]).values.allSatisfy { !$0 })
+  }
+
   @Test func nativeQuitRetainsCDPHoldUntilDialogCancellationSucceeds() {
     var held = true
     var releases = 0

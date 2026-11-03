@@ -15,6 +15,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)unbindProfileID:(NSString *)profileID;
 - (void)call:(NSString *)method profileID:(NSString *)profileID args:(NSDictionary *)args
   completion:(void (^)(NSDictionary *result))completion;
+@property(readonly) BOOL privatePrivacyAvailable;
+- (void)preparePrivateTrackerRulesForProfileID:(NSString *)profileID
+  completion:(void (^)(BOOL))completion;
 @end
 
 NS_ASSUME_NONNULL_END

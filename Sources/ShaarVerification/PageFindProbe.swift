@@ -61,7 +61,7 @@ final class PageFindProbe {
       else { throw PageFindProbeFailure("Could not prepare authored find text.") }
     }
     store.perform(.space(a.id))
-    try await waitForNativeSelection(tabA, "Profile A native tab is selected before find")
+    try await waitForDisplayedNativeTab(tabA, "Profile A WebContents is displayed before find")
     store.showPageFind()
     store.updatePageFindQuery("OrbitFindMarker")
     try await expectResult(count: 3, active: 1, "Chromium finds three authored text matches")
@@ -132,7 +132,7 @@ final class PageFindProbe {
       "clearing the query leaves no stale count or active search")
 
     store.perform(.space(a.id))
-    try await waitForNativeSelection(tabA, "Profile A native tab is selected before find")
+    try await waitForDisplayedNativeTab(tabA, "Profile A WebContents is displayed before find")
     store.showPageFind()
     store.updatePageFindQuery("OrbitFindMarker")
     try await expectResult(count: 3, active: 1, "returning to A starts a new native search")
@@ -178,6 +178,21 @@ final class PageFindProbe {
     for _ in 0..<20 {
       let selection = runtime.normalProbeSelectionAudit(forTabID: tabID.uuidString)
       if selection["selectedNativeTab"] as? Bool == true {
+        checks.append(check)
+        return
+      }
+      try await Task.sleep(for: .milliseconds(5))
+    }
+    let selection = runtime.normalProbeSelectionAudit(forTabID: tabID.uuidString)
+    throw PageFindProbeFailure("\(check); native selection audit: \(selection)")
+  }
+
+  private func waitForDisplayedNativeTab(_ tabID: UUID, _ check: String) async throws {
+    for _ in 0..<20 {
+      let selection = runtime.normalProbeSelectionAudit(forTabID: tabID.uuidString)
+      if selection["selectedNativeTab"] as? Bool == true,
+        selection["displayedNativeWebContents"] as? Bool == true
+      {
         checks.append(check)
         return
       }

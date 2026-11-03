@@ -10,6 +10,11 @@ import XCTest
 @testable import ArcusisBrowser
 
 @MainActor
+private final class BrowserChromeControlCountObservation {
+  var counts: [String: Int] = [:]
+}
+
+@MainActor
 final class PageChromeLayoutTests: XCTestCase {
   func testPageCardUsesArcInsetsAndCornerRadius() {
     XCTAssertEqual(BrowserChromeLayout.pageCardInset, 8)
@@ -32,8 +37,13 @@ final class PageChromeLayoutTests: XCTestCase {
         (ColorScheme.light, NSAppearance.Name.aqua),
         (.dark, .darkAqua),
       ] {
+        let observation = BrowserChromeControlCountObservation()
         let host = NSHostingView(
-          rootView: BrowserWindow(store: store).environment(\.colorScheme, scheme))
+          rootView: BrowserWindow(store: store)
+            .environment(\.colorScheme, scheme)
+            .onPreferenceChange(BrowserChromeControlCountPreferenceKey.self) {
+              observation.counts = $0
+            })
         let window = NSWindow(
           contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
           styleMask: .borderless, backing: .buffered, defer: false)
@@ -44,10 +54,9 @@ final class PageChromeLayoutTests: XCTestCase {
 
         host.layoutSubtreeIfNeeded()
         try await Task.sleep(for: .milliseconds(100))
-        let counts = accessibilityIdentifierCounts(in: host)
         for identifier in identifiers {
           XCTAssertEqual(
-            counts[identifier, default: 0], 1,
+            observation.counts[identifier, default: 0], 1,
             "Expected one \(identifier) control in \(layout) \(scheme) mode")
         }
       }
@@ -140,26 +149,4 @@ final class PageChromeLayoutTests: XCTestCase {
     return (rendered.pixelsWide, rendered.pixelsHigh)
   }
 
-  private func accessibilityIdentifierCounts(in root: NSObject) -> [String: Int] {
-    var counts: [String: Int] = [:]
-    var visited = Set<ObjectIdentifier>()
-    var pending: [NSObject] = [root]
-    let identifierSelector = NSSelectorFromString("accessibilityIdentifier")
-    let childrenSelector = NSSelectorFromString("accessibilityChildren")
-
-    while let element = pending.popLast() {
-      guard visited.insert(ObjectIdentifier(element)).inserted else { continue }
-      if element.responds(to: identifierSelector),
-        let identifier = element.perform(identifierSelector)?.takeUnretainedValue() as? String
-      {
-        counts[identifier, default: 0] += 1
-      }
-      if element.responds(to: childrenSelector),
-        let children = element.perform(childrenSelector)?.takeUnretainedValue() as? [Any]
-      {
-        pending.append(contentsOf: children.compactMap { $0 as? NSObject })
-      }
-    }
-    return counts
-  }
 }

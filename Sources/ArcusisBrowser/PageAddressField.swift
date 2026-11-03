@@ -27,7 +27,7 @@ struct PageAddressField: View {
       .contentShape(Rectangle())
     }
     .accessibilityLabel(ShellL10n.string("Search or enter address"))
-    .accessibilityIdentifier("browser.chrome.address")
+    .browserChromeControl("browser.chrome.address")
     .help(url?.absoluteString ?? ShellL10n.string("Search or enter address"))
   }
 }

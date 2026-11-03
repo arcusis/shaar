@@ -207,7 +207,7 @@ import SwiftUI
     await ai.copyElement(to: board)
     let detailed = board.string(forType: .string) ?? ""
     var missing: [String] = []
-    if ai.failure != nil { missing.append("copy operation") }
+    if let failure = ai.failure { missing.append("copy operation: \(failure)") }
     if !detailed.contains("Full computed styles:") { missing.append("computed styles") }
     if !detailed.contains("Matched CSS rules:") { missing.append("matched CSS rules") }
     if !detailed.contains("AI fixture console error") { missing.append("console errors") }

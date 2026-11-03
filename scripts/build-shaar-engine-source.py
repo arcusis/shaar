@@ -354,12 +354,15 @@ def validate_reference(repo: Path, reference: Path, output: Path,
 
 def run_logged(command: list[str], cwd: Path, log: Path, *, env: dict[str, str] | None = None,
                timeout: int = 43200) -> None:
-    print(f"running: {' '.join(command)}; log: {log}", flush=True)
+    display = " ".join(command)
+    if len(display) > 240:
+        display = display[:237] + "..."
+    print(f"running: {display}; log: {log}", flush=True)
     with log.open("w") as stream:
         result = subprocess.run(command, cwd=cwd, stdout=stream, stderr=subprocess.STDOUT,
                                 env=env, timeout=timeout, check=False)
     if result.returncode:
-        raise BuildError(f"command failed ({result.returncode}): {' '.join(command)}; see {log}")
+        raise BuildError(f"command failed ({result.returncode}): {display}; see {log}")
 
 
 def clear_stale_siso_lock(copied_out: Path) -> None:

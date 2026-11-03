@@ -94,6 +94,7 @@ struct ShaarEngineABITests {
 
 @MainActor private final class FakeProfileEngine: ShaarProfileEngine {
   var nextHandle: UInt64 = 1
+  var failNextOpen = false
   var opens: [(String, String)] = []
   var closed: [UInt64] = []
   var deleted: [UInt64] = []
@@ -102,6 +103,10 @@ struct ShaarEngineABITests {
   func openProfile(id: String, relativeDirectory: String) async throws -> UInt64 {
     opens.append((id, relativeDirectory))
     try await Task.sleep(for: .milliseconds(5))
+    if failNextOpen {
+      failNextOpen = false
+      throw ShaarProfileError.native(.notReady)
+    }
     defer { nextHandle += 1 }
     return nextHandle
   }
@@ -158,6 +163,36 @@ struct ShaarProfileAdapterTests {
     }
     await #expect(throws: ShaarProfileError.invalidIdentifier) {
       try await adapter.open(profileID: "4A4D4885-D38A-4B4A-BC03-B12F634BFF03")
+    }
+  }
+
+  @Test @MainActor func failedOpenCanBeRetriedWithoutRetainingAStaleRequest() async throws {
+    let fake = FakeProfileEngine()
+    fake.failNextOpen = true
+    let adapter = ShaarProfileAdapter(engine: fake, implementation: .shaar)
+    let id = "4a4d4885-d38a-4b4a-bc03-b12f634bff05"
+
+    await #expect(throws: ShaarProfileError.native(.notReady)) {
+      try await adapter.open(profileID: id)
+    }
+    #expect(adapter.loadedProfileIDs.isEmpty)
+
+    try await adapter.open(profileID: id)
+    #expect(fake.opens.count == 2)
+    #expect(adapter.loadedProfileIDs == [id])
+  }
+
+  @Test @MainActor func closeReleasesTheOpaqueHandleAndRejectsLaterCalls() async throws {
+    let fake = FakeProfileEngine()
+    let adapter = ShaarProfileAdapter(engine: fake, implementation: .shaar)
+    let id = "4a4d4885-d38a-4b4a-bc03-b12f634bff06"
+    try await adapter.open(profileID: id)
+
+    try adapter.close(profileID: id)
+    #expect(fake.closed == [1])
+    #expect(adapter.loadedProfileIDs.isEmpty)
+    #expect(throws: ShaarProfileError.notOpen) {
+      try adapter.activate(profileID: id, inWindow: 77)
     }
   }
 

@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 import pathlib
+import subprocess
 import tempfile
 import time
 import unittest
@@ -37,6 +38,7 @@ class SourceBuildTests(unittest.TestCase):
         runner.repo = output
         runner.output = output
         runner.config = {"build": {"minimumFreeBytes": 0, "buildJobs": 6}}
+        runner.build_jobs = 6
         runner.receipt = {"stages": {}}
         runner.child_environment = lambda: os.environ.copy()
         runner.save = lambda: None
@@ -84,8 +86,9 @@ class SourceBuildTests(unittest.TestCase):
         self.assertEqual(config["gitLfs"]["version"], "3.8.1")
         self.assertEqual(config["gitLfs"]["archiveSha256"],
                          "0ba10e897e0496412cd86eacaed4ed554c97ddc29bc5c709d28faa5eaaa2222c")
-        patch = ROOT / config["patch"]["file"]
-        self.assertEqual(BUILD.sha256(patch), config["patch"]["sha256"])
+        self.assertNotIn("patch", config)
+        self.assertTrue(any(item["file"].endswith("shaar-safe-storage-migration.patch")
+                            for item in config["patches"]))
         self.assertNotIn("latest", json.dumps(config).lower())
 
     def test_patch_preconditions_bind_existing_api_and_chromium_downloadprefs(self):
@@ -126,6 +129,43 @@ class SourceBuildTests(unittest.TestCase):
         self.assertTrue(any("component" in item for item in errors))
         self.assertTrue(any("metalSha256" in item for item in errors))
         self.assertTrue(any("signature" in item for item in errors))
+
+    def test_metal_toolchain_resume_accepts_only_same_identity_after_cryptex_remount(self):
+        def evidence(suffix):
+            mount = ("/private/var/run/com.apple.security.cryptexd/mnt/"
+                     f"com.apple.MobileAsset.MetalToolchain-v27.2.47.0.{suffix}")
+            return {
+                "component": {"status": "installed", "buildVersion": "27B47",
+                              "toolchainIdentifier": "com.apple.dt.toolchain.Metal.32023.922.4",
+                              "toolchainSearchPath": mount},
+                "metalPath": mount.removeprefix("/private") + "/Metal.xctoolchain/usr/bin/metal",
+                "metalRealPath": mount + "/Metal.xctoolchain/usr/bin/metal",
+                "metalVersion": "Apple metal version 32023.922\nInstalledDir: " + mount + "/bin",
+                "metalSha256": "a" * 64,
+                "codesignVerifyReturnCode": 0,
+                "codesignDisplay": "Executable=" + mount + "/Metal.xctoolchain/usr/bin/metal\nCDHash=abc",
+                "assetPath": None, "assetSha256": None,
+            }
+
+        expected = evidence("6PS9OS")
+        actual = evidence("0EEEx7")
+        original = json.loads(json.dumps(expected))
+        self.assertEqual(BUILD.metal_toolchain_precondition_errors(expected, actual), [])
+        self.assertEqual(expected, original)
+        for field, value in (("metalSha256", "b" * 64), ("codesignVerifyReturnCode", 1),
+                             ("metalVersion", "Apple metal version 999"),
+                             ("codesignDisplay", "CDHash=changed"),
+                             ("metalPath", "/other/toolchain/usr/bin/metal"),
+                             ("assetSha256", "c" * 64)):
+            with self.subTest(field=field):
+                changed = {**actual, field: value}
+                self.assertTrue(BUILD.metal_toolchain_precondition_errors(expected, changed))
+        for field in ("buildVersion", "toolchainIdentifier", "toolchainSearchPath"):
+            with self.subTest(component=field):
+                changed = {**actual, "component": {**actual["component"], field: "changed"}}
+                self.assertTrue(BUILD.metal_toolchain_precondition_errors(expected, changed))
+        changed_version = json.loads(json.dumps(actual).replace("v27.2.47.0", "v27.2.48.0"))
+        self.assertTrue(BUILD.metal_toolchain_precondition_errors(expected, changed_version))
 
     def test_ardia_series_must_support_explicit_owned_path_overrides(self):
         series = ('SRC = os.environ.get("CHROMIUM_SRC", "/unsafe/default")\n'
@@ -178,14 +218,180 @@ class SourceBuildTests(unittest.TestCase):
             self.assertEqual(script.read_text().count("./buildtools/mac/gn gen"), 1)
             self.assertNotIn("./buildtools/mac/./buildtools/mac/gn", script.read_text())
 
-    def test_build_priority_adaptation_calls_taskpolicy_directly(self):
+    def test_symbol_level_adaptation_changes_only_the_browser_symbol_level(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            script = pathlib.Path(temporary) / "gn_defines.sh"
+            script.write_text("_gn_args=(\n  use_thin_lto=true\n  symbol_level=0 blink_symbol_level=0 v8_symbol_level=0\n)\n")
+            BUILD.Runner.adapt_symbol_level(script, 1)
+            self.assertEqual(script.read_text(),
+                             "_gn_args=(\n  use_thin_lto=true\n  symbol_level=1 blink_symbol_level=0 v8_symbol_level=0\n)\n")
+            generated_args = subprocess.run(
+                ["/bin/bash", "-c", 'source "$1"; printf "%s\\n" "${_gn_args[@]}"',
+                 "bash", str(script)],
+                capture_output=True, text=True, check=True,
+            ).stdout.splitlines()
+            self.assertIn("use_thin_lto=true", generated_args)
+            self.assertFalse(any(arg.startswith("concurrent_links=") for arg in generated_args))
+            with self.assertRaisesRegex(BUILD.BuildError, "anchor mismatch"):
+                BUILD.Runner.adapt_symbol_level(script, 1)
+            with self.assertRaisesRegex(BUILD.BuildError, "unsupported symbol level"):
+                BUILD.Runner.adapt_symbol_level(script, 3)
+
+    def test_build_jobs_may_only_drop_below_the_pinned_ceiling(self):
+        config = {"build": {"buildJobs": 6}}
+        self.assertEqual(BUILD.Runner.checked_build_jobs(config, None), 6)
+        self.assertEqual(BUILD.Runner.checked_build_jobs(config, 3), 3)
+        for jobs in (0, 7):
+            with self.subTest(jobs=jobs), self.assertRaises(BUILD.BuildError):
+                BUILD.Runner.checked_build_jobs(config, jobs)
+        recorded = ["autoninja", "-j", "6", "-C", "out"]
+        self.assertEqual(BUILD.Runner.build_command_without_jobs(recorded),
+                         BUILD.Runner.build_command_without_jobs(["autoninja", "-j", "3", "-C", "out"]))
+        self.assertNotEqual(BUILD.Runner.build_command_without_jobs(recorded),
+                            BUILD.Runner.build_command_without_jobs(["autoninja", "-j", "3", "-C", "other"]))
+
+    def _patch_update_runner(self, repo, receipt_pins, patches):
+        (repo / "ThirdParty/ArdiaCore").mkdir(parents=True)
+        (repo / "ThirdParty/ArdiaCore/source-build.json").write_text("{}")
+        runner = BUILD.Runner.__new__(BUILD.Runner)
+        runner.repo = repo
+        runner.config = {**receipt_pins, "patches": patches}
+        data = {"status": "succeeded", "pins": receipt_pins, "framework": {"sha256": "old"},
+                "finishedAt": "then", "configDigest": "old", "runnerSha256": "old",
+                "stages": {"05-build": {"status": "succeeded",
+                                        "attempts": [{"status": "succeeded"}]}}}
+        return runner, data
+
+    def test_patch_update_reopens_only_the_build_for_appended_patches(self):
+        fix = {"file": "fix.patch", "sha256": "a" * 64}
+        with tempfile.TemporaryDirectory() as temporary:
+            runner, data = self._patch_update_runner(pathlib.Path(temporary),
+                                                     {"build": {"buildJobs": 6}}, [fix])
+            runner.accept_patch_update(data)
+        self.assertEqual(data["status"], "started")
+        self.assertIsNone(data["framework"])
+        self.assertNotIn("finishedAt", data)
+        self.assertEqual(data["stages"]["05-build"]["status"], "superseded")
+        self.assertFalse(BUILD.Runner.stage_succeeded(data["stages"]["05-build"]))
+        update = data["patchUpdates"][-1]
+        self.assertEqual(update["addedPatches"], [fix])
+        self.assertEqual(update["previousFramework"], {"sha256": "old"})
+
+    def test_patch_update_retires_existing_profile_patch_before_rebuild(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = pathlib.Path(temporary)
+            chromium = repo / "build/EngineSource/chromium_git/chromium/src"
+            chromium.mkdir(parents=True)
+            target = chromium / "profile.txt"
+            target.write_text("patched\n")
+            patch = repo / "old.patch"
+            patch.write_text("diff --git a/profile.txt b/profile.txt\n"
+                             "--- a/profile.txt\n+++ b/profile.txt\n"
+                             "@@ -1 +1 @@\n-original\n+patched\n")
+            old = {"file": "old.patch", "sha256": BUILD.sha256(patch)}
+            appended = {"file": "new.patch", "sha256": "a" * 64}
+            runner, data = self._patch_update_runner(
+                repo, {"build": {"buildJobs": 6, "timeoutsSeconds": {"patches": 30}},
+                       "patch": old}, [appended])
+            runner.output = repo / "build/EngineSource"
+            runner.config.pop("patch")
+            runner.accept_patch_update(data)
+            self.assertEqual(target.read_text(), "original\n")
+            self.assertFalse(data["inputs"]["profilePatchApplied"])
+            self.assertEqual(data["patchUpdates"][-1]["retiredProfilePatch"], old)
+
+    def test_patch_update_rejects_other_config_changes_and_unfinished_builds(self):
+        fix = {"file": "fix.patch", "sha256": "a" * 64}
+        cases = (
+            ({"build": {"buildJobs": 6}}, {"build": {"buildJobs": 4}}, [fix], "succeeded"),
+            ({"build": {"buildJobs": 6}}, {"build": {"buildJobs": 6}}, [], "succeeded"),
+            ({"build": {"buildJobs": 6}, "patches": [fix]},
+             {"build": {"buildJobs": 6}}, [{"file": "other.patch", "sha256": "b" * 64}, fix],
+             "succeeded"),
+            ({"build": {"buildJobs": 6}}, {"build": {"buildJobs": 6}}, [fix], "failed"),
+        )
+        for receipt_pins, config, patches, status in cases:
+            with self.subTest(config=config, patches=patches, status=status), \
+                    tempfile.TemporaryDirectory() as temporary:
+                runner, data = self._patch_update_runner(pathlib.Path(temporary), receipt_pins, patches)
+                runner.config = {**config, "patches": patches}
+                data["status"] = status
+                with self.assertRaises(BUILD.BuildError):
+                    runner.accept_patch_update(data)
+
+    def test_failed_incremental_build_accepts_only_verified_appended_patch(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = pathlib.Path(temporary)
+            (repo / "ThirdParty/ArdiaCore").mkdir(parents=True)
+            (repo / "ThirdParty/ArdiaCore/source-build.json").write_text("{}")
+            appended_file = repo / "repair.patch"
+            appended_file.write_text("repair\n")
+            original = {"file": "original.patch", "sha256": "a" * 64}
+            appended = {"file": "repair.patch", "sha256": BUILD.sha256(appended_file)}
+            runner = BUILD.Runner.__new__(BUILD.Runner)
+            runner.repo = repo
+            runner.config = {"build": {"buildJobs": 12}, "patches": [original, appended]}
+            data = {"status": "failed", "pins": {"build": {"buildJobs": 12},
+                    "patches": [original]}, "inputs": {"enginePatches": [original]},
+                    "configDigest": "old", "runnerSha256": "old",
+                    "patchUpdates": [{"previousFramework": {"enginePatchSha256": [original["sha256"]]}}]}
+            self.assertTrue(runner.accept_failed_patch_append(data, "new"))
+            self.assertEqual(data["configDigest"], "new")
+            self.assertEqual(data["patchUpdates"][-1]["addedPatches"], [appended])
+            self.assertEqual(data["patchUpdates"][-1]["previousFramework"],
+                             {"enginePatchSha256": [original["sha256"]]})
+            runner.config = {"build": {"buildJobs": 11}, "patches": [original, appended]}
+            self.assertFalse(runner.accept_failed_patch_append(data, "other"))
+
+    def test_engine_patches_apply_in_order_and_keep_already_applied_ones(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            chromium = root / "src"
+            chromium.mkdir()
+            for args in (["init", "-q"], ["config", "user.name", "test"],
+                         ["config", "user.email", "test@example.invalid"]):
+                BUILD.subprocess.run(["/usr/bin/git", "-C", str(chromium), *args], check=True)
+            (chromium / "first.txt").write_text("one\n")
+            (chromium / "second.txt").write_text("one\n")
+            first = root / "first.patch"
+            second = root / "second.patch"
+            first.write_text("--- a/first.txt\n+++ b/first.txt\n@@ -1 +1,2 @@\n one\n+two\n")
+            second.write_text("--- a/second.txt\n+++ b/second.txt\n@@ -1 +1,2 @@\n one\n+two\n")
+            runner = self._runner_for_process_test(root)
+            runner.config["build"]["timeoutsSeconds"] = {"patches": 30}
+            runner.config["patches"] = [{"file": "first.patch", "sha256": BUILD.sha256(first)},
+                                        {"file": "second.patch", "sha256": BUILD.sha256(second)}]
+            runner.receipt["inputs"] = {}
+            BUILD.subprocess.run(["/usr/bin/git", "-C", str(chromium), "apply", str(first)], check=True)
+            runner.apply_engine_patches(chromium)
+            self.assertEqual((chromium / "second.txt").read_text(), "one\ntwo\n")
+            self.assertEqual([item["state"] for item in runner.receipt["inputs"]["enginePatches"]],
+                             ["already-applied", "applied"])
+            runner.apply_engine_patches(chromium)
+            self.assertEqual((chromium / "first.txt").read_text(), "one\ntwo\n")
+            self.assertEqual((chromium / "second.txt").read_text(), "one\ntwo\n")
+
+    def test_build_priority_adaptation_restores_normal_priority(self):
         with tempfile.TemporaryDirectory() as temporary:
             script = pathlib.Path(temporary) / "05-build.sh"
-            script.write_text("exec lowprio autoninja -j 6 target\n")
-            BUILD.Runner.adapt_build_priority_script(script)
-            BUILD.Runner.adapt_build_priority_script(script)
-            self.assertEqual(script.read_text(),
-                             "exec taskpolicy -b nice -n 19 autoninja -j 6 target\n")
+            for original in ("exec lowprio autoninja -j 6 target\n",
+                             "exec taskpolicy -b nice -n 19 autoninja -j 6 target\n"):
+                script.write_text(original)
+                BUILD.Runner.adapt_build_priority_script(script)
+                BUILD.Runner.adapt_build_priority_script(script)
+                self.assertEqual(script.read_text(), "exec autoninja -j 6 target\n")
+
+    def test_built_framework_binary_uses_pinned_version_layout(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            out = pathlib.Path(temporary)
+            versions = out / "Chromium Framework.framework/Versions"
+            binary = versions / "155.0.8059.84/Chromium Framework"
+            binary.parent.mkdir(parents=True)
+            binary.write_bytes(b"test")
+            (versions / "Current").symlink_to("155.0.8059.84")
+            self.assertEqual(BUILD.Runner.built_framework_binary(out, "155.0.8059.84"), binary)
+            with self.assertRaisesRegex(BUILD.BuildError, "binary missing"):
+                BUILD.Runner.built_framework_binary(out, "155.0.8059.85")
 
     def test_depot_tools_python_bootstrap_uses_resolved_pinned_cipd_and_exact_args(self):
         self.assertEqual(BUILD.Runner.depot_tools_python_ensure_args(
@@ -307,6 +513,7 @@ class SourceBuildTests(unittest.TestCase):
     def test_gclient_cache_is_explicitly_owned(self):
         runner = BUILD.Runner.__new__(BUILD.Runner)
         runner.output = pathlib.Path("/owned/EngineSource")
+        runner.build_jobs = 6
         sync = runner.effective_commands()["sync"]
         self.assertNotIn("--cache-dir", sync)
         self.assertIn("gclient", sync)
@@ -431,6 +638,28 @@ class SourceBuildTests(unittest.TestCase):
             self.assertEqual(calls[1][0], "01-sync")
             self.assertEqual(calls[1][1], ["/bin/bash", str(shell_file)])
             self.assertEqual(calls[1][3], 28800)
+
+    def test_build_timeout_override_preserves_pins_and_other_stage_timeouts(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = pathlib.Path(temporary)
+            scripts = output / "scripts"
+            scripts.mkdir()
+            for name in ("05-build.sh", "04-domain-substitution.sh"):
+                (scripts / name).write_text("true\n")
+            runner = BUILD.Runner.__new__(BUILD.Runner)
+            runner.output = output
+            runner.config = {"build": {"timeoutsSeconds": {"build": 43200, "patches": 14400}}}
+            original = json.dumps(runner.config, sort_keys=True)
+            calls = []
+            runner.run = lambda *args: calls.append(args)
+            runner.source_stage(scripts, "05-build.sh", "build")
+            self.assertEqual(calls[-1][3], 43200)
+            runner.build_timeout_seconds = 172800
+            runner.source_stage(scripts, "05-build.sh", "build")
+            self.assertEqual(calls[-1][3], 172800)
+            runner.source_stage(scripts, "04-domain-substitution.sh", "patches")
+            self.assertEqual(calls[-1][3], 14400)
+            self.assertEqual(json.dumps(runner.config, sort_keys=True), original)
 
     def test_stage_order_keeps_fresh_upstream_sequence(self):
         self.assertEqual(

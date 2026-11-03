@@ -1,0 +1,110 @@
+diff --git a/chrome/browser/ardia/ac_engine.cc b/chrome/browser/ardia/ac_engine.cc
+index 26b3d236..4c115280 100644
+--- a/chrome/browser/ardia/ac_engine.cc
++++ b/chrome/browser/ardia/ac_engine.cc
+@@ -71,31 +71,57 @@ void Reply::Error(std::string_view message) {
+   Send(base::DictValue().Set("error", message));
+ }
+ 
++void Reply::Error(std::string_view code, std::string_view message) {
++  Send(base::DictValue()
++           .Set("ok", false)
++           .Set("error", base::DictValue()
++                             .Set("code", code)
++                             .Set("message", message)));
++}
++
+ Call::Call(const char* profile_dir,
+            const char* args_json,
+            ac_engine_reply_t reply,
+            void* context,
+-           OffTheRecord off_the_record)
+-    : reply_(reply, context) {
++           OffTheRecord off_the_record,
++           bool structured_errors)
++    : reply_(reply, context), structured_errors_(structured_errors) {
+   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+   if (args_json && *args_json) {
+     std::optional<base::Value> parsed = base::JSONReader::Read(
+         args_json, base::JSON_PARSE_CHROMIUM_EXTENSIONS);
+     if (!parsed || !parsed->is_dict()) {
+-      reply_.Error("arguments are not a JSON object");
++      if (structured_errors_) {
++        reply_.Error("invalid_arguments", "arguments are not a JSON object");
++      } else {
++        reply_.Error("arguments are not a JSON object");
++      }
+       return;
+     }
+     args_ = std::move(*parsed).TakeDict();
+   }
+   profile_ = ProfileAt(profile_dir ? profile_dir : "");
+   if (!profile_) {
+-    reply_.Error("profile not loaded");
++    if (structured_errors_) {
++      reply_.Error("profile_unavailable", "profile is not loaded");
++    } else {
++      reply_.Error("profile not loaded");
++    }
++    return;
++  }
++  if (structured_errors_ && profile_->ShutdownStarted()) {
++    profile_ = nullptr;
++    reply_.Error("profile_unavailable", "profile is shutting down");
+     return;
+   }
+   if (args_.FindBool("offTheRecord").value_or(false)) {
+     if (off_the_record != OffTheRecord::kAllow) {
+       profile_ = nullptr;
+-      reply_.Error("not for a private session");
++      if (structured_errors_) {
++        reply_.Error("off_the_record", "call requires a normal profile");
++      } else {
++        reply_.Error("not for a private session");
++      }
+       return;
+     }
+     profile_ = profile_->GetPrimaryOTRProfile(false);
+@@ -103,7 +129,11 @@ Call::Call(const char* profile_dir,
+       profile_ = nullptr;
+     }
+     if (!profile_) {
+-      reply_.Error("no private session");
++      if (structured_errors_) {
++        reply_.Error("off_the_record", "private session is not available");
++      } else {
++        reply_.Error("no private session");
++      }
+     }
+   }
+ }
+diff --git a/chrome/browser/ardia/ac_engine.h b/chrome/browser/ardia/ac_engine.h
+index ee312447..c0bb256f 100644
+--- a/chrome/browser/ardia/ac_engine.h
++++ b/chrome/browser/ardia/ac_engine.h
+@@ -34,6 +34,7 @@ class Reply {
+   void Send(base::DictValue result);
+   void Ok();
+   void Error(std::string_view message);
++  void Error(std::string_view code, std::string_view message);
+ 
+  private:
+   ac_engine_reply_t reply_;
+@@ -48,7 +49,8 @@ class Call {
+        const char* args_json,
+        ac_engine_reply_t reply,
+        void* context,
+-       OffTheRecord off_the_record = OffTheRecord::kRefuse);
++       OffTheRecord off_the_record = OffTheRecord::kRefuse,
++       bool structured_errors = false);
+   Call(const Call&) = delete;
+   Call& operator=(const Call&) = delete;
+   ~Call();
+@@ -66,6 +68,7 @@ class Call {
+   Profile* profile_ = nullptr;
+   base::DictValue args_;
+   Reply reply_;
++  bool structured_errors_ = false;
+ };
+ 
+ Profile* ProfileAt(std::string_view dir);

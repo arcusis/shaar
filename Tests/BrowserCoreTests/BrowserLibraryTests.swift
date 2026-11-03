@@ -267,7 +267,7 @@ private func bookmarkPayload(children: [[String: Any]]) -> [String: Any] {
     ]
   ]).write(to: firefox)
   let firefoxItems = try BrowserImport.read(firefox)
-  #expect(firefoxItems.count == 1 && firefoxItems[0].folder == "Folder")
+  #expect(firefoxItems.count == 1 && firefoxItems[0].folder == "Untitled / Folder")
 
   let html = directory.appendingPathComponent("Encoded.html")
   try

@@ -566,6 +566,21 @@ class ProbeSoakTests(unittest.TestCase):
 
 
 class EngineTransferTests(unittest.TestCase):
+    def test_merge_group_bundle_selection_rejects_fork_pull_request_runs(self):
+        from ci_engine import matching_pr_bundle_run_id
+        response = {"workflow_runs": [
+            {"id": 10, "run_number": 10, "conclusion": "success",
+             "head_repository": {"full_name": "contributor/shaar"},
+             "pull_requests": [{"number": 448}]},
+            {"id": 11, "run_number": 11, "conclusion": "success",
+             "head_repository": {"full_name": "arcusis/shaar"},
+             "pull_requests": [{"number": 448}]},
+            {"id": 12, "run_number": 12, "conclusion": "success",
+             "head_repository": None, "pull_requests": [{"number": 448}]},
+        ]}
+        self.assertEqual(matching_pr_bundle_run_id(response, 448, "arcusis/shaar"), "11")
+        self.assertEqual(matching_pr_bundle_run_id(response, 448, "other/shaar"), "")
+
     def test_transferred_bundle_preserves_exec_and_links_and_rejects_wrong_context_or_digest(self):
         from ci_engine import BUNDLE_NAME, archive_bundle, restore_bundle
         import shutil

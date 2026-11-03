@@ -4,15 +4,52 @@
 
 """Transfer one hosted verification bundle to independent probe shards."""
 
+import argparse
 import json
 import os
 from pathlib import Path
+import sys
 import tarfile
 
 from ci_support import file_sha256
 
 
 BUNDLE_NAME = "Shaar Verification.app"
+
+
+def matching_pr_bundle_run_id(response: dict, pr_number: int, repository_full_name: str) -> str:
+    """Select the newest successful same-repository PR run for an exact source SHA."""
+    if not repository_full_name:
+        return ""
+    runs = [
+        run
+        for run in response.get("workflow_runs", [])
+        if run.get("conclusion") == "success"
+        and (run.get("head_repository") or {}).get("full_name") == repository_full_name
+        and any(pr.get("number") == pr_number for pr in run.get("pull_requests", []))
+    ]
+    if not runs:
+        return ""
+    return str(max(runs, key=lambda run: run.get("run_number", 0))["id"])
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    select = subparsers.add_parser("select-pr-bundle-run")
+    select.add_argument("runs_file", type=Path)
+    select.add_argument("pr_number", type=int)
+    select.add_argument("repository_full_name")
+    arguments = parser.parse_args(argv)
+    if arguments.command == "select-pr-bundle-run":
+        response = json.loads(arguments.runs_file.read_text())
+        print(
+            matching_pr_bundle_run_id(
+                response, arguments.pr_number, arguments.repository_full_name
+            )
+        )
+        return 0
+    return 2
 
 
 def engine_shards(iterations: int) -> list[str]:
@@ -73,3 +110,7 @@ def restore_bundle(root: Path, directory: Path) -> None:
             if not member.name.startswith(BUNDLE_NAME + "/") and member.name != BUNDLE_NAME:
                 raise ValueError("Verification archive contains an unexpected root")
         source.extractall(destination, filter="data")
+
+
+if __name__ == "__main__":
+    sys.exit(main())

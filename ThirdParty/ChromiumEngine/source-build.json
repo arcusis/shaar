@@ -46,9 +46,9 @@
   },
   "layer": {
     "path": "ThirdParty/ChromiumEngine/layer",
-    "sha256": "a1fbc478a5d2ab62ce39eaa66729c044f1cfac9e49918ac4d5b19e658348fba0",
+    "sha256": "5087d707ffae96d7030889c60f9d8993ed3d44bfd66bbeb65b9d67229604bb0b",
     "files": {
-      "chrome/browser/shaar/BUILD.gn": "f62899737698ce041626a81d930c959a9ef2d8407ce269fff259e51d9240378d",
+      "chrome/browser/shaar/BUILD.gn": "c706eed1640981aa89fb9ac4dcd1e921f67a1216a09632d9a12d798184e99cad",
       "chrome/browser/shaar/engine/shaar_engine.cc": "07205a696ec84c0d9f210510c2e2fc9b9915c02e6ac4d06af2d6614ff7cb9d86",
       "chrome/browser/shaar/engine/shaar_event_bridge.cc": "4a6e12be0631c3bab7e0ebc23c7c3a085bd0840439c12921314b853b0ed8d6d6",
       "chrome/browser/shaar/engine/shaar_event_bridge.h": "e9651cf93b46c65f7c1cb46651d838b4f9684a69d44e22134481dbe76a3055ec",
@@ -56,7 +56,7 @@
       "chrome/browser/shaar/history/shaar_history.h": "f1482a171e11a89aacd14a51126c3065f9c9a75a93638164e395205444c08d65",
       "chrome/browser/shaar/history/shaar_history_registry.h": "dd0c50b27edc0eda0e287d80de7030cc88990cbceb63dff294e60f3bc3071c26",
       "chrome/browser/shaar/history/shaar_history_unittest.cc": "fd635f8688fe1c42a04a2abbf75e699d32e3fe01d91f8561463218f0cffdeb98",
-      "chrome/browser/shaar/public/shaar_engine.h": "2a3b02313b2cd8b59fbbd107b8f054ebd122d52420a1824c9f9f6c29448ec437",
+      "chrome/browser/shaar/public/shaar_engine.h": "5376e77fee588e52179b3d23cd31bd3b32baca71c48f6f3743b8b60ed5b3e94b",
       "chrome/browser/shaar/shaar_engine.exports": "cb7f101b30c3ed4ef138e358071fd881f7b76e1b18ab088192bcd18e65f03c7d"
     }
   },
@@ -71,5 +71,18 @@
     "_shaar_abi_minor",
     "_shaar_engine_create",
     "_shaar_engine_release"
-  ]
+  ],
+  "moduleBlocks": {
+    "history": {
+      "note": "Step 8 history module contribution",
+      "layerFiles": [
+        "chrome/browser/shaar/BUILD.gn",
+        "chrome/browser/shaar/history/shaar_history.cc",
+        "chrome/browser/shaar/history/shaar_history.h",
+        "chrome/browser/shaar/history/shaar_history_registry.h",
+        "chrome/browser/shaar/history/shaar_history_unittest.cc",
+        "chrome/browser/shaar/public/shaar_engine.h"
+      ]
+    }
+  }
 }

@@ -12,19 +12,22 @@ source_set("engine") {
     "engine/shaar_engine.cc",
     "engine/shaar_event_bridge.cc",
     "engine/shaar_event_bridge.h",
+    # History module sources (step 8).
     "history/shaar_history.cc",
     "history/shaar_history.h",
     "history/shaar_history_registry.h",
   ]
   deps = [
     "//base",
-    "//chrome/browser/history:impl",
     "//chrome/browser/profiles:profile",
+    # History module service dependencies (step 8).
+    "//chrome/browser/history:impl",
     "//components/history/core/browser",
     "//ui/base",
   ]
 }
 
+# History module unit tests (step 8).
 test("history_unittests") {
   sources = [ "history/shaar_history_unittest.cc" ]
   deps = [

@@ -143,7 +143,9 @@ struct ShaarProfileAdapterTests {
     try adapter.activate(profileID: id, inWindow: 77)
     #expect(fake.activated.count == 1)
     #expect(fake.activated[0].0 == 1 && fake.activated[0].1 == 77)
-    #expect(try adapter.state(profileID: id, key: "profile.v1.thirdPartyCookiesBlocked") == Data("true".utf8))
+    #expect(
+      try adapter.state(profileID: id, key: "profile.v1.thirdPartyCookiesBlocked")
+        == Data("true".utf8))
     try await adapter.delete(profileID: id)
     #expect(fake.deleted == [1])
     #expect(adapter.loadedProfileIDs.isEmpty)

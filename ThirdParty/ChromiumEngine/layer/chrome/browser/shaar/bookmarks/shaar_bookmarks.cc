@@ -276,10 +276,11 @@ bool ApplyOne(Model *model, const Dict &op, std::string *invalid_reason,
     }
     if (title) {
       model->SetTitle(node, base::UTF8ToUTF16(title->GetString()),
-                      metrics::BookmarkEditSource::kUser);
+                      bookmarks::metrics::BookmarkEditSource::kUser);
     }
     if (replacement_url)
-      model->SetURL(node, *replacement_url, metrics::BookmarkEditSource::kUser);
+      model->SetURL(node, *replacement_url,
+                    bookmarks::metrics::BookmarkEditSource::kUser);
     if (key_value) {
       if (key_value->GetString().empty())
         model->DeleteNodeMetaInfo(node, kShaarSyncKey);
@@ -321,7 +322,8 @@ bool ApplyOne(Model *model, const Dict &op, std::string *invalid_reason,
       *invalid_reason = "invalid_remove";
       return false;
     }
-    model->Remove(node, metrics::BookmarkEditSource::kUser, FROM_HERE);
+    model->Remove(node, bookmarks::metrics::BookmarkEditSource::kUser,
+                  FROM_HERE);
     return true;
   }
   *invalid_reason = "unsupported_operation";

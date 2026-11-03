@@ -254,7 +254,7 @@ public enum BrowserImport {
     public var errorDescription: String? {
       switch self {
       case .unsupported:
-        "Choose a supported browser profile folder or bookmark export."
+        "Choose a Chrome, Edge, Brave, Arc, Safari, or Firefox profile folder or bookmark export."
       case .privateProfile:
         "Private browser profiles cannot be imported. Choose a regular profile."
       case .databaseUnavailable:

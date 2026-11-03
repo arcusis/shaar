@@ -60,6 +60,11 @@ source_set("engine") {
     "history/shaar_history.h",
     "history/shaar_history_lifecycle_adapter.cc",
     # END Shaar history module.
+    # BEGIN media
+    "media/shaar_media.cc",
+    "media/shaar_media.h",
+    "media/shaar_media_lifecycle_adapter.cc",
+    # END media
   ]
   deps = [
     "//base",
@@ -80,6 +85,10 @@ source_set("engine") {
     "//components/prefs",
     "//components/history/core/browser",
     "//content/public/browser",
+    # BEGIN media
+    "//services/media_session/public/cpp",
+    "//services/media_session/public/mojom",
+    # END media
     "//components/download/content/public",
     "//components/download/public/common",
     "//extensions/browser",
@@ -132,6 +141,13 @@ test("history_unittests") {
   deps = [ ":engine", "//base/test:test_support",
            "//components/history/core/browser", "//testing/gtest" ]
 }
+
+# BEGIN media
+test("media_unittests") {
+  sources = [ "media/shaar_media_unittest.cc" ]
+  deps = [ ":engine", "//testing/gtest" ]
+}
+# END media
 
 config("exports") {
   inputs = [ "shaar_engine.exports" ]

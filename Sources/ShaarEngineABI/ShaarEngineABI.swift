@@ -22,7 +22,7 @@ public enum ShaarEngineError: Error, Equatable, Sendable {
   case status(ShaarStatusCode, platformCode: Int32, message: String)
 }
 
-/// Numeric values are fixed by Design/shaar_engine.h and are never inferred from text.
+/// Numeric values are fixed by the Shaar layer's public shaar_engine.h.
 public enum ShaarStatusCode: UInt32, CaseIterable, Sendable {
   case ok = 0
   case invalidArgument = 1

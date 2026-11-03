@@ -342,6 +342,21 @@ final class EngineProbe {
     checks.append(name)
   }
 
+  private func waitForDisplayedNativeTab(_ tabID: String, _ check: String) async throws {
+    for _ in 0..<20 {
+      let selection = runtime.normalProbeSelectionAudit(forTabID: tabID)
+      if selection["selectedNativeTab"] as? Bool == true,
+        selection["displayedNativeWebContents"] as? Bool == true
+      {
+        checks.append(check)
+        return
+      }
+      try await Task.sleep(for: .milliseconds(5))
+    }
+    let selection = runtime.normalProbeSelectionAudit(forTabID: tabID)
+    throw ProbeFailure("\(check); native selection audit: \(selection)")
+  }
+
   /// Restored background tabs keep committing titles after launch; wait for the model to stop changing.
   private func waitForSessionToSettle() async throws {
     var previous = store.session
@@ -543,11 +558,8 @@ final class EngineProbe {
           store.session.selectedSpace.selectedTabID?.uuidString == tab
             && store.session.selectedSpace.profileID.uuidString == profileA,
           "\(phase) Space switch \(iteration + 1) selects the correct native Space and profile")
-        let nativeSelection = runtime.normalProbeSelectionAudit(forTabID: tab)
-        try expect(
-          nativeSelection["selectedNativeTab"] as? Bool == true
-            && nativeSelection["displayedNativeWebContents"] as? Bool == true,
-          "\(phase) Space switch \(iteration + 1) displays the selected native tab")
+        try await waitForDisplayedNativeTab(
+          tab, "\(phase) Space switch \(iteration + 1) displays the selected native tab")
         let state = try await snapshot(tab)
         let retainsAccountAndDocument =
           state["cookie"] as? String == "account=alpha"
@@ -580,11 +592,8 @@ final class EngineProbe {
           store.session.selectedSpace.selectedTabID?.uuidString == tab
             && store.session.selectedSpace.profileID.uuidString == (isA ? profileA : profileB),
           "\(phase) Profile switch \(iteration + 1) selects the correct Space and profile")
-        let nativeSelection = runtime.normalProbeSelectionAudit(forTabID: tab)
-        try expect(
-          nativeSelection["selectedNativeTab"] as? Bool == true
-            && nativeSelection["displayedNativeWebContents"] as? Bool == true,
-          "\(phase) Profile switch \(iteration + 1) displays the selected native tab")
+        try await waitForDisplayedNativeTab(
+          tab, "\(phase) Profile switch \(iteration + 1) displays the selected native tab")
         let state = try await snapshot(tab)
         let original = isA ? firstA : firstB
         let retainsAccountAndDocument =

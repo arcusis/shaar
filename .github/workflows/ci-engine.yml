@@ -38,7 +38,8 @@ jobs:
   probes:
     name: Engine ${{ matrix.shard }}
     needs: prepare
-    runs-on: macos-26
+    # Paid larger-runner pool: the probe shards were waiting 10+ minutes for standard macOS slots.
+    runs-on: macos-26-xlarge
     timeout-minutes: 90
     strategy:
       fail-fast: false

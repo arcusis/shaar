@@ -87,6 +87,7 @@ source_set("engine") {
     # BEGIN site_data
     "//chrome/browser/browsing_data:constants",
     "//chrome/browser/content_settings:content_settings_factory_impl",
+    "//services/network/public/mojom",
     # END site_data
     "//content/public/browser",
     "//components/download/content/public",

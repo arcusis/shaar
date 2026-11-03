@@ -28,6 +28,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
+#include "content/public/browser/storage_partition.h"
 #include "components/content_settings/core/browser/content_settings_registry.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -40,7 +41,36 @@
 #include "content/public/browser/browsing_data_remover.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
+#include "services/network/public/mojom/cookie_manager.mojom.h"
 #include "url/gurl.h"
+
+namespace shaar::site_data {
+
+bool IsPrivateSessionCurrent(
+    ShaarEngineContext* context, shaar_engine* engine,
+    shaar_private_session* session, Profile* expected_profile,
+    std::string_view expected_profile_id, std::string_view expected_session_id) {
+  if (!context || !context->private_sessions || !session || !expected_profile)
+    return false;
+  auto* services = context->private_sessions;
+  return services->ResolvePrivateProfile(engine, session) == expected_profile &&
+         services->ProfileID(engine, session) == expected_profile_id &&
+         services->SessionID(engine, session) == expected_session_id;
+}
+
+shaar_error_code ClearCompletionStatus(
+    ShaarEngineContext* context, shaar_engine* engine,
+    shaar_private_session* session, Profile* expected_profile,
+    std::string_view expected_profile_id, std::string_view expected_session_id,
+    bool remover_failed) {
+  if (session && !IsPrivateSessionCurrent(
+                     context, engine, session, expected_profile,
+                     expected_profile_id, expected_session_id))
+    return SHAAR_WRONG_SESSION;
+  return remover_failed ? SHAAR_CHROMIUM_ERROR : SHAAR_OK;
+}
+
+}  // namespace shaar::site_data
 
 namespace {
 
@@ -183,27 +213,73 @@ shaar_error_code ReturnPayload(shaar_reply_fn reply, void* context,
   return SHAAR_OK;
 }
 
+enum class ClearResultKind { kBrowsingData, kSiteData, kSelectedCookies };
+
 class ClearObserver final : public content::BrowsingDataRemover::Observer {
  public:
   ClearObserver(shaar_reply_fn reply, void* context, shaar_request_id request_id,
-                shaar_engine* engine, std::string profile_id,
+                shaar::ShaarEngineContext* engine_context,
+                shaar_engine* engine, shaar_private_session* private_session,
+                Profile* profile, std::string profile_id,
                 std::string session_id,
-                std::string response)
+                std::string response, ClearResultKind result_kind,
+                bool storage_requested, int pending_parts)
       : reply_(reply), context_(context), request_id_(request_id),
-        engine_(engine), profile_id_(std::move(profile_id)),
+        engine_context_(engine_context), engine_(engine),
+        private_session_(private_session), profile_(profile),
+        profile_id_(std::move(profile_id)),
         session_id_(std::move(session_id)),
-        response_(std::move(response)) {}
+        response_(std::move(response)), result_kind_(result_kind),
+        storage_requested_(storage_requested), pending_parts_(pending_parts) {}
   void OnBrowsingDataRemoverDone(uint64_t failed) override {
+    remover_failed_ = failed != 0;
+    PartDone();
+  }
+  void OnCookiesDeleted(uint32_t deleted) {
+    cookies_deleted_ = deleted;
+    PartDone();
+  }
+
+ private:
+  void PartDone() {
+    if (--pending_parts_ > 0)
+      return;
+    const auto completion_status = shaar::site_data::ClearCompletionStatus(
+        engine_context_, engine_, private_session_, profile_, profile_id_,
+        session_id_, remover_failed_);
     shaar_result result{};
     result.size = sizeof(result);
     result.request_id = request_id_;
     result.error.size = sizeof(result.error);
-    result.error.code = failed ? SHAAR_CHROMIUM_ERROR : SHAAR_OK;
-    result.payload_json = failed ? shaar_bytes{nullptr, 0}
-                                 : shaar_bytes{response_.data(), response_.size()};
+    result.error.code = completion_status;
+    std::string response;
+    if (completion_status == SHAAR_OK) {
+      if (result_kind_ == ClearResultKind::kSiteData) {
+        Dict payload;
+        payload.Set("schemaVersion", 1);
+        payload.Set("cookiesDeleted", static_cast<int>(cookies_deleted_));
+        payload.Set("storageCleared", storage_requested_);
+        base::JSONWriter::Write(base::Value(std::move(payload)), &response);
+      } else if (result_kind_ == ClearResultKind::kSelectedCookies) {
+        Dict payload;
+        payload.Set("schemaVersion", 1);
+        payload.Set("cookiesDeleted", static_cast<int>(cookies_deleted_));
+        base::JSONWriter::Write(base::Value(std::move(payload)), &response);
+      } else {
+        response = response_;
+      }
+    }
+    result.payload_json = {response.data(), response.size()};
+    if (completion_status == SHAAR_WRONG_SESSION) {
+      auto callback = reply_;
+      void* context = context_;
+      callback(context, &result);
+      delete this;
+      return;
+    }
     const std::string event =
         std::string("{\"kind\":\"") +
-        (failed ? "clearFailed" : "clearCompleted") +
+        (completion_status == SHAAR_OK ? "clearCompleted" : "clearFailed") +
         "\",\"requestId\":" + std::to_string(request_id) +
         ",\"schemaVersion\":1}";
     shaar::EmitEvent(engine_, SHAAR_EVENT_SITE_DATA,
@@ -216,23 +292,47 @@ class ClearObserver final : public content::BrowsingDataRemover::Observer {
     delete this;
   }
 
- private:
   shaar_reply_fn reply_;
   void* context_;
   shaar_request_id request_id_;
+  shaar::ShaarEngineContext* engine_context_;
   shaar_engine* engine_;
+  shaar_private_session* private_session_;
+  Profile* profile_;
   std::string profile_id_;
   std::string session_id_;
   std::string response_;
+  ClearResultKind result_kind_;
+  bool storage_requested_;
+  int pending_parts_;
+  uint32_t cookies_deleted_ = 0;
+  bool remover_failed_ = false;
 };
 
-shaar_error_code Clear(Profile* profile, const GURL* origin, uint64_t mask,
+shaar_error_code Clear(shaar::ShaarEngineContext* engine_context,
+                       shaar_private_session* private_session,
+                       Profile* profile, const GURL* origin, uint64_t mask,
                        base::Time begin, shaar_engine* engine,
                        std::string profile_id, std::string session_id,
                        shaar_reply_fn reply, void* context,
-                       shaar_request_id request_id, shaar_error* error) {
+                       shaar_request_id request_id, shaar_error* error,
+                       ClearResultKind result_kind = ClearResultKind::kBrowsingData,
+                       bool storage_requested = false) {
   auto* remover = profile->GetBrowsingDataRemover();
-  if (!remover)
+  if (!remover && result_kind == ClearResultKind::kBrowsingData)
+    return Fail(error, SHAAR_NOT_READY, "browsing data remover is unavailable");
+  const bool count_cookies = result_kind != ClearResultKind::kBrowsingData &&
+      (mask & content::BrowsingDataRemover::DATA_TYPE_COOKIES) != 0;
+  auto* storage_partition = profile->GetDefaultStoragePartition();
+  auto* cookie_manager = count_cookies && storage_partition
+      ? storage_partition->GetCookieManagerForBrowserProcess() : nullptr;
+  if (count_cookies && !cookie_manager)
+    return Fail(error, SHAAR_NOT_READY, "cookie manager is unavailable");
+
+  const uint64_t remover_mask = count_cookies
+      ? mask & ~content::BrowsingDataRemover::DATA_TYPE_COOKIES : mask;
+  const bool clear_storage = remover_mask != 0;
+  if (clear_storage && !remover)
     return Fail(error, SHAAR_NOT_READY, "browsing data remover is unavailable");
   std::string response;
   Dict payload;
@@ -247,19 +347,34 @@ shaar_error_code Clear(Profile* profile, const GURL* origin, uint64_t mask,
     payload.Set("clearedTypes", std::move(types));
   }
   base::JSONWriter::Write(base::Value(std::move(payload)), &response);
-  auto* observer = new ClearObserver(reply, context, request_id, engine,
-                                     std::move(profile_id),
-                                     std::move(session_id), std::move(response));
-  if (origin) {
+  const int pending_parts = (clear_storage ? 1 : 0) + (count_cookies ? 1 : 0);
+  auto* observer = new ClearObserver(
+      reply, context, request_id, engine_context, engine, private_session, profile,
+      std::move(profile_id), std::move(session_id), std::move(response),
+      result_kind, storage_requested, pending_parts);
+
+  if (count_cookies) {
+    auto cookie_filter = network::mojom::CookieDeletionFilter::New();
+    if (origin)
+      cookie_filter->url = *origin;
+    if (!begin.is_null())
+      cookie_filter->created_after_time = begin;
+    cookie_manager->DeleteCookies(
+        std::move(cookie_filter),
+        base::BindOnce(&ClearObserver::OnCookiesDeleted,
+                       base::Unretained(observer)));
+  }
+
+  if (clear_storage && origin) {
     auto filter = content::BrowsingDataFilterBuilder::Create(
         content::BrowsingDataFilterBuilder::Mode::kDelete);
     filter->AddOrigin(url::Origin::Create(*origin));
-    remover->RemoveWithFilterAndReply(begin, base::Time::Max(), mask,
+    remover->RemoveWithFilterAndReply(begin, base::Time::Max(), remover_mask,
         content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB |
             content::BrowsingDataRemover::ORIGIN_TYPE_PROTECTED_WEB,
         std::move(filter), observer);
-  } else {
-    remover->RemoveAndReply(begin, base::Time::Max(), mask,
+  } else if (clear_storage) {
+    remover->RemoveAndReply(begin, base::Time::Max(), remover_mask,
         content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB |
             content::BrowsingDataRemover::ORIGIN_TYPE_PROTECTED_WEB,
         observer);
@@ -423,9 +538,10 @@ shaar_error_code HandleSiteDataOperation(
             ? content::BrowsingDataRemover::DATA_TYPE_COOKIES
             : chrome_browsing_data_remover::DATA_TYPE_SITE_DATA &
                   ~content::BrowsingDataRemover::DATA_TYPE_COOKIES;
-    return Clear(profile, &origin, mask, base::Time(), engine, profile_id,
-                 session_id,
-                 reply, reply_context, request_id, error);
+    return Clear(context, scope.private_session, profile, &origin, mask,
+                 base::Time(), engine, profile_id, session_id, reply,
+                 reply_context, request_id, error, ClearResultKind::kSiteData,
+                 include_storage);
   }
 
   if (operation == SHAAR_OP_SITE_SETTINGS_ORIGINS) {
@@ -485,8 +601,9 @@ shaar_error_code HandleSiteDataOperation(
       begin = base::Time::UnixEpoch() +
               base::Milliseconds(static_cast<int64_t>(milliseconds));
     }
-    return Clear(profile, nullptr, mask, begin, engine, profile_id, session_id,
-                 reply, reply_context, request_id, error);
+    return Clear(context, nullptr, profile, nullptr, mask, begin, engine,
+                 profile_id, session_id, reply, reply_context, request_id,
+                 error);
   }
 
   if (operation == SHAAR_OP_SITE_COOKIES_CLEAR) {
@@ -511,10 +628,11 @@ shaar_error_code HandleSiteDataOperation(
     if (!current.SchemeIsHTTPOrHTTPS() ||
         url::Origin::Create(current) != url::Origin::Create(origin))
       return Fail(error, SHAAR_CONFLICT, "selected tab origin has changed");
-    return Clear(profile, &origin, content::BrowsingDataRemover::DATA_TYPE_COOKIES,
-                 base::Time(), engine, profile_id, session_id,
-                 reply, reply_context,
-                 request_id, error);
+    return Clear(context, scope.private_session, profile, &origin,
+                 content::BrowsingDataRemover::DATA_TYPE_COOKIES,
+                 base::Time(), engine, profile_id, session_id, reply,
+                 reply_context, request_id, error,
+                 ClearResultKind::kSelectedCookies);
   }
 
   if (operation == SHAAR_OP_THIRD_PARTY_COOKIES_GET ||

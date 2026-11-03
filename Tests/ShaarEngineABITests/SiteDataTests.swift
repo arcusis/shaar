@@ -61,6 +61,16 @@ struct SiteDataTests {
     #expect(arguments["origin"] as? String == "https://example.com")
   }
 
+  @Test func defaultAdapterCannotSubmitToShaarTransport() async throws {
+    let fake = FakeSiteDataEngine()
+    let adapter = ShaarSiteDataAdapter(scope: regularScope, transport: fake)
+    await fake.setResponse("{\"schemaVersion\":1,\"settings\":{}}")
+    await #expect(throws: ShaarSiteDataError.unsupportedCapability) {
+      try await adapter.settings(origin: "https://example.com")
+    }
+    #expect(await fake.calls.isEmpty)
+  }
+
   @Test func resetAndClearOperationsUseTypedSchemas() async throws {
     let fake = FakeSiteDataEngine()
     let adapter = ShaarSiteDataAdapter(implementation: .shaar, scope: regularScope, transport: fake)
@@ -96,11 +106,27 @@ struct SiteDataTests {
         == ShaarThirdPartyCookiePolicy(blocked: true, managed: false))
     #expect(await fake.lastCall()?.operation == .thirdPartyCookiesSet)
 
-    await fake.setResponse("{\"schemaVersion\":1,\"complete\":true}")
+    await fake.setResponse(
+      "{\"schemaVersion\":1,\"cookiesDeleted\":3,\"storageCleared\":true}")
     try await adapter.clearSiteData(origin: "https://example.com")
     #expect(await fake.lastCall()?.operation == .siteDataClear)
+    await fake.setResponse("{\"schemaVersion\":1,\"cookiesDeleted\":2}")
     try await adapter.clearSelectedTabCookies(origin: "https://example.com")
     #expect(await fake.lastCall()?.operation == .siteCookiesClear)
+  }
+
+  @Test func clearOperationsRejectTheOldSuccessShape() async {
+    let fake = FakeSiteDataEngine()
+    let adapter = ShaarSiteDataAdapter(
+      implementation: .shaar, scope: regularScope, windowID: "window-1", tabID: "tab-1",
+      transport: fake)
+    await fake.setResponse("{\"schemaVersion\":1,\"complete\":true}")
+    await #expect(throws: ShaarSiteDataError.malformedResponse) {
+      try await adapter.clearSiteData(origin: "https://example.com")
+    }
+    await #expect(throws: ShaarSiteDataError.malformedResponse) {
+      try await adapter.clearSelectedTabCookies(origin: "https://example.com")
+    }
   }
 
   @Test func eventRoutingRequiresExactProfileAndPrivateSession() {

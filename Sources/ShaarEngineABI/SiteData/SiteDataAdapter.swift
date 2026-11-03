@@ -158,9 +158,11 @@ public struct ShaarSiteDataAdapter: Sendable {
         "origin": try Self.canonicalOrigin(origin), "includeCookies": includeCookies,
         "includeStorage": includeStorage,
       ])
-    guard Set(root.keys) == ["schemaVersion", "complete"],
-      root["complete"] as? Bool == true
+    guard Set(root.keys) == ["schemaVersion", "cookiesDeleted", "storageCleared"],
+      let cookiesDeleted = root["cookiesDeleted"] as? Int, cookiesDeleted >= 0,
+      let storageCleared = root["storageCleared"] as? Bool
     else { throw ShaarSiteDataError.malformedResponse }
+    _ = storageCleared
   }
 
   public func clearBrowsingData(types: [String], sinceUnixMs: Int64? = nil) async throws
@@ -186,8 +188,8 @@ public struct ShaarSiteDataAdapter: Sendable {
       [
         "origin": try Self.canonicalOrigin(origin)
       ])
-    guard Set(root.keys) == ["schemaVersion", "complete"],
-      root["complete"] as? Bool == true
+    guard Set(root.keys) == ["schemaVersion", "cookiesDeleted"],
+      let cookiesDeleted = root["cookiesDeleted"] as? Int, cookiesDeleted >= 0
     else { throw ShaarSiteDataError.malformedResponse }
   }
 
@@ -247,6 +249,7 @@ public struct ShaarSiteDataAdapter: Sendable {
   private func submit(_ operation: ShaarSiteDataOperation, _ body: [String: Any]) async throws
     -> [String: Any]
   {
+    guard implementation == .shaar else { throw ShaarSiteDataError.unsupportedCapability }
     var arguments = body
     arguments["schemaVersion"] = 1
     let data = try JSONSerialization.data(withJSONObject: arguments, options: [.sortedKeys])

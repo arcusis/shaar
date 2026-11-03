@@ -23,5 +23,16 @@ shaar_error_code HandleSiteDataOperation(
     void*, shaar_error*);
 extern "C" void shaar_site_data_register(ShaarModuleRegistry* registry);
 bool IsValidSiteDataOriginForTesting(std::string_view origin);
+namespace shaar::site_data {
+bool IsPrivateSessionCurrent(
+    ShaarEngineContext* context, shaar_engine* engine,
+    shaar_private_session* session, Profile* expected_profile,
+    std::string_view expected_profile_id, std::string_view expected_session_id);
+shaar_error_code ClearCompletionStatus(
+    ShaarEngineContext* context, shaar_engine* engine,
+    shaar_private_session* session, Profile* expected_profile,
+    std::string_view expected_profile_id, std::string_view expected_session_id,
+    bool remover_failed);
+}  // namespace shaar::site_data
 
 #endif  // CHROME_BROWSER_SHAAR_SITE_DATA_SHAAR_SITE_DATA_H_

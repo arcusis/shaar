@@ -219,10 +219,11 @@ class SourceBuildTests(unittest.TestCase):
     def test_symbol_level_adaptation_changes_only_the_browser_symbol_level(self):
         with tempfile.TemporaryDirectory() as temporary:
             script = pathlib.Path(temporary) / "gn_defines.sh"
-            script.write_text("_gn_args=(\n  symbol_level=0 blink_symbol_level=0 v8_symbol_level=0\n)\n")
+            script.write_text("_gn_args=(\n  use_thin_lto=true\n  symbol_level=0 blink_symbol_level=0 v8_symbol_level=0\n)\n")
             BUILD.Runner.adapt_symbol_level(script, 1)
             self.assertEqual(script.read_text(),
-                             "_gn_args=(\n  symbol_level=1 blink_symbol_level=0 concurrent_links=1 v8_symbol_level=0\n)\n")
+                             "_gn_args=(\n  use_thin_lto=true\n  symbol_level=1 blink_symbol_level=0 v8_symbol_level=0\n)\n")
+            self.assertNotIn("concurrent_links", script.read_text())
             with self.assertRaisesRegex(BUILD.BuildError, "anchor mismatch"):
                 BUILD.Runner.adapt_symbol_level(script, 1)
             with self.assertRaisesRegex(BUILD.BuildError, "unsupported symbol level"):

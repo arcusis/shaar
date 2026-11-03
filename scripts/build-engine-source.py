@@ -961,9 +961,10 @@ class Runner:
                 build_text = build_script.read_text()
                 needs_priority_adaptation = (
                     "exec autoninja " in build_text or "exec lowprio autoninja " in build_text)
+                needs_link_adaptation = " concurrent_links=1" in (scripts / "gn_defines.sh").read_text()
                 if (not self.has_unadapted_home_paths(scripts) and not needs_cache_adaptation
                         and not needs_resume_adaptation and not needs_pinned_gn
-                        and not needs_priority_adaptation):
+                        and not needs_priority_adaptation and not needs_link_adaptation):
                     return scripts
                 if self.has_unadapted_home_paths(scripts):
                     self.checked_replace(
@@ -1008,6 +1009,8 @@ class Runner:
                     self.adapt_pinned_gn_script(gn_script)
                 if needs_priority_adaptation:
                     self.adapt_build_priority_script(build_script)
+                if needs_link_adaptation:
+                    self.checked_replace(scripts / "gn_defines.sh", " concurrent_links=1", "", 1)
                 self.validate_staged_paths(scripts)
                 self.record_staged_scripts(scripts)
                 substitutions = self.receipt["inputs"].setdefault("scriptSubstitutions", [])
@@ -1192,7 +1195,7 @@ class Runner:
         if level not in (0, 1, 2):
             raise BuildError(f"unsupported symbol level: {level}")
         Runner.checked_replace(path, "  symbol_level=0 blink_symbol_level=0",
-                               f"  symbol_level={level} blink_symbol_level=0 concurrent_links=1", 1)
+                               f"  symbol_level={level} blink_symbol_level=0", 1)
 
     @staticmethod
     def adapt_build_priority_script(path: pathlib.Path) -> None:

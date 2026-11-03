@@ -141,9 +141,13 @@ final class PrivateWindowProbe {
     let contextB = UUID().uuidString.uppercased()
     let contextC = UUID().uuidString.uppercased()
     let normalPath = "/private-window-normal-\(marker)"
+    let runnerTemporary = ProcessInfo.processInfo.environment["RUNNER_TEMP"].map {
+      URL(fileURLWithPath: $0).resolvingSymlinksInPath().path
+    }
+    let allowedTemporaryRoots = [FileManager.default.temporaryDirectory.resolvingSymlinksInPath().path]
+      + (runnerTemporary.map { [$0] } ?? [])
     guard
-      root.path.hasPrefix(
-        FileManager.default.temporaryDirectory.resolvingSymlinksInPath().path + "/"),
+      allowedTemporaryRoots.contains(where: { root.path.hasPrefix($0 + "/") }),
       (try? String(contentsOf: root.appending(path: ".arcusis-probe"), encoding: .utf8))
         == "arcusis-engine-probe-v1\n"
     else {

@@ -12,13 +12,17 @@ Migration step 0 provides only the ABI/version creation entry points and one
 internal sequenced event dispatcher. Other declarations in the public header
 are reserved for later modules and are not exported yet. The separate
 `scripts/build-shaar-engine-source.py` validates the immutable inputs and prints
-a no-write dry-run plan. Its `--run` option fails closed until source sync,
-patching, GN generation, and build stages are implemented and reviewed. After a
-future build, `--verify-framework` checks the exact framework binary for the
-required Shaar exports and forbidden legacy exports before writing the owned
-`build/ShaarEngineSource/receipt.json`.
+a no-write dry-run plan. `--run --reference-source PATH` accepts a succeeded
+pinned Chromium checkout, copies it with APFS copy-on-write into
+`build/ShaarEngineSource`, installs the layer and GN hook, and builds
+`chrome_framework` at background QoS with six jobs. This temporary phase-3
+development mode keeps both Ardia and Shaar exports, verifies the Shaar symbols,
+and runs the Swift ABI loader headlessly. Its receipt records `mode: dual-export`
+and succeeds only after the loader reports ABI major 1. The independent
+`--verify-framework` final-target check still rejects all `ac_*` and
+`ArdiaCore*` symbols.
 
 The current Ardia source runner and production engine pin remain in place for
 the app's existing CI lane. `build/ShaarEngineSource` is a distinct ignored,
-owner-bound output root; no stage reads, resumes, or cleans the separate
-`engine-333-364/build/EngineSource` reference tree.
+owner-bound output root. The dual-export runner reads the separate reference
+tree but never writes to or cleans it.

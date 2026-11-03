@@ -31,8 +31,6 @@ class ShaarSourceBuildTests(unittest.TestCase):
         shutil.copytree(ROOT / BUILD.LAYER, layer_parent / "layer")
         shutil.copytree(ROOT / "ThirdParty/ChromiumEngine/patches", layer_parent / "patches")
         shutil.copy2(ROOT / BUILD.CONFIG, layer_parent / "source-build.json")
-        (repo / "Design").mkdir()
-        shutil.copy2(ROOT / "Design/shaar_engine.h", repo / "Design/shaar_engine.h")
         return repo
 
     def test_dry_run_is_shaar_only_and_creates_no_output(self):
@@ -48,11 +46,9 @@ class ShaarSourceBuildTests(unittest.TestCase):
             self.assertFalse((repo / "build").exists())
             self.assertNotIn("build/EngineSource", json.dumps(plan))
 
-    def test_execution_is_disabled_before_any_output_is_created(self):
-        with mock.patch.object(BUILD, "load_config") as load_config, mock.patch.object(
-                BUILD, "prepare_owned_output") as prepare_output:
+    def test_execution_requires_reference_before_any_output_is_created(self):
+        with mock.patch.object(BUILD, "prepare_owned_output") as prepare_output:
             self.assertEqual(BUILD.main(["--run"]), 1)
-            load_config.assert_not_called()
             prepare_output.assert_not_called()
 
     def test_manifest_and_output_guards_reject_tamper_and_symlinks(self):
@@ -102,6 +98,10 @@ class ShaarSourceBuildTests(unittest.TestCase):
                 BUILD.check_exports(symbols + forbidden + "\n")
         with self.assertRaisesRegex(BUILD.BuildError, "legacy framework exports"):
             BUILD.check_exports(symbols, "0000000000001000 t _ac_hidden_helper\n")
+        dual = BUILD.check_exports(symbols + "_ac_engine_abi_version\n", mode="dual-export")
+        self.assertIn("_ac_engine_abi_version", dual["legacyFound"])
+        with self.assertRaisesRegex(BUILD.BuildError, "lacks pinned Ardia"):
+            BUILD.check_exports(symbols, mode="dual-export")
 
         with tempfile.TemporaryDirectory() as temporary:
             repo = self.fixture_repo(temporary)
@@ -113,7 +113,8 @@ class ShaarSourceBuildTests(unittest.TestCase):
             receipt = output / BUILD.RECEIPT_FILE
             with mock.patch.object(BUILD.subprocess, "run", return_value=mock.Mock(stdout=symbols)):
                 record = BUILD.verify_framework(repo, binary, receipt, config)
-            self.assertEqual(record["framework"]["exports"]["forbiddenFound"], [])
+            self.assertEqual(record["framework"]["exports"]["legacyFound"], [])
+            self.assertEqual(record["status"], "succeeded")
             self.assertEqual(json.loads(receipt.read_text()), record)
             self.assertEqual(receipt.stat().st_mode & 0o077, 0)
             with self.assertRaisesRegex(BUILD.BuildError, "outside Shaar output|layout"):

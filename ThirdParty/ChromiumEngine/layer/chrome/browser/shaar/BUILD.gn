@@ -16,7 +16,7 @@ source_set("engine") {
     "lifecycle/shaar_lifecycle.cc",
     "lifecycle/shaar_lifecycle.h",
     "lifecycle/shaar_module_registry.cc",
-    "lifecycle/shaar_module_registry.h",
+    "engine/shaar_module_registry.h",
     # END Shaar lifecycle module.
     # BEGIN Shaar private sessions module.
     "private_sessions/shaar_private_sessions.h",

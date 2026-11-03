@@ -64,7 +64,6 @@ PROFILE_MODULE_LAYER_FILES = (
     "chrome/browser/shaar/public/shaar_engine.h",
     "chrome/browser/shaar/shaar_engine.exports",
 )
-)
 COMMIT = re.compile(r"[0-9a-f]{40}\Z")
 DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 

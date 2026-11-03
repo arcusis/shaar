@@ -146,7 +146,7 @@ def build_engine_bundle(checks: Commands, iterations: int) -> None:
 def run_split_engine_probe(checks: Commands, shard: str, mode: str, iteration: int, phase: str) -> None:
     run_id = os.environ.get("GITHUB_RUN_ID", "local")
     attempt = os.environ.get("GITHUB_RUN_ATTEMPT", "1")
-    probe_temp = Path("/tmp").resolve()
+    probe_temp = Path(os.environ.get("RUNNER_TEMP", "/tmp")).resolve()
     root = probe_temp / f"arcusis-engine-probe-{run_id}-{attempt}-{shard}"
     archive = ROOT / "build/ci/engine-state" / f"{shard}.tar.gz"
     if phase == "restart":

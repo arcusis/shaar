@@ -130,6 +130,9 @@ def require_marked_probe_root(root, purpose):
     """Return the canonical root only when this runner created and marked it."""
     canonical = root.resolve()
     allowed_parents = {Path(tempfile.gettempdir()).resolve(), Path("/tmp").resolve()}
+    runner_temp = os.environ.get("RUNNER_TEMP")
+    if runner_temp:
+        allowed_parents.add(Path(runner_temp).resolve())
     if (canonical.parent not in allowed_parents
             or not canonical.name.startswith('arcusis-engine-probe-')
             or (canonical / '.arcusis-probe').read_text() != 'arcusis-engine-probe-v1\n'):
@@ -1393,11 +1396,15 @@ def main(argv=None):
             raise RuntimeError("Transferred engine probe state has the wrong source phase or mode")
     else:
         if split_phase:
-            if root.parent.resolve() != Path("/tmp").resolve():
-                raise RuntimeError("Split engine probe roots must be created directly under /tmp")
+            allowed_parents = {Path("/tmp").resolve()}
+            runner_temp = os.environ.get("RUNNER_TEMP")
+            if runner_temp:
+                allowed_parents.add(Path(runner_temp).resolve())
+            if root.parent.resolve() not in allowed_parents:
+                raise RuntimeError("Split engine probe root is outside an approved temporary directory")
             if root.exists():
                 raise RuntimeError(f"Split engine probe root already exists: {root}")
-            root.mkdir(parents=True)
+            root.mkdir(mode=0o700, parents=True)
         (root / ".arcusis-probe").write_text("arcusis-engine-probe-v1\n")
         (root / ".arcusis-probe").chmod(0o600)
         shutil.copytree("Tests/Fixtures/ProfileExtension", root / "Extension")
@@ -1567,8 +1574,12 @@ def main(argv=None):
         phase_state["childProcesses"] = private_window_children
         phase_state["listenerClosed"] = listener_closed
         phase_state_path.write_text(json.dumps(phase_state, indent=2, sort_keys=True) + "\n")
+        if failures:
+            raise RuntimeError("; ".join(failures))
         if options.private_window:
             proof_directory = Path("build/private-window-evidence") / private_window_run_id
+            if not proof_directory.is_dir():
+                raise RuntimeError("Initial private-window probe did not produce its proof directory")
             shutil.copytree(proof_directory, root / "engine-private-window-initial-evidence")
     if options.private_window and not (split_phase and options.probe_phase == "initial"):
         summary = record_private_window_summary(

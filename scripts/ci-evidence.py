@@ -14,9 +14,13 @@ from pathlib import Path
 
 def owned_probe_root(path: Path) -> bool:
     try:
+        allowed_parents = {Path(tempfile.gettempdir()).resolve(), Path("/tmp").resolve()}
+        runner_temp = os.environ.get("RUNNER_TEMP")
+        if runner_temp:
+            allowed_parents.add(Path(runner_temp).resolve())
         return (
             not path.is_symlink()
-            and path.resolve().parent == Path(tempfile.gettempdir()).resolve()
+            and path.resolve().parent in allowed_parents
             and path.name.startswith("arcusis-engine-probe-")
             and path.stat().st_uid == os.getuid()
             and not (path / ".arcusis-probe").is_symlink()

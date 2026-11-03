@@ -192,6 +192,9 @@ typedef enum {
 
 // Private sessions module IDs.
 typedef enum { SHAAR_MODULE_PRIVATE_SESSIONS = 1200 } shaar_module_id;
+// BEGIN site_data
+enum { SHAAR_MODULE_SITE_DATA = 1201 };
+// END site_data
 
 typedef enum {
   SHAAR_DEVTOOLS_CAPABILITY_INSPECTOR = 1,

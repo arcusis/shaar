@@ -68,7 +68,8 @@ final class EngineProbe {
     bitwardenOnboardingControl: Bool,
     awaitAbruptTermination: Bool, expectAbruptRecovery: Bool, savedTabCapacityMode: Bool,
     externalAppConsentMode: Bool, privateWindowMode: Bool, privateWindowRunID: String?,
-    quitExitMode: Bool, quitPendingNavigation: Bool, sessionRecoveryMode: Bool, localizationMode: Bool
+    quitExitMode: Bool, quitPendingNavigation: Bool, sessionRecoveryMode: Bool,
+    localizationMode: Bool
   ) throws {
     self.root = root
     self.fixture = fixture

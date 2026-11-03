@@ -64,6 +64,15 @@ PROFILE_MODULE_LAYER_FILES = (
     "chrome/browser/shaar/profiles/shaar_profiles.h",
     "chrome/browser/shaar/profiles/shaar_profiles_unittest.cc",
 )
+EXTENSIONS_MODULE_LAYER_FILES = (
+    "chrome/browser/shaar/BUILD.gn",
+    "chrome/browser/shaar/extensions/shaar_extensions.cc",
+    "chrome/browser/shaar/extensions/shaar_extensions.h",
+    "chrome/browser/shaar/extensions/shaar_extensions_lifecycle_adapter.cc",
+    "chrome/browser/shaar/extensions/shaar_extensions_unittest.cc",
+    "chrome/browser/shaar/lifecycle/shaar_module_registry.cc",
+    "chrome/browser/shaar/public/shaar_engine.h",
+)
 COMMIT = re.compile(r"[0-9a-f]{40}\Z")
 DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 
@@ -207,6 +216,13 @@ def load_config(repo: Path) -> dict:
         "requiredExports": list(PROFILE_MODULE_EXPORTS),
     }:
         raise BuildError("profiles module block is missing or inconsistent")
+    if config.get("moduleBlocks", {}).get("extensions") != {
+        "operationRange": [800, 899],
+        "moduleID": 1300,
+        "layerFiles": list(EXTENSIONS_MODULE_LAYER_FILES),
+        "requiredExports": [],
+    }:
+        raise BuildError("extensions module block is missing or inconsistent")
 
     patches = config.get("patches")
     if not isinstance(patches, list) or not patches:

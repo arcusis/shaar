@@ -65,6 +65,11 @@ source_set("engine") {
     "site_data/shaar_site_data.h",
     "site_data/shaar_site_data_lifecycle_adapter.cc",
     # END site_data
+    # BEGIN extensions
+    "extensions/shaar_extensions.cc",
+    "extensions/shaar_extensions.h",
+    "extensions/shaar_extensions_lifecycle_adapter.cc",
+    # END extensions
   ]
   deps = [
     "//base",
@@ -95,6 +100,10 @@ source_set("engine") {
     "//net",
     "//ui/base",
     "//url",
+    # BEGIN extensions
+    "//chrome/browser/extensions:extensions",
+    "//extensions/common",
+    # END extensions
   ]
 }
 
@@ -148,6 +157,12 @@ test("site_data_unittests") {
   deps = [ ":engine", "//chrome/test:test_support", "//testing/gtest" ]
 }
 # END site_data
+# BEGIN extensions
+test("extensions_unittests") {
+  sources = [ "extensions/shaar_extensions_unittest.cc" ]
+  deps = [ ":engine", "//testing/gtest" ]
+}
+# END extensions
 
 config("exports") {
   inputs = [ "shaar_engine.exports" ]

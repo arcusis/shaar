@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import Foundation
+import ShaarEngineC
 import ShaarEngineABIC
 
 public enum ShaarNavigationOperation: UInt32, Sendable {

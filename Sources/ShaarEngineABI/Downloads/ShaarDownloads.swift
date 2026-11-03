@@ -111,7 +111,7 @@ public struct ShaarDownloadsAdapter: Sendable {
   public let implementation: ShaarEngineImplementation
 
   public init(
-    implementation: ShaarEngineImplementation = .shaar,
+    implementation: ShaarEngineImplementation = .shippingDefault,
     transport: any ShaarDownloadsTransport
   ) {
     self.implementation = implementation

@@ -73,7 +73,8 @@ let package = Package(
     .target(
       name: "ArcusisBrowser",
       dependencies: [
-        "BrowserCore", "ChromiumBridge", .product(name: "Sparkle", package: "Sparkle"),
+        "BrowserCore", "ChromiumBridge", "ShaarEngineABI",
+        .product(name: "Sparkle", package: "Sparkle"),
       ]),
     .executableTarget(
       name: "Shaar", dependencies: ["ArcusisBrowser"],

@@ -1126,6 +1126,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       if let rawProbeRoot = ProcessInfo.processInfo.environment["ARDIA_TEST_PROBE_ROOT"] {
         let probeRoot = URL(fileURLWithPath: rawProbeRoot).standardizedFileURL
         let marker = probeRoot.appending(path: ".arcusis-probe")
+        let markerContents = try String(contentsOf: marker, encoding: .utf8)
         let runnerTempParent =
           ProcessInfo.processInfo.environment["RUNNER_TEMP"].map {
             [URL(fileURLWithPath: $0).standardizedFileURL]
@@ -1137,7 +1138,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
           ] + runnerTempParent
         guard
           allowedParents.contains(probeRoot.deletingLastPathComponent())
-            && (try String(contentsOf: marker, encoding: .utf8)) == "arcusis-engine-probe-v1\n"
+            && markerContents == "arcusis-engine-probe-v1\n"
         else {
           throw WorkspaceError.invalidState
         }

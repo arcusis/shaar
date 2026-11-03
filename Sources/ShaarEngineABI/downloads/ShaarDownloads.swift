@@ -24,7 +24,8 @@ public struct ShaarDownloadRecord: Codable, Equatable, Sendable, Identifiable {
   }
 
   enum CodingKeys: String, CodingKey {
-    case id, url, filename, path, state, paused, received, total, speed, mimeType, dangerous, error, startTime
+    case id, url, filename, path, state, paused, received, total, speed, mimeType, dangerous, error,
+      startTime
   }
 
   public init(
@@ -65,13 +66,16 @@ public struct ShaarDownloadRecord: Codable, Equatable, Sendable, Identifiable {
   }
 }
 
-private extension KeyedDecodingContainer {
-  func decodeInteger(forKey key: Key) throws -> Int64 {
+extension KeyedDecodingContainer {
+  fileprivate func decodeInteger(forKey key: Key) throws -> Int64 {
     if let integer = try? decode(Int64.self, forKey: key) { return integer }
     let number = try decode(Double.self, forKey: key)
     guard number.isFinite, number.rounded(.towardZero) == number,
       number >= Double(Int64.min), number < Double(Int64.max)
-    else { throw DecodingError.dataCorruptedError(forKey: key, in: self, debugDescription: "Expected an integer") }
+    else {
+      throw DecodingError.dataCorruptedError(
+        forKey: key, in: self, debugDescription: "Expected an integer")
+    }
     return Int64(number)
   }
 }
@@ -173,7 +177,8 @@ public struct ShaarDownloadsAdapter: Sendable {
 
   public func directory() async throws -> String {
     let data = try await transport.submit(
-      operation: Self.directoryOperation, arguments: Self.json(["schemaVersion": 1, "action": "get"]))
+      operation: Self.directoryOperation,
+      arguments: Self.json(["schemaVersion": 1, "action": "get"]))
     let reply = try JSONDecoder().decode(DirectoryReply.self, from: data)
     guard reply.schemaVersion == 1, reply.directory.hasPrefix("/") else {
       throw ShaarDownloadsError.malformedResponse
@@ -197,7 +202,9 @@ public struct ShaarDownloadsAdapter: Sendable {
 
   /// Allows a completed file to be opened only beneath Chromium's acknowledged
   /// effective directory. Symlinks are resolved on both sides before compare.
-  public func validatedTarget(for record: ShaarDownloadRecord, effectiveDirectory: URL) throws -> URL {
+  public func validatedTarget(for record: ShaarDownloadRecord, effectiveDirectory: URL) throws
+    -> URL
+  {
     guard !record.path.isEmpty, record.path.hasPrefix("/") else {
       throw ShaarDownloadsError.unsafeTarget
     }

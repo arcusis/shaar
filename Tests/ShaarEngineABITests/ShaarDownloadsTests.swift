@@ -4,6 +4,7 @@
 
 import Foundation
 import Testing
+
 @testable import ShaarEngineABI
 
 private actor FakeDownloadsTransport: ShaarDownloadsTransport {
@@ -22,7 +23,9 @@ private actor FakeDownloadsTransport: ShaarDownloadsTransport {
 }
 
 @Test func listDecodesTheVersionedDownloadRecord() async throws {
-  let payload = Data(#"{"schemaVersion":1,"downloads":[{"id":"guid-1","url":"https://example.test/a","filename":"a.bin","path":"/tmp/Downloads/a.bin","state":"downloading","paused":false,"received":3.0,"total":9.0,"speed":4.0,"mimeType":"application/octet-stream","dangerous":false,"error":null,"startTime":1234.0}]}"#.utf8)
+  let payload = Data(
+    #"{"schemaVersion":1,"downloads":[{"id":"guid-1","url":"https://example.test/a","filename":"a.bin","path":"/tmp/Downloads/a.bin","state":"downloading","paused":false,"received":3.0,"total":9.0,"speed":4.0,"mimeType":"application/octet-stream","dangerous":false,"error":null,"startTime":1234.0}]}"#
+      .utf8)
   let fake = FakeDownloadsTransport(replies: [400: payload])
   let result = try await ShaarDownloadsAdapter(transport: fake).list()
   #expect(result.count == 1)
@@ -43,7 +46,9 @@ private actor FakeDownloadsTransport: ShaarDownloadsTransport {
 }
 
 @Test func directoryUsesTheAcknowledgedEnginePath() async throws {
-  let fake = FakeDownloadsTransport(replies: [402: Data(#"{"schemaVersion":1,"directory":"/Users/test/Downloads"}"#.utf8)])
+  let fake = FakeDownloadsTransport(replies: [
+    402: Data(#"{"schemaVersion":1,"directory":"/Users/test/Downloads"}"#.utf8)
+  ])
   let path = try await ShaarDownloadsAdapter(transport: fake).setDirectory("/Users/test/Downloads")
   #expect(path == "/Users/test/Downloads")
 }
@@ -62,7 +67,8 @@ private actor FakeDownloadsTransport: ShaarDownloadsTransport {
     windowID: Data(), tabID: Data(),
     payloadJSON: Data(#"{"schemaVersion":1,"change":"remove","downloadId":"g"}"#.utf8))
   #expect(try adapter.decodeEvent(event, profileID: "profile", sessionID: nil) == nil)
-  #expect(try adapter.decodeEvent(event, profileID: "profile", sessionID: "private") == .remove("g"))
+  #expect(
+    try adapter.decodeEvent(event, profileID: "profile", sessionID: "private") == .remove("g"))
 }
 
 @Test func revealTargetMustRemainUnderTheEffectiveFolder() throws {

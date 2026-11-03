@@ -13,13 +13,16 @@ struct BrowserSettingsProfile: Identifiable {
   let symbol: String
   let spaces: [BrowserSettingsSpace]
   let accounts: [ConnectedAccount]
+  let downloadDirectory: URL?
+  let defaultDownloadDirectory: URL?
   var spaceCount: Int { spaces.count }
   var spaceNames: [String] { spaces.map(\.name) }
 
   init(
     id: UUID, name: String, color: ProfileColorChoice = .none,
     symbol: String = BrowserProfile.defaultSymbol, spaces: [BrowserSettingsSpace],
-    accounts: [ConnectedAccount] = []
+    accounts: [ConnectedAccount] = [], downloadDirectory: URL? = nil,
+    defaultDownloadDirectory: URL? = nil
   ) {
     self.id = id
     self.name = name
@@ -27,6 +30,8 @@ struct BrowserSettingsProfile: Identifiable {
     self.symbol = symbol
     self.spaces = spaces
     self.accounts = accounts
+    self.downloadDirectory = downloadDirectory
+    self.defaultDownloadDirectory = defaultDownloadDirectory
   }
 }
 
@@ -114,6 +119,8 @@ struct BrowserSettingsView: View {
   let onRenameProfile: (UUID, String) -> Bool
   let onSetProfileColor: (UUID, ProfileColorChoice) -> Bool
   let onSetProfileSymbol: (UUID, String) -> Bool
+  let onChooseDownloadDirectory: (UUID) -> Void
+  let onResetDownloadDirectory: (UUID) -> Void
   let onDeleteProfile: (UUID, UUID?) async throws -> Void
   let onOpenSpace: (UUID) -> Void
   let onConnectAccount: (UUID, AccountSignInOption) -> Void
@@ -136,6 +143,8 @@ struct BrowserSettingsView: View {
     onRenameProfile: @escaping (UUID, String) -> Bool = { _, _ in false },
     onSetProfileColor: @escaping (UUID, ProfileColorChoice) -> Bool = { _, _ in false },
     onSetProfileSymbol: @escaping (UUID, String) -> Bool = { _, _ in false },
+    onChooseDownloadDirectory: @escaping (UUID) -> Void = { _ in },
+    onResetDownloadDirectory: @escaping (UUID) -> Void = { _ in },
     onDeleteProfile: @escaping (UUID, UUID?) async throws -> Void = { _, _ in
       throw CocoaError(.featureUnsupported)
     },
@@ -159,6 +168,8 @@ struct BrowserSettingsView: View {
     self.onRenameProfile = onRenameProfile
     self.onSetProfileColor = onSetProfileColor
     self.onSetProfileSymbol = onSetProfileSymbol
+    self.onChooseDownloadDirectory = onChooseDownloadDirectory
+    self.onResetDownloadDirectory = onResetDownloadDirectory
     self.onDeleteProfile = onDeleteProfile
     self.onOpenSpace = onOpenSpace
     self.onConnectAccount = onConnectAccount
@@ -485,6 +496,36 @@ struct BrowserSettingsView: View {
         Picker(SettingsL10n.string("Search engine"), selection: $selectedSearchEngine) {
           ForEach(searchEngines) { Text($0.title).tag($0.id) }
         }
+      }
+      Section(SettingsL10n.string("Download folder")) {
+        LabeledContent(SettingsL10n.string("Current folder")) {
+          Text(
+            (profile.downloadDirectory ?? profile.defaultDownloadDirectory)?.path
+              ?? SettingsL10n.string("Unavailable")
+          )
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .textSelection(.enabled)
+          .lineLimit(2)
+          .multilineTextAlignment(.trailing)
+        }
+        HStack {
+          Button(SettingsL10n.string("Choose Folder…")) {
+            onChooseDownloadDirectory(profile.id)
+          }
+          .accessibilityIdentifier("settings.downloadFolder.choose")
+          if profile.downloadDirectory != nil {
+            Button(SettingsL10n.string("Use Default")) {
+              onResetDownloadDirectory(profile.id)
+            }
+            .accessibilityIdentifier("settings.downloadFolder.reset")
+          }
+        }
+        Text(
+          SettingsL10n.string(
+            "This folder is saved for this profile. Browser downloads will use it when engine support is available."
+          )
+        ).font(.caption).foregroundStyle(.secondary)
       }
       Section(SettingsL10n.string("Spaces using this profile")) {
         if profile.spaces.isEmpty {

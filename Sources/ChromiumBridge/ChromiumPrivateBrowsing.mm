@@ -23,7 +23,7 @@
     [_privateProbePendingTabs containsObject:identity];
 }
 
-- (BOOL)privateProbeIdentityIsAvailable:(NSString *)identity {
+- (BOOL)privateIdentityIsAvailable:(NSString *)identity {
   return identity.length && ![self privateIdentityOccupied:identity];
 }
 
@@ -58,7 +58,7 @@
   if (![self privateContextEnabled] || !ARCIsCanonicalID(contextID) || !ARCIsCanonicalID(sourceProfileID) ||
       [_deletingProfileIDs containsObject:sourceProfileID] ||
       !source || source.destroyed || source.offTheRecord ||
-      ![self privateProbeIdentityIsAvailable:contextID]) {
+      ![self privateIdentityIsAvailable:contextID]) {
     completion(NO, ARCBridgeError(@"Invalid private probe context or source profile."));
     return;
   }
@@ -125,7 +125,7 @@
         for (NSString *pendingID in pending) {
           [self->_privateProbePendingContexts removeObjectForKey:pendingID];
           if (valid && [self privateContextEnabled] &&
-              [self privateProbeIdentityIsAvailable:pendingID]) {
+              [self privateIdentityIsAvailable:pendingID]) {
             [current[@"contextIDs"] addObject:pendingID];
             self->_privateProbeContexts[pendingID] = [@{@"sourceProfileID": sourceProfileID,
               @"sourceProfile": source, @"profile": privateProfile,
@@ -172,8 +172,8 @@
   if (![self privateContextEnabled] || !ARCIsCanonicalID(windowID) || !ARCIsCanonicalID(tabID) ||
       [windowID isEqualToString:contextID] || [tabID isEqualToString:contextID] ||
       [tabID isEqualToString:windowID] || !context ||
-      ![self privateProbeIdentityIsAvailable:windowID] ||
-      ![self privateProbeIdentityIsAvailable:tabID] ||
+      ![self privateIdentityIsAvailable:windowID] ||
+      ![self privateIdentityIsAvailable:tabID] ||
       !profile || profile.destroyed || !profile.offTheRecord || ![self privateURLIsAllowed:url]) {
     if (error) *error = ARCBridgeError(@"Invalid, unknown, closed, or unsupported private navigation.");
     return NO;
@@ -251,7 +251,7 @@
   __weak ARCChromiumRuntime *weakSelf = self;
   id observer = [NSNotificationCenter.defaultCenter addObserverForName:NSWindowWillCloseNotification
     object:native.window queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *) {
-      [weakSelf privateProbeWindowDidCloseID:windowID];
+      [weakSelf privateWindowDidCloseID:windowID];
     }];
   _privateProbeWindows[windowID] = [@{@"contextID": contextID, @"native": native,
     @"tabIDs": [NSMutableSet setWithObject:tabID], @"observer": observer,
@@ -303,7 +303,7 @@
   ArdiaCoreProfile *profile = context[@"profile"];
   if (![self privateContextEnabled] || !ARCIsCanonicalID(tabID) || !windowEntry || !context ||
       ![windowEntry[@"contextID"] isEqualToString:contextID] ||
-      [windowEntry[@"closing"] boolValue] || !native || ![self privateProbeIdentityIsAvailable:tabID] ||
+      [windowEntry[@"closing"] boolValue] || !native || ![self privateIdentityIsAvailable:tabID] ||
       !profile || profile.destroyed || !profile.offTheRecord || ![self privateURLIsAllowed:url]) {
     if (error) *error = ARCBridgeError(@"Invalid private tab owner or unsupported navigation.");
     return NO;
@@ -323,7 +323,7 @@
       self->_profiles[capturedContext[@"sourceProfileID"]] == source && !source.destroyed &&
       capturedContext[@"profile"] == profile && !profile.destroyed && profile.offTheRecord &&
       ![capturedWindow[@"closing"] boolValue] && ![capturedWindow[@"closed"] boolValue] &&
-      ![self privateProbeIdentityIsAvailable:tabID];
+      ![self privateIdentityIsAvailable:tabID];
   };
   if (windowEntry[@"pendingTabs"] == nil) windowEntry[@"pendingTabs"] = [NSMutableSet set];
   if ([windowEntry[@"pendingTabs"] containsObject:tabID]) return NO;
@@ -455,7 +455,7 @@
     ? tab.view : nil;
 }
 
-- (void)privateProbeWindowDidCloseID:(NSString *)windowID {
+- (void)privateWindowDidCloseID:(NSString *)windowID {
   NSMutableDictionary *entry = _privateProbeWindows[windowID];
   if (!entry || [entry[@"closed"] boolValue]) return;
   entry[@"closed"] = @YES;

@@ -5,39 +5,20 @@
 import BrowserCore
 import SwiftUI
 
-/// Back, forward, reload and the address for one pane of a split.
+/// Pane-specific actions for one pane of a split.
 struct SplitPaneToolbar: View {
   @Bindable var store: BrowserStore
-  let engine: BrowserEngine?
   let tabID: UUID
 
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.layoutDirection) private var layoutDirection
-
-  private var tab: BrowserTab? {
-    store.session.selectedSpace.tabs.first { $0.id == tabID }
-  }
 
   private var isFocused: Bool {
     store.session.selectedSpace.selectedTabID == tabID
   }
 
   var body: some View {
-    let state = engine?.pages[tabID]
     HStack(spacing: 2) {
-      toolbarButton("chevron.backward", label: ShellL10n.string("Back")) {
-        engine?.runtime.goBack(inTabID: tabID.uuidString)
-      }
-      .disabled(state?.canGoBack != true)
-      toolbarButton("chevron.forward", label: ShellL10n.string("Forward")) {
-        engine?.runtime.goForward(inTabID: tabID.uuidString)
-      }
-      .disabled(state?.canGoForward != true)
-      toolbarButton("arrow.clockwise", label: ShellL10n.string("Reload")) {
-        focus()
-        store.reloadCurrentPage()
-      }
-      address
       toolbarButton("plus", label: ShellL10n.string("New Tab in Split")) {
         store.openSplitPane(beside: tabID, edge: physicalRightEdge)
       }
@@ -51,37 +32,6 @@ struct SplitPaneToolbar: View {
         .opacity(isFocused ? 1 : 0.6)
     )
     .buttonStyle(.plain)
-  }
-
-  private var address: some View {
-    Button {
-      focus()
-      store.showCommand()
-      store.commandQuery = tab?.url.absoluteString ?? ""
-    } label: {
-      HStack(spacing: 5) {
-        Image(systemName: "link").font(.system(size: 10))
-        Text(tab?.url.host() ?? tab?.title ?? "")
-          .lineLimit(1)
-          .truncationMode(.middle)
-      }
-      .font(.system(size: 12))
-      .foregroundStyle(isFocused ? .primary : .secondary)
-      .frame(maxWidth: .infinity)
-      .frame(height: 24)
-      .contentShape(Rectangle())
-    }
-    .help(tab?.url.absoluteString ?? "")
-    .accessibilityLabel(ShellL10n.format("Address %@", arguments: [.string(tab?.url.host() ?? "")]))
-    .draggable(
-      store.beginTabDrag(tabID, spaceID: store.session.selectedSpaceID, fromSplitPane: true)
-    ) {
-      Label(tab?.title ?? "", systemImage: "link")
-        .font(.system(size: 12))
-        .padding(.horizontal, 10)
-        .frame(height: 26)
-        .background(.regularMaterial, in: Capsule())
-    }
   }
 
   private var paneMenu: some View {
@@ -113,10 +63,6 @@ struct SplitPaneToolbar: View {
 
   private var physicalRightEdge: SplitEdge {
     .forPhysicalRight(isRightToLeft: layoutDirection == .rightToLeft)
-  }
-
-  private func focus() {
-    if !isFocused { store.focusSplitTab(tabID) }
   }
 
   private func toolbarButton(

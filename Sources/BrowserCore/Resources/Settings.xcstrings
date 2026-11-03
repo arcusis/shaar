@@ -95,6 +95,14 @@
         }
       }
     },
+    "Download folder": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"תיקיית הורדות"}}}},
+    "Current folder": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"תיקייה נוכחית"}}}},
+    "Unavailable": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"לא זמין"}}}},
+    "Choose Folder…": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"בחירת תיקייה…"}}}},
+    "Use Default": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"שימוש בברירת המחדל"}}}},
+    "Choose": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"בחירה"}}}},
+    "Choose a download folder for this profile.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"יש לבחור תיקיית הורדות לפרופיל הזה."}}}},
+    "This folder is saved for this profile. Browser downloads will use it when engine support is available.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"התיקייה נשמרת לפרופיל הזה. הדפדפן ישתמש בה להורדות כשהמנוע יתמוך בכך."}}}},
     "Profiles": {
       "localizations": {
         "he": {

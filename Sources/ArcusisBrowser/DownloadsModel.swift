@@ -10,9 +10,19 @@ import Observation
 final class DownloadsModel {
   private(set) var records: [UUID: [String: BrowserDownload]] = [:]
   private var generatedFiles: [UUID: [String: DownloadsFolderFile]] = [:]
+  private var profileFolders: [UUID: DownloadsFolderSource] = [:]
   let folder: DownloadsFolderSource?
+  private let profileDirectory: ((UUID) -> URL?)?
 
-  init(folder: DownloadsFolderSource? = nil) { self.folder = folder }
+  init(folder: DownloadsFolderSource? = nil) {
+    self.folder = folder
+    profileDirectory = nil
+  }
+
+  init(profileDirectory: @escaping (UUID) -> URL?) {
+    folder = nil
+    self.profileDirectory = profileDirectory
+  }
 
   private(set) var notices: [UUID: String] = [:]
   @ObservationIgnored var onCommand:
@@ -25,14 +35,18 @@ final class DownloadsModel {
   }
 
   func libraryItems(in profileID: UUID) -> [BrowserDownload] {
-    let browserItems = items(in: profileID)
+    let browserItems = items(in: profileID).filter { item in
+      item.state != .finished || Self.isRegularFile(item.fileURL)
+    }
     let paths = Set(
       browserItems.compactMap { $0.fileURL?.standardizedFileURL.resolvingSymlinksInPath() })
     let generated = (generatedFiles[profileID] ?? [:]).keys.compactMap {
       generatedItem(id: $0, profileID: profileID)
     }
     let local = Dictionary(
-      (generated + (folder?.items(profileID: profileID) ?? [])).map { ($0.id, $0) },
+      (generated + (folderSource(for: profileID)?.items(profileID: profileID) ?? [])).map {
+        ($0.id, $0)
+      },
       uniquingKeysWith: { first, _ in first })
     let folderItems = local.values.filter {
       guard let url = $0.fileURL else { return false }
@@ -45,13 +59,13 @@ final class DownloadsModel {
 
   func libraryItem(id: String, profileID: UUID) -> BrowserDownload? {
     records[profileID]?[id] ?? generatedItem(id: id, profileID: profileID)
-      ?? folder?.item(id: id, profileID: profileID)
+      ?? folderSource(for: profileID)?.item(id: id, profileID: profileID)
   }
 
   func isFolderItem(_ item: BrowserDownload, profileID: UUID) -> Bool {
     records[profileID]?[item.id] == nil
       && (generatedItem(id: item.id, profileID: profileID) == item
-        || folder?.item(id: item.id, profileID: profileID) == item)
+        || folderSource(for: profileID)?.item(id: item.id, profileID: profileID) == item)
   }
 
   private func generatedItem(id: String, profileID: UUID) -> BrowserDownload? {
@@ -64,7 +78,26 @@ final class DownloadsModel {
   func registerGeneratedFile(_ url: URL, profileID: UUID) {
     guard let file = DownloadsFolderFile(url: url) else { return }
     generatedFiles[profileID, default: [:]][file.id] = file
-    folder?.refresh()
+    folderSource(for: profileID)?.refresh()
+  }
+
+  private func folderSource(for profileID: UUID) -> DownloadsFolderSource? {
+    if let folder { return folder }
+    guard let directory = profileDirectory?(profileID) else { return nil }
+    let standardizedDirectory = directory.standardizedFileURL
+    if let source = profileFolders[profileID], source.directoryURL == standardizedDirectory {
+      return source
+    }
+    let source = DownloadsFolderSource(directory: standardizedDirectory)
+    profileFolders[profileID] = source
+    return source
+  }
+
+  private static func isRegularFile(_ url: URL?) -> Bool {
+    guard let url, url.isFileURL,
+      let values = try? url.resourceValues(forKeys: [.isRegularFileKey])
+    else { return false }
+    return values.isRegularFile == true
   }
 
   func restore(_ rows: [[String: Any]], profileID: UUID) {

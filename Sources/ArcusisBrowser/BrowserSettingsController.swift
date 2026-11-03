@@ -40,7 +40,9 @@ final class BrowserSettingsState {
         id: profile.id, name: profile.name, color: ProfileColorChoice(profile: profile),
         symbol: profile.displaySymbol,
         spaces: spaces.map { BrowserSettingsSpace(id: $0.id, name: $0.name, symbol: $0.symbol) },
-        accounts: preferences.accounts(for: profile.id))
+        accounts: preferences.accounts(for: profile.id),
+        downloadDirectory: preferences.downloadDirectory(for: profile.id),
+        defaultDownloadDirectory: runtime?.downloadsDirectory(forProfileID: profile.id.uuidString))
     }
   }
 
@@ -113,6 +115,29 @@ final class BrowserSettingsState {
 
   func setSidebarInitiallyVisible(_ value: Bool) {
     preferences.setSidebarInitiallyVisible(value)
+  }
+
+  func chooseDownloadDirectory(for profileID: UUID) {
+    guard workspace.workspace.catalog.profiles.contains(where: { $0.id == profileID }) else {
+      return
+    }
+    let panel = NSOpenPanel()
+    panel.canChooseFiles = false
+    panel.canChooseDirectories = true
+    panel.allowsMultipleSelection = false
+    panel.canCreateDirectories = true
+    panel.prompt = SettingsL10n.string("Choose")
+    panel.message = SettingsL10n.string("Choose a download folder for this profile.")
+    if panel.runModal() == .OK, let url = panel.url {
+      preferences.setDownloadDirectory(url, for: profileID)
+    }
+  }
+
+  func resetDownloadDirectory(for profileID: UUID) {
+    guard workspace.workspace.catalog.profiles.contains(where: { $0.id == profileID }) else {
+      return
+    }
+    preferences.setDownloadDirectory(nil, for: profileID)
   }
 
   @discardableResult
@@ -190,6 +215,8 @@ private struct BrowserSettingsRoot: View {
       onRenameProfile: { state.renameProfile($0, name: $1) },
       onSetProfileColor: { state.setProfileColor($0, to: $1) },
       onSetProfileSymbol: { state.setProfileSymbol($0, to: $1) },
+      onChooseDownloadDirectory: { state.chooseDownloadDirectory(for: $0) },
+      onResetDownloadDirectory: { state.resetDownloadDirectory(for: $0) },
       onDeleteProfile: { try await state.deleteProfile($0, movingSpacesTo: $1) },
       onOpenSpace: state.onOpenSpace,
       onConnectAccount: state.onConnectAccount,

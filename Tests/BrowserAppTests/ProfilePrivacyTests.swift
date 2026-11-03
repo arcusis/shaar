@@ -121,6 +121,7 @@ struct ProfilePrivacyTests {
     let preferences = BrowserPreferencesStore(fileURL: preferencesURL)
     for id in [source, other] {
       preferences.setSearchEngine(.bing, for: id)
+      preferences.setDownloadDirectory(root.appending(path: id.uuidString), for: id)
       preferences.setExtension("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", pinned: true, for: id)
       preferences.setAccount(.init(provider: .google, email: "test@example.test"), for: id)
       preferences.setAutomaticPictureInPicture(false, on: "https://example.test", for: id)
@@ -140,6 +141,9 @@ struct ProfilePrivacyTests {
     }
     #expect(workspace.workspace == before)
     #expect(preferences.searchEngine(for: source) == .bing)
+    #expect(
+      preferences.downloadDirectory(for: source)?.path
+        == root.appending(path: source.uuidString).path)
     backend.failureAction = nil
     try await state.deleteProfile(source, movingSpacesTo: other)
     #expect(state.selectedProfileID == other)
@@ -147,6 +151,9 @@ struct ProfilePrivacyTests {
     #expect(try file.load() == workspace.workspace)
     let reloaded = BrowserPreferencesStore(fileURL: preferencesURL)
     #expect(reloaded.searchEngine(for: source) == .google)
+    #expect(reloaded.downloadDirectory(for: source) == nil)
+    #expect(
+      reloaded.downloadDirectory(for: other)?.path == root.appending(path: other.uuidString).path)
     #expect(
       reloaded.accounts(for: source).isEmpty && reloaded.pinnedExtensionIDs(for: source).isEmpty)
     #expect(reloaded.allowsAutomaticPictureInPicture(on: "https://example.test", for: source))

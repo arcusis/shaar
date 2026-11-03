@@ -39,7 +39,7 @@ final class BrowserEngine {
   var onClosed: ((Bool) -> Void)?
   var inspectors: [UUID: InspectorModel] = [:]
   var developerModels: [UUID: DeveloperPageModel] = [:]
-  let downloads = DownloadsModel(folder: DownloadsFolderSource())
+  let downloads: DownloadsModel
   private(set) var pages: [UUID: PageState] = [:]
   private(set) var notice: String?
   private(set) var mediaAccess: [UUID: MediaAccessState] = [:]
@@ -105,6 +105,10 @@ final class BrowserEngine {
       Set(store?.session.profiles.map { $0.id.uuidString } ?? [])
     }
     self.store = store
+    downloads = DownloadsModel(profileDirectory: { [weak runtime, weak store] profileID in
+      store?.preferences.downloadDirectory(for: profileID)
+        ?? runtime?.downloadsDirectory(forProfileID: profileID.uuidString)
+    })
     self.presentsNativePanels = presentsNativePanels
     self.lazyPinnedTabs = lazyPinnedTabs
     try events.router.register(callbacks)

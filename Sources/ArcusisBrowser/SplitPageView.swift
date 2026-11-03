@@ -163,7 +163,7 @@ struct BrowserSplitPageView: View {
       onFocus: { focus($0) },
       onWeightsChange: { store.setSplitWeights($0, at: $1, splitID: split.id) }
     ) { id in
-      SplitPaneToolbar(store: store, engine: engine, tabID: id)
+      SplitPaneToolbar(store: store, tabID: id)
     } pane: { id in
       if let failure = store.rendererFailures[id] {
         FailedPageView(store: store, failure: failure)

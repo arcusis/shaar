@@ -12,6 +12,7 @@ final class BrowserPreferencesStore {
 
   private let fileURL: URL?
   private var profileSearchEngines: [UUID: BrowserSearchEngine] = [:]
+  private var profileDownloadDirectories: [UUID: String] = [:]
   private var connectedAccounts: [UUID: [ConnectedAccount]] = [:]
   private var pinnedExtensions: [UUID: [String]] = [:]
   private var autoPictureInPictureOffSites: [UUID: [String]] = [:]
@@ -32,6 +33,22 @@ final class BrowserPreferencesStore {
 
   func setSearchEngine(_ value: BrowserSearchEngine, for profileID: UUID) {
     profileSearchEngines[profileID] = value
+    save()
+  }
+
+  /// Optional app-selected folder for this profile. The engine may not yet honor this preference.
+  func downloadDirectory(for profileID: UUID) -> URL? {
+    guard let path = profileDownloadDirectories[profileID] else { return nil }
+    return URL(filePath: path, directoryHint: .isDirectory).standardizedFileURL
+  }
+
+  func setDownloadDirectory(_ url: URL?, for profileID: UUID) {
+    guard let url, url.isFileURL else {
+      profileDownloadDirectories[profileID] = nil
+      save()
+      return
+    }
+    profileDownloadDirectories[profileID] = url.standardizedFileURL.path
     save()
   }
 
@@ -105,6 +122,7 @@ final class BrowserPreferencesStore {
   func removeProfile(_ profileID: UUID) throws {
     try validateProfileRemoval()
     profileSearchEngines[profileID] = nil
+    profileDownloadDirectories[profileID] = nil
     connectedAccounts[profileID] = nil
     pinnedExtensions[profileID] = nil
     autoPictureInPictureOffSites[profileID] = nil
@@ -135,6 +153,7 @@ final class BrowserPreferencesStore {
       }
       sidebarInitiallyVisible = document.sidebarInitiallyVisible
       profileSearchEngines = document.profileSearchEngines
+      profileDownloadDirectories = document.profileDownloadDirectories
       connectedAccounts = document.connectedAccounts
       pinnedExtensions = document.pinnedExtensions
       autoPictureInPictureOffSites = document.autoPictureInPictureOffSites
@@ -165,6 +184,7 @@ final class BrowserPreferencesStore {
       let document = PreferencesDocument(
         version: 2, sidebarInitiallyVisible: sidebarInitiallyVisible,
         profileSearchEngines: profileSearchEngines,
+        profileDownloadDirectories: profileDownloadDirectories,
         pinnedExtensions: pinnedExtensions, connectedAccounts: connectedAccounts,
         autoPictureInPictureOffSites: autoPictureInPictureOffSites,
         developerSimulations: developerSimulations)
@@ -192,6 +212,7 @@ private struct PreferencesDocument: Codable {
   let version: Int
   let sidebarInitiallyVisible: Bool
   let profileSearchEngines: [UUID: BrowserSearchEngine]
+  let profileDownloadDirectories: [UUID: String]
   let connectedAccounts: [UUID: [ConnectedAccount]]
   let pinnedExtensions: [UUID: [String]]
   let autoPictureInPictureOffSites: [UUID: [String]]
@@ -201,6 +222,7 @@ private struct PreferencesDocument: Codable {
     case version
     case sidebarInitiallyVisible
     case profileSearchEngines
+    case profileDownloadDirectories
     case connectedAccounts
     case pinnedExtensions
     case autoPictureInPictureOffSites
@@ -210,6 +232,7 @@ private struct PreferencesDocument: Codable {
   init(
     version: Int, sidebarInitiallyVisible: Bool,
     profileSearchEngines: [UUID: BrowserSearchEngine],
+    profileDownloadDirectories: [UUID: String] = [:],
     pinnedExtensions: [UUID: [String]] = [:],
     connectedAccounts: [UUID: [ConnectedAccount]] = [:],
     autoPictureInPictureOffSites: [UUID: [String]] = [:],
@@ -218,6 +241,7 @@ private struct PreferencesDocument: Codable {
     self.version = version
     self.sidebarInitiallyVisible = sidebarInitiallyVisible
     self.profileSearchEngines = profileSearchEngines
+    self.profileDownloadDirectories = profileDownloadDirectories
     self.connectedAccounts = connectedAccounts
     self.pinnedExtensions = pinnedExtensions
     self.autoPictureInPictureOffSites = autoPictureInPictureOffSites
@@ -240,5 +264,7 @@ private struct PreferencesDocument: Codable {
     autoPictureInPictureOffSites =
       try values.decodeIfPresent([UUID: [String]].self, forKey: .autoPictureInPictureOffSites)
       ?? [:]
+    profileDownloadDirectories =
+      try values.decodeIfPresent([UUID: String].self, forKey: .profileDownloadDirectories) ?? [:]
   }
 }

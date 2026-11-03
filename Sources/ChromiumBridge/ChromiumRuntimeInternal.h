@@ -4,8 +4,9 @@
 
 // Shared by the runtime's implementation files; not part of the module's public interface.
 
-#import "include/ChromiumBridgeVerification.h"
+#import "include/ChromiumBridge.h"
 #import "ChromiumDownloads.h"
+#import "ChromiumLocalState.h"
 #import "ChromiumLibrary.h"
 #import "ChromiumShutdownGuard.h"
 #import "ChromiumMediaSession.h"

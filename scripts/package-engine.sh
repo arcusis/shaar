@@ -57,7 +57,11 @@ codesign --verify --deep --strict "$staged"
 
 archive="$package/ArdiaCore-${tree:0:12}-$label.tar.xz"
 # Bound compression CPU use while other work continues on the build host.
-tar --no-mac-metadata -cf - -C "$package/stage" "Chromium Framework.framework" | nice -n 19 xz -T2 -9 > "$archive"
+if command -v xz >/dev/null 2>&1; then
+  tar --no-mac-metadata -cf - -C "$package/stage" "Chromium Framework.framework" | nice -n 19 xz -T2 -9 > "$archive"
+else
+  nice -n 19 tar --no-mac-metadata -cJf "$archive" -C "$package/stage" "Chromium Framework.framework"
+fi
 checksum=$(shasum -a 256 "$archive" | cut -d ' ' -f 1)
 jq -n --arg sha "$checksum" '{sha256: $sha}' > "$package/payload-pin.json"
 python3 scripts/engine_payload.py --archive "$archive" --framework "$staged" \

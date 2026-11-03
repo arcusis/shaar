@@ -28,16 +28,19 @@
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/download_manager.h"
+#include "extensions/browser/extension_util.h"
 
 namespace shaar {
 namespace {
 
 bool IsVisible(const download::DownloadItem& item) {
-  // Chromium marks ephemeral helper downloads transient. Extension/web store
-  // installers are identified by their source and are not user downloads.
+  // Chromium marks ephemeral helper downloads transient. Extension API and
+  // installer sources, plus CRX MIME downloads, are not user downloads.
   return !item.IsTransient() &&
          item.GetDownloadSource() !=
-             download::DownloadSource::EXTENSION_INSTALLER;
+             download::DownloadSource::EXTENSION_INSTALLER &&
+         item.GetDownloadSource() != download::DownloadSource::EXTENSION_API &&
+         !extensions::util::IsExtensionDownload(item);
 }
 
 const char* StateName(download::DownloadItem::DownloadState state) {

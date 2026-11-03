@@ -14,6 +14,19 @@ source_set("engine") {
   ]
 }
 
+source_set("unit_tests") {
+  testonly = true
+  sources = [ "downloads/shaar_downloads_unittest.cc" ]
+  deps = [
+    ":engine",
+    "//base",
+    "//components/download/public/common",
+    "//components/download/public/common:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+}
+
 config("exports") {
   inputs = [ "shaar_engine.exports" ]
   ldflags = [ "-Wl,-exported_symbols_list," +

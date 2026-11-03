@@ -60,7 +60,7 @@ std::optional<base::Value> ParseArguments(const shaar::ModuleCall* call) {
   return value;
 }
 
-bool HasOnlyKeys(const base::Value::Dict& dict,
+bool HasOnlyKeys(const base::DictValue& dict,
                  std::initializer_list<std::string_view> keys) {
   for (const auto& entry : dict) {
     if (std::find(keys.begin(), keys.end(), entry.first) == keys.end())
@@ -69,10 +69,10 @@ bool HasOnlyKeys(const base::Value::Dict& dict,
   return true;
 }
 
-bool ReadStringList(const base::Value::Dict& dict,
+bool ReadStringList(const base::DictValue& dict,
                     std::string_view key,
                     std::vector<std::string>* output) {
-  const base::Value::List* list = dict.FindList(key);
+  const base::ListValue* list = dict.FindList(key);
   if (!list)
     return false;
   for (const auto& value : *list) {
@@ -84,7 +84,7 @@ bool ReadStringList(const base::Value::Dict& dict,
 }
 
 std::optional<shaar_request_id> ReadRequestID(
-    const base::Value::Dict& dict) {
+    const base::DictValue& dict) {
   const std::string* text = dict.FindString("requestID");
   if (!text || text->empty() || text->size() > 20)
     return std::nullopt;

@@ -72,7 +72,7 @@ void ReplyLater(ReplyState state, shaar_error_code code, std::string payload) {
           state, code, std::move(payload)));
 }
 
-bool HasOnlyKeys(const base::Value::Dict& dict,
+bool HasOnlyKeys(const base::DictValue& dict,
                  std::initializer_list<const char*> keys) {
   for (const auto& entry : dict) {
     bool found = false;
@@ -88,10 +88,10 @@ bool HasOnlyKeys(const base::Value::Dict& dict,
   return true;
 }
 
-bool ParseArgs(shaar_bytes args, base::Value::Dict* dict) {
+bool ParseArgs(shaar_bytes args, base::DictValue* dict) {
   if (!args.data || !args.size || !dict)
     return false;
-  auto parsed = base::JSONReader::Read(std::string_view(args.data, args.size));
+  auto parsed = base::JSONReader::Read(std::string_view(args.data, args.size), base::JSON_PARSE_RFC);
   if (!parsed || !parsed->is_dict())
     return false;
   *dict = std::move(parsed->GetDict());
@@ -110,10 +110,10 @@ std::optional<std::string> EncodeList(Profile* profile,
                                       extensions::ExtensionRegistry* registry) {
   auto* extension_system = extensions::ExtensionSystem::Get(profile);
   auto* service = extension_system ? extension_system->extension_service() : nullptr;
-  base::Value::List entries;
+  base::ListValue entries;
   const auto installed = registry->GenerateInstalledExtensionsSet();
   for (const auto& extension : installed) {
-    base::Value::Dict row;
+    base::DictValue row;
     row.Set("id", extension->id());
     row.Set("name", extension->name());
     row.Set("version", extension->version().GetString());
@@ -127,7 +127,7 @@ std::optional<std::string> EncodeList(Profile* profile,
     row.Set("source", static_cast<int>(extension->location()));
     entries.Append(std::move(row));
   }
-  base::Value::Dict result;
+  base::DictValue result;
   result.Set("schemaVersion", 1);
   result.Set("extensions", std::move(entries));
   std::string json;
@@ -160,7 +160,7 @@ shaar_error_code HandleExtensionsOperation(
     return Fail(SHAAR_PRIVATE_DISALLOWED,
                 "extension management requires a regular profile", error);
 
-  base::Value::Dict input;
+  base::DictValue input;
   if (!ParseArgs(args, &input))
     return Fail(SHAAR_INVALID_ARGUMENT, "invalid extension JSON schema", error);
 

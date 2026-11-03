@@ -22,7 +22,7 @@ private actor FakeDownloadsTransport: ShaarDownloadsTransport {
 }
 
 @Test func listDecodesTheVersionedDownloadRecord() async throws {
-  let payload = Data(#"{"schemaVersion":1,"downloads":[{"id":"guid-1","url":"https://example.test/a","filename":"a.bin","path":"/tmp/Downloads/a.bin","state":"downloading","paused":false,"received":3,"total":9,"speed":4,"mimeType":"application/octet-stream","dangerous":false,"error":null,"startTime":1234}]}"#.utf8)
+  let payload = Data(#"{"schemaVersion":1,"downloads":[{"id":"guid-1","url":"https://example.test/a","filename":"a.bin","path":"/tmp/Downloads/a.bin","state":"downloading","paused":false,"received":3.0,"total":9.0,"speed":4.0,"mimeType":"application/octet-stream","dangerous":false,"error":null,"startTime":1234.0}]}"#.utf8)
   let fake = FakeDownloadsTransport(replies: [400: payload])
   let result = try await ShaarDownloadsAdapter(transport: fake).list()
   #expect(result.count == 1)

@@ -94,9 +94,9 @@ base::Value::Dict Downloads::Record(const download::DownloadItem& item) {
   record.Set("path", PathString(shown));
   record.Set("state", StateName(item.GetState()));
   record.Set("paused", item.IsPaused());
-  record.Set("received", item.GetReceivedBytes());
-  record.Set("total", total < 0 ? -1 : total);
-  record.Set("speed", item.CurrentSpeed());
+  record.Set("received", static_cast<double>(item.GetReceivedBytes()));
+  record.Set("total", total < 0 ? -1.0 : static_cast<double>(total));
+  record.Set("speed", static_cast<double>(item.CurrentSpeed()));
   record.Set("mimeType", item.GetMimeType());
   record.Set("dangerous", item.IsDangerous() || item.IsInsecure());
   if (item.GetLastReason() == download::DOWNLOAD_INTERRUPT_REASON_NONE) {
@@ -104,7 +104,9 @@ base::Value::Dict Downloads::Record(const download::DownloadItem& item) {
   } else {
     record.Set("error", download::DownloadInterruptReasonToString(item.GetLastReason()));
   }
-  record.Set("startTime", start.is_null() ? 0 : start.InMillisecondsSinceUnixEpoch());
+  record.Set("startTime", start.is_null()
+                               ? 0.0
+                               : static_cast<double>(start.InMillisecondsSinceUnixEpoch()));
   return record;
 }
 

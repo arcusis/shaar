@@ -26,6 +26,54 @@ public struct ShaarDownloadRecord: Codable, Equatable, Sendable, Identifiable {
   enum CodingKeys: String, CodingKey {
     case id, url, filename, path, state, paused, received, total, speed, mimeType, dangerous, error, startTime
   }
+
+  public init(
+    id: String, url: String, filename: String, path: String, state: State, paused: Bool,
+    received: Int64, total: Int64, speed: Int64, mimeType: String, dangerous: Bool,
+    error: String?, startTime: Int64
+  ) {
+    self.id = id
+    self.url = url
+    self.filename = filename
+    self.path = path
+    self.state = state
+    self.paused = paused
+    self.received = received
+    self.total = total
+    self.speed = speed
+    self.mimeType = mimeType
+    self.dangerous = dangerous
+    self.error = error
+    self.startTime = startTime
+  }
+
+  public init(from decoder: Decoder) throws {
+    let values = try decoder.container(keyedBy: CodingKeys.self)
+    id = try values.decode(String.self, forKey: .id)
+    url = try values.decode(String.self, forKey: .url)
+    filename = try values.decode(String.self, forKey: .filename)
+    path = try values.decode(String.self, forKey: .path)
+    state = try values.decode(State.self, forKey: .state)
+    paused = try values.decode(Bool.self, forKey: .paused)
+    received = try values.decodeInteger(forKey: .received)
+    total = try values.decodeInteger(forKey: .total)
+    speed = try values.decodeInteger(forKey: .speed)
+    mimeType = try values.decode(String.self, forKey: .mimeType)
+    dangerous = try values.decode(Bool.self, forKey: .dangerous)
+    error = try values.decodeIfPresent(String.self, forKey: .error)
+    startTime = try values.decodeInteger(forKey: .startTime)
+  }
+}
+
+private extension KeyedDecodingContainer {
+  func decodeInteger(forKey key: Key) throws -> Int64 {
+    if let integer = try? decode(Int64.self, forKey: key) { return integer }
+    let number = try decode(Double.self, forKey: key)
+    guard number.isFinite, number.rounded(.towardZero) == number,
+      number >= Double(Int64.min), number < Double(Int64.max)
+    else { throw DecodingError.dataCorruptedError(forKey: key, in: self, debugDescription: "Expected an integer") }
+    return Int64(number)
+  }
 }
 
 public enum ShaarDownloadAction: String, Codable, Sendable {

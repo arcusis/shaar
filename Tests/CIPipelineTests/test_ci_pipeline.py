@@ -13,6 +13,7 @@ import sys
 import tarfile
 import tempfile
 import tomllib
+from types import SimpleNamespace
 import unittest
 import zipfile
 from unittest.mock import patch
@@ -531,6 +532,27 @@ class EngineTransferTests(unittest.TestCase):
                 archive.write(b"tampered")
             with self.assertRaisesRegex(ValueError, "digest"):
                 restore_bundle(root, directory)
+
+    def test_cached_engine_bundle_counts_as_a_successful_stage_with_shards(self):
+        from ci_engine import BUNDLE_NAME, archive_bundle, engine_shards
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pin = root / "ThirdParty/ArdiaCore/pin.json"
+            pin.parent.mkdir(parents=True)
+            pin.write_text(json.dumps({"sha256": "b" * 64}))
+            (root / "build" / BUNDLE_NAME).mkdir(parents=True)
+            evidence = root / "build/ci/engine-build"
+            evidence.mkdir(parents=True)
+            output = root / "outputs"
+            with (patch.object(STAGES, "ROOT", root), patch.object(STAGES, "require_hosted_mac"),
+                  patch.dict(os.environ, {"CI_BUNDLE_INPUTS": "a" * 64, "CI_TOOLCHAIN_ID": "toolchain",
+                                          "GITHUB_OUTPUT": str(output)})):
+                archive_bundle(root, evidence)
+                checks = SimpleNamespace(directory=evidence, results=[], write_reports=lambda: None)
+                STAGES.build_engine_bundle(checks, 2)
+                self.assertEqual(STAGES.Commands.finish(checks), 0)
+            self.assertEqual([item["name"] for item in checks.results], ["verification-bundle-cache-validation"])
+            self.assertIn(f"shards={json.dumps(engine_shards(2))}", output.read_text())
 
 
 class SwiftExtractionTests(unittest.TestCase):

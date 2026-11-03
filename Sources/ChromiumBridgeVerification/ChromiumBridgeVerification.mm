@@ -744,8 +744,8 @@ static BOOL ProbeViewIsVisibleInWindow(NSView *view, NSWindow *window) {
 - (void)captureProbeTab:(ArdiaCoreTab *)tab diagnosticCompletion:(void (^)(NSData *, NSString *))completion {
   if (!_testing || !tab || tab.closed) { completion(nil, @"probe-tab-unavailable"); return; }
   [tab devToolsCall:@"Page.captureScreenshot"
-             params:@{@"format": @"png", @"captureBeyondViewport": @YES}
-            timeout:5
+            params:@{@"format": @"png", @"captureBeyondViewport": @YES}
+            timeout:15
          completion:^(NSDictionary *result, NSString *error) {
     NSString *base64 = result[@"data"];
     NSData *data = [base64 isKindOfClass:NSString.class]

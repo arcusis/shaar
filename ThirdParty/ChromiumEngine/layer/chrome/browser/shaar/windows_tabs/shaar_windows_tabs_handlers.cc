@@ -357,12 +357,3 @@ shaar_error_code HandleModuleOperation(const ModuleCall* call,
 }
 
 }  // namespace shaar::windows_tabs
-
-void shaar_windows_tabs_register(ShaarModuleRegistry* registry) {
-  if (!registry || registry->size < sizeof(ShaarModuleRegistry) ||
-      !registry->register_range)
-    return;
-  registry->register_range(registry->context, SHAAR_OP_WINDOW_BIND_PROFILE,
-                           SHAAR_OP_WINDOW_SET_BOUNDS,
-                           shaar::windows_tabs::HandleModuleOperation);
-}

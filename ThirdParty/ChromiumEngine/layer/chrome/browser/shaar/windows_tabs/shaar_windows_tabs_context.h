@@ -2,12 +2,13 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-#ifndef CHROME_BROWSER_SHAAR_WINDOWS_TABS_SHAAR_MODULE_REGISTRY_H_
-#define CHROME_BROWSER_SHAAR_WINDOWS_TABS_SHAAR_MODULE_REGISTRY_H_
+#ifndef CHROME_BROWSER_SHAAR_WINDOWS_TABS_SHAAR_WINDOWS_TABS_CONTEXT_H_
+#define CHROME_BROWSER_SHAAR_WINDOWS_TABS_SHAAR_WINDOWS_TABS_CONTEXT_H_
 
 #include <string>
 #include <unordered_map>
 
+#include "chrome/browser/shaar/engine/shaar_module_registry.h"
 #include "chrome/browser/shaar/public/shaar_engine.h"
 
 class TabStripModel;
@@ -64,20 +65,6 @@ struct ModuleCall {
 using ModuleHandler = shaar_error_code (*)(const ModuleCall*, shaar_error*);
 }  // namespace shaar
 
-// Temporary range-based registry declaration matching the lifecycle module's
-// ownership of operation dispatch. It is replaced by lifecycle's shared type
-// when that module lands.
-struct ShaarModuleRegistry {
-  using RegisterRange = void (*)(void* context,
-                                 uint32_t first,
-                                 uint32_t last,
-                                 shaar::ModuleHandler handler);
-
-  uint32_t size;
-  void* context;
-  RegisterRange register_range;
-};
-
 void shaar_windows_tabs_register(ShaarModuleRegistry* registry);
 
-#endif  // CHROME_BROWSER_SHAAR_WINDOWS_TABS_SHAAR_MODULE_REGISTRY_H_
+#endif  // CHROME_BROWSER_SHAAR_WINDOWS_TABS_SHAAR_WINDOWS_TABS_CONTEXT_H_

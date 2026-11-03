@@ -6,15 +6,53 @@
 #define CHROME_BROWSER_SHAAR_WINDOWS_TABS_SHAAR_WINDOWS_TABS_H_
 
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
+#include "chrome/browser/shaar/engine/shaar_engine_context.h"
+
 class TabStripModel;
+class Browser;
 namespace content {
 class WebContents;
 }
 
 namespace shaar::windows_tabs {
+
+class BrowserTabRegistryImpl final : public shaar::BrowserTabRegistry {
+ public:
+  Browser* FindBrowser(shaar_engine*, shaar_window*) override;
+  content::WebContents* FindWebContents(shaar_engine*, shaar_window*,
+                                         shaar_tab*) override;
+  content::WebContents* FindWebContentsByID(shaar_engine*, shaar_window*,
+                                             std::string_view) override;
+  std::string_view TabID(shaar_engine*, shaar_window*, shaar_tab*) override;
+  void GetTabs(shaar_engine*, shaar_window*,
+               std::unordered_map<std::string, content::WebContents*>*) override;
+  void BindWindow(shaar_engine*, shaar_window*, Browser*);
+  void BindTab(shaar_engine*, shaar_window*, shaar_tab*, std::string id,
+               content::WebContents*);
+  void UnbindWindow(shaar_engine*, shaar_window*);
+
+ private:
+  struct WindowEntry {
+    shaar_engine* engine;
+    shaar_window* handle;
+    Browser* browser;
+  };
+  struct TabEntry {
+    shaar_engine* engine;
+    shaar_window* window;
+    shaar_tab* handle;
+    std::string id;
+    content::WebContents* contents;
+  };
+  std::vector<WindowEntry> windows_;
+  std::vector<TabEntry> tabs_;
+};
+
+BrowserTabRegistryImpl& Registry();
 
 // Validates a complete caller order against the IDs currently bound to this
 // strip. The caller must perform this check before mutating Chromium state.

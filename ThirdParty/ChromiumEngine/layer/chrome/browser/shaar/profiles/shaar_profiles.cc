@@ -401,7 +401,7 @@ shaar_error_code HandleProfileOperation(
 
 }  // namespace
 
-void shaar_profiles_register(shaar::ShaarModuleRegistry* registry) {
+extern "C" void shaar_profiles_register(shaar::ShaarModuleRegistry* registry) {
   if (!registry)
     return;
   shaar::SetProfileServices(&g_profile_services);

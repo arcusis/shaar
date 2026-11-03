@@ -31,6 +31,14 @@ source_set("engine") {
     "profiles/shaar_profiles.cc",
     "profiles/shaar_profiles.h",
     # END Shaar profiles module.
+    # BEGIN Shaar windows-tabs module.
+    "windows_tabs/shaar_windows_tabs.cc",
+    "windows_tabs/shaar_windows_tabs.h",
+    "windows_tabs/shaar_windows_tabs_context.h",
+    "windows_tabs/shaar_windows_tabs_handlers.cc",
+    "windows_tabs/shaar_windows_tabs_handlers.h",
+    "windows_tabs/shaar_windows_tabs_lifecycle_adapter.cc",
+    # END Shaar windows-tabs module.
   ]
   deps = [
     "//base",
@@ -44,6 +52,9 @@ source_set("engine") {
     "//components/content_settings/core/common",
     "//components/prefs",
     "//content/public/browser",
+    "//net",
+    "//ui/base",
+    "//url",
   ]
 }
 
@@ -59,6 +70,11 @@ test("private_sessions_unittests") {
 
 test("profiles_unittests") {
   sources = [ "profiles/shaar_profiles_unittest.cc" ]
+  deps = [ ":engine", "//testing/gtest" ]
+}
+
+test("windows_tabs_unittests") {
+  sources = [ "windows_tabs/shaar_windows_tabs_handlers_unittest.cc" ]
   deps = [ ":engine", "//testing/gtest" ]
 }
 

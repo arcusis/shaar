@@ -14,13 +14,6 @@
 namespace shaar::windows_tabs {
 namespace {
 
-struct CapturedHandlers {
-  uint32_t first = 0;
-  uint32_t last = 0;
-  shaar::ModuleHandler handler = nullptr;
-  size_t registration_count = 0;
-};
-
 struct CapturedWindowRequest {
   shaar_request_id request_id = 0;
   shaar_window* window = nullptr;
@@ -68,17 +61,6 @@ shaar_error_code CaptureTabActivation(void* context,
   return SHAAR_OK;
 }
 
-void CaptureRange(void* context,
-                  uint32_t first,
-                  uint32_t last,
-                  shaar::ModuleHandler handler) {
-  auto* captured = static_cast<CapturedHandlers*>(context);
-  captured->first = first;
-  captured->last = last;
-  captured->handler = handler;
-  ++captured->registration_count;
-}
-
 TEST(ShaarWindowsTabsHandlersTest, PlacementRequiresExactUniqueMembership) {
   EXPECT_TRUE(ValidatePlacement({"a", "b", "c"}, {"c", "b", "a"},
                                 {"a", "b"}));
@@ -102,20 +84,25 @@ TEST(ShaarWindowsTabsHandlersTest, PlaceHandlerRejectsWrongOperationBeforeMutati
   EXPECT_EQ(HandleWindowPlaceTabs(&call, &error), SHAAR_INVALID_ARGUMENT);
 }
 
-TEST(ShaarWindowsTabsHandlersTest, RegistersEveryWindowsTabsOperation) {
-  CapturedHandlers captured;
-  ShaarModuleRegistry registry = {sizeof(ShaarModuleRegistry), &captured,
-                                  CaptureRange};
-  shaar_windows_tabs_register(&registry);
-  EXPECT_EQ(captured.registration_count, 1u);
-  EXPECT_EQ(captured.first, SHAAR_OP_WINDOW_BIND_PROFILE);
-  EXPECT_EQ(captured.last, SHAAR_OP_WINDOW_SET_BOUNDS);
-  ASSERT_NE(captured.handler, nullptr);
-  shaar::ModuleCall call = {};
-  call.operation = SHAAR_OP_WINDOW_SET_BOUNDS;
-  shaar_error error = {};
-  error.size = sizeof(error);
-  EXPECT_EQ(captured.handler(&call, &error), SHAAR_INVALID_ARGUMENT);
+TEST(ShaarWindowsTabsHandlersTest, RegistryResolvesBoundWindowAndTabIDs) {
+  BrowserTabRegistryImpl registry;
+  auto* engine = reinterpret_cast<shaar_engine*>(1);
+  auto* window = reinterpret_cast<shaar_window*>(2);
+  auto* tab = reinterpret_cast<shaar_tab*>(3);
+  auto* browser = reinterpret_cast<Browser*>(4);
+  auto* contents = reinterpret_cast<content::WebContents*>(5);
+  registry.BindWindow(engine, window, browser);
+  registry.BindTab(engine, window, tab, "tab-a", contents);
+  EXPECT_EQ(registry.FindBrowser(engine, window), browser);
+  EXPECT_EQ(registry.FindWebContents(engine, window, tab), contents);
+  EXPECT_EQ(registry.FindWebContentsByID(engine, window, "tab-a"), contents);
+  EXPECT_EQ(registry.TabID(engine, window, tab), "tab-a");
+  std::unordered_map<std::string, content::WebContents*> tabs;
+  registry.GetTabs(engine, window, &tabs);
+  EXPECT_EQ(tabs.at("tab-a"), contents);
+  registry.UnbindWindow(engine, window);
+  EXPECT_EQ(registry.FindBrowser(engine, window), nullptr);
+  EXPECT_EQ(registry.FindWebContents(engine, window, tab), nullptr);
 }
 
 TEST(ShaarWindowsTabsHandlersTest, RegularProfileBindingIsExplicitAndStable) {

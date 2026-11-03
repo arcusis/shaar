@@ -5,7 +5,7 @@
 #ifndef CHROME_BROWSER_SHAAR_WINDOWS_TABS_SHAAR_WINDOWS_TABS_HANDLERS_H_
 #define CHROME_BROWSER_SHAAR_WINDOWS_TABS_SHAAR_WINDOWS_TABS_HANDLERS_H_
 
-#include "chrome/browser/shaar/windows_tabs/shaar_module_registry.h"
+#include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs_context.h"
 
 namespace shaar::windows_tabs {
 

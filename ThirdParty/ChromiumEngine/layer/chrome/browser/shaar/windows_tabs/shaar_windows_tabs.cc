@@ -7,10 +7,111 @@
 #include <algorithm>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/browser.h"
 
 namespace shaar::windows_tabs {
+
+namespace {
+BrowserTabRegistryImpl g_registry;
+}
+
+BrowserTabRegistryImpl& Registry() { return g_registry; }
+
+Browser* BrowserTabRegistryImpl::FindBrowser(shaar_engine* engine,
+                                             shaar_window* window) {
+  for (const auto& entry : windows_)
+    if (entry.engine == engine && entry.handle == window)
+      return entry.browser;
+  return nullptr;
+}
+
+content::WebContents* BrowserTabRegistryImpl::FindWebContents(
+    shaar_engine* engine,
+    shaar_window* window,
+    shaar_tab* tab) {
+  for (const auto& entry : tabs_)
+    if (entry.engine == engine && entry.window == window &&
+        entry.handle == tab)
+      return entry.contents;
+  return nullptr;
+}
+
+content::WebContents* BrowserTabRegistryImpl::FindWebContentsByID(
+    shaar_engine* engine,
+    shaar_window* window,
+    std::string_view id) {
+  for (const auto& entry : tabs_)
+    if (entry.engine == engine && entry.window == window && entry.id == id)
+      return entry.contents;
+  return nullptr;
+}
+
+std::string_view BrowserTabRegistryImpl::TabID(shaar_engine* engine,
+                                               shaar_window* window,
+                                               shaar_tab* tab) {
+  for (const auto& entry : tabs_)
+    if (entry.engine == engine && entry.window == window &&
+        entry.handle == tab)
+      return entry.id;
+  return {};
+}
+
+void BrowserTabRegistryImpl::GetTabs(
+    shaar_engine* engine,
+    shaar_window* window,
+    std::unordered_map<std::string, content::WebContents*>* tabs) {
+  if (!tabs)
+    return;
+  tabs->clear();
+  for (const auto& entry : tabs_)
+    if (entry.engine == engine && entry.window == window)
+      tabs->emplace(entry.id, entry.contents);
+}
+
+void BrowserTabRegistryImpl::BindWindow(shaar_engine* engine,
+                                        shaar_window* window,
+                                        Browser* browser) {
+  if (!engine || !window || !browser)
+    return;
+  for (auto& entry : windows_) {
+    if (entry.engine == engine && entry.handle == window) {
+      entry.browser = browser;
+      return;
+    }
+  }
+  windows_.push_back({engine, window, browser});
+}
+
+void BrowserTabRegistryImpl::BindTab(shaar_engine* engine,
+                                     shaar_window* window,
+                                     shaar_tab* tab,
+                                     std::string id,
+                                     content::WebContents* contents) {
+  if (!engine || !window || !tab || id.empty() || !contents)
+    return;
+  for (auto& entry : tabs_) {
+    if (entry.engine == engine && entry.window == window &&
+        entry.handle == tab) {
+      entry.id = std::move(id);
+      entry.contents = contents;
+      return;
+    }
+  }
+  tabs_.push_back({engine, window, tab, std::move(id), contents});
+}
+
+void BrowserTabRegistryImpl::UnbindWindow(shaar_engine* engine,
+                                          shaar_window* window) {
+  std::erase_if(tabs_, [engine, window](const TabEntry& entry) {
+    return entry.engine == engine && entry.window == window;
+  });
+  std::erase_if(windows_, [engine, window](const WindowEntry& entry) {
+    return entry.engine == engine && entry.handle == window;
+  });
+}
 
 bool ValidatePlacement(const std::vector<std::string>& requested_ids,
                        const std::vector<std::string>& current_ids,

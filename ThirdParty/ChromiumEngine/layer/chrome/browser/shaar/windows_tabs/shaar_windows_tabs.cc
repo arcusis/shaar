@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-#include "chrome/browser/shaar/windows-tabs/shaar_windows_tabs.h"
+#include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
 
 #include <algorithm>
 #include <unordered_map>

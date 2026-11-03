@@ -19,17 +19,19 @@ source_set("engine") {
     "//ui/base",
     "//ui/gfx/geometry",
   ]
+  # windows_tabs module sources.
   sources += [
-    "windows-tabs/shaar_module_registry.h",
-    "windows-tabs/shaar_windows_tabs.cc",
-    "windows-tabs/shaar_windows_tabs.h",
-    "windows-tabs/shaar_windows_tabs_handlers.cc",
-    "windows-tabs/shaar_windows_tabs_handlers.h",
+    "windows_tabs/shaar_module_registry.h",
+    "windows_tabs/shaar_windows_tabs.cc",
+    "windows_tabs/shaar_windows_tabs.h",
+    "windows_tabs/shaar_windows_tabs_handlers.cc",
+    "windows_tabs/shaar_windows_tabs_handlers.h",
   ]
 }
 
+# windows_tabs module unit tests.
 test("windows_tabs_unittests") {
-  sources = [ "windows-tabs/shaar_windows_tabs_handlers_unittest.cc" ]
+  sources = [ "windows_tabs/shaar_windows_tabs_handlers_unittest.cc" ]
   deps = [ ":engine", "//base", "//testing/gtest", "//testing/gtest:gtest_main" ]
 }
 

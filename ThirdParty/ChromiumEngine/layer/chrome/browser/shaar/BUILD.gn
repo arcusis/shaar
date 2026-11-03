@@ -60,6 +60,11 @@ source_set("engine") {
     "history/shaar_history.h",
     "history/shaar_history_lifecycle_adapter.cc",
     # END Shaar history module.
+    # BEGIN site_data
+    "site_data/shaar_site_data.cc",
+    "site_data/shaar_site_data.h",
+    "site_data/shaar_site_data_lifecycle_adapter.cc",
+    # END site_data
   ]
   deps = [
     "//base",
@@ -79,6 +84,10 @@ source_set("engine") {
     "//components/content_settings/core/common",
     "//components/prefs",
     "//components/history/core/browser",
+    # BEGIN site_data
+    "//chrome/browser/browsing_data:constants",
+    "//chrome/browser/content_settings:content_settings_factory_impl",
+    # END site_data
     "//content/public/browser",
     "//components/download/content/public",
     "//components/download/public/common",
@@ -132,6 +141,13 @@ test("history_unittests") {
   deps = [ ":engine", "//base/test:test_support",
            "//components/history/core/browser", "//testing/gtest" ]
 }
+
+# BEGIN site_data
+test("site_data_unittests") {
+  sources = [ "site_data/shaar_site_data_unittest.cc" ]
+  deps = [ ":engine", "//chrome/test:test_support", "//testing/gtest" ]
+}
+# END site_data
 
 config("exports") {
   inputs = [ "shaar_engine.exports" ]

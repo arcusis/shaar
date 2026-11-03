@@ -36,6 +36,21 @@ class ProfileServices {
       KeyedServiceLookup lookup) = 0;
 };
 
+// BEGIN site_data
+// Site-data operations may resolve a private scope only through the owning
+// session service; opaque handles are never cast to Chromium Profile pointers.
+class PrivateSessionServices {
+ public:
+  virtual ~PrivateSessionServices() = default;
+  virtual Profile* ResolvePrivateProfile(shaar_engine* engine,
+                                         shaar_private_session* handle) = 0;
+  virtual std::string_view ProfileID(shaar_engine* engine,
+                                     shaar_private_session* handle) = 0;
+  virtual std::string_view SessionID(shaar_engine* engine,
+                                     shaar_private_session* handle) = 0;
+};
+// END site_data
+
 // Resolves opaque ABI window and tab IDs to Chromium objects. Returned pointers
 // are borrowed and valid on the UI sequence while their IDs remain registered.
 class BrowserTabRegistry {
@@ -62,11 +77,17 @@ class BrowserTabRegistry {
 struct ShaarEngineContext {
   ProfileServices* profile_services = nullptr;
   BrowserTabRegistry* browser_tabs = nullptr;
+  // BEGIN site_data
+  PrivateSessionServices* private_sessions = nullptr;
+  // END site_data
 };
 
 ShaarEngineContext& EngineContext();
 void SetProfileServices(ProfileServices* services);
 void SetBrowserTabRegistry(BrowserTabRegistry* registry);
+// BEGIN site_data
+void SetPrivateSessionServices(PrivateSessionServices* services);
+// END site_data
 
 }  // namespace shaar
 

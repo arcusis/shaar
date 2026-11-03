@@ -46,9 +46,9 @@
   },
   "layer": {
     "path": "ThirdParty/ChromiumEngine/layer",
-    "sha256": "07e668ed0432c1a8aa3d9e78c9ccac14136977953411e0bb815d0aebd92d9375",
+    "sha256": "c060315f10f50e300613147d2fbf7ba871356148e7d78edd7f18f2bcf5904106",
     "files": {
-      "chrome/browser/shaar/BUILD.gn": "a1c2e90587d24324838476ad3775baa5487ed92a97e17cff45f51c85583e0ad2",
+      "chrome/browser/shaar/BUILD.gn": "fdfc1137c97b40ba20eb1155f1860dab546abb91a544ebb2d6d12a095f69d300",
       "chrome/browser/shaar/downloads/shaar_downloads.cc": "16ed8b01e10ca46ecfc8ec1f49ea0d46e7690356a3835e9e1522b5b3d430ca00",
       "chrome/browser/shaar/downloads/shaar_downloads.h": "f02e32d575b88b62ba680dc14520ce67a22f37028c6e8ebf162d8aa7b6d86b69",
       "chrome/browser/shaar/downloads/shaar_downloads_unittest.cc": "5d658c9d8cad29afd4451a37cd321caf3b12673fbab57d9c41ba511b2cc3fd0e",

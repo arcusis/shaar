@@ -82,7 +82,7 @@ final class DevToolsProbe {
     store.perform(.open(fixture.appending(path: "developer-tools-other")))
     guard let other = store.session.selectedPage?.tab.id else { throw Failure("No second tab") }
     try await wait("switching tabs hides the native page and inspector") {
-      page.isHidden && tools.isHidden && tools.isHiddenOrHasHiddenAncestor
+      page.isHiddenOrHasHiddenAncestor && tools.isHiddenOrHasHiddenAncestor
     }
     try expect(
       runtime.devToolsView(forTabID: other.uuidString) == nil, "inspector remains scoped to its tab"

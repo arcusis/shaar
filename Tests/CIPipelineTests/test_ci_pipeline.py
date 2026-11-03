@@ -13,6 +13,7 @@ import sys
 import tarfile
 import tempfile
 import tomllib
+from types import SimpleNamespace
 import unittest
 import zipfile
 from unittest.mock import patch
@@ -87,6 +88,37 @@ class PipelineGateTests(unittest.TestCase):
             self.assertEqual(PLAN.select_stages(["Notebook/Note.md"], event), (True, True, True))
         self.assertTrue(PLAN.select_stages(["scripts/tool.py"], "merge_group")[2])
 
+    def test_draft_pull_requests_skip_native_stages_and_preserve_website_checks(self):
+        for paths in (None, []):
+            self.assertEqual(PLAN.select_stages(paths, "pull_request", draft=True), (False, True, True))
+        for paths in (["Sources/App.swift"], ["unclassified-input"]):
+            self.assertEqual(PLAN.select_stages(paths, "pull_request", draft=True), (False, False, True))
+        self.assertEqual(PLAN.select_stages(["website/src/Page.svelte"], "pull_request", draft=True),
+                         (False, True, True))
+        self.assertEqual(PLAN.select_stages(["Sources/App.swift"], "pull_request"), (True, False, True))
+        self.assertEqual(PLAN.select_stages(["Sources/App.swift"], "merge_group", draft=True),
+                         (True, False, True))
+        needs = self.results(native="skipped")
+        needs["basic-browsing"]["result"] = "skipped"
+        self.assertEqual(GATE.gate_errors(needs, False, False, browsing=False), [])
+        self.assertTrue(GATE.gate_errors(needs, True, False, browsing=True))
+
+    def test_draft_pull_request_event_outputs_reduced_plan(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "event.json").write_text(json.dumps({"pull_request": {
+                "draft": True, "base": {"sha": "b" * 40},
+            }}))
+            env = {"GITHUB_EVENT_PATH": str(root / "event.json"), "GITHUB_EVENT_NAME": "pull_request",
+                   "GITHUB_SHA": "c" * 40, "GITHUB_OUTPUT": str(root / "output"),
+                   "GITHUB_STEP_SUMMARY": str(root / "summary")}
+            with patch.dict(os.environ, env), patch.object(PLAN.subprocess, "run") as command:
+                command.return_value.returncode = 0
+                command.return_value.stdout = b"Sources/App.swift\0"
+                PLAN.main()
+            self.assertIn("full=false", (root / "output").read_text())
+            self.assertIn("Draft pull request: **True**", (root / "summary").read_text())
+
     def test_website_gate_rejects_unexpected_skip_or_missing_result(self):
         needs = self.results(native="skipped")
         self.assertTrue(GATE.gate_errors(needs, False, False, True))
@@ -139,10 +171,32 @@ class PipelineGateTests(unittest.TestCase):
         self.assertEqual(PLAN.iteration_count({}, "schedule"), 3)
         self.assertEqual(PLAN.iteration_count({}, "pull_request"), 1)
 
+    def test_merge_group_concurrency_key_uses_validated_pull_request_number(self):
+        event = {"merge_group": {"head_ref": "gh-readonly-queue/production/pr-378-" + "a" * 40}}
+        self.assertEqual(PLAN.merge_group_pr_number(event, "merge_group"), "378")
+        real_event = {"merge_group": {"head_ref": (
+            "refs/heads/gh-readonly-queue/production/pr-448-"
+            "09c679deb204edf116007c1db51f88a1bac39a56"
+        )}}
+        self.assertEqual(PLAN.merge_group_pr_number(real_event, "merge_group"), "448")
+        self.assertEqual(PLAN.merge_group_pr_number({}, "pull_request"), "")
+        malformed_refs = (
+            "gh-readonly-queue/production/pr-378-short",
+            "refs/heads/other/pr-378-" + "a" * 40,
+            "gh-readonly-queue/production/pr-nope-" + "a" * 40,
+        )
+        for head_ref in malformed_refs:
+            with self.subTest(head_ref=head_ref):
+                self.assertEqual(PLAN.merge_group_pr_number(
+                    {"merge_group": {"head_ref": head_ref}}, "merge_group"), "")
+
     def test_merge_group_compares_synthetic_head_to_immutable_base_and_fails_open_to_full_work(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "event.json").write_text(json.dumps({"merge_group": {"base_sha": "b" * 40}}))
+            (root / "event.json").write_text(json.dumps({"merge_group": {
+                "base_sha": "b" * 40,
+                "head_ref": "gh-readonly-queue/production/pr-378-" + "c" * 40,
+            }}))
             env = {"GITHUB_EVENT_PATH": str(root / "event.json"), "GITHUB_EVENT_NAME": "merge_group",
                    "GITHUB_SHA": "c" * 40, "GITHUB_OUTPUT": str(root / "output"),
                    "GITHUB_STEP_SUMMARY": str(root / "summary")}
@@ -152,19 +206,38 @@ class PipelineGateTests(unittest.TestCase):
             self.assertEqual(command.call_args.args[0], ["git", "diff", "--name-only", "-z", "b" * 40, "HEAD"])
             self.assertIn("full=true", (root / "output").read_text())
             self.assertIn("base=" + "b" * 40, (root / "output").read_text())
+            self.assertIn("queue_pr=378", (root / "output").read_text())
+
+    def test_unparseable_merge_group_ref_disables_only_cancellation_grouping(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "event.json").write_text(json.dumps({"merge_group": {
+                "base_sha": "b" * 40,
+                "head_ref": "refs/heads/gh-readonly-queue/production/pr-448-invalid",
+            }}))
+            env = {"GITHUB_EVENT_PATH": str(root / "event.json"), "GITHUB_EVENT_NAME": "merge_group",
+                   "GITHUB_SHA": "c" * 40, "GITHUB_OUTPUT": str(root / "output"),
+                   "GITHUB_STEP_SUMMARY": str(root / "summary")}
+            with patch.dict(os.environ, env), patch.object(PLAN.subprocess, "run") as command:
+                command.return_value.returncode = 128
+                PLAN.main()
+            output = (root / "output").read_text()
+            self.assertIn("full=true", output)
+            self.assertIn("queue_pr=\n", output)
+            self.assertEqual(GATE.gate_errors(self.results(), True, False), [])
 
     def results(self, native="success", nightly="skipped"):
         results = {name: {"result": "success"} for name in ("plan", "fast", "dependency-review")}
         results.update({name: {"result": native} for name in (
             "python-tests", "build", "coverage", "visuals", "localization", "engine",
-            "shipping", "codeql", "inspector-contracts",
+            "shipping", "codeql", "inspector-contracts", "basic-browsing",
         )})
         results.update({name: {"result": nightly} for name in ("sanitizers", "dead-code")})
         results["codeql"] = {"result": "success"}
         return results
 
     def test_full_pipeline_rejects_failed_cancelled_skipped_or_missing_stage(self):
-        for stage in ("engine", "localization", "inspector-contracts"):
+        for stage in ("engine", "localization", "inspector-contracts", "basic-browsing"):
             for result in ("failure", "cancelled", "skipped", None):
                 with self.subTest(stage=stage, result=result):
                     needs = self.results()
@@ -172,13 +245,24 @@ class PipelineGateTests(unittest.TestCase):
                         del needs[stage]
                     else:
                         needs[stage]["result"] = result
-                    self.assertTrue(GATE.gate_errors(needs, True, False))
+                    self.assertTrue(GATE.gate_errors(needs, True, False, browsing=stage == "basic-browsing"))
+
+    def test_cancelled_stale_merge_group_fails_gate_but_replacement_can_pass(self):
+        stale = self.results()
+        stale["engine"]["result"] = "cancelled"
+        self.assertIn("engine: cancelled", GATE.gate_errors(stale, True, False))
+        replacement = self.results()
+        self.assertEqual(GATE.gate_errors(replacement, True, False), [])
 
     def test_docs_skip_native_but_never_skip_fast_gates(self):
         needs = self.results(native="skipped")
+        needs["basic-browsing"]["result"] = "skipped"
         self.assertEqual(GATE.gate_errors(needs, False, False), [])
-        needs["fast"]["result"] = "skipped"
-        self.assertTrue(GATE.gate_errors(needs, False, False))
+        for stage in ("fast", "dependency-review", "codeql"):
+            with self.subTest(stage=stage):
+                changed = {name: dict(result) for name, result in needs.items()}
+                changed[stage]["result"] = "skipped"
+                self.assertTrue(GATE.gate_errors(changed, False, False))
 
     def test_nightly_requires_deep_checks(self):
         self.assertTrue(GATE.gate_errors(self.results(), True, True))
@@ -429,6 +513,7 @@ class ProbeSoakTests(unittest.TestCase):
             STAGES.run_engine(checks, "all", 2)
         names = [call.args[0] for call in checks.run.call_args_list]
         self.assertEqual(names, ["verification-build", "baseline-1", "baseline-2",
+                                 "private-multitab-1", "private-multitab-2",
                                  "private-window-1", "private-window-2", "private-window-3",
                                  "quit-exit-1", "quit-exit-2", "quit-exit-3",
                                  "session-recovery-1", "session-recovery-2"])
@@ -491,7 +576,7 @@ class EngineTransferTests(unittest.TestCase):
         from ci_engine import BUNDLE_NAME, archive_bundle, restore_bundle
         import shutil
         with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {
-            "GITHUB_SHA": "a" * 40, "CI_TOOLCHAIN_ID": "toolchain",
+            "CI_SOURCE_TREE": "a" * 40, "CI_BUNDLE_INPUTS": "b" * 64, "CI_TOOLCHAIN_ID": "toolchain",
         }):
             root = Path(temporary)
             pin = root / "ThirdParty/ArdiaCore/pin.json"
@@ -507,7 +592,9 @@ class EngineTransferTests(unittest.TestCase):
             directory.mkdir()
             archive_bundle(root, directory)
             shutil.rmtree(bundle)
-            with patch.dict(os.environ, {"GITHUB_SHA": "c" * 40}), self.assertRaises(ValueError):
+            with patch.dict(os.environ, {"CI_SOURCE_TREE": "c" * 40}), self.assertRaises(ValueError):
+                restore_bundle(root, directory)
+            with patch.dict(os.environ, {"CI_BUNDLE_INPUTS": "c" * 64}), self.assertRaises(ValueError):
                 restore_bundle(root, directory)
             restore_bundle(root, directory)
             self.assertEqual(executable.read_bytes(), b"authored executable")
@@ -518,6 +605,27 @@ class EngineTransferTests(unittest.TestCase):
                 archive.write(b"tampered")
             with self.assertRaisesRegex(ValueError, "digest"):
                 restore_bundle(root, directory)
+
+    def test_cached_engine_bundle_counts_as_a_successful_stage_with_shards(self):
+        from ci_engine import BUNDLE_NAME, archive_bundle, engine_shards
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pin = root / "ThirdParty/ArdiaCore/pin.json"
+            pin.parent.mkdir(parents=True)
+            pin.write_text(json.dumps({"sha256": "b" * 64}))
+            (root / "build" / BUNDLE_NAME).mkdir(parents=True)
+            evidence = root / "build/ci/engine-build"
+            evidence.mkdir(parents=True)
+            output = root / "outputs"
+            with (patch.object(STAGES, "ROOT", root), patch.object(STAGES, "require_hosted_mac"),
+                  patch.dict(os.environ, {"CI_SOURCE_TREE": "a" * 40, "CI_BUNDLE_INPUTS": "a" * 64, "CI_TOOLCHAIN_ID": "toolchain",
+                                          "GITHUB_OUTPUT": str(output)})):
+                archive_bundle(root, evidence)
+                checks = SimpleNamespace(directory=evidence, results=[], write_reports=lambda: None)
+                STAGES.build_engine_bundle(checks, 2)
+                self.assertEqual(STAGES.Commands.finish(checks), 0)
+            self.assertEqual([item["name"] for item in checks.results], ["verification-bundle-cache-validation"])
+            self.assertIn(f"shards={json.dumps(engine_shards(2))}", output.read_text())
 
 
 class SwiftExtractionTests(unittest.TestCase):

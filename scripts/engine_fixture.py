@@ -29,7 +29,7 @@ import threading
 import time
 import uuid
 import zlib
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 VERIFICATION_APP = Path('build/Shaar Verification.app')
 RELEASE_FEED = Path(__file__).resolve().with_name('release_feed.py')
@@ -448,6 +448,9 @@ WEB_STORE_FIT_PAGE = b"""<!doctype html><html data-arcusis-fixture="web-store-fi
 <style>body{margin:0;min-width:1280px;font:18px system-ui}</style>
 <p>Fixed minimum width, like the Chrome Web Store.</p></html>"""
 
+STALL_RELEASE = threading.Event()
+STALL_SECONDS = 120
+
 
 # A silent canvas stream: no network or audio device. The handlers log each Media Session
 # action so the probe can confirm what reached the page. The clip is a 40 second silent
@@ -472,7 +475,7 @@ for(const action of ['play','pause','previoustrack','nexttrack']){
 }
 </script></html>"""
 
-PAGE_CSP = "default-src 'none'; img-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self' http://tracker.localhost:* http://localhost:*"
+PAGE_CSP = "default-src 'none'; img-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self' http://trackertest.org:* http://localhost:*"
 MEDIA_SESSION_CSP = PAGE_CSP + "; media-src blob:"
 MEDIA_CLIP = Path(__file__).resolve().parent.parent / 'Tests/Fixtures/Media/seekable-clip.webm'
 
@@ -480,6 +483,10 @@ MEDIA_CLIP = Path(__file__).resolve().parent.parent / 'Tests/Fixtures/Media/seek
 class Fixture(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
+        if path == '/stall':
+            STALL_RELEASE.wait(STALL_SECONDS)
+            self.html(b'<!doctype html><title>Stalled fixture</title>')
+            return
         if path == '/profile-privacy-cache':
             body = str(time.time_ns()).encode('ascii')
             self.send_response(200)
@@ -632,7 +639,11 @@ border:2px solid #1e40af;border-radius:6px;background:#2563eb;color:white}
             self.send_header("Set-Cookie", cookie)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            # Chromium can leave a fixture request in flight while switching tabs.
+            pass
 
     def download(self, name):
         cookies = SimpleCookie(self.headers.get('Cookie', ''))
@@ -715,6 +726,7 @@ EXTERNAL_APP_CONSENT_CLEANUP_KEYS = {
     'routerClientCount', 'pendingRequests', 'passed',
 }
 PRIVATE_WINDOW_MODE = 'private-window-owned-engine-fixture'
+PRIVATE_MULTITAB_MODE = 'private-multitab-owned-engine-fixture'
 PRIVATE_WINDOW_SCOPE = (
     'Owned hidden native product and engine windows on synthetic loopback origin. No real accounts, '
     'third-party endpoints or physical input.'
@@ -781,8 +793,12 @@ def argument_parser():
                       help="Run only the external-app consent probe with native no-launch guard")
     mode.add_argument("--private-window", action="store_true",
                       help="Compose owned native OTR windows with both normal engine fixture phases")
+    mode.add_argument("--private-multitab", action="store_true",
+                      help="Verify three navigated and rendered tabs in one hidden private window")
     mode.add_argument("--quit-exit", action="store_true",
                       help="Quit through the host menu with an extension installed; assert main and helper exit")
+    mode.add_argument("--quit-pending-navigation", action="store_true",
+                      help="Quit-exit probe with a navigation pending in every host window")
     mode.add_argument("--session-recovery", action="store_true",
                       help="SIGKILL the exact probe PID while it saves a managed workspace, then verify the restored session")
     mode.add_argument("--basic-browsing", action="store_true",
@@ -794,7 +810,8 @@ def build_engine_probe_arguments(executable, root, fixture_url, phase, *, includ
                                  onboarding_control, abrupt, saved_tab_capacity,
                                  external_app_consent=False, private_window=False,
                                  private_window_run_id=None, quit_exit=False,
-                                 session_recovery=False, basic_browsing=False):
+                                 quit_pending_navigation=False, session_recovery=False,
+                                 private_multitab=False, basic_browsing=False):
     arguments = [str(executable), "--probe-data-dir", str(root),
                  "--probe-url", fixture_url, "--probe-phase", phase,
                  "--probe-output", str(root / f"{phase}.json")]
@@ -814,8 +831,12 @@ def build_engine_probe_arguments(executable, root, fixture_url, phase, *, includ
             raise RuntimeError('Private window mode requires a run identity')
         arguments.append('--probe-private-window')
         arguments.extend(('--probe-private-window-run-id', private_window_run_id))
-    if quit_exit:
+    if private_multitab:
+        arguments.append('--probe-private-multitab')
+    if quit_exit or quit_pending_navigation:
         arguments.append('--probe-quit-exit')
+    if quit_pending_navigation:
+        arguments.append('--probe-quit-pending-navigation')
     if session_recovery:
         arguments.append('--probe-session-recovery')
     if basic_browsing:
@@ -1108,6 +1129,9 @@ QUIT_EXIT_MODE = 'quit-exit-only'
 # Bounds from the Quit menu command: the browser process, then every helper in its group.
 QUIT_MAIN_EXIT_SECONDS = 15
 QUIT_HELPER_EXIT_SECONDS = 10
+CRASH_REPORT_SETTLE_SECONDS = 5
+CRASH_REPORT_DIRECTORY = Path.home() / 'Library' / 'Logs' / 'DiagnosticReports'
+CRASH_REPORT_PROCESS = 'ShaarVerification'
 
 
 def read_quit_checkpoint(root, phase, pid):
@@ -1138,6 +1162,31 @@ def wait_until(condition, seconds):
     return time.monotonic() - start
 
 
+def crash_reports_for(pid, since, directory=None):
+    """Names of macOS crash reports for this probe process since the given time."""
+    directory = directory or CRASH_REPORT_DIRECTORY
+    names = []
+    paths = [*directory.glob(f'{CRASH_REPORT_PROCESS}-*.ips'),
+             *(directory / 'Retired').glob(f'{CRASH_REPORT_PROCESS}-*.ips')]
+    for path in sorted(paths):
+        try:
+            if path.stat().st_mtime < since:
+                continue
+            _, body = path.read_text(errors='replace').split('\n', 1)
+            report = json.loads(body)
+        except (OSError, ValueError):
+            continue
+        if isinstance(report, dict) and report.get('pid') == pid:
+            names.append(path.relative_to(directory).as_posix())
+    return names
+
+
+def quit_crash_reports(process, since):
+    if process.returncode != 0:
+        wait_until(lambda: bool(crash_reports_for(process.pid, since)), CRASH_REPORT_SETTLE_SECONDS)
+    return crash_reports_for(process.pid, since)
+
+
 def wait_for_quit_exit(process, root, phase, timeout):
     """Time main and helper exit from the probe's Quit command; write the phase receipt."""
     deadline = time.monotonic() + probe_timeout(timeout)
@@ -1147,18 +1196,23 @@ def wait_for_quit_exit(process, root, phase, timeout):
         if time.monotonic() >= deadline:
             raise subprocess.TimeoutExpired(process.args, timeout)
         time.sleep(0.05)
+    quit_requested_at = time.time()
     main_seconds = wait_until(lambda: process.poll() is not None, QUIT_MAIN_EXIT_SECONDS)
     helper_seconds = None
+    crash_reports = []
     if main_seconds is not None:
         helper_seconds = wait_until(lambda: not process_group_exists(process.pid),
                                     QUIT_HELPER_EXIT_SECONDS)
+        crash_reports = quit_crash_reports(process, quit_requested_at - 1)
     receipt = {
         'schema': 1, 'phase': phase, 'pid': process.pid,
         'mainExitSeconds': main_seconds, 'helpersExitSeconds': helper_seconds,
         'mainExitBoundSeconds': probe_timeout(QUIT_MAIN_EXIT_SECONDS),
         'helpersExitBoundSeconds': probe_timeout(QUIT_HELPER_EXIT_SECONDS),
         'exitCode': process.returncode, 'lastKeepAliveSample': last_keep_alive_sample(root, phase),
-        'passed': main_seconds is not None and helper_seconds is not None,
+        'crashReports': crash_reports,
+        'passed': main_seconds is not None and helper_seconds is not None
+                  and process.returncode == 0 and not crash_reports,
     }
     (root / f'{phase}-quit-exit.json').write_text(json.dumps(receipt, indent=2, sort_keys=True) + '\n')
     if main_seconds is None:
@@ -1167,14 +1221,18 @@ def wait_for_quit_exit(process, root, phase, timeout):
     if helper_seconds is None:
         raise RuntimeError(f'{phase}: helper processes still running '
                            f'{receipt["helpersExitBoundSeconds"]:.0f}s after the browser exited')
+    if not receipt['passed']:
+        reports = ', '.join(crash_reports) or 'none'
+        raise RuntimeError(f'{phase}: browser exited {process.returncode} after Quit; crash reports: {reports}')
     return process.returncode
 
 
-def validate_quit_exit_report(root, phase, report, exit_code):
+def validate_quit_exit_report(root, phase, report, exit_code, pending_navigation=False):
     receipt = json.loads((root / f'{phase}-quit-exit.json').read_text())
     if (not isinstance(report, dict) or report.get('phase') != phase
             or report.get('probeMode') != QUIT_EXIT_MODE
             or report.get('quitExitOnly') is not True
+            or report.get('quitPendingNavigation') is not pending_navigation
             or report.get('savedTabCapacityOnly') is not False
             or report.get('externalAppConsentOnly') is not False
             or report.get('privateWindowOnly') is not False
@@ -1360,20 +1418,69 @@ def record_external_app_consent_summary(root):
     return summary
 
 
+
+def validate_private_multitab_report(root, phase, report, exit_code):
+    path = root / f'{phase}-private-multitab.json'
+    try:
+        evidence = json.loads(path.read_text())
+    except (OSError, ValueError) as error:
+        raise RuntimeError(
+            f"{phase} private multitab evidence is missing or malformed: {report.get('error')}"
+        ) from error
+    if (exit_code != 0 or report.get('passed') is not True
+            or report.get('probeMode') != PRIVATE_MULTITAB_MODE
+            or report.get('privateMultiTabOnly') is not True
+            or report.get('localFixturesPassed') is not True
+            or evidence.get('schema') != 1 or evidence.get('phase') != phase
+            or evidence.get('passed') is not True or evidence.get('windowHidden') is not True
+            or evidence.get('tabCount') != 3 or evidence.get('cleanupPassed') is not True
+            or 'three normal tabs navigate and render in one hidden window' not in report.get('checks', [])
+            or 'normal address bar search opens a live native tab' not in report.get('checks', [])
+            or parse_qs(urlparse(evidence.get('addressSearchURL', '')).query).get('q')
+                != ['shaar private smoke search']):
+        raise RuntimeError(f'{phase} private multitab report failed')
+    for visit, entries in (('opened', evidence.get('tabs')),
+                           ('reselected', evidence.get('reselected'))):
+        if not isinstance(entries, list) or len(entries) != 3:
+            raise RuntimeError(f'{phase} private multitab {visit} captures are incomplete')
+        if sorted(entry.get('index') for entry in entries if isinstance(entry, dict)) != [0, 1, 2]:
+            raise RuntimeError(f'{phase} private multitab {visit} tab indexes differ')
+        for entry in entries:
+            index = entry['index']
+            filename = f'{phase}-private-multitab-{index}-{visit}.png'
+            image = root / filename
+            if (entry.get('capture') != filename
+                    or entry.get('path') != f'/account/private-multitab-{phase}-{index}'
+                    or not isinstance(entry.get('tabID'), str)
+                    or type(entry.get('lightSamples')) is not int or entry['lightSamples'] < 48
+                    or not image.is_file() or not image.read_bytes().startswith(b'\x89PNG\r\n\x1a\n')
+                    or hashlib.sha256(image.read_bytes()).hexdigest() != entry.get('sha256')):
+                raise RuntimeError(f'{phase} private multitab {visit} tab {index} failed capture validation')
+    opened_ids = [entry['tabID'] for entry in evidence['tabs']]
+    if len(set(opened_ids)) != 3 or {entry['tabID'] for entry in evidence['reselected']} != set(opened_ids):
+        raise RuntimeError(f'{phase} private multitab identities differ')
+    return evidence
+
+
 def main(argv=None):
     options = argument_parser().parse_args(argv)
     include_bitwarden = options.bitwarden or options.bitwarden_onboarding_control
     if options.bitwarden_onboarding_control:
         print('CONTROL ONLY: two-second intro-screen age; clean first-click acceptance is not evaluated', flush=True)
     abrupt = options.abrupt_restart or options.abrupt_control
+    quit_exit = options.quit_exit or options.quit_pending_navigation
     if options.saved_tab_capacity:
         print('SAVED TAB CAPACITY ONLY: no account, MV3, or full baseline claims', flush=True)
     if options.external_app_consent:
         print('EXTERNAL APP CONSENT ONLY: owned loopback; native no-launch guard enabled', flush=True)
     if options.private_window:
         print('PRIVATE WINDOW FIXTURE: owned hidden OTR windows; synthetic loopback only', flush=True)
-    if options.quit_exit:
+    if options.private_multitab:
+        print('PRIVATE MULTITAB: one hidden OTR window; three navigated renderer captures', flush=True)
+    if quit_exit:
         print('QUIT EXIT ONLY: host Quit command with an extension installed; process exit is timed', flush=True)
+    if options.quit_pending_navigation:
+        print('QUIT PENDING NAVIGATION: every host window has a navigation in flight at Quit', flush=True)
     if options.session_recovery:
         print('SESSION RECOVERY ONLY: SIGKILL of the exact probe PID during saves, then restore', flush=True)
     if options.basic_browsing:
@@ -1411,8 +1518,11 @@ def main(argv=None):
                 abrupt=abrupt, saved_tab_capacity=options.saved_tab_capacity,
                 external_app_consent=options.external_app_consent,
                 private_window=options.private_window,
-                private_window_run_id=private_window_run_id, quit_exit=options.quit_exit,
-                session_recovery=options.session_recovery, basic_browsing=options.basic_browsing)
+                private_window_run_id=private_window_run_id, quit_exit=quit_exit,
+                quit_pending_navigation=options.quit_pending_navigation,
+                session_recovery=options.session_recovery,
+                private_multitab=options.private_multitab,
+                basic_browsing=options.basic_browsing)
             with (root / f"{phase}.log").open("w") as log:
                 process = subprocess.Popen(arguments, stdout=log, stderr=log, start_new_session=True, env=probe_env)
                 print(f"Probe PID: {process.pid}", flush=True)
@@ -1423,10 +1533,10 @@ def main(argv=None):
                     if options.session_recovery and phase == 'initial':
                         kill_during_session_saves(process, root, timeout=120)
                         continue
-                    if options.quit_exit:
+                    if quit_exit:
                         code = wait_for_quit_exit(process, root, phase, timeout=90)
                     else:
-                        timeout = (280 if options.private_window else 180 if options.external_app_consent else 180 if options.saved_tab_capacity
+                        timeout = (280 if options.private_window else 90 if options.private_multitab else 180 if options.external_app_consent else 180 if options.saved_tab_capacity
                                    else 280)
                         code = wait_for_probe(process, root, phase, timeout=timeout)
                 except subprocess.TimeoutExpired:
@@ -1462,13 +1572,16 @@ def main(argv=None):
                 validate_saved_tab_capacity_report(root, phase, report, code)
             elif options.external_app_consent:
                 validate_external_app_consent_report(root, phase, report, code)
-            elif options.quit_exit:
-                receipt = validate_quit_exit_report(root, phase, report, code)
+            elif quit_exit:
+                receipt = validate_quit_exit_report(root, phase, report, code,
+                                                    pending_navigation=options.quit_pending_navigation)
                 stopped = ' (shutdown guard stopped the event loop)' if report.get('quitEventLoopStopped') else ''
                 print(f"{phase}: browser exited {receipt['mainExitSeconds']:.2f}s after Quit{stopped}; "
                       f"helpers {receipt['helpersExitSeconds']:.2f}s later", flush=True)
             elif options.session_recovery:
                 validate_session_recovery_report(report, phase)
+            elif options.private_multitab:
+                validate_private_multitab_report(root, phase, report, code)
             elif options.basic_browsing:
                 checks = report.get('checks') if isinstance(report, dict) else None
                 required = {
@@ -1522,6 +1635,7 @@ def main(argv=None):
             summary = record_session_recovery_summary(root)
             print(f"session recovery: {'passed' if summary['passed'] else 'FAILED'}", flush=True)
     finally:
+        STALL_RELEASE.set()
         server.shutdown()
         server.server_close()
     if options.private_window:

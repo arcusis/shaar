@@ -3,6 +3,7 @@ name: Source checks
 on:
   pull_request:
     branches: [production, 'feat/native-*']
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   push:
     branches: [production, 'feat/native-*']
   merge_group:
@@ -28,6 +29,10 @@ concurrency:
   group: source-checks-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# GitHub expressions cannot split a synthetic merge-group ref. The plan job
+# validates and extracts its PR number so resource jobs can replace only their
+# matching stage when the queue rebuilds.
+
 jobs:
   plan:
     name: Select CI stages
@@ -39,6 +44,7 @@ jobs:
       swift: ${{ steps.plan.outputs.swift }}
       base: ${{ steps.plan.outputs.base }}
       iterations: ${{ steps.plan.outputs.iterations }}
+      queue_pr: ${{ steps.plan.outputs.queue_pr }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -140,6 +146,9 @@ jobs:
   python-tests:
     name: Python and Apple resource tests
     needs: plan
+    concurrency:
+      group: source-checks-${{ github.event_name }}-${{ needs.plan.outputs.queue_pr || github.ref }}-python-tests
+      cancel-in-progress: ${{ github.event_name == 'merge_group' }}
     if: needs.plan.outputs.full == 'true'
     runs-on: macos-26
     timeout-minutes: 15
@@ -181,6 +190,9 @@ jobs:
   build:
     name: Build and unit tests
     needs: plan
+    concurrency:
+      group: source-checks-${{ github.event_name }}-${{ needs.plan.outputs.queue_pr || github.ref }}-build
+      cancel-in-progress: ${{ github.event_name == 'merge_group' }}
     if: needs.plan.outputs.full == 'true'
     uses: ./.github/workflows/ci-build.yml
     with:
@@ -188,7 +200,11 @@ jobs:
 
   basic-browsing:
     name: Normal window browsing smoke
-    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    needs: plan
+    if: needs.plan.outputs.full == 'true' && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
+    concurrency:
+      group: source-checks-${{ github.event_name }}-${{ needs.plan.outputs.queue_pr || github.ref }}-basic-browsing
+      cancel-in-progress: ${{ github.event_name == 'merge_group' }}
     runs-on: macos-26
     timeout-minutes: 35
     steps:
@@ -221,6 +237,9 @@ jobs:
   visuals:
     name: Hosted sidebar component visuals
     needs: plan
+    concurrency:
+      group: source-checks-${{ github.event_name }}-${{ needs.plan.outputs.queue_pr || github.ref }}-visuals
+      cancel-in-progress: ${{ github.event_name == 'merge_group' }}
     if: needs.plan.outputs.full == 'true'
     runs-on: macos-26
     timeout-minutes: 20
@@ -242,6 +261,9 @@ jobs:
   localization:
     name: Hebrew localization, offscreen visuals, and engine locale
     needs: plan
+    concurrency:
+      group: source-checks-${{ github.event_name }}-${{ needs.plan.outputs.queue_pr || github.ref }}-localization
+      cancel-in-progress: ${{ github.event_name == 'merge_group' }}
     if: needs.plan.outputs.full == 'true'
     runs-on: macos-26
     timeout-minutes: 90
@@ -265,6 +287,9 @@ jobs:
   engine:
     name: Engine simulations
     needs: plan
+    concurrency:
+      group: source-checks-${{ github.event_name }}-${{ needs.plan.outputs.queue_pr || github.ref }}-engine
+      cancel-in-progress: ${{ github.event_name == 'merge_group' }}
     if: needs.plan.outputs.full == 'true'
     uses: ./.github/workflows/ci-engine.yml
     with:
@@ -273,6 +298,9 @@ jobs:
   shipping:
     name: Shipping bundle
     needs: [plan, fast, python-tests, dependency-review]
+    concurrency:
+      group: source-checks-${{ github.event_name }}-${{ needs.plan.outputs.queue_pr || github.ref }}-shipping
+      cancel-in-progress: ${{ github.event_name == 'merge_group' }}
     if: needs.plan.outputs.full == 'true'
     permissions:
       contents: read
@@ -292,7 +320,10 @@ jobs:
 
   sanitizers:
     name: Nightly ${{ matrix.sanitizer }} sanitizer
-    needs: [fast, build]
+    needs: [plan, fast, build]
+    concurrency:
+      group: source-checks-${{ github.event_name }}-${{ needs.plan.outputs.queue_pr || github.ref }}-sanitizers-${{ matrix.sanitizer }}
+      cancel-in-progress: ${{ github.event_name == 'merge_group' }}
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.deep_checks)
     runs-on: macos-26
     timeout-minutes: 45
@@ -319,7 +350,10 @@ jobs:
 
   dead-code:
     name: Nightly dead-code report
-    needs: [fast, build]
+    needs: [plan, fast, build]
+    concurrency:
+      group: source-checks-${{ github.event_name }}-${{ needs.plan.outputs.queue_pr || github.ref }}-dead-code
+      cancel-in-progress: ${{ github.event_name == 'merge_group' }}
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.deep_checks)
     runs-on: macos-26
     timeout-minutes: 30
@@ -344,7 +378,7 @@ jobs:
   required:
     name: CI required
     if: always()
-    needs: [plan, fast, python-tests, dependency-review, build, coverage, visuals, localization, engine, shipping, codeql, inspector-contracts, website, sanitizers, dead-code]
+    needs: [plan, fast, python-tests, dependency-review, build, coverage, visuals, localization, engine, basic-browsing, shipping, codeql, inspector-contracts, website, sanitizers, dead-code]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -356,5 +390,6 @@ jobs:
           CI_NEEDS: ${{ toJSON(needs) }}
           CI_FULL: ${{ needs.plan.outputs.full }}
           CI_WEBSITE: ${{ needs.plan.outputs.website }}
+          CI_BROWSING: ${{ needs.plan.outputs.full == 'true' && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
           CI_NIGHTLY: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.deep_checks) }}
         run: python3 scripts/ci-gate.py

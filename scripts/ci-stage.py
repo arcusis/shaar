@@ -16,7 +16,7 @@ import tarfile
 from pathlib import Path
 
 from ci_support import Commands, ROOT
-from ci_engine import BUNDLE_NAME, archive_bundle, engine_shards, restore_bundle, shard_modes
+from ci_engine import BUNDLE_NAME, archive_bundle, engine_shards, restore_bundle, shard_modes, validate_bundle_archive
 from sidebar_dnd_fixture import registered_sidebar_type
 
 
@@ -25,7 +25,7 @@ VISUAL_FILTERS = (
     "SpaceIconPickerVisualTests", "SidebarFoldersVisualTests", "CommandPanelVisualTests",
     "SettingsVisualTests",
 )
-ENGINE_MODES = ("baseline", "private-window", "quit-exit", "session-recovery")
+ENGINE_MODES = ("baseline", "private-multitab", "private-window", "quit-exit", "session-recovery")
 MINIMUM_REPETITIONS = {"private-window": 3, "quit-exit": 3}
 
 
@@ -124,6 +124,18 @@ def run_probe_iterations(checks: Commands, mode: str, iterations: range) -> None
 
 def build_engine_bundle(checks: Commands, iterations: int) -> None:
     require_hosted_mac()
+    if (checks.directory / "bundle.json").is_file():
+        validate_bundle_archive(ROOT, checks.directory)
+        checks.results.append({
+            "name": "verification-bundle-cache-validation",
+            "command": ["validate cached source tree, build inputs and archive digest"],
+            "status": 0,
+            "seconds": 0.0,
+        })
+        with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
+            output.write(f"shards={json.dumps(engine_shards(iterations))}\n")
+        print("Reusing integrity-checked verification bundle for this exact source tree and build inputs")
+        return
     if checks.run("verification-build", ["bash", "scripts/bundle-app.sh", "--with-engine", "--verification"]):
         return
     archive_bundle(ROOT, checks.directory)
@@ -153,7 +165,7 @@ def run_visuals(checks: Commands) -> None:
 
 def run_localization(checks: Commands) -> None:
     require_hosted_mac()
-    if checks.run("localization-build", ["swift", "build", "--build-tests", "--jobs", "1", "--force-resolved-versions"]):
+    if checks.run("localization-build", ["swift", "build", "--build-tests", "--jobs", "2", "--force-resolved-versions"]):
         return
     if checks.run("localization-captures", [sys.executable, "scripts/test-localization.py"]):
         return

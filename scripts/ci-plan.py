@@ -51,9 +51,11 @@ def merge_group_pr_number(event: dict, name: str) -> str:
     if name != "merge_group":
         return ""
     head_ref = event.get("merge_group", {}).get("head_ref", "")
+    if head_ref.startswith("refs/heads/"):
+        head_ref = head_ref.removeprefix("refs/heads/")
     match = re.fullmatch(r"gh-readonly-queue/production/pr-([0-9]+)-[0-9a-f]{40}", head_ref)
     if not match:
-        raise ValueError(f"Unexpected merge-group head ref: {head_ref!r}")
+        return ""
     return match.group(1)
 
 

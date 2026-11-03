@@ -143,14 +143,21 @@ class PipelineGateTests(unittest.TestCase):
     def test_merge_group_concurrency_key_uses_validated_pull_request_number(self):
         event = {"merge_group": {"head_ref": "gh-readonly-queue/production/pr-378-" + "a" * 40}}
         self.assertEqual(PLAN.merge_group_pr_number(event, "merge_group"), "378")
+        real_event = {"merge_group": {"head_ref": (
+            "refs/heads/gh-readonly-queue/production/pr-448-"
+            "09c679deb204edf116007c1db51f88a1bac39a56"
+        )}}
+        self.assertEqual(PLAN.merge_group_pr_number(real_event, "merge_group"), "448")
         self.assertEqual(PLAN.merge_group_pr_number({}, "pull_request"), "")
         malformed_refs = (
             "gh-readonly-queue/production/pr-378-short",
-            "refs/heads/gh-readonly-queue/production/pr-378-" + "a" * 40,
+            "refs/heads/other/pr-378-" + "a" * 40,
+            "gh-readonly-queue/production/pr-nope-" + "a" * 40,
         )
         for head_ref in malformed_refs:
-            with self.subTest(head_ref=head_ref), self.assertRaisesRegex(ValueError, "Unexpected merge-group"):
-                PLAN.merge_group_pr_number({"merge_group": {"head_ref": head_ref}}, "merge_group")
+            with self.subTest(head_ref=head_ref):
+                self.assertEqual(PLAN.merge_group_pr_number(
+                    {"merge_group": {"head_ref": head_ref}}, "merge_group"), "")
 
     def test_merge_group_compares_synthetic_head_to_immutable_base_and_fails_open_to_full_work(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -169,6 +176,24 @@ class PipelineGateTests(unittest.TestCase):
             self.assertIn("full=true", (root / "output").read_text())
             self.assertIn("base=" + "b" * 40, (root / "output").read_text())
             self.assertIn("queue_pr=378", (root / "output").read_text())
+
+    def test_unparseable_merge_group_ref_disables_only_cancellation_grouping(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "event.json").write_text(json.dumps({"merge_group": {
+                "base_sha": "b" * 40,
+                "head_ref": "refs/heads/gh-readonly-queue/production/pr-448-invalid",
+            }}))
+            env = {"GITHUB_EVENT_PATH": str(root / "event.json"), "GITHUB_EVENT_NAME": "merge_group",
+                   "GITHUB_SHA": "c" * 40, "GITHUB_OUTPUT": str(root / "output"),
+                   "GITHUB_STEP_SUMMARY": str(root / "summary")}
+            with patch.dict(os.environ, env), patch.object(PLAN.subprocess, "run") as command:
+                command.return_value.returncode = 128
+                PLAN.main()
+            output = (root / "output").read_text()
+            self.assertIn("full=true", output)
+            self.assertIn("queue_pr=\n", output)
+            self.assertEqual(GATE.gate_errors(self.results(), True, False), [])
 
     def results(self, native="success", nightly="skipped"):
         results = {name: {"result": "success"} for name in ("plan", "fast", "dependency-review")}

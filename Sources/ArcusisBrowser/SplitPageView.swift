@@ -56,7 +56,7 @@ struct SplitPageView<Pane: View, Header: View>: View {
 /// Children of one group laid out along its axis, separated by draggable dividers.
 /// A drag resizes from local state and commits once on release, so the session is not
 /// rewritten on every frame.
-private struct SplitGroupView: View {
+struct SplitGroupView: View {
   static let dividerThickness: CGFloat = 8
   static let minimumPane: CGFloat = 160
 

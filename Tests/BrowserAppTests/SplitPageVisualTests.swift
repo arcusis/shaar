@@ -64,6 +64,26 @@ final class SplitPageVisualTests: XCTestCase {
     XCTAssertEqual(changes, [32, 32, 32, -32])
   }
 
+  func testSplitDividerResizeKeepsBothPanesAboveMinimum() {
+    let initial = [0.5, 0.5]
+    XCTAssertEqual(SplitGroupView.resized(initial, at: 0, by: 40, available: 400), [0.6, 0.4])
+    XCTAssertEqual(SplitGroupView.resized(initial, at: 0, by: 400, available: 400), [0.6, 0.4])
+    XCTAssertEqual(SplitGroupView.resized(initial, at: 2, by: 40, available: 400), initial)
+    XCTAssertEqual(SplitGroupView.resized(initial, at: 0, by: 40, available: 0), initial)
+  }
+
+  func testSplitDividerViewBuildsInHeadlessHost() {
+    let ids = [UUID(), UUID()]
+    let view = SplitPageView(
+      split: BrowserSplit(tabIDs: ids), focusedID: ids[0], onFocus: { _ in },
+      onWeightsChange: { _, _ in }, header: { _ in Text("Pane header") },
+      pane: { _ in Text("Pane content") })
+    let host = NSHostingView(rootView: view.frame(width: 500, height: 300))
+    host.frame = NSRect(x: 0, y: 0, width: 500, height: 300)
+    host.layoutSubtreeIfNeeded()
+    XCTAssertGreaterThan(host.fittingSize.width, 0)
+  }
+
   func testMixedLayoutCapture() async throws {
     try XCTSkipUnless(
       SidebarVisualCaptureSupport.enabled, "Visual capture requires explicit opt-in")

@@ -22,12 +22,14 @@
 #include "base/values.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "extensions/browser/disable_reason.h"
 #include "extensions/browser/extension_registrar.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/extension_util.h"
+#include "extensions/browser/management_policy.h"
 #include "extensions/browser/uninstall_reason.h"
 #include "extensions/common/extension.h"
 
@@ -136,14 +138,40 @@ std::optional<std::string> EncodeList(Profile* profile,
   return json;
 }
 
+void EmitManagementEvent(shaar::ShaarEngineContext* context,
+                         shaar_engine* engine,
+                         shaar_profile* handle,
+                         const char* kind,
+                         const std::string& extension_id,
+                         std::optional<bool> enabled = std::nullopt) {
+  if (!context || !context->profile_services)
+    return;
+  const std::string profile_id(
+      context->profile_services->ProfileID(engine, handle));
+  if (profile_id.empty())
+    return;
+  base::Value::Dict event;
+  event.Set("kind", kind);
+  event.Set("schemaVersion", 1);
+  event.Set("extensionId", extension_id);
+  if (enabled.has_value())
+    event.Set("enabled", *enabled);
+  std::string payload;
+  if (!base::JSONWriter::Write(base::Value(std::move(event)), &payload))
+    return;
+  shaar::EmitEvent(engine, SHAAR_EVENT_EXTENSION,
+                   {profile_id.data(), profile_id.size()}, {}, {}, {},
+                   {payload.data(), payload.size()});
+}
+
 }  // namespace
 
 shaar_error_code HandleExtensionsOperation(
     shaar::ShaarEngineContext* context,
     shaar_engine* engine,
     shaar_scope scope,
-    shaar_window*,
-    shaar_tab*,
+    shaar_window* window,
+    shaar_tab* tab,
     shaar_operation operation,
     shaar_bytes args,
     shaar_request_id request_id,
@@ -207,6 +235,77 @@ shaar_error_code HandleExtensionsOperation(
     return Fail(SHAAR_UNSUPPORTED_CAPABILITY, "unknown extension operation", error);
   }
 
+  // These host-facing operations validate opaque ownership in the injected
+  // runtime service. They do not resolve or retain Chromium pointers here.
+  if (operation == SHAAR_OP_EXTENSION_MANAGE &&
+      input.FindString("action") && *input.FindString("action") == "install") {
+    const std::string* id = input.FindString("extensionId");
+    const std::string* source = input.FindString("source");
+    if (!window || !tab)
+      return Fail(SHAAR_INVALID_ARGUMENT, "install requires an owning tab", error);
+    if (!context->extensions)
+      return Fail(SHAAR_UNSUPPORTED_CAPABILITY,
+                  "extension install host is unavailable", error);
+    const shaar_error_code result = context->extensions->BeginInstall(
+        engine, scope.profile, window, tab, *id, *source);
+    if (result != SHAAR_OK)
+      return Fail(result, "extension install request was rejected", error);
+    ReplyLater({reply, reply_context, request_id}, SHAAR_OK,
+               "{\"schemaVersion\":1,\"accepted\":true}");
+    return SHAAR_OK;
+  }
+  if (operation == SHAAR_OP_EXTENSION_ACTION) {
+    const std::string* id = input.FindString("extensionId");
+    if (!window || !tab)
+      return Fail(SHAAR_INVALID_ARGUMENT, "extension action requires a tab", error);
+    if (!context->extensions)
+      return Fail(SHAAR_UNSUPPORTED_CAPABILITY,
+                  "extension action host is unavailable", error);
+    std::string route;
+    const shaar_error_code result = context->extensions->InvokeAction(
+        engine, scope.profile, window, tab, *id, &route);
+    if (result != SHAAR_OK)
+      return Fail(result, "extension action was rejected", error);
+    if (route != "none" && route != "popup" && route != "sidePanel")
+      return Fail(SHAAR_CHROMIUM_ERROR, "extension host returned an invalid route", error);
+    base::Value::Dict payload;
+    payload.Set("schemaVersion", 1);
+    payload.Set("route", route);
+    std::string json;
+    if (!base::JSONWriter::Write(base::Value(std::move(payload)), &json))
+      return Fail(SHAAR_CHROMIUM_ERROR, "could not encode action result", error);
+    ReplyLater({reply, reply_context, request_id}, SHAAR_OK, std::move(json));
+    return SHAAR_OK;
+  }
+  if (operation == SHAAR_OP_EXTENSION_INSTALL_DECISION) {
+    const std::string* consent_id = input.FindString("consentRequestId");
+    if (!context->extensions)
+      return Fail(SHAAR_UNSUPPORTED_CAPABILITY,
+                  "extension consent host is unavailable", error);
+    const shaar_error_code result = context->extensions->ResolveInstallDecision(
+        engine, scope.profile, *consent_id, *input.FindBool("accepted"));
+    if (result != SHAAR_OK)
+      return Fail(result, "extension consent decision was rejected", error);
+    ReplyLater({reply, reply_context, request_id}, SHAAR_OK,
+               "{\"schemaVersion\":1,\"resolved\":true}");
+    return SHAAR_OK;
+  }
+  if (operation == SHAAR_OP_EXTENSION_POPUP_CLOSE) {
+    const std::string* popup_id = input.FindString("popupId");
+    if (!window)
+      return Fail(SHAAR_INVALID_ARGUMENT, "popup close requires a window", error);
+    if (!context->extensions)
+      return Fail(SHAAR_UNSUPPORTED_CAPABILITY,
+                  "extension popup host is unavailable", error);
+    const shaar_error_code result = context->extensions->ClosePopup(
+        engine, scope.profile, window, *popup_id);
+    if (result != SHAAR_OK)
+      return Fail(result, "extension popup close was rejected", error);
+    ReplyLater({reply, reply_context, request_id}, SHAAR_OK,
+               "{\"schemaVersion\":1,\"closed\":true}");
+    return SHAAR_OK;
+  }
+
   Profile* profile = context->profile_services->ResolveProfile(engine, scope.profile);
   if (!profile || profile->IsOffTheRecord() ||
       profile->GetOriginalProfile() != profile)
@@ -265,6 +364,8 @@ shaar_error_code HandleExtensionsOperation(
                                    extensions::ExtensionRegistry::ENABLED) != nullptr;
       if (now_enabled != *enabled)
         return Fail(SHAAR_POLICY_BLOCKED, "extension state did not change", error);
+      EmitManagementEvent(context, engine, scope.profile,
+                          "extension.enabledChanged", *id, *enabled);
       ReplyLater({reply, reply_context, request_id}, SHAAR_OK,
                  "{\"schemaVersion\":1,\"updated\":true}");
       return SHAAR_OK;
@@ -278,10 +379,25 @@ shaar_error_code HandleExtensionsOperation(
       if (!registry->GetExtensionById(*id,
                                       extensions::ExtensionRegistry::EVERYTHING))
         return Fail(SHAAR_NOT_FOUND, "extension is not installed", error);
+      auto* extension_system = extensions::ExtensionSystem::Get(profile);
+      const auto* installed = registry->GetExtensionById(
+          *id, extensions::ExtensionRegistry::EVERYTHING);
+      if (extension_system && extension_system->management_policy() &&
+          !extension_system->management_policy()->UserMayModifySettings(
+              installed, nullptr))
+        return Fail(SHAAR_POLICY_BLOCKED, "extension is managed", error);
+      auto* extension_service = extension_system
+                                    ? extension_system->extension_service()
+                                    : nullptr;
+      if (!extension_service ||
+          !extension_service->UserCanDisableInstalledExtension(*id))
+        return Fail(SHAAR_POLICY_BLOCKED, "extension cannot be removed", error);
       std::u16string diagnostic;
       if (!registrar->UninstallExtension(
               *id, extensions::UNINSTALL_REASON_USER_INITIATED, &diagnostic))
         return Fail(SHAAR_POLICY_BLOCKED, "extension cannot be removed", error);
+      EmitManagementEvent(context, engine, scope.profile,
+                          "extension.removed", *id);
       ReplyLater({reply, reply_context, request_id}, SHAAR_OK,
                  "{\"schemaVersion\":1,\"removed\":true}");
       return SHAAR_OK;
@@ -290,45 +406,34 @@ shaar_error_code HandleExtensionsOperation(
       if (!HasOnlyKeys(input, {"schemaVersion", "action", "extensionId", "enabled"}) ||
           !input.FindBool("enabled").has_value())
         return Fail(SHAAR_INVALID_ARGUMENT, "invalid incognito visibility request", error);
-      return Fail(SHAAR_UNSUPPORTED_CAPABILITY,
-                  "incognito visibility policy integration is not available", error);
-    }
-    // Install requires typed consent, source verification, and multi-profile
-    // fan-out; do not route it through an unreviewed Chromium default prompt.
-    if (*action == "install") {
-      const std::string* source = input.FindString("source");
-      if (!HasOnlyKeys(input, {"schemaVersion", "action", "extensionId", "source"}) ||
-          !source || (*source != "webStore" && *source != "unpacked"))
-        return Fail(SHAAR_INVALID_ARGUMENT, "invalid extension install source", error);
-      return Fail(SHAAR_UNSUPPORTED_CAPABILITY,
-                  "extension operation requires consent/policy integration", error);
+      const bool enabled = *input.FindBool("enabled");
+      const auto* extension = registry->GetExtensionById(
+          *id, extensions::ExtensionRegistry::EVERYTHING);
+      auto* extension_system = extensions::ExtensionSystem::Get(profile);
+      auto* extension_service = extension_system
+                                    ? extension_system->extension_service()
+                                    : nullptr;
+      if (!extension)
+        return Fail(SHAAR_NOT_FOUND, "extension is not installed", error);
+      if (!extension_service || !extension_system ||
+          !extension_system->management_policy())
+        return Fail(SHAAR_NOT_READY, "extension policy is unavailable", error);
+      if (!extensions::util::CanBeIncognitoEnabled(extension))
+        return Fail(SHAAR_POLICY_BLOCKED,
+                    "extension cannot run in private sessions", error);
+      if (!extension_system->management_policy()->UserMayModifySettings(
+              extension, nullptr))
+        return Fail(SHAAR_POLICY_BLOCKED, "extension settings are managed",
+                    error);
+      extensions::util::SetIsIncognitoEnabled(*id, profile, enabled);
+      EmitManagementEvent(context, engine, scope.profile,
+                          "extension.incognitoVisibilityChanged", *id,
+                          enabled);
+      ReplyLater({reply, reply_context, request_id}, SHAAR_OK,
+                 "{\"schemaVersion\":1,\"updated\":true}");
+      return SHAAR_OK;
     }
     return Fail(SHAAR_INVALID_ARGUMENT, "unknown extension action", error);
-  }
-
-  if (operation == SHAAR_OP_EXTENSION_ACTION) {
-    const std::string* id = input.FindString("extensionId");
-    if (!HasOnlyKeys(input, {"schemaVersion", "extensionId"}) || !id ||
-        !ValidExtensionId(*id))
-      return Fail(SHAAR_INVALID_ARGUMENT, "invalid extension action request", error);
-    return Fail(SHAAR_UNSUPPORTED_CAPABILITY,
-                "extension action host integration is not available", error);
-  }
-  if (operation == SHAAR_OP_EXTENSION_INSTALL_DECISION) {
-    const std::string* consent_id = input.FindString("consentRequestId");
-    if (!HasOnlyKeys(input, {"schemaVersion", "consentRequestId", "accepted"}) ||
-        !consent_id || consent_id->empty() || !input.FindBool("accepted").has_value())
-      return Fail(SHAAR_INVALID_ARGUMENT, "invalid extension consent decision", error);
-    return Fail(SHAAR_UNSUPPORTED_CAPABILITY,
-                "extension consent host integration is not available", error);
-  }
-  if (operation == SHAAR_OP_EXTENSION_POPUP_CLOSE) {
-    const std::string* popup_id = input.FindString("popupId");
-    if (!HasOnlyKeys(input, {"schemaVersion", "popupId"}) || !popup_id ||
-        popup_id->empty())
-      return Fail(SHAAR_INVALID_ARGUMENT, "invalid extension popup close", error);
-    return Fail(SHAAR_UNSUPPORTED_CAPABILITY,
-                "extension popup host integration is not available", error);
   }
   return Fail(SHAAR_UNSUPPORTED_CAPABILITY, "unknown extension operation", error);
 }

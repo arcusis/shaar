@@ -66,6 +66,8 @@ PROFILE_MODULE_LAYER_FILES = (
 )
 EXTENSIONS_MODULE_LAYER_FILES = (
     "chrome/browser/shaar/BUILD.gn",
+    "chrome/browser/shaar/engine/shaar_engine_context.cc",
+    "chrome/browser/shaar/engine/shaar_engine_context.h",
     "chrome/browser/shaar/extensions/shaar_extensions.cc",
     "chrome/browser/shaar/extensions/shaar_extensions.h",
     "chrome/browser/shaar/extensions/shaar_extensions_lifecycle_adapter.cc",

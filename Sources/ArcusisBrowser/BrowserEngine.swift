@@ -6,6 +6,7 @@ import AppKit
 import BrowserCore
 import ChromiumBridge
 import Observation
+import ShaarEngineABI
 import SwiftUI
 
 struct PageState: Equatable {
@@ -31,6 +32,8 @@ private struct NativeTabPlacement: Equatable {
 final class BrowserEngine {
   private static let tabSuspensionDelay: TimeInterval = 5 * 60
   let runtime: ARCChromiumRuntime
+  let extensionImplementation: ShaarEngineImplementation
+  let shaarExtensionsAdapter: ShaarExtensionsAdapter?
   let events: BrowserRuntimeEvents
   let windowID: String
   private let callbacks: BrowserRuntimeClient
@@ -50,7 +53,17 @@ final class BrowserEngine {
   let lazyPinnedTabs: Bool
   var extensionPanel: ExtensionPanelRoute? {
     didSet {
-      if extensionPanel == nil { runtime.closeExtensionPopup(forWindowID: windowID) }
+      guard extensionPanel == nil else { return }
+      if extensionImplementation == .shaar, let shaarExtensionsAdapter,
+        case .popup(let popup) = oldValue, let window = UUID(uuidString: windowID)
+      {
+        Task {
+          try? await shaarExtensionsAdapter.closePopup(
+            profileID: popup.profileID, windowID: window, popupID: popup.id)
+        }
+      } else {
+        runtime.closeExtensionPopup(forWindowID: windowID)
+      }
     }
   }
   @ObservationIgnored private(set) weak var store: BrowserStore?
@@ -99,10 +112,14 @@ final class BrowserEngine {
 
   init(
     events: BrowserRuntimeEvents, windowID: String? = nil, store: BrowserStore,
-    presentsNativePanels: Bool = true, lazyPinnedTabs: Bool = false
+    presentsNativePanels: Bool = true, lazyPinnedTabs: Bool = false,
+    extensionImplementation: ShaarEngineImplementation = .shippingDefault,
+    shaarExtensionsAdapter: ShaarExtensionsAdapter? = nil
   ) throws {
     let runtime = events.runtime
     self.runtime = runtime
+    self.extensionImplementation = extensionImplementation
+    self.shaarExtensionsAdapter = shaarExtensionsAdapter
     self.events = events
     self.windowID = windowID ?? runtime.primaryWindowID
     autoPictureInPicture = AutoPictureInPicture(engine: .chromium(runtime))
@@ -345,10 +362,11 @@ final class BrowserEngine {
     store.onAutomaticPictureInPictureChanged = { [weak self] site, profile in
       self?.applyAutomaticPictureInPicture(site: site, profileID: profile)
     }
-    store.onInstallDecision = { [weak self] id, accepted in
+    store.onInstallDecision = { [weak self] request, accepted in
       guard let self else { return }
-      self.events.resolveInstall(id, windowID: self.windowID, accepted: accepted)
-      if accepted {
+      self.resolveExtensionInstall(
+        request.id, profileID: request.profileID, accepted: accepted)
+      if accepted && self.extensionImplementation == .ardia {
         Task { [weak self] in
           for _ in 0..<20 {
             do { try await Task.sleep(for: .milliseconds(500)) } catch { return }
@@ -359,6 +377,16 @@ final class BrowserEngine {
       }
     }
     callbacks.onInstallRequest = { [weak self] payload in self?.requestInstallation(payload) }
+    callbacks.onExtensionsChanged = { [weak self] profileID in
+      guard let self, self.store?.session.selectedSpace.profileID.uuidString == profileID else {
+        return
+      }
+      self.refreshExtensions()
+      if let profileID = UUID(uuidString: profileID) {
+        ExtensionManagerModel.refreshAll(
+          profileID: profileID, implementation: self.extensionImplementation)
+      }
+    }
     callbacks.onExtensionPopup = { [weak self] payload in self?.receivedPopup(payload) }
     callbacks.onExtensionPopupClosed = { [weak self] id in
       guard let self, case .popup(let context) = self.extensionPanel, context.id == id else {
@@ -711,6 +739,24 @@ final class BrowserEngine {
       extensions = []
       return
     }
+    if extensionImplementation == .shaar {
+      guard let shaarExtensionsAdapter else { extensions = []; return }
+      let requestedProfile = profile
+      extensions = []
+      Task { [weak self] in
+        guard let summaries = try? await shaarExtensionsAdapter.list(profileID: requestedProfile)
+        else { return }
+        await MainActor.run {
+          guard let self, !self.isClosed,
+            self.store?.session.selectedSpace.profileID == requestedProfile
+          else { return }
+          self.extensions = summaries.compactMap {
+            BrowserExtension(id: $0.id, name: $0.name, version: $0.version)
+          }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        }
+      }
+      return
+    }
     extensions = runtime.extensions(forProfileID: profile.uuidString).compactMap { record in
       guard let id = record["id"] as? String, let name = record["name"] as? String,
         let version = record["version"] as? String
@@ -765,6 +811,25 @@ final class BrowserEngine {
   func executeExtension(_ id: String) {
     guard let tab = store?.session.selectedPage?.tab.id else { return }
     extensionPanel = nil
+    if extensionImplementation == .shaar {
+      guard let adapter = shaarExtensionsAdapter,
+        let profile = store?.session.profileID(forTabID: tab),
+        let window = UUID(uuidString: windowID)
+      else { return }
+      Task { [weak self] in
+        do {
+          let route = try await adapter.invoke(
+            profileID: profile, windowID: window, tabID: tab, extensionID: id)
+          await MainActor.run {
+            guard let self else { return }
+            if route == .none { self.refreshExtensions() }
+          }
+        } catch {
+          await MainActor.run { self?.notice = error.localizedDescription }
+        }
+      }
+      return
+    }
     do { try runtime.executeExtensionID(id, tabID: tab.uuidString) } catch {
       notice = error.localizedDescription
     }
@@ -779,7 +844,15 @@ final class BrowserEngine {
       profile == store.session.selectedSpace.profileID,
       tab == store.session.selectedPage?.tab.id
     else {
-      if let owner = payload["windowID"] as? String {
+      if extensionImplementation == .shaar,
+        let adapter = shaarExtensionsAdapter,
+        let profile = (payload["profileID"] as? String).flatMap(UUID.init(uuidString:)),
+        let window = (payload["windowID"] as? String).flatMap(UUID.init(uuidString:)),
+        let popupID = payload["id"] as? String
+      {
+        Task { try? await adapter.closePopup(
+          profileID: profile, windowID: window, popupID: popupID) }
+      } else if extensionImplementation == .ardia, let owner = payload["windowID"] as? String {
         runtime.closeExtensionPopup(forWindowID: owner)
       }
       return
@@ -793,15 +866,22 @@ final class BrowserEngine {
 
   private func requestInstallation(_ payload: [String: Any]) {
     guard let id = payload["requestId"] as? String else { return }
+    let profileID = (payload["profileID"] as? String).flatMap(UUID.init(uuidString:))
+    if let deadline = payload["deadline"] as? TimeInterval,
+      deadline <= Date().timeIntervalSince1970
+    {
+      resolveExtensionInstall(id, profileID: profileID, accepted: false)
+      return
+    }
     let permissions = payload["permissions"] as? [String]
     let hostPermissions = payload["hostPermissions"] as? [String]
     guard payload["windowID"] as? String == windowID else {
-      events.resolveInstall(id, windowID: windowID, accepted: false)
+      resolveExtensionInstall(id, profileID: profileID, accepted: false)
       return
     }
     extensionPanel = nil
     guard let store,
-      let profile = (payload["profileID"] as? String).flatMap(UUID.init(uuidString:)),
+      let profile = profileID,
       let tab = (payload["tabID"] as? String).flatMap(UUID.init(uuidString:)),
       let source = (payload["sourceURL"] as? String).flatMap(URL.init(string:)),
       let extensionID = payload["id"] as? String, let name = payload["name"] as? String,
@@ -818,10 +898,26 @@ final class BrowserEngine {
           complete: permissions != nil && payload["permissionsComplete"] as? Bool == true)),
       store.requestInstallation(request)
     else {
-      events.resolveInstall(id, windowID: windowID, accepted: false)
+      resolveExtensionInstall(id, profileID: profileID, accepted: false)
       notice = ShellL10n.string(
         "The extension request could not be verified for this page and profile.")
       return
+    }
+  }
+
+  private func resolveExtensionInstall(
+    _ requestID: String, profileID: UUID?, accepted: Bool
+  ) {
+    if extensionImplementation == .shaar {
+      guard let shaarExtensionsAdapter, let profileID else { return }
+      Task { [weak self] in
+        try? await shaarExtensionsAdapter.resolveInstallDecision(
+          profileID: profileID, requestID: requestID, accepted: accepted)
+        guard let self, accepted else { return }
+        self.refreshExtensions()
+      }
+    } else {
+      events.resolveInstall(requestID, windowID: windowID, accepted: accepted)
     }
   }
 

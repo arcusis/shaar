@@ -8,6 +8,10 @@
 #include <string_view>
 #include <unordered_map>
 
+// BEGIN extensions
+#include <string>
+// END extensions
+
 #include "chrome/browser/shaar/public/shaar_engine.h"
 
 class Browser;
@@ -59,14 +63,54 @@ class BrowserTabRegistry {
       std::unordered_map<std::string, content::WebContents*>* tabs) = 0;
 };
 
+// BEGIN extensions
+// Embedder-owned extension operations that require a host consent surface or
+// native window. Chromium objects stay inside the browser layer; IDs remain
+// bound to the exact profile/window/tab supplied by shaar_submit.
+class ExtensionsRuntimeServices {
+ public:
+  virtual ~ExtensionsRuntimeServices() = default;
+  // Successful BeginInstall means a consent request was created and emitted;
+  // it does not claim that installation or profile fan-out has completed.
+  virtual shaar_error_code BeginInstall(shaar_engine* engine,
+                                        shaar_profile* profile,
+                                        shaar_window* window,
+                                        shaar_tab* tab,
+                                        std::string_view extension_id,
+                                        std::string_view source) = 0;
+  virtual shaar_error_code ResolveInstallDecision(
+      shaar_engine* engine,
+      shaar_profile* profile,
+      std::string_view request_id,
+      bool accepted) = 0;
+  virtual shaar_error_code InvokeAction(shaar_engine* engine,
+                                        shaar_profile* profile,
+                                        shaar_window* window,
+                                        shaar_tab* tab,
+                                        std::string_view extension_id,
+                                        std::string* route) = 0;
+  // Popup open/close/size events are emitted by the host as lifecycle changes.
+  virtual shaar_error_code ClosePopup(shaar_engine* engine,
+                                      shaar_profile* profile,
+                                      shaar_window* window,
+                                      std::string_view popup_id) = 0;
+};
+// END extensions
+
 struct ShaarEngineContext {
   ProfileServices* profile_services = nullptr;
   BrowserTabRegistry* browser_tabs = nullptr;
+  // BEGIN extensions
+  ExtensionsRuntimeServices* extensions = nullptr;
+  // END extensions
 };
 
 ShaarEngineContext& EngineContext();
 void SetProfileServices(ProfileServices* services);
 void SetBrowserTabRegistry(BrowserTabRegistry* registry);
+// BEGIN extensions
+void SetExtensionsRuntimeServices(ExtensionsRuntimeServices* services);
+// END extensions
 
 }  // namespace shaar
 

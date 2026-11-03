@@ -120,7 +120,7 @@ final class BrowserStore {
   /// The host's menu commands for the launcher's Actions; nil hides Actions.
   @ObservationIgnored var launcherActions: LauncherActions?
   @ObservationIgnored private var commandSectionsCache: CommandSectionsCache?
-  @ObservationIgnored var onInstallDecision: ((String, Bool) -> Void)?
+  @ObservationIgnored var onInstallDecision: ((ExtensionInstallRequest, Bool) -> Void)?
   @ObservationIgnored var onWebsitePermissionDecision: ((String, Bool) -> Void)?
   @ObservationIgnored var onDesktopCaptureDecision: ((String, String?) -> Void)?
   @ObservationIgnored var onExternalAppDecision: ((String, Bool) -> Void)?
@@ -883,7 +883,7 @@ final class BrowserStore {
       && request.tabID.map { rendererFailures[$0] == nil } == true
     if case .externalApp(let external) = request { allow = allow && external.canOpen }
     switch request {
-    case .extensionInstall(let request): onInstallDecision?(request.id, allow)
+    case .extensionInstall(let request): onInstallDecision?(request, allow)
     case .websitePermission(let request): onWebsitePermissionDecision?(request.id, allow)
     case .desktopCapture(let request): onDesktopCaptureDecision?(request.id, nil)
     case .externalApp(let request): onExternalAppDecision?(request.id, allow)

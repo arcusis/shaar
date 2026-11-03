@@ -5,10 +5,12 @@
 import AppKit
 import ChromiumBridge
 import Observation
+import ShaarEngineABI
 
 private struct ExtensionManagerKey: Hashable {
   let runtime: ObjectIdentifier
   let profileID: UUID
+  let implementation: ShaarEngineImplementation
 }
 
 private final class WeakExtensionManager {
@@ -27,36 +29,56 @@ final class ExtensionManagerModel {
   let profileID: UUID
   private let runtime: ARCChromiumRuntime?
   private let preferences: BrowserPreferencesStore?
+  private let implementation: ShaarEngineImplementation
+  private let shaarAdapter: ShaarExtensionsAdapter?
   private(set) var extensions: [ManagedExtension] = []
   private(set) var icons: [String: NSImage] = [:]
   private(set) var pinnedIDs: [String] = []
   private var requestID = UUID()
 
   static func shared(
-    runtime: ARCChromiumRuntime, preferences: BrowserPreferencesStore, profileID: UUID
+    runtime: ARCChromiumRuntime, preferences: BrowserPreferencesStore, profileID: UUID,
+    implementation: ShaarEngineImplementation = .shippingDefault,
+    shaarAdapter: ShaarExtensionsAdapter? = nil
   ) -> ExtensionManagerModel {
-    let key = ExtensionManagerKey(runtime: ObjectIdentifier(runtime), profileID: profileID)
+    let key = ExtensionManagerKey(
+      runtime: ObjectIdentifier(runtime), profileID: profileID, implementation: implementation)
     if let model = models[key]?.value {
       return model
     }
     let model = ExtensionManagerModel(
-      runtime: runtime, preferences: preferences, profileID: profileID)
+      runtime: runtime, preferences: preferences, profileID: profileID,
+      implementation: implementation, shaarAdapter: shaarAdapter)
     models[key] = WeakExtensionManager(model)
     model.refresh()
     return model
   }
 
+  static func refreshAll(profileID: UUID, implementation: ShaarEngineImplementation) {
+    models = models.filter { $0.value.value != nil }
+    for (key, model) in models
+    where key.profileID == profileID && key.implementation == implementation {
+      model.value?.refresh()
+    }
+  }
+
   private init(
-    runtime: ARCChromiumRuntime, preferences: BrowserPreferencesStore, profileID: UUID
+    runtime: ARCChromiumRuntime, preferences: BrowserPreferencesStore, profileID: UUID,
+    implementation: ShaarEngineImplementation,
+    shaarAdapter: ShaarExtensionsAdapter?
   ) {
     self.runtime = runtime
     self.preferences = preferences
+    self.implementation = implementation
+    self.shaarAdapter = shaarAdapter
     self.profileID = profileID
   }
 
   init(profileID: UUID, extensions: [ManagedExtension], pinnedIDs: [String] = []) {
     self.runtime = nil
     self.preferences = nil
+    self.implementation = .ardia
+    self.shaarAdapter = nil
     self.profileID = profileID
     self.extensions = extensions
     self.pinnedIDs = pinnedIDs
@@ -67,19 +89,45 @@ final class ExtensionManagerModel {
   }
 
   func help(for item: ManagedExtension, tabID: UUID?) -> String {
-    let title = tabID.flatMap {
-      runtime?.extensionActionTitle(forID: item.id, tabID: $0.uuidString)
-    }
+    let title = implementation == .ardia
+      ? tabID.flatMap { runtime?.extensionActionTitle(forID: item.id, tabID: $0.uuidString) }
+      : nil
     return item.help(actionTitle: title)
   }
 
   func refresh() {
-    guard let runtime, let preferences,
+    guard let preferences,
       ExtensionManagementOperation.isValidProfileID(profileID.uuidString)
     else { return }
     let request = UUID()
     requestID = request
     pinnedIDs = preferences.pinnedExtensionIDs(for: profileID)
+    if implementation == .shaar {
+      guard let shaarAdapter else { return }
+      let requestedProfileID = profileID
+      Task { [weak self] in
+        do {
+          let summaries = try await shaarAdapter.list(profileID: requestedProfileID)
+          await MainActor.run {
+            guard let self, self.requestID == request else { return }
+            self.extensions = summaries.map {
+              ManagedExtension(
+                id: $0.id, name: $0.name, version: $0.version, description: "",
+                enabled: $0.enabled, mayDisable: $0.mayDisable,
+                permissions: [], hostPermissions: [])
+            }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+            self.loadIcons()
+          }
+        } catch {
+          await MainActor.run {
+            guard let self, self.requestID == request else { return }
+            self.extensions = []
+          }
+        }
+      }
+      return
+    }
+    guard let runtime else { return }
     runtime.manageExtensions(
       forProfileID: profileID.uuidString, operation: .list, extensionID: nil, enabled: false
     ) { [weak self] json in
@@ -112,16 +160,32 @@ final class ExtensionManagerModel {
   }
 
   private func mutate(_ operation: ExtensionManagementOperation) {
-    guard let runtime, ExtensionManagementOperation.isValidProfileID(profileID.uuidString) else {
+    guard ExtensionManagementOperation.isValidProfileID(profileID.uuidString) else {
       return
     }
+    if implementation == .shaar {
+      guard let shaarAdapter else { return }
+      let action: ShaarExtensionManagementAction
+      switch operation {
+      case .setEnabled(let id, let enabled): action = .setEnabled(id, enabled)
+      case .uninstall(let id): action = .uninstall(id)
+      case .list, .details: return
+      }
+      let requestedProfileID = profileID
+      Task { [weak self] in
+        try? await shaarAdapter.manage(profileID: requestedProfileID, action: action)
+        await MainActor.run { self?.refresh() }
+      }
+      return
+    }
+    guard let runtime else { return }
     runtime.manageExtensions(operation, profileID: profileID) { [weak self] _ in
       Task { @MainActor [weak self] in self?.refresh() }
     }
   }
 
   private func loadIcons() {
-    guard let runtime else { return }
+    guard implementation == .ardia, let runtime else { return }
     guard let directory = runtime.extensionsDirectory(forProfileID: profileID.uuidString) else {
       return
     }

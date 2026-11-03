@@ -33,7 +33,9 @@ struct ExtensionToolbar: View {
   private var extensionModel: ExtensionManagerModel {
     ExtensionManagerModel.shared(
       runtime: engine.runtime, preferences: store.preferences,
-      profileID: store.session.selectedSpace.profileID)
+      profileID: store.session.selectedSpace.profileID,
+      implementation: engine.extensionImplementation,
+      shaarAdapter: engine.shaarExtensionsAdapter)
   }
 
   var body: some View {
@@ -98,7 +100,9 @@ struct ExtensionManagerPanel: View {
   private var model: ExtensionManagerModel {
     ExtensionManagerModel.shared(
       runtime: engine.runtime, preferences: store.preferences,
-      profileID: store.session.selectedSpace.profileID)
+      profileID: store.session.selectedSpace.profileID,
+      implementation: engine.extensionImplementation,
+      shaarAdapter: engine.shaarExtensionsAdapter)
   }
 
   var body: some View {

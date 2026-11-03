@@ -6,7 +6,7 @@ import Darwin
 import Foundation
 
 /// Step 0 deliberately leaves shipping builds on the existing ChromiumBridge path.
-public enum ShaarEngineImplementation: Equatable, Sendable {
+public enum ShaarEngineImplementation: Hashable, Sendable {
   case ardia
   case shaar
 

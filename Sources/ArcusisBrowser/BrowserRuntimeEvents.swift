@@ -2,7 +2,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import AppKit
 import ChromiumBridge
+import ShaarEngineABI
 
 /// Installs the shared runtime callbacks once, before any window client is created.
 @MainActor
@@ -167,6 +169,72 @@ final class BrowserRuntimeEvents {
       for client in self?.router.clients(forProfile: profile) ?? [] {
         client.onLibraryError?(profile, section, message)
       }
+    }
+  }
+
+  /// Routes copied Shaar extension events through the same per-window ownership
+  /// checks used by the current Chromium bridge callbacks.
+  func receiveShaarExtensionEvent(
+    _ event: ShaarCopiedEvent, adapter: ShaarExtensionsAdapter
+  ) {
+    guard let decoded = try? ShaarExtensionsAdapter.decodeEvent(event) else { return }
+    switch decoded {
+    case .changed(let profileID, _, _):
+      for client in router.clients(forProfile: profileID.uuidString) {
+        client.onExtensionsChanged?(profileID.uuidString)
+      }
+    case .consentRequested(let request):
+      guard let windowID = request.windowID?.uuidString,
+        let tabID = request.tabID?.uuidString
+      else {
+        Task { try? await adapter.resolveInstallDecision(
+          profileID: request.profileID, requestID: request.id, accepted: false) }
+        return
+      }
+      let payload: [String: Any] = [
+        "requestId": request.id,
+        "profileID": request.profileID.uuidString,
+        "windowID": windowID,
+        "tabID": tabID,
+        "id": request.extensionID,
+        "name": request.name,
+        "version": request.version,
+        "sourceURL": request.sourceURL,
+        "type": "install",
+        "permissions": request.permissions,
+        "hostPermissions": request.hostPermissions,
+        "permissionsComplete": request.permissionsComplete,
+        "deadline": request.deadline.timeIntervalSince1970,
+      ]
+      guard let client = router.claim(.installation, id: request.id, payload: payload),
+        let receive = client.onInstallRequest
+      else {
+        Task { try? await adapter.resolveInstallDecision(
+          profileID: request.profileID, requestID: request.id, accepted: false) }
+        return
+      }
+      receive(payload)
+    case .popupOpened(let profileID, let windowID, let tabID, let popupID, let extensionID):
+      let payload: [String: Any] = [
+        "id": popupID,
+        "profileID": profileID.uuidString,
+        "windowID": windowID.uuidString,
+        "tabID": tabID.uuidString,
+        "extensionID": extensionID,
+      ]
+      guard let client = router.claim(.popup, id: popupID, payload: payload),
+        let receive = client.onExtensionPopup
+      else {
+        Task { try? await adapter.closePopup(
+          profileID: profileID, windowID: windowID, popupID: popupID) }
+        return
+      }
+      receive(payload)
+    case .popupClosed(_, _, let popupID):
+      router.client(for: .popup, id: popupID, removing: true)?.onExtensionPopupClosed?(popupID)
+    case .popupSizeChanged(_, _, let popupID, let width, let height):
+      router.client(for: .popup, id: popupID)?.onExtensionPopupSize?(
+        popupID, NSSize(width: width, height: height))
     }
   }
 

@@ -145,7 +145,7 @@ test("history_unittests") {
 # BEGIN extensions
 test("extensions_unittests") {
   sources = [ "extensions/shaar_extensions_unittest.cc" ]
-  deps = [ ":engine", "//testing/gtest" ]
+  deps = [ ":engine", "//base/test:test_support", "//testing/gtest" ]
 }
 # END extensions
 

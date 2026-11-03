@@ -12,6 +12,7 @@ final class BrowserRuntimeClient {
   var onWindowClosed: ((Bool) -> Void)?
   var onNotice: ((String) -> Void)?
   var onInstallRequest: (([String: Any]) -> Void)?
+  var onExtensionsChanged: ((String) -> Void)?
   var onExtensionPopup: (([String: Any]) -> Void)?
   var onExtensionPopupClosed: ((String) -> Void)?
   var onExtensionPopupSize: ((String, NSSize) -> Void)?

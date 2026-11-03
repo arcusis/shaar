@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #include "chrome/browser/shaar/private-sessions/shaar_private_sessions.h"
+#include "chrome/browser/shaar/private-sessions/shaar_private_sessions_module.h"
 
 #include <utility>
 
@@ -140,3 +141,59 @@ void PrivateSessionRegistry::MaybeRetire(Session* session) {
 }
 
 }  // namespace shaar
+
+namespace shaar {
+
+bool ShaarModuleRegistry::Register(uint32_t module_id,
+                                  PrivateSessionModuleHandlers handlers) {
+  if (module_id != SHAAR_MODULE_PRIVATE_SESSIONS || !handlers.open ||
+      !handlers.close) {
+    return false;
+  }
+  return handlers_.emplace(module_id, handlers).second;
+}
+
+const PrivateSessionModuleHandlers* ShaarModuleRegistry::Find(
+    uint32_t module_id) const {
+  auto found = handlers_.find(module_id);
+  return found == handlers_.end() ? nullptr : &found->second;
+}
+
+shaar_error_code OpenPrivateSessionHandler(
+    void* context,
+    Profile* parent,
+    const std::string& session_id,
+    PrivateSessionRegistry::Session** out) {
+  if (!out)
+    return SHAAR_INVALID_ARGUMENT;
+  *out = nullptr;
+  if (!context || !parent || session_id.empty())
+    return SHAAR_INVALID_ARGUMENT;
+  if (parent->IsOffTheRecord() || parent->GetOriginalProfile() != parent)
+    return SHAAR_WRONG_PROFILE;
+  auto* sessions = static_cast<PrivateSessionRegistry*>(context);
+  *out = sessions->Open(parent, session_id);
+  return *out ? SHAAR_OK : SHAAR_CONFLICT;
+}
+
+shaar_error_code ClosePrivateSessionHandler(
+    void* context,
+    PrivateSessionRegistry::Session* session) {
+  if (!context || !session)
+    return SHAAR_INVALID_ARGUMENT;
+  return static_cast<PrivateSessionRegistry*>(context)->Close(session)
+             ? SHAAR_OK
+             : SHAAR_NOT_FOUND;
+}
+
+}  // namespace shaar
+
+extern "C" void shaar_private_sessions_register(
+    shaar::ShaarModuleRegistry* registry) {
+  if (!registry)
+    return;
+  registry->Register(
+      SHAAR_MODULE_PRIVATE_SESSIONS,
+      {.open = &shaar::OpenPrivateSessionHandler,
+       .close = &shaar::ClosePrivateSessionHandler});
+}

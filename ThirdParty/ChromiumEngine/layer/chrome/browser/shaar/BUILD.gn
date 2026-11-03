@@ -5,20 +5,22 @@
 assert(is_mac)
 
 source_set("engine") {
-  public = [
-    "private-sessions/shaar_private_sessions.h",
-    "public/shaar_engine.h",
-  ]
+  public = [ "public/shaar_engine.h" ]
   sources = [
     "engine/shaar_engine.cc",
     "engine/shaar_event_bridge.cc",
     "engine/shaar_event_bridge.h",
     "private-sessions/shaar_private_sessions.h",
+    "private-sessions/shaar_private_sessions_module.h",
     "private-sessions/shaar_private_sessions.cc",
   ]
 }
 
 test("private_sessions_unittests") {
+  public = [
+    "private-sessions/shaar_private_sessions.h",
+    "private-sessions/shaar_private_sessions_module.h",
+  ]
   sources = [ "private-sessions/shaar_private_sessions_unittest.cc" ]
   deps = [
     ":engine",

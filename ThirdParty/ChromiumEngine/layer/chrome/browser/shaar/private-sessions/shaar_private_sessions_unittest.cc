@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #include "chrome/browser/shaar/private-sessions/shaar_private_sessions.h"
+#include "chrome/browser/shaar/private-sessions/shaar_private_sessions_module.h"
 
 #include "chrome/test/base/testing_profile.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -56,6 +57,21 @@ TEST(PrivateSessionRegistryTest, RejectsOTRParentAndEmptyIdentity) {
   ASSERT_NE(otr, nullptr);
   EXPECT_EQ(registry.Open(otr, "session-a"), nullptr);
   EXPECT_EQ(registry.Open(&profile, ""), nullptr);
+}
+
+TEST(PrivateSessionRegistryTest, ModuleRegistrationExposesDirectHandlers) {
+  TestingProfile profile;
+  PrivateSessionRegistry sessions;
+  ShaarModuleRegistry modules;
+  shaar_private_sessions_register(&modules);
+  const auto* handlers = modules.Find(SHAAR_MODULE_PRIVATE_SESSIONS);
+  ASSERT_NE(handlers, nullptr);
+  PrivateSessionRegistry::Session* session = nullptr;
+  EXPECT_EQ(handlers->open(&sessions, &profile, "session-a", &session),
+            SHAAR_OK);
+  ASSERT_NE(session, nullptr);
+  EXPECT_EQ(handlers->close(&sessions, session), SHAAR_OK);
+  EXPECT_EQ(handlers->close(&sessions, session), SHAAR_NOT_FOUND);
 }
 
 }  // namespace

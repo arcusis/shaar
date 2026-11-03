@@ -108,6 +108,22 @@ struct ShaarEngineABITests {
     #expect(Array(engine.calls.suffix(3)) == ["close-tab-33", "close-window-22", "close-session-11"])
   }
 
+  @Test @MainActor func privateEventRoutingRequiresAllFourIDs() {
+    let adapter = ShaarPrivateSessionsAdapter(engine: FakePrivateSessionsEngine())
+    let event = ShaarCopiedEvent(
+      sequence: 4, kind: 5, profileID: Data("p".utf8), sessionID: Data("s".utf8),
+      windowID: Data("w".utf8), tabID: Data("t".utf8), payloadJSON: Data("{}".utf8))
+    var delivered = false
+    #expect(adapter.routePrivateEvent(
+      event, profileID: Data("p".utf8), sessionID: Data("s".utf8),
+      windowID: Data("w".utf8), tabID: Data("t".utf8), handler: { _ in delivered = true }))
+    #expect(delivered)
+    #expect(!adapter.routePrivateEvent(
+      event, profileID: Data("p".utf8), sessionID: Data("other".utf8),
+      windowID: Data("w".utf8), tabID: Data("t".utf8), handler: { _ in delivered = false }))
+    #expect(delivered)
+  }
+
   @Test @MainActor func eventIsCopiedBeforeMainActorDispatch() async throws {
     var delivered: ShaarCopiedEvent?
     let dispatcher = ShaarEventDispatcher { delivered = $0 }

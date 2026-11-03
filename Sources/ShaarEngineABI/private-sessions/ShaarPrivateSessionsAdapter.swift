@@ -46,6 +46,24 @@ public struct ShaarPrivateSessionHandles: Equatable, Sendable {
     return ShaarPrivateSessionsAdapter(engine: engine)
   }
 
+  /// Private callbacks are routed only when every scope and object ID agrees
+  /// with the live Swift owner. The C event bytes have already been copied.
+  @discardableResult public func routePrivateEvent(
+    _ event: ShaarCopiedEvent,
+    profileID: Data,
+    sessionID: Data,
+    windowID: Data,
+    tabID: Data,
+    handler: (ShaarCopiedEvent) -> Void
+  ) -> Bool {
+    guard !profileID.isEmpty, !sessionID.isEmpty, !windowID.isEmpty, !tabID.isEmpty,
+      event.profileID == profileID, event.sessionID == sessionID,
+      event.windowID == windowID, event.tabID == tabID
+    else { return false }
+    handler(event)
+    return true
+  }
+
   public func openSession(profileID: Data, sessionID: Data) throws -> ShaarPrivateSessionHandles {
     guard !profileID.isEmpty, !sessionID.isEmpty else {
       throw ShaarEngineError.status(.invalidArgument, platformCode: 0, message: "empty private scope")

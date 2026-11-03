@@ -38,12 +38,12 @@ let package = Package(
     ),
     .target(
       name: "ShaarEngineABIC",
-      path: "Sources/ShaarEngineABI/navigation/CABI",
+      path: "Sources/ShaarEngineABI/Navigation/CABI",
       publicHeadersPath: "include"),
     .target(
       name: "ShaarEngineABI",
       dependencies: ["ShaarEngineABIC"],
-      exclude: ["navigation/CABI"]),
+      exclude: ["Navigation/CABI"]),
     .target(
       name: "ChromiumBridgeVerification",
       dependencies: ["ChromiumBridge"],

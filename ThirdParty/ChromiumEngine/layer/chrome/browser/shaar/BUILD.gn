@@ -2,7 +2,9 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+# BEGIN navigation module test template.
 import("//testing/test.gni")
+# END navigation module test template.
 
 assert(is_mac)
 
@@ -11,20 +13,25 @@ source_set("engine") {
   deps = [
     "//base",
     "//content/public/browser",
+    # BEGIN navigation module dependencies.
     "//net",
     "//ui/base",
+    # END navigation module dependencies.
     "//url",
   ]
   sources = [
     "engine/shaar_engine.cc",
     "engine/shaar_event_bridge.cc",
     "engine/shaar_event_bridge.h",
+    # BEGIN navigation module sources.
     "navigation/shaar_module_registry.h",
     "navigation/shaar_navigation.cc",
     "navigation/shaar_navigation.h",
+    # END navigation module sources.
   ]
 }
 
+# BEGIN navigation module unit test target.
 test("navigation_unittests") {
   sources = [ "navigation/shaar_navigation_unittest.cc" ]
   deps = [
@@ -35,6 +42,7 @@ test("navigation_unittests") {
     "//testing/gtest:gtest_main",
   ]
 }
+# END navigation module unit test target.
 
 config("exports") {
   inputs = [ "shaar_engine.exports" ]

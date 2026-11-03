@@ -465,6 +465,8 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_profile_get_path(
     return Fail(SHAAR_NOT_FOUND, "profile handle is stale", error);
   if (!profile->ready || !profile->native)
     return Fail(SHAAR_NOT_READY, "profile is not ready", error);
+  if (profile->deleting)
+    return Fail(SHAAR_CONFLICT, "profile deletion is pending", error);
   g_path_result = profile->native->GetPath().AsUTF8Unsafe();
   *path = {g_path_result.data(), g_path_result.size()};
   return Fail(SHAAR_OK, "", error);
@@ -481,6 +483,8 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_profile_get_state(
     return Fail(SHAAR_NOT_FOUND, "profile handle is stale", error);
   if (!profile->ready || !profile->native)
     return Fail(SHAAR_NOT_READY, "profile is not ready", error);
+  if (profile->deleting)
+    return Fail(SHAAR_CONFLICT, "profile deletion is pending", error);
   if (BytesToString(state_key) != kThirdPartyCookiesKey)
     return Fail(SHAAR_INVALID_ARGUMENT, "unknown profile state key", error);
   const bool blocked = profile->native->GetPrefs()->GetInteger(
@@ -503,6 +507,8 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_profile_set_state(
     return Fail(SHAAR_NOT_FOUND, "profile handle is stale", error);
   if (!profile->ready || !profile->native)
     return Fail(SHAAR_NOT_READY, "profile is not ready", error);
+  if (profile->deleting)
+    return Fail(SHAAR_CONFLICT, "profile deletion is pending", error);
   if (BytesToString(state_key) != kThirdPartyCookiesKey)
     return Fail(SHAAR_INVALID_ARGUMENT, "unknown profile state key", error);
   const std::string value = BytesToString(value_json);

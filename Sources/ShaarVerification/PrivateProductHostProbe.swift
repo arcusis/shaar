@@ -364,6 +364,7 @@ final class PrivateProductHostProbe {
       typedQuery == alphabetQuery && !first.store.commandIsOpen
       && first.store.tabs.count == 1 && privateHost.windowCount == 1
       && NSApp.windows.count == appWindowCount
+    submitAddressField(window: first.window)
     first.store.confirmHTTP(useHTTPS: false)
     try await waitForURL(
       first.store, tabID: first.store.selectedTabID, contains: "-abcdefghijklmnopqrstuvwxyz")
@@ -508,14 +509,17 @@ final class PrivateProductHostProbe {
       guard let event = keyEvent(for: character, window: window) else { return nil }
       window.sendEvent(event)
     }
+    return field.stringValue
+  }
+
+  private func submitAddressField(window: NSWindow) {
     guard
       let enter = NSEvent.keyEvent(
         with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
         windowNumber: window.windowNumber, context: nil, characters: "\r",
         charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36)
-    else { return nil }
+    else { return }
     window.sendEvent(enter)
-    return field.stringValue
   }
 
   private func keyEvent(for character: Character, window: NSWindow) -> NSEvent? {
@@ -970,18 +974,6 @@ final class PrivateProductHostProbe {
     guard owner.store.selectedTabID == tabID,
       runtime.selectPrivateTabID(tabID, windowID: owner.windowID, contextID: owner.contextID)
     else { return false }
-    var nativeView: NSView?
-    for _ in 0..<100 {
-      if let candidate = runtime.view(
-        forPrivateTabID: tabID, windowID: owner.windowID, contextID: owner.contextID),
-        candidate.window === owner.window, candidate.superview != nil
-      {
-        nativeView = candidate
-        break
-      }
-      try? await Task.sleep(for: .milliseconds(50))
-    }
-    guard let nativeView else { return false }
     let document: String? = await withCheckedContinuation { continuation in
       runtime.evaluatePrivateProbeTabID(
         tabID,
@@ -989,16 +981,29 @@ final class PrivateProductHostProbe {
           "document.readyState==='complete'&&location.pathname==='/\(path)'&&document.body.innerText.includes('OrbitFindMarker')"
       ) { continuation.resume(returning: $0) }
     }
-    guard document == "true",
-      let bitmap = owner.hosting.bitmapImageRepForCachingDisplay(in: owner.hosting.bounds)
+    guard document == "true" else { return false }
+    let (screenshot, outcome): (Data?, String?) = await withCheckedContinuation {
+      continuation in
+      runtime.capturePrivateProbeTabID(tabID, windowID: owner.windowID, contextID: owner.contextID)
+      { data, outcome in continuation.resume(returning: (data, outcome)) }
+    }
+    guard outcome == nil || outcome == "captured", let screenshot,
+      let bitmap = NSBitmapImageRep(data: screenshot), bitmap.pixelsWide > 0,
+      bitmap.pixelsHigh > 0
     else { return false }
-    owner.hosting.layoutSubtreeIfNeeded()
-    owner.hosting.displayIfNeeded()
-    owner.hosting.cacheDisplay(in: owner.hosting.bounds, to: bitmap)
-    let pageCenter = bitmap.colorAt(x: bitmap.pixelsWide * 2 / 3, y: bitmap.pixelsHigh * 2 / 3)?
-      .usingColorSpace(.deviceRGB)
-    return (pageCenter?.redComponent ?? 0) + (pageCenter?.greenComponent ?? 0)
-      + (pageCenter?.blueComponent ?? 0) > 0.15
+    var nonBlackSamples = 0
+    let stride = max(1, min(bitmap.pixelsWide, bitmap.pixelsHigh) / 16)
+    for y in Swift.stride(from: 0, to: bitmap.pixelsHigh, by: stride) {
+      for x in Swift.stride(from: 0, to: bitmap.pixelsWide, by: stride) {
+        guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else {
+          continue
+        }
+        if color.redComponent + color.greenComponent + color.blueComponent > 0.15 {
+          nonBlackSamples += 1
+        }
+      }
+    }
+    return nonBlackSamples > 8
   }
 
   private func waitForCaptureReadiness(_ owner: PrivateBrowserHost.Owner, tabID: String)

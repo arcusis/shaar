@@ -20,7 +20,7 @@ final class QuitExitProbe {
   static let scope =
     "Hidden host windows in disposable profiles with the component-loaded MV3 fixture. Quit is sent through the native menu command."
   static let pendingNavigationScope =
-    "Hidden host windows in disposable profiles with the component-loaded MV3 fixture. Each window has a navigation in flight when Quit is sent through the native menu command."
+    "Hidden host windows in disposable profiles with the component-loaded MV3 fixture. Each phase seeds a fresh workspace; each window has a navigation in flight when Quit is sent through the native menu command."
 
   private let runtime: ARCChromiumRuntime
   private let primary: BrowserEngine
@@ -46,7 +46,8 @@ final class QuitExitProbe {
     self.fixture = fixture
     self.phase = phase
     self.pendingNavigation = pendingNavigation
-    let directory = root.appending(path: "quit-workspace")
+    let directory = root.appending(
+      path: pendingNavigation ? "quit-workspace-\(phase)" : "quit-workspace")
     lock = try WorkspaceProcessLock(directory: directory)
     file = WorkspaceFile(
       url: directory.appending(path: "workspace.json"),
@@ -60,7 +61,7 @@ final class QuitExitProbe {
       _ = try runtime.loadProbeExtension(at: root.appending(path: "Extension"), profileID: profile)
     }
     checks.append("every disposable profile loads the MV3 fixture")
-    if phase == "initial" { try seedWorkspace() }
+    if phase == "initial" || pendingNavigation { try seedWorkspace() }
     let host = NativeBrowserHost(
       events: primary.events, workspace: try BrowserWorkspaceStore(file: file),
       presentation: .hiddenProbe, usesPrimaryWindow: false, keyWindow: { nil },

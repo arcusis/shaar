@@ -2,6 +2,8 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import("//testing/test.gni")
+
 assert(is_mac)
 
 source_set("engine") {
@@ -10,6 +12,15 @@ source_set("engine") {
     "engine/shaar_engine.cc",
     "engine/shaar_event_bridge.cc",
     "engine/shaar_event_bridge.h",
+    "profiles/shaar_profiles.cc",
+    "profiles/shaar_profiles.h",
+  ]
+  deps = [
+    "//chrome/browser/profiles",
+    "//chrome/browser/ui/browser_window",
+    "//components/content_settings/core/browser",
+    "//components/content_settings/core/common",
+    "//components/prefs",
   ]
 }
 
@@ -17,4 +28,12 @@ config("exports") {
   inputs = [ "shaar_engine.exports" ]
   ldflags = [ "-Wl,-exported_symbols_list," +
               rebase_path("shaar_engine.exports", root_build_dir) ]
+}
+
+test("profiles_unittests") {
+  sources = [ "profiles/shaar_profiles_unittest.cc" ]
+  deps = [
+    ":engine",
+    "//testing/gtest",
+  ]
 }

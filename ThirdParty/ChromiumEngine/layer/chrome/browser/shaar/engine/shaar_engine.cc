@@ -67,6 +67,7 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_engine_create(
     return SHAAR_FAIL(SHAAR_IO_ERROR, "engine allocation failed", error);
   engine->on_event = config->on_event;
   engine->event_context = config->event_context;
+  engine->data_root.assign(config->data_root.data, config->data_root.size);
   *out = engine;
   return SHAAR_FAIL(SHAAR_OK, "", error);
 }

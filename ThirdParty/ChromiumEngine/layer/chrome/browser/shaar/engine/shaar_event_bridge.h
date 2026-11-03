@@ -7,9 +7,12 @@
 
 #include <stdint.h>
 
+#include <string>
+
 #include "chrome/browser/shaar/public/shaar_engine.h"
 
 struct shaar_engine {
+  std::string data_root;
   shaar_event_fn on_event = nullptr;
   void* event_context = nullptr;
   uint64_t next_sequence = 0;

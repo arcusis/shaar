@@ -266,6 +266,20 @@ SHAAR_EXPORT shaar_error_code shaar_profile_open(
     shaar_profile **out, shaar_error *immediate_error);
 SHAAR_EXPORT shaar_error_code shaar_profile_close(
     shaar_profile *, shaar_error *error);
+SHAAR_EXPORT shaar_error_code shaar_profile_create(
+    shaar_engine *, shaar_bytes profile_id, shaar_bytes display_name,
+    shaar_request_id, shaar_reply_fn, void *reply_context,
+    shaar_profile **out, shaar_error *immediate_error);
+SHAAR_EXPORT shaar_error_code shaar_profile_delete(
+    shaar_profile *, shaar_error *error);
+SHAAR_EXPORT shaar_error_code shaar_profile_get_state(
+    shaar_profile *, shaar_bytes state_key, shaar_bytes *value_json,
+    shaar_error *error);
+SHAAR_EXPORT shaar_error_code shaar_profile_set_state(
+    shaar_profile *, shaar_bytes state_key, shaar_bytes value_json,
+    shaar_error *error);
+SHAAR_EXPORT shaar_error_code shaar_profile_get_path(
+    shaar_profile *, shaar_bytes *path, shaar_error *error);
 SHAAR_EXPORT shaar_error_code shaar_private_session_open(
     shaar_profile *, shaar_bytes session_id, shaar_private_session **out,
     shaar_error *error);

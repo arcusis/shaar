@@ -33,6 +33,13 @@ REQUIRED_EXPORTS = (
     "_shaar_abi_minor",
     "_shaar_engine_create",
     "_shaar_engine_release",
+    "_shaar_profile_open",
+    "_shaar_profile_create",
+    "_shaar_profile_close",
+    "_shaar_profile_delete",
+    "_shaar_profile_get_state",
+    "_shaar_profile_set_state",
+    "_shaar_profile_get_path",
 )
 COMMIT = re.compile(r"[0-9a-f]{40}\Z")
 DIGEST = re.compile(r"[0-9a-f]{64}\Z")

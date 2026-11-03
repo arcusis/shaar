@@ -91,3 +91,87 @@ struct ShaarEngineABITests {
     #expect(delivered?.payloadJSON == Data(payload))
   }
 }
+
+@MainActor private final class FakeProfileEngine: ShaarProfileEngine {
+  var nextHandle: UInt64 = 1
+  var opens: [(String, String)] = []
+  var closed: [UInt64] = []
+  var deleted: [UInt64] = []
+  var activated: [(UInt64, UInt64)] = []
+
+  func openProfile(id: String, relativeDirectory: String) async throws -> UInt64 {
+    opens.append((id, relativeDirectory))
+    try await Task.sleep(for: .milliseconds(5))
+    defer { nextHandle += 1 }
+    return nextHandle
+  }
+
+  func createProfile(id: String, displayName: String) async throws -> UInt64 {
+    defer { nextHandle += 1 }
+    return nextHandle
+  }
+
+  func closeProfile(_ handle: UInt64) throws { closed.append(handle) }
+  func deleteProfile(_ handle: UInt64) async throws { deleted.append(handle) }
+  func activateProfile(_ handle: UInt64, inWindow window: UInt64) throws {
+    activated.append((handle, window))
+  }
+  func getProfileState(_ handle: UInt64, key: String) throws -> Data { Data("true".utf8) }
+  func setProfileState(_ handle: UInt64, key: String, valueJSON: Data) throws {}
+  func profilePath(_ handle: UInt64) throws -> Data { Data("/fake/Profile".utf8) }
+}
+
+@Suite("Shaar profile adapter")
+struct ShaarProfileAdapterTests {
+  @Test @MainActor func defaultRemainsArdiaAndFakeOpenDeduplicates() async throws {
+    #expect(ShaarEngineImplementation.shippingDefault == .ardia)
+    let fake = FakeProfileEngine()
+    let adapter = ShaarProfileAdapter(engine: fake, implementation: .shaar)
+    async let first: Void = adapter.open(profileID: "4a4d4885-d38a-4b4a-bc03-b12f634bff01")
+    async let second: Void = adapter.open(profileID: "4a4d4885-d38a-4b4a-bc03-b12f634bff01")
+    _ = try await (first, second)
+    #expect(fake.opens.count == 1)
+    #expect(fake.opens.first?.1 == "Profile 4a4d4885-d38a-4b4a-bc03-b12f634bff01")
+    #expect(adapter.loadedProfileIDs == ["4a4d4885-d38a-4b4a-bc03-b12f634bff01"])
+  }
+
+  @Test @MainActor func lifecycleCallsStayScopedToOpaqueHandle() async throws {
+    let fake = FakeProfileEngine()
+    let adapter = ShaarProfileAdapter(engine: fake, implementation: .shaar)
+    let id = "4a4d4885-d38a-4b4a-bc03-b12f634bff02"
+    try await adapter.create(profileID: id, displayName: "Work")
+    try adapter.activate(profileID: id, inWindow: 77)
+    #expect(fake.activated.count == 1)
+    #expect(fake.activated[0].0 == 1 && fake.activated[0].1 == 77)
+    #expect(try adapter.state(profileID: id, key: "profile.v1.thirdPartyCookiesBlocked") == Data("true".utf8))
+    try await adapter.delete(profileID: id)
+    #expect(fake.deleted == [1])
+    #expect(adapter.loadedProfileIDs.isEmpty)
+  }
+
+  @Test @MainActor func malformedAndNoncanonicalUUIDsAreRejected() async {
+    let adapter = ShaarProfileAdapter(engine: FakeProfileEngine(), implementation: .shaar)
+    await #expect(throws: ShaarProfileError.invalidIdentifier) {
+      try await adapter.open(profileID: "../Default")
+    }
+    await #expect(throws: ShaarProfileError.invalidIdentifier) {
+      try await adapter.open(profileID: "4A4D4885-D38A-4B4A-BC03-B12F634BFF03")
+    }
+  }
+
+  @Test @MainActor func copiedProfileEventsRouteAndInvalidateClosedHandles() async throws {
+    let fake = FakeProfileEngine()
+    var delivered: ShaarCopiedEvent?
+    let adapter = ShaarProfileAdapter(
+      engine: fake, implementation: .shaar, onProfileEvent: { delivered = $0 })
+    let id = "4a4d4885-d38a-4b4a-bc03-b12f634bff04"
+    try await adapter.open(profileID: id)
+    let event = ShaarCopiedEvent(
+      sequence: 8, kind: 2, profileID: Data(id.utf8), sessionID: Data(),
+      windowID: Data(), tabID: Data(),
+      payloadJSON: Data("{\"kind\":\"deleted\",\"schemaVersion\":1}".utf8))
+    adapter.receive(event)
+    #expect(delivered == event)
+    #expect(adapter.loadedProfileIDs.isEmpty)
+  }
+}

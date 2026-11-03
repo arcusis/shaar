@@ -37,6 +37,14 @@ let package = Package(
       linkerSettings: [.linkedFramework("AppKit")]
     ),
     .target(
+      name: "ChromiumBridgeVerification",
+      dependencies: ["ChromiumBridge"],
+      path: "Sources/ChromiumBridgeVerification",
+      publicHeadersPath: "include",
+      cxxSettings: [.unsafeFlags(["-fobjc-arc"])],
+      linkerSettings: [.linkedFramework("AppKit"), .unsafeFlags(["-Xlinker", "-ObjC"])]
+    ),
+    .target(
       name: "ArcusisBrowser",
       dependencies: [
         "BrowserCore", "ChromiumBridge", .product(name: "Sparkle", package: "Sparkle"),
@@ -48,7 +56,9 @@ let package = Package(
     // target need -enable-testing: build it with `bundle-app.sh --with-engine --verification`.
     .executableTarget(
       name: "ShaarVerification",
-      dependencies: ["ArcusisBrowser", "BrowserCore", "ChromiumBridge"],
+      dependencies: [
+        "ArcusisBrowser", "BrowserCore", "ChromiumBridge", "ChromiumBridgeVerification",
+      ],
       linkerSettings: bundleFrameworksLinkerSettings),
     .target(name: "BrowserTestSupport", path: "Tests/TestSupport"),
     .testTarget(name: "BrowserCoreTests", dependencies: ["BrowserCore", "BrowserTestSupport"]),
@@ -58,6 +68,9 @@ let package = Package(
       resources: [.copy("Snapshots/InspectorAI")]),
     .testTarget(
       name: "ShaarVerificationTests",
-      dependencies: ["ArcusisBrowser", "BrowserCore", "ChromiumBridge", "ShaarVerification"]),
+      dependencies: [
+        "ArcusisBrowser", "BrowserCore", "ChromiumBridge", "ChromiumBridgeVerification",
+        "ShaarVerification",
+      ]),
   ]
 )

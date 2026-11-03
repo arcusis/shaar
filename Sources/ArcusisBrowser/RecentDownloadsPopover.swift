@@ -49,7 +49,9 @@ struct RecentDownloadsPopover: View {
           row(item)
             .opacity(revealed ? 1 : 0)
             .offset(y: revealed || reduceMotion ? 0 : 16)
-            .animation(revealAnimation(stepsFromFooter: shown.count - 1 - index), value: revealed)
+            .animation(
+              reduceMotion ? nil : revealAnimation(stepsFromFooter: shown.count - 1 - index),
+              value: revealed)
         }
       }
     }
@@ -77,7 +79,6 @@ struct RecentDownloadsPopover: View {
   }
 
   private func revealAnimation(stepsFromFooter: Int) -> Animation {
-    if reduceMotion { return .easeOut(duration: 0.12) }
     return .spring(response: 0.32, dampingFraction: 0.82)
       .delay(Double(stepsFromFooter) * 0.035)
   }

@@ -4,7 +4,8 @@
 
 import AppKit
 import BrowserCore
-import ChromiumBridge.Verification
+import ChromiumBridge
+import ChromiumBridgeVerification
 import SwiftUI
 
 @testable import ArcusisBrowser

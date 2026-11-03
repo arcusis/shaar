@@ -2,12 +2,13 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-#import "ChromiumBridge.h"
+#import "../../ChromiumBridge/include/ChromiumBridge.h"
+#import "../../ChromiumBridge/ChromiumLocalState.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
 // Verification interface for the ShaarVerification harness, imported from Swift as
-// `ChromiumBridge.Verification`. The app never imports it. Each entry point does nothing
+// `ChromiumBridgeVerification`. The app never imports it. Each entry point does nothing
 // unless the runtime started in testing mode with an owned, marked disposable probe root.
 
 /// Test-only sanitizer for external-app audit fixtures; returns fixed primitive fields only.
@@ -16,8 +17,6 @@ FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeExternalAppLaunchAuditForTest
 
 /// Turns off Chromium background mode in the Local State of `userDataDirectory`; YES when it is off.
 /// The runtime applies it before every launch. Exposed so tests can exercise the edit directly.
-FOUNDATION_EXPORT BOOL ARCDisableBackgroundMode(NSURL *userDataDirectory);
-
 /// Verification callback transition: a pending/rejected dialog must retain its CDP hold.
 FOUNDATION_EXPORT void ARCCompletePrivateQuitDialogCancellation(
   BOOL ownerCurrent, NSString * _Nullable dialogError, void (^releaseHold)(void), void (^reject)(void));

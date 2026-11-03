@@ -17,16 +17,19 @@ struct PageNavigationButtons: View {
         if let id { engine?.runtime.goBack(inTabID: id.uuidString) }
       }
       .disabled(state?.canGoBack != true)
+      .browserChromeControl("browser.chrome.back")
 
       navigationButton("chevron.forward", label: ShellL10n.string("Forward")) {
         if let id { engine?.runtime.goForward(inTabID: id.uuidString) }
       }
       .disabled(state?.canGoForward != true)
+      .browserChromeControl("browser.chrome.forward")
 
       navigationButton("arrow.clockwise", label: ShellL10n.string("Reload (Command-R)")) {
         store.reloadCurrentPage()
       }
       .disabled(!store.canReloadCurrentPage)
+      .browserChromeControl("browser.chrome.reload")
     }
   }
 

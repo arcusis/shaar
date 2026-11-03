@@ -117,7 +117,7 @@ final class PageFindProbe {
     try await expectResult(count: 1, active: 1, "profile B searches its own document")
     store.perform(.space(shared.id))
     try await waitForDisplayedNativeTab(
-      shared.selectedTabID!.uuidString, "Shared profile native tab is selected before find")
+      shared.selectedTabID!, "Shared profile native tab is selected before find")
     try expect(
       shared.profileID == a.profileID && store.pageFind == nil,
       "an explicitly shared profile still clears find when its selected tab changes")

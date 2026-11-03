@@ -67,14 +67,27 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_engine_create(
     return SHAAR_FAIL(SHAAR_IO_ERROR, "engine allocation failed", error);
   engine->on_event = config->on_event;
   engine->event_context = config->event_context;
+  engine->data_root.assign(config->data_root.data, config->data_root.size);
+  engine->locale.assign(config->locale.data ? config->locale.data : "",
+                        config->locale.size);
+  if (engine->data_root.find('\0') != std::string::npos ||
+      engine->locale.find('\0') != std::string::npos) {
+    delete engine;
+    return SHAAR_FAIL(SHAAR_INVALID_ARGUMENT, "embedded NUL in config", error);
+  }
   *out = engine;
   return SHAAR_FAIL(SHAAR_OK, "", error);
 }
 
 extern "C" SHAAR_EXPORT void shaar_engine_release(shaar_engine* engine) {
-  if (engine && engine->emitting) {
-    engine->release_requested = true;
+  if (!engine)
+    return;
+  if (engine->emitting) {
+    if (!engine->run_active)
+      engine->release_requested = true;
     return;
   }
+  if (engine->run_active)
+    return;
   delete engine;
 }

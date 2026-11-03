@@ -32,7 +32,11 @@ REQUIRED_EXPORTS = (
     "_shaar_abi_major",
     "_shaar_abi_minor",
     "_shaar_engine_create",
+    "_shaar_engine_run",
+    "_shaar_engine_request_quit",
     "_shaar_engine_release",
+    "_shaar_submit",
+    "_shaar_cancel_request",
 )
 COMMIT = re.compile(r"[0-9a-f]{40}\Z")
 DIGEST = re.compile(r"[0-9a-f]{64}\Z")

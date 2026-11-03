@@ -344,13 +344,21 @@ shaar_error_code Delete(ShaarModuleRegistry *registry, shaar_scope scope,
   return SHAAR_OK;
 }
 
-history::VisitSource ImportSource(const std::string &source) {
+} // namespace
+
+namespace shaar_history {
+
+history::VisitSource VisitSourceForImport(const std::string &source) {
   if (source == "safari")
     return history::SOURCE_SAFARI_IMPORTED;
   if (source == "firefox")
     return history::SOURCE_FIREFOX_IMPORTED;
   return history::SOURCE_OS_MIGRATION_IMPORTED;
 }
+
+} // namespace shaar_history
+
+namespace {
 
 // Each row is first read through HistoryService, then new timestamps are sent
 // through AddPage. The follow-up query is queued after those writes and
@@ -514,7 +522,7 @@ shaar_error_code Insert(ShaarModuleRegistry *registry, shaar_scope scope,
   auto state = std::make_shared<ImportState>();
   state->request = request;
   state->service = service->AsWeakPtr();
-  state->source = ImportSource(*source);
+  state->source = shaar_history::VisitSourceForImport(*source);
   state->rejection_codes.resize(pages->size());
   size_t valid_rows = 0;
   for (size_t page_index = 0; page_index < pages->size(); ++page_index) {

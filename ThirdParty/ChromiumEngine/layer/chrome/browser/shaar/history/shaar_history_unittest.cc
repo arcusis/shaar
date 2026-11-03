@@ -54,6 +54,17 @@ TEST(ShaarHistoryModuleTest, RegistersTheHistoryOperationRange) {
   EXPECT_TRUE(registry.handlers.contains(SHAAR_OP_HISTORY_UNWATCH));
 }
 
+TEST(ShaarHistoryModuleTest, MapsImportsToChromiumVisitSourceCategories) {
+  EXPECT_EQ(shaar_history::VisitSourceForImport("safari"),
+            history::SOURCE_SAFARI_IMPORTED);
+  EXPECT_EQ(shaar_history::VisitSourceForImport("firefox"),
+            history::SOURCE_FIREFOX_IMPORTED);
+  EXPECT_EQ(shaar_history::VisitSourceForImport("chrome"),
+            history::SOURCE_OS_MIGRATION_IMPORTED);
+  EXPECT_EQ(shaar_history::VisitSourceForImport("arc"),
+            history::SOURCE_OS_MIGRATION_IMPORTED);
+}
+
 TEST(ShaarHistoryModuleTest, RejectsPrivateScopeForEveryHistoryOperation) {
   FakeRegistry registry;
   shaar_history_register(&registry);

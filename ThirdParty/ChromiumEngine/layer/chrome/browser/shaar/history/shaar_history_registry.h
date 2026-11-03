@@ -9,6 +9,7 @@
 #include <string>
 
 #include "chrome/browser/shaar/public/shaar_engine.h"
+#include "components/history/core/browser/history_types.h"
 
 class Profile;
 
@@ -30,5 +31,13 @@ public:
   virtual std::string ProfileID(shaar_profile *handle) const = 0;
   virtual HistoryEvent HistoryEventSink() = 0;
 };
+
+namespace shaar_history {
+
+// Chromium persists only the source categories represented by VisitSource.
+// Chrome and Arc imports therefore share the OS migration category.
+history::VisitSource VisitSourceForImport(const std::string &source);
+
+} // namespace shaar_history
 
 #endif // CHROME_BROWSER_SHAAR_HISTORY_SHAAR_HISTORY_REGISTRY_H_

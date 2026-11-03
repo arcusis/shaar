@@ -179,6 +179,44 @@ struct ShaarHistoryAdapterTests {
     #expect(calls.allSatisfy { $0.profileID == profile })
   }
 
+  @Test func insertPreservesSourceAndReportsMixedImportCounts() async throws {
+    let profile = UUID()
+    let fake = FakeHistoryEngine(
+      reply:
+        #"{"schemaVersion":1,"accepted":2,"insertedVisits":2,"duplicateVisits":3,"rejected":[{"index":2,"code":"not_addable"}]}"#
+    )
+    let adapter = ShaarHistoryAdapter(engine: fake)
+    let pages = [
+      ShaarHistoryInsertPage(
+        url: "https://import.example/", title: "Imported", visits: [1_700_000_000_123]),
+      ShaarHistoryInsertPage(
+        url: "https://import.example/second", title: nil, visits: [1_700_000_001_456]),
+      ShaarHistoryInsertPage(url: "https://rejected.example/", visits: [1_700_000_002_789]),
+    ]
+
+    for source in ["safari", "chrome", "arc", "firefox"] {
+      let result = try await adapter.insert(profileID: profile, source: source, pages: pages)
+      #expect(result.accepted == 2)
+      #expect(result.insertedVisits == 2)
+      #expect(result.duplicateVisits == 3)
+      #expect(result.rejected == [.init(index: 2, code: "not_addable")])
+    }
+
+    let calls = await fake.calls
+    #expect(calls.count == 4)
+    for (call, expectedSource) in zip(calls, ["safari", "chrome", "arc", "firefox"]) {
+      #expect(call.profileID == profile)
+      #expect(call.operation == .insert)
+      let request = try #require(
+        JSONSerialization.jsonObject(with: call.argsJSON) as? [String: Any])
+      #expect(request["schemaVersion"] as? Int == 1)
+      #expect(request["source"] as? String == expectedSource)
+      let submittedPages = try #require(request["pages"] as? [[String: Any]])
+      #expect(submittedPages.count == pages.count)
+      #expect(submittedPages[0]["visits"] as? [Int] == [1_700_000_000_123])
+    }
+  }
+
   @Test func malformedTypedResultsAreRejected() async throws {
     let fake = FakeHistoryEngine(reply: #"{"schemaVersion":1,"deleted":999}"#)
     let adapter = ShaarHistoryAdapter(engine: fake)

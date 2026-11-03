@@ -85,3 +85,26 @@ def ordered_modules(commands: list[dict], arguments: list[list[str]]) -> list[li
         for name in ready:
             ordered.append(pending.pop(name))
     return ordered
+
+
+def parallel_module_batches(commands: list[dict], arguments: list[list[str]],
+                             max_parallel: int = 2) -> list[list[list[str]]]:
+    """Group independent native compiler jobs while preserving module dependencies."""
+    if max_parallel < 1:
+        raise ValueError("Module parallelism must be positive")
+    pending = {item[item.index("-module-name") + 1]: item for item in arguments}
+    if len(pending) != len(arguments):
+        raise ValueError("Duplicate Swift module compiler invocation")
+    producers = {item[item.index("-emit-module-path") + 1]: name for name, item in pending.items()}
+    inputs = {item["args"][item["args"].index("-module-name") + 1]: item.get("inputs", [])
+              for item in commands if "-module-name" in item.get("args", [])}
+    batches = []
+    while pending:
+        ready = sorted((name for name in pending
+                        if not any(producers.get(path) in pending for path in inputs[name])),
+                       key=lambda name: (name != "BrowserTestSupport", name))
+        if not ready:
+            raise ValueError("SwiftPM module dependencies contain a cycle")
+        batch = ready[:max_parallel]
+        batches.append([pending.pop(name) for name in batch])
+    return batches

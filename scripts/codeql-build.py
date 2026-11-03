@@ -6,6 +6,7 @@
 """Replay fresh native Swift compilations without tracing SwiftPM's manifest interpreter."""
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 from pathlib import Path
@@ -14,10 +15,11 @@ import subprocess
 import time
 
 from ci_support import Commands, ROOT, SWIFT_SOURCE_ROOTS, swift_source_files, file_sha256
-from swift_build_plan import manifest_commands, native_command_log, ordered_modules, prepare_inputs
+from swift_build_plan import manifest_commands, native_command_log, parallel_module_batches, prepare_inputs
 
 
 PLAN = ROOT / "build/ci/codeql-swift/compile-plan.json"
+SWIFT_COMPILER_CORES = 4
 
 
 def source_hashes(root: Path, scope: str = "full", *, tracked: bool = True) -> dict[str, str]:
@@ -51,6 +53,19 @@ def validate_compilation(arguments: list[str]) -> None:
     target = arguments[arguments.index("-target") + 1]
     if not target.startswith("arm64-apple-macosx"):
         raise ValueError("Swift analysis must target the shipping arm64 architecture")
+
+
+def compiler_threads(arguments: list[str], concurrent_modules: int) -> list[str]:
+    if not 1 <= concurrent_modules <= SWIFT_COMPILER_CORES:
+        raise ValueError("Swift module concurrency exceeds the CodeQL runner CPU budget")
+    result = list(arguments)
+    try:
+        threads_index = result.index("-num-threads") + 1
+        int(result[threads_index])
+    except (ValueError, IndexError) as error:
+        raise ValueError("Swift compiler command is missing its thread budget") from error
+    result[threads_index] = str(SWIFT_COMPILER_CORES // concurrent_modules)
+    return result
 
 
 def compiler_commands(log: str, root: Path, compiler: Path, expected: set[str]) -> list[list[str]]:
@@ -103,10 +118,10 @@ def prepare(scope: str) -> int:
     manifest = manifest_commands(scratch / "debug.yaml")
     prepare_inputs(manifest, ROOT, scratch)
     commands = compiler_commands(native_command_log(manifest, compiler), ROOT, compiler, set(all_sources))
-    commands = ordered_modules(manifest, commands)
     commands = [command for command in commands if command_sources(command, ROOT) <= set(sources)]
+    batches = parallel_module_batches(manifest, commands, max_parallel=2)
     PLAN.parent.mkdir(parents=True, exist_ok=True)
-    PLAN.write_text(json.dumps(dict(identity(), scope=scope, compiler=str(compiler), compiler_sha256=file_sha256(compiler), sources=sources, commands=commands), indent=2) + "\n")
+    PLAN.write_text(json.dumps(dict(identity(), scope=scope, compiler=str(compiler), compiler_sha256=file_sha256(compiler), sources=sources, batches=batches), indent=2) + "\n")
     return checks.finish()
 
 
@@ -127,17 +142,41 @@ def replay(scope: str = "full") -> int:
     }, indent=2) + "\n")
     checks = Commands("codeql-swift")
     covered = set()
-    for arguments in plan["commands"]:
-        if arguments[0] != str(compiler):
-            raise ValueError("Compiler plan executable changed")
-        validate_compilation(arguments)
-        covered |= command_sources(arguments, ROOT)
-        module = arguments[arguments.index("-module-name") + 1]
-        if checks.run(module, arguments):
+    for batch in plan["batches"]:
+        execution_batch = [compiler_threads(arguments, len(batch)) for arguments in batch]
+        for arguments in batch:
+            if arguments[0] != str(compiler):
+                raise ValueError("Compiler plan executable changed")
+            validate_compilation(arguments)
+            covered |= command_sources(arguments, ROOT)
+        with ThreadPoolExecutor(max_workers=len(batch)) as pool:
+            results = list(pool.map(lambda arguments: run_compiler(checks, arguments), execution_batch))
+        for module, arguments, status, seconds, output in results:
+            (checks.directory / f"{module}.log").write_text(output)
+            print(f"::group::{module}", flush=True)
+            print(output, end="" if output.endswith("\n") else "\n", flush=True)
+            print("::endgroup::", flush=True)
+            checks.results.append(dict(name=module, command=arguments, status=status, seconds=seconds))
+        checks.write_reports()
+        if any(status for _, _, status, _, _ in results):
             return checks.finish()
     if covered != set(plan["sources"]):
         raise ValueError("Compiler response files changed after planning")
     return checks.finish()
+
+
+def run_compiler(checks: Commands, arguments: list[str]) -> tuple[str, list[str], int, float, str]:
+    module = arguments[arguments.index("-module-name") + 1]
+    started = time.monotonic()
+    try:
+        process = subprocess.run(arguments, cwd=ROOT, text=True, stdout=subprocess.PIPE,
+                                 stderr=subprocess.STDOUT, check=False)
+        output = process.stdout
+        status = process.returncode
+    except OSError as error:
+        output = str(error)
+        status = 127
+    return module, arguments, status, round(time.monotonic() - started, 3), output
 
 
 def full_build() -> int:

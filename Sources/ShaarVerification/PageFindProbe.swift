@@ -61,6 +61,7 @@ final class PageFindProbe {
       else { throw PageFindProbeFailure("Could not prepare authored find text.") }
     }
     store.perform(.space(a.id))
+    try await waitForFindTarget(tabA, containing: "OrbitFindMarker")
     store.showPageFind()
     store.updatePageFindQuery("OrbitFindMarker")
     try await expectResult(count: 3, active: 1, "Chromium finds three authored text matches")
@@ -93,6 +94,7 @@ final class PageFindProbe {
     try picture.write(to: root.appending(path: "\(phase)-find-page.png"), options: .atomic)
 
     store.perform(.space(b.id))
+    try await waitForFindTarget(tabB, containing: "BetaOnlyNeedle")
     try expect(store.pageFind == nil, "switching profiles closes find and discards its query")
     store.receiveFindResult(
       tabID: original.tabID, requestID: original.requestID, count: 2, active: 1, final: true)
@@ -114,6 +116,7 @@ final class PageFindProbe {
     store.updatePageFindQuery("BetaOnlyNeedle")
     try await expectResult(count: 1, active: 1, "profile B searches its own document")
     store.perform(.space(shared.id))
+    try await waitForFindTarget(shared.selectedTabID!)
     try expect(
       shared.profileID == a.profileID && store.pageFind == nil,
       "an explicitly shared profile still clears find when its selected tab changes")
@@ -128,6 +131,7 @@ final class PageFindProbe {
       "clearing the query leaves no stale count or active search")
 
     store.perform(.space(a.id))
+    try await waitForFindTarget(tabA, containing: "OrbitFindMarker")
     store.showPageFind()
     store.updatePageFindQuery("OrbitFindMarker")
     try await expectResult(count: 3, active: 1, "returning to A starts a new native search")
@@ -165,6 +169,32 @@ final class PageFindProbe {
       try await Task.sleep(for: .milliseconds(100))
     }
     throw PageFindProbeFailure("\(message): \(store.pageFind?.status ?? "find closed")")
+  }
+
+  private func waitForFindTarget(_ tab: UUID, containing text: String? = nil) async throws {
+    let literal =
+      text.flatMap { value in
+        try? String(data: JSONEncoder().encode(value), encoding: .utf8)
+      } ?? "null"
+    let expression =
+      "({fixture:document.documentElement.dataset.arcusisFixture,ready:document.readyState,text:\(literal)===null||document.body?.textContent.includes(\(literal))===true})"
+    var document: [String: Any] = [:]
+    for _ in 0..<40 {
+      let audit = runtime.normalProbeSelectionAudit(forTabID: tab.uuidString)
+      if audit["selectedNativeTab"] as? Bool == true {
+        document = await evaluate(tab, expression) ?? [:]
+        if document["fixture"] as? String == "v1",
+          document["ready"] as? String == "complete",
+          document["text"] as? Bool == true
+        {
+          try await Task.sleep(for: .milliseconds(100))
+          return
+        }
+      }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    let audit = runtime.normalProbeSelectionAudit(forTabID: tab.uuidString)
+    throw PageFindProbeFailure("Find target was not ready: \(audit), document: \(document).")
   }
 
   private func evaluate(_ tab: UUID, _ expression: String) async -> [String: Any]? {

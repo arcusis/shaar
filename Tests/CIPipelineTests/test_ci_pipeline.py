@@ -454,6 +454,7 @@ class ProbeSoakTests(unittest.TestCase):
             STAGES.run_engine(checks, "all", 2)
         names = [call.args[0] for call in checks.run.call_args_list]
         self.assertEqual(names, ["verification-build", "baseline-1", "baseline-2",
+                                 "private-multitab-1", "private-multitab-2",
                                  "private-window-1", "private-window-2", "private-window-3",
                                  "quit-exit-1", "quit-exit-2", "quit-exit-3",
                                  "session-recovery-1", "session-recovery-2"])

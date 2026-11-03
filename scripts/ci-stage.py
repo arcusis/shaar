@@ -25,7 +25,7 @@ VISUAL_FILTERS = (
     "SpaceIconPickerVisualTests", "SidebarFoldersVisualTests", "CommandPanelVisualTests",
     "SettingsVisualTests",
 )
-ENGINE_MODES = ("baseline", "private-window", "quit-exit", "session-recovery")
+ENGINE_MODES = ("baseline", "private-multitab", "private-window", "quit-exit", "session-recovery")
 MINIMUM_REPETITIONS = {"private-window": 3, "quit-exit": 3}
 
 

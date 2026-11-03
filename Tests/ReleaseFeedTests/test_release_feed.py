@@ -165,6 +165,23 @@ class ReleaseFeedTests(unittest.TestCase):
             with self.subTest(other=other), self.assertRaises(release_feed.ReleaseError):
                 release_feed.validate_appcast(self._appcast(other), self.config)
 
+    def test_engine_prerelease_asset_can_never_be_the_update(self):
+        engine_url = ("https://github.com/arcusis/shaar/releases/download/"
+                      "engine-155.0.8059.84-shaar.1/ArdiaCore-0fd438ac5e78.tar.xz")
+        appcast = self._appcast().replace(self.config.zip_url, engine_url)
+        with self.assertRaises(release_feed.ReleaseError):
+            release_feed.validate_appcast(appcast, self.config)
+
+    def test_release_workflow_ignores_engine_tags_and_prereleases(self):
+        workflow = (REPO / ".github" / "workflows" / "release.yml").read_text()
+        trigger = workflow[workflow.index("\non:\n"):workflow.index("\npermissions:")]
+        self.assertIn("types: [released]", trigger)
+        self.assertNotIn("published", trigger)
+        self.assertNotIn("prereleased", trigger)
+        self.assertIn('[[ "$RELEASE_TAG" =~ ^v[0-9]+\\.[0-9]+\\.[0-9]+$ ]]', workflow)
+        self.assertIn("jq -r '.draft or .prerelease'", workflow)
+        self.assertRegex(workflow, r"(?s)deploy.*needs: validate-release")
+
     def test_validation_rejects_malformed_or_multi_item_feeds(self):
         appcast = self._appcast()
         start = appcast.index("<item>")

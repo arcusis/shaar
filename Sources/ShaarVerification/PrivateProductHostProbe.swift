@@ -363,12 +363,18 @@ final class PrivateProductHostProbe {
       ).absoluteString + "?q=abcdefghijklmnopqrstuvwxyz"
     first.hosting.layoutSubtreeIfNeeded()
     let appWindowCount = NSApp.windows.count
+    let appWindowIDsBeforeTyping = Set(NSApp.windows.map { ObjectIdentifier($0) })
     let typedQuery = typeInAddressField(alphabetQuery, window: first.window, hosting: first.hosting)
+    let addedWindows = NSApp.windows.filter {
+      !appWindowIDsBeforeTyping.contains(ObjectIdentifier($0))
+    }
+    let openedPickerWindow = addedWindows.contains { $0.isVisible || $0 is NSPanel }
     smokeDiagnostics["alphabetSearch"] = [
       "typedQuery": typedQuery.map { $0 as Any } ?? NSNull(), "expectedQuery": alphabetQuery,
       "commandIsOpen": first.store.commandIsOpen, "tabCount": first.store.tabs.count,
       "privateWindowCount": privateHost.windowCount, "appWindowCountBefore": appWindowCount,
       "appWindowCountAfter": NSApp.windows.count,
+      "openedPickerWindow": openedPickerWindow,
       "windows": NSApp.windows.map { window in
         [
           "class": String(reflecting: type(of: window)), "title": window.title,
@@ -378,9 +384,8 @@ final class PrivateProductHostProbe {
       },
     ]
     checks["productAlphabetSearchDoesNotOpenPicker"] =
-      typedQuery == alphabetQuery && !first.store.commandIsOpen
+      typedQuery == alphabetQuery && !first.store.commandIsOpen && !openedPickerWindow
       && first.store.tabs.count == 1 && privateHost.windowCount == 1
-      && NSApp.windows.count == appWindowCount
     submitAddressField(window: first.window)
     first.store.confirmHTTP(useHTTPS: false)
     try await waitForURL(

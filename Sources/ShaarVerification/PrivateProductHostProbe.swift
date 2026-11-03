@@ -354,9 +354,10 @@ final class PrivateProductHostProbe {
     try await captureStartPage(first)
     let firstPath = fixture.appending(path: "private-product-\(runID.lowercased())-a")
       .absoluteString
-    let alphabetQuery = fixture.appending(
-      path: "private-product-\(runID.lowercased())-abcdefghijklmnopqrstuvwxyz"
-    ).absoluteString
+    let alphabetQuery =
+      fixture.appending(
+        path: "private-product-\(runID.lowercased())-search"
+      ).absoluteString + "?q=abcdefghijklmnopqrstuvwxyz"
     first.hosting.layoutSubtreeIfNeeded()
     let appWindowCount = NSApp.windows.count
     let typedQuery = typeInAddressField(alphabetQuery, window: first.window, hosting: first.hosting)
@@ -367,7 +368,7 @@ final class PrivateProductHostProbe {
     submitAddressField(window: first.window)
     first.store.confirmHTTP(useHTTPS: false)
     try await waitForURL(
-      first.store, tabID: first.store.selectedTabID, contains: "-abcdefghijklmnopqrstuvwxyz")
+      first.store, tabID: first.store.selectedTabID, contains: "q=abcdefghijklmnopqrstuvwxyz")
     first.store.openTab()
     try await waitForTabs(first.store, count: 2)
     guard let secondTab = first.store.selectedTab else {

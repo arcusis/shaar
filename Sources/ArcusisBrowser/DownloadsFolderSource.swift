@@ -15,6 +15,7 @@ final class DownloadsFolderSource {
   @ObservationIgnored private var filesByID: [String: DownloadsFolderFile] = [:]
   @ObservationIgnored private var watcher: DispatchSourceFileSystemObject?
   private let directory: URL
+  var directoryURL: URL { directory.standardizedFileURL }
 
   init(
     directory: URL = FileManager.default.homeDirectoryForCurrentUser.appending(path: "Downloads")

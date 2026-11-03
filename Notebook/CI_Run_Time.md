@@ -41,7 +41,24 @@ Run [41556161778](https://github.com/arcusis/shaar/actions/runs/41556161778) pas
 
 Fast gates, visuals, and coverage each waited longer than they ran. The localization and probe jobs still take substantial native execution time.
 
-The updated graph sends platform-independent fast checks to Ubuntu, keeps the complete Python/resource test suite on macOS, and runs the immutable-base coverage comparison in the unit-test macOS job. A docs-only fast gate runs on Ubuntu with Notebook-link, sensitive-file, secret-scan, and history checks. Expected macOS job count is 10 for full PRs (down from 11) and zero for known docs/site-only PRs. Record the post-change hosted PR wall time and per-job queue/runtime values here after the required checks finish; do not treat runner-count arithmetic as a measured speedup.
+The updated graph sends platform-independent fast checks to Ubuntu, keeps the complete Python/resource test suite on macOS, and runs the immutable-base coverage comparison in the unit-test macOS job. A docs-only fast gate runs on Ubuntu with Notebook-link, sensitive-file, secret-scan, and history checks. Known docs/site-only PRs select zero macOS jobs; that path has not yet had a dedicated hosted PR run.
+
+Post-change [run 41608902696](https://github.com/arcusis/shaar/actions/runs/41608902696) passed `CI required` in 18m37s from run creation. It used 10 macOS jobs, down from 11. Their aggregate `created_at` to `started_at` wait was 61s (median 3s, maximum 29s), versus 2h13m28s (median 12m34s, maximum 23m25s) before. The wall time fell 19m57s (52%) in this before/after pair. Per-job timings:
+
+| macOS job | Queue wait | Running |
+| --- | ---: | ---: |
+| Python and Apple resource tests | 3s | 1m06s |
+| Build, unit tests and coverage comparison | 29s | 10m03s |
+| Hosted sidebar visuals | 2s | 5m04s |
+| Hebrew localization | 3s | 13m27s |
+| Engine bundle build | 3s | 6m44s |
+| Engine baseline/lifecycle | 2s | 9m15s |
+| Engine private-window 1 | 2s | 8m06s |
+| Engine private-window 2 | 2s | 7m41s |
+| Engine private-window 3 | 12s | 9m36s |
+| Shipping bundle | 3s | 7m58s |
+
+This single comparison shows the queue delay was substantially reduced; the after wall time remains 3m37s above the 15-minute goal. Localization (13m27s) is now the critical path. The before and after runs had different concurrent workloads, so their wall-time change is observational rather than a controlled benchmark.
 
 ## Pipeline structure
 

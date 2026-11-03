@@ -238,7 +238,7 @@ bool Downloads::Directory(const std::string& action,
   const base::FilePath previous_save = prefs->SaveFilePath();
   prefs->SetDownloadPath(requested);
   const base::FilePath effective = prefs->DownloadPath();
-  if (effective != requested) {
+  if (effective != requested || prefs->SaveFilePath() != requested) {
     prefs->SetDownloadPath(previous_download);
     prefs->SetSaveFilePath(previous_save);
     *error_code = "SHAAR_IO_ERROR";

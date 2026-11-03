@@ -16,11 +16,13 @@ import SwiftUI
 final class PrivateProductHostProbe {
   struct Evidence {
     let checks: [String: Bool]
+    let expectedFailures: [String: String]
     let workspaceSHA256: String
     let screenshotSHA256: String
     let rendererScreenshotSHA256: String
     let rendererViewportAudit: [String: Any]
     let rendererCaptureOutcome: String
+    let smokeDiagnostics: [String: Any]
     let lifecycleBlocker: String
   }
 
@@ -47,11 +49,13 @@ final class PrivateProductHostProbe {
   private weak var keyWindow: NSWindow?
   private var host: PrivateBrowserHost?
   private var checks: [String: Bool] = [:]
+  private var expectedFailures: [String: String] = [:]
   private var workspaceBytes = Data()
   private var screenshotDigest = ""
   private var rendererScreenshotDigest = ""
   private var rendererViewportAudit: [String: Any] = [:]
   private var rendererCaptureOutcome = "not-attempted"
+  private var smokeDiagnostics: [String: Any] = [:]
   private var lifecycleBlocker = ""
   private var quitDiagnosticStages: [[String: Any]] = []
   private var nativeCloseObservations: [String: NativeCloseObservation] = [:]
@@ -114,10 +118,12 @@ final class PrivateProductHostProbe {
       checks["productWeakStoreReleasedAfterConfirmedClose"] = lifecycleStore == nil
       checks["productWeakHostingReleasedAfterConfirmedClose"] = lifecycleHosting == nil
       return Evidence(
-        checks: checks, workspaceSHA256: sha256(after), screenshotSHA256: screenshotDigest,
+        checks: checks, expectedFailures: expectedFailures,
+        workspaceSHA256: sha256(after), screenshotSHA256: screenshotDigest,
         rendererScreenshotSHA256: rendererScreenshotDigest,
         rendererViewportAudit: rendererViewportAudit,
         rendererCaptureOutcome: rendererCaptureOutcome,
+        smokeDiagnostics: smokeDiagnostics,
         lifecycleBlocker: lifecycleBlocker)
     } catch {
       if let tabID = normalSession.selectedSpace.selectedTabID?.uuidString {
@@ -351,6 +357,39 @@ final class PrivateProductHostProbe {
     try await captureStartPage(first)
     let firstPath = fixture.appending(path: "private-product-\(runID.lowercased())-a")
       .absoluteString
+    let alphabetQuery =
+      fixture.appending(
+        path: "private-product-\(runID.lowercased())-search"
+      ).absoluteString + "?q=abcdefghijklmnopqrstuvwxyz"
+    first.hosting.layoutSubtreeIfNeeded()
+    let appWindowCount = NSApp.windows.count
+    let appWindowIDsBeforeTyping = Set(NSApp.windows.map { ObjectIdentifier($0) })
+    let typedQuery = typeInAddressField(alphabetQuery, window: first.window, hosting: first.hosting)
+    let addedWindows = NSApp.windows.filter {
+      !appWindowIDsBeforeTyping.contains(ObjectIdentifier($0))
+    }
+    let openedPickerWindow = addedWindows.contains { $0.isVisible || $0 is NSPanel }
+    smokeDiagnostics["alphabetSearch"] = [
+      "typedQuery": typedQuery.map { $0 as Any } ?? NSNull(), "expectedQuery": alphabetQuery,
+      "commandIsOpen": first.store.commandIsOpen, "tabCount": first.store.tabs.count,
+      "privateWindowCount": privateHost.windowCount, "appWindowCountBefore": appWindowCount,
+      "appWindowCountAfter": NSApp.windows.count,
+      "openedPickerWindow": openedPickerWindow,
+      "windows": NSApp.windows.map { window in
+        [
+          "class": String(reflecting: type(of: window)), "title": window.title,
+          "visible": window.isVisible, "panel": window is NSPanel,
+          "level": window.level.rawValue, "styleMask": window.styleMask.rawValue,
+        ]
+      },
+    ]
+    checks["productAlphabetSearchDoesNotOpenPicker"] =
+      typedQuery == alphabetQuery && !first.store.commandIsOpen && !openedPickerWindow
+      && first.store.tabs.count == 1 && privateHost.windowCount == 1
+    submitAddressField(window: first.window)
+    first.store.confirmHTTP(useHTTPS: false)
+    try await waitForURL(
+      first.store, tabID: first.store.selectedTabID, contains: "q=abcdefghijklmnopqrstuvwxyz")
     first.store.openTab()
     try await waitForTabs(first.store, count: 2)
     guard let secondTab = first.store.selectedTab else {
@@ -404,7 +443,29 @@ final class PrivateProductHostProbe {
     first.store.confirmHTTP(useHTTPS: false)
     try await waitForURL(first.store, tabID: commandTab.id, contains: "-command-t")
     try await waitForCaptureReadiness(first, tabID: commandTab.id)
+    first.store.dismissCommand()
+    for (index, tabID) in first.store.tabs.map(\.id).enumerated() {
+      let path = "private-product-\(runID.lowercased())-smoke-\(index + 1)"
+      first.store.selectTab(tabID)
+      first.store.navigate(fixture.appending(path: path).absoluteString)
+      first.store.confirmHTTP(useHTTPS: false)
+      try await waitForURL(first.store, tabID: tabID, contains: path)
+      try await waitForCaptureReadiness(first, tabID: tabID)
+      let renders = await privateTabRenders(owner: first, tabID: tabID, path: path)
+      switch index {
+      case 0: checks["productFirstPrivateTabRenders"] = renders
+      case 1:
+        checks["productSecondPrivateTabRenders"] = renders
+        if !renders {
+          expectedFailures["productSecondPrivateTabRenders"] =
+            "Issue #417: second private tab may display a black page."
+        }
+      case 2: checks["productThirdPrivateTabRenders"] = renders
+      default: break
+      }
+    }
     first.store.showCommand()
+    try await waitForCaptureReadiness(first, tabID: first.store.selectedTabID)
     let captures = try await capturePrivateWindow(first, runID: runID, phase: phase)
     screenshotDigest = captures.hostDigest
     rendererScreenshotDigest = captures.rendererDigest
@@ -450,6 +511,76 @@ final class PrivateProductHostProbe {
       try png.write(to: directory.appending(path: "start-\(phase)-\(name).png"))
     }
     owner.window.appearance = nil
+  }
+
+  private func typeInAddressField(
+    _ text: String, window: NSWindow, hosting: NSHostingView<PrivateBrowserWindow?>
+  ) -> String? {
+    func textFields(in view: NSView) -> [NSTextField] {
+      (view as? NSTextField).map { [$0] } ?? view.subviews.flatMap { textFields(in: $0) }
+    }
+    guard let field = textFields(in: hosting).first,
+      window.makeFirstResponder(field),
+      let editor = window.fieldEditor(true, for: field) as? NSTextView
+    else { return nil }
+    editor.string = ""
+    guard let alphabet = text.range(of: "abcdefghijklmnopqrstuvwxyz") else { return nil }
+    let prefix = String(text[..<alphabet.lowerBound])
+    editor.insertText(prefix, replacementRange: editor.selectedRange())
+    for character in text[alphabet] {
+      guard let event = keyEvent(for: character, window: window) else { return nil }
+      window.sendEvent(event)
+    }
+    return field.stringValue
+  }
+
+  private func submitAddressField(window: NSWindow) {
+    guard
+      let enter = NSEvent.keyEvent(
+        with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+        windowNumber: window.windowNumber, context: nil, characters: "\r",
+        charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36)
+    else { return }
+    window.sendEvent(enter)
+  }
+
+  private func keyEvent(for character: Character, window: NSWindow) -> NSEvent? {
+    let keyCode: UInt16? =
+      switch character {
+      case "a": 0
+      case "b": 11
+      case "c": 8
+      case "d": 2
+      case "e": 14
+      case "f": 3
+      case "g": 5
+      case "h": 4
+      case "i": 34
+      case "j": 38
+      case "k": 40
+      case "l": 37
+      case "m": 46
+      case "n": 45
+      case "o": 31
+      case "p": 35
+      case "q": 12
+      case "r": 15
+      case "s": 1
+      case "t": 17
+      case "u": 32
+      case "v": 9
+      case "w": 13
+      case "x": 7
+      case "y": 16
+      case "z": 6
+      default: nil
+      }
+    guard let keyCode else { return nil }
+    let value = String(character)
+    return NSEvent.keyEvent(
+      with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+      windowNumber: window.windowNumber, context: nil, characters: value,
+      charactersIgnoringModifiers: value, isARepeat: false, keyCode: keyCode)
   }
 
   private func waitForTab(
@@ -857,6 +988,65 @@ final class PrivateProductHostProbe {
     let hostDigest = sha256(data)
     let rendererDigest = sha256(rendererData)
     return (hostDigest: hostDigest, rendererDigest: rendererDigest)
+  }
+
+  private func privateTabRenders(
+    owner: PrivateBrowserHost.Owner, tabID: String, path: String
+  ) async -> Bool {
+    guard owner.store.selectedTabID == tabID,
+      runtime.selectPrivateTabID(tabID, windowID: owner.windowID, contextID: owner.contextID)
+    else {
+      smokeDiagnostics["render-\(path)"] = ["selected": false]
+      return false
+    }
+    let document: String? = await withCheckedContinuation { continuation in
+      runtime.evaluatePrivateProbeTabID(
+        tabID,
+        script:
+          "document.readyState==='complete'&&location.pathname==='\(fixture.appending(path: path).path)'&&document.body.innerText.includes('OrbitFindMarker')"
+      ) { continuation.resume(returning: $0) }
+    }
+    guard document == "true" else {
+      smokeDiagnostics["render-\(path)"] = [
+        "selected": true, "document": document.map { $0 as Any } ?? NSNull(),
+      ]
+      return false
+    }
+    let (screenshot, outcome): (Data?, String?) = await withCheckedContinuation {
+      continuation in
+      runtime.capturePrivateProbeTabID(tabID, windowID: owner.windowID, contextID: owner.contextID)
+      { data, outcome in continuation.resume(returning: (data, outcome)) }
+    }
+    guard outcome == nil || outcome == "captured", let screenshot,
+      let bitmap = NSBitmapImageRep(data: screenshot), bitmap.pixelsWide > 0,
+      bitmap.pixelsHigh > 0
+    else {
+      smokeDiagnostics["render-\(path)"] = [
+        "selected": true, "document": document.map { $0 as Any } ?? NSNull(),
+        "captureOutcome": outcome ?? "nil",
+        "captureBytes": screenshot?.count ?? 0,
+      ]
+      return false
+    }
+    var nonBlackSamples = 0
+    let stride = max(1, min(bitmap.pixelsWide, bitmap.pixelsHigh) / 16)
+    for y in Swift.stride(from: 0, to: bitmap.pixelsHigh, by: stride) {
+      for x in Swift.stride(from: 0, to: bitmap.pixelsWide, by: stride) {
+        guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else {
+          continue
+        }
+        if color.redComponent + color.greenComponent + color.blueComponent > 0.15 {
+          nonBlackSamples += 1
+        }
+      }
+    }
+    smokeDiagnostics["render-\(path)"] = [
+      "selected": true, "document": document.map { $0 as Any } ?? NSNull(),
+      "captureOutcome": outcome ?? "nil",
+      "captureBytes": screenshot.count, "width": bitmap.pixelsWide,
+      "height": bitmap.pixelsHigh, "nonBlackSamples": nonBlackSamples,
+    ]
+    return nonBlackSamples > 8
   }
 
   private func waitForCaptureReadiness(_ owner: PrivateBrowserHost.Owner, tabID: String)

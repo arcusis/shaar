@@ -28,7 +28,10 @@ public struct ShaarPrivateSessionHandles: Equatable, Sendable {
 }
 
 @MainActor public final class ShaarPrivateSessionsAdapter {
-  private struct Key: Hashable { let profile: Data; let session: Data }
+  private struct Key: Hashable {
+    let profile: Data
+    let session: Data
+  }
   private let engine: any ShaarPrivateSessionsEngine
   private var sessions: [Key: ShaarPrivateSessionHandles] = [:]
   private var windows: [Data: (Key, UInt)] = [:]
@@ -66,50 +69,64 @@ public struct ShaarPrivateSessionHandles: Equatable, Sendable {
 
   public func openSession(profileID: Data, sessionID: Data) throws -> ShaarPrivateSessionHandles {
     guard !profileID.isEmpty, !sessionID.isEmpty else {
-      throw ShaarEngineError.status(.invalidArgument, platformCode: 0, message: "empty private scope")
+      throw ShaarEngineError.status(
+        .invalidArgument, platformCode: 0, message: "empty private scope")
     }
     let key = Key(profile: profileID, session: sessionID)
     if let existing = sessions[key] { return existing }
-    guard !sessions.keys.contains(where: { $0.session == sessionID && $0.profile != profileID }) else {
-      throw ShaarEngineError.status(.wrongProfile, platformCode: 0, message: "session belongs to another profile")
+    guard !sessions.keys.contains(where: { $0.session == sessionID && $0.profile != profileID })
+    else {
+      throw ShaarEngineError.status(
+        .wrongProfile, platformCode: 0, message: "session belongs to another profile")
     }
-    guard !sessions.keys.contains(where: { $0.profile == profileID && $0.session != sessionID }) else {
-      throw ShaarEngineError.status(.conflict, platformCode: 0, message: "profile already has a live private session")
+    guard !sessions.keys.contains(where: { $0.profile == profileID && $0.session != sessionID })
+    else {
+      throw ShaarEngineError.status(
+        .conflict, platformCode: 0, message: "profile already has a live private session")
     }
     let handle = try engine.openSession(profileID: profileID, sessionID: sessionID)
-    let result = ShaarPrivateSessionHandles(profileID: profileID, sessionID: sessionID, session: handle)
+    let result = ShaarPrivateSessionHandles(
+      profileID: profileID, sessionID: sessionID, session: handle)
     sessions[key] = result
     return result
   }
 
   public func openWindow(sessionID: Data, windowID: Data) throws -> UInt {
     guard !windowID.isEmpty else {
-      throw ShaarEngineError.status(.invalidArgument, platformCode: 0, message: "empty private window ID")
+      throw ShaarEngineError.status(
+        .invalidArgument, platformCode: 0, message: "empty private window ID")
     }
     guard let entry = sessions.first(where: { $0.key.session == sessionID }) else {
-      throw ShaarEngineError.status(.notFound, platformCode: 0, message: "private session is closed")
+      throw ShaarEngineError.status(
+        .notFound, platformCode: 0, message: "private session is closed")
     }
     guard windows[windowID] == nil else {
-      throw ShaarEngineError.status(.conflict, platformCode: 0, message: "window ID is already live")
+      throw ShaarEngineError.status(
+        .conflict, platformCode: 0, message: "window ID is already live")
     }
     let handle = try engine.openWindow(session: entry.value.session, windowID: windowID)
     windows[windowID] = (entry.key, handle)
     return handle
   }
 
-  public func openTab(sessionID: Data, windowID: Data, tabID: Data, url: Data, foreground: Bool) throws {
+  public func openTab(sessionID: Data, windowID: Data, tabID: Data, url: Data, foreground: Bool)
+    throws
+  {
     guard !tabID.isEmpty, !url.isEmpty else {
-      throw ShaarEngineError.status(.invalidArgument, platformCode: 0, message: "empty private tab ID or URL")
+      throw ShaarEngineError.status(
+        .invalidArgument, platformCode: 0, message: "empty private tab ID or URL")
     }
     guard let entry = windows[windowID], entry.0.session == sessionID,
       let session = sessions[entry.0]
     else {
-      throw ShaarEngineError.status(.wrongSession, platformCode: 0, message: "window is outside private session")
+      throw ShaarEngineError.status(
+        .wrongSession, platformCode: 0, message: "window is outside private session")
     }
     guard tabs[tabID] == nil else {
       throw ShaarEngineError.status(.conflict, platformCode: 0, message: "tab ID is already live")
     }
-    let handle = try engine.openTab(session: session.session, window: entry.1, tabID: tabID, url: url, foreground: foreground)
+    let handle = try engine.openTab(
+      session: session.session, window: entry.1, tabID: tabID, url: url, foreground: foreground)
     tabs[tabID] = (entry.0, entry.1, handle)
   }
 
@@ -126,7 +143,8 @@ public struct ShaarPrivateSessionHandles: Equatable, Sendable {
       throw ShaarEngineError.status(.notFound, platformCode: 0, message: "private window is closed")
     }
     guard !tabs.values.contains(where: { $0.1 == entry.1 && $0.0 == entry.0 }) else {
-      throw ShaarEngineError.status(.conflict, platformCode: 0, message: "private tabs must close first")
+      throw ShaarEngineError.status(
+        .conflict, platformCode: 0, message: "private tabs must close first")
     }
     try engine.closeWindow(entry.1)
     windows.removeValue(forKey: windowID)
@@ -137,9 +155,11 @@ public struct ShaarPrivateSessionHandles: Equatable, Sendable {
       let tab = tabs[tabID], tab.0 == window.0, tab.1 == window.1,
       let session = sessions[window.0]
     else {
-      throw ShaarEngineError.status(.wrongSession, platformCode: 0, message: "tab is outside private window")
+      throw ShaarEngineError.status(
+        .wrongSession, platformCode: 0, message: "tab is outside private window")
     }
-    try engine.activateTab(session: session.session, window: window.1, tab: tab.2, requestID: requestID)
+    try engine.activateTab(
+      session: session.session, window: window.1, tab: tab.2, requestID: requestID)
   }
 
   public func closeSession(profileID: Data, sessionID: Data) throws {
@@ -148,7 +168,8 @@ public struct ShaarPrivateSessionHandles: Equatable, Sendable {
     guard !windows.values.contains(where: { $0.0 == key }),
       !tabs.values.contains(where: { $0.0 == key })
     else {
-      throw ShaarEngineError.status(.conflict, platformCode: 0, message: "private windows must close first")
+      throw ShaarEngineError.status(
+        .conflict, platformCode: 0, message: "private windows must close first")
     }
     try engine.closeSession(session.session)
     sessions.removeValue(forKey: key)

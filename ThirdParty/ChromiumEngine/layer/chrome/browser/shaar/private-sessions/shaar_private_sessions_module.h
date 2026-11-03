@@ -14,10 +14,13 @@ namespace shaar {
 
 struct PrivateSessionModuleHandlers {
   using Open = shaar_error_code (*)(void*, Profile*, const std::string&,
+                                    const std::string&,
                                     PrivateSessionRegistry::Session**);
   using Close = shaar_error_code (*)(void*, PrivateSessionRegistry::Session*);
+  using ScopePolicy = shaar_error_code (*)(shaar_scope, shaar_operation);
   Open open = nullptr;
   Close close = nullptr;
+  ScopePolicy scope_policy = nullptr;
 };
 
 // Temporary module registry declaration. The lifecycle module owns the shared
@@ -35,11 +38,21 @@ class ShaarModuleRegistry {
 shaar_error_code OpenPrivateSessionHandler(
     void* context,
     Profile* parent,
+    const std::string& profile_id,
     const std::string& session_id,
     PrivateSessionRegistry::Session** out);
 shaar_error_code ClosePrivateSessionHandler(
     void* context,
     PrivateSessionRegistry::Session* session);
+shaar_error_code PrivateSessionScopePolicy(shaar_scope scope,
+                                           shaar_operation operation);
+shaar_error_code EmitPrivateSessionStateEvent(
+    shaar_engine* engine,
+    const std::string& profile_id,
+    const std::string& session_id,
+    PrivateSessionRegistry::EventState state);
+std::unique_ptr<PrivateSessionRegistry> CreatePrivateSessionRegistry(
+    shaar_engine* engine);
 
 }  // namespace shaar
 

@@ -183,6 +183,8 @@ typedef enum {
   SHAAR_OP_MEDIA_CAPTURE_REPLY = 1106
 } shaar_operation;
 
+typedef enum { SHAAR_MODULE_PRIVATE_SESSIONS = 1200 } shaar_module_id;
+
 typedef enum {
   SHAAR_DEVTOOLS_CAPABILITY_INSPECTOR = 1,
   SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER = 2

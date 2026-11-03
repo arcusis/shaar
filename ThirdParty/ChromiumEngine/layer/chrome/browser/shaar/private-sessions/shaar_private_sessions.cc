@@ -9,44 +9,56 @@
 
 #include "base/check.h"
 #include "base/strings/string_util.h"
+#include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 
 namespace shaar {
 
-PrivateSessionRegistry::PrivateSessionRegistry() = default;
+PrivateSessionRegistry::PrivateSessionRegistry(EventSink event_sink)
+    : event_sink_(std::move(event_sink)) {}
 PrivateSessionRegistry::~PrivateSessionRegistry() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(sessions_.empty());
 }
 
-PrivateSessionRegistry::Session* PrivateSessionRegistry::Open(
+shaar_error_code PrivateSessionRegistry::Open(
     Profile* parent,
-    const std::string& session_id) {
+    const std::string& profile_id,
+    const std::string& session_id,
+    Session** out) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (!parent || session_id.empty() || !base::IsStringUTF8(session_id) ||
-      parent->IsOffTheRecord() || parent->GetOriginalProfile() != parent) {
-    return nullptr;
-  }
+  if (!out)
+    return SHAAR_INVALID_ARGUMENT;
+  *out = nullptr;
+  if (!parent || profile_id.empty() || session_id.empty() ||
+      !base::IsStringUTF8(profile_id) || !base::IsStringUTF8(session_id))
+    return SHAAR_INVALID_ARGUMENT;
+  if (parent->IsOffTheRecord() || parent->GetOriginalProfile() != parent)
+    return SHAAR_WRONG_PROFILE;
 
   auto found = sessions_.find(session_id);
   if (found != sessions_.end()) {
     Session& session = *found->second;
-    if (session.closing || session.parent != parent)
-      return nullptr;
+    if (session.parent != parent || session.profile_id != profile_id)
+      return SHAAR_WRONG_PROFILE;
+    if (session.closing)
+      return SHAAR_CONFLICT;
     ++session.open_handles;
-    return &session;
+    *out = &session;
+    return SHAAR_OK;
   }
   if (retired_ids_.contains(session_id))
-    return nullptr;
+    return SHAAR_CONFLICT;
   auto parent_session = parent_sessions_.find(parent);
   if (parent_session != parent_sessions_.end())
-    return nullptr;
+    return SHAAR_CONFLICT;
 
   Profile* otr = parent->GetPrimaryOTRProfile(/*create_if_needed=*/true);
   if (!otr || !otr->IsOffTheRecord() || otr->GetOriginalProfile() != parent)
-    return nullptr;
+    return SHAAR_CHROMIUM_ERROR;
 
   auto session = std::make_unique<Session>();
   session->id = session_id;
+  session->profile_id = profile_id;
   session->parent = parent;
   session->otr = otr;
   session->open_handles = 1;
@@ -56,7 +68,9 @@ PrivateSessionRegistry::Session* PrivateSessionRegistry::Open(
   auto [inserted, ok] = sessions_.emplace(session_id, handle);
   CHECK(ok);
   parent_sessions_.emplace(parent, session_id);
-  return inserted->second;
+  Emit(*inserted->second, EventState::kOpened);
+  *out = inserted->second;
+  return SHAAR_OK;
 }
 
 bool PrivateSessionRegistry::Close(Session* session) {
@@ -64,8 +78,10 @@ bool PrivateSessionRegistry::Close(Session* session) {
   if (!IsLive(session) || session->open_handles == 0)
     return false;
   --session->open_handles;
-  if (session->open_handles == 0)
+  if (session->open_handles == 0) {
     session->closing = true;
+    Emit(*session, EventState::kClosing);
+  }
   MaybeRetire(session);
   return true;
 }
@@ -94,6 +110,9 @@ void PrivateSessionRegistry::OnProfileWillBeDestroyed(Profile* profile) {
     return;
   auto session = sessions_.find(parent->second);
   if (session != sessions_.end()) {
+    if (!session->second->closing)
+      Emit(*session->second, EventState::kClosing);
+    Emit(*session->second, EventState::kClosed);
     session->second->closing = true;
     session->second->open_handles = 0;
     retired_ids_.insert(session->first);
@@ -126,9 +145,15 @@ bool PrivateSessionRegistry::IsLive(const Session* session) const {
   return false;
 }
 
+void PrivateSessionRegistry::Emit(const Session& session, EventState state) {
+  if (event_sink_)
+    event_sink_(session.profile_id, session.id, state);
+}
+
 void PrivateSessionRegistry::MaybeRetire(Session* session) {
   if (!session->closing || session->open_handles != 0 || session->children != 0)
     return;
+  Emit(*session, EventState::kClosed);
   retired_ids_.insert(session->id);
   Profile* parent = session->parent;
   Profile* otr = session->otr;
@@ -147,7 +172,7 @@ namespace shaar {
 bool ShaarModuleRegistry::Register(uint32_t module_id,
                                   PrivateSessionModuleHandlers handlers) {
   if (module_id != SHAAR_MODULE_PRIVATE_SESSIONS || !handlers.open ||
-      !handlers.close) {
+      !handlers.close || !handlers.scope_policy) {
     return false;
   }
   return handlers_.emplace(module_id, handlers).second;
@@ -162,18 +187,79 @@ const PrivateSessionModuleHandlers* ShaarModuleRegistry::Find(
 shaar_error_code OpenPrivateSessionHandler(
     void* context,
     Profile* parent,
+    const std::string& profile_id,
     const std::string& session_id,
     PrivateSessionRegistry::Session** out) {
   if (!out)
     return SHAAR_INVALID_ARGUMENT;
   *out = nullptr;
-  if (!context || !parent || session_id.empty())
+  if (!context || !parent || profile_id.empty() || session_id.empty())
     return SHAAR_INVALID_ARGUMENT;
   if (parent->IsOffTheRecord() || parent->GetOriginalProfile() != parent)
     return SHAAR_WRONG_PROFILE;
   auto* sessions = static_cast<PrivateSessionRegistry*>(context);
-  *out = sessions->Open(parent, session_id);
-  return *out ? SHAAR_OK : SHAAR_CONFLICT;
+  return sessions->Open(parent, profile_id, session_id, out);
+}
+
+shaar_error_code PrivateSessionScopePolicy(shaar_scope scope,
+                                           shaar_operation operation) {
+  if (scope.size < sizeof(shaar_scope))
+    return SHAAR_INVALID_ARGUMENT;
+  if ((scope.profile == nullptr) == (scope.private_session == nullptr))
+    return SHAAR_INVALID_ARGUMENT;
+  if (!scope.private_session)
+    return SHAAR_OK;
+  switch (operation) {
+    case SHAAR_OP_DOWNLOAD_LIST:
+    case SHAAR_OP_DOWNLOAD_DIRECTORY:
+    case SHAAR_OP_BOOKMARK_TREE:
+    case SHAAR_OP_BOOKMARK_APPLY:
+    case SHAAR_OP_HISTORY_QUERY:
+    case SHAAR_OP_HISTORY_INSERT:
+    case SHAAR_OP_HISTORY_DELETE:
+    case SHAAR_OP_PROFILE_DELETE:
+    case SHAAR_OP_PROFILE_SET_STATE:
+      return SHAAR_PRIVATE_DISALLOWED;
+    default:
+      return SHAAR_OK;
+  }
+}
+
+shaar_error_code EmitPrivateSessionStateEvent(
+    shaar_engine* engine,
+    const std::string& profile_id,
+    const std::string& session_id,
+    PrivateSessionRegistry::EventState state) {
+  const char* payload = nullptr;
+  size_t payload_size = 0;
+  switch (state) {
+    case PrivateSessionRegistry::EventState::kOpened:
+      payload = "{\"kind\":\"privateSession.opened\",\"schemaVersion\":1}";
+      payload_size = sizeof("{\"kind\":\"privateSession.opened\",\"schemaVersion\":1}") - 1;
+      break;
+    case PrivateSessionRegistry::EventState::kClosing:
+      payload = "{\"kind\":\"privateSession.closing\",\"schemaVersion\":1}";
+      payload_size = sizeof("{\"kind\":\"privateSession.closing\",\"schemaVersion\":1}") - 1;
+      break;
+    case PrivateSessionRegistry::EventState::kClosed:
+      payload = "{\"kind\":\"privateSession.closed\",\"schemaVersion\":1}";
+      payload_size = sizeof("{\"kind\":\"privateSession.closed\",\"schemaVersion\":1}") - 1;
+      break;
+  }
+  return EmitEvent(
+      engine, SHAAR_EVENT_PRIVATE_SESSION,
+      {profile_id.data(), profile_id.size()},
+      {session_id.data(), session_id.size()}, {nullptr, 0}, {nullptr, 0},
+      {payload, payload_size});
+}
+
+std::unique_ptr<PrivateSessionRegistry> CreatePrivateSessionRegistry(
+    shaar_engine* engine) {
+  return std::make_unique<PrivateSessionRegistry>(
+      [engine](const std::string& profile_id, const std::string& session_id,
+               PrivateSessionRegistry::EventState state) {
+        EmitPrivateSessionStateEvent(engine, profile_id, session_id, state);
+      });
 }
 
 shaar_error_code ClosePrivateSessionHandler(
@@ -195,5 +281,6 @@ extern "C" void shaar_private_sessions_register(
   registry->Register(
       SHAAR_MODULE_PRIVATE_SESSIONS,
       {.open = &shaar::OpenPrivateSessionHandler,
-       .close = &shaar::ClosePrivateSessionHandler});
+       .close = &shaar::ClosePrivateSessionHandler,
+       .scope_policy = &shaar::PrivateSessionScopePolicy});
 }

@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_SHAAR_PRIVATE_SESSIONS_SHAAR_PRIVATE_SESSIONS_H_
 #define CHROME_BROWSER_SHAAR_PRIVATE_SESSIONS_SHAAR_PRIVATE_SESSIONS_H_
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -23,8 +24,13 @@ namespace shaar {
 // it alive by retaining a live session until every child handle is closed.
 class PrivateSessionRegistry : public ProfileObserver {
  public:
+  enum class EventState { kOpened, kClosing, kClosed };
+  using EventSink = std::function<void(const std::string&, const std::string&,
+                                       EventState)>;
+
   struct Session {
     std::string id;
+    std::string profile_id;
     raw_ptr<Profile> parent = nullptr;
     raw_ptr<Profile> otr = nullptr;
     size_t open_handles = 0;
@@ -32,7 +38,7 @@ class PrivateSessionRegistry : public ProfileObserver {
     bool closing = false;
   };
 
-  PrivateSessionRegistry();
+  explicit PrivateSessionRegistry(EventSink event_sink = {});
   ~PrivateSessionRegistry();
   PrivateSessionRegistry(const PrivateSessionRegistry&) = delete;
   PrivateSessionRegistry& operator=(const PrivateSessionRegistry&) = delete;
@@ -40,7 +46,10 @@ class PrivateSessionRegistry : public ProfileObserver {
   // Returns an existing session only for the exact same (profile, ID) pair.
   // IDs are never reusable during this engine lifetime, preventing stale
   // callbacks from binding to a later private context.
-  Session* Open(Profile* parent, const std::string& session_id);
+  shaar_error_code Open(Profile* parent,
+                        const std::string& profile_id,
+                        const std::string& session_id,
+                        Session** out);
   bool Close(Session* session);
   bool RetainChild(Session* session);
   bool ReleaseChild(Session* session);
@@ -50,6 +59,7 @@ class PrivateSessionRegistry : public ProfileObserver {
  private:
   void MaybeRetire(Session* session);
   bool IsLive(const Session* session) const;
+  void Emit(const Session& session, EventState state);
 
   SEQUENCE_CHECKER(sequence_checker_);
   std::unordered_map<std::string, Session*> sessions_;
@@ -58,6 +68,7 @@ class PrivateSessionRegistry : public ProfileObserver {
   std::vector<std::unique_ptr<Session>> storage_;
   std::unordered_map<Profile*, std::string> parent_sessions_;
   std::unordered_set<std::string> retired_ids_;
+  EventSink event_sink_;
 };
 
 }  // namespace shaar

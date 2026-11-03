@@ -106,6 +106,31 @@ class DevToolsRuntimeServices {
                                   int capability) = 0;
 };
 // END devtools
+// BEGIN media
+// Optional hooks for media operations whose ownership lives outside the
+// public Chromium session API. The implementation must validate OTR handle,
+// window, tab, frame and prompt ownership before accepting a request.
+class MediaRuntimeServices {
+ public:
+  virtual ~MediaRuntimeServices() = default;
+  virtual bool OwnsPrivateTab(shaar_engine* engine,
+                              shaar_scope scope,
+                              shaar_window* window,
+                              shaar_tab* tab,
+                              content::WebContents* contents) = 0;
+  virtual shaar_error_code SubmitSupplementalOperation(
+      shaar_engine* engine,
+      shaar_scope scope,
+      shaar_window* window,
+      shaar_tab* tab,
+      shaar_operation operation,
+      shaar_bytes args_json,
+      shaar_request_id request_id,
+      shaar_reply_fn reply,
+      void* reply_context,
+      shaar_error* immediate_error) = 0;
+};
+// END media
 
 struct ShaarEngineContext {
   ProfileServices* profile_services = nullptr;
@@ -116,6 +141,9 @@ struct ShaarEngineContext {
   // BEGIN devtools
   DevToolsRuntimeServices* devtools_runtime = nullptr;
   // END devtools
+  // BEGIN media
+  MediaRuntimeServices* media_services = nullptr;
+  // END media
 };
 
 ShaarEngineContext& EngineContext();
@@ -127,6 +155,9 @@ void SetPrivateSessionServices(PrivateSessionServices* services);
 // BEGIN devtools
 void SetDevToolsRuntimeServices(DevToolsRuntimeServices* services);
 // END devtools
+// BEGIN media
+void SetMediaRuntimeServices(MediaRuntimeServices* services);
+// END media
 
 }  // namespace shaar
 

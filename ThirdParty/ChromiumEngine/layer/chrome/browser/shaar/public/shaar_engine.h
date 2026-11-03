@@ -187,6 +187,7 @@ typedef enum {
   SHAAR_OP_DEVTOOLS_CONTROL_STATUS = 1007,
   // END devtools operation IDs.
 
+  // BEGIN media
   SHAAR_OP_MEDIA_GET_STATE = 1100,
   SHAAR_OP_MEDIA_CONTROL = 1101,
   SHAAR_OP_MEDIA_SET_AUTO_PIP = 1102,
@@ -194,6 +195,7 @@ typedef enum {
   SHAAR_OP_MEDIA_EXIT_PIP = 1104,
   SHAAR_OP_MEDIA_LIST_CAPTURE_SOURCES = 1105,
   SHAAR_OP_MEDIA_CAPTURE_REPLY = 1106
+  // END media
 } shaar_operation;
 
 // Private sessions module IDs.
@@ -206,6 +208,9 @@ typedef enum {
 // BEGIN site_data
 enum { SHAAR_MODULE_SITE_DATA = 1201 };
 // END site_data
+// BEGIN media
+enum { SHAAR_MODULE_MEDIA = 1203 };
+// END media
 
 // BEGIN devtools command and module IDs.
 typedef enum {
@@ -266,6 +271,7 @@ typedef enum {
 typedef enum { SHAAR_MODULE_DEVTOOLS = 1202 } shaar_devtools_module_id;
 // END devtools command and module IDs.
 
+// BEGIN media
 typedef enum {
   SHAAR_MEDIA_PLAY = 0, SHAAR_MEDIA_PAUSE = 1,
   SHAAR_MEDIA_PREVIOUS_TRACK = 2, SHAAR_MEDIA_NEXT_TRACK = 3,
@@ -275,6 +281,7 @@ typedef enum {
   SHAAR_MEDIA_PIP_PAUSE = 10, SHAAR_MEDIA_PIP_SKIP = 11,
   SHAAR_MEDIA_PIP_ENTER = 12, SHAAR_MEDIA_PIP_EXIT = 13
 } shaar_media_command;
+// END media
 
 SHAAR_EXPORT uint32_t shaar_abi_major(void);
 SHAAR_EXPORT uint32_t shaar_abi_minor(void);

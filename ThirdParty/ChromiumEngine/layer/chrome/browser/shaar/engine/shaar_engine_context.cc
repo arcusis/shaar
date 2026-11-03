@@ -30,4 +30,9 @@ void SetDevToolsRuntimeServices(DevToolsRuntimeServices* services) {
   g_context.devtools_runtime = services;
 }
 // END devtools
+// BEGIN media
+void SetMediaRuntimeServices(MediaRuntimeServices* services) {
+  g_context.media_services = services;
+}
+// END media
 }  // namespace shaar

@@ -14,21 +14,34 @@ source_set("engine") {
     "private_sessions/shaar_private_sessions.h",
     "private_sessions/shaar_private_sessions_module.h",
     "private_sessions/shaar_private_sessions.cc",
+    # --- lifecycle module ---
+    "lifecycle/shaar_lifecycle.cc",
+    "lifecycle/shaar_lifecycle.h",
+    "lifecycle/shaar_module_registry.cc",
+    "lifecycle/shaar_module_registry.h",
+  ]
+  # --- lifecycle module dependencies ---
+  deps = [
+    "//base",
+    "//chrome/browser:chrome_browser_main",
+    "//chrome/browser:main_extra_parts",
+    "//chrome/browser:chrome_content_browser_client",
+    "//chrome/browser:lifetime",
+    "//content/public/browser",
   ]
 }
 
-# Private sessions module tests.
+import("//testing/test.gni")
+
 test("private_sessions_unittests") {
-  public = [
-    "private_sessions/shaar_private_sessions.h",
-    "private_sessions/shaar_private_sessions_module.h",
-  ]
   sources = [ "private_sessions/shaar_private_sessions_unittest.cc" ]
-  deps = [
-    ":engine",
-    "//chrome/test:test_support",
-    "//testing/gtest",
-  ]
+  deps = [ ":engine", "//chrome/test:test_support", "//testing/gtest" ]
+}
+
+test("lifecycle_unittests") {
+  # --- lifecycle module ---
+  sources = [ "lifecycle/shaar_module_registry_unittest.cc" ]
+  deps = [ ":engine", "//testing/gtest" ]
 }
 
 config("exports") {

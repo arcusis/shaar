@@ -73,6 +73,8 @@ import Testing
 }
 
 @Test func browserImportAttributesBookmarkExportsAndReportsImporterErrors() throws {
+  #expect(BrowserImportSource.chrome.id == "chrome")
+  #expect(BrowserImportSource.firefox.title == "Firefox")
   let export = FileManager.default.temporaryDirectory.appending(path: "Bookmarks-\(UUID()).json")
   try copyFixture("ChromiumBookmarks", to: export)
   let batch = try BrowserImport.read(export, source: .edge)

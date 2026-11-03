@@ -4,6 +4,7 @@ CREATE TABLE moz_bookmarks(id INTEGER PRIMARY KEY, type INTEGER, fk INTEGER, par
 INSERT INTO moz_places VALUES(1, 'https://firefox.example.test/', 'Firefox history', 2, 1700000000200000);
 INSERT INTO moz_historyvisits VALUES(1, 0, 1, 1700000000100000, 1);
 INSERT INTO moz_historyvisits VALUES(2, 0, 1, 1700000000200000, 1);
+INSERT INTO moz_historyvisits VALUES(3, 0, 1, -1, 1);
 INSERT INTO moz_places VALUES(2, 'https://firefox-bookmark.example.test/', NULL, 0, NULL);
 INSERT INTO moz_bookmarks VALUES(1, 2, NULL, 0, 0, 'places root');
 INSERT INTO moz_bookmarks VALUES(2, 2, NULL, 1, 0, 'toolbar');

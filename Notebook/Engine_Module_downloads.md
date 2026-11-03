@@ -100,6 +100,6 @@ Do not treat a Swift compile, synthetic event, or directory getter alone as pari
 
 ## Effort and risks
 
-Keep the shared design estimate for phase 5: **2–3 engineer-weeks**, excluding Chromium source sync/build wall time. This includes the profile-owned service and observer lifetime, schema/error implementation, directory policy, Swift adapter/model changes, and fixture coverage.
+Keep the shared design estimate for migration row 6: **2–3 engineer-weeks**, excluding Chromium source sync/build wall time. This includes the profile-owned service and observer lifetime, schema/error implementation, directory policy, Swift adapter/model changes, and fixture coverage.
 
 Main risks are private `DownloadManager` ownership/history semantics, profile shutdown racing observer callbacks, downloads whose target path is not yet selected, event flooding or reordered terminal notifications, policy-controlled download directories, and accidental mismatch between the settings UI, Chromium's effective destination, and file reveal validation. Chromium's `DownloadItem::Remove()` removes the record from views/history and may delete an in-progress/interrupted temporary file; it is not the same as deleting a completed downloaded file. Preserve and explicitly test that distinction. The list's path field is sensitive local filesystem data but needed by current file actions; keep it confined to the scoped engine event/call and do not emit profile paths or use a path as a profile identifier.

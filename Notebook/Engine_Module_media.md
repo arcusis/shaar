@@ -1,6 +1,6 @@
 # Engine module: media
 
-Issue: [#418](https://github.com/arcusis/shaar/issues/418). This note extends phase 11 (Media) in [[Engine_Shaar_Layer_Design]] for playback state and controls, media capture, picture-in-picture, screen/window sharing, and video dimensions. It follows [[Engine_ABI_Conventions]] and the design's ABI v1: one exported `shaar_engine.h`, opaque handles, `shaar_scope`, one event stream, borrowed length-delimited UTF-8, asynchronous replies, typed `shaar_error_code`, copied Swift payloads, UI-thread serialization, and no Chromium C++ types across C. This is fresh replacement analysis; no Ardia implementation is proposed for reuse.
+Issue: [#418](https://github.com/arcusis/shaar/issues/418). This note extends migration row 13 (Media) in [[Engine_Shaar_Layer_Design]] for playback state and controls, media capture, picture-in-picture, screen/window sharing, and video dimensions. It follows [[Engine_ABI_Conventions]] and the design's ABI v1: one exported `shaar_engine.h`, opaque handles, `shaar_scope`, one event stream, borrowed length-delimited UTF-8, asynchronous replies, typed `shaar_error_code`, copied Swift payloads, UI-thread serialization, and no Chromium C++ types across C. This is fresh replacement analysis; no Ardia implementation is proposed for reuse.
 
 ## A. Shaar app behavior today
 

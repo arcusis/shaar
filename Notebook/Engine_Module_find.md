@@ -1,6 +1,6 @@
 # Find module spec for issue #418
 
-Status: module proposal, 2026-11-03. This extends [[Engine_Shaar_Layer_Design]] phase 9 and follows [[Engine_ABI_Conventions]] as published in #420. It is a fresh interface proposal for Chromium 155; it does not reuse Ardia implementation code. No build or runtime claim is made.
+Status: module proposal, 2026-11-03. This extends [[Engine_Shaar_Layer_Design]] migration row 11 and follows [[Engine_ABI_Conventions]] as published in #420. It is a fresh interface proposal for Chromium 155; it does not reuse Ardia implementation code. No build or runtime claim is made.
 
 ## Current Shaar path
 
@@ -68,6 +68,6 @@ Return `SHAAR_INVALID_ARGUMENT` for malformed UTF-8/JSON, unknown fields, empty 
 
 ## Effort and risks
 
-Estimate: **0.5–1 engineer-week**, consistent with phase 9 of [[Engine_Shaar_Layer_Design]], excluding Chromium source sync/build wall time. Main work is binding asynchronous Chromium notifications to caller request IDs and ensuring observer teardown/cancellation semantics across navigation and close.
+Estimate: **0.5–1 engineer-week**, consistent with migration row 11 of [[Engine_Shaar_Layer_Design]], excluding Chromium source sync/build wall time. Main work is binding asynchronous Chromium notifications to caller request IDs and ensuring observer teardown/cancellation semantics across navigation and close.
 
 Risks are stale results during rapid typing or tab/document changes; helper notifications may be intermediate and can report `-1`; keeping highlighted selection on dismiss differs from clearing on empty query; private results can be misrouted if the event omits its session ID; and observer lifetime must follow `WebContents`/`FindTabHelper` destruction. Chromium owns matching/counting/selection semantics, while Swift owns visible query/status and stale UI rejection. The existing `PageFindProbe` captures the bar offscreen, so it does not prove live keyboard focus. Native compile or a successful find simulation alone does not prove production engine integration until the new source-engine CI lane runs it.

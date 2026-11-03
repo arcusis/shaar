@@ -1,6 +1,6 @@
 # Shaar engine module: private sessions
 
-Issue #418 module analysis; extends [[Engine_Shaar_Layer_Design]] ABI v1 and its phase 4 plan. This is a fresh design for Chromium 155. It does not reuse Ardia implementation. Chromium and pinned Ardia source references below are read-only references under `engine-333-364/build/EngineSource`.
+Issue #418 module analysis; extends [[Engine_Shaar_Layer_Design]] ABI v1 and its migration row 5 plan. This is a fresh design for Chromium 155. It does not reuse Ardia implementation. Chromium and pinned Ardia source references below are read-only references under `engine-333-364/build/EngineSource`.
 
 ## Current Shaar behavior and boundary
 

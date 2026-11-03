@@ -39,10 +39,12 @@ typedef enum {
   SHAAR_CANCELLED = 11,
   SHAAR_IO_ERROR = 12,
   SHAAR_CHROMIUM_ERROR = 13,
-  SHAAR_SHUTTING_DOWN = 14
+  SHAAR_SHUTTING_DOWN = 14,
+  SHAAR_UNSUPPORTED_CAPABILITY = 15
 } shaar_error_code;
 
-/* size is set by the caller. Diagnostic message is borrowed until the next call. */
+/* Caller sets size for writable errors; engine sets it in callback results.
+ * Synchronous diagnostic message is borrowed until the next ABI call. */
 typedef struct {
   uint32_t size;
   shaar_error_code code;
@@ -50,7 +52,8 @@ typedef struct {
   shaar_bytes message;
 } shaar_error;
 
-/* Result and event bytes are borrowed only for the duration of the callback. */
+/* Result and event bytes, including nested error text, are borrowed only
+ * for the duration of the callback. */
 typedef struct {
   uint32_t size;
   shaar_request_id request_id;
@@ -285,7 +288,8 @@ SHAAR_EXPORT void *shaar_tab_host_view(shaar_tab *); /* borrowed NSView* */
 SHAAR_EXPORT shaar_error_code shaar_media_pip_window(
     shaar_scope, shaar_tab *, shaar_window **out, shaar_error *error);
 
-/* Immediate failure has no later callback; accepted requests complete once. */
+/* args_json includes schemaVersion. Immediate failure has no later callback;
+ * accepted requests complete once. A result payload is empty on error. */
 SHAAR_EXPORT shaar_error_code shaar_submit(
     shaar_engine *, shaar_scope, shaar_window *, shaar_tab *,
     shaar_operation, shaar_bytes args_json, shaar_request_id,

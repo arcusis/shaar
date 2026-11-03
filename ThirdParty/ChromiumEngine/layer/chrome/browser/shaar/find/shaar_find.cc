@@ -115,6 +115,10 @@ class FindState final : public base::SupportsUserData::Data,
   }
 
   find_in_page::FindTabHelper* helper() const { return helper_; }
+  const std::string& window_id() const { return window_id_; }
+  const std::string& tab_id() const { return tab_id_; }
+  const std::string& profile_id() const { return profile_id_; }
+  const std::string& session_id() const { return session_id_; }
   void SetChromiumRequest(int request) { chromium_request_id_ = request; }
 
  private:
@@ -224,7 +228,9 @@ shaar_error_code HandleFindOperation(
     return SHAAR_INVALID_ARGUMENT;
   }
 
-  const std::string window_id;
+  const std::string window_id(context->browser_tabs->WindowID(engine, window));
+  if (window_id.empty())
+    return SHAAR_NOT_READY;
   const std::string tab_id(context->browser_tabs->TabID(engine, window, tab));
   if (tab_id.empty())
     return SHAAR_NOT_FOUND;
@@ -237,7 +243,9 @@ shaar_error_code HandleFindOperation(
   }
   if (!helper)
     return SHAAR_NOT_READY;
-  if (!state) {
+  if (!state || state->window_id() != window_id ||
+      state->tab_id() != tab_id || state->profile_id() != profile_id ||
+      state->session_id() != session_id) {
     contents->SetUserData(
         reinterpret_cast<const void*>(kFindStateKey),
         std::make_unique<FindState>(contents, engine, std::string(profile_id),

@@ -72,6 +72,11 @@ class BrowserTabRegistry {
   virtual std::string_view TabID(shaar_engine* engine,
                                  shaar_window* window,
                                  shaar_tab* tab) = 0;
+  // BEGIN find
+  virtual std::string_view WindowID(shaar_engine*, shaar_window*) {
+    return {};
+  }
+  // END find
   virtual void GetTabs(
       shaar_engine* engine,
       shaar_window* window,

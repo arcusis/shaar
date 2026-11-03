@@ -110,6 +110,22 @@ TEST(ShaarWindowsTabsHandlersTest, RegistryResolvesBoundWindowAndTabIDs) {
   EXPECT_EQ(registry.FindWebContents(engine, window, tab), nullptr);
 }
 
+// BEGIN find
+TEST(ShaarWindowsTabsHandlersTest, WindowOpenBindsPublicIDForScopedEvents) {
+  BrowserTabRegistryImpl registry;
+  auto* const engine = reinterpret_cast<shaar_engine*>(1);
+  auto* const window = reinterpret_cast<shaar_window*>(2);
+  auto* const browser = reinterpret_cast<Browser*>(3);
+
+  registry.OnWindowOpened(engine, window, browser, "window-public-id",
+                          "profile-a");
+
+  EXPECT_EQ(registry.FindBrowser(engine, window), browser);
+  EXPECT_EQ(registry.WindowID(engine, window), "window-public-id");
+  EXPECT_EQ(registry.WindowID(engine, reinterpret_cast<shaar_window*>(4)), "");
+}
+// END find
+
 TEST(ShaarWindowsTabsHandlersTest, RegularProfileBindingIsExplicitAndStable) {
   shaar::ModuleCall call = {};
   Browser* const browser = reinterpret_cast<Browser*>(1);

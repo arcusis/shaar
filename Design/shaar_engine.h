@@ -191,7 +191,12 @@ typedef enum {
 } shaar_operation;
 
 // Private sessions module IDs.
-typedef enum { SHAAR_MODULE_PRIVATE_SESSIONS = 1200 } shaar_module_id;
+typedef enum {
+  SHAAR_MODULE_PRIVATE_SESSIONS = 1200,
+  // BEGIN extensions
+  SHAAR_MODULE_EXTENSIONS = 1300,
+  // END extensions
+} shaar_module_id;
 
 typedef enum {
   SHAAR_DEVTOOLS_CAPABILITY_INSPECTOR = 1,

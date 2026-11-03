@@ -26,7 +26,9 @@ SHAAR_DECLARE_OPTIONAL_MODULE(shaar_downloads_register);
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_bookmarks_register);
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_history_register);
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_site_data_register);
+// BEGIN extensions
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_extensions_register);
+// END extensions
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_find_register);
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_devtools_register);
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_media_register);
@@ -180,8 +182,10 @@ void RegisterLinkedModules(ShaarModuleRegistry* registry) {
     shaar_history_register(registry);
   if (shaar_site_data_register)
     shaar_site_data_register(registry);
+  // BEGIN extensions
   if (shaar_extensions_register)
     shaar_extensions_register(registry);
+  // END extensions
   if (shaar_find_register)
     shaar_find_register(registry);
   if (shaar_devtools_register)

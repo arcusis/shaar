@@ -1,0 +1,164 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+import Foundation
+
+public enum ShaarExtensionsOperation: UInt32, Sendable {
+  case list = 800
+  case manage = 801
+  case action = 802
+  case installDecision = 803
+  case popupClose = 804
+}
+
+public struct ShaarExtensionSummary: Equatable, Sendable, Identifiable {
+  public let id: String
+  public let name: String
+  public let version: String
+  public let enabled: Bool
+  public let mayDisable: Bool
+  public let incognitoEnabled: Bool
+  public let source: Int
+
+  public init(
+    id: String, name: String, version: String, enabled: Bool,
+    mayDisable: Bool, incognitoEnabled: Bool, source: Int
+  ) {
+    self.id = id
+    self.name = name
+    self.version = version
+    self.enabled = enabled
+    self.mayDisable = mayDisable
+    self.incognitoEnabled = incognitoEnabled
+    self.source = source
+  }
+}
+
+public enum ShaarExtensionManagementAction: Sendable, Equatable {
+  case setEnabled(String, Bool)
+  case uninstall(String)
+
+  fileprivate var fields: [String: Any] {
+    switch self {
+    case .setEnabled(let id, let enabled):
+      return ["action": "setEnabled", "extensionId": id, "enabled": enabled]
+    case .uninstall(let id):
+      return ["action": "uninstall", "extensionId": id]
+    }
+  }
+
+  fileprivate var responseKey: String {
+    if case .uninstall = self { return "removed" }
+    return "updated"
+  }
+}
+
+/// Transport for the single `shaar_submit` entry point. The bridge copies result
+/// bytes before returning from the C callback and binds the request to this profile.
+public protocol ShaarExtensionsTransport: Sendable {
+  func submitExtensions(
+    profileID: UUID, operation: ShaarExtensionsOperation, arguments: Data
+  ) async throws -> Data
+}
+
+/// Existing Ardia implementation remains the shipping default until migration gates pass.
+public protocol ArdiaExtensionsBackend: Sendable {
+  func list(profileID: UUID) async throws -> [ShaarExtensionSummary]
+  func manage(profileID: UUID, action: ShaarExtensionManagementAction) async throws
+}
+
+public enum ShaarExtensionsAdapterError: Error, Equatable, Sendable {
+  case invalidResponse(String)
+  case invalidExtensionID
+  case mutationNotConfirmed
+}
+
+public struct ShaarExtensionsAdapter: Sendable {
+  private let implementation: ShaarEngineImplementation
+  private let ardia: any ArdiaExtensionsBackend
+  private let shaar: any ShaarExtensionsTransport
+
+  public init(
+    implementation: ShaarEngineImplementation = .shippingDefault,
+    ardia: any ArdiaExtensionsBackend,
+    shaar: any ShaarExtensionsTransport
+  ) {
+    self.implementation = implementation
+    self.ardia = ardia
+    self.shaar = shaar
+  }
+
+  public func list(profileID: UUID) async throws -> [ShaarExtensionSummary] {
+    guard implementation == .shaar else { return try await ardia.list(profileID: profileID) }
+    let data = try await shaar.submitExtensions(
+      profileID: profileID, operation: .list,
+      arguments: try encode(["schemaVersion": 1]))
+    let root = try object(data, required: ["schemaVersion", "extensions"])
+    try requireVersion(root)
+    guard let rows = root["extensions"] as? [[String: Any]], rows.count <= 10_000 else {
+      throw ShaarExtensionsAdapterError.invalidResponse("invalid extension list")
+    }
+    var ids = Set<String>()
+    return try rows.map { row in
+      guard
+        Set(row.keys)
+          == Set([
+            "id", "name", "version", "enabled", "mayDisable", "incognitoEnabled", "source",
+          ]),
+        let id = row["id"] as? String, Self.isValidExtensionID(id), ids.insert(id).inserted,
+        let name = row["name"] as? String, name.utf8.count <= 4096,
+        let version = row["version"] as? String, version.utf8.count <= 256,
+        let enabled = row["enabled"] as? Bool,
+        let mayDisable = row["mayDisable"] as? Bool,
+        let incognitoEnabled = row["incognitoEnabled"] as? Bool,
+        let source = row["source"] as? Int
+      else { throw ShaarExtensionsAdapterError.invalidResponse("malformed extension row") }
+      return ShaarExtensionSummary(
+        id: id, name: name, version: version, enabled: enabled,
+        mayDisable: mayDisable, incognitoEnabled: incognitoEnabled, source: source)
+    }
+  }
+
+  public func manage(profileID: UUID, action: ShaarExtensionManagementAction) async throws {
+    guard implementation == .shaar else {
+      try await ardia.manage(profileID: profileID, action: action)
+      return
+    }
+    let fields = action.fields
+    guard let id = fields["extensionId"] as? String, Self.isValidExtensionID(id) else {
+      throw ShaarExtensionsAdapterError.invalidExtensionID
+    }
+    var envelope = fields
+    envelope["schemaVersion"] = 1
+    let data = try await shaar.submitExtensions(
+      profileID: profileID, operation: .manage, arguments: try encode(envelope))
+    let resultKey = action.responseKey
+    let root = try object(data, required: ["schemaVersion", resultKey])
+    try requireVersion(root)
+    guard root[resultKey] as? Bool == true else {
+      throw ShaarExtensionsAdapterError.mutationNotConfirmed
+    }
+  }
+
+  private func object(_ data: Data, required: Set<String>) throws -> [String: Any] {
+    guard let value = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+      Set(value.keys) == required
+    else { throw ShaarExtensionsAdapterError.invalidResponse("invalid response object") }
+    return value
+  }
+
+  private func requireVersion(_ root: [String: Any]) throws {
+    guard root["schemaVersion"] as? Int == 1 else {
+      throw ShaarExtensionsAdapterError.invalidResponse("unsupported schema version")
+    }
+  }
+
+  private func encode(_ object: [String: Any]) throws -> Data {
+    try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+  }
+
+  private static func isValidExtensionID(_ id: String) -> Bool {
+    id.utf8.count == 32 && id.utf8.allSatisfy { (97...112).contains(Int($0)) }
+  }
+}

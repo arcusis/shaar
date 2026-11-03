@@ -4,6 +4,23 @@
 
 import SwiftUI
 
+struct BrowserChromeControlCountPreferenceKey: PreferenceKey {
+  static let defaultValue: [String: Int] = [:]
+
+  static func reduce(value: inout [String: Int], nextValue: () -> [String: Int]) {
+    for (identifier, count) in nextValue() {
+      value[identifier, default: 0] += count
+    }
+  }
+}
+
+extension View {
+  func browserChromeControl(_ identifier: String) -> some View {
+    accessibilityIdentifier(identifier)
+      .preference(key: BrowserChromeControlCountPreferenceKey.self, value: [identifier: 1])
+  }
+}
+
 struct BrowserChromeAccessibilityOverrides {
   var reduceTransparency: Bool?
   var reduceMotion: Bool?
@@ -35,8 +52,9 @@ struct BrowserChromeSurface: View {
           store.sidebarIsVisible.toggle()
         }
       }
-      if store.selectedSplit == nil {
-        PageNavigationButtons(store: store, engine: engine)
+      PageNavigationButtons(store: store, engine: engine)
+      if let split = store.selectedSplit {
+        SplitLayoutControls(store: store, split: split)
       }
       WindowDragRegion()
         .frame(maxWidth: .infinity)
@@ -44,13 +62,9 @@ struct BrowserChromeSurface: View {
       pageActions
     }
     .overlay {
-      if let split = store.selectedSplit {
-        SplitLayoutControls(store: store, split: split)
-      } else {
-        PageAddressField(store: store)
-          .frame(maxWidth: 520)
-          .padding(.horizontal, 120)
-      }
+      PageAddressField(store: store)
+        .frame(maxWidth: 520)
+        .padding(.horizontal, store.selectedSplit == nil ? 120 : 190)
     }
     .padding(.horizontal, 6)
     .frame(height: 34)

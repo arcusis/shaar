@@ -10,10 +10,57 @@ import XCTest
 @testable import ArcusisBrowser
 
 @MainActor
+private final class BrowserChromeControlCountObservation {
+  var counts: [String: Int] = [:]
+}
+
+@MainActor
 final class PageChromeLayoutTests: XCTestCase {
   func testPageCardUsesArcInsetsAndCornerRadius() {
     XCTAssertEqual(BrowserChromeLayout.pageCardInset, 8)
     XCTAssertEqual(BrowserChromeLayout.pageCardRadius, 10)
+  }
+
+  func testSplitWindowHasOneAddressAndNavigationGroupInLightAndDark() async throws {
+    var session = BrowserSession.fresh()
+    let first = try XCTUnwrap(session.open(URL(string: "https://first.example")!))
+    let second = try XCTUnwrap(session.open(URL(string: "https://second.example")!))
+    XCTAssertTrue(session.splitTabs(first, second, in: session.selectedSpaceID))
+    let stores = [("single page", BrowserStore()), ("split", BrowserStore(session: session))]
+    let identifiers = [
+      "browser.chrome.address", "browser.chrome.back", "browser.chrome.forward",
+      "browser.chrome.reload",
+    ]
+
+    for (layout, store) in stores {
+      for (scheme, appearance) in [
+        (ColorScheme.light, NSAppearance.Name.aqua),
+        (.dark, .darkAqua),
+      ] {
+        let observation = BrowserChromeControlCountObservation()
+        let host = NSHostingView(
+          rootView: BrowserWindow(store: store)
+            .environment(\.colorScheme, scheme)
+            .onPreferenceChange(BrowserChromeControlCountPreferenceKey.self) {
+              observation.counts = $0
+            })
+        let window = NSWindow(
+          contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
+          styleMask: .borderless, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.appearance = NSAppearance(named: appearance)
+        window.contentView = host
+        defer { window.close() }
+
+        host.layoutSubtreeIfNeeded()
+        try await Task.sleep(for: .milliseconds(100))
+        for identifier in identifiers {
+          XCTAssertEqual(
+            observation.counts[identifier, default: 0], 1,
+            "Expected one \(identifier) control in \(layout) \(scheme) mode")
+        }
+      }
+    }
   }
 
   func testCapturesActualBrowserWindowChromeAcrossAccessibilityModes() async throws {
@@ -101,4 +148,5 @@ final class PageChromeLayoutTests: XCTestCase {
     XCTAssertEqual(rendered.pixelsHigh, Int(host.bounds.height))
     return (rendered.pixelsWide, rendered.pixelsHigh)
   }
+
 }

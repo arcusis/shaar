@@ -29,7 +29,7 @@ struct BasicBrowsingProbe {
     for character in alphabet { store.commandQuery.append(character) }
     try expect(store.commandQuery == alphabet, "address bar accepts every letter a-z")
     checks.append("address bar accepts every letter a-z")
-    try expectNoPicker(initialWindowCount)
+    try assertNoPicker(initialWindowCount)
     checks.append("address bar typing opens no menu or picker")
     store.dismissCommand()
 
@@ -38,7 +38,7 @@ struct BasicBrowsingProbe {
     for character in alphabet { store.commandQuery.append(character) }
     try expect(store.commandQuery == alphabet, "Command-T search accepts every letter a-z")
     checks.append("Command-T search accepts every letter a-z")
-    try expectNoPicker(initialWindowCount)
+    try assertNoPicker(initialWindowCount)
     checks.append("Command-T typing opens no menu or picker")
 
     let searchText = "shaar basic browsing smoke"
@@ -84,7 +84,7 @@ struct BasicBrowsingProbe {
     return checks
   }
 
-  private func tryExpectNoPicker(_ initialWindowCount: Int) throws {
+  private func assertNoPicker(_ initialWindowCount: Int) throws {
     try expect(
       store.commandIsOpen && store.sheet == nil && NSApp.modalWindow == nil
         && NSApp.windows.count == initialWindowCount && NSApp.windows.allSatisfy { !$0.isVisible },

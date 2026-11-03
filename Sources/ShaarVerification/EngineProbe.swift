@@ -385,6 +385,16 @@ final class EngineProbe {
     throw ProbeFailure("\(check); native selection audit: \(selection)")
   }
 
+  private func waitForNativeTabSelection(_ tabID: String) async throws -> [String: Any] {
+    for _ in 0..<100 {
+      let selection = runtime.normalProbeSelectionAudit(forTabID: tabID)
+      if selection["selectedNativeTab"] as? Bool == true { return selection }
+      try await Task.sleep(for: .milliseconds(50))
+    }
+    let selection = runtime.normalProbeSelectionAudit(forTabID: tabID)
+    throw ProbeFailure("Native tab \(tabID) was not selected; native selection audit: \(selection)")
+  }
+
   /// Restored background tabs keep committing titles after launch; wait for the model to stop changing.
   private func waitForSessionToSettle() async throws {
     var previous = store.session
@@ -608,7 +618,7 @@ final class EngineProbe {
           store.session.selectedSpace.selectedTabID?.uuidString == tab
             && store.session.selectedSpace.profileID.uuidString == profileA,
           "\(phase) Space switch \(iteration + 1) selects the correct native Space and profile")
-        let nativeSelection = runtime.normalProbeSelectionAudit(forTabID: tab)
+        let nativeSelection = try await waitForNativeTabSelection(tab)
         try expect(
           nativeSelection["selectedNativeTab"] as? Bool == true,
           "\(phase) Space switch \(iteration + 1) selects the native tab")
@@ -646,7 +656,7 @@ final class EngineProbe {
           store.session.selectedSpace.selectedTabID?.uuidString == tab
             && store.session.selectedSpace.profileID.uuidString == (isA ? profileA : profileB),
           "\(phase) Profile switch \(iteration + 1) selects the correct Space and profile")
-        let nativeSelection = runtime.normalProbeSelectionAudit(forTabID: tab)
+        let nativeSelection = try await waitForNativeTabSelection(tab)
         try expect(
           nativeSelection["selectedNativeTab"] as? Bool == true,
           "\(phase) Profile switch \(iteration + 1) selects the native tab")

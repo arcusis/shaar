@@ -1122,32 +1122,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     let launchLanguage = BrowserLanguage.currentLaunchLanguage
     ARCConfigureLocalization(BrowserLocalization.resourceBundleURL, launchLanguage.localeIdentifier)
     do {
-      let applicationSupport: URL
-      if let rawProbeRoot = ProcessInfo.processInfo.environment["ARDIA_TEST_PROBE_ROOT"] {
-        let probeRoot = URL(fileURLWithPath: rawProbeRoot).standardizedFileURL
-        let marker = probeRoot.appending(path: ".arcusis-probe")
-        let markerContents = try String(contentsOf: marker, encoding: .utf8)
-        let runnerTempParent =
-          ProcessInfo.processInfo.environment["RUNNER_TEMP"].map {
-            [URL(fileURLWithPath: $0).standardizedFileURL]
-          } ?? []
-        let allowedParents =
-          [
-            FileManager.default.temporaryDirectory.standardizedFileURL,
-            URL(fileURLWithPath: "/tmp").standardizedFileURL,
-          ] + runnerTempParent
-        guard
-          allowedParents.contains(probeRoot.deletingLastPathComponent())
-            && markerContents == "arcusis-engine-probe-v1\n"
-        else {
-          throw WorkspaceError.invalidState
-        }
-        applicationSupport = probeRoot.appending(
-          path: ".application-support", directoryHint: .isDirectory)
-      } else {
-        applicationSupport = URL.applicationSupportDirectory
-      }
-      let directory = applicationSupport.appending(
+      let directory = URL.applicationSupportDirectory.appending(
         path: ProductIdentity.dataFolderName, directoryHint: .isDirectory)
       let lock = try WorkspaceProcessLock(directory: directory)
       let workspace = try BrowserWorkspaceStore(

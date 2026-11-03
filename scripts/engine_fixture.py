@@ -844,14 +844,6 @@ def build_engine_probe_arguments(executable, root, fixture_url, phase, *, includ
     return arguments
 
 
-def probe_environment(root: Path) -> dict[str, str]:
-    home = root / ".home"
-    home.mkdir(mode=0o700, exist_ok=True)
-    return dict(os.environ, HOME=str(home), ARDIA_TEST_PROBE_ROOT=str(root),
-                ARDIA_DOWNLOADS_DIR=str(root / "Downloads"),
-                ARDIA_BACKGROUND="picture-in-picture")
-
-
 def validate_private_window_report(root, phase, report, exit_code):
     path = root / f'{phase}-private-window.json'
     try:
@@ -1542,9 +1534,11 @@ def main(argv=None):
     threading.Thread(target=server.serve_forever, daemon=True).start()
     executable = app / "Contents/MacOS/ShaarVerification"
     (root / 'Downloads').mkdir(mode=0o700, exist_ok=True)
-    # Keep user defaults and native workspace data under the transferred disposable root so the
-    # restart phase sees the same macOS application state on its runner.
-    probe_env = probe_environment(root)
+    # Any ARDIA_BACKGROUND value keeps Chromium's picture-in-picture overlay transparent and
+    # click-through, so the media probe opens no visible window. The engine's other
+    # background test hooks require exactly '1' and stay off.
+    probe_env = dict(os.environ, ARDIA_DOWNLOADS_DIR=str(root / 'Downloads'),
+                     ARDIA_BACKGROUND='picture-in-picture')
     print(f"Probe evidence: {root}", flush=True)
     failures = []
     try:

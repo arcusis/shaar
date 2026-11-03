@@ -1856,7 +1856,10 @@ class Runner:
         if sys.platform != "darwin" or self.host_inputs_arch() != "arm64":
             raise BuildError("source build requires Apple Silicon macOS")
         if self.receipt.get("status") == "succeeded":
-            raise BuildError("this owned output already has a successful build receipt")
+            # _load_receipt has already checked the owner, pinned configuration,
+            # and runner digest. Keep repeated workflow dispatches idempotent so
+            # the verified source/build cache can be packaged again.
+            return
         previous_failure = self.receipt.pop("failure", None)
         if previous_failure:
             self.receipt.setdefault("failureHistory", []).append(previous_failure)

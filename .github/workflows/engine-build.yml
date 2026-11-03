@@ -1,0 +1,72 @@
+name: Self-hosted engine build
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: shaar-self-hosted-engine-build
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # Dispatches from any ref except production must never reach David's Mac.
+    if: github.repository == 'arcusis/shaar' && github.ref == 'refs/heads/production'
+    runs-on: [self-hosted, macOS, shaar-engine]
+    timeout-minutes: 720
+    steps:
+      - name: Prepare persistent production checkout
+        shell: bash
+        env:
+          BUILD_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          cache_root="$HOME/shaar-engine-cache"
+          checkout="$cache_root/shaar"
+          umask 077
+          mkdir -p "$cache_root"
+          chmod 700 "$cache_root"
+
+          if [[ ! -e "$checkout" ]]; then
+            git clone --no-hardlinks https://github.com/arcusis/shaar.git "$checkout"
+          fi
+          if [[ -L "$checkout" || ! -d "$checkout/.git" ]]; then
+            echo "Persistent engine checkout is not a real Git checkout" >&2
+            exit 1
+          fi
+          origin="$(git -C "$checkout" remote get-url origin)"
+          if [[ "$origin" != "https://github.com/arcusis/shaar.git" ]]; then
+            echo "Persistent checkout origin does not match arcusis/shaar" >&2
+            exit 1
+          fi
+
+          git -C "$checkout" fetch --no-tags origin production
+          git -C "$checkout" cat-file -e "$BUILD_COMMIT^{commit}"
+          git -C "$checkout" merge-base --is-ancestor "$BUILD_COMMIT" FETCH_HEAD
+          git -C "$checkout" checkout --force --detach "$BUILD_COMMIT"
+          git -C "$checkout" clean -fd
+
+      - name: Build pinned engine source
+        shell: bash
+        run: cd "$HOME/shaar-engine-cache/shaar" && python3 scripts/build-engine-source.py --run
+
+      - name: Package engine
+        shell: bash
+        run: cd "$HOME/shaar-engine-cache/shaar" && bash scripts/package-engine.sh
+
+      - name: Stage package for artifact upload
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/engine-artifact"
+          cp "$HOME/shaar-engine-cache/shaar/build/EnginePackage"/ShaarEngine-*.zip "$GITHUB_WORKSPACE/engine-artifact/"
+
+      - name: Upload engine package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: shaar-engine-${{ github.sha }}
+          path: engine-artifact/ShaarEngine-*.zip
+          if-no-files-found: error
+          retention-days: 7

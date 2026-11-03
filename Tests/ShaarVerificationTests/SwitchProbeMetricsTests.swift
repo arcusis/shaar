@@ -28,7 +28,7 @@ import Testing
     let profileLatencyJSON = try #require(object["profileSwitchLatency"] as? [String: Any])
     let memoryJSON = try #require(object["residentMemory"] as? [String: Any])
     #expect(object["expectedSampleCount"] as? Int == 20)
-    #expect(object["latencyBudgetMilliseconds"] as? Double == 150)
+    #expect(object["latencyBudgetMilliseconds"] as? Double == 100)
     #expect((object["spaceSwitchSamples"] as? [Any])?.count == 20)
     #expect((object["profileSwitchSamples"] as? [Any])?.count == 20)
     #expect(spaceLatencyJSON["count"] as? Int == 20)
@@ -50,7 +50,7 @@ import Testing
     #expect(decoded.spaceSwitchLatency == report.spaceSwitchLatency)
     #expect(decoded.profileSwitchLatency == report.profileSwitchLatency)
     #expect(decoded.residentMemory == report.residentMemory)
-    #expect(decoded.measurementScope.contains("Host-plus-IPC"))
+    #expect(decoded.measurementScope.contains("native WebContents is displayed"))
     #expect(
       decoded.samples.allSatisfy {
         $0.latencyMilliseconds.isFinite && $0.latencyMilliseconds >= 0
@@ -127,10 +127,10 @@ import Testing
     var recorder = SwitchProbeMetricsRecorder()
     for iteration in 1...SwitchProbeMetrics.expectedSwitchCount {
       try recorder.record(
-        kind: .space, iteration: iteration, latencySeconds: 0.149,
+        kind: .space, iteration: iteration, latencySeconds: 0.099,
         residentMemoryBytes: nil)
       try recorder.record(
-        kind: .profile, iteration: iteration, latencySeconds: 0.151,
+        kind: .profile, iteration: iteration, latencySeconds: 0.101,
         residentMemoryBytes: nil)
     }
     let report = recorder.report(phase: "initial")

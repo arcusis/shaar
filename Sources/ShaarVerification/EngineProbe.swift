@@ -560,6 +560,10 @@ final class EngineProbe {
           "\(phase) Space switch \(iteration + 1) selects the correct native Space and profile")
         try await waitForDisplayedNativeTab(
           tab, "\(phase) Space switch \(iteration + 1) displays the selected native tab")
+        try switchMetrics.record(
+          kind: .space, iteration: iteration + 1,
+          latencySeconds: ProcessInfo.processInfo.systemUptime - switchStart,
+          residentMemoryBytes: NativeResidentMemory.currentBytes())
         let state = try await snapshot(tab)
         let retainsAccountAndDocument =
           state["cookie"] as? String == "account=alpha"
@@ -572,10 +576,6 @@ final class EngineProbe {
           phase == "initial" && !isShared
             ? state["session"] as? String == "alpha" : state["session"] is NSNull,
           "\(phase) Space switch \(iteration + 1) preserves tab session storage")
-        try switchMetrics.record(
-          kind: .space, iteration: iteration + 1,
-          latencySeconds: ProcessInfo.processInfo.systemUptime - switchStart,
-          residentMemoryBytes: NativeResidentMemory.currentBytes())
       }
       for iteration in 0..<SwitchProbeMetrics.expectedSwitchCount {
         let isA = !iteration.isMultiple(of: 2)
@@ -594,6 +594,10 @@ final class EngineProbe {
           "\(phase) Profile switch \(iteration + 1) selects the correct Space and profile")
         try await waitForDisplayedNativeTab(
           tab, "\(phase) Profile switch \(iteration + 1) displays the selected native tab")
+        try switchMetrics.record(
+          kind: .profile, iteration: iteration + 1,
+          latencySeconds: ProcessInfo.processInfo.systemUptime - switchStart,
+          residentMemoryBytes: NativeResidentMemory.currentBytes())
         let state = try await snapshot(tab)
         let original = isA ? firstA : firstB
         let retainsAccountAndDocument =
@@ -618,10 +622,6 @@ final class EngineProbe {
           phase == "initial"
             ? state["session"] as? String == account : state["session"] is NSNull,
           "\(phase) Profile switch \(iteration + 1) preserves tab session storage")
-        try switchMetrics.record(
-          kind: .profile, iteration: iteration + 1,
-          latencySeconds: ProcessInfo.processInfo.systemUptime - switchStart,
-          residentMemoryBytes: NativeResidentMemory.currentBytes())
       }
       let switchReport = switchMetrics.report(phase: phase)
       try expect(

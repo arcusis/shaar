@@ -235,6 +235,16 @@ class CoverageGateTests(unittest.TestCase):
             with self.subTest(report=report), self.assertRaises(ValueError):
                 COVERAGE.module_coverage(report)
 
+    def test_engine_only_private_host_probe_is_excluded_from_unit_coverage(self):
+        report = self.report()
+        report["data"][0]["files"].extend([
+            {"filename": "/checkout/Sources/ShaarVerification/PrivateProductHostProbe.swift",
+             "summary": {"lines": {"covered": 1, "count": 259}}},
+            {"filename": "/checkout/Sources/ShaarVerification/PrivateWindowProbe.swift",
+             "summary": {"lines": {"covered": 20, "count": 30}}},
+        ])
+        self.assertEqual(COVERAGE.module_coverage(report)["ShaarVerification"], (20, 30))
+
 
 class SupplyChainTests(unittest.TestCase):
     def test_generated_directory_exclusions_never_cover_nested_source_paths(self):

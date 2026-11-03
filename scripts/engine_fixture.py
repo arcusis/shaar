@@ -129,7 +129,8 @@ def record_bitwarden_summary(root, control_only):
 def require_marked_probe_root(root, purpose):
     """Return the canonical root only when this runner created and marked it."""
     canonical = root.resolve()
-    if (canonical.parent != Path(tempfile.gettempdir()).resolve()
+    allowed_parents = {Path(tempfile.gettempdir()).resolve(), Path("/tmp").resolve()}
+    if (canonical.parent not in allowed_parents
             or not canonical.name.startswith('arcusis-engine-probe-')
             or (canonical / '.arcusis-probe').read_text() != 'arcusis-engine-probe-v1\n'):
         raise RuntimeError(f'{purpose} requires a marked disposable probe root')
@@ -784,6 +785,9 @@ def argument_parser():
                       help="SIGKILL the exact probe PID while it saves a managed workspace, then verify the restored session")
     mode.add_argument("--basic-browsing", action="store_true",
                       help="Run the normal-window address/search/tab/close/reopen/quit smoke")
+    parser.add_argument("--probe-phase", choices=("initial", "restart"),
+                        help="Run one half of a baseline or private-window probe using a transferred profile")
+    parser.add_argument("--probe-root", help="Marked temporary root used by a split probe phase")
     return parser
 
 
@@ -1349,6 +1353,12 @@ def record_external_app_consent_summary(root):
 
 def main(argv=None):
     options = argument_parser().parse_args(argv)
+    split_phase = options.probe_phase is not None
+    if split_phase and (options.bitwarden or options.bitwarden_onboarding_control or options.abrupt_restart
+                        or options.abrupt_control or options.saved_tab_capacity or options.external_app_consent
+                        or options.quit_exit or options.session_recovery or options.basic_browsing
+                        or not options.probe_root):
+        raise ValueError("Split probe phases require only the baseline or private-window mode and a probe root")
     include_bitwarden = options.bitwarden or options.bitwarden_onboarding_control
     if options.bitwarden_onboarding_control:
         print('CONTROL ONLY: two-second intro-screen age; clean first-click acceptance is not evaluated', flush=True)
@@ -1367,12 +1377,50 @@ def main(argv=None):
         print('BASIC BROWSING: hidden normal window, authored pages, real renderer captures, clean quit', flush=True)
     app = VERIFICATION_APP.resolve()
     require_verification_bundle_identity(app)
-    root = Path(tempfile.mkdtemp(prefix="arcusis-engine-probe-"))
-    (root / ".arcusis-probe").write_text("arcusis-engine-probe-v1\n")
-    (root / ".arcusis-probe").chmod(0o600)
-    private_window_run_id = str(uuid.uuid4()).upper() if options.private_window else None
-    shutil.copytree("Tests/Fixtures/ProfileExtension", root / "Extension")
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Fixture)
+    root = Path(options.probe_root) if split_phase else Path(tempfile.mkdtemp(prefix="arcusis-engine-probe-"))
+    phase_state_path = root / "engine-phase-state.json"
+    saved_phase_state = None
+    if split_phase and options.probe_phase == "restart":
+        require_marked_probe_root(root, "Transferred engine probe restart")
+        saved_phase_state = json.loads(phase_state_path.read_text())
+        expected_mode = "private-window" if options.private_window else "baseline"
+        if (saved_phase_state.get("schema") != 1 or saved_phase_state.get("phase") != "initial"
+                or saved_phase_state.get("mode") != expected_mode
+                or type(saved_phase_state.get("port")) is not int
+                or not 1 <= saved_phase_state["port"] <= 65535
+                or saved_phase_state.get("listenerClosed") is not True
+                or not isinstance(saved_phase_state.get("childProcesses", []), list)):
+            raise RuntimeError("Transferred engine probe state has the wrong source phase or mode")
+    else:
+        if split_phase:
+            if root.parent.resolve() != Path("/tmp").resolve():
+                raise RuntimeError("Split engine probe roots must be created directly under /tmp")
+            if root.exists():
+                raise RuntimeError(f"Split engine probe root already exists: {root}")
+            root.mkdir(parents=True)
+        (root / ".arcusis-probe").write_text("arcusis-engine-probe-v1\n")
+        (root / ".arcusis-probe").chmod(0o600)
+        shutil.copytree("Tests/Fixtures/ProfileExtension", root / "Extension")
+    private_window_run_id = (
+        saved_phase_state.get("privateWindowRunID") if saved_phase_state else
+        str(uuid.uuid4()).upper() if options.private_window else None)
+    private_window_children = list(saved_phase_state.get("childProcesses", [])) if saved_phase_state else []
+    if split_phase and options.probe_phase == "restart" and options.private_window:
+        initial_proof = root / "engine-private-window-initial-evidence"
+        if not initial_proof.is_dir():
+            raise RuntimeError("Transferred private-window state is missing initial phase evidence")
+        shutil.copytree(initial_proof, Path("build/private-window-evidence") / private_window_run_id,
+                        dirs_exist_ok=True)
+    server = http.server.ThreadingHTTPServer(
+        ("127.0.0.1", saved_phase_state["port"] if saved_phase_state else 0), Fixture)
+    server_port = server.server_port
+    if split_phase and options.probe_phase == "initial":
+        (root / "engine-phase-state.json").write_text(json.dumps({
+            "schema": 1, "phase": "initial",
+            "mode": "private-window" if options.private_window else "baseline",
+            "port": server_port, "privateWindowRunID": private_window_run_id,
+            "childProcesses": [],
+        }, indent=2, sort_keys=True) + "\n")
     threading.Thread(target=server.serve_forever, daemon=True).start()
     executable = app / "Contents/MacOS/ShaarVerification"
     (root / 'Downloads').mkdir(mode=0o700)
@@ -1383,9 +1431,9 @@ def main(argv=None):
                      ARDIA_BACKGROUND='picture-in-picture')
     print(f"Probe evidence: {root}", flush=True)
     failures = []
-    private_window_children = []
     try:
-        phases = ("initial",) if options.basic_browsing else ("initial", "restart")
+        phases = ((options.probe_phase,) if split_phase else
+                  ("initial",) if options.basic_browsing else ("initial", "restart"))
         for phase in phases:
             if options.private_window and phase == 'restart' and failures:
                 print('SKIPPED restart: initial fixture failed; no valid seeded restart baseline', flush=True)
@@ -1511,7 +1559,18 @@ def main(argv=None):
     finally:
         server.shutdown()
         server.server_close()
-    if options.private_window:
+    if split_phase and options.probe_phase == "initial":
+        listener_closed = verify_fixture_listener_closed(server_port)
+        if not listener_closed:
+            raise RuntimeError("Initial phase left its local fixture listener open")
+        phase_state = json.loads(phase_state_path.read_text())
+        phase_state["childProcesses"] = private_window_children
+        phase_state["listenerClosed"] = listener_closed
+        phase_state_path.write_text(json.dumps(phase_state, indent=2, sort_keys=True) + "\n")
+        if options.private_window:
+            proof_directory = Path("build/private-window-evidence") / private_window_run_id
+            shutil.copytree(proof_directory, root / "engine-private-window-initial-evidence")
+    if options.private_window and not (split_phase and options.probe_phase == "initial"):
         summary = record_private_window_summary(
             root, listener_closed=verify_fixture_listener_closed(server.server_port),
             child_receipts=private_window_children,

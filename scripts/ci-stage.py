@@ -125,11 +125,17 @@ def run_probe_iterations(checks: Commands, mode: str, iterations: range) -> None
 def build_engine_bundle(checks: Commands, iterations: int) -> None:
     require_hosted_mac()
     if (checks.directory / "bundle.json").is_file():
-        validate_bundle_archive(ROOT, checks.directory)
-        with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
-            output.write(f"shards={json.dumps(engine_shards(iterations))}\n")
-        print("Reusing integrity-checked verification bundle for this exact source tree")
-        return
+        try:
+            validate_bundle_archive(ROOT, checks.directory)
+        except (OSError, ValueError, tarfile.TarError) as error:
+            print(f"Discarding unusable verification bundle cache and rebuilding: {error}")
+            (checks.directory / "bundle.json").unlink(missing_ok=True)
+            (checks.directory / "verification.tar.gz").unlink(missing_ok=True)
+        else:
+            with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
+                output.write(f"shards={json.dumps(engine_shards(iterations))}\n")
+            print("Reusing integrity-checked verification bundle for this exact source tree and toolchain")
+            return
     if checks.run("verification-build", ["bash", "scripts/bundle-app.sh", "--with-engine", "--verification"]):
         return
     archive_bundle(ROOT, checks.directory)
@@ -137,12 +143,64 @@ def build_engine_bundle(checks: Commands, iterations: int) -> None:
         output.write(f"shards={json.dumps(engine_shards(iterations))}\n")
 
 
-def run_engine_shard(checks: Commands, shard: str, iterations: int) -> None:
+def run_split_engine_probe(checks: Commands, shard: str, mode: str, iteration: int, phase: str) -> None:
+    run_id = os.environ.get("GITHUB_RUN_ID", "local")
+    attempt = os.environ.get("GITHUB_RUN_ATTEMPT", "1")
+    probe_temp = Path("/tmp").resolve()
+    root = probe_temp / f"arcusis-engine-probe-{run_id}-{attempt}-{shard}"
+    archive = ROOT / "build/ci/engine-state" / f"{shard}.tar.gz"
+    if phase == "restart":
+        archive.parent.mkdir(parents=True, exist_ok=True)
+        if root.exists():
+            raise ValueError(f"Split engine probe root already exists: {root}")
+        with tarfile.open(archive, "r:gz") as source:
+            members = source.getmembers()
+            if not members or any(not (member.name == root.name or member.name.startswith(root.name + "/"))
+                                  for member in members):
+                raise ValueError("Transferred probe archive contains an unexpected root")
+            source.extractall(probe_temp, filter="data")
+    arguments = [sys.executable, "scripts/engine_fixture.py"]
+    if mode == "private-window":
+        arguments.append("--private-window")
+    arguments.extend(("--probe-phase", phase, "--probe-root", str(root)))
+    environment = dict(os.environ, SHAAR_PROBE_TIMEOUT_SCALE="3", ARCUSIS_PRIVATE_WINDOW_CI="1")
+    if checks.run(f"{mode}-{iteration}-{phase}", arguments, env=environment):
+        return
+    if mode == "private-window":
+        phase_state = json.loads((root / "engine-phase-state.json").read_text())
+        proof = ROOT / "build/private-window-evidence" / phase_state["privateWindowRunID"]
+        if proof.is_dir():
+            shutil.copytree(proof, checks.directory / f"private-window-{iteration}-{phase}")
+    if phase == "initial":
+        archive.parent.mkdir(parents=True, exist_ok=True)
+        with tarfile.open(archive, "w:gz", compresslevel=1) as output:
+            output.add(root, arcname=root.name)
+    else:
+        shutil.rmtree(root)
+
+
+def run_engine_shard(checks: Commands, shard: str, iterations: int, phase: str | None = None) -> None:
     require_hosted_mac()
     modes = shard_modes(shard, iterations)
     restore_bundle(ROOT, ROOT / "build/ci/engine-build")
     if checks.run("verification-signature", ["codesign", "--verify", "--deep", "--strict", "--verbose=2",
                                             f"build/{BUNDLE_NAME}"]):
+        return
+    primary = next((mode for mode, _ in modes if mode in {"baseline", "private-window"}), None)
+    if phase is not None:
+        if phase not in {"initial", "restart"} or primary is None:
+            raise ValueError("Split engine shards require a baseline or private-window probe")
+        repetitions = next(indexes for mode, indexes in modes if mode == primary)
+        for iteration in repetitions:
+            run_split_engine_probe(checks, shard, primary, iteration, phase)
+            if checks.results[-1]["status"]:
+                return
+        if phase == "initial" and shard == "baseline-1":
+            for mode, indexes in modes:
+                if mode in {"quit-exit", "session-recovery"}:
+                    run_probe_iterations(checks, mode, indexes)
+                    if checks.results[-1]["status"]:
+                        return
         return
     for mode, repetitions in modes:
         run_probe_iterations(checks, mode, repetitions)
@@ -176,14 +234,15 @@ def run_sanitizer(checks: Commands, sanitizer: str) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("stage", choices=("unit", "coverage", "engine", "engine-build", "engine-shard", "basic-browsing", "visual", "localization", "shipping", "sanitize", "dead-code"))
-    parser.add_argument("--shard", choices=engine_shards(10), default="baseline-lifecycle")
+    parser.add_argument("--shard", choices=engine_shards(10), default="baseline-1")
+    parser.add_argument("--phase", choices=("initial", "restart"))
     parser.add_argument("--mode", choices=("all", *ENGINE_MODES), default="all")
     parser.add_argument("--iterations", type=int, choices=range(1, 11), default=1)
     parser.add_argument("--sanitizer", choices=("address", "thread"), default="address")
     options = parser.parse_args()
     suffix = f"-{options.mode}" if options.stage == "engine" and options.mode != "all" else ""
     if options.stage == "engine-shard":
-        suffix = f"-{options.shard}"
+        suffix = f"-{options.shard}" + (f"-{options.phase}" if options.phase else "")
     suffix += f"-{options.sanitizer}" if options.stage == "sanitize" else ""
     checks = Commands(options.stage + suffix)
     try:
@@ -198,7 +257,7 @@ def main() -> int:
         elif options.stage == "engine-build":
             build_engine_bundle(checks, options.iterations)
         elif options.stage == "engine-shard":
-            run_engine_shard(checks, options.shard, options.iterations)
+            run_engine_shard(checks, options.shard, options.iterations, options.phase)
         elif options.stage == "basic-browsing":
             run_basic_browsing(checks)
         elif options.stage == "visual":

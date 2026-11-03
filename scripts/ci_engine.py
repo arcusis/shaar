@@ -18,16 +18,22 @@ BUNDLE_NAME = "Shaar Verification.app"
 def engine_shards(iterations: int) -> list[str]:
     if not 1 <= iterations <= 10:
         raise ValueError("Engine iterations must be between 1 and 10")
-    return ["baseline-lifecycle", *(f"private-window-{index}" for index in range(1, max(3, iterations) + 1))]
+    return [*(f"baseline-{index}" for index in range(1, iterations + 1)),
+            *(f"private-window-{index}" for index in range(1, max(3, iterations) + 1))]
 
 
 def shard_modes(shard: str, iterations: int) -> list[tuple[str, range]]:
     if shard not in engine_shards(iterations):
         raise ValueError(f"Unknown engine shard: {shard}")
-    if shard == "baseline-lifecycle":
-        return [("baseline", range(1, iterations + 1)), ("quit-exit", range(1, max(3, iterations) + 1)),
-                ("session-recovery", range(1, iterations + 1))]
     index = int(shard.rsplit("-", 1)[1])
+    if shard.startswith("baseline-"):
+        modes = [("baseline", range(index, index + 1))]
+        if index == 1:
+            modes.extend((
+                ("quit-exit", range(1, max(3, iterations) + 1)),
+                ("session-recovery", range(1, iterations + 1)),
+            ))
+        return modes
     return [("private-window", range(index, index + 1))]
 
 

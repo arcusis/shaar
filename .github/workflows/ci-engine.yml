@@ -11,6 +11,9 @@ permissions:
 jobs:
   prepare:
     name: Build shared verification bundle
+    permissions:
+      actions: read
+      contents: read
     runs-on: macos-26
     timeout-minutes: 30
     outputs:
@@ -30,12 +33,42 @@ jobs:
           echo "tree=$tree" >> "$GITHUB_OUTPUT"
           echo "CI_SOURCE_TREE=$tree" >> "$GITHUB_ENV"
       - name: Restore exact-tree verification bundle
+        id: bundle-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: |
             build/ci/engine-build/bundle.json
             build/ci/engine-build/verification.tar.gz
           key: engine-bundle-${{ runner.os }}-${{ runner.arch }}-${{ env.CI_TOOLCHAIN_ID }}-${{ steps.source-tree.outputs.tree }}-${{ hashFiles('ThirdParty/ArdiaCore/pin.json') }}
+      - name: Find the matching successful PR bundle for this merge group
+        id: pr-bundle-run
+        if: github.event_name == 'merge_group' && steps.bundle-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        env:
+          QUEUE_HEAD_REF: ${{ github.event.merge_group.head_ref }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          head_ref="${QUEUE_HEAD_REF#refs/heads/}"
+          if [[ ! "$head_ref" =~ ^gh-readonly-queue/production/pr-([0-9]+)-([0-9a-f]{40})$ ]]; then
+            echo "run_id=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          queue_pr="${BASH_REMATCH[1]}"
+          source_sha="${BASH_REMATCH[2]}"
+          runs_file="$RUNNER_TEMP/source-checks-runs.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/source-checks.yml/runs?event=pull_request&head_sha=$source_sha&per_page=100" > "$runs_file"
+          run_id=$(python3 -c 'import json,sys; data=json.load(open(sys.argv[1])); pr=int(sys.argv[2]); runs=[r for r in data.get("workflow_runs", []) if r.get("conclusion") == "success" and any(p.get("number") == pr for p in r.get("pull_requests", []))]; print(max(runs, key=lambda r:r.get("run_number", 0))["id"] if runs else "")' "$runs_file" "$queue_pr")
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+      - name: Download the verified bundle artifact from the matching PR run
+        if: github.event_name == 'merge_group' && steps.bundle-cache.outputs.cache-hit != 'true' && steps.pr-bundle-run.outputs.run_id != ''
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: ci-engine-build-${{ steps.pr-bundle-run.outputs.run_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.pr-bundle-run.outputs.run_id }}
+          path: build/ci/engine-build
       - name: Build or reuse bundle bound to source tree, engine and toolchain
         id: bundle
         env:
@@ -48,13 +81,14 @@ jobs:
           compression-level: '0'
           artifact-name: ci-engine-build-${{ github.run_id }}
           overwrite: 'true'
-  probes:
-    name: Engine ${{ matrix.shard }}
+  probes-initial:
+    name: Engine ${{ matrix.shard }} initial phase
     needs: prepare
     runs-on: macos-26
     timeout-minutes: 90
     strategy:
       fail-fast: false
+      max-parallel: 4
       matrix:
         shard: ${{ fromJSON(needs.prepare.outputs.shards) }}
     steps:
@@ -70,12 +104,57 @@ jobs:
         with:
           name: ci-engine-build-${{ github.run_id }}
           path: build/ci/engine-build
-      - name: Verify shared bundle and run assigned iterations without retries
+      - name: Verify shared bundle and run initial phase without retries
         env:
           CI_ITERATIONS: ${{ inputs.iterations }}
           CI_SHARD: ${{ matrix.shard }}
-        run: .venv/bin/python scripts/ci-stage.py engine-shard --iterations "$CI_ITERATIONS" --shard "$CI_SHARD"
+        run: .venv/bin/python scripts/ci-stage.py engine-shard --iterations "$CI_ITERATIONS" --shard "$CI_SHARD" --phase initial
+      - name: Upload profile state for the restart phase
+        if: success()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: ci-engine-state-${{ matrix.shard }}-${{ github.run_id }}
+          path: build/ci/engine-state/${{ matrix.shard }}.tar.gz
+          if-no-files-found: error
+          retention-days: 1
       - uses: ./.github/actions/ci-evidence
         if: always()
         with:
-          stage: engine-shard-${{ matrix.shard }}
+          stage: engine-shard-${{ matrix.shard }}-initial
+
+  probes-restart:
+    name: Engine ${{ matrix.shard }} restart phase
+    needs: [prepare, probes-initial]
+    runs-on: macos-26
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        shard: ${{ fromJSON(needs.prepare.outputs.shards) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/ci-setup
+        with:
+          mode: engine-probe
+      - name: Identify exact source tree for bundle validation
+        run: echo "CI_SOURCE_TREE=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: ci-engine-build-${{ github.run_id }}
+          path: build/ci/engine-build
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: ci-engine-state-${{ matrix.shard }}-${{ github.run_id }}
+          path: build/ci/engine-state
+      - name: Verify shared bundle and run restart phase without retries
+        env:
+          CI_ITERATIONS: ${{ inputs.iterations }}
+          CI_SHARD: ${{ matrix.shard }}
+        run: .venv/bin/python scripts/ci-stage.py engine-shard --iterations "$CI_ITERATIONS" --shard "$CI_SHARD" --phase restart
+      - uses: ./.github/actions/ci-evidence
+        if: always()
+        with:
+          stage: engine-shard-${{ matrix.shard }}-restart

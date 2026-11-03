@@ -438,6 +438,8 @@ class ProbeSoakTests(unittest.TestCase):
     def test_shards_cover_every_original_iteration_once_without_retry(self):
         from collections import Counter
         from ci_engine import engine_shards, shard_modes
+        self.assertEqual(engine_shards(1), ["baseline-1", "private-window-1",
+                                           "private-window-2", "private-window-3"])
         for iterations in (1, 2, 3, 10):
             expected = Counter((mode, index) for mode in STAGES.ENGINE_MODES
                                for index in range(1, max(iterations, STAGES.MINIMUM_REPETITIONS.get(mode, 1)) + 1))

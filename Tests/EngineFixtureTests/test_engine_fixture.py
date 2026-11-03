@@ -143,6 +143,15 @@ class SavedTabCapacityRunnerTests(unittest.TestCase):
         self.assertFalse((self.root / 'saved-tab-capacity-summary.json').exists())
 
 
+class SplitProbePhaseArgumentTests(unittest.TestCase):
+    def test_initial_and_restart_phases_require_a_transferred_root_argument(self):
+        for phase in ('initial', 'restart'):
+            options = fixture.argument_parser().parse_args([
+                '--probe-phase', phase, '--probe-root', '/tmp/arcusis-engine-probe-ci-test'])
+            self.assertEqual(options.probe_phase, phase)
+            self.assertEqual(options.probe_root, '/tmp/arcusis-engine-probe-ci-test')
+
+
 class VerificationBundleIdentityTests(unittest.TestCase):
     def setUp(self):
         directory = tempfile.TemporaryDirectory(prefix='verification-bundle-identity-')

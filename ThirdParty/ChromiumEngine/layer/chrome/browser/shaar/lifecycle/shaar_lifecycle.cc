@@ -20,7 +20,7 @@
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
-#include "chrome/browser/shaar/lifecycle/shaar_module_registry.h"
+#include "chrome/browser/shaar/engine/shaar_module_registry.h"
 #include "content/public/browser/browser_main_parts.h"
 
 extern "C" int ChromeMain(int argc, const char** argv);

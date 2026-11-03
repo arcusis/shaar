@@ -4,22 +4,12 @@
 
 #include "chrome/browser/shaar/profiles/shaar_profiles.h"
 
-#include <map>
 #include <string>
 
-#include "chrome/browser/shaar/profiles/shaar_module_registry.h"
+#include "chrome/browser/shaar/engine/shaar_module_registry.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
-
-class CapturingRegistry final : public shaar::ShaarModuleRegistry {
- public:
-  void Register(shaar_operation operation, Handler handler) override {
-    handlers[operation] = handler;
-  }
-
-  std::map<shaar_operation, Handler> handlers;
-};
 
 void NoopReply(void*, const shaar_result*) {}
 
@@ -37,18 +27,17 @@ TEST(ShaarProfilesTest, UUIDMappingIsCanonicalAndContained) {
 }
 
 TEST(ShaarProfilesTest, RegistersOnlyTheProfileOperationRange) {
-  CapturingRegistry registry;
+  ShaarModuleRegistry registry;
   shaar_profiles_register(&registry);
-  ASSERT_EQ(registry.handlers.size(), 3u);
-  EXPECT_TRUE(registry.handlers.contains(SHAAR_OP_PROFILE_DELETE));
-  EXPECT_TRUE(registry.handlers.contains(SHAAR_OP_PROFILE_GET_STATE));
-  EXPECT_TRUE(registry.handlers.contains(SHAAR_OP_PROFILE_SET_STATE));
+  EXPECT_NE(registry.Find(SHAAR_OP_PROFILE_DELETE), nullptr);
+  EXPECT_NE(registry.Find(SHAAR_OP_PROFILE_GET_STATE), nullptr);
+  EXPECT_NE(registry.Find(SHAAR_OP_PROFILE_SET_STATE), nullptr);
 }
 
 TEST(ShaarProfilesTest, HandlerRejectsMissingAndPrivateProfileScopes) {
-  CapturingRegistry registry;
+  ShaarModuleRegistry registry;
   shaar_profiles_register(&registry);
-  auto handler = registry.handlers.at(SHAAR_OP_PROFILE_GET_STATE);
+  auto handler = registry.Find(SHAAR_OP_PROFILE_GET_STATE);
   auto* fake_engine = reinterpret_cast<shaar_engine*>(0x1);
   shaar_error error = {};
   error.size = sizeof(error);

@@ -30,7 +30,7 @@
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
-#include "chrome/browser/shaar/profiles/shaar_module_registry.h"
+#include "chrome/browser/shaar/engine/shaar_module_registry.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/prefs/pref_service.h"
 #include "components/content_settings/core/common/pref_names.h"
@@ -373,9 +373,12 @@ shaar_error_code HandleProfileOperation(
 void shaar_profiles_register(shaar::ShaarModuleRegistry* registry) {
   if (!registry)
     return;
-  registry->Register(SHAAR_OP_PROFILE_DELETE, &HandleProfileOperation);
-  registry->Register(SHAAR_OP_PROFILE_GET_STATE, &HandleProfileOperation);
-  registry->Register(SHAAR_OP_PROFILE_SET_STATE, &HandleProfileOperation);
+  registry->Register(SHAAR_OP_PROFILE_DELETE, SHAAR_OP_PROFILE_DELETE,
+                    &HandleProfileOperation);
+  registry->Register(SHAAR_OP_PROFILE_GET_STATE, SHAAR_OP_PROFILE_GET_STATE,
+                    &HandleProfileOperation);
+  registry->Register(SHAAR_OP_PROFILE_SET_STATE, SHAAR_OP_PROFILE_SET_STATE,
+                    &HandleProfileOperation);
 }
 
 namespace shaar::profiles {

@@ -10,7 +10,8 @@ pin=ThirdParty/ArdiaCore/pin.json
 checksum=$(jq -er .sha256 "$pin")
 tree=$(jq -er .engineTree "$pin")
 url=$(jq -er .archiveURL "$pin")
-key=${tree:0:12}
+# Shaar's patched builds share upstream's engine tree, so the archive digest names the cache entry.
+key=${tree:0:12}-${checksum:0:12}
 cache="$PWD/build/EngineCache"
 archive="$cache/ArdiaCore-$key.tar.xz"
 mkdir -p "$cache"

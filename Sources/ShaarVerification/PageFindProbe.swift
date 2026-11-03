@@ -171,8 +171,6 @@ final class PageFindProbe {
     throw PageFindProbeFailure("\(message): \(store.pageFind?.status ?? "find closed")")
   }
 
-  /// Wait for native selection and restored document content before starting
-  /// Chromium find, which can otherwise race tab activation and renderer commit.
   private func waitForFindTarget(_ tab: UUID, containing text: String? = nil) async throws {
     let literal =
       text.flatMap { value in
@@ -189,7 +187,6 @@ final class PageFindProbe {
           document["ready"] as? String == "complete",
           document["text"] as? Bool == true
         {
-          checks.append("native find target is selected and its authored document text is ready")
           try await Task.sleep(for: .milliseconds(100))
           return
         }

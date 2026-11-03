@@ -43,6 +43,7 @@ class BundleAppTests(unittest.TestCase):
         shutil.copy2(ICON, icon)
         shutil.copytree(REPO / "Resources" / "ExtensionManager", self.root / "Resources" / "ExtensionManager")
         shutil.copytree(REPO / "Resources" / "Localizations", self.root / "Resources" / "Localizations")
+        shutil.copytree(REPO / "Resources" / "Privacy", self.root / "Resources" / "Privacy")
         catalog_dir = self.root / "Sources" / "BrowserCore" / "Resources"
         catalog_dir.mkdir(parents=True)
         for catalog in (REPO / "Sources" / "BrowserCore" / "Resources").glob("*.xcstrings"):
@@ -139,6 +140,10 @@ class BundleAppTests(unittest.TestCase):
         resources = contents / "Resources"
         bundle = resources / "ArcusisBrowser_BrowserCore.bundle" / "Contents"
         self.assertEqual((bundle / "Resources" / "public_suffix_list.dat").read_bytes(), PSL.read_bytes())
+        self.assertEqual(
+            (resources / "Privacy" / "tracker-domains.json").read_bytes(),
+            (REPO / "Resources" / "Privacy" / "tracker-domains.json").read_bytes(),
+        )
         self.assertEqual((bundle / "Info.plist").read_text(), "fixture plist")
         for language in ("en", "he"):
             localized = bundle / "Resources" / f"{language}.lproj"

@@ -1,0 +1,27 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+diff --git a/chrome/browser/extensions/extension_tab_util.cc b/chrome/browser/extensions/extension_tab_util.cc
+--- a/chrome/browser/extensions/extension_tab_util.cc
++++ b/chrome/browser/extensions/extension_tab_util.cc
+@@ -31,6 +31,7 @@
+ #include "chrome/browser/tab_list/tab_list_interface.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
++#include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
+ #include "chrome/browser/ui/navigator/browser_navigator.h"
+ #include "chrome/browser/ui/navigator/browser_navigator_params.h"
+ #include "chrome/browser/ui/tab_contents/tab_contents_iterator.h"
+@@ -1215,8 +1216,10 @@
+ // static
+ WindowController* ExtensionTabUtil::GetWindowControllerOfTab(
+     WebContents* web_contents) {
++  // The tab's window association can outlive removal from the live browser
++  // collection during shutdown. Do not access that window's unowned user data.
+   BrowserWindowInterface* browser =
+-      browser_window_util::GetBrowserForTabContents(*web_contents);
++      GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(web_contents);
+   if (browser) {
+     return BrowserExtensionWindowController::From(browser);
+   }

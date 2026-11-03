@@ -289,12 +289,13 @@ private func bookmarkPayload(children: [[String: Any]]) -> [String: Any] {
 
   let html = directory.appendingPathComponent("Encoded.html")
   try
-    #"<A href='https://example.com/?a=1&amp;b=2' title='ignored'>A &amp; B</A><A HREF="javascript:bad()">bad</A>"#
+    #"<DL><p><DT><H3>Work</H3><DL><p><DT><H3>Research</H3><DL><p><DT><A href='https://example.com/?a=1&amp;b=2' title='ignored'>A &amp; B</A></DL><p></DL><p><DT><A HREF="javascript:bad()">bad</A></DL>"#
     .write(to: html, atomically: true, encoding: .utf8)
   let htmlItems = try BrowserImport.read(html)
   #expect(htmlItems.count == 1)
   #expect(htmlItems[0].address == "https://example.com/?a=1&amp;b=2")
   #expect(htmlItems[0].title == "A & B")
+  #expect(htmlItems[0].folder == "Work / Research")
 
   let emptyHTML = directory.appendingPathComponent("Empty.html")
   try "<DL><DT>No bookmarks</DT></DL>".write(

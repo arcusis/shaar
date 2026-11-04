@@ -95,7 +95,7 @@ void CaptureReply(void* opaque, const shaar_result* result) {
   captured->payload.assign(result->payload_json.data, result->payload_json.size);
 }
 
-TEST(ShaarDevToolsTest, CommandMapIsCapabilityScopedAndNeverExposesCookies) {
+TEST(ShaarDevToolsTest, CommandMapIsCapabilityScoped) {
   EXPECT_STREQ("DOM.getDocument",
                ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_INSPECTOR,
                               SHAAR_DEVTOOLS_DOM_GET_DOCUMENT));
@@ -108,9 +108,12 @@ TEST(ShaarDevToolsTest, CommandMapIsCapabilityScopedAndNeverExposesCookies) {
   EXPECT_EQ(nullptr,
             ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_INSPECTOR,
                            SHAAR_DEVTOOLS_NETWORK_GET_COOKIES));
-  EXPECT_EQ(nullptr,
-            ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER,
-                           SHAAR_DEVTOOLS_NETWORK_DELETE_COOKIES));
+  EXPECT_STREQ("Network.deleteCookies",
+               ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER,
+                              SHAAR_DEVTOOLS_NETWORK_DELETE_COOKIES));
+  EXPECT_STREQ("Page.captureScreenshot",
+               ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER,
+                              SHAAR_DEVTOOLS_PAGE_CAPTURE_SCREENSHOT));
 }
 
 TEST(ShaarDevToolsTest, EncodesOnlyFixedMethodsWithNumericRequestIDs) {
@@ -137,6 +140,31 @@ TEST(ShaarDevToolsTest, RejectsUnknownFieldsMalformedJSONAndForbiddenCommands) {
     EXPECT_NE(SHAAR_OK,
               EncodeProtocolRequest(Bytes(args), 7, &output, &reason));
     EXPECT_TRUE(output.empty());
+  }
+}
+
+TEST(ShaarDevToolsTest, DeveloperCookieCommandsRequireScopedParameters) {
+  for (
+      const std::string args :
+      {R"({"schemaVersion":1,"capability":2,"command":41,"params":{"urls":["https://example.com"]}})",
+       R"({"schemaVersion":1,"capability":2,"command":42,"params":{"name":"session","value":"v","url":"https://example.com"}})",
+       R"({"schemaVersion":1,"capability":2,"command":43,"params":{"name":"session","url":"https://example.com"}})"}) {
+    std::string output;
+    std::string reason;
+    EXPECT_EQ(SHAAR_OK,
+              EncodeProtocolRequest(Bytes(args), 44, &output, &reason))
+        << reason;
+    EXPECT_NE(std::string::npos, output.find("Network."));
+  }
+  for (
+      const std::string args :
+      {R"({"schemaVersion":1,"capability":2,"command":42,"params":{"name":"session","url":"https://example.com"}})",
+       R"({"schemaVersion":1,"capability":2,"command":43,"params":{"name":"session"}})",
+       R"({"schemaVersion":1,"capability":1,"command":41,"params":{}})"}) {
+    std::string output;
+    std::string reason;
+    EXPECT_NE(SHAAR_OK,
+              EncodeProtocolRequest(Bytes(args), 44, &output, &reason));
   }
 }
 

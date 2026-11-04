@@ -84,6 +84,22 @@ TEST(ShaarHistoryModuleTest, MapsImportsToChromiumVisitSourceCategories) {
             history::SOURCE_OS_MIGRATION_IMPORTED);
 }
 
+TEST(ShaarHistoryModuleTest, StopsWatchStateBeforeEngineTeardown) {
+  FakeProfileServices profiles;
+  FakeBrowserTabs tabs;
+  shaar::ShaarEngineContext context{&profiles, &tabs};
+  auto *engine = reinterpret_cast<shaar_engine *>(0x1234);
+  shaar_scope invalid_scope{};
+  shaar_error immediate{.size = sizeof(shaar_error)};
+  EXPECT_EQ(HandleHistoryOperation(&context, engine, invalid_scope, nullptr,
+                                   nullptr, SHAAR_OP_HISTORY_QUERY, {}, 1,
+                                   nullptr, nullptr, &immediate),
+            SHAAR_INVALID_ARGUMENT);
+  EXPECT_TRUE(shaar_history::HasWatchStateForTesting(engine));
+  shaar_history::StopObservingLifecycle(engine);
+  EXPECT_FALSE(shaar_history::HasWatchStateForTesting(engine));
+}
+
 TEST(ShaarHistoryModuleTest, RejectsPrivateScopeForEveryHistoryOperation) {
   ShaarModuleRegistry registry;
   shaar_history_register(&registry);

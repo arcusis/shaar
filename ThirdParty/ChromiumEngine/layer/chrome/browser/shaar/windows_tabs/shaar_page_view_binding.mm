@@ -9,6 +9,9 @@
 #include <pthread.h>
 #include <unordered_map>
 
+#include "chrome/browser/devtools/devtools_window.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_page_view_host.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
 #include "content/public/browser/web_contents.h"
@@ -91,6 +94,39 @@ extern "C" SHAAR_EXPORT void* shaar_tab_host_view(shaar_tab* tab) {
       shaar::windows_tabs::Registry().FindWindowOwner(window);
   NSView* view = FindTabView(engine, window, tab);
   return (__bridge void*)view;
+}
+
+extern "C" SHAAR_EXPORT void *shaar_devtools_frontend_view(shaar_engine *engine,
+                                                           shaar_scope scope,
+                                                           shaar_window *window,
+                                                           shaar_tab *tab) {
+  if (!pthread_main_np() || !engine || !window || !tab ||
+      scope.size < sizeof(shaar_scope) ||
+      ((scope.profile != nullptr) == (scope.private_session != nullptr)))
+    return nullptr;
+  auto &context = shaar::EngineContext();
+  content::WebContents *inspected =
+      shaar::windows_tabs::Registry().FindWebContents(engine, window, tab);
+  if (!inspected)
+    return nullptr;
+  Profile *expected = nullptr;
+  if (scope.profile && context.profile_services) {
+    expected = context.profile_services->ResolveProfile(engine, scope.profile);
+  } else if (scope.private_session && context.private_sessions) {
+    Profile *parent = nullptr;
+    std::string_view profile_id;
+    std::string_view session_id;
+    if (!context.private_sessions->Resolve(engine, scope.private_session,
+                                           &parent, &expected, &profile_id,
+                                           &session_id))
+      return nullptr;
+  }
+  if (!expected || inspected->GetBrowserContext() != expected)
+    return nullptr;
+  content::WebContents *frontend =
+      DevToolsWindow::GetInTabWebContents(inspected, nullptr);
+  return frontend ? (__bridge void *)frontend->GetNativeView().GetNativeNSView()
+                  : nullptr;
 }
 
 extern "C" SHAAR_EXPORT shaar_error_code shaar_tab_view_attach(

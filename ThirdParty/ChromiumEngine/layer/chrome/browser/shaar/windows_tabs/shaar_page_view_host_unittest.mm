@@ -95,6 +95,9 @@ TEST(ShaarPageViewHostTest, PublicABIRejectsUnregisteredHandles) {
 
   EXPECT_EQ(shaar_window_host_view(window), nullptr);
   EXPECT_EQ(shaar_tab_host_view(tab), nullptr);
+  shaar_scope scope{sizeof(shaar_scope), reinterpret_cast<shaar_profile *>(4),
+                    nullptr};
+  EXPECT_EQ(shaar_devtools_frontend_view(engine, scope, window, tab), nullptr);
   EXPECT_EQ(shaar_tab_view_attach(engine, window, tab, &error),
             SHAAR_NOT_FOUND);
   EXPECT_EQ(error.code, SHAAR_NOT_FOUND);

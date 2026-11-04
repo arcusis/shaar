@@ -19,6 +19,10 @@ extern "C" void shaar_history_register(ShaarModuleRegistry* registry);
 
 namespace shaar_history {
 history::VisitSource VisitSourceForImport(const std::string& source);
+// Detach observers while profile services are still alive during browser
+// shutdown.
+void StopObservingLifecycle(shaar_engine *engine);
+bool HasWatchStateForTesting(shaar_engine *engine);
 }
 
 #endif // CHROME_BROWSER_SHAAR_HISTORY_SHAAR_HISTORY_H_

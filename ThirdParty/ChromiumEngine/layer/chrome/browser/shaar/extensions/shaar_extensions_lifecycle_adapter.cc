@@ -10,6 +10,6 @@ extern "C" void shaar_extensions_register(ShaarModuleRegistry* registry) {
   static const shaar::ExtensionsModuleHandlers handlers{
       .submit = &HandleExtensionsOperation};
   registry->RegisterModule(SHAAR_MODULE_EXTENSIONS, &handlers);
-  registry->Register(SHAAR_OP_EXTENSION_LIST, SHAAR_OP_EXTENSION_POPUP_CLOSE,
+  registry->Register(SHAAR_OP_EXTENSION_LIST, SHAAR_OP_EXTENSION_ACTION_STATE,
                      &HandleExtensionsOperation);
 }

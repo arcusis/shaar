@@ -23,5 +23,7 @@ shaar_error_code HandleSiteDataOperation(
     void*, shaar_error*);
 extern "C" void shaar_site_data_register(ShaarModuleRegistry* registry);
 bool IsValidSiteDataOriginForTesting(std::string_view origin);
+std::string SiteSecurityLevelForTesting(std::string_view url,
+                                        bool certificate_error);
 
 #endif  // CHROME_BROWSER_SHAAR_SITE_DATA_SHAAR_SITE_DATA_H_

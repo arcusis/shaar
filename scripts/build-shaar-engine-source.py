@@ -47,6 +47,9 @@ REQUIRED_EXPORTS = (
     "_shaar_profile_get_state",
     "_shaar_profile_set_state",
     "_shaar_profile_get_path",
+    "_shaar_private_session_open",
+    "_shaar_private_session_close",
+    "_shaar_private_session_cookie_setting",
     "_shaar_window_open",
     "_shaar_window_close",
     "_shaar_tab_open",
@@ -58,6 +61,8 @@ REQUIRED_EXPORTS = (
     "_shaar_tab_view_detach",
     "_shaar_tab_view_focus",
     "_shaar_window_host_resize",
+    "_shaar_site_security_info",
+    "_shaar_devtools_frontend_view",
 )
 PROFILE_MODULE_EXPORTS = (
     "_shaar_profile_open",

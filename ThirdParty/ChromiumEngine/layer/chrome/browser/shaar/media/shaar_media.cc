@@ -9,21 +9,33 @@
 #include <cstddef>
 #include <cstring>
 #include <initializer_list>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/time/time.h"
+#include "base/timer/timer.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
+#include "chrome/common/chrome_isolated_world_ids.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/common/content_settings.h"
+#include "components/content_settings/core/common/content_settings_types.h"
 #include "content/public/browser/media_session.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "services/media_session/public/mojom/media_session.mojom.h"
+#include "url/gurl.h"
+#include "url/origin.h"
 
 namespace {
 
@@ -213,9 +225,163 @@ bool HasAction(content::MediaSession* session,
   return std::find(actions.begin(), actions.end(), action) != actions.end();
 }
 
+class RuntimeServices final : public shaar::MediaRuntimeServices {
+public:
+  bool OwnsPrivateTab(shaar_engine *engine, shaar_scope scope,
+                      shaar_window *window, shaar_tab *tab,
+                      content::WebContents *contents) override {
+    auto &context = shaar::EngineContext();
+    if (!context.private_sessions || !context.browser_tabs || !engine ||
+        !scope.private_session || scope.profile || !contents ||
+        context.browser_tabs->FindWebContents(engine, window, tab) != contents)
+      return false;
+    Profile *parent = nullptr;
+    Profile *otr = nullptr;
+    std::string_view profile_id;
+    std::string_view session_id;
+    return context.private_sessions->Resolve(engine, scope.private_session,
+                                             &parent, &otr, &profile_id,
+                                             &session_id) &&
+           parent && otr && !session_id.empty() &&
+           contents->GetBrowserContext() == otr;
+  }
+
+  shaar_error_code SubmitSupplementalOperation(
+      shaar_engine *engine, shaar_scope scope, shaar_window *window,
+      shaar_tab *tab, shaar_operation operation, shaar_bytes args_json,
+      shaar_request_id request_id, shaar_reply_fn reply, void *reply_context,
+      shaar_error *error) override {
+    if (operation != SHAAR_OP_MEDIA_SET_AUTO_PIP)
+      return Fail(error, SHAAR_UNSUPPORTED_CAPABILITY,
+                  "media capture controls are not connected");
+    auto args = ParseArguments(args_json);
+    if (!args || !args->FindBool("allowed").has_value() || !reply ||
+        !request_id)
+      return Fail(error, SHAAR_INVALID_ARGUMENT,
+                  "automatic PiP requires an allowed boolean");
+    auto &context = shaar::EngineContext();
+    content::WebContents *contents =
+        context.browser_tabs
+            ? context.browser_tabs->FindWebContents(engine, window, tab)
+            : nullptr;
+    if (!contents)
+      return Fail(error, SHAAR_NOT_FOUND, "media tab is unavailable");
+    Profile *profile =
+        Profile::FromBrowserContext(contents->GetBrowserContext());
+    const GURL &url = contents->GetLastCommittedURL();
+    if (!profile || !url.SchemeIsHTTPOrHTTPS())
+      return Fail(error, SHAAR_INVALID_ARGUMENT,
+                  "automatic PiP requires a web origin");
+    HostContentSettingsMap *settings =
+        HostContentSettingsMapFactory::GetForProfile(profile);
+    if (!settings)
+      return Fail(error, SHAAR_NOT_READY,
+                  "automatic PiP content settings are unavailable");
+    const GURL origin = url::Origin::Create(url).GetURL();
+    settings->SetContentSettingDefaultScope(
+        origin, origin, ContentSettingsType::AUTO_PICTURE_IN_PICTURE,
+        *args->FindBool("allowed") ? CONTENT_SETTING_ALLOW
+                                   : CONTENT_SETTING_BLOCK);
+    Reply(ReplyContext{request_id, reply, reply_context},
+          base::DictValue().Set("schemaVersion", 1));
+    return SHAAR_OK;
+  }
+};
+
+RuntimeServices g_runtime_services;
+
+struct VolumeRequest {
+  explicit VolumeRequest(ReplyContext reply_context)
+      : reply_context(reply_context) {}
+
+  void Finish() {
+    if (finished)
+      return;
+    finished = true;
+    timer.Stop();
+    if (changed_elements > 0) {
+      Reply(reply_context, base::DictValue().Set("schemaVersion", 1));
+    } else {
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              &DeliverReply, reply_context, SHAAR_UNSUPPORTED_CAPABILITY,
+              std::string(),
+              std::string("no playing media element accepted volume")));
+    }
+  }
+
+  void OnFrameResult(base::Value value) {
+    if (finished)
+      return;
+    if (value.is_int() && value.GetInt() > 0)
+      changed_elements += value.GetInt();
+    if (--pending_frames == 0)
+      Finish();
+  }
+
+  ReplyContext reply_context;
+  int pending_frames = 0;
+  int changed_elements = 0;
+  bool finished = false;
+  base::OneShotTimer timer;
+};
+
+std::u16string VolumeScript(double value) {
+  std::u16string script =
+      u"(()=>{let changed=0;for(const element of "
+      u"document.querySelectorAll('audio,video')){"
+      u"if(!element.paused&&!element.ended){element.volume=";
+  script += base::UTF8ToUTF16(std::to_string(value));
+  script += u";changed++;}}return changed;})()";
+  return script;
+}
+
 }  // namespace
 
 namespace shaar::media {
+
+void BindRuntimeServices() {
+  shaar::SetMediaRuntimeServices(&g_runtime_services);
+}
+
+std::u16string VolumeScriptForTesting(double value) {
+  return VolumeScript(value);
+}
+
+shaar_error_code ApplyElementVolume(content::WebContents *contents,
+                                    double value, ReplyContext reply_context,
+                                    shaar_error *error) {
+  content::RenderFrameHost *primary = contents->GetPrimaryMainFrame();
+  if (!primary)
+    return Fail(error, SHAAR_NOT_READY, "media page has no primary frame");
+  std::vector<content::RenderFrameHost *> frames;
+  primary->ForEachRenderFrameHost([&frames](content::RenderFrameHost *frame) {
+    if (frame->IsRenderFrameLive())
+      frames.push_back(frame);
+  });
+  if (frames.empty())
+    return Fail(error, SHAAR_NOT_READY, "media page has no live frame");
+  auto request = std::make_shared<VolumeRequest>(reply_context);
+  request->pending_frames = static_cast<int>(frames.size());
+  request->timer.Start(
+      FROM_HERE, base::Seconds(2),
+      base::BindOnce(
+          [](std::shared_ptr<VolumeRequest> pending) { pending->Finish(); },
+          request));
+  const std::u16string script = VolumeScript(value);
+  for (content::RenderFrameHost *frame : frames) {
+    frame->ExecuteJavaScriptInIsolatedWorld(
+        script,
+        base::BindOnce(
+            [](std::shared_ptr<VolumeRequest> pending, base::Value result) {
+              pending->OnFrameResult(std::move(result));
+            },
+            request),
+        ISOLATED_WORLD_ID_CHROME_INTERNAL);
+  }
+  return SHAAR_OK;
+}
 
 bool IsValidControl(uint32_t command, double value, bool has_value) {
   if (command > SHAAR_MEDIA_PIP_EXIT)
@@ -318,8 +484,8 @@ shaar_error_code HandleMediaOperation(
       return SHAAR_OK;
     }
     if (*command == SHAAR_MEDIA_SET_ELEMENT_VOLUME)
-      return Fail(immediate_error, SHAAR_UNSUPPORTED_CAPABILITY,
-                  "page-element volume requires a frame-owned media service");
+      return shaar::media::ApplyElementVolume(contents, value, request,
+                                              immediate_error);
     content::MediaSession* session = content::MediaSession::GetIfExists(contents);
     media_session::mojom::MediaSessionAction action;
     bool action_mapped = false;

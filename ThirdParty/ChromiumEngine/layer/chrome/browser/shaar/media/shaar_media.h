@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_SHAAR_MEDIA_SHAAR_MEDIA_H_
 #define CHROME_BROWSER_SHAAR_MEDIA_SHAAR_MEDIA_H_
 
+#include <string>
+
 #include "chrome/browser/shaar/engine/shaar_module_registry.h"
 #include "services/media_session/public/mojom/media_session.mojom.h"
 
@@ -13,6 +15,9 @@ class WebContents;
 }
 
 namespace shaar::media {
+
+void BindRuntimeServices();
+std::u16string VolumeScriptForTesting(double value);
 
 // Pure helpers used by the handler and its focused unit tests.
 bool IsValidControl(uint32_t command, double value, bool has_value);

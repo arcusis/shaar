@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include <algorithm>
+#include <cmath>
 #include <initializer_list>
 #include <memory>
 #include <optional>
@@ -20,16 +21,28 @@
 #include "base/location.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/values.h"
+#include "chrome/browser/extensions/extension_action_runner.h"
 #include "chrome/browser/extensions/extension_service.h"
+#include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "content/public/browser/host_zoom_map.h"
+#include "content/public/browser/web_contents.h"
+#include "third_party/blink/public/common/page/page_zoom.h"
 #include "extensions/browser/disable_reason.h"
+#include "extensions/browser/extension_action.h"
+#include "extensions/browser/extension_action_manager.h"
 #include "extensions/browser/extension_registrar.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/extension_util.h"
 #include "extensions/browser/uninstall_reason.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/manifest_handlers/description_info.h"
+#include "extensions/common/permissions/permissions_data.h"
+#include "url/gurl.h"
 
 namespace {
 
@@ -106,6 +119,14 @@ bool ValidExtensionId(const std::string& id) {
          });
 }
 
+std::optional<double> Number(const base::DictValue &input, const char *key) {
+  if (auto value = input.FindDouble(key))
+    return value;
+  if (auto value = input.FindInt(key))
+    return static_cast<double>(*value);
+  return std::nullopt;
+}
+
 std::optional<std::string> EncodeList(Profile* profile,
                                       extensions::ExtensionRegistry* registry) {
   auto* extension_system = extensions::ExtensionSystem::Get(profile);
@@ -117,6 +138,16 @@ std::optional<std::string> EncodeList(Profile* profile,
     row.Set("id", extension->id());
     row.Set("name", extension->name());
     row.Set("version", extension->version().GetString());
+    row.Set("description", extensions::DescriptionInfo::GetDescription(*extension));
+    base::ListValue api_permissions;
+    base::ListValue host_permissions;
+    const auto &active = extension->permissions_data()->active_permissions();
+    for (const auto &permission : active.GetAPIsAsStrings())
+      api_permissions.Append(permission);
+    for (const auto &pattern : active.explicit_hosts())
+      host_permissions.Append(pattern.GetAsString());
+    row.Set("permissions", std::move(api_permissions));
+    row.Set("hostPermissions", std::move(host_permissions));
     row.Set("enabled", registry->GetExtensionById(
                             extension->id(), extensions::ExtensionRegistry::ENABLED) !=
                             nullptr);
@@ -142,8 +173,8 @@ shaar_error_code HandleExtensionsOperation(
     shaar::ShaarEngineContext* context,
     shaar_engine* engine,
     shaar_scope scope,
-    shaar_window*,
-    shaar_tab*,
+    shaar_window* window,
+    shaar_tab* tab,
     shaar_operation operation,
     shaar_bytes args,
     shaar_request_id request_id,
@@ -188,7 +219,8 @@ shaar_error_code HandleExtensionsOperation(
     } else {
       return Fail(SHAAR_INVALID_ARGUMENT, "unknown extension action", error);
     }
-  } else if (operation == SHAAR_OP_EXTENSION_ACTION) {
+  } else if (operation == SHAAR_OP_EXTENSION_ACTION ||
+             operation == SHAAR_OP_EXTENSION_ACTION_STATE) {
     const std::string* id = input.FindString("extensionId");
     if (!HasOnlyKeys(input, {"schemaVersion", "extensionId"}) || !id ||
         !ValidExtensionId(*id))
@@ -203,6 +235,14 @@ shaar_error_code HandleExtensionsOperation(
     if (!HasOnlyKeys(input, {"schemaVersion", "popupId"}) || !popup_id ||
         popup_id->empty())
       return Fail(SHAAR_INVALID_ARGUMENT, "invalid extension popup close", error);
+  } else if (operation == SHAAR_OP_EXTENSION_WEB_STORE_ZOOM) {
+    const auto zoom = Number(input, "zoomFactor");
+    const auto applied = Number(input, "appliedZoom");
+    if (!HasOnlyKeys(input, {"schemaVersion", "zoomFactor", "appliedZoom"}) ||
+        !zoom || !applied || !std::isfinite(*zoom) ||
+        !std::isfinite(*applied) || *zoom < 0.67 || *zoom > 1 || *applied < 0 ||
+        *applied > 1)
+      return Fail(SHAAR_INVALID_ARGUMENT, "invalid Web Store zoom", error);
   } else {
     return Fail(SHAAR_UNSUPPORTED_CAPABILITY, "unknown extension operation", error);
   }
@@ -211,6 +251,40 @@ shaar_error_code HandleExtensionsOperation(
   if (!profile || profile->IsOffTheRecord() ||
       profile->GetOriginalProfile() != profile)
     return Fail(SHAAR_NOT_FOUND, "profile handle is stale", error);
+  if (operation == SHAAR_OP_EXTENSION_WEB_STORE_ZOOM) {
+    if (!window || !tab || !context->browser_tabs)
+      return Fail(SHAAR_INVALID_ARGUMENT, "Web Store zoom needs a tab", error);
+    content::WebContents *contents =
+        context->browser_tabs->FindWebContents(engine, window, tab);
+    if (!contents || contents->GetBrowserContext() != profile)
+      return Fail(SHAAR_WRONG_PROFILE, "Web Store tab scope mismatch", error);
+    const GURL &committed = contents->GetLastCommittedURL();
+    const GURL &visible = contents->GetVisibleURL();
+    if (!committed.SchemeIs("https") ||
+        committed.host() != "chromewebstore.google.com" ||
+        visible.scheme() != committed.scheme() ||
+        visible.host() != committed.host())
+      return Fail(SHAAR_POLICY_BLOCKED, "Web Store zoom host mismatch", error);
+    const double requested = *Number(input, "zoomFactor");
+    const double applied = *Number(input, "appliedZoom");
+    const double current = blink::ZoomLevelToZoomFactor(
+        content::HostZoomMap::GetZoomLevel(contents));
+    const bool manual = applied > 0 && std::fabs(current - applied) > 0.005;
+    if (!manual && std::fabs(current - requested) > 0.005)
+      content::HostZoomMap::SetZoomLevel(
+          contents, blink::ZoomFactorToZoomLevel(requested));
+    base::DictValue result;
+    result.Set("schemaVersion", 1);
+    result.Set("manual", manual);
+    result.Set("zoomFactor", manual ? current : requested);
+    std::string json;
+    if (!base::JSONWriter::Write(base::Value(std::move(result)), &json))
+      return Fail(SHAAR_CHROMIUM_ERROR, "could not encode Web Store zoom",
+                  error);
+    ReplyLater({reply, reply_context, request_id}, SHAAR_OK, std::move(json));
+    return SHAAR_OK;
+  }
+
   auto* registry = extensions::ExtensionRegistry::Get(profile);
   if (!registry)
     return Fail(SHAAR_NOT_READY, "extension registry is unavailable", error);
@@ -306,13 +380,57 @@ shaar_error_code HandleExtensionsOperation(
     return Fail(SHAAR_INVALID_ARGUMENT, "unknown extension action", error);
   }
 
-  if (operation == SHAAR_OP_EXTENSION_ACTION) {
+  if (operation == SHAAR_OP_EXTENSION_ACTION ||
+      operation == SHAAR_OP_EXTENSION_ACTION_STATE) {
     const std::string* id = input.FindString("extensionId");
     if (!HasOnlyKeys(input, {"schemaVersion", "extensionId"}) || !id ||
         !ValidExtensionId(*id))
       return Fail(SHAAR_INVALID_ARGUMENT, "invalid extension action request", error);
-    return Fail(SHAAR_UNSUPPORTED_CAPABILITY,
-                "extension action host integration is not available", error);
+    if (!window || !tab || !context->browser_tabs)
+      return Fail(SHAAR_INVALID_ARGUMENT, "extension action needs a tab",
+                  error);
+    content::WebContents *contents =
+        context->browser_tabs->FindWebContents(engine, window, tab);
+    Browser *browser = context->browser_tabs->FindBrowser(engine, window);
+    if (!contents || contents->GetBrowserContext() != profile || !browser ||
+        browser->tab_strip_model()->GetActiveWebContents() != contents)
+      return Fail(SHAAR_WRONG_PROFILE, "extension action tab scope mismatch",
+                  error);
+    const extensions::Extension *extension =
+        registry->GetExtensionById(*id, extensions::ExtensionRegistry::ENABLED);
+    if (!extension)
+      return Fail(SHAAR_NOT_FOUND, "enabled extension not found", error);
+    auto *manager = extensions::ExtensionActionManager::Get(profile);
+    auto *action = manager ? manager->GetExtensionAction(*extension) : nullptr;
+    if (!action)
+      return Fail(SHAAR_NOT_FOUND, "extension has no action", error);
+    int tab_id = extensions::ExtensionTabUtil::GetTabId(contents);
+    if (operation == SHAAR_OP_EXTENSION_ACTION_STATE) {
+      base::DictValue state;
+      state.Set("schemaVersion", 1);
+      state.Set("title", action->GetTitle(tab_id));
+      state.Set("hasPopup", action->HasPopup(tab_id));
+      std::string json;
+      if (!base::JSONWriter::Write(base::Value(std::move(state)), &json))
+        return Fail(SHAAR_CHROMIUM_ERROR, "could not encode action state",
+                    error);
+      ReplyLater({reply, reply_context, request_id}, SHAAR_OK, std::move(json));
+      return SHAAR_OK;
+    }
+    // Popup hosting needs a separate native view lifetime and is held until
+    // that ABI is present. Do not run its click side effects without a host.
+    if (action->HasPopup(tab_id))
+      return Fail(SHAAR_UNSUPPORTED_CAPABILITY,
+                  "extension popup host integration is not available", error);
+    auto *runner =
+        extensions::ExtensionActionRunner::GetForWebContents(contents);
+    if (!runner)
+      return Fail(SHAAR_NOT_READY, "extension action runner unavailable",
+                  error);
+    runner->RunAction(extension, true);
+    ReplyLater({reply, reply_context, request_id}, SHAAR_OK,
+               "{\"schemaVersion\":1,\"route\":\"none\"}");
+    return SHAAR_OK;
   }
   if (operation == SHAAR_OP_EXTENSION_INSTALL_DECISION) {
     const std::string* consent_id = input.FindString("consentRequestId");

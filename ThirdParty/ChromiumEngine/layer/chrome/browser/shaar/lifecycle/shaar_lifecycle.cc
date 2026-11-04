@@ -22,6 +22,7 @@
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "chrome/browser/shaar/engine/shaar_module_registry.h"
+#include "chrome/browser/shaar/history/shaar_history.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
 #include "content/public/browser/browser_main_parts.h"
 
@@ -137,6 +138,7 @@ void EngineWillShutDown(shaar_engine* engine) {
   if (g_state.engine != engine || g_state.shutting_down)
     return;
   g_state.shutting_down = true;
+  shaar_history::StopObservingLifecycle(engine);
   shaar::windows_tabs::StopObservingLifecycle();
   Emit(engine, kWillShutDown);
 }

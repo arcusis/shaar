@@ -13,7 +13,7 @@ extern "C" {
 #endif
 
 #define SHAAR_ENGINE_ABI_MAJOR 1u
-#define SHAAR_ENGINE_ABI_MINOR 1u
+#define SHAAR_ENGINE_ABI_MINOR 2u
 #define SHAAR_EXPORT __attribute__((visibility("default")))
 
 typedef struct shaar_engine shaar_engine;
@@ -170,6 +170,8 @@ typedef enum {
   SHAAR_OP_EXTENSION_ACTION = 802,
   SHAAR_OP_EXTENSION_INSTALL_DECISION = 803,
   SHAAR_OP_EXTENSION_POPUP_CLOSE = 804,
+  SHAAR_OP_EXTENSION_WEB_STORE_ZOOM = 805,
+  SHAAR_OP_EXTENSION_ACTION_STATE = 806,
 
   // BEGIN find
   SHAAR_OP_TAB_FIND = 900,
@@ -327,6 +329,11 @@ SHAAR_EXPORT shaar_error_code shaar_private_session_open(
     shaar_error *error);
 SHAAR_EXPORT shaar_error_code shaar_private_session_close(
     shaar_private_session *, shaar_error *error);
+/* Exact HTTP(S) origin in the private session's OTR content settings map.
+ * set=0 reads, set=1 writes allow=0 (block) or allow=1 (allow). */
+SHAAR_EXPORT shaar_error_code shaar_private_session_cookie_setting(
+    shaar_private_session *, shaar_bytes origin, int set, int allow,
+    int *allowed, shaar_error *error);
 
 /* Regular host may bind multiple regular profiles; private host is fixed. */
 SHAAR_EXPORT shaar_error_code shaar_window_open(
@@ -342,6 +349,11 @@ SHAAR_EXPORT shaar_error_code shaar_tab_open(
 SHAAR_EXPORT shaar_error_code shaar_tab_close(
     shaar_tab *, shaar_error *error);
 SHAAR_EXPORT void *shaar_tab_host_view(shaar_tab *); /* borrowed NSView* */
+/* Borrowed, fully initialized docked DevTools NSView*. Null while closed or
+ * undocked. Caller must retain no ownership and release it when the tab closes.
+ */
+SHAAR_EXPORT void *shaar_devtools_frontend_view(shaar_engine *, shaar_scope,
+                                                shaar_window *, shaar_tab *);
 /* UI-thread page hosting. Handles must be registered to the same engine/window.
  * Attach selects a tab; detach is idempotent for an unselected tab. */
 SHAAR_EXPORT shaar_error_code shaar_tab_view_attach(
@@ -354,6 +366,11 @@ SHAAR_EXPORT shaar_error_code shaar_window_host_resize(
     shaar_engine *, shaar_window *, double width, double height, shaar_error *);
 SHAAR_EXPORT shaar_error_code shaar_media_pip_window(
     shaar_scope, shaar_tab *, shaar_window **out, shaar_error *error);
+/* Borrowed JSON bytes are valid until the next call on this UI thread. The
+ * selected regular tab must belong to scope and window. */
+SHAAR_EXPORT shaar_error_code shaar_site_security_info(
+    shaar_engine *, shaar_scope, shaar_window *, shaar_tab *,
+    shaar_bytes *out_json, shaar_error *error);
 
 /* args_json includes schemaVersion. Immediate failure has no later callback;
  * accepted requests complete once. A result payload is empty on error. */

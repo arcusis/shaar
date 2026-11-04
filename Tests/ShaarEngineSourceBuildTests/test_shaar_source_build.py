@@ -65,6 +65,11 @@ class ShaarSourceBuildTests(unittest.TestCase):
             with self.assertRaisesRegex(BUILD.BuildError, "patch digest mismatch"):
                 BUILD.load_config(repo)
             shutil.copy2(ROOT / "ThirdParty/ChromiumEngine/patches/0001-shaar-framework-hook.patch", patch)
+            dual_patch = repo / "ThirdParty/ChromiumEngine/patches/0005-shaar-dual-export-main-delegate.patch"
+            dual_patch.write_text(dual_patch.read_text() + "# tampered\n")
+            with self.assertRaisesRegex(BUILD.BuildError, "delegate patch digest mismatch"):
+                BUILD.load_config(repo)
+            shutil.copy2(ROOT / "ThirdParty/ChromiumEngine/patches/0005-shaar-dual-export-main-delegate.patch", dual_patch)
             (repo / "build").symlink_to(Path(temporary) / "outside", target_is_directory=True)
             with self.assertRaisesRegex(BUILD.BuildError, "symlink rejected in output"):
                 BUILD.load_config(repo)

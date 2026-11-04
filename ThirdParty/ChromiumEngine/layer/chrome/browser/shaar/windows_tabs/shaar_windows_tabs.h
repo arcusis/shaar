@@ -86,6 +86,7 @@ class BrowserTabRegistryImpl final : public shaar::BrowserTabRegistry {
 };
 
 BrowserTabRegistryImpl& Registry();
+void StopObservingLifecycle();
 
 // Validates a complete caller order against the IDs currently bound to this
 // strip. The caller must perform this check before mutating Chromium state.

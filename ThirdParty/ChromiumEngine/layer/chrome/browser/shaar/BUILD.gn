@@ -281,11 +281,20 @@ test("shaar_layer_unittests") {
     "//testing/gmock",
     "//testing/gtest",
   ]
-  ldflags = [ "-Wl,--threads=4", "-Wl,--read-workers=4" ]
+  ldflags = [
+    "-Wl,--threads=4",
+    "-Wl,--thinlto-jobs=4",
+    "-Wl,--read-workers=2",
+  ]
 }
 
 config("exports") {
   inputs = [ "shaar_engine.exports" ]
-  ldflags = [ "-Wl,-exported_symbols_list," +
-              rebase_path("shaar_engine.exports", root_build_dir) ]
+  ldflags = [
+    "-Wl,-exported_symbols_list," +
+        rebase_path("shaar_engine.exports", root_build_dir),
+    "-Wl,--threads=4",
+    "-Wl,--thinlto-jobs=4",
+    "-Wl,--read-workers=2",
+  ]
 }

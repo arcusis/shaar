@@ -47,6 +47,17 @@ REQUIRED_EXPORTS = (
     "_shaar_profile_get_state",
     "_shaar_profile_set_state",
     "_shaar_profile_get_path",
+    "_shaar_window_open",
+    "_shaar_window_close",
+    "_shaar_tab_open",
+    "_shaar_tab_close",
+    "_shaar_window_host_view",
+    "_shaar_window_native_window",
+    "_shaar_tab_host_view",
+    "_shaar_tab_view_attach",
+    "_shaar_tab_view_detach",
+    "_shaar_tab_view_focus",
+    "_shaar_window_host_resize",
 )
 PROFILE_MODULE_EXPORTS = (
     "_shaar_profile_open",
@@ -249,6 +260,13 @@ def load_config(repo: Path) -> dict:
             raise BuildError("patch outside Shaar-owned directory")
         if sha256(path) != patch["sha256"]:
             raise BuildError(f"Shaar patch digest mismatch: {patch['file']}")
+    dual_patch = config.get("dualExportPatch", {})
+    if (not dual_patch.get("file", "").startswith("ThirdParty/ChromiumEngine/patches/") or
+            not DIGEST.fullmatch(dual_patch.get("sha256", ""))):
+        raise BuildError("invalid dual-export delegate patch")
+    dual_path = checked_repo_file(repo, dual_patch["file"])
+    if sha256(dual_path) != dual_patch["sha256"]:
+        raise BuildError("Shaar dual-export delegate patch digest mismatch")
     guarded_output(repo)
     return config
 
@@ -262,7 +280,7 @@ def dry_run(repo: Path, config: dict) -> dict:
         "target": config["build"]["target"],
         "chromiumCommit": config["chromium"]["commit"],
         "layerSha256": config["layer"]["sha256"],
-        "patches": [patch["file"] for patch in config["patches"]],
+        "patches": [config["patches"][0]["file"], config["dualExportPatch"]["file"]],
         "stages": [
             "copy-on-write snapshot of pinned dual-export Chromium and depot_tools",
             "ordered Shaar patches",
@@ -488,16 +506,17 @@ def install_layer(repo: Path, source: Path, config: dict) -> None:
             raise BuildError("existing installed Shaar layer differs from manifest")
     else:
         shutil.copytree(repo / LAYER / "chrome/browser/shaar", target)
-    patch = repo / config["patches"][0]["file"]
-    checked = subprocess.run(["git", "apply", "--check", str(patch)], cwd=source,
-                             capture_output=True, text=True, timeout=60)
-    if checked.returncode == 0:
-        subprocess.run(["git", "apply", str(patch)], cwd=source, check=True, timeout=60)
-    else:
-        reverse = subprocess.run(["git", "apply", "--reverse", "--check", str(patch)],
-                                 cwd=source, capture_output=True, text=True, timeout=60)
-        if reverse.returncode:
-            raise BuildError("Shaar GN patch neither applies nor matches installed source")
+    for entry in (config["patches"][0], config["dualExportPatch"]):
+        patch = repo / entry["file"]
+        checked = subprocess.run(["git", "apply", "--check", str(patch)], cwd=source,
+                                 capture_output=True, text=True, timeout=60)
+        if checked.returncode == 0:
+            subprocess.run(["git", "apply", str(patch)], cwd=source, check=True, timeout=60)
+        else:
+            reverse = subprocess.run(["git", "apply", "--reverse", "--check", str(patch)],
+                                     cwd=source, capture_output=True, text=True, timeout=60)
+            if reverse.returncode:
+                raise BuildError(f"Shaar patch neither applies nor matches installed source: {patch}")
 
 
 def ninja_command(ninja: Path, out: Path, target: str) -> str:
@@ -841,6 +860,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="reuse verified pinned objects and relink only the Shaar layer")
     parser.add_argument("--verify-framework", type=Path, metavar="BINARY")
     parser.add_argument("--receipt", type=Path)
+    parser.add_argument("--verify-mode", choices=("final", "dual-export"),
+                        default="final", help="expected framework export mode")
     options = parser.parse_args(argv)
     repo = Path(__file__).resolve().parents[1]
     try:
@@ -863,7 +884,8 @@ def main(argv: list[str] | None = None) -> int:
                 raise BuildError("--verify-framework requires --receipt")
             binary = Path(os.path.abspath(options.verify_framework))
             receipt = Path(os.path.abspath(options.receipt))
-            print(json.dumps(verify_framework(repo, binary, receipt, config), indent=2))
+            print(json.dumps(verify_framework(repo, binary, receipt, config,
+                                              options.verify_mode), indent=2))
         elif options.receipt:
             raise BuildError("--receipt requires --verify-framework")
         else:

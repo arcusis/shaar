@@ -134,6 +134,8 @@ final class ProfileOnboardingProbe {
     }
     defer { host.events.onNewTabWillAdopt = previous }
     let token = UUID().uuidString
+    let origin = Self.origin(of: fixture)
+    guard !origin.isEmpty else { throw Failure("Popup fixture has no origin") }
     let address = String(data: try JSONEncoder().encode(fixture.absoluteString), encoding: .utf8)!
     // Install the opener listener in the same renderer task as window.open. A separate evaluate
     // could fail to install it while the later user-gesture evaluation still opened the popup.
@@ -145,8 +147,10 @@ final class ProfileOnboardingProbe {
             document.cookie='shaarOnboarding=\(token);path=/';
             window.fixtureReply=null;
             window.addEventListener('message',e=>{
-              if(e.source===window.fixturePopup&&e.origin===location.origin)
-                window.fixtureReply=e.data;
+              // A restored renderer can expose a new WindowProxy wrapper for the same opener.
+              // Correlate this response by origin and its one-use token instead of source identity.
+              if(e.origin===location.origin&&e.data?.type==='shaar-onboarding-callback')
+                window.fixtureReply={origin:e.origin,type:e.data.type,token:e.data.token};
             });
             window.fixturePopup=window.open(\(address),'_blank','popup,width=520,height=680');
             return !!window.fixturePopup;
@@ -167,10 +171,14 @@ final class ProfileOnboardingProbe {
     }
     _ = await value(
       child,
-      "(()=>{window.opener.postMessage('fixture-mfa-complete',location.origin);return {};})()")
+      """
+      (()=>{window.opener.postMessage(
+        {type:'shaar-onboarding-callback',token:'\(token)'},location.origin);return {};})()
+      """
+    )
     try await wait("popup callback", attempts: Int(100 * ProbeTimeout.scale)) {
-      await self.value(tab, "({reply:window.fixtureReply})")?["reply"] as? String
-        == "fixture-mfa-complete"
+      let reply = await self.value(tab, "window.fixtureReply") as? [String: Any]
+      return ProfileOnboardingPopupCallback.matches(reply, origin: origin, token: token)
     }
     guard flow.windowIDs.allSatisfy({ runtime.window(forID: $0)?.isVisible == false }) else {
       throw Failure("Popup show request escaped hidden mode")
@@ -267,6 +275,12 @@ final class ProfileOnboardingProbe {
       try await Task.sleep(for: .milliseconds(100))
     }
     throw Failure("Timed out: \(label)")
+  }
+
+  private static func origin(of url: URL) -> String {
+    guard let scheme = url.scheme, let host = url.host else { return "" }
+    let port = url.port.map { ":\($0)" } ?? ""
+    return "\(scheme)://\(host)\(port)"
   }
 
   private struct Failure: LocalizedError {

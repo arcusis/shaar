@@ -5,6 +5,7 @@
 #import "include/ChromiumBridge.h"
 
 #include <dlfcn.h>
+#include <cstdlib>
 #include <cstring>
 
 #include "../../ThirdParty/ChromiumEngine/layer/chrome/browser/shaar/public/shaar_engine.h"
@@ -99,6 +100,7 @@ struct Symbols {
   NSMutableDictionary<NSString *, NSValue *> *_hostSizes;
   uint64_t _nextRequestID;
   BOOL _shaarQuitting;
+  BOOL _shaarTesting;
 }
 - (void)receiveEvent:(const shaar_event *)event;
 - (BOOL)submitTabID:(NSString *)tabID operation:(shaar_operation)operation
@@ -149,9 +151,14 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   config.on_event = ShaarEventCallback;
   config.event_context = (__bridge void *)self;
   shaar_error error = EmptyError();
-  if (_symbols.create(&config, &_shaarEngine, &error) != SHAAR_OK) return 1;
-  if (testing) [NSApp setActivationPolicy:NSApplicationActivationPolicyProhibited];
+  setenv("SHAAR_ENGINE_TESTING", testing ? "1" : "0", 1);
+  if (_symbols.create(&config, &_shaarEngine, &error) != SHAAR_OK) {
+    unsetenv("SHAAR_ENGINE_TESTING");
+    return 1;
+  }
+  _shaarTesting = testing;
   const shaar_error_code result = _symbols.run(_shaarEngine, &error);
+  unsetenv("SHAAR_ENGINE_TESTING");
   for (id observer in _hostResizeObservers.allValues)
     [NSNotificationCenter.defaultCenter removeObserver:observer];
   [_hostResizeObservers removeAllObjects];
@@ -171,6 +178,7 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   if (![payload isKindOfClass:NSDictionary.class]) return;
   NSString *kind = payload[@"kind"];
   if (event->kind == SHAAR_EVENT_ENGINE && [kind isEqualToString:@"engine.ready"]) {
+    if (_shaarTesting) [NSApp setActivationPolicy:NSApplicationActivationPolicyProhibited];
     NSError *error = nil;
     if (![self createWindowID:_shaarPrimaryWindowID error:&error]) {
       if (self.onNotice) self.onNotice(error.localizedDescription);
@@ -366,10 +374,19 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   if (!window || !tab) return;
   shaar_error error = EmptyError();
   if (_symbols.tab_view_attach(_shaarEngine, window, tab, &error) != SHAAR_OK) return;
-  [self submitTabID:tabID operation:SHAAR_OP_WINDOW_ACTIVATE_TAB
-            payload:@{@"schemaVersion": @1, @"tabID": tabID}];
   _shaarSelectedTabs[windowID] = tabID;
-  if (self.onTabActivated) self.onTabActivated(tabID, _shaarTabProfiles[tabID]);
+  // Navigation can notify Swift while Chromium is still editing its tab strip.
+  // Activate after that edit finishes to avoid reentering TabStripModel.
+  __weak ARCShaarRuntime *weakSelf = self;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    ARCShaarRuntime *owner = weakSelf;
+    if (!owner || !owner->_shaarEngine || !owner->_shaarTabs[tabID] ||
+        ![owner->_shaarSelectedTabs[windowID] isEqualToString:tabID]) return;
+    if (![owner submitTabID:tabID operation:SHAAR_OP_WINDOW_ACTIVATE_TAB
+                    payload:@{@"schemaVersion": @1, @"tabID": tabID}]) return;
+    if (owner.onTabActivated)
+      owner.onTabActivated(tabID, owner->_shaarTabProfiles[tabID]);
+  });
 }
 
 - (void)focusTabID:(NSString *)tabID {

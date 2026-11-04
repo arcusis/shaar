@@ -11,8 +11,7 @@ struct PageAddressField: View {
   var body: some View {
     let url = store.session.selectedPage?.tab.url
     Button {
-      store.showCommand()
-      store.commandQuery = url?.absoluteString ?? ""
+      store.showAddressEditor()
     } label: {
       HStack(spacing: 6) {
         Image(systemName: url == nil ? "magnifyingglass" : "link")

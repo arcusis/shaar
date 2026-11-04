@@ -242,6 +242,13 @@ final class BrowserStore {
     commandIsOpen = true
   }
 
+  func showAddressEditor() {
+    showCommand()
+    guard let url = session.selectedPage?.tab.url else { return }
+    commandEditsCurrentURL = true
+    commandQuery = url.absoluteString
+  }
+
   func dismissCommand() {
     commandIsOpen = false
     pendingSplitPlacement = nil

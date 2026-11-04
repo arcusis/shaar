@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "sourceKind": "shaar",
-  "releaseTag": "engine-155.0.8059.84-shaar.4",
-  "asset": "ShaarEngine-155.0.8059.84-shaar.4.tar.xz",
-  "sha256": "3990e8351bfbd9acaec2e91d14820b2f33e6acfe6161cb97269226385a325c2f"
+  "releaseTag": "engine-155.0.8059.84-shaar.5",
+  "asset": "ShaarEngine-155.0.8059.84-shaar.5.tar.xz",
+  "sha256": "b34245e9dae9d09e119b5655dec5ee9b47dc1ee84a689450ffe5f3a32767a846"
 }

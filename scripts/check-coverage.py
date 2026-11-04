@@ -17,7 +17,13 @@ MODULES = ("BrowserCore", "ArcusisBrowser", "ChromiumBridge", "Shaar", "ShaarVer
 # are checked by their owning engine job rather than appearing as unexecuted unit-test code.
 EXCLUDED_UNIT_TEST_SOURCES = {("ShaarVerification", "PrivateProductHostProbe.swift")}
 # This engine-only flow is exercised by the hosted normal-window smoke, not Swift unit tests.
-UNIT_COVERAGE_EXCLUDES = {("ShaarVerification", "BasicBrowsingProbe.swift")}
+UNIT_COVERAGE_EXCLUDES = {
+    ("ShaarVerification", "BasicBrowsingProbe.swift"),
+    # The deleted private window and its native-session replacement are covered by the hosted
+    # private-window and private-multitab engine shards. Shared BrowserWindow UI stays measured.
+    ("ArcusisBrowser", "PrivateBrowserWindow.swift"),
+    ("ArcusisBrowser", "PrivatePageSession.swift"),
+}
 # Engine-driven UI tests cover a few timing-dependent lines nondeterministically (merge group run
 # 41492941258 dropped ArcusisBrowser by 3 of 36,330 lines with no source change). Tolerate drops
 # up to 0.025 percentage points; anything larger is a real regression.

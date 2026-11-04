@@ -130,6 +130,26 @@ struct PrivateParityTests {
     #expect(store.session.selectedPage?.tab.id != first)
   }
 
+  @Test func sharedPrivateWindowRendersBothSplitPageContainers() throws {
+    let store = try makeStore()
+    let first = try #require(store.session.selectedPage?.tab.id)
+    let page = PrivatePageSession(
+      runtime: ARCChromiumRuntime(), contextID: UUID().uuidString,
+      windowID: UUID().uuidString, firstTabID: first, store: store)
+    store.openTab()
+    store.splitSelectedTab()
+    #expect(store.selectedSplit != nil)
+    let hosting = NSHostingView(rootView: BrowserWindow(store: store))
+    hosting.frame = NSRect(x: 0, y: 0, width: 1100, height: 760)
+    hosting.layoutSubtreeIfNeeded()
+    func containers(in view: NSView) -> Int {
+      (view is ChromiumPageContainerView ? 1 : 0)
+        + view.subviews.reduce(0) { $0 + containers(in: $1) }
+    }
+    #expect(containers(in: hosting) == 2)
+    withExtendedLifetime(page) {}
+  }
+
   @Test func retiringSharedPrivateWindowReleasesItsStore() async throws {
     weak var releasedStore: BrowserStore?
     let hosting = try autoreleasepool { () -> NSHostingView<BrowserWindow?> in

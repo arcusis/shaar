@@ -339,6 +339,16 @@ private func bookmarkPayload(children: [[String: Any]]) -> [String: Any] {
   #expect(try BrowserImport.read(url).map(\.title) == ["Phone bookmark"])
 }
 
+@Test func browserImportDecodesBookmarkHTMLCharacterReferences() throws {
+  let url = FileManager.default.temporaryDirectory.appending(path: "Firefox-\(UUID()).html")
+  defer { try? FileManager.default.removeItem(at: url) }
+  try #"<DL><DT><A HREF="https://example.com">R&amp;D &lt;map&gt; &#39;guide&#39; &#x1F30D; &apos; &unknown;</A></DL>"#
+    .write(to: url, atomically: true, encoding: .utf8)
+
+  let items = try BrowserImport.read(url)
+  #expect(items.map(\.title) == ["R&D <map> 'guide' 🌍 ' &unknown;"])
+}
+
 @Test @MainActor func browserImportBatchAppliesInOrderAndStopsAfterAnError() {
   let operations: [[String: Any]] = [["id": "first"], ["id": "second"], ["id": "third"]]
   var applied: [String] = []

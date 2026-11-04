@@ -38,7 +38,6 @@ final class EngineProbe {
   private var finished = false
   private var passed = false
   private var localFixturesPassed = false
-  private var loadedTabs: Set<String> = []
   private var switchMetrics = SwitchProbeMetricsRecorder()
   private let store: BrowserStore
   private var browserEngine: BrowserEngine?
@@ -291,12 +290,6 @@ final class EngineProbe {
     browserEngine = try BrowserEngine(
       events: BrowserRuntimeEvents(runtime: runtime), store: store, presentsNativePanels: false,
       lazyPinnedTabs: savedTabCapacityMode)
-    let changed = runtime.onTabChanged
-    runtime.onTabChanged = { [weak self] id, url, title, loading, back, forward in
-      changed?(id, url, title, loading, back, forward)
-      guard let self else { return }
-      if !loading && url == self.fixture.absoluteString { self.loadedTabs.insert(id) }
-    }
     guard let content = runtime.hostView else { return }
     let host = NSHostingView(rootView: BrowserWindow(store: store))
     host.frame = content.bounds
@@ -362,19 +355,16 @@ final class EngineProbe {
         cookie:document.cookie, local:localStorage.getItem('account'),
         session:sessionStorage.getItem('account'), instance:window.arcusisInstance})
       """
+    var receivedJavaScript = false
     for _ in 0..<80 {
-      if !loadedTabs.contains(tab) {
-        try await Task.sleep(for: .milliseconds(100))
-        continue
-      }
-      if let result = try? await evaluate(tab, script) as? [String: Any],
-        result["fixture"] as? String == "v1"
-      {
-        return result
+      if let result = try? await evaluate(tab, script) as? [String: Any] {
+        receivedJavaScript = true
+        if result["fixture"] as? String == "v1" { return result }
       }
       try await Task.sleep(for: .milliseconds(100))
     }
-    throw ProbeFailure("Loopback fixture did not load in \(tab).")
+    let detail = "JavaScript response received: \(receivedJavaScript)."
+    throw ProbeFailure("Loopback fixture did not load in \(tab); \(detail)")
   }
 
   private func expect(_ condition: Bool, _ name: String) throws {
@@ -469,7 +459,6 @@ final class EngineProbe {
       if localizationMode {
         // Restored tabs retain the previous scenario URL; reuse their profiles with this fixture.
         for (tab, profile) in [(tabA, profileA), (tabB, profileB)] {
-          loadedTabs.remove(tab)
           guard
             runtime.navigateTabID(
               tab, profileID: profile, windowID: runtime.primaryWindowID,

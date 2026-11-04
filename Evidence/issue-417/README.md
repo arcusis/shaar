@@ -8,10 +8,11 @@ restore and wrote the native view and layer trees. The hook was removed from
 the proposed source change.
 
 The Office Mac console was locked during capture. `screencapture -x -l` could
-read each private window, but the window could not become key. Both screenshots
-show the private shell; they do **not** reproduce David's active-window black
-surface. They establish that the fix preserves the blank private UI in this
-environment.
+read each private window, but the window could not become key. The before and
+after PNGs are visually identical: both show the private shell. They do **not**
+reproduce David's active-window black surface. The view and layer tree diff is
+the evidence for this patch; the images only show that the blank private UI
+still renders while the console is locked.
 
 The before tree has a full-window `WebContentsViewCocoa` beside the SwiftUI
 `NSHostingView` under the native host. The after tree has only the hosting view

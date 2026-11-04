@@ -19,15 +19,25 @@ final class PrivateSiteControlsModel: Identifiable {
   private(set) var failure: String?
   private let runtime: ARCChromiumRuntime
 
-  init?(store: PrivateBrowserStore, runtime: ARCChromiumRuntime) {
-    guard let tab = store.selectedTab, let url = URL(string: tab.url),
-      let origin = SiteOrigin.string(for: url)
-    else { return nil }
+  init?(
+    tabID: String, windowID: String, contextID: String, url: URL,
+    runtime: ARCChromiumRuntime
+  ) {
+    guard let origin = SiteOrigin.string(for: url) else { return nil }
     self.runtime = runtime
-    tabID = tab.id
-    windowID = store.windowID
-    contextID = store.contextID
+    self.tabID = tabID
+    self.windowID = windowID
+    self.contextID = contextID
     self.origin = origin
+  }
+
+  convenience init?(store: BrowserStore, runtime: ARCChromiumRuntime) {
+    guard let page = store.privatePage, let tab = store.session.selectedPage?.tab else {
+      return nil
+    }
+    self.init(
+      tabID: tab.id.uuidString, windowID: page.windowID,
+      contextID: page.contextID, url: tab.url, runtime: runtime)
   }
 
   func load() async {
@@ -52,7 +62,7 @@ final class PrivateSiteControlsModel: Identifiable {
 }
 
 struct PrivateSiteControlsButton: View {
-  weak var store: PrivateBrowserStore?
+  weak var store: BrowserStore?
   let runtime: ARCChromiumRuntime
   @State private var model: PrivateSiteControlsModel?
 

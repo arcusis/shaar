@@ -20,6 +20,10 @@ EXCLUDED_UNIT_TEST_SOURCES = {("ShaarVerification", "PrivateProductHostProbe.swi
 UNIT_COVERAGE_EXCLUDES = {
     ("ShaarVerification", "BasicBrowsingProbe.swift"),
     ("ShaarVerification", "ShaarFirstTabProbe.swift"),
+    # The deleted private window and its native-session replacement are covered by the hosted
+    # private-window and private-multitab engine shards. Shared BrowserWindow UI stays measured.
+    ("ArcusisBrowser", "PrivateBrowserWindow.swift"),
+    ("ArcusisBrowser", "PrivatePageSession.swift"),
 }
 # Engine-driven UI tests cover a few timing-dependent lines nondeterministically (merge group run
 # 41492941258 dropped ArcusisBrowser by 3 of 36,330 lines with no source change). Tolerate drops

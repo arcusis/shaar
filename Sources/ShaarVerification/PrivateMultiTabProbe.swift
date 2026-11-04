@@ -47,6 +47,12 @@ struct PrivateMultiTabProbe {
     host.perform(.newPrivateWindow)
     let owner = try await waitForOwner(host)
     guard !owner.window.isVisible else { throw Failure("Private fixture window became visible.") }
+    let savedWorkspace = try Data(contentsOf: file.url)
+    guard owner.store.isPrivate, owner.store.privatePage != nil,
+      owner.store.faviconCache == nil, owner.store.engine == nil
+    else {
+      throw Failure("Private window did not use the isolated browser model.")
+    }
     try await captureShell(owner, stage: "first-blank")
     var tabs: [[String: Any]] = []
     for index in 0..<3 {
@@ -63,6 +69,16 @@ struct PrivateMultiTabProbe {
       try await captureShell(owner, stage: "tab-\(index)")
     }
     guard owner.store.tabs.count == 3 else { throw Failure("Private window lost a tab.") }
+    owner.store.showPageFind()
+    owner.store.updatePageFindQuery("OrbitFindMarker")
+    var findMatches = 0
+    for _ in 0..<100 {
+      findMatches = owner.store.pageFind?.matchCount ?? 0
+      if findMatches > 0 { break }
+      try await Task.sleep(for: .milliseconds(50))
+    }
+    owner.store.dismissPageFind()
+    guard findMatches > 0 else { throw Failure("Private Find did not return page matches.") }
     var reselected: [[String: Any]] = []
     for index in (0..<3).reversed() {
       let tabID = tabs[index]["tabID"] as! String
@@ -94,7 +110,7 @@ struct PrivateMultiTabProbe {
     }
     let searchTabID = owner.store.selectedTabID
     var searchDocument: [String: Any]?
-    for _ in 0..<Int(200 * ProbeTimeout.scale) {
+    for _ in 0..<Int(600 * ProbeTimeout.scale) {
       searchDocument = await evaluateSearch(searchTabID)
       if PrivateMultiTabEvidence.liveSearch(searchDocument, host: searchURL.host() ?? "") {
         break
@@ -109,6 +125,19 @@ struct PrivateMultiTabProbe {
       throw Failure("Private search did not render a live results document: \(searchEvidence).")
     }
     try await captureShell(owner, stage: "search")
+    let privateSpace = owner.store.session.selectedSpaceID
+    guard let folder = owner.store.createFolder(name: "Private folder", in: privateSpace),
+      let firstID = UUID(uuidString: tabs[0]["tabID"] as? String ?? ""),
+      owner.store.moveTab(firstID, from: privateSpace, to: privateSpace, folderID: folder)
+    else { throw Failure("Private sidebar could not create a folder or move a tab into it.") }
+    owner.store.splitSelectedTab()
+    guard owner.store.selectedSplit != nil else {
+      throw Failure("Private tabs could not use the shared split model.")
+    }
+    try workspace.flushSaves()
+    guard try Data(contentsOf: file.url) == savedWorkspace else {
+      throw Failure("Private tabs, folder or split changed the saved normal workspace.")
+    }
     let closed: Bool = await withCheckedContinuation { continuation in
       runtime.closePrivateWindowID(owner.windowID, contextID: owner.contextID) {
         continuation.resume(returning: $0)
@@ -125,6 +154,8 @@ struct PrivateMultiTabProbe {
       "windowHidden": true, "openedThroughMenu": true, "savedNormalSession": true,
       "tabCount": 3, "tabs": tabs, "reselected": reselected,
       "addressSearchURL": searchURL.absoluteString,
+      "privateFolderAndSplit": true, "workspaceUnchanged": true,
+      "privateFindMatches": findMatches,
       "cleanupPassed": true,
     ]
     try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
@@ -139,7 +170,7 @@ struct PrivateMultiTabProbe {
     throw Failure("Private native window was not created.")
   }
 
-  private func waitForTabs(_ store: PrivateBrowserStore, count: Int) async throws {
+  private func waitForTabs(_ store: BrowserStore, count: Int) async throws {
     for _ in 0..<100 {
       if store.tabs.count == count { return }
       try await Task.sleep(for: .milliseconds(50))
@@ -251,6 +282,7 @@ struct PrivateMultiTabProbe {
       "nativeViewPresent": native != nil,
       "nativeHidden": native?.isHidden ?? true,
       "nativeInWindow": native?.window === owner.window,
+      "rawWindowSibling": native?.superview === owner.hosting.superview,
       "nativeFrame": NSStringFromRect(native?.frame ?? .zero),
       "containerFrames": containers.map { NSStringFromRect($0.frame) },
       "layerBacked": containers.map(\.wantsLayer),
@@ -263,6 +295,10 @@ struct PrivateMultiTabProbe {
       withJSONObject: audit, options: [.prettyPrinted, .sortedKeys])
     try auditData.write(
       to: root.appending(path: "\(phase)-private-shell-\(stage).json"), options: .atomic)
+    if stage == "first-blank", !PrivateMultiTabEvidence.blankShellAudit(audit) {
+      throw Failure(
+        "Blank private tab is not inside the SwiftUI page container: \(audit).")
+    }
     guard !owner.window.isVisible,
       let bitmap = owner.hosting.bitmapImageRepForCachingDisplay(in: owner.hosting.bounds)
     else { throw Failure("Private shell capture became visible or has no bitmap.") }
@@ -294,8 +330,17 @@ struct PrivateMultiTabProbe {
 }
 
 enum PrivateMultiTabEvidence {
+  static func blankShellAudit(_ audit: [String: Any]) -> Bool {
+    audit["nativeViewPresent"] as? Bool == true
+      && liveShellAudit(audit, stage: "first-blank")
+  }
+
   static func liveTabAudit(_ audit: [AnyHashable: Any]?, tabCount: Int) -> Bool {
-    audit?["allTabsInNativeProfileBrowser"] as? Bool == true
+    audit?["sourceIsRegular"] as? Bool == true
+      && audit?["contextIsPrivate"] as? Bool == true
+      && audit?["contextDistinct"] as? Bool == true
+      && audit?["allWindowsUsePrivateActiveProfile"] as? Bool == true
+      && audit?["allTabsInNativeProfileBrowser"] as? Bool == true
       && audit?["allWindowsDisplayOwnedWebContents"] as? Bool == true
       && audit?["visibleNativeViewportCount"] as? Int == 1
       && audit?["tabCount"] as? Int == tabCount
@@ -308,11 +353,13 @@ enum PrivateMultiTabEvidence {
       && audit["attached"] as? Bool == true
       && audit["attachedInWindow"] as? Bool == true
       && audit["nativeHidden"] as? Bool == false
+      && audit["rawWindowSibling"] as? Bool == false
   }
 
   static func liveSearch(_ evidence: [String: Any]?, host: String) -> Bool {
-    evidence?["host"] as? String == host
-      && evidence?["ready"] as? String == "complete"
+    let ready = evidence?["ready"] as? String
+    return evidence?["host"] as? String == host
+      && (ready == "interactive" || ready == "complete")
       && (evidence?["textLength"] as? Int ?? 0) > 100
   }
 

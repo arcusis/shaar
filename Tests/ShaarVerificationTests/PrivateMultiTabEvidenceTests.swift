@@ -10,6 +10,10 @@ import Testing
 @Suite struct PrivateMultiTabEvidenceTests {
   @Test func liveTabAuditRequiresOwnedWebContentsAndExpectedCount() {
     let valid: [AnyHashable: Any] = [
+      "sourceIsRegular": true,
+      "contextIsPrivate": true,
+      "contextDistinct": true,
+      "allWindowsUsePrivateActiveProfile": true,
       "allTabsInNativeProfileBrowser": true,
       "allWindowsDisplayOwnedWebContents": true,
       "visibleNativeViewportCount": 1,
@@ -29,6 +33,7 @@ import Testing
     let valid: [String: Any] = [
       "stage": "tab-0", "containerCount": 1, "layerBacked": [true],
       "attached": true, "attachedInWindow": true, "nativeHidden": false,
+      "rawWindowSibling": false,
     ]
     #expect(PrivateMultiTabEvidence.liveShellAudit(valid, stage: "tab-0"))
     #expect(!PrivateMultiTabEvidence.liveShellAudit(valid, stage: "search"))
@@ -39,11 +44,35 @@ import Testing
     }
   }
 
+  @Test func blankPrivateTabCannotCoverTheSwiftUIShell() {
+    let valid: [String: Any] = [
+      "stage": "first-blank", "nativeViewPresent": true,
+      "rawWindowSibling": false, "containerCount": 1,
+      "layerBacked": [true], "attached": true,
+      "attachedInWindow": true, "nativeHidden": false,
+    ]
+    #expect(PrivateMultiTabEvidence.blankShellAudit(valid))
+    for key in valid.keys {
+      var invalid = valid
+      invalid.removeValue(forKey: key)
+      #expect(!PrivateMultiTabEvidence.blankShellAudit(invalid))
+    }
+    var covered = valid
+    covered["rawWindowSibling"] = true
+    #expect(!PrivateMultiTabEvidence.blankShellAudit(covered))
+    var detached = valid
+    detached["attachedInWindow"] = false
+    #expect(!PrivateMultiTabEvidence.blankShellAudit(detached))
+  }
+
   @Test func searchEvidenceRequiresRenderedResultsFromExpectedHost() {
     let valid: [String: Any] = [
       "host": "search.example", "ready": "complete", "textLength": 101,
     ]
     #expect(PrivateMultiTabEvidence.liveSearch(valid, host: "search.example"))
+    var interactive = valid
+    interactive["ready"] = "interactive"
+    #expect(PrivateMultiTabEvidence.liveSearch(interactive, host: "search.example"))
     #expect(!PrivateMultiTabEvidence.liveSearch(valid, host: "other.example"))
     #expect(
       !PrivateMultiTabEvidence.liveSearch(

@@ -7,6 +7,7 @@ import Foundation
 
 extension BrowserStore {
   func showLibrary(_ section: LibrarySection) {
+    guard !isPrivate else { return }
     guard sheet == nil else { return }
     dismissCommand()
     dismissPageFind()
@@ -17,7 +18,7 @@ extension BrowserStore {
   }
 
   var canBookmarkCurrentPage: Bool {
-    sheet == nil
+    !isPrivate && sheet == nil
       && session.selectedPage.map { NavigationInput.isWebURL($0.tab.url) } == true
   }
 

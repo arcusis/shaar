@@ -283,6 +283,26 @@ struct BrowserSplitPageView: View {
   }
 }
 
+struct PrivateSplitPageView: View {
+  let store: BrowserStore
+  let session: PrivatePageSession
+  let split: BrowserSplit
+
+  var body: some View {
+    SplitPageView(
+      split: split, focusedID: store.session.selectedSpace.selectedTabID,
+      onFocus: { store.focusSplitTab($0) },
+      onWeightsChange: { store.setSplitWeights($0, at: $1, splitID: split.id) }
+    ) { id in
+      SplitPaneToolbar(store: store, tabID: id)
+    } pane: { id in
+      PrivateBrowserPage(session: session, tabID: id, inSplit: true)
+        .overlay { SplitDropZone(store: store, targetID: id) }
+    }
+    .padding(2)
+  }
+}
+
 private struct SplitPaneFocusObserver: NSViewRepresentable {
   let onFocus: () -> Void
 

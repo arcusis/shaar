@@ -67,10 +67,11 @@ struct PrivatePrivacyProbe {
         """)
       observations["permissions"] = permissions
       checks.merge(PrivatePrivacyEvidence.permissions(permissions)) { _, value in value }
-      let store = PrivateBrowserStore(
-        contextID: contextID, windowID: windowID, tabID: tabID,
-        url: fixture.absoluteString)
-      guard let model = PrivateSiteControlsModel(store: store, runtime: runtime) else {
+      guard
+        let model = PrivateSiteControlsModel(
+          tabID: tabID, windowID: windowID, contextID: contextID,
+          url: fixture, runtime: runtime)
+      else {
         throw PrivateWindowFailure("Private site control model could not bind its web origin.")
       }
       await model.load()

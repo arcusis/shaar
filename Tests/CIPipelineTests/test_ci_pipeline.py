@@ -363,6 +363,18 @@ class CoverageGateTests(unittest.TestCase):
         ])
         self.assertEqual(COVERAGE.module_coverage(report)["ShaarVerification"], (20, 30))
 
+    def test_native_private_page_replacement_uses_engine_coverage(self):
+        report = self.report()
+        report["data"][0]["files"].extend([
+            {"filename": "/checkout/Sources/ArcusisBrowser/PrivateBrowserWindow.swift",
+             "summary": {"lines": {"covered": 6, "count": 10}}},
+            {"filename": "/checkout/Sources/ArcusisBrowser/PrivatePageSession.swift",
+             "summary": {"lines": {"covered": 2, "count": 10}}},
+            {"filename": "/checkout/Sources/ArcusisBrowser/BrowserWindow.swift",
+             "summary": {"lines": {"covered": 3, "count": 10}}},
+        ])
+        self.assertEqual(COVERAGE.module_coverage(report)["ArcusisBrowser"], (7, 20))
+
 
 class SupplyChainTests(unittest.TestCase):
     def test_generated_directory_exclusions_never_cover_nested_source_paths(self):

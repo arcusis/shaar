@@ -127,6 +127,8 @@ FOUNDATION_EXPORT NSString *ARCBridgeLocalizedString(NSString *message);
     NSString *tabID, NSString *url, NSString *title, BOOL loading, BOOL canGoBack, BOOL canGoForward);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onPrivateTabSelected)(NSString *contextID, NSString *windowID,
     NSString *tabID);
+@property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onPrivateFindResult)(NSString *contextID, NSString *windowID,
+    NSString *tabID, NSString *requestID, int count, int active, BOOL final);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onPrivateNavigationFailed)(NSString *contextID, NSString *windowID, NSString *tabID, NSString *message);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onPrivateTabClosed)(NSString *contextID, NSString *windowID,
     NSString *tabID);
@@ -338,8 +340,13 @@ FOUNDATION_EXPORT NSString *ARCBridgeLocalizedString(NSString *message);
                completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion NS_SWIFT_UI_ACTOR;
 - (BOOL)navigatePrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID url:(NSString *)url;
 - (BOOL)reloadPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID;
+- (BOOL)reloadPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID
+                    mode:(ARCPageReloadMode)mode;
 - (BOOL)goBackPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID;
 - (BOOL)goForwardPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID;
+- (BOOL)findInPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID
+             requestID:(NSString *)requestID text:(NSString *)text forward:(BOOL)forward;
+- (void)stopFindingInPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID;
 - (nullable NSWindow *)windowForPrivateWindowID:(NSString *)windowID contextID:(NSString *)contextID;
 - (nullable NSView *)hostViewForPrivateWindowID:(NSString *)windowID contextID:(NSString *)contextID;
 - (nullable NSView *)viewForPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID;

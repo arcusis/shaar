@@ -72,14 +72,20 @@ class PipelineGateTests(unittest.TestCase):
                 RELEASE_CI.require_release_ci("arcusis/shaar", revision)
 
     def test_known_non_native_diffs_and_unknown_changes_select_required_coverage(self):
-        for paths in (["Notebook/Note.md"], ["README.md", "CONTRIBUTING.md"]):
+        for paths in (["Notebook/Note.md"], ["Notebook/probe.py"], ["README.md", "CONTRIBUTING.md"],
+                      ["ThirdParty/Foo/README.md"]):
             self.assertEqual(PLAN.select_stages(paths, "pull_request"), (False, False, True))
-        for paths in (["website/src/Page.svelte"], ["website/package.json", "Notebook/Note.md"]):
+        for paths in (["website/src/Page.svelte"], ["website/package.json", "Notebook/Note.md"],
+                      [".github/assets/overview.png"], [".github/workflows/website-deploy.yml"]):
             self.assertEqual(PLAN.select_stages(paths, "pull_request"), (False, True, True))
             self.assertEqual(PLAN.select_stages(paths, "merge_group"), (False, True, True))
         for paths in (None, [], ["unclassified-input"]):
             self.assertTrue(PLAN.select_stages(paths, "pull_request")[0])
         self.assertEqual(PLAN.select_stages(["Sources/App.swift"], "pull_request"), (True, False, True))
+        self.assertEqual(PLAN.select_stages(["Design/shaar_engine.h"], "pull_request"), (True, False, True))
+        self.assertEqual(PLAN.select_stages(["Sources/X.md"], "pull_request"), (True, False, True))
+        self.assertEqual(PLAN.select_stages(["Design/Mockup.sketch", "Sources/App.swift"], "pull_request"),
+                         (True, False, True))
         self.assertEqual(PLAN.select_stages(["scripts/tool.py"], "pull_request"), (True, False, True))
         for paths in (["scripts/codeql-build.py"], [".github/workflows/ci-codeql.yml"],
                       [".github/actions/ci-setup/action.yml"]):
@@ -268,10 +274,13 @@ class PipelineGateTests(unittest.TestCase):
         self.assertTrue(GATE.gate_errors(self.results(), True, True))
         self.assertEqual(GATE.gate_errors(self.results(nightly="success"), True, True), [])
 
-    def test_only_known_markdown_paths_skip_native_stages(self):
-        self.assertTrue(PLAN.documentation_only(["README.md", "Notebook/_INDEX_Main.md"]))
-        for paths in ([], ["scripts/tool.py"], [".github/workflows/ci.yml"], ["Sources/New.md"],
-                      ["Notebook/probe.py"], ["Notebook/Note.md", "Package.resolved"]):
+    def test_known_documentation_paths_skip_native_stages(self):
+        self.assertTrue(PLAN.documentation_only(["README.md", "Notebook/_INDEX_Main.md",
+                                                 "ThirdParty/Foo/README.md"]))
+        for paths in ([], ["scripts/tool.py"], [".github/workflows/ci.yml"],
+                      ["Notebook/Note.md", "Package.resolved"], ["Design/shaar_engine.h"],
+                      ["Sources/X.md"], ["Tests/Fixture.md"], ["ThirdParty/README.md"],
+                      ["ThirdParty/Foo/README.txt"]):
             self.assertFalse(PLAN.documentation_only(paths))
 
 

@@ -1,6 +1,8 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "A loaded profile and a local folder are required." : { "localizations" : { "he" : { "stringUnit" : { "state" : "translated", "value" : "נדרשים פרופיל טעון ותיקייה מקומית." } } } },
+    "The download folder could not be saved." : { "localizations" : { "he" : { "stringUnit" : { "state" : "translated", "value" : "לא ניתן לשמור את תיקיית ההורדות." } } } },
     "Site permissions could not be read for this profile.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לא ניתן לקרוא את הרשאות האתרים בפרופיל הזה."}}}},
     "Third-party cookie controls are unavailable in this engine.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "בקרת קובצי Cookie של צד שלישי לא זמינה במנוע הזה."}}}},
     "The cookie policy was not saved.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "מדיניות קובצי ה-Cookie לא נשמרה."}}}},

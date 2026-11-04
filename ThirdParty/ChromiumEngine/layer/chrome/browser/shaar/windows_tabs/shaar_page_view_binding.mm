@@ -46,7 +46,7 @@ NSView* FindTabView(shaar_engine* engine,
     return nil;
   content::WebContents* contents =
       shaar::windows_tabs::Registry().FindWebContents(engine, window, tab);
-  return contents ? contents->GetNativeView() : nil;
+  return contents ? contents->GetNativeView().GetNativeNSView() : nil;
 }
 
 shaar_error_code Result(shaar_error_code status, shaar_error* error) {

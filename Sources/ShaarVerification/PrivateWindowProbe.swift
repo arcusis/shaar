@@ -275,14 +275,8 @@ final class PrivateWindowProbe {
     checks["hiddenWindowsRemainUnordered"] =
       (runtime.privateProbeAudit(forContextID: contextA)?["allWindowsHidden"] as? Bool) == true
     checks["nativePrivateTabOwnedByActiveWebContents"] =
-      runtime.privateProbeAudit(forContextID: contextA)?["allTabsInNativeProfileBrowser"] as? Bool
-      == true
-      && runtime.privateProbeAudit(forContextID: contextA)?["allTabsAttachedToHostView"] as? Bool
-        == true
-      && runtime.privateProbeAudit(forContextID: contextA)?["allWindowsUsePrivateActiveProfile"]
-        as? Bool == true
-      && runtime.privateProbeAudit(forContextID: contextA)?["allWindowsDisplayOwnedWebContents"]
-        as? Bool == true
+      PrivateWindowOwnership.nativeFixtureIsOwned(
+        runtime.privateProbeAudit(forContextID: contextA) as? [String: Any])
     let secret = UUID().uuidString.lowercased()
     try await setPrivate(t1, cookie: secret, storage: secret)
     try await waitUntil(t2) { $0["local"] as? String == secret }
@@ -770,10 +764,14 @@ final class PrivateWindowProbe {
               audit["allTabsInNativeProfileBrowser"] as? Bool == true,
             "allTabsAttachedToHostView":
               audit["allTabsAttachedToHostView"] as? Bool == true,
+            "allTabsDetachedFromHostView":
+              audit["allTabsDetachedFromHostView"] as? Bool == true,
             "allWindowsUsePrivateActiveProfile":
               audit["allWindowsUsePrivateActiveProfile"] as? Bool == true,
             "allWindowsDisplayOwnedWebContents":
               audit["allWindowsDisplayOwnedWebContents"] as? Bool == true,
+            "allWindowsSelectOwnedWebContents":
+              audit["allWindowsSelectOwnedWebContents"] as? Bool == true,
             "tabCount": audit["tabCount"] ?? 0,
             "windowCount": audit["windowCount"] ?? 0,
             "privateEvaluationRejected": audit["privateEvaluationRejected"] as? Bool == true,
@@ -1002,4 +1000,13 @@ struct PrivateWindowFailure: LocalizedError {
   let message: String
   init(_ message: String) { self.message = message }
   var errorDescription: String? { message }
+}
+
+enum PrivateWindowOwnership {
+  static func nativeFixtureIsOwned(_ audit: [String: Any]?) -> Bool {
+    audit?["allTabsInNativeProfileBrowser"] as? Bool == true
+      && audit?["allTabsDetachedFromHostView"] as? Bool == true
+      && audit?["allWindowsUsePrivateActiveProfile"] as? Bool == true
+      && audit?["allWindowsSelectOwnedWebContents"] as? Bool == true
+  }
 }

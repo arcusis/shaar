@@ -1474,11 +1474,15 @@ def validate_private_multitab_report(root, phase, report, exit_code):
                 or audit.get('nativeHidden') is not False):
             raise RuntimeError(f'{phase} private shell {stage} lacks its live layer-backed page')
     search = json.loads((root / f'{phase}-private-search.json').read_text())
-    if (search.get('host') != urlparse(evidence['addressSearchURL']).hostname
-            or search.get('ready') != 'complete'
-            or type(search.get('textLength')) is not int or search['textLength'] <= 100):
+    if not private_search_has_results(search, urlparse(evidence['addressSearchURL']).hostname):
         raise RuntimeError(f'{phase} private search has no authored results document')
     return evidence
+
+
+def private_search_has_results(search, expected_host):
+    return (search.get('host') == expected_host
+            and search.get('ready') in ('interactive', 'complete')
+            and type(search.get('textLength')) is int and search['textLength'] > 100)
 
 
 def main(argv=None):

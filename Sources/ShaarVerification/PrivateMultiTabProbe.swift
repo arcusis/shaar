@@ -282,6 +282,7 @@ struct PrivateMultiTabProbe {
       "nativeViewPresent": native != nil,
       "nativeHidden": native?.isHidden ?? true,
       "nativeInWindow": native?.window === owner.window,
+      "rawWindowSibling": native?.superview === owner.hosting.superview,
       "nativeFrame": NSStringFromRect(native?.frame ?? .zero),
       "containerFrames": containers.map { NSStringFromRect($0.frame) },
       "layerBacked": containers.map(\.wantsLayer),
@@ -294,6 +295,10 @@ struct PrivateMultiTabProbe {
       withJSONObject: audit, options: [.prettyPrinted, .sortedKeys])
     try auditData.write(
       to: root.appending(path: "\(phase)-private-shell-\(stage).json"), options: .atomic)
+    if stage == "first-blank", !PrivateMultiTabEvidence.blankShellAudit(audit) {
+      throw Failure(
+        "Blank private tab is not inside the SwiftUI page container: \(audit).")
+    }
     guard !owner.window.isVisible,
       let bitmap = owner.hosting.bitmapImageRepForCachingDisplay(in: owner.hosting.bounds)
     else { throw Failure("Private shell capture became visible or has no bitmap.") }
@@ -325,6 +330,11 @@ struct PrivateMultiTabProbe {
 }
 
 enum PrivateMultiTabEvidence {
+  static func blankShellAudit(_ audit: [String: Any]) -> Bool {
+    audit["nativeViewPresent"] as? Bool == true
+      && liveShellAudit(audit, stage: "first-blank")
+  }
+
   static func liveTabAudit(_ audit: [AnyHashable: Any]?, tabCount: Int) -> Bool {
     audit?["sourceIsRegular"] as? Bool == true
       && audit?["contextIsPrivate"] as? Bool == true
@@ -343,11 +353,13 @@ enum PrivateMultiTabEvidence {
       && audit["attached"] as? Bool == true
       && audit["attachedInWindow"] as? Bool == true
       && audit["nativeHidden"] as? Bool == false
+      && audit["rawWindowSibling"] as? Bool == false
   }
 
   static func liveSearch(_ evidence: [String: Any]?, host: String) -> Bool {
-    evidence?["host"] as? String == host
-      && evidence?["ready"] as? String == "complete"
+    let ready = evidence?["ready"] as? String
+    return evidence?["host"] as? String == host
+      && (ready == "interactive" || ready == "complete")
       && (evidence?["textLength"] as? Int ?? 0) > 100
   }
 

@@ -15,7 +15,8 @@ import Testing
     profiles: [
       BrowserSettingsProfile(
         id: id, name: "Work",
-        spaces: [BrowserSettingsSpace(id: UUID(), name: "Research", symbol: "book")])
+        spaces: [BrowserSettingsSpace(id: UUID(), name: "Research", symbol: "book")],
+        canChooseDownloadDirectory: true)
     ],
     searchEngines: [BrowserSettingsChoice(id: "google", title: "Google")],
     selectedProfileID: selectedProfileID,

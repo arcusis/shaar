@@ -8,6 +8,8 @@ import ChromiumBridge
 import Observation
 import SwiftUI
 
+typealias ProfileDownloadDirectoryApplier = @MainActor (UUID, URL?) async throws -> URL?
+
 @MainActor @Observable
 final class BrowserSettingsState {
   let workspace: BrowserWorkspaceStore
@@ -16,7 +18,10 @@ final class BrowserSettingsState {
   let profileBackend: (any ProfileSettingsBackend)?
   private(set) var deletingProfileID: UUID?
   private(set) var selectedProfileID: UUID?
+  private(set) var downloadDirectoryRevision = 0
   private var didPresent = false
+  let downloadDirectorySettingsEnabled: Bool
+  private let applyDownloadDirectoryToEngine: ProfileDownloadDirectoryApplier?
   var onOpenSpace: (UUID) -> Void = { _ in }
   var onConnectAccount: (UUID, AccountSignInOption) -> Void = { _, _ in }
   var onDisconnectAccount: (UUID, AccountProvider) -> Void = { _, _ in }
@@ -25,16 +30,22 @@ final class BrowserSettingsState {
 
   init(
     workspace: BrowserWorkspaceStore, preferences: BrowserPreferencesStore,
-    runtime: ARCChromiumRuntime? = nil, profileBackend: (any ProfileSettingsBackend)? = nil
+    runtime: ARCChromiumRuntime? = nil, profileBackend: (any ProfileSettingsBackend)? = nil,
+    downloadDirectorySettingsEnabled: Bool = false,
+    applyDownloadDirectory: ProfileDownloadDirectoryApplier? = nil
   ) {
     self.workspace = workspace
     self.preferences = preferences
     self.runtime = runtime
     self.profileBackend = profileBackend ?? runtime.map { EngineProfileSettings(runtime: $0) }
+    applyDownloadDirectoryToEngine = applyDownloadDirectory
+    self.downloadDirectorySettingsEnabled =
+      downloadDirectorySettingsEnabled && applyDownloadDirectory != nil
   }
 
   var profiles: [BrowserSettingsProfile] {
-    workspace.workspace.catalog.profiles.map { profile in
+    _ = downloadDirectoryRevision
+    return workspace.workspace.catalog.profiles.map { profile in
       let spaces = workspace.workspace.catalog.spaces.filter { $0.profileID == profile.id }
       return BrowserSettingsProfile(
         id: profile.id, name: profile.name, color: ProfileColorChoice(profile: profile),
@@ -42,7 +53,8 @@ final class BrowserSettingsState {
         spaces: spaces.map { BrowserSettingsSpace(id: $0.id, name: $0.name, symbol: $0.symbol) },
         accounts: preferences.accounts(for: profile.id),
         downloadDirectory: preferences.downloadDirectory(for: profile.id),
-        defaultDownloadDirectory: runtime?.downloadsDirectory(forProfileID: profile.id.uuidString))
+        defaultDownloadDirectory: runtime?.downloadsDirectory(forProfileID: profile.id.uuidString),
+        canChooseDownloadDirectory: downloadDirectorySettingsEnabled)
     }
   }
 
@@ -118,26 +130,53 @@ final class BrowserSettingsState {
   }
 
   func chooseDownloadDirectory(for profileID: UUID) {
-    guard workspace.workspace.catalog.profiles.contains(where: { $0.id == profileID }) else {
+    guard downloadDirectorySettingsEnabled,
+      workspace.workspace.catalog.profiles.contains(where: { $0.id == profileID })
+    else {
       return
     }
     let panel = NSOpenPanel()
     panel.canChooseFiles = false
     panel.canChooseDirectories = true
     panel.allowsMultipleSelection = false
-    panel.canCreateDirectories = true
+    panel.canCreateDirectories = false
     panel.prompt = SettingsL10n.string("Choose")
     panel.message = SettingsL10n.string("Choose a download folder for this profile.")
-    if panel.runModal() == .OK, let url = panel.url {
-      preferences.setDownloadDirectory(url, for: profileID)
+    if panel.runModal() == .OK, let url = panel.url,
+      DownloadDirectoryPolicy.validate(url, bundleURL: Bundle.main.bundleURL)
+    {
+      Task { _ = await applyDownloadDirectory(url, for: profileID) }
     }
   }
 
   func resetDownloadDirectory(for profileID: UUID) {
-    guard workspace.workspace.catalog.profiles.contains(where: { $0.id == profileID }) else {
+    guard downloadDirectorySettingsEnabled,
+      workspace.workspace.catalog.profiles.contains(where: { $0.id == profileID })
+    else {
       return
     }
-    preferences.setDownloadDirectory(nil, for: profileID)
+    Task { _ = await applyDownloadDirectory(nil, for: profileID) }
+  }
+
+  @discardableResult
+  func applyDownloadDirectory(_ directory: URL?, for profileID: UUID) async -> Bool {
+    guard downloadDirectorySettingsEnabled,
+      workspace.workspace.catalog.profiles.contains(where: { $0.id == profileID }),
+      let applyDownloadDirectoryToEngine
+    else { return false }
+    if let directory, !DownloadDirectoryPolicy.validate(directory, bundleURL: Bundle.main.bundleURL)
+    {
+      return false
+    }
+    do {
+      let acknowledged = try await applyDownloadDirectoryToEngine(profileID, directory)
+      if directory != nil && acknowledged == nil { return false }
+      preferences.setDownloadDirectory(directory == nil ? nil : acknowledged, for: profileID)
+      downloadDirectoryRevision &+= 1
+      return true
+    } catch {
+      return false
+    }
   }
 
   @discardableResult
@@ -196,6 +235,23 @@ final class BrowserSettingsState {
     try workspace.flushSaves()
   }
 
+}
+
+enum DownloadDirectoryPolicy {
+  static func validate(_ candidate: URL, bundleURL: URL, fileManager: FileManager = .default)
+    -> Bool
+  {
+    guard candidate.isFileURL else { return false }
+    let directory = candidate.standardizedFileURL.resolvingSymlinksInPath()
+    let bundle = bundleURL.standardizedFileURL.resolvingSymlinksInPath()
+    guard directory.path != bundle.path,
+      !directory.path.hasPrefix(bundle.path.hasSuffix("/") ? bundle.path : bundle.path + "/"),
+      fileManager.isWritableFile(atPath: directory.path)
+    else { return false }
+    var isDirectory: ObjCBool = false
+    return fileManager.fileExists(atPath: directory.path, isDirectory: &isDirectory)
+      && isDirectory.boolValue
+  }
 }
 
 private struct BrowserSettingsRoot: View {
@@ -257,10 +313,13 @@ final class BrowserSettingsController: NSObject {
   init(
     workspace: BrowserWorkspaceStore, preferences: BrowserPreferencesStore,
     runtime: ARCChromiumRuntime? = nil,
+    downloadDirectoryApplier: ProfileDownloadDirectoryApplier? = nil,
     presentation: Presentation = .visible
   ) {
     state = BrowserSettingsState(
-      workspace: workspace, preferences: preferences, runtime: runtime)
+      workspace: workspace, preferences: preferences, runtime: runtime,
+      downloadDirectorySettingsEnabled: downloadDirectoryApplier != nil,
+      applyDownloadDirectory: downloadDirectoryApplier)
     self.presentation = presentation
     super.init()
   }

@@ -76,6 +76,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   private let keyWindow: () -> NSWindow?
   private let screens: () -> [NSRect]
   let preferences: BrowserPreferencesStore
+  private let downloadDirectoryApplier: ProfileDownloadDirectoryApplier?
   private(set) var settingsController: BrowserSettingsController?
   private var privateHost: PrivateBrowserHost?
   var privateWindowOwners: [PrivateBrowserHost.Owner] { privateHost?.ownedWindows ?? [] }
@@ -108,12 +109,36 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     self.events = events
     self.workspace = workspace
     self.preferences = preferences
+    if let shaar = events.runtime as? ARCShaarRuntime {
+      downloadDirectoryApplier = Self.makeDownloadDirectoryApplier(runtime: shaar)
+    } else {
+      downloadDirectoryApplier = nil
+    }
     self.presentation = presentation
     self.usesPrimaryWindow = usesPrimaryWindow
     self.keyWindow = keyWindow
     self.screens = screens
     super.init()
     events.runtime.onQuitCancelled = { [weak self] in self?.restartRequested = false }
+  }
+
+  static func makeDownloadDirectoryApplier(runtime: ARCShaarRuntime)
+    -> ProfileDownloadDirectoryApplier
+  {
+    { profileID, directory in
+      try await withCheckedThrowingContinuation { continuation in
+        runtime.configureDownloadDirectory(directory, profileID: profileID.uuidString) {
+          acknowledged, error in
+          if let error {
+            continuation.resume(throwing: error)
+          } else if let acknowledged {
+            continuation.resume(returning: acknowledged)
+          } else {
+            continuation.resume(throwing: CocoaError(.fileWriteUnknown))
+          }
+        }
+      }
+    }
   }
 
   var activeContext: NativeBrowserContext? {
@@ -174,6 +199,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     }
     settingsController = BrowserSettingsController(
       workspace: workspace, preferences: preferences, runtime: events.runtime,
+      downloadDirectoryApplier: downloadDirectoryApplier,
       presentation: presentation == .visible ? .visible : .hiddenProbe)
     settingsController?.setOpenSpaceHandler { [weak self] in self?.openSpaceFromSettings($0) }
     settingsController?.setAccountHandlers(
@@ -719,7 +745,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     let engine = try BrowserEngine(
       events: events, windowID: nativeID, store: store,
       presentsNativePanels: presentation == .visible,
-      lazyPinnedTabs: true)
+      lazyPinnedTabs: true, downloadDirectoryApplier: downloadDirectoryApplier)
     let hosting = NSHostingView(rootView: BrowserWindow(store: store))
     window.title = ProductIdentity.name
     window.titleVisibility = .hidden

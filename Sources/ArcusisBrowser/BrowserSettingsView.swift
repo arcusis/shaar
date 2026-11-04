@@ -15,6 +15,7 @@ struct BrowserSettingsProfile: Identifiable {
   let accounts: [ConnectedAccount]
   let downloadDirectory: URL?
   let defaultDownloadDirectory: URL?
+  let canChooseDownloadDirectory: Bool
   var spaceCount: Int { spaces.count }
   var spaceNames: [String] { spaces.map(\.name) }
 
@@ -22,7 +23,7 @@ struct BrowserSettingsProfile: Identifiable {
     id: UUID, name: String, color: ProfileColorChoice = .none,
     symbol: String = BrowserProfile.defaultSymbol, spaces: [BrowserSettingsSpace],
     accounts: [ConnectedAccount] = [], downloadDirectory: URL? = nil,
-    defaultDownloadDirectory: URL? = nil
+    defaultDownloadDirectory: URL? = nil, canChooseDownloadDirectory: Bool = false
   ) {
     self.id = id
     self.name = name
@@ -32,6 +33,7 @@ struct BrowserSettingsProfile: Identifiable {
     self.accounts = accounts
     self.downloadDirectory = downloadDirectory
     self.defaultDownloadDirectory = defaultDownloadDirectory
+    self.canChooseDownloadDirectory = canChooseDownloadDirectory
   }
 }
 
@@ -497,35 +499,32 @@ struct BrowserSettingsView: View {
           ForEach(searchEngines) { Text($0.title).tag($0.id) }
         }
       }
-      Section(SettingsL10n.string("Download folder")) {
-        LabeledContent(SettingsL10n.string("Current folder")) {
-          Text(
-            (profile.downloadDirectory ?? profile.defaultDownloadDirectory)?.path
-              ?? SettingsL10n.string("Unavailable")
-          )
-          .font(.caption)
-          .foregroundStyle(.secondary)
-          .textSelection(.enabled)
-          .lineLimit(2)
-          .multilineTextAlignment(.trailing)
-        }
-        HStack {
-          Button(SettingsL10n.string("Choose Folder…")) {
-            onChooseDownloadDirectory(profile.id)
+      if profile.canChooseDownloadDirectory {
+        Section(SettingsL10n.string("Download folder")) {
+          LabeledContent(SettingsL10n.string("Current folder")) {
+            Text(
+              (profile.downloadDirectory ?? profile.defaultDownloadDirectory)?.path
+                ?? SettingsL10n.string("Unavailable")
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .textSelection(.enabled)
+            .lineLimit(2)
+            .multilineTextAlignment(.trailing)
           }
-          .accessibilityIdentifier("settings.downloadFolder.choose")
-          if profile.downloadDirectory != nil {
-            Button(SettingsL10n.string("Use Default")) {
-              onResetDownloadDirectory(profile.id)
+          HStack {
+            Button(SettingsL10n.string("Choose Folder…")) {
+              onChooseDownloadDirectory(profile.id)
             }
-            .accessibilityIdentifier("settings.downloadFolder.reset")
+            .accessibilityIdentifier("settings.downloadFolder.choose")
+            if profile.downloadDirectory != nil {
+              Button(SettingsL10n.string("Use Default")) {
+                onResetDownloadDirectory(profile.id)
+              }
+              .accessibilityIdentifier("settings.downloadFolder.reset")
+            }
           }
         }
-        Text(
-          SettingsL10n.string(
-            "This folder is saved for this profile. Browser downloads will use it when engine support is available."
-          )
-        ).font(.caption).foregroundStyle(.secondary)
       }
       Section(SettingsL10n.string("Spaces using this profile")) {
         if profile.spaces.isEmpty {

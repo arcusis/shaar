@@ -17,6 +17,11 @@ static NSDictionary *ServiceJSON(const char *json) {
   return [value isKindOfClass:NSDictionary.class] ? value : nil;
 }
 
+static NSError *ServiceError(NSString *message) {
+  return [NSError errorWithDomain:@"com.arcusis.browser.downloads" code:1
+      userInfo:@{NSLocalizedDescriptionKey: ARCBridgeLocalizedString(message)}];
+}
+
 static void ServiceReply(void *context, const char *json) {
   void (^done)(NSDictionary *) = (__bridge_transfer void (^)(NSDictionary *))context;
   done(ServiceJSON(json) ?: @{@"error": ARCBridgeLocalizedString(@"Invalid engine service response.")});
@@ -53,6 +58,28 @@ static NSMutableDictionary<NSString *, NSURL *> *ShaarDownloadDirectories(ARCSha
 - (NSURL *)downloadsDirectoryForProfileID:(NSString *)profileID {
   if (![self shaarHasProfileID:profileID]) return nil;
   return ShaarDownloadDirectories(self)[profileID];
+}
+
+- (void)configureDownloadDirectory:(NSURL *)directory profileID:(NSString *)profileID
+                        completion:(void (^)(NSURL *, NSError *))completion {
+  if (![self shaarHasProfileID:profileID] || (directory && !directory.isFileURL)) {
+    completion(nil, ServiceError(@"A loaded profile and a local folder are required."));
+    return;
+  }
+  NSMutableDictionary *payload = [@{@"schemaVersion": @1,
+    @"action": directory ? @"set" : @"useDefault"} mutableCopy];
+  if (directory) payload[@"directory"] = directory.standardizedURL.path;
+  [self shaarSubmit:SHAAR_OP_DOWNLOAD_DIRECTORY profileID:profileID tabID:nil payload:payload
+        completion:^(NSDictionary *result, NSError *error) {
+    NSString *path = result[@"directory"];
+    if (error || ![path isKindOfClass:NSString.class] || !path.isAbsolutePath) {
+      completion(nil, error ?: ServiceError(@"The download folder could not be saved."));
+      return;
+    }
+    NSURL *effective = [NSURL fileURLWithPath:path isDirectory:YES];
+    ShaarDownloadDirectories(self)[profileID] = effective;
+    completion(effective, nil);
+  }];
 }
 
 - (void)downloadCommand:(NSString *)command downloadID:(NSString *)downloadID profileID:(NSString *)profileID

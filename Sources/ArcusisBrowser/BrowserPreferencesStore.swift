@@ -13,6 +13,7 @@ final class BrowserPreferencesStore {
   private let fileURL: URL?
   private var profileSearchEngines: [UUID: BrowserSearchEngine] = [:]
   private var profileDownloadDirectories: [UUID: String] = [:]
+  private var profileDownloadBookmarks: [UUID: Data] = [:]
   private var connectedAccounts: [UUID: [ConnectedAccount]] = [:]
   private var pinnedExtensions: [UUID: [String]] = [:]
   private var autoPictureInPictureOffSites: [UUID: [String]] = [:]
@@ -36,8 +37,17 @@ final class BrowserPreferencesStore {
     save()
   }
 
-  /// Optional app-selected folder for this profile. The engine may not yet honor this preference.
+  /// Engine-acknowledged folder for this profile, with a bookmark for scoped access.
   func downloadDirectory(for profileID: UUID) -> URL? {
+    if let bookmark = profileDownloadBookmarks[profileID] {
+      var isStale = false
+      if let url = try? URL(
+        resolvingBookmarkData: bookmark, options: [.withSecurityScope], relativeTo: nil,
+        bookmarkDataIsStale: &isStale)
+      {
+        return url.standardizedFileURL
+      }
+    }
     guard let path = profileDownloadDirectories[profileID] else { return nil }
     return URL(filePath: path, directoryHint: .isDirectory).standardizedFileURL
   }
@@ -45,10 +55,14 @@ final class BrowserPreferencesStore {
   func setDownloadDirectory(_ url: URL?, for profileID: UUID) {
     guard let url, url.isFileURL else {
       profileDownloadDirectories[profileID] = nil
+      profileDownloadBookmarks[profileID] = nil
       save()
       return
     }
-    profileDownloadDirectories[profileID] = url.standardizedFileURL.path
+    let resolved = url.standardizedFileURL
+    profileDownloadDirectories[profileID] = resolved.path
+    profileDownloadBookmarks[profileID] = try? resolved.bookmarkData(
+      options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil)
     save()
   }
 
@@ -134,6 +148,7 @@ final class BrowserPreferencesStore {
     try validateProfileRemoval()
     profileSearchEngines[profileID] = nil
     profileDownloadDirectories[profileID] = nil
+    profileDownloadBookmarks[profileID] = nil
     connectedAccounts[profileID] = nil
     pinnedExtensions[profileID] = nil
     autoPictureInPictureOffSites[profileID] = nil
@@ -196,6 +211,7 @@ final class BrowserPreferencesStore {
         version: 2, sidebarInitiallyVisible: sidebarInitiallyVisible,
         profileSearchEngines: profileSearchEngines,
         profileDownloadDirectories: profileDownloadDirectories,
+        profileDownloadBookmarks: profileDownloadBookmarks,
         pinnedExtensions: pinnedExtensions, connectedAccounts: connectedAccounts,
         autoPictureInPictureOffSites: autoPictureInPictureOffSites,
         developerSimulations: developerSimulations)
@@ -224,6 +240,7 @@ private struct PreferencesDocument: Codable {
   let sidebarInitiallyVisible: Bool
   let profileSearchEngines: [UUID: BrowserSearchEngine]
   let profileDownloadDirectories: [UUID: String]
+  let profileDownloadBookmarks: [UUID: Data]
   let connectedAccounts: [UUID: [ConnectedAccount]]
   let pinnedExtensions: [UUID: [String]]
   let autoPictureInPictureOffSites: [UUID: [String]]
@@ -234,6 +251,7 @@ private struct PreferencesDocument: Codable {
     case sidebarInitiallyVisible
     case profileSearchEngines
     case profileDownloadDirectories
+    case profileDownloadBookmarks
     case connectedAccounts
     case pinnedExtensions
     case autoPictureInPictureOffSites
@@ -244,6 +262,7 @@ private struct PreferencesDocument: Codable {
     version: Int, sidebarInitiallyVisible: Bool,
     profileSearchEngines: [UUID: BrowserSearchEngine],
     profileDownloadDirectories: [UUID: String] = [:],
+    profileDownloadBookmarks: [UUID: Data] = [:],
     pinnedExtensions: [UUID: [String]] = [:],
     connectedAccounts: [UUID: [ConnectedAccount]] = [:],
     autoPictureInPictureOffSites: [UUID: [String]] = [:],
@@ -253,6 +272,7 @@ private struct PreferencesDocument: Codable {
     self.sidebarInitiallyVisible = sidebarInitiallyVisible
     self.profileSearchEngines = profileSearchEngines
     self.profileDownloadDirectories = profileDownloadDirectories
+    self.profileDownloadBookmarks = profileDownloadBookmarks
     self.connectedAccounts = connectedAccounts
     self.pinnedExtensions = pinnedExtensions
     self.autoPictureInPictureOffSites = autoPictureInPictureOffSites
@@ -277,5 +297,7 @@ private struct PreferencesDocument: Codable {
       ?? [:]
     profileDownloadDirectories =
       try values.decodeIfPresent([UUID: String].self, forKey: .profileDownloadDirectories) ?? [:]
+    profileDownloadBookmarks =
+      try values.decodeIfPresent([UUID: Data].self, forKey: .profileDownloadBookmarks) ?? [:]
   }
 }

@@ -21,6 +21,84 @@ BrowserTabRegistryImpl g_registry;
 
 BrowserTabRegistryImpl& Registry() { return g_registry; }
 
+BrowserTabRegistryImpl::WindowState* BrowserTabRegistryImpl::FindWindowState(
+    shaar_engine* engine, shaar_window* window) {
+  for (auto& entry : windows_)
+    if (entry.engine == engine && entry.handle == window)
+      return &entry;
+  return nullptr;
+}
+
+bool BrowserTabRegistryImpl::ReserveWindow(shaar_engine* engine,
+                                           shaar_window* window,
+                                           std::string id) {
+  if (!engine || !window || id.empty())
+    return false;
+  for (const auto& entry : windows_)
+    if (entry.handle == window ||
+        (entry.engine == engine && entry.window_id == id))
+      return false;
+  windows_.push_back({engine, window, nullptr, std::move(id), nullptr, {}, {}});
+  return true;
+}
+
+bool BrowserTabRegistryImpl::HasTabID(shaar_engine* engine,
+                                      shaar_window* window,
+                                      std::string_view id) const {
+  for (const auto& entry : tabs_)
+    if (entry.engine == engine && entry.window == window && entry.id == id)
+      return true;
+  return false;
+}
+
+bool BrowserTabRegistryImpl::ReserveTab(shaar_engine* engine,
+                                        shaar_window* window,
+                                        shaar_tab* tab,
+                                        std::string id) {
+  if (!engine || !window || !tab || id.empty() ||
+      !FindWindowState(engine, window) || HasTabID(engine, window, id))
+    return false;
+  for (const auto& entry : tabs_)
+    if (entry.handle == tab)
+      return false;
+  tabs_.push_back({engine, window, tab, std::move(id), nullptr});
+  return true;
+}
+
+void BrowserTabRegistryImpl::UnbindTab(shaar_engine* engine,
+                                       shaar_window* window,
+                                       shaar_tab* tab) {
+  std::erase_if(tabs_, [engine, window, tab](const TabEntry& entry) {
+    return entry.engine == engine && entry.window == window &&
+           entry.handle == tab;
+  });
+}
+
+void BrowserTabRegistryImpl::UnbindBrowser(shaar_engine* engine,
+                                           shaar_window* window,
+                                           Browser* browser) {
+  auto* state = FindWindowState(engine, window);
+  if (!state || !browser)
+    return;
+  std::erase_if(state->browsers_by_profile,
+                [browser](const auto& entry) { return entry.second == browser; });
+  if (state->browser == browser)
+    state->browser = nullptr;
+  if (state->active_browser == browser) {
+    state->active_browser = nullptr;
+    state->active_profile_id.clear();
+  }
+  if (!state->browsers_by_profile.empty()) {
+    const auto& [id, remaining] = *state->browsers_by_profile.begin();
+    if (!state->browser)
+      state->browser = remaining;
+    if (!state->active_browser) {
+      state->active_browser = remaining;
+      state->active_profile_id = id;
+    }
+  }
+}
+
 Browser* BrowserTabRegistryImpl::FindBrowser(shaar_engine* engine,
                                              shaar_window* window) {
   for (const auto& entry : windows_)

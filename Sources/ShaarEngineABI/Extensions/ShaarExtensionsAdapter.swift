@@ -74,6 +74,13 @@ public enum ShaarExtensionsAdapterError: Error, Equatable, Sendable {
   case mutationNotConfirmed
 }
 
+public struct ShaarSharedInstallResult: Equatable, Sendable {
+  public let installed: Set<UUID>
+  public let failed: Set<UUID>
+
+  public var complete: Bool { failed.isEmpty }
+}
+
 public struct ShaarExtensionsAdapter: Sendable {
   private let implementation: ShaarEngineImplementation
   private let ardia: any ArdiaExtensionsBackend
@@ -139,6 +146,39 @@ public struct ShaarExtensionsAdapter: Sendable {
     guard root[resultKey] as? Bool == true else {
       throw ShaarExtensionsAdapterError.mutationNotConfirmed
     }
+  }
+
+  /// Apply one approved shared-home intent to regular profiles. Keep every
+  /// outcome so a failed profile can be retried without repeating consent.
+  public func installAcrossProfiles(
+    extensionID: String, profileIDs: [UUID]
+  ) async -> ShaarSharedInstallResult {
+    let targets = Array(Set(profileIDs)).sorted { $0.uuidString < $1.uuidString }
+    guard Self.isValidExtensionID(extensionID), implementation == .shaar else {
+      return ShaarSharedInstallResult(installed: [], failed: Set(targets))
+    }
+    var installed = Set<UUID>()
+    var failed = Set<UUID>()
+    for profileID in targets {
+      do {
+        let arguments = try encode([
+          "schemaVersion": 1, "action": "install", "extensionId": extensionID,
+          "source": "sharedHome",
+        ])
+        let data = try await shaar.submitExtensions(
+          profileID: profileID, operation: .manage, arguments: arguments)
+        let root = try object(data, required: ["schemaVersion", "installed"])
+        try requireVersion(root)
+        if root["installed"] as? Bool == true {
+          installed.insert(profileID)
+        } else {
+          failed.insert(profileID)
+        }
+      } catch {
+        failed.insert(profileID)
+      }
+    }
+    return ShaarSharedInstallResult(installed: installed, failed: failed)
   }
 
   private func object(_ data: Data, required: Set<String>) throws -> [String: Any] {

@@ -46,6 +46,7 @@
 - [[Engine_Module_history]]
 - [[Engine_Module_site-data]]
 - [[Engine_Module_extensions]]
+- [[Shared_Extension_Home]]
 - [[Engine_Module_find]]
 - [[Engine_Module_devtools]]
 - [[Engine_Module_media]]

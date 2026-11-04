@@ -183,7 +183,8 @@ shaar_error_code HandleExtensionsOperation(
     } else if (*action == "install") {
       const std::string* source = input.FindString("source");
       if (!HasOnlyKeys(input, {"schemaVersion", "action", "extensionId", "source"}) ||
-          !source || (*source != "webStore" && *source != "unpacked"))
+          !source || (*source != "webStore" && *source != "unpacked" &&
+                      *source != "sharedHome"))
         return Fail(SHAAR_INVALID_ARGUMENT, "invalid extension install source", error);
     } else {
       return Fail(SHAAR_INVALID_ARGUMENT, "unknown extension action", error);
@@ -293,15 +294,27 @@ shaar_error_code HandleExtensionsOperation(
       return Fail(SHAAR_UNSUPPORTED_CAPABILITY,
                   "incognito visibility policy integration is not available", error);
     }
-    // Install requires typed consent, source verification, and multi-profile
-    // fan-out; do not route it through an unreviewed Chromium default prompt.
+    // A replay against an already-installed profile is idempotent and must not
+    // change that profile's enabled state. Creating a missing instance still
+    // requires a reviewed shared package and consent/policy integration.
     if (*action == "install") {
       const std::string* source = input.FindString("source");
       if (!HasOnlyKeys(input, {"schemaVersion", "action", "extensionId", "source"}) ||
-          !source || (*source != "webStore" && *source != "unpacked"))
+          !source || (*source != "webStore" && *source != "unpacked" &&
+                      *source != "sharedHome"))
         return Fail(SHAAR_INVALID_ARGUMENT, "invalid extension install source", error);
+      const extensions::Extension* existing = registry->GetExtensionById(
+          *id, extensions::ExtensionRegistry::EVERYTHING);
+      if (*source == "sharedHome" && existing &&
+          (!existing->is_extension() || !existing->from_webstore()))
+        return Fail(SHAAR_CONFLICT, "extension is not a Web Store install", error);
+      if (*source == "sharedHome" && existing) {
+        ReplyLater({reply, reply_context, request_id}, SHAAR_OK,
+                   "{\"schemaVersion\":1,\"installed\":true}");
+        return SHAAR_OK;
+      }
       return Fail(SHAAR_UNSUPPORTED_CAPABILITY,
-                  "extension operation requires consent/policy integration", error);
+                  "shared extension package installation is not available", error);
     }
     return Fail(SHAAR_INVALID_ARGUMENT, "unknown extension action", error);
   }

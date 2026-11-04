@@ -95,4 +95,19 @@ TEST(ShaarExtensionsModuleTest, RejectsMalformedExtensionIDs) {
   EXPECT_EQ(profiles.resolve_calls, 0);
 }
 
+TEST(ShaarExtensionsModuleTest, AcceptsSharedHomeInstallSchemaBeforeProfileLookup) {
+  EmptyProfileServices profiles;
+  shaar::ShaarEngineContext context{&profiles, nullptr};
+  shaar_scope scope = {};
+  scope.size = sizeof(scope);
+  scope.profile = reinterpret_cast<shaar_profile*>(1);
+  shaar_error error = {};
+  error.size = sizeof(error);
+  EXPECT_EQ(Submit(&context, scope, SHAAR_OP_EXTENSION_MANAGE,
+                   R"({"schemaVersion":1,"action":"install","extensionId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","source":"sharedHome"})",
+                   &error),
+            SHAAR_NOT_FOUND);
+  EXPECT_EQ(profiles.resolve_calls, 1);
+}
+
 }  // namespace

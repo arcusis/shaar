@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import Foundation
+import ShaarEngineC
 import Testing
 
 @testable import ShaarEngineABI
@@ -39,13 +40,16 @@ private func fakeLifecycleRun(
   guard engine != nil else { return ShaarStatusCode.invalidArgument.rawValue }
   let payload = Array("{\"kind\":\"engine.ready\",\"schemaVersion\":1}".utf8)
   payload.withUnsafeBufferPointer { buffer in
-    let event = ShaarABIEvent(
-      size: UInt32(MemoryLayout<ShaarABIEvent>.size), sequence: 1, kind: 1,
-      profileID: ShaarBytes(data: nil, size: 0), sessionID: ShaarBytes(data: nil, size: 0),
-      windowID: ShaarBytes(data: nil, size: 0), tabID: ShaarBytes(data: nil, size: 0),
-      payloadJSON: ShaarBytes(
-        data: buffer.baseAddress.map { UnsafeRawPointer($0).assumingMemoryBound(to: CChar.self) },
-        size: buffer.count))
+    var event = ShaarABIEvent()
+    event.size = UInt32(MemoryLayout<ShaarABIEvent>.size)
+    event.sequence = 1
+    event.kind = shaar_event_kind(rawValue: 1)
+    var payloadBytes = ShaarBytes()
+    payloadBytes.data = buffer.baseAddress.map {
+      UnsafeRawPointer($0).assumingMemoryBound(to: CChar.self)
+    }
+    payloadBytes.size = buffer.count
+    event.payload_json = payloadBytes
     withUnsafePointer(to: event) { eventPointer in
       fakeEventCallback?(fakeEventContext, UnsafeRawPointer(eventPointer))
     }

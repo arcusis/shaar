@@ -9,6 +9,24 @@ import Testing
 @testable import ShaarVerification
 
 @Suite @MainActor struct InspectorAIPasteboardTests {
+  @Test func detailedDiagnosticsReadinessRequiresEachCollectedSignal() {
+    let console = ["AI fixture console error"]
+    let statuses = [503]
+    let signals = ["Inspector AI fixture"]
+    #expect(
+      !InspectorAICopyProbe.diagnosticsReady(
+        consoleMessages: [], requestStatuses: statuses, signalNames: signals))
+    #expect(
+      !InspectorAICopyProbe.diagnosticsReady(
+        consoleMessages: console, requestStatuses: [], signalNames: signals))
+    #expect(
+      !InspectorAICopyProbe.diagnosticsReady(
+        consoleMessages: console, requestStatuses: statuses, signalNames: []))
+    #expect(
+      InspectorAICopyProbe.diagnosticsReady(
+        consoleMessages: console, requestStatuses: statuses, signalNames: signals))
+  }
+
   @Test func receiptRequiresActualPNGAfterMatchingMarkdownRepresentations() throws {
     let board = NSPasteboard.withUniqueName()
     defer { board.releaseGlobally() }

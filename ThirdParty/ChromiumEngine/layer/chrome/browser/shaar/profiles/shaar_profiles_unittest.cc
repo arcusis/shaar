@@ -43,12 +43,12 @@ TEST(ShaarProfilesTest, HandlerRejectsMissingAndPrivateProfileScopes) {
   error.size = sizeof(error);
   shaar_scope scope = {};
   scope.size = sizeof(scope);
-  EXPECT_EQ(handler(fake_engine, scope, nullptr, nullptr,
+  EXPECT_EQ(handler(nullptr, fake_engine, scope, nullptr, nullptr,
                     SHAAR_OP_PROFILE_GET_STATE, {"{}", 2}, 1,
                     &NoopReply, nullptr, &error),
             SHAAR_INVALID_ARGUMENT);
   scope.private_session = reinterpret_cast<shaar_private_session*>(0x2);
-  EXPECT_EQ(handler(fake_engine, scope, nullptr, nullptr,
+  EXPECT_EQ(handler(nullptr, fake_engine, scope, nullptr, nullptr,
                     SHAAR_OP_PROFILE_GET_STATE, {"{}", 2}, 1,
                     &NoopReply, nullptr, &error),
             SHAAR_PRIVATE_DISALLOWED);

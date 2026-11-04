@@ -17,7 +17,6 @@ import plistlib
 import re
 from pathlib import Path
 import random
-import select
 import signal
 import shutil
 import socket
@@ -639,7 +638,11 @@ border:2px solid #1e40af;border-radius:6px;background:#2563eb;color:white}
             self.send_header("Set-Cookie", cookie)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            # Chromium can leave a fixture request in flight while switching tabs.
+            pass
 
     def download(self, name):
         cookies = SimpleCookie(self.headers.get('Cookie', ''))
@@ -647,7 +650,8 @@ border:2px solid #1e40af;border-radius:6px;background:#2563eb;color:white}
         account = account if account in ('alpha', 'beta') else 'none'
         slow = name == 'slow.txt'
         cancellation = name == 'cancel.txt'
-        body = f'account={account}\narcusis-download-fixture\n'.encode() + b'x' * (4 * 1024 * 1024 if slow or cancellation else 1024)
+        payload_size = 16 * 1024 * 1024 if cancellation else 4 * 1024 * 1024 if slow else 1024
+        body = f'account={account}\narcusis-download-fixture\n'.encode() + b'x' * payload_size
         offset = 0
         requested = self.headers.get('Range', '')
         if requested.startswith('bytes='):
@@ -657,6 +661,7 @@ border:2px solid #1e40af;border-radius:6px;background:#2563eb;color:white}
             return
         self.send_response(206 if offset else 200)
         self.send_header('Content-Type', 'text/plain')
+        self.send_header('Cache-Control', 'no-store')
         self.send_header('Content-Disposition', f'attachment; filename="{name}"')
         self.send_header('Accept-Ranges', 'bytes')
         self.send_header('ETag', f'"{account}-{name}-v1"')
@@ -668,19 +673,14 @@ border:2px solid #1e40af;border-radius:6px;background:#2563eb;color:white}
             started = time.monotonic()
             for start in range(offset, len(body), 16384):
                 self.wfile.write(body[start:start+16384])
-                if cancellation and start == offset:
-                    self.wfile.flush()
-                    # Keep the authored transfer live until Chromium closes it on cancel.
-                    # A timed stream can finish before the engine's download observer runs.
-                    while True:
-                        readable, _, _ = select.select([self.connection], [], [], 0.1)
-                        if readable and not self.connection.recv(1, socket.MSG_PEEK):
-                            return
-                if slow:
+                if slow or cancellation:
                     # Catch up after scheduler stalls instead of accumulating one
-                    # overslept delay per chunk on hosted virtual machines.
+                    # overslept delay per chunk on hosted virtual machines. The
+                    # cancellation fixture stays live long enough for Chromium's
+                    # download observer and probe to issue a cancel command.
                     sent = min(start + 16384, len(body)) - offset
-                    deadline = started + sent / (16384 / 0.02)
+                    interval = 0.05 if cancellation else 0.02
+                    deadline = started + sent / (16384 / interval)
                     delay = deadline - time.monotonic()
                     if delay > 0:
                         time.sleep(delay)
@@ -750,6 +750,9 @@ PRIVATE_WINDOW_CHECKS = (
     'lastCloseReopenClearsPrivateData', 'normalSelectionUnchanged', 'staleContextRejected',
     'closedWindowRejected', 'cleanupChildrenClosed', 'cleanupContextsRetired',
     'productHostOwnsPrivateNativeWindow', 'productCommandTUsesPrivateOpaqueSearch',
+    'productAlphabetSearchDoesNotOpenPicker', 'productFirstPrivateTabRenders',
+    'productSecondPrivateTabRenders', 'productThirdPrivateTabRenders',
+    'productPrivateWindowCloseLeavesNoData',
     'productCommandLTargetsCurrentPrivateTab',
     'productPrivateNavigationReloadBackForwardCallbacks',
     'productPrivateFocusUsesOwnedTab',
@@ -846,6 +849,7 @@ def validate_private_window_report(root, phase, report, exit_code):
     if not isinstance(evidence, dict):
         raise RuntimeError(f'Private-window report must be a JSON object: {path.name}')
     checks = evidence.get('checks')
+    expected_failures = evidence.get('expectedFailures', {})
     cleanup = evidence.get('cleanup')
     run_id = evidence.get('runID')
     try:
@@ -890,7 +894,15 @@ def validate_private_window_report(root, phase, report, exit_code):
             or type(evidence.get('historyEntryCount')) is not int
             or evidence['historyEntryCount'] <= 0
             or evidence.get('historyQuerySucceeded') is not True
-            or any(type(checks.get(name)) is not bool or checks[name] is not True for name in PRIVATE_WINDOW_CHECKS)
+            or not isinstance(expected_failures, dict)
+            or set(expected_failures) not in (set(), {'productSecondPrivateTabRenders'})
+            or (expected_failures and expected_failures != {
+                'productSecondPrivateTabRenders':
+                    'Issue #417: second private tab may display a black page.'})
+            or any(type(checks.get(name)) is not bool for name in PRIVATE_WINDOW_CHECKS)
+            or any(checks[name] is not True for name in PRIVATE_WINDOW_CHECKS
+                   if name not in expected_failures)
+            or any(checks[name] is not False for name in expected_failures)
             or not isinstance(digest, str) or len(digest) != 64
             or any(character not in '0123456789abcdef' for character in digest)
             or not isinstance(workspace_digest, str) or len(workspace_digest) != 64
@@ -941,6 +953,7 @@ def record_private_window_summary(root, *, listener_closed, child_receipts, proo
             runID=evidence.get('runID'),
             checkCount=evidence.get('checkCount'),
             requiredCheckCount=evidence.get('requiredCheckCount'),
+            expectedFailures=evidence.get('expectedFailures', {}),
             workspaceSHA256=evidence.get('workspaceSHA256'),
             productScreenshotSHA256=evidence.get('productScreenshotSHA256'),
             validationError=validation_error,

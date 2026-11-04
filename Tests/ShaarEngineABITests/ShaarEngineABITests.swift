@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import Foundation
+import ShaarEngineC
 import Testing
 
 @testable import ShaarEngineABI
@@ -63,32 +64,95 @@ struct ShaarEngineABITests {
     #expect(throws: ShaarEngineError.invalidStatusCode(99)) { try ShaarStatusCode.decode(99) }
   }
 
+  @Test func swiftEventTypesUseTheImportedCLayouts() {
+    #expect(MemoryLayout<ShaarBytes>.size == MemoryLayout<shaar_bytes>.size)
+    #expect(MemoryLayout<ShaarABIEvent>.size == MemoryLayout<shaar_event>.size)
+    #expect(MemoryLayout<ShaarABIEvent>.alignment == MemoryLayout<shaar_event>.alignment)
+  }
+
   @Test @MainActor func eventIsCopiedBeforeMainActorDispatch() async throws {
     var delivered: ShaarCopiedEvent?
     let dispatcher = ShaarEventDispatcher { delivered = $0 }
     let profile = Array("profile".utf8)
     let payload = Array("{\"kind\":\"tab\",\"schemaVersion\":1}".utf8)
-    let event = profile.withUnsafeBufferPointer { profileBuffer in
+    profile.withUnsafeBufferPointer { profileBuffer in
       payload.withUnsafeBufferPointer { payloadBuffer in
-        ShaarABIEvent(
-          size: UInt32(MemoryLayout<ShaarABIEvent>.size), sequence: 42, kind: 5,
-          profileID: ShaarBytes(
-            data: profileBuffer.baseAddress.map {
-              UnsafeRawPointer($0).assumingMemoryBound(to: CChar.self)
-            }, size: profile.count),
-          sessionID: ShaarBytes(data: nil, size: 0), windowID: ShaarBytes(data: nil, size: 0),
-          tabID: ShaarBytes(data: nil, size: 0),
-          payloadJSON: ShaarBytes(
-            data: payloadBuffer.baseAddress.map {
-              UnsafeRawPointer($0).assumingMemoryBound(to: CChar.self)
-            }, size: payload.count))
+        var event = shaar_event()
+        event.size = UInt32(MemoryLayout<shaar_event>.size)
+        event.sequence = 42
+        event.kind = shaar_event_kind(rawValue: 5)
+
+        var profileBytes = shaar_bytes()
+        profileBytes.data = profileBuffer.baseAddress.map {
+          UnsafeRawPointer($0).assumingMemoryBound(to: CChar.self)
+        }
+        profileBytes.size = profile.count
+        event.profile_id = profileBytes
+
+        var payloadBytes = shaar_bytes()
+        payloadBytes.data = payloadBuffer.baseAddress.map {
+          UnsafeRawPointer($0).assumingMemoryBound(to: CChar.self)
+        }
+        payloadBytes.size = payload.count
+        event.payload_json = payloadBytes
+
+        dispatcher.receive(event)
       }
     }
-    dispatcher.receive(event)
     for _ in 0..<20 where delivered == nil { await Task.yield() }
     #expect(delivered?.sequence == 42)
     #expect(delivered?.profileID == Data(profile))
     #expect(delivered?.payloadJSON == Data(payload))
+  }
+
+  @Test @MainActor func eventsReachMainActorInSequenceOrder() async {
+    let count = 256
+    let sequences = await withCheckedContinuation { continuation in
+      var received: [UInt64] = []
+      let dispatcher = ShaarEventDispatcher { event in
+        received.append(event.sequence)
+        if received.count == count { continuation.resume(returning: received) }
+      }
+      for sequence in 1...count {
+        dispatcher.receive(engineEvent(sequence: UInt64(sequence)))
+      }
+    }
+    #expect(sequences == (1...count).map(UInt64.init))
+  }
+
+  @Test @MainActor func invalidEventsAreReported() async {
+    let reported = await withCheckedContinuation { continuation in
+      let dispatcher = ShaarEventDispatcher(
+        handler: { _ in Issue.record("invalid event was dispatched") },
+        onError: { error in continuation.resume(returning: error) })
+      dispatcher.receive(engineEvent(sequence: 1, kind: 5))
+    }
+    #expect(reported == .invalidEvent("profile-scoped event has no profile ID"))
+  }
+
+  @Test func frameworkLoadFailureHasItsOwnTypedError() {
+    let frameworkURL = URL(fileURLWithPath: "/no/such/Shaar.framework")
+    do {
+      _ = try ShaarEngineLoader.load(frameworkURL: frameworkURL)
+      Issue.record("loading a missing framework unexpectedly succeeded")
+    } catch let error as ShaarEngineError {
+      guard case .frameworkLoadFailed(let path, let reason) = error else {
+        Issue.record("expected frameworkLoadFailed, got \(error)")
+        return
+      }
+      #expect(path == frameworkURL.appending(path: "Versions/Current/Chromium Framework").path)
+      #expect(!reason.isEmpty)
+    } catch {
+      Issue.record("expected ShaarEngineError, got \(error)")
+    }
+  }
+
+  private func engineEvent(sequence: UInt64, kind: UInt32 = 1) -> shaar_event {
+    var event = shaar_event()
+    event.size = UInt32(MemoryLayout<shaar_event>.size)
+    event.sequence = sequence
+    event.kind = shaar_event_kind(rawValue: kind)
+    return event
   }
 
 }

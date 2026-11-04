@@ -38,7 +38,17 @@ let package = Package(
       cxxSettings: [.unsafeFlags(["-fobjc-arc"])],
       linkerSettings: [.linkedFramework("AppKit")]
     ),
-    .target(name: "ShaarEngineABI"),
+    .target(name: "ShaarEngineC", publicHeadersPath: "include"),
+    // BEGIN Shaar navigation C ABI shim.
+    .target(
+      name: "ShaarEngineABIC",
+      path: "Sources/ShaarEngineABI/Navigation/CABI",
+      publicHeadersPath: "include"),
+    .target(
+      name: "ShaarEngineABI",
+      dependencies: ["ShaarEngineC", "ShaarEngineABIC"],
+      exclude: ["Navigation/CABI"]),
+    // END Shaar navigation C ABI shim.
     .target(
       name: "ChromiumBridgeVerification",
       dependencies: ["ChromiumBridge"],
@@ -77,6 +87,6 @@ let package = Package(
         "ArcusisBrowser", "BrowserCore", "ChromiumBridge", "ChromiumBridgeVerification",
         "ShaarVerification",
       ]),
-    .testTarget(name: "ShaarEngineABITests", dependencies: ["ShaarEngineABI"]),
+    .testTarget(name: "ShaarEngineABITests", dependencies: ["ShaarEngineABI", "ShaarEngineC"]),
   ]
 )

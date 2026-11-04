@@ -141,10 +141,17 @@ typedef enum {
 
   SHAAR_OP_BOOKMARK_TREE = 500,
   SHAAR_OP_BOOKMARK_APPLY = 501,
+  // BEGIN bookmarks module operation IDs.
+  SHAAR_OP_BOOKMARK_WATCH = 502,
+  // END bookmarks module operation IDs.
 
   SHAAR_OP_HISTORY_QUERY = 600,
   SHAAR_OP_HISTORY_INSERT = 601,
   SHAAR_OP_HISTORY_DELETE = 602,
+  // BEGIN history module operation IDs.
+  SHAAR_OP_HISTORY_WATCH = 603,
+  SHAAR_OP_HISTORY_UNWATCH = 604,
+  // END history module operation IDs.
 
   SHAAR_OP_SITE_SETTINGS_GET = 700,
   SHAAR_OP_SITE_SETTINGS_SET = 701,

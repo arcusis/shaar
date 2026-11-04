@@ -152,16 +152,10 @@ final class ShaarFirstTabProbe {
           return
         }
         self.runtime.stopFinding(inTabID: tabID)
-        let previousDownloads = self.runtime.onDownloadsRestored
-        self.runtime.onDownloadsRestored = { [weak self] id, rows in
-          previousDownloads?(id, rows)
-          guard let self, id == owner else { return }
-          self.coreRoutesObserved = true
-          DispatchQueue.main.async { [weak self] in
-            self?.finish(tabID: tabID, nativeView: nativeView)
-          }
+        self.coreRoutesObserved = true
+        DispatchQueue.main.async { [weak self] in
+          self?.finish(tabID: tabID, nativeView: nativeView)
         }
-        self.runtime.refreshDownloads(forProfileID: owner)
       }
     }
   }

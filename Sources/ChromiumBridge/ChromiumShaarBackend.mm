@@ -34,13 +34,6 @@ shaar_error EmptyError() {
   return error;
 }
 
-NSDictionary *RegularDownloadRecord(id value) {
-  if (![value isKindOfClass:NSDictionary.class]) return nil;
-  NSMutableDictionary *record = [value mutableCopy];
-  record[@"offTheRecord"] = @NO;
-  return record;
-}
-
 void IgnoreReply(void *, const shaar_result *) {}
 
 struct Symbols {
@@ -107,7 +100,6 @@ struct Symbols {
   NSMutableDictionary<NSString *, NSValue *> *_hostSizes;
   NSMutableDictionary<NSString *, NSString *> *_shaarFindTokens;
   NSMutableDictionary<NSString *, NSString *> *_shaarFindRequests;
-  NSMutableDictionary<NSString *, NSURL *> *_shaarDownloadDirectories;
   uint64_t _nextRequestID;
   BOOL _shaarQuitting;
   BOOL _shaarTesting;
@@ -144,7 +136,6 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   _hostSizes = [NSMutableDictionary dictionary];
   _shaarFindTokens = [NSMutableDictionary dictionary];
   _shaarFindRequests = [NSMutableDictionary dictionary];
-  _shaarDownloadDirectories = [NSMutableDictionary dictionary];
   _nextRequestID = 1;
   NSURL *binary = [url URLByAppendingPathComponent:@"Versions/Current/Chromium Framework"];
   _shaarLibrary = dlopen(binary.fileSystemRepresentation, RTLD_NOW | RTLD_GLOBAL);
@@ -223,16 +214,6 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
     if (token && _shaarTabs[tabID] && self.onFindResult)
       self.onFindResult(tabID, token, [payload[@"matchCount"] intValue],
                         [payload[@"activeMatch"] intValue], [payload[@"final"] boolValue]);
-    return;
-  }
-  if (event->kind == SHAAR_EVENT_DOWNLOAD && !event->session_id.size &&
-      _shaarProfiles[profileID]) {
-    if ([kind isEqualToString:@"downloads.changed"] && self.onDownloadChanged &&
-        [payload[@"download"] isKindOfClass:NSDictionary.class])
-      self.onDownloadChanged(profileID, RegularDownloadRecord(payload[@"download"]));
-    if ([kind isEqualToString:@"downloads.removed"] && self.onDownloadRemoved &&
-        [payload[@"downloadId"] isKindOfClass:NSString.class])
-      self.onDownloadRemoved(profileID, payload[@"downloadId"]);
     return;
   }
   if (event->kind == SHAAR_EVENT_BOOKMARK && !event->session_id.size &&
@@ -659,52 +640,6 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
 - (void)evaluateInTabID:(NSString *)tabID script:(NSString *)script
             completion:(void (^)(NSString *))completion {
   completion(nil);  // SHAAR_OP_TAB_EVALUATE is reserved but has no layer handler.
-}
-
-- (void)downloadCommand:(NSString *)command downloadID:(NSString *)downloadID
-              profileID:(NSString *)profileID completion:(void (^)(NSError *))completion {
-  if (![@[@"pause", @"resume", @"cancel", @"remove"] containsObject:command] ||
-      ![[NSUUID alloc] initWithUUIDString:downloadID]) {
-    completion(ShaarError(@"Invalid Shaar download action."));
-    return;
-  }
-  [self submitProfileID:profileID operation:SHAAR_OP_DOWNLOAD_CONTROL
-                payload:@{@"schemaVersion": @1, @"action": command,
-                          @"downloadId": downloadID}
-             completion:^(NSDictionary *result, NSError *error) { completion(error); }];
-}
-
-- (void)refreshDownloadsForProfileID:(NSString *)profileID {
-  [self submitProfileID:profileID operation:SHAAR_OP_DOWNLOAD_LIST
-                payload:@{@"schemaVersion": @1}
-             completion:^(NSDictionary *result, NSError *error) {
-    NSArray *rows = result[@"downloads"];
-    if (error || ![rows isKindOfClass:NSArray.class]) {
-      if (self.onNotice) self.onNotice(@"Shaar downloads could not be restored.");
-      return;
-    }
-    NSMutableArray<NSDictionary *> *downloads = [NSMutableArray arrayWithCapacity:rows.count];
-    for (id row in rows) {
-      NSDictionary *record = RegularDownloadRecord(row);
-      if (!record) {
-        if (self.onNotice) self.onNotice(@"Shaar returned an invalid download record.");
-        return;
-      }
-      [downloads addObject:record];
-    }
-    if (self.onDownloadsRestored) self.onDownloadsRestored(profileID, downloads);
-  }];
-  [self submitProfileID:profileID operation:SHAAR_OP_DOWNLOAD_DIRECTORY
-                payload:@{@"schemaVersion": @1, @"action": @"get"}
-             completion:^(NSDictionary *result, NSError *error) {
-    NSString *path = result[@"directory"];
-    if (!error && [path isKindOfClass:NSString.class] && [path hasPrefix:@"/"])
-      self->_shaarDownloadDirectories[profileID] = [NSURL fileURLWithPath:path isDirectory:YES];
-  }];
-}
-
-- (NSURL *)downloadsDirectoryForProfileID:(NSString *)profileID {
-  return _shaarProfiles[profileID] ? _shaarDownloadDirectories[profileID] : nil;
 }
 
 - (void)bookmarksForProfileID:(NSString *)profileID

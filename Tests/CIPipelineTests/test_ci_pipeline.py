@@ -505,19 +505,26 @@ class SwiftReportTests(unittest.TestCase):
 class ProbeSoakTests(unittest.TestCase):
     def test_shards_cover_every_original_iteration_once_without_retry(self):
         from collections import Counter
-        from ci_engine import engine_shards, shard_modes
-        self.assertEqual(engine_shards(1), [
-            "baseline-1", "private-multitab-1", "private-window-1", "private-window-2",
-            "private-window-3", "quit-exit-1", "quit-exit-2", "quit-exit-3", "session-recovery-1",
-        ])
+        from ci_engine import (
+            ENGINE_PROBE_WEIGHTS_SECONDS, _engine_shard_assignments, engine_shards, shard_modes,
+        )
+        self.assertEqual(engine_shards(1), ["engine-1", "engine-2", "engine-3", "engine-4"])
         for iterations in (1, 2, 3, 10):
             expected = Counter((mode, index) for mode in STAGES.ENGINE_MODES
                                for index in range(1, max(iterations, STAGES.MINIMUM_REPETITIONS.get(mode, 1)) + 1))
             actual = Counter((mode, index) for shard in engine_shards(iterations)
                              for mode, indexes in shard_modes(shard, iterations) for index in indexes)
             self.assertEqual(actual, expected)
+            self.assertEqual(len(engine_shards(iterations)), 4)
         with self.assertRaises(ValueError):
-            shard_modes("private-window-4", 1)
+            shard_modes("engine-5", 1)
+
+        assignments = _engine_shard_assignments(1)
+        estimated_loads = {
+            shard: sum(ENGINE_PROBE_WEIGHTS_SECONDS[mode] for mode, _ in probes)
+            for shard, probes in assignments.items()
+        }
+        self.assertLessEqual(max(estimated_loads.values()) - min(estimated_loads.values()), 60)
 
     def test_all_modes_share_one_build_and_preserve_each_iteration(self):
         checks = unittest.mock.Mock()

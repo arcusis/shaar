@@ -1,0 +1,90 @@
+--- a/chrome/app/chrome_main.cc
++++ b/chrome/app/chrome_main.cc
+@@ -23,7 +23,9 @@
+ #include "chrome/app/chrome_main_delegate.h"
+ #endif
+ #include "chrome/app/startup_timestamps.h"
++#include "chrome/browser/chrome_content_browser_client.h"
+ #include "chrome/browser/headless/headless_mode_init.h"
++#include "chrome/browser/shaar/lifecycle/shaar_lifecycle.h"
+ #include "chrome/common/buildflags.h"
+ #include "chrome/common/chrome_result_codes.h"
+ #include "chrome/common/chrome_switches.h"
+@@ -35,6 +37,7 @@
+ #include "chrome/app/chrome_main_mac.h"
+ #include "ardia/core/ac_main_delegate.h"  // nogncheck
+ #include "chrome/common/mac/detect_inappropriate_exit.h"
++#include "chrome/common/profiler/main_thread_stack_sampling_profiler.h"
+ #endif
+ 
+ #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+@@ -71,6 +74,23 @@
+ }
+ 
+ }  // namespace
++
++#if BUILDFLAG(IS_MAC)
++class ShaarMainDelegate final : public ChromeMainDelegate {
++ public:
++  using ChromeMainDelegate::ChromeMainDelegate;
++
++ protected:
++  content::ContentBrowserClient* CreateContentBrowserClient() override {
++    chrome_content_browser_client_ =
++        shaar::lifecycle::CreateContentBrowserClient();
++    CHECK(sampling_profiler_);
++    chrome_content_browser_client_->SetSamplingProfiler(
++        std::move(sampling_profiler_));
++    return chrome_content_browser_client_.get();
++  }
++};
++#endif
+ 
+ const base::CommandLine& GetInitialBrowserCommandLine() {
+   // Will `CHECK` if called without a previous assignment during browser
+@@ -132,11 +152,20 @@
+       base::TimeTicks::FromInternalValue(preread_end_ticks)};
+   ChromeMainDelegate chrome_main_delegate(timestamps);
+ #else  // BUILDFLAG(IS_WIN)
+-  // Ardia: ArdiaCore's delegate (engine/ardiacore), a ChromeMainDelegate.
+-  ardiacore::ACMainDelegate chrome_main_delegate(
+-      {.exe_entry_point_ticks = base::TimeTicks::Now()});
+-#endif
++  std::unique_ptr<ChromeMainDelegate> chrome_main_delegate;
++  if (shaar::lifecycle::ActiveEngine()) {
++    chrome_main_delegate = std::make_unique<ShaarMainDelegate>(
++        StartupTimestamps{.exe_entry_point_ticks = base::TimeTicks::Now()});
++  } else {
++    chrome_main_delegate = std::make_unique<ardiacore::ACMainDelegate>(
++        StartupTimestamps{.exe_entry_point_ticks = base::TimeTicks::Now()});
++  }
++#endif
++#if BUILDFLAG(IS_MAC)
++  content::ContentMainParams params(chrome_main_delegate.get());
++#else
+   content::ContentMainParams params(&chrome_main_delegate);
++#endif
+ 
+ #if BUILDFLAG(IS_WIN)
+   // The process should crash when going through abnormal termination, but we
+--- a/chrome/browser/app_controller_mac.mm
++++ b/chrome/browser/app_controller_mac.mm
+@@ -71,6 +71,7 @@
+ #include "chrome/browser/sessions/session_service.h"
+ #include "chrome/browser/sessions/session_service_factory.h"
+ #include "chrome/browser/sessions/tab_restore_service_factory.h"
++#include "chrome/browser/shaar/lifecycle/shaar_lifecycle.h"
+ #include "chrome/browser/shortcuts/chrome_webloc_file.h"
+ #include "chrome/browser/tab_group_sync/tab_group_sync_service_factory.h"
+ #include "chrome/browser/task_manager/task_manager_metrics_recorder.h"
+@@ -2213,6 +2214,10 @@
+ - (void)setLastProfile:(Profile*)profile {
+   if (profile == _lastProfile)
+     return;
++  if (shaar::lifecycle::ActiveEngine()) {
++    _lastProfile = profile;
++    return;
++  }
+ 
+   // If _lastProfile becomes null, remember the last state of Cmd+Shift+T so the
+   // command can continue working (or stay disabled). This is primarily meant

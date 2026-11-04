@@ -126,7 +126,7 @@ public struct ShaarStorageKeychainABITransport: ShaarStorageKeychainTransport,
       let box = StorageKeychainReplyBox(requestID: requestID, continuation: continuation)
       let replyContext = Unmanaged.passRetained(box).toOpaque()
       var immediateError = shaar_error(
-        size: UInt32(MemoryLayout<shaar_error>.size), code: SHAAR_OK,
+        size: UInt32(MemoryLayout<shaar_error>.size), code: shaar_error_code(rawValue: 0),
         platform_code: 0, message: shaar_bytes(data: nil, size: 0))
       let status = arguments.withUnsafeBytes { rawBuffer -> UInt32 in
         let bytes = rawBuffer.bindMemory(to: CChar.self)
@@ -136,7 +136,7 @@ public struct ShaarStorageKeychainABITransport: ShaarStorageKeychainTransport,
           shaar_bytes(data: bytes.baseAddress, size: bytes.count), requestID,
           storageKeychainReply, replyContext, &immediateError)
       }
-      if status != UInt32(SHAAR_OK.rawValue) {
+      if status != 0 {
         Unmanaged<StorageKeychainReplyBox>.fromOpaque(replyContext).release()
         let message =
           (try? String(

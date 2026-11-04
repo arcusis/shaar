@@ -337,6 +337,49 @@ jobs:
       iterations: ${{ fromJSON(needs.plan.outputs.iterations || '1') }}
       shards: ${{ needs.engine-bundle.outputs.shards }}
 
+  shaar-engine-simulation:
+    name: Shaar engine simulation (opt-in first tab)
+    needs: plan
+    if: needs.plan.outputs.full == 'true'
+    runs-on: macos-26
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/ci-setup
+        with:
+          mode: shaar-engine-verification
+          products: build/swiftpm/verification
+      - name: Fetch SHA-256 pinned Shaar test framework
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/fetch-shaar-test-engine.sh
+      - name: Build the headless Shaar verification bundle
+        env:
+          SHAAR_TEST_SHAAR_ENGINE: '1'
+        run: bash scripts/bundle-app.sh --configuration release --with-engine --verification
+      - name: Open the first tab through the opt-in Shaar backend
+        run: |
+          app="$PWD/build/Shaar Verification.app"
+          evidence="$PWD/build/ci/shaar-engine-simulation"
+          mkdir -p "$evidence"
+          "$app/Contents/MacOS/ShaarVerification" \
+            --probe-shaar-first-tab --shaar-engine-backend=shaar \
+            --probe-framework "$app/Contents/Frameworks/Chromium Framework.framework" \
+            --probe-output "$evidence/first-tab.json" \
+            --probe-data-dir "$RUNNER_TEMP/shaar-engine-first-tab" \
+            > "$evidence/first-tab.log" 2>&1
+          jq -e '.passed == true and .backend == "shaar" and .nativeView == true and
+            .navigationObserved == true and .allWindowsHidden == true' \
+            "$evidence/first-tab.json" >/dev/null
+      - uses: ./.github/actions/ci-evidence
+        if: always()
+        with:
+          stage: shaar-engine-simulation
+
   shipping:
     name: Shipping bundle
     needs: [plan, fast, python-tests, dependency-review]
@@ -420,7 +463,7 @@ jobs:
   required:
     name: CI required
     if: always()
-    needs: [plan, fast, python-tests, dependency-review, build, coverage, visuals, localization, engine, basic-browsing, shipping, codeql, inspector-contracts, website, sanitizers, dead-code]
+    needs: [plan, fast, python-tests, dependency-review, build, coverage, visuals, localization, engine, basic-browsing, shaar-engine-simulation, shipping, codeql, inspector-contracts, website, sanitizers, dead-code]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

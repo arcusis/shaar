@@ -37,7 +37,12 @@ source_set("engine") {
     "windows_tabs/shaar_windows_tabs_context.h",
     "windows_tabs/shaar_windows_tabs_handlers.cc",
     "windows_tabs/shaar_windows_tabs_handlers.h",
+    "windows_tabs/shaar_windows_tabs_lifecycle.cc",
     "windows_tabs/shaar_windows_tabs_lifecycle_adapter.cc",
+    "windows_tabs/shaar_page_view_binding.h",
+    "windows_tabs/shaar_page_view_binding.mm",
+    "windows_tabs/shaar_page_view_host.h",
+    "windows_tabs/shaar_page_view_host.mm",
     # END Shaar windows-tabs module.
     # BEGIN Shaar navigation module.
     "navigation/shaar_navigation_context.h",
@@ -91,6 +96,8 @@ source_set("engine") {
     "storage_keychain/shaar_storage_keychain_lifecycle_adapter.cc",
     # END storage_keychain
   ]
+  cflags_objcc = [ "-fobjc-arc" ]
+  frameworks = [ "AppKit.framework" ]
   deps = [
     "//base",
     "//chrome/browser:chrome_browser_main",
@@ -104,6 +111,7 @@ source_set("engine") {
     "//chrome/browser/profiles",
     "//chrome/browser/history:impl",
     "//chrome/browser/ui/browser_window",
+    "//chrome/browser/ui/browser_window:create_browser_window",
     "//chrome/browser/ui/tabs:tabs",
     "//chrome/browser/download:impl",
     "//chrome/browser/bookmarks:impl",
@@ -173,7 +181,12 @@ test("shaar_profiles_unittests") {
 }
 
 test("shaar_windows_tabs_unittests") {
-  sources = [ "windows_tabs/shaar_windows_tabs_handlers_unittest.cc" ]
+  sources = [
+    "windows_tabs/shaar_windows_tabs_handlers_unittest.cc",
+    "windows_tabs/shaar_page_view_host_unittest.mm",
+  ]
+  cflags_objcc = [ "-fobjc-arc" ]
+  frameworks = [ "AppKit.framework" ]
   deps = [ ":engine", "//testing/gtest" ]
 }
 
@@ -268,11 +281,20 @@ test("shaar_layer_unittests") {
     "//testing/gmock",
     "//testing/gtest",
   ]
-  ldflags = [ "-Wl,--threads=4", "-Wl,--read-workers=4" ]
+  ldflags = [
+    "-Wl,--threads=4",
+    "-Wl,--thinlto-jobs=4",
+    "-Wl,--read-workers=2",
+  ]
 }
 
 config("exports") {
   inputs = [ "shaar_engine.exports" ]
-  ldflags = [ "-Wl,-exported_symbols_list," +
-              rebase_path("shaar_engine.exports", root_build_dir) ]
+  ldflags = [
+    "-Wl,-exported_symbols_list," +
+        rebase_path("shaar_engine.exports", root_build_dir),
+    "-Wl,--threads=4",
+    "-Wl,--thinlto-jobs=4",
+    "-Wl,--read-workers=2",
+  ]
 }

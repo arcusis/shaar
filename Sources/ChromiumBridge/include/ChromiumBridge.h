@@ -52,7 +52,20 @@ FOUNDATION_EXPORT void ARCConfigureLocalization(NSURL *bundleURL, NSString *lang
 FOUNDATION_EXPORT NSString *ARCBridgeLocalizedString(NSString *message);
 
 /// All methods and callbacks run on the main thread. The engine owns the AppKit run loop.
-@interface ARCChromiumRuntime : NSObject
+@protocol ARCBrowserCoreBackend <NSObject>
+- (int)runWithDataDirectory:(NSURL *)directory testing:(BOOL)testing;
+- (void)loadProfileID:(NSString *)profileID completion:(void (^)(NSError * _Nullable))completion;
+- (BOOL)createWindowID:(NSString *)windowID error:(NSError **)error;
+- (BOOL)closeWindowID:(NSString *)windowID;
+- (BOOL)openTabID:(NSString *)tabID profileID:(NSString *)profileID windowID:(NSString *)windowID
+               url:(NSString *)url error:(NSError **)error;
+- (BOOL)navigateTabID:(NSString *)tabID profileID:(NSString *)profileID windowID:(NSString *)windowID
+                 url:(NSString *)url;
+- (void)closeTabID:(NSString *)tabID;
+- (nullable NSView *)hostViewForWindowID:(NSString *)windowID;
+@end
+
+@interface ARCChromiumRuntime : NSObject <ARCBrowserCoreBackend>
 /// Set before `runWithDataDirectory:testing:`; configures Chromium UI locale and Accept-Language.
 @property(nonatomic, copy) NSString *languageIdentifier;
 /// Tab-scoped simulations and page diagnostics share the in-process protocol bridge.
@@ -181,6 +194,10 @@ FOUNDATION_EXPORT NSString *ARCBridgeLocalizedString(NSString *message);
 - (nullable NSURL *)downloadsDirectoryForProfileID:(NSString *)profileID;
 - (int)nativeTabIDForID:(NSString *)tabID;
 - (void)quit;
+@end
+
+/// Shaar C ABI implementation of the core profile/window/tab/navigation backend.
+@interface ARCShaarRuntime : ARCChromiumRuntime <ARCBrowserCoreBackend>
 @end
 
 @interface ARCChromiumRuntime (Extensions)

@@ -52,23 +52,30 @@ private func fakeShaarNavigationSubmit(
   _ reply: shaar_reply_fn?, _ replyContext: UnsafeMutableRawPointer?,
   _ immediateError: UnsafeMutablePointer<shaar_error>?
 ) -> shaar_error_code {
-  guard let reply, let replyContext else { return SHAAR_INVALID_ARGUMENT }
+  guard let reply, let replyContext else { return shaar_error_code(rawValue: 1) }
   let replyContextAddress = UInt(bitPattern: replyContext)
   DispatchQueue.global().async {
-    let replyContext = UnsafeMutableRawPointer(bitPattern: replyContextAddress)!
-    let response = Data("{\"schemaVersion\":1}".utf8)
-    response.withUnsafeBytes { rawBuffer in
-      let payload = rawBuffer.bindMemory(to: CChar.self)
-      var result = shaar_result(
-        size: UInt32(MemoryLayout<shaar_result>.size), request_id: requestID,
-        error: shaar_error(
-          size: UInt32(MemoryLayout<shaar_error>.size), code: SHAAR_OK,
-          platform_code: 0, message: shaar_bytes(data: nil, size: 0)),
-        payload_json: shaar_bytes(data: payload.baseAddress, size: payload.count))
-      reply(replyContext, &result)
-    }
+    deliverFakeNavigationReply(reply, contextAddress: replyContextAddress, requestID: requestID)
   }
-  return SHAAR_OK
+  return shaar_error_code(rawValue: 0)
+}
+
+private func deliverFakeNavigationReply(
+  _ reply: shaar_reply_fn, contextAddress: UInt, requestID: UInt64
+) {
+  let context = UnsafeMutableRawPointer(bitPattern: contextAddress)!
+  let response = Data("{\"schemaVersion\":1}".utf8)
+  response.withUnsafeBytes { rawBuffer in
+    let payload = rawBuffer.bindMemory(to: CChar.self)
+    let resultError = shaar_error(
+      size: UInt32(MemoryLayout<shaar_error>.size), code: shaar_error_code(rawValue: 0),
+      platform_code: 0, message: shaar_bytes(data: nil, size: 0))
+    let resultPayload = shaar_bytes(data: payload.baseAddress, size: payload.count)
+    var result = shaar_result(
+      size: UInt32(MemoryLayout<shaar_result>.size), request_id: requestID,
+      error: resultError, payload_json: resultPayload)
+    reply(context, &result)
+  }
 }
 
 private struct FakeNavigationSymbols: ShaarSymbolResolving {

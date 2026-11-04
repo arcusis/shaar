@@ -41,7 +41,7 @@ void OnEvent(void* context, const shaar_event* event) {
 
 int main() {
   assert(shaar_abi_major() == 1);
-  assert(shaar_abi_minor() == 0);
+  assert(shaar_abi_minor() == SHAAR_ENGINE_ABI_MINOR);
   Capture capture;
   shaar_config config = {};
   config.size = sizeof(config);

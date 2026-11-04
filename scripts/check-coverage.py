@@ -16,9 +16,10 @@ MODULES = ("BrowserCore", "ArcusisBrowser", "ChromiumBridge", "Shaar", "ShaarVer
 # for this comparison. Keep it out of the unit-test coverage denominator so new smoke assertions
 # are checked by their owning engine job rather than appearing as unexecuted unit-test code.
 EXCLUDED_UNIT_TEST_SOURCES = {("ShaarVerification", "PrivateProductHostProbe.swift")}
-# This engine-only flow is exercised by the hosted normal-window smoke, not Swift unit tests.
+# These engine-only flows are exercised by their hosted simulation jobs, not Swift unit tests.
 UNIT_COVERAGE_EXCLUDES = {
     ("ShaarVerification", "BasicBrowsingProbe.swift"),
+    ("ShaarVerification", "ShaarFirstTabProbe.swift"),
     # The deleted private window and its native-session replacement are covered by the hosted
     # private-window and private-multitab engine shards. Shared BrowserWindow UI stays measured.
     ("ArcusisBrowser", "PrivateBrowserWindow.swift"),

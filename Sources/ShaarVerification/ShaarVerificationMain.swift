@@ -8,6 +8,9 @@ import Foundation
 @main
 enum ShaarVerificationMain {
   @MainActor static func main() {
+    if CommandLine.arguments.contains("--probe-shaar-first-tab") {
+      exit(ShaarFirstTabProbe.run(arguments: CommandLine.arguments))
+    }
     if let result = storeLanguage(
       arguments: CommandLine.arguments, bundleIdentifier: Bundle.main.bundleIdentifier)
     {

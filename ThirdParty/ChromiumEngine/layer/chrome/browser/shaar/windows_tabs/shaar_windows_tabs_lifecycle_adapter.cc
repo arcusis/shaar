@@ -55,19 +55,29 @@ shaar_error_code HandleLifecycleOperation(
     shaar_error* error) {
   if (!context || !context->browser_tabs || !engine || !window || !reply)
     return SHAAR_INVALID_ARGUMENT;
-  Browser* browser = context->browser_tabs->FindBrowser(engine, window);
-  if (!browser)
-    return SHAAR_NOT_FOUND;
   if (tab && !context->browser_tabs->FindWebContents(engine, window, tab))
     return SHAAR_NOT_FOUND;
-  std::unordered_map<std::string, content::WebContents*> tabs;
-  context->browser_tabs->GetTabs(engine, window, &tabs);
-  const std::string tab_id(context->browser_tabs->TabID(engine, window, tab));
   std::string profile_id;
   if (scope.profile && context->profile_services) {
     profile_id = context->profile_services->ProfileID(engine, scope.profile);
   }
-  auto* state = shaar::windows_tabs::Registry().EnsureWindowState(
+  auto& registry = shaar::windows_tabs::Registry();
+  auto* state = registry.FindWindowState(engine, window);
+  if (!state)
+    return SHAAR_NOT_FOUND;
+  Browser* browser = tab ? registry.FindBrowserForTab(engine, window, tab)
+                         : state->browser;
+  if (!tab && !profile_id.empty()) {
+    auto found = state->browsers_by_profile.find(profile_id);
+    browser = found == state->browsers_by_profile.end() ? nullptr
+                                                        : found->second;
+  }
+  if (!browser)
+    return SHAAR_NOT_FOUND;
+  std::unordered_map<std::string, content::WebContents*> tabs;
+  registry.GetTabsForBrowser(engine, window, browser, &tabs);
+  const std::string tab_id(context->browser_tabs->TabID(engine, window, tab));
+  state = registry.EnsureWindowState(
       engine, window, browser, profile_id);
   if (!state)
     return SHAAR_NOT_READY;

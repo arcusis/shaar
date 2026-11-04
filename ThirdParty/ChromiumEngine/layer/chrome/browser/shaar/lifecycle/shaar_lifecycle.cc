@@ -8,6 +8,7 @@
 #include <pthread.h>
 
 #include <array>
+#include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <string>
@@ -21,6 +22,7 @@
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "chrome/browser/shaar/engine/shaar_module_registry.h"
+#include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
 #include "content/public/browser/browser_main_parts.h"
 
 extern "C" int ChromeMain(int argc, const char** argv);
@@ -135,6 +137,7 @@ void EngineWillShutDown(shaar_engine* engine) {
   if (g_state.engine != engine || g_state.shutting_down)
     return;
   g_state.shutting_down = true;
+  shaar::windows_tabs::StopObservingLifecycle();
   Emit(engine, kWillShutDown);
 }
 
@@ -187,6 +190,10 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_engine_run(
   std::vector<std::string> argument_storage = {
       executable_path, user_data_switch, "--no-first-run",
       "--no-default-browser-check", "--disable-background-mode"};
+  if (const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
+      testing && std::strcmp(testing, "1") == 0) {
+    argument_storage.push_back("--use-mock-keychain");
+  }
   if (!locale_switch.empty()) {
     argument_storage.push_back(locale_switch);
   }
@@ -195,6 +202,7 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_engine_run(
   for (const std::string& argument : argument_storage)
     argv.push_back(argument.c_str());
   argv.push_back(nullptr);
+
 
   engine->run_active = true;
   const int result = ChromeMain(static_cast<int>(argv.size() - 1), argv.data());

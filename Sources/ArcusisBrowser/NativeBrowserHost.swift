@@ -1156,6 +1156,15 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case restart
   }
 
+  static func makeRuntime(
+    frameworkURL: URL, environment: [String: String], arguments: [String]
+  ) throws -> ARCChromiumRuntime {
+    switch BrowserBackendSelection.choose(environment: environment, arguments: arguments) {
+    case .ardia: return try ARCChromiumRuntime(frameworkURL: frameworkURL)
+    case .shaar: return try ARCShaarRuntime(frameworkURL: frameworkURL)
+    }
+  }
+
   static func run(frameworkURL: URL) -> LaunchResult {
     BrowserLanguage.applyToCurrentProcess()
     let launchLanguage = BrowserLanguage.currentLaunchLanguage
@@ -1172,7 +1181,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
           directory: directory.appending(path: "favicons", directoryHint: .isDirectory)))
       let preferences = BrowserPreferencesStore(
         fileURL: directory.appending(path: "preferences.json"))
-      let runtime = try ARCChromiumRuntime(frameworkURL: frameworkURL)
+      let runtime = try makeRuntime(
+        frameworkURL: frameworkURL, environment: ProcessInfo.processInfo.environment,
+        arguments: ProcessInfo.processInfo.arguments)
       runtime.languageIdentifier = launchLanguage.localeIdentifier
       BrowserSettingsAppearance.apply(
         UserDefaults.standard.string(forKey: "settingsAppearance") ?? "system")

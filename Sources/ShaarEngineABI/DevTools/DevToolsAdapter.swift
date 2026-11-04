@@ -181,7 +181,8 @@ public struct ShaarDevToolsABITransport: ShaarDevToolsSubmitting, @unchecked Sen
     let box = ShaarDevToolsReplyBox(requestID, completion)
     let context = Unmanaged.passRetained(box).toOpaque()
     var immediateError = shaar_error(
-      size: UInt32(MemoryLayout<shaar_error>.size), code: SHAAR_OK, platform_code: 0,
+      size: UInt32(MemoryLayout<shaar_error>.size), code: shaar_error_code(rawValue: 0),
+      platform_code: 0,
       message: shaar_bytes(data: nil, size: 0))
     let status = request.payload.withUnsafeBytes { raw -> UInt32 in
       let bytes = raw.bindMemory(to: CChar.self)
@@ -192,7 +193,7 @@ public struct ShaarDevToolsABITransport: ShaarDevToolsSubmitting, @unchecked Sen
         shaar_bytes(data: bytes.baseAddress, size: bytes.count), requestID,
         shaarDevToolsABICallback, context, &immediateError)
     }
-    guard status == UInt32(SHAAR_OK.rawValue) else {
+    guard status == 0 else {
       Unmanaged<ShaarDevToolsReplyBox>.fromOpaque(context).release()
       try ShaarStatusCode.decode(
         status, platformCode: immediateError.platform_code,

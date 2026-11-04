@@ -4,6 +4,7 @@
 
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs_handlers.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
+#include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 
 #include <string>
 #include <unordered_map>
@@ -93,7 +94,7 @@ TEST(ShaarWindowsTabsHandlersTest, RegistryResolvesBoundWindowAndTabIDs) {
   auto* contents = reinterpret_cast<content::WebContents*>(5);
   registry.BindWindow(engine, window, browser);
   auto* state = registry.EnsureWindowState(engine, window, browser, "profile-a");
-  registry.BindTab(engine, window, tab, "tab-a", contents);
+  registry.BindTab(engine, window, tab, "tab-a", browser, contents);
   ASSERT_NE(state, nullptr);
   EXPECT_EQ(state->active_browser, browser);
   EXPECT_EQ(state->active_profile_id, "profile-a");
@@ -102,12 +103,118 @@ TEST(ShaarWindowsTabsHandlersTest, RegistryResolvesBoundWindowAndTabIDs) {
   EXPECT_EQ(registry.FindWebContents(engine, window, tab), contents);
   EXPECT_EQ(registry.FindWebContentsByID(engine, window, "tab-a"), contents);
   EXPECT_EQ(registry.TabID(engine, window, tab), "tab-a");
+  EXPECT_EQ(registry.FindWindowOwner(window), engine);
+  EXPECT_EQ(registry.FindTabWindow(tab), window);
   std::unordered_map<std::string, content::WebContents*> tabs;
   registry.GetTabs(engine, window, &tabs);
   EXPECT_EQ(tabs.at("tab-a"), contents);
   registry.UnbindWindow(engine, window);
   EXPECT_EQ(registry.FindBrowser(engine, window), nullptr);
   EXPECT_EQ(registry.FindWebContents(engine, window, tab), nullptr);
+  EXPECT_EQ(registry.FindWindowOwner(window), nullptr);
+  EXPECT_EQ(registry.FindTabWindow(tab), nullptr);
+}
+
+TEST(ShaarWindowsTabsHandlersTest, ReservedWindowBindsBrowserAndClosesCleanly) {
+  BrowserTabRegistryImpl registry;
+  auto* engine = reinterpret_cast<shaar_engine*>(1);
+  auto* window = reinterpret_cast<shaar_window*>(2);
+  auto* browser = reinterpret_cast<Browser*>(3);
+  ASSERT_TRUE(registry.ReserveWindow(engine, window, "window-a"));
+  EXPECT_EQ(registry.FindWindowOwner(window), engine);
+  EXPECT_EQ(registry.FindBrowser(engine, window), nullptr);
+  EXPECT_EQ(registry.WindowID(engine, window), "window-a");
+  EXPECT_FALSE(registry.ReserveWindow(engine, reinterpret_cast<shaar_window*>(4),
+                                      "window-a"));
+  registry.BindWindow(engine, window, browser);
+  EXPECT_EQ(registry.FindBrowser(engine, window), browser);
+  registry.UnbindBrowser(engine, window, browser);
+  EXPECT_EQ(registry.FindBrowser(engine, window), nullptr);
+  EXPECT_EQ(registry.FindWindowOwner(window), engine);
+  registry.BindWindow(engine, window, browser);
+  registry.UnbindWindow(engine, window);
+  EXPECT_EQ(registry.FindWindowOwner(window), nullptr);
+}
+
+TEST(ShaarWindowsTabsHandlersTest, ClosedTabCannotResolveOrReuseItsPublicID) {
+  BrowserTabRegistryImpl registry;
+  auto* engine = reinterpret_cast<shaar_engine*>(1);
+  auto* window = reinterpret_cast<shaar_window*>(2);
+  auto* tab = reinterpret_cast<shaar_tab*>(3);
+  auto* contents = reinterpret_cast<content::WebContents*>(4);
+  ASSERT_TRUE(registry.ReserveWindow(engine, window, "window-a"));
+  ASSERT_TRUE(registry.ReserveTab(engine, window, tab, "tab-a"));
+  EXPECT_FALSE(registry.ReserveTab(engine, window,
+                                   reinterpret_cast<shaar_tab*>(5), "tab-a"));
+  registry.BindTab(engine, window, tab, "tab-a",
+                   reinterpret_cast<Browser*>(9), contents);
+  EXPECT_EQ(registry.FindWebContents(engine, window, tab), contents);
+  registry.UnbindTab(engine, window, tab);
+  EXPECT_EQ(registry.FindTabWindow(tab), nullptr);
+  EXPECT_EQ(registry.FindWebContentsByID(engine, window, "tab-a"), nullptr);
+  EXPECT_TRUE(registry.ReserveTab(engine, window,
+                                  reinterpret_cast<shaar_tab*>(5), "tab-a"));
+  registry.UnbindWindow(engine, window);
+}
+
+TEST(ShaarWindowsTabsHandlersTest, ProfileTabsStayBoundToTheirOwnBrowser) {
+  BrowserTabRegistryImpl registry;
+  auto* engine = reinterpret_cast<shaar_engine*>(1);
+  auto* window = reinterpret_cast<shaar_window*>(2);
+  auto* browser_a = reinterpret_cast<Browser*>(3);
+  auto* browser_b = reinterpret_cast<Browser*>(4);
+  auto* tab_a = reinterpret_cast<shaar_tab*>(5);
+  auto* tab_b = reinterpret_cast<shaar_tab*>(6);
+  auto* contents_a = reinterpret_cast<content::WebContents*>(7);
+  auto* contents_b = reinterpret_cast<content::WebContents*>(8);
+  ASSERT_TRUE(registry.ReserveWindow(engine, window, "window-a"));
+  registry.EnsureWindowState(engine, window, browser_a, "profile-a");
+  registry.EnsureWindowState(engine, window, browser_b, "profile-b");
+  ASSERT_TRUE(registry.ReserveTab(engine, window, tab_a, "tab-a"));
+  ASSERT_TRUE(registry.ReserveTab(engine, window, tab_b, "tab-b"));
+  registry.BindTab(engine, window, tab_a, "tab-a", browser_a, contents_a);
+  registry.BindTab(engine, window, tab_b, "tab-b", browser_b, contents_b);
+  EXPECT_EQ(registry.FindBrowserForTab(engine, window, tab_a), browser_a);
+  EXPECT_EQ(registry.FindBrowserForTab(engine, window, tab_b), browser_b);
+  std::unordered_map<std::string, content::WebContents*> tabs;
+  registry.GetTabsForBrowser(engine, window, browser_a, &tabs);
+  EXPECT_EQ(tabs.size(), 1u);
+  EXPECT_EQ(tabs.at("tab-a"), contents_a);
+  registry.UnbindWindow(engine, window);
+}
+
+TEST(ShaarWindowsTabsHandlersTest, WindowCloseWaitsForEveryBrowser) {
+  BrowserTabRegistryImpl registry;
+  auto* engine = reinterpret_cast<shaar_engine*>(1);
+  auto* window = reinterpret_cast<shaar_window*>(2);
+  auto* first = reinterpret_cast<Browser*>(3);
+  auto* second = reinterpret_cast<Browser*>(4);
+  ASSERT_TRUE(registry.ReserveWindow(engine, window, "window-a"));
+  registry.EnsureWindowState(engine, window, first, "profile-a");
+  registry.EnsureWindowState(engine, window, second, "profile-b");
+  EXPECT_TRUE(registry.BeginWindowClose(engine, window));
+  EXPECT_FALSE(registry.WindowCloseReady(engine, window));
+  registry.UnbindBrowser(engine, window, first);
+  EXPECT_FALSE(registry.WindowCloseReady(engine, window));
+  registry.UnbindBrowser(engine, window, second);
+  EXPECT_TRUE(registry.WindowCloseReady(engine, window));
+  registry.UnbindWindow(engine, window);
+}
+
+TEST(ShaarWindowsTabsHandlersTest, RegularWindowABIReservesAndClosesHandle) {
+  shaar_engine engine_storage;
+  auto* engine = &engine_storage;
+  static constexpr char kID[] = "window-api";
+  shaar_window* window = nullptr;
+  shaar_error error = {.size = sizeof(shaar_error)};
+  EXPECT_EQ(shaar_window_open(engine, SHAAR_WINDOW_REGULAR, nullptr,
+                              {kID, sizeof(kID) - 1}, &window, &error), SHAAR_OK);
+  ASSERT_NE(window, nullptr);
+  EXPECT_EQ(Registry().FindWindowOwner(window), engine);
+  EXPECT_EQ(Registry().WindowID(engine, window), "window-api");
+  EXPECT_EQ(shaar_window_close(window, &error), SHAAR_OK);
+  EXPECT_EQ(Registry().FindWindowOwner(window), nullptr);
+  EXPECT_EQ(shaar_window_close(window, &error), SHAAR_NOT_FOUND);
 }
 
 // BEGIN find

@@ -80,6 +80,10 @@ if $with_verification && { ! $with_engine || $with_updates; }; then
   echo '--verification requires --with-engine and excludes --with-updates.' >&2
   exit 2
 fi
+if [[ ${SHAAR_TEST_SHAAR_ENGINE:-0} == 1 ]] && ! $with_verification; then
+  echo 'The Shaar test engine is allowed only in a verification bundle.' >&2
+  exit 2
+fi
 
 bundle_identifier=$SHAAR_BUNDLE_IDENTIFIER
 if $with_verification; then
@@ -141,7 +145,9 @@ ditto "$binary_dir/Sparkle.framework" "$app/Contents/Frameworks/Sparkle.framewor
 mkdir -p "$app/Contents/Resources/Sparkle"
 cp "$scratch_path/artifacts/sparkle/Sparkle/LICENSE" "$app/Contents/Resources/Sparkle/LICENSE"
 if $with_engine; then
-  if $with_verification && [[ ${SHAAR_TEST_BUILT_ENGINE:-0} == 1 ]]; then
+  if $with_verification && [[ ${SHAAR_TEST_SHAAR_ENGINE:-0} == 1 ]]; then
+    framework=$(bash scripts/fetch-shaar-test-engine.sh)
+  elif $with_verification && [[ ${SHAAR_TEST_BUILT_ENGINE:-0} == 1 ]]; then
     receipt=build/EngineSource/receipt.json
     jq -e '.status == "succeeded" and (.framework.path | type == "string")' "$receipt" >/dev/null
     built_binary="build/EngineSource/$(jq -er .framework.path "$receipt")"

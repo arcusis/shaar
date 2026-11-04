@@ -35,6 +35,8 @@ struct shaar_window {
   shaar_engine* engine;
   shaar_window_kind kind;
   shaar_private_session* private_session;
+  std::string id;
+  std::string profile_id;
 };
 
 void CleanupTab(shaar_tab* tab, uint64_t serial);
@@ -66,6 +68,8 @@ std::unordered_map<shaar_window*, std::unique_ptr<shaar_window>> windows;
 std::unordered_map<shaar_tab*, std::unique_ptr<shaar_tab>> tabs;
 uint64_t next_tab_serial = 0;
 
+void FinalizeWindow(shaar_window* window);
+
 class LifecycleObserver final : public BrowserCollectionObserver {
  public:
   void EnsureObserving() {
@@ -78,11 +82,17 @@ class LifecycleObserver final : public BrowserCollectionObserver {
   void OnBrowserClosed(BrowserWindowInterface* closed) override {
     auto* browser = static_cast<Browser*>(closed);
     auto& registry = shaar::windows_tabs::Registry();
-    for (const auto& [window, handle] : windows)
+    std::vector<shaar_window*> finished;
+    for (const auto& [window, handle] : windows) {
       registry.UnbindBrowser(handle->engine, window, browser);
+      if (registry.WindowCloseReady(handle->engine, window))
+        finished.push_back(window);
+    }
     for (const auto& [tab, handle] : tabs)
       if (handle->browser == browser)
         handle->browser = nullptr;
+    for (shaar_window* window : finished)
+      FinalizeWindow(window);
   }
 
  private:
@@ -99,6 +109,47 @@ shaar_error_code Result(shaar_error_code status, shaar_error* error) {
   if (error && error->size >= offsetof(shaar_error, code) + sizeof(error->code))
     error->code = status;
   return status;
+}
+
+void FinalizeWindow(shaar_window* window) {
+  auto found = windows.find(window);
+  if (found == windows.end())
+    return;
+  shaar_engine* engine = window->engine;
+  const std::string window_id = window->id;
+  const std::string profile_id = window->profile_id;
+  struct ClosedTab {
+    std::string profile_id;
+    std::string session_id;
+    std::string id;
+  };
+  std::vector<ClosedTab> closed_tabs;
+  for (auto it = tabs.begin(); it != tabs.end();) {
+    if (it->second->window == window) {
+      closed_tabs.push_back({it->second->profile_id, it->second->session_id,
+                             it->second->tab_id});
+      it = tabs.erase(it);
+    } else {
+      ++it;
+    }
+  }
+  shaar::windows_tabs::Registry().UnbindWindow(engine, window);
+  windows.erase(found);
+  static constexpr char kClosed[] = R"({"kind":"closed","schemaVersion":1})";
+  for (const auto& tab : closed_tabs) {
+    shaar::EmitEvent(engine, SHAAR_EVENT_TAB,
+                     {tab.profile_id.data(), tab.profile_id.size()},
+                     {tab.session_id.data(), tab.session_id.size()},
+                     {window_id.data(), window_id.size()},
+                     {tab.id.data(), tab.id.size()},
+                     {kClosed, sizeof(kClosed) - 1});
+  }
+  if (!profile_id.empty()) {
+    shaar::EmitEvent(engine, SHAAR_EVENT_WINDOW,
+                     {profile_id.data(), profile_id.size()}, {},
+                     {window_id.data(), window_id.size()}, {},
+                     {kClosed, sizeof(kClosed) - 1});
+  }
 }
 
 bool ValidID(shaar_bytes bytes) {
@@ -210,6 +261,7 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_window_open(
     return Result(SHAAR_INVALID_ARGUMENT, error);
 
   Profile* private_profile = nullptr;
+  std::string private_profile_id;
   if (kind == SHAAR_WINDOW_PRIVATE) {
     auto* services = shaar::EngineContext().private_sessions;
     Profile* parent = nullptr;
@@ -219,12 +271,15 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_window_open(
                                         &private_profile, &profile_id,
                                         &session_id))
       return Result(SHAAR_NOT_FOUND, error);
+    private_profile_id = profile_id;
   }
 
   auto handle = std::make_unique<shaar_window>();
   handle->engine = engine;
   handle->kind = kind;
   handle->private_session = private_session;
+  handle->id.assign(window_id.data, window_id.size);
+  handle->profile_id = std::move(private_profile_id);
   auto* raw = handle.get();
   auto& registry = shaar::windows_tabs::Registry();
   if (!registry.ReserveWindow(engine, raw,
@@ -255,40 +310,17 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_window_close(
   auto* state = registry.FindWindowState(engine, window);
   if (!state)
     return Result(SHAAR_NOT_FOUND, error);
-  const auto browsers = state->browsers_by_profile;
-  Browser* primary = state->browser;
-  struct ClosedTab {
-    std::string profile_id;
-    std::string session_id;
-    std::string window_id;
-    std::string tab_id;
-  };
-  std::vector<ClosedTab> closed_tabs;
-  for (auto it = tabs.begin(); it != tabs.end();) {
-    if (it->second->window == window) {
-      closed_tabs.push_back({it->second->profile_id, it->second->session_id,
-                             it->second->window_id, it->second->tab_id});
-      it = tabs.erase(it);
-    } else {
-      ++it;
-    }
+  if (!registry.BeginWindowClose(engine, window))
+    return Result(SHAAR_CONFLICT, error);
+  const std::vector<Browser*> pending(state->pending_closes.begin(),
+                                      state->pending_closes.end());
+  if (pending.empty()) {
+    FinalizeWindow(window);
+    return Result(SHAAR_OK, error);
   }
-  registry.UnbindWindow(engine, window);
-  windows.erase(found);
-  if (primary && primary->GetWindow())
-    primary->GetWindow()->Close();
-  for (const auto& [id, browser] : browsers)
-    if (browser != primary && browser && browser->GetWindow())
+  for (Browser* browser : pending)
+    if (browser && browser->GetWindow())
       browser->GetWindow()->Close();
-  static constexpr char kClosed[] = R"({"kind":"closed","schemaVersion":1})";
-  for (const auto& tab : closed_tabs) {
-    shaar::EmitEvent(engine, SHAAR_EVENT_TAB,
-                     {tab.profile_id.data(), tab.profile_id.size()},
-                     {tab.session_id.data(), tab.session_id.size()},
-                     {tab.window_id.data(), tab.window_id.size()},
-                     {tab.tab_id.data(), tab.tab_id.size()},
-                     {kClosed, sizeof(kClosed) - 1});
-  }
   return Result(SHAAR_OK, error);
 }
 
@@ -320,6 +352,9 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_tab_open(
   if (!profile)
     return Result(status, error);
   auto& registry = shaar::windows_tabs::Registry();
+  auto* state = registry.FindWindowState(engine, window);
+  if (!state || state->closing)
+    return Result(SHAAR_CONFLICT, error);
   if (registry.HasTabID(engine, window,
                         std::string_view(tab_id.data, tab_id.size)))
     return Result(SHAAR_CONFLICT, error);
@@ -365,6 +400,8 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_tab_open(
                    std::string(tab_id.data, tab_id.size), browser,
                    raw_contents);
   tabs.emplace(raw, std::move(handle));
+  if (window->profile_id.empty())
+    window->profile_id = tabs.at(raw)->profile_id;
   *out = raw;
   if (url.size)
     shaar::navigation::Navigate(raw_contents, target, false);

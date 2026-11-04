@@ -183,6 +183,24 @@ TEST(ShaarWindowsTabsHandlersTest, ProfileTabsStayBoundToTheirOwnBrowser) {
   registry.UnbindWindow(engine, window);
 }
 
+TEST(ShaarWindowsTabsHandlersTest, WindowCloseWaitsForEveryBrowser) {
+  BrowserTabRegistryImpl registry;
+  auto* engine = reinterpret_cast<shaar_engine*>(1);
+  auto* window = reinterpret_cast<shaar_window*>(2);
+  auto* first = reinterpret_cast<Browser*>(3);
+  auto* second = reinterpret_cast<Browser*>(4);
+  ASSERT_TRUE(registry.ReserveWindow(engine, window, "window-a"));
+  registry.EnsureWindowState(engine, window, first, "profile-a");
+  registry.EnsureWindowState(engine, window, second, "profile-b");
+  EXPECT_TRUE(registry.BeginWindowClose(engine, window));
+  EXPECT_FALSE(registry.WindowCloseReady(engine, window));
+  registry.UnbindBrowser(engine, window, first);
+  EXPECT_FALSE(registry.WindowCloseReady(engine, window));
+  registry.UnbindBrowser(engine, window, second);
+  EXPECT_TRUE(registry.WindowCloseReady(engine, window));
+  registry.UnbindWindow(engine, window);
+}
+
 TEST(ShaarWindowsTabsHandlersTest, RegularWindowABIReservesAndClosesHandle) {
   shaar_engine engine_storage;
   auto* engine = &engine_storage;

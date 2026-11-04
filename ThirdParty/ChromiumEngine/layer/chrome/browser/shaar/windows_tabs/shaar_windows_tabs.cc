@@ -80,6 +80,7 @@ void BrowserTabRegistryImpl::UnbindBrowser(shaar_engine* engine,
   auto* state = FindWindowState(engine, window);
   if (!state || !browser)
     return;
+  state->pending_closes.erase(browser);
   std::erase_if(state->browsers_by_profile,
                 [browser](const auto& entry) { return entry.second == browser; });
   if (state->browser == browser)
@@ -97,6 +98,30 @@ void BrowserTabRegistryImpl::UnbindBrowser(shaar_engine* engine,
       state->active_profile_id = id;
     }
   }
+}
+
+bool BrowserTabRegistryImpl::BeginWindowClose(shaar_engine* engine,
+                                              shaar_window* window) {
+  auto* state = FindWindowState(engine, window);
+  if (!state)
+    return false;
+  if (state->closing)
+    return true;
+  state->closing = true;
+  if (state->browser)
+    state->pending_closes.insert(state->browser);
+  for (const auto& [id, browser] : state->browsers_by_profile)
+    if (browser)
+      state->pending_closes.insert(browser);
+  return true;
+}
+
+bool BrowserTabRegistryImpl::WindowCloseReady(shaar_engine* engine,
+                                              shaar_window* window) const {
+  for (const auto& state : windows_)
+    if (state.engine == engine && state.handle == window)
+      return state.closing && state.pending_closes.empty();
+  return false;
 }
 
 Browser* BrowserTabRegistryImpl::FindBrowser(shaar_engine* engine,

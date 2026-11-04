@@ -8,6 +8,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
@@ -32,6 +33,8 @@ class BrowserTabRegistryImpl final : public shaar::BrowserTabRegistry {
     Browser* active_browser = nullptr;
     std::string active_profile_id;
     std::unordered_map<std::string, Browser*> browsers_by_profile;
+    bool closing = false;
+    std::unordered_set<Browser*> pending_closes;
   };
   Browser* FindBrowser(shaar_engine*, shaar_window*) override;
   content::WebContents* FindWebContents(shaar_engine*, shaar_window*,
@@ -57,6 +60,8 @@ class BrowserTabRegistryImpl final : public shaar::BrowserTabRegistry {
   bool ReserveTab(shaar_engine*, shaar_window*, shaar_tab*, std::string id);
   void UnbindTab(shaar_engine*, shaar_window*, shaar_tab*);
   void UnbindBrowser(shaar_engine*, shaar_window*, Browser*);
+  bool BeginWindowClose(shaar_engine*, shaar_window*);
+  bool WindowCloseReady(shaar_engine*, shaar_window*) const;
   WindowState* FindWindowState(shaar_engine*, shaar_window*);
   bool HasTabID(shaar_engine*, shaar_window*, std::string_view) const;
   WindowState* EnsureWindowState(shaar_engine*, shaar_window*, Browser*,

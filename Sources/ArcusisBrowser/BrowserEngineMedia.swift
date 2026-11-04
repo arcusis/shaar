@@ -12,6 +12,7 @@ extension BrowserEngine {
     guard let id = ownedLiveTab(identity) else { return }
     let state = payload.flatMap(MediaSessionState.init(payload:))
     store?.media.update(id, state: state)
+    handOffPictureInPicture()
     if pictureInPictureControls.tabID == id {
       pictureInPictureControls.update(state?.pictureInPicture)
     }

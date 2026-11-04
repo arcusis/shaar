@@ -22,6 +22,7 @@ final class AutoPictureInPicture {
   /// Pages whose window opened, or is opening, because they left the screen.
   private var automaticPages: Set<UUID> = []
   private var visiblePages: Set<UUID> = []
+  private var mediaSessions: [UUID: MediaSessionState] = [:]
 
   init(engine: Engine) {
     self.engine = engine
@@ -31,6 +32,7 @@ final class AutoPictureInPicture {
   func visiblePagesChanged(
     to visible: Set<UUID>, sessions: [UUID: MediaSessionState], allowed: (UUID) -> Bool
   ) {
+    let updated = Set(sessions.keys.filter { mediaSessions[$0] != sessions[$0] })
     let hidden = visiblePages.subtracting(visible)
     let shown = visible.subtracting(visiblePages)
     visiblePages = visible
@@ -45,6 +47,13 @@ final class AutoPictureInPicture {
       automaticPages.insert(page)
       if !engine.handlesAutomatically(page) { engine.enter(page) }
     }
+    let updatedHidden = updated.subtracting(visible).subtracting(hidden)
+    for page in updatedHidden where !automaticPages.contains(page) {
+      guard shouldOpen(page, state: sessions[page], allowed: allowed) else { continue }
+      automaticPages.insert(page)
+      if !engine.handlesAutomatically(page) { engine.enter(page) }
+    }
+    mediaSessions = sessions
   }
 
   func pictureInPictureChanged(_ page: UUID, active: Bool) {
@@ -65,12 +74,14 @@ final class AutoPictureInPicture {
     openPages.remove(page)
     automaticPages.remove(page)
     visiblePages.remove(page)
+    mediaSessions[page] = nil
   }
 
   func forgetAll() {
     openPages.removeAll()
     automaticPages.removeAll()
     visiblePages.removeAll()
+    mediaSessions.removeAll()
   }
 
   private func shouldOpen(

@@ -93,6 +93,15 @@ final class AutoPictureInPictureTests: XCTestCase {
     XCTAssertEqual(exited, [page])
   }
 
+  func testLateMediaReportStartsPictureInPictureForAnAlreadyHiddenPage() {
+    let pip = controller()
+    let page = UUID()
+    pip.visiblePagesChanged(to: [page], sessions: [:], allowed: { _ in true })
+    pip.visiblePagesChanged(to: [], sessions: [:], allowed: { _ in true })
+    pip.visiblePagesChanged(to: [], sessions: [page: video], allowed: { _ in true })
+    XCTAssertEqual(entered, [page])
+  }
+
   func testStoreSettingIsPerSiteAndProfile() throws {
     var session = BrowserSession.fresh()
     let video = try XCTUnwrap(session.open(URL(string: "https://www.youtube.com/watch?v=1")!))

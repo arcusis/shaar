@@ -9,16 +9,6 @@ import Testing
 @testable import ShaarVerification
 
 @Suite @MainActor struct InspectorAIPasteboardTests {
-  @Test func detailedCopyRetriesAfterTransientInspectorRequestFailure() {
-    let complete =
-      "Full computed styles: Matched CSS rules: AI fixture console error status 503 Inspector AI fixture"
-    #expect(
-      InspectorAICopyProbe.detailedCopyNeedsRetry(
-        failure: "The page could not complete the Inspector request.", text: ""))
-    #expect(InspectorAICopyProbe.detailedCopyNeedsRetry(failure: nil, text: "partial context"))
-    #expect(!InspectorAICopyProbe.detailedCopyNeedsRetry(failure: nil, text: complete))
-  }
-
   @Test func detailedDiagnosticsReadinessRequiresEachCollectedSignal() {
     let console = ["AI fixture console error"]
     let statuses = [503]
@@ -35,6 +25,34 @@ import Testing
     #expect(
       InspectorAICopyProbe.diagnosticsReady(
         consoleMessages: console, requestStatuses: statuses, signalNames: signals))
+  }
+
+  @Test func detailedCopyWaitsForCollectedContext() {
+    var details = InspectorAIFormatter.Details()
+    details.computed = [.init(name: "color", value: "red")]
+    details.rules = [
+      .init(
+        selector: "button", source: "fixture", declarations: [.init(name: "color", value: "red")])
+    ]
+    details.consoleErrors = ["AI fixture console error"]
+    details.networkErrors = ["GET /inspector-ai-failure — status 503"]
+    details.technologies = ["Inspector AI fixture"]
+    #expect(InspectorAICopyProbe.detailedContextReady(details))
+    var missing = details
+    missing.computed = []
+    #expect(!InspectorAICopyProbe.detailedContextReady(missing))
+    missing = details
+    missing.rules = []
+    #expect(!InspectorAICopyProbe.detailedContextReady(missing))
+    missing = details
+    missing.consoleErrors = []
+    #expect(!InspectorAICopyProbe.detailedContextReady(missing))
+    missing = details
+    missing.networkErrors = []
+    #expect(!InspectorAICopyProbe.detailedContextReady(missing))
+    missing = details
+    missing.technologies = []
+    #expect(!InspectorAICopyProbe.detailedContextReady(missing))
   }
 
   @Test func receiptRequiresActualPNGAfterMatchingMarkdownRepresentations() throws {

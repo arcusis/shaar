@@ -99,9 +99,16 @@ final class DevToolsProbe {
         && page.frame == card.bounds && !page.isHidden
     }
     engine.toggleDeveloperTools()
-    try await wait("reopening restores the engine's remembered dock layout") {
-      self.isDocked(identity, in: card)
-        && card.subviews.last?.frame == initial
+    do {
+      try await wait("reopening restores the engine's remembered dock layout") {
+        self.isDocked(identity, in: card)
+          && Self.rememberedDockFrameMatches(initial, card.subviews.last?.frame)
+      }
+    } catch {
+      let reopened = runtime.devToolsView(forTabID: identity)
+      throw Failure(
+        "\(error.localizedDescription): reopened=\(reopened != nil), docked=\(isDocked(identity, in: card)), initial=\(initial), page=\(page.frame), tools=\(reopened?.frame ?? .zero), subviews=\(card.subviews.count)"
+      )
     }
     try expect(
       runtime.view(forTabID: identity) === card, "opening and closing preserve page-card identity")
@@ -134,6 +141,14 @@ final class DevToolsProbe {
     let tolerance = card.bounds.insetBy(dx: -1, dy: -1)
     return tolerance.contains(tools.frame) && tolerance.contains(page.frame)
       && page.frame != card.bounds && card.subviews.last === page
+  }
+
+  static func rememberedDockFrameMatches(_ initial: NSRect, _ reopened: NSRect?) -> Bool {
+    guard let reopened else { return false }
+    return abs(reopened.minX - initial.minX) <= 1
+      && abs(reopened.minY - initial.minY) <= 1
+      && abs(reopened.width - initial.width) <= 1
+      && abs(reopened.height - initial.height) <= 1
   }
 
   private func wait(_ message: String, _ condition: () -> Bool) async throws {

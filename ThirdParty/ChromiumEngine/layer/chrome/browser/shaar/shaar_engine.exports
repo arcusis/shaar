@@ -13,3 +13,10 @@ _shaar_profile_delete
 _shaar_profile_get_state
 _shaar_profile_set_state
 _shaar_profile_get_path
+_shaar_window_host_view
+_shaar_window_native_window
+_shaar_tab_host_view
+_shaar_tab_view_attach
+_shaar_tab_view_detach
+_shaar_tab_view_focus
+_shaar_window_host_resize

@@ -11,6 +11,7 @@
 
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/shaar/windows_tabs/shaar_page_view_binding.h"
 
 namespace shaar::windows_tabs {
 
@@ -159,12 +160,28 @@ void BrowserTabRegistryImpl::BindTab(shaar_engine* engine,
 
 void BrowserTabRegistryImpl::UnbindWindow(shaar_engine* engine,
                                           shaar_window* window) {
+  ReleasePageHost(window);
   std::erase_if(tabs_, [engine, window](const TabEntry& entry) {
     return entry.engine == engine && entry.window == window;
   });
   std::erase_if(windows_, [engine, window](const WindowState& entry) {
     return entry.engine == engine && entry.handle == window;
   });
+}
+
+shaar_engine* BrowserTabRegistryImpl::FindWindowOwner(
+    shaar_window* window) const {
+  for (const auto& entry : windows_)
+    if (entry.handle == window)
+      return entry.engine;
+  return nullptr;
+}
+
+shaar_window* BrowserTabRegistryImpl::FindTabWindow(shaar_tab* tab) const {
+  for (const auto& entry : tabs_)
+    if (entry.handle == tab)
+      return entry.window;
+  return nullptr;
 }
 
 bool ValidatePlacement(const std::vector<std::string>& requested_ids,

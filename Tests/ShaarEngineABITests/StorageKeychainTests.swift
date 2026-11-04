@@ -81,7 +81,7 @@ private func fakeStorageKeychainSubmit(
 ) -> shaar_error_code {
   guard engine != nil, let reply, let replyContext,
     window == nil, tab == nil, scope.private_session == nil
-  else { return SHAAR_INVALID_ARGUMENT }
+  else { return shaar_error_code(rawValue: 1) }
   fakeStorageKeychainSubmitCapture.record(
     scope: scope, operation: operation, arguments: arguments)
   let replyAddress = UInt(bitPattern: replyContext)
@@ -94,13 +94,13 @@ private func fakeStorageKeychainSubmit(
       var result = shaar_result(
         size: UInt32(MemoryLayout<shaar_result>.size), request_id: requestID,
         error: shaar_error(
-          size: UInt32(MemoryLayout<shaar_error>.size), code: SHAAR_OK,
+          size: UInt32(MemoryLayout<shaar_error>.size), code: shaar_error_code(rawValue: 0),
           platform_code: 0, message: shaar_bytes(data: nil, size: 0)),
         payload_json: shaar_bytes(data: bytes.baseAddress, size: bytes.count))
       replyFunction(context, &result)
     }
   }
-  return SHAAR_OK
+  return shaar_error_code(rawValue: 0)
 }
 
 private struct FakeStorageKeychainABISymbols: ShaarSymbolResolving {

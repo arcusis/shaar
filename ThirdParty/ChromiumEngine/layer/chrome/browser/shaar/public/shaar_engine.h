@@ -13,7 +13,7 @@ extern "C" {
 #endif
 
 #define SHAAR_ENGINE_ABI_MAJOR 1u
-#define SHAAR_ENGINE_ABI_MINOR 0u
+#define SHAAR_ENGINE_ABI_MINOR 1u
 #define SHAAR_EXPORT __attribute__((visibility("default")))
 
 typedef struct shaar_engine shaar_engine;
@@ -335,12 +335,23 @@ SHAAR_EXPORT shaar_error_code shaar_window_open(
 SHAAR_EXPORT shaar_error_code shaar_window_close(
     shaar_window *, shaar_error *error);
 SHAAR_EXPORT void *shaar_window_host_view(shaar_window *); /* borrowed NSView* */
+SHAAR_EXPORT void *shaar_window_native_window(shaar_window *); /* borrowed NSWindow* */
 SHAAR_EXPORT shaar_error_code shaar_tab_open(
     shaar_scope, shaar_window *, shaar_bytes tab_id, shaar_bytes url,
     int foreground, shaar_tab **out, shaar_error *error);
 SHAAR_EXPORT shaar_error_code shaar_tab_close(
     shaar_tab *, shaar_error *error);
 SHAAR_EXPORT void *shaar_tab_host_view(shaar_tab *); /* borrowed NSView* */
+/* UI-thread page hosting. Handles must be registered to the same engine/window.
+ * Attach selects a tab; detach is idempotent for an unselected tab. */
+SHAAR_EXPORT shaar_error_code shaar_tab_view_attach(
+    shaar_engine *, shaar_window *, shaar_tab *, shaar_error *);
+SHAAR_EXPORT shaar_error_code shaar_tab_view_detach(
+    shaar_engine *, shaar_window *, shaar_tab *, shaar_error *);
+SHAAR_EXPORT shaar_error_code shaar_tab_view_focus(
+    shaar_engine *, shaar_window *, shaar_tab *, shaar_error *);
+SHAAR_EXPORT shaar_error_code shaar_window_host_resize(
+    shaar_engine *, shaar_window *, double width, double height, shaar_error *);
 SHAAR_EXPORT shaar_error_code shaar_media_pip_window(
     shaar_scope, shaar_tab *, shaar_window **out, shaar_error *error);
 

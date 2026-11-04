@@ -102,12 +102,16 @@ TEST(ShaarWindowsTabsHandlersTest, RegistryResolvesBoundWindowAndTabIDs) {
   EXPECT_EQ(registry.FindWebContents(engine, window, tab), contents);
   EXPECT_EQ(registry.FindWebContentsByID(engine, window, "tab-a"), contents);
   EXPECT_EQ(registry.TabID(engine, window, tab), "tab-a");
+  EXPECT_EQ(registry.FindWindowOwner(window), engine);
+  EXPECT_EQ(registry.FindTabWindow(tab), window);
   std::unordered_map<std::string, content::WebContents*> tabs;
   registry.GetTabs(engine, window, &tabs);
   EXPECT_EQ(tabs.at("tab-a"), contents);
   registry.UnbindWindow(engine, window);
   EXPECT_EQ(registry.FindBrowser(engine, window), nullptr);
   EXPECT_EQ(registry.FindWebContents(engine, window, tab), nullptr);
+  EXPECT_EQ(registry.FindWindowOwner(window), nullptr);
+  EXPECT_EQ(registry.FindTabWindow(tab), nullptr);
 }
 
 // BEGIN find

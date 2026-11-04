@@ -54,6 +54,8 @@ class BrowserTabRegistryImpl final : public shaar::BrowserTabRegistry {
   void BindTab(shaar_engine*, shaar_window*, shaar_tab*, std::string id,
                content::WebContents*);
   void UnbindWindow(shaar_engine*, shaar_window*);
+  shaar_engine* FindWindowOwner(shaar_window*) const;
+  shaar_window* FindTabWindow(shaar_tab*) const;
 
  private:
   struct TabEntry {

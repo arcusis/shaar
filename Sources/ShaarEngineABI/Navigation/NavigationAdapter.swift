@@ -161,7 +161,8 @@ public struct ShaarNavigationABITransport: ShaarNavigationSubmitting, @unchecked
     let replyBox = ShaarNavigationReplyBox(requestID: requestID, completion: completion)
     let replyContext = Unmanaged.passRetained(replyBox).toOpaque()
     var immediateError = shaar_error(
-      size: UInt32(MemoryLayout<shaar_error>.size), code: SHAAR_OK, platform_code: 0,
+      size: UInt32(MemoryLayout<shaar_error>.size), code: shaar_error_code(rawValue: 0),
+      platform_code: 0,
       message: shaar_bytes(data: nil, size: 0))
     let status = request.payload.withUnsafeBytes { rawBuffer -> UInt32 in
       let buffer = rawBuffer.bindMemory(to: CChar.self)

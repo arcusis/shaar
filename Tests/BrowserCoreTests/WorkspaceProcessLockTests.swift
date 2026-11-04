@@ -7,24 +7,35 @@ import Testing
 
 @testable import BrowserCore
 
+private func temporaryWorkspaceLockDirectory() -> URL {
+  FileManager.default.temporaryDirectory.appending(
+    path: "shaar-workspace-lock-\(ProcessInfo.processInfo.processIdentifier)-\(UUID().uuidString)")
+}
+
 @Test func workspaceLockExcludesOtherDescriptorsAndReleasesWithoutDeletingItsFile() throws {
-  let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
-  defer { try? FileManager.default.removeItem(at: root) }
-  var owner: WorkspaceProcessLock? = try WorkspaceProcessLock(directory: root)
+  let root = temporaryWorkspaceLockDirectory()
+  var owner: WorkspaceProcessLock?
+  var successor: WorkspaceProcessLock?
+  defer {
+    successor = nil
+    owner = nil
+    try? FileManager.default.removeItem(at: root)
+  }
+  owner = try WorkspaceProcessLock(directory: root)
   let path = root.appending(path: "workspace.lock")
   let original = try Data(contentsOf: path)
   #expect(throws: WorkspaceLockError.self) { _ = try WorkspaceProcessLock(directory: root) }
   #expect(try Data(contentsOf: path) == original)
   #expect(owner != nil)
   owner = nil
-  let successor = try WorkspaceProcessLock(directory: root)
+  successor = try WorkspaceProcessLock(directory: root)
   withExtendedLifetime(successor) {
     #expect(FileManager.default.fileExists(atPath: path.path))
   }
 }
 
 @Test func workspaceLockRejectsSymlinksWithoutTouchingTheirTargets() throws {
-  let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+  let root = temporaryWorkspaceLockDirectory()
   defer { try? FileManager.default.removeItem(at: root) }
   try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
   let target = root.appending(path: "original")
@@ -65,7 +76,7 @@ import Testing
 }
 
 @Test func workspaceLockRejectsHardLinkedLockFiles() throws {
-  let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+  let root = temporaryWorkspaceLockDirectory()
   defer { try? FileManager.default.removeItem(at: root) }
   try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
   let original = root.appending(path: "original")

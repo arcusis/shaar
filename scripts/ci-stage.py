@@ -105,9 +105,19 @@ def run_engine(checks: Commands, mode: str, iterations: int) -> None:
         run_probe_iterations(checks, selected, range(1, repetitions + 1))
 
 
+def restore_shared_verification_bundle() -> bool:
+    directory = ROOT / "build/ci/engine-build"
+    if not (directory / "bundle.json").is_file():
+        return False
+    restore_bundle(ROOT, directory)
+    return True
+
+
 def run_basic_browsing(checks: Commands) -> None:
     require_hosted_mac()
-    if checks.run("verification-build", ["bash", "scripts/bundle-app.sh", "--with-engine", "--verification"]):
+    if not restore_shared_verification_bundle() and checks.run(
+        "verification-build", ["bash", "scripts/bundle-app.sh", "--with-engine", "--verification"]
+    ):
         return
     checks.run("normal-window-browsing", [sys.executable, "scripts/engine_fixture.py", "--basic-browsing"])
 
@@ -176,11 +186,15 @@ def run_visuals(checks: Commands) -> None:
 
 def run_localization(checks: Commands) -> None:
     require_hosted_mac()
+    has_shared_bundle = restore_shared_verification_bundle()
     if checks.run("localization-build", ["swift", "build", "--build-tests", "--jobs", "2", "--force-resolved-versions"]):
         return
     if checks.run("localization-captures", [sys.executable, "scripts/test-localization.py"]):
         return
-    checks.run("localization-engine", [sys.executable, "scripts/localization-fixture.py"])
+    localization_engine = [sys.executable, "scripts/localization-fixture.py"]
+    if has_shared_bundle:
+        localization_engine.append("--skip-build")
+    checks.run("localization-engine", localization_engine)
 
 
 def run_sanitizer(checks: Commands, sanitizer: str) -> None:

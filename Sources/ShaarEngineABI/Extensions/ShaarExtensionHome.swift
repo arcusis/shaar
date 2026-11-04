@@ -9,59 +9,87 @@ import Foundation
 public actor ShaarExtensionHome {
   private struct Catalog: Codable {
     let schemaVersion: Int
-    let extensionIDs: [String]
+    let intents: [Intent]
+  }
+
+  private struct Intent: Codable {
+    let id: String
+    let approvedVersion: String
   }
 
   private let fileURL: URL
   private let adapter: ShaarExtensionsAdapter
-  private var ids: Set<String>
+  private var versions: [String: String]
 
   public init(fileURL: URL, adapter: ShaarExtensionsAdapter) throws {
     self.fileURL = fileURL
     self.adapter = adapter
     if FileManager.default.fileExists(atPath: fileURL.path) {
       let catalog = try JSONDecoder().decode(Catalog.self, from: Data(contentsOf: fileURL))
-      guard catalog.schemaVersion == 1,
-        catalog.extensionIDs.allSatisfy(Self.validID),
-        Set(catalog.extensionIDs).count == catalog.extensionIDs.count
+      guard catalog.schemaVersion == 2,
+        catalog.intents.allSatisfy({
+          Self.validID($0.id) && ShaarExtensionsAdapter.isValidVersion($0.approvedVersion)
+        }),
+        Set(catalog.intents.map(\.id)).count == catalog.intents.count
       else { throw ShaarExtensionsAdapterError.invalidResponse("invalid shared extension catalog") }
-      ids = Set(catalog.extensionIDs)
+      versions = Dictionary(
+        uniqueKeysWithValues: catalog.intents.map { ($0.id, $0.approvedVersion) })
     } else {
-      ids = []
+      versions = [:]
     }
   }
 
-  public var extensionIDs: [String] { ids.sorted() }
+  public var extensionIDs: [String] { versions.keys.sorted() }
 
   /// Persist the approved intent before fan-out so a crash or partial failure
   /// can be retried for current and future regular profiles.
   public func recordApprovedInstall(
-    _ extensionID: String, profileIDs: [UUID]
+    _ extensionID: String, approvedVersion: String, profileIDs: [UUID]
   ) async throws -> ShaarSharedInstallResult {
     guard Self.validID(extensionID) else { throw ShaarExtensionsAdapterError.invalidExtensionID }
-    let previous = ids
-    ids.insert(extensionID)
+    guard ShaarExtensionsAdapter.isValidVersion(approvedVersion) else {
+      throw ShaarExtensionsAdapterError.invalidApprovedVersion
+    }
+    let previous = versions
+    versions[extensionID] = approvedVersion
     do { try save() } catch {
-      ids = previous
+      versions = previous
       throw error
     }
-    return await adapter.installAcrossProfiles(extensionID: extensionID, profileIDs: profileIDs)
+    return await adapter.installAcrossProfiles(
+      extensionID: extensionID, approvedVersion: approvedVersion, profileIDs: profileIDs)
   }
 
   /// Call after a regular profile opens and on retry. The native install is
   /// idempotent and must preserve that profile's existing enable state.
   public func reconcile(profileID: UUID) async -> ShaarSharedInstallResult {
     var failed = Set<UUID>()
-    for id in ids.sorted() {
-      let result = await adapter.installAcrossProfiles(extensionID: id, profileIDs: [profileID])
+    var pending = Set<UUID>()
+    for result in await reconcileDetails(profileID: profileID).values {
       failed.formUnion(result.failed)
+      pending.formUnion(result.pending)
     }
-    let installed: Set<UUID> = failed.isEmpty && !ids.isEmpty ? [profileID] : []
-    return ShaarSharedInstallResult(installed: installed, failed: failed)
+    let installed: Set<UUID> =
+      failed.isEmpty && pending.isEmpty && !versions.isEmpty
+      ? [profileID] : []
+    return ShaarSharedInstallResult(installed: installed, failed: failed, pending: pending)
+  }
+
+  public func reconcileDetails(profileID: UUID) async -> [String: ShaarSharedInstallResult] {
+    var details: [String: ShaarSharedInstallResult] = [:]
+    for (id, approvedVersion) in versions.sorted(by: { $0.key < $1.key }) {
+      let result = await adapter.installAcrossProfiles(
+        extensionID: id, approvedVersion: approvedVersion, profileIDs: [profileID])
+      details[id] = result
+    }
+    return details
   }
 
   private func save() throws {
-    let data = try JSONEncoder().encode(Catalog(schemaVersion: 1, extensionIDs: ids.sorted()))
+    let intents = versions.sorted { $0.key < $1.key }.map {
+      Intent(id: $0.key, approvedVersion: $0.value)
+    }
+    let data = try JSONEncoder().encode(Catalog(schemaVersion: 2, intents: intents))
     try data.write(to: fileURL, options: .atomic)
   }
 

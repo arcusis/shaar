@@ -104,10 +104,25 @@ TEST(ShaarExtensionsModuleTest, AcceptsSharedHomeInstallSchemaBeforeProfileLooku
   shaar_error error = {};
   error.size = sizeof(error);
   EXPECT_EQ(Submit(&context, scope, SHAAR_OP_EXTENSION_MANAGE,
-                   R"({"schemaVersion":1,"action":"install","extensionId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","source":"sharedHome"})",
+                   R"({"schemaVersion":1,"action":"install","extensionId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","source":"sharedHome","approvedVersion":"1.2.3"})",
                    &error),
             SHAAR_NOT_FOUND);
   EXPECT_EQ(profiles.resolve_calls, 1);
+}
+
+TEST(ShaarExtensionsModuleTest, RejectsSharedInstallWithoutApprovedVersion) {
+  EmptyProfileServices profiles;
+  shaar::ShaarEngineContext context{&profiles, nullptr};
+  shaar_scope scope = {};
+  scope.size = sizeof(scope);
+  scope.profile = reinterpret_cast<shaar_profile*>(1);
+  shaar_error error = {};
+  error.size = sizeof(error);
+  EXPECT_EQ(Submit(&context, scope, SHAAR_OP_EXTENSION_MANAGE,
+                   R"({"schemaVersion":1,"action":"install","extensionId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","source":"sharedHome"})",
+                   &error),
+            SHAAR_INVALID_ARGUMENT);
+  EXPECT_EQ(profiles.resolve_calls, 0);
 }
 
 }  // namespace

@@ -20,6 +20,7 @@
 #include "base/location.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/values.h"
+#include "base/version.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
@@ -28,8 +29,10 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/extension_util.h"
+#include "extensions/browser/pending_extension_manager.h"
 #include "extensions/browser/uninstall_reason.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/extension_urls.h"
 
 namespace {
 
@@ -104,6 +107,26 @@ bool ValidExtensionId(const std::string& id) {
          std::all_of(id.begin(), id.end(), [](char character) {
            return character >= 'a' && character <= 'p';
          });
+}
+
+bool IsRegularExtension(const extensions::Extension* extension,
+                        content::BrowserContext*) {
+  return extension && extension->is_extension();
+}
+
+bool ValidInstallSource(const base::Value::Dict& input) {
+  const std::string* source = input.FindString("source");
+  if (!source)
+    return false;
+  if (*source == "sharedHome") {
+    const std::string* version = input.FindString("approvedVersion");
+    return HasOnlyKeys(input, {"schemaVersion", "action", "extensionId",
+                               "source", "approvedVersion"}) &&
+           version && base::Version(*version).IsValid();
+  }
+  return (*source == "webStore" || *source == "unpacked") &&
+         HasOnlyKeys(input, {"schemaVersion", "action", "extensionId",
+                              "source"});
 }
 
 std::optional<std::string> EncodeList(Profile* profile,
@@ -181,10 +204,7 @@ shaar_error_code HandleExtensionsOperation(
       if (!HasOnlyKeys(input, {"schemaVersion", "action", "extensionId"}))
         return Fail(SHAAR_INVALID_ARGUMENT, "invalid extension uninstall request", error);
     } else if (*action == "install") {
-      const std::string* source = input.FindString("source");
-      if (!HasOnlyKeys(input, {"schemaVersion", "action", "extensionId", "source"}) ||
-          !source || (*source != "webStore" && *source != "unpacked" &&
-                      *source != "sharedHome"))
+      if (!ValidInstallSource(input))
         return Fail(SHAAR_INVALID_ARGUMENT, "invalid extension install source", error);
     } else {
       return Fail(SHAAR_INVALID_ARGUMENT, "unknown extension action", error);
@@ -295,13 +315,12 @@ shaar_error_code HandleExtensionsOperation(
                   "incognito visibility policy integration is not available", error);
     }
     // A replay against an already-installed profile is idempotent and must not
-    // change that profile's enabled state. Creating a missing instance still
-    // requires a reviewed shared package and consent/policy integration.
+    // change that profile's enabled state. A missing Web Store extension is
+    // queued through Chromium's verified update/install machinery. The app
+    // supplies the exact version that was approved with its install intent.
     if (*action == "install") {
       const std::string* source = input.FindString("source");
-      if (!HasOnlyKeys(input, {"schemaVersion", "action", "extensionId", "source"}) ||
-          !source || (*source != "webStore" && *source != "unpacked" &&
-                      *source != "sharedHome"))
+      if (!ValidInstallSource(input))
         return Fail(SHAAR_INVALID_ARGUMENT, "invalid extension install source", error);
       const extensions::Extension* existing = registry->GetExtensionById(
           *id, extensions::ExtensionRegistry::EVERYTHING);
@@ -313,8 +332,26 @@ shaar_error_code HandleExtensionsOperation(
                    "{\"schemaVersion\":1,\"installed\":true}");
         return SHAAR_OK;
       }
+      if (*source == "sharedHome") {
+        auto* extension_system = extensions::ExtensionSystem::Get(profile);
+        auto* service = extension_system ? extension_system->extension_service() : nullptr;
+        auto* pending = extensions::PendingExtensionManager::Get(profile);
+        if (!service || !pending)
+          return Fail(SHAAR_NOT_READY, "extension installer is unavailable", error);
+        if (!pending->IsIdPending(*id)) {
+          const std::string& version = *input.FindString("approvedVersion");
+          if (!pending->AddFromSync(
+                  *id, extension_urls::GetWebstoreUpdateUrl(),
+                  base::Version(version), &IsRegularExtension, false))
+            return Fail(SHAAR_POLICY_BLOCKED, "extension install was blocked", error);
+          service->CheckForUpdatesSoon();
+        }
+        ReplyLater({reply, reply_context, request_id}, SHAAR_OK,
+                   "{\"schemaVersion\":1,\"queued\":true}");
+        return SHAAR_OK;
+      }
       return Fail(SHAAR_UNSUPPORTED_CAPABILITY,
-                  "shared extension package installation is not available", error);
+                  "extension source is not available", error);
     }
     return Fail(SHAAR_INVALID_ARGUMENT, "unknown extension action", error);
   }

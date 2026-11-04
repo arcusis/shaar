@@ -13,6 +13,7 @@ final class BrowserSettingsState {
   let workspace: BrowserWorkspaceStore
   let preferences: BrowserPreferencesStore
   let runtime: ARCChromiumRuntime?
+  let sharedExtensions: SharedExtensionSettingsModel?
   let profileBackend: (any ProfileSettingsBackend)?
   private(set) var deletingProfileID: UUID?
   private(set) var selectedProfileID: UUID?
@@ -25,11 +26,13 @@ final class BrowserSettingsState {
 
   init(
     workspace: BrowserWorkspaceStore, preferences: BrowserPreferencesStore,
-    runtime: ARCChromiumRuntime? = nil, profileBackend: (any ProfileSettingsBackend)? = nil
+    runtime: ARCChromiumRuntime? = nil, profileBackend: (any ProfileSettingsBackend)? = nil,
+    sharedExtensions: SharedExtensionSettingsModel? = nil
   ) {
     self.workspace = workspace
     self.preferences = preferences
     self.runtime = runtime
+    self.sharedExtensions = sharedExtensions
     self.profileBackend = profileBackend ?? runtime.map { EngineProfileSettings(runtime: $0) }
   }
 
@@ -222,6 +225,7 @@ private struct BrowserSettingsRoot: View {
       onConnectAccount: state.onConnectAccount,
       onDisconnectAccount: state.onDisconnectAccount,
       extensionManager: state.extensionManager(for:),
+      sharedExtensions: state.sharedExtensions,
       onAddExtensions: { state.openExtensions(for: $0) },
       profileBackend: state.profileBackend,
       clearHistory: state.runtime.map { runtime in
@@ -256,10 +260,12 @@ final class BrowserSettingsController: NSObject {
   init(
     workspace: BrowserWorkspaceStore, preferences: BrowserPreferencesStore,
     runtime: ARCChromiumRuntime? = nil,
+    sharedExtensions: SharedExtensionSettingsModel? = nil,
     presentation: Presentation = .visible
   ) {
     state = BrowserSettingsState(
-      workspace: workspace, preferences: preferences, runtime: runtime)
+      workspace: workspace, preferences: preferences, runtime: runtime,
+      sharedExtensions: sharedExtensions)
     self.presentation = presentation
     super.init()
   }

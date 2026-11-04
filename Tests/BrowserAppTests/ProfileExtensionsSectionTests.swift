@@ -30,7 +30,7 @@ final class ProfileExtensionsSectionTests: XCTestCase {
       ])
     let view = VStack(alignment: .leading, spacing: 8) {
       Text("Extensions").font(.headline)
-      ProfileExtensionsSection(model: model, onAddExtensions: {})
+      ProfileExtensionsSection(model: model, sharedModel: nil, onAddExtensions: {})
     }
     .padding(16)
     .frame(width: 440, height: 230, alignment: .topLeading)

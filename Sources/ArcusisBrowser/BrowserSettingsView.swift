@@ -126,6 +126,7 @@ struct BrowserSettingsView: View {
   let onConnectAccount: (UUID, AccountSignInOption) -> Void
   let onDisconnectAccount: (UUID, AccountProvider) -> Void
   let extensionManager: (UUID) -> ExtensionManagerModel?
+  let sharedExtensions: SharedExtensionSettingsModel?
   let onAddExtensions: (UUID) -> Void
   let clearHistory: ((UUID) async throws -> Void)?
   let profileBackend: (any ProfileSettingsBackend)?
@@ -152,6 +153,7 @@ struct BrowserSettingsView: View {
     onConnectAccount: @escaping (UUID, AccountSignInOption) -> Void = { _, _ in },
     onDisconnectAccount: @escaping (UUID, AccountProvider) -> Void = { _, _ in },
     extensionManager: @escaping (UUID) -> ExtensionManagerModel? = { _ in nil },
+    sharedExtensions: SharedExtensionSettingsModel? = nil,
     onAddExtensions: @escaping (UUID) -> Void = { _ in },
     profileBackend: (any ProfileSettingsBackend)? = nil,
     clearHistory: ((UUID) async throws -> Void)? = nil,
@@ -175,6 +177,7 @@ struct BrowserSettingsView: View {
     self.onConnectAccount = onConnectAccount
     self.onDisconnectAccount = onDisconnectAccount
     self.extensionManager = extensionManager
+    self.sharedExtensions = sharedExtensions
     self.onAddExtensions = onAddExtensions
     self.clearHistory = clearHistory
     self.profileBackend = profileBackend
@@ -577,6 +580,7 @@ struct BrowserSettingsView: View {
       Section(SettingsL10n.string("Extensions")) {
         ProfileExtensionsSection(
           model: extensionManager(profile.id),
+          sharedModel: sharedExtensions,
           onAddExtensions: { onAddExtensions(profile.id) })
       }
       Section {

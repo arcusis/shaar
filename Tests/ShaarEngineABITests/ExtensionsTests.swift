@@ -59,7 +59,8 @@ struct ShaarExtensionsAdapterTests {
     let adapter = ShaarExtensionsAdapter(
       implementation: .shaar, ardia: FakeArdiaExtensions(), shaar: fake)
     let result = await adapter.installAcrossProfiles(
-      extensionID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", profileIDs: [first, second])
+      extensionID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", approvedVersion: "1.2.3",
+      profileIDs: [first, second])
     #expect(result.installed == Set([first, second]))
     #expect(result.failed.isEmpty)
     let calls = await fake.calls
@@ -69,13 +70,22 @@ struct ShaarExtensionsAdapterTests {
       let args = try #require(JSONSerialization.jsonObject(with: call.arguments) as? [String: Any])
       #expect(args["action"] as? String == "install")
       #expect(args["source"] as? String == "sharedHome")
+      #expect(args["approvedVersion"] as? String == "1.2.3")
     }
     await fake.setReply(#"{"schemaVersion":1,"installed":false}"#, for: second)
     let partial = await adapter.installAcrossProfiles(
-      extensionID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", profileIDs: [first, second])
+      extensionID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", approvedVersion: "1.2.3",
+      profileIDs: [first, second])
     #expect(partial.installed == [first])
     #expect(partial.failed == [second])
     #expect(!partial.complete)
+    await fake.setReply(#"{"schemaVersion":1,"queued":true}"#, for: second)
+    let queued = await adapter.installAcrossProfiles(
+      extensionID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", approvedVersion: "1.2.3",
+      profileIDs: [first, second])
+    #expect(queued.installed == [first])
+    #expect(queued.pending == [second])
+    #expect(!queued.complete)
   }
 
   @Test func sharedHomePersistsIntentAndReconcilesNewProfiles() async throws {
@@ -88,7 +98,8 @@ struct ShaarExtensionsAdapterTests {
     let adapter = ShaarExtensionsAdapter(
       implementation: .shaar, ardia: FakeArdiaExtensions(), shaar: fake)
     let home = try ShaarExtensionHome(fileURL: file, adapter: adapter)
-    let initial = try await home.recordApprovedInstall(id, profileIDs: [first])
+    let initial = try await home.recordApprovedInstall(
+      id, approvedVersion: "1.0", profileIDs: [first])
     #expect(initial.complete)
     let reopened = try ShaarExtensionHome(fileURL: file, adapter: adapter)
     #expect(await reopened.extensionIDs == [id])
@@ -167,5 +178,10 @@ struct ShaarExtensionsAdapterTests {
     await #expect(throws: ShaarExtensionsAdapterError.invalidExtensionID) {
       try await adapter.manage(profileID: UUID(), action: .uninstall("../extension"))
     }
+    let invalidInstall = await adapter.installAcrossProfiles(
+      extensionID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", approvedVersion: "../1",
+      profileIDs: [UUID()])
+    #expect(invalidInstall.installed.isEmpty)
+    #expect(invalidInstall.failed.count == 1)
   }
 }

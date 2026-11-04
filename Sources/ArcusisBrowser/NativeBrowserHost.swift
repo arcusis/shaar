@@ -76,6 +76,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   private let keyWindow: () -> NSWindow?
   private let screens: () -> [NSRect]
   let preferences: BrowserPreferencesStore
+  let sharedExtensions: SharedExtensionSettingsModel?
   private(set) var settingsController: BrowserSettingsController?
   private var privateHost: PrivateBrowserHost?
   private var miniWindows: [String: MiniBrowserController] = [:]
@@ -100,6 +101,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   init(
     events: BrowserRuntimeEvents, workspace: BrowserWorkspaceStore,
     preferences: BrowserPreferencesStore = BrowserPreferencesStore(),
+    sharedExtensions: SharedExtensionSettingsModel? = nil,
     presentation: Presentation = .visible, usesPrimaryWindow: Bool = true,
     keyWindow: @escaping () -> NSWindow? = { NSApp.keyWindow ?? NSApp.mainWindow },
     screens: @escaping () -> [NSRect] = { NSScreen.screens.map(\.visibleFrame) }
@@ -107,6 +109,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     self.events = events
     self.workspace = workspace
     self.preferences = preferences
+    self.sharedExtensions = sharedExtensions
     self.presentation = presentation
     self.usesPrimaryWindow = usesPrimaryWindow
     self.keyWindow = keyWindow
@@ -172,6 +175,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     }
     settingsController = BrowserSettingsController(
       workspace: workspace, preferences: preferences, runtime: events.runtime,
+      sharedExtensions: sharedExtensions,
       presentation: presentation == .visible ? .visible : .hiddenProbe)
     settingsController?.setOpenSpaceHandler { [weak self] spaceID in
       guard let self,

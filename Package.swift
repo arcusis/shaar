@@ -89,6 +89,7 @@ let package = Package(
       name: "ShaarVerification",
       dependencies: [
         "ArcusisBrowser", "BrowserCore", "ChromiumBridge", "ChromiumBridgeVerification",
+        "ShaarEngineABI",
       ],
       linkerSettings: bundleFrameworksLinkerSettings),
     .target(name: "BrowserTestSupport", path: "Tests/TestSupport"),
@@ -97,13 +98,13 @@ let package = Package(
       resources: [.copy("Fixtures/BrowserImport")]),
     .testTarget(
       name: "BrowserAppTests",
-      dependencies: ["ArcusisBrowser", "BrowserCore", "BrowserTestSupport"],
+      dependencies: ["ArcusisBrowser", "BrowserCore", "BrowserTestSupport", "ShaarEngineABI"],
       resources: [.copy("Snapshots/InspectorAI")]),
     .testTarget(
       name: "ShaarVerificationTests",
       dependencies: [
         "ArcusisBrowser", "BrowserCore", "ChromiumBridge", "ChromiumBridgeVerification",
-        "ShaarVerification",
+        "ShaarVerification", "ShaarEngineABI",
       ]),
     .testTarget(name: "ShaarEngineABITests", dependencies: ["ShaarEngineABI", "ShaarEngineC"]),
   ]

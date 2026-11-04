@@ -369,6 +369,48 @@ private func bookmarkPayload(children: [[String: Any]]) -> [String: Any] {
   #expect(operations.count == 2 && operations[0]["t"] as? String == "Bookmarks Menu")
 }
 
+@Test func browserImportKeepsSlashInsideFolderName() throws {
+  let url = FileManager.default.temporaryDirectory.appending(path: "Chrome-\(UUID()).json")
+  defer { try? FileManager.default.removeItem(at: url) }
+  try JSONSerialization.data(withJSONObject: [
+    "roots": [
+      "bookmark_bar": [
+        "children": [
+          [
+            "name": "Research / Media",
+            "children": [
+              [
+                "name": "Archive",
+                "children": [["name": "Page", "url": "https://page.example"]],
+              ]
+            ],
+          ],
+          [
+            "name": "Research",
+            "children": [
+              [
+                "name": "Media / Archive",
+                "children": [["name": "Second page", "url": "https://second.example"]],
+              ]
+            ],
+          ],
+        ]
+      ]
+    ]
+  ]).write(to: url)
+
+  let items = try BrowserImport.read(url)
+  #expect(
+    items.map(\.folderComponents) == [
+      ["Research / Media", "Archive"], ["Research", "Media / Archive"],
+    ])
+  let operations = BrowserImport.operations(for: items, otherFolderID: UUID())
+  #expect(operations.count == 6)
+  #expect(operations[0]["t"] as? String == "Research / Media")
+  #expect(operations[3]["t"] as? String == "Research")
+  #expect(operations[5]["parent"] as? String != operations[2]["parent"] as? String)
+}
+
 @Test @MainActor func browserImportBatchAppliesInOrderAndStopsAfterAnError() {
   let operations: [[String: Any]] = [["id": "first"], ["id": "second"], ["id": "third"]]
   var applied: [String] = []

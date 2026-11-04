@@ -204,10 +204,12 @@ private enum FirefoxHistoryReader {
         }
         parent = folder.parent
       }
+      let folderComponents = Array(folders.reversed())
       result.append(
         BrowserImportItem(
           kind: .bookmark, source: .firefox, title: node.title, address: address,
-          folder: folders.reversed().isEmpty ? nil : folders.reversed().joined(separator: " / ")))
+          folder: folderComponents.isEmpty ? nil : folderComponents.joined(separator: " / "),
+          folderComponents: folderComponents.isEmpty ? nil : folderComponents))
     }
     return result
   }

@@ -12,11 +12,13 @@ public struct BrowserImportItem: Identifiable, Equatable, Sendable {
   public let title: String
   public let address: String
   public let folder: String?
+  public let folderComponents: [String]?
   public let visitTimes: [Date]
 
   public init(
     id: UUID = UUID(), kind: Kind = .bookmark, source: BrowserImportSource = .chrome,
-    title: String, address: String, folder: String? = nil, visitTimes: [Date] = []
+    title: String, address: String, folder: String? = nil, folderComponents: [String]? = nil,
+    visitTimes: [Date] = []
   ) {
     self.id = id
     self.kind = kind
@@ -24,6 +26,9 @@ public struct BrowserImportItem: Identifiable, Equatable, Sendable {
     self.title = title
     self.address = address
     self.folder = folder
+    self.folderComponents =
+      folderComponents
+      ?? folder.map { $0.components(separatedBy: " / ") }
     self.visitTimes = visitTimes
   }
 }
@@ -84,14 +89,14 @@ public enum BrowserImport {
     Any]]
   {
     var operations: [[String: Any]] = []
-    var folders: [String: UUID] = [:]
+    var folders: [[String]: UUID] = [:]
     for item in items where item.kind == .bookmark {
       let parent: UUID
-      if let folder = item.folder {
+      if let components = item.folderComponents {
         var currentParent = otherFolderID
-        var path = ""
-        for component in folder.components(separatedBy: " / ") {
-          path = path.isEmpty ? component : "\(path) / \(component)"
+        var path: [String] = []
+        for component in components {
+          path.append(component)
           if let existing = folders[path] {
             currentParent = existing
           } else {
@@ -156,17 +161,19 @@ public enum BrowserImport {
   }
 
   private static func walkSafari(
-    _ nodes: [[String: Any]], path: String?, into result: inout [BrowserImportItem]
+    _ nodes: [[String: Any]], path: [String]?, into result: inout [BrowserImportItem]
   ) {
     for node in nodes {
       let title = node["Title"] as? String ?? "Untitled"
       if let address = node["URLString"] as? String, valid(address) {
         result.append(
-          .init(id: UUID(), kind: .bookmark, title: title, address: address, folder: path))
+          .init(
+            id: UUID(), kind: .bookmark, title: title, address: address,
+            folder: path?.joined(separator: " / "), folderComponents: path))
       } else {
         walkSafari(
           node["Children"] as? [[String: Any]] ?? [],
-          path: path.map { "\($0) / \(title)" } ?? title, into: &result)
+          path: (path ?? []) + [title], into: &result)
       }
     }
   }
@@ -210,7 +217,8 @@ public enum BrowserImport {
         let folder = folderStack.isEmpty ? nil : folderStack.joined(separator: " / ")
         result.append(
           BrowserImportItem(
-            id: UUID(), kind: .bookmark, title: title, address: address, folder: folder))
+            id: UUID(), kind: .bookmark, title: title, address: address, folder: folder,
+            folderComponents: folderStack))
         continue
       }
 
@@ -268,17 +276,19 @@ public enum BrowserImport {
   }
 
   private static func walk(
-    _ nodes: [[String: Any]], path: String?, into result: inout [BrowserImportItem]
+    _ nodes: [[String: Any]], path: [String]?, into result: inout [BrowserImportItem]
   ) {
     for node in nodes {
       let title = node["name"] as? String ?? node["title"] as? String ?? "Untitled"
       let address = node["url"] as? String ?? node["uri"] as? String
       if let address, valid(address) {
         result.append(
-          .init(id: UUID(), kind: .bookmark, title: title, address: address, folder: path))
+          .init(
+            id: UUID(), kind: .bookmark, title: title, address: address,
+            folder: path?.joined(separator: " / "), folderComponents: path))
       } else if let children = node["children"] as? [[String: Any]] ?? node["c"] as? [[String: Any]]
       {
-        walk(children, path: path.map { "\($0) / \(title)" } ?? title, into: &result)
+        walk(children, path: (path ?? []) + [title], into: &result)
       }
     }
   }
@@ -311,6 +321,6 @@ extension BrowserImportItem {
   func with(source: BrowserImportSource) -> BrowserImportItem {
     BrowserImportItem(
       id: id, kind: kind, source: source, title: title, address: address, folder: folder,
-      visitTimes: visitTimes)
+      folderComponents: folderComponents, visitTimes: visitTimes)
   }
 }

@@ -356,9 +356,11 @@ private func bookmarkPayload(children: [[String: Any]]) -> [String: Any] {
   try JSONSerialization.data(withJSONObject: [
     "guid": "root________", "title": "", "type": "text/x-moz-place-container",
     "children": [
-      ["guid": "menu________", "title": "Bookmarks Menu", "type": "text/x-moz-place-container",
-       "children": [["title": "Page", "uri": "https://page.example"]]]
-    ]
+      [
+        "guid": "menu________", "title": "Bookmarks Menu", "type": "text/x-moz-place-container",
+        "children": [["title": "Page", "uri": "https://page.example"]],
+      ]
+    ],
   ]).write(to: url)
 
   let items = try BrowserImport.read(url)

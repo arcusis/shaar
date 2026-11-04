@@ -221,9 +221,44 @@ public enum BrowserImport {
   }
 
   private static func htmlText(_ value: String) -> String {
-    value.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
-      .replacingOccurrences(of: "&amp;", with: "&")
-      .replacingOccurrences(of: "&quot;", with: "\"")
+    let text = value.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+    var result = ""
+    var index = text.startIndex
+    while index < text.endIndex {
+      if text[index] == "&", let end = text[index...].firstIndex(of: ";"),
+        text.distance(from: index, to: end) <= 12
+      {
+        let entity = String(text[text.index(after: index)..<end])
+        if let decoded = decodeHTMLEntity(entity) {
+          result.unicodeScalars.append(contentsOf: decoded.unicodeScalars)
+          index = text.index(after: end)
+          continue
+        }
+      }
+      result.append(text[index])
+      index = text.index(after: index)
+    }
+    return result
+  }
+
+  private static func decodeHTMLEntity(_ entity: String) -> String? {
+    switch entity {
+    case "amp": return "&"
+    case "quot": return "\""
+    case "apos": return "'"
+    case "lt": return "<"
+    case "gt": return ">"
+    case "nbsp": return "\u{00a0}"
+    default: break
+    }
+
+    guard entity.first == "#" else { return nil }
+    let isHex = entity.dropFirst().first == "x" || entity.dropFirst().first == "X"
+    let digits = entity.dropFirst(isHex ? 2 : 1)
+    guard let value = UInt32(digits, radix: isHex ? 16 : 10),
+      let scalar = UnicodeScalar(value)
+    else { return nil }
+    return String(scalar)
   }
 
   private static func walk(

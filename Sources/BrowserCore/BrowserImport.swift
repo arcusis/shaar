@@ -141,7 +141,7 @@ public enum BrowserImport {
 
   private static func chromium(_ roots: [String: Any]) -> [BrowserImportItem] {
     var result: [BrowserImportItem] = []
-    for key in ["bookmark_bar", "other", "synced"] {
+    for key in ["bookmark_bar", "other", "synced", "mobile"] {
       if let root = roots[key] as? [String: Any] {
         walk(root["children"] as? [[String: Any]] ?? [], path: nil, into: &result)
       }

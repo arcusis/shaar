@@ -327,6 +327,18 @@ private func bookmarkPayload(children: [[String: Any]]) -> [String: Any] {
   #expect(sharedFolderOperations.filter { $0["k"] as? String == "u" }.count == 2)
 }
 
+@Test func browserImportIncludesChromeMobileRoot() throws {
+  let url = FileManager.default.temporaryDirectory.appending(path: "Chrome-\(UUID()).json")
+  defer { try? FileManager.default.removeItem(at: url) }
+  try JSONSerialization.data(withJSONObject: [
+    "roots": [
+      "mobile": ["children": [["name": "Phone bookmark", "url": "https://phone.example"]]]
+    ]
+  ]).write(to: url)
+
+  #expect(try BrowserImport.read(url).map(\.title) == ["Phone bookmark"])
+}
+
 @Test @MainActor func browserImportBatchAppliesInOrderAndStopsAfterAnError() {
   let operations: [[String: Any]] = [["id": "first"], ["id": "second"], ["id": "third"]]
   var applied: [String] = []

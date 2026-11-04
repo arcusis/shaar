@@ -4,6 +4,7 @@
 
 import Foundation
 import ShaarEngineABIC
+import ShaarEngineC
 import ShaarStorageKeychainABIC
 
 /// A regular profile's already-open native scope. The resolver owns this

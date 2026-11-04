@@ -4,6 +4,7 @@
 
 import Foundation
 import ShaarEngineABIC
+import ShaarEngineC
 
 public enum ShaarDevToolsOperation: UInt32, Sendable {
   case call = 1000

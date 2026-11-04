@@ -306,14 +306,22 @@ final class ProfileSettingsStub: ProfileSettingsBackend {
   func deleteProfile(_ id: UUID) async throws { try record("delete", id) }
 }
 
-private actor SettingsSiteDataTransport: ShaarSiteDataTransport {
+actor SettingsSiteDataTransport: ShaarSiteDataTransport {
   private var calls: [(UUID, ShaarSiteDataOperation)] = []
+  private var payloads: [(UUID, ShaarSiteDataOperation, Data)] = []
   private var blocked: [UUID: Bool] = [:]
   private var managed = false
   private var hasException = true
   private var cookieUnsupported = false
 
   func profileIDs() -> [UUID] { calls.map(\.0) }
+  func recordedCalls() -> [(UUID, ShaarSiteDataOperation)] { calls }
+  func clearedTypes(for profileID: UUID) -> [String] {
+    payloads.filter { $0.0 == profileID && $0.1 == .browsingDataClear }.flatMap {
+      let args = try? JSONSerialization.jsonObject(with: $0.2) as? [String: Any]
+      return args?["types"] as? [String] ?? []
+    }
+  }
   func operations() -> [ShaarSiteDataOperation] { calls.map(\.1) }
   func setManaged(_ value: Bool) { managed = value }
   func setCookieUnsupported(_ value: Bool) { cookieUnsupported = value }
@@ -322,6 +330,7 @@ private actor SettingsSiteDataTransport: ShaarSiteDataTransport {
     profileID: UUID, operation: ShaarSiteDataOperation, arguments: Data
   ) async throws -> Data {
     calls.append((profileID, operation))
+    payloads.append((profileID, operation, arguments))
     let body: [String: Any]
     switch operation {
     case .thirdPartyCookiesGet:
@@ -356,7 +365,7 @@ private actor SettingsSiteDataTransport: ShaarSiteDataTransport {
   }
 }
 
-@MainActor private final class SettingsProfileManager: ShaarSettingsProfileManaging {
+@MainActor final class SettingsProfileManager: ShaarSettingsProfileManaging {
   var opened: [UUID] = []
   func open(profileID: UUID) async throws { opened.append(profileID) }
   func delete(profileID: UUID) async throws {}

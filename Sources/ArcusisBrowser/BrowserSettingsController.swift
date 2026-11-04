@@ -267,6 +267,7 @@ final class BrowserSettingsController: NSObject {
   }
 
   var profiles: [BrowserSettingsProfile] { state.profiles }
+  var profileBackend: (any ProfileSettingsBackend)? { state.profileBackend }
   var selectedProfileID: UUID? { state.selectedProfileID }
   var sidebarInitiallyVisible: Bool { state.sidebarInitiallyVisible }
 

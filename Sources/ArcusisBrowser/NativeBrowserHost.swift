@@ -76,6 +76,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   private let keyWindow: () -> NSWindow?
   private let screens: () -> [NSRect]
   let preferences: BrowserPreferencesStore
+  private let settingsBackend: (any ProfileSettingsBackend)?
   private(set) var settingsController: BrowserSettingsController?
   private var privateHost: PrivateBrowserHost?
   private var miniWindows: [String: MiniBrowserController] = [:]
@@ -102,11 +103,13 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     preferences: BrowserPreferencesStore = BrowserPreferencesStore(),
     presentation: Presentation = .visible, usesPrimaryWindow: Bool = true,
     keyWindow: @escaping () -> NSWindow? = { NSApp.keyWindow ?? NSApp.mainWindow },
-    screens: @escaping () -> [NSRect] = { NSScreen.screens.map(\.visibleFrame) }
+    screens: @escaping () -> [NSRect] = { NSScreen.screens.map(\.visibleFrame) },
+    settingsBackend: (any ProfileSettingsBackend)? = nil
   ) {
     self.events = events
     self.workspace = workspace
     self.preferences = preferences
+    self.settingsBackend = settingsBackend
     self.presentation = presentation
     self.usesPrimaryWindow = usesPrimaryWindow
     self.keyWindow = keyWindow
@@ -170,9 +173,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     events.onNewTabWillAdopt = { [weak self] tab, profile, opener in
       self?.prepareNewTab(tab, profile: profile, opener: opener)
     }
-    settingsController = BrowserSettingsController(
-      workspace: workspace, preferences: preferences, runtime: events.runtime,
-      presentation: presentation == .visible ? .visible : .hiddenProbe)
+    settingsController = makeSettingsController()
     settingsController?.setOpenSpaceHandler { [weak self] spaceID in
       guard let self,
         let context = self.contexts.values.first(where: {
@@ -201,6 +202,13 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     }
     for url in pendingURLs { openExternalURL(url) }
     pendingURLs.removeAll()
+  }
+
+  func makeSettingsController() -> BrowserSettingsController {
+    BrowserSettingsController(
+      workspace: workspace, preferences: preferences, runtime: events.runtime,
+      profileBackend: settingsBackend,
+      presentation: presentation == .visible ? .visible : .hiddenProbe)
   }
 
   @discardableResult

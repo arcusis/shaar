@@ -4,6 +4,7 @@
 
 import Foundation
 import ShaarEngineABIC
+import ShaarEngineC
 
 private final class SiteDataRequestIDs: @unchecked Sendable {
   private let lock = NSLock()

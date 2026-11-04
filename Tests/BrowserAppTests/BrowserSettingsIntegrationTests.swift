@@ -3,13 +3,52 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import BrowserCore
+import ChromiumBridge
 import Foundation
+import ShaarEngineABI
 import Testing
 
 @testable import ArcusisBrowser
 
 @Suite @MainActor
 struct BrowserSettingsIntegrationTests {
+  @Test func hiddenHostRoutesSelectedProfileToInjectedShaarPrivacyBackend() async throws {
+    let seeded = fixture()
+    let workspace = try BrowserWorkspaceStore(initialSession: seeded.session)
+    let transport = SettingsSiteDataTransport()
+    let backend = ShaarProfileSettings(
+      transport: transport, profiles: SettingsProfileManager())
+    let host = NativeBrowserHost(
+      events: BrowserRuntimeEvents(runtime: ARCChromiumRuntime()),
+      workspace: workspace, presentation: .hiddenProbe,
+      settingsBackend: backend)
+    let controller = host.makeSettingsController()
+    controller.show(for: seeded.alpha.id)
+    #expect(controller.selectedProfileID == seeded.alpha.id)
+    let routed = try #require(controller.profileBackend)
+    let first = ProfilePrivacyModel(profileID: seeded.alpha.id, backend: routed)
+    await first.load()
+    await first.clear(siteData: true)
+    await first.setCookiesBlocked(true)
+    await first.resetPermissions(origin: "https://example.test")
+    #expect(controller.selectProfile(seeded.beta.id))
+    let second = ProfilePrivacyModel(profileID: seeded.beta.id, backend: routed)
+    await second.load()
+    await second.clear(siteData: false)
+    #expect(controller.selectedProfileID == seeded.beta.id)
+    #expect(first.failure == nil && second.failure == nil)
+    #expect(await transport.clearedTypes(for: seeded.alpha.id) == ["siteData"])
+    #expect(await transport.clearedTypes(for: seeded.beta.id) == ["cache"])
+    let mutations = await transport.recordedCalls().filter {
+      [.browsingDataClear, .thirdPartyCookiesSet, .settingsReset].contains($0.1)
+    }
+    #expect(
+      mutations.map(\.0) == [
+        seeded.alpha.id, seeded.alpha.id, seeded.alpha.id, seeded.beta.id,
+      ])
+    controller.close()
+  }
+
   @Test func unknownStoredSearchEngineFallsBackWithoutLosingPreferences() throws {
     let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }

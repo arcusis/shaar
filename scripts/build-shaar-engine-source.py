@@ -23,6 +23,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import tempfile
 
 
 CONFIG = Path("ThirdParty/ChromiumEngine/source-build.json")

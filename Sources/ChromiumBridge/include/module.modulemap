@@ -1,4 +1,5 @@
 module ChromiumBridge {
   header "ChromiumBridge.h"
+  header "ChromiumShaarPrivacy.h"
   export *
 }

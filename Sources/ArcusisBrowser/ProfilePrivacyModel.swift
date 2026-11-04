@@ -16,15 +16,29 @@ protocol ProfileSettingsBackend {
   func permissions(_ id: UUID, origin: String) async throws -> [String: NSDictionary]
   func resetPermissions(_ id: UUID, origin: String) async throws
   func thirdPartyCookiesBlocked(_ id: UUID) -> Bool?
+  func thirdPartyCookiesManaged(_ id: UUID) -> Bool
   func setThirdPartyCookiesBlocked(_ blocked: Bool, profileID: UUID) async throws
   func deleteProfile(_ id: UUID) async throws
+}
+
+extension ProfileSettingsBackend {
+  func thirdPartyCookiesManaged(_ id: UUID) -> Bool { false }
 }
 
 @MainActor
 struct EngineProfileSettings: ProfileSettingsBackend {
   let runtime: ARCChromiumRuntime
 
-  func loadProfile(_ id: UUID) async throws { try await runtime.loadProfileID(id.uuidString) }
+  func loadProfile(_ id: UUID) async throws {
+    try await runtime.loadProfileID(id.uuidString)
+    if let shaar = runtime as? ARCShaarRuntime {
+      await withCheckedContinuation { continuation in
+        shaar.refreshThirdPartyCookiePolicy(forProfileID: id.uuidString) {
+          continuation.resume()
+        }
+      }
+    }
+  }
   func clearSiteData(_ id: UUID) async throws {
     try await runtime.clearProfileSiteData(forProfileID: id.uuidString)
   }
@@ -43,6 +57,10 @@ struct EngineProfileSettings: ProfileSettingsBackend {
   }
   func thirdPartyCookiesBlocked(_ id: UUID) -> Bool? {
     runtime.thirdPartyCookiesBlocked(forProfileID: id.uuidString)?.boolValue
+  }
+  func thirdPartyCookiesManaged(_ id: UUID) -> Bool {
+    (runtime as? ARCShaarRuntime)?.thirdPartyCookiesManaged(forProfileID: id.uuidString)?.boolValue
+      ?? false
   }
   func setThirdPartyCookiesBlocked(_ blocked: Bool, profileID: UUID) async throws {
     try await runtime.setThirdPartyCookiesBlocked(blocked, profileID: profileID.uuidString)
@@ -113,6 +131,7 @@ final class ProfilePrivacyModel {
   private let backend: any ProfileSettingsBackend
   private(set) var sites: [ProfilePermissionSite] = []
   private(set) var cookiesBlocked: Bool?
+  private(set) var cookiesManaged = false
   private(set) var busy = false
   private(set) var loaded = false
   private(set) var failure: String?
@@ -127,6 +146,7 @@ final class ProfilePrivacyModel {
     await run {
       try await self.backend.loadProfile(self.profileID)
       self.cookiesBlocked = self.backend.thirdPartyCookiesBlocked(self.profileID)
+      self.cookiesManaged = self.backend.thirdPartyCookiesManaged(self.profileID)
       try await self.refreshPermissions()
       self.loaded = true
     }
@@ -155,10 +175,11 @@ final class ProfilePrivacyModel {
   }
 
   func setCookiesBlocked(_ blocked: Bool) async {
-    guard cookiesBlocked != nil else { return }
+    guard cookiesBlocked != nil, !cookiesManaged else { return }
     await run {
       try await self.backend.setThirdPartyCookiesBlocked(blocked, profileID: self.profileID)
       self.cookiesBlocked = self.backend.thirdPartyCookiesBlocked(self.profileID)
+      self.cookiesManaged = self.backend.thirdPartyCookiesManaged(self.profileID)
     }
   }
 

@@ -65,7 +65,9 @@ struct ProfilePrivacySections: View {
             SettingsL10n.string("Block Third-Party Cookies"),
             isOn: Binding(
               get: { blocked },
-              set: { value in Task { await model.setCookiesBlocked(value) } }))
+              set: { value in Task { await model.setCookiesBlocked(value) } })
+          )
+          .disabled(model.cookiesManaged)
         } else {
           LabeledContent(
             SettingsL10n.string("Block Third-Party Cookies"),
@@ -74,7 +76,9 @@ struct ProfilePrivacySections: View {
       } header: {
         Text(SettingsL10n.string("Cookies"))
       } footer: {
-        if model.cookiesBlocked == nil {
+        if model.cookiesManaged {
+          Text(SettingsL10n.string("This cookie policy is managed by your organization."))
+        } else if model.cookiesBlocked == nil {
           Text(
             SettingsL10n.string(
               "This engine cannot read or change the third-party cookie policy. Your cookie policy has not been changed."

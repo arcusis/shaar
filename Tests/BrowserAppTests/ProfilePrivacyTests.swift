@@ -11,6 +11,28 @@ import Testing
 
 @Suite @MainActor
 struct ProfilePrivacyTests {
+  @Test func settingsUseSelectedShaarRuntimeForPrivacyBackend() throws {
+    let runtime = ARCShaarRuntime()
+    let workspace = try BrowserWorkspaceStore(initialSession: .fresh())
+    let state = BrowserSettingsState(
+      workspace: workspace, preferences: BrowserPreferencesStore(), runtime: runtime)
+    #expect((state.profileBackend as? EngineProfileSettings)?.runtime === runtime)
+    #expect(state.selectProfile(workspace.workspace.catalog.profiles[1].id))
+    #expect(state.selectedProfileID == workspace.workspace.catalog.profiles[1].id)
+  }
+
+  @Test func unavailableShaarCookiePolicyStaysUnknown() async {
+    let runtime = ARCShaarRuntime()
+    let profileID = UUID().uuidString
+    await withCheckedContinuation { continuation in
+      runtime.refreshThirdPartyCookiePolicy(forProfileID: profileID) {
+        continuation.resume()
+      }
+    }
+    #expect(runtime.thirdPartyCookiesBlocked(forProfileID: profileID) == nil)
+    #expect(runtime.thirdPartyCookiesManaged(forProfileID: profileID) == nil)
+  }
+
   @Test func unavailableEngineFailsClosedForProfileAndCookieMutations() async {
     let backend = EngineProfileSettings(runtime: ARCChromiumRuntime())
     let id = UUID()
@@ -34,6 +56,21 @@ struct ProfilePrivacyTests {
     backend.failureAction = "cookies"
     await model.setCookiesBlocked(false)
     #expect(model.cookiesBlocked == true && model.failure != nil)
+  }
+
+  @Test func managedCookiePolicyStaysReadOnlyForSelectedProfile() async {
+    let backend = ProfileSettingsStub()
+    let selected = UUID()
+    let other = UUID()
+    backend.cookiePolicies = [selected: true, other: false]
+    backend.managedCookieProfiles = [selected]
+    let model = ProfilePrivacyModel(profileID: selected, backend: backend)
+    await model.load()
+    #expect(model.cookiesManaged)
+    await model.setCookiesBlocked(false)
+    #expect(model.cookiesBlocked == true)
+    #expect(!backend.calls.contains { $0.0 == "cookies" })
+    #expect(backend.cookiePolicies[other] == false)
   }
 
   @Test func selectedProfileOwnsEveryPrivacyActionAndUnsupportedCookiePolicyStaysUnknown() async {
@@ -207,6 +244,7 @@ final class ProfileSettingsStub: ProfileSettingsBackend {
   var calls: [(String, UUID)] = []
   var failureAction: String?
   var cookiePolicies: [UUID: Bool] = [:]
+  var managedCookieProfiles: Set<UUID> = []
   var delayedProfile: UUID?
   var loadContinuation: CheckedContinuation<Void, Never>?
 
@@ -235,6 +273,7 @@ final class ProfileSettingsStub: ProfileSettingsBackend {
     exceptions[id]?[origin] = nil
   }
   func thirdPartyCookiesBlocked(_ id: UUID) -> Bool? { cookiePolicies[id] }
+  func thirdPartyCookiesManaged(_ id: UUID) -> Bool { managedCookieProfiles.contains(id) }
   func setThirdPartyCookiesBlocked(_ blocked: Bool, profileID: UUID) async throws {
     try record("cookies", profileID)
     cookiePolicies[profileID] = blocked

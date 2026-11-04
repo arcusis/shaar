@@ -69,7 +69,9 @@ typedef enum {
   SHAAR_EVENT_WINDOW = 4,
   SHAAR_EVENT_TAB = 5,
   SHAAR_EVENT_NAVIGATION = 6,
+  // BEGIN find
   SHAAR_EVENT_FIND = 7,
+  // END find
   SHAAR_EVENT_PERMISSION = 8,
   SHAAR_EVENT_DOWNLOAD = 9,
   SHAAR_EVENT_BOOKMARK = 10,
@@ -169,9 +171,12 @@ typedef enum {
   SHAAR_OP_EXTENSION_INSTALL_DECISION = 803,
   SHAAR_OP_EXTENSION_POPUP_CLOSE = 804,
 
+  // BEGIN find
   SHAAR_OP_TAB_FIND = 900,
   SHAAR_OP_TAB_STOP_FIND = 901,
+  // END find
 
+  // BEGIN devtools operation IDs.
   SHAAR_OP_DEVTOOLS_CALL = 1000,
   SHAAR_OP_DEVTOOLS_UI_SHOW = 1001,
   SHAAR_OP_DEVTOOLS_UI_CLOSE = 1002,
@@ -180,19 +185,40 @@ typedef enum {
   SHAAR_OP_DEVTOOLS_CONTROL_ENABLE = 1005,
   SHAAR_OP_DEVTOOLS_CONTROL_DISABLE = 1006,
   SHAAR_OP_DEVTOOLS_CONTROL_STATUS = 1007,
+  // END devtools operation IDs.
 
+  // BEGIN media
   SHAAR_OP_MEDIA_GET_STATE = 1100,
   SHAAR_OP_MEDIA_CONTROL = 1101,
   SHAAR_OP_MEDIA_SET_AUTO_PIP = 1102,
   SHAAR_OP_MEDIA_ENTER_PIP = 1103,
   SHAAR_OP_MEDIA_EXIT_PIP = 1104,
   SHAAR_OP_MEDIA_LIST_CAPTURE_SOURCES = 1105,
-  SHAAR_OP_MEDIA_CAPTURE_REPLY = 1106
+  SHAAR_OP_MEDIA_CAPTURE_REPLY = 1106,
+  // END media
+  // BEGIN storage_keychain
+  SHAAR_OP_STORAGE_KEYCHAIN_IDENTITY = 1400
+  // END storage_keychain
 } shaar_operation;
 
 // Private sessions module IDs.
-typedef enum { SHAAR_MODULE_PRIVATE_SESSIONS = 1200 } shaar_module_id;
+typedef enum {
+  SHAAR_MODULE_PRIVATE_SESSIONS = 1200,
+  // BEGIN extensions
+  SHAAR_MODULE_EXTENSIONS = 1300,
+  // END extensions
+  // BEGIN storage_keychain
+  SHAAR_MODULE_STORAGE_KEYCHAIN = 1400
+  // END storage_keychain
+} shaar_module_id;
+// BEGIN site_data
+enum { SHAAR_MODULE_SITE_DATA = 1201 };
+// END site_data
+// BEGIN media
+enum { SHAAR_MODULE_MEDIA = 1203 };
+// END media
 
+// BEGIN devtools command and module IDs.
 typedef enum {
   SHAAR_DEVTOOLS_CAPABILITY_INSPECTOR = 1,
   SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER = 2
@@ -248,7 +274,10 @@ typedef enum {
   SHAAR_DEVTOOLS_NETWORK_SET_COOKIE = 42,
   SHAAR_DEVTOOLS_NETWORK_DELETE_COOKIES = 43
 } shaar_devtools_command;
+typedef enum { SHAAR_MODULE_DEVTOOLS = 1202 } shaar_devtools_module_id;
+// END devtools command and module IDs.
 
+// BEGIN media
 typedef enum {
   SHAAR_MEDIA_PLAY = 0, SHAAR_MEDIA_PAUSE = 1,
   SHAAR_MEDIA_PREVIOUS_TRACK = 2, SHAAR_MEDIA_NEXT_TRACK = 3,
@@ -258,6 +287,7 @@ typedef enum {
   SHAAR_MEDIA_PIP_PAUSE = 10, SHAAR_MEDIA_PIP_SKIP = 11,
   SHAAR_MEDIA_PIP_ENTER = 12, SHAAR_MEDIA_PIP_EXIT = 13
 } shaar_media_command;
+// END media
 
 SHAAR_EXPORT uint32_t shaar_abi_major(void);
 SHAAR_EXPORT uint32_t shaar_abi_minor(void);

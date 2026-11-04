@@ -23,6 +23,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import tempfile
 
 
 CONFIG = Path("ThirdParty/ChromiumEngine/source-build.json")
@@ -65,6 +66,15 @@ PROFILE_MODULE_LAYER_FILES = (
     "chrome/browser/shaar/profiles/shaar_profiles.cc",
     "chrome/browser/shaar/profiles/shaar_profiles.h",
     "chrome/browser/shaar/profiles/shaar_profiles_unittest.cc",
+)
+EXTENSIONS_MODULE_LAYER_FILES = (
+    "chrome/browser/shaar/BUILD.gn",
+    "chrome/browser/shaar/extensions/shaar_extensions.cc",
+    "chrome/browser/shaar/extensions/shaar_extensions.h",
+    "chrome/browser/shaar/extensions/shaar_extensions_lifecycle_adapter.cc",
+    "chrome/browser/shaar/extensions/shaar_extensions_unittest.cc",
+    "chrome/browser/shaar/lifecycle/shaar_module_registry.cc",
+    "chrome/browser/shaar/public/shaar_engine.h",
 )
 COMMIT = re.compile(r"[0-9a-f]{40}\Z")
 DIGEST = re.compile(r"[0-9a-f]{64}\Z")
@@ -220,6 +230,13 @@ def load_config(repo: Path) -> dict:
         "requiredExports": list(PROFILE_MODULE_EXPORTS),
     }:
         raise BuildError("profiles module block is missing or inconsistent")
+    if config.get("moduleBlocks", {}).get("extensions") != {
+        "operationRange": [800, 899],
+        "moduleID": 1300,
+        "layerFiles": list(EXTENSIONS_MODULE_LAYER_FILES),
+        "requiredExports": [],
+    }:
+        raise BuildError("extensions module block is missing or inconsistent")
 
     patches = config.get("patches")
     if not isinstance(patches, list) or not patches:
@@ -253,6 +270,7 @@ def dry_run(repo: Path, config: dict) -> dict:
             "GN generation for chrome_framework",
             "framework build and export receipt verification",
             "headless Swift loader ABI-major probe",
+            "optional --layer-tests target build and gtest JSON run",
         ],
         "requiredExports": config["requiredExports"],
         "finalTargetForbiddenExports": ["ac_*", "ArdiaCore*"],
@@ -692,9 +710,131 @@ def probe_swift_loader(repo: Path, output: Path, binary: Path) -> None:
         raise BuildError("Swift loader did not report ABI major 1")
 
 
+def save_receipt(receipt: Path, record: dict) -> None:
+    temporary = receipt.with_name(receipt.name + ".tmp")
+    if temporary.exists() or temporary.is_symlink() or receipt.is_symlink():
+        raise BuildError("unsafe receipt path")
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "w") as stream:
+            json.dump(record, stream, indent=2, sort_keys=True)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, receipt)
+        os.chmod(receipt, 0o600)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def reject_symlink_components(root: Path, path: Path) -> None:
+    try:
+        relative = path.relative_to(root)
+    except ValueError as exc:
+        raise BuildError("Shaar layer test path escaped output") from exc
+    current = root
+    for part in relative.parts:
+        current = current / part
+        if current.is_symlink():
+            raise BuildError(f"symlink rejected in Shaar test path: {current}")
+
+
+def run_layer_tests(repo: Path, config: dict, runner=subprocess.run) -> dict:
+    """Build and run the aggregate layer test target in an existing owned output."""
+    output = guarded_output(repo)
+    if not output.is_dir() or output.is_symlink():
+        raise BuildError("Shaar output does not exist")
+    if output.stat().st_uid != os.getuid() or stat.S_IMODE(output.stat().st_mode) & 0o077:
+        raise BuildError("Shaar output ownership or mode rejected")
+    owner = output / OWNER_FILE
+    if owner.is_symlink() or not owner.is_file() or json.loads(owner.read_text()) != owner_record(repo):
+        raise BuildError("Shaar output owner record mismatch")
+
+    receipt = output / RECEIPT_FILE
+    if receipt.is_symlink() or not receipt.is_file():
+        raise BuildError("Shaar build receipt is missing or unsafe")
+    record = json.loads(receipt.read_text())
+    if (record.get("sourceKind") != "shaar" or record.get("output") != str(output) or
+            record.get("configSha256") != sha256(repo / CONFIG) or
+            record.get("layerSha256") != config["layer"]["sha256"]):
+        raise BuildError("Shaar build receipt does not match the current source inputs")
+
+    chromium = output / "chromium_git/chromium/src"
+    build_dir = chromium / "out" / config["build"]["configuration"]
+    gn = output / "depot_tools/gn"
+    siso = output / "depot_tools/siso"
+    args_file = build_dir / "args.gn"
+    executable = build_dir / config["build"].get("layerTestBinary", "shaar_layer_unittests")
+    for path in (chromium, build_dir, gn, siso, args_file):
+        reject_symlink_components(output, path)
+    if (not chromium.is_dir() or not build_dir.is_dir() or not gn.is_file() or
+            not siso.is_file() or not args_file.is_file()):
+        raise BuildError("existing Shaar Chromium output is incomplete")
+
+    target = config["build"].get("layerTestLabel", "//chrome:shaar_layer_unittests")
+    build_command = [str(siso), "ninja", "--offline", "-C", str(build_dir),
+                     "-local_jobs", str(config["build"]["buildJobs"]), target]
+    stage = {
+        "status": "running",
+        "startedAt": datetime.now(timezone.utc).isoformat(),
+        "target": target,
+        "buildCommand": build_command,
+    }
+    record.setdefault("stages", {})["layer-tests"] = stage
+    save_receipt(receipt, record)
+    try:
+        args_text = args_file.read_text()
+        if "shaar_layer_tests = true" not in args_text.splitlines():
+            args_text = "\n".join(line for line in args_text.splitlines()
+                                  if not line.strip().startswith("shaar_layer_tests ="))
+            args_file.write_text(args_text.rstrip() + "\nshaar_layer_tests = true\n")
+            gn_result = runner(
+                [str(gn), "gen", str(build_dir)], cwd=chromium, check=False,
+                capture_output=True, text=True,
+                timeout=config["build"]["timeoutsSeconds"]["gn"])
+            stage["gnExitCode"] = gn_result.returncode
+            if gn_result.returncode != 0:
+                raise BuildError(f"layer test GN generation failed with {gn_result.returncode}")
+        build_result = runner(
+            build_command, cwd=chromium, check=False, capture_output=True, text=True,
+            timeout=config["build"]["timeoutsSeconds"]["build"])
+        stage["buildExitCode"] = build_result.returncode
+        if build_result.returncode != 0:
+            raise BuildError(f"layer test target build failed with {build_result.returncode}")
+        if executable.is_symlink() or not executable.is_file():
+            raise BuildError("layer test executable was not produced")
+
+        with tempfile.TemporaryDirectory(prefix="shaar-layer-tests-", dir=output) as temp_dir:
+            result_path = Path(temp_dir) / "gtest-results.json"
+            test_command = [str(executable), "--headless",
+                            f"--gtest_output=json:{result_path}"]
+            stage["testCommand"] = test_command
+            result = runner(
+                test_command, cwd=build_dir, check=False, capture_output=True, text=True,
+                timeout=config["build"]["timeoutsSeconds"].get("layerTests", 1800))
+            stage["testExitCode"] = result.returncode
+            if not result_path.is_file() or result_path.is_symlink():
+                raise BuildError("layer test did not write its gtest JSON report")
+            stage["result"] = json.loads(result_path.read_text())
+        if stage["testExitCode"] != 0:
+            raise BuildError(f"layer tests failed with {stage['testExitCode']}")
+        stage["status"] = "succeeded"
+        stage["finishedAt"] = datetime.now(timezone.utc).isoformat()
+        save_receipt(receipt, record)
+        return stage
+    except (BuildError, OSError, ValueError, subprocess.SubprocessError) as exc:
+        stage["status"] = "failed"
+        stage["failure"] = str(exc)
+        stage["finishedAt"] = datetime.now(timezone.utc).isoformat()
+        save_receipt(receipt, record)
+        raise
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true", help="run a temporary dual-export source build")
+    parser.add_argument("--layer-tests", action="store_true",
+                        help="build and run the aggregate layer tests in an existing source output")
     parser.add_argument("--reference-source", type=Path, metavar="CHROMIUM_SRC",
                         help="read-only pinned source checkout to copy-on-write snapshot")
     parser.add_argument("--relink-from-reference", action="store_true",
@@ -704,6 +844,12 @@ def main(argv: list[str] | None = None) -> int:
     options = parser.parse_args(argv)
     repo = Path(__file__).resolve().parents[1]
     try:
+        if options.layer_tests:
+            if options.run or options.reference_source or options.relink_from_reference or options.verify_framework or options.receipt:
+                raise BuildError("--layer-tests cannot be combined with build or verification flags")
+            config = load_config(repo)
+            print(json.dumps(run_layer_tests(repo, config), indent=2))
+            return 0
         config = load_config(repo)
         if options.run:
             if not options.reference_source or options.verify_framework or options.receipt:

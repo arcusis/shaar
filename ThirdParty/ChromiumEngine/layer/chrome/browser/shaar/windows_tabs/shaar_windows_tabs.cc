@@ -59,6 +59,39 @@ std::string_view BrowserTabRegistryImpl::TabID(shaar_engine* engine,
   return {};
 }
 
+// BEGIN find
+std::string_view BrowserTabRegistryImpl::WindowID(shaar_engine* engine,
+                                                  shaar_window* window) {
+  for (const auto& entry : windows_)
+    if (entry.engine == engine && entry.handle == window)
+      return entry.window_id;
+  return {};
+}
+
+void BrowserTabRegistryImpl::BindWindowID(shaar_engine* engine,
+                                          shaar_window* window,
+                                          std::string window_id) {
+  if (!engine || !window || window_id.empty())
+    return;
+  for (auto& entry : windows_) {
+    if (entry.engine == engine && entry.handle == window) {
+      entry.window_id = std::move(window_id);
+      return;
+    }
+  }
+}
+
+void BrowserTabRegistryImpl::OnWindowOpened(shaar_engine* engine,
+                                            shaar_window* window,
+                                            Browser* browser,
+                                            std::string window_id,
+                                            std::string_view profile_id) {
+  BindWindow(engine, window, browser);
+  BindWindowID(engine, window, std::move(window_id));
+  EnsureWindowState(engine, window, browser, profile_id);
+}
+// END find
+
 void BrowserTabRegistryImpl::GetTabs(
     shaar_engine* engine,
     shaar_window* window,
@@ -84,7 +117,7 @@ void BrowserTabRegistryImpl::BindWindow(shaar_engine* engine,
       return;
     }
   }
-  windows_.push_back({engine, window, browser, browser, {}, {}});
+  windows_.push_back({engine, window, browser, {}, browser, {}, {}});
 }
 
 BrowserTabRegistryImpl::WindowState* BrowserTabRegistryImpl::EnsureWindowState(

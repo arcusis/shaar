@@ -1,0 +1,84 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+import Foundation
+import Testing
+
+@testable import ShaarEngineABI
+
+private actor FakeSiteDataEngine: ShaarSiteDataTransport {
+  struct Call: Equatable {
+    let operation: ShaarSiteDataOperation
+    let arguments: Data
+  }
+  var calls: [Call] = []
+  var response = Data()
+
+  func setResponse(_ value: String) { response = Data(value.utf8) }
+  func submit(operation: ShaarSiteDataOperation, arguments: Data) async throws -> Data {
+    calls.append(Call(operation: operation, arguments: arguments))
+    return response
+  }
+  func lastCall() -> Call? { calls.last }
+}
+
+struct SiteDataTests {
+  @Test func selectionPreservesArdiaDefaultAndValidatesSettingsPayload() async throws {
+    let fake = FakeSiteDataEngine()
+    #expect(ShaarSiteDataAdapter.selected(implementation: .ardia, transport: fake) == nil)
+    #expect(ShaarSiteDataAdapter.selected(implementation: .shippingDefault, transport: fake) == nil)
+    let adapter = ShaarSiteDataAdapter(implementation: .shaar, transport: fake)
+    await fake.setResponse(
+      """
+      {"schemaVersion":1,"settings":{"camera":{"value":"ask","isDefault":true}}}
+      """)
+    let values = try await adapter.settings(origin: "HTTPS://Example.com/")
+    #expect(values["camera"] == ShaarSiteSetting(value: .ask, isDefault: true))
+    let call = await fake.lastCall()
+    #expect(call?.operation == .settingsGet)
+    let arguments = try #require(
+      JSONSerialization.jsonObject(with: call?.arguments ?? Data()) as? [String: Any])
+    #expect(arguments["origin"] as? String == "https://example.com")
+  }
+
+  @Test func resetAndClearOperationsUseTypedSchemas() async throws {
+    let fake = FakeSiteDataEngine()
+    let adapter = ShaarSiteDataAdapter(implementation: .shaar, transport: fake)
+    await fake.setResponse("{\"schemaVersion\":1,\"resetCount\":2}")
+    #expect(try await adapter.reset(origin: "https://example.com") == 2)
+    await fake.setResponse(
+      "{\"schemaVersion\":1,\"clearedTypes\":[\"cache\",\"siteData\"],\"complete\":true}")
+    #expect(
+      try await adapter.clearBrowsingData(types: ["siteData", "cache"]) == ["cache", "siteData"])
+    #expect(await fake.lastCall()?.operation == .browsingDataClear)
+  }
+
+  @Test func rejectsNonOriginAndMalformedResult() async throws {
+    let fake = FakeSiteDataEngine()
+    let adapter = ShaarSiteDataAdapter(implementation: .shaar, transport: fake)
+    await #expect(throws: ShaarSiteDataError.invalidOrigin) {
+      try await adapter.settings(origin: "https://example.com/path")
+    }
+    await fake.setResponse("{\"schemaVersion\":1,\"resetCount\":-1}")
+    await #expect(throws: ShaarSiteDataError.malformedResponse) {
+      try await adapter.reset(origin: "https://example.com")
+    }
+  }
+
+  @Test func cookieOperationsDecodePolicyAndRequireCompletion() async throws {
+    let fake = FakeSiteDataEngine()
+    let adapter = ShaarSiteDataAdapter(implementation: .shaar, transport: fake)
+    await fake.setResponse("{\"schemaVersion\":1,\"blocked\":true,\"managed\":false}")
+    #expect(
+      try await adapter.setThirdPartyCookiesBlocked(true)
+        == ShaarThirdPartyCookiePolicy(blocked: true, managed: false))
+    #expect(await fake.lastCall()?.operation == .thirdPartyCookiesSet)
+
+    await fake.setResponse("{\"schemaVersion\":1,\"complete\":true}")
+    try await adapter.clearSiteData(origin: "https://example.com")
+    #expect(await fake.lastCall()?.operation == .siteDataClear)
+    try await adapter.clearSelectedTabCookies(origin: "https://example.com")
+    #expect(await fake.lastCall()?.operation == .siteCookiesClear)
+  }
+}

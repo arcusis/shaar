@@ -8,6 +8,7 @@
 #include <string>
 
 #include "chrome/browser/shaar/engine/shaar_module_registry.h"
+#include "components/history/core/browser/history_types.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {

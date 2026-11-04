@@ -38,17 +38,34 @@ let package = Package(
       cxxSettings: [.unsafeFlags(["-fobjc-arc"])],
       linkerSettings: [.linkedFramework("AppKit")]
     ),
-    .target(name: "ShaarEngineC", publicHeadersPath: "include"),
     // BEGIN Shaar navigation C ABI shim.
     .target(
       name: "ShaarEngineABIC",
       path: "Sources/ShaarEngineABI/Navigation/CABI",
       publicHeadersPath: "include"),
+    // BEGIN storage_keychain
+    .target(
+      name: "ShaarStorageKeychainABIC",
+      path: "Sources/ShaarEngineABI/StorageKeychain/CABI",
+      publicHeadersPath: "include"),
+    // END storage_keychain
     .target(
       name: "ShaarEngineABI",
-      dependencies: ["ShaarEngineC", "ShaarEngineABIC"],
-      exclude: ["Navigation/CABI"]),
+      dependencies: [
+        "ShaarEngineC",
+        "ShaarEngineABIC",
+        // BEGIN storage_keychain
+        "ShaarStorageKeychainABIC",
+        // END storage_keychain
+      ],
+      exclude: [
+        "Navigation/CABI",
+        // BEGIN storage_keychain
+        "StorageKeychain/CABI",
+        // END storage_keychain
+      ]),
     // END Shaar navigation C ABI shim.
+    .target(name: "ShaarEngineC", publicHeadersPath: "include"),
     .target(
       name: "ChromiumBridgeVerification",
       dependencies: ["ChromiumBridge"],
@@ -60,7 +77,8 @@ let package = Package(
     .target(
       name: "ArcusisBrowser",
       dependencies: [
-        "BrowserCore", "ChromiumBridge", .product(name: "Sparkle", package: "Sparkle"),
+        "BrowserCore", "ChromiumBridge", "ShaarEngineABI",
+        .product(name: "Sparkle", package: "Sparkle"),
       ]),
     .executableTarget(
       name: "Shaar", dependencies: ["ArcusisBrowser"],

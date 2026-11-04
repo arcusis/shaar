@@ -16,6 +16,7 @@
 #include "base/sequence_checker.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_observer.h"
+#include "chrome/browser/shaar/public/shaar_engine.h"
 
 namespace shaar {
 

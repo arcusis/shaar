@@ -26,6 +26,9 @@ class BrowserTabRegistryImpl final : public shaar::BrowserTabRegistry {
     shaar_engine* engine;
     shaar_window* handle;
     Browser* browser;
+    // BEGIN find
+    std::string window_id;
+    // END find
     Browser* active_browser = nullptr;
     std::string active_profile_id;
     std::unordered_map<std::string, Browser*> browsers_by_profile;
@@ -36,6 +39,13 @@ class BrowserTabRegistryImpl final : public shaar::BrowserTabRegistry {
   content::WebContents* FindWebContentsByID(shaar_engine*, shaar_window*,
                                              std::string_view) override;
   std::string_view TabID(shaar_engine*, shaar_window*, shaar_tab*) override;
+  // BEGIN find
+  std::string_view WindowID(shaar_engine*, shaar_window*) override;
+  // Native window-open path: bind the reserved ABI handle to its public ID.
+  void OnWindowOpened(shaar_engine*, shaar_window*, Browser*,
+                      std::string window_id, std::string_view profile_id);
+  void BindWindowID(shaar_engine*, shaar_window*, std::string window_id);
+  // END find
   void GetTabs(shaar_engine*, shaar_window*,
                std::unordered_map<std::string, content::WebContents*>*) override;
   void BindWindow(shaar_engine*, shaar_window*, Browser*);

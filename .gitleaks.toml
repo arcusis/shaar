@@ -23,6 +23,14 @@ paths = ['''^scripts/release\-config\.sh$''']
 regexTarget = "match"
 regexes = ['''^SHAAR_SPARKLE_PUBLIC_ED_KEY=mAZzywTpmIBYZQRU9LERPRlNASVCm8X31EF9ZmDYX9Y=$''']
 
+# BEGIN storage_keychain manifest digests
+[[allowlists]]
+description = "Storage-keychain source file integrity hashes in the source-build manifest"
+condition = "AND"
+paths = ['''^ThirdParty/ChromiumEngine/source-build\.json$''']
+regexTarget = "secret"
+regexes = ['''^[a-f0-9]{64}$''']
+# END storage_keychain manifest digests
 [[allowlists]]
 description = "Known public private-window fixture extension identity key"
 condition = "AND"

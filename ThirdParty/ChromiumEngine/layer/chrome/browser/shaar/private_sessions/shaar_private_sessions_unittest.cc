@@ -11,10 +11,16 @@
 
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "chrome/test/base/testing_profile.h"
+#include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace shaar {
 namespace {
+
+class PrivateSessionRegistryTest : public testing::Test {
+ protected:
+  content::BrowserTaskEnvironment task_environment_;
+};
 
 struct CapturedEvent {
   uint64_t sequence;
@@ -33,7 +39,7 @@ void CaptureEvent(void* context, const shaar_event* event) {
                                  event->payload_json.size)});
 }
 
-TEST(PrivateSessionRegistryTest, SameParentAndIDShareOnePrimaryOTRLease) {
+TEST_F(PrivateSessionRegistryTest, SameParentAndIDShareOnePrimaryOTRLease) {
   TestingProfile profile;
   PrivateSessionRegistry registry;
   PrivateSessionRegistry::Session* first = nullptr;
@@ -59,7 +65,7 @@ TEST(PrivateSessionRegistryTest, SameParentAndIDShareOnePrimaryOTRLease) {
   EXPECT_EQ(profile.GetPrimaryOTRProfile(/*create_if_needed=*/false), nullptr);
 }
 
-TEST(PrivateSessionRegistryTest, RejectsWrongParentAndRetiredSessionIDs) {
+TEST_F(PrivateSessionRegistryTest, RejectsWrongParentAndRetiredSessionIDs) {
   TestingProfile first_profile;
   TestingProfile second_profile;
   PrivateSessionRegistry registry;
@@ -78,7 +84,7 @@ TEST(PrivateSessionRegistryTest, RejectsWrongParentAndRetiredSessionIDs) {
             SHAAR_CONFLICT);
 }
 
-TEST(PrivateSessionRegistryTest, DefersRetirementUntilChildrenClose) {
+TEST_F(PrivateSessionRegistryTest, DefersRetirementUntilChildrenClose) {
   TestingProfile profile;
   PrivateSessionRegistry registry;
   PrivateSessionRegistry::Session* session = nullptr;
@@ -93,7 +99,7 @@ TEST(PrivateSessionRegistryTest, DefersRetirementUntilChildrenClose) {
             SHAAR_CONFLICT);
 }
 
-TEST(PrivateSessionRegistryTest, RejectsOTRParentAndEmptyIdentity) {
+TEST_F(PrivateSessionRegistryTest, RejectsOTRParentAndEmptyIdentity) {
   TestingProfile profile;
   PrivateSessionRegistry registry;
   Profile* otr = profile.GetPrimaryOTRProfile(/*create_if_needed=*/true);
@@ -105,7 +111,7 @@ TEST(PrivateSessionRegistryTest, RejectsOTRParentAndEmptyIdentity) {
             SHAAR_INVALID_ARGUMENT);
 }
 
-TEST(PrivateSessionRegistryTest, ParentDestructionInvalidatesStaleHandles) {
+TEST_F(PrivateSessionRegistryTest, ParentDestructionInvalidatesStaleHandles) {
   PrivateSessionRegistry registry;
   auto profile = std::make_unique<TestingProfile>();
   PrivateSessionRegistry::Session* session = nullptr;
@@ -121,7 +127,7 @@ TEST(PrivateSessionRegistryTest, ParentDestructionInvalidatesStaleHandles) {
   EXPECT_FALSE(registry.ReleaseChild(session));
 }
 
-TEST(PrivateSessionRegistryTest, ModuleRegistrationExposesDirectHandlers) {
+TEST_F(PrivateSessionRegistryTest, ModuleRegistrationExposesDirectHandlers) {
   TestingProfile profile;
   PrivateSessionRegistry sessions;
   ShaarModuleRegistry modules;
@@ -137,7 +143,7 @@ TEST(PrivateSessionRegistryTest, ModuleRegistrationExposesDirectHandlers) {
   EXPECT_EQ(handlers->close(&sessions, session), SHAAR_NOT_FOUND);
 }
 
-TEST(PrivateSessionRegistryTest, EventsRetainParentAndSessionIDsThroughTeardown) {
+TEST_F(PrivateSessionRegistryTest, EventsRetainParentAndSessionIDsThroughTeardown) {
   TestingProfile profile;
   std::vector<CapturedEvent> events;
   shaar_engine engine;
@@ -161,7 +167,7 @@ TEST(PrivateSessionRegistryTest, EventsRetainParentAndSessionIDsThroughTeardown)
   EXPECT_NE(events[2].payload.find("privateSession.closed"), std::string::npos);
 }
 
-TEST(PrivateSessionRegistryTest, PersistenceOperationsAreRejectedOnlyForPrivateScope) {
+TEST_F(PrivateSessionRegistryTest, PersistenceOperationsAreRejectedOnlyForPrivateScope) {
   shaar_scope regular = {};
   regular.size = sizeof(regular);
   regular.profile = reinterpret_cast<shaar_profile*>(1);

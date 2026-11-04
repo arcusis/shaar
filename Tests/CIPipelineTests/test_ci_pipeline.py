@@ -538,6 +538,26 @@ class ProbeSoakTests(unittest.TestCase):
                                  "quit-exit-1", "quit-exit-2", "quit-exit-3",
                                  "session-recovery-1", "session-recovery-2"])
 
+    def test_cached_engine_bundle_counts_as_a_successful_stage_check(self):
+        checks = unittest.mock.Mock()
+        checks.results = []
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            checks.directory = root / "cached-bundle"
+            checks.directory.mkdir()
+            (checks.directory / "bundle.json").write_text("{}")
+            with (patch.object(STAGES, "ROOT", root),
+                  patch.object(STAGES, "require_hosted_mac"),
+                  patch.object(STAGES, "validate_bundle_archive"),
+                  patch.dict(os.environ, {"GITHUB_OUTPUT": str(root / "output")})):
+                STAGES.build_engine_bundle(checks, 1)
+        self.assertEqual(checks.results, [
+            dict(name="verification-bundle-cache-validation",
+                 command=["validate cached source tree, build inputs and archive digest"],
+                 status=0, seconds=0.0),
+            dict(name="cached-verification-bundle", command=[], status=0, seconds=0.0),
+        ])
+
     def test_soak_keeps_all_iteration_failures_without_retrying(self):
         checks = unittest.mock.Mock()
         checks.run.side_effect = [0, 1, 0, 1]
@@ -690,7 +710,9 @@ class EngineTransferTests(unittest.TestCase):
                 checks = SimpleNamespace(directory=evidence, results=[], write_reports=lambda: None)
                 STAGES.build_engine_bundle(checks, 2)
                 self.assertEqual(STAGES.Commands.finish(checks), 0)
-            self.assertEqual([item["name"] for item in checks.results], ["verification-bundle-cache-validation"])
+            self.assertEqual(
+                [item["name"] for item in checks.results],
+                ["verification-bundle-cache-validation", "cached-verification-bundle"])
             self.assertIn(f"shards={json.dumps(engine_shards(2))}", output.read_text())
 
 

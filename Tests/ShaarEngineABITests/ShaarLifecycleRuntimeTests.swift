@@ -11,6 +11,7 @@ import Testing
 private nonisolated(unsafe) var fakeEventCallback: ShaarEventCallback?
 private nonisolated(unsafe) var fakeEventContext: UnsafeMutableRawPointer?
 private nonisolated(unsafe) var fakeEngineReleased = false
+private nonisolated(unsafe) var fakeLifecycleOrder: [String] = []
 
 @_cdecl("fake_lifecycle_abi_major")
 private func fakeLifecycleABIMajor() -> UInt32 { 1 }
@@ -37,6 +38,7 @@ private func fakeLifecycleCreate(
 private func fakeLifecycleRun(
   _ engine: OpaquePointer?, _ error: UnsafeMutableRawPointer?
 ) -> UInt32 {
+  fakeLifecycleOrder.append("run")
   guard engine != nil else { return ShaarStatusCode.invalidArgument.rawValue }
   let payload = Array("{\"kind\":\"engine.ready\",\"schemaVersion\":1}".utf8)
   payload.withUnsafeBufferPointer { buffer in
@@ -69,6 +71,7 @@ private func fakeLifecycleRequestQuit(
 
 @_cdecl("fake_lifecycle_release")
 private func fakeLifecycleRelease(_ engine: OpaquePointer?) {
+  fakeLifecycleOrder.append("release")
   fakeEngineReleased = engine != nil
 }
 
@@ -130,6 +133,7 @@ struct ShaarLifecycleRuntimeTests {
 
   @Test @MainActor func fakeEngineCreatesRunsCopiesReadyEventAndReleases() async throws {
     fakeEngineReleased = false
+    fakeLifecycleOrder = []
     var delivered: ShaarCopiedEvent?
     let runtime = try ShaarLifecycleRuntime(
       resolver: FakeLifecycleResolver(), dataRoot: URL(fileURLWithPath: "/tmp/shaar-test"),
@@ -149,6 +153,7 @@ struct ShaarLifecycleRuntimeTests {
     }
     runtime.release()
     #expect(fakeEngineReleased)
+    #expect(fakeLifecycleOrder == ["run", "release"])
   }
 
   @Test @MainActor func runtimeRejectsMissingLifecycleExportsBeforeCreate() {

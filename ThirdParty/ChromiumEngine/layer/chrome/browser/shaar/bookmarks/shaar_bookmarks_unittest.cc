@@ -165,27 +165,27 @@ TEST_F(ShaarBookmarksLoadedTest,
   ReplyState reply = Submit(SHAAR_OP_BOOKMARK_TREE, R"({"schemaVersion":1})");
   ASSERT_TRUE(reply.called);
   ASSERT_EQ(reply.code, SHAAR_OK);
-  std::optional<base::Value> payload = base::JSONReader::Read(reply.payload);
+  std::optional<base::Value> payload = base::JSONReader::Read(reply.payload, base::JSON_PARSE_RFC);
   ASSERT_TRUE(payload);
-  const base::Value::Dict &root = payload->GetDict();
-  const base::Value::Dict *bar = root.FindDict("bar");
+  const base::DictValue &root = payload->GetDict();
+  const base::DictValue *bar = root.FindDict("bar");
   ASSERT_NE(bar, nullptr);
-  const base::Value::List *children = bar->FindList("c");
+  const base::ListValue *children = bar->FindList("c");
   ASSERT_NE(children, nullptr);
   ASSERT_EQ(children->size(), 2u);
 
-  const base::Value::Dict &first = children->front().GetDict();
+  const base::DictValue &first = children->front().GetDict();
   ASSERT_NE(first.FindString("id"), nullptr);
   EXPECT_EQ(*first.FindString("id"), folder_id.AsLowercaseString());
   ASSERT_NE(first.FindString("t"), nullptr);
   EXPECT_TRUE(first.FindString("t")->empty());
   ASSERT_NE(first.FindString("k"), nullptr);
   EXPECT_EQ(*first.FindString("k"), "f");
-  EXPECT_EQ(first.FindInt("a"), 123);
-  const base::Value::List *folder_children = first.FindList("c");
+  EXPECT_EQ(first.FindDouble("a"), 123.0);
+  const base::ListValue *folder_children = first.FindList("c");
   ASSERT_NE(folder_children, nullptr);
   ASSERT_EQ(folder_children->size(), 1u);
-  const base::Value::Dict &url = folder_children->front().GetDict();
+  const base::DictValue &url = folder_children->front().GetDict();
   ASSERT_NE(url.FindString("id"), nullptr);
   EXPECT_EQ(*url.FindString("id"), url_id.AsLowercaseString());
   ASSERT_NE(url.FindString("t"), nullptr);
@@ -209,7 +209,7 @@ TEST_F(ShaarBookmarksLoadedTest,
              "{\"schemaVersion\":1,\"ops\":[" + add_url + "," + add_url + "]}");
   ASSERT_TRUE(added.called);
   ASSERT_EQ(added.code, SHAAR_OK);
-  std::optional<base::Value> add_result = base::JSONReader::Read(added.payload);
+  std::optional<base::Value> add_result = base::JSONReader::Read(added.payload, base::JSON_PARSE_RFC);
   ASSERT_TRUE(add_result);
   EXPECT_EQ(add_result->GetDict().FindInt("applied"), 1);
   EXPECT_EQ(add_result->GetDict().FindInt("skipped"), 1);
@@ -222,15 +222,15 @@ TEST_F(ShaarBookmarksLoadedTest,
       R"({"op":"add","id":"20000000-0000-4000-8000-000000000002","parent":"bar","t":"folder","k":"f"},)"
       R"({"op":"move","id":"20000000-0000-4000-8000-000000000001","parent":"20000000-0000-4000-8000-000000000002","index":-1},)"
       R"({"op":"move","id":"20000000-0000-4000-8000-000000000002","parent":"20000000-0000-4000-8000-000000000002","index":0},)"
-      R"({"op":"remove","id":"bar"})]} )";
+      R"({"op":"remove","id":"bar"}]})";
   ReplyState partial = Submit(SHAAR_OP_BOOKMARK_APPLY, ops);
   ASSERT_TRUE(partial.called);
   ASSERT_EQ(partial.code, SHAAR_OK);
-  std::optional<base::Value> result = base::JSONReader::Read(partial.payload);
+  std::optional<base::Value> result = base::JSONReader::Read(partial.payload, base::JSON_PARSE_RFC);
   ASSERT_TRUE(result);
   EXPECT_EQ(result->GetDict().FindInt("applied"), 3);
   EXPECT_EQ(result->GetDict().FindInt("skipped"), 0);
-  const base::Value::List *invalid = result->GetDict().FindList("invalid");
+  const base::ListValue *invalid = result->GetDict().FindList("invalid");
   ASSERT_NE(invalid, nullptr);
   ASSERT_EQ(invalid->size(), 2u);
   EXPECT_EQ(invalid->front().GetString(), "cycle");
@@ -241,7 +241,7 @@ TEST_F(ShaarBookmarksLoadedTest,
       R"({"schemaVersion":1,"ops":[{"op":"remove","id":"20000000-0000-4000-8000-000000000001"}]})");
   ASSERT_TRUE(removed.called);
   std::optional<base::Value> remove_result =
-      base::JSONReader::Read(removed.payload);
+      base::JSONReader::Read(removed.payload, base::JSON_PARSE_RFC);
   ASSERT_TRUE(remove_result);
   EXPECT_EQ(remove_result->GetDict().FindInt("applied"), 1);
   EXPECT_EQ(

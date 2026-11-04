@@ -25,11 +25,20 @@ SHAAR_DECLARE_OPTIONAL_MODULE(shaar_navigation_register);
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_downloads_register);
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_bookmarks_register);
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_history_register);
+// BEGIN site_data
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_site_data_register);
+// END site_data
+// BEGIN extensions
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_extensions_register);
+// END extensions
+// BEGIN find
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_find_register);
+// END find
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_devtools_register);
 SHAAR_DECLARE_OPTIONAL_MODULE(shaar_media_register);
+// BEGIN storage_keychain
+SHAAR_DECLARE_OPTIONAL_MODULE(shaar_storage_keychain_register);
+// END storage_keychain
 #undef SHAAR_DECLARE_OPTIONAL_MODULE
 
 namespace {
@@ -178,16 +187,26 @@ void RegisterLinkedModules(ShaarModuleRegistry* registry) {
     shaar_bookmarks_register(registry);
   if (shaar_history_register)
     shaar_history_register(registry);
+  // BEGIN site_data
   if (shaar_site_data_register)
     shaar_site_data_register(registry);
+  // END site_data
+  // BEGIN extensions
   if (shaar_extensions_register)
     shaar_extensions_register(registry);
+  // END extensions
+  // BEGIN find
   if (shaar_find_register)
     shaar_find_register(registry);
+  // END find
   if (shaar_devtools_register)
     shaar_devtools_register(registry);
   if (shaar_media_register)
     shaar_media_register(registry);
+  // BEGIN storage_keychain
+  if (shaar_storage_keychain_register)
+    shaar_storage_keychain_register(registry);
+  // END storage_keychain
 }
 
 ShaarModuleRegistry& ModuleRegistry() {
@@ -228,7 +247,7 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_submit(
   }
 
   const std::string_view json(args_json.data, args_json.size);
-  std::optional<base::Value> parsed = base::JSONReader::Read(json);
+  std::optional<base::Value> parsed = base::JSONReader::Read(json, base::JSON_PARSE_RFC);
   if (!parsed || !parsed->is_dict())
     return Fail(SHAAR_INVALID_ARGUMENT, "args_json must be a JSON object",
                 immediate_error);

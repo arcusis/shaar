@@ -13,6 +13,17 @@ public enum ShaarEngineImplementation: Equatable, Sendable {
   case shaar
 
   public static let shippingDefault: Self = .ardia
+
+  /// Shaar is opt-in for debug and source-engine CI runs. Release builds always
+  /// retain Ardia unless a caller explicitly constructs a test transport.
+  public static func selected(
+    debugSetting: String? = nil,
+    environment: [String: String] = ProcessInfo.processInfo.environment,
+    isDebug: Bool = _isDebugAssertConfiguration()
+  ) -> Self {
+    guard isDebug else { return .shippingDefault }
+    return (debugSetting ?? environment["SHAAR_ENGINE_IMPLEMENTATION"]) == "shaar" ? .shaar : .ardia
+  }
 }
 
 public enum ShaarEngineError: Error, Equatable, Sendable {
@@ -71,6 +82,9 @@ public struct ShaarCopiedEvent: Equatable, Sendable {
 public typealias ShaarBytes = shaar_bytes
 public typealias ShaarABIEvent = shaar_event
 
+// The C ABI enum is imported as a raw-value enum, not as a Swift global case.
+private let shaarEngineEventKind: UInt32 = 1
+
 private func copyBytes(_ bytes: shaar_bytes, field: String) throws -> Data {
   guard bytes.size >= 0, bytes.size == 0 || bytes.data != nil else {
     throw ShaarEngineError.invalidEvent("invalid \(field) slice")
@@ -88,7 +102,7 @@ public enum ShaarEventCopy {
     let profile = try copyBytes(event.profile_id, field: "profile ID")
     let session = try copyBytes(event.session_id, field: "session ID")
     let kind = UInt32(event.kind.rawValue)
-    if kind != UInt32(SHAAR_EVENT_ENGINE.rawValue) && profile.isEmpty {
+    if kind != shaarEngineEventKind && profile.isEmpty {
       throw ShaarEngineError.invalidEvent("profile-scoped event has no profile ID")
     }
     return ShaarCopiedEvent(
@@ -140,12 +154,13 @@ private struct FrameworkSymbols: ShaarSymbolResolving {
   }
 }
 
-public struct ShaarEngineLoader {
+public final class ShaarEngineLoader: ShaarSymbolResolving, @unchecked Sendable {
   public static let abiMajor: UInt32 = 1
   public let implementation: ShaarEngineImplementation
   private let abiMajorFunction: @convention(c) () -> UInt32
   public let createSymbol: UnsafeRawPointer
   private let symbolResolver: any ShaarSymbolResolving
+  private var frameworkHandle: UnsafeMutableRawPointer?
 
   public init(resolver: ShaarSymbolResolving, implementation: ShaarEngineImplementation = .shaar)
     throws
@@ -164,6 +179,7 @@ public struct ShaarEngineLoader {
     self.symbolResolver = resolver
     self.abiMajorFunction = unsafeBitCast(majorSymbol, to: (@convention(c) () -> UInt32).self)
     self.createSymbol = create
+    self.frameworkHandle = nil
   }
 
   public func currentMajor() -> UInt32 { abiMajorFunction() }
@@ -176,14 +192,30 @@ public struct ShaarEngineLoader {
       throw ShaarEngineError.frameworkLoadFailed(
         path: binary.path, reason: String(cString: dlerror()))
     }
-    return try Self(resolver: FrameworkSymbols(handle: handle), implementation: implementation)
+    do {
+      let loader = try Self(
+        resolver: FrameworkSymbols(handle: handle), implementation: implementation)
+      loader.frameworkHandle = handle
+      return loader
+    } catch {
+      dlclose(handle)
+      throw error
+    }
   }
-}
 
-extension ShaarEngineLoader: ShaarSymbolResolving {
   public func symbol(named: String) -> UnsafeRawPointer? {
     symbolResolver.symbol(named: named)
   }
+
+  /// Called by the single transport owner after engine release and after every
+  /// module has stopped submitting requests.
+  func closeFramework() {
+    guard let frameworkHandle else { return }
+    self.frameworkHandle = nil
+    dlclose(frameworkHandle)
+  }
+
+  deinit { closeFramework() }
 }
 
 extension ShaarStatusCode {

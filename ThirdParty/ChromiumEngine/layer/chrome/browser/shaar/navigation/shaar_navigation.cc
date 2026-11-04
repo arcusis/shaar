@@ -88,7 +88,7 @@ shaar_error_code ValidateURL(const std::string& input,
   GURL parsed(input);
   if (!parsed.is_valid() || parsed.scheme().empty())
     return SHAAR_INVALID_ARGUMENT;
-  std::string scheme = parsed.scheme();
+  std::string scheme(parsed.scheme());
   std::transform(
       scheme.begin(), scheme.end(), scheme.begin(),
       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
@@ -164,12 +164,12 @@ shaar_error_code DecodeCommand(shaar_operation operation, shaar_bytes args_json,
     return SHAAR_INVALID_ARGUMENT;
   }
   auto value =
-      base::JSONReader::Read(std::string_view(args_json.data, args_json.size));
+      base::JSONReader::Read(std::string_view(args_json.data, args_json.size), base::JSON_PARSE_RFC);
   if (!value || !value->is_dict()) {
     if (reason) *reason = "invalid_json_object";
     return SHAAR_INVALID_ARGUMENT;
   }
-  const base::Value::Dict& dict = value->GetDict();
+  const base::DictValue& dict = value->GetDict();
   const std::optional<int> schema_version = dict.FindInt("schemaVersion");
   if (!schema_version || *schema_version != 1) {
     if (reason) *reason = "unsupported_schema_version";
@@ -401,12 +401,12 @@ void NavigationObserver::Emit(const char* phase,
   content::WebContents* contents = web_contents();
   if (destroyed_ || !engine_ || !contents) return;
 
-  base::Value::Dict payload;
+  base::DictValue payload;
   payload.Set("kind", "navigation");
   payload.Set("schemaVersion", 1);
   payload.Set("phase", phase);
   payload.Set("navigationID", navigation_id);
-  payload.Set("generation", static_cast<int64_t>(generation_));
+  payload.Set("generation", static_cast<double>(generation_));
   const GURL& visible_url =
       handle ? handle->GetURL() : contents->GetVisibleURL();
   const std::string readable_url = PageReadableURL(visible_url);
@@ -425,13 +425,13 @@ void NavigationObserver::Emit(const char* phase,
   payload.Set("canGoForward", controller.CanGoForward());
   payload.Set("sameDocument", same_document);
   if (failure_code) {
-    base::Value::Dict failure;
+    base::DictValue failure;
     failure.Set("netError", -1);
     failure.Set("isMainFrame", true);
     failure.Set("descriptionCode", failure_code);
     payload.Set("failure", std::move(failure));
   } else if (handle && handle->HasCommitted() && handle->IsErrorPage()) {
-    base::Value::Dict failure;
+    base::DictValue failure;
     failure.Set("netError", static_cast<int>(handle->GetNetErrorCode()));
     failure.Set("isMainFrame", true);
     failure.Set("descriptionCode", "chromium_error_page");
@@ -439,7 +439,7 @@ void NavigationObserver::Emit(const char* phase,
   } else if (handle && !handle->HasCommitted()) {
     const int error = handle->GetNetErrorCode();
     if (error != net::OK) {
-      base::Value::Dict failure;
+      base::DictValue failure;
       failure.Set("netError", error);
       failure.Set("isMainFrame", true);
       failure.Set("descriptionCode", error == net::ERR_ABORTED

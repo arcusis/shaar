@@ -20,4 +20,19 @@ void SetProfileServices(ProfileServices* services) {
 void SetBrowserTabRegistry(BrowserTabRegistry* registry) {
   g_context.browser_tabs = registry;
 }
+// BEGIN site_data
+void SetPrivateSessionServices(PrivateSessionServices* services) {
+  g_context.private_sessions = services;
+}
+// END site_data
+// BEGIN devtools
+void SetDevToolsRuntimeServices(DevToolsRuntimeServices* services) {
+  g_context.devtools_runtime = services;
+}
+// END devtools
+// BEGIN media
+void SetMediaRuntimeServices(MediaRuntimeServices* services) {
+  g_context.media_services = services;
+}
+// END media
 }  // namespace shaar

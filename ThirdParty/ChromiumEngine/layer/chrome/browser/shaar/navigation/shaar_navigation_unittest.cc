@@ -63,23 +63,25 @@ TEST(ShaarNavigationHandlerTest,
      RejectsBlockedSchemesUnknownFieldsAndBadTypes) {
   FakeBackend backend;
   std::string reason;
-  const std::string blocked = R"({"schemaVersion":1,"url":"javascript:alert(1)",
-                    "userInitiated" : true
-})";
-  EXPECT_EQ(HandleCommand(&backend, SHAAR_OP_TAB_NAVIGATE, Bytes(blocked), &reason),
-            SHAAR_POLICY_BLOCKED);
-EXPECT_EQ(reason, "scheme_blocked");
+  const std::string blocked =
+      R"json({"schemaVersion":1,"url":"javascript:alert(1)","userInitiated":true})json";
+  EXPECT_EQ(
+      HandleCommand(&backend, SHAAR_OP_TAB_NAVIGATE, Bytes(blocked), &reason),
+      SHAAR_POLICY_BLOCKED);
+  EXPECT_EQ(reason, "scheme_blocked");
 
-const std::string extra =
-    R"({"schemaVersion":1,"direction":"back","unexpected":false})";
-EXPECT_EQ(HandleCommand(&backend, SHAAR_OP_TAB_GO, Bytes(extra), &reason),
-          SHAAR_INVALID_ARGUMENT);
-EXPECT_EQ(reason, "unknown_argument_field");
+  const std::string extra =
+      R"({"schemaVersion":1,"direction":"back","unexpected":false})";
+  EXPECT_EQ(HandleCommand(&backend, SHAAR_OP_TAB_GO, Bytes(extra), &reason),
+            SHAAR_INVALID_ARGUMENT);
+  EXPECT_EQ(reason, "unknown_argument_field");
 
-const std::string wrong_type = R"({"schemaVersion":1,"direction":"sideways"})";
-EXPECT_EQ(HandleCommand(&backend, SHAAR_OP_TAB_GO, Bytes(wrong_type), &reason),
-          SHAAR_INVALID_ARGUMENT);
-EXPECT_EQ(reason, "invalid_history_direction");
+  const std::string wrong_type =
+      R"({"schemaVersion":1,"direction":"sideways"})";
+  EXPECT_EQ(
+      HandleCommand(&backend, SHAAR_OP_TAB_GO, Bytes(wrong_type), &reason),
+      SHAAR_INVALID_ARGUMENT);
+  EXPECT_EQ(reason, "invalid_history_direction");
 }
 
 TEST(ShaarNavigationHandlerTest,

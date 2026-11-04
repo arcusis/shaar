@@ -40,8 +40,8 @@ constexpr size_t kMaxSyncKeyBytes = 2048;
 constexpr size_t kMaxOperations = 1000;
 constexpr char kShaarSyncKey[] = "shaar_sync_key";
 
-using Dict = base::Value::Dict;
-using List = base::Value::List;
+using Dict = base::DictValue;
+using List = base::ListValue;
 using Node = bookmarks::BookmarkNode;
 using Model = bookmarks::BookmarkModel;
 
@@ -53,7 +53,7 @@ std::string Write(const base::Value &value) {
 std::optional<base::Value> Parse(std::string_view json) {
   if (json.empty() || json.size() > kMaxInputBytes)
     return std::nullopt;
-  return base::JSONReader::Read(json);
+  return base::JSONReader::Read(json, base::JSON_PARSE_RFC);
 }
 std::string NodeID(const Node *node) {
   return node->uuid().AsLowercaseString();
@@ -65,7 +65,8 @@ bool SerializeNode(const Node *node, size_t depth, size_t *count,
     return false;
   output->Set("id", NodeID(node));
   output->Set("t", base::UTF16ToUTF8(node->GetTitledUrlNodeTitle()));
-  output->Set("a", node->date_added().InMillisecondsSinceUnixEpoch());
+  output->Set("a", static_cast<double>(
+                       node->date_added().InMillisecondsSinceUnixEpoch()));
   std::string sync_key;
   if (node->GetMetaInfo(kShaarSyncKey, &sync_key) && !sync_key.empty())
     output->Set("key", sync_key);
@@ -275,10 +276,11 @@ bool ApplyOne(Model *model, const Dict &op, std::string *invalid_reason,
     }
     if (title) {
       model->SetTitle(node, base::UTF8ToUTF16(title->GetString()),
-                      metrics::BookmarkEditSource::kUser);
+                      bookmarks::metrics::BookmarkEditSource::kUser);
     }
     if (replacement_url)
-      model->SetURL(node, *replacement_url, metrics::BookmarkEditSource::kUser);
+      model->SetURL(node, *replacement_url,
+                    bookmarks::metrics::BookmarkEditSource::kUser);
     if (key_value) {
       if (key_value->GetString().empty())
         model->DeleteNodeMetaInfo(node, kShaarSyncKey);
@@ -320,7 +322,8 @@ bool ApplyOne(Model *model, const Dict &op, std::string *invalid_reason,
       *invalid_reason = "invalid_remove";
       return false;
     }
-    model->Remove(node, metrics::BookmarkEditSource::kUser, FROM_HERE);
+    model->Remove(node, bookmarks::metrics::BookmarkEditSource::kUser,
+                  FROM_HERE);
     return true;
   }
   *invalid_reason = "unsupported_operation";
@@ -414,7 +417,7 @@ shaar_error_code BookmarksModule::Submit(shaar_operation operation,
   } else if (operation == SHAAR_OP_BOOKMARK_APPLY) {
     if (!ValidFields(args, {"schemaVersion", "ops"}))
       return SHAAR_INVALID_ARGUMENT;
-    const base::Value::List *operations = args.FindList("ops");
+    const base::ListValue *operations = args.FindList("ops");
     if (!operations || operations->size() > kMaxOperations)
       return SHAAR_INVALID_ARGUMENT;
   } else {
@@ -442,7 +445,7 @@ shaar_error_code BookmarksModule::Submit(shaar_operation operation,
     return SHAAR_OK;
   }
 
-  const base::Value::List *operations = args.FindList("ops");
+  const base::ListValue *operations = args.FindList("ops");
   bookmarks::ScopedGroupBookmarkActions grouped(model_);
   int applied = 0;
   int skipped = 0;

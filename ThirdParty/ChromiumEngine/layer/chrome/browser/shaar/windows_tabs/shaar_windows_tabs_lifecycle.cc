@@ -362,7 +362,8 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_tab_open(
                            std::string(tab_id.data, tab_id.size)))
     return Result(SHAAR_CONFLICT, error);
   registry.BindTab(engine, window, raw,
-                   std::string(tab_id.data, tab_id.size), raw_contents);
+                   std::string(tab_id.data, tab_id.size), browser,
+                   raw_contents);
   tabs.emplace(raw, std::move(handle));
   *out = raw;
   if (url.size)

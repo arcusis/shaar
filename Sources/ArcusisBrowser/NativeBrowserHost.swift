@@ -5,6 +5,7 @@
 import AppKit
 import BrowserCore
 import ChromiumBridge
+import ShaarEngineABI
 import SwiftUI
 
 enum BrowserMenuCommand: String, CaseIterable {
@@ -76,6 +77,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   private let keyWindow: () -> NSWindow?
   private let screens: () -> [NSRect]
   let preferences: BrowserPreferencesStore
+  private let downloadDirectoryApplier: ProfileDownloadDirectoryApplier?
   private(set) var settingsController: BrowserSettingsController?
   private var privateHost: PrivateBrowserHost?
   private var miniWindows: [String: MiniBrowserController] = [:]
@@ -100,6 +102,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   init(
     events: BrowserRuntimeEvents, workspace: BrowserWorkspaceStore,
     preferences: BrowserPreferencesStore = BrowserPreferencesStore(),
+    downloadsAdapterForProfile: (@MainActor (UUID) -> ShaarDownloadsAdapter?)? = nil,
     presentation: Presentation = .visible, usesPrimaryWindow: Bool = true,
     keyWindow: @escaping () -> NSWindow? = { NSApp.keyWindow ?? NSApp.mainWindow },
     screens: @escaping () -> [NSRect] = { NSScreen.screens.map(\.visibleFrame) }
@@ -107,6 +110,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     self.events = events
     self.workspace = workspace
     self.preferences = preferences
+    downloadDirectoryApplier = downloadsAdapterForProfile.map {
+      Self.downloadDirectoryApplier(adapterForProfile: $0)
+    }
     self.presentation = presentation
     self.usesPrimaryWindow = usesPrimaryWindow
     self.keyWindow = keyWindow
@@ -172,6 +178,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     }
     settingsController = BrowserSettingsController(
       workspace: workspace, preferences: preferences, runtime: events.runtime,
+      downloadDirectorySettingsEnabled: downloadDirectoryApplier != nil,
+      applyDownloadDirectory: downloadDirectoryApplier,
       presentation: presentation == .visible ? .visible : .hiddenProbe)
     settingsController?.setOpenSpaceHandler { [weak self] spaceID in
       guard let self,
@@ -201,6 +209,24 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     }
     for url in pendingURLs { openExternalURL(url) }
     pendingURLs.removeAll()
+  }
+
+  static func downloadDirectoryApplier(
+    adapterForProfile: @escaping @MainActor (UUID) -> ShaarDownloadsAdapter?
+  ) -> ProfileDownloadDirectoryApplier {
+    { profileID, directory in
+      guard let adapter = adapterForProfile(profileID) else {
+        throw ShaarDownloadsError.engine(.notReady, message: "Profile downloads are unavailable")
+      }
+      let path: String
+      if let directory {
+        guard directory.isFileURL else { throw ShaarDownloadsError.unsafeTarget }
+        path = try await adapter.setDirectory(directory.standardizedFileURL.path)
+      } else {
+        path = try await adapter.useDefaultDirectory()
+      }
+      return URL(filePath: path, directoryHint: .isDirectory)
+    }
   }
 
   @discardableResult
@@ -680,7 +706,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     let engine = try BrowserEngine(
       events: events, windowID: nativeID, store: store,
       presentsNativePanels: presentation == .visible,
-      lazyPinnedTabs: true)
+      lazyPinnedTabs: true,
+      downloadDirectoryApplier: downloadDirectoryApplier)
     let hosting = NSHostingView(rootView: BrowserWindow(store: store))
     window.title = ProductIdentity.name
     window.titleVisibility = .hidden
@@ -1117,7 +1144,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case restart
   }
 
-  static func run(frameworkURL: URL) -> LaunchResult {
+  static func run(
+    frameworkURL: URL,
+    downloadsAdapterForProfile: (@MainActor (UUID) -> ShaarDownloadsAdapter?)? = nil
+  ) -> LaunchResult {
     BrowserLanguage.applyToCurrentProcess()
     let launchLanguage = BrowserLanguage.currentLaunchLanguage
     ARCConfigureLocalization(BrowserLocalization.resourceBundleURL, launchLanguage.localeIdentifier)
@@ -1139,7 +1169,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
         UserDefaults.standard.string(forKey: "settingsAppearance") ?? "system")
       let host = NativeBrowserHost(
         events: BrowserRuntimeEvents(runtime: runtime), workspace: workspace,
-        preferences: preferences)
+        preferences: preferences, downloadsAdapterForProfile: downloadsAdapterForProfile)
       NSAppleEventManager.shared().setEventHandler(
         host, andSelector: #selector(handleURL(_:reply:)),
         forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))

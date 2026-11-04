@@ -8,6 +8,8 @@ import ChromiumBridge
 import Observation
 import SwiftUI
 
+typealias ProfileDownloadDirectoryApplier = @MainActor (UUID, URL?) async throws -> URL?
+
 @MainActor @Observable
 final class BrowserSettingsState {
   let workspace: BrowserWorkspaceStore
@@ -16,6 +18,7 @@ final class BrowserSettingsState {
   let profileBackend: (any ProfileSettingsBackend)?
   private(set) var deletingProfileID: UUID?
   private(set) var selectedProfileID: UUID?
+  private(set) var downloadDirectoryRevision = 0
   private var didPresent = false
   var downloadDirectorySettingsEnabled = false
   private let applyDownloadDirectoryToEngine: (@MainActor (UUID, URL?) async throws -> URL?)?
@@ -36,12 +39,14 @@ final class BrowserSettingsState {
     self.runtime = runtime
     self.profileBackend = profileBackend ?? runtime.map { EngineProfileSettings(runtime: $0) }
     applyDownloadDirectoryToEngine = applyDownloadDirectory
-    self.downloadDirectorySettingsEnabled = downloadDirectorySettingsEnabled
+    self.downloadDirectorySettingsEnabled =
+      downloadDirectorySettingsEnabled
       && applyDownloadDirectory != nil
   }
 
   var profiles: [BrowserSettingsProfile] {
-    workspace.workspace.catalog.profiles.map { profile in
+    _ = downloadDirectoryRevision
+    return workspace.workspace.catalog.profiles.map { profile in
       let spaces = workspace.workspace.catalog.spaces.filter { $0.profileID == profile.id }
       return BrowserSettingsProfile(
         id: profile.id, name: profile.name, color: ProfileColorChoice(profile: profile),
@@ -127,7 +132,8 @@ final class BrowserSettingsState {
 
   func chooseDownloadDirectory(for profileID: UUID) {
     guard downloadDirectorySettingsEnabled,
-      workspace.workspace.catalog.profiles.contains(where: { $0.id == profileID }) else {
+      workspace.workspace.catalog.profiles.contains(where: { $0.id == profileID })
+    else {
       return
     }
     let panel = NSOpenPanel()
@@ -138,14 +144,16 @@ final class BrowserSettingsState {
     panel.prompt = SettingsL10n.string("Choose")
     panel.message = SettingsL10n.string("Choose a download folder for this profile.")
     if panel.runModal() == .OK, let url = panel.url,
-      DownloadDirectoryPolicy.validate(url, bundleURL: Bundle.main.bundleURL) {
+      DownloadDirectoryPolicy.validate(url, bundleURL: Bundle.main.bundleURL)
+    {
       Task { _ = await applyDownloadDirectory(url, for: profileID) }
     }
   }
 
   func resetDownloadDirectory(for profileID: UUID) {
     guard downloadDirectorySettingsEnabled,
-      workspace.workspace.catalog.profiles.contains(where: { $0.id == profileID }) else {
+      workspace.workspace.catalog.profiles.contains(where: { $0.id == profileID })
+    else {
       return
     }
     Task { _ = await applyDownloadDirectory(nil, for: profileID) }
@@ -157,13 +165,16 @@ final class BrowserSettingsState {
       workspace.workspace.catalog.profiles.contains(where: { $0.id == profileID }),
       let applyDownloadDirectoryToEngine
     else { return false }
-    if let directory, !DownloadDirectoryPolicy.validate(directory, bundleURL: Bundle.main.bundleURL) {
+    if let directory, !DownloadDirectoryPolicy.validate(directory, bundleURL: Bundle.main.bundleURL)
+    {
       return false
     }
     do {
       let acknowledgedDirectory = try await applyDownloadDirectoryToEngine(profileID, directory)
       if directory != nil, acknowledgedDirectory == nil { return false }
-      preferences.setDownloadDirectory(directory == nil ? nil : acknowledgedDirectory, for: profileID)
+      preferences.setDownloadDirectory(
+        directory == nil ? nil : acknowledgedDirectory, for: profileID)
+      downloadDirectoryRevision &+= 1
       return true
     } catch {
       return false
@@ -240,7 +251,8 @@ enum DownloadDirectoryPolicy {
       fileManager.isWritableFile(atPath: directory.path)
     else { return false }
     var isDirectory: ObjCBool = false
-    return fileManager.fileExists(atPath: directory.path, isDirectory: &isDirectory) && isDirectory.boolValue
+    return fileManager.fileExists(atPath: directory.path, isDirectory: &isDirectory)
+      && isDirectory.boolValue
   }
 }
 

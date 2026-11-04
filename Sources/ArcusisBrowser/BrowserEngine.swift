@@ -6,6 +6,7 @@ import AppKit
 import BrowserCore
 import ChromiumBridge
 import Observation
+import ShaarEngineABI
 import SwiftUI
 
 struct PageState: Equatable {
@@ -32,6 +33,7 @@ final class BrowserEngine {
   private static let tabSuspensionDelay: TimeInterval = 5 * 60
   let runtime: ARCChromiumRuntime
   let events: BrowserRuntimeEvents
+  let downloadDirectoryApplier: ProfileDownloadDirectoryApplier?
   let windowID: String
   private let callbacks: BrowserRuntimeClient
   let autoPictureInPicture: AutoPictureInPicture
@@ -99,11 +101,13 @@ final class BrowserEngine {
 
   init(
     events: BrowserRuntimeEvents, windowID: String? = nil, store: BrowserStore,
-    presentsNativePanels: Bool = true, lazyPinnedTabs: Bool = false
+    presentsNativePanels: Bool = true, lazyPinnedTabs: Bool = false,
+    downloadDirectoryApplier: ProfileDownloadDirectoryApplier? = nil
   ) throws {
     let runtime = events.runtime
     self.runtime = runtime
     self.events = events
+    self.downloadDirectoryApplier = downloadDirectoryApplier
     self.windowID = windowID ?? runtime.primaryWindowID
     autoPictureInPicture = AutoPictureInPicture(engine: .chromium(runtime))
     callbacks = BrowserRuntimeClient(windowID: self.windowID) { [weak store] in
@@ -595,28 +599,8 @@ final class BrowserEngine {
       else { continue }
       loadingProfiles.insert(profile)
       runtime.loadProfileID(profile.uuidString) { [weak self] error in
-        MainActor.assumeIsolated {
-          guard let self else { return }
-          self.loadingProfiles.remove(profile)
-          guard !self.isClosed else { return }
-          if let error {
-            self.failedProfiles.insert(profile)
-            self.notice = error.localizedDescription
-          } else {
-            self.loadedProfiles.insert(profile)
-            self.store?.library.refresh(profile, section: .bookmarks)
-            self.store?.library.refresh(profile, section: .history)
-            // Chromium's download history initializes asynchronously after profile load.
-            Task { [weak self] in
-              for delay in [300, 700, 2000] {
-                try? await Task.sleep(for: .milliseconds(delay))
-                guard let self, !self.isClosed else { return }
-                self.runtime.refreshDownloads(forProfileID: profile.uuidString)
-              }
-            }
-          }
-          // A cached profile can complete synchronously during reconciliation.
-          DispatchQueue.main.async { [weak self] in self?.reconcile() }
+        Task { @MainActor [weak self] in
+          await self?.finishLoadingProfile(profile, error: error)
         }
       }
     }
@@ -704,6 +688,41 @@ final class BrowserEngine {
       runtime.clearActiveTab(inWindowID: windowID)
     }
     refreshExtensions()
+  }
+
+  private func finishLoadingProfile(_ profile: UUID, error: Error?) async {
+    loadingProfiles.remove(profile)
+    guard !isClosed else { return }
+    if let error {
+      failedProfiles.insert(profile)
+      notice = error.localizedDescription
+    } else {
+      do {
+        if let directory = store?.preferences.downloadDirectory(for: profile),
+          let downloadDirectoryApplier
+        {
+          guard let acknowledged = try await downloadDirectoryApplier(profile, directory) else {
+            throw ShaarDownloadsError.malformedResponse
+          }
+          store?.preferences.setDownloadDirectory(acknowledged, for: profile)
+        }
+        loadedProfiles.insert(profile)
+        store?.library.refresh(profile, section: .bookmarks)
+        store?.library.refresh(profile, section: .history)
+        Task { [weak self] in
+          for delay in [300, 700, 2000] {
+            try? await Task.sleep(for: .milliseconds(delay))
+            guard let self, !self.isClosed else { return }
+            self.runtime.refreshDownloads(forProfileID: profile.uuidString)
+          }
+        }
+      } catch {
+        failedProfiles.insert(profile)
+        notice = error.localizedDescription
+      }
+    }
+    // A cached profile can complete synchronously during reconciliation.
+    DispatchQueue.main.async { [weak self] in self?.reconcile() }
   }
 
   func refreshExtensions() {

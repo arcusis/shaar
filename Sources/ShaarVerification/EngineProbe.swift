@@ -32,6 +32,7 @@ final class EngineProbe {
   private let sessionRecoveryMode: Bool
   private let localizationMode: Bool
   private let basicBrowsingMode: Bool
+  private let downloadDirectoryApplier: ProfileDownloadDirectoryApplier?
   private let expectedAfterTermination: BrowserSession?
   private let output: URL
   private var checks: [String] = []
@@ -72,7 +73,8 @@ final class EngineProbe {
     externalAppConsentMode: Bool, privateWindowMode: Bool, privateMultiTabMode: Bool,
     privateWindowRunID: String?,
     quitExitMode: Bool, quitPendingNavigation: Bool, sessionRecoveryMode: Bool,
-    localizationMode: Bool, basicBrowsingMode: Bool
+    localizationMode: Bool, basicBrowsingMode: Bool,
+    downloadDirectoryApplier: ProfileDownloadDirectoryApplier?
   ) throws {
     self.root = root
     self.fixture = fixture
@@ -90,6 +92,7 @@ final class EngineProbe {
     self.sessionRecoveryMode = sessionRecoveryMode
     self.localizationMode = localizationMode
     self.basicBrowsingMode = basicBrowsingMode
+    self.downloadDirectoryApplier = downloadDirectoryApplier
     expectedAfterTermination =
       expectAbruptRecovery ? try AbruptProbeCheckpoint.expectedSession(root: root) : nil
     self.output = output
@@ -132,6 +135,8 @@ final class EngineProbe {
       store = BrowserStore(
         sessionFile: SessionFile(url: root.appending(path: "session.json")), session: session)
     }
+    store.usePreferences(
+      BrowserPreferencesStore(fileURL: root.appending(path: "preferences.json")))
     if let expectedAfterTermination {
       guard store.session == expectedAfterTermination else {
         throw AbruptCheckpointError.snapshotMismatch
@@ -142,19 +147,27 @@ final class EngineProbe {
     }
   }
 
-  static func run(arguments: [String]) -> Int32 {
+  static func run(
+    arguments: [String],
+    downloadDirectoryApplier: ProfileDownloadDirectoryApplier? = nil
+  ) -> Int32 {
     BrowserLanguage.applyToCurrentProcess()
     if arguments.contains("--probe-localization") {
       return LocalizationProbe.run(arguments: arguments)
     }
-    return runCore(arguments: arguments, localizationMode: false)
+    return runCore(
+      arguments: arguments, localizationMode: false,
+      downloadDirectoryApplier: downloadDirectoryApplier)
   }
 
   static func runLocalization(arguments: [String]) -> Int32 {
-    runCore(arguments: arguments, localizationMode: true)
+    runCore(arguments: arguments, localizationMode: true, downloadDirectoryApplier: nil)
   }
 
-  private static func runCore(arguments: [String], localizationMode: Bool) -> Int32 {
+  private static func runCore(
+    arguments: [String], localizationMode: Bool,
+    downloadDirectoryApplier: ProfileDownloadDirectoryApplier?
+  ) -> Int32 {
     do {
       func value(_ flag: String) throws -> String {
         guard let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1)
@@ -259,7 +272,8 @@ final class EngineProbe {
         privateWindowRunID: privateWindowRunID, quitExitMode: quitExitMode,
         quitPendingNavigation: quitPendingNavigation,
         sessionRecoveryMode: sessionRecoveryMode, localizationMode: localizationMode,
-        basicBrowsingMode: basicBrowsingMode)
+        basicBrowsingMode: basicBrowsingMode,
+        downloadDirectoryApplier: downloadDirectoryApplier)
       probe.runtime.onReady = { [weak probe] in
         guard let probe else { return }
         Task {
@@ -290,7 +304,8 @@ final class EngineProbe {
   private func attachNativeShell() throws {
     browserEngine = try BrowserEngine(
       events: BrowserRuntimeEvents(runtime: runtime), store: store, presentsNativePanels: false,
-      lazyPinnedTabs: savedTabCapacityMode)
+      lazyPinnedTabs: savedTabCapacityMode,
+      downloadDirectoryApplier: downloadDirectoryApplier)
     let changed = runtime.onTabChanged
     runtime.onTabChanged = { [weak self] id, url, title, loading, back, forward in
       changed?(id, url, title, loading, back, forward)

@@ -1,10 +1,30 @@
 import Foundation
+import ShaarEngineABI
 import Testing
 
 @testable import ArcusisBrowser
 
 @Suite @MainActor
 struct DownloadDirectoryTests {
+  @Test func activeHostAdapterAppliesAndResetsProfileDirectory() async throws {
+    let profile = UUID()
+    let fake = DownloadDirectoryTransport()
+    var requestedProfiles: [UUID] = []
+    let apply = NativeBrowserHost.downloadDirectoryApplier(adapterForProfile: { requestedProfile in
+      requestedProfiles.append(requestedProfile)
+      return requestedProfile == profile ? ShaarDownloadsAdapter(transport: fake) : nil
+    })
+
+    let selected = URL(fileURLWithPath: "/tmp/profile-downloads", isDirectory: true)
+    let acknowledged = try await apply(profile, selected)
+    #expect(acknowledged?.path == "/tmp/profile-downloads")
+    #expect(try await apply(profile, nil)?.path == "/tmp/default-downloads")
+    #expect(requestedProfiles == [profile, profile])
+
+    let calls = await fake.calls
+    #expect(calls.map(\.action) == ["set", "useDefault"])
+  }
+
   @Test func appliesTheProfileDirectoryBeforePersistingTheEngineAcknowledgement() async throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -28,6 +48,7 @@ struct DownloadDirectoryTests {
         return acknowledged
       })
 
+    #expect(state.profiles.first?.canChooseDownloadDirectory == true)
     #expect(await state.applyDownloadDirectory(selected, for: profile))
     #expect(appliedProfile == profile)
     #expect(appliedDirectory == selected)
@@ -64,7 +85,24 @@ struct DownloadDirectoryTests {
     preferences.setDownloadDirectory(selected, for: profile)
     let restored = BrowserPreferencesStore(fileURL: file)
 
-    #expect(restored.downloadDirectory(for: profile)?.standardizedFileURL == selected.standardizedFileURL)
+    #expect(
+      restored.downloadDirectory(for: profile)?.standardizedFileURL == selected.standardizedFileURL)
     #expect(restored.downloadDirectory(for: UUID()) == nil)
+  }
+}
+
+private actor DownloadDirectoryTransport: ShaarDownloadsTransport {
+  struct Call: Equatable {
+    let action: String
+  }
+
+  private(set) var calls: [Call] = []
+
+  func submit(operation: UInt32, arguments: Data) async throws -> Data {
+    let object = try #require(JSONSerialization.jsonObject(with: arguments) as? [String: Any])
+    let action = try #require(object["action"] as? String)
+    calls.append(Call(action: action))
+    let path = action == "set" ? object["directory"] as? String ?? "" : "/tmp/default-downloads"
+    return try JSONSerialization.data(withJSONObject: ["schemaVersion": 1, "directory": path])
   }
 }

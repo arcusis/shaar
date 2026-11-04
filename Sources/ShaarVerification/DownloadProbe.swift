@@ -170,7 +170,78 @@ final class DownloadProbe {
       try complete.id.write(
         to: root.appending(path: "initial-download-id"), atomically: true, encoding: .utf8)
     }
+    checks += try await verifyProfileDirectories()
     return checks
+  }
+
+  private func verifyProfileDirectories() async throws -> [String] {
+    guard let applyDirectory = engine.downloadDirectoryApplier else {
+      return ["per-profile download folder probe skipped: native downloads adapter unavailable"]
+    }
+    let spaces = Array(store.session.spaces.prefix(2))
+    guard spaces.count == 2 else {
+      throw DownloadProbeFailure("Two regular profiles are required for the directory probe.")
+    }
+    let folders = [
+      root.appending(path: "ProfileDownloads/alpha", directoryHint: .isDirectory),
+      root.appending(path: "ProfileDownloads/beta", directoryHint: .isDirectory),
+    ]
+    for folder in folders {
+      try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    }
+
+    if phase == "restart" {
+      for index in spaces.indices {
+        guard
+          store.preferences.downloadDirectory(for: spaces[index].profileID)?.standardizedFileURL
+            == folders[index].standardizedFileURL
+        else {
+          throw DownloadProbeFailure("Profile download folder did not survive restart.")
+        }
+      }
+    } else {
+      for index in spaces.indices {
+        guard
+          let acknowledged = try await applyDirectory(
+            spaces[index].profileID, folders[index])
+        else { throw DownloadProbeFailure("Engine did not acknowledge profile download folder.") }
+        store.preferences.setDownloadDirectory(acknowledged, for: spaces[index].profileID)
+      }
+    }
+
+    var results: [String] = []
+    for index in spaces.indices {
+      let space = spaces[index]
+      let tab = space.selectedTabID!
+      store.perform(.space(space.id))
+      try await waitForDownloadTarget(tab, "Profile \(index == 0 ? "alpha" : "beta") is ready")
+      let previous = Set(engine.downloads.items(in: space.profileID).map(\.id))
+      let name = index == 0 ? "slow.txt" : "profile.txt"
+      try await begin(tab, name: name)
+      let item = try await wait(space.profileID, "profile-specific download completes") {
+        !previous.contains($0.id) && $0.state == .finished
+      }
+      try verifyProfileDirectoryBytes(
+        item, in: folders[index], account: index == 0 ? "alpha" : "beta",
+        large: index == 0)
+      results.append("profile \(index == 0 ? "alpha" : "beta") downloads to its saved folder")
+    }
+    return results
+  }
+
+  private func verifyProfileDirectoryBytes(
+    _ item: BrowserDownload, in directory: URL, account: String, large: Bool
+  ) throws {
+    let destination = directory.standardizedFileURL.resolvingSymlinksInPath()
+    guard let path = item.fileURL?.standardizedFileURL.resolvingSymlinksInPath(),
+      path.path.hasPrefix(destination.path + "/")
+    else { throw DownloadProbeFailure("Download landed outside its profile folder.") }
+    let expected =
+      Data("account=\(account)\narcusis-download-fixture\n".utf8)
+      + Data(repeating: 120, count: large ? 4 * 1024 * 1024 : 1024)
+    try expect(
+      try Data(contentsOf: path) == expected,
+      "profile download bytes match the authored response")
   }
 
   private func begin(_ tab: UUID, name: String) async throws {

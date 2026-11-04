@@ -112,6 +112,22 @@ struct BrowserWindow: View {
       }
     }
     .modifier(SpaceMenuDialogs(store: store))
+    .alert(
+      ShellL10n.string("This connection would use HTTP"),
+      isPresented: Binding(
+        get: { store.privatePage?.pendingHTTP != nil },
+        set: { if !$0 { store.privatePage?.cancelHTTP() } })
+    ) {
+      Button(ShellL10n.string("Try HTTPS")) {
+        store.privatePage?.confirmHTTP(useHTTPS: true)
+      }
+      Button(ShellL10n.string("Continue with HTTP"), role: .destructive) {
+        store.privatePage?.confirmHTTP(useHTTPS: false)
+      }
+      Button(ShellL10n.string("Cancel"), role: .cancel) {
+        store.privatePage?.cancelHTTP()
+      }
+    }
     .sheet(
       item: store.engine?.presentsNativePanels == false ? .constant(nil) : $store.sheet,
       onDismiss: { store.sheetDidDismiss() }
@@ -138,7 +154,9 @@ struct BrowserWindow: View {
         store.engine?.extensionPanel = nil
       }
       if !isOpen && store.pageFind == nil {
-        if let engine = store.engine, let id = store.session.selectedPage?.tab.id {
+        if let privatePage = store.privatePage, let id = store.session.selectedPage?.tab.id {
+          DispatchQueue.main.async { privatePage.focusPage(id) }
+        } else if let engine = store.engine, let id = store.session.selectedPage?.tab.id {
           DispatchQueue.main.async { engine.focusPage(id) }
         } else {
           pageIsFocused = true
@@ -168,7 +186,21 @@ struct BrowserWindow: View {
       }
       ZStack {
         Color(nsColor: .textBackgroundColor)
-        if let engine = store.engine, let id = store.session.selectedPage?.tab.id {
+        if let privatePage = store.privatePage, let id = store.session.selectedPage?.tab.id {
+          if let split = store.selectedSplit {
+            PrivateSplitPageView(store: store, session: privatePage, split: split)
+          } else {
+            PrivateBrowserPage(session: privatePage, tabID: id)
+              .overlay { SplitDropZone(store: store, targetID: id) }
+          }
+          if let failure = privatePage.failure {
+            Text(failure)
+              .font(.callout)
+              .foregroundStyle(.red)
+              .padding(12)
+              .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+          }
+        } else if let engine = store.engine, let id = store.session.selectedPage?.tab.id {
           if let split = store.selectedSplit {
             BrowserSplitPageView(store: store, engine: engine, split: split)
           } else if let failure = store.rendererFailures[id] {
@@ -330,7 +362,9 @@ struct BrowserWindow: View {
 
   private func dismissLibraryDrawerAndFocusPage() {
     store.closeLibraryDrawer()
-    if let engine = store.engine, let id = store.session.selectedPage?.tab.id {
+    if let privatePage = store.privatePage, let id = store.session.selectedPage?.tab.id {
+      privatePage.focusPage(id)
+    } else if let engine = store.engine, let id = store.session.selectedPage?.tab.id {
       engine.runtime.focusTabID(id.uuidString)
     } else {
       pageIsFocused = true

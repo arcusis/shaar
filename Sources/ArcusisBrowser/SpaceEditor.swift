@@ -47,6 +47,8 @@ struct SpaceEditor: View {
     _appearance = State(
       initialValue: ThemeColorDraft(
         tint: space?.tint ?? .lavender, customRGB: space?.customRGB))
+    _sharedProfileID = State(
+      initialValue: store.isPrivate ? store.session.selectedSpace.profileID : nil)
   }
 
   var body: some View {
@@ -61,7 +63,7 @@ struct SpaceEditor: View {
           .accessibilityLabel(SettingsL10n.string("Space name"))
       }
       ThemeColorPicker(color: $appearance, focusOnAppear: store.spaceEditorFocus == .theme)
-      if route.spaceID == nil { profileSection }
+      if route.spaceID == nil && !store.isPrivate { profileSection }
       if let error { Text(error).font(.caption).foregroundStyle(.red) }
       HStack(spacing: 10) {
         if route.spaceID != nil {

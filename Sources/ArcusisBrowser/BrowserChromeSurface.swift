@@ -53,6 +53,12 @@ struct BrowserChromeSurface: View {
         }
       }
       PageNavigationButtons(store: store, engine: engine)
+      if store.isPrivate {
+        Label(ShellL10n.string("Private browsing"), systemImage: "eye.slash.fill")
+          .font(.system(size: 11, weight: .semibold))
+          .foregroundStyle(.purple)
+          .accessibilityIdentifier("browser.private.marker")
+      }
       if let split = store.selectedSplit {
         SplitLayoutControls(store: store, split: split)
       }
@@ -87,6 +93,8 @@ struct BrowserChromeSurface: View {
         ExtensionToolbar(engine: engine, store: store)
           .frame(width: 28, height: 28)
       }
+    } else if let page = store.privatePage {
+      PrivateSiteControlsButton(store: store, runtime: page.runtime)
     }
   }
 

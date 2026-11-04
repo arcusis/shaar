@@ -261,6 +261,18 @@ public struct BrowserSession: Codable, Equatable, Sendable {
     fresh(language: BrowserLanguage.currentLaunchLanguage)
   }
 
+  /// A window-local model for an off-the-record profile. It must never be passed to a SessionFile.
+  public static func privateWindow(sourceProfileID: UUID, firstTabID: UUID) throws -> BrowserSession
+  {
+    let profile = BrowserProfile(id: sourceProfileID, name: "Private", symbol: "eye.slash")
+    let first = BrowserTab(id: firstTabID, url: URL(string: "about:blank")!)
+    let space = BrowserSpace(
+      profileID: sourceProfileID, name: "Private", symbol: "eye.slash",
+      tint: .lavender, tabs: [first], selectedTabID: firstTabID)
+    return try BrowserSession(
+      profiles: [profile], spaces: [space], selectedSpaceID: space.id)
+  }
+
   static func fresh(language: BrowserLanguage) -> BrowserSession {
     let personalName = BrowserLocalization.string("Personal", table: "Core", language: language)
     let workName = BrowserLocalization.string("Work", table: "Core", language: language)

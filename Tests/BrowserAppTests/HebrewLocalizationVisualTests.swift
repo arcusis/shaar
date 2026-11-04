@@ -146,27 +146,16 @@ final class HebrewLocalizationVisualTests: XCTestCase {
     }
   }
 
-  func testPrivateStartPageRendersAndDoesNotRetainStore() throws {
-    let size = NSSize(width: 720, height: 720)
+  func testPrivateChromeMarkerRenders() throws {
+    let size = NSSize(width: 900, height: 100)
+    let session = try BrowserSession.privateWindow(
+      sourceProfileID: UUID(), firstTabID: UUID())
+    let store = BrowserStore(privateSession: session)
     for (theme, appearance) in [(ColorScheme.light, NSAppearance.Name.aqua), (.dark, .darkAqua)] {
       let scheme = theme == .dark ? "dark" : "light"
-      weak var releasedStore: PrivateBrowserStore?
-      let hosting = try autoreleasepool {
-        let scopedStore = PrivateBrowserStore(
-          contextID: UUID().uuidString, windowID: UUID().uuidString,
-          tabID: UUID().uuidString, url: "about:blank")
-        releasedStore = scopedStore
-        try capture(
-          PrivateStartPage(store: scopedStore).environment(\.colorScheme, theme),
-          name: "private-start-page-\(scheme).png", size: size, appearance: appearance)
-        return NSHostingView(
-          rootView: PrivateStartPage(store: scopedStore).environment(\.colorScheme, theme))
-      }
-      hosting.frame = NSRect(origin: .zero, size: size)
-      hosting.layoutSubtreeIfNeeded()
-      withExtendedLifetime(hosting) {
-        XCTAssertNil(releasedStore, "Hosted PrivateStartPage must not retain its private store")
-      }
+      try capture(
+        BrowserChromeSurface(store: store, engine: nil).environment(\.colorScheme, theme),
+        name: "private-chrome-\(scheme).png", size: size, appearance: appearance)
     }
   }
 

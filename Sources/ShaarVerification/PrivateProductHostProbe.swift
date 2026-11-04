@@ -59,8 +59,8 @@ final class PrivateProductHostProbe {
   private var lifecycleBlocker = ""
   private var quitDiagnosticStages: [[String: Any]] = []
   private var nativeCloseObservations: [String: NativeCloseObservation] = [:]
-  private weak var lifecycleStore: PrivateBrowserStore?
-  private weak var lifecycleHosting: NSHostingView<PrivateBrowserWindow?>?
+  private weak var lifecycleStore: BrowserStore?
+  private weak var lifecycleHosting: NSHostingView<BrowserWindow?>?
 
   init(
     runtime: ARCChromiumRuntime, root: URL, fixture: URL, phase: String,
@@ -361,6 +361,7 @@ final class PrivateProductHostProbe {
       fixture.appending(
         path: "private-product-\(runID.lowercased())-search"
       ).absoluteString + "?q=abcdefghijklmnopqrstuvwxyz"
+    first.store.showAddressEditor()
     first.hosting.layoutSubtreeIfNeeded()
     let appWindowCount = NSApp.windows.count
     let appWindowIDsBeforeTyping = Set(NSApp.windows.map { ObjectIdentifier($0) })
@@ -384,7 +385,7 @@ final class PrivateProductHostProbe {
       },
     ]
     checks["productAlphabetSearchDoesNotOpenPicker"] =
-      typedQuery == alphabetQuery && !first.store.commandIsOpen && !openedPickerWindow
+      typedQuery == alphabetQuery && first.store.commandIsOpen && !openedPickerWindow
       && first.store.tabs.count == 1 && privateHost.windowCount == 1
     submitAddressField(window: first.window)
     first.store.confirmHTTP(useHTTPS: false)
@@ -422,15 +423,19 @@ final class PrivateProductHostProbe {
       firstTabID != nil && first.store.selectedTabID == secondTab.id
       && first.store.tabs.first(where: { $0.id == secondTab.id })?.url.contains("-next") == true
     privateHost.perform(.newTab)
+    checks["productCommandTUsesPrivateOpaqueSearch"] =
+      privateHost.activeOwner?.windowID == first.windowID
+      && privateHost.canPerform(.newTab) && first.store.commandIsOpen
+      && first.store.tabs.count == 2
+    first.store.dismissCommand()
+    first.store.openTab()
     try await waitForTabs(first.store, count: 3)
     guard let commandTab = first.store.selectedTab else {
       throw PrivateWindowFailure("Private Command-T did not create a selected native tab.")
     }
     checks["productCommandTUsesPrivateOpaqueSearch"] =
-      privateHost.activeOwner?.windowID == first.windowID
-      && privateHost.canPerform(.newTab)
-      && first.store.showsStartPage && first.store.tabs.count == 3
-      && commandTab.id != secondTab.id
+      checks["productCommandTUsesPrivateOpaqueSearch"] == true
+      && first.store.showsStartPage && commandTab.id != secondTab.id
     privateHost.perform(.search)
     checks["productCommandLTargetsCurrentPrivateTab"] =
       first.store.tabs.count == 3
@@ -514,7 +519,7 @@ final class PrivateProductHostProbe {
   }
 
   private func typeInAddressField(
-    _ text: String, window: NSWindow, hosting: NSHostingView<PrivateBrowserWindow?>
+    _ text: String, window: NSWindow, hosting: NSHostingView<BrowserWindow?>
   ) -> String? {
     func textFields(in view: NSView) -> [NSTextField] {
       (view as? NSTextField).map { [$0] } ?? view.subviews.flatMap { textFields(in: $0) }
@@ -584,7 +589,7 @@ final class PrivateProductHostProbe {
   }
 
   private func waitForTab(
-    _ store: PrivateBrowserStore, tabID: String, canGoBack: Bool
+    _ store: BrowserStore, tabID: String, canGoBack: Bool
   ) async throws {
     for _ in 0..<100 {
       if store.tabs.first(where: { $0.id == tabID })?.canGoBack == canGoBack { return }
@@ -594,7 +599,7 @@ final class PrivateProductHostProbe {
   }
 
   private func waitForLoading(
-    _ store: PrivateBrowserStore, tabID: String, loading: Bool
+    _ store: BrowserStore, tabID: String, loading: Bool
   ) async throws {
     for _ in 0..<100 {
       if store.tabs.first(where: { $0.id == tabID })?.loading == loading { return }
@@ -914,7 +919,7 @@ final class PrivateProductHostProbe {
     return false
   }
 
-  private func waitForTabs(_ store: PrivateBrowserStore, count: Int) async throws {
+  private func waitForTabs(_ store: BrowserStore, count: Int) async throws {
     for _ in 0..<100 {
       if store.tabs.count == count { return }
       try await Task.sleep(for: .milliseconds(50))
@@ -922,7 +927,7 @@ final class PrivateProductHostProbe {
     throw PrivateWindowFailure("Private product tab callback timed out.")
   }
 
-  private func waitForURL(_ store: PrivateBrowserStore, tabID: String, contains value: String)
+  private func waitForURL(_ store: BrowserStore, tabID: String, contains value: String)
     async throws
   {
     for _ in 0..<100 {

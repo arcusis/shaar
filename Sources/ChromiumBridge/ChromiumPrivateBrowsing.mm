@@ -468,9 +468,15 @@
 }
 
 - (BOOL)reloadPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID {
+  return [self reloadPrivateTabID:tabID windowID:windowID contextID:contextID mode:ARCPageReloadModeNormal];
+}
+
+- (BOOL)reloadPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID
+                    mode:(ARCPageReloadMode)mode {
   ArdiaCoreTab *tab = nil;
   if (![self privateOwnerForTabID:tabID windowID:windowID contextID:contextID tab:&tab window:nil]) return NO;
-  [tab reload];
+  if (mode == ARCPageReloadModeBypassingCache) [tab reloadIgnoringCache];
+  else [tab reload];
   return YES;
 }
 
@@ -486,6 +492,34 @@
   if (![self privateOwnerForTabID:tabID windowID:windowID contextID:contextID tab:&tab window:nil] || !tab.canGoForward) return NO;
   [tab goForward];
   return YES;
+}
+
+- (BOOL)findInPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID
+             requestID:(NSString *)requestID text:(NSString *)text forward:(BOOL)forward {
+  ArdiaCoreTab *tab = nil;
+  NSMutableDictionary *entry = (NSMutableDictionary *)_privateProbeTabs[tabID];
+  NSDictionary *window = _privateProbeWindows[windowID];
+  if (![self privateOwnerForTabID:tabID windowID:windowID contextID:contextID tab:&tab window:nil] ||
+      ![window[@"selectedTabID"] isEqualToString:tabID] || !ARCIsCanonicalID(requestID) || !text.length)
+    return NO;
+  if (![entry[@"findText"] isEqualToString:text]) {
+    entry[@"findRequestID"] = nil;
+    [tab find:@"" forward:YES];
+  }
+  entry[@"findRequestID"] = requestID;
+  entry[@"findText"] = text;
+  [tab find:text forward:forward];
+  return YES;
+}
+
+- (void)stopFindingInPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID {
+  ArdiaCoreTab *tab = nil;
+  if (![self privateOwnerForTabID:tabID windowID:windowID contextID:contextID tab:&tab window:nil]) return;
+  NSMutableDictionary *entry = (NSMutableDictionary *)_privateProbeTabs[tabID];
+  entry[@"findRequestID"] = nil;
+  entry[@"findText"] = nil;
+  [tab find:@"" forward:YES];
+  [tab stopFinding];
 }
 
 - (NSWindow *)windowForPrivateWindowID:(NSString *)windowID contextID:(NSString *)contextID {

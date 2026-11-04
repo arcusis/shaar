@@ -165,11 +165,18 @@ struct CommandPanel: View {
     if store.commandEditsCurrentURL, !movedSelection,
       let url = NavigationInput.destination(
         for: store.commandQuery,
-        searchEngine: store.preferences.searchEngine(for: store.session.selectedSpace.profileID)),
-      store.engine?.navigateCurrentPage(to: url) == true
+        searchEngine: store.preferences.searchEngine(for: store.session.selectedSpace.profileID))
     {
-      store.dismissCommand()
-      return
+      if let privatePage = store.privatePage,
+        privatePage.navigateCurrentPage(to: url) || privatePage.pendingHTTP != nil
+      {
+        store.dismissCommand()
+        return
+      }
+      if store.engine?.navigateCurrentPage(to: url) == true {
+        store.dismissCommand()
+        return
+      }
     }
     store.acceptCommand()
   }

@@ -133,6 +133,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     }
   }
 
+  private var activeBrowserStore: BrowserStore? {
+    privateHost?.activeOwner?.store ?? activeContext?.store
+  }
+
   func restore() throws {
     guard !started else { throw WorkspaceError.invalidState }
     started = true
@@ -150,10 +154,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     let privateHost = PrivateBrowserHost(
       runtime: events.runtime, presentsWindows: presentation == .visible,
       keyWindow: keyWindow,
-      searchEngine: { [weak self] source in
-        guard let self, let id = UUID(uuidString: source) else { return .google }
-        return self.preferences.searchEngine(for: id)
-      },
+      preferences: preferences,
       sourceProfileID: { [weak self] in
         if let privateSource = self?.privateHost?.activeOwner?.sourceProfileID {
           return privateSource
@@ -258,7 +259,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
 
   func canPerform(_ command: BrowserMenuCommand) -> Bool {
     guard !events.runtime.isQuitting else { return false }
-    if command == .newMiniWindow || command == .quit { return true }
+    if command == .quit { return true }
+    if command == .newMiniWindow { return privateHost?.hasActiveWindow != true }
     if command == .checkForUpdates { return canCheckForUpdates }
     if command == .newPrivateWindow {
       return activeContext != nil || privateHost?.hasActiveWindow == true
@@ -930,7 +932,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
 
   func validateMenuItem(_ item: NSMenuItem) -> Bool {
     if let id = item.representedObject as? UUID {
-      guard canPerform(.nextSpace), let store = activeContext?.store else { return false }
+      guard canPerform(.nextSpace), let store = activeBrowserStore else { return false }
       item.state = store.session.selectedSpaceID == id ? .on : .off
       return store.session.spaces.contains { $0.id == id }
     }
@@ -942,7 +944,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     else { return false }
     if command == .closeTab {
       item.title =
-        activeContext.map { Self.closeTabTitle(for: $0.store) }
+        activeBrowserStore.map(Self.closeTabTitle(for:))
         ?? ShellL10n.string("Close window")
     }
     return canPerform(command)
@@ -1079,7 +1081,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   }
 
   @objc private func copyCurrentURL(_ sender: NSMenuItem) {
-    guard canPerform(.nextSpace), let url = activeContext?.store.session.selectedPage?.tab.url
+    guard canPerform(.nextSpace), let url = activeBrowserStore?.session.selectedPage?.tab.url
     else {
       return
     }
@@ -1089,7 +1091,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
 
   @objc private func selectMenuSpace(_ sender: NSMenuItem) {
     guard canPerform(.nextSpace), let id = sender.representedObject as? UUID,
-      let store = activeContext?.store,
+      let store = activeBrowserStore,
       store.session.spaces.contains(where: { $0.id == id })
     else { return }
     store.perform(.space(id))
@@ -1103,7 +1105,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     while let item = menu.items.first(where: { $0.representedObject is UUID || $0.tag == 91827 }) {
       menu.removeItem(item)
     }
-    guard canPerform(.nextSpace), let store = activeContext?.store else { return }
+    guard canPerform(.nextSpace), let store = activeBrowserStore else { return }
     let separator = NSMenuItem.separator()
     separator.tag = 91827
     menu.addItem(separator)

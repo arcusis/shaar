@@ -1326,6 +1326,16 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
   if (identity && [self mediaSessionStateForTabID:identity]) [self publishMediaSessionForTabID:identity];
 }
 - (void)tab:(ArdiaCoreTab *)tab didFindMatches:(int)count active:(int)active final:(BOOL)final {
+  NSString *privateID = nil;
+  NSDictionary *privateEntry = [self privateEntryForTab:tab identity:&privateID];
+  if (privateEntry) {
+    NSString *requestID = privateEntry[@"findRequestID"];
+    NSDictionary *window = _privateProbeWindows[privateEntry[@"windowID"]];
+    if (requestID && [window[@"selectedTabID"] isEqualToString:privateID] && self.onPrivateFindResult)
+      self.onPrivateFindResult(privateEntry[@"contextID"], privateEntry[@"windowID"],
+        privateID, requestID, count, active, final);
+    return;
+  }
   NSString *identity = [self identityForTab:tab];
   ARCNativeWindowState *state = [self stateForTabID:identity];
   if (state.findRequestID && [identity isEqualToString:state.findTabID] &&

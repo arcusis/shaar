@@ -13,9 +13,10 @@ final class PrivateBrowserHost {
     let contextID: String
     let sourceProfileID: String
     let windowID: String
-    let store: PrivateBrowserStore
+    let store: BrowserStore
+    let page: PrivatePageSession
     let window: NSWindow
-    let hosting: NSHostingView<PrivateBrowserWindow?>
+    let hosting: NSHostingView<BrowserWindow?>
     let titlebarDragView: NSView
   }
 
@@ -23,7 +24,7 @@ final class PrivateBrowserHost {
   private let keyWindow: () -> NSWindow?
   private let sourceProfileID: () -> String?
   private let presentsWindows: Bool
-  private let searchEngine: (String) -> BrowserSearchEngine
+  private let preferences: BrowserPreferencesStore
   private var owners: [String: Owner] = [:]
   private var contextsBySource: [String: String] = [:]
   private var windowsByContext: [String: Set<String>] = [:]
@@ -32,13 +33,13 @@ final class PrivateBrowserHost {
   init(
     runtime: ARCChromiumRuntime, presentsWindows: Bool = true,
     keyWindow: @escaping () -> NSWindow? = { NSApp.keyWindow ?? NSApp.mainWindow },
-    searchEngine: @escaping (String) -> BrowserSearchEngine = { _ in .google },
+    preferences: BrowserPreferencesStore = BrowserPreferencesStore(),
     sourceProfileID: @escaping () -> String?
   ) {
-    self.searchEngine = searchEngine
     self.runtime = runtime
     self.presentsWindows = presentsWindows
     self.keyWindow = keyWindow
+    self.preferences = preferences
     self.sourceProfileID = sourceProfileID
   }
 
@@ -47,47 +48,67 @@ final class PrivateBrowserHost {
     while let parent = window?.sheetParent { window = parent }
     return owners.values.first { $0.window === window }
   }
-
   var hasActiveWindow: Bool { activeOwner != nil }
   var ownedWindows: [Owner] { Array(owners.values) }
   var windowCount: Int { owners.count }
 
   func installCallbacks() {
     runtime.onPrivateNavigationFailed = { [weak self] context, window, tab, message in
-      guard let owner = self?.owners[window], owner.contextID == context,
-        owner.store.selectedTabID == tab
+      guard let owner = self?.owner(context: context, window: window),
+        owner.store.session.selectedPage?.tab.id.uuidString == tab
       else { return }
-      owner.store.failure = message
+      owner.page.navigationFailed(message)
     }
     runtime.onPrivateTabChanged = {
       [weak self] context, window, tab, url, title, loading, back, forward in
-      self?.tabChanged(
-        context: context, window: window, tab: tab, url: url, title: title,
-        loading: loading, back: back, forward: forward)
+      guard let owner = self?.owner(context: context, window: window),
+        let id = UUID(uuidString: tab)
+      else { return }
+      owner.page.tabChanged(
+        id, url: url, title: title, loading: loading,
+        back: back, forward: forward)
     }
     runtime.onPrivateTabSelected = { [weak self] context, window, tab in
-      self?.tabSelected(context: context, window: window, tab: tab)
+      guard let owner = self?.owner(context: context, window: window),
+        let id = UUID(uuidString: tab)
+      else { return }
+      owner.page.tabSelected(id)
+    }
+    runtime.onPrivateFindResult = {
+      [weak self] context, window, tab, request, count, active, final in
+      guard let owner = self?.owner(context: context, window: window),
+        let id = UUID(uuidString: tab), let token = UUID(uuidString: request)
+      else { return }
+      owner.store.receiveFindResult(
+        tabID: id, requestID: token, count: Int(count), active: Int(active), final: final)
     }
     runtime.onPrivateTabClosed = { [weak self] context, window, tab in
-      self?.tabClosed(context: context, window: window, tab: tab)
+      guard let owner = self?.owner(context: context, window: window),
+        let id = UUID(uuidString: tab)
+      else { return }
+      owner.page.tabClosed(id)
     }
     runtime.onPrivateWindowClosed = { [weak self] context, window in
       self?.windowClosed(context: context, window: window)
     }
   }
 
+  private func owner(context: String, window: String) -> Owner? {
+    guard let owner = owners[window], owner.contextID == context else { return nil }
+    return owner
+  }
+
   func detach() {
     runtime.onPrivateNavigationFailed = nil
     runtime.onPrivateTabChanged = nil
     runtime.onPrivateTabSelected = nil
+    runtime.onPrivateFindResult = nil
     runtime.onPrivateTabClosed = nil
     runtime.onPrivateWindowClosed = nil
-    for owner in owners.values {
-      retire(owner)
-    }
+    for owner in owners.values { retire(owner) }
+    owners.removeAll()
   }
 
-  /// Retire SwiftUI bindings before AppKit or its field editor can keep them alive.
   static func retireHostingContent<Content: View>(_ hosting: NSHostingView<Content?>) {
     hosting.rootView = nil
     hosting.layoutSubtreeIfNeeded()
@@ -99,7 +120,13 @@ final class PrivateBrowserHost {
     _ = owner.window.makeFirstResponder(nil)
     Self.retireHostingContent(owner.hosting)
     owner.titlebarDragView.removeFromSuperview()
-    owner.store.clear()
+    owner.store.onSessionChanged = nil
+    owner.store.onCloseTab = nil
+    owner.store.onReloadPage = nil
+    owner.store.onNavigatePage = nil
+    owner.store.onFindRequest = nil
+    owner.store.onStopFinding = nil
+    owner.store.privatePage = nil
   }
 
   func openWindow() throws {
@@ -113,82 +140,114 @@ final class PrivateBrowserHost {
       if pendingWindowRequests[context] != nil {
         pendingWindowRequests[context, default: []].append((windowID, tabID))
       } else {
-        createWindow(
-          context: context, source: source, window: windowID, tab: tabID, url: "about:blank")
+        createWindow(context: context, source: source, window: windowID, tab: tabID)
       }
-    } else {
-      contextsBySource[source] = contextID
-      windowsByContext[contextID] = []
-      pendingWindowRequests[contextID] = [(windowID, tabID)]
-      runtime.createPrivateContextID(contextID, sourceProfileID: source) {
-        [weak self] success, error in
-        guard let self else { return }
-        guard success, !self.runtime.isQuitting,
-          self.sourceProfileID() == source,
-          self.contextsBySource[source] == contextID,
-          self.windowsByContext[contextID] != nil
-        else {
-          self.pendingWindowRequests.removeValue(forKey: contextID)
-          if self.contextsBySource[source] == contextID {
-            self.contextsBySource.removeValue(forKey: source)
-          }
-          if self.windowsByContext[contextID]?.isEmpty == true {
-            self.windowsByContext.removeValue(forKey: contextID)
-          }
-          if success, self.windowsByContext[contextID] == nil {
-            _ = self.runtime.releasePrivateContextID(contextID)
-          }
-          _ = error
-          return
+      return
+    }
+    contextsBySource[source] = contextID
+    windowsByContext[contextID] = []
+    pendingWindowRequests[contextID] = [(windowID, tabID)]
+    runtime.createPrivateContextID(contextID, sourceProfileID: source) { [weak self] success, _ in
+      guard let self else { return }
+      guard success, !self.runtime.isQuitting, self.contextsBySource[source] == contextID,
+        self.windowsByContext[contextID] != nil
+      else {
+        self.pendingWindowRequests.removeValue(forKey: contextID)
+        if self.contextsBySource[source] == contextID {
+          self.contextsBySource.removeValue(forKey: source)
         }
-        let requests = self.pendingWindowRequests.removeValue(forKey: contextID) ?? []
-        for (windowID, tabID) in requests {
-          self.createWindow(
-            context: contextID, source: source, window: windowID, tab: tabID,
-            url: "about:blank")
+        if self.windowsByContext[contextID]?.isEmpty == true {
+          self.windowsByContext.removeValue(forKey: contextID)
         }
+        if success, self.windowsByContext[contextID] == nil {
+          _ = self.runtime.releasePrivateContextID(contextID)
+        }
+        return
       }
+      let requests = self.pendingWindowRequests.removeValue(forKey: contextID) ?? []
+      for (window, tab) in requests {
+        self.createWindow(context: contextID, source: source, window: window, tab: tab)
+      }
+    }
+  }
+
+  static func supportsPrivateCommand(_ command: BrowserMenuCommand) -> Bool {
+    switch command {
+    case .bookmarkPage, .bookmarks, .history, .downloads, .extensions, .settings,
+      .developerTools, .inspector, .inspectorCopy,
+      .newMiniWindow, .checkForUpdates:
+      false
+    default: true
     }
   }
 
   func canPerform(_ command: BrowserMenuCommand) -> Bool {
-    guard activeOwner != nil else { return false }
-    guard !runtime.isQuitting else { return false }
-    return Self.supportsPrivateCommand(command)
-  }
-
-  static func supportsPrivateCommand(_ command: BrowserMenuCommand) -> Bool {
-    [.newTab, .search, .closeTab, .closeWindow, .reload].contains(command)
+    guard let owner = activeOwner, !runtime.isQuitting,
+      Self.supportsPrivateCommand(command), owner.store.sheet == nil
+    else { return false }
+    return switch command {
+    case .reopenClosed: owner.store.canReopenClosedTab
+    case .splitView: owner.store.session.selectedSpace.tabs.count >= 2
+    case .reload, .hardReload: owner.store.canReloadCurrentPage
+    case .find: owner.store.canFindCurrentPage
+    case .findNext, .findPrevious: owner.store.pageFind?.canMove == true
+    default: true
+    }
   }
 
   func perform(_ command: BrowserMenuCommand) {
     guard let owner = activeOwner, canPerform(command) else { return }
+    let store = owner.store
     switch command {
-    case .newTab:
-      owner.store.openTab()
-    case .search: owner.store.showCommand()
+    case .newTab: store.showCommand()
+    case .search: store.showAddressEditor()
+    case .newSpace: store.spaceEditor = .create
+    case .editSpace: store.spaceEditor = .edit(store.session.selectedSpaceID)
+    case .createFolder:
+      store.showFolderEditor(.create(spaceID: store.session.selectedSpaceID, parentID: nil))
     case .closeTab:
-      if owner.store.tabs.count > 1, let tab = owner.store.selectedTab {
-        owner.store.closeTab(tab.id)
-      } else {
-        closeWindow(context: owner.contextID, window: owner.windowID)
-      }
-    case .closeWindow: closeWindow(context: owner.contextID, window: owner.windowID)
-    case .reload: owner.store.reload()
+      if store.session.selectedPage != nil { store.closeCurrentPage() } else { closeWindow(owner) }
+    case .closeWindow: closeWindow(owner)
+    case .reopenClosed: store.reopenLastClosedTab()
+    case .recentlyClosed: store.showRecentlyClosed()
+    case .addFavorite: _ = store.addCurrentPageAsFavorite()
+    case .sidebar: store.sidebarIsVisible.toggle()
+    case .nextSpace: store.cycleSpace(by: 1)
+    case .previousSpace: store.cycleSpace(by: -1)
+    case .reload: _ = store.reloadCurrentPage()
+    case .hardReload: _ = store.reloadCurrentPage(.bypassingCache)
+    case .find: store.showPageFind()
+    case .findNext: store.movePageFind(forward: true)
+    case .findPrevious: store.movePageFind(forward: false)
+    case .splitView: store.splitSelectedTab()
+    case .help:
+      if let url = URL(string: "https://github.com/arcusis/shaar") { store.perform(.open(url)) }
+    case .minimizeWindow: owner.window.performMiniaturize(nil)
+    case .zoomWindow: owner.window.zoom(nil)
+    case .bringAllToFront:
+      for item in owners.values { item.window.orderFront(nil) }
+      owner.window.makeKeyAndOrderFront(nil)
     default: break
     }
   }
 
-  private func createWindow(
-    context: String, source: String, window: String, tab: String, url: String
-  ) {
-    guard !runtime.isQuitting else { return }
-    do { try runtime.createPrivateWindowID(window, contextID: context, tabID: tab, url: url) } catch
-    {
+  private func createWindow(context: String, source: String, window: String, tab: String) {
+    guard !runtime.isQuitting, let sourceID = UUID(uuidString: source),
+      let firstTabID = UUID(uuidString: tab),
+      let session = try? BrowserSession.privateWindow(
+        sourceProfileID: sourceID, firstTabID: firstTabID)
+    else { return }
+    do {
+      try runtime.createPrivateWindowID(
+        window, contextID: context, tabID: tab,
+        url: "about:blank")
+    } catch {
       releaseEmptyContext(context, source: source)
       return
     }
-    guard let nativeWindow = runtime.window(forPrivateWindowID: window, contextID: context) else {
+    guard let nativeWindow = runtime.window(forPrivateWindowID: window, contextID: context),
+      let container = runtime.hostView(forPrivateWindowID: window, contextID: context)
+    else {
       runtime.closePrivateWindowID(window, contextID: context) { [weak self] closed in
         if closed { self?.releaseEmptyContext(context, source: source) }
       }
@@ -204,19 +263,12 @@ final class PrivateBrowserHost {
       NativeWindowPlacement.frame(
         saved: nil, source: nil, screens: NSScreen.screens.map(\.visibleFrame)),
       display: false)
-    let store = PrivateBrowserStore(
-      contextID: context, windowID: window, tabID: tab, url: url, searchEngine: searchEngine(source)
-    )
-    let hosting = NSHostingView<PrivateBrowserWindow?>(
-      rootView: PrivateBrowserWindow(store: store, runtime: runtime))
-    hosting.frame = nativeWindow.contentView?.bounds ?? .zero
-    hosting.autoresizingMask = [.width, .height]
-    guard let container = runtime.hostView(forPrivateWindowID: window, contextID: context) else {
-      runtime.closePrivateWindowID(window, contextID: context) { [weak self] closed in
-        if closed { self?.releaseEmptyContext(context, source: source) }
-      }
-      return
-    }
+    let store = BrowserStore(privateSession: session)
+    store.usePreferences(preferences)
+    let page = PrivatePageSession(
+      runtime: runtime, contextID: context, windowID: window,
+      firstTabID: firstTabID, store: store)
+    let hosting = NSHostingView<BrowserWindow?>(rootView: BrowserWindow(store: store))
     hosting.frame = container.bounds
     hosting.autoresizingMask = [.width, .height]
     container.addSubview(hosting)
@@ -226,86 +278,38 @@ final class PrivateBrowserHost {
       isRightToLeft: BrowserLanguage.currentLaunchLanguage.isRightToLeft)
     titlebarHost.addSubview(titlebarDragView, positioned: .above, relativeTo: nil)
     let owner = Owner(
-      contextID: context, sourceProfileID: source, windowID: window, store: store,
-      window: nativeWindow, hosting: hosting, titlebarDragView: titlebarDragView)
+      contextID: context, sourceProfileID: source, windowID: window,
+      store: store, page: page, window: nativeWindow,
+      hosting: hosting, titlebarDragView: titlebarDragView)
     owners[window] = owner
     windowsByContext[context, default: []].insert(window)
-    store.onOpenTab = { [weak self] in self?.openTab(context: context, window: window) }
-    store.onNavigate = { [weak self] id, value in
-      self?.navigate(id, value, context: context, window: window)
+    page.onEmpty = { [weak self] in
+      guard let self, let owner = self.owners[window] else { return }
+      self.closeWindow(owner)
     }
-    store.onCloseTab = { [weak self] id in
-      self?.closeTab(id, context: context, window: window)
-    }
-    store.onSelectTab = { [weak self] id in
-      guard let self,
-        self.runtime.selectPrivateTabID(id, windowID: window, contextID: context),
-        self.owners[window]?.contextID == context
-      else { return }
-      self.owners[window]?.store.select(id)
-    }
-    store.onReload = { [weak self] id in
-      guard let self, self.owners[window]?.contextID == context else { return }
-      _ = self.runtime.reloadPrivateTabID(id, windowID: window, contextID: context)
-    }
-    store.onBack = { [weak self] id in
-      guard let self, self.owners[window]?.contextID == context else { return }
-      _ = self.runtime.goBackPrivateTabID(id, windowID: window, contextID: context)
-    }
-    store.onForward = { [weak self] id in
-      guard let self, self.owners[window]?.contextID == context else { return }
-      _ = self.runtime.goForwardPrivateTabID(id, windowID: window, contextID: context)
-    }
+    store.launcherActions = LauncherActions(
+      available: { [weak self] in self?.launcherCommands(window: window) ?? [] },
+      run: { [weak self] name in self?.performLauncherCommand(name, window: window) })
     if presentsWindows { nativeWindow.makeKeyAndOrderFront(nil) }
   }
 
-  private func openTab(context: String, window: String) {
-    guard let owner = owners[window], owner.contextID == context else { return }
-    let id = UUID().uuidString.uppercased()
-    do {
-      try runtime.openPrivateTabID(
-        id, windowID: owner.windowID, contextID: owner.contextID, url: "about:blank")
-    } catch { return }
-    guard runtime.selectPrivateTabID(id, windowID: owner.windowID, contextID: owner.contextID)
-    else {
-      runtime.closePrivateTabID(id, windowID: owner.windowID, contextID: owner.contextID) { _ in }
-      return
+  private func launcherCommands(window: String) -> [LauncherCommand] {
+    guard owners[window] != nil else { return [] }
+    return LauncherCommands.catalog.filter {
+      guard let command = BrowserMenuCommand(rawValue: $0.id) else { return false }
+      return Self.supportsPrivateCommand(command)
     }
-    owner.store.select(id)
   }
 
-  private func navigate(_ id: String, _ value: String, context: String, window: String) {
-    guard let owner = owners[window], owner.contextID == context else { return }
-    let address: String
-    if value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "about:blank" {
-      address = "about:blank"
-    } else if let destination = NavigationInput.destination(for: value) {
-      address = destination.absoluteString
-    } else {
-      return
-    }
-    guard
-      runtime.navigatePrivateTabID(
-        id, windowID: window, contextID: context, url: address)
+  private func performLauncherCommand(_ name: String, window: String) {
+    guard let command = BrowserMenuCommand(rawValue: name), owners[window] != nil,
+      Self.supportsPrivateCommand(command)
     else { return }
-    owner.store.address = address
+    if activeOwner?.windowID == window { perform(command) }
   }
 
-  private func closeTab(_ id: String, context: String, window: String) {
-    guard owners[window]?.contextID == context else { return }
-    runtime.closePrivateTabID(id, windowID: window, contextID: context) {
-      [weak self] closed in
-      guard let self, closed, let owner = self.owners[window], owner.contextID == context else {
-        return
-      }
-      owner.store.remove(id)
-      if owner.store.tabs.isEmpty { self.closeWindow(context: context, window: window) }
-    }
-  }
-
-  private func closeWindow(context: String, window: String) {
-    guard owners[window]?.contextID == context else { return }
-    runtime.closePrivateWindowID(window, contextID: context) { _ in }
+  private func closeWindow(_ owner: Owner) {
+    runtime.closePrivateWindowID(owner.windowID, contextID: owner.contextID) { _ in }
   }
 
   private func releaseEmptyContext(_ context: String, source: String) {
@@ -317,29 +321,8 @@ final class PrivateBrowserHost {
     _ = runtime.releasePrivateContextID(context)
   }
 
-  private func tabChanged(
-    context: String, window: String, tab: String, url: String, title: String,
-    loading: Bool, back: Bool, forward: Bool
-  ) {
-    guard let owner = owners[window], owner.contextID == context else { return }
-    owner.store.receive(
-      PrivateBrowserTab(
-        id: tab, url: url, title: title, loading: loading,
-        canGoBack: back, canGoForward: forward))
-  }
-
-  private func tabSelected(context: String, window: String, tab: String) {
-    guard let owner = owners[window], owner.contextID == context else { return }
-    owner.store.select(tab)
-  }
-
-  private func tabClosed(context: String, window: String, tab: String) {
-    guard let owner = owners[window], owner.contextID == context else { return }
-    owner.store.remove(tab)
-  }
-
   private func windowClosed(context: String, window: String) {
-    guard let owner = owners[window], owner.contextID == context else { return }
+    guard let owner = owner(context: context, window: window) else { return }
     owners.removeValue(forKey: window)
     retire(owner)
     windowsByContext[context]?.remove(window)

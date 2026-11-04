@@ -197,6 +197,28 @@ final class ShaarPreviewProbe {
           && self.committed[tab.uuidString] == self.firstURL.absoluteString
       }
     }
+    await check("extensions") {
+      guard
+        let secondProfileID = self.profileTabID.flatMap({ tabID in
+          self.host.contexts[self.firstWindowID]?.store.session.profileID(forTabID: tabID)
+        })
+      else { throw Failure("Second profile is unavailable for extension checks.") }
+      let first = try await self.extensionList(profileID: self.firstProfileID)
+      let second = try await self.extensionList(profileID: secondProfileID)
+      guard
+        Set(first.compactMap { $0["id"] as? String }).count == first.count,
+        Set(second.compactMap { $0["id"] as? String }).count == second.count
+      else {
+        throw Failure("Profile extension lists contain duplicate or invalid IDs.")
+      }
+      guard
+        let firstDirectory = self.runtime.extensionsDirectory(
+          forProfileID: self.firstProfileID.uuidString),
+        let secondDirectory = self.runtime.extensionsDirectory(
+          forProfileID: secondProfileID.uuidString),
+        firstDirectory != secondDirectory
+      else { throw Failure("Extension directories are not profile scoped.") }
+    }
     await check("downloads") {
       guard let url = self.downloadURL else { throw Failure("No download fixture URL.") }
       guard
@@ -212,6 +234,19 @@ final class ShaarPreviewProbe {
       }
     }
     finish(error: nil)
+  }
+
+  private func extensionList(profileID: UUID) async throws -> [[String: Any]] {
+    let json = await withCheckedContinuation { continuation in
+      runtime.manageExtensions(
+        forProfileID: profileID.uuidString, operation: .list,
+        extensionID: nil, enabled: false
+      ) { continuation.resume(returning: $0) }
+    }
+    guard let json, let data = json.data(using: .utf8),
+      let rows = try JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+    else { throw Failure("Shaar extension list did not return an array.") }
+    return rows
   }
 
   private func check(_ name: String, work: () async throws -> Void) async {

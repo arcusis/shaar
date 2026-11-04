@@ -359,7 +359,7 @@ extension ProfileOnboardingProbe {
         else { throw Failure("Profile fixture requires an authored loopback page") }
         fixture = url
       }
-      let runtime = try ARCChromiumRuntime(
+      let runtime = try ARCShaarRuntime(
         frameworkURL: frameworks.appending(path: "Chromium Framework.framework"))
       let workspace = try BrowserWorkspaceStore(
         file: WorkspaceFile(

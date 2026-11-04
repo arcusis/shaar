@@ -234,6 +234,8 @@ private struct PrivatePageView: NSViewRepresentable {
   }
 
   func updateNSView(_ view: ChromiumPageContainerView, context: Context) {
+    view.wantsLayer = true
+    view.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
     _ = view.attach(
       runtime.view(forPrivateTabID: tabID, windowID: windowID, contextID: contextID))
     if isFocused, view.window?.isKeyWindow == true {

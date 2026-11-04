@@ -25,6 +25,15 @@ final class BrowserBackendSelectionTests: XCTestCase {
         environment: ["SHAAR_ENGINE_BACKEND": "unknown"], arguments: []), .ardia)
   }
 
+  func testPreviewBundleSelectsShaar() {
+    XCTAssertEqual(
+      BrowserBackendSelection.choose(
+        environment: [:], arguments: [], bundleBackend: "shaar"), .shaar)
+    XCTAssertEqual(
+      BrowserBackendSelection.choose(
+        environment: [:], arguments: [], bundleBackend: "unknown"), .ardia)
+  }
+
   func testExplicitShaarSelectionDoesNotFallBackWhenABIMissing() {
     XCTAssertThrowsError(
       try ARCShaarRuntime(frameworkURL: URL(fileURLWithPath: "/nonexistent-shaar-framework")))

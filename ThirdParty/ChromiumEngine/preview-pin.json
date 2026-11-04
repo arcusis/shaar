@@ -1,0 +1,10 @@
+{
+  "sourceKind": "shaar",
+  "purpose": "Preview engine for issue #418",
+  "sourceCommit": "a3cc5fcdc216bf8399e802c685913a2f7cac3d90",
+  "engineTree": "0fd438ac5e7847948832ff6dd080ce9ab0206464",
+  "archiveURL": "https://github.com/arcusis/shaar/releases/download/engine-155.0.8059.84-shaar.3/ShaarEngine-155.0.8059.84-shaar.3.tar.xz",
+  "sha256": "da4df762ef4ee6118701f92b82631e5359afa8221a27b3fafd63fe5542ba4f7b",
+  "chromiumVersion": "155.0.8059.84",
+  "architecture": "arm64"
+}

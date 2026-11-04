@@ -22,15 +22,17 @@ configuration=release
 with_engine=false
 with_updates=false
 with_verification=false
+preview_shaar_engine=false
 seen_configuration=false
 seen_engine=false
 seen_updates=false
 seen_verification=false
+seen_preview_shaar_engine=false
 while (($#)); do
   case "$1" in
     --configuration)
       if $seen_configuration || (($# < 2)) || [[ "$2" == --* ]]; then
-        echo 'Usage: bundle-app.sh [--configuration release|debug] [--with-engine] [--with-updates] [--verification]' >&2
+        echo 'Usage: bundle-app.sh [--configuration release|debug] [--with-engine] [--with-updates] [--verification] [--preview-shaar-engine]' >&2
         exit 2
       fi
       case "$2" in
@@ -67,6 +69,15 @@ while (($#)); do
       with_verification=true
       shift
       ;;
+    --preview-shaar-engine)
+      if $seen_preview_shaar_engine; then
+        echo 'Duplicate option: --preview-shaar-engine' >&2
+        exit 2
+      fi
+      seen_preview_shaar_engine=true
+      preview_shaar_engine=true
+      shift
+      ;;
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
 done
@@ -79,6 +90,14 @@ fi
 if $with_verification && { ! $with_engine || $with_updates; }; then
   echo '--verification requires --with-engine and excludes --with-updates.' >&2
   exit 2
+fi
+if $preview_shaar_engine && { ! $with_engine || $with_updates; }; then
+  echo '--preview-shaar-engine requires --with-engine and excludes --with-updates.' >&2
+  exit 2
+fi
+engine_pin=ThirdParty/ArdiaCore/pin.json
+if $preview_shaar_engine; then
+  engine_pin=ThirdParty/ChromiumEngine/preview-pin.json
 fi
 
 bundle_identifier=$SHAAR_BUNDLE_IDENTIFIER
@@ -132,8 +151,9 @@ cp -R Resources/ExtensionManager "$app/Contents/Resources/ExtensionManager"
 mkdir -p "$app/Contents/Resources/Privacy"
 cp Resources/Privacy/tracker-domains.json "$app/Contents/Resources/Privacy/"
 mkdir -p "$app/Contents/Resources/ArdiaCore"
-cp ThirdParty/ArdiaCore/LICENSE ThirdParty/ArdiaCore/NOTICE ThirdParty/ArdiaCore/pin.json \
+cp ThirdParty/ArdiaCore/LICENSE ThirdParty/ArdiaCore/NOTICE \
   "$app/Contents/Resources/ArdiaCore/"
+cp "$engine_pin" "$app/Contents/Resources/ArdiaCore/pin.json"
 # The executable links Sparkle, so every bundle embeds it. Copy the pinned SwiftPM artifact
 # unchanged: its own signatures and entitlements stay intact for release re-signing.
 mkdir -p "$app/Contents/Frameworks"
@@ -155,7 +175,7 @@ if $with_engine; then
       exit 1
     }
   else
-    framework=$(bash scripts/fetch-engine.sh)
+    framework=$(SHAAR_ENGINE_PIN="$engine_pin" bash scripts/fetch-engine.sh)
   fi
   # Keep version symlinks and upstream resources. Re-sign nested code inside out.
   ditto "$framework" "$app/Contents/Frameworks/Chromium Framework.framework"
@@ -163,6 +183,10 @@ if $with_engine; then
 fi
 # Only release bundles carry the update feed; without it the app never starts Sparkle.
 update_keys=''
+backend_key=''
+if $preview_shaar_engine; then
+  backend_key='  <key>ShaarEngineBackend</key><string>shaar</string>'
+fi
 if $with_updates; then
   update_keys="  <key>SUFeedURL</key><string>$SHAAR_FEED_URL</string>
   <key>SUPublicEDKey</key><string>$SHAAR_SPARKLE_PUBLIC_ED_KEY</string>
@@ -200,6 +224,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
   <key>NSLocationWhenInUseUsageDescription</key><string>Allow websites you approve to use your location, such as maps and delivery sites.</string>
   <key>NSBluetoothAlwaysUsageDescription</key><string>Allow websites you approve to connect to Bluetooth devices, such as security keys and phones used for passkey sign-in.</string>
 $update_keys
+$backend_key
 </dict></plist>
 PLIST
 adhoc_sign "$app"

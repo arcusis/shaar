@@ -214,14 +214,35 @@ static NSMutableDictionary<NSString *, NSNumber *> *ShaarCookiePolicyCache(ARCSh
   return cache;
 }
 
+static const void *ShaarManagedCookiePolicyCacheKey = &ShaarManagedCookiePolicyCacheKey;
+
+static NSMutableDictionary<NSString *, NSNumber *> *ShaarManagedCookiePolicyCache(ARCShaarRuntime *runtime) {
+  NSMutableDictionary *cache = objc_getAssociatedObject(runtime, ShaarManagedCookiePolicyCacheKey);
+  if (!cache) {
+    cache = [NSMutableDictionary dictionary];
+    objc_setAssociatedObject(runtime, ShaarManagedCookiePolicyCacheKey, cache, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  }
+  return cache;
+}
+
 @implementation ARCShaarRuntime (SiteControls)
 
 - (void)shaarPrimeSiteControlsForProfileID:(NSString *)profileID completion:(void (^)(void))completion {
+  [self refreshThirdPartyCookiePolicyForProfileID:profileID completion:completion];
+}
+
+- (void)refreshThirdPartyCookiePolicyForProfileID:(NSString *)profileID completion:(void (^)(void))completion {
   [self shaarSubmit:SHAAR_OP_THIRD_PARTY_COOKIES_GET profileID:profileID tabID:nil
            payload:@{@"schemaVersion": @1} completion:^(NSDictionary *result, NSError *error) {
     NSNumber *blocked = result[@"blocked"];
-    if (!error && [blocked isKindOfClass:NSNumber.class])
+    NSNumber *managed = result[@"managed"];
+    if (!error && [blocked isKindOfClass:NSNumber.class] && [managed isKindOfClass:NSNumber.class]) {
       ShaarCookiePolicyCache(self)[profileID] = blocked;
+      ShaarManagedCookiePolicyCache(self)[profileID] = managed;
+    } else {
+      [ShaarCookiePolicyCache(self) removeObjectForKey:profileID];
+      [ShaarManagedCookiePolicyCache(self) removeObjectForKey:profileID];
+    }
     completion();
   }];
 }
@@ -263,15 +284,23 @@ static NSMutableDictionary<NSString *, NSNumber *> *ShaarCookiePolicyCache(ARCSh
   return [self shaarHasProfileID:profileID] ? ShaarCookiePolicyCache(self)[profileID] : nil;
 }
 
+- (NSNumber *)thirdPartyCookiesManagedForProfileID:(NSString *)profileID {
+  return [self shaarHasProfileID:profileID] ? ShaarManagedCookiePolicyCache(self)[profileID] : nil;
+}
+
 - (void)setThirdPartyCookiesBlocked:(BOOL)blocked profileID:(NSString *)profileID
                          completion:(void (^)(NSError *))completion {
   [self shaarSubmit:SHAAR_OP_THIRD_PARTY_COOKIES_SET profileID:profileID tabID:nil
            payload:@{@"schemaVersion": @1, @"blocked": @(blocked)}
         completion:^(NSDictionary *result, NSError *error) {
     NSNumber *effective = result[@"blocked"];
-    if (!error && [effective isKindOfClass:NSNumber.class] && effective.boolValue == blocked)
+    NSNumber *managed = result[@"managed"];
+    if (!error && [effective isKindOfClass:NSNumber.class] &&
+        [managed isKindOfClass:NSNumber.class] && effective.boolValue == blocked) {
       ShaarCookiePolicyCache(self)[profileID] = effective;
-    completion(error ?: (effective && effective.boolValue == blocked
+      ShaarManagedCookiePolicyCache(self)[profileID] = managed;
+    }
+    completion(error ?: (effective && managed && effective.boolValue == blocked
         ? nil : ARCBridgeError(@"The cookie policy was not saved.")));
   }];
 }
@@ -282,6 +311,7 @@ static NSMutableDictionary<NSString *, NSNumber *> *ShaarCookiePolicyCache(ARCSh
     return;
   }
   [ShaarCookiePolicyCache(self) removeObjectForKey:profileID];
+  [ShaarManagedCookiePolicyCache(self) removeObjectForKey:profileID];
   completion(nil);
 }
 

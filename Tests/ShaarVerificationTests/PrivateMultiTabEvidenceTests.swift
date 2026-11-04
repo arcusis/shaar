@@ -33,6 +33,7 @@ import Testing
     let valid: [String: Any] = [
       "stage": "tab-0", "containerCount": 1, "layerBacked": [true],
       "attached": true, "attachedInWindow": true, "nativeHidden": false,
+      "rawWindowSibling": false,
     ]
     #expect(PrivateMultiTabEvidence.liveShellAudit(valid, stage: "tab-0"))
     #expect(!PrivateMultiTabEvidence.liveShellAudit(valid, stage: "search"))
@@ -41,6 +42,22 @@ import Testing
       missing.removeValue(forKey: key)
       #expect(!PrivateMultiTabEvidence.liveShellAudit(missing, stage: "tab-0"))
     }
+  }
+
+  @Test func blankPrivateTabCannotCoverTheSwiftUIShell() {
+    let valid: [String: Any] = [
+      "stage": "first-blank", "nativeViewPresent": true,
+      "rawWindowSibling": false, "containerCount": 0,
+    ]
+    #expect(PrivateMultiTabEvidence.blankShellAudit(valid))
+    for key in valid.keys {
+      var invalid = valid
+      invalid.removeValue(forKey: key)
+      #expect(!PrivateMultiTabEvidence.blankShellAudit(invalid))
+    }
+    var covered = valid
+    covered["rawWindowSibling"] = true
+    #expect(!PrivateMultiTabEvidence.blankShellAudit(covered))
   }
 
   @Test func searchEvidenceRequiresRenderedResultsFromExpectedHost() {

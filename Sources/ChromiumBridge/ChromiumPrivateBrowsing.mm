@@ -273,9 +273,7 @@
     if (error) *error = ARCBridgeError(@"Chromium could not create the private tab.");
     return NO;
   }
-  tab.view.frame = native.hostView.bounds;
-  tab.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-  [native.hostView addSubview:tab.view];
+  // SwiftUI attaches the page only when it is shown. A full-window sibling can cover its shell.
   // Navigation waits for private protection setup below.
   tab.delegate = self;
   if (!creationCurrent()) {
@@ -392,9 +390,6 @@
   [windowEntry[@"tabIDs"] addObject:tabID];
   [windowEntry[@"pendingTabs"] removeObject:tabID];
   [_privateProbePendingTabs removeObject:tabID];
-  tab.view.frame = native.hostView.bounds;
-  tab.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-  [native.hostView addSubview:tab.view];
   tab.delegate = self;
   tab.view.hidden = YES;
   if (!current() || _privateProbeTabs[tabID] != entry) {

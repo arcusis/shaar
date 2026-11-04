@@ -314,6 +314,14 @@ final class EngineProbe {
     }
   }
 
+  private func waitForRestoredTab(_ id: String) async throws {
+    for _ in 0..<100 {
+      if runtime.nativeTabID(forID: id) >= 0 { return }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    throw ProbeFailure("Saved tab did not materialize in the Shaar window: \(id).")
+  }
+
   private func evaluate(_ tab: String, _ script: String) async throws -> Any {
     let json: String? = await withCheckedContinuation { continuation in
       runtime.evaluate(inTabID: tab, script: script) { continuation.resume(returning: $0) }
@@ -450,9 +458,10 @@ final class EngineProbe {
       bootstrapStage = .loadingBeta
       try await load(profileB)
       bootstrapStage = .openingAlpha
-      try runtime.openTabID(tabA, profileID: profileA, url: fixture.absoluteString)
+      browserEngine?.reconcile()
+      try await waitForRestoredTab(tabA)
       bootstrapStage = .openingBeta
-      try runtime.openTabID(tabB, profileID: profileB, url: fixture.absoluteString)
+      try await waitForRestoredTab(tabB)
       if localizationMode {
         // Restored tabs retain the previous scenario URL; reuse their profiles with this fixture.
         for (tab, profile) in [(tabA, profileA), (tabB, profileB)] {

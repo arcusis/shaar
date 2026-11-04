@@ -44,6 +44,8 @@ TEST(ShaarExtensionsModuleTest, RegistrationAddsOnlyExtensionOperationRange) {
   shaar_extensions_register(&registry);
   EXPECT_NE(registry.Find(SHAAR_OP_EXTENSION_LIST), nullptr);
   EXPECT_NE(registry.Find(SHAAR_OP_EXTENSION_POPUP_CLOSE), nullptr);
+  EXPECT_NE(registry.Find(SHAAR_OP_EXTENSION_WEB_STORE_ZOOM), nullptr);
+  EXPECT_NE(registry.Find(SHAAR_OP_EXTENSION_ACTION_STATE), nullptr);
   EXPECT_EQ(registry.Find(SHAAR_OP_TAB_FIND), nullptr);
   const auto* module = static_cast<const shaar::ExtensionsModuleHandlers*>(
       registry.FindModule(SHAAR_MODULE_EXTENSIONS));
@@ -91,6 +93,35 @@ TEST(ShaarExtensionsModuleTest, RejectsMalformedExtensionIDs) {
   EXPECT_EQ(Submit(&context, scope, SHAAR_OP_EXTENSION_MANAGE,
                    R"({"schemaVersion":1,"action":"uninstall","extensionId":"../bad"})",
                    &error),
+            SHAAR_INVALID_ARGUMENT);
+  EXPECT_EQ(profiles.resolve_calls, 0);
+}
+
+TEST(ShaarExtensionsModuleTest, RejectsMalformedWebStoreFitBeforeProfileLookup) {
+  EmptyProfileServices profiles;
+  shaar::ShaarEngineContext context{&profiles, nullptr};
+  shaar_scope scope = {};
+  scope.size = sizeof(scope);
+  scope.profile = reinterpret_cast<shaar_profile*>(1);
+  shaar_error error = {};
+  error.size = sizeof(error);
+  EXPECT_EQ(Submit(&context, scope, SHAAR_OP_EXTENSION_WEB_STORE_ZOOM,
+                   R"({"schemaVersion":1,"zoomFactor":-5,"appliedZoom":1})",
+                   &error),
+            SHAAR_INVALID_ARGUMENT);
+  EXPECT_EQ(profiles.resolve_calls, 0);
+}
+
+TEST(ShaarExtensionsModuleTest, RejectsMalformedActionStateBeforeProfileLookup) {
+  EmptyProfileServices profiles;
+  shaar::ShaarEngineContext context{&profiles, nullptr};
+  shaar_scope scope = {};
+  scope.size = sizeof(scope);
+  scope.profile = reinterpret_cast<shaar_profile*>(1);
+  shaar_error error = {};
+  error.size = sizeof(error);
+  EXPECT_EQ(Submit(&context, scope, SHAAR_OP_EXTENSION_ACTION_STATE,
+                   R"({"schemaVersion":1,"extensionId":"../bad"})", &error),
             SHAAR_INVALID_ARGUMENT);
   EXPECT_EQ(profiles.resolve_calls, 0);
 }

@@ -4,6 +4,7 @@
 
 #import "ChromiumWebStoreFit.h"
 #import "include/ChromiumBridge.h"
+#import "ChromiumShaarExtensionsInternal.h"
 #import "../../ThirdParty/ArdiaCore/ArdiaCore.h"
 #include <algorithm>
 #include <cmath>
@@ -28,6 +29,9 @@ double ARCWebStoreFitZoom(double viewportWidth, double requiredWidth) {
 @property(nonatomic) double appliedZoom;
 @property(nonatomic) BOOL manual;
 @property(nonatomic, strong, nullable) id frameObserver;
+@property(nonatomic, weak, nullable) ARCShaarRuntime *shaarRuntime;
+@property(nonatomic, copy, nullable) NSString *shaarURL;
+@property(nonatomic, copy, nullable) NSString *shaarProfileID;
 @end
 
 @implementation ARCWebStoreFitState
@@ -40,6 +44,7 @@ double ARCWebStoreFitZoom(double viewportWidth, double requiredWidth) {
   BOOL _testing;
   ARCWebStoreFitEvaluator _evaluator;
   NSMapTable<ArdiaCoreTab *, ARCWebStoreFitState *> *_states;
+  NSMutableDictionary<NSString *, ARCWebStoreFitState *> *_shaarStates;
 }
 
 - (instancetype)initWithTesting:(BOOL)testing evaluator:(ARCWebStoreFitEvaluator)evaluator {
@@ -47,6 +52,7 @@ double ARCWebStoreFitZoom(double viewportWidth, double requiredWidth) {
   _testing = testing;
   _evaluator = [evaluator copy];
   _states = [NSMapTable weakToStrongObjectsMapTable];
+  _shaarStates = [NSMutableDictionary dictionary];
   return self;
 }
 
@@ -143,6 +149,80 @@ double ARCWebStoreFitZoom(double viewportWidth, double requiredWidth) {
   double zoom = ARCWebStoreFitZoom(viewport, json.doubleValue);
   state.appliedZoom = zoom;
   if (std::fabs(tab.zoomFactor - zoom) > ZoomTolerance) tab.zoomFactor = zoom;
+}
+
+- (void)shaarTabDidReceiveEvent:(NSDictionary *)event tabID:(NSString *)tabID runtime:(ARCShaarRuntime *)runtime {
+  NSString *phase = event[@"phase"];
+  NSString *url = event[@"url"];
+  if (![url isKindOfClass:NSString.class] || ![self isWebStoreURL:url]) {
+    [self shaarTabWillCloseID:tabID];
+    return;
+  }
+  ARCWebStoreFitState *state = _shaarStates[tabID];
+  if (!state) {
+    state = [ARCWebStoreFitState new];
+    _shaarStates[tabID] = state;
+  }
+  state.shaarRuntime = runtime;
+  state.shaarURL = url;
+  state.shaarProfileID = [runtime shaarProfileIDForTabID:tabID];
+  if ([phase isEqualToString:@"started"] || [phase isEqualToString:@"committed"]) {
+    state.generation++;
+    state.appliedZoom = 0;
+    state.manual = NO;
+  }
+  NSView *view = [runtime viewForTabID:tabID];
+  if (view && !state.frameObserver) {
+    view.postsFrameChangedNotifications = YES;
+    __weak ARCWebStoreFit *weakSelf = self;
+    state.frameObserver = [NSNotificationCenter.defaultCenter
+        addObserverForName:NSViewFrameDidChangeNotification object:view queue:nil
+                usingBlock:^(NSNotification *notification) {
+      [weakSelf scheduleShaarTabID:tabID];
+    }];
+  }
+  if (![event[@"loading"] boolValue]) [self scheduleShaarTabID:tabID];
+}
+
+- (void)shaarTabWillCloseID:(NSString *)tabID {
+  [NSObject cancelPreviousPerformRequestsWithTarget:self
+                                           selector:@selector(fitShaarTabID:) object:tabID];
+  [_shaarStates removeObjectForKey:tabID];
+}
+
+- (void)scheduleShaarTabID:(NSString *)tabID {
+  ARCWebStoreFitState *state = _shaarStates[tabID];
+  if (!state || state.manual) return;
+  [NSObject cancelPreviousPerformRequestsWithTarget:self
+                                           selector:@selector(fitShaarTabID:) object:tabID];
+  [self performSelector:@selector(fitShaarTabID:) withObject:tabID afterDelay:FitDelay];
+}
+
+- (void)fitShaarTabID:(NSString *)tabID {
+  ARCWebStoreFitState *state = _shaarStates[tabID];
+  ARCShaarRuntime *runtime = state.shaarRuntime;
+  NSView *view = [runtime viewForTabID:tabID];
+  if (!state || !runtime || !view || state.manual || !state.shaarProfileID ||
+      ![self isWebStoreURL:state.shaarURL]) return;
+  double width = NSWidth(view.bounds);
+  if (width <= 0) return;
+  // The store's current fixed body minimum is 1280 CSS pixels. The native
+  // operation validates the committed host before changing its zoom.
+  double zoom = ARCWebStoreFitZoom(width, 1280);
+  NSUInteger generation = state.generation;
+  [runtime shaarSubmitExtensionOperation:SHAAR_OP_EXTENSION_WEB_STORE_ZOOM
+      profileID:state.shaarProfileID tabID:tabID
+      payload:@{@"schemaVersion": @1, @"zoomFactor": @(zoom),
+                @"appliedZoom": @(state.appliedZoom)}
+      completion:^(NSString *json, shaar_error_code code) {
+        if (code != SHAAR_OK || !json || self->_shaarStates[tabID] != state ||
+            state.generation != generation) return;
+        NSDictionary *reply = [NSJSONSerialization JSONObjectWithData:
+            [json dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
+        if (![reply[@"schemaVersion"] isEqual:@1]) return;
+        state.manual = [reply[@"manual"] boolValue];
+        if (!state.manual) state.appliedZoom = [reply[@"zoomFactor"] doubleValue];
+      }];
 }
 
 @end

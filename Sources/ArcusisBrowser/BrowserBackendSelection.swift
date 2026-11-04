@@ -6,9 +6,12 @@ enum BrowserBackendSelection: Equatable {
   case ardia
   case shaar
 
-  static func choose(environment: [String: String], arguments: [String]) -> Self {
+  static func choose(
+    environment: [String: String], arguments: [String], bundleBackend: String? = nil
+  ) -> Self {
     if arguments.contains("--shaar-engine-backend=shaar") { return .shaar }
     if environment["SHAAR_ENGINE_BACKEND"] == "shaar" { return .shaar }
+    if bundleBackend == "shaar" { return .shaar }
     return .ardia
   }
 }

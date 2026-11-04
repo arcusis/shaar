@@ -85,7 +85,8 @@ bool Downloads::IsReady() const {
   return ready_ && manager_;
 }
 
-base::DictValue Downloads::Record(const download::DownloadItem& item) {
+base::DictValue Downloads::Record(const download::DownloadItem& item,
+                                  bool off_the_record) {
   base::DictValue record;
   const base::FilePath& target = item.GetTargetFilePath();
   const base::FilePath& full = item.GetFullPath();
@@ -103,6 +104,7 @@ base::DictValue Downloads::Record(const download::DownloadItem& item) {
   record.Set("speed", static_cast<double>(item.CurrentSpeed()));
   record.Set("mimeType", item.GetMimeType());
   record.Set("dangerous", item.IsDangerous() || item.IsInsecure());
+  record.Set("offTheRecord", off_the_record);
   if (item.GetLastReason() == download::DOWNLOAD_INTERRUPT_REASON_NONE) {
     record.Set("error", base::Value());
   } else {
@@ -131,7 +133,7 @@ base::DictValue Downloads::List() const {
       return left->GetStartTime() > right->GetStartTime();
     });
     for (const auto* item : visible)
-      items.Append(Record(*item));
+      items.Append(Record(*item, browser_context_->IsOffTheRecord()));
   }
   result.Set("downloads", std::move(items));
   return result;
@@ -402,7 +404,7 @@ void Downloads::EmitUpsert(download::DownloadItem* item) {
   payload.Set("schemaVersion", 1);
   payload.Set("kind", "downloads.changed");
   payload.Set("change", "upsert");
-  payload.Set("download", Record(*item));
+  payload.Set("download", Record(*item, browser_context_->IsOffTheRecord()));
   PostEvent(std::move(payload));
 }
 

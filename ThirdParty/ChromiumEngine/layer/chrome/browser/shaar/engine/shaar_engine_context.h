@@ -52,6 +52,10 @@ class PrivateSessionServices {
                        Profile** otr,
                        std::string_view* profile_id,
                        std::string_view* session_id) = 0;
+  virtual bool RetainChild(shaar_engine* engine,
+                           shaar_private_session* handle) = 0;
+  virtual bool ReleaseChild(shaar_engine* engine,
+                            shaar_private_session* handle) = 0;
 };
 // END site_data
 

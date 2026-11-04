@@ -24,7 +24,7 @@ private actor FakeDownloadsTransport: ShaarDownloadsTransport {
 
 @Test func listDecodesTheVersionedDownloadRecord() async throws {
   let payload = Data(
-    #"{"schemaVersion":1,"downloads":[{"id":"guid-1","url":"https://example.test/a","filename":"a.bin","path":"/tmp/Downloads/a.bin","state":"downloading","paused":false,"received":3.0,"total":9.0,"speed":4.0,"mimeType":"application/octet-stream","dangerous":false,"error":null,"startTime":1234.0}]}"#
+    #"{"schemaVersion":1,"downloads":[{"id":"guid-1","url":"https://example.test/a","filename":"a.bin","path":"/tmp/Downloads/a.bin","state":"downloading","paused":false,"received":3.0,"total":9.0,"speed":4.0,"mimeType":"application/octet-stream","dangerous":false,"offTheRecord":false,"error":null,"startTime":1234.0}]}"#
       .utf8)
   let fake = FakeDownloadsTransport(replies: [400: payload])
   let result = try await ShaarDownloadsAdapter(transport: fake).list()
@@ -40,13 +40,24 @@ private actor FakeDownloadsTransport: ShaarDownloadsTransport {
   #expect(result[0].speed == 4)
   #expect(result[0].mimeType == "application/octet-stream")
   #expect(!result[0].dangerous)
+  #expect(!result[0].offTheRecord)
   #expect(result[0].error == nil)
   #expect(result[0].startTime == 1234)
 }
 
+@Test func downloadRecordRequiresPrivacyBit() async throws {
+  let missing = Data(
+    #"{"schemaVersion":1,"downloads":[{"id":"guid-1","url":"https://example.test/a","filename":"a.bin","path":"/tmp/a.bin","state":"finished","paused":false,"received":1,"total":1,"speed":0,"mimeType":"application/octet-stream","dangerous":false,"error":null,"startTime":0}]}"#
+      .utf8)
+  let fake = FakeDownloadsTransport(replies: [400: missing])
+  await #expect(throws: (any Error).self) {
+    _ = try await ShaarDownloadsAdapter(transport: fake).list()
+  }
+}
+
 @Test func listPreservesUnknownSizeAndFailureDiagnostics() async throws {
   let payload = Data(
-    #"{"schemaVersion":1,"downloads":[{"id":"guid-2","url":"https://example.test/b","filename":"b.bin","path":"","state":"failed","paused":false,"received":0,"total":-1,"speed":0,"mimeType":"application/octet-stream","dangerous":true,"error":"NETWORK_FAILED","startTime":0}]}"#
+    #"{"schemaVersion":1,"downloads":[{"id":"guid-2","url":"https://example.test/b","filename":"b.bin","path":"","state":"failed","paused":false,"received":0,"total":-1,"speed":0,"mimeType":"application/octet-stream","dangerous":true,"offTheRecord":false,"error":"NETWORK_FAILED","startTime":0}]}"#
       .utf8)
   let fake = FakeDownloadsTransport(replies: [400: payload])
   let result = try await ShaarDownloadsAdapter(transport: fake).list()
@@ -124,7 +135,8 @@ private actor FakeDownloadsTransport: ShaarDownloadsTransport {
   let row = ShaarDownloadRecord(
     id: "g", url: "https://example.test", filename: "a", path: "/tmp/Downloads/a",
     state: .finished, paused: false, received: 1, total: 1, speed: 0,
-    mimeType: "application/octet-stream", dangerous: false, error: nil, startTime: 0)
+    mimeType: "application/octet-stream", dangerous: false, offTheRecord: false, error: nil,
+    startTime: 0)
   let adapter = ShaarDownloadsAdapter(transport: FakeDownloadsTransport(replies: [:]))
   #expect(throws: ShaarDownloadsError.unsafeTarget) {
     try adapter.validatedTarget(for: row, effectiveDirectory: URL(fileURLWithPath: "/tmp/Other"))

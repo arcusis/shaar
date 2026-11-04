@@ -55,7 +55,7 @@ TEST(ShaarDownloadsRecordTest, MapsAllStatesAndKeepsUnknownSize) {
   for (const auto& [state, expected] : cases) {
     NiceMock<download::MockDownloadItem> item;
     SetRecordDefaults(item, state);
-    const base::DictValue record = Downloads::Record(item);
+    const base::DictValue record = Downloads::Record(item, false);
     ASSERT_NE(record.FindString("state"), nullptr);
     EXPECT_EQ(*record.FindString("state"), expected);
     EXPECT_EQ(record.FindDouble("total"), -1.0);
@@ -65,6 +65,7 @@ TEST(ShaarDownloadsRecordTest, MapsAllStatesAndKeepsUnknownSize) {
     ASSERT_NE(record.FindString("filename"), nullptr);
     EXPECT_EQ(*record.FindString("filename"), "file.bin");
     EXPECT_EQ(record.FindDouble("startTime"), 1234.0);
+    EXPECT_EQ(record.FindBool("offTheRecord"), false);
     EXPECT_TRUE(record.Find("error")->is_none());
   }
 }
@@ -75,7 +76,8 @@ TEST(ShaarDownloadsRecordTest, UsesFullPathWhenTargetPathIsEmpty) {
   ON_CALL(item, GetTargetFilePath())
       .WillByDefault(ReturnRefOfCopy(base::FilePath()));
 
-  const base::DictValue record = Downloads::Record(item);
+  const base::DictValue record = Downloads::Record(item, true);
+  EXPECT_EQ(record.FindBool("offTheRecord"), true);
   ASSERT_NE(record.FindString("path"), nullptr);
   EXPECT_EQ(*record.FindString("path"), "/temporary/file.bin");
 }

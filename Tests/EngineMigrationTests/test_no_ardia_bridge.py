@@ -25,6 +25,37 @@ class ShaarOnlyBridgeTests(unittest.TestCase):
                 self.assertIn("try ARCShaarRuntime(", source)
                 self.assertNotIn("try ARCChromiumRuntime(", source)
 
+    def test_shaar_first_tab_verification_has_no_backend_opt_in(self):
+        for name in (
+            ".github/workflows/source-checks.yml",
+            "Tests/ShaarVerificationTests/ShaarFirstTabProbeTests.swift",
+            "Tests/ShaarVerificationTests/ShaarPreviewProbeTests.swift",
+        ):
+            with self.subTest(source=name):
+                self.assertNotIn("--shaar-engine-backend", (ROOT / name).read_text())
+
+    def test_tab_evaluation_uses_shaar_devtools(self):
+        source = (ROOT / "Sources/ChromiumBridge/ChromiumShaarBackend.mm").read_text()
+        method = source.split("- (void)evaluateInTabID:", 1)[1].split(
+            "- (void)bookmarksForProfileID:", 1
+        )[0]
+        self.assertIn('shaarDevToolsCall:@"Runtime.evaluate"', method)
+        self.assertIn('returnByValue', method)
+
+    def test_engine_shutdown_notifies_window_clients(self):
+        source = (ROOT / "Sources/ChromiumBridge/ChromiumShaarBackend.mm").read_text()
+        run = source.split("- (int)runWithDataDirectory:", 1)[1].split(
+            "- (void)receiveEvent:", 1
+        )[0]
+        self.assertIn("[self finishWindowID:windowID]", run)
+
+    def test_normal_browsing_probe_uses_shaar_tab_identity(self):
+        source = (ROOT / "Sources/ShaarVerification/EngineProbe.swift").read_text()
+        method = source.split("private func normalBrowsingSmoke()", 1)[1].split(
+            "\n  private func ", 1
+        )[0]
+        self.assertNotIn("runtime.nativeTabID(forID:", method)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -8,17 +8,16 @@ import Testing
 
 @MainActor
 @Suite struct ShaarPreviewProbeTests {
-  @Test func missingBackendAndProbeInputsFailBeforeStartingTheEngine() {
+  @Test func missingProbeInputsFailBeforeStartingTheEngine() {
     #expect(ShaarPreviewProbe.run(arguments: []) == 1)
-    #expect(ShaarPreviewProbe.run(arguments: ["--shaar-engine-backend=shaar"]) == 1)
     #expect(
       ShaarPreviewProbe.run(arguments: [
-        "--shaar-engine-backend=shaar", "--probe-output", "/tmp/shaar-preview-report.json",
+        "--probe-output", "/tmp/shaar-preview-report.json",
       ]) == 1)
     #expect(
       ShaarPreviewProbe.run(arguments: [
-        "--shaar-engine-backend=shaar", "--probe-output", "/tmp/shaar-preview-report.json",
-        "--probe-data-dir", "/tmp/shaar-preview-data",
+        "--probe-output", "/tmp/shaar-preview-report.json", "--probe-data-dir",
+        "/tmp/shaar-preview-data",
       ]) == 1)
   }
 }

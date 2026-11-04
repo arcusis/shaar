@@ -23,7 +23,8 @@ final class BrowserSettingsLayoutTests: XCTestCase {
       profiles: [
         BrowserSettingsProfile(
           id: profileID, name: "Work",
-          spaces: [BrowserSettingsSpace(id: UUID(), name: "Work", symbol: "square.stack.3d.up")])
+          spaces: [BrowserSettingsSpace(id: UUID(), name: "Work", symbol: "square.stack.3d.up")],
+          canChooseDownloadDirectory: true)
       ],
       searchEngines: [
         BrowserSettingsChoice(id: "google", title: "Google"),

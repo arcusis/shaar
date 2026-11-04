@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #import "ChromiumRuntimeInternal.h"
+#import "ChromiumShaarFeatureTransport.h"
 #include <cmath>
 
 // Runs with a user gesture so Chromium accepts the request. It picks the largest playing
@@ -89,6 +90,65 @@ static NSString *ARCPictureInPictureCommandName(ARCPictureInPictureCommand comma
   for (NSString *frameID in [_mediaSessions frameIDsForTabID:tabID]) {
     [tab callFrame:frameID kind:ARCAutoPictureInPictureMessage json:json];
   }
+}
+
+@end
+
+@implementation ARCShaarRuntime (PictureInPicture)
+
+- (void)enterPictureInPictureInTabID:(NSString *)tabID completion:(void (^)(BOOL))completion {
+  NSString *profileID = [self shaarProfileIDForTabID:tabID];
+  if (!profileID) { completion(NO); return; }
+  [self shaarSubmit:SHAAR_OP_MEDIA_ENTER_PIP profileID:profileID tabID:tabID
+           payload:@{@"schemaVersion": @1}
+        completion:^(NSDictionary *result, NSError *error) { completion(error == nil); }];
+}
+
+- (void)exitPictureInPictureInTabID:(NSString *)tabID {
+  NSString *profileID = [self shaarProfileIDForTabID:tabID];
+  if (!profileID) return;
+  [self shaarSubmit:SHAAR_OP_MEDIA_EXIT_PIP profileID:profileID tabID:tabID
+           payload:@{@"schemaVersion": @1} completion:nil];
+}
+
+- (BOOL)engineHandlesAutoPictureInPictureForTabID:(NSString *)tabID {
+  return NO;
+}
+
+- (void)setAutoPictureInPictureAllowed:(BOOL)allowed tabID:(NSString *)tabID {
+  NSString *profileID = [self shaarProfileIDForTabID:tabID];
+  if (!profileID) return;
+  [self shaarSubmit:SHAAR_OP_MEDIA_SET_AUTO_PIP profileID:profileID tabID:tabID
+           payload:@{@"schemaVersion": @1, @"allowed": @(allowed)} completion:nil];
+}
+
+- (NSWindow *)pictureInPictureVideoWindowForTabID:(NSString *)tabID {
+  NSWindow *native = [self shaarPictureInPictureWindowForTabID:tabID];
+  if (native) return native;
+  NSDictionary *state = [self mediaSessionStateForTabID:tabID];
+  if (!state[@"pictureInPicture"]) return nil;
+  for (NSWindow *window in NSApp.windows)
+    if (ARCIsPictureInPictureVideoWindow(window)) return window;
+  return nil;
+}
+
+- (BOOL)sendPictureInPictureCommand:(ARCPictureInPictureCommand)command seconds:(double)seconds
+                              tabID:(NSString *)tabID {
+  NSString *profileID = [self shaarProfileIDForTabID:tabID];
+  if (!profileID || ![self pictureInPictureVideoWindowForTabID:tabID]) return NO;
+  shaar_media_command native = SHAAR_MEDIA_PIP_PLAY;
+  switch (command) {
+    case ARCPictureInPictureCommandPlay: native = SHAAR_MEDIA_PIP_PLAY; break;
+    case ARCPictureInPictureCommandPause: native = SHAAR_MEDIA_PIP_PAUSE; break;
+    case ARCPictureInPictureCommandSkip: native = SHAAR_MEDIA_PIP_SKIP; break;
+  }
+  NSMutableDictionary *payload = [@{@"schemaVersion": @1, @"command": @(native)} mutableCopy];
+  if (command == ARCPictureInPictureCommandSkip) {
+    if (!std::isfinite(seconds) || seconds == 0 || std::abs(seconds) > 86400) return NO;
+    payload[@"value"] = @(seconds);
+  }
+  return [self shaarSubmit:SHAAR_OP_MEDIA_CONTROL profileID:profileID tabID:tabID
+                  payload:payload completion:nil];
 }
 
 @end

@@ -111,6 +111,8 @@ struct Symbols {
 - (void)finishWindowID:(NSString *)windowID;
 @end
 
+#include "ChromiumShaarFeatureTransport.inc"
+
 static void ShaarEventCallback(void *context, const shaar_event *event) {
   [(__bridge ARCShaarRuntime *)context receiveEvent:event];
 }
@@ -208,6 +210,9 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
     if (self.onTabClosed) self.onTabClosed(tabID);
     return;
   }
+  if (event->kind == SHAAR_EVENT_DOWNLOAD)
+    [self shaarReceiveDownloadEventForProfileID:
+        [self shaarProfileIDForNativeID:String(event->profile_id)] payload:payload];
 }
 
 - (void)loadProfileID:(NSString *)profileID completion:(void (^)(NSError *))completion {
@@ -219,8 +224,14 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   NSString *directory = [@"Profile " stringByAppendingString:canonicalID];
   __weak ARCShaarRuntime *weakSelf = self;
   void (^reply)(NSError *) = ^(NSError *failure) {
-    if (failure) [weakSelf removeFailedProfileID:profileID];
-    completion(failure);
+    if (failure) {
+      [weakSelf removeFailedProfileID:profileID];
+      completion(failure);
+      return;
+    }
+    [weakSelf shaarPrimeSiteControlsForProfileID:profileID completion:^{
+      [weakSelf shaarPrimeEngineServicesForProfileID:profileID completion:^{ completion(nil); }];
+    }];
   };
   void *context = (__bridge_retained void *)reply;
   shaar_profile *profile = nullptr;

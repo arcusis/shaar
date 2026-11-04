@@ -354,6 +354,11 @@ SHAAR_EXPORT shaar_error_code shaar_window_host_resize(
     shaar_engine *, shaar_window *, double width, double height, shaar_error *);
 SHAAR_EXPORT shaar_error_code shaar_media_pip_window(
     shaar_scope, shaar_tab *, shaar_window **out, shaar_error *error);
+/* Borrowed JSON bytes are valid until the next call on this UI thread. The
+ * selected regular tab must belong to scope and window. */
+SHAAR_EXPORT shaar_error_code shaar_site_security_info(
+    shaar_engine *, shaar_scope, shaar_window *, shaar_tab *,
+    shaar_bytes *out_json, shaar_error *error);
 
 /* args_json includes schemaVersion. Immediate failure has no later callback;
  * accepted requests complete once. A result payload is empty on error. */

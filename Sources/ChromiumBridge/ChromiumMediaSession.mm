@@ -3,6 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #import "ChromiumRuntimeInternal.h"
+#import "ChromiumShaarFeatureTransport.h"
+#import <objc/runtime.h>
 #include <cmath>
 
 NSString *const ARCMediaSessionMessage = @"arcusisMediaSession";
@@ -316,6 +318,126 @@ static NSDictionary<NSString *, id> *ARCMediaSessionStateFromJSON(NSString *json
   [_frames removeObjectForKey:tabID];
   [_order removeObjectForKey:tabID];
   return had;
+}
+
+@end
+
+static const void *ShaarMediaCacheKey = &ShaarMediaCacheKey;
+static const void *ShaarMediaRefreshKey = &ShaarMediaRefreshKey;
+static NSString *ARCMediaSessionActionName(ARCMediaSessionAction action);
+
+static NSMutableDictionary *ShaarMediaCache(ARCShaarRuntime *runtime, const void *key) {
+  NSMutableDictionary *cache = objc_getAssociatedObject(runtime, key);
+  if (!cache) {
+    cache = [NSMutableDictionary dictionary];
+    objc_setAssociatedObject(runtime, key, cache, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  }
+  return cache;
+}
+
+static NSString *ShaarMediaActionName(NSNumber *command) {
+  if (![command isKindOfClass:NSNumber.class]) return nil;
+  switch (command.intValue) {
+    case SHAAR_MEDIA_PLAY: return @"play";
+    case SHAAR_MEDIA_PAUSE: return @"pause";
+    case SHAAR_MEDIA_PREVIOUS_TRACK: return @"previoustrack";
+    case SHAAR_MEDIA_NEXT_TRACK: return @"nexttrack";
+    case SHAAR_MEDIA_SEEK_BACKWARD: return @"seekbackward";
+    case SHAAR_MEDIA_SEEK_FORWARD: return @"seekforward";
+    case SHAAR_MEDIA_SEEK_TO: return @"seekto";
+    default: return nil;
+  }
+}
+
+static NSDictionary *ShaarMediaPublicState(NSDictionary *native) {
+  NSString *playback = native[@"playbackState"];
+  if (![playback isKindOfClass:NSString.class] ||
+      ![@[@"none", @"paused", @"playing"] containsObject:playback]) return nil;
+  NSMutableArray *actions = [NSMutableArray array];
+  NSArray *supported = [native[@"supportedActions"] isKindOfClass:NSArray.class]
+      ? native[@"supportedActions"] : @[];
+  for (id command in supported) {
+    NSString *name = ShaarMediaActionName(command);
+    if (name) [actions addObject:name];
+  }
+  NSMutableDictionary *state = [@{
+    @"playbackState": playback,
+    @"title": native[@"title"] ?: @"", @"artist": native[@"artist"] ?: @"",
+    @"album": native[@"album"] ?: @"", @"artwork": native[@"artwork"] ?: @"",
+    @"actions": actions, @"hasVideo": native[@"hasVideo"] ?: @NO,
+    @"canSeek": native[@"canSeek"] ?: @NO, @"muted": native[@"tabMuted"] ?: @NO,
+    @"silent": native[@"silent"] ?: @NO, @"volume": native[@"pageVolume"] ?: NSNull.null,
+  } mutableCopy];
+  if ([native[@"pipVideoState"] isEqual:@"inPictureInPicture"])
+    state[@"pictureInPicture"] = @{@"playing": @([playback isEqualToString:@"playing"]), @"live": @NO};
+  return state;
+}
+
+@implementation ARCShaarRuntime (MediaSession)
+
+- (NSDictionary<NSString *, id> *)mediaSessionStateForTabID:(NSString *)tabID {
+  NSString *profileID = [self shaarProfileIDForTabID:tabID];
+  if (!profileID) return nil;
+  NSMutableDictionary *refreshes = ShaarMediaCache(self, ShaarMediaRefreshKey);
+  NSDate *last = refreshes[tabID];
+  if (!last || [last timeIntervalSinceNow] < -1) {
+    refreshes[tabID] = NSDate.date;
+    [self shaarSubmit:SHAAR_OP_MEDIA_GET_STATE profileID:profileID tabID:tabID
+             payload:@{@"schemaVersion": @1} completion:^(NSDictionary *result, NSError *error) {
+      if (error || ![self shaarProfileIDForTabID:tabID]) return;
+      NSDictionary *state = ShaarMediaPublicState(result);
+      NSDictionary *previous = ShaarMediaCache(self, ShaarMediaCacheKey)[tabID];
+      if (state) ShaarMediaCache(self, ShaarMediaCacheKey)[tabID] = state;
+      else [ShaarMediaCache(self, ShaarMediaCacheKey) removeObjectForKey:tabID];
+      if (![previous isEqual:state] && self.onMediaSessionChanged)
+        self.onMediaSessionChanged(tabID, state);
+      BOOL wasPip = previous[@"pictureInPicture"] != nil;
+      BOOL isPip = state[@"pictureInPicture"] != nil;
+      if (wasPip != isPip && self.onPictureInPictureChanged)
+        self.onPictureInPictureChanged(tabID, isPip);
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+        if (![self shaarHasTabID:tabID profileID:profileID selected:YES]) return;
+        [self mediaSessionStateForTabID:tabID];
+      });
+    }];
+  }
+  return ShaarMediaCache(self, ShaarMediaCacheKey)[tabID];
+}
+
+- (BOOL)sendMediaSessionAction:(ARCMediaSessionAction)action seconds:(double)seconds tabID:(NSString *)tabID {
+  NSString *profileID = [self shaarProfileIDForTabID:tabID];
+  NSString *name = ARCMediaSessionActionName(action);
+  NSDictionary *state = [self mediaSessionStateForTabID:tabID];
+  if (!profileID || !name || ![state[@"actions"] containsObject:name]) return NO;
+  NSMutableDictionary *payload = [@{@"schemaVersion": @1, @"command": @(action)} mutableCopy];
+  if (action == ARCMediaSessionActionSeekTo) {
+    if (!std::isfinite(seconds) || seconds < 0 || seconds > 86400) return NO;
+    payload[@"value"] = @(seconds);
+  }
+  return [self shaarSubmit:SHAAR_OP_MEDIA_CONTROL profileID:profileID tabID:tabID
+                  payload:payload completion:nil];
+}
+
+- (BOOL)setMuted:(BOOL)muted tabID:(NSString *)tabID {
+  NSString *profileID = [self shaarProfileIDForTabID:tabID];
+  if (!profileID) return NO;
+  return [self shaarSubmit:SHAAR_OP_MEDIA_CONTROL profileID:profileID tabID:tabID
+                  payload:@{@"schemaVersion": @1, @"command": @(SHAAR_MEDIA_SET_TAB_MUTED), @"value": @(muted)}
+               completion:^(NSDictionary *result, NSError *error) {
+    if (!error) {
+      [ShaarMediaCache(self, ShaarMediaRefreshKey) removeObjectForKey:tabID];
+      [self mediaSessionStateForTabID:tabID];
+    }
+  }];
+}
+
+- (BOOL)setMediaVolume:(double)volume tabID:(NSString *)tabID {
+  if (!std::isfinite(volume) || volume < 0 || volume > 1) return NO;
+  NSString *profileID = [self shaarProfileIDForTabID:tabID];
+  if (!profileID) return NO;
+  return [self shaarSubmit:SHAAR_OP_MEDIA_CONTROL profileID:profileID tabID:tabID
+                  payload:@{@"schemaVersion": @1, @"command": @(SHAAR_MEDIA_SET_ELEMENT_VOLUME), @"value": @(volume)}
+               completion:nil];
 }
 
 @end

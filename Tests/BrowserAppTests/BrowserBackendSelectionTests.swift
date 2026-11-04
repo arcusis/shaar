@@ -21,6 +21,63 @@ final class BrowserBackendSelectionTests: XCTestCase {
     }
   }
 
+  func testShaarOverridesSiteControls() {
+    for selector in [
+      "clearProfileSiteDataForProfileID:completion:",
+      "sitePermissionOriginsForProfileID:completion:",
+      "resetSitePermissionsForOrigin:profileID:completion:",
+      "thirdPartyCookiesBlockedForProfileID:",
+      "setThirdPartyCookiesBlocked:profileID:completion:",
+      "deleteEngineProfileID:completion:",
+      "securityInfoForTabID:profileID:",
+      "siteSettingsForOrigin:profileID:completion:",
+      "setSiteSetting:value:origin:profileID:completion:",
+      "clearSiteDataForOrigin:profileID:completion:",
+      "clearCacheForProfileID:completion:",
+      "clearCookiesForTabID:profileID:completion:",
+    ] { assertShaarOverrides(selector) }
+  }
+
+  func testShaarOverridesMediaAndPictureInPicture() {
+    for selector in [
+      "mediaSessionStateForTabID:", "sendMediaSessionAction:seconds:tabID:",
+      "setMuted:tabID:", "setMediaVolume:tabID:",
+      "enterPictureInPictureInTabID:completion:", "exitPictureInPictureInTabID:",
+      "engineHandlesAutoPictureInPictureForTabID:",
+      "setAutoPictureInPictureAllowed:tabID:",
+      "pictureInPictureVideoWindowForTabID:",
+      "sendPictureInPictureCommand:seconds:tabID:",
+    ] { assertShaarOverrides(selector) }
+  }
+
+  func testShaarOverridesDownloadServices() {
+    for selector in [
+      "downloadCommand:downloadID:profileID:completion:",
+      "refreshDownloadsForProfileID:",
+      "downloadsDirectoryForProfileID:",
+    ] { assertShaarOverrides(selector) }
+  }
+
+  @MainActor func testShaarFeatureCallsRejectWithoutEngineHandles() {
+    let runtime = ARCShaarRuntime()
+    let profile = UUID().uuidString
+    let tab = UUID().uuidString
+    XCTAssertNil(runtime.mediaSessionState(forTabID: tab))
+    XCTAssertFalse(runtime.setMuted(true, tabID: tab))
+    XCTAssertNil(runtime.securityInfo(forTabID: tab, profileID: profile))
+    let site = expectation(description: "site operation rejects absent profile")
+    runtime.clearCache(forProfileID: profile) { error in
+      XCTAssertNotNil(error)
+      site.fulfill()
+    }
+    let picture = expectation(description: "picture in picture rejects absent tab")
+    runtime.enterPictureInPicture(inTabID: tab) { requested in
+      XCTAssertFalse(requested)
+      picture.fulfill()
+    }
+    wait(for: [site, picture], timeout: 1)
+  }
+
   private func assertShaarOverrides(_ name: String) {
     let selector = NSSelectorFromString(name)
     let ardia = class_getInstanceMethod(ARCChromiumRuntime.self, selector)

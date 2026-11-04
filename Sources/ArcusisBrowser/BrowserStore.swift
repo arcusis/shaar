@@ -568,6 +568,7 @@ final class BrowserStore {
   func addCurrentPageAsFavorite() -> Bool {
     guard canFavoriteCurrentPage, case .tab(let tab) = session.selectedPage else { return false }
     let tabID = tab.id
+    let favicon = engine?.favicons[tabID]
     guard profileFavorites.count < BrowserSession.maximumFavoritesPerProfile else {
       sidebarNotice = ShellL10n.string("Favorites are full (12). Remove one to add another.")
       return false
@@ -576,6 +577,7 @@ final class BrowserStore {
       return false
     }
     save()
+    if let favicon { rememberFavicon(favicon, forTab: tabID) }
     return true
   }
 
@@ -903,8 +905,11 @@ final class BrowserStore {
   }
 
   func togglePin(_ id: UUID) {
+    let wasPinned = session.selectedSpace.tabs.first { $0.id == id }?.isPinned == true
+    let favicon = engine?.favicons[id]
     session.togglePin(id)
     save()
+    if !wasPinned, let favicon { rememberFavicon(favicon, forTab: id) }
   }
 
   @discardableResult

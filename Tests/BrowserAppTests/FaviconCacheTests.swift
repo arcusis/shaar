@@ -4,6 +4,7 @@
 
 import AppKit
 import BrowserCore
+import ChromiumBridge
 import Foundation
 import Testing
 
@@ -164,6 +165,50 @@ struct FaviconCacheTests {
     #expect(
       second.favicon(for: pinned, profileID: profileID).map { FaviconFixture.matches($0, .blue) }
         == true)
+  }
+
+  @Test func pinningLoadedTabPersistsItsCurrentFaviconForRestart() throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    var session = BrowserSession.fresh()
+    let opened = session.open(URL(string: "https://loaded.example")!)
+    let tabID = try #require(opened)
+    let profileID = session.selectedSpace.profileID
+    let cache = FaviconCache(directory: directory)
+    let manager = try BrowserWorkspaceStore(initialSession: session, faviconCache: cache)
+    let windowID = try #require(manager.workspace.windows.first?.id)
+    let store = try #require(manager.stores[windowID])
+    let engine = try BrowserEngine(
+      events: BrowserRuntimeEvents(runtime: ARCChromiumRuntime()), store: store)
+    engine.seedFavicon(FaviconFixture.icon(.blue), for: tabID)
+
+    store.togglePin(tabID)
+    let pinID = try #require(manager.workspace.window(windowID)?.pins.first?.pinID)
+    let restarted = FaviconCache(directory: directory)
+    let icon = try #require(restarted.icon(for: pinID, profileID: profileID))
+    #expect(FaviconFixture.matches(icon, .blue))
+  }
+
+  @Test func favoriteCreatedFromLoadedTabPersistsItsCurrentFaviconForRestart() throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    var session = BrowserSession.fresh()
+    let opened = session.open(URL(string: "https://loaded-favorite.example")!)
+    let tabID = try #require(opened)
+    let profileID = session.selectedSpace.profileID
+    let cache = FaviconCache(directory: directory)
+    let manager = try BrowserWorkspaceStore(initialSession: session, faviconCache: cache)
+    let windowID = try #require(manager.workspace.windows.first?.id)
+    let store = try #require(manager.stores[windowID])
+    let engine = try BrowserEngine(
+      events: BrowserRuntimeEvents(runtime: ARCChromiumRuntime()), store: store)
+    engine.seedFavicon(FaviconFixture.icon(.red), for: tabID)
+
+    #expect(store.addCurrentPageAsFavorite())
+    let favoriteID = try #require(store.session.selectedSpace.selectedFavoriteID)
+    let restarted = FaviconCache(directory: directory)
+    let icon = try #require(restarted.icon(for: favoriteID, profileID: profileID))
+    #expect(FaviconFixture.matches(icon, .red))
   }
 
   private func sidebarSession() -> (

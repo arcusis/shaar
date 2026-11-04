@@ -47,6 +47,11 @@ extension BrowserStore {
     faviconCache?.store(image, for: itemID, profileID: profileID)
   }
 
+  func rememberLiveFavicon(forTab tabID: UUID) {
+    guard let image = engine?.favicons[tabID] else { return }
+    rememberFavicon(image, forTab: tabID)
+  }
+
   private func faviconItemID(forTab tabID: UUID) -> UUID? {
     switch session.page(forTabID: tabID) {
     case .favorite(let page): page.favoriteID

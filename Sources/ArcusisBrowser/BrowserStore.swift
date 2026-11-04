@@ -576,6 +576,7 @@ final class BrowserStore {
       return false
     }
     save()
+    rememberLiveFavicon(forTab: tabID)
     return true
   }
 
@@ -905,6 +906,9 @@ final class BrowserStore {
   func togglePin(_ id: UUID) {
     session.togglePin(id)
     save()
+    if session.page(forTabID: id)?.tab.isPinned == true {
+      rememberLiveFavicon(forTab: id)
+    }
   }
 
   @discardableResult

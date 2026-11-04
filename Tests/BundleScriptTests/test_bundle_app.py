@@ -55,6 +55,13 @@ class BundleAppTests(unittest.TestCase):
             "printf 'fetch-engine\\n' >> \"$BUNDLE_TEST_LOG\"\n"
             "printf '%s\\n' \"$BUNDLE_TEST_FRAMEWORK\"\n"
         )
+        shaar_engine_script = self.root / "scripts" / "fetch-shaar-test-engine.sh"
+        shaar_engine_script.write_text(
+            "#!/bin/bash\n"
+            "set -euo pipefail\n"
+            "printf 'fetch-shaar-test-engine\\n' >> \"$BUNDLE_TEST_LOG\"\n"
+            "printf '%s\\n' \"$BUNDLE_TEST_FRAMEWORK\"\n"
+        )
         for name in ("LICENSE", "NOTICE", "pin.json"):
             path = self.root / "ThirdParty" / "ArdiaCore" / name
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -326,6 +333,21 @@ class BundleAppTests(unittest.TestCase):
             (self.root / "build/Shaar Verification.app/Contents/Frameworks/Chromium Framework.framework").is_dir()
         )
         self.assertFalse((self.root / "build/Shaar.app").exists())
+
+    def test_shaar_test_engine_is_verification_only_and_selected_explicitly(self):
+        environment = {**self.env, "SHAAR_TEST_SHAAR_ENGINE": "1"}
+        rejected = self._run("--with-engine", env=environment)
+        self.assertEqual(rejected.returncode, 2)
+        self.assertIn("allowed only in a verification bundle", rejected.stderr)
+        self.assertEqual(self._log(), "")
+
+        accepted = self._run("--with-engine", "--verification", env=environment)
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+        self.assertIn("fetch-shaar-test-engine", self._log())
+        self.assertNotIn("fetch-engine\n", self._log())
+        self.assertTrue(
+            (self.root / "build/Shaar Verification.app/Contents/Frameworks/Chromium Framework.framework").is_dir()
+        )
 
     def test_verification_requires_engine_and_never_carries_updates(self):
         for args in (("--verification",), ("--with-engine", "--with-updates", "--verification")):

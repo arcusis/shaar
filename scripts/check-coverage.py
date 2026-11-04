@@ -16,8 +16,11 @@ MODULES = ("BrowserCore", "ArcusisBrowser", "ChromiumBridge", "Shaar", "ShaarVer
 # for this comparison. Keep it out of the unit-test coverage denominator so new smoke assertions
 # are checked by their owning engine job rather than appearing as unexecuted unit-test code.
 EXCLUDED_UNIT_TEST_SOURCES = {("ShaarVerification", "PrivateProductHostProbe.swift")}
-# This engine-only flow is exercised by the hosted normal-window smoke, not Swift unit tests.
-UNIT_COVERAGE_EXCLUDES = {("ShaarVerification", "BasicBrowsingProbe.swift")}
+# These engine-only flows are exercised by their hosted simulation jobs, not Swift unit tests.
+UNIT_COVERAGE_EXCLUDES = {
+    ("ShaarVerification", "BasicBrowsingProbe.swift"),
+    ("ShaarVerification", "ShaarFirstTabProbe.swift"),
+}
 # Engine-driven UI tests cover a few timing-dependent lines nondeterministically (merge group run
 # 41492941258 dropped ArcusisBrowser by 3 of 36,330 lines with no source change). Tolerate drops
 # up to 0.025 percentage points; anything larger is a real regression.

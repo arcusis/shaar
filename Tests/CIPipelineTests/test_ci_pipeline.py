@@ -329,6 +329,16 @@ class CoverageGateTests(unittest.TestCase):
         coverage = COVERAGE.module_coverage(report)
         self.assertEqual(coverage["ShaarVerification"], (0, 1093))
 
+    def test_shaar_first_tab_simulation_is_excluded_from_unit_coverage(self):
+        report = self.report()
+        report["data"][0]["files"] += [
+            {"filename": "/checkout/Sources/ShaarVerification/ShaarFirstTabProbe.swift",
+             "summary": {"lines": {"covered": 0, "count": 158}}},
+            {"filename": "/checkout/Sources/ShaarVerification/EngineProbe.swift",
+             "summary": {"lines": {"covered": 967, "count": 17929}}},
+        ]
+        self.assertEqual(COVERAGE.module_coverage(report)["ShaarVerification"], (967, 17929))
+
     def test_timing_noise_passes_but_real_drop_fails(self):
         base = {"ArcusisBrowser": (22697, 36330)}
         self.assertEqual(COVERAGE.regressions(base, {"ArcusisBrowser": (22694, 36330)}), [])

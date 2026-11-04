@@ -15,11 +15,16 @@ final class ShaarFirstTabProbe {
   private let host: NativeBrowserHost
   private let workspace: BrowserWorkspaceStore
   private let tabID: UUID
+  private let profileID: UUID
+  private let checksCoreRoutes: Bool
   private let output: URL
   private let dataRoot: URL
   private let pageURL = URL(string: "https://example.com")!
   private var finished = false
   private var passed = false
+  private var navigationCommitted = false
+  private var coreChecksStarted = false
+  private var coreRoutesObserved = false
 
   private init(arguments: [String]) throws {
     func value(after flag: String) throws -> String {
@@ -36,6 +41,7 @@ final class ShaarFirstTabProbe {
     let framework = URL(filePath: try value(after: "--probe-framework"))
     output = URL(filePath: try value(after: "--probe-output"))
     dataRoot = URL(filePath: try value(after: "--probe-data-dir"), directoryHint: .isDirectory)
+    checksCoreRoutes = arguments.contains("--probe-shaar-core-routes")
     let selected = try NativeBrowserHost.makeRuntime(
       frameworkURL: framework, environment: ProcessInfo.processInfo.environment,
       arguments: arguments)
@@ -52,6 +58,10 @@ final class ShaarFirstTabProbe {
       throw Failure("The fresh workspace did not create its first tab.")
     }
     tabID = id
+    guard let owner = store.session.profileID(forTabID: id) else {
+      throw Failure("The first tab has no profile.")
+    }
+    profileID = owner
     host = NativeBrowserHost(
       events: BrowserRuntimeEvents(runtime: runtime), workspace: workspace,
       presentation: .hiddenProbe)
@@ -68,6 +78,13 @@ final class ShaarFirstTabProbe {
   }
 
   private func run() -> Int32 {
+    let previousCommitted = runtime.onDocumentCommitted
+    runtime.onDocumentCommitted = { [weak self] id, profile in
+      previousCommitted?(id, profile)
+      guard let self, id == self.tabID.uuidString else { return }
+      self.navigationCommitted = true
+      DispatchQueue.main.async { [weak self] in self?.checkTab() }
+    }
     runtime.onReady = { [weak self] in
       guard let self else { return }
       do {
@@ -93,16 +110,61 @@ final class ShaarFirstTabProbe {
       let window = runtime.window(forID: windowID),
       host.contexts.values.contains(where: { $0.engine.pages[tabID] != nil }),
       workspace.stores.values.contains(where: {
-        $0.session.selectedSpace.selectedTab?.url == pageURL
+        Self.matchesRequestedURL($0.session.selectedSpace.selectedTab?.url, requested: pageURL)
       }),
+      navigationCommitted,
       !window.isVisible, NSApp.windows.allSatisfy({ !$0.isVisible })
     {
-      finish(tabID: tab, nativeView: view)
+      if checksCoreRoutes {
+        checkCoreRoutes(tabID: tab, nativeView: view)
+      } else {
+        finish(tabID: tab, nativeView: view)
+      }
       return
     }
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
       self?.checkTab()
     }
+  }
+
+  private func checkCoreRoutes(tabID: String, nativeView: NSView) {
+    guard !coreChecksStarted else { return }
+    coreChecksStarted = true
+    let owner = profileID.uuidString
+    runtime.bookmarks(forProfileID: owner) { [weak self] tree, error in
+      guard let self else { return }
+      guard error == nil, tree?["bar"] != nil, tree?["other"] != nil else {
+        self.finish(error: "Shaar bookmarks tree failed: \(String(describing: error))")
+        return
+      }
+      self.runtime.history(forProfileID: owner, limit: 20) { [weak self] rows, error in
+        guard let self else { return }
+        guard error == nil, rows != nil else {
+          self.finish(error: "Shaar history query failed: \(String(describing: error))")
+          return
+        }
+        let token = UUID().uuidString
+        guard
+          self.runtime.find(
+            inTabID: tabID, profileID: owner, requestID: token, text: "Example", forward: true)
+        else {
+          self.finish(error: "Shaar find request was rejected.")
+          return
+        }
+        self.runtime.stopFinding(inTabID: tabID)
+        self.coreRoutesObserved = true
+        DispatchQueue.main.async { [weak self] in
+          self?.finish(tabID: tabID, nativeView: nativeView)
+        }
+      }
+    }
+  }
+
+  static func matchesRequestedURL(_ actual: URL?, requested: URL) -> Bool {
+    guard let actual, actual.scheme == requested.scheme, actual.host == requested.host,
+      actual.query == requested.query, actual.fragment == requested.fragment
+    else { return false }
+    return actual.path == requested.path || (actual.path == "/" && requested.path.isEmpty)
   }
 
   private func finish(tabID: String? = nil, nativeView: NSView? = nil, error: String? = nil) {
@@ -116,7 +178,8 @@ final class ShaarFirstTabProbe {
       "passed": passed,
       "tabID": tabID ?? "",
       "nativeView": nativeView != nil,
-      "navigationObserved": host.contexts.values.contains { $0.engine.pages[self.tabID] != nil },
+      "navigationObserved": navigationCommitted,
+      "coreRoutesObserved": coreRoutesObserved,
       "requestedURL": pageURL.absoluteString,
       "allWindowsHidden": NSApp.windows.allSatisfy { !$0.isVisible },
       "error": error ?? "",

@@ -98,6 +98,8 @@ struct Symbols {
   NSMutableDictionary<NSString *, NSString *> *_shaarSelectedTabs;
   NSMutableDictionary<NSString *, id> *_hostResizeObservers;
   NSMutableDictionary<NSString *, NSValue *> *_hostSizes;
+  NSMutableDictionary<NSString *, NSString *> *_shaarFindTokens;
+  NSMutableDictionary<NSString *, NSString *> *_shaarFindRequests;
   uint64_t _nextRequestID;
   BOOL _shaarQuitting;
   BOOL _shaarTesting;
@@ -109,6 +111,9 @@ struct Symbols {
              operation:(shaar_operation)operation payload:(NSDictionary *)payload;
 - (void)removeFailedProfileID:(NSString *)profileID;
 - (void)finishWindowID:(NSString *)windowID;
+- (void)submitProfileID:(NSString *)profileID operation:(shaar_operation)operation
+                payload:(NSDictionary *)payload
+             completion:(void (^)(NSDictionary *, NSError *))completion;
 @end
 
 static void ShaarEventCallback(void *context, const shaar_event *event) {
@@ -129,6 +134,8 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   _shaarSelectedTabs = [NSMutableDictionary dictionary];
   _hostResizeObservers = [NSMutableDictionary dictionary];
   _hostSizes = [NSMutableDictionary dictionary];
+  _shaarFindTokens = [NSMutableDictionary dictionary];
+  _shaarFindRequests = [NSMutableDictionary dictionary];
   _nextRequestID = 1;
   NSURL *binary = [url URLByAppendingPathComponent:@"Versions/Current/Chromium Framework"];
   _shaarLibrary = dlopen(binary.fileSystemRepresentation, RTLD_NOW | RTLD_GLOBAL);
@@ -141,7 +148,12 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
 
 - (int)runWithDataDirectory:(NSURL *)directory testing:(BOOL)testing {
   NSAssert(NSThread.isMainThread, @"Shaar engine requires the main thread");
-  NSString *path = directory.path.stringByStandardizingPath;
+  if (![NSFileManager.defaultManager createDirectoryAtURL:directory
+                              withIntermediateDirectories:YES attributes:nil error:nil]) return 1;
+  char *resolved = realpath(directory.fileSystemRepresentation, nullptr);
+  if (!resolved) return 1;
+  NSString *path = [NSString stringWithUTF8String:resolved];
+  free(resolved);
   shaar_config config = {};
   config.size = sizeof(config);
   config.requested_major = SHAAR_ENGINE_ABI_MAJOR;
@@ -165,6 +177,8 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   [_hostSizes removeAllObjects];
   [_shaarWindows removeAllObjects];
   [_shaarTabs removeAllObjects];
+  [_shaarFindTokens removeAllObjects];
+  [_shaarFindRequests removeAllObjects];
   _symbols.release(_shaarEngine);
   _shaarEngine = nullptr;
   return result == SHAAR_OK ? 0 : 1;
@@ -194,6 +208,24 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
     return;
   }
   NSString *tabID = String(event->tab_id);
+  NSString *profileID = String(event->profile_id).uppercaseString;
+  if (event->kind == SHAAR_EVENT_FIND) {
+    NSString *token = _shaarFindTokens[payload[@"requestID"]];
+    if (token && _shaarTabs[tabID] && self.onFindResult)
+      self.onFindResult(tabID, token, [payload[@"matchCount"] intValue],
+                        [payload[@"activeMatch"] intValue], [payload[@"final"] boolValue]);
+    return;
+  }
+  if (event->kind == SHAAR_EVENT_BOOKMARK && !event->session_id.size &&
+      _shaarProfiles[profileID]) {
+    if (self.onLibraryChanged) self.onLibraryChanged(profileID, @"bookmarks");
+    return;
+  }
+  if (event->kind == SHAAR_EVENT_HISTORY && !event->session_id.size &&
+      _shaarProfiles[profileID]) {
+    if (self.onLibraryChanged) self.onLibraryChanged(profileID, @"history");
+    return;
+  }
   if (event->kind == SHAAR_EVENT_WINDOW && [kind isEqualToString:@"closed"]) {
     [self finishWindowID:String(event->window_id)];
     return;
@@ -203,6 +235,7 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
     if (windowID && [_shaarSelectedTabs[windowID] isEqualToString:tabID])
       [_shaarSelectedTabs removeObjectForKey:windowID];
     [_shaarTabs removeObjectForKey:tabID];
+    [self stopFindingInTabID:tabID];
     [_shaarTabWindows removeObjectForKey:tabID];
     [_shaarTabProfiles removeObjectForKey:tabID];
     if (self.onTabClosed) self.onTabClosed(tabID);
@@ -217,6 +250,8 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   }
   if ([payload[@"phase"] isEqualToString:@"committed"] && self.onDocumentCommitted)
     self.onDocumentCommitted(tabID, _shaarTabProfiles[tabID] ?: @"");
+  if ([payload[@"phase"] isEqualToString:@"committed"] && self.onLibraryChanged)
+    self.onLibraryChanged(_shaarTabProfiles[tabID] ?: @"", @"history");
   NSDictionary *failure = [payload[@"failure"] isKindOfClass:NSDictionary.class]
       ? payload[@"failure"] : nil;
   if ([failure[@"descriptionCode"] isEqualToString:@"renderer_gone"] && self.onRendererGone)
@@ -232,7 +267,13 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   NSString *directory = [@"Profile " stringByAppendingString:canonicalID];
   __weak ARCShaarRuntime *weakSelf = self;
   void (^reply)(NSError *) = ^(NSError *failure) {
-    if (failure) [weakSelf removeFailedProfileID:profileID];
+    if (failure) {
+      [weakSelf removeFailedProfileID:profileID];
+    } else {
+      [weakSelf submitProfileID:profileID operation:SHAAR_OP_BOOKMARK_WATCH
+                         payload:@{@"schemaVersion": @1, @"enabled": @YES}
+                      completion:^(NSDictionary *result, NSError *error) {}];
+    }
     completion(failure);
   };
   void *context = (__bridge_retained void *)reply;
@@ -461,6 +502,46 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
                          IgnoreReply, nullptr, &error) == SHAAR_OK;
 }
 
+- (void)submitProfileID:(NSString *)profileID operation:(shaar_operation)operation
+                payload:(NSDictionary *)payload
+             completion:(void (^)(NSDictionary *, NSError *))completion {
+  shaar_profile *profile = (shaar_profile *)_shaarProfiles[profileID].pointerValue;
+  NSData *json = [NSJSONSerialization dataWithJSONObject:payload options:0 error:nil];
+  if (!profile || !json || !_shaarEngine) {
+    completion(nil, ShaarError(@"Shaar profile operation is unavailable."));
+    return;
+  }
+  shaar_scope scope = {};
+  scope.size = sizeof(scope);
+  scope.profile = profile;
+  void (^reply)(NSDictionary *, NSError *) = [completion copy];
+  void *context = (__bridge_retained void *)reply;
+  shaar_error error = EmptyError();
+  shaar_error_code status = _symbols.submit(
+      _shaarEngine, scope, nullptr, nullptr, operation,
+      {(const char *)json.bytes, json.length}, _nextRequestID++,
+      [](void *context, const shaar_result *result) {
+        void (^finish)(NSDictionary *, NSError *) = (__bridge_transfer id)context;
+        if (!result || result->error.code != SHAAR_OK) {
+          finish(nil, ShaarError(@"Shaar profile operation failed."));
+          return;
+        }
+        NSData *bytes = [NSData dataWithBytes:result->payload_json.data ?: ""
+                                      length:result->payload_json.size];
+        NSDictionary *value = bytes.length
+            ? [NSJSONSerialization JSONObjectWithData:bytes options:0 error:nil] : @{};
+        if (![value isKindOfClass:NSDictionary.class]) {
+          finish(nil, ShaarError(@"Shaar returned an invalid profile response."));
+          return;
+        }
+        finish(value, nil);
+      }, context, &error);
+  if (status != SHAAR_OK) {
+    CFBridgingRelease(context);
+    completion(nil, ShaarError(@"Shaar rejected the profile operation."));
+  }
+}
+
 - (BOOL)submitWindowID:(NSString *)windowID profileID:(NSString *)profileID
              operation:(shaar_operation)operation payload:(NSDictionary *)payload {
   shaar_window *window = (shaar_window *)_shaarWindows[windowID].pointerValue;
@@ -508,6 +589,176 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
                   payload:@{@"schemaVersion": @1,
                             @"mode": mode == ARCPageReloadModeBypassingCache ?
                                 @"bypass_cache" : @"normal"}];
+}
+
+- (NSImage *)faviconForTabID:(NSString *)tabID profileID:(NSString *)profileID
+                    windowID:(NSString *)windowID {
+  return nil;  // The Shaar ABI does not export favicon bytes yet.
+}
+
+- (int)chromeWindowIDForProfileID:(NSString *)profileID windowID:(NSString *)windowID {
+  return -1;  // Native Chromium window IDs are not part of the Shaar ABI.
+}
+
+- (int)nativeTabIDForID:(NSString *)tabID { return -1; }
+
+- (void)resolveExternalAppRequestID:(NSString *)requestID accepted:(BOOL)accepted {
+  // No Shaar external-app request ABI exists; there is no Ardia request to resolve.
+}
+
+- (BOOL)findInTabID:(NSString *)tabID profileID:(NSString *)profileID
+         requestID:(NSString *)requestID text:(NSString *)text forward:(BOOL)forward {
+  NSString *windowID = _shaarTabWindows[tabID];
+  if (!text.length || ![[NSUUID alloc] initWithUUIDString:requestID] ||
+      ![_shaarTabProfiles[tabID] isEqualToString:profileID] ||
+      ![_shaarSelectedTabs[windowID] isEqualToString:tabID]) return NO;
+  NSString *previous = _shaarFindRequests[tabID];
+  if (previous) [_shaarFindTokens removeObjectForKey:previous];
+  NSString *nativeID = [NSString stringWithFormat:@"%llu", _nextRequestID];
+  _shaarFindTokens[nativeID] = requestID;
+  _shaarFindRequests[tabID] = nativeID;
+  BOOL accepted = [self submitTabID:tabID operation:SHAAR_OP_TAB_FIND
+                           payload:@{@"schemaVersion": @1, @"query": text,
+                                     @"forward": @(forward)}];
+  if (!accepted) {
+    [_shaarFindTokens removeObjectForKey:nativeID];
+    [_shaarFindRequests removeObjectForKey:tabID];
+  }
+  return accepted;
+}
+
+- (void)stopFindingInTabID:(NSString *)tabID {
+  NSString *nativeID = _shaarFindRequests[tabID];
+  if (!nativeID) return;
+  [_shaarFindRequests removeObjectForKey:tabID];
+  [_shaarFindTokens removeObjectForKey:nativeID];
+  if (_shaarTabs[tabID])
+    [self submitTabID:tabID operation:SHAAR_OP_TAB_STOP_FIND
+              payload:@{@"schemaVersion": @1, @"selection": @"keep"}];
+}
+
+- (void)evaluateInTabID:(NSString *)tabID script:(NSString *)script
+            completion:(void (^)(NSString *))completion {
+  completion(nil);  // SHAAR_OP_TAB_EVALUATE is reserved but has no layer handler.
+}
+
+- (void)bookmarksForProfileID:(NSString *)profileID
+                  completion:(void (^)(NSDictionary *, NSError *))completion {
+  [self submitProfileID:profileID operation:SHAAR_OP_BOOKMARK_TREE
+                payload:@{@"schemaVersion": @1}
+             completion:^(NSDictionary *result, NSError *error) {
+    if (error || ![result[@"bar"] isKindOfClass:NSDictionary.class] ||
+        ![result[@"other"] isKindOfClass:NSDictionary.class]) {
+      completion(nil, error ?: ShaarError(@"Invalid Shaar bookmark tree."));
+      return;
+    }
+    completion(result, nil);
+  }];
+}
+
+- (void)applyBookmarkOperation:(NSDictionary *)operation profileID:(NSString *)profileID
+                    completion:(void (^)(NSError *))completion {
+  if (![operation isKindOfClass:NSDictionary.class]) {
+    completion(ShaarError(@"Invalid Shaar bookmark action."));
+    return;
+  }
+  [self submitProfileID:profileID operation:SHAAR_OP_BOOKMARK_APPLY
+                payload:@{@"schemaVersion": @1, @"ops": @[operation]}
+             completion:^(NSDictionary *result, NSError *error) {
+    NSArray *invalid = result[@"invalid"];
+    BOOL confirmed = [result[@"applied"] isEqual:@1] &&
+                     [result[@"skipped"] isEqual:@0] &&
+                     [invalid isKindOfClass:NSArray.class] && !invalid.count;
+    if (error) { completion(error); return; }
+    completion(confirmed ? nil : ShaarError(@"Shaar did not confirm the bookmark action."));
+  }];
+}
+
+- (void)historyForProfileID:(NSString *)profileID limit:(NSInteger)limit
+                 completion:(void (^)(NSArray<NSDictionary *> *, NSError *))completion {
+  if (limit < 1 || limit > 5000) {
+    completion(nil, ShaarError(@"Invalid Shaar history limit."));
+    return;
+  }
+  [self submitProfileID:profileID operation:SHAAR_OP_HISTORY_QUERY
+                payload:@{@"schemaVersion": @1, @"maxUrls": @(limit),
+                          @"maxVisitsPerUrl": @1}
+             completion:^(NSDictionary *result, NSError *error) {
+    NSArray *entries = result[@"entries"];
+    if (error || ![entries isKindOfClass:NSArray.class]) {
+      completion(nil, error ?: ShaarError(@"Invalid Shaar history response."));
+      return;
+    }
+    NSMutableArray<NSDictionary *> *rows = [NSMutableArray arrayWithCapacity:entries.count];
+    for (id entry in entries) {
+      if (![entry isKindOfClass:NSDictionary.class] ||
+          ![entry[@"url"] isKindOfClass:NSString.class] ||
+          ![entry[@"title"] isKindOfClass:NSString.class] ||
+          ![entry[@"visitCount"] isKindOfClass:NSNumber.class] ||
+          ![entry[@"visits"] isKindOfClass:NSArray.class]) {
+        completion(nil, ShaarError(@"Invalid Shaar history entry."));
+        return;
+      }
+      [rows addObject:@{@"u": entry[@"url"], @"t": entry[@"title"],
+                        @"n": entry[@"visitCount"], @"v": entry[@"visits"]}];
+    }
+    completion(rows, nil);
+  }];
+}
+
+- (void)deleteHistoryURL:(NSString *)url profileID:(NSString *)profileID
+              completion:(void (^)(NSError *))completion {
+  NSURL *address = [NSURL URLWithString:url];
+  if (![@[@"http", @"https"] containsObject:address.scheme.lowercaseString]) {
+    completion(ShaarError(@"Invalid Shaar history address."));
+    return;
+  }
+  [self submitProfileID:profileID operation:SHAAR_OP_HISTORY_DELETE
+                payload:@{@"schemaVersion": @1, @"urls": @[url]}
+             completion:^(NSDictionary *result, NSError *error) {
+    if (error) { completion(error); return; }
+    if (![result[@"deleted"] isKindOfClass:NSNumber.class]) {
+      completion(ShaarError(@"Shaar did not confirm history deletion."));
+      return;
+    }
+    if (self.onLibraryChanged) self.onLibraryChanged(profileID, @"history");
+    completion(nil);
+  }];
+}
+
+- (void)importHistoryRows:(NSArray<NSDictionary *> *)rows source:(NSString *)source
+                profileID:(NSString *)profileID completion:(void (^)(NSError *))completion {
+  if (![@[@"safari", @"chrome", @"arc", @"firefox"] containsObject:source] ||
+      !rows.count || rows.count > 5000) {
+    completion(ShaarError(@"Unsupported Shaar history import."));
+    return;
+  }
+  NSMutableArray<NSDictionary *> *pages = [NSMutableArray arrayWithCapacity:rows.count];
+  for (NSDictionary *row in rows) {
+    if (![row isKindOfClass:NSDictionary.class] ||
+        ![row[@"u"] isKindOfClass:NSString.class] ||
+        ![row[@"t"] isKindOfClass:NSString.class] ||
+        ![row[@"v"] isKindOfClass:NSArray.class]) {
+      completion(ShaarError(@"Invalid Shaar history import row."));
+      return;
+    }
+    [pages addObject:@{@"url": row[@"u"], @"title": row[@"t"],
+                       @"visits": row[@"v"]}];
+  }
+  [self submitProfileID:profileID operation:SHAAR_OP_HISTORY_INSERT
+                payload:@{@"schemaVersion": @1, @"source": source, @"pages": pages}
+             completion:^(NSDictionary *result, NSError *error) {
+    NSArray *rejected = result[@"rejected"];
+    BOOL confirmed = [result[@"accepted"] isEqual:@(rows.count)] &&
+                     [rejected isKindOfClass:NSArray.class] && !rejected.count;
+    if (error) { completion(error); return; }
+    if (!confirmed) {
+      completion(ShaarError(@"Shaar did not import every history row."));
+      return;
+    }
+    if (self.onLibraryChanged) self.onLibraryChanged(profileID, @"history");
+    completion(nil);
+  }];
 }
 
 - (void)quit {

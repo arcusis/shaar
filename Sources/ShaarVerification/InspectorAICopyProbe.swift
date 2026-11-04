@@ -203,18 +203,9 @@ import SwiftUI
         requestStatuses: tools.requests.map(\.status),
         signalNames: tools.signals.map(\.name))
     }
+    try await waitForDetailedContext(ai)
     ai.detailed = true
     await ai.copyElement(to: board)
-    if Self.detailedCopyNeedsRetry(
-      failure: ai.failure, text: board.string(forType: .string) ?? "")
-    {
-      try await wait("detailed AI Inspector copy retry readiness") {
-        (try? await inspector.evaluate(
-          "document.readyState==='complete' && !!globalThis.__shaarInspectorV2"))
-          as? Bool == true
-      }
-      await ai.copyElement(to: board)
-    }
     let detailed = board.string(forType: .string) ?? ""
     let missing = Self.missingDetailedDiagnostics(failure: ai.failure, text: detailed)
     try check(
@@ -261,8 +252,29 @@ import SwiftUI
       && signalNames.contains("Inspector AI fixture")
   }
 
-  static func detailedCopyNeedsRetry(failure: String?, text: String) -> Bool {
-    !missingDetailedDiagnostics(failure: failure, text: text).isEmpty
+  static func detailedContextReady(_ details: InspectorAIFormatter.Details) -> Bool {
+    !details.computed.isEmpty && !details.rules.isEmpty
+      && details.consoleErrors.contains { $0.contains("AI fixture console error") }
+      && details.networkErrors.contains { $0.contains("status 503") }
+      && details.technologies.contains { $0.contains("Inspector AI fixture") }
+  }
+
+  private func waitForDetailedContext(_ ai: InspectorAICopyModel) async throws {
+    var lastFailure = "context has not been collected"
+    do {
+      try await wait("detailed AI Inspector context collection") {
+        do {
+          let context = try await ai.context(captureDetails: true)
+          if Self.detailedContextReady(context.details) { return true }
+          lastFailure = "context is missing collected styles or Page diagnostics"
+        } catch {
+          lastFailure = error.localizedDescription
+        }
+        return false
+      }
+    } catch {
+      throw InspectorFailure("Detailed AI Inspector context was not ready: \(lastFailure).")
+    }
   }
 
   static func missingDetailedDiagnostics(failure: String?, text: String) -> [String] {

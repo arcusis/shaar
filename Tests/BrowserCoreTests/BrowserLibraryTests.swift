@@ -375,19 +375,33 @@ private func bookmarkPayload(children: [[String: Any]]) -> [String: Any] {
   try JSONSerialization.data(withJSONObject: [
     "roots": [
       "bookmark_bar": [
-        "children": [[
-          "name": "Research / Media",
-          "children": [["name": "Page", "url": "https://page.example"]],
-        ]]
+        "children": [
+          [
+            "name": "Research / Media",
+            "children": [[
+              "name": "Archive",
+              "children": [["name": "Page", "url": "https://page.example"]],
+            ]],
+          ],
+          [
+            "name": "Research",
+            "children": [[
+              "name": "Media / Archive",
+              "children": [["name": "Second page", "url": "https://second.example"]],
+            ]],
+          ],
+        ]
       ]
     ]
   ]).write(to: url)
 
   let items = try BrowserImport.read(url)
-  #expect(items.first?.folderComponents == ["Research / Media"])
+  #expect(items.map(\.folderComponents) == [["Research / Media", "Archive"], ["Research", "Media / Archive"]])
   let operations = BrowserImport.operations(for: items, otherFolderID: UUID())
-  #expect(operations.count == 2)
+  #expect(operations.count == 6)
   #expect(operations[0]["t"] as? String == "Research / Media")
+  #expect(operations[3]["t"] as? String == "Research")
+  #expect(operations[5]["parent"] as? String != operations[2]["parent"] as? String)
 }
 
 @Test @MainActor func browserImportBatchAppliesInOrderAndStopsAfterAnError() {

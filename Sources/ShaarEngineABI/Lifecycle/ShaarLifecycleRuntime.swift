@@ -96,6 +96,8 @@ private func receiveShaarEvent(
   private var frameworkHandle: UnsafeMutableRawPointer?
   private var hasRun = false
   private var runReturned = false
+  public var hasRunStarted: Bool { hasRun }
+  public var hasRunReturned: Bool { runReturned }
 
   public init(
     resolver: ShaarSymbolResolving,

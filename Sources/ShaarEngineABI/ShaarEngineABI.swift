@@ -13,6 +13,17 @@ public enum ShaarEngineImplementation: Equatable, Sendable {
   case shaar
 
   public static let shippingDefault: Self = .ardia
+
+  /// Shaar is opt-in for debug and source-engine CI runs. Release builds always
+  /// retain Ardia unless a caller explicitly constructs a test transport.
+  public static func selected(
+    debugSetting: String? = nil,
+    environment: [String: String] = ProcessInfo.processInfo.environment,
+    isDebug: Bool = _isDebugAssertConfiguration()
+  ) -> Self {
+    guard isDebug else { return .shippingDefault }
+    return (debugSetting ?? environment["SHAAR_ENGINE_IMPLEMENTATION"]) == "shaar" ? .shaar : .ardia
+  }
 }
 
 public enum ShaarEngineError: Error, Equatable, Sendable {
@@ -143,12 +154,13 @@ private struct FrameworkSymbols: ShaarSymbolResolving {
   }
 }
 
-public struct ShaarEngineLoader {
+public final class ShaarEngineLoader: ShaarSymbolResolving, @unchecked Sendable {
   public static let abiMajor: UInt32 = 1
   public let implementation: ShaarEngineImplementation
   private let abiMajorFunction: @convention(c) () -> UInt32
   public let createSymbol: UnsafeRawPointer
   private let symbolResolver: any ShaarSymbolResolving
+  private var frameworkHandle: UnsafeMutableRawPointer?
 
   public init(resolver: ShaarSymbolResolving, implementation: ShaarEngineImplementation = .shaar)
     throws
@@ -167,6 +179,7 @@ public struct ShaarEngineLoader {
     self.symbolResolver = resolver
     self.abiMajorFunction = unsafeBitCast(majorSymbol, to: (@convention(c) () -> UInt32).self)
     self.createSymbol = create
+    self.frameworkHandle = nil
   }
 
   public func currentMajor() -> UInt32 { abiMajorFunction() }
@@ -179,14 +192,30 @@ public struct ShaarEngineLoader {
       throw ShaarEngineError.frameworkLoadFailed(
         path: binary.path, reason: String(cString: dlerror()))
     }
-    return try Self(resolver: FrameworkSymbols(handle: handle), implementation: implementation)
+    do {
+      let loader = try Self(
+        resolver: FrameworkSymbols(handle: handle), implementation: implementation)
+      loader.frameworkHandle = handle
+      return loader
+    } catch {
+      dlclose(handle)
+      throw error
+    }
   }
-}
 
-extension ShaarEngineLoader: ShaarSymbolResolving {
   public func symbol(named: String) -> UnsafeRawPointer? {
     symbolResolver.symbol(named: named)
   }
+
+  /// Called by the single transport owner after engine release and after every
+  /// module has stopped submitting requests.
+  func closeFramework() {
+    guard let frameworkHandle else { return }
+    self.frameworkHandle = nil
+    dlclose(frameworkHandle)
+  }
+
+  deinit { closeFramework() }
 }
 
 extension ShaarStatusCode {

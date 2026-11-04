@@ -48,8 +48,7 @@ public protocol ShaarSiteDataTransport: Sendable {
   func submit(operation: ShaarSiteDataOperation, arguments: Data) async throws -> Data
 }
 
-/// Typed site-data calls over the Shaar ABI. The application keeps its Ardia
-/// route unless the existing implementation choice selects `.shaar`.
+/// Typed site-data calls over the Shaar ABI.
 public struct ShaarSiteDataAdapter: Sendable {
   private let transport: any ShaarSiteDataTransport
   public let implementation: ShaarEngineImplementation

@@ -10,29 +10,7 @@ import XCTest
 
 final class BrowserBackendSelectionTests: XCTestCase {
   func testShaarIsAlwaysDefault() {
-    XCTAssertEqual(BrowserBackendSelection.choose(environment: [:], arguments: []), .shaar)
-  }
-
-  func testLegacySelectionInputsCannotChangeBackend() {
-    XCTAssertEqual(
-      BrowserBackendSelection.choose(
-        environment: ["SHAAR_ENGINE_BACKEND": "shaar"], arguments: []), .shaar)
-    XCTAssertEqual(
-      BrowserBackendSelection.choose(
-        environment: [:], arguments: ["--shaar-engine-backend=shaar"]), .shaar)
-    XCTAssertEqual(
-      BrowserBackendSelection.choose(
-        environment: ["SHAAR_ENGINE_BACKEND": "ardia"],
-        arguments: ["--shaar-engine-backend=ardia"]), .shaar)
-  }
-
-  func testPreviewBundleSelectsShaar() {
-    XCTAssertEqual(
-      BrowserBackendSelection.choose(
-        environment: [:], arguments: [], bundleBackend: "shaar"), .shaar)
-    XCTAssertEqual(
-      BrowserBackendSelection.choose(
-        environment: [:], arguments: [], bundleBackend: "unknown"), .ardia)
+    XCTAssertEqual(BrowserBackendSelection.choose(), .shaar)
   }
 
   func testExplicitShaarSelectionDoesNotFallBackWhenABIMissing() {
@@ -203,10 +181,8 @@ final class BrowserBackendSelectionTests: XCTestCase {
 
   private func assertShaarOverrides(_ name: String) {
     let selector = NSSelectorFromString(name)
-    let ardia = class_getInstanceMethod(ARCChromiumRuntime.self, selector)
     let shaar = class_getInstanceMethod(ARCShaarRuntime.self, selector)
-    XCTAssertNotNil(ardia)
     XCTAssertNotNil(shaar)
-    XCTAssertNotEqual(ardia, shaar, "Shaar must override \(name)")
+    XCTAssertTrue(ARCShaarRuntime.instancesRespond(to: selector), "Shaar must implement \(name)")
   }
 }

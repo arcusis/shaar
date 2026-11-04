@@ -605,7 +605,7 @@ class ExternalAppConsentRunnerTests(unittest.TestCase):
                 include_bitwarden=False, onboarding_control=False, abrupt=False,
                 saved_tab_capacity=False, external_app_consent=True)
             self.assertIn('--probe-external-app-consent', args)
-            self.assertIn('--ardia-test-external-protocol-no-launch', args)
+            self.assertIn('--shaar-test-external-protocol-no-launch', args)
             self.assertEqual(sum(arg.startswith('--probe-external') for arg in args), 1)
             self.assertFalse(any(arg.startswith('--probe-external-app-consent=') for arg in args))
 
@@ -640,7 +640,7 @@ class ExternalAppConsentRunnerTests(unittest.TestCase):
         for call in popen.call_args_list:
             args = call.args[0]
             self.assertIn('--probe-external-app-consent', args)
-            self.assertIn('--ardia-test-external-protocol-no-launch', args)
+            self.assertIn('--shaar-test-external-protocol-no-launch', args)
         self.assertEqual([call.kwargs['timeout'] for call in wait.call_args_list], [180, 180])
         self.assertEqual((self.root / '.arcusis-probe').stat().st_mode & 0o777, 0o600)
         self.assertTrue((self.root / 'external-app-consent-summary.json').exists())

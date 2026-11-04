@@ -24,10 +24,10 @@ private actor FakeSiteDataEngine: ShaarSiteDataTransport {
 }
 
 struct SiteDataTests {
-  @Test func selectionPreservesArdiaDefaultAndValidatesSettingsPayload() async throws {
+  @Test func selectionUsesShaarDefaultAndValidatesSettingsPayload() async throws {
     let fake = FakeSiteDataEngine()
-    #expect(ShaarSiteDataAdapter.selected(implementation: .ardia, transport: fake) == nil)
-    #expect(ShaarSiteDataAdapter.selected(implementation: .shippingDefault, transport: fake) == nil)
+    #expect(ShaarSiteDataAdapter.selected(implementation: .shaar, transport: fake) != nil)
+    #expect(ShaarSiteDataAdapter.selected(implementation: .shippingDefault, transport: fake) != nil)
     let adapter = ShaarSiteDataAdapter(implementation: .shaar, transport: fake)
     await fake.setResponse(
       """

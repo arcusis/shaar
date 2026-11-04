@@ -129,13 +129,13 @@ private struct FakeStorageKeychainABISymbols: ShaarSymbolResolving {
 
 @Suite("Storage keychain")
 struct StorageKeychainTests {
-  @Test func shippingDefaultKeepsArdiaAndShaarUsesItsStatusRoute() async throws {
+  @Test func shippingDefaultUsesShaarStatusRoute() async throws {
     let profile = UUID()
     let fake = FakeStorageKeychainTransport(
       reply: #"{"schemaVersion":1,"identity":"shaar"}"#)
 
-    #expect(ShaarEngineImplementation.shippingDefault == .ardia)
-    #expect(ShaarStorageKeychainAdapter.selected(transport: fake).map { _ in true } == nil)
+    #expect(ShaarEngineImplementation.shippingDefault == .shaar)
+    #expect(ShaarStorageKeychainAdapter.selected(transport: fake).map { _ in true } == true)
     let adapter = try #require(
       ShaarStorageKeychainAdapter.selected(implementation: .shaar, transport: fake))
     #expect(try await adapter.configuredIdentity(for: profile) == .shaar)
@@ -151,7 +151,7 @@ struct StorageKeychainTests {
     let profile = UUID()
     let unknown = ShaarStorageKeychainAdapter(
       transport: FakeStorageKeychainTransport(
-        reply: #"{"schemaVersion":1,"identity":"ardia"}"#))
+        reply: #"{"schemaVersion":1,"identity":"unknown"}"#))
     await #expect(throws: ShaarStorageKeychainError.malformedResponse) {
       try await unknown.configuredIdentity(for: profile)
     }
@@ -182,7 +182,7 @@ struct StorageKeychainTests {
     #expect(call.2 == UInt(bitPattern: profileHandle))
   }
 
-  @Test func loaderLeavesStorageKeychainOnArdiaDefault() throws {
+  @Test func loaderProvidesStorageKeychainOnShaarDefault() throws {
     let loader = try ShaarEngineLoader(
       resolver: FakeStorageKeychainABISymbols(), implementation: .shippingDefault)
     let profile = OpaquePointer(bitPattern: 0x11)!
@@ -191,7 +191,7 @@ struct StorageKeychainTests {
         size: UInt32(MemoryLayout<shaar_scope>.size), profile: profile,
         private_session: nil))
 
-    #expect(try loader.makeStorageKeychainAdapter(profileResolver: resolver) == nil)
+    #expect(try loader.makeStorageKeychainAdapter(profileResolver: resolver) != nil)
   }
 
   @Test func concreteTransportRejectsPrivateProfileScope() async throws {

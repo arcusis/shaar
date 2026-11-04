@@ -828,7 +828,8 @@ def build_engine_probe_arguments(executable, root, fixture_url, phase, *, includ
     if saved_tab_capacity:
         arguments.append('--probe-saved-tab-capacity')
     if external_app_consent:
-        arguments.extend(('--probe-external-app-consent', '--ardia-test-external-protocol-no-launch'))
+        arguments.append('--probe-external-app-consent')
+        arguments.append('--shaar-test-external-protocol-no-launch')
     if private_window:
         if not isinstance(private_window_run_id, str):
             raise RuntimeError('Private window mode requires a run identity')
@@ -1567,11 +1568,8 @@ def main(argv=None):
     threading.Thread(target=server.serve_forever, daemon=True).start()
     executable = app / "Contents/MacOS/ShaarVerification"
     (root / 'Downloads').mkdir(mode=0o700, exist_ok=True)
-    # Any ARDIA_BACKGROUND value keeps Chromium's picture-in-picture overlay transparent and
-    # click-through, so the media probe opens no visible window. The engine's other
-    # background test hooks require exactly '1' and stay off.
-    probe_env = dict(os.environ, ARDIA_DOWNLOADS_DIR=str(root / 'Downloads'),
-                     ARDIA_BACKGROUND='picture-in-picture')
+    # Probe state is scoped to the disposable test root and hidden harness.
+    probe_env = dict(os.environ)
     print(f"Probe evidence: {root}", flush=True)
     failures = []
     try:

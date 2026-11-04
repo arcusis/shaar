@@ -3,6 +3,7 @@
   "strings" : {
     "A loaded profile and a local folder are required." : { "localizations" : { "he" : { "stringUnit" : { "state" : "translated", "value" : "נדרשים פרופיל טעון ותיקייה מקומית." } } } },
     "The download folder could not be saved." : { "localizations" : { "he" : { "stringUnit" : { "state" : "translated", "value" : "לא ניתן לשמור את תיקיית ההורדות." } } } },
+    "Shaar engine unavailable.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "מנוע Shaar אינו זמין."}}}},
     "Site permissions could not be read for this profile.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לא ניתן לקרוא את הרשאות האתרים בפרופיל הזה."}}}},
     "Third-party cookie controls are unavailable in this engine.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "בקרת קובצי Cookie של צד שלישי לא זמינה במנוע הזה."}}}},
     "The cookie policy was not saved.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "מדיניות קובצי ה-Cookie לא נשמרה."}}}},
@@ -38,7 +39,6 @@
     "The private cookie setting could not be read." : { "localizations" : { "he" : { "stringUnit" : { "state" : "translated", "value" : "לא ניתן לקרוא את הגדרת קובצי ה‑Cookie בגלישה פרטית." } } } },
     "The private cookie setting was not applied." : { "localizations" : { "he" : { "stringUnit" : { "state" : "translated", "value" : "לא ניתן להחיל את הגדרת קובצי ה‑Cookie בגלישה פרטית." } } } },
     "The private site control target is no longer selected." : { "localizations" : { "he" : { "stringUnit" : { "state" : "translated", "value" : "האתר הפרטי שעבורו נפתחה הבקרה אינו נבחר עוד." } } } },
-    "The framework does not expose the pinned ArdiaCore API." : { "localizations" : { "he" : { "stringUnit" : { "state" : "translated", "value" : "המסגרת אינה חושפת את ממשק ArdiaCore שננעל לפרויקט." } } } },
     "The tab has no loaded profile; refusing a default-profile fallback." : { "localizations" : { "he" : { "stringUnit" : { "state" : "translated", "value" : "ללשונית אין פרופיל טעון; לא יתבצע מעבר לפרופיל ברירת מחדל." } } } },
     "The tab has no open native window." : { "localizations" : { "he" : { "stringUnit" : { "state" : "translated", "value" : "אין חלון פתוח עבור הלשונית." } } } },
     "Unknown download profile." : { "localizations" : { "he" : { "stringUnit" : { "state" : "translated", "value" : "פרופיל ההורדה אינו מוכר." } } } },

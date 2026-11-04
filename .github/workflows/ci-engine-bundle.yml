@@ -27,7 +27,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Identify verification bundle build inputs
-        run: echo "CI_BUNDLE_INPUTS=${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**', 'Resources/**', 'Plugins/**', 'ThirdParty/ArdiaCore/**', 'scripts/bundle-app.sh', 'scripts/ci-stage.py', 'scripts/release-config.sh', 'scripts/engine-signing.sh', 'scripts/fetch-engine.sh', 'scripts/stage-browser-resources.py', 'scripts/release_feed.py') }}" >> "$GITHUB_ENV"
+        run: echo "CI_BUNDLE_INPUTS=${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**', 'Resources/**', 'Plugins/**', 'ThirdParty/ChromiumEngine/**', 'scripts/bundle-app.sh', 'scripts/ci-stage.py', 'scripts/release-config.sh', 'scripts/engine-signing.sh', 'scripts/fetch-engine.sh', 'scripts/rebrand-engine-framework.py', 'scripts/engine_payload.py', 'scripts/verify_engine_bundle.py', 'scripts/stage-browser-resources.py', 'scripts/release_feed.py') }}" >> "$GITHUB_ENV"
       - uses: ./.github/actions/ci-setup
         with:
           mode: verification
@@ -45,7 +45,7 @@ jobs:
           path: |
             build/ci/engine-build/bundle.json
             build/ci/engine-build/verification.tar.gz
-          key: engine-bundle-${{ runner.os }}-${{ runner.arch }}-${{ env.CI_TOOLCHAIN_ID }}-${{ steps.source-tree.outputs.tree }}-${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**', 'Resources/**', 'Plugins/**', 'ThirdParty/ArdiaCore/**', 'scripts/bundle-app.sh', 'scripts/ci-stage.py', 'scripts/release-config.sh', 'scripts/engine-signing.sh', 'scripts/fetch-engine.sh', 'scripts/stage-browser-resources.py', 'scripts/release_feed.py') }}-${{ hashFiles('ThirdParty/ArdiaCore/pin.json') }}
+          key: engine-bundle-${{ runner.os }}-${{ runner.arch }}-${{ env.CI_TOOLCHAIN_ID }}-${{ steps.source-tree.outputs.tree }}-${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**', 'Resources/**', 'Plugins/**', 'ThirdParty/ChromiumEngine/**', 'scripts/bundle-app.sh', 'scripts/ci-stage.py', 'scripts/release-config.sh', 'scripts/engine-signing.sh', 'scripts/fetch-engine.sh', 'scripts/rebrand-engine-framework.py', 'scripts/engine_payload.py', 'scripts/verify_engine_bundle.py', 'scripts/stage-browser-resources.py', 'scripts/release_feed.py') }}-${{ hashFiles('ThirdParty/ChromiumEngine/pin.json') }}
       - name: Find the matching successful PR bundle for this merge group
         id: pr-bundle-run
         if: github.event_name == 'merge_group' && steps.bundle-cache.outputs.cache-hit != 'true'

@@ -93,9 +93,9 @@ private actor FakeMediaTransport: ShaarMediaTransport {
       == .pictureInPictureChanged("playing"))
 }
 
-@Test func ardiaRemainsTheDefaultImplementationChoice() {
+@Test func shaarIsTheDefaultImplementationChoice() {
   let fake = FakeMediaTransport("{}")
-  #expect(ShaarMediaAdapter.selected(transport: fake) == nil)
-  #expect(ShaarMediaAdapter.selected(implementation: .ardia, transport: fake) == nil)
+  #expect(ShaarMediaAdapter.selected(transport: fake) != nil)
+  #expect(ShaarMediaAdapter.selected(implementation: .shaar, transport: fake) != nil)
   #expect(ShaarMediaAdapter.selected(implementation: .shaar, transport: fake) != nil)
 }

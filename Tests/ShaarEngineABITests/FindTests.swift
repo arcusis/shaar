@@ -7,9 +7,8 @@ import Testing
 
 @testable import ShaarEngineABI
 
-@MainActor private final class FakeFindEngine: ShaarFindTransport, ArdiaFindBackend {
+@MainActor private final class FakeFindEngine: ShaarFindTransport {
   private(set) var requests: [ShaarFindRequest] = []
-  private(set) var ariaCalls: [String] = []
 
   func submit(
     _ request: ShaarFindRequest,
@@ -19,36 +18,13 @@ import Testing
     completion(.success(Data("{\"schemaVersion\":1}".utf8)))
   }
 
-  func find(
-    query: String, forward: Bool,
-    completion: @escaping @MainActor (Result<Void, Error>) -> Void
-  ) {
-    ariaCalls.append("find:\(query):\(forward)")
-    completion(.success(()))
-  }
-
-  func stop(
-    clearSelection: Bool,
-    completion: @escaping @MainActor (Result<Void, Error>) -> Void
-  ) {
-    ariaCalls.append("stop:\(clearSelection)")
-    completion(.success(()))
-  }
 }
 
 @Suite("Shaar find adapter")
 @MainActor struct FindTests {
-  @Test func defaultRemainsArdiaAndShaarBuildsVersionedFindAndStopRequests() throws {
+  @Test func defaultBuildsVersionedFindAndStopRequests() throws {
     let fake = FakeFindEngine()
-    let defaultAdapter = ShaarFindAdapter(ardia: fake, shaar: fake)
-    #expect(ShaarEngineImplementation.shippingDefault == .ardia)
-    #expect(
-      defaultAdapter.find(
-        query: "", forward: true, scope: .init(profileID: "p"),
-        windowID: "w", tabID: "t", completion: { _ in }) == nil)
-    #expect(fake.ariaCalls == ["find::true"])
-
-    let adapter = ShaarFindAdapter(implementation: .shaar, ardia: fake, shaar: fake)
+    let adapter = ShaarFindAdapter(shaar: fake)
     let scope = ShaarFindScope(profileID: "profile-a", sessionID: "session-a")
     let requestID = adapter.find(
       query: "needle", forward: false, scope: scope, windowID: "window-a",
@@ -77,9 +53,7 @@ import Testing
   }
 
   @Test func findEventsRequireExactScopeHandlesAndRequestToken() throws {
-    let adapter = ShaarFindAdapter(
-      implementation: .shaar, ardia: FakeFindEngine(),
-      shaar: FakeFindEngine())
+    let adapter = ShaarFindAdapter(shaar: FakeFindEngine())
     let payload = Data(
       "{\"kind\":\"result\",\"schemaVersion\":1,\"requestID\":\"19\",\"matchCount\":4,\"activeMatch\":2,\"final\":true}"
         .utf8)

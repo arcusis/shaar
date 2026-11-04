@@ -5,25 +5,6 @@
 import Darwin
 import Foundation
 
-public enum ShaarLifecycleBackend<Ardia, Shaar> {
-  case ardia(Ardia)
-  case shaar(Shaar)
-}
-
-/// Keeps the shipping implementation choice centralized while lifecycle moves module by module.
-public enum ShaarLifecycleImplementationChoice {
-  public static func make<Ardia, Shaar>(
-    implementation: ShaarEngineImplementation = .shippingDefault,
-    ardia: () -> Ardia,
-    shaar: () throws -> Shaar
-  ) rethrows -> ShaarLifecycleBackend<Ardia, Shaar> {
-    switch implementation {
-    case .ardia: return .ardia(ardia())
-    case .shaar: return .shaar(try shaar())
-    }
-  }
-}
-
 @usableFromInline @frozen struct ShaarLifecycleConfig {
   @usableFromInline var size: UInt32
   @usableFromInline var requestedMajor: UInt32

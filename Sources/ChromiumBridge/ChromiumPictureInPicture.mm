@@ -37,63 +37,6 @@ static NSString *ARCPictureInPictureCommandName(ARCPictureInPictureCommand comma
   return nil;
 }
 
-@implementation ARCChromiumRuntime (PictureInPicture)
-
-- (void)enterPictureInPictureInTabID:(NSString *)tabID completion:(void (^)(BOOL))completion {
-  ArdiaCoreTab *tab = [self liveTabForID:tabID];
-  if (!tab) { completion(NO); return; }
-  [self evaluateTab:tab script:ARCEnterPictureInPictureScript userGesture:YES completion:^(NSString *json) {
-    completion([json containsString:@"\"requested\":true"]);
-  }];
-}
-
-- (void)exitPictureInPictureInTabID:(NSString *)tabID {
-  ArdiaCoreTab *tab = [self liveTabForID:tabID];
-  if (tab) [self evaluateTab:tab script:ARCExitPictureInPictureScript completion:^(NSString *json) {}];
-}
-
-- (BOOL)engineHandlesAutoPictureInPictureForTabID:(NSString *)tabID {
-  return [self liveTabForID:tabID].autoPictureInPictureIsChromes;
-}
-
-- (NSWindow *)pictureInPictureVideoWindowForTabID:(NSString *)tabID {
-  if (![_pictureInPictureVideoTabID isEqualToString:tabID] || ![self liveTabForID:tabID]) return nil;
-  for (NSWindow *window in NSApp.windows) {
-    if (ARCIsPictureInPictureVideoWindow(window)) return window;
-  }
-  return nil;
-}
-
-- (BOOL)sendPictureInPictureCommand:(ARCPictureInPictureCommand)command seconds:(double)seconds
-                              tabID:(NSString *)tabID {
-  ArdiaCoreTab *tab = [self liveTabForID:tabID];
-  NSString *name = ARCPictureInPictureCommandName(command);
-  if (!tab || !name || ![_pictureInPictureVideoTabID isEqualToString:tabID]) return NO;
-  NSData *data = [NSJSONSerialization dataWithJSONObject:@{
-    @"command": name, @"seconds": @(std::isfinite(seconds) ? seconds : 0),
-  } options:0 error:nil];
-  if (!data) return NO;
-  NSString *json = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-  // Only the frame whose video is in picture-in-picture acts on the command.
-  tab.frozen = NO;
-  for (NSString *frameID in [_mediaSessions frameIDsForTabID:tabID]) {
-    [tab callFrame:frameID kind:ARCPictureInPictureCommandMessage json:json];
-  }
-  return YES;
-}
-
-- (void)setAutoPictureInPictureAllowed:(BOOL)allowed tabID:(NSString *)tabID {
-  ArdiaCoreTab *tab = [self liveTabForID:tabID];
-  if (!tab) return;
-  NSString *json = allowed ? @"{\"allowed\":true}" : @"{\"allowed\":false}";
-  [tab callPage:ARCAutoPictureInPictureMessage json:json];
-  for (NSString *frameID in [_mediaSessions frameIDsForTabID:tabID]) {
-    [tab callFrame:frameID kind:ARCAutoPictureInPictureMessage json:json];
-  }
-}
-
-@end
-
 @implementation ARCShaarRuntime (PictureInPicture)
 
 - (void)enterPictureInPictureInTabID:(NSString *)tabID completion:(void (^)(BOOL))completion {
@@ -149,18 +92,6 @@ static NSString *ARCPictureInPictureCommandName(ARCPictureInPictureCommand comma
   }
   return [self shaarSubmit:SHAAR_OP_MEDIA_CONTROL profileID:profileID tabID:tabID
                   payload:payload completion:nil];
-}
-
-@end
-
-@implementation ARCChromiumRuntime (PictureInPictureSupport)
-
-- (void)notePictureInPictureVideoTabID:(NSString *)tabID active:(BOOL)active kind:(id)kind {
-  if (active) {
-    _pictureInPictureVideoTabID = [kind isEqual:@"video"] ? tabID : nil;
-  } else if ([_pictureInPictureVideoTabID isEqualToString:tabID]) {
-    _pictureInPictureVideoTabID = nil;
-  }
 }
 
 @end

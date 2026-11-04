@@ -34,7 +34,7 @@ import Testing
 struct PrivateSessionsTests {
   @Test @MainActor func adapterCarriesScopeAndRejectsMismatches() throws {
     let engine = FakePrivateSessionsEngine()
-    #expect(ShaarPrivateSessionsAdapter.makeIfSelected(engine: engine) == nil)
+    #expect(ShaarPrivateSessionsAdapter.makeIfSelected(engine: engine) != nil)
     #expect(
       ShaarPrivateSessionsAdapter.makeIfSelected(implementation: .shaar, engine: engine) != nil)
     let adapter = ShaarPrivateSessionsAdapter(engine: engine)

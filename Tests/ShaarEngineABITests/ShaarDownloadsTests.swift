@@ -115,7 +115,7 @@ private actor FakeDownloadsTransport: ShaarDownloadsTransport {
 
 @Test func sourceAdapterStaysOffUntilTheShaarImplementationIsSelected() {
   let fake = FakeDownloadsTransport(replies: [:])
-  #expect(ShaarDownloadsAdapter.selected(implementation: .ardia, transport: fake) == nil)
+  #expect(ShaarDownloadsAdapter.selected(implementation: .shaar, transport: fake) != nil)
   #expect(ShaarDownloadsAdapter.selected(implementation: .shaar, transport: fake) != nil)
 }
 

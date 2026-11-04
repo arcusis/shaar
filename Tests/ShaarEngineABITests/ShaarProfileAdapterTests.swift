@@ -51,8 +51,8 @@ import Testing
 
 @Suite("Shaar profile adapter")
 struct ShaarProfileAdapterTests {
-  @Test @MainActor func defaultRemainsArdiaAndFakeOpenDeduplicates() async throws {
-    #expect(ShaarEngineImplementation.shippingDefault == .ardia)
+  @Test @MainActor func shaarDefaultAndFakeOpenDeduplicates() async throws {
+    #expect(ShaarEngineImplementation.shippingDefault == .shaar)
     let fake = FakeProfileEngine()
     let adapter = ShaarProfileAdapter(engine: fake, implementation: .shaar)
     async let first: Void = adapter.open(profileID: "4a4d4885-d38a-4b4a-bc03-b12f634bff01")

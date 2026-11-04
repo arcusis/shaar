@@ -36,7 +36,7 @@ in-memory rules. No filter-list download runs in a private browsing session.
 
 The rules apply only to off-the-record HTTP(S) requests, WebSocket handshakes
 from frames and workers, and WebTransport creation. A narrow socket connector
-callback supplies browser-owned context and isolation data to Ardia policies. Site allowances remain in OTR
+callback supplies browser-owned context and isolation data to Shaar policies. Site allowances remain in OTR
 memory; the host revokes allowances when their granting window closes. New
 requests and socket handshakes use the current rules; existing connections can
 remain until their owners close. The

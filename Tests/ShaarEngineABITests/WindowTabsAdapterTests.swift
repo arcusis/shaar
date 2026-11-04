@@ -47,9 +47,9 @@ import Testing
 
 @Suite("Shaar windows and tabs adapter")
 struct WindowTabsAdapterTests {
-  @Test @MainActor func adapterIsUnavailableOnArdiaShippingDefault() {
+  @Test @MainActor func adapterIsAvailableOnShaarShippingDefault() {
     #expect(
-      ShaarWindowTabsAdapter.makeIfSelected(engine: FakeWindowTabsEngine()) == nil)
+      ShaarWindowTabsAdapter.makeIfSelected(engine: FakeWindowTabsEngine()) != nil)
   }
 
   @Test @MainActor func hostViewsRemainBorrowedAndRequireLiveHandles() throws {

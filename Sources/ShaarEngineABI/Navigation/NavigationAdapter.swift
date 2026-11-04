@@ -187,7 +187,7 @@ public struct ShaarNavigationABITransport: ShaarNavigationSubmitting, @unchecked
 
 extension ShaarEngineLoader {
   /// Create the navigation ABI transport only when this loader selected Shaar.
-  /// Returning `nil` preserves the Ardia implementation path.
+  /// Returning `nil` indicates the native capability is unavailable.
   public func makeNavigationTransport(
     handleResolver: any ShaarNavigationHandleResolving
   ) throws -> ShaarNavigationABITransport? {
@@ -226,7 +226,7 @@ public enum ShaarNavigationCommand: Equatable, Sendable {
   }
 }
 
-/// Thin command adapter. The Ardia path remains the shipping default; callers
+/// Thin command adapter. Callers
 /// only instantiate this adapter when the selected engine is `.shaar`.
 public struct ShaarNavigationAdapter: Sendable {
   private let transport: any ShaarNavigationSubmitting

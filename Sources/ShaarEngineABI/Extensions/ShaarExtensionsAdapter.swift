@@ -64,12 +64,6 @@ public protocol ShaarExtensionsTransport: Sendable {
   ) async throws -> Data
 }
 
-/// Existing Ardia implementation remains the shipping default until migration gates pass.
-public protocol ArdiaExtensionsBackend: Sendable {
-  func list(profileID: UUID) async throws -> [ShaarExtensionSummary]
-  func manage(profileID: UUID, action: ShaarExtensionManagementAction) async throws
-}
-
 public enum ShaarExtensionsAdapterError: Error, Equatable, Sendable {
   case invalidResponse(String)
   case invalidExtensionID
@@ -87,22 +81,13 @@ public struct ShaarSharedInstallResult: Equatable, Sendable {
 }
 
 public struct ShaarExtensionsAdapter: Sendable {
-  private let implementation: ShaarEngineImplementation
-  private let ardia: any ArdiaExtensionsBackend
   private let shaar: any ShaarExtensionsTransport
 
-  public init(
-    implementation: ShaarEngineImplementation = .shippingDefault,
-    ardia: any ArdiaExtensionsBackend,
-    shaar: any ShaarExtensionsTransport
-  ) {
-    self.implementation = implementation
-    self.ardia = ardia
+  public init(shaar: any ShaarExtensionsTransport) {
     self.shaar = shaar
   }
 
   public func list(profileID: UUID) async throws -> [ShaarExtensionSummary] {
-    guard implementation == .shaar else { return try await ardia.list(profileID: profileID) }
     let data = try await shaar.submitExtensions(
       profileID: profileID, operation: .list,
       arguments: try encode(["schemaVersion": 1]))
@@ -142,10 +127,6 @@ public struct ShaarExtensionsAdapter: Sendable {
   }
 
   public func manage(profileID: UUID, action: ShaarExtensionManagementAction) async throws {
-    guard implementation == .shaar else {
-      try await ardia.manage(profileID: profileID, action: action)
-      return
-    }
     let fields = action.fields
     guard let id = fields["extensionId"] as? String, Self.isValidExtensionID(id) else {
       throw ShaarExtensionsAdapterError.invalidExtensionID
@@ -168,9 +149,7 @@ public struct ShaarExtensionsAdapter: Sendable {
     extensionID: String, approvedVersion: String, profileIDs: [UUID]
   ) async -> ShaarSharedInstallResult {
     let targets = Array(Set(profileIDs)).sorted { $0.uuidString < $1.uuidString }
-    guard Self.isValidExtensionID(extensionID), Self.isValidVersion(approvedVersion),
-      implementation == .shaar
-    else {
+    guard Self.isValidExtensionID(extensionID), Self.isValidVersion(approvedVersion) else {
       return ShaarSharedInstallResult(installed: [], failed: Set(targets), pending: [])
     }
     var installed = Set<UUID>()

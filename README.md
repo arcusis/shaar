@@ -18,7 +18,7 @@
 [![macOS 26+](https://img.shields.io/badge/macOS-26%2B-000000?logo=apple&logoColor=white)](#requirements)
 [![Apple silicon](https://img.shields.io/badge/Apple%20silicon-arm64-000000?logo=apple&logoColor=white)](#requirements)
 [![Swift 6.2](https://img.shields.io/badge/Swift-6.2-F05138?logo=swift&logoColor=white)](https://www.swift.org)
-[![Chromium 155](https://img.shields.io/badge/Chromium-155-4285F4?logo=googlechrome&logoColor=white)](ThirdParty/ArdiaCore)
+[![Chromium 155](https://img.shields.io/badge/Chromium-155-4285F4?logo=googlechrome&logoColor=white)](ThirdParty/ChromiumEngine)
 [![Open issues](https://img.shields.io/github/issues/arcusis/shaar?color=71E122)](https://github.com/arcusis/shaar/issues)
 
 [**Download**](https://github.com/arcusis/shaar/releases) ·
@@ -123,7 +123,7 @@ More detail, including building the engine from source, is in [Build and Run](No
 │      ├─ BrowserCore      sessions, profiles, search, links,  │
 │      │                   update feed — pure Swift, no UI     │
 │      └─ ChromiumBridge   Objective-C++ bridge to the engine  │
-│              └─ Chromium Framework (pinned ArdiaCore build)  │
+│              └─ Chromium Framework (pinned Shaar build)  │
 └──────────────────────────────────────────────────────────────┘
 ShaarVerification — separate harness that drives the real engine in tests; never shipped
 ```
@@ -181,7 +181,7 @@ Please report vulnerabilities privately through [GitHub Security Advisories](htt
 
 ## Credits
 
-Shaar's design is inspired by [Arc](https://arc.net) by The Browser Company; Shaar is independent and not affiliated with them. It is built on [Chromium](https://www.chromium.org) through [ArdiaCore](https://github.com/mantrakp04/ardia) and uses [Sparkle](https://sparkle-project.org) for updates. See [CREDITS.md](CREDITS.md) for full acknowledgements, and [NOTICE](NOTICE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for third-party licenses.
+Shaar's design is inspired by [Arc](https://arc.net) by The Browser Company; Shaar is independent and not affiliated with them. It is built on [Chromium](https://www.chromium.org) through the Shaar engine and uses [Sparkle](https://sparkle-project.org) for updates. See [CREDITS.md](CREDITS.md) for full acknowledgements, and [NOTICE](NOTICE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for third-party licenses.
 
 ## License
 

@@ -54,6 +54,28 @@ final class BrowserBackendSelectionTests: XCTestCase {
     }
   }
 
+  func testShaarOverridesRemainingCoreRoutes() {
+    for selector in [
+      "faviconForTabID:profileID:windowID:",
+      "chromeWindowIDForProfileID:windowID:",
+      "findInTabID:profileID:requestID:text:forward:",
+      "stopFindingInTabID:",
+      "evaluateInTabID:script:completion:",
+      "downloadCommand:downloadID:profileID:completion:",
+      "refreshDownloadsForProfileID:",
+      "bookmarksForProfileID:completion:",
+      "applyBookmarkOperation:profileID:completion:",
+      "historyForProfileID:limit:completion:",
+      "deleteHistoryURL:profileID:completion:",
+      "importHistoryRows:source:profileID:completion:",
+      "downloadsDirectoryForProfileID:",
+      "nativeTabIDForID:",
+      "resolveExternalAppRequestID:accepted:",
+    ] {
+      assertShaarOverrides(selector)
+    }
+  }
+
   private func assertShaarOverrides(_ name: String) {
     let selector = NSSelectorFromString(name)
     let ardia = class_getInstanceMethod(ARCChromiumRuntime.self, selector)

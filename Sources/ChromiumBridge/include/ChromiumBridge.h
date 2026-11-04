@@ -180,7 +180,7 @@ FOUNDATION_EXPORT NSString *ARCBridgeLocalizedString(NSString *message);
 - (void)refreshDownloadsForProfileID:(NSString *)profileID;
 - (BOOL)placeTabIDs:(NSArray<NSString *> *)tabIDs pinnedIDs:(NSArray<NSString *> *)pinnedIDs
          profileID:(NSString *)profileID;
-/// Evaluates a constant JavaScript script and returns its JSON value through ArdiaCore's post callback.
+/// Evaluates a constant JavaScript script and returns its JSON value when the selected engine supports it.
 /// Callers must serialize all dynamic values as JSON literals before constructing the script.
 - (void)evaluateInTabID:(NSString *)tabID script:(NSString *)script
             completion:(void (^)(NSString * _Nullable))completion;
@@ -194,7 +194,7 @@ FOUNDATION_EXPORT NSString *ARCBridgeLocalizedString(NSString *message);
 - (void)quit;
 @end
 
-/// Shaar C ABI implementation. Startup selection is enabled after core routes are ready.
+/// Shaar C ABI implementation, selected only by an explicit startup flag or environment variable.
 @interface ARCShaarRuntime : ARCChromiumRuntime <ARCBrowserCoreBackend>
 @end
 

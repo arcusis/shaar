@@ -237,13 +237,14 @@ class PipelineGateTests(unittest.TestCase):
         results.update({name: {"result": native} for name in (
             "python-tests", "build", "coverage", "visuals", "localization", "engine",
             "shipping", "codeql", "inspector-contracts", "basic-browsing",
+            "shaar-engine-simulation",
         )})
         results.update({name: {"result": nightly} for name in ("sanitizers", "dead-code")})
         results["codeql"] = {"result": "success"}
         return results
 
     def test_full_pipeline_rejects_failed_cancelled_skipped_or_missing_stage(self):
-        for stage in ("engine", "localization", "inspector-contracts", "basic-browsing"):
+        for stage in ("engine", "shaar-engine-simulation", "localization", "inspector-contracts", "basic-browsing"):
             for result in ("failure", "cancelled", "skipped", None):
                 with self.subTest(stage=stage, result=result):
                     needs = self.results()

@@ -5,12 +5,76 @@
 import BrowserCore
 import ChromiumBridge
 import Foundation
+import ShaarEngineABI
 import Testing
 
 @testable import ArcusisBrowser
 
 @Suite @MainActor
 struct ProfilePrivacyTests {
+  @Test func shaarBackendHandlesProfilePickerChanges() async {
+    let first = UUID()
+    let second = UUID()
+    let transport = SettingsSiteDataTransport()
+    let backend = ShaarProfileSettings(
+      transport: transport,
+      profiles: SettingsProfileManager())
+    let firstModel = ProfilePrivacyModel(profileID: first, backend: backend)
+    await firstModel.load()
+    await firstModel.setCookiesBlocked(true)
+    let secondModel = ProfilePrivacyModel(profileID: second, backend: backend)
+    await secondModel.load()
+    await secondModel.clear(siteData: false)
+    #expect(secondModel.loaded && secondModel.failure == nil)
+    #expect(firstModel.cookiesBlocked == true && secondModel.cookiesBlocked == false)
+    #expect((await transport.profileIDs()).contains(second))
+    #expect((await transport.profileIDs()).contains(first))
+  }
+
+  @Test func unsupportedCookieCapabilityDoesNotHideSiteDataControls() async {
+    let selected = UUID()
+    let transport = SettingsSiteDataTransport()
+    await transport.setCookieUnsupported(true)
+    let backend = ShaarProfileSettings(
+      transport: transport,
+      profiles: SettingsProfileManager())
+    let model = ProfilePrivacyModel(profileID: selected, backend: backend)
+    await model.load()
+    #expect(model.loaded && model.failure == nil)
+    #expect(model.cookiesBlocked == nil)
+    #expect(model.sites.map(\.id) == ["https://example.test"])
+    await model.clear(siteData: false)
+    #expect(model.failure == nil && model.message != nil)
+  }
+
+  @Test func shaarSettingsActionsStayOnSelectedProfileAndRespectManagedPolicy() async throws {
+    let selected = UUID()
+    let other = UUID()
+    let transport = SettingsSiteDataTransport()
+    let profiles = SettingsProfileManager()
+    let backend = ShaarProfileSettings(transport: transport, profiles: profiles)
+    let model = ProfilePrivacyModel(profileID: selected, backend: backend)
+    await model.load()
+    #expect(model.sites.map(\.id) == ["https://example.test"])
+    #expect(model.cookiesBlocked == false)
+    await model.clear(siteData: true)
+    await model.clear(siteData: false)
+    await model.resetPermissions(origin: "https://example.test")
+    await model.setCookiesBlocked(true)
+    #expect(model.cookiesBlocked == true)
+    #expect(model.failure == nil)
+    #expect(await transport.profileIDs().allSatisfy { $0 == selected })
+    #expect(await transport.operations().contains(.thirdPartyCookiesSet))
+    #expect(profiles.opened.allSatisfy { $0 == selected })
+    #expect(!((await transport.profileIDs()).contains(other)))
+
+    await transport.setManaged(true)
+    await model.load()
+    #expect(model.cookiesManaged)
+    await model.setCookiesBlocked(false)
+    #expect(!(await transport.operations().suffix(1).contains(.thirdPartyCookiesSet)))
+  }
+
   @Test func unavailableEngineFailsClosedForProfileAndCookieMutations() async {
     let backend = EngineProfileSettings(runtime: ARCChromiumRuntime())
     let id = UUID()
@@ -240,4 +304,60 @@ final class ProfileSettingsStub: ProfileSettingsBackend {
     cookiePolicies[profileID] = blocked
   }
   func deleteProfile(_ id: UUID) async throws { try record("delete", id) }
+}
+
+private actor SettingsSiteDataTransport: ShaarSiteDataTransport {
+  private var calls: [(UUID, ShaarSiteDataOperation)] = []
+  private var blocked: [UUID: Bool] = [:]
+  private var managed = false
+  private var hasException = true
+  private var cookieUnsupported = false
+
+  func profileIDs() -> [UUID] { calls.map(\.0) }
+  func operations() -> [ShaarSiteDataOperation] { calls.map(\.1) }
+  func setManaged(_ value: Bool) { managed = value }
+  func setCookieUnsupported(_ value: Bool) { cookieUnsupported = value }
+
+  func submit(
+    profileID: UUID, operation: ShaarSiteDataOperation, arguments: Data
+  ) async throws -> Data {
+    calls.append((profileID, operation))
+    let body: [String: Any]
+    switch operation {
+    case .thirdPartyCookiesGet:
+      if cookieUnsupported {
+        throw ShaarEngineError.status(
+          .unsupportedCapability, platformCode: 0, message: "Cookie controls unavailable")
+      }
+      body = ["schemaVersion": 1, "blocked": blocked[profileID] ?? false, "managed": managed]
+    case .thirdPartyCookiesSet:
+      let args = try JSONSerialization.jsonObject(with: arguments) as? [String: Any]
+      blocked[profileID] = args?["blocked"] as? Bool ?? false
+      body = ["schemaVersion": 1, "blocked": blocked[profileID] ?? false, "managed": managed]
+    case .settingsOrigins:
+      body = ["schemaVersion": 1, "origins": hasException ? ["https://example.test"] : []]
+    case .settingsGet:
+      body = [
+        "schemaVersion": 1,
+        "settings": [
+          "camera": ["value": "allow", "isDefault": false]
+        ],
+      ]
+    case .settingsReset:
+      hasException = false
+      body = ["schemaVersion": 1, "resetCount": 1]
+    case .browsingDataClear:
+      let args = try JSONSerialization.jsonObject(with: arguments) as? [String: Any]
+      body = ["schemaVersion": 1, "clearedTypes": args?["types"] ?? [], "complete": true]
+    default:
+      throw CocoaError(.featureUnsupported)
+    }
+    return try JSONSerialization.data(withJSONObject: body)
+  }
+}
+
+@MainActor private final class SettingsProfileManager: ShaarSettingsProfileManaging {
+  var opened: [UUID] = []
+  func open(profileID: UUID) async throws { opened.append(profileID) }
+  func delete(profileID: UUID) async throws {}
 }

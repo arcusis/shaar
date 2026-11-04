@@ -6,6 +6,7 @@ import BrowserCore
 import ChromiumBridge
 import Foundation
 import Observation
+import ShaarEngineABI
 
 @MainActor
 protocol ProfileSettingsBackend {
@@ -16,8 +17,90 @@ protocol ProfileSettingsBackend {
   func permissions(_ id: UUID, origin: String) async throws -> [String: NSDictionary]
   func resetPermissions(_ id: UUID, origin: String) async throws
   func thirdPartyCookiesBlocked(_ id: UUID) -> Bool?
+  func thirdPartyCookiesManaged(_ id: UUID) -> Bool
   func setThirdPartyCookiesBlocked(_ blocked: Bool, profileID: UUID) async throws
   func deleteProfile(_ id: UUID) async throws
+}
+
+extension ProfileSettingsBackend {
+  func thirdPartyCookiesManaged(_ id: UUID) -> Bool { false }
+}
+
+@MainActor
+protocol ShaarSettingsProfileManaging {
+  func open(profileID: UUID) async throws
+  func delete(profileID: UUID) async throws
+}
+
+extension ShaarProfileAdapter: ShaarSettingsProfileManaging {
+  func open(profileID: UUID) async throws {
+    try await open(profileID: profileID.uuidString.lowercased())
+  }
+  func delete(profileID: UUID) async throws {
+    try await delete(profileID: profileID.uuidString.lowercased())
+  }
+}
+
+@MainActor
+final class ShaarProfileSettings: ProfileSettingsBackend {
+  private let transport: any ShaarSiteDataTransport
+  private let profiles: any ShaarSettingsProfileManaging
+  private var cookiePolicies: [UUID: ShaarThirdPartyCookiePolicy] = [:]
+
+  init(transport: any ShaarSiteDataTransport, profiles: any ShaarSettingsProfileManaging) {
+    self.transport = transport
+    self.profiles = profiles
+  }
+
+  convenience init(engine: ShaarEngineTransport, profiles: ShaarProfileAdapter) throws {
+    let transport = try ShaarSiteDataABITransport(resolver: engine, profileResolver: profiles)
+    self.init(transport: transport, profiles: profiles)
+  }
+
+  private func adapter(for id: UUID) -> ShaarSiteDataAdapter {
+    ShaarSiteDataAdapter(profileID: id, implementation: .shaar, transport: transport)
+  }
+
+  func loadProfile(_ id: UUID) async throws {
+    try await profiles.open(profileID: id)
+    do {
+      cookiePolicies[id] = try await adapter(for: id).thirdPartyCookiePolicy()
+    } catch ShaarEngineError.status(.unsupportedCapability, _, _) {
+      cookiePolicies[id] = nil
+    }
+  }
+  func clearSiteData(_ id: UUID) async throws {
+    _ = try await adapter(for: id).clearBrowsingData(types: ["siteData"])
+  }
+  func clearCache(_ id: UUID) async throws {
+    _ = try await adapter(for: id).clearBrowsingData(types: ["cache"])
+  }
+  func permissionOrigins(_ id: UUID) async throws -> [String] {
+    try await adapter(for: id).origins()
+  }
+  func permissions(_ id: UUID, origin: String) async throws -> [String: NSDictionary] {
+    let settings = try await adapter(for: id).settings(origin: origin)
+    return settings.mapValues {
+      ["value": $0.value.rawValue, "isDefault": $0.isDefault] as NSDictionary
+    }
+  }
+  func resetPermissions(_ id: UUID, origin: String) async throws {
+    _ = try await adapter(for: id).reset(origin: origin)
+  }
+  func thirdPartyCookiesBlocked(_ id: UUID) -> Bool? {
+    cookiePolicies[id]?.blocked
+  }
+  func thirdPartyCookiesManaged(_ id: UUID) -> Bool {
+    cookiePolicies[id]?.managed == true
+  }
+  func setThirdPartyCookiesBlocked(_ blocked: Bool, profileID: UUID) async throws {
+    cookiePolicies[profileID] = try await adapter(for: profileID).setThirdPartyCookiesBlocked(
+      blocked)
+  }
+  func deleteProfile(_ id: UUID) async throws {
+    try await profiles.delete(profileID: id)
+    cookiePolicies[id] = nil
+  }
 }
 
 @MainActor
@@ -113,6 +196,7 @@ final class ProfilePrivacyModel {
   private let backend: any ProfileSettingsBackend
   private(set) var sites: [ProfilePermissionSite] = []
   private(set) var cookiesBlocked: Bool?
+  private(set) var cookiesManaged = false
   private(set) var busy = false
   private(set) var loaded = false
   private(set) var failure: String?
@@ -127,6 +211,7 @@ final class ProfilePrivacyModel {
     await run {
       try await self.backend.loadProfile(self.profileID)
       self.cookiesBlocked = self.backend.thirdPartyCookiesBlocked(self.profileID)
+      self.cookiesManaged = self.backend.thirdPartyCookiesManaged(self.profileID)
       try await self.refreshPermissions()
       self.loaded = true
     }
@@ -155,10 +240,11 @@ final class ProfilePrivacyModel {
   }
 
   func setCookiesBlocked(_ blocked: Bool) async {
-    guard cookiesBlocked != nil else { return }
+    guard cookiesBlocked != nil, !cookiesManaged else { return }
     await run {
       try await self.backend.setThirdPartyCookiesBlocked(blocked, profileID: self.profileID)
       self.cookiesBlocked = self.backend.thirdPartyCookiesBlocked(self.profileID)
+      self.cookiesManaged = self.backend.thirdPartyCookiesManaged(self.profileID)
     }
   }
 

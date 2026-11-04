@@ -256,10 +256,12 @@ final class BrowserSettingsController: NSObject {
   init(
     workspace: BrowserWorkspaceStore, preferences: BrowserPreferencesStore,
     runtime: ARCChromiumRuntime? = nil,
+    profileBackend: (any ProfileSettingsBackend)? = nil,
     presentation: Presentation = .visible
   ) {
     state = BrowserSettingsState(
-      workspace: workspace, preferences: preferences, runtime: runtime)
+      workspace: workspace, preferences: preferences, runtime: runtime,
+      profileBackend: profileBackend)
     self.presentation = presentation
     super.init()
   }

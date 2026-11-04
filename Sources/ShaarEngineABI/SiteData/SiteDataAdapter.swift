@@ -42,32 +42,38 @@ public enum ShaarSiteDataError: Error, Equatable, Sendable {
   case malformedResponse
   case invalidOrigin
   case unsupportedCapability
+  case wrongProfile
 }
 
 public protocol ShaarSiteDataTransport: Sendable {
-  func submit(operation: ShaarSiteDataOperation, arguments: Data) async throws -> Data
+  func submit(profileID: UUID, operation: ShaarSiteDataOperation, arguments: Data) async throws
+    -> Data
 }
 
 /// Typed site-data calls over the Shaar ABI. The application keeps its Ardia
 /// route unless the existing implementation choice selects `.shaar`.
 public struct ShaarSiteDataAdapter: Sendable {
   private let transport: any ShaarSiteDataTransport
+  public let profileID: UUID
   public let implementation: ShaarEngineImplementation
 
   public init(
+    profileID: UUID,
     implementation: ShaarEngineImplementation = .shippingDefault,
     transport: any ShaarSiteDataTransport
   ) {
+    self.profileID = profileID
     self.implementation = implementation
     self.transport = transport
   }
 
   public static func selected(
+    profileID: UUID,
     implementation: ShaarEngineImplementation,
     transport: any ShaarSiteDataTransport
   ) -> Self? {
     guard implementation == .shaar else { return nil }
-    return Self(implementation: implementation, transport: transport)
+    return Self(profileID: profileID, implementation: implementation, transport: transport)
   }
 
   public func settings(origin: String) async throws -> [String: ShaarSiteSetting] {
@@ -197,7 +203,8 @@ public struct ShaarSiteDataAdapter: Sendable {
     var arguments = body
     arguments["schemaVersion"] = 1
     let data = try JSONSerialization.data(withJSONObject: arguments, options: [.sortedKeys])
-    let response = try await transport.submit(operation: operation, arguments: data)
+    let response = try await transport.submit(
+      profileID: profileID, operation: operation, arguments: data)
     guard let object = try JSONSerialization.jsonObject(with: response) as? [String: Any],
       object["schemaVersion"] as? Int == 1
     else { throw ShaarSiteDataError.malformedResponse }

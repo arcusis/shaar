@@ -173,7 +173,13 @@ public enum BrowserImport {
 
   private static func firefox(_ root: [String: Any]) -> [BrowserImportItem] {
     var result: [BrowserImportItem] = []
-    walk([root], path: nil, into: &result)
+    if root["guid"] as? String == "root________",
+      root["type"] as? String == "text/x-moz-place-container"
+    {
+      walk(root["children"] as? [[String: Any]] ?? [], path: nil, into: &result)
+    } else {
+      walk([root], path: nil, into: &result)
+    }
     return result
   }
 

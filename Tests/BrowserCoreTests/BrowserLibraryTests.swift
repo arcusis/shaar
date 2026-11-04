@@ -350,6 +350,23 @@ private func bookmarkPayload(children: [[String: Any]]) -> [String: Any] {
   #expect(items.map(\.title) == ["R&D <map> 'guide' 🌍 ' &unknown;"])
 }
 
+@Test func firefoxJSONRootDoesNotBecomeAnImportedFolder() throws {
+  let url = FileManager.default.temporaryDirectory.appending(path: "Firefox-\(UUID()).json")
+  defer { try? FileManager.default.removeItem(at: url) }
+  try JSONSerialization.data(withJSONObject: [
+    "guid": "root________", "title": "", "type": "text/x-moz-place-container",
+    "children": [
+      ["guid": "menu________", "title": "Bookmarks Menu", "type": "text/x-moz-place-container",
+       "children": [["title": "Page", "uri": "https://page.example"]]]
+    ]
+  ]).write(to: url)
+
+  let items = try BrowserImport.read(url)
+  #expect(items.map(\.folder) == ["Bookmarks Menu"])
+  let operations = BrowserImport.operations(for: items, otherFolderID: UUID())
+  #expect(operations.count == 2 && operations[0]["t"] as? String == "Bookmarks Menu")
+}
+
 @Test @MainActor func browserImportBatchAppliesInOrderAndStopsAfterAnError() {
   let operations: [[String: Any]] = [["id": "first"], ["id": "second"], ["id": "third"]]
   var applied: [String] = []

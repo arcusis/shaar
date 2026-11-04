@@ -14,12 +14,13 @@ enum SpaceShortcut {
 }
 
 struct SpaceCommands: Commands {
+  static let newSpaceShortcut = KeyboardShortcut("S", modifiers: [.command, .shift])
   let store: BrowserStore
 
   var body: some Commands {
     CommandMenu(ShellL10n.string("Spaces")) {
       Button(ShellL10n.string("New space…")) { store.spaceEditor = .create }
-        .keyboardShortcut("n", modifiers: [.command, .option])
+        .keyboardShortcut(Self.newSpaceShortcut)
       Button(ShellL10n.string("Edit current space…")) {
         store.spaceEditor = .edit(store.session.selectedSpaceID)
       }

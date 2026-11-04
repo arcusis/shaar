@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import ChromiumBridge
+import ObjectiveC
 import XCTest
 
 @testable import ArcusisBrowser
@@ -27,5 +28,57 @@ final class BrowserBackendSelectionTests: XCTestCase {
   func testExplicitShaarSelectionDoesNotFallBackWhenABIMissing() {
     XCTAssertThrowsError(
       try ARCShaarRuntime(frameworkURL: URL(fileURLWithPath: "/nonexistent-shaar-framework")))
+  }
+
+  func testShaarOverridesProfileLoading() {
+    assertShaarOverrides("loadProfileID:completion:")
+  }
+
+  func testShaarOverridesWindowAndTabHosting() {
+    for selector in [
+      "createWindowID:error:", "closeWindowID:",
+      "openTabID:profileID:windowID:url:error:", "closeTabID:",
+      "hostViewForWindowID:", "viewForTabID:", "activateTabID:",
+    ] {
+      assertShaarOverrides(selector)
+    }
+  }
+
+  func testShaarOverridesNavigation() {
+    for selector in [
+      "navigateTabID:profileID:windowID:url:",
+      "goBackInTabID:", "goForwardInTabID:",
+      "reloadTabID:profileID:mode:",
+    ] {
+      assertShaarOverrides(selector)
+    }
+  }
+
+  func testShaarOverridesRemainingCoreRoutes() {
+    for selector in [
+      "faviconForTabID:profileID:windowID:",
+      "chromeWindowIDForProfileID:windowID:",
+      "findInTabID:profileID:requestID:text:forward:",
+      "stopFindingInTabID:",
+      "evaluateInTabID:script:completion:",
+      "bookmarksForProfileID:completion:",
+      "applyBookmarkOperation:profileID:completion:",
+      "historyForProfileID:limit:completion:",
+      "deleteHistoryURL:profileID:completion:",
+      "importHistoryRows:source:profileID:completion:",
+      "nativeTabIDForID:",
+      "resolveExternalAppRequestID:accepted:",
+    ] {
+      assertShaarOverrides(selector)
+    }
+  }
+
+  private func assertShaarOverrides(_ name: String) {
+    let selector = NSSelectorFromString(name)
+    let ardia = class_getInstanceMethod(ARCChromiumRuntime.self, selector)
+    let shaar = class_getInstanceMethod(ARCShaarRuntime.self, selector)
+    XCTAssertNotNil(ardia)
+    XCTAssertNotNil(shaar)
+    XCTAssertNotEqual(ardia, shaar, "Shaar must override \(name)")
   }
 }

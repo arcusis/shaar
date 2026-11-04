@@ -9,11 +9,11 @@ import XCTest
 @testable import ArcusisBrowser
 
 final class BrowserBackendSelectionTests: XCTestCase {
-  func testArdiaRemainsDefault() {
-    XCTAssertEqual(BrowserBackendSelection.choose(environment: [:], arguments: []), .ardia)
+  func testShaarIsAlwaysDefault() {
+    XCTAssertEqual(BrowserBackendSelection.choose(environment: [:], arguments: []), .shaar)
   }
 
-  func testShaarRequiresExplicitEnvironmentOrFlag() {
+  func testLegacySelectionInputsCannotChangeBackend() {
     XCTAssertEqual(
       BrowserBackendSelection.choose(
         environment: ["SHAAR_ENGINE_BACKEND": "shaar"], arguments: []), .shaar)
@@ -22,7 +22,8 @@ final class BrowserBackendSelectionTests: XCTestCase {
         environment: [:], arguments: ["--shaar-engine-backend=shaar"]), .shaar)
     XCTAssertEqual(
       BrowserBackendSelection.choose(
-        environment: ["SHAAR_ENGINE_BACKEND": "unknown"], arguments: []), .ardia)
+        environment: ["SHAAR_ENGINE_BACKEND": "ardia"],
+        arguments: ["--shaar-engine-backend=ardia"]), .shaar)
   }
 
   func testPreviewBundleSelectsShaar() {

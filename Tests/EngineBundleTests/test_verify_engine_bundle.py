@@ -31,6 +31,9 @@ FEED_SPEC.loader.exec_module(release_feed)
 
 
 class EngineBundleVerifierTests(unittest.TestCase):
+    def test_framework_identity_is_shaar(self):
+        self.assertEqual(verifier.FRAMEWORK_ID, "com.arcusis.shaar.framework")
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)

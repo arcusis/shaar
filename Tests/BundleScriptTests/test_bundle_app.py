@@ -62,13 +62,15 @@ class BundleAppTests(unittest.TestCase):
             "printf 'fetch-shaar-test-engine\\n' >> \"$BUNDLE_TEST_LOG\"\n"
             "printf '%s\\n' \"$BUNDLE_TEST_FRAMEWORK\"\n"
         )
-        for name in ("LICENSE", "NOTICE", "pin.json"):
-            path = self.root / "ThirdParty" / "ArdiaCore" / name
+        for name in ("pin.json",):
+            path = self.root / "ThirdParty" / "ChromiumEngine" / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(name)
         preview_pin = self.root / "ThirdParty" / "ChromiumEngine" / "preview-pin.json"
         preview_pin.parent.mkdir(parents=True)
         preview_pin.write_text("preview pin")
+        for name in ("LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"):
+            (self.root / name).write_text(name)
 
         self.binary_dir = self.root / "swift-bin"
         self.binary_dir.mkdir()
@@ -289,8 +291,9 @@ class BundleAppTests(unittest.TestCase):
         self.assertIn("not notarized", result.stdout)
         self._assert_icon_bundle("build/Shaar Shell.app")
         self.assertTrue(
-            (self.root / "build/Shaar Shell.app/Contents/Resources/ArdiaCore/pin.json").is_file()
+            (self.root / "build/Shaar Shell.app/Contents/Resources/ChromiumEngine/pin.json").is_file()
         )
+        self.assertFalse((self.root / "build/Shaar Shell.app/Contents/Resources/ArdiaCore").exists())
         self.assertIn("codesign --force --timestamp=none --sign -", self._log())
         self.assertIn("codesign --verify --deep --strict", self._log())
 

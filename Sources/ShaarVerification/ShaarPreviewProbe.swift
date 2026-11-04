@@ -42,18 +42,13 @@ final class ShaarPreviewProbe {
       else { throw Failure("Missing \(flag).") }
       return arguments[index + 1]
     }
-    guard
-      BrowserBackendSelection.choose(
-        environment: ProcessInfo.processInfo.environment, arguments: arguments) == .shaar
-    else { throw Failure("Shaar backend switch is required.") }
     output = URL(filePath: try value("--probe-output"))
     dataRoot = URL(filePath: try value("--probe-data-dir"), directoryHint: .isDirectory)
     downloadURL = try? URL(string: value("--probe-download-url"))
     let framework = URL(filePath: try value("--probe-framework"))
     guard
-      let selected = try NativeBrowserHost.makeRuntime(
-        frameworkURL: framework, environment: ProcessInfo.processInfo.environment,
-        arguments: arguments) as? ARCShaarRuntime
+      let selected = try NativeBrowserHost.makeRuntime(frameworkURL: framework)
+        as? ARCShaarRuntime
     else { throw Failure("Backend selector did not construct Shaar runtime.") }
     runtime = selected
     workspace = try BrowserWorkspaceStore()

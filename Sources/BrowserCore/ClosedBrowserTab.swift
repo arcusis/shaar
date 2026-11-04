@@ -37,15 +37,15 @@ extension BrowserSession {
     else { return nil }
     let snapshot = closedTabs[entry]
     let folder = snapshot.tab.folderID.flatMap { id in
-      spaces[space].folders.contains { $0.id == id } ? id : nil
+      spaces[space].folders.first { $0.id == id }
     }
     let tab = BrowserTab(
-      url: snapshot.tab.url, title: snapshot.tab.title, isPinned: snapshot.tab.isPinned,
-      folderID: folder)
+      url: snapshot.tab.url, title: snapshot.tab.title,
+      isPinned: folder?.isPinned ?? snapshot.tab.isPinned, folderID: folder?.id)
     spaces[space].tabs.insert(tab, at: min(snapshot.index, spaces[space].tabs.count))
     spaces[space].selectedTabID = tab.id
     spaces[space].selectedFavoriteID = nil
-    spaces[space].expandFolderPath(folder)
+    spaces[space].expandFolderPath(folder?.id)
     closedTabs.remove(at: entry)
     return tab.id
   }

@@ -228,3 +228,24 @@ private let legacySession = Data(
   #expect(session.selectedSpace.folders.filter { $0.parentID == nil }.map(\.id) == [second, first])
   try session.validate()
 }
+
+@Test func reopeningClosedTabFollowsFolderWhenFolderChangesSection() throws {
+  var session = BrowserSession.fresh()
+  let space = session.selectedSpaceID
+  let opened = session.open(URL(string: "https://pinned.example")!)
+  let tab = try #require(opened)
+  session.togglePin(tab)
+  let addedFolder = session.addFolder(name: "Pinned", in: space)
+  let folder = try #require(addedFolder)
+  let movedTab = session.moveTab(tab, from: space, to: space, folderID: folder)
+  #expect(movedTab)
+  session.closeTab(tab)
+
+  let movedFolder = session.moveFolder(folder, from: space, to: space, pinned: false)
+  #expect(movedFolder)
+  let reopened = session.reopenClosedTab(tab, in: space)
+  #expect(reopened != nil)
+  #expect(session.selectedSpace.selectedTab?.isPinned == false)
+  #expect(session.selectedSpace.selectedTab?.folderID == folder)
+  try session.validate()
+}

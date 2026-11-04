@@ -42,30 +42,11 @@ public struct ShaarFindUpdate: Equatable, Sendable {
   )
 }
 
-@MainActor public protocol ArdiaFindBackend {
-  func find(
-    query: String, forward: Bool,
-    completion: @escaping @MainActor (Result<Void, Error>) -> Void
-  )
-  func stop(
-    clearSelection: Bool,
-    completion: @escaping @MainActor (Result<Void, Error>) -> Void
-  )
-}
-
 @MainActor public final class ShaarFindAdapter {
-  private let implementation: ShaarEngineImplementation
-  private let ardia: any ArdiaFindBackend
   private let shaar: any ShaarFindTransport
   private var nextRequestID: UInt64 = 1
 
-  public init(
-    implementation: ShaarEngineImplementation = .shippingDefault,
-    ardia: any ArdiaFindBackend,
-    shaar: any ShaarFindTransport
-  ) {
-    self.implementation = implementation
-    self.ardia = ardia
+  public init(shaar: any ShaarFindTransport) {
     self.shaar = shaar
   }
 
@@ -73,12 +54,6 @@ public struct ShaarFindUpdate: Equatable, Sendable {
     query: String, forward: Bool, scope: ShaarFindScope, windowID: String,
     tabID: String, completion: @escaping @MainActor (Result<UInt64, Error>) -> Void
   ) -> UInt64? {
-    guard implementation == .shaar else {
-      ardia.find(query: query, forward: forward) { result in
-        completion(result.map { 0 })
-      }
-      return nil
-    }
     let requestID = allocateRequestID()
     submit(
       requestID, .find, fields: ["query": query, "forward": forward], scope: scope,
@@ -93,10 +68,6 @@ public struct ShaarFindUpdate: Equatable, Sendable {
     clearSelection: Bool, scope: ShaarFindScope, windowID: String, tabID: String,
     completion: @escaping @MainActor (Result<Void, Error>) -> Void
   ) -> UInt64? {
-    guard implementation == .shaar else {
-      ardia.stop(clearSelection: clearSelection, completion: completion)
-      return nil
-    }
     let requestID = allocateRequestID()
     submit(
       requestID, .stop, fields: ["selection": clearSelection ? "clear" : "keep"],

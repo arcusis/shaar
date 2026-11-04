@@ -7,22 +7,17 @@ import Dispatch
 import Foundation
 import ShaarEngineC
 
-/// Step 0 deliberately leaves shipping builds on the existing ChromiumBridge path.
 public enum ShaarEngineImplementation: Equatable, Sendable {
-  case ardia
   case shaar
 
-  public static let shippingDefault: Self = .ardia
+  public static let shippingDefault: Self = .shaar
 
-  /// Shaar is opt-in for debug and source-engine CI runs. Release builds always
-  /// retain Ardia unless a caller explicitly constructs a test transport.
   public static func selected(
     debugSetting: String? = nil,
     environment: [String: String] = ProcessInfo.processInfo.environment,
     isDebug: Bool = _isDebugAssertConfiguration()
   ) -> Self {
-    guard isDebug else { return .shippingDefault }
-    return (debugSetting ?? environment["SHAAR_ENGINE_IMPLEMENTATION"]) == "shaar" ? .shaar : .ardia
+    .shaar
   }
 }
 

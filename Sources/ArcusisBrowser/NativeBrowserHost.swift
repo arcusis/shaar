@@ -1205,10 +1205,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case restart
   }
 
-  static func makeRuntime(
-    frameworkURL: URL, environment: [String: String], arguments: [String],
-    bundleBackend: String? = nil
-  ) throws -> ARCChromiumRuntime {
+  static func makeRuntime(frameworkURL: URL) throws -> ARCChromiumRuntime {
     try ARCShaarRuntime(frameworkURL: frameworkURL)
   }
 
@@ -1228,10 +1225,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
           directory: directory.appending(path: "favicons", directoryHint: .isDirectory)))
       let preferences = BrowserPreferencesStore(
         fileURL: directory.appending(path: "preferences.json"))
-      let runtime = try makeRuntime(
-        frameworkURL: frameworkURL, environment: ProcessInfo.processInfo.environment,
-        arguments: ProcessInfo.processInfo.arguments,
-        bundleBackend: Bundle.main.object(forInfoDictionaryKey: "ShaarEngineBackend") as? String)
+      let runtime = try makeRuntime(frameworkURL: frameworkURL)
       runtime.languageIdentifier = launchLanguage.localeIdentifier
       BrowserSettingsAppearance.apply(
         UserDefaults.standard.string(forKey: "settingsAppearance") ?? "system")

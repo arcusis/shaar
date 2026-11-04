@@ -207,7 +207,7 @@ final class EngineProbe {
       else {
         throw ProbeFailure("Private window fixture run identity is malformed.")
       }
-      let noLaunchGuard = arguments.contains("--ardia-test-external-protocol-no-launch")
+      let noLaunchGuard = arguments.contains("--shaar-test-external-protocol-no-launch")
       let conflictingFlags = [
         "--bitwarden", "--bitwarden-onboarding-control",
         "--probe-await-abrupt-termination", "--probe-expect-abrupt-recovery",

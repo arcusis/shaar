@@ -204,8 +204,6 @@ def run():
                 "--probe-phase", phase, "--probe-output", str(output), "--probe-localization",
             ]
             environment = safe_environment()
-            environment["ARDIA_DOWNLOADS_DIR"] = str(profile_root / "Downloads")
-            environment["ARDIA_BACKGROUND"] = "picture-in-picture"
             (profile_root / "Downloads").mkdir(mode=0o700, exist_ok=True)
             completed = subprocess.run(
                 arguments, cwd=ROOT, env=environment, capture_output=True, text=True,

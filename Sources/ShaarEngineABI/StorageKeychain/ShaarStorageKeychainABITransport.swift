@@ -154,8 +154,7 @@ public struct ShaarStorageKeychainABITransport: ShaarStorageKeychainTransport,
 }
 
 extension ShaarEngineLoader {
-  /// Callers obtain the status adapter only when this loader selected Shaar;
-  /// the default Ardia implementation remains unchanged.
+  /// Callers obtain the status adapter from the Shaar loader.
   public func makeStorageKeychainAdapter(
     profileResolver: any ShaarStorageKeychainProfileResolving
   ) throws -> ShaarStorageKeychainAdapter? {

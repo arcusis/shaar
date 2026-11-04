@@ -121,7 +121,7 @@ public struct ShaarDownloadsAdapter: Sendable {
     self.transport = transport
   }
 
-  /// Keeps normal builds on the Ardia lane until the source engine is selected.
+  /// Constructs the Shaar downloads adapter.
   public static func selected(
     implementation: ShaarEngineImplementation,
     transport: any ShaarDownloadsTransport

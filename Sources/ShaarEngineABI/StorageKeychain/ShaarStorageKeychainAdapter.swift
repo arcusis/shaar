@@ -32,8 +32,7 @@ public struct ShaarStorageKeychainAdapter: Sendable {
     self.transport = transport
   }
 
-  /// The Ardia implementation remains selected in shipping builds. Callers
-  /// receive this adapter only when the existing choice selects Shaar.
+  /// Creates the Shaar storage-keychain adapter.
   public static func selected(
     implementation: ShaarEngineImplementation = .shippingDefault,
     transport: any ShaarStorageKeychainTransport

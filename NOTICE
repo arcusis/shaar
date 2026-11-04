@@ -6,17 +6,11 @@ Shaar includes or can bundle the third-party components below. Each component
 remains under its own license.
 
 Chromium engine
-  Source: pinned ArdiaCore engine archive described in
-  ThirdParty/ArdiaCore/pin.json; Chromium version 155.0.8059.84.
+  Source: pinned Shaar engine archive described in
+  ThirdParty/ChromiumEngine/pin.json; Chromium version 155.0.8059.84.
   License: BSD-style licenses and other licenses. The complete notices for
   bundled Chromium dependencies are provided by the engine at chrome://credits.
   Keep those notices with any redistribution of the engine.
-
-ArdiaCore native API and engine distribution metadata
-  Source: https://github.com/mantrakp04/ardia, pinned source commit and engine
-  archive in ThirdParty/ArdiaCore/pin.json.
-  License: Apache License 2.0. See ThirdParty/ArdiaCore/LICENSE and
-  ThirdParty/ArdiaCore/NOTICE.
 
 Public Suffix List data
   Source: Chromium source tree, pinned commit and path in

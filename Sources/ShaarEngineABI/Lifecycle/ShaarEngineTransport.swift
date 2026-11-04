@@ -71,18 +71,3 @@ public enum ShaarEngineStartupError: Error, Equatable, Sendable {
     shutDown = true
   }
 }
-
-public enum ShaarEngineTransportSelection<Ardia> {
-  case ardia(Ardia)
-  case shaar(ShaarEngineTransport)
-
-  /// A failed native framework startup cleanly selects the existing Ardia lane.
-  @MainActor public static func make(
-    implementation: ShaarEngineImplementation = .shippingDefault,
-    ardia: () -> Ardia,
-    shaar: () throws -> ShaarEngineTransport
-  ) -> Self {
-    guard implementation == .shaar else { return .ardia(ardia()) }
-    do { return .shaar(try shaar()) } catch { return .ardia(ardia()) }
-  }
-}

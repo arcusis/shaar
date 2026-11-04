@@ -113,24 +113,6 @@ private struct FakeLifecycleResolver: ShaarSymbolResolving {
 
 @Suite("Shaar lifecycle adapter")
 struct ShaarLifecycleRuntimeTests {
-  @Test func defaultImplementationRemainsArdiaAndShaarIsSelectable() throws {
-    let defaultBackend = ShaarLifecycleImplementationChoice.make(
-      ardia: { "existing-runtime" }, shaar: { "new-runtime" })
-    guard case .ardia(let runtime) = defaultBackend else {
-      Issue.record("shipping default must continue to select Ardia")
-      return
-    }
-    #expect(runtime == "existing-runtime")
-
-    let selected = ShaarLifecycleImplementationChoice.make(
-      implementation: .shaar, ardia: { "existing-runtime" }, shaar: { "new-runtime" })
-    guard case .shaar(let selectedRuntime) = selected else {
-      Issue.record("explicit Shaar choice must construct the new runtime")
-      return
-    }
-    #expect(selectedRuntime == "new-runtime")
-  }
-
   @Test @MainActor func fakeEngineCreatesRunsCopiesReadyEventAndReleases() async throws {
     fakeEngineReleased = false
     fakeLifecycleOrder = []

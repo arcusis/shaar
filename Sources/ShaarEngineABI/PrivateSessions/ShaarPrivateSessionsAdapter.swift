@@ -39,7 +39,7 @@ public struct ShaarPrivateSessionHandles: Equatable, Sendable {
 
   public init(engine: any ShaarPrivateSessionsEngine) { self.engine = engine }
 
-  /// The application keeps ARCChromiumRuntime on Ardia unless the existing
+  /// The application uses the Shaar runtime; the existing
   /// implementation choice explicitly selects Shaar.
   public static func makeIfSelected(
     implementation: ShaarEngineImplementation = .shippingDefault,

@@ -202,9 +202,9 @@ struct ShaarNavigationAdapterTests {
           netError: -105, isMainFrame: true, descriptionCode: "navigation_failed"))
   }
 
-  @Test func shippingChoiceRemainsOnArdiaUntilExplicitlySelected() {
-    #expect(ShaarEngineImplementation.shippingDefault == .ardia)
-    #expect(ShaarNavigationAdapter(transport: FakeNavigationEngine()) == nil)
+  @Test func shippingChoiceUsesShaar() {
+    #expect(ShaarEngineImplementation.shippingDefault == .shaar)
+    #expect(ShaarNavigationAdapter(transport: FakeNavigationEngine()) != nil)
   }
 
   @Test func concreteTransportCallsFakeABISymbolAndCopiesAsyncResult() async throws {

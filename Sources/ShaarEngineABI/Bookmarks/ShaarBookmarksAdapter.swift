@@ -20,40 +20,17 @@ public enum ShaarBookmarkOperation: UInt32, Sendable {
   )
 }
 
-/// Bridge to the existing ARC library facade. It remains the shipping default.
-@MainActor public protocol ArdiaBookmarksBackend {
-  func tree(completion: @escaping @MainActor (Result<[String: Any], Error>) -> Void)
-  func apply(
-    _ operation: [String: Any],
-    completion: @escaping @MainActor (Result<Void, Error>) -> Void
-  )
-  func watch(enabled: Bool, completion: @escaping @MainActor (Result<Void, Error>) -> Void)
-}
-
-/// Routes bookmarks calls according to the existing explicit implementation
-/// choice while retaining the old Ardia facade as the shipping default.
+/// Routes bookmark calls through the Shaar transport.
 @MainActor public final class ShaarBookmarksAdapter {
-  private let implementation: ShaarEngineImplementation
-  private let ardia: any ArdiaBookmarksBackend
   private let shaar: any ShaarBookmarksTransport
 
-  public init(
-    implementation: ShaarEngineImplementation = .shippingDefault,
-    ardia: any ArdiaBookmarksBackend,
-    shaar: any ShaarBookmarksTransport
-  ) {
-    self.implementation = implementation
-    self.ardia = ardia
+  public init(shaar: any ShaarBookmarksTransport) {
     self.shaar = shaar
   }
 
   public func tree(
     completion: @escaping @MainActor (Result<[String: Any], Error>) -> Void
   ) {
-    guard implementation == .shaar else {
-      ardia.tree(completion: completion)
-      return
-    }
     call(.tree, arguments: [:]) { result in
       completion(
         result.flatMap { data in
@@ -74,10 +51,6 @@ public enum ShaarBookmarkOperation: UInt32, Sendable {
     _ operation: [String: Any],
     completion: @escaping @MainActor (Result<Void, Error>) -> Void
   ) {
-    guard implementation == .shaar else {
-      ardia.apply(operation, completion: completion)
-      return
-    }
     call(.apply, arguments: ["ops": [operation]]) { result in
       completion(
         result.flatMap { data in
@@ -98,10 +71,6 @@ public enum ShaarBookmarkOperation: UInt32, Sendable {
     enabled: Bool,
     completion: @escaping @MainActor (Result<Void, Error>) -> Void
   ) {
-    guard implementation == .shaar else {
-      ardia.watch(enabled: enabled, completion: completion)
-      return
-    }
     call(.watch, arguments: ["enabled": enabled]) { result in
       completion(
         result.flatMap { data in

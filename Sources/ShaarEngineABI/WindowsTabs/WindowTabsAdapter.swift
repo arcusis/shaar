@@ -65,7 +65,7 @@ public struct ShaarWindowTabsSnapshot: Equatable, Sendable {
   private var tabOwners: [String: TabOwner] = [:]
 
   /// The Shaar adapter is constructed only when the existing explicit choice selects Shaar.
-  /// The default remains Ardia, so un-migrated callers keep their current implementation.
+  /// Constructs the Shaar windows and tabs adapter.
   public static func makeIfSelected(
     engine: ShaarWindowTabsEngine,
     implementation: ShaarEngineImplementation = .shippingDefault

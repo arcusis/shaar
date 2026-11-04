@@ -48,7 +48,7 @@ final class PageFindProbe {
     for (tab, text) in [
       (tabA, "AlphaOnlyNeedle AlphaOnlyNeedle"), (tabB, "BetaOnlyNeedle"),
     ] {
-      // This sets up disposable fixture contents only. Matching uses ArdiaCoreTab.find.
+      // This sets up disposable fixture contents only. Matching uses the Shaar find operation.
       let literal = String(data: try JSONEncoder().encode(text), encoding: .utf8)!
       guard
         await evaluate(

@@ -37,6 +37,7 @@ class BundleAppTests(unittest.TestCase):
         for name in ("release-config.sh", "release_feed.py", "engine-signing.sh"):
             shutil.copy2(REPO / "scripts" / name, self.root / "scripts" / name)
         shutil.copy2(REPO / "scripts" / "stage-browser-resources.py", self.root / "scripts")
+        shutil.copy2(REPO / "scripts" / "rebrand-engine-framework.py", self.root / "scripts")
         shutil.copytree(REPO / "ThirdParty" / "PublicSuffix", self.root / "ThirdParty" / "PublicSuffix")
         icon = self.root / "Resources" / "Branding" / "Shaar.icns"
         icon.parent.mkdir(parents=True)
@@ -52,7 +53,7 @@ class BundleAppTests(unittest.TestCase):
         engine_script.write_text(
             "#!/bin/bash\n"
             "set -euo pipefail\n"
-            "printf 'fetch-engine pin=%s\\n' \"${SHAAR_ENGINE_PIN:-default}\" >> \"$BUNDLE_TEST_LOG\"\n"
+            "printf 'fetch-engine\\n' >> \"$BUNDLE_TEST_LOG\"\n"
             "printf '%s\\n' \"$BUNDLE_TEST_FRAMEWORK\"\n"
         )
         shaar_engine_script = self.root / "scripts" / "fetch-shaar-test-engine.sh"
@@ -66,9 +67,6 @@ class BundleAppTests(unittest.TestCase):
             path = self.root / "ThirdParty" / "ChromiumEngine" / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(name)
-        preview_pin = self.root / "ThirdParty" / "ChromiumEngine" / "preview-pin.json"
-        preview_pin.parent.mkdir(parents=True)
-        preview_pin.write_text("preview pin")
         for name in ("LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"):
             (self.root / name).write_text(name)
 
@@ -89,10 +87,19 @@ class BundleAppTests(unittest.TestCase):
         libraries.mkdir(parents=True)
         helpers.mkdir(parents=True)
         (libraries / "libengine.dylib").write_text("stub library")
-        helper = helpers / "Renderer.app"
-        (helper / "Contents").mkdir(parents=True)
-        (helper / "Contents" / "MacOS").mkdir()
-        (helper / "Contents" / "MacOS" / "Renderer").write_text("stub helper")
+        resources = self.framework / "Versions" / "Current" / "Resources"
+        resources.mkdir()
+        (resources / "Info.plist").write_bytes(plistlib.dumps({"CFBundleIdentifier": "legacy.framework"}))
+        for name in (
+            "Chromium Helper.app", "Chromium Helper (GPU).app",
+            "Chromium Helper (Renderer).app", "Chromium Helper (Alerts).app",
+            "Chromium Helper (Aperitif).app", "Chromium Helper (Aperitif GPU).app",
+            "Chromium Helper (Aperitif Renderer).app", "Chromium Helper (Aperitif Alerts).app",
+        ):
+            helper = helpers / name
+            (helper / "Contents/MacOS").mkdir(parents=True)
+            (helper / "Contents/Info.plist").write_bytes(plistlib.dumps({"CFBundleIdentifier": "legacy.helper"}))
+            (helper / "Contents/MacOS/Helper").write_text("stub helper")
 
         self._tool(
             "swift",
@@ -220,14 +227,16 @@ class BundleAppTests(unittest.TestCase):
         self.assertIs(plist["SUEnableAutomaticChecks"], True)
         self.assertIs(plist["SUEnableInstallerLauncherService"], True)
 
-    def test_preview_shaar_bundle_uses_preview_pin_and_sets_backend(self):
-        result = self._run("--with-engine", "--preview-shaar-engine")
+    def test_engine_bundle_uses_shaar_pin_without_backend_switch(self):
+        result = self._run("--with-engine")
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self._info_plist("build/Shaar Engine Preview.app")["ShaarEngineBackend"], "shaar")
-        self.assertIn("fetch-engine pin=ThirdParty/ChromiumEngine/preview-pin.json", self._log())
-        bundled_pin = self.root / "build/Shaar Engine Preview.app/Contents/Resources/ArdiaCore/pin.json"
-        self.assertEqual(bundled_pin.read_text(), "preview pin")
+        self.assertNotIn("ShaarEngineBackend", self._info_plist("build/Shaar.app"))
+        self.assertIn("fetch-engine", self._log())
+        bundled_pin = self.root / "build/Shaar.app/Contents/Resources/ChromiumEngine/pin.json"
+        self.assertEqual(bundled_pin.read_text(), "pin.json")
+        framework_info = self.root / "build/Shaar.app/Contents/Frameworks/Chromium Framework.framework/Versions/Current/Resources/Info.plist"
+        self.assertEqual(plistlib.loads(framework_info.read_bytes())["CFBundleIdentifier"], "com.arcusis.shaar.framework")
 
     def test_engine_preview_isolated_from_regular_browser(self):
         result = self._run("--with-engine", "--preview-shaar-engine")
@@ -243,6 +252,9 @@ class BundleAppTests(unittest.TestCase):
         self.assertNotEqual(plist["ShaarDataFolderName"], "Arcusis Browser")
         self.assertEqual(plist["ShaarCacheFolderName"], "Shaar Engine Preview")
         self.assertIs(plist["ShaarUseMockKeychain"], True)
+        self.assertNotIn("ShaarEngineBackend", plist)
+        bundled_pin = self.root / "build/Shaar Engine Preview.app/Contents/Resources/ChromiumEngine/pin.json"
+        self.assertEqual(bundled_pin.read_text(), "pin.json")
 
     def test_preview_shaar_requires_engine_and_excludes_updates(self):
         for args in (("--preview-shaar-engine",),
@@ -250,9 +262,9 @@ class BundleAppTests(unittest.TestCase):
             with self.subTest(args=args):
                 self.assertEqual(self._run(*args).returncode, 2)
 
-    def test_preview_bundle_respects_swift_job_cap(self):
+    def test_engine_bundle_respects_swift_job_cap(self):
         environment = dict(self.env, SHAAR_BUNDLE_SWIFT_JOBS="4")
-        result = self._run("--with-engine", "--preview-shaar-engine", env=environment)
+        result = self._run("--with-engine", env=environment)
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("swift build --jobs 4", self._log())

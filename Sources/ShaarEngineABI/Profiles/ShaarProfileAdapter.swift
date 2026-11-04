@@ -28,7 +28,7 @@ public enum ShaarProfileError: Error, Equatable, Sendable {
 }
 
 /// UUID to native handle registry used by the Shaar implementation choice. Shipping remains
-/// on `.ardia`; callers construct this only after selecting `.shaar` explicitly.
+/// on Shaar; callers construct this after the engine starts.
 @MainActor public final class ShaarProfileAdapter: ShaarStorageKeychainProfileResolving {
   private let engine: any ShaarProfileEngine
   private let onProfileEvent: @MainActor (ShaarCopiedEvent) -> Void

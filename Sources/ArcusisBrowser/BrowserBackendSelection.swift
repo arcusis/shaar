@@ -5,9 +5,7 @@
 enum BrowserBackendSelection: Equatable {
   case shaar
 
-  static func choose(
-    environment: [String: String], arguments: [String], bundleBackend: String? = nil
-  ) -> Self {
+  static func choose() -> Self {
     .shaar
   }
 }

@@ -42,9 +42,9 @@ class EngineBundleVerifierTests(unittest.TestCase):
         self.framework = self.app / "Contents/Frameworks/Chromium Framework.framework"
         self.versioned = self.framework / "Versions/155.0.8059.84"
         self.helpers = self.versioned / "Helpers"
-        self.packaged = self.app / "Contents/Resources/ArdiaCore"
+        self.packaged = self.app / "Contents/Resources/ChromiumEngine"
         self.archive = self.root / "engine.tar.xz"
-        source = self.repo / "ThirdParty/ArdiaCore"
+        source = self.repo / "ThirdParty/ChromiumEngine"
         (self.repo / "scripts").mkdir(parents=True)
         source.mkdir(parents=True)
         shutil.copy2(REPO / "scripts/engine_payload.py", self.repo / "scripts/engine_payload.py")
@@ -82,18 +82,19 @@ class EngineBundleVerifierTests(unittest.TestCase):
             (helper / "Contents/MacOS" / executable).write_bytes(b"helper fixture")
             self.helper_map[name] = identifier
         pin = {
-            "repository": "https://example.invalid/engine", "sourceCommit": "1" * 40,
-            "sourceTag": "v1.2.3", "engineTree": "2" * 40,
-            "archiveURL": "https://example.invalid/engine.tar.xz", "sha256": "0" * 64,
-            "chromiumVersion": "155.0.8059.84", "architecture": "arm64",
+            "schemaVersion": 1, "sourceKind": "shaar",
+            "releaseTag": "engine-155.0.8059.84-shaar.4",
+            "asset": "ShaarEngine-155.0.8059.84-shaar.4.tar.xz",
+            "sha256": "0" * 64,
         }
         self.pin_path = source / "pin.json"
-        (source / "LICENSE").write_text("fixture license\n")
-        (source / "NOTICE").write_text("fixture notice\n")
+        for name in ("LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"):
+            (self.repo / name).write_text(f"fixture {name}\n")
         self._write_archive(pin)
         self.pin_path.write_text(json.dumps(pin, sort_keys=True) + "\n")
-        for filename in ("pin.json", "LICENSE", "NOTICE"):
-            (self.packaged / filename).write_bytes((source / filename).read_bytes())
+        (self.packaged / "pin.json").write_bytes(self.pin_path.read_bytes())
+        for filename in ("LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"):
+            (self.packaged / filename).write_bytes((self.repo / filename).read_bytes())
 
     def tearDown(self):
         self.temp.cleanup()

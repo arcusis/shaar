@@ -1190,12 +1190,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     frameworkURL: URL, environment: [String: String], arguments: [String],
     bundleBackend: String? = nil
   ) throws -> ARCChromiumRuntime {
-    switch BrowserBackendSelection.choose(
-      environment: environment, arguments: arguments, bundleBackend: bundleBackend)
-    {
-    case .ardia: return try ARCChromiumRuntime(frameworkURL: frameworkURL)
-    case .shaar: return try ARCShaarRuntime(frameworkURL: frameworkURL)
-    }
+    try ARCShaarRuntime(frameworkURL: frameworkURL)
   }
 
   static func run(frameworkURL: URL) -> LaunchResult {

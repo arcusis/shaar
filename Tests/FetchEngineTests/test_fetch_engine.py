@@ -53,10 +53,9 @@ class FetchEngineTests(unittest.TestCase):
         self.scripts.mkdir()
         shutil.copy2(REPO / "scripts/fetch-engine.sh", self.scripts / "fetch-engine.sh")
         shutil.copy2(REPO / "scripts/engine_payload.py", self.scripts / "engine_payload.py")
-        self.third_party = self.root / "ThirdParty/ArdiaCore"
+        self.third_party = self.root / "ThirdParty/ChromiumEngine"
         self.third_party.mkdir(parents=True)
         self.pin_path = self.third_party / "pin.json"
-        self.tree = "a1b2c3d4e5f6789012345678901234567890abcd"
         self.cache = self.root / "build/EngineCache"
         self.tools = self.root / "tools"
         self.tools.mkdir()
@@ -70,14 +69,14 @@ class FetchEngineTests(unittest.TestCase):
         staged = self.root / "staged.tar.xz"
         write_archive(staged)
         checksum = hashlib.sha256(staged.read_bytes()).hexdigest()
-        self.key = f"{self.tree[:12]}-{checksum[:12]}"
-        self.destination = self.cache / self.key
-        self.archive = self.cache / f"ArdiaCore-{self.key}.tar.xz"
+        self.destination = self.cache / checksum[:16]
+        self.archive = self.cache / "ShaarEngine-155.0.8059.84-shaar.3.tar.xz"
         staged.rename(self.archive)
         self.pin = {
-            "sourceCommit": "0" * 40,
-            "engineTree": self.tree,
-            "archiveURL": "https://invalid.example/never-fetched.tar.xz",
+            "schemaVersion": 1,
+            "sourceKind": "shaar",
+            "releaseTag": "engine-155.0.8059.84-shaar.3",
+            "asset": self.archive.name,
             "sha256": checksum,
         }
         self._write_pin()

@@ -163,10 +163,10 @@ cp Resources/Branding/Shaar.icns "$app/Contents/Resources/Shaar.icns"
 cp -R Resources/ExtensionManager "$app/Contents/Resources/ExtensionManager"
 mkdir -p "$app/Contents/Resources/Privacy"
 cp Resources/Privacy/tracker-domains.json "$app/Contents/Resources/Privacy/"
-mkdir -p "$app/Contents/Resources/ArdiaCore"
-cp ThirdParty/ArdiaCore/LICENSE ThirdParty/ArdiaCore/NOTICE \
-  "$app/Contents/Resources/ArdiaCore/"
-cp "$engine_pin" "$app/Contents/Resources/ArdiaCore/pin.json"
+mkdir -p "$app/Contents/Resources/ChromiumEngine"
+cp "$engine_pin" "$app/Contents/Resources/ChromiumEngine/pin.json"
+cp LICENSE NOTICE THIRD_PARTY_NOTICES.md \
+  "$app/Contents/Resources/ChromiumEngine/"
 # The executable links Sparkle, so every bundle embeds it. Copy the pinned SwiftPM artifact
 # unchanged: its own signatures and entitlements stay intact for release re-signing.
 mkdir -p "$app/Contents/Frameworks"

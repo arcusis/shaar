@@ -15,6 +15,18 @@ from ci_support import file_sha256
 
 
 BUNDLE_NAME = "Shaar Verification.app"
+ENGINE_SHARD_COUNT = 4
+
+# Average observed job runtimes, in seconds, across the three recent full engine
+# runs. These are scheduling hints only; every requested probe iteration is
+# still assigned to exactly one shard.
+ENGINE_PROBE_WEIGHTS_SECONDS = {
+    "baseline": 484,
+    "private-multitab": 54,
+    "private-window": 489,
+    "quit-exit": 52,
+    "session-recovery": 45,
+}
 
 
 def matching_pr_bundle_run_id(response: dict, pr_number: int, repository_full_name: str) -> str:
@@ -55,21 +67,43 @@ def main(argv: list[str] | None = None) -> int:
 def engine_shards(iterations: int) -> list[str]:
     if not 1 <= iterations <= 10:
         raise ValueError("Engine iterations must be between 1 and 10")
-    return [*(f"baseline-{index}" for index in range(1, iterations + 1)),
-            *(f"private-multitab-{index}" for index in range(1, iterations + 1)),
-            *(f"private-window-{index}" for index in range(1, max(3, iterations) + 1)),
-            *(f"quit-exit-{index}" for index in range(1, max(3, iterations) + 1)),
-            *(f"session-recovery-{index}" for index in range(1, iterations + 1))]
+    return [f"engine-{index}" for index in range(1, ENGINE_SHARD_COUNT + 1)]
+
+
+def _engine_shard_assignments(iterations: int) -> dict[str, list[tuple[str, int]]]:
+    shards = engine_shards(iterations)
+    assignments = {shard: [] for shard in shards}
+    loads = {shard: 0 for shard in shards}
+    repetitions = {
+        "baseline": iterations,
+        "private-multitab": iterations,
+        "private-window": max(3, iterations),
+        "quit-exit": max(3, iterations),
+        "session-recovery": iterations,
+    }
+    probes = [
+        (mode, index)
+        for mode in ENGINE_PROBE_WEIGHTS_SECONDS
+        for index in range(1, repetitions[mode] + 1)
+    ]
+    mode_order = {mode: index for index, mode in enumerate(ENGINE_PROBE_WEIGHTS_SECONDS)}
+    probes.sort(key=lambda probe: (
+        -ENGINE_PROBE_WEIGHTS_SECONDS[probe[0]], mode_order[probe[0]], probe[1]
+    ))
+    for mode, index in probes:
+        shard = min(shards, key=lambda candidate: (loads[candidate], candidate))
+        assignments[shard].append((mode, index))
+        loads[shard] += ENGINE_PROBE_WEIGHTS_SECONDS[mode]
+    return assignments
 
 
 def shard_modes(shard: str, iterations: int) -> list[tuple[str, range]]:
     if shard not in engine_shards(iterations):
         raise ValueError(f"Unknown engine shard: {shard}")
-    for mode in ("baseline", "private-multitab", "private-window", "quit-exit", "session-recovery"):
-        prefix = f"{mode}-"
-        if shard.startswith(prefix):
-            return [(mode, range(int(shard[len(prefix):]), int(shard[len(prefix):]) + 1))]
-    raise ValueError(f"Unknown engine shard: {shard}")
+    return [
+        (mode, range(index, index + 1))
+        for mode, index in _engine_shard_assignments(iterations)[shard]
+    ]
 
 
 def context(root: Path) -> dict:

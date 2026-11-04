@@ -1,0 +1,15 @@
+CREATE TABLE moz_places(id INTEGER PRIMARY KEY, url TEXT, title TEXT, visit_count INTEGER, last_visit_date INTEGER);
+CREATE TABLE moz_historyvisits(id INTEGER PRIMARY KEY, from_visit INTEGER, place_id INTEGER, visit_date INTEGER, visit_type INTEGER);
+CREATE TABLE moz_bookmarks(id INTEGER PRIMARY KEY, type INTEGER, fk INTEGER, parent INTEGER, position INTEGER, title TEXT);
+INSERT INTO moz_places VALUES(1, 'https://firefox.example.test/', 'Firefox history', 2, 1700000000200000);
+INSERT INTO moz_historyvisits VALUES(1, 0, 1, 1700000000100000, 1);
+INSERT INTO moz_historyvisits VALUES(2, 0, 1, 1700000000200000, 1);
+INSERT INTO moz_historyvisits VALUES(3, 0, 1, -1, 1);
+INSERT INTO moz_places VALUES(2, 'https://firefox-bookmark.example.test/', NULL, 0, NULL);
+INSERT INTO moz_bookmarks VALUES(1, 2, NULL, 0, 0, 'places root');
+INSERT INTO moz_bookmarks VALUES(2, 2, NULL, 1, 0, 'toolbar');
+INSERT INTO moz_bookmarks VALUES(3, 1, 2, 2, 0, 'Firefox bookmark');
+INSERT INTO moz_bookmarks VALUES(4, 2, NULL, 2, 0, 'Research');
+INSERT INTO moz_bookmarks VALUES(5, 1, 2, 4, 0, 'Nested bookmark');
+INSERT INTO moz_bookmarks VALUES(6, 1, 2, NULL, 1, 'Bookmark without a parent');
+INSERT INTO moz_bookmarks VALUES(7, 1, 2, 4, 1, NULL);

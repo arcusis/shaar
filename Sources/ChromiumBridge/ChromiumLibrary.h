@@ -19,6 +19,8 @@ NS_ASSUME_NONNULL_BEGIN
   completion:(void (^)(NSArray<NSDictionary *> * _Nullable, NSError * _Nullable))completion;
 - (void)deleteHistoryURL:(NSString *)url profileID:(NSString *)profileID
   completion:(void (^)(NSError * _Nullable))completion;
+- (void)importHistoryRows:(NSArray<NSDictionary *> *)rows source:(NSString *)source
+  profileID:(NSString *)profileID completion:(void (^)(NSError * _Nullable))completion;
 @end
 
 NS_ASSUME_NONNULL_END

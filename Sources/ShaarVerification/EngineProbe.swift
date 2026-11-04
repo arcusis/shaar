@@ -957,7 +957,8 @@ final class EngineProbe {
       throw ProbeFailure("Normal address bar did not open its search tab.")
     }
     for _ in 0..<100 {
-      if runtime.nativeTabID(forID: selected.id.uuidString) >= 0,
+      if runtime.windowID(forTabID: selected.id.uuidString) == runtime.primaryWindowID,
+        runtime.view(forTabID: selected.id.uuidString) != nil,
         runtime.normalProbeSelectionAudit(forTabID: selected.id.uuidString)[
           "displayedNativeWebContents"]
           as? Bool == true

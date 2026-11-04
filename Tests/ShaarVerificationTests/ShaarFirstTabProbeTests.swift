@@ -11,10 +11,9 @@ import Testing
 @Suite struct ShaarFirstTabProbeTests {
   @Test func missingArgumentsFailBeforeStartingTheEngine() {
     #expect(ShaarFirstTabProbe.run(arguments: []) == 1)
-    #expect(ShaarFirstTabProbe.run(arguments: ["--shaar-engine-backend=shaar"]) == 1)
     #expect(
       ShaarFirstTabProbe.run(arguments: [
-        "--shaar-engine-backend=shaar", "--probe-framework", "/nonexistent/framework",
+        "--probe-framework", "/nonexistent/framework",
       ]) == 1)
   }
 

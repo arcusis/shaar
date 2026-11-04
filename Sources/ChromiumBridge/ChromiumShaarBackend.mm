@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #import "include/ChromiumBridge.h"
+#import "ChromiumRuntimeInternal.h"
 #import "ChromiumShaarExtensionsInternal.h"
 #import "ChromiumShaarPrivateSupport.h"
 
@@ -190,6 +191,7 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   _shaarTesting = testing;
   const shaar_error_code result = _symbols.run(_shaarEngine, &error);
   unsetenv("SHAAR_ENGINE_TESTING");
+  for (NSString *windowID in [_shaarWindows.allKeys copy]) [self finishWindowID:windowID];
   for (id observer in _hostResizeObservers.allValues)
     [NSNotificationCenter.defaultCenter removeObserver:observer];
   [_hostResizeObservers removeAllObjects];
@@ -694,7 +696,29 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
 
 - (void)evaluateInTabID:(NSString *)tabID script:(NSString *)script
             completion:(void (^)(NSString *))completion {
-  completion(nil);  // SHAAR_OP_TAB_EVALUATE is reserved but has no layer handler.
+  NSString *profileID = _shaarTabProfiles[tabID];
+  NSString *windowID = _shaarTabWindows[tabID];
+  if (!script.length || ![self shaarDevToolsOwnsTabID:tabID profileID:profileID
+                                           windowID:windowID]) {
+    completion(nil);
+    return;
+  }
+  [self shaarDevToolsCall:@"Runtime.evaluate"
+                  params:@{@"expression": script, @"returnByValue": @YES}
+              capability:SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER tabID:tabID
+               profileID:profileID windowID:windowID
+              completion:^(NSDictionary *result, NSError *error) {
+    NSDictionary *remote = [result[@"result"] isKindOfClass:NSDictionary.class]
+                             ? result[@"result"] : nil;
+    id value = remote[@"value"];
+    if (error || result[@"exceptionDetails"] || !value) {
+      completion(nil);
+      return;
+    }
+    NSData *json = [NSJSONSerialization dataWithJSONObject:value
+                                               options:NSJSONWritingFragmentsAllowed error:nil];
+    completion(json ? [[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding] : nil);
+  }];
 }
 
 - (void)bookmarksForProfileID:(NSString *)profileID

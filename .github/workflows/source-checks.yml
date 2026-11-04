@@ -338,7 +338,7 @@ jobs:
       shards: ${{ needs.engine-bundle.outputs.shards }}
 
   shaar-engine-simulation:
-    name: Shaar engine simulation (opt-in first tab)
+    name: Shaar engine simulation (first tab)
     needs: plan
     if: needs.plan.outputs.full == 'true'
     runs-on: macos-26
@@ -361,13 +361,13 @@ jobs:
         env:
           SHAAR_TEST_SHAAR_ENGINE: '1'
         run: bash scripts/bundle-app.sh --configuration release --with-engine --verification
-      - name: Open the first tab through the opt-in Shaar backend
+      - name: Open the first tab through the Shaar backend
         run: |
           app="$PWD/build/Shaar Verification.app"
           evidence="$PWD/build/ci/shaar-engine-simulation"
           mkdir -p "$evidence"
           "$app/Contents/MacOS/ShaarVerification" \
-            --probe-shaar-first-tab --shaar-engine-backend=shaar \
+            --probe-shaar-first-tab \
             --probe-framework "$app/Contents/Frameworks/Chromium Framework.framework" \
             --probe-output "$evidence/first-tab.json" \
             --probe-data-dir "$RUNNER_TEMP/shaar-engine-first-tab" \

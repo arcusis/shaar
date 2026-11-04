@@ -24,12 +24,33 @@ final class SettingsOpenSpaceTests: XCTestCase {
 
     let host = NativeBrowserHost(
       events: BrowserRuntimeEvents(runtime: ARCChromiumRuntime()), workspace: workspace,
-      presentation: .hiddenProbe)
+      presentation: .hiddenProbe, keyWindow: { nil }, screens: { [] })
     let windowID = try host.createWorkspaceWindowForSettingsSpace(requestedSpaceID)
 
     XCTAssertEqual(workspace.workspace.windows.count, 1)
     XCTAssertEqual(workspace.stores[windowID]?.session.selectedSpaceID, requestedSpaceID)
     try workspace.flushSaves()
     XCTAssertEqual(try file.load()?.window(windowID)?.session.selectedSpaceID, requestedSpaceID)
+  }
+
+  func testSettingsOpenRollsBackCreatedWindowWhenNativeAttachFails() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let file = WorkspaceFile(
+      url: root.appending(path: "workspace.json"),
+      legacySessionURL: root.appending(path: "session.json"))
+    let workspace = try BrowserWorkspaceStore(file: file)
+    let requestedSpaceID = try XCTUnwrap(workspace.workspace.catalog.spaces.last?.id)
+    for windowID in Array(workspace.stores.keys) { try workspace.removeWindow(windowID) }
+    try workspace.flushSaves()
+
+    let host = NativeBrowserHost(
+      events: BrowserRuntimeEvents(runtime: ARCChromiumRuntime()), workspace: workspace,
+      presentation: .hiddenProbe, keyWindow: { nil }, screens: { [] })
+    host.openSpaceFromSettings(requestedSpaceID)
+
+    XCTAssertTrue(workspace.workspace.windows.isEmpty)
+    XCTAssertTrue(host.contexts.isEmpty)
+    XCTAssertNotNil(host.lastError)
   }
 }

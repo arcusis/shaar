@@ -174,11 +174,31 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       workspace: workspace, preferences: preferences, runtime: events.runtime,
       presentation: presentation == .visible ? .visible : .hiddenProbe)
     settingsController?.setOpenSpaceHandler { [weak self] spaceID in
-      guard let self,
-        let context = self.contexts.values.first(where: {
-          $0.store.session.spaces.contains { $0.id == spaceID }
-        })
-      else { return }
+      guard let self else { return }
+      let context: NativeBrowserContext
+      if let existing = self.contexts.values.first(where: {
+        $0.store.session.spaces.contains { $0.id == spaceID }
+      }) {
+        context = existing
+      } else {
+        do {
+          let id = try self.createWorkspaceWindowForSettingsSpace(spaceID)
+          do {
+            try self.attach(id, source: nil)
+          } catch {
+            try? self.workspace.removeWindow(id)
+            if self.events.runtime.window(forID: id.uuidString) != nil {
+              self.events.runtime.closeWindowID(id.uuidString)
+            }
+            throw error
+          }
+          guard let created = self.contexts[id] else { throw WorkspaceError.invalidState }
+          context = created
+        } catch {
+          self.report(error)
+          return
+        }
+      }
       context.store.perform(.space(spaceID))
       context.window.makeKeyAndOrderFront(nil)
     }
@@ -216,6 +236,21 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       throw error
     }
     if presentation == .visible { contexts[id]?.window.makeKeyAndOrderFront(nil) }
+    return id
+  }
+
+  /// Creates a saved browser window on the requested Space when Settings has no native window.
+  @discardableResult
+  func createWorkspaceWindowForSettingsSpace(_ spaceID: UUID) throws -> UUID {
+    guard workspace.workspace.catalog.spaces.contains(where: { $0.id == spaceID }) else {
+      throw WorkspaceError.invalidState
+    }
+    let id = try workspace.newWindow(from: workspace.workspace.focusedWindowID)
+    guard let store = workspace.stores[id] else {
+      try? workspace.removeWindow(id)
+      throw WorkspaceError.invalidState
+    }
+    store.perform(.space(spaceID))
     return id
   }
 

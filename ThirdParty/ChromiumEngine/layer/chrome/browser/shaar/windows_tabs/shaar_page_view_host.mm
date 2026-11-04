@@ -75,9 +75,10 @@ void PageViewHost::Resize(NSSize size) {
 }
 
 bool PageViewHost::Focus(NSView* tab_view) {
-  if (!tab_view || selected_view_ != tab_view || !window_.isKeyWindow)
+  NSWindow* target = tab_view.window;
+  if (!tab_view || selected_view_ != tab_view || !target.isKeyWindow)
     return false;
-  return [window_ makeFirstResponder:tab_view];
+  return [target makeFirstResponder:tab_view];
 }
 
 }  // namespace shaar::windows_tabs

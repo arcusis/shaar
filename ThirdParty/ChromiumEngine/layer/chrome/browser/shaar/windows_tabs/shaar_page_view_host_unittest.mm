@@ -7,6 +7,18 @@
 #include "chrome/browser/shaar/windows_tabs/shaar_page_view_host.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+@interface ShaarFocusProbeWindow : NSWindow
+@property(nonatomic, strong) NSResponder* acceptedResponder;
+@end
+
+@implementation ShaarFocusProbeWindow
+- (BOOL)isKeyWindow { return YES; }
+- (BOOL)makeFirstResponder:(NSResponder*)responder {
+  self.acceptedResponder = responder;
+  return YES;
+}
+@end
+
 namespace shaar::windows_tabs {
 namespace {
 
@@ -36,6 +48,23 @@ TEST(ShaarPageViewHostTest, WindowStartsHiddenAndRejectsForeignFocus) {
   EXPECT_FALSE(host.Focus(tab));
   EXPECT_TRUE(host.Attach(tab));
   EXPECT_FALSE(host.Focus([[NSView alloc] initWithFrame:NSZeroRect]));
+}
+
+TEST(ShaarPageViewHostTest, FocusUsesTheAttachedViewsKeyWindow) {
+  PageViewHost host(NSMakeRect(0, 0, 800, 600));
+  NSView* tab = [[NSView alloc] initWithFrame:NSZeroRect];
+  ASSERT_TRUE(host.Attach(tab));
+  ShaarFocusProbeWindow* target = [[ShaarFocusProbeWindow alloc]
+      initWithContentRect:NSMakeRect(0, 0, 800, 600)
+              styleMask:NSWindowStyleMaskBorderless
+                backing:NSBackingStoreBuffered
+                  defer:YES];
+  target.contentView = tab;
+  EXPECT_FALSE(target.isVisible);
+  EXPECT_TRUE(host.Focus(tab));
+  EXPECT_EQ(target.acceptedResponder, tab);
+  host.Detach(tab);
+  [target close];
 }
 
 TEST(ShaarPageViewHostTest, MovingViewLeavesPreviousHostEmpty) {

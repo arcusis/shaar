@@ -316,7 +316,11 @@ final class EngineProbe {
 
   private func waitForRestoredTab(_ id: String) async throws {
     for _ in 0..<100 {
-      if runtime.nativeTabID(forID: id) >= 0 { return }
+      if runtime.windowID(forTabID: id) == runtime.primaryWindowID,
+        runtime.view(forTabID: id) != nil
+      {
+        return
+      }
       try await Task.sleep(for: .milliseconds(100))
     }
     throw ProbeFailure("Saved tab did not materialize in the Shaar window: \(id).")

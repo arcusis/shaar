@@ -378,17 +378,21 @@ private func bookmarkPayload(children: [[String: Any]]) -> [String: Any] {
         "children": [
           [
             "name": "Research / Media",
-            "children": [[
-              "name": "Archive",
-              "children": [["name": "Page", "url": "https://page.example"]],
-            ]],
+            "children": [
+              [
+                "name": "Archive",
+                "children": [["name": "Page", "url": "https://page.example"]],
+              ]
+            ],
           ],
           [
             "name": "Research",
-            "children": [[
-              "name": "Media / Archive",
-              "children": [["name": "Second page", "url": "https://second.example"]],
-            ]],
+            "children": [
+              [
+                "name": "Media / Archive",
+                "children": [["name": "Second page", "url": "https://second.example"]],
+              ]
+            ],
           ],
         ]
       ]
@@ -396,7 +400,10 @@ private func bookmarkPayload(children: [[String: Any]]) -> [String: Any] {
   ]).write(to: url)
 
   let items = try BrowserImport.read(url)
-  #expect(items.map(\.folderComponents) == [["Research / Media", "Archive"], ["Research", "Media / Archive"]])
+  #expect(
+    items.map(\.folderComponents) == [
+      ["Research / Media", "Archive"], ["Research", "Media / Archive"],
+    ])
   let operations = BrowserImport.operations(for: items, otherFolderID: UUID())
   #expect(operations.count == 6)
   #expect(operations[0]["t"] as? String == "Research / Media")

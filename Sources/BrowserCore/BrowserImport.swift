@@ -26,7 +26,8 @@ public struct BrowserImportItem: Identifiable, Equatable, Sendable {
     self.title = title
     self.address = address
     self.folder = folder
-    self.folderComponents = folderComponents
+    self.folderComponents =
+      folderComponents
       ?? folder.map { $0.components(separatedBy: " / ") }
     self.visitTimes = visitTimes
   }

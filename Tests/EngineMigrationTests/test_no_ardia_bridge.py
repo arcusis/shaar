@@ -56,6 +56,13 @@ class ShaarOnlyBridgeTests(unittest.TestCase):
         )[0]
         self.assertNotIn("runtime.nativeTabID(forID:", method)
 
+    def test_fixture_snapshot_polls_page_without_navigation_event_dependency(self):
+        source = (ROOT / "Sources/ShaarVerification/EngineProbe.swift").read_text()
+        snapshot = source.split("private func snapshot(", 1)[1].split(
+            "\n  private func ", 1
+        )[0]
+        self.assertNotIn("loadedTabs.contains", snapshot)
+
 
 if __name__ == "__main__":
     unittest.main()

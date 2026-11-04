@@ -136,7 +136,8 @@ public struct ShaarFindUpdate: Equatable, Sendable {
   }
 
   private func submit(
-    _ requestID: UInt64, _ operation: ShaarFindOperation, fields: [String: Any], scope: ShaarFindScope,
+    _ requestID: UInt64, _ operation: ShaarFindOperation, fields: [String: Any],
+    scope: ShaarFindScope,
     windowID: String, tabID: String,
     completion: @escaping @MainActor (Result<Data, Error>) -> Void
   ) {

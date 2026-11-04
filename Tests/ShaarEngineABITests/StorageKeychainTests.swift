@@ -113,11 +113,13 @@ private struct FakeStorageKeychainABISymbols: ShaarSymbolResolving {
       let function = fakeStorageKeychainEngineCreate as @convention(c) () -> UInt32
       return unsafeBitCast(function, to: UnsafeRawPointer.self)
     case "shaar_submit":
-      let function = fakeStorageKeychainSubmit as @convention(c) (
-        OpaquePointer?, shaar_scope, OpaquePointer?, OpaquePointer?, shaar_operation,
-        shaar_bytes, UInt64, shaar_reply_fn?, UnsafeMutableRawPointer?,
-        UnsafeMutablePointer<shaar_error>?
-      ) -> shaar_error_code
+      let function =
+        fakeStorageKeychainSubmit
+        as @convention(c) (
+          OpaquePointer?, shaar_scope, OpaquePointer?, OpaquePointer?, shaar_operation,
+          shaar_bytes, UInt64, shaar_reply_fn?, UnsafeMutableRawPointer?,
+          UnsafeMutablePointer<shaar_error>?
+        ) -> shaar_error_code
       return unsafeBitCast(function, to: UnsafeRawPointer.self)
     default:
       return nil

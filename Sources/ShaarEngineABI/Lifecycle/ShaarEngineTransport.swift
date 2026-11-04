@@ -83,7 +83,6 @@ public enum ShaarEngineTransportSelection<Ardia> {
     shaar: () throws -> ShaarEngineTransport
   ) -> Self {
     guard implementation == .shaar else { return .ardia(ardia()) }
-    do { return .shaar(try shaar()) }
-    catch { return .ardia(ardia()) }
+    do { return .shaar(try shaar()) } catch { return .ardia(ardia()) }
   }
 }

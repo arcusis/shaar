@@ -42,7 +42,10 @@ struct ShaarEngineTransportTests {
         throw ShaarEngineStartupError.frameworkLoadFailed("must not load")
       })
     #expect(!attempted)
-    if case .ardia(let runtime) = choice { #expect(runtime == "existing-ardia-runtime") }
-    else { Issue.record("shipping choice selected Shaar") }
+    if case .ardia(let runtime) = choice {
+      #expect(runtime == "existing-ardia-runtime")
+    } else {
+      Issue.record("shipping choice selected Shaar")
+    }
   }
 }

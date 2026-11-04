@@ -5,6 +5,38 @@ import Testing
 
 @Suite @MainActor
 struct DownloadDirectoryTests {
+  @Test func appliesTheProfileDirectoryBeforePersistingTheEngineAcknowledgement() async throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let workspace = try BrowserWorkspaceStore(initialSession: .fresh())
+    let profile = try #require(workspace.workspace.catalog.profiles.first?.id)
+    let preferences = BrowserPreferencesStore(fileURL: root.appending(path: "preferences.json"))
+    let selected = root.appending(path: "Downloads", directoryHint: .isDirectory)
+    let acknowledged = root.appending(path: "Engine Downloads", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: selected, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: acknowledged, withIntermediateDirectories: true)
+
+    var appliedProfile: UUID?
+    var appliedDirectory: URL?
+    let state = BrowserSettingsState(
+      workspace: workspace, preferences: preferences, downloadDirectorySettingsEnabled: true,
+      applyDownloadDirectory: { id, directory in
+        appliedProfile = id
+        appliedDirectory = directory
+        return acknowledged
+      })
+
+    #expect(await state.applyDownloadDirectory(selected, for: profile))
+    #expect(appliedProfile == profile)
+    #expect(appliedDirectory == selected)
+    #expect(preferences.downloadDirectory(for: profile) == acknowledged)
+    #expect(
+      BrowserPreferencesStore(fileURL: root.appending(path: "preferences.json"))
+        .downloadDirectory(for: profile) == acknowledged)
+  }
+
   @Test func validatesExistingWritableDirectoryOutsideTheApplicationBundle() throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     let bundle = root.appending(path: "App.app", directoryHint: .isDirectory)

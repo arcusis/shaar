@@ -35,6 +35,7 @@
 - [[Engine_Ardia_Inventory]]
 - [[Engine_ABI_Conventions]]
 - [[Engine_Shaar_Layer_Design]]
+- [[Engine_App_Switch_Phase3b]]
 - [[Engine_Step0_Native_Proof]]
 - [[Engine_Module_lifecycle]]
 - [[Engine_Module_profiles]]

@@ -6,7 +6,30 @@ import ChromiumBridge
 import ObjectiveC
 import XCTest
 
+@testable import ArcusisBrowser
+
 final class BrowserBackendSelectionTests: XCTestCase {
+  func testArdiaRemainsDefault() {
+    XCTAssertEqual(BrowserBackendSelection.choose(environment: [:], arguments: []), .ardia)
+  }
+
+  func testShaarRequiresExplicitEnvironmentOrFlag() {
+    XCTAssertEqual(
+      BrowserBackendSelection.choose(
+        environment: ["SHAAR_ENGINE_BACKEND": "shaar"], arguments: []), .shaar)
+    XCTAssertEqual(
+      BrowserBackendSelection.choose(
+        environment: [:], arguments: ["--shaar-engine-backend=shaar"]), .shaar)
+    XCTAssertEqual(
+      BrowserBackendSelection.choose(
+        environment: ["SHAAR_ENGINE_BACKEND": "unknown"], arguments: []), .ardia)
+  }
+
+  func testExplicitShaarSelectionDoesNotFallBackWhenABIMissing() {
+    XCTAssertThrowsError(
+      try ARCShaarRuntime(frameworkURL: URL(fileURLWithPath: "/nonexistent-shaar-framework")))
+  }
+
   func testShaarOverridesProfileLoading() {
     assertShaarOverrides("loadProfileID:completion:")
   }
@@ -16,6 +39,16 @@ final class BrowserBackendSelectionTests: XCTestCase {
       "createWindowID:error:", "closeWindowID:",
       "openTabID:profileID:windowID:url:error:", "closeTabID:",
       "hostViewForWindowID:", "viewForTabID:", "activateTabID:",
+    ] {
+      assertShaarOverrides(selector)
+    }
+  }
+
+  func testShaarOverridesNavigation() {
+    for selector in [
+      "navigateTabID:profileID:windowID:url:",
+      "goBackInTabID:", "goForwardInTabID:",
+      "reloadTabID:profileID:mode:",
     ] {
       assertShaarOverrides(selector)
     }

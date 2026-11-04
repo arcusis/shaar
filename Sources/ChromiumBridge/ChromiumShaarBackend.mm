@@ -141,7 +141,12 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
 
 - (int)runWithDataDirectory:(NSURL *)directory testing:(BOOL)testing {
   NSAssert(NSThread.isMainThread, @"Shaar engine requires the main thread");
-  NSString *path = directory.path.stringByStandardizingPath;
+  if (![NSFileManager.defaultManager createDirectoryAtURL:directory
+                              withIntermediateDirectories:YES attributes:nil error:nil]) return 1;
+  char *resolved = realpath(directory.fileSystemRepresentation, nullptr);
+  if (!resolved) return 1;
+  NSString *path = [NSString stringWithUTF8String:resolved];
+  free(resolved);
   shaar_config config = {};
   config.size = sizeof(config);
   config.requested_major = SHAAR_ENGINE_ABI_MAJOR;
@@ -208,6 +213,19 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
     if (self.onTabClosed) self.onTabClosed(tabID);
     return;
   }
+  if (event->kind != SHAAR_EVENT_NAVIGATION || !_shaarTabs[tabID]) return;
+  NSString *url = [payload[@"url"] isKindOfClass:NSString.class] ? payload[@"url"] : @"";
+  NSString *title = [payload[@"title"] isKindOfClass:NSString.class] ? payload[@"title"] : @"";
+  if (self.onTabChanged) {
+    self.onTabChanged(tabID, url, title, [payload[@"loading"] boolValue],
+                      [payload[@"canGoBack"] boolValue], [payload[@"canGoForward"] boolValue]);
+  }
+  if ([payload[@"phase"] isEqualToString:@"committed"] && self.onDocumentCommitted)
+    self.onDocumentCommitted(tabID, _shaarTabProfiles[tabID] ?: @"");
+  NSDictionary *failure = [payload[@"failure"] isKindOfClass:NSDictionary.class]
+      ? payload[@"failure"] : nil;
+  if ([failure[@"descriptionCode"] isEqualToString:@"renderer_gone"] && self.onRendererGone)
+    self.onRendererGone(tabID, _shaarTabProfiles[tabID] ?: @"", @"renderer_gone", 0);
 }
 
 - (void)loadProfileID:(NSString *)profileID completion:(void (^)(NSError *))completion {
@@ -462,6 +480,39 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   return _symbols.submit(_shaarEngine, scope, window, nullptr, operation,
                          {(const char *)json.bytes, json.length}, _nextRequestID++,
                          IgnoreReply, nullptr, &error) == SHAAR_OK;
+}
+
+- (BOOL)navigateTabID:(NSString *)tabID profileID:(NSString *)profileID
+             windowID:(NSString *)windowID url:(NSString *)url {
+  if (![_shaarTabProfiles[tabID] isEqualToString:profileID] ||
+      ![_shaarTabWindows[tabID] isEqualToString:windowID]) return NO;
+  return [self submitTabID:tabID operation:SHAAR_OP_TAB_NAVIGATE
+                  payload:@{@"schemaVersion": @1, @"url": url,
+                            @"userInitiated": @YES}];
+}
+
+- (void)goBackInTabID:(NSString *)tabID {
+  [self submitTabID:tabID operation:SHAAR_OP_TAB_GO
+            payload:@{@"schemaVersion": @1, @"direction": @"back"}];
+}
+- (void)goForwardInTabID:(NSString *)tabID {
+  [self submitTabID:tabID operation:SHAAR_OP_TAB_GO
+            payload:@{@"schemaVersion": @1, @"direction": @"forward"}];
+}
+- (void)reloadTabID:(NSString *)tabID {
+  [self reloadTabID:tabID profileID:_shaarTabProfiles[tabID] mode:ARCPageReloadModeNormal];
+}
+- (BOOL)reloadTabID:(NSString *)tabID profileID:(NSString *)profileID {
+  return [self reloadTabID:tabID profileID:profileID mode:ARCPageReloadModeNormal];
+}
+- (BOOL)reloadTabID:(NSString *)tabID profileID:(NSString *)profileID
+                mode:(ARCPageReloadMode)mode {
+  if (![_shaarTabProfiles[tabID] isEqualToString:profileID] ||
+      mode == ARCPageReloadModeNewRenderer) return NO;
+  return [self submitTabID:tabID operation:SHAAR_OP_TAB_RELOAD
+                  payload:@{@"schemaVersion": @1,
+                            @"mode": mode == ARCPageReloadModeBypassingCache ?
+                                @"bypass_cache" : @"normal"}];
 }
 
 - (void)quit {

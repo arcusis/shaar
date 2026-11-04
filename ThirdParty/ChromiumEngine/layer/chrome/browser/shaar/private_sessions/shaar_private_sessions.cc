@@ -4,12 +4,15 @@
 
 #include "chrome/browser/shaar/private_sessions/shaar_private_sessions.h"
 #include "chrome/browser/shaar/private_sessions/shaar_private_sessions_module.h"
+#include "chrome/browser/shaar/private_sessions/shaar_private_trackers.h"
 
 #include <utility>
 #include <map>
 #include <pthread.h>
+#include <cstring>
 
 #include "base/check.h"
+#include "base/json/json_reader.h"
 #include "base/strings/string_util.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
@@ -116,6 +119,7 @@ void PrivateSessionRegistry::OnProfileWillBeDestroyed(Profile* profile) {
   auto parent = parent_sessions_.find(profile);
   if (parent == parent_sessions_.end())
     return;
+  TrackerProtection().RemoveProfile(profile);
   for (const std::string& session_id : parent->second) {
     auto session = sessions_.find(session_id);
     if (session == sessions_.end())
@@ -127,6 +131,7 @@ void PrivateSessionRegistry::OnProfileWillBeDestroyed(Profile* profile) {
     session->second->open_handles = 0;
     retired_ids_.insert(session->first);
     session->second->parent = nullptr;
+    TrackerProtection().RemoveProfile(session->second->otr);
     session->second->otr = nullptr;
     sessions_.erase(session);
   }
@@ -222,6 +227,8 @@ void PrivateSessionRegistry::MaybeRetire(Session* session) {
   if (parent_sessions->second.empty()) {
     parent_sessions_.erase(parent_sessions);
     parent->RemoveObserver(this);
+    TrackerProtection().RemoveProfile(otr);
+    TrackerProtection().RemoveProfile(parent);
     parent->DestroyOffTheRecordProfile(otr);
   }
   session->parent = nullptr;
@@ -435,6 +442,75 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_private_session_cookie_setting(
       &value);
   if (code == SHAAR_OK) *allowed = value ? 1 : 0;
   return Result(code, error);
+}
+
+extern "C" SHAAR_EXPORT shaar_error_code shaar_private_session_tracker_rules(
+    shaar_private_session* handle, shaar_bytes revision,
+    shaar_bytes domains_json, shaar_error* error) {
+  if (!pthread_main_np() || !handle || !revision.data || !revision.size ||
+      !domains_json.data || !domains_json.size ||
+      domains_json.size > 4 * 1024 * 1024)
+    return Result(SHAAR_INVALID_ARGUMENT, error);
+  auto found = g_handles.find(handle);
+  if (found == g_handles.end()) return Result(SHAAR_NOT_FOUND, error);
+  Profile* parent = nullptr;
+  if (!g_services.Resolve(found->second, handle, &parent, nullptr, nullptr,
+                          nullptr))
+    return Result(SHAAR_NOT_FOUND, error);
+  auto value = base::JSONReader::Read(
+      std::string_view(domains_json.data, domains_json.size), base::JSON_PARSE_RFC);
+  if (!value || !value->is_list())
+    return Result(SHAAR_INVALID_ARGUMENT, error);
+  std::vector<std::string> domains;
+  for (const auto& domain : value->GetList()) {
+    if (!domain.is_string()) return Result(SHAAR_INVALID_ARGUMENT, error);
+    domains.push_back(domain.GetString());
+  }
+  return Result(shaar::TrackerProtection().SetRules(
+      parent, std::string(revision.data, revision.size), domains), error);
+}
+
+extern "C" SHAAR_EXPORT shaar_error_code shaar_private_session_tracker_status(
+    shaar_private_session* handle, char* revision, size_t revision_capacity,
+    int* domain_count, int* blocked_requests, shaar_error* error) {
+  if (!pthread_main_np() || !handle || !revision || revision_capacity < 201 ||
+      !domain_count || !blocked_requests)
+    return Result(SHAAR_INVALID_ARGUMENT, error);
+  auto found = g_handles.find(handle);
+  if (found == g_handles.end()) return Result(SHAAR_NOT_FOUND, error);
+  Profile* otr = nullptr;
+  if (!g_services.Resolve(found->second, handle, nullptr, &otr, nullptr,
+                          nullptr))
+    return Result(SHAAR_NOT_FOUND, error);
+  const auto status = shaar::TrackerProtection().Status(otr);
+  if (!status.enabled) return Result(SHAAR_NOT_READY, error);
+  std::memcpy(revision, status.revision.c_str(), status.revision.size() + 1);
+  *domain_count = status.domain_count;
+  *blocked_requests = status.blocked_requests;
+  return Result(SHAAR_OK, error);
+}
+
+extern "C" SHAAR_EXPORT shaar_error_code shaar_private_session_tracker_allowance(
+    shaar_private_session* handle, shaar_bytes origin, int set, int allow,
+    int* allowed, shaar_error* error) {
+  if (!pthread_main_np() || !handle || !origin.data || !origin.size ||
+      !allowed || (set != 0 && set != 1) || (allow != 0 && allow != 1))
+    return Result(SHAAR_INVALID_ARGUMENT, error);
+  auto found = g_handles.find(handle);
+  if (found == g_handles.end()) return Result(SHAAR_NOT_FOUND, error);
+  Profile* otr = nullptr;
+  if (!g_services.Resolve(found->second, handle, nullptr, &otr, nullptr,
+                          nullptr))
+    return Result(SHAAR_NOT_FOUND, error);
+  std::string site(origin.data, origin.size);
+  if (set) {
+    const auto code = shaar::TrackerProtection().SetAllowance(otr, site, allow);
+    if (code != SHAAR_OK) return Result(code, error);
+  } else if (!shaar::ValidPrivateTrackerOrigin(site)) {
+    return Result(SHAAR_INVALID_ARGUMENT, error);
+  }
+  *allowed = shaar::TrackerProtection().Allowance(otr, site) ? 1 : 0;
+  return Result(SHAAR_OK, error);
 }
 
 extern "C" void shaar_private_sessions_register(

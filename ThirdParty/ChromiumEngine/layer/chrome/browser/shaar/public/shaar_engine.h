@@ -332,6 +332,20 @@ SHAAR_EXPORT shaar_error_code shaar_private_session_close(
 SHAAR_EXPORT shaar_error_code shaar_private_session_cookie_setting(
     shaar_private_session *, shaar_bytes origin, int set, int allow,
     int *allowed, shaar_error *error);
+/* Rules are canonical DNS names in a JSON string array (max 4 MiB). Revision
+ * identifies exact content and cannot be reused with different rules. */
+SHAAR_EXPORT shaar_error_code shaar_private_session_tracker_rules(
+    shaar_private_session *, shaar_bytes revision, shaar_bytes domains_json,
+    shaar_error *error);
+/* Writes a NUL-terminated revision into caller storage (at least 201 bytes). */
+SHAAR_EXPORT shaar_error_code shaar_private_session_tracker_status(
+    shaar_private_session *, char *revision, size_t revision_capacity,
+    int *domain_count,
+    int *blocked_requests, shaar_error *error);
+/* Exact HTTP(S) top-frame origin. set=0 reads, set=1 writes. */
+SHAAR_EXPORT shaar_error_code shaar_private_session_tracker_allowance(
+    shaar_private_session *, shaar_bytes origin, int set, int allow,
+    int *allowed, shaar_error *error);
 
 /* Regular host may bind multiple regular profiles; private host is fixed. */
 SHAAR_EXPORT shaar_error_code shaar_window_open(

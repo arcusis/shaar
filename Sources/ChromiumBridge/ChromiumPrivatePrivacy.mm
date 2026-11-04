@@ -120,10 +120,28 @@ static NSString *ARCPrivateOrigin(NSString *url) {
 
 namespace {
 using CookieSetting = decltype(&shaar_private_session_cookie_setting);
+using TrackerRules = decltype(&shaar_private_session_tracker_rules);
+using TrackerStatus = decltype(&shaar_private_session_tracker_status);
+using TrackerAllowance = decltype(&shaar_private_session_tracker_allowance);
 
 CookieSetting PrivateCookieSymbol() {
   return reinterpret_cast<CookieSetting>(dlsym(RTLD_DEFAULT,
       "shaar_private_session_cookie_setting"));
+}
+
+TrackerRules PrivateTrackerRulesSymbol() {
+  return reinterpret_cast<TrackerRules>(dlsym(RTLD_DEFAULT,
+      "shaar_private_session_tracker_rules"));
+}
+
+TrackerStatus PrivateTrackerStatusSymbol() {
+  return reinterpret_cast<TrackerStatus>(dlsym(RTLD_DEFAULT,
+      "shaar_private_session_tracker_status"));
+}
+
+TrackerAllowance PrivateTrackerAllowanceSymbol() {
+  return reinterpret_cast<TrackerAllowance>(dlsym(RTLD_DEFAULT,
+      "shaar_private_session_tracker_allowance"));
 }
 
 shaar_private_session *Session(NSDictionary *context) {
@@ -159,9 +177,35 @@ BOOL SetCookie(NSDictionary *context, NSString *origin, BOOL set, BOOL allow,
 }
 }  // namespace
 
+BOOL ARCPrivateShaarInstallTrackerRules(shaar_private_session *session) {
+  auto install = PrivateTrackerRulesSymbol();
+  if (!session || !install) return NO;
+  NSURL *url = [[NSBundle mainBundle].resourceURL
+      URLByAppendingPathComponent:@"Privacy/tracker-domains.json"];
+  NSData *data = [NSData dataWithContentsOfURL:url
+      options:NSDataReadingMappedIfSafe error:nil];
+  NSDictionary *rules = data ? [NSJSONSerialization JSONObjectWithData:data
+      options:0 error:nil] : nil;
+  NSArray *domains = [rules[@"domains"] isKindOfClass:NSArray.class]
+      ? rules[@"domains"] : nil;
+  NSString *revision = [rules[@"revision"] isKindOfClass:NSString.class]
+      ? rules[@"revision"] : nil;
+  if (![rules[@"schema"] isEqual:@1] || !revision.length ||
+      !domains.count || domains.count > 100000) return NO;
+  NSData *json = [NSJSONSerialization dataWithJSONObject:domains options:0
+      error:nil];
+  if (!json || json.length > 4 * 1024 * 1024) return NO;
+  shaar_error error = ARCPrivateShaarEmptyError();
+  return install(session, ARCPrivateShaarBytes(revision),
+      {(const char *)json.bytes, json.length}, &error) == SHAAR_OK;
+}
+
 @implementation ARCShaarRuntime (PrivatePrivacy)
 
-- (BOOL)privatePrivacyAvailable { return NO; }
+- (BOOL)privatePrivacyAvailable {
+  return PrivateCookieSymbol() && PrivateTrackerRulesSymbol() &&
+         PrivateTrackerStatusSymbol() && PrivateTrackerAllowanceSymbol();
+}
 
 - (BOOL)shaarPrivateOriginAllowed:(NSString *)origin sourceProfileID:(NSString *)sourceID
                   excludingWindowID:(NSString *)excluded {
@@ -181,8 +225,25 @@ BOOL SetCookie(NSDictionary *context, NSString *origin, BOOL set, BOOL allow,
                               completion:(void (^)(NSDictionary *))completion {
   NSDictionary *context = ARCPrivateShaarState(self)[@"contexts"][contextID];
   if (!context) { completion(@{@"error": @"Private context is unavailable."}); return; }
-  // The private-session ABI does not yet expose tracker request protection.
-  completion(@{@"error": @"Private tracker protection is unavailable in this engine."});
+  auto status = PrivateTrackerStatusSymbol();
+  if (!status) {
+    completion(@{@"error": @"Private tracker status is unavailable."});
+    return;
+  }
+  char revision[201] = {};
+  int domains = 0;
+  int blocked = 0;
+  shaar_error error = ARCPrivateShaarEmptyError();
+  if (status(Session(context), revision, sizeof(revision), &domains,
+             &blocked, &error) != SHAAR_OK) {
+    completion(@{@"error": @"Private tracker status failed."});
+    return;
+  }
+  completion(@{@"offTheRecord": @YES,
+    @"trackerProtectionEnabled": @YES,
+    @"trackerRulesRevision": [NSString stringWithUTF8String:revision] ?: @"",
+    @"trackerDomainCount": @(domains),
+    @"blockedTrackerRequests": @(blocked)});
 }
 
 - (void)setPrivateCookieSettingForContextID:(NSString *)contextID origin:(NSString *)origin
@@ -205,7 +266,21 @@ BOOL SetCookie(NSDictionary *context, NSString *origin, BOOL set, BOOL allow,
 - (void)setPrivateTrackerAllowanceForContextID:(NSString *)contextID origin:(NSString *)origin
                                           allow:(BOOL)allow
                                      completion:(void (^)(NSDictionary *))completion {
-  completion(@{@"error": @"Private tracker allowance is unavailable in this engine."});
+  NSDictionary *context = ARCPrivateShaarState(self)[@"contexts"][contextID];
+  auto setting = PrivateTrackerAllowanceSymbol();
+  if (!context || !setting || ![ARCPrivateOrigin(origin) isEqual:origin]) {
+    completion(@{@"error": @"Invalid private tracker origin or context."});
+    return;
+  }
+  int allowed = 0;
+  shaar_error error = ARCPrivateShaarEmptyError();
+  if (setting(Session(context), ARCPrivateShaarBytes(origin), 1, allow,
+              &allowed, &error) != SHAAR_OK) {
+    completion(@{@"error": @"Private tracker allowance failed."});
+    return;
+  }
+  completion(@{@"ok": @YES, @"origin": origin,
+    @"trackersAllowed": @(allowed != 0)});
 }
 
 - (void)preparePrivateTabID:(NSString *)tabID windowID:(NSString *)windowID

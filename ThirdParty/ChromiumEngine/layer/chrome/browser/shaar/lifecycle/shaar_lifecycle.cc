@@ -22,8 +22,15 @@
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "chrome/browser/shaar/engine/shaar_module_registry.h"
+#include "chrome/browser/shaar/private_sessions/shaar_private_trackers.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
 #include "content/public/browser/browser_main_parts.h"
+#include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_process_host.h"
+#include "mojo/public/cpp/bindings/remote.h"
+#include "net/base/net_errors.h"
+#include "services/network/public/mojom/websocket.mojom.h"
+#include "services/network/public/mojom/web_transport.mojom.h"
 
 extern "C" int ChromeMain(int argc, const char** argv);
 
@@ -96,6 +103,88 @@ class ShaarContentBrowserClient final : public ChromeContentBrowserClient {
     static_cast<ChromeBrowserMainParts*>(parts.get())
         ->AddParts(std::make_unique<LifecycleExtraParts>(engine_));
     return parts;
+  }
+
+  void WillCreateURLLoaderFactory(
+      content::BrowserContext* browser_context,
+      content::RenderFrameHost* frame,
+      int render_process_id,
+      URLLoaderFactoryType type,
+      const url::Origin& request_initiator,
+      const net::IsolationInfo& isolation_info,
+      std::optional<int64_t> navigation_id,
+      ukm::SourceIdObj ukm_source_id,
+      network::URLLoaderFactoryBuilder& factory_builder,
+      mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>* header_client,
+      bool* bypass_redirect_checks,
+      bool* disable_secure_dns,
+      network::mojom::URLLoaderFactoryOverridePtr* factory_override,
+      scoped_refptr<base::SequencedTaskRunner> navigation_response_task_runner,
+      bool is_for_network_service) override {
+    shaar::InstallPrivateTrackerFactory(browser_context, isolation_info,
+                                        factory_builder);
+    ChromeContentBrowserClient::WillCreateURLLoaderFactory(
+        browser_context, frame, render_process_id, type, request_initiator,
+        isolation_info, navigation_id, ukm_source_id, factory_builder,
+        header_client, bypass_redirect_checks, disable_secure_dns,
+        factory_override, navigation_response_task_runner,
+        is_for_network_service);
+  }
+
+  bool WillInterceptWebSocket(content::RenderFrameHost* frame) override {
+    return (frame && frame->GetBrowserContext()->IsOffTheRecord()) ||
+           ChromeContentBrowserClient::WillInterceptWebSocket(frame);
+  }
+
+  void CreateWebSocket(
+      content::RenderFrameHost* frame, WebSocketFactory factory,
+      const GURL& url, const net::SiteForCookies& site_for_cookies,
+      const std::optional<std::string>& user_agent,
+      mojo::PendingRemote<network::mojom::WebSocketHandshakeClient> handshake_client,
+      content::ContentBrowserClient::WebSocketOptions options) override {
+    if (frame && shaar::ShouldBlockPrivateTracker(
+        frame->GetBrowserContext(), url,
+        frame->GetOutermostMainFrame()->GetLastCommittedOrigin())) {
+      mojo::Remote<network::mojom::WebSocketHandshakeClient> client(
+          std::move(handshake_client));
+      client->OnFailure("Blocked by private tracker protection",
+                        net::ERR_BLOCKED_BY_CLIENT, -1);
+      return;
+    }
+    if (ChromeContentBrowserClient::WillInterceptWebSocket(frame)) {
+      ChromeContentBrowserClient::CreateWebSocket(
+          frame, std::move(factory), url, site_for_cookies, user_agent,
+          std::move(handshake_client), std::move(options));
+      return;
+    }
+    std::move(factory).Run(url, {}, std::move(handshake_client), {},
+                           std::move(options.header_client));
+  }
+
+  void WillCreateWebTransport(
+      int process_id, int frame_routing_id, const GURL& url,
+      const url::Origin& initiator_origin,
+      mojo::PendingRemote<network::mojom::WebTransportHandshakeClient> handshake_client,
+      WillCreateWebTransportCallback callback) override {
+    auto* process = content::RenderProcessHost::FromID(process_id);
+    if (process && process->GetBrowserContext()->IsOffTheRecord()) {
+      std::optional<url::Origin> top_origin = initiator_origin;
+      if (auto* frame = content::RenderFrameHost::FromID(process_id,
+                                                        frame_routing_id)) {
+        top_origin = frame->GetOutermostMainFrame()->GetLastCommittedOrigin();
+      }
+      if (shaar::ShouldBlockPrivateTracker(process->GetBrowserContext(), url,
+                                           top_origin)) {
+        auto error = network::mojom::WebTransportError::New();
+        error->net_error = net::ERR_BLOCKED_BY_CLIENT;
+        error->details = "Blocked by private tracker protection";
+        std::move(callback).Run(std::move(handshake_client), std::move(error));
+        return;
+      }
+    }
+    ChromeContentBrowserClient::WillCreateWebTransport(
+        process_id, frame_routing_id, url, initiator_origin,
+        std::move(handshake_client), std::move(callback));
   }
 
  private:

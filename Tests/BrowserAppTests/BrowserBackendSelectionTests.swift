@@ -21,6 +21,19 @@ final class BrowserBackendSelectionTests: XCTestCase {
     }
   }
 
+  func testShaarOverridesExtensionOperations() {
+    for selector in [
+      "extensionsForProfileID:", "extensionActionTitleForID:tabID:",
+      "showPopupForExtension:tabID:error:",
+      "executeExtensionID:tabID:error:",
+      "manageExtensionsForProfileID:operation:extensionID:enabled:completion:",
+      "extensionsDirectoryForProfileID:", "viewForExtensionPopupID:",
+      "closeExtensionPopup", "closeExtensionPopupForWindowID:",
+    ] {
+      assertShaarOverrides(selector)
+    }
+  }
+
   private func assertShaarOverrides(_ name: String) {
     let selector = NSSelectorFromString(name)
     let ardia = class_getInstanceMethod(ARCChromiumRuntime.self, selector)

@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #import "include/ChromiumBridge.h"
+#import "ChromiumShaarExtensionsInternal.h"
 
 #include <dlfcn.h>
 #include <cstdlib>
@@ -176,6 +177,7 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
                                 length:event->payload_json.size];
   NSDictionary *payload = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
   if (![payload isKindOfClass:NSDictionary.class]) return;
+  [self shaarExtensionEvent:event payload:payload];
   NSString *kind = payload[@"kind"];
   if (event->kind == SHAAR_EVENT_ENGINE && [kind isEqualToString:@"engine.ready"]) {
     if (_shaarTesting) [NSApp setActivationPolicy:NSApplicationActivationPolicyProhibited];
@@ -462,6 +464,66 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   return _symbols.submit(_shaarEngine, scope, window, nullptr, operation,
                          {(const char *)json.bytes, json.length}, _nextRequestID++,
                          IgnoreReply, nullptr, &error) == SHAAR_OK;
+}
+
+- (BOOL)shaarSubmitExtensionOperation:(shaar_operation)operation
+                           profileID:(NSString *)profileID tabID:(NSString *)tabID
+                             payload:(NSDictionary *)payload
+                          completion:(void (^)(NSString *, shaar_error_code))completion {
+  shaar_profile *profile = (shaar_profile *)_shaarProfiles[profileID].pointerValue;
+  NSString *windowID = tabID ? _shaarTabWindows[tabID] : _shaarPrimaryWindowID;
+  shaar_window *window = (shaar_window *)_shaarWindows[windowID].pointerValue;
+  shaar_tab *tab = tabID ? (shaar_tab *)_shaarTabs[tabID].pointerValue : nullptr;
+  if (!_shaarEngine || !profile || !window || (tabID && (!tab ||
+      ![_shaarTabProfiles[tabID] isEqualToString:profileID]))) return NO;
+  NSData *json = [NSJSONSerialization dataWithJSONObject:payload options:0 error:nil];
+  if (!json) return NO;
+  shaar_scope scope = {};
+  scope.size = sizeof(scope);
+  scope.profile = profile;
+  void *context = (__bridge_retained void *)[completion copy];
+  shaar_error error = EmptyError();
+  shaar_error_code status = _symbols.submit(
+      _shaarEngine, scope, window, tab, operation,
+      {(const char *)json.bytes, json.length}, _nextRequestID++,
+      [](void *context, const shaar_result *result) {
+        void (^reply)(NSString *, shaar_error_code) = (__bridge_transfer id)context;
+        NSString *json = result ? String(result->payload_json) : nil;
+        reply(json, result ? result->error.code : SHAAR_CHROMIUM_ERROR);
+      }, context, &error);
+  if (status != SHAAR_OK) {
+    CFBridgingRelease(context);
+    return NO;
+  }
+  return YES;
+}
+
+- (BOOL)shaarOwnsSelectedTabID:(NSString *)tabID profileID:(NSString *)profileID {
+  NSString *windowID = _shaarTabWindows[tabID];
+  return windowID && [_shaarTabProfiles[tabID] isEqualToString:profileID] &&
+         [_shaarSelectedTabs[windowID] isEqualToString:tabID];
+}
+
+- (NSString *)shaarProfileIDForTabID:(NSString *)tabID {
+  return _shaarTabProfiles[tabID];
+}
+
+- (NSString *)shaarProfileIDForWindowID:(NSString *)windowID {
+  NSString *selectedTabID = _shaarSelectedTabs[windowID];
+  return _shaarTabProfiles[selectedTabID];
+}
+
+- (NSURL *)shaarProfileDirectoryForID:(NSString *)profileID {
+  shaar_profile *profile = (shaar_profile *)_shaarProfiles[profileID].pointerValue;
+  if (!profile) return nil;
+  auto getPath = reinterpret_cast<decltype(&shaar_profile_get_path)>(
+      dlsym(_shaarLibrary, "shaar_profile_get_path"));
+  if (!getPath) return nil;
+  shaar_bytes path = {};
+  shaar_error error = EmptyError();
+  if (getPath(profile, &path, &error) != SHAAR_OK) return nil;
+  NSString *value = String(path);
+  return value.length ? [NSURL fileURLWithPath:value isDirectory:YES] : nil;
 }
 
 - (void)quit {

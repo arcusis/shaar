@@ -186,6 +186,7 @@ final class BrowserSettingsState {
     try await profileBackend.loadProfile(id)
     draft = workspace.workspace
     try draft.deleteProfile(id, movingSpacesTo: destinationID)
+    try workspace.validateWritableSnapshot()
     try await profileBackend.deleteProfile(id)
     try workspace.deleteProfile(id, movingSpacesTo: destinationID)
     if selectedProfileID == id {

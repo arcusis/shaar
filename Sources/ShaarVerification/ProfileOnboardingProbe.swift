@@ -176,7 +176,7 @@ final class ProfileOnboardingProbe {
         {type:'shaar-onboarding-callback',token:'\(token)'},location.origin);return {};})()
       """
     )
-    try await wait("popup callback") {
+    try await wait("popup callback", attempts: Int(100 * ProbeTimeout.scale)) {
       let reply = await self.value(tab, "window.fixtureReply") as? [String: Any]
       return ProfileOnboardingPopupCallback.matches(reply, origin: origin, token: token)
     }

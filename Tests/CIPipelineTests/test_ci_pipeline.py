@@ -72,14 +72,20 @@ class PipelineGateTests(unittest.TestCase):
                 RELEASE_CI.require_release_ci("arcusis/shaar", revision)
 
     def test_known_non_native_diffs_and_unknown_changes_select_required_coverage(self):
-        for paths in (["Notebook/Note.md"], ["README.md", "CONTRIBUTING.md"]):
+        for paths in (["Notebook/Note.md"], ["Notebook/probe.py"], ["README.md", "CONTRIBUTING.md"],
+                      ["ThirdParty/Foo/README.md"]):
             self.assertEqual(PLAN.select_stages(paths, "pull_request"), (False, False, True))
-        for paths in (["website/src/Page.svelte"], ["website/package.json", "Notebook/Note.md"]):
+        for paths in (["website/src/Page.svelte"], ["website/package.json", "Notebook/Note.md"],
+                      [".github/assets/overview.png"], [".github/workflows/website-deploy.yml"]):
             self.assertEqual(PLAN.select_stages(paths, "pull_request"), (False, True, True))
             self.assertEqual(PLAN.select_stages(paths, "merge_group"), (False, True, True))
         for paths in (None, [], ["unclassified-input"]):
             self.assertTrue(PLAN.select_stages(paths, "pull_request")[0])
         self.assertEqual(PLAN.select_stages(["Sources/App.swift"], "pull_request"), (True, False, True))
+        self.assertEqual(PLAN.select_stages(["Design/shaar_engine.h"], "pull_request"), (True, False, True))
+        self.assertEqual(PLAN.select_stages(["Sources/X.md"], "pull_request"), (True, False, True))
+        self.assertEqual(PLAN.select_stages(["Design/Mockup.sketch", "Sources/App.swift"], "pull_request"),
+                         (True, False, True))
         self.assertEqual(PLAN.select_stages(["scripts/tool.py"], "pull_request"), (True, False, True))
         for paths in (["scripts/codeql-build.py"], [".github/workflows/ci-codeql.yml"],
                       [".github/actions/ci-setup/action.yml"]):
@@ -268,10 +274,13 @@ class PipelineGateTests(unittest.TestCase):
         self.assertTrue(GATE.gate_errors(self.results(), True, True))
         self.assertEqual(GATE.gate_errors(self.results(nightly="success"), True, True), [])
 
-    def test_only_known_markdown_paths_skip_native_stages(self):
-        self.assertTrue(PLAN.documentation_only(["README.md", "Notebook/_INDEX_Main.md"]))
-        for paths in ([], ["scripts/tool.py"], [".github/workflows/ci.yml"], ["Sources/New.md"],
-                      ["Notebook/probe.py"], ["Notebook/Note.md", "Package.resolved"]):
+    def test_known_documentation_paths_skip_native_stages(self):
+        self.assertTrue(PLAN.documentation_only(["README.md", "Notebook/_INDEX_Main.md",
+                                                 "ThirdParty/Foo/README.md"]))
+        for paths in ([], ["scripts/tool.py"], [".github/workflows/ci.yml"],
+                      ["Notebook/Note.md", "Package.resolved"], ["Design/shaar_engine.h"],
+                      ["Sources/X.md"], ["Tests/Fixture.md"], ["ThirdParty/README.md"],
+                      ["ThirdParty/Foo/README.txt"]):
             self.assertFalse(PLAN.documentation_only(paths))
 
 
@@ -496,15 +505,26 @@ class SwiftReportTests(unittest.TestCase):
 class ProbeSoakTests(unittest.TestCase):
     def test_shards_cover_every_original_iteration_once_without_retry(self):
         from collections import Counter
-        from ci_engine import engine_shards, shard_modes
+        from ci_engine import (
+            ENGINE_PROBE_WEIGHTS_SECONDS, _engine_shard_assignments, engine_shards, shard_modes,
+        )
+        self.assertEqual(engine_shards(1), ["engine-1", "engine-2", "engine-3", "engine-4"])
         for iterations in (1, 2, 3, 10):
             expected = Counter((mode, index) for mode in STAGES.ENGINE_MODES
                                for index in range(1, max(iterations, STAGES.MINIMUM_REPETITIONS.get(mode, 1)) + 1))
             actual = Counter((mode, index) for shard in engine_shards(iterations)
                              for mode, indexes in shard_modes(shard, iterations) for index in indexes)
             self.assertEqual(actual, expected)
+            self.assertEqual(len(engine_shards(iterations)), 4)
         with self.assertRaises(ValueError):
-            shard_modes("private-window-4", 1)
+            shard_modes("engine-5", 1)
+
+        assignments = _engine_shard_assignments(1)
+        estimated_loads = {
+            shard: sum(ENGINE_PROBE_WEIGHTS_SECONDS[mode] for mode, _ in probes)
+            for shard, probes in assignments.items()
+        }
+        self.assertLessEqual(max(estimated_loads.values()) - min(estimated_loads.values()), 60)
 
     def test_all_modes_share_one_build_and_preserve_each_iteration(self):
         checks = unittest.mock.Mock()
@@ -572,6 +592,21 @@ class ProbeSoakTests(unittest.TestCase):
 
 
 class EngineTransferTests(unittest.TestCase):
+    def test_merge_group_bundle_selection_rejects_fork_pull_request_runs(self):
+        from ci_engine import matching_pr_bundle_run_id
+        response = {"workflow_runs": [
+            {"id": 10, "run_number": 10, "conclusion": "success",
+             "head_repository": {"full_name": "contributor/shaar"},
+             "pull_requests": [{"number": 448}]},
+            {"id": 11, "run_number": 11, "conclusion": "success",
+             "head_repository": {"full_name": "arcusis/shaar"},
+             "pull_requests": [{"number": 448}]},
+            {"id": 12, "run_number": 12, "conclusion": "success",
+             "head_repository": None, "pull_requests": [{"number": 448}]},
+        ]}
+        self.assertEqual(matching_pr_bundle_run_id(response, 448, "arcusis/shaar"), "11")
+        self.assertEqual(matching_pr_bundle_run_id(response, 448, "other/shaar"), "")
+
     def test_transferred_bundle_preserves_exec_and_links_and_rejects_wrong_context_or_digest(self):
         from ci_engine import BUNDLE_NAME, archive_bundle, restore_bundle
         import shutil
@@ -605,6 +640,37 @@ class EngineTransferTests(unittest.TestCase):
                 archive.write(b"tampered")
             with self.assertRaisesRegex(ValueError, "digest"):
                 restore_bundle(root, directory)
+
+    def test_normal_browsing_restores_the_shared_exact_source_bundle(self):
+        from ci_engine import BUNDLE_NAME, archive_bundle
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {
+            "CI_SOURCE_TREE": "a" * 40, "CI_BUNDLE_INPUTS": "b" * 64, "CI_TOOLCHAIN_ID": "toolchain",
+        }):
+            root = Path(temporary)
+            pin = root / "ThirdParty/ArdiaCore/pin.json"
+            pin.parent.mkdir(parents=True)
+            pin.write_text(json.dumps({"sha256": "b" * 64}))
+            (root / "build" / BUNDLE_NAME).mkdir(parents=True)
+            evidence = root / "build/ci/engine-build"
+            evidence.mkdir(parents=True)
+            archive_bundle(root, evidence)
+            import shutil
+            shutil.rmtree(root / "build" / BUNDLE_NAME)
+            checks = SimpleNamespace(run=unittest.mock.Mock(return_value=0))
+            with patch.object(STAGES, "ROOT", root), patch.object(STAGES, "require_hosted_mac"):
+                STAGES.run_basic_browsing(checks)
+            self.assertEqual([call.args[0] for call in checks.run.call_args_list], ["normal-window-browsing"])
+            self.assertTrue((root / "build" / BUNDLE_NAME).is_dir())
+
+    def test_localization_uses_restored_bundle_without_rebuilding_it(self):
+        checks = SimpleNamespace(run=unittest.mock.Mock(return_value=0))
+        with patch.object(STAGES, "require_hosted_mac"), patch.object(
+            STAGES, "restore_shared_verification_bundle", return_value=True
+        ):
+            STAGES.run_localization(checks)
+        localization_engine = checks.run.call_args_list[-1].args
+        self.assertEqual(localization_engine[0], "localization-engine")
+        self.assertEqual(localization_engine[1][-1], "--skip-build")
 
     def test_cached_engine_bundle_counts_as_a_successful_stage_with_shards(self):
         from ci_engine import BUNDLE_NAME, archive_bundle, engine_shards

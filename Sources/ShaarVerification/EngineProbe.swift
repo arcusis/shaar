@@ -171,7 +171,11 @@ final class EngineProbe {
       let phase = try value("--probe-phase")
       let temporary = FileManager.default.temporaryDirectory.standardizedFileURL
         .resolvingSymlinksInPath()
-      guard root.path.hasPrefix(temporary.path + "/"),
+      let runnerTemporary = ProcessInfo.processInfo.environment["RUNNER_TEMP"].map {
+        URL(fileURLWithPath: $0).standardizedFileURL.resolvingSymlinksInPath()
+      }
+      let allowedTemporaryRoots = [temporary] + (runnerTemporary.map { [$0] } ?? [])
+      guard allowedTemporaryRoots.contains(where: { root.path.hasPrefix($0.path + "/") }),
         output.deletingLastPathComponent().path == root.path,
         try String(contentsOf: root.appending(path: ".arcusis-probe"), encoding: .utf8)
           == "arcusis-engine-probe-v1\n",
@@ -379,6 +383,16 @@ final class EngineProbe {
     }
     let selection = runtime.normalProbeSelectionAudit(forTabID: tabID)
     throw ProbeFailure("\(check); native selection audit: \(selection)")
+  }
+
+  private func waitForNativeTabSelection(_ tabID: String) async throws -> [AnyHashable: Any] {
+    for _ in 0..<100 {
+      let selection = runtime.normalProbeSelectionAudit(forTabID: tabID)
+      if selection["selectedNativeTab"] as? Bool == true { return selection }
+      try await Task.sleep(for: .milliseconds(50))
+    }
+    let selection = runtime.normalProbeSelectionAudit(forTabID: tabID)
+    throw ProbeFailure("Native tab \(tabID) was not selected; native selection audit: \(selection)")
   }
 
   /// Restored background tabs keep committing titles after launch; wait for the model to stop changing.
@@ -604,7 +618,7 @@ final class EngineProbe {
           store.session.selectedSpace.selectedTabID?.uuidString == tab
             && store.session.selectedSpace.profileID.uuidString == profileA,
           "\(phase) Space switch \(iteration + 1) selects the correct native Space and profile")
-        let nativeSelection = runtime.normalProbeSelectionAudit(forTabID: tab)
+        let nativeSelection = try await waitForNativeTabSelection(tab)
         try expect(
           nativeSelection["selectedNativeTab"] as? Bool == true,
           "\(phase) Space switch \(iteration + 1) selects the native tab")
@@ -642,7 +656,7 @@ final class EngineProbe {
           store.session.selectedSpace.selectedTabID?.uuidString == tab
             && store.session.selectedSpace.profileID.uuidString == (isA ? profileA : profileB),
           "\(phase) Profile switch \(iteration + 1) selects the correct Space and profile")
-        let nativeSelection = runtime.normalProbeSelectionAudit(forTabID: tab)
+        let nativeSelection = try await waitForNativeTabSelection(tab)
         try expect(
           nativeSelection["selectedNativeTab"] as? Bool == true,
           "\(phase) Profile switch \(iteration + 1) selects the native tab")

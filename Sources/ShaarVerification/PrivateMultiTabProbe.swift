@@ -19,16 +19,35 @@ struct PrivateMultiTabProbe {
   let fixture: URL
   let phase: String
   let sourceProfileID: String
+  let normalSession: BrowserSession
+  let events: BrowserRuntimeEvents
 
   func run() async throws {
-    let host = PrivateBrowserHost(
-      runtime: runtime, presentsWindows: false,
-      sourceProfileID: { sourceProfileID })
-    host.installCallbacks()
+    let file = WorkspaceFile(
+      url: root.appending(path: "private-multitab-workspace.json"),
+      legacySessionURL: root.appending(path: "private-multitab-legacy.json"))
+    _ = try BrowserWorkspaceStore(file: file, initialSession: normalSession)
+    let workspace = try BrowserWorkspaceStore(file: file)
+    let focus = Focus()
+    let host = NativeBrowserHost(
+      events: events, workspace: workspace, presentation: .hiddenProbe,
+      usesPrimaryWindow: false, keyWindow: { focus.window },
+      screens: { [NSRect(x: 0, y: 0, width: 1920, height: 1080)] })
     defer { host.detach() }
-    try host.openWindow()
+    try host.restore()
+    guard let focusedID = workspace.workspace.focusedWindowID,
+      let normal = host.contexts[focusedID]
+    else {
+      throw Failure("Saved normal window was not restored.")
+    }
+    focus.window = normal.window
+    guard host.canPerform(.newPrivateWindow),
+      normal.store.session.selectedSpace.profileID.uuidString == sourceProfileID
+    else { throw Failure("Saved normal profile cannot open a private window.") }
+    host.perform(.newPrivateWindow)
     let owner = try await waitForOwner(host)
     guard !owner.window.isVisible else { throw Failure("Private fixture window became visible.") }
+    try await captureShell(owner, stage: "first-blank")
     var tabs: [[String: Any]] = []
     for index in 0..<3 {
       if index > 0 {
@@ -41,6 +60,7 @@ struct PrivateMultiTabProbe {
       owner.store.confirmHTTP(useHTTPS: false)
       try await waitForDocument(owner, tabID: tabID, path: url.path)
       tabs.append(try await capture(owner, tabID: tabID, index: index, visit: "opened"))
+      try await captureShell(owner, stage: "tab-\(index)")
     }
     guard owner.store.tabs.count == 3 else { throw Failure("Private window lost a tab.") }
     var reselected: [[String: Any]] = []
@@ -71,20 +91,42 @@ struct PrivateMultiTabProbe {
     guard searchNavigated else {
       throw Failure("Private address bar search did not navigate its live selected tab.")
     }
+    let searchTabID = owner.store.selectedTabID
+    var searchDocument: [String: Any]?
+    for _ in 0..<Int(200 * ProbeTimeout.scale) {
+      searchDocument = await evaluateSearch(searchTabID)
+      if searchDocument?["ready"] as? String == "complete",
+        (searchDocument?["textLength"] as? Int ?? 0) > 100
+      {
+        break
+      }
+      try await Task.sleep(for: .milliseconds(50))
+    }
+    let searchEvidence = searchDocument ?? [:]
+    let searchData = try JSONSerialization.data(
+      withJSONObject: searchEvidence, options: [.prettyPrinted, .sortedKeys])
+    try searchData.write(to: root.appending(path: "\(phase)-private-search.json"), options: .atomic)
+    guard searchEvidence["host"] as? String == searchURL.host(),
+      (searchEvidence["textLength"] as? Int ?? 0) > 100
+    else {
+      throw Failure("Private search did not render a live results document: \(searchEvidence).")
+    }
+    try await captureShell(owner, stage: "search")
     let closed: Bool = await withCheckedContinuation { continuation in
       runtime.closePrivateWindowID(owner.windowID, contextID: owner.contextID) {
         continuation.resume(returning: $0)
       }
     }
-    for _ in 0..<100 where host.windowCount != 0 {
+    for _ in 0..<100 where !host.privateWindowOwners.isEmpty {
       try await Task.sleep(for: .milliseconds(50))
     }
-    guard closed && host.windowCount == 0 else {
+    guard closed && host.privateWindowOwners.isEmpty else {
       throw Failure("Private multitab window did not close cleanly.")
     }
     let report: [String: Any] = [
       "schema": 1, "phase": phase, "passed": true,
-      "windowHidden": true, "tabCount": 3, "tabs": tabs, "reselected": reselected,
+      "windowHidden": true, "openedThroughMenu": true, "savedNormalSession": true,
+      "tabCount": 3, "tabs": tabs, "reselected": reselected,
       "addressSearchURL": searchURL.absoluteString,
       "cleanupPassed": true,
     ]
@@ -92,9 +134,9 @@ struct PrivateMultiTabProbe {
       .write(to: root.appending(path: "\(phase)-private-multitab.json"), options: .atomic)
   }
 
-  private func waitForOwner(_ host: PrivateBrowserHost) async throws -> PrivateBrowserHost.Owner {
+  private func waitForOwner(_ host: NativeBrowserHost) async throws -> PrivateBrowserHost.Owner {
     for _ in 0..<100 {
-      if let owner = host.ownedWindows.first { return owner }
+      if let owner = host.privateWindowOwners.first { return owner }
       try await Task.sleep(for: .milliseconds(50))
     }
     throw Failure("Private native window was not created.")
@@ -134,6 +176,18 @@ struct PrivateMultiTabProbe {
         tabID,
         script:
           "({path:location.pathname,fixture:document.documentElement.dataset.arcusisFixture,instance:window.arcusisInstance})"
+      ) { continuation.resume(returning: $0) }
+    }
+    guard let json, let data = json.data(using: .utf8) else { return nil }
+    return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+  }
+
+  private func evaluateSearch(_ tabID: String) async -> [String: Any]? {
+    let json: String? = await withCheckedContinuation { continuation in
+      runtime.evaluatePrivacyProbeTabID(
+        tabID,
+        script:
+          "({host:location.hostname,ready:document.readyState,title:document.title,textLength:document.body?.innerText.length??0,htmlLength:document.documentElement?.outerHTML.length??0})"
       ) { continuation.resume(returning: $0) }
     }
     guard let json, let data = json.data(using: .utf8) else { return nil }
@@ -200,8 +254,57 @@ struct PrivateMultiTabProbe {
     ]
   }
 
+  private func captureShell(_ owner: PrivateBrowserHost.Owner, stage: String) async throws {
+    owner.hosting.layoutSubtreeIfNeeded()
+    try await Task.sleep(for: .milliseconds(150))
+    let native = runtime.view(
+      forPrivateTabID: owner.store.selectedTabID,
+      windowID: owner.windowID, contextID: owner.contextID)
+    let containers = pageContainers(in: owner.hosting)
+    let audit: [String: Any] = [
+      "stage": stage,
+      "containerCount": containers.count,
+      "nativeViewPresent": native != nil,
+      "nativeHidden": native?.isHidden ?? true,
+      "nativeInWindow": native?.window === owner.window,
+      "nativeFrame": NSStringFromRect(native?.frame ?? .zero),
+      "containerFrames": containers.map { NSStringFromRect($0.frame) },
+      "layerBacked": containers.map(\.wantsLayer),
+      "attached": containers.contains { $0.pageView === native },
+      "attachedInWindow": containers.contains {
+        $0.pageView === native && $0.window === owner.window
+      },
+    ]
+    let auditData = try JSONSerialization.data(
+      withJSONObject: audit, options: [.prettyPrinted, .sortedKeys])
+    try auditData.write(
+      to: root.appending(path: "\(phase)-private-shell-\(stage).json"), options: .atomic)
+    guard !owner.window.isVisible,
+      let bitmap = owner.hosting.bitmapImageRepForCachingDisplay(in: owner.hosting.bounds)
+    else { throw Failure("Private shell capture became visible or has no bitmap.") }
+    owner.hosting.cacheDisplay(in: owner.hosting.bounds, to: bitmap)
+    guard let png = bitmap.representation(using: .png, properties: [:]), png.count > 4096
+    else { throw Failure("Private shell capture was empty.") }
+    try png.write(
+      to: root.appending(path: "\(phase)-private-shell-\(stage).png"), options: .atomic)
+    if stage != "first-blank" {
+      guard containers.count == 1, containers[0].wantsLayer else {
+        throw Failure("Private page container is not layer-backed: \(audit).")
+      }
+    }
+  }
+
+  private func pageContainers(in view: NSView) -> [ChromiumPageContainerView] {
+    let current = (view as? ChromiumPageContainerView).map { [$0] } ?? []
+    return current + view.subviews.flatMap { pageContainers(in: $0) }
+  }
+
   private struct Failure: LocalizedError {
     let errorDescription: String?
     init(_ message: String) { errorDescription = message }
+  }
+
+  private final class Focus {
+    weak var window: NSWindow?
   }
 }

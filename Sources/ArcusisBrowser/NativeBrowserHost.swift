@@ -78,6 +78,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   let preferences: BrowserPreferencesStore
   private(set) var settingsController: BrowserSettingsController?
   private var privateHost: PrivateBrowserHost?
+  var privateWindowOwners: [PrivateBrowserHost.Owner] { privateHost?.ownedWindows ?? [] }
   private var miniWindows: [String: MiniBrowserController] = [:]
   private(set) var accountSignIns: [String: ProfileAccountSignIn] = [:]
   private(set) var profileOnboarding: ProfileOnboardingWindow?

@@ -1436,7 +1436,10 @@ def validate_private_multitab_report(root, phase, report, exit_code):
             or report.get('localFixturesPassed') is not True
             or evidence.get('schema') != 1 or evidence.get('phase') != phase
             or evidence.get('passed') is not True or evidence.get('windowHidden') is not True
+            or evidence.get('openedThroughMenu') is not True
+            or evidence.get('savedNormalSession') is not True
             or evidence.get('tabCount') != 3 or evidence.get('cleanupPassed') is not True
+            or 'saved normal window opens a hidden private window through the menu and renders three live tabs' not in report.get('checks', [])
             or 'three normal tabs navigate and render in one hidden window' not in report.get('checks', [])
             or 'normal address bar search opens a live native tab' not in report.get('checks', [])
             or parse_qs(urlparse(evidence.get('addressSearchURL', '')).query).get('q')
@@ -1462,6 +1465,19 @@ def validate_private_multitab_report(root, phase, report, exit_code):
     opened_ids = [entry['tabID'] for entry in evidence['tabs']]
     if len(set(opened_ids)) != 3 or {entry['tabID'] for entry in evidence['reselected']} != set(opened_ids):
         raise RuntimeError(f'{phase} private multitab identities differ')
+    for stage in ('tab-0', 'tab-1', 'tab-2', 'search'):
+        audit_path = root / f'{phase}-private-shell-{stage}.json'
+        audit = json.loads(audit_path.read_text())
+        if (audit.get('stage') != stage or audit.get('containerCount') != 1
+                or audit.get('layerBacked') != [True]
+                or audit.get('attached') is not True or audit.get('attachedInWindow') is not True
+                or audit.get('nativeHidden') is not False):
+            raise RuntimeError(f'{phase} private shell {stage} lacks its live layer-backed page')
+    search = json.loads((root / f'{phase}-private-search.json').read_text())
+    if (search.get('host') != urlparse(evidence['addressSearchURL']).hostname
+            or search.get('ready') != 'complete'
+            or type(search.get('textLength')) is not int or search['textLength'] <= 100):
+        raise RuntimeError(f'{phase} private search has no authored results document')
     return evidence
 
 

@@ -469,14 +469,18 @@ final class EngineProbe {
       bootstrapStage = .readingBeta
       let firstB = try await snapshot(tabB)
       if privateMultiTabMode {
+        guard let browserEngine else { throw ProbeFailure("Private multitab engine is missing.") }
         bootstrapStage = .ready
         fixtureStage = "private-multitab"
         try await normalBrowsingSmoke()
         try await PrivateMultiTabProbe(
           runtime: runtime, root: root, fixture: fixture, phase: phase,
-          sourceProfileID: profileA
+          sourceProfileID: profileA, normalSession: store.session,
+          events: browserEngine.events
         ).run()
-        checks.append("one hidden private window opens, navigates, and renders three live tabs")
+        checks.append(
+          "saved normal window opens a hidden private window through the menu and renders three live tabs"
+        )
         localFixturesPassed = true
         finish(error: nil)
         return
@@ -1043,7 +1047,7 @@ final class EngineProbe {
     if externalAppConsentMode || savedTabCapacityMode { return 180 }
     if quitExitMode { return 90 }
     if sessionRecoveryMode { return 90 }
-    if privateMultiTabMode { return 45 }
+    if privateMultiTabMode { return 90 }
     return privateWindowMode ? 210 : 255
   }
 

@@ -634,6 +634,37 @@ class EngineTransferTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "digest"):
                 restore_bundle(root, directory)
 
+    def test_normal_browsing_restores_the_shared_exact_source_bundle(self):
+        from ci_engine import BUNDLE_NAME, archive_bundle
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {
+            "CI_SOURCE_TREE": "a" * 40, "CI_BUNDLE_INPUTS": "b" * 64, "CI_TOOLCHAIN_ID": "toolchain",
+        }):
+            root = Path(temporary)
+            pin = root / "ThirdParty/ArdiaCore/pin.json"
+            pin.parent.mkdir(parents=True)
+            pin.write_text(json.dumps({"sha256": "b" * 64}))
+            (root / "build" / BUNDLE_NAME).mkdir(parents=True)
+            evidence = root / "build/ci/engine-build"
+            evidence.mkdir(parents=True)
+            archive_bundle(root, evidence)
+            import shutil
+            shutil.rmtree(root / "build" / BUNDLE_NAME)
+            checks = SimpleNamespace(run=unittest.mock.Mock(return_value=0))
+            with patch.object(STAGES, "ROOT", root), patch.object(STAGES, "require_hosted_mac"):
+                STAGES.run_basic_browsing(checks)
+            self.assertEqual([call.args[0] for call in checks.run.call_args_list], ["normal-window-browsing"])
+            self.assertTrue((root / "build" / BUNDLE_NAME).is_dir())
+
+    def test_localization_uses_restored_bundle_without_rebuilding_it(self):
+        checks = SimpleNamespace(run=unittest.mock.Mock(return_value=0))
+        with patch.object(STAGES, "require_hosted_mac"), patch.object(
+            STAGES, "restore_shared_verification_bundle", return_value=True
+        ):
+            STAGES.run_localization(checks)
+        localization_engine = checks.run.call_args_list[-1].args
+        self.assertEqual(localization_engine[0], "localization-engine")
+        self.assertEqual(localization_engine[1][-1], "--skip-build")
+
     def test_cached_engine_bundle_counts_as_a_successful_stage_with_shards(self):
         from ci_engine import BUNDLE_NAME, archive_bundle, engine_shards
         with tempfile.TemporaryDirectory() as temporary:

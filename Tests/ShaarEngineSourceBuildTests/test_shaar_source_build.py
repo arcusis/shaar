@@ -24,6 +24,28 @@ SPEC.loader.exec_module(BUILD)
 
 
 class ShaarSourceBuildTests(unittest.TestCase):
+    def test_reference_requires_applied_safe_storage_migration(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            source.mkdir()
+            subprocess.run(["git", "init", "-q", str(source)], check=True)
+            path = source / "components/os_crypt/common/keychain_password_mac.mm"
+            path.parent.mkdir(parents=True)
+            old = 'const char name[] = "Ardia Safe Storage";\n'
+            new = 'const char name[] = "Shaar Safe Storage";\n'
+            patch = root / "migration.patch"
+            patch.write_text("diff --git a/components/os_crypt/common/keychain_password_mac.mm "
+                             "b/components/os_crypt/common/keychain_password_mac.mm\n"
+                             "--- a/components/os_crypt/common/keychain_password_mac.mm\n"
+                             "+++ b/components/os_crypt/common/keychain_password_mac.mm\n"
+                             "@@ -1 +1 @@\n-" + old + "+" + new)
+            path.write_text(old)
+            with self.assertRaisesRegex(BUILD.BuildError, "Safe Storage migration"):
+                BUILD.verify_safe_storage_migration(source, patch)
+            path.write_text(new)
+            BUILD.verify_safe_storage_migration(source, patch)
+
     def fixture_repo(self, temporary: str) -> Path:
         repo = Path(temporary) / "repo"
         layer_parent = repo / "ThirdParty/ChromiumEngine"

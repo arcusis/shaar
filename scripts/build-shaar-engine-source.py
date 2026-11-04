@@ -391,6 +391,15 @@ def now_utc() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def verify_safe_storage_migration(source: Path, patch: Path) -> None:
+    """Require the pinned migration in the source copied into the Shaar engine."""
+    result = subprocess.run(["git", "apply", "--reverse", "--check", str(patch)],
+                            cwd=source, capture_output=True, text=True, timeout=60,
+                            check=False)
+    if result.returncode:
+        raise BuildError("reference source lacks Shaar Safe Storage migration")
+
+
 def validate_reference(repo: Path, reference: Path, output: Path,
                        config: dict) -> tuple[Path, Path, dict]:
     """Accept only a completed build of the same pinned Chromium checkout."""
@@ -411,10 +420,21 @@ def validate_reference(repo: Path, reference: Path, output: Path,
     for section in ("chromium", "ungoogled", "depotTools"):
         if reference_record.get("pins", {}).get(section) != config[section]:
             raise BuildError(f"reference {section} pins differ from Shaar config")
-    legacy_pin = json.loads(checked_repo_file(
-        repo, "ThirdParty/ArdiaCore/source-build.json").read_text())["source"]
-    if reference_record.get("pins", {}).get("source") != legacy_pin:
+    legacy_config_path = checked_repo_file(repo, "ThirdParty/ArdiaCore/source-build.json")
+    legacy_config = json.loads(legacy_config_path.read_text())
+    if reference_record.get("pins", {}).get("source") != legacy_config["source"]:
         raise BuildError("reference Ardia pin differs from the pre-relicense source")
+    if reference_record.get("configDigest") != sha256(legacy_config_path):
+        raise BuildError("reference build receipt predates the pinned source patches")
+    migration = next((entry for entry in legacy_config["patches"]
+                      if entry["file"] ==
+                      "ThirdParty/ArdiaCore/patches/shaar-safe-storage-migration.patch"), None)
+    if not migration:
+        raise BuildError("reference build lacks Shaar Safe Storage migration pin")
+    patch = checked_repo_file(repo, migration["file"])
+    if sha256(patch) != migration["sha256"]:
+        raise BuildError("Shaar Safe Storage migration patch digest mismatch")
+    verify_safe_storage_migration(source, patch)
     head = subprocess.run(["git", "-C", str(source), "rev-parse", "HEAD"],
                           check=True, capture_output=True, text=True, timeout=30).stdout.strip()
     if head != config["chromium"]["commit"]:

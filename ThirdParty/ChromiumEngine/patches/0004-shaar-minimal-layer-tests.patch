@@ -1,0 +1,177 @@
+--- a/chrome/test/base/BUILD.gn
++++ b/chrome/test/base/BUILD.gn
+@@ -10,6 +10,10 @@
+ import("//services/device/public/cpp/geolocation/buildflags.gni")
+ import("//ui/views/features.gni")
+ 
++declare_args() {
++  shaar_layer_tests = false
++}
++
+ source_set("test_switches") {
+   testonly = true
+   sources = [
+@@ -299,6 +303,9 @@
+ # extensions deps that only the .cc files need.
+ source_set("testing_profile_impl") {
+   testonly = true
++  if (shaar_layer_tests) {
++    defines = [ "SHAAR_LAYER_TESTS" ]
++  }
+   sources = [
+     "fake_profile_manager.cc",
+     "testing_profile.cc",
+@@ -348,16 +355,16 @@
+     "//content/test:test_support",
+   ]
+   if (enable_extensions_core) {
+-    deps += [
+-      "//chrome/browser/extensions",
+-      "//chrome/browser/extensions:test_support",
+-    ]
++    deps += [ "//chrome/browser/extensions" ]
++    if (!shaar_layer_tests) {
++      deps += [ "//chrome/browser/extensions:test_support" ]
++    }
+   }
+   if (enable_extensions) {
+-    deps += [
+-      "//chrome/browser/web_applications",
+-      "//chrome/browser/web_applications:web_applications_test_support",
+-    ]
++    deps += [ "//chrome/browser/web_applications" ]
++    if (!shaar_layer_tests) {
++      deps += [ "//chrome/browser/web_applications:web_applications_test_support" ]
++    }
+   }
+   if (enable_guest_view) {
+     deps += [ "//components/guest_view/browser" ]
+--- a/chrome/test/base/testing_profile.cc
++++ b/chrome/test/base/testing_profile.cc
+@@ -118,7 +118,9 @@
+ #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+ #include "chrome/browser/extensions/chrome_extension_system_factory.h"
+ #include "chrome/browser/extensions/extension_special_storage_policy.h"
++#if !defined(SHAAR_LAYER_TESTS)
+ #include "chrome/browser/extensions/test_extension_system.h"
++#endif
+ #include "extensions/browser/extension_pref_value_map.h"
+ #include "extensions/browser/extension_pref_value_map_factory.h"
+ #include "extensions/browser/extension_prefs.h"
+@@ -129,7 +131,9 @@
+ #endif
+ 
+ #if BUILDFLAG(ENABLE_EXTENSIONS)
++#if !defined(SHAAR_LAYER_TESTS)
+ #include "chrome/browser/web_applications/test/fake_web_app_provider.h"
++#endif
+ #include "chrome/browser/web_applications/web_app_provider_factory.h"
+ #endif
+ 
+@@ -462,13 +466,17 @@
+     extensions::ExtensionPrefsFactory::GetInstance()->SetInstanceForTesting(
+         this, std::move(extension_prefs));
+ 
++#if !defined(SHAAR_LAYER_TESTS)
+     extensions::ChromeExtensionSystemFactory::GetInstance()->SetTestingFactory(
+         this, base::BindRepeating(&extensions::TestExtensionSystem::Build));
++#endif
+ #endif  // BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+ 
+ #if BUILDFLAG(ENABLE_EXTENSIONS)
++#if !defined(SHAAR_LAYER_TESTS)
+     web_app::WebAppProviderFactory::GetInstance()->SetTestingFactory(
+         this, base::BindRepeating(&web_app::FakeWebAppProvider::BuildDefault));
++#endif
+ #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+ 
+ #if BUILDFLAG(IS_CHROMEOS)
+--- a/chrome/test/base/testing_browser_process.h
++++ b/chrome/test/base/testing_browser_process.h
+@@ -147,7 +147,9 @@
+       std::unique_ptr<BackgroundModeManager> manager) override;
+ #endif
+   StatusTray* status_tray() override;
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   safe_browsing::SafeBrowsingService* safe_browsing_service() override;
++#endif
+   subresource_filter::RulesetService* subresource_filter_ruleset_service()
+       override;
+   BrowserProcessPlatformPart* platform_part() override;
+@@ -203,7 +205,7 @@
+   void set_usb_system_tray_icon_for_test(
+       std::unique_ptr<UsbSystemTrayIcon> icon) override;
+   speech::SpeechRecognitionSmallExpertModelInstaller*
+-  speech_recognition_small_expert_model_installer() override;
++  speech_recognition_small_expert_model_installer();
+ #endif
+   os_crypt_async::OSCryptAsync* os_crypt_async() override;
+   void set_additional_os_crypt_async_provider_for_test(
+@@ -218,7 +220,9 @@
+ 
+   void SetMetricsService(metrics::MetricsService* metrics_service);
+   void SetProfileManager(std::unique_ptr<ProfileManager> profile_manager);
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   void SetSafeBrowsingService(safe_browsing::SafeBrowsingService* sb_service);
++#endif
+   void SetVariationsService(variations::VariationsService* variations_service);
+   void SetWebRtcLogUploader(std::unique_ptr<WebRtcLogUploader> uploader);
+   void SetRulesetService(
+@@ -336,7 +340,9 @@
+       device_parental_controls_;
+ #endif
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   scoped_refptr<safe_browsing::SafeBrowsingService> sb_service_;
++#endif
+   std::unique_ptr<subresource_filter::RulesetService>
+       subresource_filter_ruleset_service_;
+   std::unique_ptr<WebRtcLogUploader> webrtc_log_uploader_;
+--- a/chrome/test/base/testing_browser_process.cc
++++ b/chrome/test/base/testing_browser_process.cc
+@@ -30,7 +30,9 @@
+ #include "chrome/browser/printing/print_job_manager.h"
+ #include "chrome/browser/profiles/profile_manager.h"
+ #include "chrome/browser/resource_coordinator/resource_coordinator_parts.h"
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ #include "chrome/browser/safe_browsing/safe_browsing_service.h"
++#endif
+ #include "chrome/browser/serial/serial_policy_allowed_ports.h"
+ #include "chrome/browser/status_icons/status_tray.h"
+ #include "chrome/common/chrome_paths.h"
+@@ -476,10 +478,12 @@
+   return status_tray_.get();
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ safe_browsing::SafeBrowsingService*
+ TestingBrowserProcess::safe_browsing_service() {
+   return sb_service_.get();
+ }
++#endif
+ 
+ WebRtcLogUploader* TestingBrowserProcess::webrtc_log_uploader() {
+   return webrtc_log_uploader_.get();
+@@ -792,10 +796,12 @@
+   return platform_part_.get();
+ }
+ 
++#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+ void TestingBrowserProcess::SetSafeBrowsingService(
+     safe_browsing::SafeBrowsingService* sb_service) {
+   sb_service_ = sb_service;
+ }
++#endif
+ 
+ void TestingBrowserProcess::SetWebRtcLogUploader(
+     std::unique_ptr<WebRtcLogUploader> uploader) {
+--- a/ui/compositor/test/in_process_context_factory.cc
++++ b/ui/compositor/test/in_process_context_factory.cc
+@@ -140,6 +140,7 @@
+     vsync_interval_ = interval;
+   }
+   void SetOutputIsSecure(bool secure) override {}
++  void SetVideoSuperResolutionAllowed(bool allowed) override {}
+ #if BUILDFLAG(IS_MAC)
+   void SetVSyncDisplayID(int64_t display_id) override {}
+ #endif

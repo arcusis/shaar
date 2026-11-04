@@ -181,7 +181,7 @@ TEST_F(ShaarBookmarksLoadedTest,
   EXPECT_TRUE(first.FindString("t")->empty());
   ASSERT_NE(first.FindString("k"), nullptr);
   EXPECT_EQ(*first.FindString("k"), "f");
-  EXPECT_EQ(first.FindInt("a"), 123);
+  EXPECT_EQ(first.FindDouble("a"), 123.0);
   const base::ListValue *folder_children = first.FindList("c");
   ASSERT_NE(folder_children, nullptr);
   ASSERT_EQ(folder_children->size(), 1u);
@@ -222,7 +222,7 @@ TEST_F(ShaarBookmarksLoadedTest,
       R"({"op":"add","id":"20000000-0000-4000-8000-000000000002","parent":"bar","t":"folder","k":"f"},)"
       R"({"op":"move","id":"20000000-0000-4000-8000-000000000001","parent":"20000000-0000-4000-8000-000000000002","index":-1},)"
       R"({"op":"move","id":"20000000-0000-4000-8000-000000000002","parent":"20000000-0000-4000-8000-000000000002","index":0},)"
-      R"({"op":"remove","id":"bar"})]} )";
+      R"({"op":"remove","id":"bar"}]})";
   ReplyState partial = Submit(SHAAR_OP_BOOKMARK_APPLY, ops);
   ASSERT_TRUE(partial.called);
   ASSERT_EQ(partial.code, SHAAR_OK);

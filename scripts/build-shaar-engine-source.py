@@ -761,16 +761,19 @@ def run_layer_tests(repo: Path, config: dict, runner=subprocess.run) -> dict:
 
     chromium = output / "chromium_git/chromium/src"
     build_dir = chromium / "out" / config["build"]["configuration"]
-    autoninja = output / "depot_tools/autoninja"
+    gn = output / "depot_tools/gn"
+    siso = output / "depot_tools/siso"
+    args_file = build_dir / "args.gn"
     executable = build_dir / config["build"].get("layerTestBinary", "shaar_layer_unittests")
-    for path in (chromium, build_dir, autoninja):
+    for path in (chromium, build_dir, gn, siso, args_file):
         reject_symlink_components(output, path)
-    if not chromium.is_dir() or not build_dir.is_dir() or not autoninja.is_file():
+    if (not chromium.is_dir() or not build_dir.is_dir() or not gn.is_file() or
+            not siso.is_file() or not args_file.is_file()):
         raise BuildError("existing Shaar Chromium output is incomplete")
 
     target = config["build"].get("layerTestLabel", "//chrome:shaar_layer_unittests")
-    build_command = [str(autoninja), "-C", str(build_dir), "-j",
-                     str(config["build"]["buildJobs"]), target]
+    build_command = [str(siso), "ninja", "--offline", "-C", str(build_dir),
+                     "-local_jobs", str(config["build"]["buildJobs"]), target]
     stage = {
         "status": "running",
         "startedAt": datetime.now(timezone.utc).isoformat(),
@@ -780,6 +783,18 @@ def run_layer_tests(repo: Path, config: dict, runner=subprocess.run) -> dict:
     record.setdefault("stages", {})["layer-tests"] = stage
     save_receipt(receipt, record)
     try:
+        args_text = args_file.read_text()
+        if "shaar_layer_tests = true" not in args_text.splitlines():
+            args_text = "\n".join(line for line in args_text.splitlines()
+                                  if not line.strip().startswith("shaar_layer_tests ="))
+            args_file.write_text(args_text.rstrip() + "\nshaar_layer_tests = true\n")
+            gn_result = runner(
+                [str(gn), "gen", str(build_dir)], cwd=chromium, check=False,
+                capture_output=True, text=True,
+                timeout=config["build"]["timeoutsSeconds"]["gn"])
+            stage["gnExitCode"] = gn_result.returncode
+            if gn_result.returncode != 0:
+                raise BuildError(f"layer test GN generation failed with {gn_result.returncode}")
         build_result = runner(
             build_command, cwd=chromium, check=False, capture_output=True, text=True,
             timeout=config["build"]["timeoutsSeconds"]["build"])
@@ -791,7 +806,8 @@ def run_layer_tests(repo: Path, config: dict, runner=subprocess.run) -> dict:
 
         with tempfile.TemporaryDirectory(prefix="shaar-layer-tests-", dir=output) as temp_dir:
             result_path = Path(temp_dir) / "gtest-results.json"
-            test_command = [str(executable), f"--gtest_output=json:{result_path}"]
+            test_command = [str(executable), "--headless",
+                            f"--gtest_output=json:{result_path}"]
             stage["testCommand"] = test_command
             result = runner(
                 test_command, cwd=build_dir, check=False, capture_output=True, text=True,

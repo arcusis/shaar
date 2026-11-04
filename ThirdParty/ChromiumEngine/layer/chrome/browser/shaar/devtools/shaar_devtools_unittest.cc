@@ -7,10 +7,15 @@
 #include <string>
 
 #include "base/containers/span.h"
+#include "base/functional/bind.h"
+#include "base/json/json_reader.h"
+#include "base/memory/ref_counted.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/test/task_environment.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/devtools_agent_host_client.h"
-#include "content/public/test/test_renderer_host.h"
+#include "content/public/test/mock_devtools_agent_host.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace shaar::devtools {
@@ -58,20 +63,37 @@ void CaptureEvent(void* opaque, const shaar_event* event) {
   captured->payload.assign(event->payload_json.data, event->payload_json.size);
 }
 
-class RecordingProtocolClient final
-    : public content::DevToolsAgentHostClient {
+class ReplyingAgentHost final : public content::MockDevToolsAgentHost {
  public:
-  void DispatchProtocolMessage(content::DevToolsAgentHost*,
+  void DispatchProtocolMessage(content::DevToolsAgentHostClient* client,
                                base::span<const uint8_t> message) override {
-    last_message.assign(reinterpret_cast<const char*>(message.data()),
-                        message.size());
+    request.assign(reinterpret_cast<const char*>(message.data()), message.size());
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&ReplyingAgentHost::SendReply,
+                                  base::WrapRefCounted(this), client));
   }
-  void AgentHostClosed(content::DevToolsAgentHost*) override {
-    host_closed = true;
+  std::string request;
+
+ private:
+  ~ReplyingAgentHost() override = default;
+  void SendReply(content::DevToolsAgentHostClient* client) {
+    constexpr std::string_view response = R"({"id":44,"result":{"value":7}})";
+    client->DispatchProtocolMessage(this, base::as_byte_span(response));
   }
-  std::string last_message;
-  bool host_closed = false;
 };
+
+struct CapturedReply {
+  shaar_request_id request_id = 0;
+  shaar_error_code code = SHAAR_CHROMIUM_ERROR;
+  std::string payload;
+};
+
+void CaptureReply(void* opaque, const shaar_result* result) {
+  auto* captured = static_cast<CapturedReply*>(opaque);
+  captured->request_id = result->request_id;
+  captured->code = result->error.code;
+  captured->payload.assign(result->payload_json.data, result->payload_json.size);
+}
 
 TEST(ShaarDevToolsTest, CommandMapIsCapabilityScopedAndNeverExposesCookies) {
   EXPECT_STREQ("DOM.getDocument",
@@ -214,17 +236,25 @@ TEST(ShaarDevToolsTest, FrontendStateEventCarriesOnlyExactScopeAndState) {
   EXPECT_EQ(1u, captured.event.sequence);
 }
 
-class ShaarDevToolsAgentHostTest : public content::RenderViewHostTestHarness {};
-
-TEST_F(ShaarDevToolsAgentHostTest, AttachesAndDetachesFromTheExactTabTarget) {
-  auto host = content::DevToolsAgentHost::GetOrCreateForTab(web_contents());
-  ASSERT_TRUE(host);
-  EXPECT_EQ(web_contents(), host->GetWebContents());
-  RecordingProtocolClient client;
-  ASSERT_TRUE(host->AttachClient(&client));
+TEST(ShaarDevToolsTest, ProtocolClientAttachesRepliesAndDetaches) {
+  base::test::TaskEnvironment tasks;
+  auto host = base::MakeRefCounted<ReplyingAgentHost>();
+  CapturedReply captured;
+  ASSERT_TRUE(StartProtocolRequest(host, 44, &CaptureReply, &captured,
+                                   R"({"id":44,"method":"DOM.getDocument"})"));
   EXPECT_TRUE(host->IsAttached());
-  EXPECT_TRUE(host->DetachClient(&client));
+  EXPECT_NE(std::string::npos, host->request.find("DOM.getDocument"));
+  tasks.RunUntilIdle();
   EXPECT_FALSE(host->IsAttached());
+  EXPECT_EQ(44u, captured.request_id);
+  EXPECT_EQ(SHAAR_OK, captured.code);
+  auto payload = base::JSONReader::Read(captured.payload, base::JSON_PARSE_RFC);
+  ASSERT_TRUE(payload);
+  ASSERT_TRUE(payload->is_dict());
+  EXPECT_EQ(1, payload->GetDict().FindInt("schemaVersion"));
+  const auto* result = payload->GetDict().FindDict("result");
+  ASSERT_NE(nullptr, result);
+  EXPECT_EQ(7, result->FindInt("value"));
 }
 
 TEST(ShaarDevToolsTest, LifecycleEntryRegistersOnlyItsOperationRange) {

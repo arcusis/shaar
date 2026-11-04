@@ -113,7 +113,9 @@ class ShaarSourceBuildTests(unittest.TestCase):
             build_dir = chromium / "out" / config["build"]["configuration"]
             build_dir.mkdir(parents=True)
             (output / "depot_tools").mkdir()
-            (output / "depot_tools/autoninja").write_text("fake autoninja\n")
+            (output / "depot_tools/gn").write_text("fake gn\n")
+            (output / "depot_tools/siso").write_text("fake siso\n")
+            (build_dir / "args.gn").write_text("is_debug = false\n")
             receipt = {
                 "schemaVersion": 1,
                 "sourceKind": "shaar",
@@ -129,10 +131,12 @@ class ShaarSourceBuildTests(unittest.TestCase):
 
                 def __call__(self, args, **kwargs):
                     self.calls.append((list(args), kwargs))
-                    if args[0].endswith("autoninja"):
+                    if args[0].endswith("gn"):
+                        return subprocess.CompletedProcess(args, 0, "generated", "")
+                    if args[0].endswith("siso"):
                         (build_dir / "shaar_layer_unittests").write_text("fake test binary")
                         return subprocess.CompletedProcess(args, 0, "built", "")
-                    report = Path(args[1].split("json:", 1)[1])
+                    report = Path(args[2].split("json:", 1)[1])
                     report.write_text(json.dumps({
                         "tests": [{"name": "ShaarLayerTest.Passes", "result": "COMPLETED"}],
                         "failures": [],
@@ -142,9 +146,13 @@ class ShaarSourceBuildTests(unittest.TestCase):
             fake_runner = FakeRunner()
             stage = BUILD.run_layer_tests(repo, config, runner=fake_runner)
             self.assertEqual(stage["status"], "succeeded")
-            self.assertEqual(len(fake_runner.calls), 2)
-            self.assertEqual(fake_runner.calls[0][0][-1], "//chrome:shaar_layer_unittests")
-            self.assertTrue(fake_runner.calls[1][0][1].startswith("--gtest_output=json:"))
+            self.assertEqual(len(fake_runner.calls), 3)
+            self.assertEqual(fake_runner.calls[0][0][1], "gen")
+            self.assertEqual(fake_runner.calls[1][0][-1], "//chrome:shaar_layer_unittests")
+            self.assertEqual(fake_runner.calls[1][0][5:7], ["-local_jobs", "6"])
+            self.assertEqual(fake_runner.calls[2][0][1], "--headless")
+            self.assertTrue(fake_runner.calls[2][0][2].startswith("--gtest_output=json:"))
+            self.assertIn("shaar_layer_tests = true", (build_dir / "args.gn").read_text())
             saved = json.loads((output / BUILD.RECEIPT_FILE).read_text())
             self.assertEqual(saved["stages"]["layer-tests"]["result"]["failures"], [])
 

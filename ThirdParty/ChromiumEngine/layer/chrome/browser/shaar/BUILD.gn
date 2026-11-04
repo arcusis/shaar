@@ -233,6 +233,7 @@ test("shaar_media_unittests") {
 # END media
 
 test("shaar_layer_unittests") {
+  data_deps = [ "//chrome:packed_resources" ]
   sources = [
     "bookmarks/shaar_bookmarks_unittest.cc",
     "devtools/shaar_devtools_unittest.cc",
@@ -247,23 +248,27 @@ test("shaar_layer_unittests") {
     "profiles/shaar_profiles_unittest.cc",
     "site_data/shaar_site_data_unittest.cc",
     "storage_keychain/shaar_storage_keychain_unittest.cc",
+    "testing/shaar_test_link_stubs.cc",
+    "testing/shaar_test_main.cc",
     "windows_tabs/shaar_windows_tabs_handlers_unittest.cc",
   ]
   deps = [
     ":engine",
     "//base",
     "//base/test:test_support",
-    "//chrome/test:test_support",
+    "//chrome/test/base:testing_browser_process_impl",
+    "//chrome/test/base:testing_profile_impl",
     "//components/bookmarks/test",
     "//components/download/public/common:test_support",
     "//components/history/core/browser",
     "//components/os_crypt/common:keychain_password_mac",
     "//content/test:test_support",
     "//crypto",
+    "//mojo/core/embedder",
     "//testing/gmock",
     "//testing/gtest",
-    "//testing/gtest:gtest_main",
   ]
+  ldflags = [ "-Wl,--threads=4", "-Wl,--read-workers=4" ]
 }
 
 config("exports") {

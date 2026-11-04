@@ -470,6 +470,21 @@ shaar_error_code DecodeOperation(shaar_operation operation,
 
 }  // namespace
 
+bool StartProtocolRequest(scoped_refptr<content::DevToolsAgentHost> host,
+                          shaar_request_id request_id,
+                          shaar_reply_fn reply,
+                          void* reply_context,
+                          const std::string& request_json) {
+  if (!host)
+    return false;
+  auto* client = new ProtocolClient(
+      std::move(host), ReplyContext{request_id, reply, reply_context});
+  if (client->Start(request_json))
+    return true;
+  delete client;
+  return false;
+}
+
 const char* ProtocolMethod(shaar_devtools_capability capability,
                            shaar_devtools_command command) {
   for (const auto& entry : kCommands) {
@@ -666,9 +681,8 @@ shaar_error_code HandleDevToolsOperation(
     auto host = content::DevToolsAgentHost::GetOrCreateForTab(contents);
     if (!host || host->GetWebContents() != contents)
       return Fail(error, SHAAR_NOT_READY, "DevTools protocol target is unavailable");
-    auto* client = new ProtocolClient(std::move(host), request);
-    if (!client->Start(protocol_request)) {
-      delete client;
+    if (!StartProtocolRequest(std::move(host), request_id, reply,
+                              reply_context, protocol_request)) {
       return Fail(error, SHAAR_NOT_READY, "DevTools protocol attach was denied");
     }
     return SHAAR_OK;

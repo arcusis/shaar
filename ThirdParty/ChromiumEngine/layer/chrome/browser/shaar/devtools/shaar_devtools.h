@@ -8,11 +8,16 @@
 #include <string>
 #include <string_view>
 
+#include "base/memory/scoped_refptr.h"
+
 #include "chrome/browser/shaar/engine/shaar_module_registry.h"
 #include "chrome/browser/shaar/public/shaar_engine.h"
 
 namespace base {
 class Value;
+}
+namespace content {
+class DevToolsAgentHost;
 }
 
 namespace shaar::devtools {
@@ -44,6 +49,15 @@ shaar_error_code EncodeProtocolRequest(shaar_bytes args_json,
                                        shaar_request_id request_id,
                                        std::string* request_json,
                                        std::string* reason);
+
+// Starts the same protocol client used by the operation handler. The host is
+// supplied by the caller so its attachment and reply path can be tested
+// without constructing a browser window.
+bool StartProtocolRequest(scoped_refptr<content::DevToolsAgentHost> host,
+                          shaar_request_id request_id,
+                          shaar_reply_fn reply,
+                          void* reply_context,
+                          const std::string& request_json);
 
 shaar_error_code HandleDevToolsOperation(
     shaar::ShaarEngineContext* context,

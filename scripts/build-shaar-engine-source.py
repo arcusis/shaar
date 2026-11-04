@@ -50,6 +50,9 @@ REQUIRED_EXPORTS = (
     "_shaar_private_session_open",
     "_shaar_private_session_close",
     "_shaar_private_session_cookie_setting",
+    "_shaar_private_session_tracker_rules",
+    "_shaar_private_session_tracker_status",
+    "_shaar_private_session_tracker_allowance",
     "_shaar_window_open",
     "_shaar_window_close",
     "_shaar_tab_open",
@@ -62,6 +65,8 @@ REQUIRED_EXPORTS = (
     "_shaar_tab_view_focus",
     "_shaar_window_host_resize",
     "_shaar_site_security_info",
+    "_shaar_devtools_frontend_view",
+    "_shaar_extension_popup_view",
 )
 PROFILE_MODULE_EXPORTS = (
     "_shaar_profile_open",
@@ -84,12 +89,14 @@ PROFILE_MODULE_LAYER_FILES = (
 )
 EXTENSIONS_MODULE_LAYER_FILES = (
     "chrome/browser/shaar/BUILD.gn",
+    "chrome/browser/shaar/extensions/shaar_extension_views.mm",
     "chrome/browser/shaar/extensions/shaar_extensions.cc",
     "chrome/browser/shaar/extensions/shaar_extensions.h",
     "chrome/browser/shaar/extensions/shaar_extensions_lifecycle_adapter.cc",
     "chrome/browser/shaar/extensions/shaar_extensions_unittest.cc",
     "chrome/browser/shaar/lifecycle/shaar_module_registry.cc",
     "chrome/browser/shaar/public/shaar_engine.h",
+    "chrome/browser/shaar/windows_tabs/shaar_windows_tabs_lifecycle.cc",
 )
 COMMIT = re.compile(r"[0-9a-f]{40}\Z")
 DIGEST = re.compile(r"[0-9a-f]{64}\Z")
@@ -249,7 +256,7 @@ def load_config(repo: Path) -> dict:
         "operationRange": [800, 899],
         "moduleID": 1300,
         "layerFiles": list(EXTENSIONS_MODULE_LAYER_FILES),
-        "requiredExports": [],
+        "requiredExports": ["_shaar_extension_popup_view"],
     }:
         raise BuildError("extensions module block is missing or inconsistent")
 

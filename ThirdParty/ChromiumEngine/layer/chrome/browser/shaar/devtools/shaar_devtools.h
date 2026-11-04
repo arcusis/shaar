@@ -26,8 +26,10 @@ struct ModuleHandlers {
   ShaarModuleRegistry::Handler handle_operation;
 };
 
+void BindRuntimeServices();
+
 // Returns a fixed protocol method only when the command belongs to the
-// requested capability. Cookie commands are reserved for site-data.
+// requested capability. Cookie commands are restricted to Developer.
 const char* ProtocolMethod(shaar_devtools_capability capability,
                            shaar_devtools_command command);
 

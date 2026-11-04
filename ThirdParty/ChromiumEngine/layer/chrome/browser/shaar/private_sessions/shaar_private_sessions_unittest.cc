@@ -4,13 +4,14 @@
 
 #include "chrome/browser/shaar/private_sessions/shaar_private_sessions.h"
 #include "chrome/browser/shaar/private_sessions/shaar_private_sessions_module.h"
+#include "chrome/browser/shaar/private_sessions/shaar_private_trackers.h"
 
 #include <memory>
 #include <string>
 #include <vector>
 
-#include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
+#include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "chrome/test/base/testing_profile.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -103,23 +104,23 @@ TEST_F(PrivateSessionRegistryTest, DefersRetirementUntilChildrenClose) {
 TEST_F(PrivateSessionRegistryTest, ResolvesLiveSessionAndRetainsWindowLease) {
   TestingProfile profile;
   PrivateSessionRegistry registry;
-  PrivateSessionRegistry::Session* session = nullptr;
+  PrivateSessionRegistry::Session *session = nullptr;
   ASSERT_EQ(registry.Open(&profile, "profile-a", "session-a", &session),
             SHAAR_OK);
-  Profile* parent = nullptr;
-  Profile* otr = nullptr;
+  Profile *parent = nullptr;
+  Profile *otr = nullptr;
   std::string_view profile_id;
   std::string_view session_id;
-  ASSERT_TRUE(registry.Resolve(session, &parent, &otr, &profile_id,
-                               &session_id));
+  ASSERT_TRUE(
+      registry.Resolve(session, &parent, &otr, &profile_id, &session_id));
   EXPECT_EQ(parent, &profile);
   EXPECT_EQ(otr, profile.GetPrimaryOTRProfile(false));
   EXPECT_EQ(profile_id, "profile-a");
   EXPECT_EQ(session_id, "session-a");
   ASSERT_TRUE(registry.RetainChild(session));
   ASSERT_TRUE(registry.Close(session));
-  EXPECT_FALSE(registry.Resolve(session, &parent, &otr, &profile_id,
-                                &session_id));
+  EXPECT_FALSE(
+      registry.Resolve(session, &parent, &otr, &profile_id, &session_id));
   EXPECT_NE(profile.GetPrimaryOTRProfile(false), nullptr);
   ASSERT_TRUE(registry.ReleaseChild(session));
   EXPECT_EQ(profile.GetPrimaryOTRProfile(false), nullptr);
@@ -127,19 +128,72 @@ TEST_F(PrivateSessionRegistryTest, ResolvesLiveSessionAndRetainsWindowLease) {
 
 TEST_F(PrivateSessionRegistryTest, CookieSettingsStayOnPrivateProfile) {
   TestingProfile profile;
-  Profile* otr = profile.GetPrimaryOTRProfile(true);
+  Profile *otr = profile.GetPrimaryOTRProfile(true);
   ASSERT_NE(otr, nullptr);
   bool allowed = true;
-  EXPECT_EQ(PrivateCookieSetting(otr, "https://example.test", true, false,
-                                 &allowed), SHAAR_OK);
+  EXPECT_EQ(
+      PrivateCookieSetting(otr, "https://example.test", true, false, &allowed),
+      SHAAR_OK);
   EXPECT_FALSE(allowed);
-  EXPECT_EQ(PrivateCookieSetting(otr, "https://example.test", false, false,
-                                 &allowed), SHAAR_OK);
+  EXPECT_EQ(
+      PrivateCookieSetting(otr, "https://example.test", false, false, &allowed),
+      SHAAR_OK);
   EXPECT_FALSE(allowed);
-  EXPECT_EQ(PrivateCookieSetting(&profile, "https://example.test", false,
-                                 false, &allowed), SHAAR_WRONG_PROFILE);
+  EXPECT_EQ(PrivateCookieSetting(&profile, "https://example.test", false, false,
+                                 &allowed),
+            SHAAR_WRONG_PROFILE);
   EXPECT_EQ(PrivateCookieSetting(otr, "https://example.test/path", true, true,
-                                 &allowed), SHAAR_INVALID_ARGUMENT);
+                                 &allowed),
+            SHAAR_INVALID_ARGUMENT);
+  profile.DestroyOffTheRecordProfile(otr);
+}
+
+TEST_F(PrivateSessionRegistryTest,
+       TrackerRulesBlockThirdPartyRequestsAndRedirects) {
+  TestingProfile profile;
+  Profile *otr = profile.GetPrimaryOTRProfile(true);
+  ASSERT_NE(otr, nullptr);
+  PrivateTrackerProtection protection;
+  ASSERT_EQ(protection.SetRules(&profile, "revision-1",
+                                {"tracker.example", "metrics.example"}),
+            SHAAR_OK);
+  const url::Origin top = url::Origin::Create(GURL("https://site.example/"));
+  EXPECT_FALSE(protection.ShouldBlock(
+      &profile, GURL("https://tracker.example/pixel"), top));
+  EXPECT_TRUE(
+      protection.ShouldBlock(otr, GURL("https://tracker.example/pixel"), top));
+  EXPECT_TRUE(protection.ShouldBlock(
+      otr, GURL("https://a.tracker.example/redirect"), top));
+  EXPECT_FALSE(
+      protection.ShouldBlock(otr, GURL("https://site.example/resource"), top));
+  EXPECT_EQ(protection.Status(otr).blocked_requests, 2);
+  ASSERT_EQ(protection.SetAllowance(otr, "https://site.example", true),
+            SHAAR_OK);
+  EXPECT_FALSE(
+      protection.ShouldBlock(otr, GURL("https://tracker.example/pixel"), top));
+  EXPECT_FALSE(
+      protection.ShouldBlock(otr, GURL("https://metrics.example/pixel"), top));
+  EXPECT_EQ(protection.Status(otr).blocked_requests, 2);
+  profile.DestroyOffTheRecordProfile(otr);
+}
+
+TEST_F(PrivateSessionRegistryTest, TrackerRulesRejectMalformedAndFailClosed) {
+  TestingProfile profile;
+  Profile *otr = profile.GetPrimaryOTRProfile(true);
+  ASSERT_NE(otr, nullptr);
+  PrivateTrackerProtection protection;
+  const url::Origin top = url::Origin::Create(GURL("https://site.example/"));
+  EXPECT_TRUE(protection.ShouldBlock(otr, GURL("https://site.example/a"), top));
+  EXPECT_EQ(protection.SetRules(&profile, "revision-1", {"bad..domain"}),
+            SHAAR_INVALID_ARGUMENT);
+  EXPECT_EQ(protection.SetRules(&profile, "revision-1", {"tracker.example"}),
+            SHAAR_OK);
+  EXPECT_EQ(protection.SetRules(&profile, "revision-1", {"other.example"}),
+            SHAAR_CONFLICT);
+  EXPECT_EQ(protection.SetAllowance(&profile, "https://site.example", true),
+            SHAAR_WRONG_PROFILE);
+  EXPECT_EQ(protection.SetAllowance(otr, "https://site.example/path", true),
+            SHAAR_INVALID_ARGUMENT);
   profile.DestroyOffTheRecordProfile(otr);
 }
 

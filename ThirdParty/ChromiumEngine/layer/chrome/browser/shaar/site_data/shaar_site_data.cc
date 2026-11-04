@@ -4,14 +4,14 @@
 
 #include "chrome/browser/shaar/site_data/shaar_site_data.h"
 
-#include <stddef.h>
-#include <pthread.h>
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <limits>
 #include <memory>
 #include <optional>
+#include <pthread.h>
+#include <stddef.h>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -25,10 +25,10 @@
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "components/content_settings/core/browser/content_settings_registry.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -36,12 +36,13 @@
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/prefs/pref_service.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/browsing_data_filter_builder.h"
 #include "content/public/browser/browsing_data_remover.h"
-#include "content/public/browser/browser_context.h"
-#include "content/public/browser/web_contents.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/ssl_status.h"
+#include "content/public/browser/web_contents.h"
 #include "net/cert/cert_status_flags.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -576,42 +577,49 @@ bool IsValidSiteDataOriginForTesting(std::string_view value) {
   return ValidOrigin(value, &origin);
 }
 
-std::string SiteSecurityLevelForTesting(std::string_view raw_url, bool certificate_error) {
+std::string SiteSecurityLevelForTesting(std::string_view raw_url,
+                                        bool certificate_error) {
   GURL url{std::string(raw_url)};
-  if (!url.SchemeIsHTTPOrHTTPS()) return "unavailable";
-  if (certificate_error) return "certificateError";
+  if (!url.SchemeIsHTTPOrHTTPS())
+    return "unavailable";
+  if (certificate_error)
+    return "certificateError";
   return url.SchemeIs("https") ? "secure" : "insecure";
 }
 
 extern "C" SHAAR_EXPORT shaar_error_code shaar_site_security_info(
-    shaar_engine* engine, shaar_scope scope, shaar_window* window,
-    shaar_tab* tab, shaar_bytes* out_json, shaar_error* error) {
+    shaar_engine *engine, shaar_scope scope, shaar_window *window,
+    shaar_tab *tab, shaar_bytes *out_json, shaar_error *error) {
   if (!pthread_main_np() || !engine || !window || !tab || !out_json ||
-      scope.size < sizeof(shaar_scope) || !scope.profile || scope.private_session)
+      scope.size < sizeof(shaar_scope) || !scope.profile ||
+      scope.private_session)
     return Fail(error, SHAAR_INVALID_ARGUMENT, "selected regular tab required");
-  auto& context = shaar::EngineContext();
+  auto &context = shaar::EngineContext();
   if (!context.profile_services || !context.browser_tabs)
     return Fail(error, SHAAR_NOT_READY, "site security services unavailable");
-  Profile* profile = context.profile_services->ResolveProfile(engine, scope.profile);
-  Browser* browser = context.browser_tabs->FindBrowser(engine, window);
-  content::WebContents* contents =
+  Profile *profile =
+      context.profile_services->ResolveProfile(engine, scope.profile);
+  Browser *browser = context.browser_tabs->FindBrowser(engine, window);
+  content::WebContents *contents =
       context.browser_tabs->FindWebContents(engine, window, tab);
   if (!profile || !browser || !contents ||
       contents->GetBrowserContext() != profile || !browser->tab_strip_model())
-    return Fail(error, SHAAR_WRONG_PROFILE, "tab is outside the regular profile");
+    return Fail(error, SHAAR_WRONG_PROFILE,
+                "tab is outside the regular profile");
   if (browser->tab_strip_model()->GetActiveWebContents() != contents)
     return Fail(error, SHAAR_CONFLICT, "tab is no longer selected");
-  const GURL& url = contents->GetLastCommittedURL();
+  const GURL &url = contents->GetLastCommittedURL();
   if (!url.SchemeIsHTTPOrHTTPS())
     return Fail(error, SHAAR_INVALID_ARGUMENT, "tab has no web origin");
-  const content::NavigationEntry* entry =
+  content::NavigationEntry *entry =
       contents->GetController().GetLastCommittedEntry();
-  const bool certificate_error = entry &&
-      net::IsCertStatusError(entry->GetSSL().cert_status);
+  const bool certificate_error =
+      entry && net::IsCertStatusError(entry->GetSSL().cert_status);
   base::DictValue payload;
   payload.Set("schemaVersion", 1);
   payload.Set("origin", url::Origin::Create(url).Serialize());
-  payload.Set("level", SiteSecurityLevelForTesting(url.spec(), certificate_error));
+  payload.Set("level",
+              SiteSecurityLevelForTesting(url.spec(), certificate_error));
   static thread_local std::string response;
   base::JSONWriter::Write(base::Value(std::move(payload)), &response);
   *out_json = {response.data(), response.size()};

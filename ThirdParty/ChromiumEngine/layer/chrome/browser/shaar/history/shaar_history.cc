@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <functional>
@@ -646,13 +647,11 @@ struct WatchState;
 
 class HistoryObserver final : public history::HistoryServiceObserver {
 public:
-  HistoryObserver(
-      history::HistoryService *service, std::string profile_id,
-      HistoryContext::HistoryEvent sink,
-      base::OnceCallback<void(history::HistoryService *)> on_deleted)
-      : service_(service), service_key_(service),
-        profile_id_(std::move(profile_id)), sink_(std::move(sink)),
-        on_deleted_(std::move(on_deleted)) {
+  HistoryObserver(history::HistoryService *service, std::string profile_id,
+                  HistoryContext::HistoryEvent sink,
+                  base::OnceClosure on_deleted)
+      : service_(service), profile_id_(std::move(profile_id)),
+        sink_(std::move(sink)), on_deleted_(std::move(on_deleted)) {
     service_->AddObserver(this);
   }
   ~HistoryObserver() override {
@@ -672,11 +671,12 @@ public:
                           const history::DeletionInfo &) override {
     Changed();
   }
-  void HistoryServiceBeingDeleted(history::HistoryService *) override {
+  void HistoryServiceBeingDeleted(history::HistoryService *service) override {
     timer_.Stop();
+    service->RemoveObserver(this);
     service_ = nullptr;
     if (on_deleted_)
-      std::move(on_deleted_).Run(service_key_);
+      std::move(on_deleted_).Run();
   }
 
 private:
@@ -691,20 +691,43 @@ private:
       sink_(profile_id_, "{\"kind\":\"changed\",\"schemaVersion\":1}");
   }
   raw_ptr<history::HistoryService> service_;
-  history::HistoryService *service_key_;
   std::string profile_id_;
   HistoryContext::HistoryEvent sink_;
-  base::OnceCallback<void(history::HistoryService *)> on_deleted_;
+  base::OnceClosure on_deleted_;
   base::OneShotTimer timer_;
 };
 
 struct WatchState {
-  std::map<history::HistoryService *, std::unique_ptr<HistoryObserver>>
-      observers;
-  std::map<std::string, history::HistoryService *> subscriptions;
+  struct ObserverEntry {
+    uint64_t id;
+    std::unique_ptr<HistoryObserver> observer;
+  };
+  std::map<history::HistoryService *, ObserverEntry> observers;
+  std::map<std::string, uint64_t> subscriptions;
+  uint64_t next_observer_id = 1;
 };
 
 std::map<shaar_engine*, std::shared_ptr<WatchState>> g_watch_states;
+
+void RemoveDeletedObserver(std::weak_ptr<WatchState> weak_state,
+                           uint64_t observer_id) {
+  auto state = weak_state.lock();
+  if (!state)
+    return;
+  auto observer = std::find_if(state->observers.begin(), state->observers.end(),
+                               [observer_id](const auto &item) {
+                                 return item.second.id == observer_id;
+                               });
+  if (observer != state->observers.end())
+    state->observers.erase(observer);
+  for (auto subscription = state->subscriptions.begin();
+       subscription != state->subscriptions.end();) {
+    if (subscription->second == observer_id)
+      subscription = state->subscriptions.erase(subscription);
+    else
+      ++subscription;
+  }
+}
 
 shaar_error_code Watch(HistoryContext *registry,
                        const std::shared_ptr<WatchState> &state,
@@ -730,37 +753,25 @@ shaar_error_code Watch(HistoryContext *registry,
     return ErrorCodeOr(immediate_error, SHAAR_NOT_READY);
   if (!state->observers.contains(service)) {
     std::weak_ptr<WatchState> weak_state = state;
+    const uint64_t observer_id = state->next_observer_id++;
     state->observers.emplace(
         service,
-        std::make_unique<HistoryObserver>(
-            service, registry->ProfileID(scope.profile),
-            registry->HistoryEventSink(),
-            base::BindOnce(
-                [](std::weak_ptr<WatchState> weak,
-                   history::HistoryService *key) {
-                  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-                      FROM_HERE,
-                      base::BindOnce(
-                          [](std::weak_ptr<WatchState> posted,
-                             history::HistoryService *deleted) {
-                            if (auto live = posted.lock()) {
-                              live->observers.erase(deleted);
-                              for (auto it = live->subscriptions.begin();
-                                   it != live->subscriptions.end();) {
-                                if (it->second == deleted)
-                                  it = live->subscriptions.erase(it);
-                                else
-                                  ++it;
-                              }
-                            }
-                          },
-                          weak, key));
-                },
-                weak_state)));
+        WatchState::ObserverEntry{
+            observer_id,
+            std::make_unique<HistoryObserver>(
+                service, registry->ProfileID(scope.profile),
+                registry->HistoryEventSink(),
+                base::BindOnce(
+                    [](std::weak_ptr<WatchState> weak, uint64_t id) {
+                      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+                          FROM_HERE,
+                          base::BindOnce(&RemoveDeletedObserver, weak, id));
+                    },
+                    weak_state, observer_id))});
   }
   const std::string token =
       "history-" + base::Uuid::GenerateRandomV4().AsLowercaseString();
-  state->subscriptions.emplace(token, service);
+  state->subscriptions.emplace(token, state->observers.at(service).id);
   Reply(
       request, SHAAR_OK,
       base::DictValue().Set("schemaVersion", 1).Set("subscriptionId", token));
@@ -799,21 +810,37 @@ shaar_error_code Unwatch(HistoryContext *registry,
   if (!service)
     return Fail(immediate_error, SHAAR_NOT_READY,
                 "history service is not ready");
-  if (subscription->second != service) {
+  auto observer = state->observers.find(service);
+  if (observer == state->observers.end() ||
+      subscription->second != observer->second.id) {
     return Fail(immediate_error, SHAAR_WRONG_PROFILE,
                 "history subscription belongs to another profile");
   }
   state->subscriptions.erase(subscription);
-  const bool still_used = std::any_of(
-      state->subscriptions.begin(), state->subscriptions.end(),
-      [service](const auto &item) { return item.second == service; });
+  const bool still_used =
+      std::any_of(state->subscriptions.begin(), state->subscriptions.end(),
+                  [id = observer->second.id](const auto &item) {
+                    return item.second == id;
+                  });
   if (!still_used)
-    state->observers.erase(service);
+    state->observers.erase(observer);
   Reply(request, SHAAR_OK, base::DictValue().Set("schemaVersion", 1));
   return SHAAR_OK;
 }
 
 } // namespace
+
+namespace shaar_history {
+
+void StopObservingLifecycle(shaar_engine *engine) {
+  g_watch_states.erase(engine);
+}
+
+bool HasWatchStateForTesting(shaar_engine *engine) {
+  return g_watch_states.contains(engine);
+}
+
+} // namespace shaar_history
 
 shaar_error_code HandleHistoryOperation(
     shaar::ShaarEngineContext* engine_context,

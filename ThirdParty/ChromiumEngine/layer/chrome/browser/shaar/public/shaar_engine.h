@@ -13,7 +13,7 @@ extern "C" {
 #endif
 
 #define SHAAR_ENGINE_ABI_MAJOR 1u
-#define SHAAR_ENGINE_ABI_MINOR 1u
+#define SHAAR_ENGINE_ABI_MINOR 3u
 #define SHAAR_EXPORT __attribute__((visibility("default")))
 
 typedef struct shaar_engine shaar_engine;
@@ -172,6 +172,7 @@ typedef enum {
   SHAAR_OP_EXTENSION_POPUP_CLOSE = 804,
   SHAAR_OP_EXTENSION_WEB_STORE_ZOOM = 805,
   SHAAR_OP_EXTENSION_ACTION_STATE = 806,
+  SHAAR_OP_EXTENSION_MANAGER_OPEN = 807,
 
   // BEGIN find
   SHAAR_OP_TAB_FIND = 900,
@@ -334,6 +335,19 @@ SHAAR_EXPORT shaar_error_code shaar_private_session_close(
 SHAAR_EXPORT shaar_error_code shaar_private_session_cookie_setting(
     shaar_private_session *, shaar_bytes origin, int set, int allow,
     int *allowed, shaar_error *error);
+/* Rules are canonical DNS names in a JSON string array (max 4 MiB). Revision
+ * identifies exact content and cannot be reused with different rules. */
+SHAAR_EXPORT shaar_error_code shaar_private_session_tracker_rules(
+    shaar_private_session *, shaar_bytes revision, shaar_bytes domains_json,
+    shaar_error *error);
+/* Writes a NUL-terminated revision into caller storage (at least 201 bytes). */
+SHAAR_EXPORT shaar_error_code shaar_private_session_tracker_status(
+    shaar_private_session *, char *revision, size_t revision_capacity,
+    int *domain_count, int *blocked_requests, shaar_error *error);
+/* Exact HTTP(S) top-frame origin. set=0 reads, set=1 writes. */
+SHAAR_EXPORT shaar_error_code shaar_private_session_tracker_allowance(
+    shaar_private_session *, shaar_bytes origin, int set, int allow,
+    int *allowed, shaar_error *error);
 
 /* Regular host may bind multiple regular profiles; private host is fixed. */
 SHAAR_EXPORT shaar_error_code shaar_window_open(
@@ -349,6 +363,14 @@ SHAAR_EXPORT shaar_error_code shaar_tab_open(
 SHAAR_EXPORT shaar_error_code shaar_tab_close(
     shaar_tab *, shaar_error *error);
 SHAAR_EXPORT void *shaar_tab_host_view(shaar_tab *); /* borrowed NSView* */
+/* Borrowed until POPUP_CLOSE or its owning tab or window closes. */
+SHAAR_EXPORT void *shaar_extension_popup_view(
+    shaar_engine *, shaar_window *, shaar_bytes popup_id);
+/* Borrowed, fully initialized docked DevTools NSView*. Null while closed or
+ * undocked. Caller must retain no ownership and release it when the tab closes.
+ */
+SHAAR_EXPORT void *shaar_devtools_frontend_view(shaar_engine *, shaar_scope,
+                                                shaar_window *, shaar_tab *);
 /* UI-thread page hosting. Handles must be registered to the same engine/window.
  * Attach selects a tab; detach is idempotent for an unselected tab. */
 SHAAR_EXPORT shaar_error_code shaar_tab_view_attach(

@@ -21,6 +21,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
+#include "chrome/browser/shaar/extensions/shaar_extensions.h"
 #include "chrome/browser/shaar/navigation/shaar_navigation.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
 #include "chrome/browser/profiles/profile.h"
@@ -87,6 +88,8 @@ class LifecycleObserver final : public BrowserCollectionObserver {
   void OnBrowserClosed(BrowserWindowInterface* closed) override {
     auto* browser = static_cast<Browser*>(closed);
     auto& registry = shaar::windows_tabs::Registry();
+    for (const auto& [window, handle] : windows)
+      shaar::extensions_host::ClosePopupsForBrowser(handle->engine, browser);
     std::vector<shaar_window*> finished;
     for (const auto& [window, handle] : windows) {
       registry.UnbindBrowser(handle->engine, window, browser);
@@ -121,10 +124,11 @@ void FinalizeWindow(shaar_window* window) {
   if (found == windows.end())
     return;
   shaar_engine* engine = window->engine;
+  shaar::extensions_host::ClosePopupsForWindow(engine, window);
   const std::string window_id = window->id;
   const std::string profile_id = window->profile_id;
   const std::string session_id = window->session_id;
-  shaar_private_session* private_session = window->private_session;
+  shaar_private_session *private_session = window->private_session;
   struct ClosedTab {
     std::string profile_id;
     std::string session_id;
@@ -159,7 +163,8 @@ void FinalizeWindow(shaar_window* window) {
                      {kClosed, sizeof(kClosed) - 1});
   }
   if (private_session && shaar::EngineContext().private_sessions)
-    shaar::EngineContext().private_sessions->ReleaseChild(engine, private_session);
+    shaar::EngineContext().private_sessions->ReleaseChild(engine,
+                                                          private_session);
 }
 
 bool ValidID(shaar_bytes bytes) {
@@ -305,7 +310,7 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_window_open(
                               std::string(window_id.data, window_id.size)))
     return Result(SHAAR_CONFLICT, error);
   if (private_profile) {
-    auto* services = shaar::EngineContext().private_sessions;
+    auto *services = shaar::EngineContext().private_sessions;
     if (!services->RetainChild(engine, private_session)) {
       registry.UnbindWindow(engine, raw);
       return Result(SHAAR_NOT_FOUND, error);
@@ -337,6 +342,7 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_window_close(
     return Result(SHAAR_NOT_FOUND, error);
   if (!registry.BeginWindowClose(engine, window))
     return Result(SHAAR_CONFLICT, error);
+  shaar::extensions_host::ClosePopupsForWindow(engine, window);
   const std::vector<Browser*> pending(state->pending_closes.begin(),
                                       state->pending_closes.end());
   if (pending.empty()) {
@@ -462,6 +468,7 @@ void CleanupTab(uint64_t serial) {
   if (found == tab_handles.end())
     return;
   shaar_tab* tab = found->first;
+  shaar::extensions_host::ClosePopupsForTab(tab->engine, tab);
   const std::string profile_id = tab->profile_id;
   const std::string session_id = tab->session_id;
   const std::string window_id = tab->window_id;

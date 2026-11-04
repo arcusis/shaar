@@ -13,9 +13,12 @@ from pathlib import Path
 
 
 def documentation_only(paths: list[str]) -> bool:
-    root_documents = {"README.md", "CONTRIBUTING.md", "CREDITS.md", "SECURITY.md"}
     return bool(paths) and all(
-        path in root_documents or path.startswith("Notebook/") and path.endswith(".md")
+        path.startswith("Notebook/")
+        or "/" not in path and path.endswith(".md")
+        or len(path.split("/")) == 3
+        and path.startswith("ThirdParty/")
+        and path.endswith("/README.md")
         for path in paths
     )
 
@@ -34,7 +37,7 @@ def select_stages(paths: list[str] | None, event: str, draft: bool = False) -> t
         return False, website, True
     if not paths or event in {"push", "schedule", "workflow_dispatch"}:
         return True, True, True
-    native = not all(documentation_only([path]) or path.startswith("website/")
+    native = not all(documentation_only([path]) or path.startswith(("website/", ".github/assets/"))
                      or path.startswith(".github/workflows/website-") and path.endswith(".yml") for path in paths)
     website = any(website_path(path) or path.startswith(".github/workflows/") for path in paths)
     return native, website, True

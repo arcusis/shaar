@@ -12,8 +12,15 @@ BOOL ARCProbeRootIsOwned(NSURL *root) {
   if (!root.isFileURL) return NO;
   NSURL *canonical = root.URLByResolvingSymlinksInPath.URLByStandardizingPath;
   NSURL *temporary = [NSURL fileURLWithPath:NSTemporaryDirectory()].URLByResolvingSymlinksInPath.URLByStandardizingPath;
+  NSString *runnerTemporaryPath = NSProcessInfo.processInfo.environment[@"RUNNER_TEMP"];
+  NSURL *runnerTemporary = runnerTemporaryPath.length
+    ? [NSURL fileURLWithPath:runnerTemporaryPath].URLByResolvingSymlinksInPath.URLByStandardizingPath
+    : nil;
   struct stat info;
-  BOOL valid = [canonical.URLByDeletingLastPathComponent.path isEqualToString:temporary.path] &&
+  NSString *parentPath = canonical.URLByDeletingLastPathComponent.path;
+  BOOL validTemporaryParent = [parentPath isEqualToString:temporary.path] ||
+    (runnerTemporary && [parentPath isEqualToString:runnerTemporary.path]);
+  BOOL valid = validTemporaryParent &&
     [canonical.lastPathComponent hasPrefix:@"arcusis-engine-probe-"] &&
     [root.URLByResolvingSymlinksInPath.URLByStandardizingPath.path isEqualToString:canonical.path] &&
     lstat(root.path.stringByStandardizingPath.fileSystemRepresentation, &info) == 0 && S_ISDIR(info.st_mode) &&

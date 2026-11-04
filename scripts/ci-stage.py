@@ -16,7 +16,10 @@ import tarfile
 from pathlib import Path
 
 from ci_support import Commands, ROOT
-from ci_engine import BUNDLE_NAME, archive_bundle, engine_shards, restore_bundle, shard_modes, validate_bundle_archive
+from ci_engine import (
+    BUNDLE_NAME, archive_bundle, engine_shards, restore_bundle, shard_modes,
+    validate_bundle_archive,
+)
 from sidebar_dnd_fixture import registered_sidebar_type
 
 
@@ -102,9 +105,19 @@ def run_engine(checks: Commands, mode: str, iterations: int) -> None:
         run_probe_iterations(checks, selected, range(1, repetitions + 1))
 
 
+def restore_shared_verification_bundle() -> bool:
+    directory = ROOT / "build/ci/engine-build"
+    if not (directory / "bundle.json").is_file():
+        return False
+    restore_bundle(ROOT, directory)
+    return True
+
+
 def run_basic_browsing(checks: Commands) -> None:
     require_hosted_mac()
-    if checks.run("verification-build", ["bash", "scripts/bundle-app.sh", "--with-engine", "--verification"]):
+    if not restore_shared_verification_bundle() and checks.run(
+        "verification-build", ["bash", "scripts/bundle-app.sh", "--with-engine", "--verification"]
+    ):
         return
     checks.run("normal-window-browsing", [sys.executable, "scripts/engine_fixture.py", "--basic-browsing"])
 
@@ -125,19 +138,25 @@ def run_probe_iterations(checks: Commands, mode: str, iterations: range) -> None
 def build_engine_bundle(checks: Commands, iterations: int) -> None:
     require_hosted_mac()
     if (checks.directory / "bundle.json").is_file():
-        validate_bundle_archive(ROOT, checks.directory)
-        checks.results.append({
-            "name": "verification-bundle-cache-validation",
-            "command": ["validate cached source tree, build inputs and archive digest"],
-            "status": 0,
-            "seconds": 0.0,
-        })
-        with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
-            output.write(f"shards={json.dumps(engine_shards(iterations))}\n")
-        checks.results.append(dict(name="cached-verification-bundle", command=[],
-                                    status=0, seconds=0.0))
-        print("Reusing integrity-checked verification bundle for this exact source tree and build inputs")
-        return
+        try:
+            validate_bundle_archive(ROOT, checks.directory)
+        except (OSError, ValueError, tarfile.TarError) as error:
+            print(f"Discarding unusable verification bundle cache and rebuilding: {error}")
+            (checks.directory / "bundle.json").unlink(missing_ok=True)
+            (checks.directory / "verification.tar.gz").unlink(missing_ok=True)
+        else:
+            checks.results.append({
+                "name": "verification-bundle-cache-validation",
+                "command": ["validate cached source tree, build inputs and archive digest"],
+                "status": 0,
+                "seconds": 0.0,
+            })
+            with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
+                output.write(f"shards={json.dumps(engine_shards(iterations))}\n")
+            checks.results.append(dict(name="cached-verification-bundle", command=[],
+                                        status=0, seconds=0.0))
+            print("Reusing integrity-checked verification bundle for this exact source tree and build inputs")
+            return
     if checks.run("verification-build", ["bash", "scripts/bundle-app.sh", "--with-engine", "--verification"]):
         return
     archive_bundle(ROOT, checks.directory)
@@ -154,6 +173,8 @@ def run_engine_shard(checks: Commands, shard: str, iterations: int) -> None:
         return
     for mode, repetitions in modes:
         run_probe_iterations(checks, mode, repetitions)
+        if checks.results[-1]["status"]:
+            return
 
 
 def run_visuals(checks: Commands) -> None:
@@ -167,11 +188,15 @@ def run_visuals(checks: Commands) -> None:
 
 def run_localization(checks: Commands) -> None:
     require_hosted_mac()
+    has_shared_bundle = restore_shared_verification_bundle()
     if checks.run("localization-build", ["swift", "build", "--build-tests", "--jobs", "2", "--force-resolved-versions"]):
         return
     if checks.run("localization-captures", [sys.executable, "scripts/test-localization.py"]):
         return
-    checks.run("localization-engine", [sys.executable, "scripts/localization-fixture.py"])
+    localization_engine = [sys.executable, "scripts/localization-fixture.py"]
+    if has_shared_bundle:
+        localization_engine.append("--skip-build")
+    checks.run("localization-engine", localization_engine)
 
 
 def run_sanitizer(checks: Commands, sanitizer: str) -> None:
@@ -184,7 +209,7 @@ def run_sanitizer(checks: Commands, sanitizer: str) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("stage", choices=("unit", "coverage", "engine", "engine-build", "engine-shard", "basic-browsing", "visual", "localization", "shipping", "sanitize", "dead-code"))
-    parser.add_argument("--shard", choices=engine_shards(10), default="baseline-lifecycle")
+    parser.add_argument("--shard", choices=engine_shards(10), default="baseline-1")
     parser.add_argument("--mode", choices=("all", *ENGINE_MODES), default="all")
     parser.add_argument("--iterations", type=int, choices=range(1, 11), default=1)
     parser.add_argument("--sanitizer", choices=("address", "thread"), default="address")

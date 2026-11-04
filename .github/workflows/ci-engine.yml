@@ -6,59 +6,23 @@ on:
         description: Requested repetitions; private-window and Quit run at least three
         type: number
         default: 1
+      shards:
+        description: Shard list emitted by the shared verification bundle workflow
+        type: string
+        required: true
 permissions:
+  actions: read
   contents: read
 jobs:
-  prepare:
-    name: Build shared verification bundle
-    runs-on: macos-26
-    timeout-minutes: 30
-    outputs:
-      shards: ${{ steps.bundle.outputs.shards }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - name: Identify verification bundle build inputs
-        run: echo "CI_BUNDLE_INPUTS=${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**', 'Resources/**', 'Plugins/**', 'ThirdParty/ArdiaCore/**', 'scripts/bundle-app.sh', 'scripts/ci-stage.py', 'scripts/release-config.sh', 'scripts/engine-signing.sh', 'scripts/fetch-engine.sh', 'scripts/stage-browser-resources.py', 'scripts/release_feed.py') }}" >> "$GITHUB_ENV"
-      - uses: ./.github/actions/ci-setup
-        with:
-          mode: verification
-          products: build/swiftpm/verification
-      - name: Identify exact source tree for bundle reuse
-        id: source-tree
-        run: |
-          tree=$(git rev-parse 'HEAD^{tree}')
-          echo "tree=$tree" >> "$GITHUB_OUTPUT"
-          echo "CI_SOURCE_TREE=$tree" >> "$GITHUB_ENV"
-      - name: Restore verification bundle for identical source and build inputs
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: |
-            build/ci/engine-build/bundle.json
-            build/ci/engine-build/verification.tar.gz
-          key: engine-bundle-${{ runner.os }}-${{ runner.arch }}-${{ env.CI_TOOLCHAIN_ID }}-${{ steps.source-tree.outputs.tree }}-${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**', 'Resources/**', 'Plugins/**', 'ThirdParty/ArdiaCore/**', 'scripts/bundle-app.sh', 'scripts/ci-stage.py', 'scripts/release-config.sh', 'scripts/engine-signing.sh', 'scripts/fetch-engine.sh', 'scripts/stage-browser-resources.py', 'scripts/release_feed.py') }}-${{ hashFiles('ThirdParty/ArdiaCore/pin.json') }}
-      - name: Build or reuse bundle bound to source tree, build inputs, engine and toolchain
-        id: bundle
-        env:
-          CI_ITERATIONS: ${{ inputs.iterations }}
-        run: .venv/bin/python scripts/ci-stage.py engine-build --iterations "$CI_ITERATIONS"
-      - uses: ./.github/actions/ci-evidence
-        if: always()
-        with:
-          stage: engine-build
-          compression-level: '0'
-          artifact-name: ci-engine-build-${{ github.run_id }}
-          overwrite: 'true'
-  probes:
-    name: Engine ${{ matrix.shard }}
-    needs: prepare
+  probes-initial:
+    name: Engine shard ${{ matrix.shard }}
     runs-on: macos-26
     timeout-minutes: 90
     strategy:
       fail-fast: false
+      max-parallel: 4
       matrix:
-        shard: ${{ fromJSON(needs.prepare.outputs.shards) }}
+        shard: ${{ fromJSON(inputs.shards) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -74,7 +38,7 @@ jobs:
         with:
           name: ci-engine-build-${{ github.run_id }}
           path: build/ci/engine-build
-      - name: Verify shared bundle and run assigned iterations without retries
+      - name: Verify shared bundle and run initial phase without retries
         env:
           CI_ITERATIONS: ${{ inputs.iterations }}
           CI_SHARD: ${{ matrix.shard }}

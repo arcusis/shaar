@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict><key>Children</key><array><dict><key>Title</key><string>Reading</string><key>Children</key><array><dict><key>Title</key><string>Safari page</string><key>URLString</key><string>https://safari.example.test/</string></dict></array></dict></array></dict></plist>

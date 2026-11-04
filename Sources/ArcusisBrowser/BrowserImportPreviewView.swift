@@ -7,11 +7,26 @@ import SwiftUI
 
 struct BrowserImportPreviewView: View {
   let items: [BrowserImportItem]
+  let source: BrowserImportSource
   let profileName: String
   let error: String?
   let canImport: Bool
   let onCancel: () -> Void
   let onImport: () -> Void
+
+  init(
+    items: [BrowserImportItem], source: BrowserImportSource = .chrome, profileName: String,
+    error: String?, canImport: Bool, onCancel: @escaping () -> Void,
+    onImport: @escaping () -> Void
+  ) {
+    self.items = items
+    self.source = source
+    self.profileName = profileName
+    self.error = error
+    self.canImport = canImport
+    self.onCancel = onCancel
+    self.onImport = onImport
+  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 14) {
@@ -19,27 +34,29 @@ struct BrowserImportPreviewView: View {
       if let error {
         Text(error).foregroundStyle(.secondary)
       } else {
+        Text(verbatim: "From \(source.title)").font(.caption).foregroundStyle(.secondary)
         Text(
           PanelsL10n.format(
-            "%d bookmarks are ready to import into %@.", .integer(items.count),
-            .string(profileName)))
+            "%d bookmarks and %d history entries are ready to import into %@.",
+            .integer(items.filter { $0.kind == .bookmark }.count),
+            .integer(items.filter { $0.kind == .history }.count), .string(profileName)))
         List(items.prefix(40)) { item in
           VStack(alignment: .leading) {
-            Text(item.title).lineLimit(1)
+            HStack {
+              Text(item.title).lineLimit(1)
+              Spacer()
+              Text(verbatim: item.kind == .bookmark ? "Bookmark" : "History")
+                .font(.caption).foregroundStyle(.secondary)
+            }
             Text(item.address).font(.caption).foregroundStyle(.secondary).lineLimit(1)
           }
         }
-        Text(
-          PanelsL10n.string(
-            "History import requires an engine feature that is not available in this build.")
-        )
-        .font(.caption).foregroundStyle(.secondary)
       }
       HStack {
         Spacer()
         Button(PanelsL10n.string("Cancel"), action: onCancel)
         if error == nil {
-          Button(PanelsL10n.string("Import Bookmarks"), action: onImport)
+          Button(PanelsL10n.string("Import Data"), action: onImport)
             .keyboardShortcut(.defaultAction)
             .disabled(!canImport)
         }

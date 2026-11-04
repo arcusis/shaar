@@ -200,13 +200,16 @@ jobs:
 
   basic-browsing:
     name: Normal window browsing smoke
-    needs: plan
+    needs: [plan, engine-bundle]
     if: needs.plan.outputs.full == 'true' && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
     concurrency:
       group: source-checks-${{ github.event_name }}-${{ needs.plan.outputs.queue_pr || github.ref }}-basic-browsing
       cancel-in-progress: ${{ github.event_name == 'merge_group' }}
     runs-on: macos-26
     timeout-minutes: 35
+    permissions:
+      actions: read
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -215,7 +218,16 @@ jobs:
         with:
           mode: verification
           products: build/swiftpm/verification
-      - name: Build verification bundle and run normal browsing smoke
+      - name: Download shared exact-source verification bundle
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: ci-engine-build-${{ github.run_id }}
+          path: build/ci/engine-build
+      - name: Identify exact source tree for bundle validation
+        run: |
+          echo "CI_BUNDLE_INPUTS=${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**', 'Resources/**', 'Plugins/**', 'ThirdParty/ArdiaCore/**', 'scripts/bundle-app.sh', 'scripts/ci-stage.py', 'scripts/release-config.sh', 'scripts/engine-signing.sh', 'scripts/fetch-engine.sh', 'scripts/stage-browser-resources.py', 'scripts/release_feed.py') }}" >> "$GITHUB_ENV"
+          echo "CI_SOURCE_TREE=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_ENV"
+      - name: Restore verified bundle and run normal browsing smoke
         run: .venv/bin/python scripts/ci-stage.py basic-browsing
       - uses: ./.github/actions/ci-evidence
         if: always()
@@ -260,13 +272,16 @@ jobs:
 
   localization:
     name: Hebrew localization, offscreen visuals, and engine locale
-    needs: plan
+    needs: [plan, engine-bundle]
     concurrency:
       group: source-checks-${{ github.event_name }}-${{ needs.plan.outputs.queue_pr || github.ref }}-localization
       cancel-in-progress: ${{ github.event_name == 'merge_group' }}
     if: needs.plan.outputs.full == 'true'
     runs-on: macos-26
     timeout-minutes: 90
+    permissions:
+      actions: read
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -274,6 +289,15 @@ jobs:
       - uses: ./.github/actions/ci-setup
         with:
           mode: localization
+      - name: Download shared exact-source verification bundle
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: ci-engine-build-${{ github.run_id }}
+          path: build/ci/engine-build
+      - name: Identify exact source tree for bundle validation
+        run: |
+          echo "CI_BUNDLE_INPUTS=${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**', 'Resources/**', 'Plugins/**', 'ThirdParty/ArdiaCore/**', 'scripts/bundle-app.sh', 'scripts/ci-stage.py', 'scripts/release-config.sh', 'scripts/engine-signing.sh', 'scripts/fetch-engine.sh', 'scripts/stage-browser-resources.py', 'scripts/release_feed.py') }}" >> "$GITHUB_ENV"
+          echo "CI_SOURCE_TREE=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_ENV"
       - name: Capture English and Hebrew screens and verify native engine language
         run: .venv/bin/python scripts/ci-stage.py localization
       - uses: ./.github/actions/ci-evidence
@@ -284,16 +308,34 @@ jobs:
             build/Verification/localization-visuals
             build/Verification/localization-engine-evidence
 
+  engine-bundle:
+    name: Shared verification bundle
+    needs: plan
+    concurrency:
+      group: source-checks-${{ github.event_name }}-${{ needs.plan.outputs.queue_pr || github.ref }}-engine-bundle
+      cancel-in-progress: ${{ github.event_name == 'merge_group' }}
+    if: needs.plan.outputs.full == 'true'
+    permissions:
+      actions: read
+      contents: read
+    uses: ./.github/workflows/ci-engine-bundle.yml
+    with:
+      iterations: ${{ fromJSON(needs.plan.outputs.iterations || '1') }}
+
   engine:
     name: Engine simulations
-    needs: plan
+    needs: [plan, engine-bundle]
     concurrency:
       group: source-checks-${{ github.event_name }}-${{ needs.plan.outputs.queue_pr || github.ref }}-engine
       cancel-in-progress: ${{ github.event_name == 'merge_group' }}
     if: needs.plan.outputs.full == 'true'
+    permissions:
+      actions: read
+      contents: read
     uses: ./.github/workflows/ci-engine.yml
     with:
       iterations: ${{ fromJSON(needs.plan.outputs.iterations || '1') }}
+      shards: ${{ needs.engine-bundle.outputs.shards }}
 
   shipping:
     name: Shipping bundle

@@ -128,7 +128,11 @@ def record_bitwarden_summary(root, control_only):
 def require_marked_probe_root(root, purpose):
     """Return the canonical root only when this runner created and marked it."""
     canonical = root.resolve()
-    if (canonical.parent != Path(tempfile.gettempdir()).resolve()
+    allowed_parents = {Path(tempfile.gettempdir()).resolve(), Path("/tmp").resolve()}
+    runner_temp = os.environ.get("RUNNER_TEMP")
+    if runner_temp:
+        allowed_parents.add(Path(runner_temp).resolve())
+    if (canonical.parent not in allowed_parents
             or not canonical.name.startswith('arcusis-engine-probe-')
             or (canonical / '.arcusis-probe').read_text() != 'arcusis-engine-probe-v1\n'):
         raise RuntimeError(f'{purpose} requires a marked disposable probe root')
@@ -750,6 +754,9 @@ PRIVATE_WINDOW_CHECKS = (
     'lastCloseReopenClearsPrivateData', 'normalSelectionUnchanged', 'staleContextRejected',
     'closedWindowRejected', 'cleanupChildrenClosed', 'cleanupContextsRetired',
     'productHostOwnsPrivateNativeWindow', 'productCommandTUsesPrivateOpaqueSearch',
+    'productAlphabetSearchDoesNotOpenPicker', 'productFirstPrivateTabRenders',
+    'productSecondPrivateTabRenders', 'productThirdPrivateTabRenders',
+    'productPrivateWindowCloseLeavesNoData',
     'productCommandLTargetsCurrentPrivateTab',
     'productPrivateNavigationReloadBackForwardCallbacks',
     'productPrivateFocusUsesOwnedTab',
@@ -796,6 +803,9 @@ def argument_parser():
                       help="SIGKILL the exact probe PID while it saves a managed workspace, then verify the restored session")
     mode.add_argument("--basic-browsing", action="store_true",
                       help="Run the normal-window address/search/tab/close/reopen/quit smoke")
+    parser.add_argument("--probe-phase", choices=("initial", "restart"),
+                        help="Run one half of a baseline or private-window probe using a transferred profile")
+    parser.add_argument("--probe-root", help="Marked temporary root used by a split probe phase")
     return parser
 
 
@@ -846,6 +856,7 @@ def validate_private_window_report(root, phase, report, exit_code):
     if not isinstance(evidence, dict):
         raise RuntimeError(f'Private-window report must be a JSON object: {path.name}')
     checks = evidence.get('checks')
+    expected_failures = evidence.get('expectedFailures', {})
     cleanup = evidence.get('cleanup')
     run_id = evidence.get('runID')
     try:
@@ -890,7 +901,15 @@ def validate_private_window_report(root, phase, report, exit_code):
             or type(evidence.get('historyEntryCount')) is not int
             or evidence['historyEntryCount'] <= 0
             or evidence.get('historyQuerySucceeded') is not True
-            or any(type(checks.get(name)) is not bool or checks[name] is not True for name in PRIVATE_WINDOW_CHECKS)
+            or not isinstance(expected_failures, dict)
+            or set(expected_failures) not in (set(), {'productSecondPrivateTabRenders'})
+            or (expected_failures and expected_failures != {
+                'productSecondPrivateTabRenders':
+                    'Issue #417: second private tab may display a black page.'})
+            or any(type(checks.get(name)) is not bool for name in PRIVATE_WINDOW_CHECKS)
+            or any(checks[name] is not True for name in PRIVATE_WINDOW_CHECKS
+                   if name not in expected_failures)
+            or any(checks[name] is not False for name in expected_failures)
             or not isinstance(digest, str) or len(digest) != 64
             or any(character not in '0123456789abcdef' for character in digest)
             or not isinstance(workspace_digest, str) or len(workspace_digest) != 64
@@ -941,6 +960,7 @@ def record_private_window_summary(root, *, listener_closed, child_receipts, proo
             runID=evidence.get('runID'),
             checkCount=evidence.get('checkCount'),
             requiredCheckCount=evidence.get('requiredCheckCount'),
+            expectedFailures=evidence.get('expectedFailures', {}),
             workspaceSHA256=evidence.get('workspaceSHA256'),
             productScreenshotSHA256=evidence.get('productScreenshotSHA256'),
             validationError=validation_error,
@@ -1447,6 +1467,12 @@ def validate_private_multitab_report(root, phase, report, exit_code):
 
 def main(argv=None):
     options = argument_parser().parse_args(argv)
+    split_phase = options.probe_phase is not None
+    if split_phase and (options.bitwarden or options.bitwarden_onboarding_control or options.abrupt_restart
+                        or options.abrupt_control or options.saved_tab_capacity or options.external_app_consent
+                        or options.quit_exit or options.session_recovery or options.basic_browsing
+                        or not options.probe_root):
+        raise ValueError("Split probe phases require only the baseline or private-window mode and a probe root")
     include_bitwarden = options.bitwarden or options.bitwarden_onboarding_control
     if options.bitwarden_onboarding_control:
         print('CONTROL ONLY: two-second intro-screen age; clean first-click acceptance is not evaluated', flush=True)
@@ -1470,15 +1496,57 @@ def main(argv=None):
         print('BASIC BROWSING: hidden normal window, authored pages, real renderer captures, clean quit', flush=True)
     app = VERIFICATION_APP.resolve()
     require_verification_bundle_identity(app)
-    root = Path(tempfile.mkdtemp(prefix="arcusis-engine-probe-"))
-    (root / ".arcusis-probe").write_text("arcusis-engine-probe-v1\n")
-    (root / ".arcusis-probe").chmod(0o600)
-    private_window_run_id = str(uuid.uuid4()).upper() if options.private_window else None
-    shutil.copytree("Tests/Fixtures/ProfileExtension", root / "Extension")
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Fixture)
+    root = Path(options.probe_root) if split_phase else Path(tempfile.mkdtemp(prefix="arcusis-engine-probe-"))
+    phase_state_path = root / "engine-phase-state.json"
+    saved_phase_state = None
+    if split_phase and options.probe_phase == "restart":
+        require_marked_probe_root(root, "Transferred engine probe restart")
+        saved_phase_state = json.loads(phase_state_path.read_text())
+        expected_mode = "private-window" if options.private_window else "baseline"
+        if (saved_phase_state.get("schema") != 1 or saved_phase_state.get("phase") != "initial"
+                or saved_phase_state.get("mode") != expected_mode
+                or type(saved_phase_state.get("port")) is not int
+                or not 1 <= saved_phase_state["port"] <= 65535
+                or saved_phase_state.get("listenerClosed") is not True
+                or not isinstance(saved_phase_state.get("childProcesses", []), list)):
+            raise RuntimeError("Transferred engine probe state has the wrong source phase or mode")
+    else:
+        if split_phase:
+            allowed_parents = {Path("/tmp").resolve()}
+            runner_temp = os.environ.get("RUNNER_TEMP")
+            if runner_temp:
+                allowed_parents.add(Path(runner_temp).resolve())
+            if root.parent.resolve() not in allowed_parents:
+                raise RuntimeError("Split engine probe root is outside an approved temporary directory")
+            if root.exists():
+                raise RuntimeError(f"Split engine probe root already exists: {root}")
+            root.mkdir(mode=0o700, parents=True)
+        (root / ".arcusis-probe").write_text("arcusis-engine-probe-v1\n")
+        (root / ".arcusis-probe").chmod(0o600)
+        shutil.copytree("Tests/Fixtures/ProfileExtension", root / "Extension")
+    private_window_run_id = (
+        saved_phase_state.get("privateWindowRunID") if saved_phase_state else
+        str(uuid.uuid4()).upper() if options.private_window else None)
+    private_window_children = list(saved_phase_state.get("childProcesses", [])) if saved_phase_state else []
+    if split_phase and options.probe_phase == "restart" and options.private_window:
+        initial_proof = root / "engine-private-window-initial-evidence"
+        if not initial_proof.is_dir():
+            raise RuntimeError("Transferred private-window state is missing initial phase evidence")
+        shutil.copytree(initial_proof, Path("build/private-window-evidence") / private_window_run_id,
+                        dirs_exist_ok=True)
+    server = http.server.ThreadingHTTPServer(
+        ("127.0.0.1", saved_phase_state["port"] if saved_phase_state else 0), Fixture)
+    server_port = server.server_port
+    if split_phase and options.probe_phase == "initial":
+        (root / "engine-phase-state.json").write_text(json.dumps({
+            "schema": 1, "phase": "initial",
+            "mode": "private-window" if options.private_window else "baseline",
+            "port": server_port, "privateWindowRunID": private_window_run_id,
+            "childProcesses": [],
+        }, indent=2, sort_keys=True) + "\n")
     threading.Thread(target=server.serve_forever, daemon=True).start()
     executable = app / "Contents/MacOS/ShaarVerification"
-    (root / 'Downloads').mkdir(mode=0o700)
+    (root / 'Downloads').mkdir(mode=0o700, exist_ok=True)
     # Any ARDIA_BACKGROUND value keeps Chromium's picture-in-picture overlay transparent and
     # click-through, so the media probe opens no visible window. The engine's other
     # background test hooks require exactly '1' and stay off.
@@ -1486,9 +1554,9 @@ def main(argv=None):
                      ARDIA_BACKGROUND='picture-in-picture')
     print(f"Probe evidence: {root}", flush=True)
     failures = []
-    private_window_children = []
     try:
-        phases = ("initial",) if options.basic_browsing else ("initial", "restart")
+        phases = ((options.probe_phase,) if split_phase else
+                  ("initial",) if options.basic_browsing else ("initial", "restart"))
         for phase in phases:
             if options.private_window and phase == 'restart' and failures:
                 print('SKIPPED restart: initial fixture failed; no valid seeded restart baseline', flush=True)
@@ -1621,7 +1689,22 @@ def main(argv=None):
         STALL_RELEASE.set()
         server.shutdown()
         server.server_close()
-    if options.private_window:
+    if split_phase and options.probe_phase == "initial":
+        listener_closed = verify_fixture_listener_closed(server_port)
+        if not listener_closed:
+            raise RuntimeError("Initial phase left its local fixture listener open")
+        phase_state = json.loads(phase_state_path.read_text())
+        phase_state["childProcesses"] = private_window_children
+        phase_state["listenerClosed"] = listener_closed
+        phase_state_path.write_text(json.dumps(phase_state, indent=2, sort_keys=True) + "\n")
+        if failures:
+            raise RuntimeError("; ".join(failures))
+        if options.private_window:
+            proof_directory = Path("build/private-window-evidence") / private_window_run_id
+            if not proof_directory.is_dir():
+                raise RuntimeError("Initial private-window probe did not produce its proof directory")
+            shutil.copytree(proof_directory, root / "engine-private-window-initial-evidence")
+    if options.private_window and not (split_phase and options.probe_phase == "initial"):
         summary = record_private_window_summary(
             root, listener_closed=verify_fixture_listener_closed(server.server_port),
             child_receipts=private_window_children,

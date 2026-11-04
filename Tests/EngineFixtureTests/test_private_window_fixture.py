@@ -40,6 +40,7 @@ class PrivateWindowFixtureTests(unittest.TestCase):
                     checkCount=len(fixture.PRIVATE_WINDOW_CHECKS),
                     requiredCheckCount=len(fixture.PRIVATE_WINDOW_CHECKS),
                     checks={name: True for name in fixture.PRIVATE_WINDOW_CHECKS},
+                    expectedFailures={},
                     historyEntryCount=1,
                     historyQuerySucceeded=True,
                     historyPathDigest='a' * 64,
@@ -205,6 +206,34 @@ class PrivateWindowFixtureTests(unittest.TestCase):
         self.write_phase('initial')
         with self.assertRaises(RuntimeError):
             fixture.validate_private_window_report(self.root, 'initial', self.report('initial'), 1)
+
+    def test_second_private_tab_is_the_only_issue_417_expected_failure(self):
+        evidence = self.evidence('initial')
+        evidence['checks']['productSecondPrivateTabRenders'] = False
+        evidence['expectedFailures'] = {
+            'productSecondPrivateTabRenders':
+                'Issue #417: second private tab may display a black page.'}
+        self.write_phase('initial', evidence)
+        fixture.validate_private_window_report(self.root, 'initial', self.report('initial'), 0)
+
+        for name in ('productFirstPrivateTabRenders', 'productThirdPrivateTabRenders'):
+            evidence = self.evidence('initial')
+            evidence['checks'][name] = False
+            evidence['expectedFailures'] = {
+                name: 'Issue #417: second private tab may display a black page.'}
+            self.write_phase('initial', evidence)
+            with self.subTest(name=name), self.assertRaises(RuntimeError):
+                fixture.validate_private_window_report(
+                    self.root, 'initial', self.report('initial'), 0)
+
+    def test_issue_417_expected_failure_cannot_be_declared_if_second_tab_passes(self):
+        evidence = self.evidence('initial')
+        evidence['expectedFailures'] = {
+            'productSecondPrivateTabRenders':
+                'Issue #417: second private tab may display a black page.'}
+        self.write_phase('initial', evidence)
+        with self.assertRaises(RuntimeError):
+            fixture.validate_private_window_report(self.root, 'initial', self.report('initial'), 0)
 
 
 if __name__ == '__main__':

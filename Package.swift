@@ -20,6 +20,7 @@ let package = Package(
   targets: [
     .target(
       name: "BrowserCore",
+      dependencies: ["CSQLite"],
       exclude: [
         "Resources/Core.xcstrings", "Resources/Bridge.xcstrings", "Resources/Shell.xcstrings",
         "Resources/Settings.xcstrings", "Resources/Panels.xcstrings",
@@ -30,6 +31,7 @@ let package = Package(
       plugins: [.plugin(name: "CompileLocalizations")]),
     .plugin(
       name: "CompileLocalizations", capability: .buildTool(), path: "Plugins/CompileLocalizations"),
+    .systemLibrary(name: "CSQLite", path: "Sources/CSQLite"),
     .target(
       name: "ChromiumBridge",
       publicHeadersPath: "include",
@@ -89,7 +91,9 @@ let package = Package(
       ],
       linkerSettings: bundleFrameworksLinkerSettings),
     .target(name: "BrowserTestSupport", path: "Tests/TestSupport"),
-    .testTarget(name: "BrowserCoreTests", dependencies: ["BrowserCore", "BrowserTestSupport"]),
+    .testTarget(
+      name: "BrowserCoreTests", dependencies: ["BrowserCore", "BrowserTestSupport", "CSQLite"],
+      resources: [.copy("Fixtures/BrowserImport")]),
     .testTarget(
       name: "BrowserAppTests",
       dependencies: ["ArcusisBrowser", "BrowserCore", "BrowserTestSupport"],

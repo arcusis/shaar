@@ -16,6 +16,7 @@ public struct ShaarDownloadRecord: Codable, Equatable, Sendable, Identifiable {
   public let speed: Int64
   public let mimeType: String
   public let dangerous: Bool
+  public let offTheRecord: Bool
   public let error: String?
   public let startTime: Int64
 
@@ -24,14 +25,14 @@ public struct ShaarDownloadRecord: Codable, Equatable, Sendable, Identifiable {
   }
 
   enum CodingKeys: String, CodingKey {
-    case id, url, filename, path, state, paused, received, total, speed, mimeType, dangerous, error,
-      startTime
+    case id, url, filename, path, state, paused, received, total, speed, mimeType, dangerous,
+      offTheRecord, error, startTime
   }
 
   public init(
     id: String, url: String, filename: String, path: String, state: State, paused: Bool,
     received: Int64, total: Int64, speed: Int64, mimeType: String, dangerous: Bool,
-    error: String?, startTime: Int64
+    offTheRecord: Bool, error: String?, startTime: Int64
   ) {
     self.id = id
     self.url = url
@@ -44,6 +45,7 @@ public struct ShaarDownloadRecord: Codable, Equatable, Sendable, Identifiable {
     self.speed = speed
     self.mimeType = mimeType
     self.dangerous = dangerous
+    self.offTheRecord = offTheRecord
     self.error = error
     self.startTime = startTime
   }
@@ -61,6 +63,7 @@ public struct ShaarDownloadRecord: Codable, Equatable, Sendable, Identifiable {
     speed = try values.decodeInteger(forKey: .speed)
     mimeType = try values.decode(String.self, forKey: .mimeType)
     dangerous = try values.decode(Bool.self, forKey: .dangerous)
+    offTheRecord = try values.decode(Bool.self, forKey: .offTheRecord)
     error = try values.decodeIfPresent(String.self, forKey: .error)
     startTime = try values.decodeInteger(forKey: .startTime)
   }

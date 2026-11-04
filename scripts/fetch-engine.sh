@@ -6,7 +6,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [[ $(uname -m) == arm64 ]] || { echo 'Pinned engine requires Apple silicon.' >&2; exit 1; }
-pin=ThirdParty/ArdiaCore/pin.json
+pin=${SHAAR_ENGINE_PIN:-ThirdParty/ArdiaCore/pin.json}
 checksum=$(jq -er .sha256 "$pin")
 tree=$(jq -er .engineTree "$pin")
 url=$(jq -er .archiveURL "$pin")

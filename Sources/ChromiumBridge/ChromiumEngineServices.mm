@@ -5,6 +5,8 @@
 #import "ChromiumEngineServices.h"
 #import "include/ChromiumBridge.h"
 #import "../../ThirdParty/ArdiaCore/ac_engine.h"
+#import "ChromiumShaarFeatureTransport.h"
+#import <objc/runtime.h>
 #include <dlfcn.h>
 #include <string.h>
 
@@ -22,6 +24,79 @@ static void ServiceReply(void *context, const char *json) {
 
 @interface ARCEngineServices ()
 - (void)receiveTopic:(NSString *)topic payload:(NSDictionary *)payload;
+@end
+
+static const void *ShaarDownloadDirectoryKey = &ShaarDownloadDirectoryKey;
+
+static NSMutableDictionary<NSString *, NSURL *> *ShaarDownloadDirectories(ARCShaarRuntime *runtime) {
+  NSMutableDictionary *cache = objc_getAssociatedObject(runtime, ShaarDownloadDirectoryKey);
+  if (!cache) {
+    cache = [NSMutableDictionary dictionary];
+    objc_setAssociatedObject(runtime, ShaarDownloadDirectoryKey, cache, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  }
+  return cache;
+}
+
+@implementation ARCShaarRuntime (EngineServices)
+
+- (void)shaarPrimeEngineServicesForProfileID:(NSString *)profileID completion:(void (^)(void))completion {
+  [self shaarSubmit:SHAAR_OP_DOWNLOAD_DIRECTORY profileID:profileID tabID:nil
+           payload:@{@"schemaVersion": @1, @"action": @"get"}
+        completion:^(NSDictionary *result, NSError *error) {
+    NSString *path = result[@"directory"];
+    if (!error && [path isKindOfClass:NSString.class] && path.isAbsolutePath)
+      ShaarDownloadDirectories(self)[profileID] = [NSURL fileURLWithPath:path isDirectory:YES];
+    completion();
+  }];
+}
+
+- (NSURL *)downloadsDirectoryForProfileID:(NSString *)profileID {
+  if (![self shaarHasProfileID:profileID]) return nil;
+  return ShaarDownloadDirectories(self)[profileID];
+}
+
+- (void)downloadCommand:(NSString *)command downloadID:(NSString *)downloadID profileID:(NSString *)profileID
+            completion:(void (^)(NSError *))completion {
+  if (![@[@"pause", @"resume", @"cancel", @"remove"] containsObject:command] ||
+      ![[NSUUID alloc] initWithUUIDString:downloadID]) {
+    completion([NSError errorWithDomain:@"com.arcusis.browser.downloads" code:1
+        userInfo:@{NSLocalizedDescriptionKey: ARCBridgeLocalizedString(@"Invalid download action.")}]);
+    return;
+  }
+  [self shaarSubmit:SHAAR_OP_DOWNLOAD_CONTROL profileID:profileID tabID:nil
+           payload:@{@"schemaVersion": @1, @"downloadId": downloadID, @"action": command}
+        completion:^(NSDictionary *result, NSError *error) { completion(error); }];
+}
+
+- (void)refreshDownloadsForProfileID:(NSString *)profileID {
+  if (![self shaarHasProfileID:profileID]) return;
+  [self shaarSubmit:SHAAR_OP_DOWNLOAD_LIST profileID:profileID tabID:nil
+           payload:@{@"schemaVersion": @1} completion:^(NSDictionary *result, NSError *error) {
+    NSArray *downloads = result[@"downloads"];
+    if (error || ![downloads isKindOfClass:NSArray.class]) {
+      if (self.onNotice) self.onNotice((error ?: [NSError errorWithDomain:@"com.arcusis.browser.downloads"
+          code:1 userInfo:@{NSLocalizedDescriptionKey: @"Downloads could not be restored."}]).localizedDescription);
+      return;
+    }
+    for (id row in downloads) if (![row isKindOfClass:NSDictionary.class]) return;
+    if (self.onDownloadsRestored) self.onDownloadsRestored(profileID, downloads);
+  }];
+}
+
+- (void)shaarReceiveDownloadEventForProfileID:(NSString *)profileID payload:(NSDictionary *)payload {
+  if (!profileID || ![self shaarHasProfileID:profileID]) return;
+  NSString *kind = payload[@"kind"];
+  if ([kind isEqualToString:@"downloads.changed"]) {
+    NSDictionary *record = payload[@"download"];
+    if ([record isKindOfClass:NSDictionary.class] && self.onDownloadChanged)
+      self.onDownloadChanged(profileID, record);
+  } else if ([kind isEqualToString:@"downloads.removed"]) {
+    NSString *identity = payload[@"downloadId"];
+    if ([identity isKindOfClass:NSString.class] && self.onDownloadRemoved)
+      self.onDownloadRemoved(profileID, identity);
+  }
+}
+
 @end
 
 static void ServiceEvent(void *context, const char *topic, const char *json) {

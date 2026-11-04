@@ -52,7 +52,7 @@ class BundleAppTests(unittest.TestCase):
         engine_script.write_text(
             "#!/bin/bash\n"
             "set -euo pipefail\n"
-            "printf 'fetch-engine\\n' >> \"$BUNDLE_TEST_LOG\"\n"
+            "printf 'fetch-engine pin=%s\\n' \"${SHAAR_ENGINE_PIN:-default}\" >> \"$BUNDLE_TEST_LOG\"\n"
             "printf '%s\\n' \"$BUNDLE_TEST_FRAMEWORK\"\n"
         )
         shaar_engine_script = self.root / "scripts" / "fetch-shaar-test-engine.sh"
@@ -66,6 +66,9 @@ class BundleAppTests(unittest.TestCase):
             path = self.root / "ThirdParty" / "ArdiaCore" / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(name)
+        preview_pin = self.root / "ThirdParty" / "ChromiumEngine" / "preview-pin.json"
+        preview_pin.parent.mkdir(parents=True)
+        preview_pin.write_text("preview pin")
 
         self.binary_dir = self.root / "swift-bin"
         self.binary_dir.mkdir()
@@ -214,6 +217,28 @@ class BundleAppTests(unittest.TestCase):
         self.assertEqual(plist["SUPublicEDKey"], config.public_ed_key)
         self.assertIs(plist["SUEnableAutomaticChecks"], True)
         self.assertIs(plist["SUEnableInstallerLauncherService"], True)
+
+    def test_preview_shaar_bundle_uses_preview_pin_and_sets_backend(self):
+        result = self._run("--with-engine", "--preview-shaar-engine")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self._info_plist("build/Shaar.app")["ShaarEngineBackend"], "shaar")
+        self.assertIn("fetch-engine pin=ThirdParty/ChromiumEngine/preview-pin.json", self._log())
+        bundled_pin = self.root / "build/Shaar.app/Contents/Resources/ArdiaCore/pin.json"
+        self.assertEqual(bundled_pin.read_text(), "preview pin")
+
+    def test_preview_shaar_requires_engine_and_excludes_updates(self):
+        for args in (("--preview-shaar-engine",),
+                     ("--with-engine", "--with-updates", "--preview-shaar-engine")):
+            with self.subTest(args=args):
+                self.assertEqual(self._run(*args).returncode, 2)
+
+    def test_preview_bundle_respects_swift_job_cap(self):
+        environment = dict(self.env, SHAAR_BUNDLE_SWIFT_JOBS="4")
+        result = self._run("--with-engine", "--preview-shaar-engine", env=environment)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("swift build --jobs 4", self._log())
 
     def test_with_updates_is_rejected_outside_release_engine_bundles(self):
         for args in (

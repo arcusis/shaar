@@ -65,7 +65,8 @@ class Downloads final : private download::AllDownloadItemNotifier::Observer {
               std::string* payload_json,
               std::string* error_code);
 
-  static base::DictValue Record(const download::DownloadItem& item);
+  static base::DictValue Record(const download::DownloadItem& item,
+                                bool off_the_record);
 
  private:
   struct Transition {

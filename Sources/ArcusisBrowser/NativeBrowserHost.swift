@@ -1157,9 +1157,12 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   }
 
   static func makeRuntime(
-    frameworkURL: URL, environment: [String: String], arguments: [String]
+    frameworkURL: URL, environment: [String: String], arguments: [String],
+    bundleBackend: String? = nil
   ) throws -> ARCChromiumRuntime {
-    switch BrowserBackendSelection.choose(environment: environment, arguments: arguments) {
+    switch BrowserBackendSelection.choose(
+      environment: environment, arguments: arguments, bundleBackend: bundleBackend)
+    {
     case .ardia: return try ARCChromiumRuntime(frameworkURL: frameworkURL)
     case .shaar: return try ARCShaarRuntime(frameworkURL: frameworkURL)
     }
@@ -1183,7 +1186,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
         fileURL: directory.appending(path: "preferences.json"))
       let runtime = try makeRuntime(
         frameworkURL: frameworkURL, environment: ProcessInfo.processInfo.environment,
-        arguments: ProcessInfo.processInfo.arguments)
+        arguments: ProcessInfo.processInfo.arguments,
+        bundleBackend: Bundle.main.object(forInfoDictionaryKey: "ShaarEngineBackend") as? String)
       runtime.languageIdentifier = launchLanguage.localeIdentifier
       BrowserSettingsAppearance.apply(
         UserDefaults.standard.string(forKey: "settingsAppearance") ?? "system")

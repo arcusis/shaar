@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
+#include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "chrome/test/base/testing_profile.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -99,6 +100,49 @@ TEST_F(PrivateSessionRegistryTest, DefersRetirementUntilChildrenClose) {
             SHAAR_CONFLICT);
 }
 
+TEST_F(PrivateSessionRegistryTest, ResolvesLiveSessionAndRetainsWindowLease) {
+  TestingProfile profile;
+  PrivateSessionRegistry registry;
+  PrivateSessionRegistry::Session* session = nullptr;
+  ASSERT_EQ(registry.Open(&profile, "profile-a", "session-a", &session),
+            SHAAR_OK);
+  Profile* parent = nullptr;
+  Profile* otr = nullptr;
+  std::string_view profile_id;
+  std::string_view session_id;
+  ASSERT_TRUE(registry.Resolve(session, &parent, &otr, &profile_id,
+                               &session_id));
+  EXPECT_EQ(parent, &profile);
+  EXPECT_EQ(otr, profile.GetPrimaryOTRProfile(false));
+  EXPECT_EQ(profile_id, "profile-a");
+  EXPECT_EQ(session_id, "session-a");
+  ASSERT_TRUE(registry.RetainChild(session));
+  ASSERT_TRUE(registry.Close(session));
+  EXPECT_FALSE(registry.Resolve(session, &parent, &otr, &profile_id,
+                                &session_id));
+  EXPECT_NE(profile.GetPrimaryOTRProfile(false), nullptr);
+  ASSERT_TRUE(registry.ReleaseChild(session));
+  EXPECT_EQ(profile.GetPrimaryOTRProfile(false), nullptr);
+}
+
+TEST_F(PrivateSessionRegistryTest, CookieSettingsStayOnPrivateProfile) {
+  TestingProfile profile;
+  Profile* otr = profile.GetPrimaryOTRProfile(true);
+  ASSERT_NE(otr, nullptr);
+  bool allowed = true;
+  EXPECT_EQ(PrivateCookieSetting(otr, "https://example.test", true, false,
+                                 &allowed), SHAAR_OK);
+  EXPECT_FALSE(allowed);
+  EXPECT_EQ(PrivateCookieSetting(otr, "https://example.test", false, false,
+                                 &allowed), SHAAR_OK);
+  EXPECT_FALSE(allowed);
+  EXPECT_EQ(PrivateCookieSetting(&profile, "https://example.test", false,
+                                 false, &allowed), SHAAR_WRONG_PROFILE);
+  EXPECT_EQ(PrivateCookieSetting(otr, "https://example.test/path", true, true,
+                                 &allowed), SHAAR_INVALID_ARGUMENT);
+  profile.DestroyOffTheRecordProfile(otr);
+}
+
 TEST_F(PrivateSessionRegistryTest, RejectsOTRParentAndEmptyIdentity) {
   TestingProfile profile;
   PrivateSessionRegistry registry;
@@ -132,6 +176,7 @@ TEST_F(PrivateSessionRegistryTest, ModuleRegistrationExposesDirectHandlers) {
   PrivateSessionRegistry sessions;
   ShaarModuleRegistry modules;
   shaar_private_sessions_register(&modules);
+  ASSERT_NE(EngineContext().private_sessions, nullptr);
   const auto* handlers = static_cast<const PrivateSessionModuleHandlers*>(
       modules.FindModule(SHAAR_MODULE_PRIVATE_SESSIONS));
   ASSERT_NE(handlers, nullptr);

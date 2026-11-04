@@ -39,6 +39,7 @@ struct shaar_window {
   shaar_private_session* private_session;
   std::string id;
   std::string profile_id;
+  std::string session_id;
 };
 
 void CleanupTab(uint64_t serial);
@@ -122,6 +123,8 @@ void FinalizeWindow(shaar_window* window) {
   shaar_engine* engine = window->engine;
   const std::string window_id = window->id;
   const std::string profile_id = window->profile_id;
+  const std::string session_id = window->session_id;
+  shaar_private_session* private_session = window->private_session;
   struct ClosedTab {
     std::string profile_id;
     std::string session_id;
@@ -150,10 +153,13 @@ void FinalizeWindow(shaar_window* window) {
   }
   if (!profile_id.empty()) {
     shaar::EmitEvent(engine, SHAAR_EVENT_WINDOW,
-                     {profile_id.data(), profile_id.size()}, {},
+                     {profile_id.data(), profile_id.size()},
+                     {session_id.data(), session_id.size()},
                      {window_id.data(), window_id.size()}, {},
                      {kClosed, sizeof(kClosed) - 1});
   }
+  if (private_session && shaar::EngineContext().private_sessions)
+    shaar::EngineContext().private_sessions->ReleaseChild(engine, private_session);
 }
 
 bool ValidID(shaar_bytes bytes) {
@@ -272,6 +278,7 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_window_open(
 
   Profile* private_profile = nullptr;
   std::string private_profile_id;
+  std::string private_session_id;
   if (kind == SHAAR_WINDOW_PRIVATE) {
     auto* services = shaar::EngineContext().private_sessions;
     Profile* parent = nullptr;
@@ -282,6 +289,7 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_window_open(
                                         &session_id))
       return Result(SHAAR_NOT_FOUND, error);
     private_profile_id = profile_id;
+    private_session_id = session_id;
   }
 
   auto handle = std::make_unique<shaar_window>();
@@ -290,14 +298,21 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_window_open(
   handle->private_session = private_session;
   handle->id.assign(window_id.data, window_id.size);
   handle->profile_id = std::move(private_profile_id);
+  handle->session_id = std::move(private_session_id);
   auto* raw = handle.get();
   auto& registry = shaar::windows_tabs::Registry();
   if (!registry.ReserveWindow(engine, raw,
                               std::string(window_id.data, window_id.size)))
     return Result(SHAAR_CONFLICT, error);
   if (private_profile) {
+    auto* services = shaar::EngineContext().private_sessions;
+    if (!services->RetainChild(engine, private_session)) {
+      registry.UnbindWindow(engine, raw);
+      return Result(SHAAR_NOT_FOUND, error);
+    }
     Browser* browser = CreateHiddenBrowser(private_profile);
     if (!browser) {
+      services->ReleaseChild(engine, private_session);
       registry.UnbindWindow(engine, raw);
       return Result(SHAAR_CHROMIUM_ERROR, error);
     }

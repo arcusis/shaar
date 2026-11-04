@@ -182,8 +182,7 @@ FOUNDATION_EXPORT NSString *ARCBridgeLocalizedString(NSString *message);
 - (void)refreshDownloadsForProfileID:(NSString *)profileID;
 - (BOOL)placeTabIDs:(NSArray<NSString *> *)tabIDs pinnedIDs:(NSArray<NSString *> *)pinnedIDs
          profileID:(NSString *)profileID;
-/// Evaluates a constant JavaScript script and returns its JSON value through ArdiaCore's post callback.
-/// Callers must serialize all dynamic values as JSON literals before constructing the script.
+/// Reserved JavaScript evaluation route; completion currently receives nil because Shaar lacks a handler.
 - (void)evaluateInTabID:(NSString *)tabID script:(NSString *)script
             completion:(void (^)(NSString * _Nullable))completion;
 - (void)resolveInstallRequestID:(NSString *)requestID accepted:(BOOL)accepted;

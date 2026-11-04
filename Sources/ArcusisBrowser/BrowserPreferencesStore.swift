@@ -76,6 +76,17 @@ final class BrowserPreferencesStore {
     save()
   }
 
+  /// Onboarding must not report success until the connected account is on disk.
+  func persistAccount(_ account: ConnectedAccount, for profileID: UUID) throws {
+    let previous = connectedAccounts[profileID]
+    connectedAccounts[profileID] = [account]
+    save()
+    guard storageNotice == nil else {
+      connectedAccounts[profileID] = previous
+      throw CocoaError(.fileWriteUnknown)
+    }
+  }
+
   func removeAccount(_ provider: AccountProvider, for profileID: UUID) {
     let remaining = accounts(for: profileID).filter { $0.provider != provider }
     connectedAccounts[profileID] = remaining.isEmpty ? nil : remaining

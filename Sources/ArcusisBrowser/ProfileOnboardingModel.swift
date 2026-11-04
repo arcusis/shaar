@@ -43,12 +43,19 @@ struct ProfileDraft: Equatable {
   func create(in workspace: BrowserWorkspaceStore, preferences: BrowserPreferencesStore) throws
     -> UUID
   {
+    guard !workspace.workspace.catalog.profiles.contains(where: { $0.id == id }) else {
+      throw WorkspaceError.invalidState
+    }
     let liveSpaceID = spaceID.flatMap { id in
       workspace.workspace.catalog.spaces.contains { $0.id == id } ? id : nil
     }
-    let id = try workspace.createProfile(profile, assigningSpace: liveSpaceID)
-    for account in accounts { preferences.setAccount(account, for: id) }
-    return id
+    for account in accounts { try preferences.persistAccount(account, for: id) }
+    do {
+      return try workspace.createProfile(profile, assigningSpace: liveSpaceID)
+    } catch {
+      for account in accounts { preferences.removeAccount(account.provider, for: id) }
+      throw error
+    }
   }
 }
 

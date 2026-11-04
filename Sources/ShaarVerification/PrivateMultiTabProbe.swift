@@ -297,7 +297,7 @@ struct PrivateMultiTabProbe {
       to: root.appending(path: "\(phase)-private-shell-\(stage).json"), options: .atomic)
     if stage == "first-blank", !PrivateMultiTabEvidence.blankShellAudit(audit) {
       throw Failure(
-        "Blank private tab compositor covers the SwiftUI shell as a full-window sibling.")
+        "Blank private tab is not inside the SwiftUI page container: \(audit).")
     }
     guard !owner.window.isVisible,
       let bitmap = owner.hosting.bitmapImageRepForCachingDisplay(in: owner.hosting.bounds)
@@ -331,10 +331,8 @@ struct PrivateMultiTabProbe {
 
 enum PrivateMultiTabEvidence {
   static func blankShellAudit(_ audit: [String: Any]) -> Bool {
-    audit["stage"] as? String == "first-blank"
-      && audit["nativeViewPresent"] as? Bool == true
-      && audit["rawWindowSibling"] as? Bool == false
-      && audit["containerCount"] as? Int == 0
+    audit["nativeViewPresent"] as? Bool == true
+      && liveShellAudit(audit, stage: "first-blank")
   }
 
   static func liveTabAudit(_ audit: [AnyHashable: Any]?, tabCount: Int) -> Bool {

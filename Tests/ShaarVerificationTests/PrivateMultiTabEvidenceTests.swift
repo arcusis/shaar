@@ -47,7 +47,9 @@ import Testing
   @Test func blankPrivateTabCannotCoverTheSwiftUIShell() {
     let valid: [String: Any] = [
       "stage": "first-blank", "nativeViewPresent": true,
-      "rawWindowSibling": false, "containerCount": 0,
+      "rawWindowSibling": false, "containerCount": 1,
+      "layerBacked": [true], "attached": true,
+      "attachedInWindow": true, "nativeHidden": false,
     ]
     #expect(PrivateMultiTabEvidence.blankShellAudit(valid))
     for key in valid.keys {
@@ -58,6 +60,9 @@ import Testing
     var covered = valid
     covered["rawWindowSibling"] = true
     #expect(!PrivateMultiTabEvidence.blankShellAudit(covered))
+    var detached = valid
+    detached["attachedInWindow"] = false
+    #expect(!PrivateMultiTabEvidence.blankShellAudit(detached))
   }
 
   @Test func searchEvidenceRequiresRenderedResultsFromExpectedHost() {

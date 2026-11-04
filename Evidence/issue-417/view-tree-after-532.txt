@@ -1,0 +1,242 @@
+windowNumber=12270 frame=(360.0, 180.0, 1200.0, 780.0)
+hostingFrame=(0.0, 0.0, 1200.0, 780.0) hostingBounds=(0.0, 0.0, 1200.0, 780.0)
+view NativeWidgetMacNSWindowTitledFrame frame=(0.0, 0.0, 1200.0, 780.0) hidden=false alpha=1.0 wantsLayer=false z=0.0 opacity=1.0 subviews=4
+  view NSVisualEffectView frame=(0.0, 0.0, 1200.0, 780.0) hidden=false alpha=1.0 wantsLayer=false z=0.0 opacity=1.0 subviews=0
+  view BridgedContentView frame=(0.0, 0.0, 1200.0, 780.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=2
+    view ViewsCompositorSuperview frame=(0.0, 0.0, 1200.0, 780.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=0
+    view NSView frame=(0.0, 0.0, 1200.0, 780.0) hidden=false alpha=1.0 wantsLayer=false z=0.0 opacity=1.0 subviews=1
+      view NSHostingView<Optional<BrowserWindow>> frame=(0.0, 0.0, 1200.0, 780.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=18
+        view KeyViewProxy frame=(84.0, 0.0, 28.0, 32.0) hidden=false alpha=1.0 wantsLayer=false z=0.0 opacity=1.0 subviews=0
+        view KeyViewProxy frame=(278.0, 43.0, 28.0, 28.0) hidden=false alpha=1.0 wantsLayer=false z=0.0 opacity=1.0 subviews=0
+        view KeyViewProxy frame=(606.0, 44.0, 189.0, 26.0) hidden=false alpha=1.0 wantsLayer=false z=0.0 opacity=1.0 subviews=0
+        view KeyViewProxy frame=(14.0, 739.0, 30.0, 30.0) hidden=false alpha=1.0 wantsLayer=false z=0.0 opacity=1.0 subviews=0
+        view KeyViewProxy frame=(89.0, 739.0, 22.0, 30.0) hidden=false alpha=1.0 wantsLayer=false z=0.0 opacity=1.0 subviews=0
+        view KeyViewProxy frame=(156.0, 739.0, 30.0, 30.0) hidden=false alpha=1.0 wantsLayer=false z=0.0 opacity=1.0 subviews=0
+        view KeyViewProxy frame=(208.0, 75.0, 984.0, 697.0) hidden=false alpha=1.0 wantsLayer=false z=0.0 opacity=1.0 subviews=0
+        view AppKitPlatformViewHost<PlatformViewRepresentableAdaptor<WindowFullScreenObserver>> frame=(0.0, 32.0, 1200.0, 748.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=1
+          view ObserverView frame=(0.0, 0.0, 1200.0, 748.0) hidden=false alpha=1.0 wantsLayer=false z=0.0 opacity=1.0 subviews=0
+        view _NSGraphicsView frame=(0.0, 32.0, 1200.0, 748.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=1
+          view _NSGraphicsView frame=(208.0, 8.0, 984.0, 732.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=7
+            view _NSGraphicsView frame=(0.0, 0.0, 984.0, 732.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=1
+              view _FocusRingView frame=(6.0, 3.0, 28.0, 28.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=0
+            view _NSGraphicsView frame=(0.0, 0.0, 984.0, 732.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=1
+              view _FocusRingView frame=(38.0, 3.0, 28.0, 28.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=0
+            view _NSGraphicsView frame=(0.0, 0.0, 984.0, 732.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=1
+              view _FocusRingView frame=(70.0, 3.0, 28.0, 28.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=0
+            view _NSGraphicsView frame=(0.0, 0.0, 984.0, 732.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=1
+              view AppKitPlatformViewHost<PlatformViewRepresentableAdaptor<WindowDragRegion>> frame=(223.0, 5.0, 723.0, 24.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=1
+                view WindowDragView frame=(0.0, 0.0, 723.0, 24.0) hidden=false alpha=1.0 wantsLayer=false z=0.0 opacity=1.0 subviews=0
+            view _NSGraphicsView frame=(0.0, 0.0, 984.0, 732.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=1
+              view _FocusRingView frame=(0.0, 0.0, 28.0, 28.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=0
+            view _NSGraphicsView frame=(0.0, 0.0, 984.0, 732.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=1
+              view _FocusRingView frame=(398.0, 4.0, 189.0, 26.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=0
+            view _NSGraphicsView frame=(0.0, 0.0, 984.0, 732.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=1
+              view AppKitPlatformViewHost<PlatformViewRepresentableAdaptor<PrivateBrowserPage>> frame=(0.0, 35.0, 984.0, 697.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=1
+                view ChromiumPageContainerView frame=(0.0, 0.0, 984.0, 697.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=1
+                  view WebContentsViewCocoa frame=(0.0, 0.0, 984.0, 697.0) hidden=false alpha=1.0 wantsLayer=false z=0.0 opacity=1.0 subviews=1
+                    view RenderWidgetHostViewCocoa frame=(0.0, 0.0, 984.0, 697.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=0
+        view AppKitPlatformViewHost<PlatformViewRepresentableAdaptor<SpaceSwipeNavigation>> frame=(0.0, 32.0, 200.0, 748.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=1
+          view SpaceSwipeMonitorView frame=(0.0, 0.0, 200.0, 748.0) hidden=false alpha=1.0 wantsLayer=false z=0.0 opacity=1.0 subviews=0
+        view AppKitPlatformViewHost<PlatformViewRepresentableAdaptor<DraggingDestinationView>> frame=(14.0, 36.0, 172.0, 8.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=1
+          view _PlatformDraggingDestinationView frame=(0.0, 0.0, 172.0, 8.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=0
+        view _NSGraphicsView frame=(14.0, 94.0, 172.0, 619.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=1
+          view PlatformContainer frame=(0.0, 0.0, 172.0, 619.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=1
+            view HostingScrollView frame=(0.0, 0.0, 172.0, 619.0) hidden=false alpha=1.0 wantsLayer=false z=0.0 opacity=1.0 subviews=2
+              view NSClipView frame=(0.0, 0.0, 172.0, 619.0) hidden=false alpha=1.0 wantsLayer=false z=0.0 opacity=1.0 subviews=7
+                view DocumentView frame=(0.0, 0.0, 172.0, 194.0) hidden=false alpha=1.0 wantsLayer=false z=0.0 opacity=1.0 subviews=1
+                  view PlatformGroupContainer frame=(0.0, 0.0, 172.0, 194.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=10
+                    view _FocusRingView frame=(146.0, 0.0, 26.0, 26.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=0
+                    view AppKitPlatformViewHost<PlatformViewRepresentableAdaptor<DraggingDestinationView>> frame=(0.0, 30.0, 172.0, 8.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=1
+                      view _PlatformDraggingDestinationView frame=(0.0, 0.0, 172.0, 8.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=0
+                    view _FocusRingView frame=(111.0, 48.0, 24.0, 14.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=0
+                    view _FocusRingView frame=(143.0, 48.0, 29.0, 14.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=0
+                    view _FocusRingView frame=(0.0, 72.0, 172.0, 32.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=0
+                    view AppKitPlatformViewHost<PlatformViewRepresentableAdaptor<DraggingDestinationView>> frame=(0.0, 108.0, 172.0, 12.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=1
+                      view _PlatformDraggingDestinationView frame=(0.0, 0.0, 172.0, 12.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=0
+                    view AppKitPlatformViewHost<PlatformViewRepresentableAdaptor<DraggingDestinationView>> frame=(0.0, 124.0, 172.0, 34.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=1
+                      view _PlatformDraggingDestinationView frame=(0.0, 0.0, 172.0, 34.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=0
+                    view _FocusRingView frame=(10.0, 133.0, 126.0, 16.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=0
+                    view _NSGraphicsView frame=(144.0, 132.0, 18.0, 18.0) hidden=false alpha=0.0 wantsLayer=true z=0.0 opacity=0.0 subviews=1
+                      view _FocusRingView frame=(0.0, 0.0, 18.0, 18.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=0
+                    view AppKitPlatformViewHost<PlatformViewRepresentableAdaptor<DraggingDestinationView>> frame=(0.0, 162.0, 172.0, 32.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=1
+                      view _PlatformDraggingDestinationView frame=(0.0, 0.0, 172.0, 32.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=0
+                view KeyViewProxy frame=(146.0, 0.0, 26.0, 26.0) hidden=false alpha=1.0 wantsLayer=false z=0.0 opacity=1.0 subviews=0
+                view KeyViewProxy frame=(111.0, 48.0, 24.0, 14.0) hidden=false alpha=1.0 wantsLayer=false z=0.0 opacity=1.0 subviews=0
+                view KeyViewProxy frame=(143.0, 48.0, 29.0, 14.0) hidden=false alpha=1.0 wantsLayer=false z=0.0 opacity=1.0 subviews=0
+                view KeyViewProxy frame=(0.0, 72.0, 172.0, 32.0) hidden=false alpha=1.0 wantsLayer=false z=0.0 opacity=1.0 subviews=0
+                view KeyViewProxy frame=(10.0, 133.0, 126.0, 16.0) hidden=false alpha=1.0 wantsLayer=false z=0.0 opacity=1.0 subviews=0
+                view KeyViewProxy frame=(144.0, 132.0, 18.0, 18.0) hidden=false alpha=1.0 wantsLayer=false z=0.0 opacity=1.0 subviews=0
+              view NSScroller frame=(0.0, 0.0, 0.0, 100.0) hidden=true alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=0
+        view _FocusRingView frame=(14.0, 739.0, 30.0, 30.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=0
+        view AppKitPlatformViewHost<PlatformViewRepresentableAdaptor<DraggingDestinationView>> frame=(89.0, 739.0, 22.0, 30.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=1
+          view _PlatformDraggingDestinationView frame=(0.0, 0.0, 22.0, 30.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=0
+        view _FocusRingView frame=(89.0, 739.0, 22.0, 30.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=0
+        view _FocusRingView frame=(156.0, 739.0, 30.0, 30.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=0
+        view _FocusRingView frame=(84.0, 0.0, 28.0, 32.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=0
+        view AppKitPlatformViewHost<PlatformViewRepresentableAdaptor<TabSwitcherMonitor>> frame=(600.0, 406.0, 0.0, 0.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=1
+          view TabSwitcherMonitorView frame=(0.0, 0.0, 0.0, 0.0) hidden=false alpha=1.0 wantsLayer=false z=0.0 opacity=1.0 subviews=0
+  view NSTitlebarContainerView frame=(0.0, 748.0, 1200.0, 32.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=2
+    view NSTitlebarView frame=(0.0, 0.0, 1200.0, 32.0) hidden=false alpha=1.0 wantsLayer=false z=0.0 opacity=1.0 subviews=6
+      view NSTitlebarBackgroundView frame=(0.0, 0.0, 1200.0, 32.0) hidden=true alpha=1.0 wantsLayer=false z=0.0 opacity=1.0 subviews=0
+      view NSView frame=(0.0, 0.0, 1200.0, 32.0) hidden=false alpha=1.0 wantsLayer=false z=0.0 opacity=1.0 subviews=0
+      view NSTextField frame=(82.0, 8.0, 42.0, 16.0) hidden=true alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=1
+        view NSTextFieldSimpleLabel frame=(0.0, 0.0, 42.0, 16.0) hidden=false alpha=1.0 wantsLayer=false z=0.0 opacity=1.0 subviews=0
+      view _NSThemeCloseWidget frame=(9.0, 9.0, 14.0, 14.0) hidden=false alpha=1.0 wantsLayer=false z=0.0 opacity=1.0 subviews=1
+        view _NSCoreHostingView<ThemeWidgetView> frame=(0.0, 0.0, 14.0, 14.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=0
+      view _NSThemeZoomWidget frame=(55.0, 9.0, 14.0, 14.0) hidden=false alpha=1.0 wantsLayer=false z=0.0 opacity=1.0 subviews=1
+        view _NSCoreHostingView<ThemeWidgetView> frame=(0.0, 0.0, 14.0, 14.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=0
+      view _NSThemeWidget frame=(32.0, 9.0, 14.0, 14.0) hidden=false alpha=1.0 wantsLayer=false z=0.0 opacity=1.0 subviews=1
+        view _NSCoreHostingView<ThemeWidgetView> frame=(0.0, 0.0, 14.0, 14.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=0
+    view _NSTitlebarDecorationView frame=(0.0, 0.0, 1200.0, 32.0) hidden=false alpha=1.0 wantsLayer=true z=0.0 opacity=1.0 subviews=0
+  view WindowDragView frame=(113.0, 748.0, 1087.0, 32.0) hidden=false alpha=1.0 wantsLayer=false z=0.0 opacity=1.0 subviews=0
+layer NSViewBackingLayer frame=(0.0, 0.0, 1200.0, 780.0) z=0.0 opacity=1.0 hidden=false sublayers=5
+  layer CUIWindowFrameLayer frame=(0.0, 0.0, 1200.0, 780.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+    layer CALayer frame=(0.0, 0.0, 1200.0, 780.0) z=0.0 opacity=0.0 hidden=false sublayers=0
+  layer NSViewBackingLayer frame=(0.0, 0.0, 1200.0, 780.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+    layer CALayer frame=(0.0, 0.0, 1200.0, 780.0) z=0.0 opacity=1.0 hidden=false sublayers=2
+      layer CALayer frame=(0.0, 0.0, 1200.0, 780.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+      layer CAChameleonLayer frame=(0.0, 0.0, 1200.0, 780.0) z=0.0 opacity=0.1 hidden=false sublayers=0
+  layer NSViewBackingLayer frame=(0.0, 0.0, 1200.0, 780.0) z=0.0 opacity=1.0 hidden=false sublayers=2
+    layer CALayer frame=(0.0, 0.0, 1200.0, 780.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+      layer CALayer frame=(0.0, 0.0, 1200.0, 780.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+        layer CALayerHost frame=(0.0, 0.0, 0.0, 0.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+    layer NSViewBackingLayer frame=(0.0, 0.0, 1200.0, 780.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+      layer NSViewBackingLayer frame=(0.0, 0.0, 1200.0, 780.0) z=0.0 opacity=1.0 hidden=false sublayers=27
+        layer NSViewBackingLayer frame=(0.0, 32.0, 1200.0, 748.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+          layer NSViewBackingLayer frame=(0.0, 0.0, 1200.0, 748.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+        layer CALayer frame=(0.0, 32.0, 1200.0, 748.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+        layer NSViewBackingLayer frame=(0.0, 32.0, 1200.0, 748.0) z=0.0 opacity=1.0 hidden=false sublayers=2
+          layer NSViewBackingLayer frame=(208.0, 8.0, 984.0, 732.0) z=0.0 opacity=1.0 hidden=false sublayers=19
+            layer CALayer frame=(0.0, 0.0, 984.0, 732.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+            layer CALayer frame=(0.0, 0.0, 984.0, 732.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+              layer CALayer frame=(0.0, 0.0, 984.0, 34.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+            layer ImageLayer frame=(16.0, 11.0, 7.0, 12.0) z=0.0 opacity=0.5 hidden=false sublayers=0
+            layer NSViewBackingLayer frame=(0.0, 0.0, 984.0, 732.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+              layer NSViewBackingLayer frame=(6.0, 3.0, 28.0, 28.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+            layer ImageLayer frame=(49.0, 11.0, 7.0, 12.0) z=0.0 opacity=0.5 hidden=false sublayers=0
+            layer NSViewBackingLayer frame=(0.0, 0.0, 984.0, 732.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+              layer NSViewBackingLayer frame=(38.0, 3.0, 28.0, 28.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+            layer ImageLayer frame=(78.0, 10.0, 12.0, 14.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+            layer NSViewBackingLayer frame=(0.0, 0.0, 984.0, 732.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+              layer NSViewBackingLayer frame=(70.0, 3.0, 28.0, 28.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+            layer CGDrawingLayer frame=(103.0, 12.0, 15.0, 11.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+            layer CGDrawingLayer frame=(127.0, 10.0, 92.0, 14.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+            layer NSViewBackingLayer frame=(0.0, 0.0, 984.0, 732.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+              layer NSViewBackingLayer frame=(223.0, 5.0, 723.0, 24.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+                layer NSViewBackingLayer frame=(0.0, 0.0, 723.0, 24.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+            layer ImageLayer frame=(958.0, 12.0, 13.0, 11.0) z=0.0 opacity=0.5 hidden=false sublayers=0
+            layer NSViewBackingLayer frame=(0.0, 0.0, 984.0, 732.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+              layer NSViewBackingLayer frame=(0.0, 0.0, 28.0, 28.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+            layer ImageLayer frame=(409.0, 10.0, 15.0, 15.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+            layer CGDrawingLayer frame=(431.0, 9.0, 146.0, 16.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+            layer NSViewBackingLayer frame=(0.0, 0.0, 984.0, 732.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+              layer NSViewBackingLayer frame=(398.0, 4.0, 189.0, 26.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+            layer CALayer frame=(0.0, 0.0, 984.0, 732.0) z=0.0 opacity=0.4 hidden=false sublayers=1
+              layer CALayer frame=(0.0, 0.0, 984.0, 1.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+            layer CALayer frame=(0.0, 0.0, 984.0, 732.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+              layer CALayer frame=(0.0, 35.0, 984.0, 697.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+            layer NSViewBackingLayer frame=(0.0, 0.0, 984.0, 732.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+              layer NSViewBackingLayer frame=(0.0, 35.0, 984.0, 697.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+                layer NSViewBackingLayer frame=(0.0, 0.0, 984.0, 697.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+                  layer NSViewBackingLayer frame=(0.0, 0.0, 984.0, 697.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+                    layer CALayer frame=(0.0, 0.0, 984.0, 697.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+                      layer CALayer frame=(0.0, 0.0, 984.0, 697.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+                        layer CALayerHost frame=(0.0, 0.0, 0.0, 0.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+          layer CALayer frame=(208.0, 8.0, 984.0, 732.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+        layer CALayer frame=(0.0, 32.0, 200.0, 748.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+        layer NSViewBackingLayer frame=(0.0, 32.0, 200.0, 748.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+          layer NSViewBackingLayer frame=(0.0, 0.0, 200.0, 748.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+        layer NSViewBackingLayer frame=(14.0, 36.0, 172.0, 8.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+          layer NSViewBackingLayer frame=(0.0, 0.0, 172.0, 8.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+        layer CGDrawingLayer frame=(15.0, 63.0, 18.0, 12.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+        layer CGDrawingLayer frame=(42.0, 61.0, 45.0, 16.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+        layer NSViewBackingLayer frame=(14.0, 94.0, 172.0, 619.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+          layer NSViewBackingLayer frame=(0.0, 0.0, 172.0, 619.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+            layer NSViewBackingLayer frame=(0.0, 0.0, 172.0, 619.0) z=0.0 opacity=1.0 hidden=false sublayers=2
+              layer NSViewBackingLayer frame=(0.0, 0.0, 172.0, 619.0) z=0.0 opacity=1.0 hidden=false sublayers=7
+                layer NSViewBackingLayer frame=(0.0, 0.0, 172.0, 194.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+                  layer NSViewBackingLayer frame=(0.0, 0.0, 172.0, 194.0) z=0.0 opacity=1.0 hidden=false sublayers=21
+                    layer CGDrawingLayer frame=(0.0, 6.0, 38.0, 14.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+                    layer ImageLayer frame=(152.0, 7.0, 18.0, 13.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+                    layer NSViewBackingLayer frame=(146.0, 0.0, 26.0, 26.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+                    layer NSViewBackingLayer frame=(0.0, 30.0, 172.0, 8.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+                      layer NSViewBackingLayer frame=(0.0, 0.0, 172.0, 8.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+                    layer CALayer frame=(0.0, 55.0, 103.0, 1.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+                    layer CGDrawingLayer frame=(111.0, 48.0, 24.0, 14.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+                    layer NSViewBackingLayer frame=(111.0, 48.0, 24.0, 14.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+                    layer CGDrawingLayer frame=(143.0, 48.0, 29.0, 14.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+                    layer NSViewBackingLayer frame=(143.0, 48.0, 29.0, 14.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+                    layer ColorShapeLayer frame=(11.0, 83.0, 10.0, 10.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+                      layer CAShapeLayer frame=(0.0, 0.0, 10.0, 10.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+                    layer CGDrawingLayer frame=(31.0, 80.0, 51.0, 16.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+                    layer NSViewBackingLayer frame=(0.0, 72.0, 172.0, 32.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+                    layer NSViewBackingLayer frame=(0.0, 108.0, 172.0, 12.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+                      layer NSViewBackingLayer frame=(0.0, 0.0, 172.0, 12.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+                    layer NSViewBackingLayer frame=(0.0, 124.0, 172.0, 34.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+                      layer NSViewBackingLayer frame=(0.0, 0.0, 172.0, 34.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+                    layer CALayer frame=(0.0, 124.0, 172.0, 34.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+                    layer CGDrawingLayer frame=(10.0, 135.0, 13.0, 12.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+                    layer CGDrawingLayer frame=(33.0, 133.0, 72.0, 16.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+                    layer NSViewBackingLayer frame=(10.0, 133.0, 126.0, 16.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+                    layer ColorShapeLayer frame=(149.0, 137.0, 8.0, 8.0) z=0.0 opacity=0.0 hidden=false sublayers=1
+                      layer CAShapeLayer frame=(0.0, 0.0, 8.0, 8.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+                    layer NSViewBackingLayer frame=(144.0, 132.0, 18.0, 18.0) z=0.0 opacity=0.0 hidden=false sublayers=1
+                      layer NSViewBackingLayer frame=(0.0, 0.0, 18.0, 18.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+                    layer NSViewBackingLayer frame=(0.0, 162.0, 172.0, 32.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+                      layer NSViewBackingLayer frame=(0.0, 0.0, 172.0, 32.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+                layer NSViewBackingLayer frame=(146.0, 0.0, 26.0, 26.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+                layer NSViewBackingLayer frame=(111.0, 48.0, 24.0, 14.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+                layer NSViewBackingLayer frame=(143.0, 48.0, 29.0, 14.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+                layer NSViewBackingLayer frame=(0.0, 72.0, 172.0, 32.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+                layer NSViewBackingLayer frame=(10.0, 133.0, 126.0, 16.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+                layer NSViewBackingLayer frame=(144.0, 132.0, 18.0, 18.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+              layer NSViewBackingLayer frame=(0.0, 0.0, 0.0, 100.0) z=0.0 opacity=1.0 hidden=true sublayers=2
+                layer CALayer frame=(-9.0, 3.0, 6.0, 94.0) z=0.0 opacity=0.0 hidden=false sublayers=0
+                layer CALayer frame=(-9.0, 3.0, 6.0, 26.0) z=0.0 opacity=0.0 hidden=true sublayers=0
+        layer CALayer frame=(14.0, 729.0, 172.0, 1.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+        layer ColorShapeLayer frame=(21.0, 747.0, 16.0, 15.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+          layer CAShapeLayer frame=(0.0, 0.0, 16.0, 15.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+        layer NSViewBackingLayer frame=(14.0, 739.0, 30.0, 30.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+        layer NSViewBackingLayer frame=(89.0, 739.0, 22.0, 30.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+          layer NSViewBackingLayer frame=(0.0, 0.0, 22.0, 30.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+        layer CGDrawingLayer frame=(91.0, 748.0, 19.0, 13.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+        layer NSViewBackingLayer frame=(89.0, 739.0, 22.0, 30.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+        layer ColorShapeLayer frame=(165.0, 748.0, 13.0, 13.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+          layer CAShapeLayer frame=(0.0, 0.0, 13.0, 13.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+        layer NSViewBackingLayer frame=(156.0, 739.0, 30.0, 30.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+        layer ColorShapeLayer frame=(90.0, 10.0, 17.0, 13.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+          layer CAShapeLayer frame=(0.0, 0.0, 17.0, 13.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+        layer NSViewBackingLayer frame=(84.0, 0.0, 28.0, 32.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+        layer NSViewBackingLayer frame=(600.0, 406.0, 0.0, 0.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+          layer NSViewBackingLayer frame=(0.0, 0.0, 0.0, 0.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+        layer NSViewBackingLayer frame=(84.0, 0.0, 28.0, 32.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+        layer NSViewBackingLayer frame=(278.0, 43.0, 28.0, 28.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+        layer NSViewBackingLayer frame=(606.0, 44.0, 189.0, 26.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+        layer NSViewBackingLayer frame=(14.0, 739.0, 30.0, 30.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+        layer NSViewBackingLayer frame=(89.0, 739.0, 22.0, 30.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+        layer NSViewBackingLayer frame=(156.0, 739.0, 30.0, 30.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+        layer NSViewBackingLayer frame=(208.0, 75.0, 984.0, 697.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+  layer NSViewBackingLayer frame=(0.0, 748.0, 1200.0, 32.0) z=0.0 opacity=1.0 hidden=false sublayers=2
+    layer NSViewBackingLayer frame=(0.0, 0.0, 1200.0, 32.0) z=0.0 opacity=1.0 hidden=false sublayers=6
+      layer NSViewBackingLayer frame=(0.0, 0.0, 1200.0, 32.0) z=0.0 opacity=1.0 hidden=true sublayers=0
+      layer CABackdropLayer frame=(0.0, 0.0, 1200.0, 32.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+      layer NSViewBackingLayer frame=(82.0, 8.0, 42.0, 16.0) z=0.0 opacity=1.0 hidden=true sublayers=1
+        layer NSViewBackingLayer frame=(0.0, 0.0, 42.0, 16.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+      layer NSViewBackingLayer frame=(9.0, 9.0, 14.0, 14.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+        layer NSViewBackingLayer frame=(0.0, 0.0, 14.0, 14.0) z=0.0 opacity=1.0 hidden=false sublayers=2
+          layer CALayer frame=(0.0, 0.0, 14.0, 14.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+          layer CALayer frame=(0.25, 0.25, 13.5, 13.5) z=0.0 opacity=1.0 hidden=false sublayers=0
+      layer NSViewBackingLayer frame=(55.0, 9.0, 14.0, 14.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+        layer NSViewBackingLayer frame=(0.0, 0.0, 14.0, 14.0) z=0.0 opacity=1.0 hidden=false sublayers=2
+          layer CALayer frame=(0.0, 0.0, 14.0, 14.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+          layer CALayer frame=(0.25, 0.25, 13.5, 13.5) z=0.0 opacity=1.0 hidden=false sublayers=0
+      layer NSViewBackingLayer frame=(32.0, 9.0, 14.0, 14.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+        layer NSViewBackingLayer frame=(0.0, 0.0, 14.0, 14.0) z=0.0 opacity=1.0 hidden=false sublayers=2
+          layer CALayer frame=(0.0, 0.0, 14.0, 14.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+          layer CALayer frame=(0.25, 0.25, 13.5, 13.5) z=0.0 opacity=1.0 hidden=false sublayers=0
+    layer NSViewBackingLayer frame=(0.0, 0.0, 1200.0, 32.0) z=0.0 opacity=1.0 hidden=false sublayers=1
+      layer CUIWindowFrameLayer frame=(0.0, 0.0, 1200.0, 32.0) z=0.0 opacity=1.0 hidden=false sublayers=3
+        layer CAGradientLayer frame=(0.0, 0.0, 1200.0, 32.0) z=0.0 opacity=0.0 hidden=true sublayers=0
+        layer CALayer frame=(0.0, 0.0, 1200.0, 32.0) z=0.0 opacity=0.0 hidden=true sublayers=0
+        layer CALayer frame=(0.0, 0.0, 1200.0, 32.0) z=0.0 opacity=1.0 hidden=false sublayers=0
+  layer NSViewBackingLayer frame=(113.0, 748.0, 1087.0, 32.0) z=0.0 opacity=1.0 hidden=false sublayers=0

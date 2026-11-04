@@ -9,6 +9,7 @@
 #include <pthread.h>
 #include <unordered_map>
 
+#include "base/no_destructor.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
@@ -20,8 +21,13 @@ namespace {
 using shaar::windows_tabs::PageViewHost;
 
 std::unordered_map<shaar_window*, std::unique_ptr<PageViewHost>>& Hosts() {
-  static std::unordered_map<shaar_window*, std::unique_ptr<PageViewHost>> hosts;
-  return hosts;
+  // Chromium can exit directly after closing its browsers. Any host still
+  // retained by the app then outlives AppKit's shutdown; its destructor must
+  // not message a tab view from the C runtime's static destruction pass.
+  static base::NoDestructor<
+      std::unordered_map<shaar_window*, std::unique_ptr<PageViewHost>>>
+      hosts;
+  return *hosts;
 }
 
 PageViewHost* FindHost(shaar_window* window, bool create) {

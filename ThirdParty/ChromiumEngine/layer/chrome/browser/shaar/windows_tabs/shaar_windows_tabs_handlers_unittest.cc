@@ -218,6 +218,36 @@ TEST(ShaarWindowsTabsHandlersTest, WindowCloseWaitsForLiveTabCleanup) {
   registry.UnbindWindow(engine, window);
 }
 
+TEST(ShaarWindowsTabsHandlersTest, MixedProfileWindowsCloseIndependently) {
+  BrowserTabRegistryImpl registry;
+  auto* engine = reinterpret_cast<shaar_engine*>(1);
+  auto* regular = reinterpret_cast<shaar_window*>(2);
+  auto* private_window = reinterpret_cast<shaar_window*>(3);
+  auto* regular_browser = reinterpret_cast<Browser*>(4);
+  auto* private_browser = reinterpret_cast<Browser*>(5);
+  auto* regular_tab = reinterpret_cast<shaar_tab*>(6);
+  auto* private_tab = reinterpret_cast<shaar_tab*>(7);
+  ASSERT_TRUE(registry.ReserveWindow(engine, regular, "regular-window"));
+  ASSERT_TRUE(registry.ReserveWindow(engine, private_window, "private-window"));
+  registry.EnsureWindowState(engine, regular, regular_browser, "profile-a");
+  registry.EnsureWindowState(engine, private_window, private_browser,
+                             "profile-a-private");
+  ASSERT_TRUE(registry.ReserveTab(engine, regular, regular_tab, "regular-tab"));
+  ASSERT_TRUE(registry.ReserveTab(engine, private_window, private_tab,
+                                  "private-tab"));
+  ASSERT_TRUE(registry.BeginWindowClose(engine, regular));
+  ASSERT_TRUE(registry.BeginWindowClose(engine, private_window));
+  registry.UnbindBrowser(engine, regular, regular_browser);
+  registry.UnbindTab(engine, regular, regular_tab);
+  EXPECT_TRUE(registry.WindowCloseReady(engine, regular));
+  EXPECT_FALSE(registry.WindowCloseReady(engine, private_window));
+  registry.UnbindBrowser(engine, private_window, private_browser);
+  registry.UnbindTab(engine, private_window, private_tab);
+  EXPECT_TRUE(registry.WindowCloseReady(engine, private_window));
+  registry.UnbindWindow(engine, regular);
+  registry.UnbindWindow(engine, private_window);
+}
+
 TEST(ShaarWindowsTabsHandlersTest, RegularWindowABIReservesAndClosesHandle) {
   shaar_engine engine_storage;
   auto* engine = &engine_storage;

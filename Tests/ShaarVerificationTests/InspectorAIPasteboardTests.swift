@@ -9,6 +9,16 @@ import Testing
 @testable import ShaarVerification
 
 @Suite @MainActor struct InspectorAIPasteboardTests {
+  @Test func detailedCopyRetriesAfterTransientInspectorRequestFailure() {
+    let complete =
+      "Full computed styles: Matched CSS rules: AI fixture console error status 503 Inspector AI fixture"
+    #expect(
+      InspectorAICopyProbe.detailedCopyNeedsRetry(
+        failure: "The page could not complete the Inspector request.", text: ""))
+    #expect(InspectorAICopyProbe.detailedCopyNeedsRetry(failure: nil, text: "partial context"))
+    #expect(!InspectorAICopyProbe.detailedCopyNeedsRetry(failure: nil, text: complete))
+  }
+
   @Test func detailedDiagnosticsReadinessRequiresEachCollectedSignal() {
     let console = ["AI fixture console error"]
     let statuses = [503]

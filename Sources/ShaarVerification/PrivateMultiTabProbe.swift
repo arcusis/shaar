@@ -80,8 +80,9 @@ struct PrivateMultiTabProbe {
     var searchNavigated = false
     for _ in 0..<100 {
       if owner.store.selectedTab?.url == searchURL.absoluteString,
-        runtime.privateProbeAudit(forContextID: owner.contextID)?[
-          "allWindowsDisplayOwnedWebContents"] as? Bool == true
+        PrivateMultiTabEvidence.liveTabAudit(
+          runtime.privateProbeAudit(forContextID: owner.contextID),
+          tabCount: owner.store.tabs.count)
       {
         searchNavigated = true
         break
@@ -95,9 +96,7 @@ struct PrivateMultiTabProbe {
     var searchDocument: [String: Any]?
     for _ in 0..<Int(200 * ProbeTimeout.scale) {
       searchDocument = await evaluateSearch(searchTabID)
-      if searchDocument?["ready"] as? String == "complete",
-        (searchDocument?["textLength"] as? Int ?? 0) > 100
-      {
+      if PrivateMultiTabEvidence.liveSearch(searchDocument, host: searchURL.host() ?? "") {
         break
       }
       try await Task.sleep(for: .milliseconds(50))
@@ -106,9 +105,7 @@ struct PrivateMultiTabProbe {
     let searchData = try JSONSerialization.data(
       withJSONObject: searchEvidence, options: [.prettyPrinted, .sortedKeys])
     try searchData.write(to: root.appending(path: "\(phase)-private-search.json"), options: .atomic)
-    guard searchEvidence["host"] as? String == searchURL.host(),
-      (searchEvidence["textLength"] as? Int ?? 0) > 100
-    else {
+    guard PrivateMultiTabEvidence.liveSearch(searchEvidence, host: searchURL.host() ?? "") else {
       throw Failure("Private search did not render a live results document: \(searchEvidence).")
     }
     try await captureShell(owner, stage: "search")
@@ -207,10 +204,7 @@ struct PrivateMultiTabProbe {
     let audit = runtime.privateProbeAudit(forContextID: owner.contextID)
     guard ready,
       let audit,
-      audit["allTabsInNativeProfileBrowser"] as? Bool == true,
-      audit["allWindowsDisplayOwnedWebContents"] as? Bool == true,
-      audit["visibleNativeViewportCount"] as? Int == 1,
-      audit["tabCount"] as? Int == owner.store.tabs.count
+      PrivateMultiTabEvidence.liveTabAudit(audit, tabCount: owner.store.tabs.count)
     else {
       throw Failure(
         "Private tab \(index) has no live selected WebContents: ready=\(ready), audit=\(String(describing: audit))."
@@ -230,18 +224,8 @@ struct PrivateMultiTabProbe {
     else {
       throw Failure("Private tab \(index) renderer capture failed: \(error ?? "empty PNG").")
     }
-    var light = 0
-    for row in 1...8 {
-      for column in 1...8 {
-        let x = bitmap.pixelsWide * column / 9
-        let y = bitmap.pixelsHigh * row / 9
-        guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else {
-          throw Failure("Private tab \(index) renderer has undecodable pixels.")
-        }
-        if (color.redComponent + color.greenComponent + color.blueComponent) / 3 > 0.5 {
-          light += 1
-        }
-      }
+    guard let light = PrivateMultiTabEvidence.lightSamples(bitmap) else {
+      throw Failure("Private tab \(index) renderer has undecodable pixels.")
     }
     guard light >= 48 else { throw Failure("Private tab \(index) rendered a dark or black page.") }
     let filename = "\(phase)-private-multitab-\(index)-\(visit).png"
@@ -288,7 +272,7 @@ struct PrivateMultiTabProbe {
     try png.write(
       to: root.appending(path: "\(phase)-private-shell-\(stage).png"), options: .atomic)
     if stage != "first-blank" {
-      guard containers.count == 1, containers[0].wantsLayer else {
+      guard PrivateMultiTabEvidence.liveShellAudit(audit, stage: stage) else {
         throw Failure("Private page container is not layer-backed: \(audit).")
       }
     }
@@ -306,5 +290,46 @@ struct PrivateMultiTabProbe {
 
   private final class Focus {
     weak var window: NSWindow?
+  }
+}
+
+enum PrivateMultiTabEvidence {
+  static func liveTabAudit(_ audit: [AnyHashable: Any]?, tabCount: Int) -> Bool {
+    audit?["allTabsInNativeProfileBrowser"] as? Bool == true
+      && audit?["allWindowsDisplayOwnedWebContents"] as? Bool == true
+      && audit?["visibleNativeViewportCount"] as? Int == 1
+      && audit?["tabCount"] as? Int == tabCount
+  }
+
+  static func liveShellAudit(_ audit: [String: Any], stage: String) -> Bool {
+    audit["stage"] as? String == stage
+      && audit["containerCount"] as? Int == 1
+      && audit["layerBacked"] as? [Bool] == [true]
+      && audit["attached"] as? Bool == true
+      && audit["attachedInWindow"] as? Bool == true
+      && audit["nativeHidden"] as? Bool == false
+  }
+
+  static func liveSearch(_ evidence: [String: Any]?, host: String) -> Bool {
+    evidence?["host"] as? String == host
+      && evidence?["ready"] as? String == "complete"
+      && (evidence?["textLength"] as? Int ?? 0) > 100
+  }
+
+  static func lightSamples(_ bitmap: NSBitmapImageRep) -> Int? {
+    var light = 0
+    for row in 1...8 {
+      for column in 1...8 {
+        let x = bitmap.pixelsWide * column / 9
+        let y = bitmap.pixelsHigh * row / 9
+        guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else {
+          return nil
+        }
+        if (color.redComponent + color.greenComponent + color.blueComponent) / 3 > 0.5 {
+          light += 1
+        }
+      }
+    }
+    return light
   }
 }

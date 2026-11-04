@@ -11,6 +11,12 @@ struct SpaceIndicatorLayout {
   let selectedWidth: CGFloat
   let overflowWidth: CGFloat
 
+  static func insertsBeforeTarget(at pointX: CGFloat, width: CGFloat, isRightToLeft: Bool)
+    -> Bool
+  {
+    isRightToLeft ? pointX > width / 2 : pointX < width / 2
+  }
+
   init(count: Int, selectedIndex: Int, width: CGFloat) {
     let width = max(0, width)
     selectedWidth = min(22, width)

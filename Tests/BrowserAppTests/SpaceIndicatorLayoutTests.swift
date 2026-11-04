@@ -27,6 +27,13 @@ struct SpaceIndicatorLayoutTests {
       }
     }
   }
+
+  @Test func spaceReorderHitSideFollowsVisualDirection() {
+    #expect(SpaceIndicatorLayout.insertsBeforeTarget(at: 4, width: 20, isRightToLeft: false))
+    #expect(!SpaceIndicatorLayout.insertsBeforeTarget(at: 16, width: 20, isRightToLeft: false))
+    #expect(!SpaceIndicatorLayout.insertsBeforeTarget(at: 4, width: 20, isRightToLeft: true))
+    #expect(SpaceIndicatorLayout.insertsBeforeTarget(at: 16, width: 20, isRightToLeft: true))
+  }
 }
 
 @MainActor

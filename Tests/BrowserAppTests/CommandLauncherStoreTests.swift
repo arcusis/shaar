@@ -10,6 +10,18 @@ import Testing
 
 @Suite @MainActor
 struct CommandLauncherStoreTests {
+  @Test func addressEditorSelectsCurrentURLForEditing() throws {
+    let store = BrowserStore()
+    let url = URL(string: "https://current.example/path")!
+    store.perform(.open(url))
+
+    store.showAddressEditor()
+
+    #expect(store.commandIsOpen)
+    #expect(store.commandEditsCurrentURL)
+    #expect(store.commandQuery == url.absoluteString)
+  }
+
   @Test func actionsAppearOnlyWhenAHostCanRunThem() {
     let store = BrowserStore()
     store.showCommand()

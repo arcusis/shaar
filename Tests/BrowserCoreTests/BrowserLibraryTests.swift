@@ -342,7 +342,8 @@ private func bookmarkPayload(children: [[String: Any]]) -> [String: Any] {
 @Test func browserImportDecodesBookmarkHTMLCharacterReferences() throws {
   let url = FileManager.default.temporaryDirectory.appending(path: "Firefox-\(UUID()).html")
   defer { try? FileManager.default.removeItem(at: url) }
-  try #"<DL><DT><A HREF="https://example.com">R&amp;D &lt;map&gt; &#39;guide&#39; &#x1F30D; &apos; &unknown;</A></DL>"#
+  try
+    #"<DL><DT><A HREF="https://example.com">R&amp;D &lt;map&gt; &#39;guide&#39; &#x1F30D; &apos; &unknown;</A></DL>"#
     .write(to: url, atomically: true, encoding: .utf8)
 
   let items = try BrowserImport.read(url)

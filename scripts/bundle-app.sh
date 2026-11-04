@@ -116,7 +116,15 @@ else
   app="build/Shaar Shell.app"
 fi
 swift_build() {
-  swift build --manifest-cache none --scratch-path "$scratch_path" -c "$configuration" "$@"
+  local -a jobs=()
+  if [[ -n ${SHAAR_BUNDLE_SWIFT_JOBS:-} ]]; then
+    [[ $SHAAR_BUNDLE_SWIFT_JOBS =~ ^[1-9][0-9]*$ ]] || {
+      echo 'SHAAR_BUNDLE_SWIFT_JOBS must be a positive integer.' >&2
+      return 2
+    }
+    jobs=(--jobs "$SHAAR_BUNDLE_SWIFT_JOBS")
+  fi
+  swift build "${jobs[@]}" --manifest-cache none --scratch-path "$scratch_path" -c "$configuration" "$@"
 }
 mkdir -p "$scratch_path"
 if $with_verification; then

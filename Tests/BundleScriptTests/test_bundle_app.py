@@ -226,6 +226,13 @@ class BundleAppTests(unittest.TestCase):
             with self.subTest(args=args):
                 self.assertEqual(self._run(*args).returncode, 2)
 
+    def test_preview_bundle_respects_swift_job_cap(self):
+        environment = dict(self.env, SHAAR_BUNDLE_SWIFT_JOBS="4")
+        result = self._run("--with-engine", "--preview-shaar-engine", env=environment)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("swift build --jobs 4", self._log())
+
     def test_with_updates_is_rejected_outside_release_engine_bundles(self):
         for args in (
             ("--with-updates",),

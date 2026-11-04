@@ -124,6 +124,12 @@ final class BrowserWorkspaceStore {
     return saved
   }
 
+  /// Confirms the current workspace can be written before a destructive profile operation.
+  func validateWritableSnapshot() throws {
+    try flushSaves()
+    guard persistSnapshot() else { throw CocoaError(.fileWriteUnknown) }
+  }
+
   /// Waits until the latest change is on disk. Ordinary changes return before the disk flush.
   func flushSaves() throws {
     do {

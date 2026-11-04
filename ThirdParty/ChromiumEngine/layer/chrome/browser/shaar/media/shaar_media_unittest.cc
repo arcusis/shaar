@@ -31,6 +31,15 @@ TEST(ShaarMediaTest, MapsOnlySupportedChromiumSessionActions) {
   EXPECT_FALSE(shaar::media::MapSessionAction(SHAAR_MEDIA_PIP_SKIP, &action));
 }
 
+TEST(ShaarMediaTest, ElementVolumeScriptTargetsOnlyPlayingPageMedia) {
+  const std::u16string script = shaar::media::VolumeScriptForTesting(0.625);
+  EXPECT_NE(script.find(u"document.querySelectorAll('audio,video')"),
+            std::u16string::npos);
+  EXPECT_NE(script.find(u"!element.paused&&!element.ended"),
+            std::u16string::npos);
+  EXPECT_NE(script.find(u"element.volume=0.625"), std::u16string::npos);
+}
+
 TEST(ShaarMediaTest, RegistersItsModuleAndOperationHandler) {
   ShaarModuleRegistry registry;
   shaar_media_register(&registry);

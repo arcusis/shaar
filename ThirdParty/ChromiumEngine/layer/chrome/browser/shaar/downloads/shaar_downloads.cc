@@ -85,7 +85,7 @@ bool Downloads::IsReady() const {
   return ready_ && manager_;
 }
 
-base::DictValue Downloads::Record(const download::DownloadItem& item,
+base::DictValue Downloads::Record(const download::DownloadItem &item,
                                   bool off_the_record) {
   base::DictValue record;
   const base::FilePath& target = item.GetTargetFilePath();

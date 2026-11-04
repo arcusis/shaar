@@ -34,6 +34,62 @@ namespace {
 constexpr size_t kMaxArgumentsBytes = 1024 * 1024;
 constexpr int kInspector = 1;
 constexpr int kDeveloper = 2;
+
+class RuntimeServices final : public DevToolsRuntimeServices {
+public:
+  bool ResolveTarget(shaar_engine *engine, shaar_scope scope,
+                     shaar_window *window, shaar_tab *tab,
+                     content::WebContents *contents,
+                     DevToolsTargetIdentity *identity) override {
+    auto &context = shaar::EngineContext();
+    if (!engine || !window || !tab || !contents || !identity ||
+        !context.browser_tabs ||
+        context.browser_tabs->FindWebContents(engine, window, tab) != contents)
+      return false;
+    const std::string_view window_id =
+        context.browser_tabs->WindowID(engine, window);
+    const std::string_view tab_id =
+        context.browser_tabs->TabID(engine, window, tab);
+    if (window_id.empty() || tab_id.empty())
+      return false;
+    std::string_view profile_id;
+    std::string_view session_id;
+    Profile *target_profile = nullptr;
+    if (scope.profile && !scope.private_session && context.profile_services) {
+      target_profile =
+          context.profile_services->ResolveProfile(engine, scope.profile);
+      profile_id = context.profile_services->ProfileID(engine, scope.profile);
+    } else if (scope.private_session && !scope.profile &&
+               context.private_sessions) {
+      Profile *parent = nullptr;
+      context.private_sessions->Resolve(engine, scope.private_session, &parent,
+                                        &target_profile, &profile_id,
+                                        &session_id);
+    }
+    if (!target_profile || profile_id.empty() ||
+        contents->GetBrowserContext() != target_profile)
+      return false;
+    *identity = {std::string(profile_id), std::string(session_id),
+                 std::string(window_id), std::string(tab_id)};
+    return true;
+  }
+
+  bool IsOperationAllowed(shaar_engine *engine, shaar_scope scope,
+                          content::WebContents *contents,
+                          shaar_operation operation, int capability) override {
+    if (!engine || !contents ||
+        ((scope.profile != nullptr) == (scope.private_session != nullptr)))
+      return false;
+    if (scope.private_session &&
+        (operation == SHAAR_OP_DEVTOOLS_CONTROL_ENABLE ||
+         operation == SHAAR_OP_DEVTOOLS_CONTROL_DISABLE))
+      return false;
+    return operation != SHAAR_OP_DEVTOOLS_CALL || capability == kInspector ||
+           capability == kDeveloper;
+  }
+};
+
+RuntimeServices g_runtime_services;
 constexpr char kFrontendStateEvent[] =
     "{\"schemaVersion\":1,\"kind\":\"frontendState\",\"open\":%s}";
 
@@ -46,45 +102,76 @@ struct CommandEntry {
 
 constexpr CommandEntry kCommands[] = {
     {SHAAR_DEVTOOLS_RUNTIME_EVALUATE, "Runtime.evaluate", true, true},
-    {SHAAR_DEVTOOLS_RUNTIME_RELEASE_OBJECT, "Runtime.releaseObject", true, true},
-    {SHAAR_DEVTOOLS_RUNTIME_GET_PROPERTIES, "Runtime.getProperties", true, true},
-    {SHAAR_DEVTOOLS_RUNTIME_RELEASE_OBJECT_GROUP, "Runtime.releaseObjectGroup", true, true},
+    {SHAAR_DEVTOOLS_RUNTIME_RELEASE_OBJECT, "Runtime.releaseObject", true,
+     true},
+    {SHAAR_DEVTOOLS_RUNTIME_GET_PROPERTIES, "Runtime.getProperties", true,
+     true},
+    {SHAAR_DEVTOOLS_RUNTIME_RELEASE_OBJECT_GROUP, "Runtime.releaseObjectGroup",
+     true, true},
     {SHAAR_DEVTOOLS_DOM_ENABLE, "DOM.enable", true, false},
     {SHAAR_DEVTOOLS_DOM_GET_DOCUMENT, "DOM.getDocument", true, false},
     {SHAAR_DEVTOOLS_DOM_REQUEST_NODE, "DOM.requestNode", true, false},
     {SHAAR_DEVTOOLS_DOM_GET_BOX_MODEL, "DOM.getBoxModel", true, false},
     {SHAAR_DEVTOOLS_CSS_ENABLE, "CSS.enable", true, false},
-    {SHAAR_DEVTOOLS_CSS_GET_PLATFORM_FONTS_FOR_NODE, "CSS.getPlatformFontsForNode", true, false},
-    {SHAAR_DEVTOOLS_CSS_GET_BACKGROUND_COLORS, "CSS.getBackgroundColors", true, false},
-    {SHAAR_DEVTOOLS_CSS_GET_MATCHED_STYLES_FOR_NODE, "CSS.getMatchedStylesForNode", true, false},
-    {SHAAR_DEVTOOLS_CSS_GET_COMPUTED_STYLE_FOR_NODE, "CSS.getComputedStyleForNode", true, false},
-    {SHAAR_DEVTOOLS_CSS_GET_STYLESHEET_TEXT, "CSS.getStyleSheetText", true, false},
+    {SHAAR_DEVTOOLS_CSS_GET_PLATFORM_FONTS_FOR_NODE,
+     "CSS.getPlatformFontsForNode", true, false},
+    {SHAAR_DEVTOOLS_CSS_GET_BACKGROUND_COLORS, "CSS.getBackgroundColors", true,
+     false},
+    {SHAAR_DEVTOOLS_CSS_GET_MATCHED_STYLES_FOR_NODE,
+     "CSS.getMatchedStylesForNode", true, false},
+    {SHAAR_DEVTOOLS_CSS_GET_COMPUTED_STYLE_FOR_NODE,
+     "CSS.getComputedStyleForNode", true, false},
+    {SHAAR_DEVTOOLS_CSS_GET_STYLESHEET_TEXT, "CSS.getStyleSheetText", true,
+     false},
     {SHAAR_DEVTOOLS_PAGE_ENABLE, "Page.enable", true, true},
     {SHAAR_DEVTOOLS_PAGE_GET_RESOURCE_TREE, "Page.getResourceTree", true, true},
-    {SHAAR_DEVTOOLS_PAGE_GET_RESOURCE_CONTENT, "Page.getResourceContent", true, false},
-    {SHAAR_DEVTOOLS_PAGE_CAPTURE_SCREENSHOT, "Page.captureScreenshot", true, false},
+    {SHAAR_DEVTOOLS_PAGE_GET_RESOURCE_CONTENT, "Page.getResourceContent", true,
+     false},
+    {SHAAR_DEVTOOLS_PAGE_CAPTURE_SCREENSHOT, "Page.captureScreenshot", true,
+     true},
     {SHAAR_DEVTOOLS_OVERLAY_ENABLE, "Overlay.enable", true, false},
     {SHAAR_DEVTOOLS_OVERLAY_DISABLE, "Overlay.disable", true, false},
-    {SHAAR_DEVTOOLS_OVERLAY_SET_SHOW_GRID_OVERLAYS, "Overlay.setShowGridOverlays", true, false},
-    {SHAAR_DEVTOOLS_OVERLAY_SET_SHOW_FLEX_OVERLAYS, "Overlay.setShowFlexOverlays", true, false},
-    {SHAAR_DEVTOOLS_OVERLAY_GET_GRID_HIGHLIGHT_OBJECTS_FOR_TEST, "Overlay.getGridHighlightObjectsForTest", true, false},
+    {SHAAR_DEVTOOLS_OVERLAY_SET_SHOW_GRID_OVERLAYS,
+     "Overlay.setShowGridOverlays", true, false},
+    {SHAAR_DEVTOOLS_OVERLAY_SET_SHOW_FLEX_OVERLAYS,
+     "Overlay.setShowFlexOverlays", true, false},
+    {SHAAR_DEVTOOLS_OVERLAY_GET_GRID_HIGHLIGHT_OBJECTS_FOR_TEST,
+     "Overlay.getGridHighlightObjectsForTest", true, false},
     {SHAAR_DEVTOOLS_DOM_DESCRIBE_NODE, "DOM.describeNode", true, false},
-    {SHAAR_DEVTOOLS_ACCESSIBILITY_GET_PARTIAL_AX_TREE, "Accessibility.getPartialAXTree", true, false},
-    {SHAAR_DEVTOOLS_EMULATION_SET_DEVICE_METRICS_OVERRIDE, "Emulation.setDeviceMetricsOverride", false, true},
-    {SHAAR_DEVTOOLS_EMULATION_CLEAR_DEVICE_METRICS_OVERRIDE, "Emulation.clearDeviceMetricsOverride", false, true},
+    {SHAAR_DEVTOOLS_ACCESSIBILITY_GET_PARTIAL_AX_TREE,
+     "Accessibility.getPartialAXTree", true, false},
+    {SHAAR_DEVTOOLS_EMULATION_SET_DEVICE_METRICS_OVERRIDE,
+     "Emulation.setDeviceMetricsOverride", false, true},
+    {SHAAR_DEVTOOLS_EMULATION_CLEAR_DEVICE_METRICS_OVERRIDE,
+     "Emulation.clearDeviceMetricsOverride", false, true},
     {SHAAR_DEVTOOLS_NETWORK_ENABLE, "Network.enable", false, true},
-    {SHAAR_DEVTOOLS_NETWORK_EMULATE_NETWORK_CONDITIONS, "Network.emulateNetworkConditions", false, true},
-    {SHAAR_DEVTOOLS_EMULATION_SET_CPU_THROTTLING_RATE, "Emulation.setCPUThrottlingRate", false, true},
-    {SHAAR_DEVTOOLS_EMULATION_SET_GEOLOCATION_OVERRIDE, "Emulation.setGeolocationOverride", false, true},
-    {SHAAR_DEVTOOLS_EMULATION_CLEAR_GEOLOCATION_OVERRIDE, "Emulation.clearGeolocationOverride", false, true},
-    {SHAAR_DEVTOOLS_EMULATION_SET_TIMEZONE_OVERRIDE, "Emulation.setTimezoneOverride", false, true},
-    {SHAAR_DEVTOOLS_EMULATION_SET_LOCALE_OVERRIDE, "Emulation.setLocaleOverride", false, true},
-    {SHAAR_DEVTOOLS_EMULATION_SET_USER_AGENT_OVERRIDE, "Emulation.setUserAgentOverride", false, true},
-    {SHAAR_DEVTOOLS_EMULATION_SET_EMULATED_MEDIA, "Emulation.setEmulatedMedia", false, true},
+    {SHAAR_DEVTOOLS_NETWORK_EMULATE_NETWORK_CONDITIONS,
+     "Network.emulateNetworkConditions", false, true},
+    {SHAAR_DEVTOOLS_EMULATION_SET_CPU_THROTTLING_RATE,
+     "Emulation.setCPUThrottlingRate", false, true},
+    {SHAAR_DEVTOOLS_EMULATION_SET_GEOLOCATION_OVERRIDE,
+     "Emulation.setGeolocationOverride", false, true},
+    {SHAAR_DEVTOOLS_EMULATION_CLEAR_GEOLOCATION_OVERRIDE,
+     "Emulation.clearGeolocationOverride", false, true},
+    {SHAAR_DEVTOOLS_EMULATION_SET_TIMEZONE_OVERRIDE,
+     "Emulation.setTimezoneOverride", false, true},
+    {SHAAR_DEVTOOLS_EMULATION_SET_LOCALE_OVERRIDE,
+     "Emulation.setLocaleOverride", false, true},
+    {SHAAR_DEVTOOLS_EMULATION_SET_USER_AGENT_OVERRIDE,
+     "Emulation.setUserAgentOverride", false, true},
+    {SHAAR_DEVTOOLS_EMULATION_SET_EMULATED_MEDIA, "Emulation.setEmulatedMedia",
+     false, true},
     {SHAAR_DEVTOOLS_PERFORMANCE_ENABLE, "Performance.enable", false, true},
-    {SHAAR_DEVTOOLS_PERFORMANCE_GET_METRICS, "Performance.getMetrics", false, true},
-    {SHAAR_DEVTOOLS_PAGE_ADD_SCRIPT_TO_EVALUATE_ON_NEW_DOCUMENT, "Page.addScriptToEvaluateOnNewDocument", false, true},
-    {SHAAR_DEVTOOLS_PAGE_REMOVE_SCRIPT_TO_EVALUATE_ON_NEW_DOCUMENT, "Page.removeScriptToEvaluateOnNewDocument", false, true},
+    {SHAAR_DEVTOOLS_PERFORMANCE_GET_METRICS, "Performance.getMetrics", false,
+     true},
+    {SHAAR_DEVTOOLS_PAGE_ADD_SCRIPT_TO_EVALUATE_ON_NEW_DOCUMENT,
+     "Page.addScriptToEvaluateOnNewDocument", false, true},
+    {SHAAR_DEVTOOLS_PAGE_REMOVE_SCRIPT_TO_EVALUATE_ON_NEW_DOCUMENT,
+     "Page.removeScriptToEvaluateOnNewDocument", false, true},
+    {SHAAR_DEVTOOLS_NETWORK_GET_COOKIES, "Network.getCookies", false, true},
+    {SHAAR_DEVTOOLS_NETWORK_SET_COOKIE, "Network.setCookie", false, true},
+    {SHAAR_DEVTOOLS_NETWORK_DELETE_COOKIES, "Network.deleteCookies", false,
+     true},
 };
 
 struct ReplyContext {
@@ -231,9 +318,15 @@ bool ValidateParams(shaar_devtools_command command,
     case SHAAR_DEVTOOLS_PAGE_REMOVE_SCRIPT_TO_EVALUATE_ON_NEW_DOCUMENT:
       return ParamsHaveOnly(params, {"identifier"});
     case SHAAR_DEVTOOLS_NETWORK_GET_COOKIES:
+      return ParamsHaveOnly(params, {"urls"});
     case SHAAR_DEVTOOLS_NETWORK_SET_COOKIE:
+      return ParamsHaveOnly(
+          params, {"name", "value", "url", "domain", "path", "secure",
+                   "httpOnly", "sameSite", "expires", "priority", "sameParty",
+                   "sourceScheme", "sourcePort", "partitionKey"});
     case SHAAR_DEVTOOLS_NETWORK_DELETE_COOKIES:
-      return false;
+      return ParamsHaveOnly(params,
+                            {"name", "url", "domain", "path", "partitionKey"});
   }
   return false;
 }
@@ -324,6 +417,17 @@ bool HasRequiredFields(shaar_devtools_command command,
       return HasRequiredString(params, "source");
     case SHAAR_DEVTOOLS_PAGE_REMOVE_SCRIPT_TO_EVALUATE_ON_NEW_DOCUMENT:
       return HasRequiredString(params, "identifier");
+    case SHAAR_DEVTOOLS_NETWORK_GET_COOKIES:
+      return !params.Find("urls") || params.FindList("urls") != nullptr;
+    case SHAAR_DEVTOOLS_NETWORK_SET_COOKIE:
+      return HasRequiredString(params, "name") &&
+             params.FindString("value") != nullptr &&
+             (HasRequiredString(params, "url") ||
+              HasRequiredString(params, "domain"));
+    case SHAAR_DEVTOOLS_NETWORK_DELETE_COOKIES:
+      return HasRequiredString(params, "name") &&
+             (HasRequiredString(params, "url") ||
+              HasRequiredString(params, "domain"));
     default:
       return true;
   }
@@ -469,6 +573,10 @@ shaar_error_code DecodeOperation(shaar_operation operation,
 }
 
 }  // namespace
+
+void BindRuntimeServices() {
+  shaar::SetDevToolsRuntimeServices(&g_runtime_services);
+}
 
 bool StartProtocolRequest(scoped_refptr<content::DevToolsAgentHost> host,
                           shaar_request_id request_id,

@@ -34,15 +34,20 @@ TEST(ShaarSiteDataTest, SecurityInfoRequiresSelectedRegularTabScope) {
   shaar_bytes output{};
   shaar_error error{};
   error.size = sizeof(error);
-  EXPECT_EQ(shaar_site_security_info(nullptr, scope, nullptr, nullptr,
-                                     &output, &error), SHAAR_INVALID_ARGUMENT);
+  EXPECT_EQ(shaar_site_security_info(nullptr, scope, nullptr, nullptr, &output,
+                                     &error),
+            SHAAR_INVALID_ARGUMENT);
   EXPECT_EQ(error.code, SHAAR_INVALID_ARGUMENT);
   EXPECT_EQ(output.size, 0u);
 }
 
 TEST(ShaarSiteDataTest, SecurityLevelRejectsCertificateErrorsAndNonWebPages) {
-  EXPECT_EQ(SiteSecurityLevelForTesting("https://example.com", false), "secure");
-  EXPECT_EQ(SiteSecurityLevelForTesting("https://example.com", true), "certificateError");
-  EXPECT_EQ(SiteSecurityLevelForTesting("http://example.com", false), "insecure");
-  EXPECT_EQ(SiteSecurityLevelForTesting("file:///tmp/page", false), "unavailable");
+  EXPECT_EQ(SiteSecurityLevelForTesting("https://example.com", false),
+            "secure");
+  EXPECT_EQ(SiteSecurityLevelForTesting("https://example.com", true),
+            "certificateError");
+  EXPECT_EQ(SiteSecurityLevelForTesting("http://example.com", false),
+            "insecure");
+  EXPECT_EQ(SiteSecurityLevelForTesting("file:///tmp/page", false),
+            "unavailable");
 }

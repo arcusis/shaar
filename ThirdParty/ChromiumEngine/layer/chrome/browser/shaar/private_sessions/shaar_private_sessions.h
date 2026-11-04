@@ -56,9 +56,9 @@ class PrivateSessionRegistry : public ProfileObserver {
   bool RetainChild(Session* session);
   bool ReleaseChild(Session* session);
   Session* Find(Profile* parent, const std::string& session_id) const;
-  bool Resolve(const Session* session, Profile** parent, Profile** otr,
-               std::string_view* profile_id,
-               std::string_view* session_id) const;
+  bool Resolve(const Session *session, Profile **parent, Profile **otr,
+               std::string_view *profile_id,
+               std::string_view *session_id) const;
   void OnProfileWillBeDestroyed(Profile* profile) override;
 
  private:

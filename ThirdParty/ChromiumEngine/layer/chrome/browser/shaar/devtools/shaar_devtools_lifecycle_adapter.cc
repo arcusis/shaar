@@ -7,6 +7,7 @@
 extern "C" void shaar_devtools_register(ShaarModuleRegistry* registry) {
   if (!registry)
     return;
+  shaar::devtools::BindRuntimeServices();
   static const shaar::devtools::ModuleHandlers handlers{
       .handle_operation = &shaar::devtools::HandleDevToolsOperation};
   registry->RegisterModule(SHAAR_MODULE_DEVTOOLS, &handlers);

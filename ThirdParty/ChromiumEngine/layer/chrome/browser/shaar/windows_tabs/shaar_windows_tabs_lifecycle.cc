@@ -128,7 +128,7 @@ void FinalizeWindow(shaar_window* window) {
   const std::string window_id = window->id;
   const std::string profile_id = window->profile_id;
   const std::string session_id = window->session_id;
-  shaar_private_session* private_session = window->private_session;
+  shaar_private_session *private_session = window->private_session;
   struct ClosedTab {
     std::string profile_id;
     std::string session_id;
@@ -163,7 +163,8 @@ void FinalizeWindow(shaar_window* window) {
                      {kClosed, sizeof(kClosed) - 1});
   }
   if (private_session && shaar::EngineContext().private_sessions)
-    shaar::EngineContext().private_sessions->ReleaseChild(engine, private_session);
+    shaar::EngineContext().private_sessions->ReleaseChild(engine,
+                                                          private_session);
 }
 
 bool ValidID(shaar_bytes bytes) {
@@ -309,7 +310,7 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_window_open(
                               std::string(window_id.data, window_id.size)))
     return Result(SHAAR_CONFLICT, error);
   if (private_profile) {
-    auto* services = shaar::EngineContext().private_sessions;
+    auto *services = shaar::EngineContext().private_sessions;
     if (!services->RetainChild(engine, private_session)) {
       registry.UnbindWindow(engine, raw);
       return Result(SHAAR_NOT_FOUND, error);

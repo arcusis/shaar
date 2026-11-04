@@ -104,7 +104,8 @@ TEST(ShaarExtensionsModuleTest, RejectsMalformedExtensionIDs) {
   EXPECT_EQ(profiles.resolve_calls, 0);
 }
 
-TEST(ShaarExtensionsModuleTest, RejectsMalformedWebStoreFitBeforeProfileLookup) {
+TEST(ShaarExtensionsModuleTest,
+     RejectsMalformedWebStoreFitBeforeProfileLookup) {
   EmptyProfileServices profiles;
   shaar::ShaarEngineContext context{&profiles, nullptr};
   shaar_scope scope = {};
@@ -119,7 +120,8 @@ TEST(ShaarExtensionsModuleTest, RejectsMalformedWebStoreFitBeforeProfileLookup) 
   EXPECT_EQ(profiles.resolve_calls, 0);
 }
 
-TEST(ShaarExtensionsModuleTest, RejectsMalformedActionStateBeforeProfileLookup) {
+TEST(ShaarExtensionsModuleTest,
+     RejectsMalformedActionStateBeforeProfileLookup) {
   EmptyProfileServices profiles;
   shaar::ShaarEngineContext context{&profiles, nullptr};
   shaar_scope scope = {};

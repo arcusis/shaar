@@ -830,6 +830,18 @@ shaar_error_code Unwatch(HistoryContext *registry,
 
 } // namespace
 
+namespace shaar_history {
+
+void StopObservingLifecycle(shaar_engine *engine) {
+  g_watch_states.erase(engine);
+}
+
+bool HasWatchStateForTesting(shaar_engine *engine) {
+  return g_watch_states.contains(engine);
+}
+
+} // namespace shaar_history
+
 shaar_error_code HandleHistoryOperation(
     shaar::ShaarEngineContext* engine_context,
     shaar_engine* engine,

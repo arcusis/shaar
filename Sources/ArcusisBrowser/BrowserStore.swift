@@ -42,6 +42,8 @@ struct SpaceRemovalImpact {
 @MainActor @Observable
 final class BrowserStore {
   var session: BrowserSession
+  private(set) var isPrivate = false
+  var privatePage: PrivatePageSession?
   var splitTabRecency: [UUID] = []
   var pendingSplitPlacement: SplitPlacement?
   var sidebarDrag: SidebarTransfer?
@@ -161,6 +163,12 @@ final class BrowserStore {
     }
   }
 
+  init(privateSession: BrowserSession) {
+    sessionFile = nil
+    session = privateSession
+    isPrivate = true
+  }
+
   /// The first snapshot is a launch checkpoint, written before any change is scheduled.
   private func writeLaunchSnapshot() {
     guard let sessionFile else { return }
@@ -208,7 +216,7 @@ final class BrowserStore {
       bookmarks: library.bookmarks[profile]?.items ?? [], history: library.history[profile] ?? [],
       commands: launcherActions?.available() ?? [],
       searchEngine: preferences.searchEngine(for: profile),
-      providerSearch: preferences.accounts(for: profile).first.flatMap {
+      providerSearch: (isPrivate ? nil : preferences.accounts(for: profile).first).flatMap {
         switch $0.provider {
         case .google: .google
         case .microsoft: .microsoft
@@ -270,6 +278,7 @@ final class BrowserStore {
 
   @discardableResult
   func showLibraryDrawer(_ section: LibraryDrawerSection) -> Bool {
+    if isPrivate && section != .spaces { return false }
     guard canUseLibraryDrawer else { return false }
     dismissPageFind()
     engine?.extensionPanel = nil
@@ -280,6 +289,7 @@ final class BrowserStore {
 
   @discardableResult
   func selectLibraryDrawerSection(_ section: LibraryDrawerSection) -> Bool {
+    if isPrivate && section != .spaces { return false }
     guard libraryDrawerSection != nil, canUseLibraryDrawer else { return false }
     libraryDrawerSection = section
     libraryDrawerProfileID = section == .spaces ? nil : session.selectedSpace.profileID
@@ -342,6 +352,7 @@ final class BrowserStore {
   }
 
   func showDownloads() {
+    guard !isPrivate else { return }
     guard sheet == nil else { return }
     dismissCommand()
     dismissPageFind()
@@ -1159,6 +1170,7 @@ final class BrowserStore {
     name: String, sharingProfile profileID: UUID?, tint: SpaceTint,
     customRGB: SpaceRGBColor? = nil, symbol: String? = nil
   ) -> Bool {
+    if isPrivate && profileID != session.selectedSpace.profileID { return false }
     guard
       let id = session.addSpace(
         name: name, sharingProfile: profileID, tint: tint, customRGB: customRGB)
@@ -1185,6 +1197,7 @@ final class BrowserStore {
 
   @discardableResult
   func setSpaceProfile(_ spaceID: UUID, to profileID: UUID) -> Bool {
+    if isPrivate { return false }
     if let onSetSpaceProfile { return onSetSpaceProfile(spaceID, profileID) }
     var updated = session
     guard updated.setSpaceProfile(spaceID, to: profileID) else { return false }

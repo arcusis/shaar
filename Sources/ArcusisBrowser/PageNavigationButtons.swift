@@ -10,17 +10,29 @@ struct PageNavigationButtons: View {
 
   var body: some View {
     let id = store.session.selectedPage?.tab.id
-    let state = id.flatMap { engine?.pages[$0] }
+    let state = id.flatMap { engine?.pages[$0] ?? store.privatePage?.pages[$0] }
 
     HStack(spacing: 4) {
       navigationButton("chevron.backward", label: ShellL10n.string("Back")) {
-        if let id { engine?.runtime.goBack(inTabID: id.uuidString) }
+        if let id {
+          if let privatePage = store.privatePage {
+            privatePage.goBack(id)
+          } else {
+            engine?.runtime.goBack(inTabID: id.uuidString)
+          }
+        }
       }
       .disabled(state?.canGoBack != true)
       .browserChromeControl("browser.chrome.back")
 
       navigationButton("chevron.forward", label: ShellL10n.string("Forward")) {
-        if let id { engine?.runtime.goForward(inTabID: id.uuidString) }
+        if let id {
+          if let privatePage = store.privatePage {
+            privatePage.goForward(id)
+          } else {
+            engine?.runtime.goForward(inTabID: id.uuidString)
+          }
+        }
       }
       .disabled(state?.canGoForward != true)
       .browserChromeControl("browser.chrome.forward")

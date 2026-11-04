@@ -10,6 +10,10 @@ import Testing
 @Suite struct PrivateMultiTabEvidenceTests {
   @Test func liveTabAuditRequiresOwnedWebContentsAndExpectedCount() {
     let valid: [AnyHashable: Any] = [
+      "sourceIsRegular": true,
+      "contextIsPrivate": true,
+      "contextDistinct": true,
+      "allWindowsUsePrivateActiveProfile": true,
       "allTabsInNativeProfileBrowser": true,
       "allWindowsDisplayOwnedWebContents": true,
       "visibleNativeViewportCount": 1,

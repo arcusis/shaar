@@ -61,7 +61,7 @@ def expected_captures():
     names = {"space-pager-selected.png", "space-pager-drag.png",
              "language-restart-light.png", "language-restart-dark.png",
              "sidebar-toggle-windowed.png", "sidebar-toggle-fullscreen.png",
-             "private-start-page-light.png", "private-start-page-dark.png"}
+             "private-chrome-light.png", "private-chrome-dark.png"}
     for scheme in ("light", "dark"):
         for panel in ("design", "css", "component", "accessibility", "assets", "notes", "overview",
                       "vitals", "network", "console", "storage", "simulations", "report"):

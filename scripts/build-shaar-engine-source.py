@@ -707,6 +707,13 @@ def run_dual_export(repo: Path, reference: Path, config: dict,
 
 def probe_swift_loader(repo: Path, output: Path, binary: Path) -> None:
     loader = checked_repo_file(repo, "Sources/ShaarEngineABI/ShaarEngineABI.swift")
+    c_header = checked_repo_file(repo, "Sources/ShaarEngineC/include/shaar_engine.h")
+    module_map = output / "shaar-loader-probe.modulemap"
+    module_map.write_text(
+        "module ShaarEngineC {\n"
+        f"  umbrella {json.dumps(str(c_header.parent))}\n"
+        "  export *\n}\n"
+    )
     probe = output / "shaar-loader-probe.swift"
     probe.write_text('''import Foundation
 @main struct Probe {
@@ -720,6 +727,7 @@ def probe_swift_loader(repo: Path, output: Path, binary: Path) -> None:
 ''')
     executable = output / "shaar-loader-probe"
     run_logged(["/usr/sbin/taskpolicy", "-b", "/usr/bin/swiftc",
+                "-Xcc", f"-fmodule-map-file={module_map}",
                 str(loader), str(probe), "-o", str(executable)], output,
                output / "swift-probe-build.log", timeout=300)
     framework = binary.parents[2]

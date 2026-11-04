@@ -359,8 +359,9 @@ enum PrivateMultiTabEvidence {
   }
 
   static func liveSearch(_ evidence: [String: Any]?, host: String) -> Bool {
-    evidence?["host"] as? String == host
-      && evidence?["ready"] as? String == "complete"
+    let ready = evidence?["ready"] as? String
+    return evidence?["host"] as? String == host
+      && (ready == "interactive" || ready == "complete")
       && (evidence?["textLength"] as? Int ?? 0) > 100
   }
 

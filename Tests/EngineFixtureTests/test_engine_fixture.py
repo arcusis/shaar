@@ -22,6 +22,15 @@ fixture = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fixture)
 
 
+class PrivateSearchEvidenceTests(unittest.TestCase):
+    def test_populated_interactive_document_is_rendered(self):
+        search = dict(host='search.example', ready='interactive', textLength=101)
+        self.assertTrue(fixture.private_search_has_results(search, 'search.example'))
+        self.assertFalse(fixture.private_search_has_results(search, 'other.example'))
+        self.assertFalse(fixture.private_search_has_results(dict(search, ready='loading'), 'search.example'))
+        self.assertFalse(fixture.private_search_has_results(dict(search, textLength=100), 'search.example'))
+
+
 class SavedTabCapacityRunnerTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory(prefix='arcusis-engine-probe-')

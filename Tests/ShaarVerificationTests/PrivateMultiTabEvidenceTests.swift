@@ -65,6 +65,9 @@ import Testing
       "host": "search.example", "ready": "complete", "textLength": 101,
     ]
     #expect(PrivateMultiTabEvidence.liveSearch(valid, host: "search.example"))
+    var interactive = valid
+    interactive["ready"] = "interactive"
+    #expect(PrivateMultiTabEvidence.liveSearch(interactive, host: "search.example"))
     #expect(!PrivateMultiTabEvidence.liveSearch(valid, host: "other.example"))
     #expect(
       !PrivateMultiTabEvidence.liveSearch(

@@ -327,14 +327,20 @@ static BOOL ProbeViewIsVisibleInWindow(NSView *view, NSWindow *window) {
   BOOL anyTabLoading = NO;
   BOOL allTabsInNativeProfileBrowser = YES;
   BOOL allTabsAttachedToHostView = YES;
+  BOOL allTabsDetachedFromHostView = YES;
   BOOL allWindowsUsePrivateActiveProfile = YES;
   BOOL allWindowsDisplayOwnedWebContents = YES;
+  BOOL allWindowsSelectOwnedWebContents = YES;
   NSUInteger visibleNativeViewportCount = 0;
   for (NSString *windowID in context[@"windows"]) {
     NSMutableDictionary *window = _privateProbeWindows[windowID];
     ArdiaCoreWindow *nativeWindowObject = window[@"native"];
     NSUInteger visiblePrivateViews = 0;
     if (nativeWindowObject.activeProfile != profile) allWindowsUsePrivateActiveProfile = NO;
+    NSString *selectedTabID = window[@"selectedTabID"];
+    if (!selectedTabID || ![window[@"tabIDs"] containsObject:selectedTabID] ||
+        !_privateProbeTabs[selectedTabID][@"tab"])
+      allWindowsSelectOwnedWebContents = NO;
     for (NSString *tabID in window[@"tabIDs"]) {
       ArdiaCoreTab *tab = _privateProbeTabs[tabID][@"tab"];
       NSURL *tabURL = [NSURL URLWithString:tab.url ?: @""];
@@ -343,6 +349,8 @@ static BOOL ProbeViewIsVisibleInWindow(NSView *view, NSWindow *window) {
         allTabsInNativeProfileBrowser = NO;
       if (!tab.view || tab.view.superview != nativeWindowObject.hostView)
         allTabsAttachedToHostView = NO;
+      if (!tab.view || tab.view.superview == nativeWindowObject.hostView)
+        allTabsDetachedFromHostView = NO;
       BOOL selected = [window[@"selectedTabID"] isEqualToString:tabID];
       if (tab.view && !tab.view.hidden && tab.view.window == nativeWindowObject.window) visiblePrivateViews++;
       if (selected && (!tab.view || tab.view.hidden || tab.view.window != nativeWindowObject.window))
@@ -370,8 +378,10 @@ static BOOL ProbeViewIsVisibleInWindow(NSView *view, NSWindow *window) {
            @"anyTabLoading": @(anyTabLoading),
            @"allTabsInNativeProfileBrowser": @(allTabsInNativeProfileBrowser),
            @"allTabsAttachedToHostView": @(allTabsAttachedToHostView),
+           @"allTabsDetachedFromHostView": @(allTabsDetachedFromHostView),
            @"allWindowsUsePrivateActiveProfile": @(allWindowsUsePrivateActiveProfile),
            @"allWindowsDisplayOwnedWebContents": @(allWindowsDisplayOwnedWebContents),
+           @"allWindowsSelectOwnedWebContents": @(allWindowsSelectOwnedWebContents),
            @"visibleNativeViewportCount": @(visibleNativeViewportCount),
            @"pendingWindowCount": @([(NSSet *)context[@"pendingWindows"] count]),
            @"pendingReleaseRejected": context[@"pendingReleaseRejected"] ?: @NO,

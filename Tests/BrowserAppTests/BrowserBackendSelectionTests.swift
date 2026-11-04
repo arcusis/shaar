@@ -21,6 +21,25 @@ final class BrowserBackendSelectionTests: XCTestCase {
     }
   }
 
+  func testShaarOverridesDevToolsAndInspector() {
+    for selector in [
+      "devToolsViewForTabID:", "showDevToolsForTabID:", "closeDevToolsForTabID:",
+      "beginInspectorForTabID:profileID:windowID:", "endInspectorForTabID:",
+      "inspectorCall:params:tabID:profileID:windowID:completion:",
+      "beginDeveloperSessionForTabID:profileID:windowID:",
+      "endDeveloperSessionForTabID:profileID:windowID:",
+      "developerCall:params:tabID:profileID:windowID:completion:",
+    ] {
+      assertShaarOverrides(selector)
+    }
+    for field in [
+      "_shaarEngine", "_nextRequestID", "_shaarProfiles", "_shaarWindows",
+      "_shaarTabs", "_shaarTabProfiles", "_shaarTabWindows",
+    ] {
+      XCTAssertNotNil(class_getInstanceVariable(ARCShaarRuntime.self, field), field)
+    }
+  }
+
   private func assertShaarOverrides(_ name: String) {
     let selector = NSSelectorFromString(name)
     let ardia = class_getInstanceMethod(ARCChromiumRuntime.self, selector)

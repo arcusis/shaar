@@ -225,6 +225,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0002-shaar-lifecycle-hooks.patch",
       "sha256": "ccc93512f6e7143dc9b420118990d0ebc7021bebe1fa5925f74004607be91493"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0003-shaar-layer-tests.patch",
+      "sha256": "6b79c7d6dec3be2ed7b21a8801b104fc9873161406f45f18d3f60948f7a3d4eb"
     }
   ],
   "requiredExports": [

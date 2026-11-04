@@ -8,11 +8,25 @@ import XCTest
 
 final class BrowserBackendSelectionTests: XCTestCase {
   func testShaarOverridesProfileLoading() {
-    let selector = NSSelectorFromString("loadProfileID:completion:")
+    assertShaarOverrides("loadProfileID:completion:")
+  }
+
+  func testShaarOverridesWindowAndTabHosting() {
+    for selector in [
+      "createWindowID:error:", "closeWindowID:",
+      "openTabID:profileID:windowID:url:error:", "closeTabID:",
+      "hostViewForWindowID:", "viewForTabID:", "activateTabID:",
+    ] {
+      assertShaarOverrides(selector)
+    }
+  }
+
+  private func assertShaarOverrides(_ name: String) {
+    let selector = NSSelectorFromString(name)
     let ardia = class_getInstanceMethod(ARCChromiumRuntime.self, selector)
     let shaar = class_getInstanceMethod(ARCShaarRuntime.self, selector)
     XCTAssertNotNil(ardia)
     XCTAssertNotNil(shaar)
-    XCTAssertNotEqual(ardia, shaar)
+    XCTAssertNotEqual(ardia, shaar, "Shaar must override \(name)")
   }
 }

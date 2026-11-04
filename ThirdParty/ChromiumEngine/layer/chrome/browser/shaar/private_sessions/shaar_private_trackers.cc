@@ -111,10 +111,14 @@ public:
       Finish(network::URLLoaderCompletionStatus(net::ERR_BLOCKED_BY_CLIENT));
       return;
     }
+    // Bind the remote before installing its disconnect handler. A live tab can
+    // issue a request while its private window is closing, and Mojo requires a
+    // bound remote here even if the upstream factory is about to disconnect.
+    auto upstream_receiver = upstream_loader_.BindNewPipeAndPassReceiver();
     upstream_loader_.set_disconnect_handler(base::BindOnce(
         &ProtectedRequest::UpstreamDisconnected, base::Unretained(this)));
     factory->CreateLoaderAndStart(
-        upstream_loader_.BindNewPipeAndPassReceiver(), request_id, options,
+        std::move(upstream_receiver), request_id, options,
         request, upstream_client_.BindNewPipeAndPassRemote(), annotation);
   }
 

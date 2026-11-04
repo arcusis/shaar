@@ -3,7 +3,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-# Package a verified dual-export Shaar framework for issue #418 CI testing.
+# Package a verified Shaar-only framework for issue #418 CI testing.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 label=${1:?usage: package-shaar-engine-test.sh shaar.N}
@@ -18,8 +18,9 @@ version=$(jq -er .chromium.version ThirdParty/ChromiumEngine/source-build.json)
 tag="engine-$version-$label"
 name="ShaarEngine-$version-$label"
 
-jq -e '.sourceKind == "shaar" and .mode == "dual-export" and
-  .status == "exports_verified" and (.framework.exports.required | length) >= 26' \
+jq -e '.sourceKind == "shaar" and .mode == "final" and
+  .status == "succeeded" and (.framework.exports.required | length) >= 26 and
+  .framework.exports.legacyFound == []' \
   "$receipt" >/dev/null
 [[ $(shasum -a 256 ThirdParty/ChromiumEngine/source-build.json | cut -d ' ' -f 1) == \
    $(jq -er .configSha256 "$receipt") ]] || { echo 'Source config changed after verification.' >&2; exit 1; }
@@ -42,20 +43,18 @@ source_sha=$(jq -er .framework.sha256 "$receipt")
 [[ $(shasum -a 256 "$binary" | cut -d ' ' -f 1) == "$source_sha" ]] || {
   echo 'Framework binary changed after export verification.' >&2; exit 1;
 }
+if /usr/bin/nm -a "$binary" | grep -Eiq '(_ac_|ardia)'; then
+  echo 'Framework still contains an Ardia-named symbol.' >&2; exit 1
+fi
 
 package=build/ShaarEnginePackage
 rm -rf "$package"
 mkdir -p "$package/stage"
 ditto "$framework" "$package/stage/Chromium Framework.framework"
 staged="$package/stage/Chromium Framework.framework"
-jit=ThirdParty/ChromiumEngine/signing/jit.entitlements
+python3 scripts/rebrand-engine-framework.py "$staged"
 adhoc_sign_test() {
-  case "$1" in
-    *"Helper (Renderer).app"|*"Helper (Aperitif Renderer).app"|\
-    *"Helper (GPU).app"|*"Helper (Aperitif GPU).app")
-      codesign --force --timestamp=none --sign - --options runtime --entitlements "$jit" "$1" ;;
-    *) codesign --force --timestamp=none --sign - --options runtime "$1" ;;
-  esac
+  codesign --force --timestamp=none --sign - "$1"
 }
 sign_engine_framework "$staged" adhoc_sign_test
 codesign --verify --deep --strict "$staged"

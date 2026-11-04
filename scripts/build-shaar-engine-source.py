@@ -5,8 +5,8 @@
 
 """Build and verify the Shaar layer in a separate Chromium source tree.
 
-The temporary dual-export mode clones a succeeded pinned source checkout with
-APFS copy-on-write. The reference is read only; every generated file and build
+The Shaar-only build clones a succeeded pinned source checkout with APFS
+copy-on-write. The reference is read only; every generated file and build
 artifact stays under build/ShaarEngineSource. A dry run performs no writes.
 """
 
@@ -278,6 +278,13 @@ def load_config(repo: Path) -> dict:
     dual_path = checked_repo_file(repo, dual_patch["file"])
     if sha256(dual_path) != dual_patch["sha256"]:
         raise BuildError("Shaar dual-export delegate patch digest mismatch")
+    final_patch = config.get("finalPatch", {})
+    if (not final_patch.get("file", "").startswith("ThirdParty/ChromiumEngine/patches/") or
+            not DIGEST.fullmatch(final_patch.get("sha256", ""))):
+        raise BuildError("invalid Shaar-only framework patch")
+    final_path = checked_repo_file(repo, final_patch["file"])
+    if sha256(final_path) != final_patch["sha256"]:
+        raise BuildError("Shaar-only framework patch digest mismatch")
     guarded_output(repo)
     return config
 
@@ -291,9 +298,10 @@ def dry_run(repo: Path, config: dict) -> dict:
         "target": config["build"]["target"],
         "chromiumCommit": config["chromium"]["commit"],
         "layerSha256": config["layer"]["sha256"],
-        "patches": [config["patches"][0]["file"], config["dualExportPatch"]["file"]],
+        "patches": [config["patches"][0]["file"],
+                    config["dualExportPatch"]["file"], config["finalPatch"]["file"]],
         "stages": [
-            "copy-on-write snapshot of pinned dual-export Chromium and depot_tools",
+            "copy-on-write snapshot of pinned Chromium and depot_tools",
             "ordered Shaar patches",
             "verified Shaar layer installation at chrome/browser/shaar",
             "GN generation for chrome_framework",
@@ -303,7 +311,7 @@ def dry_run(repo: Path, config: dict) -> dict:
         ],
         "requiredExports": config["requiredExports"],
         "finalTargetForbiddenExports": ["ac_*", "ArdiaCore*"],
-        "temporaryMode": "dual-export; Ardia remains only in the development snapshot",
+        "frameworkMode": "final; Shaar exports only",
     }
 
 
@@ -314,7 +322,8 @@ def check_exports(symbols: str, all_symbols: str | None = None,
     missing = sorted(set(REQUIRED_EXPORTS) - found)
     all_names = {line.split()[-1] for line in (all_symbols or symbols).splitlines() if line.split()}
     forbidden = sorted(name for name in (found | all_names)
-                       if name.startswith(("_ac_", "ac_")) or "ArdiaCore" in name)
+                       if name.startswith(("_ac_", "ac_")) or
+                       "ardia" in name.lower())
     if missing:
         raise BuildError("missing Shaar framework exports: " + ", ".join(missing))
     if mode == "final" and forbidden:
@@ -537,7 +546,8 @@ def install_layer(repo: Path, source: Path, config: dict) -> None:
             raise BuildError("existing installed Shaar layer differs from manifest")
     else:
         shutil.copytree(repo / LAYER / "chrome/browser/shaar", target)
-    for entry in (config["patches"][0], config["dualExportPatch"]):
+    for entry in (config["patches"][0], config["dualExportPatch"],
+                  config["finalPatch"]):
         patch = repo / entry["file"]
         checked = subprocess.run(["git", "apply", "--check", str(patch)], cwd=source,
                                  capture_output=True, text=True, timeout=60)
@@ -651,9 +661,9 @@ def relink_from_reference_objects(output: Path, source: Path, config: dict,
             "thinLTOJobs": 6}
 
 
-def run_dual_export(repo: Path, reference: Path, config: dict,
-                    relink_only: bool = False) -> dict:
-    """Temporary phase-3 development build; the final target keeps its no-Ardia gate."""
+def run_shaar_framework(repo: Path, reference: Path, config: dict,
+                        relink_only: bool = False) -> dict:
+    """Build the Shaar-only framework from the pinned source snapshot."""
     output = guarded_output(repo)
     source, reference_root, reference_record = validate_reference(
         repo, reference, output, config)
@@ -664,7 +674,7 @@ def run_dual_export(repo: Path, reference: Path, config: dict,
         raise BuildError("insufficient free space for source build")
     output = prepare_owned_output(repo)
     receipt = output / RECEIPT_FILE
-    record = {"schemaVersion": 1, "sourceKind": "shaar", "mode": "dual-export",
+    record = {"schemaVersion": 1, "sourceKind": "shaar", "mode": "final",
               "buildStrategy": "validated-reference-objects-relink" if relink_only else "full-siso",
               "status": "running", "startedAt": now_utc(), "output": str(output),
               "reference": str(source),
@@ -696,7 +706,7 @@ def run_dual_export(repo: Path, reference: Path, config: dict,
         env["VPYTHON_VIRTUALENV_ROOT"] = str(output / "vpython-root")
         gn = copied / "buildtools/mac/gn"
         stage("gn", lambda: run_logged(
-            ["/usr/sbin/taskpolicy", "-b", str(gn), "gen",
+            [str(gn), "gen",
              "out/" + config["build"]["configuration"]], copied, output / "gn.log",
             env=env, timeout=config["build"]["timeoutsSeconds"]["gn"]))
         if relink_only:
@@ -705,14 +715,16 @@ def run_dual_export(repo: Path, reference: Path, config: dict,
             write_receipt(receipt, record)
         else:
             stage("build", lambda: run_logged(
-                ["/usr/sbin/taskpolicy", "-b",
-                 str(output / "depot_tools/autoninja"), "-j", "6", "-k", "0", "-C",
-                 "out/" + config["build"]["configuration"], "chrome_framework"],
+                ["/usr/bin/nice", "-n", "19", str(output / "depot_tools/siso"),
+                 "ninja", "--offline", "-C",
+                 "out/" + config["build"]["configuration"],
+                 "-local_jobs", str(config["build"]["buildJobs"]),
+                 "-k", "0", "chrome_framework"],
                 copied, output / "build.log", env=env,
                 timeout=config["build"]["timeoutsSeconds"]["build"]))
         binary = output / config["build"]["frameworkBinary"]
         verified = stage("exports", lambda: verify_framework(
-            repo, binary, receipt, config, "dual-export"))
+            repo, binary, receipt, config, "final"))
         # verify_framework writes the export receipt, so restore the stage ledger.
         record["framework"] = verified["framework"]
         write_receipt(receipt, record)
@@ -890,7 +902,7 @@ def run_layer_tests(repo: Path, config: dict, runner=subprocess.run) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--run", action="store_true", help="run a temporary dual-export source build")
+    parser.add_argument("--run", action="store_true", help="build a Shaar-only source framework")
     parser.add_argument("--layer-tests", action="store_true",
                         help="build and run the aggregate layer tests in an existing source output")
     parser.add_argument("--reference-source", type=Path, metavar="CHROMIUM_SRC",
@@ -914,7 +926,7 @@ def main(argv: list[str] | None = None) -> int:
         if options.run:
             if not options.reference_source or options.verify_framework or options.receipt:
                 raise BuildError("--run requires only --reference-source")
-            print(json.dumps(run_dual_export(repo, options.reference_source, config,
+            print(json.dumps(run_shaar_framework(repo, options.reference_source, config,
                                              options.relink_from_reference), indent=2))
         elif options.reference_source or options.relink_from_reference:
             raise BuildError("--reference-source and --relink-from-reference require --run")

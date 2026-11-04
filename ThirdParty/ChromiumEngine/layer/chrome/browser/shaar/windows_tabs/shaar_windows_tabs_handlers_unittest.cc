@@ -201,6 +201,23 @@ TEST(ShaarWindowsTabsHandlersTest, WindowCloseWaitsForEveryBrowser) {
   registry.UnbindWindow(engine, window);
 }
 
+TEST(ShaarWindowsTabsHandlersTest, WindowCloseWaitsForLiveTabCleanup) {
+  BrowserTabRegistryImpl registry;
+  auto* engine = reinterpret_cast<shaar_engine*>(1);
+  auto* window = reinterpret_cast<shaar_window*>(2);
+  auto* browser = reinterpret_cast<Browser*>(3);
+  auto* tab = reinterpret_cast<shaar_tab*>(4);
+  ASSERT_TRUE(registry.ReserveWindow(engine, window, "private-window"));
+  registry.EnsureWindowState(engine, window, browser, "private-profile");
+  ASSERT_TRUE(registry.ReserveTab(engine, window, tab, "live-tab"));
+  ASSERT_TRUE(registry.BeginWindowClose(engine, window));
+  registry.UnbindBrowser(engine, window, browser);
+  EXPECT_FALSE(registry.WindowCloseReady(engine, window));
+  registry.UnbindTab(engine, window, tab);
+  EXPECT_TRUE(registry.WindowCloseReady(engine, window));
+  registry.UnbindWindow(engine, window);
+}
+
 TEST(ShaarWindowsTabsHandlersTest, RegularWindowABIReservesAndClosesHandle) {
   shaar_engine engine_storage;
   auto* engine = &engine_storage;

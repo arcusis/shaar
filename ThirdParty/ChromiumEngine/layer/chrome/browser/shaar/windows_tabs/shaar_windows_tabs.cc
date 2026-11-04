@@ -119,8 +119,13 @@ bool BrowserTabRegistryImpl::BeginWindowClose(shaar_engine* engine,
 bool BrowserTabRegistryImpl::WindowCloseReady(shaar_engine* engine,
                                               shaar_window* window) const {
   for (const auto& state : windows_)
-    if (state.engine == engine && state.handle == window)
-      return state.closing && state.pending_closes.empty();
+    if (state.engine == engine && state.handle == window) {
+      if (!state.closing || !state.pending_closes.empty())
+        return false;
+      return !std::ranges::any_of(tabs_, [engine, window](const TabEntry& tab) {
+        return tab.engine == engine && tab.window == window;
+      });
+    }
   return false;
 }
 

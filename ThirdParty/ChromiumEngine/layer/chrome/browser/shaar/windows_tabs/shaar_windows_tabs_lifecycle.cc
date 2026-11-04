@@ -49,6 +49,7 @@ struct shaar_tab : content::WebContentsObserver {
   shaar_tab(content::WebContents* contents, uint64_t serial)
       : content::WebContentsObserver(contents), serial(serial) {}
   void WebContentsDestroyed() override {
+    // Drop the WebContents pointer before a queued view update can request it.
     shaar::windows_tabs::Registry().UnbindTab(engine, window, this);
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&CleanupTab, serial));
@@ -123,38 +124,18 @@ void FinalizeWindow(shaar_window* window) {
   auto found = windows.find(window);
   if (found == windows.end())
     return;
+  for (const auto& [tab, handle] : tab_handles)
+    if (handle->window == window)
+      return;
   shaar_engine* engine = window->engine;
   shaar::extensions_host::ClosePopupsForWindow(engine, window);
   const std::string window_id = window->id;
   const std::string profile_id = window->profile_id;
   const std::string session_id = window->session_id;
   shaar_private_session *private_session = window->private_session;
-  struct ClosedTab {
-    std::string profile_id;
-    std::string session_id;
-    std::string id;
-  };
-  std::vector<ClosedTab> closed_tabs;
-  for (auto it = tab_handles.begin(); it != tab_handles.end();) {
-    if (it->second->window == window) {
-      closed_tabs.push_back({it->second->profile_id, it->second->session_id,
-                             it->second->tab_id});
-      it = tab_handles.erase(it);
-    } else {
-      ++it;
-    }
-  }
   shaar::windows_tabs::Registry().UnbindWindow(engine, window);
   windows.erase(found);
   static constexpr char kClosed[] = R"({"kind":"closed","schemaVersion":1})";
-  for (const auto& tab : closed_tabs) {
-    shaar::EmitEvent(engine, SHAAR_EVENT_TAB,
-                     {tab.profile_id.data(), tab.profile_id.size()},
-                     {tab.session_id.data(), tab.session_id.size()},
-                     {window_id.data(), window_id.size()},
-                     {tab.id.data(), tab.id.size()},
-                     {kClosed, sizeof(kClosed) - 1});
-  }
   if (!profile_id.empty()) {
     shaar::EmitEvent(engine, SHAAR_EVENT_WINDOW,
                      {profile_id.data(), profile_id.size()},
@@ -474,7 +455,7 @@ void CleanupTab(uint64_t serial) {
   const std::string window_id = tab->window_id;
   const std::string tab_id = tab->tab_id;
   shaar_engine* engine = tab->engine;
-  shaar::windows_tabs::Registry().UnbindTab(tab->engine, tab->window, tab);
+  shaar_window* window = tab->window;
   tab_handles.erase(found);
   static constexpr char kClosed[] = R"({"kind":"closed","schemaVersion":1})";
   shaar::EmitEvent(engine, SHAAR_EVENT_TAB,
@@ -483,4 +464,6 @@ void CleanupTab(uint64_t serial) {
                    {window_id.data(), window_id.size()},
                    {tab_id.data(), tab_id.size()},
                    {kClosed, sizeof(kClosed) - 1});
+  if (shaar::windows_tabs::Registry().WindowCloseReady(engine, window))
+    FinalizeWindow(window);
 }

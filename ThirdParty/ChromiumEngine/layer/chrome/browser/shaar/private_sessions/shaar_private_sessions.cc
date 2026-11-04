@@ -119,6 +119,7 @@ void PrivateSessionRegistry::OnProfileWillBeDestroyed(Profile* profile) {
   auto parent = parent_sessions_.find(profile);
   if (parent == parent_sessions_.end())
     return;
+  profile->RemoveObserver(this);
   TrackerProtection().RemoveProfile(profile);
   for (const std::string& session_id : parent->second) {
     auto session = sessions_.find(session_id);

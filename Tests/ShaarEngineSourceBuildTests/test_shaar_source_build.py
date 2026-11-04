@@ -92,6 +92,11 @@ class ShaarSourceBuildTests(unittest.TestCase):
             with self.assertRaisesRegex(BUILD.BuildError, "delegate patch digest mismatch"):
                 BUILD.load_config(repo)
             shutil.copy2(ROOT / "ThirdParty/ChromiumEngine/patches/0005-shaar-dual-export-main-delegate.patch", dual_patch)
+            final_patch = repo / "ThirdParty/ChromiumEngine/patches/0006-shaar-only-framework.patch"
+            final_patch.write_text(final_patch.read_text() + "# tampered\n")
+            with self.assertRaisesRegex(BUILD.BuildError, "Shaar-only framework patch digest mismatch"):
+                BUILD.load_config(repo)
+            shutil.copy2(ROOT / "ThirdParty/ChromiumEngine/patches/0006-shaar-only-framework.patch", final_patch)
             (repo / "build").symlink_to(Path(temporary) / "outside", target_is_directory=True)
             with self.assertRaisesRegex(BUILD.BuildError, "symlink rejected in output"):
                 BUILD.load_config(repo)
@@ -189,7 +194,8 @@ class ShaarSourceBuildTests(unittest.TestCase):
         self.assertEqual(checked["required"], list(BUILD.REQUIRED_EXPORTS))
         with self.assertRaisesRegex(BUILD.BuildError, "missing Shaar"):
             BUILD.check_exports("_shaar_abi_major\n")
-        for forbidden in ("_ac_engine_call", "_OBJC_CLASS_$_ArdiaCoreEngine"):
+        for forbidden in ("_ac_engine_call", "_OBJC_CLASS_$_ArdiaCoreEngine",
+                          "_OBJC_METACLASS_$_ArdiaCoreWindow", "_ArdiaCoreMain"):
             with self.subTest(forbidden=forbidden), self.assertRaisesRegex(
                     BUILD.BuildError, "legacy framework exports"):
                 BUILD.check_exports(symbols + forbidden + "\n")
@@ -208,8 +214,9 @@ class ShaarSourceBuildTests(unittest.TestCase):
             binary.parent.mkdir(parents=True)
             binary.write_bytes(b"fake Mach-O for mocked nm")
             receipt = output / BUILD.RECEIPT_FILE
-            with mock.patch.object(BUILD.subprocess, "run", return_value=mock.Mock(stdout=symbols)):
+            with mock.patch.object(BUILD.subprocess, "run", return_value=mock.Mock(stdout=symbols)) as nm:
                 record = BUILD.verify_framework(repo, binary, receipt, config)
+            self.assertEqual([call.args[0][1] for call in nm.call_args_list], ["-gUj", "-a"])
             self.assertEqual(record["framework"]["exports"]["legacyFound"], [])
             self.assertEqual(record["status"], "succeeded")
             self.assertEqual(json.loads(receipt.read_text()), record)

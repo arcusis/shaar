@@ -205,14 +205,18 @@ import SwiftUI
     }
     ai.detailed = true
     await ai.copyElement(to: board)
+    if Self.detailedCopyNeedsRetry(
+      failure: ai.failure, text: board.string(forType: .string) ?? "")
+    {
+      try await wait("detailed AI Inspector copy retry readiness") {
+        (try? await inspector.evaluate(
+          "document.readyState==='complete' && !!globalThis.__shaarInspectorV2"))
+          as? Bool == true
+      }
+      await ai.copyElement(to: board)
+    }
     let detailed = board.string(forType: .string) ?? ""
-    var missing: [String] = []
-    if let failure = ai.failure { missing.append("copy operation: \(failure)") }
-    if !detailed.contains("Full computed styles:") { missing.append("computed styles") }
-    if !detailed.contains("Matched CSS rules:") { missing.append("matched CSS rules") }
-    if !detailed.contains("AI fixture console error") { missing.append("console errors") }
-    if !detailed.contains("status 503") { missing.append("HTTP errors") }
-    if !detailed.contains("Inspector AI fixture") { missing.append("technology signals") }
+    let missing = Self.missingDetailedDiagnostics(failure: ai.failure, text: detailed)
     try check(
       missing.isEmpty,
       "Detailed context is missing collected diagnostics: \(missing.joined(separator: ", ")).")
@@ -255,6 +259,21 @@ import SwiftUI
     consoleMessages.contains { $0.contains("AI fixture console error") }
       && requestStatuses.contains(503)
       && signalNames.contains("Inspector AI fixture")
+  }
+
+  static func detailedCopyNeedsRetry(failure: String?, text: String) -> Bool {
+    !missingDetailedDiagnostics(failure: failure, text: text).isEmpty
+  }
+
+  static func missingDetailedDiagnostics(failure: String?, text: String) -> [String] {
+    var missing: [String] = []
+    if let failure { missing.append("copy operation: \(failure)") }
+    if !text.contains("Full computed styles:") { missing.append("computed styles") }
+    if !text.contains("Matched CSS rules:") { missing.append("matched CSS rules") }
+    if !text.contains("AI fixture console error") { missing.append("console errors") }
+    if !text.contains("status 503") { missing.append("HTTP errors") }
+    if !text.contains("Inspector AI fixture") { missing.append("technology signals") }
+    return missing
   }
 
   static func pasteboardReceipt(_ board: NSPasteboard) throws -> [String: Any] {

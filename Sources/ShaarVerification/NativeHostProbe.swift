@@ -169,7 +169,9 @@ final class NativeHostProbe {
     self.host = host
     host.onClosed = { [weak self] id, quitting in self?.closures[id] = quitting }
     try host.restore()
-    checks += try await ProfileOnboardingProbe(host: host, root: root, fixture: fixture).run()
+    checks += try await ProfileOnboardingProbe(
+      host: host, root: root, fixture: fixture, phase: phase
+    ).run()
     let checkpoint = root.appending(path: "host-identities.json")
     var firstID: UUID
     var secondID: UUID

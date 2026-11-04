@@ -15,12 +15,14 @@ final class ProfileOnboardingProbe {
   let host: NativeBrowserHost
   let root: URL
   let fixture: URL
+  let phase: String
   private var runtime: ARCChromiumRuntime { host.events.runtime }
 
-  init(host: NativeBrowserHost, root: URL, fixture: URL) {
+  init(host: NativeBrowserHost, root: URL, fixture: URL, phase: String = "standalone") {
     self.host = host
     self.root = root
     self.fixture = fixture
+    self.phase = phase
   }
 
   func run(live: Bool = false, options: [AccountSignInOption] = AccountSignInOption.allCases)
@@ -62,7 +64,8 @@ final class ProfileOnboardingProbe {
             "\(option.title): authored account-menu name, email and photo read by the production session script"
           )
         }
-        try await verifyPopup(flow: flow, tab: tab)
+        try await verifyPopup(
+          flow: flow, tab: tab, reloadOpener: phase == "restart" && provider == .google)
         checks.append(
           "\(provider.title): draft popup preserves session, opener and callback; Cancel closes every transient host"
         )
@@ -123,7 +126,7 @@ final class ProfileOnboardingProbe {
     }
   }
 
-  private func verifyPopup(flow: ProfileAccountSignIn, tab: UUID) async throws {
+  private func verifyPopup(flow: ProfileAccountSignIn, tab: UUID, reloadOpener: Bool) async throws {
     var popupTab: UUID?
     let previous = host.events.onNewTabWillAdopt
     host.events.onNewTabWillAdopt = { id, profile, opener in
@@ -145,6 +148,7 @@ final class ProfileOnboardingProbe {
         script: """
           (()=>{
             document.cookie='shaarOnboarding=\(token);path=/';
+            window.fixtureOpenerDocumentID='\(token)';
             window.fixtureReply=null;
             window.addEventListener('message',e=>{
               // A restored renderer can expose a new WindowProxy wrapper for the same opener.
@@ -161,28 +165,71 @@ final class ProfileOnboardingProbe {
       }
     }
     guard reply == "true" else { throw Failure("Draft popup rejected") }
-    try await wait("popup adoption") { popupTab != nil && flow.windowIDs.count == 2 }
+    let popupStep = "\(phase) \(flow.provider.title) popup"
+    try await wait("\(popupStep) adoption") { popupTab != nil && flow.windowIDs.count == 2 }
     guard let child = popupTab else { throw Failure("Popup tab missing") }
-    try await wait("popup session") {
+    try await wait("\(popupStep) session") {
       let state = await self.value(
         child, "({cookie:document.cookie,opener:!!window.opener,ready:document.readyState})")
       return (state?["cookie"] as? String)?.contains("shaarOnboarding=\(token)") == true
         && state?["opener"] as? Bool == true && state?["ready"] as? String == "complete"
     }
-    _ = await value(
-      child,
-      """
-      (()=>{window.opener.postMessage(
-        {type:'shaar-onboarding-callback',token:'\(token)'},location.origin);return {};})()
-      """
-    )
-    try await wait("popup callback", attempts: Int(100 * ProbeTimeout.scale)) {
-      let reply = await self.value(tab, "window.fixtureReply") as? [String: Any]
+    if reloadOpener {
+      guard runtime.reloadTabID(tab.uuidString, profileID: flow.profileID.uuidString) else {
+        throw Failure("\(popupStep) opener reload rejected")
+      }
+      try await wait("\(popupStep) opener document replacement") {
+        let state = await self.value(
+          tab,
+          "({ready:document.readyState,url:location.href,documentID:window.fixtureOpenerDocumentID})"
+        )
+        return state?["ready"] as? String == "complete"
+          && state?["url"] as? String == self.fixture.absoluteString
+          && state?["documentID"] == nil
+      }
+    }
+    try await wait("\(popupStep) callback listener arm", attempts: 20) {
+      await self.armPopupCallback(tab: tab, origin: origin)
+    }
+    try await wait("\(popupStep) callback postMessage trigger", attempts: 20) {
+      let reply = await self.value(tab, "window.fixtureReply")
+      if ProfileOnboardingPopupCallback.matches(reply, origin: origin, token: token) {
+        return true
+      }
+      guard await self.armPopupCallback(tab: tab, origin: origin) else { return false }
+      let sent = await self.value(
+        child,
+        """
+        (()=>{window.opener.postMessage(
+          {type:'shaar-onboarding-callback',token:'\(token)'},location.origin);return {sent:true};})()
+        """)
+      return sent?["sent"] as? Bool == true
+    }
+    try await wait(
+      "\(popupStep) callback delivery after postMessage", attempts: Int(100 * ProbeTimeout.scale)
+    ) {
+      let reply = await self.value(tab, "window.fixtureReply")
       return ProfileOnboardingPopupCallback.matches(reply, origin: origin, token: token)
     }
     guard flow.windowIDs.allSatisfy({ runtime.window(forID: $0)?.isVisible == false }) else {
       throw Failure("Popup show request escaped hidden mode")
     }
+  }
+
+  private func armPopupCallback(tab: UUID, origin: String) async -> Bool {
+    let state = await value(
+      tab,
+      """
+      (()=>{
+        window.fixtureReply=null;
+        window.addEventListener('message',e=>{
+          if(e.origin===location.origin&&e.data?.type==='shaar-onboarding-callback')
+            window.fixtureReply={origin:e.origin,type:e.data.type,token:e.data.token};
+        });
+        return {armed:true,origin:location.origin};
+      })()
+      """)
+    return state?["armed"] as? Bool == true && state?["origin"] as? String == origin
   }
 
   private func verifyProviderPage(

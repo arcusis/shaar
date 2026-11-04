@@ -15,6 +15,7 @@ final class BrowserSettingsState {
   let workspace: BrowserWorkspaceStore
   let preferences: BrowserPreferencesStore
   let runtime: ARCChromiumRuntime?
+  let sharedExtensions: SharedExtensionSettingsModel?
   let profileBackend: (any ProfileSettingsBackend)?
   private(set) var deletingProfileID: UUID?
   private(set) var selectedProfileID: UUID?
@@ -31,12 +32,14 @@ final class BrowserSettingsState {
   init(
     workspace: BrowserWorkspaceStore, preferences: BrowserPreferencesStore,
     runtime: ARCChromiumRuntime? = nil, profileBackend: (any ProfileSettingsBackend)? = nil,
+    sharedExtensions: SharedExtensionSettingsModel? = nil,
     downloadDirectorySettingsEnabled: Bool = false,
     applyDownloadDirectory: ProfileDownloadDirectoryApplier? = nil
   ) {
     self.workspace = workspace
     self.preferences = preferences
     self.runtime = runtime
+    self.sharedExtensions = sharedExtensions
     self.profileBackend = profileBackend ?? runtime.map { EngineProfileSettings(runtime: $0) }
     applyDownloadDirectoryToEngine = applyDownloadDirectory
     self.downloadDirectorySettingsEnabled =
@@ -279,6 +282,7 @@ private struct BrowserSettingsRoot: View {
       onConnectAccount: state.onConnectAccount,
       onDisconnectAccount: state.onDisconnectAccount,
       extensionManager: state.extensionManager(for:),
+      sharedExtensions: state.sharedExtensions,
       onAddExtensions: { state.openExtensions(for: $0) },
       profileBackend: state.profileBackend,
       clearHistory: state.runtime.map { runtime in
@@ -313,11 +317,13 @@ final class BrowserSettingsController: NSObject {
   init(
     workspace: BrowserWorkspaceStore, preferences: BrowserPreferencesStore,
     runtime: ARCChromiumRuntime? = nil,
+    sharedExtensions: SharedExtensionSettingsModel? = nil,
     downloadDirectoryApplier: ProfileDownloadDirectoryApplier? = nil,
     presentation: Presentation = .visible
   ) {
     state = BrowserSettingsState(
       workspace: workspace, preferences: preferences, runtime: runtime,
+      sharedExtensions: sharedExtensions,
       downloadDirectorySettingsEnabled: downloadDirectoryApplier != nil,
       applyDownloadDirectory: downloadDirectoryApplier)
     self.presentation = presentation

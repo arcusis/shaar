@@ -654,6 +654,10 @@
         }
       }
     },
+    "Installing…": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "מתקין…"}}}},
+    "Install failed": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "ההתקנה נכשלה"}}}},
+    "Not installed": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לא מותקן"}}}},
+    "Retry": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "ניסיון חוזר"}}}},
     "Add Extensions…": {
       "localizations": {
         "he": {

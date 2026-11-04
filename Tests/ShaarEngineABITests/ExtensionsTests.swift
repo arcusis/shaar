@@ -15,6 +15,8 @@ private actor FakeExtensionsTransport: ShaarExtensionsTransport {
   }
   private(set) var calls: [Call] = []
   var reply: Data
+  var repliesByProfile: [UUID: Data] = [:]
+  var listReply: Data?
 
   init(_ reply: String) { self.reply = Data(reply.utf8) }
 
@@ -22,10 +24,15 @@ private actor FakeExtensionsTransport: ShaarExtensionsTransport {
     profileID: UUID, operation: ShaarExtensionsOperation, arguments: Data
   ) async throws -> Data {
     calls.append(Call(profileID: profileID, operation: operation, arguments: arguments))
-    return reply
+    if operation == .list, let listReply { return listReply }
+    return repliesByProfile[profileID] ?? reply
   }
 
   func setReply(_ value: String) { reply = Data(value.utf8) }
+  func setReply(_ value: String, for profileID: UUID) {
+    repliesByProfile[profileID] = Data(value.utf8)
+  }
+  func setListReply(_ value: String) { listReply = Data(value.utf8) }
 }
 
 private actor FakeArdiaExtensions: ArdiaExtensionsBackend {
@@ -48,6 +55,97 @@ private actor FakeArdiaExtensions: ArdiaExtensionsBackend {
 
 @Suite("Shaar extensions adapter")
 struct ShaarExtensionsAdapterTests {
+  @Test func sharedInstallReportsEveryProfileAndNeverHidesPartialFailure() async throws {
+    let first = UUID()
+    let second = UUID()
+    let fake = FakeExtensionsTransport(#"{"schemaVersion":1,"installed":true}"#)
+    let adapter = ShaarExtensionsAdapter(
+      implementation: .shaar, ardia: FakeArdiaExtensions(), shaar: fake)
+    let result = await adapter.installAcrossProfiles(
+      extensionID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", approvedVersion: "1.2.3",
+      profileIDs: [first, second])
+    #expect(result.installed == Set([first, second]))
+    #expect(result.failed.isEmpty)
+    let calls = await fake.calls
+    #expect(Set(calls.map(\.profileID)) == Set([first, second]))
+    #expect(calls.allSatisfy { $0.operation == .manage })
+    for call in calls {
+      let args = try #require(JSONSerialization.jsonObject(with: call.arguments) as? [String: Any])
+      #expect(args["action"] as? String == "install")
+      #expect(args["source"] as? String == "sharedHome")
+      #expect(args["approvedVersion"] as? String == "1.2.3")
+    }
+    await fake.setReply(#"{"schemaVersion":1,"installed":false}"#, for: second)
+    let partial = await adapter.installAcrossProfiles(
+      extensionID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", approvedVersion: "1.2.3",
+      profileIDs: [first, second])
+    #expect(partial.installed == [first])
+    #expect(partial.failed == [second])
+    #expect(!partial.complete)
+    await fake.setReply(#"{"schemaVersion":1,"queued":true}"#, for: second)
+    let queued = await adapter.installAcrossProfiles(
+      extensionID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", approvedVersion: "1.2.3",
+      profileIDs: [first, second])
+    #expect(queued.installed == [first])
+    #expect(queued.pending == [second])
+    #expect(!queued.complete)
+  }
+
+  @Test func sharedHomePersistsIntentAndReconcilesNewProfiles() async throws {
+    let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")
+    defer { try? FileManager.default.removeItem(at: file) }
+    let first = UUID()
+    let next = UUID()
+    let id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    let fake = FakeExtensionsTransport(#"{"schemaVersion":1,"installed":true}"#)
+    await fake.setListReply(
+      #"{"schemaVersion":1,"extensions":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"Example","version":"1.0","enabled":true,"mayDisable":true,"incognitoEnabled":false,"source":4,"fromWebStore":true}]}"#
+    )
+    let adapter = ShaarExtensionsAdapter(
+      implementation: .shaar, ardia: FakeArdiaExtensions(), shaar: fake)
+    let home = try ShaarExtensionHome(fileURL: file, adapter: adapter)
+    let initial = try await home.recordApprovedInstall(
+      id, approvedVersion: "1.0", profileIDs: [first])
+    #expect(initial.complete)
+    let reopened = try ShaarExtensionHome(fileURL: file, adapter: adapter)
+    #expect(await reopened.extensionIDs == [id])
+    let result = await reopened.reconcile(profileID: next)
+    #expect(result.complete)
+    #expect(Set(await fake.calls.map(\.profileID)) == Set([first, next]))
+  }
+
+  @Test func sharedHomeRejectsAnInstallWithoutACompletedOrigin() async throws {
+    let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")
+    defer { try? FileManager.default.removeItem(at: file) }
+    let fake = FakeExtensionsTransport(#"{"schemaVersion":1,"installed":true}"#)
+    await fake.setListReply(#"{"schemaVersion":1,"extensions":[]}"#)
+    let adapter = ShaarExtensionsAdapter(
+      implementation: .shaar, ardia: FakeArdiaExtensions(), shaar: fake)
+    let home = try ShaarExtensionHome(fileURL: file, adapter: adapter)
+    await #expect(throws: ShaarExtensionsAdapterError.installNotConfirmed) {
+      try await home.recordApprovedInstall(
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", approvedVersion: "1.0", profileIDs: [UUID()])
+    }
+    #expect(await home.extensionIDs.isEmpty)
+    #expect(!FileManager.default.fileExists(atPath: file.path))
+  }
+
+  @Test func sharedHomeRejectsUnpackedOrigin() async throws {
+    let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")
+    defer { try? FileManager.default.removeItem(at: file) }
+    let fake = FakeExtensionsTransport(#"{"schemaVersion":1,"installed":true}"#)
+    await fake.setListReply(
+      #"{"schemaVersion":1,"extensions":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"Local","version":"1.0","enabled":true,"mayDisable":true,"incognitoEnabled":false,"source":4,"fromWebStore":false}]}"#
+    )
+    let adapter = ShaarExtensionsAdapter(
+      implementation: .shaar, ardia: FakeArdiaExtensions(), shaar: fake)
+    let home = try ShaarExtensionHome(fileURL: file, adapter: adapter)
+    await #expect(throws: ShaarExtensionsAdapterError.installNotConfirmed) {
+      try await home.recordApprovedInstall(
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", approvedVersion: "1.0", profileIDs: [UUID()])
+    }
+  }
+
   @Test func shippingDefaultRemainsArdiaAndDoesNotSubmitToShaar() async throws {
     let profile = UUID()
     let ardia = FakeArdiaExtensions()
@@ -81,6 +179,17 @@ struct ShaarExtensionsAdapterTests {
       try JSONSerialization.jsonObject(with: call.arguments) as? [String: Int] == [
         "schemaVersion": 1
       ])
+  }
+
+  @Test func listAcceptsNativeMetadataFields() async throws {
+    let fake = FakeExtensionsTransport(
+      #"{"schemaVersion":1,"extensions":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"Example","version":"2.1","description":"Details","permissions":["storage"],"hostPermissions":[],"enabled":true,"mayDisable":true,"incognitoEnabled":false,"source":4,"fromWebStore":true}]}"#
+    )
+    let adapter = ShaarExtensionsAdapter(
+      implementation: .shaar, ardia: FakeArdiaExtensions(), shaar: fake)
+    let result = try await adapter.list(profileID: UUID())
+    #expect(result.first?.name == "Example")
+    #expect(result.first?.fromWebStore == true)
   }
 
   @Test func managementActionsAreClosedAndRequireConfirmedResults() async throws {
@@ -118,5 +227,10 @@ struct ShaarExtensionsAdapterTests {
     await #expect(throws: ShaarExtensionsAdapterError.invalidExtensionID) {
       try await adapter.manage(profileID: UUID(), action: .uninstall("../extension"))
     }
+    let invalidInstall = await adapter.installAcrossProfiles(
+      extensionID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", approvedVersion: "../1",
+      profileIDs: [UUID()])
+    #expect(invalidInstall.installed.isEmpty)
+    #expect(invalidInstall.failed.count == 1)
   }
 }

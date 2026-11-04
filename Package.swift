@@ -97,7 +97,7 @@ let package = Package(
       resources: [.copy("Fixtures/BrowserImport")]),
     .testTarget(
       name: "BrowserAppTests",
-      dependencies: ["ArcusisBrowser", "BrowserCore", "BrowserTestSupport"],
+      dependencies: ["ArcusisBrowser", "BrowserCore", "BrowserTestSupport", "ShaarEngineABI"],
       resources: [.copy("Snapshots/InspectorAI")]),
     .testTarget(
       name: "ShaarVerificationTests",

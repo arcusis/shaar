@@ -20,10 +20,11 @@ public struct ShaarExtensionSummary: Equatable, Sendable, Identifiable {
   public let mayDisable: Bool
   public let incognitoEnabled: Bool
   public let source: Int
+  public let fromWebStore: Bool
 
   public init(
     id: String, name: String, version: String, enabled: Bool,
-    mayDisable: Bool, incognitoEnabled: Bool, source: Int
+    mayDisable: Bool, incognitoEnabled: Bool, source: Int, fromWebStore: Bool = false
   ) {
     self.id = id
     self.name = name
@@ -32,6 +33,7 @@ public struct ShaarExtensionSummary: Equatable, Sendable, Identifiable {
     self.mayDisable = mayDisable
     self.incognitoEnabled = incognitoEnabled
     self.source = source
+    self.fromWebStore = fromWebStore
   }
 }
 
@@ -71,7 +73,17 @@ public protocol ArdiaExtensionsBackend: Sendable {
 public enum ShaarExtensionsAdapterError: Error, Equatable, Sendable {
   case invalidResponse(String)
   case invalidExtensionID
+  case invalidApprovedVersion
+  case installNotConfirmed
   case mutationNotConfirmed
+}
+
+public struct ShaarSharedInstallResult: Equatable, Sendable {
+  public let installed: Set<UUID>
+  public let failed: Set<UUID>
+  public let pending: Set<UUID>
+
+  public var complete: Bool { failed.isEmpty && pending.isEmpty }
 }
 
 public struct ShaarExtensionsAdapter: Sendable {
@@ -101,22 +113,31 @@ public struct ShaarExtensionsAdapter: Sendable {
     }
     var ids = Set<String>()
     return try rows.map { row in
+      let required: Set<String> = [
+        "id", "name", "version", "enabled", "mayDisable", "incognitoEnabled", "source",
+      ]
+      let metadata: Set<String> = [
+        "description", "permissions", "hostPermissions", "fromWebStore",
+      ]
       guard
-        Set(row.keys)
-          == Set([
-            "id", "name", "version", "enabled", "mayDisable", "incognitoEnabled", "source",
-          ]),
+        required.isSubset(of: Set(row.keys)),
+        Set(row.keys).isSubset(of: required.union(metadata)),
         let id = row["id"] as? String, Self.isValidExtensionID(id), ids.insert(id).inserted,
         let name = row["name"] as? String, name.utf8.count <= 4096,
         let version = row["version"] as? String, version.utf8.count <= 256,
         let enabled = row["enabled"] as? Bool,
         let mayDisable = row["mayDisable"] as? Bool,
         let incognitoEnabled = row["incognitoEnabled"] as? Bool,
-        let source = row["source"] as? Int
+        let source = row["source"] as? Int,
+        row["description"] == nil || row["description"] is String,
+        row["permissions"] == nil || row["permissions"] is [String],
+        row["hostPermissions"] == nil || row["hostPermissions"] is [String],
+        row["fromWebStore"] == nil || row["fromWebStore"] is Bool
       else { throw ShaarExtensionsAdapterError.invalidResponse("malformed extension row") }
       return ShaarExtensionSummary(
         id: id, name: name, version: version, enabled: enabled,
-        mayDisable: mayDisable, incognitoEnabled: incognitoEnabled, source: source)
+        mayDisable: mayDisable, incognitoEnabled: incognitoEnabled, source: source,
+        fromWebStore: row["fromWebStore"] as? Bool ?? false)
     }
   }
 
@@ -141,6 +162,48 @@ public struct ShaarExtensionsAdapter: Sendable {
     }
   }
 
+  /// Apply one approved shared-home intent to regular profiles. Keep every
+  /// outcome so a failed profile can be retried without repeating consent.
+  public func installAcrossProfiles(
+    extensionID: String, approvedVersion: String, profileIDs: [UUID]
+  ) async -> ShaarSharedInstallResult {
+    let targets = Array(Set(profileIDs)).sorted { $0.uuidString < $1.uuidString }
+    guard Self.isValidExtensionID(extensionID), Self.isValidVersion(approvedVersion),
+      implementation == .shaar
+    else {
+      return ShaarSharedInstallResult(installed: [], failed: Set(targets), pending: [])
+    }
+    var installed = Set<UUID>()
+    var failed = Set<UUID>()
+    var pending = Set<UUID>()
+    for profileID in targets {
+      do {
+        let arguments = try encode([
+          "schemaVersion": 1, "action": "install", "extensionId": extensionID,
+          "source": "sharedHome", "approvedVersion": approvedVersion,
+        ])
+        let data = try await shaar.submitExtensions(
+          profileID: profileID, operation: .manage, arguments: arguments)
+        let root = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        guard let root,
+          Set(root.keys) == ["schemaVersion", "installed"]
+            || Set(root.keys) == ["schemaVersion", "queued"]
+        else { throw ShaarExtensionsAdapterError.invalidResponse("invalid install result") }
+        try requireVersion(root)
+        if root["installed"] as? Bool == true {
+          installed.insert(profileID)
+        } else if root["queued"] as? Bool == true {
+          pending.insert(profileID)
+        } else {
+          failed.insert(profileID)
+        }
+      } catch {
+        failed.insert(profileID)
+      }
+    }
+    return ShaarSharedInstallResult(installed: installed, failed: failed, pending: pending)
+  }
+
   private func object(_ data: Data, required: Set<String>) throws -> [String: Any] {
     guard let value = try JSONSerialization.jsonObject(with: data) as? [String: Any],
       Set(value.keys) == required
@@ -160,5 +223,12 @@ public struct ShaarExtensionsAdapter: Sendable {
 
   private static func isValidExtensionID(_ id: String) -> Bool {
     id.utf8.count == 32 && id.utf8.allSatisfy { (97...112).contains(Int($0)) }
+  }
+
+  static func isValidVersion(_ version: String) -> Bool {
+    !version.isEmpty && version.utf8.count <= 64
+      && version.split(separator: ".", omittingEmptySubsequences: false).allSatisfy {
+        !$0.isEmpty && $0.utf8.allSatisfy { (48...57).contains(Int($0)) }
+      }
   }
 }

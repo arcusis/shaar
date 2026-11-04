@@ -364,6 +364,7 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
 
 - (void)finishWindowID:(NSString *)windowID {
   if (!_shaarWindows[windowID]) return;
+  [self closeExtensionPopupForWindowID:windowID];
   id observer = _hostResizeObservers[windowID];
   if (observer) [NSNotificationCenter.defaultCenter removeObserver:observer];
   [_hostResizeObservers removeObjectForKey:windowID];
@@ -454,6 +455,8 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   if (!window || !tab) return;
   shaar_error error = EmptyError();
   if (_symbols.tab_view_attach(_shaarEngine, window, tab, &error) != SHAAR_OK) return;
+  if (![_shaarSelectedTabs[windowID] isEqualToString:tabID])
+    [self closeExtensionPopupForWindowID:windowID];
   _shaarSelectedTabs[windowID] = tabID;
   // Navigation can notify Swift while Chromium is still editing its tab strip.
   // Activate after that edit finishes to avoid reentering TabStripModel.
@@ -842,6 +845,10 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   return _shaarTabProfiles[tabID];
 }
 
+- (NSString *)shaarWindowIDForTabID:(NSString *)tabID {
+  return _shaarTabWindows[tabID];
+}
+
 - (NSString *)shaarProfileIDForWindowID:(NSString *)windowID {
   NSString *selectedTabID = _shaarSelectedTabs[windowID];
   return _shaarTabProfiles[selectedTabID];
@@ -858,6 +865,15 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   if (getPath(profile, &path, &error) != SHAAR_OK) return nil;
   NSString *value = String(path);
   return value.length ? [NSURL fileURLWithPath:value isDirectory:YES] : nil;
+}
+
+- (NSView *)shaarExtensionPopupViewForID:(NSString *)popupID
+                                 windowID:(NSString *)windowID {
+  shaar_window *window = (shaar_window *)_shaarWindows[windowID].pointerValue;
+  if (!_shaarEngine || !window || !popupID.length) return nil;
+  auto popupView = reinterpret_cast<decltype(&shaar_extension_popup_view)>(
+      dlsym(_shaarLibrary, "shaar_extension_popup_view"));
+  return popupView ? (__bridge NSView *)popupView(_shaarEngine, window, Bytes(popupID)) : nil;
 }
 
 - (void)quit {

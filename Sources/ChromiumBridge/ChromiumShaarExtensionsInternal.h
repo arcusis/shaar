@@ -16,8 +16,11 @@ NS_ASSUME_NONNULL_BEGIN
                           completion:(void (^)(NSString * _Nullable json, shaar_error_code code))completion;
 - (BOOL)shaarOwnsSelectedTabID:(NSString *)tabID profileID:(NSString *)profileID;
 - (nullable NSString *)shaarProfileIDForTabID:(NSString *)tabID;
+- (nullable NSString *)shaarWindowIDForTabID:(NSString *)tabID;
 - (nullable NSString *)shaarProfileIDForWindowID:(NSString *)windowID;
 - (nullable NSURL *)shaarProfileDirectoryForID:(NSString *)profileID;
+- (nullable NSView *)shaarExtensionPopupViewForID:(NSString *)popupID
+                                         windowID:(NSString *)windowID;
 - (void)shaarExtensionEvent:(const shaar_event *)event payload:(NSDictionary *)payload;
 @end
 

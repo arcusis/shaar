@@ -10,6 +10,13 @@ import Testing
 
 @Suite @MainActor
 struct DownloadDirectoryTests {
+  @Test func defaultBackendDoesNotOfferFolderSelection() throws {
+    let workspace = try BrowserWorkspaceStore(initialSession: .fresh())
+    let state = BrowserSettingsState(
+      workspace: workspace, preferences: BrowserPreferencesStore())
+    #expect(state.profiles.allSatisfy { !$0.canChooseDownloadDirectory })
+  }
+
   @Test func persistsOnlyTheShaarAcknowledgedFolderForOneProfile() async throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

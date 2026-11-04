@@ -85,7 +85,8 @@ final class SettingsVisualTests: XCTestCase {
               ],
               accounts: [
                 ConnectedAccount(provider: .google, email: "alex@example.com", name: "Alex Example")
-              ])
+              ],
+              canChooseDownloadDirectory: section == .profiles)
           ],
           searchEngines: [BrowserSettingsChoice(id: "google", title: "Google")],
           selectedProfileID: .constant(profileID), sidebarInitiallyVisible: .constant(true),

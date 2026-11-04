@@ -21,6 +21,35 @@ final class BrowserBackendSelectionTests: XCTestCase {
     }
   }
 
+  func testShaarOverridesPrivateBrowsingAndPrivacy() {
+    for selector in [
+      "privatePrivacyAvailable", "privateContextEnabled", "isPrivateIdentity:",
+      "privateIdentityOccupied:",
+      "createPrivateContextID:sourceProfileID:completion:",
+      "createPrivateWindowID:contextID:tabID:url:error:",
+      "openPrivateTabID:windowID:contextID:url:error:",
+      "selectPrivateTabID:windowID:contextID:",
+      "focusPrivateTabID:windowID:contextID:",
+      "closePrivateTabID:windowID:contextID:completion:",
+      "navigatePrivateTabID:windowID:contextID:url:",
+      "reloadPrivateTabID:windowID:contextID:",
+      "goBackPrivateTabID:windowID:contextID:",
+      "goForwardPrivateTabID:windowID:contextID:",
+      "windowForPrivateWindowID:contextID:",
+      "hostViewForPrivateWindowID:contextID:",
+      "viewForPrivateTabID:windowID:contextID:",
+      "closePrivateWindowID:contextID:completion:",
+      "releasePrivateContextID:",
+      "privatePrivacyStatusForContextID:completion:",
+      "setPrivateCookieSettingForContextID:origin:value:completion:",
+      "setPrivateTrackerAllowanceForContextID:origin:allow:completion:",
+      "privateCookiesForTabID:windowID:contextID:origin:completion:",
+      "setPrivateCookiesAllowed:tabID:windowID:contextID:origin:completion:",
+    ] {
+      assertShaarOverrides(selector)
+    }
+  }
+
   private func assertShaarOverrides(_ name: String) {
     let selector = NSSelectorFromString(name)
     let ardia = class_getInstanceMethod(ARCChromiumRuntime.self, selector)

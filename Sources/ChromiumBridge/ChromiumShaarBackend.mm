@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #import "include/ChromiumBridge.h"
+#import "ChromiumShaarPrivateSupport.h"
 
 #include <dlfcn.h>
 #include <cstdlib>
@@ -177,6 +178,10 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   NSDictionary *payload = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
   if (![payload isKindOfClass:NSDictionary.class]) return;
   NSString *kind = payload[@"kind"];
+  if (event->session_id.size) {
+    [self receivePrivateEvent:event payload:payload];
+    return;
+  }
   if (event->kind == SHAAR_EVENT_ENGINE && [kind isEqualToString:@"engine.ready"]) {
     if (_shaarTesting) [NSApp setActivationPolicy:NSApplicationActivationPolicyProhibited];
     NSError *error = nil;
@@ -242,6 +247,11 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
 
 - (void)removeFailedProfileID:(NSString *)profileID {
   [_shaarProfiles removeObjectForKey:profileID];
+}
+
+- (shaar_engine *)privateEngineHandle { return _shaarEngine; }
+- (shaar_profile *)privateProfileHandleForID:(NSString *)profileID {
+  return (shaar_profile *)_shaarProfiles[profileID].pointerValue;
 }
 
 - (NSString *)primaryWindowID { return _shaarPrimaryWindowID; }

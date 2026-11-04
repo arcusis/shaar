@@ -31,6 +31,8 @@ shaar_error_code OpenPrivateSessionHandler(
 shaar_error_code ClosePrivateSessionHandler(
     void* context,
     PrivateSessionRegistry::Session* session);
+shaar_error_code PrivateCookieSetting(Profile* otr, std::string_view origin,
+                                      bool set, bool allow, bool* allowed);
 shaar_error_code PrivateSessionScopePolicy(shaar_scope scope,
                                            shaar_operation operation);
 shaar_error_code EmitPrivateSessionStateEvent(

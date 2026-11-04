@@ -327,6 +327,11 @@ SHAAR_EXPORT shaar_error_code shaar_private_session_open(
     shaar_error *error);
 SHAAR_EXPORT shaar_error_code shaar_private_session_close(
     shaar_private_session *, shaar_error *error);
+/* Exact HTTP(S) origin in the private session's OTR content settings map.
+ * set=0 reads, set=1 writes allow=0 (block) or allow=1 (allow). */
+SHAAR_EXPORT shaar_error_code shaar_private_session_cookie_setting(
+    shaar_private_session *, shaar_bytes origin, int set, int allow,
+    int *allowed, shaar_error *error);
 
 /* Regular host may bind multiple regular profiles; private host is fixed. */
 SHAAR_EXPORT shaar_error_code shaar_window_open(

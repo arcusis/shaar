@@ -98,7 +98,7 @@ final class EngineProbe {
     }
     let language = BrowserLanguage.currentLaunchLanguage
     ARCConfigureLocalization(BrowserLocalization.resourceBundleURL, language.localeIdentifier)
-    runtime = try ARCChromiumRuntime(
+    runtime = try ARCShaarRuntime(
       frameworkURL: frameworks.appending(path: "Chromium Framework.framework"))
     runtime.languageIdentifier = language.localeIdentifier
     if sessionRecoveryMode {

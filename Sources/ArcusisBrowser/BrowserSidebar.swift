@@ -475,9 +475,11 @@ struct BrowserSidebar: View {
       let next = index.flatMap {
         spaces.indices.contains($0 + 1) ? spaces[$0 + 1].id : nil
       }
+      let beforeTarget = SpaceIndicatorLayout.insertsBeforeTarget(
+        at: point.x, width: width, isRightToLeft: layoutDirection == .rightToLeft)
       return store.acceptSidebarDrop(
         item, into: space.id,
-        beforeSpace: point.x < width / 2 ? space.id : next)
+        beforeSpace: beforeTarget ? space.id : next)
     } isTargeted: { targeted in
       targetedSpace = targetedSpace.updatingTarget(space.id, isActive: targeted)
     }

@@ -104,6 +104,50 @@ class ShaarSourceBuildTests(unittest.TestCase):
             with self.assertRaisesRegex(BUILD.BuildError, "symlinked Siso lock"):
                 BUILD.clear_stale_siso_lock(output)
 
+    def test_layer_tests_reuse_owned_output_and_record_fake_runner_results(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = self.fixture_repo(temporary)
+            config = BUILD.load_config(repo)
+            output = BUILD.prepare_owned_output(repo)
+            chromium = output / "chromium_git/chromium/src"
+            build_dir = chromium / "out" / config["build"]["configuration"]
+            build_dir.mkdir(parents=True)
+            (output / "depot_tools").mkdir()
+            (output / "depot_tools/autoninja").write_text("fake autoninja\n")
+            receipt = {
+                "schemaVersion": 1,
+                "sourceKind": "shaar",
+                "output": str(output),
+                "configSha256": BUILD.sha256(repo / BUILD.CONFIG),
+                "layerSha256": config["layer"]["sha256"],
+            }
+            (output / BUILD.RECEIPT_FILE).write_text(json.dumps(receipt))
+
+            class FakeRunner:
+                def __init__(self):
+                    self.calls = []
+
+                def __call__(self, args, **kwargs):
+                    self.calls.append((list(args), kwargs))
+                    if args[0].endswith("autoninja"):
+                        (build_dir / "shaar_layer_unittests").write_text("fake test binary")
+                        return subprocess.CompletedProcess(args, 0, "built", "")
+                    report = Path(args[1].split("json:", 1)[1])
+                    report.write_text(json.dumps({
+                        "tests": [{"name": "ShaarLayerTest.Passes", "result": "COMPLETED"}],
+                        "failures": [],
+                    }))
+                    return subprocess.CompletedProcess(args, 0, "passed", "")
+
+            fake_runner = FakeRunner()
+            stage = BUILD.run_layer_tests(repo, config, runner=fake_runner)
+            self.assertEqual(stage["status"], "succeeded")
+            self.assertEqual(len(fake_runner.calls), 2)
+            self.assertEqual(fake_runner.calls[0][0][-1], "//chrome:shaar_layer_unittests")
+            self.assertTrue(fake_runner.calls[1][0][1].startswith("--gtest_output=json:"))
+            saved = json.loads((output / BUILD.RECEIPT_FILE).read_text())
+            self.assertEqual(saved["stages"]["layer-tests"]["result"]["failures"], [])
+
     def test_export_receipt_requires_shaar_symbols_and_rejects_legacy(self):
         symbols = "\n".join(BUILD.REQUIRED_EXPORTS) + "\n_ChromeMain\n"
         checked = BUILD.check_exports(symbols)

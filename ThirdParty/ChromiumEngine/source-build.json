@@ -40,9 +40,12 @@
       "sync": 28800,
       "patches": 14400,
       "gn": 1800,
-      "build": 43200
+      "build": 43200,
+      "layerTests": 1800
     },
-    "frameworkBinary": "chromium_git/chromium/src/out/Release_GN_arm64/Chromium Framework.framework/Versions/155.0.8059.84/Chromium Framework"
+    "frameworkBinary": "chromium_git/chromium/src/out/Release_GN_arm64/Chromium Framework.framework/Versions/155.0.8059.84/Chromium Framework",
+    "layerTestLabel": "//chrome:shaar_layer_unittests",
+    "layerTestBinary": "shaar_layer_unittests"
   },
   "layer": {
     "path": "ThirdParty/ChromiumEngine/layer",

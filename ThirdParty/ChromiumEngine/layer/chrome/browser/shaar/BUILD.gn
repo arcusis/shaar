@@ -75,6 +75,7 @@ source_set("engine") {
     # BEGIN extensions
     "extensions/shaar_extensions.cc",
     "extensions/shaar_extensions.h",
+    "extensions/shaar_extension_views.mm",
     "extensions/shaar_extensions_lifecycle_adapter.cc",
     # END extensions
     # BEGIN find

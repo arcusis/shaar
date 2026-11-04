@@ -172,6 +172,7 @@ typedef enum {
   SHAAR_OP_EXTENSION_POPUP_CLOSE = 804,
   SHAAR_OP_EXTENSION_WEB_STORE_ZOOM = 805,
   SHAAR_OP_EXTENSION_ACTION_STATE = 806,
+  SHAAR_OP_EXTENSION_MANAGER_OPEN = 807,
 
   // BEGIN find
   SHAAR_OP_TAB_FIND = 900,
@@ -362,6 +363,9 @@ SHAAR_EXPORT shaar_error_code shaar_tab_open(
 SHAAR_EXPORT shaar_error_code shaar_tab_close(
     shaar_tab *, shaar_error *error);
 SHAAR_EXPORT void *shaar_tab_host_view(shaar_tab *); /* borrowed NSView* */
+/* Borrowed until POPUP_CLOSE or its owning tab or window closes. */
+SHAAR_EXPORT void *shaar_extension_popup_view(
+    shaar_engine *, shaar_window *, shaar_bytes popup_id);
 /* Borrowed, fully initialized docked DevTools NSView*. Null while closed or
  * undocked. Caller must retain no ownership and release it when the tab closes.
  */

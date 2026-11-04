@@ -168,7 +168,7 @@ final class ProfileOnboardingProbe {
     _ = await value(
       child,
       "(()=>{window.opener.postMessage('fixture-mfa-complete',location.origin);return {};})()")
-    try await wait("popup callback") {
+    try await wait("popup callback", attempts: Int(100 * ProbeTimeout.scale)) {
       await self.value(tab, "({reply:window.fixtureReply})")?["reply"] as? String
         == "fixture-mfa-complete"
     }

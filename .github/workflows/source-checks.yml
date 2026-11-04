@@ -291,6 +291,9 @@ jobs:
       group: source-checks-${{ github.event_name }}-${{ needs.plan.outputs.queue_pr || github.ref }}-engine
       cancel-in-progress: ${{ github.event_name == 'merge_group' }}
     if: needs.plan.outputs.full == 'true'
+    permissions:
+      actions: read
+      contents: read
     uses: ./.github/workflows/ci-engine.yml
     with:
       iterations: ${{ fromJSON(needs.plan.outputs.iterations || '1') }}

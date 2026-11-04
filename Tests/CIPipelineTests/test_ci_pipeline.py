@@ -497,6 +497,10 @@ class ProbeSoakTests(unittest.TestCase):
     def test_shards_cover_every_original_iteration_once_without_retry(self):
         from collections import Counter
         from ci_engine import engine_shards, shard_modes
+        self.assertEqual(engine_shards(1), [
+            "baseline-1", "private-multitab-1", "private-window-1", "private-window-2",
+            "private-window-3", "quit-exit-1", "quit-exit-2", "quit-exit-3", "session-recovery-1",
+        ])
         for iterations in (1, 2, 3, 10):
             expected = Counter((mode, index) for mode in STAGES.ENGINE_MODES
                                for index in range(1, max(iterations, STAGES.MINIMUM_REPETITIONS.get(mode, 1)) + 1))
@@ -572,6 +576,21 @@ class ProbeSoakTests(unittest.TestCase):
 
 
 class EngineTransferTests(unittest.TestCase):
+    def test_merge_group_bundle_selection_rejects_fork_pull_request_runs(self):
+        from ci_engine import matching_pr_bundle_run_id
+        response = {"workflow_runs": [
+            {"id": 10, "run_number": 10, "conclusion": "success",
+             "head_repository": {"full_name": "contributor/shaar"},
+             "pull_requests": [{"number": 448}]},
+            {"id": 11, "run_number": 11, "conclusion": "success",
+             "head_repository": {"full_name": "arcusis/shaar"},
+             "pull_requests": [{"number": 448}]},
+            {"id": 12, "run_number": 12, "conclusion": "success",
+             "head_repository": None, "pull_requests": [{"number": 448}]},
+        ]}
+        self.assertEqual(matching_pr_bundle_run_id(response, 448, "arcusis/shaar"), "11")
+        self.assertEqual(matching_pr_bundle_run_id(response, 448, "other/shaar"), "")
+
     def test_transferred_bundle_preserves_exec_and_links_and_rejects_wrong_context_or_digest(self):
         from ci_engine import BUNDLE_NAME, archive_bundle, restore_bundle
         import shutil

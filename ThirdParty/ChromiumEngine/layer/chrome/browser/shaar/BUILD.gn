@@ -26,6 +26,8 @@ source_set("engine") {
     "private_sessions/shaar_private_sessions.h",
     "private_sessions/shaar_private_sessions_module.h",
     "private_sessions/shaar_private_sessions.cc",
+    "private_sessions/shaar_private_trackers.h",
+    "private_sessions/shaar_private_trackers.cc",
     # END Shaar private sessions module.
     # BEGIN Shaar profiles module.
     "profiles/shaar_profiles.cc",
@@ -139,6 +141,10 @@ source_set("engine") {
     "//components/download/public/common:public",
     "//extensions/browser",
     "//net",
+    "//mojo/public/cpp/base",
+    "//mojo/public/cpp/bindings",
+    "//services/network/public/cpp",
+    "//services/network/public/mojom",
     "//ui/base",
     "//url",
     # BEGIN extensions
@@ -172,7 +178,7 @@ test("shaar_lifecycle_unittests") {
 
 test("shaar_private_sessions_unittests") {
   sources = [ "private_sessions/shaar_private_sessions_unittest.cc" ]
-  deps = [ ":engine", "//chrome/test:test_support", "//testing/gtest" ]
+  deps = [ ":engine", "//chrome/test:test_support", "//testing/gtest", "//url" ]
 }
 
 test("shaar_profiles_unittests") {

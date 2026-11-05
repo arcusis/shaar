@@ -187,7 +187,11 @@ extension BrowserSession {
         tab.isPinned = false
         tab.folderID = nil
         spaces[destination].tabs.append(tab)
-        spaces[destination].selectedTabID = tab.id
+        if spaces[destination].selectedFavoriteID == favoriteID
+          || spaces[destination].selectedTabID == nil
+        {
+          spaces[destination].selectedTabID = tab.id
+        }
         if selectedPage { selectedSpaceID = spaces[destination].id }
         _ = closeFavoritePage(favoriteID)
       }

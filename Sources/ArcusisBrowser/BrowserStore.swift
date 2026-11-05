@@ -902,6 +902,7 @@ final class BrowserStore {
       !consentRequests.contains(where: { $0.id == request.id })
     else { return false }
     consentRequests.append(request)
+    dismissCommand()
     dismissPageFind()
     presentNextConsent()
     return true

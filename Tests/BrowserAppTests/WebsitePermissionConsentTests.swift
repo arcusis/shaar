@@ -86,4 +86,18 @@ struct WebsitePermissionConsentTests {
     #expect(decisions == [false])
     #expect(store.sheet == nil)
   }
+
+  @Test func permissionPromptDismissesPendingSplitCommand() throws {
+    let store = store()
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    store.openSplitPane(beside: tab.id, edge: .right)
+    #expect(store.commandIsOpen)
+    #expect(store.pendingSplitPlacement != nil)
+
+    let request = try request(store)
+    #expect(store.requestWebsitePermission(request))
+    #expect(store.sheet?.id == "permission-\(request.id)")
+    #expect(!store.commandIsOpen)
+    #expect(store.pendingSplitPlacement == nil)
+  }
 }

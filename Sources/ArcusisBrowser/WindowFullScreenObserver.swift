@@ -23,13 +23,19 @@ struct WindowFullScreenObserver: NSViewRepresentable {
 
   func makeNSView(context: Context) -> ObserverView {
     let view = ObserverView()
-    view.onChange = { value in
-      if isFullScreen != value { isFullScreen = value }
-    }
+    bind(view)
     return view
   }
 
-  func updateNSView(_ view: ObserverView, context: Context) {}
+  func updateNSView(_ view: ObserverView, context: Context) {
+    bind(view)
+  }
+
+  private func bind(_ view: ObserverView) {
+    view.onChange = { value in
+      if isFullScreen != value { isFullScreen = value }
+    }
+  }
 
   final class ObserverView: NSView {
     var onChange: ((Bool) -> Void)?

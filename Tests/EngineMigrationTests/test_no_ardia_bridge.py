@@ -63,6 +63,14 @@ class ShaarOnlyBridgeTests(unittest.TestCase):
         )[0]
         self.assertNotIn("loadedTabs.contains", snapshot)
 
+    def test_recovery_fixture_navigation_uses_shaar_tab_route(self):
+        source = (ROOT / "Sources/ShaarVerification/SessionRecoveryProbe.swift").read_text()
+        navigate = source.split("private func navigate(", 1)[1].split(
+            "\n  private func ", 1
+        )[0]
+        self.assertIn("runtime.navigateTabID(", navigate)
+        self.assertNotIn("runtime.evaluate(", navigate)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -129,7 +129,7 @@ final class SessionRecoveryProbe {
     }
     try await waitForDocument(selected, runtime: runtime, engine: engine)
     let navigated = fixture.appending(path: "recovery-navigated")
-    try navigate(selected, to: navigated, runtime: runtime)
+    try navigate(selected, to: navigated, profileID: alpha.profileID, runtime: runtime)
     try await waitFor("native navigation reaches the session model") {
       self.savedTab(selected, in: self.store.session)?.url == navigated
     }
@@ -272,11 +272,14 @@ final class SessionRecoveryProbe {
     session.spaces.flatMap(\.tabs).first { $0.id == id }
   }
 
-  private func navigate(_ id: UUID, to url: URL, runtime: ARCChromiumRuntime) throws {
-    let literal = String(decoding: try JSONEncoder().encode(url.absoluteString), as: UTF8.self)
-    runtime.evaluate(
-      inTabID: id.uuidString, script: "(()=>{location.href=\(literal);return {};})()"
-    ) { _ in }
+  private func navigate(
+    _ id: UUID, to url: URL, profileID: UUID, runtime: ARCChromiumRuntime
+  ) throws {
+    guard let windowID = runtime.windowID(forTabID: id.uuidString),
+      runtime.navigateTabID(
+        id.uuidString, profileID: profileID.uuidString, windowID: windowID,
+        url: url.absoluteString)
+    else { throw SessionRecoveryFailure("The recovery fixture navigation was rejected.") }
   }
 
   private func waitForDocument(_ id: UUID, runtime: ARCChromiumRuntime, engine: BrowserEngine)

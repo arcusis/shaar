@@ -69,6 +69,12 @@ def remove_mock_keychain_switch(source):
                         "bridge")
 
 
+def add_legacy_startup_logging(source):
+    return replace_once(source, '    "--disable-stack-profiler",\n',
+                        '    "--disable-stack-profiler",\n    "--enable-logging=stderr",\n',
+                        "startup logging")
+
+
 def add_legacy_bookmarks(source):
     marker = "        try runtime.openTabID(sharedA, profileID: profileA, url: fixture.absoluteString)"
     addition = """        for (profile, account) in [(profileA, "alpha"), (profileB, "beta")] {
@@ -183,7 +189,8 @@ def extract_old_source(destination, release):
 
 def prepare_old_harness(source, released_framework):
     bridge = source / "Sources/ChromiumBridge/ChromiumBridge.mm"
-    bridge.write_text(remove_mock_keychain_switch(bridge.read_text()))
+    bridge.write_text(add_legacy_startup_logging(
+        remove_mock_keychain_switch(bridge.read_text())))
     probe = source / "Sources/ShaarVerification/EngineProbe.swift"
     probe.write_text(add_legacy_bookmarks(probe.read_text()))
     main = source / "Sources/ShaarVerification/ShaarVerificationMain.swift"

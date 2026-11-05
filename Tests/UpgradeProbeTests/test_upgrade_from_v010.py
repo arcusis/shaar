@@ -32,6 +32,14 @@ class UpgradeFromV010Tests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "v0.1.0 bridge source changed"):
             upgrade_from_v010.remove_mock_keychain_switch("unrelated source")
 
+    def test_old_harness_routes_native_startup_errors_to_owned_log(self):
+        source = subprocess.check_output(
+            ["git", "show", "v0.1.0:Sources/ChromiumBridge/ChromiumBridge.mm"],
+            cwd=upgrade_from_v010.ROOT, text=True)
+        patched = upgrade_from_v010.add_legacy_startup_logging(source)
+        self.assertIn('"--enable-logging=stderr",', patched)
+        self.assertEqual(patched.count('"--enable-logging=stderr",'), 1)
+
     def test_account_url_ignores_other_saved_loopback_tabs(self):
         session = {"spaces": [{"tabs": [
             {"url": "http://127.0.0.1:32100/library-alpha-saved"},

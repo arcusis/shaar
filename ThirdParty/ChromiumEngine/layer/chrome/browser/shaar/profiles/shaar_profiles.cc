@@ -28,13 +28,15 @@
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_metrics.h"
-#include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "chrome/browser/shaar/engine/shaar_module_registry.h"
+#include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/prefs/pref_service.h"
 #include "components/content_settings/core/common/pref_names.h"
+#include "components/language/core/browser/language_prefs.h"
+#include "components/language/core/browser/pref_names.h"
 
 struct shaar_profile {
   struct Waiter {
@@ -185,6 +187,11 @@ void OnProfileReady(shaar_profile* handle,
     }
     return;
   }
+  if (!handle->engine->locale.empty()) {
+    g_browser_process->SetApplicationLocale(handle->engine->locale);
+    shaar::profiles::ApplyApplicationLocale(
+        profile, g_browser_process->local_state(), handle->engine->locale);
+  }
   handle->native = profile;
   handle->ready = true;
   const std::string payload = "{\"kind\":\"loaded\",\"schemaVersion\":1}";
@@ -299,6 +306,30 @@ shaar_error_code ReserveAndLoad(shaar_engine* engine,
 }
 
 }  // namespace
+
+namespace shaar::profiles {
+
+void ApplyApplicationLocale(Profile* profile,
+                            PrefService* local_state,
+                            const std::string& locale) {
+  if (!profile || !local_state || locale.empty()) {
+    return;
+  }
+
+  local_state->SetString(language::prefs::kApplicationLocale, locale);
+  language::LanguagePrefs language_prefs(profile->GetPrefs());
+  std::vector<std::string> selected_languages;
+  language_prefs.GetUserSelectedLanguagesList(&selected_languages);
+  std::vector<std::string> ordered_languages = {locale};
+  for (const std::string& language : selected_languages) {
+    if (!language.empty() && language != locale) {
+      ordered_languages.push_back(language);
+    }
+  }
+  language_prefs.SetUserSelectedLanguagesList(ordered_languages);
+}
+
+}  // namespace shaar::profiles
 
 namespace {
 

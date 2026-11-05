@@ -461,7 +461,7 @@ final class BrowserStore {
       closeLibraryDrawer()
       measureSpaceSwitch {
         session.selectSpace(id)
-        commandIsOpen = false
+        dismissCommand()
         save(deferred: true)
       }
       return
@@ -501,7 +501,7 @@ final class BrowserStore {
       launcherActions?.run(name)
       return
     }
-    commandIsOpen = false
+    dismissCommand()
     save()
   }
 

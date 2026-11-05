@@ -62,7 +62,9 @@ public struct BookmarkTree: Equatable, Sendable {
         ids.insert(id).inserted, let title = node["t"] as? String,
         let kind = node["k"] as? String, ["f", "u"].contains(kind)
       else { throw LibraryDataError.invalidBookmarks }
-      let text = title.isEmpty ? Self.untitledBookmarkTitle(kind: kind) : title
+      let text =
+        title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        ? Self.untitledBookmarkTitle(kind: kind) : title
       let ownPath = path.isEmpty ? text : "\(path) / \(text)"
       let address: String?
       if kind == "u" {
@@ -124,7 +126,9 @@ public struct BrowserHistoryEntry: Identifiable, Equatable, Sendable {
     else { throw LibraryDataError.invalidHistory }
     self.profileID = profileID
     self.address = address
-    self.title = title.isEmpty ? URL(string: address)?.host() ?? address : title
+    self.title =
+      title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      ? URL(string: address)?.host() ?? address : title
     visitCount = count.int64Value
     lastVisit = Date(timeIntervalSince1970: last / 1000)
   }

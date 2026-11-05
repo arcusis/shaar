@@ -21,6 +21,12 @@ TEST(ShaarLifecycleProbeTest, BackgroundSwitchesAreVerificationOnly) {
   EXPECT_NE(std::find(verification.begin(), verification.end(),
                       "--no-startup-window"),
             verification.end());
+  for (const auto& arguments : {production, verification}) {
+    for (const char* option : {"--shaar-embedder", "--no-first-run"}) {
+      EXPECT_NE(std::find(arguments.begin(), arguments.end(), option),
+                arguments.end());
+    }
+  }
   for (const char* option : {"--disable-renderer-backgrounding",
                              "--disable-backgrounding-occluded-windows",
                              "--disable-background-timer-throttling"}) {

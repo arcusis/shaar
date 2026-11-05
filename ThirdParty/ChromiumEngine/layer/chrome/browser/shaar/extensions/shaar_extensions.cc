@@ -42,6 +42,7 @@
 #include "extensions/browser/uninstall_reason.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_urls.h"
+#include "extensions/common/manifest.h"
 #include "extensions/common/manifest_handlers/description_info.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
@@ -160,6 +161,10 @@ std::optional<std::string> EncodeList(Profile* profile,
   base::ListValue entries;
   const auto installed = registry->GenerateInstalledExtensionsSet();
   for (const auto& extension : installed) {
+    // Components such as Chromium PDF are implementation details, not apps
+    // installed by the Shaar user. Keep them enabled inside Chromium.
+    if (!shaar::extensions_host::ShouldListLocation(extension->location()))
+      continue;
     base::DictValue row;
     row.Set("id", extension->id());
     row.Set("name", extension->name());
@@ -196,6 +201,12 @@ std::optional<std::string> EncodeList(Profile* profile,
 }
 
 }  // namespace
+
+namespace shaar::extensions_host {
+bool ShouldListLocation(extensions::mojom::ManifestLocation location) {
+  return !extensions::Manifest::IsComponentLocation(location);
+}
+}  // namespace shaar::extensions_host
 
 bool SharedHomeVersionSatisfied(std::string_view installed,
                                 std::string_view approved) {

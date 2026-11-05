@@ -6,6 +6,8 @@
 
 #include <unordered_map>
 
+#include "content/public/browser/web_contents.h"
+
 namespace shaar::windows_tabs {
 
 namespace {
@@ -15,8 +17,8 @@ std::unordered_map<void*, PageViewHost*>& SelectedOwners() {
 }
 }  // namespace
 
-PageViewHost::PageViewHost(NSRect frame) {
-  window_ = [[NSWindow alloc] initWithContentRect:frame
+PageViewHost::PageViewHost(NSRect frame, NSWindow* window) {
+  window_ = window ?: [[NSWindow alloc] initWithContentRect:frame
                                         styleMask:(NSWindowStyleMaskTitled |
                                                    NSWindowStyleMaskClosable |
                                                    NSWindowStyleMaskResizable |
@@ -29,9 +31,25 @@ PageViewHost::PageViewHost(NSRect frame) {
   window_.releasedWhenClosed = NO;
   window_.collectionBehavior = NSWindowCollectionBehaviorFullScreenPrimary;
   [window_ orderOut:nil];
+  NSNotificationCenter* center = NSNotificationCenter.defaultCenter;
+  auto refresh = ^(NSNotification*) { RefreshVisibility(); };
+  occlusion_observer_ = [center
+      addObserverForName:NSWindowDidChangeOcclusionStateNotification
+                 object:window_ queue:nil usingBlock:refresh];
+  miniaturize_observer_ = [center
+      addObserverForName:NSWindowDidMiniaturizeNotification
+                 object:window_ queue:nil usingBlock:refresh];
+  deminiaturize_observer_ = [center
+      addObserverForName:NSWindowDidDeminiaturizeNotification
+                 object:window_ queue:nil usingBlock:refresh];
 }
 
 PageViewHost::~PageViewHost() {
+  NSNotificationCenter* center = NSNotificationCenter.defaultCenter;
+  [center removeObserver:occlusion_observer_];
+  [center removeObserver:miniaturize_observer_];
+  [center removeObserver:deminiaturize_observer_];
+  SetSelectedWebContents(nullptr);
   if (selected_view_)
     Detach(selected_view_);
   [window_ close];
@@ -40,7 +58,7 @@ PageViewHost::~PageViewHost() {
 bool PageViewHost::Attach(NSView* tab_view) {
   if (!tab_view || tab_view == view_)
     return false;
-  if (selected_view_ == tab_view)
+  if (selected_view_ == tab_view && tab_view.window == window_)
     return true;
   void* identity = (__bridge void*)tab_view;
   auto prior = SelectedOwners().find(identity);
@@ -63,7 +81,30 @@ bool PageViewHost::Detach(NSView* tab_view) {
   [tab_view removeFromSuperview];
   SelectedOwners().erase((__bridge void*)tab_view);
   selected_view_ = nil;
+  SetSelectedWebContents(nullptr);
   return true;
+}
+
+void PageViewHost::SetSelectedWebContents(content::WebContents* contents) {
+  content::WebContents* previous = selected_contents_.get();
+  if (previous && previous != contents)
+    previous->UpdateWebContentsVisibility(content::Visibility::HIDDEN);
+  selected_contents_ = contents ? contents->GetWeakPtr()
+                                : base::WeakPtr<content::WebContents>();
+  RefreshVisibility();
+}
+
+void PageViewHost::RefreshVisibility() {
+  content::WebContents* contents = selected_contents_.get();
+  if (!contents)
+    return;
+  content::Visibility visibility = content::Visibility::HIDDEN;
+  if (window_.isVisible && !window_.isMiniaturized) {
+    visibility = (window_.occlusionState & NSWindowOcclusionStateVisible)
+                     ? content::Visibility::VISIBLE
+                     : content::Visibility::OCCLUDED;
+  }
+  contents->UpdateWebContentsVisibility(visibility);
 }
 
 void PageViewHost::Resize(NSSize size) {

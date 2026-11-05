@@ -7,13 +7,19 @@
 
 #import <AppKit/AppKit.h>
 
+#include "base/memory/weak_ptr.h"
+
+namespace content {
+class WebContents;
+}
+
 namespace shaar::windows_tabs {
 
 // UI-thread AppKit owner. Chromium owns the tab view; this class only borrows it
 // while selected. The window and its content view live until the ABI window closes.
 class PageViewHost final {
  public:
-  explicit PageViewHost(NSRect frame);
+  explicit PageViewHost(NSRect frame, NSWindow* window = nil);
   ~PageViewHost();
   PageViewHost(const PageViewHost&) = delete;
   PageViewHost& operator=(const PageViewHost&) = delete;
@@ -25,11 +31,17 @@ class PageViewHost final {
   bool Detach(NSView* tab_view);
   void Resize(NSSize size);
   bool Focus(NSView* tab_view);
+  void SetSelectedWebContents(content::WebContents* contents);
+  void RefreshVisibility();
 
  private:
   __strong NSWindow* window_ = nil;
   __strong NSView* view_ = nil;
   __strong NSView* selected_view_ = nil;
+  base::WeakPtr<content::WebContents> selected_contents_;
+  __strong id occlusion_observer_ = nil;
+  __strong id miniaturize_observer_ = nil;
+  __strong id deminiaturize_observer_ = nil;
 };
 
 }  // namespace shaar::windows_tabs

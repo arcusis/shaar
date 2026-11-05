@@ -33,9 +33,16 @@ class RebrandEngineFrameworkTests(unittest.TestCase):
                 path.write_bytes(plistlib.dumps({"CFBundleIdentifier": "com.ardia.browser"}))
             REBRAND.rebrand(framework)
             for path, identifier in info_paths.items():
-                self.assertEqual(plistlib.loads(path.read_bytes())["CFBundleIdentifier"],
-                                 identifier)
+                values = plistlib.loads(path.read_bytes())
+                self.assertEqual(values["CFBundleIdentifier"], identifier)
                 self.assertFalse(identifier.startswith("com.ardia."))
+                self.assertTrue(values["CFBundleDisplayName"].startswith("Shaar"))
+                if "Helpers" in path.parts:
+                    self.assertEqual(values["CFBundleIconFile"], "Shaar.icns")
+                    resources = path.parent / "Resources"
+                    self.assertEqual((resources / "Shaar.icns").read_bytes(),
+                                     REBRAND.SHAAR_ICON.read_bytes())
+                    self.assertFalse((resources / "Assets.car").exists())
 
 
 if __name__ == "__main__":

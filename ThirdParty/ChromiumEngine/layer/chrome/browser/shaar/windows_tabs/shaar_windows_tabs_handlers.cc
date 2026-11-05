@@ -16,7 +16,9 @@
 
 #include "base/json/json_reader.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
+#include "chrome/browser/shaar/windows_tabs/shaar_page_view_binding.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "content/public/browser/web_contents.h"
 #include "ui/base/base_window.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -190,7 +192,11 @@ shaar_error_code HandleWindowActivateTab(const ModuleCall* call,
   const int index = call->tab_strip_model->GetIndexOfWebContents(it->second);
   if (index < 0)
     return Fail(SHAAR_NOT_FOUND, error);
+  content::WebContents* previous =
+      call->tab_strip_model->GetActiveWebContents();
   call->tab_strip_model->ActivateTabAt(index);
+  shaar::windows_tabs::ActivatePageHost(call->window, call->scoped_browser,
+                                         previous, it->second);
   return Succeed(error);
 }
 

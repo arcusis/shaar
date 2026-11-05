@@ -55,7 +55,10 @@ class EngineBundleVerifierTests(unittest.TestCase):
         (self.versioned / "Libraries").mkdir()
         self.helpers.mkdir()
         self.payload = b"engine payload fixture"
-        self.engine_plist = plistlib.dumps({"CFBundleIdentifier": verifier.FRAMEWORK_ID})
+        self.engine_plist = plistlib.dumps({
+            "CFBundleIdentifier": verifier.FRAMEWORK_ID,
+            "CFBundleDisplayName": "Shaar Engine",
+        })
         (self.versioned / "Resources/data.bin").write_bytes(self.payload)
         (self.versioned / "Resources/Info.plist").write_bytes(self.engine_plist)
         (self.versioned / "Chromium Framework").write_bytes(b"framework binary")
@@ -78,7 +81,11 @@ class EngineBundleVerifierTests(unittest.TestCase):
             (helper / "Contents/MacOS").mkdir(parents=True)
             (helper / "Contents/Info.plist").write_bytes(plistlib.dumps({
                 "CFBundleIdentifier": identifier, "CFBundleExecutable": executable,
+                "CFBundleDisplayName": name.removesuffix(".app").replace("Chromium", "Shaar", 1),
+                "CFBundleIconFile": "Shaar.icns",
             }))
+            (helper / "Contents/Resources").mkdir()
+            shutil.copy2(verifier.SHAAR_ICON, helper / "Contents/Resources/Shaar.icns")
             (helper / "Contents/MacOS" / executable).write_bytes(b"helper fixture")
             self.helper_map[name] = identifier
         pin = {
@@ -171,6 +178,17 @@ class EngineBundleVerifierTests(unittest.TestCase):
             "CFBundleIdentifier": "com.attacker.helper", "CFBundleExecutable": "Chromium Helper",
         }))
         self.assertEqual(self.verify()["reason"], "helper_identity_mismatch")
+
+    def test_chromium_helper_name_and_icon_fail(self):
+        helper = self.helpers / "Chromium Helper.app/Contents"
+        info = plistlib.loads((helper / "Info.plist").read_bytes())
+        info["CFBundleDisplayName"] = "Chromium Helper"
+        (helper / "Info.plist").write_bytes(plistlib.dumps(info))
+        self.assertEqual(self.verify()["reason"], "helper_identity_mismatch")
+        self.reset()
+        helper = self.helpers / "Chromium Helper.app/Contents"
+        (helper / "Resources/Shaar.icns").write_bytes(b"not the Shaar icon")
+        self.assertEqual(self.verify()["reason"], "helper_icon_mismatch")
 
     def test_verifier_checks_the_shipping_identifier_and_rejects_the_harness_identifier(self):
         config = release_feed.load_config(REPO / "scripts/release-config.sh")

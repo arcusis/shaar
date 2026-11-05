@@ -393,13 +393,25 @@ enum LibrarySpacesOverviewModel {
       items += space.tabs.filter { !$0.isPinned }.map { .tab($0, depth: 0) }
       if !spaceMatches && !needle.isEmpty {
         let matchingFolderIDs = Set(space.folders.filter { contains($0.name, needle) }.map(\.id))
+        var visibleFolderIDs: Set<UUID> = []
+        for id in matchingFolderIDs {
+          visibleFolderIDs.formUnion(space.folderPath(to: id).map(\.id))
+        }
+        let matchingTabIDs = Set(
+          items.compactMap { item -> UUID? in
+            guard case .tab(let tab, _) = item else { return nil }
+            let folderPath = Set(space.folderPath(to: tab.folderID).map(\.id))
+            guard tabMatches(tab, needle) || !folderPath.isDisjoint(with: matchingFolderIDs)
+            else { return nil }
+            visibleFolderIDs.formUnion(folderPath)
+            return tab.id
+          })
         items = items.filter { item in
           switch item {
           case .folder(let folder, _):
-            return matchingFolderIDs.contains(folder.id)
+            return visibleFolderIDs.contains(folder.id)
           case .tab(let tab, _):
-            let folderPath = Set(space.folderPath(to: tab.folderID).map(\.id))
-            return tabMatches(tab, needle) || !folderPath.isDisjoint(with: matchingFolderIDs)
+            return matchingTabIDs.contains(tab.id)
           }
         }
       }

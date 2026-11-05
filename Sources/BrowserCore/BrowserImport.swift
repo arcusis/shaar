@@ -259,7 +259,7 @@ public enum BrowserImport {
 
   private static func decodeHTMLEntity(_ entity: String) -> String? {
     switch entity {
-    case "amp": return "&"
+    case "amp", "AMP": return "&"
     case "quot": return "\""
     case "apos": return "'"
     case "lt": return "<"

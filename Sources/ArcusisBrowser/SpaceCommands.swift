@@ -27,8 +27,10 @@ struct SpaceCommands: Commands {
       Divider()
       Button(ShellL10n.string("Previous space")) { store.cycleSpace(by: -1) }
         .keyboardShortcut(.leftArrow, modifiers: [.command, .option])
+        .disabled(store.session.spaces.count < 2)
       Button(ShellL10n.string("Next space")) { store.cycleSpace(by: 1) }
         .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
+        .disabled(store.session.spaces.count < 2)
       Divider()
       ForEach(Array(store.session.spaces.enumerated()), id: \.element.id) { index, space in
         if let key = SpaceShortcut.key(forIndex: index) {

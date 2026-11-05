@@ -192,6 +192,7 @@ final class PrivateBrowserHost {
     return switch command {
     case .reopenClosed: store.canReopenClosedTab
     case .splitView: store.canSplitSelectedTab
+    case .nextSpace, .previousSpace: store.session.spaces.count > 1
     case .addFavorite: store.canFavoriteCurrentPage
     case .reload, .hardReload: store.canReloadCurrentPage
     case .find: store.canFindCurrentPage

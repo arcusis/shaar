@@ -77,6 +77,13 @@ struct PrivateParityTests {
     #expect(!PrivateBrowserHost.windowCanPerform(.splitView, store: store))
   }
 
+  @Test func spaceCyclingMenusAreDisabledForSingleSpaceWindow() throws {
+    let store = try makeStore()
+    #expect(store.session.spaces.count == 1)
+    #expect(!PrivateBrowserHost.windowCanPerform(.nextSpace, store: store))
+    #expect(!PrivateBrowserHost.windowCanPerform(.previousSpace, store: store))
+  }
+
   @Test func privateTabsFoldersAndSplitsNeverEnterWorkspaceFile() throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }

@@ -329,6 +329,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       guard let target = context.engine.siteControlTarget else { return false }
       return context.engine.inspectors[target.tabID]?.aiCopy.canCopy == true
     case .splitView: return store.canSplitSelectedTab
+    case .nextSpace, .previousSpace: return store.session.spaces.count > 1
     case .reopenClosed: return store.canReopenClosedTab
     case .bookmarkPage: return store.canBookmarkCurrentPage
     case .addFavorite:

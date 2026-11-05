@@ -671,8 +671,24 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
     var session = try BrowserSession(
       profiles: catalog.profiles, spaces: spaces, selectedSpaceID: selectedSpace,
       favorites: catalog.favorites, favoritePages: favoritePages)
-    session.closedTabs = old.session.closedTabs.filter { entry in
-      spaces.contains { $0.id == entry.spaceID && $0.profileID == entry.profileID }
+    session.closedTabs = old.session.closedTabs.compactMap { entry in
+      guard
+        let projectedSpace = spaces.first(where: {
+          $0.id == entry.spaceID && $0.profileID == entry.profileID
+        })
+      else { return nil }
+      guard let folderID = entry.tab.folderID,
+        !projectedSpace.folders.contains(where: { $0.id == folderID })
+      else { return entry }
+      let priorSpace = old.session.spaces.first { $0.id == entry.spaceID }
+      let parent = priorSpace?.folderPath(to: folderID).first { candidate in
+        projectedSpace.folders.contains { $0.id == candidate.id }
+      }
+      var tab = entry.tab
+      tab.folderID = parent?.id
+      tab.isPinned = parent?.isPinned ?? tab.isPinned
+      return ClosedBrowserTab(
+        tab: tab, spaceID: entry.spaceID, profileID: entry.profileID, index: entry.index)
     }
     return WorkspaceWindow(id: old.id, session: session, pins: references, geometry: old.geometry)
   }

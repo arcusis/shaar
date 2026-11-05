@@ -79,6 +79,26 @@ import Testing
   try session.validate()
 }
 
+@Test func firstBackgroundNativeTabSelectsWithinEmptyDestinationSpace() {
+  var session = BrowserSession.fresh()
+  let originalSpaceID = session.selectedSpaceID
+  let destinationSpace = session.spaces[1]
+  let first = BrowserTab(url: URL(string: "https://work.example/first")!)
+  let second = BrowserTab(url: URL(string: "https://work.example/second")!)
+
+  let firstDestination = session.insertNativeTab(
+    first, profileID: destinationSpace.profileID, openerID: nil, foreground: false)
+  let secondDestination = session.insertNativeTab(
+    second, profileID: destinationSpace.profileID, openerID: nil, foreground: false)
+
+  #expect(firstDestination == destinationSpace.id)
+  #expect(secondDestination == destinationSpace.id)
+  #expect(session.selectedSpaceID == originalSpaceID)
+  #expect(session.spaces[1].selectedTabID == first.id)
+  session.selectSpace(destinationSpace.id)
+  #expect(session.selectedSpace.selectedTab?.id == first.id)
+}
+
 @Test func removingAProfilesLastSpaceAsksBeforeClosingOpenFavorites() {
   var session = BrowserSession.fresh()
   let personal = session.spaces[0]

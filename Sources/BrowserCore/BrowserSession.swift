@@ -670,8 +670,10 @@ public struct BrowserSession: Codable, Equatable, Sendable {
     spaces[index].tabs.append(tab)
     if foreground {
       selectedSpaceID = spaces[index].id
-      spaces[index].selectedTabID = tab.id
       spaces[index].selectedFavoriteID = nil
+    }
+    if foreground || spaces[index].selectedTabID == nil {
+      spaces[index].selectedTabID = tab.id
     }
     return spaces[index].id
   }

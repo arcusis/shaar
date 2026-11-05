@@ -201,6 +201,7 @@ struct SitePermissionsSection: View {
       ForEach(model.permissions, id: \.self) { permission in
         SitePermissionRow(
           permission: permission, value: model.permissionValues[permission],
+          saving: model.savingPermissions.contains(permission),
           setAllowed: { allowed in Task { await model.setPermission(permission, allowed: allowed) }
           }
         )
@@ -213,6 +214,7 @@ struct SitePermissionsSection: View {
 struct SitePermissionRow: View {
   let permission: SitePermission
   let value: SitePermissionValue?
+  let saving: Bool
   let setAllowed: (Bool) -> Void
 
   var body: some View {
@@ -231,7 +233,7 @@ struct SitePermissionRow: View {
         .toggleStyle(.switch)
         .controlSize(.mini)
         .labelsHidden()
-        .disabled(value == nil)
+        .disabled(value == nil || saving)
         .help(permission.help)
         .accessibilityLabel(permission.help)
     }

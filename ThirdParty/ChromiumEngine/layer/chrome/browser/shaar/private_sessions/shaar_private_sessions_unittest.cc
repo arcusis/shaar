@@ -12,7 +12,12 @@
 
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/common/content_settings.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -146,6 +151,74 @@ TEST_F(PrivateSessionRegistryTest, CookieSettingsStayOnPrivateProfile) {
                                  &allowed),
             SHAAR_INVALID_ARGUMENT);
   profile.DestroyOffTheRecordProfile(otr);
+}
+
+TEST_F(PrivateSessionRegistryTest, GlobalCookiesAndStorageDefaultIsOTROnly) {
+  TestingProfile profile;
+  auto* normal = HostContentSettingsMapFactory::GetForProfile(&profile);
+  ASSERT_NE(normal, nullptr);
+  const GURL inherited_site("https://allowed.example.test/");
+  normal->SetContentSettingDefaultScope(inherited_site, inherited_site,
+                                        ContentSettingsType::COOKIES,
+                                        CONTENT_SETTING_ALLOW);
+  const ContentSetting before =
+      normal->GetDefaultContentSetting(ContentSettingsType::COOKIES);
+  PrivateSessionRegistry registry;
+  PrivateSessionRegistry::Session* session = nullptr;
+  ASSERT_EQ(registry.Open(&profile, "profile-a", "private-a", &session),
+            SHAAR_OK);
+  auto* private_settings = HostContentSettingsMapFactory::GetForProfile(session->otr);
+  ASSERT_NE(private_settings, nullptr);
+  EXPECT_EQ(private_settings->GetDefaultContentSetting(ContentSettingsType::COOKIES),
+            CONTENT_SETTING_BLOCK);
+  EXPECT_EQ(private_settings->GetContentSetting(inherited_site, inherited_site,
+                                                ContentSettingsType::COOKIES),
+            CONTENT_SETTING_BLOCK);
+  EXPECT_EQ(normal->GetDefaultContentSetting(ContentSettingsType::COOKIES), before);
+  EXPECT_TRUE(registry.Close(session));
+}
+
+TEST_F(PrivateSessionRegistryTest, HTTPSOnlyAppliesToOTRProfile) {
+  TestingProfile profile;
+  profile.GetPrefs()->SetBoolean(prefs::kHttpsOnlyModeEnabled, false);
+  PrivateSessionRegistry registry;
+  PrivateSessionRegistry::Session* session = nullptr;
+  ASSERT_EQ(registry.Open(&profile, "profile-a", "private-a", &session),
+            SHAAR_OK);
+  EXPECT_TRUE(session->otr->GetPrefs()->GetBoolean(prefs::kHttpsOnlyModeEnabled));
+  EXPECT_FALSE(profile.GetPrefs()->GetBoolean(prefs::kHttpsOnlyModeEnabled));
+  EXPECT_TRUE(registry.Close(session));
+}
+
+TEST_F(PrivateSessionRegistryTest, WebRTCAndReferrerPrefsStayPrivate) {
+  TestingProfile profile;
+  profile.GetPrefs()->SetBoolean(prefs::kEnableReferrers, true);
+  profile.GetPrefs()->SetString(prefs::kWebRTCIPHandlingPolicy, "default");
+  PrivateSessionRegistry registry;
+  PrivateSessionRegistry::Session* session = nullptr;
+  ASSERT_EQ(registry.Open(&profile, "profile-a", "private-a", &session),
+            SHAAR_OK);
+  PrefService* private_prefs = session->otr->GetPrefs();
+  EXPECT_FALSE(private_prefs->GetBoolean(prefs::kEnableReferrers));
+  EXPECT_EQ(private_prefs->GetString(prefs::kWebRTCIPHandlingPolicy),
+            "disable_non_proxied_udp");
+  EXPECT_TRUE(private_prefs->GetList(prefs::kWebRTCIPHandlingUrl).empty());
+  EXPECT_TRUE(private_prefs->GetList(prefs::kWebRtcLocalIpsAllowedUrls).empty());
+  EXPECT_TRUE(profile.GetPrefs()->GetBoolean(prefs::kEnableReferrers));
+  EXPECT_EQ(profile.GetPrefs()->GetString(prefs::kWebRTCIPHandlingPolicy),
+            "default");
+  EXPECT_TRUE(registry.Close(session));
+}
+
+TEST_F(PrivateSessionRegistryTest, ExtensionPolicyRejectsOnlyOTRContexts) {
+  TestingProfile profile;
+  PrivateSessionRegistry registry;
+  PrivateSessionRegistry::Session* session = nullptr;
+  ASSERT_EQ(registry.Open(&profile, "profile-a", "private-a", &session),
+            SHAAR_OK);
+  EXPECT_TRUE(PrivateExtensionsDisabled(session->otr));
+  EXPECT_FALSE(PrivateExtensionsDisabled(&profile));
+  EXPECT_TRUE(registry.Close(session));
 }
 
 TEST_F(PrivateSessionRegistryTest,

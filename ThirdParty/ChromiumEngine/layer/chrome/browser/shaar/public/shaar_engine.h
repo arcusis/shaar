@@ -335,6 +335,10 @@ SHAAR_EXPORT shaar_error_code shaar_private_session_close(
 SHAAR_EXPORT shaar_error_code shaar_private_session_cookie_setting(
     shaar_private_session *, shaar_bytes origin, int set, int allow,
     int *allowed, shaar_error *error);
+/* Live OTR defaults and parent comparison, encoded as a NUL-terminated JSON
+ * object. The caller owns the buffer; no private profile pointer escapes. */
+SHAAR_EXPORT shaar_error_code shaar_private_session_privacy_status(
+    shaar_private_session *, char *json, size_t capacity, shaar_error *error);
 /* Rules are canonical DNS names in a JSON string array (max 4 MiB). Revision
  * identifies exact content and cannot be reused with different rules. */
 SHAAR_EXPORT shaar_error_code shaar_private_session_tracker_rules(

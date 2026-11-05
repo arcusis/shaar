@@ -50,6 +50,7 @@ REQUIRED_EXPORTS = (
     "_shaar_private_session_open",
     "_shaar_private_session_close",
     "_shaar_private_session_cookie_setting",
+    "_shaar_private_session_privacy_status",
     "_shaar_private_session_tracker_rules",
     "_shaar_private_session_tracker_status",
     "_shaar_private_session_tracker_allowance",

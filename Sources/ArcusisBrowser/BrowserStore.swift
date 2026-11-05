@@ -1022,12 +1022,24 @@ final class BrowserStore {
       save()
       return true
     case .favorite(let payload):
+      if acceptsFavoriteDrag(payload, in: session.selectedSpaceID),
+        let target = session.spaces.first(where: { $0.id == space }),
+        target.profileID != payload.profileID
+      {
+        sidebarNotice = ShellL10n.string(
+          "Favorites can move only between spaces sharing a profile.")
+        return false
+      }
       guard acceptsFavoriteDrag(payload, in: space, requiresSelectedSpace: false) else {
         return false
       }
-      return restoreFavoriteAsTab(
-        payload.favoriteID, in: space, before: targetTab, pinned: pinned ?? false,
-        folderID: folderID)
+      guard
+        restoreFavoriteAsTab(
+          payload.favoriteID, in: space, before: targetTab, pinned: pinned ?? false,
+          folderID: folderID)
+      else { return false }
+      sidebarNotice = nil
+      return true
     case .url(let url):
       guard NavigationInput.isWebURL(url) else { return false }
       var draft = session

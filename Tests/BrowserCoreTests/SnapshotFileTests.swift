@@ -93,6 +93,21 @@ import Testing
     #expect(try SnapshotFile<BrowserSession>(url: snapshot.backupURL).loadPrimary() == good)
   }
 
+  @Test func damagedLegacySnapshotIsRestrictedWhenMovedAside() throws {
+    defer { try? FileManager.default.removeItem(at: root) }
+    let good = session(opening: "https://example.com/good")
+    try file.save(good)
+    try file.save(good)
+    let damaged = Data("{\"url\":\"https://private.example\"".utf8)
+    try damaged.write(to: file.url)
+    try FileManager.default.setAttributes(
+      [.posixPermissions: 0o644], ofItemAtPath: file.url.path)
+
+    #expect(try file.load() == good)
+    #expect(try posixPermissions(snapshot.damagedURL) == 0o600)
+    #expect(try Data(contentsOf: snapshot.damagedURL) == damaged)
+  }
+
   @Test func primaryThatFailsValidationFallsBackToTheBackup() throws {
     defer { try? FileManager.default.removeItem(at: root) }
     let good = session(opening: "https://example.com/good")

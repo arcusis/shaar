@@ -140,6 +140,27 @@ import Testing
   try session.validate()
 }
 
+@Test func removingBackgroundFavoriteKeepsOrdinaryTabSelected() throws {
+  var session = BrowserSession.fresh()
+  let opened = session.open(URL(string: "https://reading.example")!)
+  let ordinary = try #require(opened)
+  let added = session.addFavorite(
+    profileID: session.selectedSpace.profileID,
+    originalURL: URL(string: "https://favorite.example")!)
+  let favorite = try #require(added)
+  let favoritePage = try #require(session.favoritePage(for: favorite))
+
+  #expect(session.selectedSpace.selectedTabID == ordinary)
+  #expect(session.selectedSpace.selectedFavoriteID == nil)
+  let removed = session.removeFavorite(favorite, disposition: .preserveAsTab)
+  #expect(removed)
+
+  #expect(session.selectedSpace.tabs.contains { $0.id == favoritePage.tab.id })
+  #expect(session.selectedSpace.selectedTabID == ordinary)
+  #expect(session.selectedPage?.tab.id == ordinary)
+  try session.validate()
+}
+
 @Test func sessionV1V2V3UpgradeWithoutRewritingLegacyBytes() throws {
   let session = BrowserSession.fresh()
   let current =

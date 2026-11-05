@@ -99,6 +99,14 @@ import Testing
   }
 }
 
+@Test func whitespaceOnlyHistoryTitleFallsBackToHost() throws {
+  let entry = try BrowserHistoryEntry(
+    profileID: UUID(),
+    payload: ["u": "https://example.com/account", "t": "  \n\t", "n": 1, "v": [1000]])
+
+  #expect(entry.title == "example.com")
+}
+
 @Test func launcherLibraryResultsStayInSelectedProfileAndPreferBookmarksToDuplicateHistory() throws
 {
   var session = BrowserSession.fresh()

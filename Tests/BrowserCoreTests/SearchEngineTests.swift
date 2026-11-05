@@ -59,6 +59,9 @@ import Testing
     #expect(NavigationInput.address(for: input) == nil)
     #expect(NavigationInput.destination(for: input) == nil)
   }
+  #expect(
+    NavigationInput.address(for: "example.com:8443")?.absoluteString
+      == "https://example.com:8443")
 }
 
 @Test func commandSearchKeepsGoogleDefaultAndAcceptsSelectedEngine() throws {

@@ -348,6 +348,7 @@ public enum CommandLauncher {
 
   /// Compares pages so "https://site.example" and "https://site.example/" are one page.
   static func pageKey(_ address: String) -> String {
-    address.hasSuffix("/") ? String(address.dropLast()) : address
+    guard address.hasSuffix("/"), URL(string: address)?.path() == "/" else { return address }
+    return String(address.dropLast())
   }
 }

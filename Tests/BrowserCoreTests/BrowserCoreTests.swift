@@ -52,6 +52,17 @@ private func openTab(_ address: String, in session: inout BrowserSession) throws
   try session.validate()
 }
 
+@Test func whitespaceOnlyNativeTitleFallsBackToTabHost() throws {
+  var session = BrowserSession.fresh()
+  let tabID = try openTab("https://example.com/page", in: &session)
+
+  let updated = session.updateTab(
+    tabID, url: URL(string: "https://news.example.com/page")!, title: "  \n\t")
+
+  #expect(updated)
+  #expect(session.selectedSpace.selectedTab?.title == "news.example.com")
+}
+
 @Test func nativePopupStaysWithOpenerSpaceAndRejectsUnknownProfiles() throws {
   var session = BrowserSession.fresh()
   let openerSpace = session.selectedSpaceID

@@ -637,7 +637,9 @@ public struct BrowserSession: Codable, Equatable, Sendable {
       let space = spaces.firstIndex(where: { $0.tabs.contains { $0.id == id } }),
       let tab = spaces[space].tabs.firstIndex(where: { $0.id == id })
     else { return false }
-    let title = title.isEmpty ? url.host() ?? url.absoluteString : title
+    let title =
+      title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      ? url.host() ?? url.absoluteString : title
     guard spaces[space].tabs[tab].url != url || spaces[space].tabs[tab].title != title else {
       return false
     }

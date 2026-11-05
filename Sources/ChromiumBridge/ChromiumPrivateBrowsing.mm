@@ -716,6 +716,13 @@ shaar_tab *PrivateTab(NSDictionary *entry) {
     completion(NO, ARCBridgeError(@"The private source lease is unavailable."));
     return;
   }
+  if (!ARCPrivateShaarInstallTrackerRules(session)) {
+    auto close = PrivateSymbol<decltype(&shaar_private_session_close)>(
+        "shaar_private_session_close");
+    if (close) close(session, &error);
+    completion(NO, ARCBridgeError(@"Private site protections could not be applied."));
+    return;
+  }
   NSMutableDictionary *state = ARCPrivateShaarState(self);
   state[@"contexts"][contextID] = [@{@"sourceProfileID": sourceProfileID,
     @"session": [NSValue valueWithPointer:session],

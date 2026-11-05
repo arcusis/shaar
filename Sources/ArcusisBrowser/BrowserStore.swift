@@ -548,9 +548,6 @@ final class BrowserStore {
       let space = session.spaces.first(where: { $0.id == spaceID })
     else { return }
     let todayIDs = Set(space.tabs.filter { !$0.isPinned }.map(\.id))
-    for tab in space.tabs where !tab.isPinned && tab.folderID != nil {
-      _ = moveTab(tab.id, from: spaceID, to: spaceID, pinned: false)
-    }
     var handled: Set<UUID> = []
     for group in groups where group.tabIDs.count > 1 {
       let ids = Set(group.tabIDs)

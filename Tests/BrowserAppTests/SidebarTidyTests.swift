@@ -32,3 +32,16 @@ import Testing
   #expect(groups.first { $0.topic == "localhost:4000" }?.tabIDs == [second.id])
   #expect(groups.first { $0.topic == "[::1]:8080" }?.tabIDs == [ipv6.id])
 }
+
+@Test @MainActor func emptyTidyResultKeepsManualTodayFolderMembership() throws {
+  let store = BrowserStore()
+  let space = store.session.selectedSpaceID
+  store.perform(.open(URL(string: "https://example.com/one")!))
+  let tab = try #require(store.session.selectedSpace.selectedTab)
+  let folder = try #require(store.createFolder(name: "Manual", in: space, section: .today))
+  #expect(store.moveTab(tab.id, from: space, to: space, folderID: folder))
+
+  store.applyTidyGroups([], in: space)
+
+  #expect(store.session.selectedSpace.tabs.first { $0.id == tab.id }?.folderID == folder)
+}

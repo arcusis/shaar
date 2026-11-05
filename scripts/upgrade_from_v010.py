@@ -246,6 +246,22 @@ def fixture_root_from_log(log, parent):
     return fixture
 
 
+def retain_old_fixture_evidence(transcript, parent, evidence):
+    matches = re.findall(r"^Probe evidence: (.+)$", transcript, flags=re.MULTILINE)
+    if len(matches) != 1:
+        return
+    fixture = Path(matches[0]).resolve()
+    if fixture.parent != parent.resolve() or not fixture.name.startswith("arcusis-engine-probe-"):
+        raise RuntimeError("v0.1.0 fixture evidence escaped its owned temporary root")
+    marker = fixture / ".arcusis-probe"
+    if not marker.is_file() or marker.read_text() != "arcusis-engine-probe-v1\n":
+        raise RuntimeError("v0.1.0 fixture evidence lacks its ownership marker")
+    for phase in ("initial", "restart"):
+        child_log = fixture / f"{phase}.log"
+        if child_log.is_file() and not child_log.is_symlink():
+            shutil.copy2(child_log, evidence / f"old-fixture-{phase}.log")
+
+
 def account_url_from_session(session):
     urls = {tab["url"] for space in session["spaces"] for tab in space["tabs"]}
     accounts = set()
@@ -399,9 +415,14 @@ def execute(output):
                         env=environment, timeout=900, output=evidence / "old-bundle.log")
             old_app = old_source / "build/Shaar Verification.app"
             set_shipping_bundle_id(old_app)
-            old_log = run_checked(["nice", "-n", "19", "python3", "scripts/engine_fixture.py"],
-                                  cwd=old_source, env=environment, timeout=900,
-                                  output=evidence / "old-fixture.log")
+            fixture_log = evidence / "old-fixture.log"
+            try:
+                old_log = run_checked(["nice", "-n", "19", "python3",
+                                       "scripts/engine_fixture.py"], cwd=old_source,
+                                      env=environment, timeout=900, output=fixture_log)
+            except RuntimeError:
+                retain_old_fixture_evidence(fixture_log.read_text(), root, evidence)
+                raise
             fixture = fixture_root_from_log(old_log, root)
             data_root = stage_old_data(fixture, home)
             session = json.loads((fixture / "session.json").read_text())

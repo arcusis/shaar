@@ -109,6 +109,25 @@ class UpgradeFromV010Tests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "timed out"):
             upgrade_from_v010.run_checked(["sleep", "1"], timeout=0.01)
 
+    def test_failed_old_fixture_preserves_only_owned_child_log(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = root / "arcusis-engine-probe-example"
+            fixture.mkdir()
+            (fixture / ".arcusis-probe").write_text("arcusis-engine-probe-v1\n")
+            (fixture / "initial.log").write_text("old engine failure\n")
+            evidence = root / "evidence"
+            evidence.mkdir()
+
+            upgrade_from_v010.retain_old_fixture_evidence(
+                f"Probe evidence: {fixture}\n", root, evidence)
+
+            self.assertEqual((evidence / "old-fixture-initial.log").read_text(),
+                             "old engine failure\n")
+            with self.assertRaisesRegex(RuntimeError, "escaped"):
+                upgrade_from_v010.retain_old_fixture_evidence(
+                    "Probe evidence: /tmp/unrelated\n", root, evidence)
+
 
 if __name__ == "__main__":
     unittest.main()

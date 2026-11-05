@@ -34,6 +34,7 @@ struct SpaceEditor: View {
   @State private var iconIsPresented = false
   @State private var finished = false
   @State private var error: String?
+  @State private var lastPreview: BrowserSpace?
   @FocusState private var nameIsFocused: Bool
   private let original: BrowserSpace?
 
@@ -89,11 +90,7 @@ struct SpaceEditor: View {
     .onChange(of: appearance) { _, _ in applyLive() }
     .onChange(of: symbol) { _, _ in applyLive() }
     .onDisappear {
-      if !finished, let original {
-        _ = store.updateSpace(
-          original.id, name: original.name, tint: original.tint, customRGB: original.customRGB,
-          symbol: original.symbol)
-      }
+      restorePreviewIfNeeded()
       store.spaceEditorFocus = .name
     }
     .confirmationDialog(
@@ -139,8 +136,26 @@ struct SpaceEditor: View {
     {
       error = SettingsL10n.string("This Space could not be saved. Check its name and Profile.")
     } else {
+      lastPreview = store.session.spaces.first { $0.id == id }
       error = nil
     }
+  }
+
+  private func restorePreviewIfNeeded() {
+    guard !finished, let original, let lastPreview,
+      let current = store.session.spaces.first(where: { $0.id == original.id })
+    else { return }
+    let name = current.name == lastPreview.name ? original.name : current.name
+    let tint = current.tint == lastPreview.tint ? original.tint : current.tint
+    let customRGB =
+      current.customRGB == lastPreview.customRGB ? original.customRGB : current.customRGB
+    let symbol = current.symbol == lastPreview.symbol ? original.symbol : current.symbol
+    guard
+      name != current.name || tint != current.tint || customRGB != current.customRGB
+        || symbol != current.symbol
+    else { return }
+    _ = store.updateSpace(
+      original.id, name: name, tint: tint, customRGB: customRGB, symbol: symbol)
   }
 
   private func submit() {

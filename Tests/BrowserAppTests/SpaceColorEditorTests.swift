@@ -58,6 +58,28 @@ import XCTest
 
 @MainActor
 final class SpaceColorEditorLayoutTests: XCTestCase {
+  func testClosingUntouchedEditorKeepsConcurrentSpaceRename() throws {
+    let store = BrowserStore(sessionFile: nil, session: .fresh())
+    let spaceID = store.session.selectedSpaceID
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 404, height: 600), styleMask: [],
+      backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    defer { window.close() }
+    let host = NSHostingView(rootView: AnyView(SpaceEditor(store: store, route: .edit(spaceID))))
+    window.contentView = host
+    host.frame = window.contentView!.bounds
+    host.layoutSubtreeIfNeeded()
+    RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+
+    XCTAssertTrue(store.updateSpace(spaceID, name: "Newer name", tint: .ocean))
+    host.rootView = AnyView(EmptyView())
+    host.layoutSubtreeIfNeeded()
+    RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+
+    XCTAssertEqual(store.session.spaces.first { $0.id == spaceID }?.name, "Newer name")
+  }
+
   func testActualSpaceEditorRendersHiddenWindowCreationAndEditStates() throws {
     let output = URL(filePath: "/tmp/browser-rgb-space-color-editor")
     try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)

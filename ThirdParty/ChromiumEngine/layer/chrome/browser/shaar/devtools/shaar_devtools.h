@@ -68,6 +68,9 @@ bool StartProtocolRequest(scoped_refptr<content::DevToolsAgentHost> host,
                           const std::string& request_json,
                           std::string main_frame_id = {});
 
+// Closes a synthetic target that does not emit AgentHostClosed in tests.
+void CloseProtocolSessionForTesting(content::DevToolsAgentHost* host);
+
 // Selects the page protocol target for the scoped tab, including OTR tabs.
 scoped_refptr<content::DevToolsAgentHost> ProtocolAgentHostFor(
     content::WebContents* contents);

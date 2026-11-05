@@ -11,6 +11,7 @@
 #include "base/containers/span.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
+#include "base/json/json_writer.h"
 #include "base/memory/ref_counted.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/test/task_environment.h"
@@ -108,6 +109,7 @@ class MainFrameContextAgentHost final : public content::MockDevToolsAgentHost {
     const auto* method = parsed->GetDict().FindString("method");
     ASSERT_NE(nullptr, method);
     if (*method == "Runtime.enable") {
+      ++runtime_enables;
       base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, base::BindOnce(&MainFrameContextAgentHost::SendContexts,
                                     base::WrapRefCounted(this), client));
@@ -121,6 +123,11 @@ class MainFrameContextAgentHost final : public content::MockDevToolsAgentHost {
   }
 
   base::DictValue evaluation;
+  int runtime_enables = 0;
+  void NavigateToNewContext() {
+    context_id_ = 81;
+    Send(client_, R"({"method":"Runtime.executionContextsCleared"})");
+  }
 
  private:
   ~MainFrameContextAgentHost() override = default;
@@ -133,7 +140,7 @@ class MainFrameContextAgentHost final : public content::MockDevToolsAgentHost {
   void SendContexts(content::DevToolsAgentHostClient* client) {
     Send(client, R"({"id":-1,"result":{}})");
     Send(client, R"({"method":"Runtime.executionContextCreated","params":{"context":{"id":11,"auxData":{"frameId":"stale-frame","isDefault":true}}}})");
-    Send(client, "{\"method\":\"Runtime.executionContextCreated\",\"params\":{\"context\":{\"id\":27,\"auxData\":{\"frameId\":\"" +
+    Send(client, "{\"method\":\"Runtime.executionContextCreated\",\"params\":{\"context\":{\"id\":" + std::to_string(context_id_) + ",\"auxData\":{\"frameId\":\"" +
                      frame_id_ + "\",\"isDefault\":true}}}}");
   }
 
@@ -142,6 +149,7 @@ class MainFrameContextAgentHost final : public content::MockDevToolsAgentHost {
   }
 
   std::string frame_id_;
+  int context_id_ = 27;
 };
 
 struct CapturedReply {
@@ -158,6 +166,131 @@ void CaptureReply(void* opaque, const shaar_result* result) {
   captured->payload.assign(result->payload_json.data, result->payload_json.size);
   captured->message.assign(result->error.message.data,
                            result->error.message.size);
+}
+
+// Remote objects and enabled domains belong to one CDP attachment.
+class InspectorSessionHost final : public content::MockDevToolsAgentHost {
+ public:
+  bool AttachClient(content::DevToolsAgentHostClient* client) override {
+    ++attachments;
+    return MockDevToolsAgentHost::AttachClient(client);
+  }
+  bool DetachClient(content::DevToolsAgentHostClient* client) override {
+    dom_enabled = css_enabled = object_created = false;
+    return MockDevToolsAgentHost::DetachClient(client);
+  }
+  void DispatchProtocolMessage(content::DevToolsAgentHostClient* client,
+                               base::span<const uint8_t> message) override {
+    auto parsed = base::JSONReader::Read(std::string_view(
+        reinterpret_cast<const char*>(message.data()), message.size()),
+        base::JSON_PARSE_RFC);
+    ASSERT_TRUE(parsed && parsed->is_dict());
+    const auto& command = parsed->GetDict();
+    const auto* method = command.FindString("method");
+    ASSERT_TRUE(method);
+    base::DictValue response;
+    response.Set("id", command.FindInt("id").value());
+    base::DictValue result;
+    if (*method == "DOM.enable") dom_enabled = true;
+    if (*method == "CSS.enable") css_enabled = true;
+    if (*method == "DOM.getDocument") {
+      EXPECT_TRUE(dom_enabled);
+      result.Set("root", base::DictValue().Set("nodeId", 7));
+    }
+    if (*method == "Runtime.evaluate") {
+      object_created = true;
+      result.Set("result", base::DictValue().Set("objectId", "session-object"));
+    }
+    if (*method == "DOM.requestNode") {
+      EXPECT_TRUE(dom_enabled);
+      EXPECT_TRUE(css_enabled);
+      EXPECT_TRUE(object_created);
+      EXPECT_EQ("session-object", *command.FindDict("params")->FindString("objectId"));
+      result.Set("nodeId", 7);
+    }
+    response.Set("result", std::move(result));
+    std::string json;
+    base::JSONWriter::Write(response, &json);
+    client->DispatchProtocolMessage(this, base::as_byte_span(json));
+  }
+  int attachments = 0;
+  bool dom_enabled = false;
+  bool css_enabled = false;
+  bool object_created = false;
+ private:
+  ~InspectorSessionHost() override = default;
+};
+
+TEST(ShaarDevToolsTest, InspectorSequenceKeepsDomainsNodesAndObjectsInOneSession) {
+  base::test::TaskEnvironment tasks;
+  auto host = base::MakeRefCounted<InspectorSessionHost>();
+  const char* commands[] = {
+      R"({"id":1,"method":"Page.enable"})",
+      R"({"id":2,"method":"DOM.enable"})",
+      R"({"id":3,"method":"DOM.getDocument"})",
+      R"({"id":4,"method":"CSS.enable"})",
+      R"({"id":5,"method":"Runtime.evaluate","params":{"expression":"document.body"}})",
+      R"({"id":6,"method":"DOM.requestNode","params":{"objectId":"session-object"}})"};
+  for (size_t i = 0; i < std::size(commands); ++i) {
+    CapturedReply reply;
+    ASSERT_TRUE(StartProtocolRequest(host, i + 1, &CaptureReply, &reply, commands[i]));
+    tasks.RunUntilIdle();
+    EXPECT_EQ(SHAAR_OK, reply.code);
+  }
+  EXPECT_EQ(1, host->attachments);
+  EXPECT_TRUE(host->IsAttached());
+  auto other = base::MakeRefCounted<InspectorSessionHost>();
+  EXPECT_FALSE(other->dom_enabled);
+  CloseProtocolSessionForTesting(host.get());
+  EXPECT_FALSE(host->IsAttached());
+}
+
+class PendingSessionHost final : public content::MockDevToolsAgentHost {
+ public:
+  void DispatchProtocolMessage(content::DevToolsAgentHostClient*,
+                               base::span<const uint8_t>) override {}
+  void CloseTarget() {
+    auto* client = client_.get();
+    client_ = nullptr;
+    client->AgentHostClosed(this);
+  }
+ private:
+  ~PendingSessionHost() override = default;
+};
+
+TEST(ShaarDevToolsTest, TargetClosureFailsActiveAndQueuedRequests) {
+  base::test::TaskEnvironment tasks;
+  auto host = base::MakeRefCounted<PendingSessionHost>();
+  CapturedReply first, second;
+  ASSERT_TRUE(StartProtocolRequest(host, 1, &CaptureReply, &first,
+                                  R"({"id":1,"method":"DOM.enable"})"));
+  ASSERT_TRUE(StartProtocolRequest(host, 2, &CaptureReply, &second,
+                                  R"({"id":2,"method":"DOM.getDocument"})"));
+  host->CloseTarget();
+  tasks.RunUntilIdle();
+  EXPECT_EQ(SHAAR_NOT_FOUND, first.code);
+  EXPECT_EQ(SHAAR_NOT_FOUND, second.code);
+  EXPECT_EQ(1u, first.request_id);
+  EXPECT_EQ(2u, second.request_id);
+  EXPECT_FALSE(host->IsAttached());
+}
+
+TEST(ShaarDevToolsTest, PersistentSessionDropsExecutionContextOnNavigation) {
+  base::test::TaskEnvironment tasks;
+  auto host = base::MakeRefCounted<MainFrameContextAgentHost>("main-frame");
+  const std::string command = R"({"id":44,"method":"Runtime.evaluate","params":{"expression":"document.body"}})";
+  CapturedReply before, after;
+  ASSERT_TRUE(StartProtocolRequest(host, 44, &CaptureReply, &before, command, "main-frame"));
+  tasks.RunUntilIdle();
+  EXPECT_EQ(SHAAR_OK, before.code);
+  EXPECT_EQ(27, host->evaluation.FindDict("params")->FindInt("contextId"));
+  host->NavigateToNewContext();
+  ASSERT_TRUE(StartProtocolRequest(host, 44, &CaptureReply, &after, command, "main-frame"));
+  tasks.RunUntilIdle();
+  EXPECT_EQ(SHAAR_OK, after.code);
+  EXPECT_EQ(81, host->evaluation.FindDict("params")->FindInt("contextId"));
+  EXPECT_EQ(2, host->runtime_enables);
+  CloseProtocolSessionForTesting(host.get());
 }
 
 TEST(ShaarDevToolsTest, CommandMapIsCapabilityScoped) {
@@ -329,7 +462,7 @@ TEST(ShaarDevToolsTest, FrontendStateEventCarriesOnlyExactScopeAndState) {
   EXPECT_EQ(1u, captured.event.sequence);
 }
 
-TEST(ShaarDevToolsTest, ProtocolClientAttachesRepliesAndDetaches) {
+TEST(ShaarDevToolsTest, ProtocolClientKeepsSessionUntilTargetCloses) {
   base::test::TaskEnvironment tasks;
   auto host = base::MakeRefCounted<ReplyingAgentHost>();
   CapturedReply captured;
@@ -338,6 +471,8 @@ TEST(ShaarDevToolsTest, ProtocolClientAttachesRepliesAndDetaches) {
   EXPECT_TRUE(host->IsAttached());
   EXPECT_NE(std::string::npos, host->request.find("DOM.getDocument"));
   tasks.RunUntilIdle();
+  EXPECT_TRUE(host->IsAttached());
+  CloseProtocolSessionForTesting(host.get());
   EXPECT_FALSE(host->IsAttached());
   EXPECT_EQ(44u, captured.request_id);
   EXPECT_EQ(SHAAR_OK, captured.code);
@@ -358,6 +493,8 @@ TEST(ShaarDevToolsTest, ProtocolClientPreservesProtocolErrorMessage) {
   ASSERT_TRUE(StartProtocolRequest(host, 44, &CaptureReply, &captured,
                                    R"({"id":44,"method":"Runtime.evaluate"})"));
   tasks.RunUntilIdle();
+  EXPECT_TRUE(host->IsAttached());
+  CloseProtocolSessionForTesting(host.get());
   EXPECT_FALSE(host->IsAttached());
   EXPECT_EQ(SHAAR_CHROMIUM_ERROR, captured.code);
   EXPECT_EQ("Method not found", captured.message);
@@ -457,6 +594,7 @@ TEST_F(ShaarPrivateDevToolsPageTargetTest,
       R"({"id":44,"method":"Runtime.evaluate","params":{"expression":"!!document.documentElement","returnByValue":true}})",
       frame_id));
   task_environment()->RunUntilIdle();
+  CloseProtocolSessionForTesting(host.get());
   const auto* params = host->evaluation.FindDict("params");
   ASSERT_NE(nullptr, params);
   EXPECT_EQ(27, params->FindInt("contextId"));

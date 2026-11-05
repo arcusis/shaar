@@ -1,0 +1,125 @@
+--- a/components/os_crypt/async/browser/keychain_key_provider.h
++++ b/components/os_crypt/async/browser/keychain_key_provider.h
+@@ -28,6 +28,7 @@
+ 
+  private:
+   friend class KeychainKeyProviderCompatTest;
++  friend class ShaarKeychainDeadlineTest;
+   FRIEND_TEST_ALL_PREFIXES(KeychainKeyProviderTest, GetKey_Success);
+   FRIEND_TEST_ALL_PREFIXES(KeychainKeyProviderTest, GetKey_NotFound);
+   FRIEND_TEST_ALL_PREFIXES(KeychainKeyProviderTest, GetKey_Failure_AuthFailed);
+--- a/components/os_crypt/async/browser/keychain_key_provider.mm
++++ b/components/os_crypt/async/browser/keychain_key_provider.mm
+@@ -11,6 +11,8 @@
+ #include "base/command_line.h"
+ #include "base/functional/bind.h"
+ #include "base/task/thread_pool.h"
++#include "base/task/sequenced_task_runner.h"
++#include "base/time/time.h"
+ #include "base/types/expected.h"
+ #include "components/os_crypt/async/common/algorithm.mojom.h"
+ #include "components/os_crypt/common/keychain_password_mac.h"
+@@ -19,6 +21,10 @@
+ #include "crypto/apple/keychain_v2.h"
+ #include "crypto/kdf.h"
+ #include "crypto/subtle_passkey.h"
++
++namespace shaar::lifecycle {
++void SafeStorageUnavailable() __attribute__((weak_import));
++}
+ 
+ namespace os_crypt_async {
+ 
+@@ -76,14 +82,38 @@
+ KeychainKeyProvider::~KeychainKeyProvider() = default;
+ 
+ void KeychainKeyProvider::GetKey(KeyCallback callback) {
+-  // Apple's documentation [1] recommends accessing the keychain on a worker
+-  // thread. [1]
+-  // https://developer.apple.com/documentation/security/secitemcopymatching%28_%3A_%3A%29#Performance-considerations
++  // Network cookie initialization must not wait indefinitely for SecurityAgent.
++  // Keep the keychain request on its worker and release startup with an explicitly
++  // unavailable key. A late approval cannot replace the key ring mid-session.
++  const bool embedded = base::CommandLine::ForCurrentProcess()->HasSwitch(
++      "shaar-embedder");
++  auto pending = std::make_shared<KeyCallback>(std::move(callback));
++  if (embedded) {
++    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
++        FROM_HERE,
++        base::BindOnce([](std::shared_ptr<KeyCallback> pending) {
++          if (!*pending)
++            return;
++          if (shaar::lifecycle::SafeStorageUnavailable)
++            shaar::lifecycle::SafeStorageUnavailable();
++          std::move(*pending).Run(
++              kKeyTag, base::unexpected(KeyError::kTemporarilyUnavailable));
++        }, pending),
++        base::Milliseconds(500));
++  }
+   base::ThreadPool::PostTaskAndReplyWithResult(
+       FROM_HERE, {base::TaskPriority::USER_BLOCKING, base::MayBlock()},
+-      base::BindOnce(&GetKeyTask, crypto::SubtlePassKey{},
+-                     keychain_for_testing_),
+-      base::BindOnce(std::move(callback), kKeyTag));
++      base::BindOnce(&GetKeyTask, crypto::SubtlePassKey{}, keychain_for_testing_),
++      base::BindOnce([](std::shared_ptr<KeyCallback> pending, bool embedded,
++                       base::expected<Encryptor::Key, KeyError> key) {
++        if (!*pending)
++          return;
++        if (embedded && !key.has_value() &&
++            shaar::lifecycle::SafeStorageUnavailable) {
++          shaar::lifecycle::SafeStorageUnavailable();
++        }
++        std::move(*pending).Run(kKeyTag, std::move(key));
++      }, pending, embedded));
+ }
+ 
+ bool KeychainKeyProvider::UseForEncryption() {
+--- a/net/extras/sqlite/cookie_crypto_delegate.h
++++ b/net/extras/sqlite/cookie_crypto_delegate.h
+@@ -30,6 +30,10 @@
+   // asynchronously.
+   virtual void Init(base::OnceClosure callback) = 0;
+ 
++  // False means encrypted data is temporarily locked. The persistent store
++  // must remain unopened, so unavailable keys cannot erase saved cookies.
++  virtual bool IsEncryptionAvailable() const { return true; }
++
+   // Encrypt `plaintext` string and store the result in `ciphertext`. Returns
+   // true if the encryption succeeded. This must only be called after the
+   // callback from `Init` has run. This method can be called on any sequence.
+--- a/net/extras/sqlite/sqlite_persistent_cookie_store.cc
++++ b/net/extras/sqlite/sqlite_persistent_cookie_store.cc
+@@ -727,7 +727,8 @@
+               "SQLitePersistentCookieStore::Backend::InitializeDatabaseEarly",
+               perfetto::Flow::FromPointer(this));
+   DCHECK(background_task_runner()->RunsTasksInCurrentSequence());
+-  const bool is_initialized = InitializeDatabase();
++  const bool is_initialized =
++      (!crypto_ || crypto_->IsEncryptionAvailable()) && InitializeDatabase();
+   base::UmaHistogramBoolean("Cookie.CreateDatabaseEarly", is_initialized);
+ }
+ 
+@@ -769,7 +770,9 @@
+   base::ElapsedTimer timer;
+   bool success = false;
+ 
+-  if (InitializeDatabase()) {
++  // Browsing can use in-memory cookies while Safe Storage is unavailable.
++  // Do not open/migrate/delete persistent data until a key is available.
++  if ((!crypto_ || crypto_->IsEncryptionAvailable()) && InitializeDatabase()) {
+     if (!key.has_value()) {
+       ChainLoadCookies(std::move(loaded_callback));
+       RecordLoadAndNotifyInBackgroundMetrics(timer.Elapsed());
+--- a/services/network/network_context.cc
++++ b/services/network/network_context.cc
+@@ -298,6 +298,9 @@
+       delete;
+ 
+   void Init(base::OnceClosure callback) override;
++  bool IsEncryptionAvailable() const override {
++    return instance_ && instance_->IsEncryptionAvailable();
++  }
+   bool EncryptString(const std::string& plaintext,
+                      std::string* ciphertext) override;
+   bool DecryptString(const std::string& ciphertext,

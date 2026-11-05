@@ -18,6 +18,7 @@ namespace shaar::lifecycle {
 // Hook called from Chromium's browser close manager after an unload abort.
 void EngineQuitCancelled();
 void EngineReady(shaar_engine* engine);
+void SafeStorageUnavailable();
 void EngineWillShutDown(shaar_engine* engine);
 shaar_engine* ActiveEngine();
 bool EngineIsRunning(shaar_engine* engine);

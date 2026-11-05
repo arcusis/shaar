@@ -59,6 +59,7 @@ struct State {
   bool ready = false;
   bool closing = false;
   bool shutting_down = false;
+  bool safe_storage_unavailable = false;
 };
 
 State g_state;
@@ -253,6 +254,16 @@ void EngineReady(shaar_engine* engine) {
     return;
   g_state.ready = true;
   Emit(engine, kReady);
+  if (g_state.safe_storage_unavailable)
+    SafeStorageUnavailable();
+}
+
+void SafeStorageUnavailable() {
+  g_state.safe_storage_unavailable = true;
+  if (g_state.engine && g_state.ready && !g_state.shutting_down) {
+    Emit(g_state.engine,
+         R"({"kind":"storage.keychainUnavailable","schemaVersion":1,"restartRequired":true,"persistentCookiesAvailable":false})");
+  }
 }
 
 void EngineQuitCancelled() {

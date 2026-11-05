@@ -54,6 +54,16 @@ final class ChromiumPageLayoutTests: XCTestCase {
     XCTAssertEqual(container.subviews.count, 1)
   }
 
+  func testAttachingHiddenPrivatePageMakesNativeViewVisible() {
+    let container = ChromiumPageContainerView(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
+    let page = NSView(frame: .zero)
+    page.isHidden = true
+
+    XCTAssertTrue(container.attach(page))
+    XCTAssertFalse(page.isHidden)
+    XCTAssertTrue(page.superview === container)
+  }
+
   func testDismantlingPreviousContainerKeepsTransferredPageAttached() {
     let first = ChromiumPageContainerView(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
     let second = ChromiumPageContainerView(frame: NSRect(x: 0, y: 0, width: 800, height: 600))

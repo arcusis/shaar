@@ -2,8 +2,10 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import AppKit
 import Foundation
 import ShaarEngineABI
+import SwiftUI
 import Testing
 
 @testable import ArcusisBrowser
@@ -92,5 +94,32 @@ struct SharedExtensionSettingsTests {
     #expect(model.rows.count == 1)
     #expect(model.rows[0].profiles[first]?.enabled == true)
     #expect(model.rows[0].profiles[second]?.failed == true)
+  }
+
+  @Test @MainActor func sharedSectionLaysOutInstalledAndFailedProfiles() async throws {
+    let installedProfile = UUID()
+    let failedProfile = UUID()
+    let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")
+    defer { try? FileManager.default.removeItem(at: file) }
+    let transport = SettingsExtensionsTransport(
+      profiles: [installedProfile: true], missing: [failedProfile])
+    let adapter = ShaarExtensionsAdapter(
+      implementation: .shaar, ardia: UnusedArdiaExtensions(), shaar: transport)
+    let home = try ShaarExtensionHome(fileURL: file, adapter: adapter)
+    let model = SharedExtensionSettingsModel(
+      home: home, adapter: adapter,
+      profiles: { [installedProfile: "Work", failedProfile: "Personal"] })
+    _ = try await model.recordApprovedInstall(
+      id: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", version: "1.2")
+
+    let host = NSHostingView(
+      rootView: ProfileExtensionsSection(model: nil, sharedModel: model, onAddExtensions: {}))
+    host.frame = NSRect(x: 0, y: 0, width: 440, height: 250)
+    host.layoutSubtreeIfNeeded()
+
+    #expect(model.rows.first?.profiles[installedProfile]?.enabled == true)
+    #expect(model.rows.first?.profiles[failedProfile]?.failed == true)
+    #expect(host.fittingSize.width > 0)
+    #expect(host.fittingSize.height > 0)
   }
 }

@@ -25,6 +25,7 @@ struct BrowserLibraryDrawer: View {
   @Bindable var store: BrowserStore
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @FocusState private var spacesSearchIsFocused: Bool
+  @State private var spacesQuery = ""
 
   private var section: LibraryDrawerSection { store.libraryDrawerSection ?? .downloads }
 
@@ -128,11 +129,18 @@ struct BrowserLibraryDrawer: View {
 
   private var spacesContent: some View {
     VStack(spacing: 0) {
+      TextField(PanelsL10n.string("Search Spaces…"), text: $spacesQuery)
+        .textFieldStyle(.roundedBorder)
+        .accessibilityLabel(PanelsL10n.string("Search Spaces"))
+        .focused($spacesSearchIsFocused)
+        .padding(.horizontal, 24)
+        .padding(.top, 14)
+        .padding(.bottom, 10)
       let expectedProfiles = Dictionary(
         uniqueKeysWithValues: store.session.spaces.map { ($0.id, $0.profileID) })
       LibrarySpacesOverview(
         store: store,
-        query: "",
+        query: spacesQuery,
         onSelectSpace: { id in
           guard let profile = expectedProfiles[id] else { return }
           _ = store.selectLibrarySpace(id, expectedProfileID: profile)

@@ -970,7 +970,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       return store.session.spaces.contains { $0.id == id }
     }
     if item.action == #selector(copyCurrentURL(_:)) {
-      return canPerform(.nextSpace) && activeContext?.store.session.selectedPage != nil
+      return canPerform(.nextSpace) && activeBrowserStore?.session.selectedPage != nil
     }
     guard let raw = item.representedObject as? String,
       let command = BrowserMenuCommand(rawValue: raw)

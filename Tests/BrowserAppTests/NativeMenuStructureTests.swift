@@ -6,45 +6,81 @@ import AppKit
 import BrowserCore
 import ChromiumBridge
 import Testing
+import XCTest
 
 @testable import ArcusisBrowser
 
-@Test @MainActor func newMiniWindowRequiresANormalWindowTarget() throws {
-  let host = NativeBrowserHost(
-    events: BrowserRuntimeEvents(runtime: ARCChromiumRuntime()),
-    workspace: try BrowserWorkspaceStore(initialSession: .fresh()),
-    presentation: .hiddenProbe, keyWindow: { nil })
-  #expect(!host.canPerform(.newMiniWindow))
-}
-
-@Test @MainActor func newPrivateWindowStaysAvailableAfterLastNormalWindowCloses() throws {
-  _ = NSApplication.shared
-  let workspace = try BrowserWorkspaceStore(initialSession: .fresh())
-  let runtime = PrivateMenuRuntime()
-  let host = NativeBrowserHost(
-    events: BrowserRuntimeEvents(runtime: runtime), workspace: workspace,
-    presentation: .hiddenProbe, usesPrimaryWindow: false, keyWindow: { nil })
-  defer {
-    host.detach()
-    runtime.testWindow?.close()
+@MainActor
+final class NativeWindowMenuLifecycleTests: XCTestCase {
+  func testNewMiniWindowRequiresANormalWindowTarget() throws {
+    _ = NSApplication.shared
+    let host = NativeBrowserHost(
+      events: BrowserRuntimeEvents(runtime: ARCChromiumRuntime()),
+      workspace: try BrowserWorkspaceStore(initialSession: .fresh()),
+      presentation: .hiddenProbe, keyWindow: { nil })
+    XCTAssertFalse(host.canPerform(.newMiniWindow))
   }
-  try host.restore()
-  let context = try #require(host.contexts.values.first)
-  context.engine.onClosed?(false)
-  #expect(workspace.workspace.windows.isEmpty)
 
-  #expect(
-    host.privateWindowSourceProfileID
-      == workspace.workspace.catalog.spaces.first?.profileID.uuidString)
-  #expect(host.canPerform(.newPrivateWindow))
-  host.perform(.newPrivateWindow)
-  #expect(
-    runtime.privateSourceIDs
-      == [workspace.workspace.catalog.spaces.first?.profileID.uuidString].compactMap { $0 })
+  func testNewPrivateWindowStaysAvailableAfterLastNormalWindowCloses() throws {
+    _ = NSApplication.shared
+    let workspace = try BrowserWorkspaceStore(initialSession: .fresh())
+    let runtime = PrivateMenuRuntime()
+    let host = NativeBrowserHost(
+      events: BrowserRuntimeEvents(runtime: runtime), workspace: workspace,
+      presentation: .hiddenProbe, usesPrimaryWindow: false, keyWindow: { nil })
+    defer {
+      host.detach()
+      runtime.testWindow?.close()
+    }
+    try host.restore()
+    let context = try XCTUnwrap(host.contexts.values.first)
+    context.engine.onClosed?(false)
+    XCTAssertTrue(workspace.workspace.windows.isEmpty)
+
+    XCTAssertEqual(
+      host.privateWindowSourceProfileID,
+      workspace.workspace.catalog.spaces.first?.profileID.uuidString)
+    XCTAssertTrue(host.canPerform(.newPrivateWindow))
+    host.perform(.newPrivateWindow)
+    XCTAssertEqual(
+      runtime.privateSourceIDs,
+      [workspace.workspace.catalog.spaces.first?.profileID.uuidString].compactMap { $0 })
+  }
+
+  func testCopyURLMenuWorksInPrivateOnlyWindow() throws {
+    _ = NSApplication.shared
+    let runtime = PrivateMenuRuntime()
+    runtime.allowsPrivateWindow = true
+    let host = NativeBrowserHost(
+      events: BrowserRuntimeEvents(runtime: runtime),
+      workspace: try BrowserWorkspaceStore(initialSession: .fresh()),
+      presentation: .hiddenProbe, usesPrimaryWindow: false,
+      keyWindow: { runtime.activeWindow })
+    defer {
+      host.detach()
+      runtime.testWindow?.close()
+      runtime.privateWindow?.close()
+    }
+    try host.restore()
+    runtime.activeWindow = runtime.testWindow
+    host.perform(.newPrivateWindow)
+    XCTAssertEqual(host.privateWindowOwners.count, 1)
+    let context = try XCTUnwrap(host.contexts.values.first)
+    context.engine.onClosed?(false)
+    runtime.activeWindow = runtime.privateWindow
+    let item = try XCTUnwrap(
+      NativeBrowserHost.makeMenu(target: host).items.compactMap(\.submenu)
+        .flatMap(\.items).first { $0.title == ShellL10n.string("Copy URL") })
+
+    XCTAssertTrue(host.validateMenuItem(item))
+  }
 }
 
 private final class PrivateMenuRuntime: ARCChromiumRuntime, @unchecked Sendable {
   var testWindow: NSWindow?
+  var privateWindow: NSWindow?
+  var activeWindow: NSWindow?
+  var allowsPrivateWindow = false
   var privateSourceIDs: [String] = []
 
   override func createWindowID(_ windowID: String) throws {
@@ -52,6 +88,7 @@ private final class PrivateMenuRuntime: ARCChromiumRuntime, @unchecked Sendable 
       testWindow = NSWindow(
         contentRect: NSRect(x: 0, y: 0, width: 900, height: 700),
         styleMask: [.borderless], backing: .buffered, defer: false)
+      testWindow?.isReleasedWhenClosed = false
     }
   }
 
@@ -65,7 +102,26 @@ private final class PrivateMenuRuntime: ARCChromiumRuntime, @unchecked Sendable 
     completion: @escaping @MainActor @Sendable (Bool, Error?) -> Void
   ) {
     privateSourceIDs.append(sourceProfileID)
-    completion(false, nil)
+    completion(allowsPrivateWindow, nil)
+  }
+
+  override func createPrivateWindowID(
+    _ windowID: String, contextID: String, tabID: String, url: String
+  ) throws {
+    MainActor.assumeIsolated {
+      privateWindow = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 900, height: 700),
+        styleMask: [.borderless], backing: .buffered, defer: false)
+      privateWindow?.isReleasedWhenClosed = false
+    }
+  }
+
+  override func window(forPrivateWindowID windowID: String, contextID: String) -> NSWindow? {
+    privateWindow
+  }
+
+  override func hostView(forPrivateWindowID windowID: String, contextID: String) -> NSView? {
+    MainActor.assumeIsolated { privateWindow?.contentView }
   }
 }
 

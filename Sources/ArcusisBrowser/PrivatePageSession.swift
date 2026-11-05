@@ -250,16 +250,17 @@ struct PrivateBrowserPage: NSViewRepresentable {
 // Verification fixtures exercise the same browser model used by the product window.
 extension BrowserStore {
   var tabs: [PrivateBrowserTab] {
-    session.selectedSpace.tabs.map { tab in
-      let state = privatePage?.pages[tab.id]
-      return PrivateBrowserTab(
-        id: tab.id.uuidString, url: tab.url.absoluteString, title: tab.title,
-        loading: state?.loading ?? false, canGoBack: state?.canGoBack ?? false,
-        canGoForward: state?.canGoForward ?? false)
-    }
+    session.selectedSpace.tabs.map(privateTab)
   }
   var selectedTabID: String { session.selectedPage?.tab.id.uuidString ?? "" }
-  var selectedTab: PrivateBrowserTab? { tabs.first { $0.id == selectedTabID } }
+  var selectedTab: PrivateBrowserTab? { session.selectedPage.map { privateTab($0.tab) } }
+  private func privateTab(_ tab: BrowserTab) -> PrivateBrowserTab {
+    let state = privatePage?.pages[tab.id]
+    return PrivateBrowserTab(
+      id: tab.id.uuidString, url: tab.url.absoluteString, title: tab.title,
+      loading: state?.loading ?? false, canGoBack: state?.canGoBack ?? false,
+      canGoForward: state?.canGoForward ?? false)
+  }
   var windowID: String { privatePage?.windowID ?? "" }
   var contextID: String { privatePage?.contextID ?? "" }
   var showsStartPage: Bool { session.selectedPage?.tab.url.absoluteString == "about:blank" }

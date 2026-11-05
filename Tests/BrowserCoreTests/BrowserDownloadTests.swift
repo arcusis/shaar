@@ -55,6 +55,18 @@ import Testing
   #expect(source("https://" + String(repeating: "a", count: 8200) + ".example") == "Download")
 }
 
+@Test func downloadSourcesRecognizeUppercaseDataAndBlobSchemes() {
+  func source(_ address: String) -> String? {
+    BrowserDownload(
+      id: "9b948ba6-d386-4e34-acdf-b2fb92fdb34b", profileID: UUID(), filename: "file",
+      path: "/tmp/file", sourceURL: address, state: .finished, paused: false,
+      dangerous: false, offTheRecord: false, received: 1, total: 1, startTime: 0)?.source
+  }
+
+  #expect(source("DATA:text/plain,secret") == "Generated file")
+  #expect(source("BLOB:https://docs.example.com/id") == "docs.example.com")
+}
+
 @Test func downloadActionsFollowStateAndPause() {
   func actions(_ state: DownloadState, paused: Bool = false) -> [DownloadAction]? {
     BrowserDownload(

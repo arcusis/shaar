@@ -67,8 +67,9 @@ public struct BrowserDownload: Identifiable, Equatable, Sendable {
   }
 
   private static func sourceDescription(_ address: String) -> String {
-    if address.hasPrefix("data:") { return BrowserLocalization.string("Generated file") }
-    let value = address.hasPrefix("blob:") ? String(address.dropFirst(5)) : address
+    let scheme = address.prefix(5).lowercased()
+    if scheme == "data:" { return BrowserLocalization.string("Generated file") }
+    let value = scheme == "blob:" ? String(address.dropFirst(5)) : address
     guard value.utf8.count <= 8192, let url = URL(string: value) else {
       return BrowserLocalization.string("Download")
     }

@@ -93,6 +93,34 @@ struct DownloadDirectoryTests {
         == SettingsL10n.string("The download folder could not be changed. Try again."))
   }
 
+  @Test func downloadDirectoryBookmarkSurvivesReloadAndUnrelatedSave() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let directory = root.appending(path: "Downloads", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let fileURL = root.appending(path: "preferences.json")
+    let profile = UUID()
+    BrowserPreferencesStore(fileURL: fileURL).setDownloadDirectory(directory, for: profile)
+
+    // Supply bookmark data explicitly so this test also runs outside an app sandbox.
+    let bookmark = try directory.bookmarkData(
+      options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
+    var document = try #require(
+      JSONSerialization.jsonObject(with: Data(contentsOf: fileURL)) as? [String: Any])
+    document["profileDownloadBookmarks"] = [profile.uuidString, bookmark.base64EncodedString()]
+    try JSONSerialization.data(withJSONObject: document).write(to: fileURL)
+
+    let reloaded = BrowserPreferencesStore(fileURL: fileURL)
+    #expect(reloaded.storageNotice == nil)
+    #expect(reloaded.downloadDirectory(for: profile) == directory)
+    reloaded.setSearchEngine(.bing, for: profile)
+    let saved = try #require(
+      JSONSerialization.jsonObject(with: Data(contentsOf: fileURL)) as? [String: Any])
+    let bookmarks = try #require(saved["profileDownloadBookmarks"] as? [String])
+    #expect(bookmarks == [profile.uuidString, bookmark.base64EncodedString()])
+  }
+
   @Test func resetUsesEngineAcknowledgementAndClearsSavedOverride() async throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

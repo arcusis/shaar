@@ -39,7 +39,7 @@ enum CommandText {
 
   /// True when the query is empty or any field contains it, ignoring case.
   static func matches(_ query: String, _ fields: [String]) -> Bool {
-    query.isEmpty || fields.contains { $0.localizedCaseInsensitiveContains(query) }
+    query.isEmpty || fields.contains { $0.localizedStandardContains(query) }
   }
 }
 

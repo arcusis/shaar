@@ -28,7 +28,13 @@ enum LocalizationProbe {
 
     let expected = language.localeIdentifier
     let expectedDirection = language.isRightToLeft ? "rtl" : "ltr"
-    guard actual == expected, languages.first == expected else {
+    // Chromium can report a regional navigator tag even when the selected language is bare.
+    func primaryLanguage(_ tag: String) -> String {
+      String(tag.split(separator: "-", maxSplits: 1).first ?? "")
+    }
+    guard primaryLanguage(actual) == expected,
+      languages.first.map(primaryLanguage) == expected
+    else {
       throw LocalizationProbeError.navigatorLanguage(expected: expected, actual: actual)
     }
     guard htmlLanguage == expected, htmlDirection == expectedDirection else {

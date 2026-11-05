@@ -44,6 +44,21 @@ struct BrowserRuntimeRouterTests {
     #expect(closed == ["first:tab"])
   }
 
+  @Test func quitDoesNotTurnNativeTeardownIntoUserTabCloses() throws {
+    let router = BrowserRuntimeRouter()
+    let client = BrowserRuntimeClient(windowID: "first") { [] }
+    try router.register(client)
+    var closed: [String] = []
+    client.onTabClosed = { closed.append($0) }
+    #expect(router.bindTab("user-closed", windowID: "first"))
+    router.tabClosed("user-closed")
+    #expect(router.bindTab("still-open", windowID: "first"))
+    router.prepareForQuit()
+    router.tabClosed("still-open")
+    #expect(closed == ["user-closed"])
+    #expect(router.client(forTab: "still-open", nativeWindowID: "first") == nil)
+  }
+
   @Test func contextIDsCannotBeClaimedOrResolvedByAnotherWindow() throws {
     let router = BrowserRuntimeRouter()
     let first = BrowserRuntimeClient(windowID: "first") { [] }

@@ -896,7 +896,11 @@ final class EngineProbe {
   /// The quit probe must leave through the host's own Quit command, as a person would.
   private func quit() {
     guard let quitExitProbe else {
-      runtime.quit()
+      if let browserEngine {
+        browserEngine.events.quit()
+      } else {
+        runtime.quit()
+      }
       return
     }
     do { try quitExitProbe.requestQuit() } catch {

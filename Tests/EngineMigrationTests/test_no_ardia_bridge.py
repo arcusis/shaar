@@ -71,6 +71,12 @@ class ShaarOnlyBridgeTests(unittest.TestCase):
         self.assertIn("runtime.navigateTabID(", navigate)
         self.assertNotIn("runtime.evaluate(", navigate)
 
+    def test_shared_fixture_uses_browser_engine_owned_shaar_tab(self):
+        source = (ROOT / "Sources/ShaarVerification/EngineProbe.swift").read_text()
+        self.assertIn("try await waitForRestoredTab(sharedA)", source)
+        self.assertNotIn("runtime.openTabID(sharedA", source)
+        self.assertNotIn("runtime.nativeTabID(forID: sharedA)", source)
+
 
 if __name__ == "__main__":
     unittest.main()

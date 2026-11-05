@@ -37,11 +37,6 @@ private actor SettingsExtensionsTransport: ShaarExtensionsTransport {
   }
 }
 
-private struct UnusedArdiaExtensions: ArdiaExtensionsBackend {
-  func list(profileID: UUID) async throws -> [ShaarExtensionSummary] { [] }
-  func manage(profileID: UUID, action: ShaarExtensionManagementAction) async throws {}
-}
-
 @Suite("Shared extension Settings")
 struct SharedExtensionSettingsTests {
   @Test @MainActor func oneInstallHasIndependentProfileToggles() async throws {
@@ -50,8 +45,7 @@ struct SharedExtensionSettingsTests {
     let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")
     defer { try? FileManager.default.removeItem(at: file) }
     let transport = SettingsExtensionsTransport(profiles: [first: true, second: false])
-    let adapter = ShaarExtensionsAdapter(
-      implementation: .shaar, ardia: UnusedArdiaExtensions(), shaar: transport)
+    let adapter = ShaarExtensionsAdapter(shaar: transport)
     let home = try ShaarExtensionHome(fileURL: file, adapter: adapter)
     _ = try await home.recordApprovedInstall(
       "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", approvedVersion: "1.2", profileIDs: [first])
@@ -83,8 +77,7 @@ struct SharedExtensionSettingsTests {
     defer { try? FileManager.default.removeItem(at: file) }
     let transport = SettingsExtensionsTransport(
       profiles: [first: true, second: false], missing: [second])
-    let adapter = ShaarExtensionsAdapter(
-      implementation: .shaar, ardia: UnusedArdiaExtensions(), shaar: transport)
+    let adapter = ShaarExtensionsAdapter(shaar: transport)
     let home = try ShaarExtensionHome(fileURL: file, adapter: adapter)
     let model = SharedExtensionSettingsModel(
       home: home, adapter: adapter, profiles: { [first: "Work", second: "Personal"] })
@@ -103,8 +96,7 @@ struct SharedExtensionSettingsTests {
     defer { try? FileManager.default.removeItem(at: file) }
     let transport = SettingsExtensionsTransport(
       profiles: [installedProfile: true], missing: [failedProfile])
-    let adapter = ShaarExtensionsAdapter(
-      implementation: .shaar, ardia: UnusedArdiaExtensions(), shaar: transport)
+    let adapter = ShaarExtensionsAdapter(shaar: transport)
     let home = try ShaarExtensionHome(fileURL: file, adapter: adapter)
     let model = SharedExtensionSettingsModel(
       home: home, adapter: adapter,

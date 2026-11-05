@@ -168,7 +168,12 @@ Browser* CreateHiddenBrowser(Profile* profile) {
   params.omit_from_session_restore = true;
   params.should_trigger_session_restore = false;
   BrowserWindowInterface* created = CreateBrowserWindow(std::move(params));
-  return static_cast<Browser*>(created);
+  Browser* browser = static_cast<Browser*>(created);
+  if (browser) {
+    if (BrowserWindow* native_window = BrowserWindow::FromBrowser(browser))
+      native_window->Hide();
+  }
+  return browser;
 }
 
 Profile* ResolveScope(shaar_engine* engine,

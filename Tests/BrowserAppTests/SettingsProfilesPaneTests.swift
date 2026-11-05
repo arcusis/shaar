@@ -29,6 +29,15 @@ import Testing
       == "ניתוק \u{2068}alice@example.com\u{2069} מ-\u{2068}Google\u{2069}")
 }
 
+@Test func macSettingsButtonNamesItsPermissionInBothLanguages() {
+  #expect(
+    BrowserSettingsAccessibility.openPermissionSettingsLabel(name: "Camera", language: .english)
+      == "Open Camera Settings")
+  #expect(
+    BrowserSettingsAccessibility.openPermissionSettingsLabel(name: "מצלמה", language: .hebrew)
+      == "פתיחת הגדרות \u{2068}מצלמה\u{2069}")
+}
+
 @Test @MainActor func profilePaneMasterDetailFitsLightAndDarkAppearances() {
   let id = UUID()
   let selectedProfileID = Binding<UUID?>(get: { id }, set: { _ in })

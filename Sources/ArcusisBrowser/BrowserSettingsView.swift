@@ -21,6 +21,13 @@ enum BrowserSettingsAccessibility {
       "Disconnect %@ from %@", table: "Settings", language: language,
       arguments: [.string(account.email), .string(account.provider.title)])
   }
+
+  static func openPermissionSettingsLabel(
+    name: String, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    BrowserLocalization.format(
+      "Open %@ Settings", table: "Settings", language: language, arguments: [.string(name)])
+  }
 }
 
 struct BrowserSettingsProfile: Identifiable {
@@ -707,6 +714,9 @@ private struct MacPermissionsSection: View {
               .foregroundStyle(.secondary)
             if let url = permission.settingsURL {
               Button(SettingsL10n.string("Open Settings")) { NSWorkspace.shared.open(url) }
+                .accessibilityLabel(
+                  BrowserSettingsAccessibility.openPermissionSettingsLabel(
+                    name: permission.title))
             }
           }
         } label: {

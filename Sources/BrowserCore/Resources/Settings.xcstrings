@@ -596,6 +596,7 @@
         }
       }
     },
+    "Open %@ Settings": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "פתיחת הגדרות %@"}}}},
     "macOS Permissions": {
       "localizations": {
         "he": {

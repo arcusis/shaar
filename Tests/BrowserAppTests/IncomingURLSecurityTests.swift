@@ -46,6 +46,23 @@ struct IncomingURLPolicyTests {
 struct StartupFailureMessageTests {
   private static let path = "/Users/someone/Library/Application Support/Shaar/workspace.lock"
 
+  private static func readable(_ text: String) -> String {
+    text.replacingOccurrences(of: "\u{2068}", with: "")
+      .replacingOccurrences(of: "\u{2069}", with: "")
+  }
+
+  @Test func hebrewLaunchFailuresKeepDiagnosticsWithoutEnglishSentencesOrPaths() {
+    let inUse = StartupFailureMessage.text(for: WorkspaceLockError.inUse, language: .hebrew)
+    #expect(
+      Self.readable(inUse).hasPrefix(
+        "הפעלת הדפדפן נכשלה: תהליך אחר של Shaar משתמש בסביבת העבודה הזאת."))
+    let fileError = CocoaError(.fileWriteNoPermission, userInfo: [NSFilePathErrorKey: Self.path])
+    let file = StartupFailureMessage.text(for: fileError, language: .hebrew)
+    #expect(Self.readable(file).hasPrefix("הפעלת הדפדפן נכשלה: אין גישה לתיקיית נתוני הדפדפן."))
+    #expect(!file.contains(Self.path))
+    #expect(file.contains("[NSCocoaErrorDomain "))
+  }
+
   @Test func mapsKnownFailuresToStableSentences() {
     #expect(
       StartupFailureMessage.text(for: WorkspaceLockError.inUse).hasPrefix(

@@ -9,24 +9,38 @@ import Foundation
 /// stderr only ever gets a fixed sentence for the kind of failure plus the error's domain and code.
 enum StartupFailureMessage {
   static func text(for error: Error) -> String {
-    let nsError = error as NSError
-    return "Browser startup failed: \(summary(of: error)) [\(nsError.domain) \(nsError.code)]"
+    text(for: error, language: .currentLaunchLanguage)
   }
 
-  private static func summary(of error: Error) -> String {
+  static func text(for error: Error, language: BrowserLanguage) -> String {
+    let nsError = error as NSError
+    let message = BrowserLocalization.format(
+      "Browser startup failed: %@", table: "Shell", language: language,
+      arguments: [.string(summary(of: error, language: language))])
+    return "\(message) [\(nsError.domain) \(nsError.code)]"
+  }
+
+  private static func summary(of error: Error, language: BrowserLanguage) -> String {
     switch error {
     case WorkspaceLockError.inUse:
-      "Another \(ProductIdentity.name) process is using this workspace."
+      BrowserLocalization.format(
+        "Another %@ process is using this workspace.", table: "Core", language: language,
+        arguments: [.string(ProductIdentity.name)])
     case WorkspaceLockError.invalidFile:
-      "The workspace lock file is invalid."
+      BrowserLocalization.string(
+        "The workspace lock file is invalid.", table: "Core", language: language)
     case is WorkspaceError:
-      "The saved workspace could not be opened."
+      BrowserLocalization.string(
+        "The saved workspace could not be opened.", table: "Shell", language: language)
     case is CocoaError, is POSIXError:
-      "The browser data folder is not accessible."
+      BrowserLocalization.string(
+        "The browser data folder is not accessible.", table: "Shell", language: language)
     case let error as NSError where error.domain == engineErrorDomain:
-      "The browser engine could not be loaded."
+      BrowserLocalization.string(
+        "The browser engine could not be loaded.", table: "Shell", language: language)
     default:
-      "An unexpected error occurred."
+      BrowserLocalization.string(
+        "An unexpected error occurred.", table: "Shell", language: language)
     }
   }
 

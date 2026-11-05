@@ -106,10 +106,17 @@ extern "C" SHAAR_EXPORT void* shaar_tab_host_view(shaar_tab* tab) {
 }
 
 extern "C" SHAAR_EXPORT shaar_error_code shaar_tab_get_probe_state(
-    shaar_engine* engine, shaar_window* window, shaar_tab* tab,
+    shaar_engine* engine, shaar_scope scope, shaar_window* window, shaar_tab* tab,
     shaar_tab_probe_state* out, shaar_error* error) {
-  if (!pthread_main_np() || !out || out->size < sizeof(*out))
+  if (!pthread_main_np() || !out || out->size < sizeof(*out) ||
+      scope.size < sizeof(scope) ||
+      ((scope.profile != nullptr) == (scope.private_session != nullptr)))
     return Result(SHAAR_INVALID_ARGUMENT, error);
+  out->live_web_contents = 0;
+  out->selected_native_tab = 0;
+  out->displayed_native_web_contents = 0;
+  out->context_is_private = 0;
+  out->scope_owns_tab = 0;
   if (!engine || !window || !tab ||
       shaar::windows_tabs::Registry().FindWindowOwner(window) != engine ||
       shaar::windows_tabs::Registry().FindTabWindow(tab) != window)
@@ -135,6 +142,21 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_tab_get_probe_state(
       !native_view.isHiddenOrHasHiddenAncestor;
   out->context_is_private = contents &&
       contents->GetBrowserContext()->IsOffTheRecord();
+  auto& context = shaar::EngineContext();
+  Profile* expected_profile = nullptr;
+  if (scope.profile && context.profile_services) {
+    expected_profile =
+        context.profile_services->ResolveProfile(engine, scope.profile);
+  } else if (scope.private_session && context.private_sessions) {
+    Profile* parent = nullptr;
+    std::string_view profile_id;
+    std::string_view session_id;
+    context.private_sessions->Resolve(engine, scope.private_session,
+                                      &parent, &expected_profile,
+                                      &profile_id, &session_id);
+  }
+  out->scope_owns_tab = expected_profile && contents &&
+      contents->GetBrowserContext() == expected_profile;
   return Result(SHAAR_OK, error);
 }
 

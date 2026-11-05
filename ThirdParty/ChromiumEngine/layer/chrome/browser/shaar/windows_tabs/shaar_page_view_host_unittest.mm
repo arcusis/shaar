@@ -104,15 +104,26 @@ TEST(ShaarPageViewHostTest, PublicABIRejectsUnregisteredHandles) {
   EXPECT_EQ(error.code, SHAAR_NOT_FOUND);
   shaar_tab_probe_state state = {};
   state.size = sizeof(state);
-  EXPECT_EQ(shaar_tab_get_probe_state(engine, window, tab, &state, &error),
+  state.live_web_contents = 1;
+  state.selected_native_tab = 1;
+  state.displayed_native_web_contents = 1;
+  state.context_is_private = 1;
+  state.scope_owns_tab = 1;
+  EXPECT_EQ(shaar_tab_get_probe_state(engine, scope, window, tab, &state, &error),
             SHAAR_NOT_FOUND);
   EXPECT_EQ(error.code, SHAAR_NOT_FOUND);
   EXPECT_EQ(state.live_web_contents, 0);
   EXPECT_EQ(state.selected_native_tab, 0);
   EXPECT_EQ(state.displayed_native_web_contents, 0);
   EXPECT_EQ(state.context_is_private, 0);
+  EXPECT_EQ(state.scope_owns_tab, 0);
+  shaar_scope ambiguous{sizeof(shaar_scope),
+                        reinterpret_cast<shaar_profile *>(4),
+                        reinterpret_cast<shaar_private_session *>(5)};
+  EXPECT_EQ(shaar_tab_get_probe_state(engine, ambiguous, window, tab, &state,
+                                     &error), SHAAR_INVALID_ARGUMENT);
   state.size = sizeof(state) - 1;
-  EXPECT_EQ(shaar_tab_get_probe_state(engine, window, tab, &state, &error),
+  EXPECT_EQ(shaar_tab_get_probe_state(engine, scope, window, tab, &state, &error),
             SHAAR_INVALID_ARGUMENT);
   EXPECT_EQ(error.code, SHAAR_INVALID_ARGUMENT);
 }

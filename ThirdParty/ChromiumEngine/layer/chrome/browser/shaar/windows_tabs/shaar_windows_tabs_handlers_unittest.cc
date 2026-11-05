@@ -463,15 +463,18 @@ TEST(ShaarWindowsTabsHandlersTest, ProbeStateRejectsUnregisteredHandles) {
   error.size = sizeof(error);
   shaar_tab_probe_state state = {};
   state.size = sizeof(state);
-  EXPECT_EQ(shaar_tab_get_probe_state(engine, window, tab, &state, &error),
+  shaar_scope scope = {.size = sizeof(shaar_scope),
+                       .profile = reinterpret_cast<shaar_profile*>(4)};
+  EXPECT_EQ(shaar_tab_get_probe_state(engine, scope, window, tab, &state, &error),
             SHAAR_NOT_FOUND);
   EXPECT_EQ(error.code, SHAAR_NOT_FOUND);
   EXPECT_EQ(state.live_web_contents, 0);
   EXPECT_EQ(state.selected_native_tab, 0);
   EXPECT_EQ(state.displayed_native_web_contents, 0);
   EXPECT_EQ(state.context_is_private, 0);
+  EXPECT_EQ(state.scope_owns_tab, 0);
   state.size = sizeof(state) - 1;
-  EXPECT_EQ(shaar_tab_get_probe_state(engine, window, tab, &state, &error),
+  EXPECT_EQ(shaar_tab_get_probe_state(engine, scope, window, tab, &state, &error),
             SHAAR_INVALID_ARGUMENT);
   EXPECT_EQ(error.code, SHAAR_INVALID_ARGUMENT);
 }

@@ -566,7 +566,8 @@ final class BrowserEngine {
   }
 
   func reconcile() {
-    guard !isClosed, !reconciling, !receivingNativeSelection, let store else { return }
+    guard !isClosed, !runtime.isQuitting, !reconciling, !receivingNativeSelection, let store
+    else { return }
     reconciling = true
     defer { reconciling = false }
     let session = store.session

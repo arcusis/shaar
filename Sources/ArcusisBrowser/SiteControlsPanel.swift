@@ -53,6 +53,7 @@ struct SiteControlsButton: View {
           }))
     }
     .onChange(of: store.session.selectedPage?.tab.id) { model = nil }
+    .onChange(of: store.session.selectedPage?.tab.url) { model = nil }
   }
 
   private func open() {
@@ -65,6 +66,7 @@ struct SiteControlsButton: View {
   private func showCertificate(_ model: SiteControlsModel) {
     Task {
       guard let chain = await model.certificateChain(),
+        engine.siteControlTarget == model.target,
         let window = engine.runtime.window(forID: engine.windowID)
       else { return }
       self.model = nil

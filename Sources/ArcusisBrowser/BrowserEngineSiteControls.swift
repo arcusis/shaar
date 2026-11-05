@@ -64,6 +64,9 @@ extension BrowserEngine: SiteControlBackend {
   }
 
   func perform(_ action: SiteAction, for target: SiteControlTarget) async throws {
+    guard siteControlTarget == target else {
+      throw SiteControlFailure("This page can no longer be reloaded from here.")
+    }
     let profile = target.profileID.uuidString
     switch action {
     case .reload: try reload(target, .normal)
@@ -106,6 +109,9 @@ extension BrowserEngine: SiteControlBackend {
   }
 
   private func webOrigin(of target: SiteControlTarget) throws -> String {
+    guard siteControlTarget == target else {
+      throw SiteControlFailure("This page can no longer be reloaded from here.")
+    }
     guard let origin = target.origin else {
       throw SiteControlFailure("Site controls are available for web pages only.")
     }

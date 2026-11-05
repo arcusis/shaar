@@ -32,6 +32,29 @@ import Testing
   #expect(!legacy.isFolder && legacy.address != nil && legacy.destination == nil)
 }
 
+@Test func whitespaceOnlyBookmarkTitlesUseUntitledFallbacks() throws {
+  let folderID = UUID()
+  let bookmarkID = UUID()
+  let tree = try BookmarkTree(
+    profileID: UUID(),
+    payload: bookmarkPayload(children: [
+      [
+        "id": folderID.uuidString, "k": "f", "t": "  \n",
+        "c": [
+          [
+            "id": bookmarkID.uuidString, "k": "u", "t": " \t", "u": "https://example.com",
+          ]
+        ],
+      ]
+    ]))
+
+  #expect(tree.items.first { $0.id == folderID }?.title == "Untitled folder")
+  #expect(tree.items.first { $0.id == bookmarkID }?.title == "Untitled bookmark")
+  #expect(
+    tree.items.first { $0.id == bookmarkID }?.path
+      == "Bookmarks bar / Untitled folder / Untitled bookmark")
+}
+
 @Test func malformedBookmarkTreesRejectDuplicateIDsAndInvalidShapes() throws {
   let id = UUID().uuidString
   for children in [

@@ -71,3 +71,19 @@ private func privateCookieModel(_ runtime: ARCChromiumRuntime) throws -> Private
   await refresh.value
   #expect(model.allowed == true)
 }
+
+@MainActor @Test func olderPrivateCookieReadCannotReplaceNewerRefresh() async throws {
+  let runtime = PrivateCookieAsyncRuntime()
+  let model = try privateCookieModel(runtime)
+  runtime.delayNextRead = true
+  let older = Task { await model.load() }
+  for _ in 0..<100 where runtime.finishRead == nil { await Task.yield() }
+  #expect(runtime.finishRead != nil)
+
+  runtime.actualAllowed = true
+  await model.load()
+  #expect(model.allowed == true)
+  runtime.finishRead?()
+  await older.value
+  #expect(model.allowed == true)
+}

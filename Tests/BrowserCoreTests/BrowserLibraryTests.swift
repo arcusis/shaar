@@ -54,6 +54,35 @@ import Testing
       == 303)
 }
 
+@Test func whitespaceBookmarkTitlesUseUntitledFallbacks() throws {
+  let session = BrowserSession.fresh()
+  let folderID = UUID()
+  let bookmarkID = UUID()
+  let tree = try BookmarkTree(
+    profileID: session.selectedSpace.profileID,
+    payload: bookmarkPayload(children: [
+      [
+        "id": folderID.uuidString, "k": "f", "t": " \t ",
+        "c": [
+          [
+            "id": bookmarkID.uuidString, "k": "u", "t": " \n ",
+            "u": "https://docs.example.com/read",
+          ]
+        ],
+      ]
+    ]))
+  let folder = try #require(tree.items.first { $0.id == folderID })
+  let bookmark = try #require(tree.items.first { $0.id == bookmarkID })
+  let sections = CommandLauncher.sections(
+    for: "docs.example.com", filter: .bookmarks, in: session,
+    sources: CommandSources(bookmarks: tree.items))
+
+  #expect(folder.title == "Untitled folder")
+  #expect(bookmark.title == "Untitled bookmark")
+  #expect(bookmark.path.contains("Untitled folder / Untitled bookmark"))
+  #expect(sections.results.first?.title == "Untitled bookmark")
+}
+
 @Test func historyDatesCountsAndAddressesAreValidatedBeforeDisplay() throws {
   let profile = UUID()
   let wire: [String: Any] = [

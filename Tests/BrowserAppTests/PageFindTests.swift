@@ -2,7 +2,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import AppKit
 import BrowserCore
+import ChromiumBridge
 import Foundation
 import Testing
 
@@ -203,5 +205,56 @@ struct PageFindTests {
     store.updatePageFindQuery("find me")
     #expect(store.pageFind?.status == "Page unavailable")
     #expect(store.pageFind?.canMove == false)
+  }
+
+  @Test func closingPrivateFindReturnsFocusToItsPage() throws {
+    let tabID = UUID()
+    let store = BrowserStore(
+      privateSession: try BrowserSession.privateWindow(
+        sourceProfileID: UUID(), firstTabID: tabID))
+    let runtime = PrivateFindFocusRuntime()
+    runtime.pageView = PrivateFindPageView()
+    let window = PrivateFindKeyWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
+      styleMask: [.titled], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.contentView = runtime.pageView
+    let page = PrivatePageSession(
+      runtime: runtime, contextID: UUID().uuidString, windowID: UUID().uuidString,
+      firstTabID: tabID, store: store)
+    store.showPageFind()
+    let state = try #require(store.pageFind)
+
+    PageFindBar(store: store, state: state).close()
+
+    #expect(store.pageFind == nil)
+    #expect(runtime.focusedTabID == tabID.uuidString)
+    #expect(window.firstResponder === runtime.pageView)
+    withExtendedLifetime(page) {}
+  }
+}
+
+private final class PrivateFindKeyWindow: NSWindow {
+  override var isKeyWindow: Bool { true }
+}
+
+private final class PrivateFindPageView: NSView {
+  override var acceptsFirstResponder: Bool { true }
+}
+
+private final class PrivateFindFocusRuntime: ARCChromiumRuntime {
+  var pageView: PrivateFindPageView!
+  var focusedTabID: String?
+
+  override func view(forPrivateTabID tabID: String, windowID: String, contextID: String) -> NSView?
+  {
+    pageView
+  }
+
+  override func focusPrivateTabID(
+    _ tabID: String, windowID: String, contextID: String
+  ) -> Bool {
+    focusedTabID = tabID
+    return true
   }
 }

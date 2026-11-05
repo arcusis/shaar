@@ -55,11 +55,15 @@ struct PageFindBar: View {
 
   private var isCurrent: Bool { store.pageFind?.id == state.id && state.matches(store.session) }
 
-  private func close() {
+  func close() {
     guard isCurrent else { return }
     store.dismissPageFind()
     if state.matches(store.session), store.sheet == nil, !store.commandIsOpen {
-      store.engine?.runtime.focusTabID(state.tabID.uuidString)
+      if let privatePage = store.privatePage {
+        privatePage.focusPage(state.tabID)
+      } else {
+        store.engine?.runtime.focusTabID(state.tabID.uuidString)
+      }
     }
   }
 }

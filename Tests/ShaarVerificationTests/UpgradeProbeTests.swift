@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import Foundation
 import Testing
 
 @testable import ShaarVerification
@@ -31,5 +32,13 @@ import Testing
     ]
     #expect(UpgradeProbe.containsBookmarkTitle("Alpha console", in: tree))
     #expect(!UpgradeProbe.containsBookmarkTitle("Beta console", in: tree))
+  }
+
+  @Test func acceptsOnlyTheMarkedUpgradeHome() {
+    let root = URL(filePath: "/tmp/arcusis-upgrade-example", directoryHint: .isDirectory)
+    let home = root.appending(path: "home", directoryHint: .isDirectory)
+    #expect(UpgradeProbe.owns(home: home, inside: root))
+    #expect(!UpgradeProbe.owns(home: root, inside: root))
+    #expect(!UpgradeProbe.owns(home: root.appending(path: "other"), inside: root))
   }
 }

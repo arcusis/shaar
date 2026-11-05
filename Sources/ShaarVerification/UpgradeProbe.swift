@@ -52,7 +52,7 @@ final class UpgradeProbe {
       root.lastPathComponent.hasPrefix("arcusis-engine-probe-"),
       try String(contentsOf: root.appending(path: ".arcusis-probe"), encoding: .utf8)
         == "arcusis-engine-probe-v1\n",
-      home.deletingLastPathComponent() == root.deletingLastPathComponent(),
+      Self.owns(home: home, inside: root),
       ProcessInfo.processInfo.environment["HOME"] == home.path,
       ProcessInfo.processInfo.environment["CFFIXED_USER_HOME"] == home.path,
       dataRoot.path.hasPrefix(home.path + "/"),
@@ -177,6 +177,10 @@ final class UpgradeProbe {
       return array.contains { containsBookmarkTitle(title, in: $0) }
     }
     return false
+  }
+
+  static func owns(home: URL, inside root: URL) -> Bool {
+    home.lastPathComponent == "home" && home.deletingLastPathComponent() == root
   }
 
   private func expect(_ condition: Bool, name: String) throws {

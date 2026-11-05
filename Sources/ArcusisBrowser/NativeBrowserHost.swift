@@ -77,6 +77,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   private let screens: () -> [NSRect]
   let preferences: BrowserPreferencesStore
   private let downloadDirectoryApplier: ProfileDownloadDirectoryApplier?
+  let sharedExtensions: SharedExtensionSettingsModel?
   private(set) var settingsController: BrowserSettingsController?
   private var privateHost: PrivateBrowserHost?
   var privateWindowOwners: [PrivateBrowserHost.Owner] { privateHost?.ownedWindows ?? [] }
@@ -102,6 +103,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   init(
     events: BrowserRuntimeEvents, workspace: BrowserWorkspaceStore,
     preferences: BrowserPreferencesStore = BrowserPreferencesStore(),
+    sharedExtensions: SharedExtensionSettingsModel? = nil,
     presentation: Presentation = .visible, usesPrimaryWindow: Bool = true,
     keyWindow: @escaping () -> NSWindow? = { NSApp.keyWindow ?? NSApp.mainWindow },
     screens: @escaping () -> [NSRect] = { NSScreen.screens.map(\.visibleFrame) }
@@ -109,6 +111,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     self.events = events
     self.workspace = workspace
     self.preferences = preferences
+    self.sharedExtensions = sharedExtensions
     if let shaar = events.runtime as? ARCShaarRuntime {
       downloadDirectoryApplier = Self.makeDownloadDirectoryApplier(runtime: shaar)
     } else {
@@ -199,6 +202,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     }
     settingsController = BrowserSettingsController(
       workspace: workspace, preferences: preferences, runtime: events.runtime,
+      sharedExtensions: sharedExtensions,
       downloadDirectoryApplier: downloadDirectoryApplier,
       presentation: presentation == .visible ? .visible : .hiddenProbe)
     settingsController?.setOpenSpaceHandler { [weak self] in self?.openSpaceFromSettings($0) }

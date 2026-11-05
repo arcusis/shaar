@@ -7,8 +7,18 @@ import SwiftUI
 
 struct ProfileExtensionsSection: View {
   let model: ExtensionManagerModel?
+  let sharedModel: SharedExtensionSettingsModel?
   let onAddExtensions: () -> Void
   @State private var detailID: String?
+
+  init(
+    model: ExtensionManagerModel?, sharedModel: SharedExtensionSettingsModel? = nil,
+    onAddExtensions: @escaping () -> Void
+  ) {
+    self.model = model
+    self.sharedModel = sharedModel
+    self.onAddExtensions = onAddExtensions
+  }
 
   var body: some View {
     Group {
@@ -16,7 +26,9 @@ struct ProfileExtensionsSection: View {
         ExtensionDetails(model: model, item: item) { detailID = nil }
       } else {
         VStack(alignment: .leading, spacing: 0) {
-          if let model {
+          if let sharedModel {
+            SharedExtensionSettingsSection(model: sharedModel)
+          } else if let model {
             ExtensionManagerList(
               model: model, canRun: false, run: { _ in }, showDetails: { detailID = $0 }
             )
@@ -35,11 +47,75 @@ struct ProfileExtensionsSection: View {
           }
           .buttonStyle(.link)
           .padding(.top, 8)
-          .disabled(model == nil)
+          .disabled(model == nil && sharedModel == nil)
         }
-        .task { model?.refresh() }
+        .task {
+          model?.refresh()
+          await sharedModel?.reload()
+        }
       }
     }
+  }
+}
+
+private struct SharedExtensionSettingsSection: View {
+  let model: SharedExtensionSettingsModel
+
+  var body: some View {
+    if model.rows.isEmpty {
+      ContentUnavailableView(
+        SettingsL10n.string("No Extensions"), systemImage: "puzzlepiece.extension",
+        description: Text(SettingsL10n.string("Extensions you add appear here for this profile."))
+      )
+      .padding(.vertical, 12)
+    } else {
+      VStack(alignment: .leading, spacing: 12) {
+        ForEach(model.rows) { row in
+          VStack(alignment: .leading, spacing: 6) {
+            Text(row.name).font(.headline)
+            ForEach(
+              row.profiles.keys.sorted(by: {
+                (row.profiles[$0]?.name ?? "") < (row.profiles[$1]?.name ?? "")
+              }), id: \.self
+            ) { profileID in
+              if let state = row.profiles[profileID] {
+                if let enabled = state.enabled {
+                  Toggle(
+                    state.name,
+                    isOn: Binding(
+                      get: { enabled },
+                      set: { value in
+                        Task {
+                          await model.setEnabled(value, extensionID: row.id, profileID: profileID)
+                        }
+                      }))
+                } else if state.failed {
+                  HStack {
+                    Text(state.name)
+                    Spacer()
+                    Text(SettingsL10n.string("Install failed"))
+                      .foregroundStyle(.secondary)
+                    Button(SettingsL10n.string("Retry")) {
+                      Task { await model.reconcile(profileID: profileID) }
+                    }
+                  }
+                } else {
+                  LabeledContent(state.name, value: statusText(state))
+                }
+              }
+            }
+          }
+        }
+        if let error = model.error { Text(error).foregroundStyle(.red) }
+      }
+      .padding(.vertical, 8)
+    }
+  }
+
+  private func statusText(_ state: SharedExtensionProfileState) -> String {
+    if state.pending { return SettingsL10n.string("Installing…") }
+    if state.failed { return SettingsL10n.string("Install failed") }
+    return SettingsL10n.string("Not installed")
   }
 }
 

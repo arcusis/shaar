@@ -17,6 +17,7 @@ final class ShaarFirstTabProbe {
   private let tabID: UUID
   private let profileID: UUID
   private let checksCoreRoutes: Bool
+  private let checksExtensions: Bool
   private let output: URL
   private let dataRoot: URL
   private let pageURL = URL(string: "https://example.com")!
@@ -25,6 +26,7 @@ final class ShaarFirstTabProbe {
   private var navigationCommitted = false
   private var coreChecksStarted = false
   private var coreRoutesObserved = false
+  private var extensionListObserved = false
 
   private init(arguments: [String]) throws {
     func value(after flag: String) throws -> String {
@@ -42,6 +44,7 @@ final class ShaarFirstTabProbe {
     output = URL(filePath: try value(after: "--probe-output"))
     dataRoot = URL(filePath: try value(after: "--probe-data-dir"), directoryHint: .isDirectory)
     checksCoreRoutes = arguments.contains("--probe-shaar-core-routes")
+    checksExtensions = arguments.contains("--probe-shaar-extensions")
     let selected = try NativeBrowserHost.makeRuntime(
       frameworkURL: framework, environment: ProcessInfo.processInfo.environment,
       arguments: arguments)
@@ -115,7 +118,9 @@ final class ShaarFirstTabProbe {
       navigationCommitted,
       !window.isVisible, NSApp.windows.allSatisfy({ !$0.isVisible })
     {
-      if checksCoreRoutes {
+      if checksExtensions {
+        checkExtensionRoute(tabID: tab, nativeView: view)
+      } else if checksCoreRoutes {
         checkCoreRoutes(tabID: tab, nativeView: view)
       } else {
         finish(tabID: tab, nativeView: view)
@@ -124,6 +129,32 @@ final class ShaarFirstTabProbe {
     }
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
       self?.checkTab()
+    }
+  }
+
+  private func checkExtensionRoute(tabID: String, nativeView: NSView) {
+    guard !coreChecksStarted else { return }
+    coreChecksStarted = true
+    let owner = profileID.uuidString
+    guard runtime.extensionsDirectory(forProfileID: owner) != nil else {
+      finish(error: "Shaar did not provide the profile extension directory.")
+      return
+    }
+    runtime.manageExtensions(
+      forProfileID: owner, operation: .list, extensionID: nil, enabled: false
+    ) { [weak self] json in
+      Task { @MainActor [weak self] in
+        guard let self else { return }
+        guard let json, let data = json.data(using: .utf8),
+          let rows = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+          Set(rows.compactMap { $0["id"] as? String }).count == rows.count
+        else {
+          self.finish(error: "Shaar extension list failed for the owning profile.")
+          return
+        }
+        self.extensionListObserved = true
+        self.finish(tabID: tabID, nativeView: nativeView)
+      }
     }
   }
 
@@ -180,6 +211,7 @@ final class ShaarFirstTabProbe {
       "nativeView": nativeView != nil,
       "navigationObserved": navigationCommitted,
       "coreRoutesObserved": coreRoutesObserved,
+      "extensionListObserved": extensionListObserved,
       "requestedURL": pageURL.absoluteString,
       "allWindowsHidden": NSApp.windows.allSatisfy { !$0.isVisible },
       "error": error ?? "",

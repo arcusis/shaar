@@ -222,6 +222,8 @@ static NSString *ARCJSONLiteral(id value) {
 @property(strong) NSMutableDictionary<NSString *, NSArray<NSDictionary *> *> *lists;
 @property(strong) NSMutableSet<NSString *> *loading;
 @property(strong) NSMutableDictionary<NSString *, NSString *> *popupIDs;
+@property(strong) NSMutableDictionary<NSString *, NSDictionary *> *popupInfo;
+@property(strong) NSMutableDictionary<NSString *, id> *popupObservers;
 @property(strong) NSMutableDictionary<NSString *, NSString *> *actionTitles;
 @property(strong) NSMutableSet<NSString *> *actionLoading;
 @property(strong) ARCWebStoreFit *webStoreFit;
@@ -233,6 +235,8 @@ static NSString *ARCJSONLiteral(id value) {
   _lists = [NSMutableDictionary dictionary];
   _loading = [NSMutableSet set];
   _popupIDs = [NSMutableDictionary dictionary];
+  _popupInfo = [NSMutableDictionary dictionary];
+  _popupObservers = [NSMutableDictionary dictionary];
   _actionTitles = [NSMutableDictionary dictionary];
   _actionLoading = [NSMutableSet set];
   _webStoreFit = [[ARCWebStoreFit alloc] initWithTesting:NO evaluator:nil];
@@ -336,8 +340,17 @@ static NSArray<NSDictionary *> *ShaarExtensionRows(NSString *json) {
       profileID:profileID tabID:tabID
       payload:@{@"schemaVersion": @1, @"extensionId": extensionID}
       completion:^(NSString *json, shaar_error_code code) {
-        if (code != SHAAR_OK && self.onNotice)
-          self.onNotice(@"This extension action is unavailable in the selected profile.");
+        if (code != SHAAR_OK) {
+          if (self.onNotice)
+            self.onNotice(@"This extension action is unavailable in the selected profile.");
+          return;
+        }
+        NSDictionary *reply = json ? [NSJSONSerialization JSONObjectWithData:
+            [json dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil] : nil;
+        if (![reply isKindOfClass:NSDictionary.class] || ![reply[@"schemaVersion"] isEqual:@1]) return;
+        if ([reply[@"route"] isEqualToString:@"popup"])
+          [self shaarPresentExtensionPopup:reply extensionID:extensionID
+                                    tabID:tabID profileID:profileID];
       }];
   if (!accepted && error) *error = ARCBridgeError(@"This extension action is unavailable in the selected profile.");
   return accepted;
@@ -395,16 +408,71 @@ static NSArray<NSDictionary *> *ShaarExtensionRows(NSString *json) {
   return directory ? [directory URLByAppendingPathComponent:@"Extensions" isDirectory:YES] : nil;
 }
 
-- (NSView *)viewForExtensionPopupID:(NSString *)popupID { return nil; }
+- (void)shaarPresentExtensionPopup:(NSDictionary *)reply
+                     extensionID:(NSString *)extensionID tabID:(NSString *)tabID
+                       profileID:(NSString *)profileID {
+  NSString *popupID = [reply[@"popupId"] isKindOfClass:NSString.class] ? reply[@"popupId"] : nil;
+  NSString *windowID = [self shaarWindowIDForTabID:tabID];
+  if (!popupID.length || !windowID ||
+      ![self shaarOwnsSelectedTabID:tabID profileID:profileID]) {
+    if (popupID.length) [self shaarSubmitExtensionOperation:SHAAR_OP_EXTENSION_POPUP_CLOSE
+        profileID:profileID tabID:tabID
+        payload:@{@"schemaVersion": @1, @"popupId": popupID}
+        completion:^(NSString *json, shaar_error_code code) {}];
+    return;
+  }
+  NSView *view = [self shaarExtensionPopupViewForID:popupID windowID:windowID];
+  if (!view) {
+    [self shaarSubmitExtensionOperation:SHAAR_OP_EXTENSION_POPUP_CLOSE
+        profileID:profileID tabID:tabID
+        payload:@{@"schemaVersion": @1, @"popupId": popupID}
+        completion:^(NSString *json, shaar_error_code code) {}];
+    return;
+  }
+  [self closeExtensionPopupForWindowID:windowID];
+  ARCShaarExtensionState *state = ShaarExtensionState(self);
+  state.popupIDs[windowID] = popupID;
+  state.popupInfo[popupID] = @{@"windowID": windowID, @"tabID": tabID,
+                              @"profileID": profileID, @"extensionID": extensionID};
+  view.postsFrameChangedNotifications = YES;
+  __weak ARCShaarRuntime *weakSelf = self;
+  state.popupObservers[popupID] = [NSNotificationCenter.defaultCenter
+      addObserverForName:NSViewFrameDidChangeNotification object:view
+      queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *notification) {
+        ARCShaarRuntime *owner = weakSelf;
+        if (owner && ShaarExtensionState(owner).popupInfo[popupID])
+          [owner shaarReportPopupSizeForID:popupID view:view];
+      }];
+  if (self.onExtensionPopup) self.onExtensionPopup(@{
+    @"id": popupID, @"windowID": windowID, @"tabID": tabID,
+    @"profileID": profileID, @"extensionID": extensionID});
+  [self shaarReportPopupSizeForID:popupID view:view];
+}
+
+- (void)shaarReportPopupSizeForID:(NSString *)popupID view:(NSView *)view {
+  if (view.frame.size.width > 0 && view.frame.size.height > 0 && self.onExtensionPopupSize)
+    self.onExtensionPopupSize(popupID, view.frame.size);
+}
+
+- (NSView *)viewForExtensionPopupID:(NSString *)popupID {
+  NSDictionary *info = ShaarExtensionState(self).popupInfo[popupID];
+  return info ? [self shaarExtensionPopupViewForID:popupID windowID:info[@"windowID"]] : nil;
+}
 - (void)closeExtensionPopup { [self closeExtensionPopupForWindowID:self.primaryWindowID]; }
 - (void)closeExtensionPopupForWindowID:(NSString *)windowID {
   ARCShaarExtensionState *state = ShaarExtensionState(self);
   NSString *popupID = state.popupIDs[windowID];
   if (!popupID) return;
+  NSDictionary *info = state.popupInfo[popupID];
+  id observer = state.popupObservers[popupID];
+  if (observer) [NSNotificationCenter.defaultCenter removeObserver:observer];
+  [state.popupObservers removeObjectForKey:popupID];
   [state.popupIDs removeObjectForKey:windowID];
-  NSString *profileID = [self shaarProfileIDForWindowID:windowID];
-  if (profileID) [self shaarSubmitExtensionOperation:SHAAR_OP_EXTENSION_POPUP_CLOSE
-      profileID:profileID tabID:nil payload:@{@"schemaVersion": @1, @"popupId": popupID}
+  [state.popupInfo removeObjectForKey:popupID];
+  NSString *profileID = info[@"profileID"];
+  NSString *tabID = info[@"tabID"];
+  if (profileID && tabID) [self shaarSubmitExtensionOperation:SHAAR_OP_EXTENSION_POPUP_CLOSE
+      profileID:profileID tabID:tabID payload:@{@"schemaVersion": @1, @"popupId": popupID}
       completion:^(NSString *json, shaar_error_code code) {}];
   if (self.onExtensionPopupClosed) self.onExtensionPopupClosed(popupID);
 }
@@ -412,9 +480,9 @@ static NSArray<NSDictionary *> *ShaarExtensionRows(NSString *json) {
 - (void)shaarExtensionEvent:(const shaar_event *)event payload:(NSDictionary *)payload {
   NSString *tabID = [[NSString alloc] initWithBytes:event->tab_id.data length:event->tab_id.size
                                             encoding:NSUTF8StringEncoding];
-  if (!tabID.length) return;
-  ARCWebStoreFit *fit = ShaarExtensionState(self).webStoreFit;
   ARCShaarExtensionState *state = ShaarExtensionState(self);
+  if (!tabID.length) return;
+  ARCWebStoreFit *fit = state.webStoreFit;
   if (event->kind == SHAAR_EVENT_NAVIGATION &&
       [payload[@"phase"] isEqualToString:@"started"]) {
     NSString *prefix = [tabID stringByAppendingString:@":"];
@@ -423,6 +491,14 @@ static NSArray<NSDictionary *> *ShaarExtensionRows(NSString *json) {
   }
   if (event->kind == SHAAR_EVENT_TAB && [payload[@"kind"] isEqualToString:@"closed"])
     [fit shaarTabWillCloseID:tabID];
+  if ((event->kind == SHAAR_EVENT_TAB && [payload[@"kind"] isEqualToString:@"closed"]) ||
+      (event->kind == SHAAR_EVENT_NAVIGATION && [payload[@"phase"] isEqualToString:@"started"])) {
+    for (NSString *popupID in state.popupInfo.allKeys) {
+      NSDictionary *info = state.popupInfo[popupID];
+      if ([info[@"tabID"] isEqualToString:tabID])
+        [self closeExtensionPopupForWindowID:info[@"windowID"]];
+    }
+  }
   if (event->kind == SHAAR_EVENT_NAVIGATION)
     [fit shaarTabDidReceiveEvent:payload tabID:tabID runtime:self];
 }

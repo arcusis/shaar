@@ -12,9 +12,12 @@
 #include "base/no_destructor.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_page_view_host.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
 
 namespace {
@@ -100,6 +103,39 @@ extern "C" SHAAR_EXPORT void* shaar_tab_host_view(shaar_tab* tab) {
       shaar::windows_tabs::Registry().FindWindowOwner(window);
   NSView* view = FindTabView(engine, window, tab);
   return (__bridge void*)view;
+}
+
+extern "C" SHAAR_EXPORT shaar_error_code shaar_tab_get_probe_state(
+    shaar_engine* engine, shaar_window* window, shaar_tab* tab,
+    shaar_tab_probe_state* out, shaar_error* error) {
+  if (!pthread_main_np() || !out || out->size < sizeof(*out))
+    return Result(SHAAR_INVALID_ARGUMENT, error);
+  if (!engine || !window || !tab ||
+      shaar::windows_tabs::Registry().FindWindowOwner(window) != engine ||
+      shaar::windows_tabs::Registry().FindTabWindow(tab) != window)
+    return Result(SHAAR_NOT_FOUND, error);
+  content::WebContents* contents =
+      shaar::windows_tabs::Registry().FindWebContents(engine, window, tab);
+  Browser* browser =
+      shaar::windows_tabs::Registry().FindBrowserForTab(engine, window, tab);
+  auto* window_state =
+      shaar::windows_tabs::Registry().FindWindowState(engine, window);
+  PageViewHost* host = FindHost(window, false);
+  NSView* native_view = contents
+                            ? contents->GetNativeView().GetNativeNSView()
+                            : nil;
+  out->live_web_contents = contents != nullptr;
+  out->selected_native_tab =
+      contents && browser && window_state &&
+      window_state->active_browser == browser &&
+      browser->tab_strip_model()->GetActiveWebContents() == contents;
+  out->displayed_native_web_contents =
+      native_view && host && host->selected_view() == native_view &&
+      native_view.window == host->window() &&
+      !native_view.isHiddenOrHasHiddenAncestor;
+  out->context_is_private = contents &&
+      contents->GetBrowserContext()->IsOffTheRecord();
+  return Result(SHAAR_OK, error);
 }
 
 extern "C" SHAAR_EXPORT void *shaar_devtools_frontend_view(shaar_engine *engine,

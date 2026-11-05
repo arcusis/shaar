@@ -27,4 +27,12 @@ struct PrivateProbeEvaluationTests {
     ]
     #expect(ARCProbePrivateEvaluationJSON(reply) == nil)
   }
+
+  @Test func awaitsAsyncPrivacyScriptsByValue() {
+    let expression = "(async()=>({cookie:true}))()"
+    let params = ARCProbePrivacyEvaluationParameters(expression)
+    #expect(params["expression"] as? String == expression)
+    #expect(params["returnByValue"] as? Bool == true)
+    #expect(params["awaitPromise"] as? Bool == true)
+  }
 }

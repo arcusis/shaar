@@ -12,6 +12,11 @@ public struct ClosedBrowserTab: Codable, Equatable, Identifiable, Sendable {
   public let profileID: UUID
   public let index: Int
 
+  public var recoveryTitle: String {
+    tab.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      ? tab.url.host() ?? tab.url.absoluteString : tab.title
+  }
+
   public init(tab: BrowserTab, spaceID: UUID, profileID: UUID, index: Int) {
     self.tab = tab
     self.spaceID = spaceID

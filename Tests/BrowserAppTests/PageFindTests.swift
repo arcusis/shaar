@@ -16,6 +16,22 @@ struct PageFindTests {
     return store
   }
 
+  @Test func openingFindCancelsPendingSplitPlacement() throws {
+    let store = store()
+    let target = try #require(store.session.selectedSpace.selectedTabID)
+    store.openSplitPane(beside: target, edge: .right)
+    #expect(store.commandIsOpen)
+    #expect(store.pendingSplitPlacement != nil)
+
+    store.showPageFind()
+    #expect(!store.commandIsOpen)
+    #expect(store.pageFind != nil)
+    #expect(store.pendingSplitPlacement == nil)
+
+    store.perform(.open(URL(string: "https://example.com/later")!))
+    #expect(store.session.selectedSpace.splits.isEmpty)
+  }
+
   @Test func findIsNotAvailableWithoutATabOrOverAModal() {
     let store = BrowserStore()
     store.showPageFind()

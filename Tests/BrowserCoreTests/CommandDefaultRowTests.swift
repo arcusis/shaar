@@ -63,6 +63,15 @@ private func sessionWithGmailFavoriteAndGitHubTab() throws -> (BrowserSession, U
   #expect(results.contains { $0.action == .tab(space: session.selectedSpaceID, tab: tabID) })
 }
 
+@Test func typedAddressDoesNotMatchDifferentPathCase() throws {
+  var session = BrowserSession.fresh()
+  _ = session.open(URL(string: "https://EXAMPLE.COM/EXAMPLE.COM")!)
+  let typed = URL(string: "https://example.com/example.com")!
+
+  let results = CommandSearch.results(for: typed.absoluteString, in: session)
+  #expect(results.first?.action == .open(typed))
+}
+
 @Test func launcherSectionsPutOpenFirstWhenItIsTheDefaultRow() throws {
   let (session, _, _) = try sessionWithGmailFavoriteAndGitHubTab()
   let sections = CommandLauncher.sections(

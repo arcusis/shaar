@@ -123,6 +123,7 @@ source_set("engine") {
     "//components/content_settings/core/common",
     "//components/prefs",
     "//components/history/core/browser",
+    "//components/keep_alive_registry",
     # BEGIN site_data
     "//chrome/browser/browsing_data:constants",
     "//chrome/browser/content_settings:content_settings_factory_impl",
@@ -230,7 +231,7 @@ test("shaar_site_data_unittests") {
 # BEGIN extensions
 test("shaar_extensions_unittests") {
   sources = [ "extensions/shaar_extensions_unittest.cc" ]
-  deps = [ ":engine", "//testing/gtest" ]
+  deps = [ ":engine", "//base/test:test_support", "//testing/gtest" ]
 }
 # END extensions
 # BEGIN find

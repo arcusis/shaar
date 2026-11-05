@@ -301,6 +301,15 @@ SHAAR_EXPORT shaar_error_code shaar_engine_run(
 SHAAR_EXPORT shaar_error_code shaar_engine_request_quit(
     shaar_engine *, shaar_error *error);
 SHAAR_EXPORT void shaar_engine_release(shaar_engine *);
+/* Verification-only diagnostics. Calls require SHAAR_ENGINE_TESTING=1 and the
+ * active engine; output bytes are borrowed until the next call on this thread. */
+SHAAR_EXPORT shaar_error_code shaar_test_keep_alive_state(
+    shaar_engine *, shaar_bytes *out, shaar_error *error);
+/* Loads only the fixture at <owned marked probe root>/Extension in a regular
+ * profile. This is unavailable to shipping runs. */
+SHAAR_EXPORT shaar_error_code shaar_test_load_component_extension(
+    shaar_engine *, shaar_profile *, shaar_bytes path, shaar_bytes *extension_id,
+    shaar_error *error);
 
 /* On SHAAR_OK, out is a reserved handle; one later reply confirms readiness. */
 SHAAR_EXPORT shaar_error_code shaar_profile_open(

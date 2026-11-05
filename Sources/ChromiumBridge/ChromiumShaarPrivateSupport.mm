@@ -60,10 +60,16 @@ BOOL ARCPrivateShaarSubmit(ARCShaarRuntime *runtime, shaar_scope scope,
   if (!json) return NO;
   void *context = (__bridge_retained void *)[completion copy];
   shaar_error error = ARCPrivateShaarEmptyError();
+  const uint64_t requestID = operation == SHAAR_OP_DEVTOOLS_CALL
+      ? [runtime nextPrivateDevToolsRequestID] : kPrivateRequestID.fetch_add(1);
   shaar_error_code code = submit(engine, scope, window, tab, operation,
                                  {(const char *)json.bytes, json.length},
-                                 kPrivateRequestID.fetch_add(1), Reply, context, &error);
+                                 requestID, Reply, context, &error);
   if (code == SHAAR_OK) return YES;
+  const char *testing = getenv("SHAAR_ENGINE_TESTING");
+  if (testing && std::strcmp(testing, "1") == 0)
+    fprintf(stderr, "Shaar private operation %d rejected: status=%d error=%d\n",
+            (int)operation, (int)code, (int)error.code);
   CFBridgingRelease(context);
   return NO;
 }

@@ -175,7 +175,7 @@ BOOL PrivatePoliciesReady(NSDictionary *status) {
     return NO;
   }
   state[@"tabs"][tabID] = [@{@"contextID": contextID, @"windowID": windowID,
-    @"handle": [NSValue valueWithPointer:tab], @"url": @"about:blank",
+    @"handle": [NSValue valueWithPointer:tab], @"url": @"about:blank", @"loading": @NO,
     @"requestedURL": url} mutableCopy];
   [window[@"tabs"] addObject:tabID];
   if (self.onPrivateTabChanged)
@@ -486,6 +486,9 @@ BOOL PrivatePoliciesReady(NSDictionary *status) {
   NSMutableDictionary *tab = state[@"tabs"][tabID];
   NSString *url = [payload[@"url"] isKindOfClass:NSString.class] ? payload[@"url"] : tab[@"url"];
   tab[@"url"] = url ?: @"about:blank";
+  tab[@"loading"] = payload[@"loading"] ?: @NO;
+  tab[@"navigationPhase"] = payload[@"phase"] ?: @"unknown";
+  if (payload[@"failure"]) tab[@"navigationFailure"] = payload[@"failure"];
   tab[@"canGoBack"] = payload[@"canGoBack"] ?: @NO;
   tab[@"canGoForward"] = payload[@"canGoForward"] ?: @NO;
   if (self.onPrivateTabChanged)

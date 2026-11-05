@@ -28,6 +28,9 @@ FOUNDATION_EXPORT NSString *ARCMediaSessionPageScript(void);
 FOUNDATION_EXPORT NSDictionary<NSString *, id> *ARCProbeNormalSelectionAudit(
   NSView * _Nullable tabView, NSView * _Nullable hostView, NSWindow * _Nullable window);
 
+/// Extracts a JSON value from a scoped Shaar Runtime.evaluate reply.
+FOUNDATION_EXPORT NSString * _Nullable ARCProbePrivateEvaluationJSON(NSDictionary *reply);
+
 @interface ARCChromiumRuntime (Verification)
 /// Grants geolocation only on the selected disposable Inspector loopback fixture.
 - (void)grantProbeGeolocationInTabID:(NSString *)tabID completion:(void (NS_SWIFT_UI_ACTOR ^)(NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;

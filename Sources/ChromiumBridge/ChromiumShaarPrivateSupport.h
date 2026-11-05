@@ -8,6 +8,7 @@
 
 @interface ARCShaarRuntime (PrivateHandles)
 - (shaar_engine *)privateEngineHandle;
+- (uint64_t)nextPrivateDevToolsRequestID;
 - (shaar_profile *)privateProfileHandleForID:(NSString *)profileID;
 - (BOOL)privateTabOwned:(NSString *)tabID windowID:(NSString *)windowID
              contextID:(NSString *)contextID;

@@ -158,6 +158,69 @@ struct RecentDownloadsTests {
       scheme: .light, width: 300, name: "long-name-rtl-unicode", output: output)
   }
 
+  @Test(.timeLimit(.minutes(1)))
+  func finishingDownloadLoadsThumbnailInOpenPopover() async throws {
+    let profile = UUID()
+    let file = FileManager.default.temporaryDirectory.appending(
+      path: "recent-preview-\(UUID()).png")
+    defer { try? FileManager.default.removeItem(at: file) }
+    let bitmap = NSBitmapImageRep(
+      bitmapDataPlanes: nil, pixelsWide: 32, pixelsHigh: 32, bitsPerSample: 8,
+      samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+      bytesPerRow: 0, bitsPerPixel: 0)!
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmap)
+    NSColor.magenta.setFill()
+    NSBezierPath(rect: NSRect(x: 0, y: 0, width: 32, height: 32)).fill()
+    NSGraphicsContext.restoreGraphicsState()
+    try #require(bitmap.representation(using: .png, properties: [:])).write(to: file)
+
+    let model = DownloadsModel()
+    model.changed(record(path: file.path, state: "downloading"), profileID: profile)
+    func view() -> RecentDownloadsPopover {
+      RecentDownloadsPopover(
+        items: model.items(in: profile), profileID: profile,
+        selectedProfileID: { profile },
+        dragURL: { item in
+          model.fileForDrag(id: item.id, profileID: profile, selectedProfileID: profile)
+        }, dismiss: {}, animatesReveal: false)
+    }
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 212, height: 140), styleMask: [],
+      backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    defer { window.close() }
+    let host = NSHostingView(rootView: view())
+    window.contentView = host
+    host.frame = NSRect(x: 0, y: 0, width: 212, height: 140)
+    host.layoutSubtreeIfNeeded()
+    try await Task.sleep(for: .milliseconds(150))
+
+    model.changed(record(path: file.path, state: "finished"), profileID: profile)
+    host.rootView = view()
+    let output = FileManager.default.temporaryDirectory.appending(
+      path: "recent-preview-capture.png")
+    defer { try? FileManager.default.removeItem(at: output) }
+    var magentaPixels = 0
+    for _ in 0..<40 {
+      host.layoutSubtreeIfNeeded()
+      let image = try VisualCapture.render(host, to: output)
+      magentaPixels = stride(from: 0, to: image.pixelsWide, by: 3).reduce(0) { count, x in
+        count
+          + stride(from: 0, to: image.pixelsHigh, by: 3).filter { y in
+            guard let color = image.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else {
+              return false
+            }
+            return color.redComponent > 0.8 && color.blueComponent > 0.8
+              && color.greenComponent < 0.3
+          }.count
+      }
+      if magentaPixels > 20 { break }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    #expect(magentaPixels > 20)
+  }
+
   private func capture(
     items: [BrowserDownload], profile: UUID, referenceDate: Date,
     scheme: ColorScheme, width: CGFloat, name: String, output: URL

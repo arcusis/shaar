@@ -28,3 +28,14 @@ import Testing
   #expect(screen.contains(frame))
   #expect(frame == screen)
 }
+
+@Test func offscreenRestoredWindowMovesToNearestRemainingDisplay() {
+  let primary = NSRect(x: 0, y: 0, width: 1600, height: 1000)
+  let secondary = NSRect(x: 1600, y: 0, width: 1600, height: 1000)
+  let saved = WorkspaceWindowGeometry(x: 4000, y: 100, width: 900, height: 650)
+
+  let frame = NativeWindowPlacement.frame(saved: saved, source: nil, screens: [primary, secondary])
+
+  #expect(secondary.contains(frame))
+  #expect(frame == NSRect(x: 2300, y: 100, width: 900, height: 650))
+}

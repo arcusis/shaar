@@ -415,6 +415,9 @@ void ARCCompletePrivateQuitDialogCancellation(
            @"hostHasWindow": attachment[@"hostHasWindow"],
            @"tabHasWindow": attachment[@"tabHasWindow"],
            @"windowAvailable": attachment[@"windowAvailable"],
+           @"tabWindowMatchesHost": @(view.window == window),
+           @"tabViewHidden": @(view.isHiddenOrHasHiddenAncestor),
+           @"tabSuperviewClass": view.superview ? NSStringFromClass(view.superview.class) : @"none",
            @"primaryWindow": @([windowID isEqual:runtime.primaryWindowID]),
            @"selectedID": @(selected), @"activeProfile": @(selected),
            @"nativeProfileOwnsTab": @(supported && state.scope_owns_tab &&

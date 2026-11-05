@@ -388,14 +388,14 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     }
     flushGeometry()
     workspace.persistSnapshot()
-    events.runtime.quit()
+    events.quit()
   }
 
   func restartForLanguageChange() -> String? {
     do {
       try BrowserRestart.prepare(workspace: workspace, flushGeometry: flushGeometry)
       restartRequested = true
-      events.runtime.quit()
+      events.quit()
       return nil
     } catch {
       return SettingsL10n.string("Your tabs could not be saved. Shaar has not restarted.")
@@ -1224,7 +1224,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
         } catch {
           host?.startupFailed = true
           host?.report(error)
-          host?.events.runtime.quit()
+          host?.events.quit()
         }
       }
       return withExtendedLifetime((host, lock)) {

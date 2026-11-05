@@ -227,7 +227,14 @@ def run():
                 value.split(",", 1)[0].strip().split("-", 1)[0] == language for value in requests
             ):
                 raise RuntimeError(f"{language} {phase}: loopback Accept-Language mismatch")
-            if not isinstance(document, dict) or document.get("language") != language:
+            if not isinstance(document, dict):
+                raise RuntimeError(f"{language} {phase}: browser language receipt missing/mismatched")
+            navigator = document.get("language")
+            languages = document.get("languages")
+            if (not isinstance(navigator, str) or navigator.split("-", 1)[0] != language
+                    or not isinstance(languages, list) or not languages
+                    or not isinstance(languages[0], str)
+                    or languages[0].split("-", 1)[0] != language):
                 raise RuntimeError(f"{language} {phase}: browser language receipt missing/mismatched")
             if document.get("htmlLanguage") != language or document.get("htmlDirection") != expected_direction:
                 raise RuntimeError(f"{language} {phase}: fixture document lang/dir mismatch")

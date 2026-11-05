@@ -56,6 +56,15 @@ import Testing
     #expect(checks[1].contains(language.isRightToLeft ? "rtl" : "ltr"))
   }
 
+  @Test(arguments: BrowserLanguage.supported)
+  func acceptsRegionalNavigatorLanguage(language: BrowserLanguage) throws {
+    var value = evidence(language)
+    let regional = language == .hebrew ? "he-IL" : "en-US"
+    value["language"] = regional
+    value["languages"] = [regional, language.localeIdentifier]
+    #expect(try LocalizationProbe.validate(value, language: language).count == 2)
+  }
+
   @Test func rejectsMalformedAndIncompleteEvidence() {
     #expect(throws: LocalizationProbeError.self) {
       try LocalizationProbe.validate([], language: .hebrew)

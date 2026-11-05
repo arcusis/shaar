@@ -10,6 +10,12 @@ import Testing
 
 @Suite @MainActor
 struct BrowserLibraryTests {
+  @Test func bookmarkAndHistorySearchFindsTitlesWithoutTypingAccents() {
+    #expect(LibraryPanelSearch.matches("Résumé https://example.test", query: "resume"))
+    #expect(LibraryPanelSearch.matches("Café https://example.test", query: "cafe"))
+    #expect(!LibraryPanelSearch.matches("Café https://example.test", query: "resume"))
+  }
+
   @Test func newerReadsWinAndMalformedRepliesKeepLastGoodProfileSnapshot() throws {
     let model = BrowserLibraryModel()
     let a = UUID()

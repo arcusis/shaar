@@ -252,9 +252,14 @@ public enum CommandSearch {
         || CommandText.titleStarts(with: query, result.title)
     }
     func append(_ result: CommandResult, url: URL? = nil) -> Bool {
-      if leadingIndex == nil, leads(result, url) { leadingIndex = results.count }
-      results.append(result)
-      return results.count >= candidateLimit
+      if results.count < candidateLimit {
+        if leadingIndex == nil, leads(result, url) { leadingIndex = results.count }
+        results.append(result)
+      } else if leadingIndex == nil, leads(result, url) {
+        results[candidateLimit - 1] = result
+        leadingIndex = candidateLimit - 1
+      }
+      return results.count >= candidateLimit && (typedAddress == nil || leadingIndex != nil)
     }
 
     let orderedSpaces = session.spaces.sorted {
@@ -279,7 +284,8 @@ public enum CommandSearch {
         break
       }
     }
-    search: for space in orderedSpaces where results.count < candidateLimit {
+    search: for space in orderedSpaces
+    where results.count < candidateLimit || (typedAddress != nil && leadingIndex == nil) {
       let foldersByID = Dictionary(
         space.folders.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
       var folderPaths: [UUID?: String] = [nil: ""]

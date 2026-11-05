@@ -52,6 +52,19 @@ import Testing
     #expect(try temporaryFiles().isEmpty)
   }
 
+  @Test func saveRestrictsPermissionsOnRotatedLegacySnapshot() throws {
+    defer { try? FileManager.default.removeItem(at: root) }
+    let first = session(opening: "https://example.com/private")
+    try file.save(first)
+    try FileManager.default.setAttributes(
+      [.posixPermissions: 0o644], ofItemAtPath: file.url.path)
+    #expect(try posixPermissions(file.url) == 0o644)
+
+    try file.save(session(opening: "https://example.com/next"))
+    #expect(try posixPermissions(snapshot.backupURL) == 0o600)
+    #expect(try SnapshotFile<BrowserSession>(url: snapshot.backupURL).loadPrimary() == first)
+  }
+
   @Test func unreadablePrimaryFallsBackToTheBackupAndIsSetAside() throws {
     defer { try? FileManager.default.removeItem(at: root) }
     let good = session(opening: "https://example.com/good")

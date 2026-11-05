@@ -114,6 +114,11 @@ enum DurableFileWriter {
       path: ".\(backup.lastPathComponent).\(UUID().uuidString).tmp")
     guard link(url.path, staged.path) == 0 else { throw posixError() }
     do {
+      let descriptor = open(staged.path, O_RDONLY | O_NONBLOCK | O_CLOEXEC | O_NOFOLLOW)
+      guard descriptor >= 0 else { throw posixError() }
+      defer { close(descriptor) }
+      guard fchmod(descriptor, mode_t(0o600)) == 0 else { throw posixError() }
+      try flush(descriptor)
       try rename(staged, to: backup)
     } catch {
       unlink(staged.path)

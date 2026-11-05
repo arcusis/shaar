@@ -136,6 +136,23 @@ private func target(_ address: String) -> SiteControlTarget {
   #expect(model.permissionValues[.camera] == .allow)
 }
 
+@MainActor @Test func refreshDuringPermissionWriteKeepsPendingChoice() async {
+  let backend = FakeSiteBackend()
+  backend.suspendFirstWrite = true
+  let model = SiteControlsModel(target: target("https://mail.example"), backend: backend)
+  await model.load()
+  let write = Task { await model.setPermission(.camera, allowed: true) }
+  for _ in 0..<100 where backend.finishFirstWrite == nil { await Task.yield() }
+  #expect(backend.finishFirstWrite != nil)
+
+  await model.load()
+  #expect(model.permissionValues[.camera] == .allow)
+  backend.finishFirstWrite?.resume()
+  await write.value
+  #expect(model.permissionValues[.camera] == .allow)
+  #expect(backend.values[.camera] == .allow)
+}
+
 @MainActor @Test func siteControlsDoNotOverlapWritesToTheSamePermission() async {
   let backend = FakeSiteBackend()
   backend.suspendFirstWrite = true

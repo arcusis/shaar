@@ -136,7 +136,11 @@ final class SiteControlsModel: Identifiable {
       else {
         return
       }
-      permissionValues = values
+      var refreshed = values
+      for permission in savingPermissions {
+        refreshed[permission] = permissionValues[permission]
+      }
+      permissionValues = refreshed
       failure = nil
     } catch {
       guard loadRevision == permissionLoadRevision, changeRevision == permissionChangeRevision
@@ -151,7 +155,10 @@ final class SiteControlsModel: Identifiable {
     guard let backend, !savingPermissions.contains(permission) else { return }
     permissionChangeRevision += 1
     savingPermissions.insert(permission)
-    defer { savingPermissions.remove(permission) }
+    defer {
+      savingPermissions.remove(permission)
+      permissionChangeRevision += 1
+    }
     let previous = permissionValues[permission]
     permissionValues[permission] = allowed ? .allow : .block
     do {

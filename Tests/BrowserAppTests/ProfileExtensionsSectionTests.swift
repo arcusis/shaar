@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import AppKit
+import BrowserCore
 import SwiftUI
 import XCTest
 
@@ -10,6 +11,23 @@ import XCTest
 
 @MainActor
 final class ProfileExtensionsSectionTests: XCTestCase {
+  func testProfileNamesFollowShaarsSelectedLanguageOrder() {
+    let english = UUID()
+    let hebrew = UUID()
+    let row = SharedExtensionSettingsRow(
+      id: "example", name: "Example", version: "1",
+      profiles: [
+        english: .init(name: "A", enabled: true, pending: false, failed: false),
+        hebrew: .init(name: "אב", enabled: true, pending: false, failed: false),
+      ])
+    XCTAssertEqual(
+      ProfileExtensionsSection.sortedProfileIDs(for: row, language: .hebrew),
+      [hebrew, english])
+    XCTAssertEqual(
+      ProfileExtensionsSection.sortedProfileIDs(for: row, language: .english),
+      [english, hebrew])
+  }
+
   func testPinnedExtensionsOnlyIncludesEnabledItems() {
     let enabled = sample("Enabled", enabled: true)
     let disabled = sample("Disabled", enabled: false)

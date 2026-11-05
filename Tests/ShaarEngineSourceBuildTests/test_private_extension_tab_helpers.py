@@ -1,3 +1,7 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 """Keep private tabs from attaching helpers that require extension observers."""
 
 from pathlib import Path
@@ -8,7 +12,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[2]
-PATCH = ROOT / "ThirdParty/ChromiumEngine/patches/0005-private-extension-tab-helpers.patch"
+PATCH = ROOT / "ThirdParty/ChromiumEngine/patches/0006-shaar-only-framework.patch"
 MANIFEST = ROOT / "ThirdParty/ChromiumEngine/source-build.json"
 
 
@@ -27,10 +31,9 @@ class PrivateExtensionTabHelpersTests(unittest.TestCase):
             self.assertRegex(source, rf"\+\s+extensions::{helper}::CreateForWebContents")
 
     def test_patch_is_pinned_in_source_build(self):
-        patches = json.loads(MANIFEST.read_text())["patches"]
-        matching = [entry for entry in patches if entry["file"] == str(PATCH.relative_to(ROOT))]
-        self.assertEqual(len(matching), 1)
-        self.assertEqual(matching[0]["sha256"], hashlib.sha256(PATCH.read_bytes()).hexdigest())
+        entry = json.loads(MANIFEST.read_text())["finalPatch"]
+        self.assertEqual(entry["file"], str(PATCH.relative_to(ROOT)))
+        self.assertEqual(entry["sha256"], hashlib.sha256(PATCH.read_bytes()).hexdigest())
 
 
 if __name__ == "__main__":

@@ -6,6 +6,15 @@ import BrowserCore
 import SwiftUI
 import UniformTypeIdentifiers
 
+enum LibraryBookmarkAccessibility {
+  static func folderState(
+    collapsed: Bool, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    BrowserLocalization.string(
+      collapsed ? "Collapsed" : "Expanded", table: "Panels", language: language)
+  }
+}
+
 enum LibraryPanelSearch {
   static func matches(_ text: String, query: String) -> Bool {
     query.isEmpty || text.localizedStandardContains(query)
@@ -248,6 +257,10 @@ struct LibraryPanel: View {
       !item.isFolder && item.destination == nil
         ? PanelsL10n.string("This address cannot be opened here. Use Edit to change it.")
         : item.path
+    )
+    .accessibilityValue(
+      LibraryBookmarkAccessibility.folderState(collapsed: collapsed.contains(item.id)),
+      isEnabled: item.isFolder
     )
     .contextMenu {
       if item.isFolder {

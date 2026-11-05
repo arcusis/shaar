@@ -197,11 +197,7 @@ private enum FirefoxHistoryReader {
       var parent = node.parent
       var seen: Set<Int64> = []
       while let folder = byID[parent], folder.type == 2, seen.insert(parent).inserted {
-        if !["places root", "menu", "toolbar", "unfiled", "mobile", "tags"].contains(
-          folder.title.lowercased())
-        {
-          folders.append(folder.title)
-        }
+        if !isFirefoxRootFolder(folder, in: byID) { folders.append(folder.title) }
         parent = folder.parent
       }
       let folderComponents = Array(folders.reversed())
@@ -221,6 +217,16 @@ private struct FirefoxBookmarkNode {
   let parent: Int64
   let title: String
   let address: String?
+}
+
+private func isFirefoxRootFolder(
+  _ folder: FirefoxBookmarkNode, in nodes: [Int64: FirefoxBookmarkNode]
+) -> Bool {
+  if folder.parent == 0 && folder.title.lowercased() == "places root" { return true }
+  guard let parent = nodes[folder.parent], parent.parent == 0,
+    parent.title.lowercased() == "places root"
+  else { return false }
+  return ["menu", "toolbar", "unfiled", "mobile", "tags"].contains(folder.title.lowercased())
 }
 
 private func groupedHistory(

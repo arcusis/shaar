@@ -189,12 +189,23 @@ struct LibraryPanel: View {
     BrowserImportPreviewView(
       items: importPreview, source: importSource, profileName: store.profileName,
       error: importError,
-      canImport: !importPreview.isEmpty && !busy && !loading,
+      canImport: Self.canImportPreview(
+        items: importPreview, hasBookmarkTree: tree != nil, busy: busy, loading: loading),
       onCancel: { showingImportPreview = false }, onImport: applyImport)
   }
 
+  static func canImportPreview(
+    items: [BrowserImportItem], hasBookmarkTree: Bool, busy: Bool, loading: Bool
+  ) -> Bool {
+    !items.isEmpty && !busy && !loading
+      && (hasBookmarkTree || !items.contains { $0.kind == .bookmark })
+  }
+
   private func applyImport() {
-    guard ownsContext, !importPreview.isEmpty else { return }
+    guard ownsContext,
+      Self.canImportPreview(
+        items: importPreview, hasBookmarkTree: tree != nil, busy: busy, loading: loading)
+    else { return }
     store.library.importBrowserData(
       importPreview, profile: profileID, otherFolderID: tree?.otherID ?? UUID(),
       completion: { success in

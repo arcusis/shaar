@@ -64,9 +64,11 @@ def replace_once(source, old, new, label):
     return source.replace(old, new)
 
 
-def remove_mock_keychain_switch(source):
-    return replace_once(source, '    strings.push_back("--use-mock-keychain");\n', "",
-                        "bridge")
+def make_mock_keychain_control_switch(source):
+    return replace_once(
+        source, '    strings.push_back("--use-mock-keychain");\n',
+        '    if ([NSProcessInfo.processInfo.environment objectForKey:@"SHAAR_UPGRADE_MOCK_CONTROL"])\n'
+        '      strings.push_back("--use-mock-keychain");\n', "bridge")
 
 
 def add_legacy_startup_logging(source):
@@ -190,7 +192,7 @@ def extract_old_source(destination, release):
 def prepare_old_harness(source, released_framework):
     bridge = source / "Sources/ChromiumBridge/ChromiumBridge.mm"
     bridge.write_text(add_legacy_startup_logging(
-        remove_mock_keychain_switch(bridge.read_text())))
+        make_mock_keychain_control_switch(bridge.read_text())))
     probe = source / "Sources/ShaarVerification/EngineProbe.swift"
     probe.write_text(add_legacy_bookmarks(probe.read_text()))
     main = source / "Sources/ShaarVerification/ShaarVerificationMain.swift"
@@ -430,6 +432,29 @@ def run_upgrade_probe(app, fixture, home, data_root, environment, expected_passw
         thread.join()
 
 
+def run_mock_control(source, system_temp, environment, evidence):
+    with tempfile.TemporaryDirectory(prefix="arcusis-engine-probe-", dir=system_temp) as temporary:
+        root = Path(temporary).resolve(strict=True)
+        (root / "home").mkdir(mode=0o700)
+        control_env = upgrade_environment(environment, root)
+        control_env["SHAAR_UPGRADE_MOCK_CONTROL"] = "1"
+        control_log = evidence / "old-mock-control.log"
+        try:
+            transcript = run_checked(["nice", "-n", "19", "python3",
+                                      "scripts/engine_fixture.py"], cwd=source,
+                                     env=control_env, timeout=900, output=control_log)
+            if fixture_root_from_log(transcript, system_temp) != root:
+                raise RuntimeError("mock control used a foreign fixture root")
+            result = {"passed": True}
+        except Exception as error:
+            result = {"passed": False, "error": str(error)}
+        for phase in ("initial", "restart"):
+            phase_log = root / f"{phase}.log"
+            if phase_log.is_file() and not phase_log.is_symlink():
+                shutil.copy2(phase_log, evidence / f"old-mock-control-{phase}.log")
+        (evidence / "old-mock-control-result.json").write_text(json.dumps(result) + "\n")
+
+
 def execute(output):
     require_disposable_runner(os.environ, getpass.getuser())
     if os.uname().machine != "arm64":
@@ -461,6 +486,7 @@ def execute(output):
             run_checked(["nice", "-n", "19", "bash", "scripts/bundle-app.sh",
                          "--with-engine", "--verification"], cwd=old_source,
                         env=environment, timeout=900, output=evidence / "old-bundle.log")
+            run_mock_control(old_source, system_temp, environment, evidence)
             old_app = old_source / "build/Shaar Verification.app"
             set_shipping_bundle_id(old_app)
             fixture_log = evidence / "old-fixture.log"

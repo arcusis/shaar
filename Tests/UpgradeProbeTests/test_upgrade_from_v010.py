@@ -30,7 +30,15 @@ class UpgradeFromV010Tests(unittest.TestCase):
 
     def test_old_harness_patch_requires_exact_mock_keychain_switch(self):
         with self.assertRaisesRegex(RuntimeError, "v0.1.0 bridge source changed"):
-            upgrade_from_v010.remove_mock_keychain_switch("unrelated source")
+            upgrade_from_v010.make_mock_keychain_control_switch("unrelated source")
+
+    def test_old_harness_uses_mock_keychain_only_for_control(self):
+        source = subprocess.check_output(
+            ["git", "show", "v0.1.0:Sources/ChromiumBridge/ChromiumBridge.mm"],
+            cwd=upgrade_from_v010.ROOT, text=True)
+        patched = upgrade_from_v010.make_mock_keychain_control_switch(source)
+        self.assertIn('objectForKey:@"SHAAR_UPGRADE_MOCK_CONTROL"', patched)
+        self.assertNotIn('\n    strings.push_back("--use-mock-keychain");', patched)
 
     def test_old_harness_routes_native_startup_errors_to_owned_log(self):
         source = subprocess.check_output(

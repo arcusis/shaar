@@ -4,6 +4,7 @@
 
 import AppKit
 import BrowserCore
+import ChromiumBridge
 import Security
 import SwiftUI
 import XCTest
@@ -17,6 +18,28 @@ final class HebrewLocalizationVisualTests: XCTestCase {
     URL(
       fileURLWithPath: "build/Verification/localization-visuals/\(language.localeIdentifier)",
       isDirectory: true)
+  }
+
+  func testClosedEngineDownloadCommandUsesLaunchLanguage() throws {
+    let store = BrowserStore()
+    let events = BrowserRuntimeEvents(runtime: ARCChromiumRuntime())
+    let engine = try BrowserEngine(events: events, store: store)
+    let profile = store.session.selectedSpace.profileID
+    let id = UUID().uuidString
+    engine.downloads.changed(
+      [
+        "id": id, "filename": "file.txt", "path": "/tmp/file.txt",
+        "url": "https://example.com/file", "state": "downloading", "paused": false,
+        "dangerous": false, "offTheRecord": false, "received": 20.0, "total": 100.0,
+        "startTime": 1.0,
+      ], profileID: profile)
+    events.router.windowClosed(engine.windowID, quitting: false)
+    XCTAssertTrue(engine.isClosed)
+
+    XCTAssertTrue(
+      engine.downloads.perform(.pause, id: id, profileID: profile, selectedProfileID: profile))
+    XCTAssertEqual(
+      engine.downloads.notices[profile], PanelsL10n.string("Download controls are unavailable."))
   }
 
   func testLanguageRestartPromptRendersOffscreen() throws {

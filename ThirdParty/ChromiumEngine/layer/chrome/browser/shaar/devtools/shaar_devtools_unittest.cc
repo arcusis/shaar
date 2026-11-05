@@ -17,9 +17,11 @@
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/devtools_agent_host_client.h"
+#include "content/public/test/browser_task_environment.h"
 #include "content/public/test/mock_devtools_agent_host.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_renderer_host.h"
+#include "content/public/test/web_contents_tester.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace shaar::devtools {
@@ -380,6 +382,47 @@ TEST_F(ShaarPrivateDevToolsPageTargetTest, ProtocolUsesPrivatePageTarget) {
       content::DevToolsAgentHost::GetOrCreateForTab(web_contents());
   ASSERT_TRUE(tab_host);
   EXPECT_NE(tab_host.get(), host.get());
+}
+
+TEST(ShaarDevToolsTest, HiddenCaptureLeaseBalancesCapturerCount) {
+  content::BrowserTaskEnvironment tasks;
+  content::TestBrowserContext context;
+  auto contents =
+      content::WebContentsTester::CreateTestWebContents(&context, nullptr);
+  contents->WasHidden();
+  EXPECT_FALSE(contents->IsBeingCaptured());
+  {
+    auto lease = StartHiddenProbeCapture(contents.get());
+    EXPECT_TRUE(contents->IsBeingCaptured());
+    EXPECT_NE(content::Visibility::VISIBLE, contents->GetVisibility());
+  }
+  EXPECT_FALSE(contents->IsBeingCaptured());
+  EXPECT_NE(content::Visibility::VISIBLE, contents->GetVisibility());
+}
+
+TEST(ShaarDevToolsTest, CaptureRejectsUnownedWindowTabPair) {
+  shaar::windows_tabs::BrowserTabRegistryImpl registry;
+  auto* engine = reinterpret_cast<shaar_engine*>(1);
+  auto* owned_window = reinterpret_cast<shaar_window*>(2);
+  auto* other_window = reinterpret_cast<shaar_window*>(3);
+  auto* tab = reinterpret_cast<shaar_tab*>(4);
+  auto* browser = reinterpret_cast<Browser*>(5);
+  auto* contents = reinterpret_cast<content::WebContents*>(6);
+  registry.BindWindow(engine, owned_window, browser);
+  registry.BindTab(engine, owned_window, tab, "tab-a", browser, contents);
+  shaar::ShaarEngineContext context{};
+  context.browser_tabs = &registry;
+  shaar_scope scope{sizeof(shaar_scope), reinterpret_cast<shaar_profile*>(7), nullptr};
+  CapturedReply captured;
+  shaar_error error{};
+  error.size = sizeof(error);
+  EXPECT_EQ(SHAAR_NOT_FOUND,
+            HandleDevToolsOperation(&context, engine, scope, other_window, tab,
+                                    SHAAR_OP_PROBE_CAPTURE_TAB,
+                                    Bytes(R"({"schemaVersion":1})"), 44,
+                                    &CaptureReply, &captured, &error));
+  EXPECT_EQ(SHAAR_NOT_FOUND, error.code);
+  EXPECT_EQ(0u, captured.request_id);
 }
 
 TEST(ShaarDevToolsTest, LifecycleEntryRegistersOnlyItsOperationRange) {

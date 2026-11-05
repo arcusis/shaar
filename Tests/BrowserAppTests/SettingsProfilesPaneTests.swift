@@ -64,3 +64,19 @@ import Testing
     #expect(host.fittingSize.height >= 440)
   }
 }
+
+@Test @MainActor func reopeningSettingsForAnotherProfileSelectsRequestedProfile() throws {
+  let workspace = try BrowserWorkspaceStore(initialSession: .fresh())
+  let first = try #require(workspace.workspace.catalog.profiles.first?.id)
+  let second = try workspace.createProfile(name: "Second")
+  let controller = BrowserSettingsController(
+    workspace: workspace, preferences: BrowserPreferencesStore(), presentation: .hiddenProbe)
+  defer { controller.close() }
+
+  controller.show(for: first)
+  #expect(controller.selectedProfileID == first)
+  controller.show(for: second)
+  #expect(controller.selectedProfileID == second)
+  controller.show()
+  #expect(controller.selectedProfileID == second)
+}

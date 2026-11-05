@@ -784,7 +784,10 @@ final class BrowserStore {
         $0.profileID == profileID && $0.tabs.contains { $0.id == id }
       })
     else { return false }
-    guard session.selectedSpaceID != owner.id || owner.selectedTabID != id else { return true }
+    guard
+      session.selectedSpaceID != owner.id || owner.selectedTabID != id
+        || owner.selectedFavoriteID != nil
+    else { return true }
     session.selectTab(id, in: owner.id)
     save()
     return true

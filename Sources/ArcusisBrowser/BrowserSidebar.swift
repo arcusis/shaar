@@ -1084,7 +1084,7 @@ struct BrowserSidebar: View {
       space.folderPath(to: store.session.selectedPage?.tab.folderID).contains {
         $0.id == folder.id
       }
-    let siblings = space.folders.filter { $0.parentID == folder.parentID }
+    let siblings = SidebarFolderReorder.siblings(of: folder, in: space)
     return Button {
       store.toggleFolder(folder.id, in: space.id)
     } label: {
@@ -1167,13 +1167,21 @@ struct BrowserSidebar: View {
   }
 
   private func shiftFolder(_ folder: BrowserFolder, in space: BrowserSpace, by offset: Int) {
-    let siblings = space.folders.filter { $0.parentID == folder.parentID }
+    let siblings = SidebarFolderReorder.siblings(of: folder, in: space)
     guard let index = siblings.firstIndex(where: { $0.id == folder.id }),
       siblings.indices.contains(index + offset)
     else { return }
     let before = siblings.insertionAnchor(movingIndex: index, by: offset)
     store.moveFolder(
       folder.id, from: space.id, to: space.id, parentID: folder.parentID, before: before)
+  }
+}
+
+enum SidebarFolderReorder {
+  static func siblings(of folder: BrowserFolder, in space: BrowserSpace) -> [BrowserFolder] {
+    space.folders.filter {
+      $0.parentID == folder.parentID && $0.isPinned == folder.isPinned
+    }
   }
 }
 

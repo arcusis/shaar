@@ -192,7 +192,11 @@ public enum CommandLauncher {
     -> [CommandResult]
   {
     let profileID = session.selectedSpace.profileID
-    let open = Set(session.selectedSpace.tabs.map { pageKey($0.url.absoluteString) })
+    let favoriteIDs = Set(session.favorites.filter { $0.profileID == profileID }.map(\.id))
+    var open = Set(session.selectedSpace.tabs.map { pageKey($0.url.absoluteString) })
+    for page in session.favoritePages where favoriteIDs.contains(page.favoriteID) {
+      open.insert(pageKey(page.tab.url.absoluteString))
+    }
     var top = TopRanked<BrowserHistoryEntry>(limit: mostVisitedLimit) {
       ($0.visitCount, $0.lastVisit) > ($1.visitCount, $1.lastVisit)
     }

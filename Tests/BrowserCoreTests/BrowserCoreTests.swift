@@ -199,6 +199,15 @@ private func openTab(_ address: String, in session: inout BrowserSession) throws
   }
 }
 
+@Test func navigationInputRecognizesLocalhostWithQueryOrFragment() {
+  #expect(
+    NavigationInput.destination(for: "localhost?view=1")?.absoluteString
+      == "https://localhost?view=1")
+  #expect(
+    NavigationInput.destination(for: "localhost#section")?.absoluteString
+      == "https://localhost#section")
+}
+
 @Test func commandResultsAlwaysKeepNavigationAvailable() {
   var session = BrowserSession.fresh()
   for index in 0..<20 { session.open(URL(string: "https://example.com/\(index)")!) }

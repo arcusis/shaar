@@ -670,6 +670,8 @@
     "Installing…": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "מתקין…"}}}},
     "Install failed": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "ההתקנה נכשלה"}}}},
     "Could not update the extension. Try again.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לא ניתן לעדכן את התוסף. נסו שוב."}}}},
+    "Enable %@ for %@": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "הפעלת התוסף %@ בפרופיל %@"}}}},
+    "Disable %@ for %@": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "השבתת התוסף %@ בפרופיל %@"}}}},
     "Not installed": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לא מותקן"}}}},
     "Retry": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "ניסיון חוזר"}}}},
     "Add Extensions…": {

@@ -34,6 +34,15 @@ struct ProfileExtensionsSection: View {
     }
   }
 
+  static func toggleLabel(
+    extensionName: String, profileName: String, enabled: Bool,
+    language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    BrowserLocalization.format(
+      enabled ? "Disable %@ for %@" : "Enable %@ for %@", table: "Settings", language: language,
+      arguments: [.string(extensionName), .string(profileName)])
+  }
+
   var body: some View {
     Group {
       if let model, let item = model.extensions.first(where: { $0.id == detailID }) {
@@ -98,7 +107,11 @@ private struct SharedExtensionSettingsSection: View {
                         Task {
                           await model.setEnabled(value, extensionID: row.id, profileID: profileID)
                         }
-                      }))
+                      })
+                  )
+                  .accessibilityLabel(
+                    ProfileExtensionsSection.toggleLabel(
+                      extensionName: row.name, profileName: state.name, enabled: enabled))
                 } else if state.failed {
                   HStack {
                     Text(state.name)

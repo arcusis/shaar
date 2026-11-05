@@ -28,6 +28,17 @@ final class ProfileExtensionsSectionTests: XCTestCase {
       [english, hebrew])
   }
 
+  func testSharedExtensionToggleLabelsNameTheActionExtensionAndProfile() {
+    XCTAssertEqual(
+      ProfileExtensionsSection.toggleLabel(
+        extensionName: "Notes", profileName: "Work", enabled: false, language: .english),
+      "Enable Notes for Work")
+    XCTAssertEqual(
+      ProfileExtensionsSection.toggleLabel(
+        extensionName: "Notes", profileName: "Work", enabled: true, language: .hebrew),
+      "השבתת התוסף \u{2068}Notes\u{2069} בפרופיל \u{2068}Work\u{2069}")
+  }
+
   func testPinnedExtensionsOnlyIncludesEnabledItems() {
     let enabled = sample("Enabled", enabled: true)
     let disabled = sample("Disabled", enabled: false)

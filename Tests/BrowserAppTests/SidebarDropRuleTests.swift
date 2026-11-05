@@ -96,6 +96,32 @@ struct SidebarDropRuleTests {
     try store.session.validate()
   }
 
+  @Test func favoriteDropOnBackgroundSpaceKeepsCurrentSpaceSelected() throws {
+    let store = BrowserStore()
+    let selected = store.session.selectedSpaceID
+    let profile = store.session.selectedSpace.profileID
+    #expect(store.createSpace(name: "Second", sharingProfile: profile, tint: .ocean))
+    let background = store.session.selectedSpaceID
+    store.perform(.space(selected))
+    let openedTab = store.session.open(URL(string: "https://active.example")!)
+    let activeTab = try #require(openedTab)
+    let created = store.session.addFavorite(
+      profileID: profile, originalURL: URL(string: "https://favorite-drop.example")!)
+    let favorite = try #require(created)
+    let pageID = try #require(store.session.favoritePage(for: favorite)?.tab.id)
+    let payload = ProfileFavoriteDrag(
+      profileID: profile, dragSessionID: store.dragSessionID,
+      favoriteID: favorite, favoriteIDs: store.profileFavorites.map(\.id))
+
+    #expect(store.acceptSidebarDrop(.favorite(payload), into: background, pinned: false))
+    #expect(store.session.selectedSpaceID == selected)
+    #expect(store.session.selectedPage?.tab.id == activeTab)
+    #expect(!store.session.favorites.contains { $0.id == favorite })
+    #expect(store.session.spaces.first { $0.id == background }?.tabs.map(\.id) == [pageID])
+    #expect(store.session.selectedSpace.tabs.allSatisfy { $0.id != pageID })
+    try store.session.validate()
+  }
+
   @Test func stackMovesPreserveLayoutOrderAndFolderMembership() throws {
     let (store, space, tabs) = fixture()
     store.splitTabs(tabs[0], tabs[1])

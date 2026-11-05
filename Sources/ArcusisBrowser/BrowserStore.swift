@@ -634,12 +634,13 @@ final class BrowserStore {
     _ id: UUID, in spaceID: UUID, before tabID: UUID? = nil,
     pinned: Bool, folderID: UUID? = nil
   ) -> Bool {
-    guard sheet == nil, !commandIsOpen, session.selectedSpaceID == spaceID,
+    guard sheet == nil, !commandIsOpen,
       let space = session.spaces.first(where: { $0.id == spaceID }),
       session.favorites.contains(where: { $0.id == id && $0.profileID == space.profileID }),
       let pageID = session.favoritePages.first(where: { $0.favoriteID == id })?.tab.id
     else { return false }
     var draft = session
+    let selectedSpaceID = draft.selectedSpaceID
     guard draft.selectFavorite(id, in: spaceID),
       draft.removeFavorite(id, disposition: .preserveAsTab)
     else { return false }
@@ -649,6 +650,7 @@ final class BrowserStore {
           pageID, from: spaceID, to: spaceID, before: tabID, pinned: pinned, folderID: folderID)
       else { return false }
     }
+    draft.selectSpace(selectedSpaceID)
     session = draft
     save()
     return true
@@ -1002,7 +1004,9 @@ final class BrowserStore {
       save()
       return true
     case .favorite(let payload):
-      guard acceptsFavoriteDrag(payload, in: space) else { return false }
+      guard acceptsFavoriteDrag(payload, in: space, requiresSelectedSpace: false) else {
+        return false
+      }
       return restoreFavoriteAsTab(
         payload.favoriteID, in: space, before: targetTab, pinned: pinned ?? false,
         folderID: folderID)
@@ -1031,11 +1035,14 @@ final class BrowserStore {
     }
   }
 
-  func acceptsFavoriteDrag(_ payload: ProfileFavoriteDrag, in spaceID: UUID) -> Bool {
+  func acceptsFavoriteDrag(
+    _ payload: ProfileFavoriteDrag, in spaceID: UUID, requiresSelectedSpace: Bool = true
+  ) -> Bool {
     guard let space = session.spaces.first(where: { $0.id == spaceID }) else { return false }
     return payload.dragSessionID == dragSessionID && payload.profileID == space.profileID
       && payload.favoriteIDs == profileFavorites.map(\.id)
-      && payload.favoriteIDs.contains(payload.favoriteID) && session.selectedSpaceID == spaceID
+      && payload.favoriteIDs.contains(payload.favoriteID)
+      && (!requiresSelectedSpace || session.selectedSpaceID == spaceID)
   }
 
   @discardableResult

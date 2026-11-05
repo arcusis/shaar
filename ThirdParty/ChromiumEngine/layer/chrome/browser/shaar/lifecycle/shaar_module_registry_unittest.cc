@@ -3,10 +3,28 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #include "chrome/browser/shaar/engine/shaar_module_registry.h"
+#include "chrome/browser/shaar/lifecycle/shaar_lifecycle.h"
+
+#include <algorithm>
 
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
+
+TEST(ShaarLifecycleProbeTest, BackgroundSwitchesAreVerificationOnly) {
+  const auto production = shaar::lifecycle::ChromeMainArguments(
+      "/test/Shaar", "/tmp/prod", "en", false);
+  const auto verification = shaar::lifecycle::ChromeMainArguments(
+      "/test/Shaar", "/tmp/probe", "en", true);
+  for (const char* option : {"--disable-renderer-backgrounding",
+                             "--disable-backgrounding-occluded-windows",
+                             "--disable-background-timer-throttling"}) {
+    EXPECT_EQ(std::find(production.begin(), production.end(), option),
+              production.end());
+    EXPECT_NE(std::find(verification.begin(), verification.end(), option),
+              verification.end());
+  }
+}
 
 TEST(ShaarLifecycleProbeTest, KeepAliveStateRequiresActiveEngine) {
   shaar_error error = {};

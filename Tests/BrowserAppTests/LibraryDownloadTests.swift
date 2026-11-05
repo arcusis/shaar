@@ -13,6 +13,23 @@ import Testing
 
 @Suite @MainActor
 struct LibraryDownloadTests {
+  @Test func downloadSourceSubtitleUsesSelectedLanguage() {
+    let hebrew = LibraryDownloadsView.subtitle(
+      kind: "PDF", source: "example.test", language: .hebrew
+    )
+    .replacingOccurrences(of: "\u{2068}", with: "")
+    .replacingOccurrences(of: "\u{2069}", with: "")
+    #expect(hebrew == "PDF מתוך example.test")
+    #expect(
+      LibraryDownloadsView.subtitle(kind: "PDF", source: "הורדה", language: .hebrew) == "PDF")
+    #expect(
+      LibraryDownloadsView.subtitle(kind: "PDF", source: "Download", language: .hebrew) == "PDF")
+    #expect(
+      LibraryDownloadsView.subtitle(
+        kind: "PDF", source: BrowserLocalization.string("Generated file", language: .hebrew),
+        language: .hebrew) == "PDF")
+  }
+
   private func record(
     _ id: String = UUID().uuidString.lowercased(),
     filename: String = "sample.jpg",

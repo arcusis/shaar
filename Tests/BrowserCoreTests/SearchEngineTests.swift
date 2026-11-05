@@ -69,6 +69,13 @@ import Testing
   #expect(NavigationInput.address(for: "LOCALHOST:3000")?.port == 3000)
 }
 
+@Test func navigationRejectsOutOfRangeWebPorts() {
+  let invalid = URL(string: "https://example.com:99999")!
+  #expect(!NavigationInput.isWebURL(invalid))
+  #expect(NavigationInput.address(for: invalid.absoluteString) == nil)
+  #expect(NavigationInput.address(for: "https://example.com:65535")?.port == 65535)
+}
+
 @Test func commandSearchKeepsGoogleDefaultAndAcceptsSelectedEngine() throws {
   let session = BrowserSession.fresh()
   let defaultResult = try #require(

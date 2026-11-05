@@ -77,11 +77,14 @@ final class BrowserSettingsState {
       ?? workspace.stores.values.first(where: {
         $0.session.spaces.contains { $0.profileID == profileID }
       })
-    guard
-      let store, let spaceID = store.session.spaces.first(where: { $0.profileID == profileID })?.id
+    guard let store,
+      let firstSpaceID = store.session.spaces.first(where: { $0.profileID == profileID })?.id
     else {
       return
     }
+    let spaceID =
+      store.session.selectedSpace.profileID == profileID
+      ? store.session.selectedSpaceID : firstSpaceID
     if store.session.selectedSpaceID != spaceID { store.perform(.space(spaceID)) }
     store.perform(.open(BrowserExtension.storeCatalogURL))
   }

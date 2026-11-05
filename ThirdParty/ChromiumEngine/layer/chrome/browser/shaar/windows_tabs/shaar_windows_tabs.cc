@@ -150,6 +150,16 @@ Browser* BrowserTabRegistryImpl::FindBrowser(shaar_engine* engine,
   return nullptr;
 }
 
+bool BrowserTabRegistryImpl::IsSelectedWebContents(
+    shaar_engine* engine, shaar_window* window, shaar_tab* tab,
+    content::WebContents* contents) {
+  WindowState* state = FindWindowState(engine, window);
+  Browser* owner = FindBrowserForTab(engine, window, tab);
+  return state && contents && owner && state->active_browser == owner &&
+         FindWebContents(engine, window, tab) == contents &&
+         owner->tab_strip_model()->GetActiveWebContents() == contents;
+}
+
 content::WebContents* BrowserTabRegistryImpl::FindWebContents(
     shaar_engine* engine,
     shaar_window* window,

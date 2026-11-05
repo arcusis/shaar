@@ -9,24 +9,34 @@
 #include <limits.h>
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <initializer_list>
 #include <string_view>
 #include <utility>
+#include <vector>
 
+#include "base/base64.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/containers/span.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/devtools/devtools_window.h"
+#include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/browser/render_widget_host_view.h"
+#include "ui/gfx/codec/png_codec.h"
+#include "ui/gfx/geometry/size.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace shaar::devtools {
 namespace {
@@ -34,6 +44,7 @@ namespace {
 constexpr size_t kMaxArgumentsBytes = 1024 * 1024;
 constexpr int kInspector = 1;
 constexpr int kDeveloper = 2;
+constexpr base::TimeDelta kProbeCaptureTimeout = base::Seconds(12);
 
 class RuntimeServices final : public DevToolsRuntimeServices {
 public:
@@ -199,6 +210,82 @@ void Reply(ReplyContext request, shaar_error_code code, std::string payload,
       FROM_HERE, base::BindOnce(&DeliverReply, request, code,
                                 std::move(payload), std::move(message)));
 }
+
+class ProbeCaptureRequest final
+    : public base::RefCountedThreadSafe<ProbeCaptureRequest> {
+ public:
+  explicit ProbeCaptureRequest(ReplyContext reply) : reply_(reply) {}
+
+  void Start(content::WebContents* contents) {
+    auto* view = contents->GetRenderWidgetHostView();
+    if (!view) {
+      Finish({}, "renderer view is unavailable");
+      return;
+    }
+    // An empty capture size preserves the hidden WebContents' layout and page
+    // visibility. The returned guard balances DecrementCapturerCount on every
+    // completion path, including timeout and copy failure.
+    capturer_ = StartHiddenProbeCapture(contents);
+    timer_.Start(FROM_HERE, kProbeCaptureTimeout,
+                 base::BindOnce(&ProbeCaptureRequest::OnTimeout,
+                                base::WrapRefCounted(this)));
+    auto ui_runner = base::SequencedTaskRunner::GetCurrentDefault();
+    view->CopyFromSurface(
+        gfx::Rect(), gfx::Size(), kProbeCaptureTimeout,
+        base::BindOnce(
+            [](scoped_refptr<ProbeCaptureRequest> request,
+               scoped_refptr<base::SequencedTaskRunner> ui_runner,
+               const content::CopyFromSurfaceResult& result) {
+              std::vector<unsigned char> png;
+              if (result.has_value() && !result->bitmap.drawsNothing()) {
+                auto encoded = gfx::PNGCodec::EncodeBGRASkBitmap(
+                    result->bitmap, /*discard_transparency=*/false);
+                if (encoded)
+                  png = std::move(*encoded);
+              }
+              ui_runner->PostTask(
+                  FROM_HERE, base::BindOnce(&ProbeCaptureRequest::OnCopy,
+                                            std::move(request), std::move(png)));
+            },
+            base::WrapRefCounted(this), std::move(ui_runner)));
+  }
+
+ private:
+  friend class base::RefCountedThreadSafe<ProbeCaptureRequest>;
+  ~ProbeCaptureRequest() = default;
+
+  void OnTimeout() { Finish({}, "renderer capture timed out"); }
+  void OnCopy(std::vector<unsigned char> png) {
+    Finish(std::move(png), "renderer returned no PNG capture");
+  }
+  void Finish(std::vector<unsigned char> png, const char* failure) {
+    if (finished_)
+      return;
+    finished_ = true;
+    timer_.Stop();
+    capturer_.RunAndReset();
+    if (png.empty()) {
+      Reply(reply_, SHAAR_NOT_READY, {}, failure);
+      return;
+    }
+    base::DictValue result;
+    result.Set("data", base::Base64Encode(base::as_byte_span(png)));
+    base::DictValue envelope;
+    envelope.Set("schemaVersion", 1);
+    envelope.Set("result", std::move(result));
+    std::string payload;
+    if (!base::JSONWriter::Write(base::Value(std::move(envelope)), &payload)) {
+      Reply(reply_, SHAAR_CHROMIUM_ERROR, {}, "could not encode renderer capture");
+      return;
+    }
+    Reply(reply_, SHAAR_OK, std::move(payload));
+  }
+
+  ReplyContext reply_;
+  base::ScopedClosureRunner capturer_;
+  base::OneShotTimer timer_;
+  bool finished_ = false;
+};
 
 shaar_error_code Fail(shaar_error* error, shaar_error_code code,
                       const char* message) {
@@ -576,6 +663,12 @@ shaar_error_code DecodeOperation(shaar_operation operation,
 
 }  // namespace
 
+base::ScopedClosureRunner StartHiddenProbeCapture(content::WebContents* contents) {
+  return contents->IncrementCapturerCount(
+      gfx::Size(), /*stay_hidden=*/true, /*stay_awake=*/true,
+      /*is_activity=*/false);
+}
+
 void BindRuntimeServices() {
   shaar::SetDevToolsRuntimeServices(&g_runtime_services);
 }
@@ -777,6 +870,20 @@ shaar_error_code HandleDevToolsOperation(
                                                                   scope.profile))
     return Fail(error, SHAAR_WRONG_PROFILE,
                 "DevTools profile identity does not match the requested scope");
+
+  if (operation == SHAAR_OP_PROBE_CAPTURE_TAB) {
+    if (!HasEmptyVersionedSchema(args_json))
+      return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid capture probe schema");
+    const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
+    if (!testing || std::strcmp(testing, "1") != 0)
+      return Fail(error, SHAAR_POLICY_BLOCKED, "capture probe requires testing mode");
+    if (!context->browser_tabs->IsSelectedWebContents(engine, window, tab,
+                                                        contents))
+      return Fail(error, SHAAR_NOT_READY, "capture probe requires selected tab");
+    base::MakeRefCounted<ProbeCaptureRequest>(
+        ReplyContext{request_id, reply, reply_context})->Start(contents);
+    return SHAAR_OK;
+  }
 
   int capability = 0;
   if (operation == SHAAR_OP_DEVTOOLS_CALL) {

@@ -9,6 +9,7 @@
 #include <string_view>
 
 #include "base/memory/scoped_refptr.h"
+#include "base/functional/callback_helpers.h"
 
 #include "chrome/browser/shaar/engine/shaar_module_registry.h"
 #include "chrome/browser/shaar/public/shaar_engine.h"
@@ -28,6 +29,9 @@ struct ModuleHandlers {
 };
 
 void BindRuntimeServices();
+
+// Keeps a hidden tab producing compositor frames until the returned guard dies.
+base::ScopedClosureRunner StartHiddenProbeCapture(content::WebContents* contents);
 
 // Returns a fixed protocol method only when the command belongs to the
 // requested capability. Cookie commands are restricted to Developer.

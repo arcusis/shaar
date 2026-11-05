@@ -71,6 +71,11 @@ NSString *ARCProbePrivateEvaluationJSON(NSDictionary *reply) {
   return data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
 }
 
+NSDictionary<NSString *, id> *ARCProbePrivacyEvaluationParameters(NSString *expression) {
+  return @{@"expression": expression, @"returnByValue": @YES,
+           @"awaitPromise": @YES};
+}
+
 void ARCCompletePrivateQuitDialogCancellation(
     BOOL ownerCurrent, NSString *dialogError, void (^releaseHold)(void), void (^reject)(void)) {
   if (!ownerCurrent || dialogError) { reject(); return; }
@@ -139,7 +144,7 @@ void ARCCompletePrivateQuitDialogCancellation(
   NSDictionary *payload = @{@"schemaVersion": @1,
       @"capability": @(SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER),
       @"command": @(SHAAR_DEVTOOLS_RUNTIME_EVALUATE),
-      @"params": @{@"expression": script, @"returnByValue": @YES}};
+      @"params": ARCProbePrivacyEvaluationParameters(script)};
   BOOL submitted = ARCPrivateShaarSubmit(runtime, scope, nativeWindow, nativeTab,
       SHAAR_OP_DEVTOOLS_CALL, payload, ^(NSDictionary *reply) {
     NSString *value = ARCProbePrivateEvaluationJSON(reply);
@@ -155,7 +160,32 @@ void ARCCompletePrivateQuitDialogCancellation(
 - (NSDictionary *)privatePrivacyStatusForProbeTabID:(NSString *)tabID { return nil; }
 - (NSDictionary *)privatePrivacyPreferencesForContextID:(NSString *)contextID { return nil; }
 - (void)evaluatePrivacyProbeTabID:(NSString *)tabID script:(NSString *)script
-                          completion:(void (^)(NSString *))completion { completion(nil); }
+                          completion:(void (^)(NSString *))completion {
+  if (![self isKindOfClass:ARCShaarRuntime.class] || !script.length) {
+    completion(nil);
+    return;
+  }
+  ARCShaarRuntime *runtime = (ARCShaarRuntime *)self;
+  if (ARCPrivateShaarState(runtime)[@"tabs"][tabID]) {
+    [runtime evaluatePrivateProbeTabID:tabID script:script completion:completion];
+    return;
+  }
+  NSString *profileID = [runtime shaarDevToolsProfileIDForTabID:tabID];
+  NSString *windowID = [runtime windowIDForTabID:tabID];
+  if (![runtime shaarDevToolsOwnsTabID:tabID profileID:profileID windowID:windowID]) {
+    completion(nil);
+    return;
+  }
+  [runtime shaarDevToolsCall:@"Runtime.evaluate"
+                    params:ARCProbePrivacyEvaluationParameters(script)
+                capability:SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER tabID:tabID
+                 profileID:profileID windowID:windowID
+                completion:^(NSDictionary *reply, NSError *error) {
+    if (error) { completion(nil); return; }
+    completion(ARCProbePrivateEvaluationJSON(
+        @{@"schemaVersion": @1, @"result": reply ?: @{}}));
+  }];
+}
 - (BOOL)attemptCancelledPrivateProbeCloseID:(NSString *)windowID { return NO; }
 - (NSDictionary *)privateProbeAuditForContextID:(NSString *)contextID {
   if (![self isKindOfClass:ARCShaarRuntime.class]) return nil;

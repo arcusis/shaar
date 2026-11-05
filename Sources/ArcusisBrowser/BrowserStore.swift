@@ -508,6 +508,7 @@ final class BrowserStore {
   func cycleSpace(by offset: Int) {
     measureSpaceSwitch {
       sidebarNotice = nil
+      pendingSplitPlacement = nil
       session.cycleSpace(by: offset)
       save(deferred: true)
     }

@@ -10,6 +10,22 @@ import Testing
 
 @Suite @MainActor
 struct BrowserStoreTests {
+  @Test func cyclingSpacesCancelsPendingSplitPlacement() throws {
+    let store = BrowserStore()
+    store.perform(.open(URL(string: "https://example.com/first")!))
+    let firstSpace = store.session.selectedSpaceID
+    let target = try #require(store.session.selectedSpace.selectedTabID)
+    store.openSplitPane(beside: target, edge: .right)
+    #expect(store.pendingSplitPlacement != nil)
+
+    store.cycleSpace(by: 1)
+    #expect(store.session.selectedSpaceID != firstSpace)
+    #expect(store.pendingSplitPlacement == nil)
+    store.cycleSpace(by: -1)
+    store.perform(.open(URL(string: "https://example.com/later")!))
+    #expect(store.session.selectedSpace.splits.isEmpty)
+  }
+
   @Test func nativeCloseWaitsForEngineBeforeRemovingTheTab() throws {
     let store = BrowserStore()
     store.perform(.open(URL(string: "https://example.com")!))

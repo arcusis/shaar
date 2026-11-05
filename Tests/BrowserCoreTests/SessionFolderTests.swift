@@ -138,6 +138,28 @@ private let legacySession = Data(
   #expect(session.selectedSpace.folderPath(to: fallbackFolder).allSatisfy { !$0.isCollapsed })
 }
 
+@Test func movingSelectedTabRevealsSourceFallbackInsideCollapsedFolder() throws {
+  var session = BrowserSession.fresh()
+  let source = session.selectedSpaceID
+  let fallback = session.open(URL(string: "https://example.com/fallback")!)!
+  let moving = session.open(URL(string: "https://example.com/moving")!)!
+  let folder = session.addFolder(name: "Fallback", in: source)!
+  let placed = session.moveTab(fallback, from: source, to: source, folderID: folder)
+  #expect(placed)
+  let destination = session.addSpace(
+    name: "Shared", sharingProfile: session.selectedSpace.profileID)!
+  session.selectSpace(source)
+  let collapsed = session.toggleFolder(folder, in: source)
+  #expect(collapsed)
+
+  let moved = session.moveTab(moving, from: source, to: destination)
+
+  #expect(moved)
+  let sourceAfter = try #require(session.spaces.first { $0.id == source })
+  #expect(sourceAfter.selectedTabID == fallback)
+  #expect(sourceAfter.folderPath(to: folder).allSatisfy { !$0.isCollapsed })
+}
+
 @Test func removingFolderPromotesContainersAndKeepsAllPagesAndSelection() throws {
   var session = BrowserSession.fresh()
   let space = session.selectedSpaceID

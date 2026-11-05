@@ -677,6 +677,15 @@ shaar_error_code EncodeProtocolRequest(shaar_bytes args_json,
   return SHAAR_OK;
 }
 
+scoped_refptr<content::DevToolsAgentHost> ProtocolAgentHostFor(
+    content::WebContents* contents) {
+  if (!contents)
+    return nullptr;
+  // A tab target accepts Target/Tracing but not Runtime or Page methods.
+  auto host = content::DevToolsAgentHost::GetOrCreateFor(contents);
+  return host && host->GetWebContents() == contents ? host : nullptr;
+}
+
 void EmitFrontendStateEvent(shaar_engine* engine,
                             const DevToolsTargetIdentity& identity,
                             bool open) {
@@ -788,10 +797,8 @@ shaar_error_code HandleDevToolsOperation(
         EncodeProtocolRequest(args_json, request_id, &protocol_request, &reason);
     if (status != SHAAR_OK)
       return Fail(error, status, reason.c_str());
-    // Chromium's tab target handles Target/Tracing only. Page commands such as
-    // Runtime.evaluate are dispatched by the primary frame's page target.
-    auto host = content::DevToolsAgentHost::GetOrCreateFor(contents);
-    if (!host || host->GetWebContents() != contents)
+    auto host = ProtocolAgentHostFor(contents);
+    if (!host)
       return Fail(error, SHAAR_NOT_READY, "DevTools protocol target is unavailable");
     if (!StartProtocolRequest(std::move(host), request_id, reply,
                               reply_context, protocol_request)) {

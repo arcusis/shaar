@@ -55,6 +55,20 @@ final class SessionSplitTests: XCTestCase {
     XCTAssertTrue(try XCTUnwrap(session.spaces.first { $0.id == spaceID }).splits.isEmpty)
     try session.validate()
   }
+
+  func testReorderingTabWithinSpaceKeepsSplit() throws {
+    var session = BrowserSession.fresh()
+    let spaceID = session.selectedSpaceID
+    let first = try XCTUnwrap(session.open(URL(string: "https://one.example")!))
+    let second = try XCTUnwrap(session.open(URL(string: "https://two.example")!))
+    XCTAssertTrue(session.splitTabs(first, second, in: spaceID))
+    let split = try XCTUnwrap(session.selectedSpace.splits.first)
+
+    XCTAssertTrue(session.moveTab(second, from: spaceID, to: spaceID, before: first))
+    XCTAssertEqual(session.selectedSpace.splits, [split])
+    XCTAssertEqual(session.selectedSpace.tabs.map(\.id), [second, first])
+    try session.validate()
+  }
 }
 
 final class SplitLayoutTests: XCTestCase {

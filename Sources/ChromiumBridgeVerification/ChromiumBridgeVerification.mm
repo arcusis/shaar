@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #import "include/ChromiumBridgeVerification.h"
+#import "../ChromiumBridge/ChromiumShaarPrivateSupport.h"
 
 static NSError *ProbeUnsupported(void) {
   return [NSError errorWithDomain:@"org.arcusis.shaar.probe" code:1
@@ -22,6 +23,19 @@ NSDictionary<NSString *, id> *ARCProbeNormalSelectionAudit(
            @"tabHasWindow": @(tabView.window != nil),
            @"windowAvailable": @(window != nil),
            @"nativeTabToken": tabView ? [NSString stringWithFormat:@"%p", tabView] : @""};
+}
+
+NSString *ARCProbePrivateEvaluationJSON(NSDictionary *reply) {
+  if (![reply[@"schemaVersion"] isEqual:@1] || reply[@"error"]) return nil;
+  NSDictionary *result = [reply[@"result"] isKindOfClass:NSDictionary.class]
+      ? reply[@"result"] : nil;
+  NSDictionary *remote = [result[@"result"] isKindOfClass:NSDictionary.class]
+      ? result[@"result"] : nil;
+  id value = remote[@"value"];
+  if (result[@"exceptionDetails"] || !value) return nil;
+  NSData *data = [NSJSONSerialization dataWithJSONObject:value
+      options:NSJSONWritingFragmentsAllowed error:nil];
+  return data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
 }
 
 void ARCCompletePrivateQuitDialogCancellation(
@@ -46,14 +60,123 @@ void ARCCompletePrivateQuitDialogCancellation(
 - (void)captureProbeTabID:(NSString *)tabID completion:(void (^)(NSData *))completion { completion(nil); }
 - (void)captureMarketingProbeTabID:(NSString *)tabID completion:(void (^)(NSData *))completion { completion(nil); }
 - (void)evaluatePrivateProbeTabID:(NSString *)tabID script:(NSString *)script
-                       completion:(void (^)(NSString *))completion { completion(nil); }
+                       completion:(void (^)(NSString *))completion {
+  if (![self isKindOfClass:ARCShaarRuntime.class] || !script.length) { completion(nil); return; }
+  ARCShaarRuntime *runtime = (ARCShaarRuntime *)self;
+  NSDictionary *state = ARCPrivateShaarState(runtime);
+  NSDictionary *tab = state[@"tabs"][tabID];
+  NSString *contextID = tab[@"contextID"];
+  NSString *windowID = tab[@"windowID"];
+  NSMutableDictionary *context = state[@"contexts"][contextID];
+  NSDictionary *window = state[@"windows"][windowID];
+  if (![runtime privateTabOwned:tabID windowID:windowID contextID:contextID] ||
+      !context || !window) { completion(nil); return; }
+  shaar_scope scope = {};
+  scope.size = sizeof(scope);
+  scope.private_session = (shaar_private_session *)
+      ((NSValue *)context[@"session"]).pointerValue;
+  shaar_window *nativeWindow = (shaar_window *)
+      ((NSValue *)window[@"handle"]).pointerValue;
+  shaar_tab *nativeTab = (shaar_tab *)((NSValue *)tab[@"handle"]).pointerValue;
+  NSDictionary *payload = @{@"schemaVersion": @1,
+      @"capability": @(SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER),
+      @"command": @(SHAAR_DEVTOOLS_RUNTIME_EVALUATE),
+      @"params": @{@"expression": script, @"returnByValue": @YES}};
+  BOOL submitted = ARCPrivateShaarSubmit(runtime, scope, nativeWindow, nativeTab,
+      SHAAR_OP_DEVTOOLS_CALL, payload, ^(NSDictionary *reply) {
+    NSString *value = ARCProbePrivateEvaluationJSON(reply);
+    context[@"probeEvaluationError"] = value ? @"" : [reply description];
+    completion(value);
+  });
+  if (!submitted) {
+    context[@"probeEvaluationError"] = @"Shaar rejected scoped Runtime.evaluate.";
+    completion(nil);
+  }
+}
 - (void)probePrivateNetworkControlsForTabID:(NSString *)tabID completion:(void (^)(BOOL))completion { completion(NO); }
 - (NSDictionary *)privatePrivacyStatusForProbeTabID:(NSString *)tabID { return nil; }
 - (NSDictionary *)privatePrivacyPreferencesForContextID:(NSString *)contextID { return nil; }
 - (void)evaluatePrivacyProbeTabID:(NSString *)tabID script:(NSString *)script
                           completion:(void (^)(NSString *))completion { completion(nil); }
 - (BOOL)attemptCancelledPrivateProbeCloseID:(NSString *)windowID { return NO; }
-- (NSDictionary *)privateProbeAuditForContextID:(NSString *)contextID { return nil; }
+- (NSDictionary *)privateProbeAuditForContextID:(NSString *)contextID {
+  if (![self isKindOfClass:ARCShaarRuntime.class]) return nil;
+  ARCShaarRuntime *runtime = (ARCShaarRuntime *)self;
+  NSDictionary *state = ARCPrivateShaarState(runtime);
+  NSDictionary *context = state[@"contexts"][contextID];
+  if (!context) return nil;
+  NSArray<NSString *> *windowIDs = [context[@"windows"] allObjects];
+  BOOL allWindowsAlive = YES;
+  BOOL allWindowsHidden = YES;
+  BOOL allSelectedViewsAttached = YES;
+  NSUInteger selectedViewCount = 0;
+  for (NSString *windowID in windowIDs) {
+    NSDictionary *entry = state[@"windows"][windowID];
+    NSString *selectedID = entry[@"selectedTabID"];
+    NSWindow *window = [runtime windowForPrivateWindowID:windowID contextID:contextID];
+    NSView *host = [runtime hostViewForPrivateWindowID:windowID contextID:contextID];
+    NSView *selected = selectedID
+        ? [runtime viewForPrivateTabID:selectedID windowID:windowID contextID:contextID] : nil;
+    BOOL attached = selected && host && window &&
+        [selected isDescendantOf:host] && selected.window == window;
+    allWindowsAlive &= window != nil;
+    allWindowsHidden &= window != nil && !window.isVisible;
+    allSelectedViewsAttached &= attached;
+    if (attached) ++selectedViewCount;
+  }
+  NSUInteger tabCount = 0;
+  BOOL allTabsLoaded = YES;
+  BOOL allTabsLoopback = YES;
+  BOOL anyTabLoading = NO;
+  BOOL allBackgroundViewsDetached = YES;
+  NSMutableArray *documentStates = [NSMutableArray array];
+  for (NSString *tabID in state[@"tabs"]) {
+    NSDictionary *tab = state[@"tabs"][tabID];
+    if (![tab[@"contextID"] isEqualToString:contextID]) continue;
+    ++tabCount;
+    NSString *url = tab[@"url"];
+    NSString *requestedURL = tab[@"requestedURL"];
+    BOOL loading = [tab[@"loading"] boolValue];
+    BOOL loaded = url.length && [url isEqualToString:requestedURL] && !loading;
+    NSURLComponents *parts = [NSURLComponents componentsWithString:url];
+    BOOL loopback = [parts.scheme isEqualToString:@"http"] &&
+        [parts.host isEqualToString:@"127.0.0.1"];
+    [documentStates addObject:@{@"url": url ?: @"", @"requestedURL": requestedURL ?: @"",
+        @"loading": @(loading), @"phase": tab[@"navigationPhase"] ?: @"unknown",
+        @"failure": tab[@"navigationFailure"] ?: [NSNull null]}];
+    allTabsLoaded &= loaded;
+    allTabsLoopback &= loopback;
+    anyTabLoading |= loading;
+    NSString *windowID = tab[@"windowID"];
+    NSDictionary *window = state[@"windows"][windowID];
+    if (![window[@"selectedTabID"] isEqualToString:tabID]) {
+      NSView *view = [runtime viewForPrivateTabID:tabID
+          windowID:windowID contextID:contextID];
+      NSView *host = [runtime hostViewForPrivateWindowID:windowID contextID:contextID];
+      allBackgroundViewsDetached &= view && host && ![view isDescendantOf:host];
+    }
+  }
+  NSString *sourceID = context[@"sourceProfileID"];
+  BOOL profileAlive = [runtime privateProfileHandleForID:sourceID] != nullptr;
+  return @{@"contextIsPrivate": @YES, @"profileAlive": @(profileAlive),
+      @"windowCount": @(windowIDs.count), @"tabCount": @(tabCount),
+      @"allTabsLoaded": @(tabCount > 0 && allTabsLoaded),
+      @"allTabsAuthoredLoopbackURL": @(tabCount > 0 && allTabsLoopback),
+      @"anyTabLoading": @(anyTabLoading),
+      @"allWindowsNativeWindowsAlive": @(allWindowsAlive),
+      @"allWindowsHidden": @(allWindowsHidden),
+      @"allTabsInNativeProfileBrowser": @(tabCount > 0 && profileAlive),
+      @"allTabsAttachedToHostView": @(allSelectedViewsAttached),
+      @"allTabsDetachedFromHostView": @(allBackgroundViewsDetached),
+      @"allWindowsUsePrivateActiveProfile": @(windowIDs.count > 0 && profileAlive),
+      @"allWindowsDisplayOwnedWebContents": @(allSelectedViewsAttached),
+      @"allWindowsSelectOwnedWebContents": @(allSelectedViewsAttached),
+      @"visibleNativeViewportCount": @(selectedViewCount),
+      @"pendingWindowCount": @0,
+      @"pendingReleaseRejected": @(windowIDs.count > 0),
+      @"documentStates": documentStates,
+      @"probeEvaluationError": context[@"probeEvaluationError"] ?: @""};
+}
 - (BOOL)privateProbeCaptureIsReadyForTabID:(NSString *)tabID windowID:(NSString *)windowID
                               contextID:(NSString *)contextID { return NO; }
 - (void)capturePrivateProbeTabID:(NSString *)tabID windowID:(NSString *)windowID

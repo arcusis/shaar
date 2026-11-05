@@ -810,6 +810,8 @@ final class PrivateWindowProbe {
             "privateEvaluationStale": audit["privateEvaluationStale"] as? Bool == true,
             "privateEvaluationSucceeded": audit["privateEvaluationSucceeded"] as? Bool == true,
             "privateEvaluationTimedOut": audit["privateEvaluationTimedOut"] as? Bool == true,
+            "probeEvaluationError": audit["probeEvaluationError"] as? String ?? "",
+            "documentStates": audit["documentStates"] ?? [],
           ]
           if lastDocumentAudit["allTabsLoaded"] as? Bool != true {
             try await Task.sleep(for: .milliseconds(100))

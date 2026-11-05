@@ -337,6 +337,7 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
 }
 
 - (shaar_engine *)privateEngineHandle { return _shaarEngine; }
+- (uint64_t)nextPrivateDevToolsRequestID { return _nextRequestID++; }
 - (shaar_profile *)privateProfileHandleForID:(NSString *)profileID {
   return (shaar_profile *)_shaarProfiles[profileID].pointerValue;
 }

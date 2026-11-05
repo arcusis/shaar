@@ -192,6 +192,8 @@ public enum BrowserImport {
 
   /// Firefox's exported bookmarks.html uses the standard Netscape bookmark format.
   private static func htmlBookmarks(_ html: String) -> [BrowserImportItem] {
+    let html = html.replacingOccurrences(
+      of: #"(?s)<!--.*?(?:-->|$)"#, with: "", options: .regularExpression)
     guard
       let expression = try? NSRegularExpression(
         pattern:

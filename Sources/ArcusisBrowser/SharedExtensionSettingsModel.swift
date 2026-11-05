@@ -108,7 +108,7 @@ final class SharedExtensionSettingsModel {
       error = nil
       await reload()
     } catch {
-      self.error = String(describing: error)
+      self.error = SettingsL10n.string("Could not update the extension. Try again.")
     }
   }
 }

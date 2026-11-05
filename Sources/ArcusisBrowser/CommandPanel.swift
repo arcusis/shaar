@@ -181,10 +181,18 @@ struct CommandPanel: View {
     store.acceptCommand()
   }
 
-  private func acceptCommandInNewTab() {
+  func acceptCommandInNewTab() {
     guard let action = store.selectedCommandResult?.action else { return }
     if case .tab(_, let tabID) = action, let page = store.session.page(forTabID: tabID) {
       store.perform(.open(page.tab.url))
+    } else if case .favorite(let profileID, let favoriteID) = action,
+      profileID == store.session.selectedSpace.profileID,
+      let favorite = store.session.favorites.first(where: {
+        $0.id == favoriteID && $0.profileID == profileID
+      })
+    {
+      let url = store.session.favoritePage(for: favoriteID)?.tab.url ?? favorite.originalURL
+      store.perform(.open(url))
     } else if store.commandEditsCurrentURL, !movedSelection,
       let url = NavigationInput.destination(
         for: store.commandQuery,

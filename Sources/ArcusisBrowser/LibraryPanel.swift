@@ -6,6 +6,12 @@ import BrowserCore
 import SwiftUI
 import UniformTypeIdentifiers
 
+enum LibraryPanelSearch {
+  static func matches(_ text: String, query: String) -> Bool {
+    query.isEmpty || text.localizedStandardContains(query)
+  }
+}
+
 struct LibraryPanel: View {
   let store: BrowserStore
   let profileID: UUID
@@ -35,7 +41,7 @@ struct LibraryPanel: View {
     guard let tree else { return [] }
     if !query.isEmpty {
       return tree.items.filter {
-        "\($0.title) \($0.address ?? "") \($0.path)".localizedCaseInsensitiveContains(query)
+        LibraryPanelSearch.matches("\($0.title) \($0.address ?? "") \($0.path)", query: query)
       }
     }
     var hiddenDepth: Int?
@@ -47,7 +53,7 @@ struct LibraryPanel: View {
   }
   private var history: [BrowserHistoryEntry] {
     (store.library.history[profileID] ?? []).filter {
-      query.isEmpty || "\($0.title) \($0.address)".localizedCaseInsensitiveContains(query)
+      LibraryPanelSearch.matches("\($0.title) \($0.address)", query: query)
     }
   }
 

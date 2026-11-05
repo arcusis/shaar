@@ -164,6 +164,33 @@ struct ProfilePrivacyTests {
     }
   }
 
+  @Test func malformedExceptionsExplainFailureInHebrew() throws {
+    do {
+      _ = try ProfileSitePermission.exceptions([
+        "camera": ["value": "invalid", "isDefault": false]
+      ])
+      Issue.record("Malformed permission data must be rejected")
+    } catch let error as ProfilePermissionDataError {
+      #expect(
+        error.description(language: .hebrew)
+          == "מנוע הדפדפן החזיר נתוני הרשאות אתר לא תקינים.")
+    } catch {
+      Issue.record("Expected a profile permission data error, got \(error)")
+    }
+  }
+
+  @Test func malformedPermissionPayloadSurfacesSpecificPrivacyFailure() async {
+    let backend = ProfileSettingsStub()
+    let profileID = UUID()
+    backend.exceptions[profileID] = [
+      "https://example.test": ["camera": ["value": "invalid", "isDefault": false]]
+    ]
+    let model = ProfilePrivacyModel(profileID: profileID, backend: backend)
+    await model.load()
+    #expect(model.failure == ProfilePermissionDataError.invalidException.localizedDescription)
+    #expect(model.sites.isEmpty)
+  }
+
   @Test func deletionWaitsForEngineAndRemovesAllPreferencesAcrossReload() async throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }

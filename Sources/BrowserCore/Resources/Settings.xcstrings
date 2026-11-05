@@ -9,6 +9,7 @@
     "WebRTC local IP exposure": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"חשיפת כתובת IP מקומית ב-WebRTC"}}}},
     "Engine controlled": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"בשליטת המנוע"}}}},
     "The private start page shows which protections are active. Use site controls to allow cookies for a specific site.": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"דף הפתיחה הפרטי מציג אילו הגנות פעילות. השתמשו בבקרות האתר כדי לאפשר קובצי Cookie לאתר מסוים."}}}},
+    "The engine returned invalid site permission data.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "מנוע הדפדפן החזיר נתוני הרשאות אתר לא תקינים."}}}},
     "If no Spaces remain, an empty Space is created for a remaining profile.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "אם לא נשארו מרחבים, ייווצר מרחב ריק לפרופיל שנותר."}}}},
     "Favorites and profile preferences will be removed. Chromium will schedule deletion of cookies, site data, history, cache and extensions. This cannot be undone.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "המועדפים והעדפות הפרופיל יוסרו. Chromium יתזמן מחיקה של קובצי Cookie, נתוני אתרים, היסטוריה, מטמון ותוספים. לא ניתן לבטל פעולה זו."}}}},
     "Move Spaces": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "העברת מרחבים"}}}},

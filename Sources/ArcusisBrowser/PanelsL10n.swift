@@ -7,22 +7,25 @@ import Foundation
 
 enum PanelsL10n {
   static func formattingLocale(
-    for language: BrowserLanguage = BrowserLanguage.currentLaunchLanguage
+    for language: BrowserLanguage = BrowserLanguage.currentLaunchLanguage,
+    systemLocale: Locale = .autoupdatingCurrent
   )
     -> Locale
   {
-    language.isRightToLeft ? Locale(identifier: language.localeIdentifier) : .autoupdatingCurrent
+    if language.isRightToLeft { return Locale(identifier: language.localeIdentifier) }
+    guard let region = systemLocale.region?.identifier else {
+      return Locale(identifier: language.localeIdentifier)
+    }
+    return Locale(identifier: "\(language.localeIdentifier)_\(region)")
   }
 
   static func byteCount(
-    _ value: Int64, language: BrowserLanguage = BrowserLanguage.currentLaunchLanguage
+    _ value: Int64, language: BrowserLanguage = BrowserLanguage.currentLaunchLanguage,
+    systemLocale: Locale = .autoupdatingCurrent
   ) -> String {
-    if language.isRightToLeft {
-      return value.formatted(.byteCount(style: .file).locale(formattingLocale(for: language)))
-    }
-    let formatter = ByteCountFormatter()
-    formatter.countStyle = .file
-    return formatter.string(fromByteCount: value)
+    value.formatted(
+      .byteCount(style: .file).locale(
+        formattingLocale(for: language, systemLocale: systemLocale)))
   }
 
   static func string(_ key: String) -> String {

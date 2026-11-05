@@ -84,7 +84,9 @@ enum BrowserImportSQLite {
           row[String(cString: name)] = .real(sqlite3_column_double(statement, Int32(index)))
         case SQLITE_TEXT:
           if let value = sqlite3_column_text(statement, Int32(index)) {
-            row[String(cString: name)] = .text(String(cString: value))
+            let bytes = Int(sqlite3_column_bytes(statement, Int32(index)))
+            row[String(cString: name)] = .text(
+              String(decoding: UnsafeBufferPointer(start: value, count: bytes), as: UTF8.self))
           } else {
             row[String(cString: name)] = .null
           }

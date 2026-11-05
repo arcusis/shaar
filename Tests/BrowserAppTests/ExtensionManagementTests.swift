@@ -4,6 +4,7 @@
 
 import AppKit
 import BrowserCore
+import ChromiumBridge
 import Foundation
 import Testing
 
@@ -11,6 +12,31 @@ import Testing
 
 struct ExtensionManagementTests {
   private let validID = String(repeating: "b", count: 32)
+
+  @Test func shaarListHidesComponentLocationsWithoutMatchingNames() throws {
+    func row(_ id: String, name: String, source: Int) -> [String: Any] {
+      ["id": id, "name": name, "version": "1.0", "source": source]
+    }
+    let userPDF = String(repeating: "a", count: 32)
+    let component = String(repeating: "c", count: 32)
+    let externalComponent = String(repeating: "d", count: 32)
+    let policyExtension = String(repeating: "e", count: 32)
+    let missingLocation = String(repeating: "f", count: 32)
+    let reply: [String: Any] = [
+      "schemaVersion": 1,
+      "extensions": [
+        row(component, name: "Notes", source: 5),
+        row(userPDF, name: "Chromium PDF Viewer", source: 4),
+        row(externalComponent, name: "External PDF", source: 10),
+        row(policyExtension, name: "Policy Extension", source: 9),
+        ["id": missingLocation, "name": "Unknown", "version": "1.0"],
+      ],
+    ]
+    let data = try JSONSerialization.data(withJSONObject: reply)
+    let json = try #require(String(data: data, encoding: .utf8))
+    let rows = try #require(ARCVisibleShaarExtensionRows(json))
+    #expect(rows.compactMap { $0["id"] as? String } == [userPDF, policyExtension])
+  }
 
   @Test func popupCloseLabelNamesTheExtensionInBothLanguages() {
     let popup = ExtensionPopupContext(

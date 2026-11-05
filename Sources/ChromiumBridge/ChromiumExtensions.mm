@@ -6,6 +6,9 @@
 #import "ChromiumShaarExtensionsInternal.h"
 
 static NSString *const ARCExtensionManagerID = @"bphhlegomeaogfihjcipdbcfbgkcfafp";
+// Chromium 155 extensions/common/mojom/manifest.mojom ManifestLocation values.
+static const NSInteger ARCComponentExtensionLocation = 5;
+static const NSInteger ARCExternalComponentExtensionLocation = 10;
 
 static BOOL ARCExtensionIDIsValid(NSString *extensionID) {
   if (![extensionID isKindOfClass:NSString.class] || extensionID.length != 32) return NO;
@@ -66,7 +69,7 @@ static NSString *ShaarJSONString(id value) {
   return data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
 }
 
-static NSArray<NSDictionary *> *ShaarExtensionRows(NSString *json) {
+NSArray<NSDictionary<NSString *, id> *> *ARCVisibleShaarExtensionRows(NSString *json) {
   NSData *data = [json dataUsingEncoding:NSUTF8StringEncoding];
   NSDictionary *object = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
   if (![object isKindOfClass:NSDictionary.class] || ![object[@"schemaVersion"] isEqual:@1] ||
@@ -74,6 +77,10 @@ static NSArray<NSDictionary *> *ShaarExtensionRows(NSString *json) {
   NSMutableArray *rows = [NSMutableArray array];
   for (id entry in object[@"extensions"]) {
     if (![entry isKindOfClass:NSDictionary.class]) return nil;
+    NSNumber *location = entry[@"source"];
+    if (![location isKindOfClass:NSNumber.class] ||
+        location.integerValue == ARCComponentExtensionLocation ||
+        location.integerValue == ARCExternalComponentExtensionLocation) continue;
     NSString *identity = entry[@"id"];
     if (!ARCExtensionIDIsValid(identity) || ![entry[@"name"] isKindOfClass:NSString.class] ||
         ![entry[@"version"] isKindOfClass:NSString.class]) return nil;
@@ -195,7 +202,7 @@ static NSArray<NSDictionary *> *ShaarExtensionRows(NSString *json) {
       tabID:nil payload:payload completion:^(NSString *json, shaar_error_code code) {
         if (code != SHAAR_OK) { completion(nil); return; }
         if (operation == ARCExtensionManagementOperationList) {
-          NSArray *rows = ShaarExtensionRows(json);
+          NSArray *rows = ARCVisibleShaarExtensionRows(json);
           if (rows) ShaarExtensionState(self).lists[validated] = rows;
           completion(rows ? ShaarJSONString(rows) : nil);
         } else {

@@ -19,6 +19,10 @@ typedef NS_ENUM(NSInteger, ARCExtensionManagementOperation) {
   ARCExtensionManagementOperationDetails,
 };
 
+/// Converts an engine extension-list response to rows shown in Shaar's UI.
+FOUNDATION_EXPORT NSArray<NSDictionary<NSString *, id> *> * _Nullable
+ARCVisibleShaarExtensionRows(NSString *json);
+
 /// Media Session actions sent to the frame that reports a tab's playback.
 typedef NS_ENUM(NSInteger, ARCMediaSessionAction) {
   ARCMediaSessionActionPlay,

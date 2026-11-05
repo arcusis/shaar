@@ -26,6 +26,19 @@ struct BrowserStoreTests {
     #expect(store.session.selectedSpace.splits.isEmpty)
   }
 
+  @Test func spaceCyclingAvailabilityRequiresAnotherSpace() throws {
+    let store = BrowserStore()
+    #expect(store.canCycleSpace)
+    var oneSpace = BrowserSession.fresh()
+    let removed = oneSpace.removeSpace(oneSpace.spaces[1].id)
+    #expect(removed)
+    let singleStore = BrowserStore(session: oneSpace)
+    #expect(!singleStore.canCycleSpace)
+    let privateSession = try BrowserSession.privateWindow(
+      sourceProfileID: UUID(), firstTabID: UUID())
+    #expect(!BrowserStore(session: privateSession).canCycleSpace)
+  }
+
   @Test func nativeCloseWaitsForEngineBeforeRemovingTheTab() throws {
     let store = BrowserStore()
     store.perform(.open(URL(string: "https://example.com")!))

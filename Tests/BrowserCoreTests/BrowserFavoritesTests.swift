@@ -297,6 +297,25 @@ import Testing
   try session.validate()
 }
 
+@Test func promotingLastOrdinaryTabKeepsPinnedFallback() throws {
+  var session = BrowserSession.fresh()
+  let spaceID = session.selectedSpaceID
+  let openedPinnedTab = session.open(URL(string: "https://pinned.example")!)
+  let pinnedTab = try #require(openedPinnedTab)
+  session.togglePin(pinnedTab)
+  let openedOrdinaryTab = session.open(URL(string: "https://favorite.example")!)
+  let ordinaryTab = try #require(openedOrdinaryTab)
+
+  let promotedFavorite = session.promoteTabToFavorite(ordinaryTab, in: spaceID)
+  let favoriteID = try #require(promotedFavorite)
+  #expect(session.selectedSpace.selectedTabID == pinnedTab)
+
+  let closed = session.closeFavoritePage(favoriteID)
+  #expect(closed)
+  #expect(session.selectedPage?.tab.id == pinnedTab)
+  try session.validate()
+}
+
 @Test func promotionNormalizesLegacyWhitespaceTitleWithoutChangingPageIdentity() throws {
   var session = BrowserSession.fresh()
   let spaceID = session.selectedSpaceID

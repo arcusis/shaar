@@ -62,6 +62,24 @@ final class LibrarySpacesOverviewTests: XCTestCase {
     }
   }
 
+  func testTabSearchKeepsContainingTodayFolderPath() throws {
+    let profile = BrowserProfile(name: "Personal")
+    let root = BrowserFolder(name: "Projects", isPinned: false)
+    let child = BrowserFolder(name: "Notes", parentID: root.id, isPinned: false)
+    let tab = BrowserTab(
+      url: URL(string: "https://example.com")!, title: "Needle page",
+      isPinned: false, folderID: child.id)
+    let space = BrowserSpace(
+      profileID: profile.id, name: "Main", symbol: "house", tint: .ocean,
+      tabs: [tab], folders: [root, child])
+    let session = try BrowserSession(
+      profiles: [profile], spaces: [space], selectedSpaceID: space.id)
+
+    let card = try XCTUnwrap(LibrarySpacesOverviewModel.cards(in: session, query: "Needle").first)
+    let expected = ["folder-\(root.id)", "folder-\(child.id)", "tab-\(tab.id)"]
+    XCTAssertEqual(card.items.map(\.id), expected)
+  }
+
   func testCapturedCallbacksRejectRemovedOrReassignedSpaceAndTab() throws {
     let (session, ids) = makeSession()
     let liveSpace = session.spaces.first { $0.id == ids.longSpace }!

@@ -393,11 +393,16 @@ enum LibrarySpacesOverviewModel {
           }
         }
       if !spaceMatches && !needle.isEmpty {
-        let matchingFolderIDs = Set(space.folders.filter { contains($0.name, needle) }.map(\.id))
+        let matchingFolders = space.folders.filter { contains($0.name, needle) }
+        let matchingFolderIDs = Set(matchingFolders.map(\.id))
+        let matchingTabs = space.tabs.filter { tabMatches($0, needle) }
+        let visibleFolderIDs = Set(
+          (matchingFolders.map(\.id) + matchingTabs.compactMap(\.folderID))
+            .flatMap { space.folderPath(to: $0).map(\.id) })
         items = items.filter { item in
           switch item {
           case .folder(let folder, _):
-            return matchingFolderIDs.contains(folder.id)
+            return visibleFolderIDs.contains(folder.id)
           case .tab(let tab, _):
             let folderPath = Set(space.folderPath(to: tab.folderID).map(\.id))
             return tabMatches(tab, needle) || !folderPath.isDisjoint(with: matchingFolderIDs)

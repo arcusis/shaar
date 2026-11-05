@@ -45,7 +45,9 @@ enum AccountProvider: String, Codable, CaseIterable, Identifiable, Sendable {
     guard url.scheme?.lowercased() == "https" else { return false }
     let host = url.host()?.lowercased() ?? ""
     switch self {
-    case .google: return host.hasSuffix(".google.com") && host != "accounts.google.com"
+    case .google:
+      return (host == "google.com" || host.hasSuffix(".google.com"))
+        && host != "accounts.google.com"
     case .microsoft:
       return [
         "www.microsoft365.com", "m365.cloud.microsoft", "www.office.com", "outlook.live.com",

@@ -31,6 +31,7 @@ struct ProfileAccountsTests {
   @Test func providersRecognizeTheirSignedInLandingPages() {
     #expect(AccountProvider.google.isSignedInPage(URL(string: "https://myaccount.google.com/")!))
     #expect(AccountProvider.google.isSignedInPage(URL(string: "https://www.google.com/")!))
+    #expect(AccountProvider.google.isSignedInPage(URL(string: "https://google.com/")!))
     #expect(AccountProvider.google.isSignedInPage(URL(string: "https://mail.google.com/mail/")!))
     #expect(
       !AccountProvider.google.isSignedInPage(URL(string: "https://accounts.google.com/v3/signin")!))

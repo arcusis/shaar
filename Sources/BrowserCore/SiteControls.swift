@@ -58,7 +58,7 @@ public enum SiteOrigin {
     else { return nil }
     var components = URLComponents()
     components.scheme = scheme
-    components.host = host
+    components.host = host.contains(":") ? "[\(host)]" : host
     let defaultPort = scheme == "https" ? 443 : 80
     if url.port != defaultPort { components.port = url.port }
     return components.string

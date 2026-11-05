@@ -31,6 +31,15 @@ import Testing
       == "https://example.test:8443")
 }
 
+@Test func siteOriginSerializesIPv6HostsForSiteControls() {
+  #expect(
+    SiteOrigin.string(for: URL(string: "https://[::1]:8443/page")!)
+      == "https://[::1]:8443")
+  #expect(
+    SiteOrigin.string(for: URL(string: "http://[::1]:8080/page")!)
+      == "http://[::1]:8080")
+}
+
 @Test func siteSecurityTreatsEveryEngineWarningAsNotSecure() {
   #expect(SiteSecurity(engineLevel: "secure") == .secure)
   for level in ["insecure", "certificateError", "mixed"] {

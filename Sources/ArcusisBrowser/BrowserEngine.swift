@@ -217,7 +217,7 @@ final class BrowserEngine {
     }
     store.library.onMutation = { [weak self] profile, mutation, completion in
       guard let self, !self.isClosed else {
-        completion("The browser engine is unavailable.")
+        completion(PanelsL10n.string("The browser engine is unavailable."))
         return
       }
       let done: @MainActor (Error?) -> Void = { error in completion(error?.localizedDescription) }

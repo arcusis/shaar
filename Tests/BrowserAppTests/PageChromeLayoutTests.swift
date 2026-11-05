@@ -16,6 +16,17 @@ private final class BrowserChromeControlCountObservation {
 
 @MainActor
 final class PageChromeLayoutTests: XCTestCase {
+  func testAddressControlAnnouncesCurrentURL() throws {
+    let url = try XCTUnwrap(URL(string: "https://example.com/research?q=tab"))
+    let label = PageAddressField.accessibilityLabel(for: url)
+
+    XCTAssertTrue(label.contains(url.absoluteString))
+    XCTAssertNotEqual(label, PageAddressField.accessibilityLabel(for: nil))
+    XCTAssertEqual(
+      PageAddressField.accessibilityLabel(for: nil),
+      ShellL10n.string("Search or enter address"))
+  }
+
   func testPageCardUsesArcInsetsAndCornerRadius() {
     XCTAssertEqual(BrowserChromeLayout.pageCardInset, 8)
     XCTAssertEqual(BrowserChromeLayout.pageCardRadius, 10)

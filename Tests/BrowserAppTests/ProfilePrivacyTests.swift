@@ -58,6 +58,20 @@ struct ProfilePrivacyTests {
     #expect(model.cookiesBlocked == true && model.failure != nil)
   }
 
+  @Test func ignoredCookiePolicyWriteReportsFailureAfterReadback() async {
+    let backend = ProfileSettingsStub()
+    let profileID = UUID()
+    backend.cookiePolicies[profileID] = false
+    backend.ignoreCookieWrites = true
+    let model = ProfilePrivacyModel(profileID: profileID, backend: backend)
+    await model.load()
+
+    await model.setCookiesBlocked(true)
+
+    #expect(model.cookiesBlocked == false)
+    #expect(model.failure != nil)
+  }
+
   @Test func managedCookiePolicyStaysReadOnlyForSelectedProfile() async {
     let backend = ProfileSettingsStub()
     let selected = UUID()
@@ -244,6 +258,7 @@ final class ProfileSettingsStub: ProfileSettingsBackend {
   var calls: [(String, UUID)] = []
   var failureAction: String?
   var cookiePolicies: [UUID: Bool] = [:]
+  var ignoreCookieWrites = false
   var managedCookieProfiles: Set<UUID> = []
   var delayedProfile: UUID?
   var loadContinuation: CheckedContinuation<Void, Never>?
@@ -276,7 +291,7 @@ final class ProfileSettingsStub: ProfileSettingsBackend {
   func thirdPartyCookiesManaged(_ id: UUID) -> Bool { managedCookieProfiles.contains(id) }
   func setThirdPartyCookiesBlocked(_ blocked: Bool, profileID: UUID) async throws {
     try record("cookies", profileID)
-    cookiePolicies[profileID] = blocked
+    if !ignoreCookieWrites { cookiePolicies[profileID] = blocked }
   }
   func deleteProfile(_ id: UUID) async throws { try record("delete", id) }
 }

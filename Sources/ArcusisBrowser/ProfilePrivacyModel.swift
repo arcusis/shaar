@@ -180,6 +180,11 @@ final class ProfilePrivacyModel {
       try await self.backend.setThirdPartyCookiesBlocked(blocked, profileID: self.profileID)
       self.cookiesBlocked = self.backend.thirdPartyCookiesBlocked(self.profileID)
       self.cookiesManaged = self.backend.thirdPartyCookiesManaged(self.profileID)
+      if self.cookiesBlocked != blocked {
+        self.failure = SettingsL10n.string(
+          "This engine cannot read or change the third-party cookie policy. Your cookie policy has not been changed."
+        )
+      }
     }
   }
 

@@ -140,6 +140,16 @@
         }
       }
     },
+    "Bookmark": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "סימנייה"
+          }
+        }
+      }
+    },
     "Bookmark address": {
       "localizations": {
         "he": {
@@ -646,6 +656,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "תיקייה: %@"
+          }
+        }
+      }
+    },
+    "From %@": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "מ־%@"
           }
         }
       }

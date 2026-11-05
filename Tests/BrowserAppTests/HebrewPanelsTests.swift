@@ -50,6 +50,17 @@ struct HebrewPanelsTests {
       .contains("רשימה מלאה של האתרים שהתוסף יכול לגשת אליהם"))
   }
 
+  @Test func importPreviewSourceAndItemTypesHaveHebrewLabels() {
+    #expect(
+      BrowserLocalization.format(
+        "From %@", table: "Panels", language: .hebrew, arguments: [.string("Chrome")])
+        == "מ־\u{2068}Chrome\u{2069}")
+    #expect(
+      BrowserLocalization.string("Bookmark", table: "Panels", language: .hebrew) == "סימנייה")
+    #expect(
+      BrowserLocalization.string("History", table: "Panels", language: .hebrew) == "היסטוריה")
+  }
+
   @Test func pipCornerChromeMirrorsWhileTransportStaysCentered() {
     let ltr = PictureInPictureControlsView.cornerFrames(width: 356, rightToLeft: false)
     let rtl = PictureInPictureControlsView.cornerFrames(width: 356, rightToLeft: true)

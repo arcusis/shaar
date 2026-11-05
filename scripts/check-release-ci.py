@@ -11,22 +11,27 @@ import re
 import subprocess
 
 
+SWIFT_SECURITY_EVENTS = ("schedule", "workflow_dispatch")
+
+
 def api(path: str) -> dict | list:
     return json.loads(subprocess.check_output(["gh", "api", path], text=True))
 
 
-def production_runs(document: dict, revision: str) -> list[dict]:
+def production_runs(document: dict, revision: str, events: tuple[str, ...] = ("push",)) -> list[dict]:
     return [run for run in document["workflow_runs"]
             if run.get("head_sha") == revision and run.get("head_branch") == "production"
-            and run.get("event") == "push" and run.get("status") == "completed"
+            and run.get("event") in events and run.get("status") == "completed"
             and run.get("conclusion") == "success" and type(run.get("id")) is int
             and run["id"] > 0]
 
 
-def require_workflow(repository: str, revision: str, workflow: str, required: set[str]) -> int:
+def require_workflow(repository: str, revision: str, workflow: str, required: set[str],
+                     events: tuple[str, ...] = ("push",)) -> int:
     prefix = f"repos/{repository}/actions"
-    runs = api(f"{prefix}/workflows/{workflow}/runs?head_sha={revision}&event=push&branch=production&status=success&per_page=100")
-    for run in production_runs(runs, revision):
+    event_filter = f"&event={events[0]}" if len(events) == 1 else ""
+    runs = api(f"{prefix}/workflows/{workflow}/runs?head_sha={revision}{event_filter}&branch=production&status=success&per_page=100")
+    for run in production_runs(runs, revision, events):
         jobs = []
         page = 1
         while True:
@@ -55,7 +60,9 @@ def require_release_ci(repository: str, revision: str) -> dict[str, int]:
         raise ValueError("Release CI requires an immutable 40-character commit")
     runs = {
         "Source checks": require_workflow(repository, revision, "source-checks.yml", {"CI required"}),
-        "Swift security": require_workflow(repository, revision, "swift-security.yml", {"Swift security required"}),
+        # Swift CodeQL runs nightly and on demand; dispatch it on the release commit before releasing.
+        "Swift security": require_workflow(repository, revision, "swift-security.yml", {"Swift security required"},
+                                           SWIFT_SECURITY_EVENTS),
     }
     require_no_open_alerts(repository)
     return runs

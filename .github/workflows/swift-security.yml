@@ -4,8 +4,6 @@
 
 name: Swift security
 on:
-  push:
-    branches: [production]
   schedule:
     - cron: '23 1 * * *'
   workflow_dispatch:
@@ -14,8 +12,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: swift-security-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref != 'refs/heads/production') }}
+  group: swift-security-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   analyze:
@@ -26,12 +24,12 @@ jobs:
     uses: ./.github/workflows/ci-codeql.yml
     with:
       swift_only: true
-      full: ${{ github.event_name != 'pull_request' && github.event_name != 'merge_group' }}
+      full: true
 
   required:
     name: Swift security required
     needs: analyze
-    if: always() && ((github.event_name == 'push' && github.ref == 'refs/heads/production') || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -48,3 +46,22 @@ jobs:
         run: |
           test "$SWIFT_RESULT" = success
           python3 scripts/check-release-ci.py --repository "$GITHUB_REPOSITORY" --alerts-only
+
+  issues:
+    name: Sync code-scanning issues
+    needs: analyze
+    if: always() && needs.analyze.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+      security-events: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Open an issue per open alert and close fixed ones
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/sync-code-scanning-issues.py --repository "$GITHUB_REPOSITORY"

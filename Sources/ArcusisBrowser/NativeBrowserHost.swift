@@ -165,6 +165,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     privateHost?.activeOwner?.store ?? activeContext?.store
   }
 
+  static func copyURLMenuAvailable(in store: BrowserStore?, menusEnabled: Bool) -> Bool {
+    menusEnabled && store?.session.selectedPage != nil
+  }
+
   func restore() throws {
     guard !started else { throw WorkspaceError.invalidState }
     started = true
@@ -967,7 +971,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       return store.session.spaces.contains { $0.id == id }
     }
     if item.action == #selector(copyCurrentURL(_:)) {
-      return canPerform(.nextSpace) && activeContext?.store.session.selectedPage != nil
+      return Self.copyURLMenuAvailable(
+        in: activeBrowserStore, menusEnabled: canPerform(.nextSpace))
     }
     guard let raw = item.representedObject as? String,
       let command = BrowserMenuCommand(rawValue: raw)

@@ -35,7 +35,16 @@ struct PageFindState: Identifiable {
   func matches(_ session: BrowserSession) -> Bool {
     session.selectedSpace.profileID == profileID
       && session.selectedPage?.tab.id == tabID
-      && session.selectedPage?.tab.url == pageURL
+      && session.selectedPage.map { isSameDocument($0.tab.url) } == true
       && session.profileID(forTabID: tabID) == profileID
+  }
+
+  private func isSameDocument(_ currentURL: URL) -> Bool {
+    guard var original = URLComponents(url: pageURL, resolvingAgainstBaseURL: false),
+      var current = URLComponents(url: currentURL, resolvingAgainstBaseURL: false)
+    else { return false }
+    original.fragment = nil
+    current.fragment = nil
+    return original.url == current.url
   }
 }

@@ -141,6 +141,23 @@ struct PageFindTests {
     #expect(stopped == 4)
   }
 
+  @Test func fragmentNavigationKeepsFindInTheSameDocument() throws {
+    let store = store()
+    let tab = try #require(store.session.selectedSpace.selectedTab)
+    var stopped = 0
+    store.onStopFinding = { _ in stopped += 1 }
+    store.showPageFind()
+    store.updatePageFindQuery("heading")
+    let initial = try #require(store.pageFind)
+
+    store.nativeTabChanged(
+      tab.id, url: URL(string: "https://example.com/page#section")!, title: "Section")
+
+    #expect(store.pageFind?.id == initial.id)
+    #expect(store.pageFind?.query == "heading")
+    #expect(stopped == 0)
+  }
+
   @Test func clearingAndDismissingInvalidatesRepliesWithoutSavingSearchText() throws {
     let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }

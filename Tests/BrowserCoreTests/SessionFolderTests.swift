@@ -118,6 +118,26 @@ private let legacySession = Data(
   #expect(session.selectedSpace.selectedTab?.isPinned == false)
 }
 
+@Test func closingSelectedTabRevealsFallbackInsideCollapsedFolder() throws {
+  var session = BrowserSession.fresh()
+  let space = session.selectedSpaceID
+  let closing = session.open(URL(string: "https://example.com/closing")!)!
+  let fallback = session.open(URL(string: "https://example.com/fallback")!)!
+  let closingFolder = session.addFolder(name: "Closing", in: space)!
+  let fallbackFolder = session.addFolder(name: "Fallback", in: space)!
+  let placedClosing = session.moveTab(closing, from: space, to: space, folderID: closingFolder)
+  let placedFallback = session.moveTab(fallback, from: space, to: space, folderID: fallbackFolder)
+  #expect(placedClosing && placedFallback)
+  session.selectTab(closing, in: space)
+  let collapsedFallback = session.toggleFolder(fallbackFolder, in: space)
+  #expect(collapsedFallback)
+
+  session.closeTab(closing)
+
+  #expect(session.selectedSpace.selectedTabID == fallback)
+  #expect(session.selectedSpace.folderPath(to: fallbackFolder).allSatisfy { !$0.isCollapsed })
+}
+
 @Test func removingFolderPromotesContainersAndKeepsAllPagesAndSelection() throws {
   var session = BrowserSession.fresh()
   let space = session.selectedSpaceID

@@ -628,6 +628,8 @@ public struct BrowserSession: Codable, Equatable, Sendable {
       let tabs = spaces[index].tabs
       spaces[index].selectedTabID =
         splitPeer ?? (tabs.isEmpty ? nil : tabs[min(tabIndex, tabs.count - 1)].id)
+      let fallbackFolder = spaces[index].selectedTab?.folderID
+      spaces[index].expandFolderPath(fallbackFolder)
     }
   }
 

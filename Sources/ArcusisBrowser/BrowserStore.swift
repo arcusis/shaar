@@ -996,10 +996,20 @@ final class BrowserStore {
       tabDrag = nil
       return true
     case .split(let sessionID, let source, let split):
-      guard sessionID == dragSessionID,
+      guard sessionID == dragSessionID else { return false }
+      if let origin = session.spaces.first(where: { $0.id == source }),
+        let target = session.spaces.first(where: { $0.id == space }),
+        origin.profileID != target.profileID
+      {
+        sidebarNotice = ShellL10n.string(
+          "Split stacks can move only between spaces sharing a profile.")
+        return false
+      }
+      guard
         session.moveSplit(
           split, from: source, to: space, before: targetTab, pinned: pinned, folderID: folderID)
       else { return false }
+      sidebarNotice = nil
       tabDrag = nil
       save()
       return true

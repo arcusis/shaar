@@ -33,6 +33,25 @@ final class TabRecencyTests: XCTestCase {
 
 @MainActor
 final class TabSwitcherFavoriteTests: XCTestCase {
+  func testClosedChoiceIsSkippedWhenSwitcherCommits() throws {
+    let store = BrowserStore()
+    store.perform(.open(URL(string: "https://first.example")!))
+    let first = try XCTUnwrap(store.session.selectedSpace.selectedTabID)
+    store.perform(.open(URL(string: "https://second.example")!))
+    let second = try XCTUnwrap(store.session.selectedSpace.selectedTabID)
+    store.perform(.open(URL(string: "https://third.example")!))
+    let third = try XCTUnwrap(store.session.selectedSpace.selectedTabID)
+    let switcher = TabSwitcherController()
+    switcher.advance(store: store, reverse: false)
+    XCTAssertEqual(switcher.choices[switcher.index], first)
+
+    store.nativeTabClosed(first)
+    XCTAssertEqual(store.session.selectedSpace.selectedTabID, third)
+    switcher.commit(store: store)
+
+    XCTAssertEqual(store.session.selectedSpace.selectedTabID, second)
+  }
+
   func testControlTabSwitchesBetweenOpenFavoritePagesWithoutOrdinaryTabs() throws {
     let store = BrowserStore()
     let space = store.session.selectedSpace

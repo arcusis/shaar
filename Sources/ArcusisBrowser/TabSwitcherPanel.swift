@@ -24,12 +24,7 @@ final class TabSwitcherController {
   func advance(store: BrowserStore, reverse: Bool) {
     let space = store.session.selectedSpace
     if choices.isEmpty {
-      let favoriteIDs = Set(store.session.favorites(for: space.profileID).map(\.id))
-      var available =
-        space.tabs.map(\.id)
-        + store.session.favoritePages.filter {
-          favoriteIDs.contains($0.favoriteID)
-        }.map(\.tab.id)
+      var available = availableTabIDs(in: store)
       if let selected = store.session.selectedPage?.tab.id, !available.contains(selected) {
         available.insert(selected, at: 0)
       }
@@ -48,9 +43,18 @@ final class TabSwitcherController {
       cancel()
       return
     }
-    let tab = choices[index]
+    let available = Set(availableTabIDs(in: store))
+    let tab = choices.indices.map { choices[(index + $0) % choices.count] }
+      .first { available.contains($0) }
     cancel()
-    store.perform(.tab(space: spaceID, tab: tab))
+    if let tab { store.perform(.tab(space: spaceID, tab: tab)) }
+  }
+
+  private func availableTabIDs(in store: BrowserStore) -> [UUID] {
+    let space = store.session.selectedSpace
+    let favoriteIDs = Set(store.session.favorites(for: space.profileID).map(\.id))
+    return space.tabs.map(\.id)
+      + store.session.favoritePages.filter { favoriteIDs.contains($0.favoriteID) }.map(\.tab.id)
   }
 
   func cancel() {

@@ -226,6 +226,24 @@ bool MakeExecutablePath(std::string* path) {
 
 namespace shaar::lifecycle {
 
+std::vector<std::string> ChromeMainArguments(
+    const std::string& executable_path, const std::string& data_root,
+    const std::string& locale, bool testing) {
+  std::vector<std::string> arguments = {
+      executable_path, "--user-data-dir=" + data_root, "--no-first-run",
+      "--no-default-browser-check", "--no-startup-window",
+      "--disable-background-mode"};
+  if (testing) {
+    arguments.push_back("--use-mock-keychain");
+    arguments.push_back("--disable-renderer-backgrounding");
+    arguments.push_back("--disable-backgrounding-occluded-windows");
+    arguments.push_back("--disable-background-timer-throttling");
+  }
+  if (!locale.empty())
+    arguments.push_back("--lang=" + locale);
+  return arguments;
+}
+
 std::unique_ptr<ChromeContentBrowserClient> CreateContentBrowserClient() {
   return std::make_unique<ShaarContentBrowserClient>(g_state.engine);
 }
@@ -319,21 +337,11 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_engine_run(
                 error);
   }
 
-  std::string user_data_switch = "--user-data-dir=" + engine->data_root;
-  std::string locale_switch;
-  if (!engine->locale.empty())
-    locale_switch = "--lang=" + engine->locale;
-  std::vector<std::string> argument_storage = {
-      executable_path, user_data_switch, "--no-first-run",
-      "--no-default-browser-check", "--no-startup-window",
-      "--disable-background-mode"};
-  if (const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
-      testing && std::strcmp(testing, "1") == 0) {
-    argument_storage.push_back("--use-mock-keychain");
-  }
-  if (!locale_switch.empty()) {
-    argument_storage.push_back(locale_switch);
-  }
+  const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
+  std::vector<std::string> argument_storage =
+      shaar::lifecycle::ChromeMainArguments(
+          executable_path, engine->data_root, engine->locale,
+          testing && std::strcmp(testing, "1") == 0);
   std::vector<const char*> argv;
   argv.reserve(argument_storage.size());
   for (const std::string& argument : argument_storage)

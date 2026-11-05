@@ -49,7 +49,7 @@
   },
   "layer": {
     "path": "ThirdParty/ChromiumEngine/layer",
-    "sha256": "c3d00f6e8bc6cf8c78fe0ab6581c61b8dabfd57d6a485742c60472d675f1772d",
+    "sha256": "2114fa0c2c8cff65a524ccdabeffe26a7b4bf530d29ff5fcceadf71ee1b501c4",
     "files": {
       "chrome/browser/shaar/BUILD.gn": "2df453e4d24f303b0348d4a7b8a5d818f71727bd3971367bfaf7b09c8ed01350",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks.cc": "da94500fa2d7b3106d58dcf3afc2f46072c6cc57a6e1868d1cdd132cafa714fd",
@@ -83,10 +83,10 @@
       "chrome/browser/shaar/history/shaar_history.h": "be7cf95eec6c7accc48a4cb28acb59577ceb6822407fddc4d665c3ee0532c579",
       "chrome/browser/shaar/history/shaar_history_lifecycle_adapter.cc": "a84c4e8775c8d68e96f7c60912d0aafffa810db257d41db31c5a17337944d084",
       "chrome/browser/shaar/history/shaar_history_unittest.cc": "05d22d884eacbd1b0a1d848608e75ff94c061173f2601aa30bc5e515383a3093",
-      "chrome/browser/shaar/lifecycle/shaar_lifecycle.cc": "eb6c291254761a1a185f38b56fa7a8edbfbdb5dd3ccec4458ff7365c2bd87ded",
-      "chrome/browser/shaar/lifecycle/shaar_lifecycle.h": "3eee9d02f45c652807c3c247db8e8fc3f036470eb3fca02c2f55886edc56250a",
+      "chrome/browser/shaar/lifecycle/shaar_lifecycle.cc": "c4979998b2228b9223beb8931b5dd6f30471c07c54103d14fddb6008dd204769",
+      "chrome/browser/shaar/lifecycle/shaar_lifecycle.h": "b5f320c6ec3c76683b39224da63cb9855c29b5578e69f629885ae126ab2a134e",
       "chrome/browser/shaar/lifecycle/shaar_module_registry.cc": "a3eb2de11416047f275071ea9417bb888a6c39e51d1cf3d586c7d9a34909e89c",
-      "chrome/browser/shaar/lifecycle/shaar_module_registry_unittest.cc": "769146d57cb80500d72d5545eee2a54318e726733fd4becbd5b7868aba6c6140",
+      "chrome/browser/shaar/lifecycle/shaar_module_registry_unittest.cc": "5d7afce27583250c2a3d0238a9c532231d96a1b3baa4169310cfbdfad7dd8f7e",
       "chrome/browser/shaar/media/shaar_media.cc": "5fb8a58363725c2d118e9cbd89c8b1bd4c9d83ee64be70d116b3cf0be7d2cf7d",
       "chrome/browser/shaar/media/shaar_media.h": "92c9a22fc8cd104ecca33cde45a47177b4e23d0aa6dfc96175c5b5ebd94929e3",
       "chrome/browser/shaar/media/shaar_media_lifecycle_adapter.cc": "9c63e066e207ab9f74b30649269667243f8d1d78eae71bd2fb62c6f615ba2b2d",

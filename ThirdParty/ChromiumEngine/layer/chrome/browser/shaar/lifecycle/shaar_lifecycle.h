@@ -6,6 +6,8 @@
 #define CHROME_BROWSER_SHAAR_LIFECYCLE_SHAAR_LIFECYCLE_H_
 
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "chrome/browser/shaar/public/shaar_engine.h"
 
@@ -22,6 +24,9 @@ bool EngineIsRunning(shaar_engine* engine);
 bool EngineIsReady(shaar_engine* engine);
 bool EngineIsShuttingDown(shaar_engine* engine);
 std::unique_ptr<ChromeContentBrowserClient> CreateContentBrowserClient();
+std::vector<std::string> ChromeMainArguments(
+    const std::string& executable_path, const std::string& data_root,
+    const std::string& locale, bool testing);
 
 }  // namespace shaar::lifecycle
 

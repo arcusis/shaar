@@ -60,6 +60,18 @@ import Testing
   #expect(narrowed.results.map(\.title) == ["Search Gmail for “budget”"])
 }
 
+@Test func typedWebAddressLeadsConnectedProviderSearches() {
+  let session = BrowserSession.fresh()
+  var sources = CommandSources()
+  sources.providerSearch = .google
+
+  let sections = CommandLauncher.sections(
+    for: "https://example.com/path", filter: nil, in: session, sources: sources)
+
+  #expect(sections.results.first?.action == .open(URL(string: "https://example.com/path")!))
+  #expect(sections.results.filter { $0.symbol == "magnifyingglass" }.count == 3)
+}
+
 @Test func providerSearchRowsRequireOneOfTheSupportedConnectedProviders() throws {
   #expect(CommandProviderSearch.results(for: "budget", provider: nil).isEmpty)
   #expect(CommandProviderSearch.results(for: "budget", provider: .google).count == 3)

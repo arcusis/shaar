@@ -152,6 +152,28 @@ import Testing
   #expect(section.results.last?.subtitle == "Elsewhere · elsewhere.example")
 }
 
+@Test func tabsChipFindsTabsByContainingFolderName() throws {
+  var fixture = try LauncherFixture()
+  let added = fixture.session.addFolder(name: "Research", in: fixture.spaceID)
+  let parent = try #require(added)
+  let nested = fixture.session.addFolder(name: "Notes", in: fixture.spaceID, parentID: parent)
+  let folder = try #require(nested)
+  let moved = fixture.session.moveTab(
+    fixture.openTabID, from: fixture.spaceID, to: fixture.spaceID, folderID: folder)
+  #expect(moved)
+
+  let sections = CommandLauncher.sections(
+    for: "Research", filter: .tabs, in: fixture.session, sources: fixture.sources)
+
+  #expect(
+    sections.results.map(\.action).contains(.tab(space: fixture.spaceID, tab: fixture.openTabID)))
+  let nestedSections = CommandLauncher.sections(
+    for: "Research / Notes", filter: .tabs, in: fixture.session, sources: fixture.sources)
+  let nestedActions = nestedSections.results.map(\.action)
+  #expect(
+    nestedActions.contains(.tab(space: fixture.spaceID, tab: fixture.openTabID)))
+}
+
 @Test func actionsMatchWordPrefixesOnly() {
   let command = LauncherCommand(
     id: "splitView", title: "Split View", detail: "Tabs", symbol: "square")

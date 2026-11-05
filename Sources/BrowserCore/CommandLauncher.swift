@@ -247,7 +247,11 @@ public enum CommandLauncher {
     }
     let tabs = orderedSpaces.lazy.flatMap { space in
       space.orderedTabs.lazy
-        .filter { CommandText.matches(query, CommandFields.tab($0)) }
+        .filter {
+          let path = space.folderPath(to: $0.folderID).reversed().map(\.name)
+            .joined(separator: " / ")
+          return CommandText.matches(query, CommandFields.tab($0, folderPath: path))
+        }
         .map { tab in
           CommandResult.tab(
             tab, space: space.id, subtitle: tabSubtitle(tab, in: space, session: session))

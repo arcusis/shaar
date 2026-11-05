@@ -76,6 +76,23 @@ import Testing
   #expect(NavigationInput.address(for: "https://example.com:65535")?.port == 65535)
 }
 
+@Test func bareEmailAddressSearchesInsteadOfOpeningItsDomain() throws {
+  let input = "alice@example.com"
+  #expect(NavigationInput.address(for: input) == nil)
+  let destination = try #require(NavigationInput.destination(for: input))
+  let query = URLComponents(url: destination, resolvingAgainstBaseURL: false)?.queryItems?
+    .first { $0.name == "q" }?.value
+  #expect(destination.host() == "www.google.com")
+  #expect(query == input)
+  #expect(NavigationInput.address(for: "https://alice@example.com")?.host() == "example.com")
+  #expect(
+    NavigationInput.address(for: "example.com/path@alice")?.absoluteString
+      == "https://example.com/path@alice")
+
+  let result = CommandSearch.results(for: input, in: BrowserSession.fresh()).first
+  #expect(result?.action == .open(destination))
+}
+
 @Test func commandSearchKeepsGoogleDefaultAndAcceptsSelectedEngine() throws {
   let session = BrowserSession.fresh()
   let defaultResult = try #require(

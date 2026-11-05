@@ -9,6 +9,21 @@ static NSError *ProbeUnsupported(void) {
                          userInfo:@{NSLocalizedDescriptionKey: @"This native probe is not supported by the Shaar engine."}];
 }
 
+NSDictionary<NSString *, id> *ARCProbeNormalSelectionAudit(
+    NSView *tabView, NSView *hostView, NSWindow *window) {
+  BOOL attached = tabView && hostView && [tabView isDescendantOf:hostView];
+  BOOL selected = attached && window && hostView.window == window && tabView.window == window;
+  return @{@"supported": @YES, @"liveTab": @(tabView != nil),
+           @"selectedNativeTab": @(selected),
+           @"displayedNativeWebContents": @(selected),
+           @"selectedViewAttached": @(attached),
+           @"selectedViewVisible": @(selected && !tabView.isHiddenOrHasHiddenAncestor),
+           @"hostHasWindow": @(hostView.window != nil),
+           @"tabHasWindow": @(tabView.window != nil),
+           @"windowAvailable": @(window != nil),
+           @"nativeTabToken": tabView ? [NSString stringWithFormat:@"%p", tabView] : @""};
+}
+
 void ARCCompletePrivateQuitDialogCancellation(
     BOOL ownerCurrent, NSString *dialogError, void (^releaseHold)(void), void (^reject)(void)) {
   if (!ownerCurrent || dialogError) { reject(); return; }
@@ -46,7 +61,14 @@ void ARCCompletePrivateQuitDialogCancellation(
                       completion:(void (^)(NSData *, NSString *))completion {
   completion(nil, @"Shaar native capture probe is unsupported.");
 }
-- (NSDictionary *)normalProbeSelectionAuditForTabID:(NSString *)tabID { return @{@"supported": @NO}; }
+- (NSDictionary *)normalProbeSelectionAuditForTabID:(NSString *)tabID {
+  if (![self isKindOfClass:ARCShaarRuntime.class]) return @{@"supported": @NO};
+  NSString *windowID = [self windowIDForTabID:tabID];
+  NSView *tabView = [self viewForTabID:tabID];
+  if (!windowID) return ARCProbeNormalSelectionAudit(tabView, nil, nil);
+  return ARCProbeNormalSelectionAudit(tabView, [self hostViewForWindowID:windowID],
+                                      [self windowForID:windowID]);
+}
 - (NSDictionary *)privateQuitCDPHoldAuditForTabID:(NSString *)tabID { return nil; }
 - (void)preparePrivateQuitCancellationProbeTabID:(NSString *)tabID
                                       completion:(void (^)(BOOL))completion { completion(NO); }

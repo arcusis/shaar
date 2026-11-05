@@ -579,8 +579,10 @@ final class EngineProbe {
         store.perform(.space(alphaSpace.id))
         store.perform(.tab(space: alphaSpace.id, tab: alphaTab))
         var nativeAlphaSelected = false
+        var selectionAudit: [AnyHashable: Any] = [:]
         for _ in 0..<100 {
           let selection = runtime.normalProbeSelectionAudit(forTabID: tabA)
+          selectionAudit = selection
           nativeAlphaSelected =
             selection["selectedNativeTab"] as? Bool == true
             && selection["displayedNativeWebContents"] as? Bool == true
@@ -588,7 +590,8 @@ final class EngineProbe {
           try await Task.sleep(for: .milliseconds(100))
         }
         try expect(
-          nativeAlphaSelected, "store selects live normal Alpha WebContents before private fixture")
+          nativeAlphaSelected,
+          "store selects live normal Alpha WebContents before private fixture: \(selectionAudit)")
         try await waitForSessionToSettle()
         let before = store.session
         let privateProbe = PrivateWindowProbe(
@@ -858,6 +861,21 @@ final class EngineProbe {
     guard !finished else { return }
     finished = true
     resultError = error
+    if privateWindowMode {
+      let report = root.appending(path: "\(phase)-private-window.json")
+      if !FileManager.default.fileExists(atPath: report.path) {
+        let message =
+          resultError?.localizedDescription
+          ?? "Private-window probe ended without its evidence report."
+        do {
+          try PrivateWindowProbe.writeEarlyFailure(
+            root: root, phase: phase, runID: privateWindowRunID!, error: message)
+        } catch {
+          resultError = ProbeFailure(
+            "\(message) Private-window report write failed: \(error.localizedDescription)")
+        }
+      }
+    }
     do { try nativeHostProbe?.prepareForQuit() } catch {
       resultError = ProbeFailure(
         "\(resultError?.localizedDescription ?? "") Host quit snapshot: \(error.localizedDescription)"

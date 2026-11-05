@@ -848,14 +848,53 @@ def build_engine_probe_arguments(executable, root, fixture_url, phase, *, includ
     return arguments
 
 
+def ensure_private_failure_reports(root, phase, run_id, exit_code):
+    main_path = root / f'{phase}.json'
+    private_path = root / f'{phase}-private-window.json'
+    if main_path.exists() and private_path.exists():
+        return
+    try:
+        main = json.loads(main_path.read_text()) if main_path.exists() else None
+    except (OSError, ValueError):
+        main = None
+    log_path = root / f'{phase}.log'
+    try:
+        last_log_line = log_path.read_text(errors='replace').splitlines()[-1][-300:]
+    except (OSError, IndexError):
+        last_log_line = 'no process diagnostic'
+    try:
+        last_stage = (root / f'{phase}-private-window-stage.txt').read_text().strip()
+    except OSError:
+        last_stage = 'process-exit'
+    error = main.get('error') if isinstance(main, dict) else None
+    error = error or f'verification process exit {exit_code}: {last_log_line}'
+    if not main_path.exists():
+        main_path.write_text(json.dumps({
+            'phase': phase, 'passed': False, 'probeMode': PRIVATE_WINDOW_MODE,
+            'privateWindowOnly': True, 'privateWindowProbe': True, 'error': error,
+        }, indent=2, sort_keys=True) + '\n')
+    if not private_path.exists():
+        private_path.write_text(json.dumps({
+            'schema': 1, 'mode': PRIVATE_WINDOW_MODE, 'phase': phase,
+            'runID': run_id, 'passed': False, 'lastStage': last_stage,
+            'error': error, 'productLifecycleBlocker': error,
+        }, indent=2, sort_keys=True) + '\n')
+
+
 def validate_private_window_report(root, phase, report, exit_code):
     path = root / f'{phase}-private-window.json'
     try:
         evidence = json.loads(path.read_text())
+    except FileNotFoundError as error:
+        probe_error = report.get('error') if isinstance(report, dict) else None
+        raise RuntimeError(f'{phase} private-window report is missing: {probe_error or path.name}') from error
     except json.JSONDecodeError as error:
         raise RuntimeError(f'Malformed private-window report: {path.name}') from error
     if not isinstance(evidence, dict):
         raise RuntimeError(f'Private-window report must be a JSON object: {path.name}')
+    if evidence.get('passed') is False:
+        probe_error = evidence.get('error') or evidence.get('productLifecycleBlocker')
+        raise RuntimeError(f'{phase} private-window probe failed: {probe_error or "no error recorded"}')
     checks = evidence.get('checks')
     expected_failures = evidence.get('expectedFailures', {})
     cleanup = evidence.get('cleanup')
@@ -1619,6 +1658,7 @@ def main(argv=None):
                 private_window_children.append(dict(
                     phase=phase, pid=process.pid, childExited=process.poll() is not None,
                     processGroupAbsent=not process_group_exists(process.pid)))
+                ensure_private_failure_reports(root, phase, private_window_run_id, code)
             if not output.exists():
                 if options.private_window:
                     failures.append(f'{phase}: main report missing (exit {code})')
@@ -1677,6 +1717,7 @@ def main(argv=None):
                     failure = f"{phase}: {error}"
                     failures.append(failure)
                     print(f"FAILED {failure}", flush=True)
+                    continue
             else:
                 validate_full_fixture_report(report, phase)
             if include_bitwarden and phase == 'restart':

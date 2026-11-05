@@ -24,6 +24,10 @@ FOUNDATION_EXPORT void ARCCompletePrivateQuitDialogCancellation(
 /// The shipped media reporter, for deterministic JavaScript event-order tests without an engine.
 FOUNDATION_EXPORT NSString *ARCMediaSessionPageScript(void);
 
+/// Test-only audit of a Shaar page view's attachment to its owning hidden window.
+FOUNDATION_EXPORT NSDictionary<NSString *, id> *ARCProbeNormalSelectionAudit(
+  NSView * _Nullable tabView, NSView * _Nullable hostView, NSWindow * _Nullable window);
+
 @interface ARCChromiumRuntime (Verification)
 /// Grants geolocation only on the selected disposable Inspector loopback fixture.
 - (void)grantProbeGeolocationInTabID:(NSString *)tabID completion:(void (NS_SWIFT_UI_ACTOR ^)(NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;

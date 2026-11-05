@@ -683,6 +683,13 @@ public struct BrowserSession: Codable, Equatable, Sendable {
       let index = openerSpace ?? currentSpace
         ?? spaces.firstIndex(where: { $0.profileID == profileID })
     else { return nil }
+    if let folderID = tab.folderID {
+      guard
+        spaces[index].folders.contains(where: {
+          $0.id == folderID && $0.isPinned == tab.isPinned
+        })
+      else { return nil }
+    }
     spaces[index].tabs.append(tab)
     if foreground {
       selectedSpaceID = spaces[index].id

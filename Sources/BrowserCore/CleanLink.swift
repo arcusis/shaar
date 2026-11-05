@@ -31,7 +31,9 @@ public enum CleanLink {
 
   private static func isTracking(_ key: String, host: String) -> Bool {
     if key.hasPrefix("utm_") || trackingKeys.contains(key) { return true }
-    if key == "si", isHost(host, in: ["youtube", "youtu", "spotify"]) { return true }
+    if key == "si", isDomain(host, in: ["youtube.com", "youtu.be", "spotify.com"]) {
+      return true
+    }
     if ["s", "t"].contains(key), isDomain(host, in: ["x.com", "twitter.com"]) { return true }
     if isHost(host, in: ["amazon"]) {
       return amazonTrackingKeys.contains(key)

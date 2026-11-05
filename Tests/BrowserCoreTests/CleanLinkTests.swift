@@ -48,6 +48,16 @@ import Testing
   )
 }
 
+@Test func cleanLinkKeepsSiteParametersOnUnrelatedVideoNamedDomains() {
+  for address in [
+    "https://youtube.example.com/watch?si=chapter&v=123",
+    "https://spotify.example.com/track?si=source",
+  ] {
+    let url = URL(string: address)!
+    #expect(CleanLink.clean(url) == url)
+  }
+}
+
 @Test func cleanLinkUnwrapsGoogleRedirectAndLeavesCleanURLUnchanged() {
   #expect(
     CleanLink.clean(

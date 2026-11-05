@@ -320,6 +320,7 @@
         }
       }
     },
+    "Close %@ extension": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"סגירת התוסף %@"}}}},
     "Collapsed": {
       "localizations": {
         "he": {

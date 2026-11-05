@@ -12,6 +12,15 @@ import Testing
 struct ExtensionManagementTests {
   private let validID = String(repeating: "b", count: 32)
 
+  @Test func popupCloseLabelNamesTheExtensionInBothLanguages() {
+    let popup = ExtensionPopupContext(
+      id: "popup", profileID: UUID(), tabID: UUID(), extensionID: validID, name: "Notes")
+    #expect(popup.closeAccessibilityLabel(language: .english) == "Close Notes extension")
+    #expect(
+      popup.closeAccessibilityLabel(language: .hebrew)
+        == "סגירת התוסף \u{2068}Notes\u{2069}")
+  }
+
   @Test func extensionHelpIncludesDistinctActionTitlesAndFallsBackToItsName() {
     let item = ManagedExtension(
       id: validID, name: "Password Manager", version: "1", description: "", enabled: true,

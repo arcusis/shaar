@@ -12,6 +12,11 @@ struct ExtensionPopupContext: Identifiable, Equatable {
   let tabID: UUID
   let extensionID: String
   let name: String
+
+  func closeAccessibilityLabel(language: BrowserLanguage = .currentLaunchLanguage) -> String {
+    BrowserLocalization.format(
+      "Close %@ extension", table: "Panels", language: language, arguments: [.string(name)])
+  }
 }
 
 enum ExtensionPanelRoute: Identifiable, Equatable {
@@ -77,6 +82,7 @@ struct ExtensionToolbar: View {
               Image(systemName: "xmark")
             }
             .buttonStyle(.plain).help(PanelsL10n.string("Close extension"))
+            .accessibilityLabel(context.closeAccessibilityLabel())
           }
           .padding(12)
           Divider()

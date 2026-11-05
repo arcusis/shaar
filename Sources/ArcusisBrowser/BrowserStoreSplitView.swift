@@ -29,10 +29,17 @@ extension BrowserStore {
     splitTabRecency.removeAll { !existing.contains($0) }
   }
 
+  var canSplitSelectedTab: Bool {
+    guard session.selectedSpace.selectedFavoriteID == nil,
+      let selected = session.selectedSpace.selectedTabID, !selectedSplitIsFull
+    else { return false }
+    let inSplit = Set(selectedSplit?.tabIDs ?? [selected])
+    return session.selectedSpace.tabs.contains { !inSplit.contains($0.id) }
+  }
+
   /// Adds the most recently used other tab beside the selected one.
   func splitSelectedTab() {
-    guard session.selectedSpace.selectedFavoriteID == nil,
-      let selected = session.selectedSpace.selectedTabID
+    guard canSplitSelectedTab, let selected = session.selectedSpace.selectedTabID
     else { return }
     let inSplit = Set(selectedSplit?.tabIDs ?? [selected])
     let ids = Set(session.selectedSpace.tabs.map(\.id)).subtracting(inSplit)

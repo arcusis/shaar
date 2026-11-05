@@ -10,6 +10,31 @@ import XCTest
 
 @MainActor
 final class BrowserSplitStoreTests: XCTestCase {
+  func testSplitShortcutIsAvailableOnlyWhenAnotherPaneCanJoin() throws {
+    var session = BrowserSession.fresh()
+    let ids = try (0..<5).map {
+      try XCTUnwrap(session.open(URL(string: "https://split-\($0).example")!))
+    }
+    let store = BrowserStore(session: session)
+    let space = store.session.selectedSpaceID
+    store.perform(.tab(space: space, tab: ids[0]))
+    XCTAssertTrue(store.canSplitSelectedTab)
+    store.splitTabs(ids[0], ids[1])
+    XCTAssertTrue(store.canSplitSelectedTab)
+    store.addToSplit(ids[2], beside: ids[0], edge: .right)
+    store.addToSplit(ids[3], beside: ids[0], edge: .right)
+    store.perform(.tab(space: space, tab: ids[0]))
+    XCTAssertEqual(store.selectedSplit?.tabIDs.count, 4)
+    XCTAssertFalse(store.canSplitSelectedTab, "a full split cannot accept the fifth tab")
+
+    var pair = BrowserSession.fresh()
+    let first = try XCTUnwrap(pair.open(URL(string: "https://first.example")!))
+    let second = try XCTUnwrap(pair.open(URL(string: "https://second.example")!))
+    let pairStore = BrowserStore(session: pair)
+    pairStore.splitTabs(first, second)
+    XCTAssertFalse(pairStore.canSplitSelectedTab, "both tabs already share the split")
+  }
+
   func testShortcutUsesMostRecentlySelectedOtherTab() throws {
     var session = BrowserSession.fresh()
     let first = try XCTUnwrap(session.open(URL(string: "https://one.example")!))

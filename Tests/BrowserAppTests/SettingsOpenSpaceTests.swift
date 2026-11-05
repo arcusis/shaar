@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import AppKit
 import BrowserCore
 import ChromiumBridge
 import XCTest
@@ -52,5 +53,56 @@ final class SettingsOpenSpaceTests: XCTestCase {
     XCTAssertTrue(workspace.workspace.windows.isEmpty)
     XCTAssertTrue(host.contexts.isEmpty)
     XCTAssertNotNil(host.lastError)
+  }
+
+  func testHiddenSettingsOpenSpaceDoesNotOrderBrowserWindow() throws {
+    _ = NSApplication.shared
+    let runtime = SettingsWindowRuntime()
+    let workspace = try BrowserWorkspaceStore(initialSession: .fresh())
+    let requestedSpaceID = try XCTUnwrap(workspace.workspace.catalog.spaces.last?.id)
+    let host = NativeBrowserHost(
+      events: BrowserRuntimeEvents(runtime: runtime), workspace: workspace,
+      presentation: .hiddenProbe, usesPrimaryWindow: false)
+    defer { host.detach() }
+    try host.restore()
+    let window = try XCTUnwrap(runtime.createdWindow)
+
+    host.openSpaceFromSettings(requestedSpaceID)
+
+    XCTAssertEqual(host.contexts.values.first?.store.session.selectedSpaceID, requestedSpaceID)
+    XCTAssertFalse(window.wasOrdered)
+  }
+}
+
+private final class SettingsWindowRuntime: ARCChromiumRuntime, @unchecked Sendable {
+  private(set) var createdWindow: SettingsRecordingWindow?
+
+  override func createWindowID(_ windowID: String) throws {
+    MainActor.assumeIsolated {
+      createdWindow = SettingsRecordingWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 900, height: 700),
+        styleMask: [.borderless], backing: .buffered, defer: false)
+    }
+  }
+
+  override func window(forID windowID: String) -> NSWindow? { createdWindow }
+  override func hostView(forWindowID windowID: String) -> NSView? {
+    MainActor.assumeIsolated { createdWindow?.contentView }
+  }
+
+  override func closeWindowID(_ windowID: String) -> Bool {
+    MainActor.assumeIsolated {
+      createdWindow?.close()
+      createdWindow = nil
+    }
+    return true
+  }
+}
+
+private final class SettingsRecordingWindow: NSWindow {
+  private(set) var wasOrdered = false
+
+  override func makeKeyAndOrderFront(_ sender: Any?) {
+    wasOrdered = true
   }
 }

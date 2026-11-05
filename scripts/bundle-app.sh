@@ -85,6 +85,11 @@ if [[ ${SHAAR_TEST_SHAAR_ENGINE:-0} == 1 ]] && ! $with_verification; then
   exit 2
 fi
 engine_pin=ThirdParty/ChromiumEngine/pin.json
+if $with_updates && ! jq -e '.schemaVersion == 1 and .sourceKind == "shaar"' \
+  "$engine_pin" >/dev/null; then
+  echo '--with-updates requires the pinned Shaar engine.' >&2
+  exit 2
+fi
 
 bundle_identifier=$SHAAR_BUNDLE_IDENTIFIER
 if $with_verification; then

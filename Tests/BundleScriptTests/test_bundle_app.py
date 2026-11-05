@@ -63,10 +63,9 @@ class BundleAppTests(unittest.TestCase):
             "printf 'fetch-shaar-test-engine\\n' >> \"$BUNDLE_TEST_LOG\"\n"
             "printf '%s\\n' \"$BUNDLE_TEST_FRAMEWORK\"\n"
         )
-        for name in ("pin.json",):
-            path = self.root / "ThirdParty" / "ChromiumEngine" / name
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(name)
+        path = self.root / "ThirdParty" / "ChromiumEngine" / "pin.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(REPO / "ThirdParty" / "ChromiumEngine" / "pin.json", path)
         for name in ("LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"):
             (self.root / name).write_text(name)
 
@@ -226,6 +225,26 @@ class BundleAppTests(unittest.TestCase):
         self.assertEqual(plist["SUPublicEDKey"], config.public_ed_key)
         self.assertIs(plist["SUEnableAutomaticChecks"], True)
         self.assertIs(plist["SUEnableInstallerLauncherService"], True)
+        self.assertEqual(plist["CFBundleIdentifier"], config.bundle_identifier)
+        self.assertNotIn("ShaarUseMockKeychain", plist)
+        self.assertNotIn("ShaarEngineBackend", plist)
+        bundled_pin = self.root / "build/Shaar.app/Contents/Resources/ChromiumEngine/pin.json"
+        self.assertEqual(bundled_pin.read_bytes(),
+                         (REPO / "ThirdParty/ChromiumEngine/pin.json").read_bytes())
+        self.assertEqual(plistlib.loads((self.root / "build/Shaar.app/Contents/Info.plist").read_bytes())
+                         ["CFBundleName"], "Shaar")
+        self.assertFalse((self.root / "build/Shaar.app/Contents/Resources/ArdiaCore").exists())
+        self.assertIn("fetch-engine", self._log())
+
+    def test_with_updates_rejects_non_shaar_engine_before_build(self):
+        pin = self.root / "ThirdParty/ChromiumEngine/pin.json"
+        pin.write_text(pin.read_text().replace('"sourceKind": "shaar"', '"sourceKind": "ardia"'))
+
+        result = self._run("--with-engine", "--with-updates")
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("requires the pinned Shaar engine", result.stderr)
+        self.assertEqual(self._log(), "")
 
     def test_engine_bundle_uses_shaar_pin_without_backend_switch(self):
         result = self._run("--with-engine")
@@ -234,7 +253,8 @@ class BundleAppTests(unittest.TestCase):
         self.assertNotIn("ShaarEngineBackend", self._info_plist("build/Shaar.app"))
         self.assertIn("fetch-engine", self._log())
         bundled_pin = self.root / "build/Shaar.app/Contents/Resources/ChromiumEngine/pin.json"
-        self.assertEqual(bundled_pin.read_text(), "pin.json")
+        self.assertEqual(bundled_pin.read_bytes(),
+                         (REPO / "ThirdParty/ChromiumEngine/pin.json").read_bytes())
         framework_info = self.root / "build/Shaar.app/Contents/Frameworks/Chromium Framework.framework/Versions/Current/Resources/Info.plist"
         self.assertEqual(plistlib.loads(framework_info.read_bytes())["CFBundleIdentifier"], "com.arcusis.shaar.framework")
 

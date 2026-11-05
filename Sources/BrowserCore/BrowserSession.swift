@@ -704,6 +704,7 @@ public struct BrowserSession: Codable, Equatable, Sendable {
     if foreground {
       selectedSpaceID = spaces[index].id
       spaces[index].selectedFavoriteID = nil
+      spaces[index].expandFolderPath(tab.folderID)
     }
     if foreground || spaces[index].selectedTabID == nil {
       spaces[index].selectedTabID = tab.id

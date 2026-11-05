@@ -69,6 +69,24 @@ import Testing
   #expect(duplicate == nil && unknownProfile == nil)
 }
 
+@Test func foregroundNativeTabRevealsItsCollapsedFolder() throws {
+  var session = BrowserSession.fresh()
+  let space = session.selectedSpaceID
+  let profile = session.selectedSpace.profileID
+  let folder = session.addFolder(name: "Popups", in: space)!
+  let collapsed = session.toggleFolder(folder, in: space)
+  #expect(collapsed)
+  let incoming = BrowserTab(
+    url: URL(string: "https://example.com/popup")!, isPinned: true, folderID: folder)
+
+  let inserted = session.insertNativeTab(
+    incoming, profileID: profile, openerID: nil, foreground: true)
+
+  #expect(inserted == space)
+  #expect(session.selectedSpace.selectedTabID == incoming.id)
+  #expect(session.selectedSpace.folderPath(to: folder).allSatisfy { !$0.isCollapsed })
+}
+
 @Test func movingSelectedTabRevealsSourceFallbackInsideCollapsedFolder() throws {
   var session = BrowserSession.fresh()
   let source = session.selectedSpaceID

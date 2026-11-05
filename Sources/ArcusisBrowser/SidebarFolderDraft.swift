@@ -26,6 +26,10 @@ struct SidebarFolderDraft: Equatable {
     return folder
   }
 
+  var cancelAccessibilityLabel: String {
+    editingFolderID == nil ? ShellL10n.string("Cancel new folder") : ShellL10n.string("Cancel")
+  }
+
   func isValid(in session: BrowserSession) -> Bool {
     return route.matches(session)
   }

@@ -12,6 +12,14 @@ import XCTest
 
 @Suite @MainActor
 struct SidebarFolderDraftTests {
+  @Test func cancelLabelMatchesFolderDraftMode() {
+    let spaceID = UUID()
+    let create = SidebarFolderDraft(route: .create(spaceID: spaceID, parentID: nil))
+    let edit = SidebarFolderDraft(route: .edit(spaceID: spaceID, folderID: UUID()))
+    #expect(create.cancelAccessibilityLabel == ShellL10n.string("Cancel new folder"))
+    #expect(edit.cancelAccessibilityLabel == ShellL10n.string("Cancel"))
+  }
+
   @Test func inlineFolderDraftRejectsStaleSpaceAndKeepsCancellationModelFree() throws {
     let store = BrowserStore()
     let spaceID = store.session.selectedSpaceID

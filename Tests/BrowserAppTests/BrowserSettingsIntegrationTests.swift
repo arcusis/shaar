@@ -10,6 +10,29 @@ import Testing
 
 @Suite @MainActor
 struct BrowserSettingsIntegrationTests {
+  @Test func addExtensionsOpensInLastFocusedWindowForProfile() throws {
+    let session = fixture().session
+    let manager = try BrowserWorkspaceStore(initialSession: session)
+    let originalID = manager.workspace.windows[0].id
+    _ = try manager.newWindow(from: originalID)
+    let unorderedFirstID = try #require(manager.stores.keys.first)
+    let focusedID = try #require(manager.stores.keys.first { $0 != unorderedFirstID })
+    try manager.focusWindow(focusedID)
+    let profileID = session.selectedSpace.profileID
+    let state = BrowserSettingsState(workspace: manager, preferences: BrowserPreferencesStore())
+
+    state.openExtensions(for: profileID)
+
+    #expect(
+      manager.stores[focusedID]?.session.spaces.flatMap(\.tabs).contains {
+        $0.url == BrowserExtension.storeCatalogURL
+      } == true)
+    #expect(
+      manager.stores[unorderedFirstID]?.session.spaces.flatMap(\.tabs).contains {
+        $0.url == BrowserExtension.storeCatalogURL
+      } == false)
+  }
+
   @Test func unknownStoredSearchEngineFallsBackWithoutLosingPreferences() throws {
     let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }

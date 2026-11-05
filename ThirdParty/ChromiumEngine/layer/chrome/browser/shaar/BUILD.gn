@@ -254,8 +254,6 @@ test("shaar_media_unittests") {
 
 test("shaar_layer_unittests") {
   data_deps = [ "//chrome:packed_resources" ]
-  cflags_objcc = [ "-fobjc-arc" ]
-  frameworks = [ "AppKit.framework" ]
   sources = [
     "bookmarks/shaar_bookmarks_unittest.cc",
     "devtools/shaar_devtools_unittest.cc",
@@ -273,7 +271,6 @@ test("shaar_layer_unittests") {
     "testing/shaar_test_link_stubs.cc",
     "testing/shaar_test_main.cc",
     "windows_tabs/shaar_windows_tabs_handlers_unittest.cc",
-    "windows_tabs/shaar_page_view_host_unittest.mm",
   ]
   deps = [
     ":engine",

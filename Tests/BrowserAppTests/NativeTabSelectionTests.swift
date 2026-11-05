@@ -10,6 +10,23 @@ import Testing
 
 @Suite @MainActor
 struct NativeTabSelectionTests {
+  @Test func activationRevealsFallbackTabWhileFavoriteIsSelected() throws {
+    let store = BrowserStore()
+    store.perform(.open(URL(string: "https://example.com/tab")!))
+    let tabID = try #require(store.session.selectedSpace.selectedTabID)
+    let profileID = store.session.selectedSpace.profileID
+    let addedFavoriteID = store.session.addFavorite(
+      profileID: profileID, originalURL: URL(string: "https://example.com/favorite")!)
+    let favoriteID = try #require(addedFavoriteID)
+    #expect(store.selectFavorite(favoriteID))
+    #expect(store.session.selectedSpace.selectedTabID == tabID)
+    #expect(store.session.selectedSpace.selectedFavoriteID == favoriteID)
+
+    #expect(store.nativeTabActivated(tabID, profileID: profileID))
+    #expect(store.session.selectedSpace.selectedFavoriteID == nil)
+    #expect(store.session.selectedPage?.tab.id == tabID)
+  }
+
   @Test func activationRevealsOwningSharedSpaceAndPersistsWithoutMovingTabs() throws {
     let profile = BrowserProfile(name: "Company")
     let folder = BrowserFolder(name: "Pinned", isCollapsed: true)

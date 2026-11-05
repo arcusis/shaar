@@ -23,7 +23,7 @@ public enum CleanLink {
     let host = components.host?.lowercased() ?? ""
     let kept = components.queryItems?.filter { !isTracking($0.name.lowercased(), host: host) }
     components.queryItems = kept?.isEmpty == true ? nil : kept
-    if isHost(host, in: ["amazon"]) {
+    if isAmazonDomain(host) {
       components.path = pathWithoutAmazonReferral(components.path)
     }
     return components.url ?? url
@@ -33,7 +33,7 @@ public enum CleanLink {
     if key.hasPrefix("utm_") || trackingKeys.contains(key) { return true }
     if key == "si", isHost(host, in: ["youtube", "youtu", "spotify"]) { return true }
     if ["s", "t"].contains(key), isDomain(host, in: ["x.com", "twitter.com"]) { return true }
-    if isHost(host, in: ["amazon"]) {
+    if isAmazonDomain(host) {
       return amazonTrackingKeys.contains(key)
         || amazonTrackingPrefixes.contains { key.hasPrefix($0) }
     }
@@ -59,6 +59,14 @@ public enum CleanLink {
   /// True when any dot-separated label of the host is one of `names`, as in `www.amazon.co.uk`.
   private static func isHost(_ host: String, in names: Set<String>) -> Bool {
     host.split(separator: ".").contains { names.contains(String($0)) }
+  }
+
+  private static func isAmazonDomain(_ host: String) -> Bool {
+    let labels = host.split(separator: ".")
+    guard let amazon = labels.lastIndex(of: "amazon") else { return false }
+    let suffix = Array(labels[(amazon + 1)...])
+    if suffix.count == 1 { return suffix[0] == "com" || suffix[0].count == 2 }
+    return suffix.count == 2 && ["co", "com"].contains(suffix[0]) && suffix[1].count == 2
   }
 
   private static func isDomain(_ host: String, in domains: [String]) -> Bool {

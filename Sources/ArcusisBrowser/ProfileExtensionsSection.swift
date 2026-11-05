@@ -95,11 +95,19 @@ private struct SharedExtensionSettingsSection: View {
 
   var body: some View {
     if model.rows.isEmpty {
-      ContentUnavailableView(
-        SettingsL10n.string("No Extensions"), systemImage: "puzzlepiece.extension",
-        description: Text(SettingsL10n.string("Extensions you add appear here for this profile."))
-      )
-      .padding(.vertical, 12)
+      if let error = model.error {
+        ContentUnavailableView(
+          SettingsL10n.string("Extensions unavailable"), systemImage: "exclamationmark.triangle",
+          description: Text(error)
+        )
+        .padding(.vertical, 12)
+      } else {
+        ContentUnavailableView(
+          SettingsL10n.string("No Extensions"), systemImage: "puzzlepiece.extension",
+          description: Text(SettingsL10n.string("Extensions you add appear here for this profile."))
+        )
+        .padding(.vertical, 12)
+      }
     } else {
       VStack(alignment: .leading, spacing: 12) {
         ForEach(model.rows) { row in

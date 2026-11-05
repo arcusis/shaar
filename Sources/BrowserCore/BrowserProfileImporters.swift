@@ -51,11 +51,12 @@ private struct ChromiumProfileImporter: BrowserProfileImporter {
     guard isDirectory else { throw BrowserImport.ImportError.unsupported }
     let bookmarksURL = url.appending(path: "Bookmarks")
     let historyURL = url.appending(path: "History")
-    guard FileManager.default.fileExists(atPath: bookmarksURL.path),
-      FileManager.default.fileExists(atPath: historyURL.path)
-    else { throw BrowserImport.ImportError.unsupported }
-    let bookmarkItems = try BrowserImport.read(bookmarksURL).map { $0.with(source: source) }
-    let historyItems = try ChromiumHistoryReader.read(historyURL, source: source)
+    let hasBookmarks = FileManager.default.fileExists(atPath: bookmarksURL.path)
+    let hasHistory = FileManager.default.fileExists(atPath: historyURL.path)
+    guard hasBookmarks || hasHistory else { throw BrowserImport.ImportError.unsupported }
+    let bookmarkItems =
+      hasBookmarks ? try BrowserImport.read(bookmarksURL).map { $0.with(source: source) } : []
+    let historyItems = hasHistory ? try ChromiumHistoryReader.read(historyURL, source: source) : []
     return BrowserImportBatch(source: source, items: bookmarkItems + historyItems)
   }
 }

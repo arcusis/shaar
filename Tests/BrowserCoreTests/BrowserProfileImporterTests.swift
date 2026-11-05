@@ -53,6 +53,22 @@ import Testing
       == ["History page", "untitled.example.test", "spaces.example.test"])
 }
 
+@Test func chromiumProfileImportsAvailableDataWithoutTheOtherFile() throws {
+  let profile = try profileDirectory(name: "ChromeBookmarksOnly")
+  try copyFixture("ChromiumBookmarks", to: profile.appending(path: "Bookmarks"))
+
+  let batch = try BrowserImport.readProfile(at: profile, source: .chrome)
+  #expect(batch.bookmarks.map(\.address) == ["https://work.example.test/"])
+  #expect(batch.history.isEmpty)
+
+  let historyProfile = try profileDirectory(name: "ChromeHistoryOnly")
+  try createDatabase(
+    sqlFixture: "ChromiumHistory.sql", at: historyProfile.appending(path: "History"))
+  let historyBatch = try BrowserImport.readProfile(at: historyProfile, source: .chrome)
+  #expect(historyBatch.bookmarks.isEmpty)
+  #expect(historyBatch.history.map(\.address) == ["https://history.example.test/"])
+}
+
 @Test func safariProfileImportsItsBookmarkPlistAndSafariEpochHistory() throws {
   let profile = try profileDirectory(name: "Safari")
   try copyFixture("SafariBookmarks.plist", to: profile.appending(path: "Bookmarks.plist"))
@@ -190,8 +206,7 @@ import Testing
     try BrowserImport.readProfile(at: regularFile, source: .chrome)
   }
 
-  let chromiumProfile = try profileDirectory(name: "ChromeIncomplete")
-  try copyFixture("ChromiumBookmarks", to: chromiumProfile.appending(path: "Bookmarks"))
+  let chromiumProfile = try profileDirectory(name: "ChromeEmpty")
   #expect(throws: BrowserImport.ImportError.self) {
     try BrowserImport.readProfile(at: chromiumProfile, source: .chrome)
   }

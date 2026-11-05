@@ -1,10 +1,10 @@
 {
   "sourceKind": "shaar",
   "purpose": "Preview engine for issue #418",
-  "sourceCommit": "1ff1be2391032b628fab5dc062f86b5838270092",
+  "sourceCommit": "5210cdc24f4a61facbba49fba604374a65aa8f72",
   "engineTree": "0fd438ac5e7847948832ff6dd080ce9ab0206464",
-  "archiveURL": "https://github.com/arcusis/shaar/releases/download/engine-155.0.8059.84-shaar.4/ShaarEngine-155.0.8059.84-shaar.4.tar.xz",
-  "sha256": "3990e8351bfbd9acaec2e91d14820b2f33e6acfe6161cb97269226385a325c2f",
+  "archiveURL": "https://github.com/arcusis/shaar/releases/download/engine-155.0.8059.84-shaar.8/ShaarEngine-155.0.8059.84-shaar.8.tar.xz",
+  "sha256": "c27294cd8d82b56d1fa3235dc4e5dfb7ff0169bb3ec0ebd7964e2fefb835b1d7",
   "chromiumVersion": "155.0.8059.84",
   "architecture": "arm64"
 }

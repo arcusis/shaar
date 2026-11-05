@@ -222,10 +222,25 @@ class BundleAppTests(unittest.TestCase):
         result = self._run("--with-engine", "--preview-shaar-engine")
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self._info_plist("build/Shaar.app")["ShaarEngineBackend"], "shaar")
+        self.assertEqual(self._info_plist("build/Shaar Engine Preview.app")["ShaarEngineBackend"], "shaar")
         self.assertIn("fetch-engine pin=ThirdParty/ChromiumEngine/preview-pin.json", self._log())
-        bundled_pin = self.root / "build/Shaar.app/Contents/Resources/ArdiaCore/pin.json"
+        bundled_pin = self.root / "build/Shaar Engine Preview.app/Contents/Resources/ArdiaCore/pin.json"
         self.assertEqual(bundled_pin.read_text(), "preview pin")
+
+    def test_engine_preview_isolated_from_regular_browser(self):
+        result = self._run("--with-engine", "--preview-shaar-engine")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        plist = self._info_plist("build/Shaar Engine Preview.app")
+        regular = release_feed.load_config(RELEASE_CONFIG)
+        self.assertEqual(plist["CFBundleIdentifier"], "com.arcusis.browser.engine-preview")
+        self.assertNotEqual(plist["CFBundleIdentifier"], regular.bundle_identifier)
+        self.assertEqual(plist["CFBundleName"], "Shaar Engine Preview")
+        self.assertEqual(plist["CFBundleDisplayName"], "Shaar Engine Preview")
+        self.assertEqual(plist["ShaarDataFolderName"], "Shaar Engine Preview")
+        self.assertNotEqual(plist["ShaarDataFolderName"], "Arcusis Browser")
+        self.assertEqual(plist["ShaarCacheFolderName"], "Shaar Engine Preview")
+        self.assertIs(plist["ShaarUseMockKeychain"], True)
 
     def test_preview_shaar_requires_engine_and_excludes_updates(self):
         for args in (("--preview-shaar-engine",),

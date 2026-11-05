@@ -97,10 +97,10 @@ def inventory_rows():
                     "disposition": "catalog-authoritative translation; source line is lexical occurrence, not proof of table binding",
                 })
     rows.extend([
-        {"source_file": "Sources/BrowserCore/ProductIdentity.swift", "source_line": source_line("Sources/BrowserCore/ProductIdentity.swift", 'static let name = "Shaar"'),
+        {"source_file": "Sources/BrowserCore/ProductIdentity.swift", "source_line": source_line("Sources/BrowserCore/ProductIdentity.swift", 'return "Shaar"'),
          "table": "Disposition", "key": "Product name", "english": "Shaar", "hebrew": "Shaar",
          "disposition": "retained product brand"},
-        {"source_file": "Sources/BrowserCore/ProductIdentity.swift", "source_line": source_line("Sources/BrowserCore/ProductIdentity.swift", 'static let dataFolderName = "Arcusis Browser"'),
+        {"source_file": "Sources/BrowserCore/ProductIdentity.swift", "source_line": source_line("Sources/BrowserCore/ProductIdentity.swift", 'return "Arcusis Browser"'),
          "table": "Disposition", "key": "Application data folder", "english": "Arcusis Browser",
          "hebrew": "Arcusis Browser", "disposition": "retained for persisted user data compatibility"},
         {"source_file": "Sources/BrowserCore/BrowserSession.swift", "source_line": source_line("Sources/BrowserCore/BrowserSession.swift", 'name = try values.decode(String.self, forKey: .name)'),

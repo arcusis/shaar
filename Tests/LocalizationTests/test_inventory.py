@@ -38,7 +38,7 @@ class InventoryTests(unittest.TestCase):
         files = {
             "Sources/BrowserCore/View.swift": 'BrowserLocalization.string("Open %@")\n',
             "Sources/BrowserCore/ProductIdentity.swift":
-                'static let name = "Shaar"\nstatic let dataFolderName = "Arcusis Browser"\n',
+                'return "Shaar"\nreturn "Arcusis Browser"\n',
             "Sources/BrowserCore/BrowserSession.swift":
                 'name = try values.decode(String.self, forKey: .name)\n',
             "Resources/ExtensionManager/manager.html": '<title>Shaar Extension Manager</title>\n',

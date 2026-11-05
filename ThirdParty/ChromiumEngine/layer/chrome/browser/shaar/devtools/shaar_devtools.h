@@ -64,7 +64,8 @@ bool StartProtocolRequest(scoped_refptr<content::DevToolsAgentHost> host,
                           shaar_request_id request_id,
                           shaar_reply_fn reply,
                           void* reply_context,
-                          const std::string& request_json);
+                          const std::string& request_json,
+                          std::string main_frame_id = {});
 
 // Selects the page protocol target for the scoped tab, including OTR tabs.
 scoped_refptr<content::DevToolsAgentHost> ProtocolAgentHostFor(

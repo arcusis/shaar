@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <initializer_list>
+#include <optional>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -32,6 +33,7 @@
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "content/public/browser/devtools_agent_host.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "ui/gfx/codec/png_codec.h"
@@ -536,17 +538,32 @@ bool HasEmptyVersionedSchema(shaar_bytes args_json) {
 class ProtocolClient final : public content::DevToolsAgentHostClient {
  public:
   ProtocolClient(scoped_refptr<content::DevToolsAgentHost> host,
-                 ReplyContext request)
-      : host_(std::move(host)), request_(request) {}
+                 ReplyContext request, std::string main_frame_id)
+      : host_(std::move(host)), request_(request),
+        main_frame_id_(std::move(main_frame_id)) {}
 
   bool Start(const std::string& protocol_request) {
+    request_json_ = protocol_request;
+    auto parsed = base::JSONReader::Read(request_json_, base::JSON_PARSE_RFC);
+    if (!parsed || !parsed->is_dict())
+      return false;
+    const auto& command = parsed->GetDict();
+    const auto* method = command.FindString("method");
+    const auto* params = command.FindDict("params");
+    await_main_frame_context_ = method && *method == "Runtime.evaluate" &&
+        params && !params->Find("contextId") &&
+        !params->Find("uniqueContextId") && !main_frame_id_.empty();
     if (!host_->AttachClient(this))
       return false;
     attached_ = true;
     timer_.Start(FROM_HERE, base::Seconds(15), this,
                  &ProtocolClient::OnTimeout);
-    host_->DispatchProtocolMessage(
-        this, base::as_byte_span(protocol_request));
+    if (await_main_frame_context_) {
+      const std::string enable = R"({"id":-1,"method":"Runtime.enable"})";
+      host_->DispatchProtocolMessage(this, base::as_byte_span(enable));
+    } else {
+      host_->DispatchProtocolMessage(this, base::as_byte_span(request_json_));
+    }
     return true;
   }
 
@@ -560,6 +577,18 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
       return;
     }
     const base::DictValue& dict = parsed->GetDict();
+    if (await_main_frame_context_ && !evaluation_sent_) {
+      const auto* method = dict.FindString("method");
+      if (method && *method == "Runtime.executionContextCreated") {
+        OnContextCreated(dict);
+        return;
+      }
+      if (dict.FindInt("id") == -1) {
+        if (dict.FindDict("error"))
+          Finish(SHAAR_CHROMIUM_ERROR, {}, "Runtime.enable failed");
+        return;
+      }
+    }
     const auto response_id = dict.FindInt("id");
     if (!response_id || *response_id != static_cast<int>(request_.request_id))
       return;
@@ -588,8 +617,38 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
   }
 
  private:
+  void OnContextCreated(const base::DictValue& message) {
+    const auto* params = message.FindDict("params");
+    const auto* context = params ? params->FindDict("context") : nullptr;
+    const auto* aux = context ? context->FindDict("auxData") : nullptr;
+    const auto* frame_id = aux ? aux->FindString("frameId") : nullptr;
+    const auto context_id = context ? context->FindInt("id") : std::nullopt;
+    if (!frame_id || *frame_id != main_frame_id_ ||
+        !aux->FindBool("isDefault").value_or(false) || !context_id)
+      return;
+    auto request = base::JSONReader::Read(request_json_, base::JSON_PARSE_RFC);
+    if (!request || !request->is_dict()) {
+      Finish(SHAAR_INVALID_ARGUMENT, {}, "invalid Runtime.evaluate request");
+      return;
+    }
+    auto* evaluation_params = request->GetDict().FindDict("params");
+    if (!evaluation_params) {
+      Finish(SHAAR_INVALID_ARGUMENT, {}, "missing Runtime.evaluate params");
+      return;
+    }
+    evaluation_params->Set("contextId", *context_id);
+    if (!base::JSONWriter::Write(*request, &request_json_)) {
+      Finish(SHAAR_CHROMIUM_ERROR, {}, "could not bind main frame context");
+      return;
+    }
+    evaluation_sent_ = true;
+    host_->DispatchProtocolMessage(this, base::as_byte_span(request_json_));
+  }
+
   void OnTimeout() {
-    Finish(SHAAR_NOT_READY, {}, "DevTools protocol request timed out");
+    Finish(SHAAR_NOT_READY, {}, await_main_frame_context_ && !evaluation_sent_
+               ? "main frame execution context timed out"
+               : "DevTools protocol request timed out");
   }
 
   void Finish(shaar_error_code code, std::string payload,
@@ -607,7 +666,11 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
 
   scoped_refptr<content::DevToolsAgentHost> host_;
   ReplyContext request_;
+  std::string main_frame_id_;
+  std::string request_json_;
   base::OneShotTimer timer_;
+  bool await_main_frame_context_ = false;
+  bool evaluation_sent_ = false;
   bool attached_ = false;
   bool finished_ = false;
 };
@@ -677,11 +740,13 @@ bool StartProtocolRequest(scoped_refptr<content::DevToolsAgentHost> host,
                           shaar_request_id request_id,
                           shaar_reply_fn reply,
                           void* reply_context,
-                          const std::string& request_json) {
+                          const std::string& request_json,
+                          std::string main_frame_id) {
   if (!host)
     return false;
   auto* client = new ProtocolClient(
-      std::move(host), ReplyContext{request_id, reply, reply_context});
+      std::move(host), ReplyContext{request_id, reply, reply_context},
+      std::move(main_frame_id));
   if (client->Start(request_json))
     return true;
   delete client;
@@ -885,9 +950,9 @@ shaar_error_code HandleDevToolsOperation(
   }
 
   int capability = 0;
+  shaar_devtools_command parsed_command = SHAAR_DEVTOOLS_RUNTIME_EVALUATE;
   if (operation == SHAAR_OP_DEVTOOLS_CALL) {
     shaar_devtools_capability parsed_capability;
-    shaar_devtools_command parsed_command;
     base::DictValue params;
     std::string reason;
     const shaar_error_code decode_status = DecodeOperation(
@@ -913,8 +978,17 @@ shaar_error_code HandleDevToolsOperation(
     auto host = ProtocolAgentHostFor(contents);
     if (!host)
       return Fail(error, SHAAR_NOT_READY, "DevTools protocol target is unavailable");
+    std::string main_frame_id;
+    if (parsed_command == SHAAR_DEVTOOLS_RUNTIME_EVALUATE) {
+      auto* frame = contents->GetPrimaryMainFrame();
+      if (!frame)
+        return Fail(error, SHAAR_NOT_READY,
+                    "DevTools main frame is unavailable");
+      main_frame_id = frame->GetDevToolsFrameToken().ToString();
+    }
     if (!StartProtocolRequest(std::move(host), request_id, reply,
-                              reply_context, protocol_request)) {
+                              reply_context, protocol_request,
+                              std::move(main_frame_id))) {
       return Fail(error, SHAAR_NOT_READY, "DevTools protocol attach was denied");
     }
     return SHAAR_OK;

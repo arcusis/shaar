@@ -54,6 +54,13 @@ import Testing
   }
 }
 
+@Test func mailtoInputIsNotInferredAsAWebAddress() {
+  for input in ["mailto:alice@example.com", "MAILTO:alice@example.com"] {
+    #expect(NavigationInput.address(for: input) == nil)
+    #expect(NavigationInput.destination(for: input) == nil)
+  }
+}
+
 @Test func commandSearchKeepsGoogleDefaultAndAcceptsSelectedEngine() throws {
   let session = BrowserSession.fresh()
   let defaultResult = try #require(

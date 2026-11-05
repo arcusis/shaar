@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from scripts import upgrade_from_v010
 
@@ -64,6 +65,24 @@ class UpgradeFromV010Tests(unittest.TestCase):
                          "synthetic-password")
         with self.assertRaises(subprocess.CalledProcessError):
             upgrade_from_v010.decrypt_password(encrypted, "wrong-secret")
+
+    def test_fresh_temporary_home_needs_no_prior_default_keychain(self):
+        calls = []
+
+        def security(arguments, **_options):
+            calls.append(arguments)
+            if arguments[:2] == ["security", "default-keychain"] and "-s" not in arguments:
+                raise RuntimeError("security failed (1)")
+            return ""
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(upgrade_from_v010, "run_checked", side_effect=security):
+                with upgrade_from_v010.throwaway_keychain(Path(directory), {}):
+                    pass
+        restores = [call for call in calls if call[:3] ==
+                    ["security", "default-keychain", "-d"] and "-s" in call]
+        self.assertEqual(len(restores), 1)
+        self.assertTrue(restores[0][-1].endswith("upgrade.keychain-db"))
 
     def test_timed_out_probe_reports_owned_process_group_failure(self):
         with self.assertRaisesRegex(RuntimeError, "timed out"):

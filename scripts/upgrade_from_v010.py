@@ -194,8 +194,10 @@ def throwaway_keychain(root, environment):
     old_list = run_checked(["security", "list-keychains", "-d", "user"],
                            env=environment).splitlines()
     old_list = [item.strip().strip('"') for item in old_list]
-    old_default = run_checked(["security", "default-keychain", "-d", "user"],
-                              env=environment).strip().strip('"')
+    old_default = None
+    if old_list:
+        old_default = run_checked(["security", "default-keychain", "-d", "user"],
+                                  env=environment).strip().strip('"')
     run_checked(["security", "create-keychain", "-p", password, str(keychain)],
                 env=environment)
     try:
@@ -213,10 +215,12 @@ def throwaway_keychain(root, environment):
                     env=environment)
         yield keychain, secret
     finally:
-        run_checked(["security", "default-keychain", "-d", "user", "-s", old_default],
-                    env=environment)
-        run_checked(["security", "list-keychains", "-d", "user", "-s", *old_list],
-                    env=environment)
+        if old_default:
+            run_checked(["security", "default-keychain", "-d", "user", "-s", old_default],
+                        env=environment)
+        if old_list:
+            run_checked(["security", "list-keychains", "-d", "user", "-s", *old_list],
+                        env=environment)
         run_checked(["security", "delete-keychain", str(keychain)], env=environment)
 
 

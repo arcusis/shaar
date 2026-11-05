@@ -18,6 +18,7 @@ class Value;
 }
 namespace content {
 class DevToolsAgentHost;
+class WebContents;
 }
 
 namespace shaar::devtools {
@@ -60,6 +61,10 @@ bool StartProtocolRequest(scoped_refptr<content::DevToolsAgentHost> host,
                           shaar_reply_fn reply,
                           void* reply_context,
                           const std::string& request_json);
+
+// Selects the page protocol target for the scoped tab, including OTR tabs.
+scoped_refptr<content::DevToolsAgentHost> ProtocolAgentHostFor(
+    content::WebContents* contents);
 
 shaar_error_code HandleDevToolsOperation(
     shaar::ShaarEngineContext* context,

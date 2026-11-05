@@ -106,6 +106,23 @@ TEST_F(PrivateSessionRegistryTest, DefersRetirementUntilChildrenClose) {
             SHAAR_CONFLICT);
 }
 
+TEST_F(PrivateSessionRegistryTest,
+       ExternalOTRDestructionDoesNotDoubleDestroyAtLeaseRetirement) {
+  TestingProfile profile;
+  PrivateSessionRegistry registry;
+  PrivateSessionRegistry::Session* session = nullptr;
+  ASSERT_EQ(registry.Open(&profile, "profile-a", "session-a", &session),
+            SHAAR_OK);
+  ASSERT_NE(session, nullptr);
+  Profile* otr = profile.GetPrimaryOTRProfile(false);
+  ASSERT_NE(otr, nullptr);
+
+  profile.DestroyOffTheRecordProfile(otr);
+  ASSERT_EQ(profile.GetPrimaryOTRProfile(false), nullptr);
+  EXPECT_TRUE(registry.Close(session));
+  EXPECT_EQ(profile.GetPrimaryOTRProfile(false), nullptr);
+}
+
 TEST_F(PrivateSessionRegistryTest, ResolvesLiveSessionAndRetainsWindowLease) {
   TestingProfile profile;
   PrivateSessionRegistry registry;

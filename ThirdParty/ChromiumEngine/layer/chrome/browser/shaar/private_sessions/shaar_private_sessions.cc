@@ -248,7 +248,10 @@ void PrivateSessionRegistry::MaybeRetire(Session* session) {
     parent->RemoveObserver(this);
     TrackerProtection().RemoveProfile(otr);
     TrackerProtection().RemoveProfile(parent);
-    parent->DestroyOffTheRecordProfile(otr);
+    // Closing the last Chromium private Browser may already have retired the
+    // primary OTR profile. Do not pass its stale pointer back to ProfileImpl.
+    if (parent->GetPrimaryOTRProfile(/*create_if_needed=*/false) == otr)
+      parent->DestroyOffTheRecordProfile(otr);
   }
   session->parent = nullptr;
   session->otr = nullptr;

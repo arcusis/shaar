@@ -63,6 +63,21 @@ import Testing
   #expect(batch.items.allSatisfy { $0.source == .firefox })
 }
 
+@Test func firefoxImportKeepsNestedFoldersNamedLikeRootFolders() throws {
+  let database = try databaseURLProfile(name: "Firefox", databaseName: "places.sqlite")
+  try createDatabase(
+    sqlFixture: "FirefoxPlaces.sql", at: database,
+    extraSQL: """
+      INSERT INTO moz_bookmarks VALUES(8, 2, NULL, 4, 2, 'toolbar');
+      INSERT INTO moz_bookmarks VALUES(9, 1, 2, 8, 0, 'Nested toolbar bookmark');
+      """
+  )
+
+  let batch = try BrowserImport.readProfile(at: database, source: .firefox)
+  let bookmark = try #require(batch.bookmarks.first { $0.title == "Nested toolbar bookmark" })
+  #expect(bookmark.folderComponents == ["Research", "toolbar"])
+}
+
 @Test func privateBrowserProfileDirectoriesAreRejectedBeforeReading() throws {
   for name in ["Incognito", "InPrivate", "Guest Profile", "Private Browsing"] {
     let profile = try profileDirectory(name: name)
@@ -185,10 +200,10 @@ private func copyFixture(_ name: String, to destination: URL) throws {
   try FileManager.default.copyItem(at: source, to: destination)
 }
 
-private func createDatabase(sqlFixture: String, at destination: URL) throws {
+private func createDatabase(sqlFixture: String, at destination: URL, extraSQL: String = "") throws {
   let source = try #require(
     Bundle.module.resourceURL?.appending(path: "BrowserImport/\(sqlFixture)"))
-  let sql = try String(contentsOf: source, encoding: .utf8)
+  let sql = try String(contentsOf: source, encoding: .utf8) + "\n" + extraSQL
   var database: OpaquePointer?
   guard
     sqlite3_open_v2(

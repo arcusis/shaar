@@ -456,6 +456,7 @@ final class EngineProbe {
       try await waitForRestoredTab(tabA)
       bootstrapStage = .openingBeta
       try await waitForRestoredTab(tabB)
+      try await waitForRestoredTab(sharedA)
       if localizationMode {
         // Restored tabs retain the previous scenario URL; reuse their profiles with this fixture.
         for (tab, profile) in [(tabA, profileA), (tabB, profileB)] {
@@ -550,7 +551,6 @@ final class EngineProbe {
               "profile A sign-in leaves profile B empty")
           }
         }
-        try runtime.openTabID(sharedA, profileID: profileA, url: fixture.absoluteString)
         let shared = try await snapshot(sharedA)
         firstShared = shared
         try expect(
@@ -562,9 +562,6 @@ final class EngineProbe {
           rejected = true
         }
         try expect(rejected, "live tab cannot be reassigned to another profile")
-      }
-      if runtime.nativeTabID(forID: sharedA) < 0 {
-        try runtime.openTabID(sharedA, profileID: profileA, url: fixture.absoluteString)
       }
       let sharedOriginal: [String: Any]
       if let firstShared {

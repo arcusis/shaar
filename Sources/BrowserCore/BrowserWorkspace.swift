@@ -355,12 +355,16 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
     id: UUID = UUID()
   ) throws -> UUID {
     let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !cleanName.isEmpty, !catalog.profiles.contains(where: { $0.id == id }) else {
+    let cleanSymbol = symbol?.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !cleanName.isEmpty, cleanSymbol.map({ !$0.isEmpty }) ?? true,
+      !catalog.profiles.contains(where: { $0.id == id })
+    else {
       throw WorkspaceError.invalidState
     }
     var draft = self
     draft.catalog.profiles.append(
-      BrowserProfile(id: id, name: cleanName, tint: tint, customRGB: customRGB, symbol: symbol))
+      BrowserProfile(
+        id: id, name: cleanName, tint: tint, customRGB: customRGB, symbol: cleanSymbol))
     try draft.projectAllWindows()
     self = draft
     return id
@@ -384,8 +388,9 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
   }
 
   public mutating func setProfileSymbol(_ id: UUID, symbol: String) throws {
-    guard !symbol.isEmpty else { throw WorkspaceError.invalidState }
-    try updateProfile(id) { $0.symbol = symbol }
+    let cleanSymbol = symbol.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !cleanSymbol.isEmpty else { throw WorkspaceError.invalidState }
+    try updateProfile(id) { $0.symbol = cleanSymbol }
   }
 
   private mutating func updateProfile(_ id: UUID, change: (inout BrowserProfile) -> Void) throws {

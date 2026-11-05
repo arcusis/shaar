@@ -20,7 +20,12 @@ public struct BrowserProfile: Codable, Identifiable, Equatable, Sendable {
     self.name = name
     self.tint = tint
     self.customRGB = customRGB
-    self.symbol = symbol
+    self.symbol = Self.usableSymbol(symbol)
+  }
+
+  private static func usableSymbol(_ value: String?) -> String? {
+    let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed?.isEmpty == true ? nil : trimmed
   }
 
   private enum CodingKeys: String, CodingKey { case id, name, tint, customRGB, symbol }
@@ -31,7 +36,7 @@ public struct BrowserProfile: Codable, Identifiable, Equatable, Sendable {
     name = try values.decode(String.self, forKey: .name)
     tint = try values.decodeIfPresent(SpaceTint.self, forKey: .tint)
     customRGB = try values.decodeIfPresent(SpaceRGBColor.self, forKey: .customRGB)
-    symbol = try values.decodeIfPresent(String.self, forKey: .symbol)
+    symbol = Self.usableSymbol(try values.decodeIfPresent(String.self, forKey: .symbol))
   }
 
   public func encode(to encoder: Encoder) throws {
@@ -141,7 +146,7 @@ public struct BrowserSpace: Codable, Identifiable, Equatable, Sendable {
     self.id = id
     self.profileID = profileID
     self.name = name
-    self.symbol = symbol
+    self.symbol = Self.usableSymbol(symbol)
     self.tint = tint
     self.customRGB = customRGB
     self.tabs = tabs
@@ -149,6 +154,11 @@ public struct BrowserSpace: Codable, Identifiable, Equatable, Sendable {
     self.selectedFavoriteID = selectedFavoriteID
     self.folders = folders
     self.splits = splits
+  }
+
+  private static func usableSymbol(_ value: String) -> String {
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? "square.stack" : trimmed
   }
 
   private enum CodingKeys: String, CodingKey {
@@ -161,7 +171,7 @@ public struct BrowserSpace: Codable, Identifiable, Equatable, Sendable {
     id = try c.decode(UUID.self, forKey: .id)
     profileID = try c.decode(UUID.self, forKey: .profileID)
     name = try c.decode(String.self, forKey: .name)
-    symbol = try c.decode(String.self, forKey: .symbol)
+    symbol = Self.usableSymbol(try c.decode(String.self, forKey: .symbol))
     tint = try c.decode(SpaceTint.self, forKey: .tint)
     customRGB = try c.decodeIfPresent(SpaceRGBColor.self, forKey: .customRGB)
     tabs = try c.decode([BrowserTab].self, forKey: .tabs)

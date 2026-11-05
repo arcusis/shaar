@@ -7,10 +7,11 @@ import Foundation
 extension BrowserSession {
   @discardableResult
   public mutating func updateSpaceSymbol(_ id: UUID, symbol: String) -> Bool {
-    guard !symbol.isEmpty, let index = spaces.firstIndex(where: { $0.id == id }) else {
+    let cleanSymbol = symbol.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !cleanSymbol.isEmpty, let index = spaces.firstIndex(where: { $0.id == id }) else {
       return false
     }
-    spaces[index].symbol = symbol
+    spaces[index].symbol = cleanSymbol
     return true
   }
 }

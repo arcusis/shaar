@@ -3,12 +3,29 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import AppKit
+import Observation
 import Testing
 
 @testable import ArcusisBrowser
 @testable import ShaarVerification
 
 @Suite @MainActor struct InspectorAIPasteboardTests {
+  @Test func selectionLockWaitsForObservedReadiness() async {
+    let signal = SelectionLockFixture()
+    var completed = false
+    let waiting = Task {
+      await InspectorAICopyProbe.waitForSelectionLock { signal.locked }
+      completed = true
+    }
+    await Task.yield()
+    signal.unrelated = true
+    await Task.yield()
+    #expect(!completed)
+    signal.locked = true
+    await waiting.value
+    #expect(completed)
+  }
+
   @Test func detailedDiagnosticsReadinessRequiresEachCollectedSignal() {
     let console = ["AI fixture console error"]
     let statuses = [503]
@@ -110,4 +127,9 @@ import Testing
       _ = try InspectorAICopyProbe.screenshotFile(board, within: cache)
     }
   }
+}
+
+@MainActor @Observable private final class SelectionLockFixture {
+  var locked = false
+  var unrelated = false
 }

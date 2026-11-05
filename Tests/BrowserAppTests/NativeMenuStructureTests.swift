@@ -3,9 +3,24 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import AppKit
+import ChromiumBridge
 import Testing
 
 @testable import ArcusisBrowser
+
+@Test @MainActor func newPrivateWindowStaysAvailableAfterLastNormalWindowCloses() throws {
+  let workspace = try BrowserWorkspaceStore()
+  try workspace.removeWindow(workspace.workspace.windows[0].id)
+  let host = NativeBrowserHost(
+    events: BrowserRuntimeEvents(runtime: ARCChromiumRuntime()), workspace: workspace,
+    presentation: .hiddenProbe, usesPrimaryWindow: false, keyWindow: { nil })
+
+  #expect(workspace.workspace.windows.isEmpty)
+  #expect(host.canPerform(.newPrivateWindow))
+  #expect(
+    host.privateWindowSourceProfileID()
+      == workspace.workspace.catalog.spaces[0].profileID.uuidString)
+}
 
 @Test @MainActor func nativeMenusMatchArcGroupsAndRouteEveryImplementedCommandOnce() {
   let application = NSApplication.shared

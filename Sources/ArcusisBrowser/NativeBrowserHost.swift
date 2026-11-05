@@ -184,10 +184,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       keyWindow: keyWindow,
       preferences: preferences,
       sourceProfileID: { [weak self] in
-        if let privateSource = self?.privateHost?.activeOwner?.sourceProfileID {
-          return privateSource
-        }
-        return self?.activeContext?.store.session.selectedSpace.profileID.uuidString
+        self?.privateWindowSourceProfileID()
       })
     self.privateHost = privateHost
     privateHost.installCallbacks()
@@ -293,7 +290,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     if command == .newMiniWindow { return privateHost?.hasActiveWindow != true }
     if command == .checkForUpdates { return canCheckForUpdates }
     if command == .newPrivateWindow {
-      return activeContext != nil || privateHost?.hasActiveWindow == true
+      return privateWindowSourceProfileID() != nil
     }
     if privateHost?.hasActiveWindow == true {
       return privateHost?.canPerform(command) == true
@@ -307,6 +304,17 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     }
     guard let context = activeContext else { return false }
     return windowCanPerform(command, in: context, afterLauncher: false)
+  }
+
+  func privateWindowSourceProfileID() -> String? {
+    if let active = privateHost?.activeOwner?.sourceProfileID { return active }
+    if let active = activeContext?.store.session.selectedSpace.profileID {
+      return active.uuidString
+    }
+    let saved = workspace.workspace.focusedWindowID.flatMap { workspace.workspace.window($0) }
+    return
+      (saved?.session.selectedSpace.profileID
+      ?? workspace.workspace.catalog.spaces.first?.profileID)?.uuidString
   }
 
   /// Enablement inside one browser window. `afterLauncher` asks whether a launcher Action may

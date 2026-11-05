@@ -563,6 +563,7 @@ final class BrowserStore {
 
   func nativeTabClosed(_ id: UUID) {
     rendererFailures[id] = nil
+    if pendingSplitPlacement?.target == id { dismissCommand() }
     if let favoritePage = session.favoritePages.first(where: { $0.tab.id == id }) {
       _ = session.closeFavoritePage(favoritePage.favoriteID)
       save()

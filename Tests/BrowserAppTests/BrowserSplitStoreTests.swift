@@ -83,6 +83,25 @@ final class BrowserSplitStoreTests: XCTestCase {
     XCTAssertNil(store.pendingSplitPlacement)
   }
 
+  func testClosingSplitTargetCancelsPendingPaneCommand() throws {
+    let store = BrowserStore()
+    store.perform(.open(URL(string: "https://other.example")!))
+    let other = try XCTUnwrap(store.session.selectedSpace.selectedTabID)
+    store.perform(.open(URL(string: "https://target.example")!))
+    let target = try XCTUnwrap(store.session.selectedSpace.selectedTabID)
+    store.openSplitPane(beside: target, edge: .right)
+    XCTAssertTrue(store.commandIsOpen)
+    XCTAssertEqual(store.pendingSplitPlacement?.target, target)
+
+    store.nativeTabClosed(other)
+    XCTAssertTrue(store.commandIsOpen)
+    XCTAssertEqual(store.pendingSplitPlacement?.target, target)
+    store.nativeTabClosed(target)
+
+    XCTAssertNil(store.pendingSplitPlacement)
+    XCTAssertFalse(store.commandIsOpen)
+  }
+
   func testDroppingTabsBuildsAndSeparatesSplits() throws {
     var session = BrowserSession.fresh()
     let ids = try (0..<5).map {

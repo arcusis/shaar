@@ -129,6 +129,12 @@ def add_hidden_window_guard(source):
     return replace_once(source, old, new, "main entrypoint")
 
 
+def preserve_released_framework_signature(source):
+    old = '  sign_engine_framework "$app/Contents/Frameworks/Chromium Framework.framework" adhoc_sign'
+    new = '  codesign --verify --deep --strict "$app/Contents/Frameworks/Chromium Framework.framework"'
+    return replace_once(source, old, new, "released framework signature")
+
+
 def run_checked(arguments, *, cwd=None, env=None, timeout=900, output=None):
     process = subprocess.Popen(arguments, cwd=cwd, env=env, start_new_session=True,
                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
@@ -199,10 +205,11 @@ def prepare_old_harness(source, released_framework):
     shutil.copy2(ROOT / "Sources/ShaarVerification/HiddenWindowOrderGuard.swift",
                  source / "Sources/ShaarVerification/HiddenWindowOrderGuard.swift")
     bundle = source / "scripts/bundle-app.sh"
-    bundle.write_text(replace_once(bundle.read_text(),
-                                   "  swift build --manifest-cache none",
-                                   "  swift build --jobs 4 --manifest-cache none",
-                                   "bundle jobs"))
+    bundled = replace_once(bundle.read_text(),
+                           "  swift build --manifest-cache none",
+                           "  swift build --jobs 4 --manifest-cache none",
+                           "bundle jobs")
+    bundle.write_text(preserve_released_framework_signature(bundled))
     fetch = source / "scripts/fetch-engine.sh"
     fetch.write_text("#!/bin/bash\nset -euo pipefail\nprintf '%s\\n' " +
                      json.dumps(str(released_framework)) + "\n")

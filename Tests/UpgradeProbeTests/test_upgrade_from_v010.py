@@ -60,6 +60,14 @@ class UpgradeFromV010Tests(unittest.TestCase):
         self.assertIn("let windowGuard = try! HiddenWindowOrderGuard.install()", patched)
         self.assertNotIn("NSApplication.shared.setActivationPolicy", patched)
 
+    def test_old_bundle_preserves_released_framework_signature(self):
+        source = subprocess.check_output(
+            ["git", "show", "v0.1.0:scripts/bundle-app.sh"],
+            cwd=upgrade_from_v010.ROOT, text=True)
+        patched = upgrade_from_v010.preserve_released_framework_signature(source)
+        self.assertNotIn('sign_engine_framework "$app/Contents/Frameworks/Chromium Framework.framework"', patched)
+        self.assertIn('codesign --verify --deep --strict "$app/Contents/Frameworks/Chromium Framework.framework"', patched)
+
     def test_old_harness_routes_native_startup_errors_to_owned_log(self):
         source = subprocess.check_output(
             ["git", "show", "v0.1.0:Sources/ChromiumBridge/ChromiumBridge.mm"],

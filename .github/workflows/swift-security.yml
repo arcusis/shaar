@@ -4,19 +4,8 @@
 
 name: Swift security
 on:
-  pull_request:
-    paths:
-      - 'Package.swift'
-      - 'Package.resolved'
-      - 'Sources/ArcusisBrowser/**/*.swift'
-      - 'Sources/BrowserCore/**/*.swift'
-      - 'Sources/ChromiumBridge/**/*.swift'
-      - 'Sources/Shaar/**/*.swift'
-      - 'Tests/TestSupport/**/*.swift'
   push:
     branches: [production]
-  merge_group:
-    types: [checks_requested]
   schedule:
     - cron: '23 1 * * *'
   workflow_dispatch:

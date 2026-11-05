@@ -123,7 +123,9 @@ enum SessionAccountPage {
       let snapshot = try? JSONDecoder().decode(Snapshot.self, from: data),
       let source = snapshot.photo.flatMap(URL.init(string:))
     else { return nil }
-    if source.scheme == "https" { return source }
+    if let secure = snapshot.photo.flatMap(GoogleAccountList.photoURL(from:)) {
+      return secure
+    }
     if source.scheme == "blob",
       let origin = URL(string: String(source.absoluteString.dropFirst(5))),
       origin.scheme == "https", origin.host == URL(string: snapshot.url)?.host

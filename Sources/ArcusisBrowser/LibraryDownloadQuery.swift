@@ -152,23 +152,43 @@ enum LibraryDownloadQuery {
     return groups
   }
 
-  static func relativeDay(_ date: Date, now: Date = Date(), calendar: Calendar = .current) -> String
-  {
+  static func relativeDay(
+    _ date: Date, now: Date = Date(), calendar: Calendar = .current,
+    language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
     let days = max(
       0,
       calendar.dateComponents(
         [.day], from: calendar.startOfDay(for: date),
         to: calendar.startOfDay(for: now)
       ).day ?? 0)
-    if days == 0 { return PanelsL10n.string("Today") }
-    if days == 1 { return PanelsL10n.string("Yesterday") }
-    if days < 7 { return PanelsL10n.plural("%d days ago", count: days) }
+    if days == 0 { return BrowserLocalization.string("Today", table: "Panels", language: language) }
+    if days == 1 {
+      return BrowserLocalization.string("Yesterday", table: "Panels", language: language)
+    }
+    if days < 7 {
+      return BrowserLocalization.plural(
+        "%d days ago", count: days, table: "Panels", language: language)
+    }
     if days < 30 {
       let weeks = days / 7
-      return PanelsL10n.plural(weeks == 1 ? "%d week ago" : "%d weeks ago", count: weeks)
+      return BrowserLocalization.plural(
+        weeks == 1 ? "%d week ago" : "%d weeks ago", count: weeks, table: "Panels",
+        language: language)
+    }
+    let years = max(
+      0,
+      calendar.dateComponents(
+        [.year], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: now)
+      ).year ?? 0)
+    if years > 0 {
+      return BrowserLocalization.plural(
+        "%d years ago", count: years, table: "Panels", language: language)
     }
     let months = max(1, days / 30)
-    return PanelsL10n.plural(months == 1 ? "%d month ago" : "%d months ago", count: months)
+    return BrowserLocalization.plural(
+      months == 1 ? "%d month ago" : "%d months ago", count: months, table: "Panels",
+      language: language)
   }
 
   static func status(_ item: BrowserDownload) -> String {

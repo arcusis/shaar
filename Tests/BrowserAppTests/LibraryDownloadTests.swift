@@ -44,6 +44,30 @@ struct LibraryDownloadTests {
       LibraryDownloadsView.fileType(for: nil, language: .hebrew) == "קובץ")
   }
 
+  @Test func oldDownloadDatesUseLocalizedYearForms() throws {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let oneYear = try #require(calendar.date(byAdding: .day, value: -400, to: now))
+    let twoYears = try #require(calendar.date(byAdding: .day, value: -800, to: now))
+    let threeYears = try #require(calendar.date(byAdding: .day, value: -1_200, to: now))
+    #expect(
+      LibraryDownloadQuery.relativeDay(oneYear, now: now, calendar: calendar, language: .english)
+        == "1 year ago")
+    #expect(
+      LibraryDownloadQuery.relativeDay(twoYears, now: now, calendar: calendar, language: .english)
+        == "2 years ago")
+    #expect(
+      LibraryDownloadQuery.relativeDay(oneYear, now: now, calendar: calendar, language: .hebrew)
+        == "לפני שנה")
+    #expect(
+      LibraryDownloadQuery.relativeDay(twoYears, now: now, calendar: calendar, language: .hebrew)
+        == "לפני שנתיים")
+    #expect(
+      LibraryDownloadQuery.relativeDay(threeYears, now: now, calendar: calendar, language: .hebrew)
+        == "לפני 3 שנים")
+  }
+
   private func record(
     _ id: String = UUID().uuidString.lowercased(),
     filename: String = "sample.jpg",

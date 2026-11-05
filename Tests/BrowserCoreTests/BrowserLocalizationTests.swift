@@ -133,3 +133,18 @@ import Testing
     BrowserLocalization.plural("%d active downloads", count: 3, table: "Bridge", language: .hebrew)
       == "הסגירה תבטל 3 הורדות פעילות.")
 }
+
+@Test func importFailuresExplainProblemsInHebrew() {
+  #expect(
+    BrowserImport.ImportError.unsupported.description(language: .hebrew)
+      == "בחרו תיקיית פרופיל או קובץ ייצוא סימניות של Chrome, Edge, Brave, Arc, Safari או Firefox.")
+  #expect(
+    BrowserImport.ImportError.privateProfile.description(language: .hebrew)
+      == "אי אפשר לייבא פרופילים פרטיים של דפדפן. בחרו פרופיל רגיל.")
+  #expect(
+    BrowserImport.ImportError.databaseUnavailable("fixture").description(language: .hebrew)
+      == "לא ניתן לקרוא בבטחה את מסד נתוני ההיסטוריה של הדפדפן שנבחר.")
+  #expect(
+    BrowserImport.ImportError.tooManyRows.description(language: .hebrew)
+      == "פרופיל הדפדפן שנבחר מכיל יותר נתונים ממה שניתן לייבא בבת אחת.")
+}

@@ -31,6 +31,12 @@ class RebrandEngineFrameworkTests(unittest.TestCase):
             for path in info_paths:
                 path.parent.mkdir(parents=True)
                 path.write_bytes(plistlib.dumps({"CFBundleIdentifier": "com.ardia.browser"}))
+                if "Helpers" in path.parts:
+                    localized = path.parent / "Resources/base.lproj/InfoPlist.strings"
+                    localized.parent.mkdir(parents=True)
+                    localized.write_bytes(plistlib.dumps(
+                        {"CFBundleDisplayName": "Chromium", "Unrelated": "preserved"},
+                        fmt=plistlib.FMT_BINARY))
             REBRAND.rebrand(framework)
             for path, identifier in info_paths.items():
                 values = plistlib.loads(path.read_bytes())
@@ -43,6 +49,10 @@ class RebrandEngineFrameworkTests(unittest.TestCase):
                     self.assertEqual((resources / "Shaar.icns").read_bytes(),
                                      REBRAND.SHAAR_ICON.read_bytes())
                     self.assertFalse((resources / "Assets.car").exists())
+                    localized = plistlib.loads(
+                        (resources / "base.lproj/InfoPlist.strings").read_bytes())
+                    self.assertEqual(localized["CFBundleDisplayName"], values["CFBundleDisplayName"])
+                    self.assertEqual(localized["Unrelated"], "preserved")
 
 
 if __name__ == "__main__":

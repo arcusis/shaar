@@ -58,6 +58,12 @@ def rebrand(framework: Path) -> None:
         info_path.write_bytes(plistlib.dumps(info))
         resources = helper / "Resources"
         resources.mkdir(exist_ok=True)
+        for localized in resources.glob("*.lproj/InfoPlist.strings"):
+            values = plistlib.loads(localized.read_bytes())
+            for key in ("CFBundleDisplayName", "CFBundleName"):
+                if key in values:
+                    values[key] = display_name
+            localized.write_bytes(plistlib.dumps(values))
         shutil.copyfile(SHAAR_ICON, resources / "Shaar.icns")
         (resources / "Assets.car").unlink(missing_ok=True)
 

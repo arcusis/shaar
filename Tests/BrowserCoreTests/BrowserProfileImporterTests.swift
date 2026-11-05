@@ -124,6 +124,20 @@ import Testing
   }
 }
 
+@Test func sqliteSnapshotPreservesTextAfterEmbeddedNUL() throws {
+  let profile = try profileDirectory(name: "SQLiteNUL")
+  let database = profile.appending(path: "History")
+  try createDatabase(sqlFixture: "ChromiumHistory.sql", at: database)
+
+  let rows = try BrowserImportSQLite.rows(
+    at: database, query: "SELECT CAST(x'4162004364' AS TEXT) AS title")
+  guard case .text(let title) = rows.first?["title"] else {
+    Issue.record("SQLite TEXT was not decoded.")
+    return
+  }
+  #expect(title == "Ab\0Cd")
+}
+
 @Test func sqliteSnapshotRejectsMissingSourcesAndInvalidQueries() throws {
   let absent = FileManager.default.temporaryDirectory.appending(path: "missing-\(UUID()).sqlite")
   #expect(throws: BrowserImport.ImportError.self) {

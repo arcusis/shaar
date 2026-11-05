@@ -48,6 +48,13 @@ struct PrivateParityTests {
     #expect(!PrivateBrowserHost.supportsPrivateCommand(.downloads))
   }
 
+  @Test func privateFavoriteMenuRequiresWebPage() throws {
+    let store = try makeStore()
+    #expect(!PrivateBrowserHost.windowCanPerform(.addFavorite, store: store))
+    store.perform(.open(URL(string: "https://example.com/private")!))
+    #expect(PrivateBrowserHost.windowCanPerform(.addFavorite, store: store))
+  }
+
   @Test func privateTabsFoldersAndSplitsNeverEnterWorkspaceFile() throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }

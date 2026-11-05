@@ -8,6 +8,12 @@ import Testing
 @testable import ArcusisBrowser
 
 struct ProfileAccountsTests {
+  @Test func blankAccountNameUsesEmailForBadgeInitials() {
+    let account = ConnectedAccount(
+      provider: .google, email: "alex@example.test", name: " \t\n")
+    #expect(account.initials == "A")
+  }
+
   @Test func googleAccountListReadsThePrimarySignedInAccount() {
     let body = """
       ["gaia.l.a.r",[["gaia.l.a",1,"Alex Example","alex@example.com","https://lh3.googleusercontent.com/a/photo",1,1,0,null,1,"1234"],["gaia.l.a",1,"Second","second@example.com","",1,1,0,null,1,"5678"]]]

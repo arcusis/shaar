@@ -454,6 +454,8 @@ public struct BrowserSession: Codable, Equatable, Sendable {
         let remaining = updated[source].tabs
         updated[source].selectedTabID =
           remaining.isEmpty ? nil : remaining[min(position, remaining.count - 1)].id
+        let fallbackFolder = updated[source].selectedTab?.folderID
+        updated[source].expandFolderPath(fallbackFolder)
       }
       if followsSelection || updated[destination].selectedTabID == nil {
         updated[destination].selectedTabID = id

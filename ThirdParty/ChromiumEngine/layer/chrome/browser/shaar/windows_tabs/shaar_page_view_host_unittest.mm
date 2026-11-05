@@ -101,6 +101,19 @@ TEST(ShaarPageViewHostTest, PublicABIRejectsUnregisteredHandles) {
   EXPECT_EQ(shaar_tab_view_attach(engine, window, tab, &error),
             SHAAR_NOT_FOUND);
   EXPECT_EQ(error.code, SHAAR_NOT_FOUND);
+  shaar_tab_probe_state state = {};
+  state.size = sizeof(state);
+  EXPECT_EQ(shaar_tab_get_probe_state(engine, window, tab, &state, &error),
+            SHAAR_NOT_FOUND);
+  EXPECT_EQ(error.code, SHAAR_NOT_FOUND);
+  EXPECT_EQ(state.live_web_contents, 0);
+  EXPECT_EQ(state.selected_native_tab, 0);
+  EXPECT_EQ(state.displayed_native_web_contents, 0);
+  EXPECT_EQ(state.context_is_private, 0);
+  state.size = sizeof(state) - 1;
+  EXPECT_EQ(shaar_tab_get_probe_state(engine, window, tab, &state, &error),
+            SHAAR_INVALID_ARGUMENT);
+  EXPECT_EQ(error.code, SHAAR_INVALID_ARGUMENT);
 }
 
 }  // namespace

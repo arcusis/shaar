@@ -53,6 +53,14 @@ class UpgradeFromV010Tests(unittest.TestCase):
         self.assertIn("runtime.applyBookmarkOperation(operation, profileID: profile)", patched)
         self.assertEqual(patched.count("Alpha console"), 1)
 
+    def test_old_native_guard_accepts_the_owned_tmpdir(self):
+        source = subprocess.check_output(
+            ["git", "show", "v0.1.0:Sources/ShaarVerification/EngineProbe.swift"],
+            cwd=upgrade_from_v010.ROOT, text=True)
+        patched = upgrade_from_v010.patch_legacy_temporary_guard(source)
+        self.assertIn('ProcessInfo.processInfo.environment["TMPDIR"]', patched)
+        self.assertIn('"arcusis-engine-probe-v1\\n"', patched)
+
     def test_annotated_release_tag_resolves_to_pinned_commit(self):
         self.assertEqual(upgrade_from_v010.v010_commit(),
                          "f887d5d7308670fd3c2215ebe4814abe457afa0f")

@@ -88,6 +88,15 @@ def add_legacy_bookmarks(source):
     return replace_once(source, marker, addition + marker, "bookmark probe")
 
 
+def patch_legacy_temporary_guard(source):
+    old = ("      let temporary = FileManager.default.temporaryDirectory.standardizedFileURL\n"
+           "        .resolvingSymlinksInPath()")
+    new = ("      let temporary = URL(filePath: ProcessInfo.processInfo.environment[\"TMPDIR\"]"
+           " ?? NSTemporaryDirectory(), directoryHint: .isDirectory)\n"
+           "        .standardizedFileURL.resolvingSymlinksInPath()")
+    return replace_once(source, old, new, "temporary root guard")
+
+
 def add_hidden_window_guard(source):
     source = replace_once(source, "import Foundation\n", "import AppKit\nimport Foundation\n",
                           "main import")
@@ -163,7 +172,7 @@ def prepare_old_harness(source, released_framework):
     bridge = source / "Sources/ChromiumBridge/ChromiumBridge.mm"
     bridge.write_text(remove_mock_keychain_switch(bridge.read_text()))
     probe = source / "Sources/ShaarVerification/EngineProbe.swift"
-    probe.write_text(add_legacy_bookmarks(probe.read_text()))
+    probe.write_text(patch_legacy_temporary_guard(add_legacy_bookmarks(probe.read_text())))
     main = source / "Sources/ShaarVerification/ShaarVerificationMain.swift"
     main.write_text(add_hidden_window_guard(main.read_text()))
     shutil.copy2(ROOT / "Sources/ShaarVerification/HiddenWindowOrderGuard.swift",

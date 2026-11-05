@@ -187,6 +187,32 @@ private let legacySession = Data(
     try JSONDecoder().decode(BrowserSession.self, from: JSONEncoder().encode(session)) == session)
 }
 
+@Test func movingSelectedFolderRevealsSourceFallbackTab() throws {
+  var session = BrowserSession.fresh()
+  let source = session.selectedSpaceID
+  let remainingTab = session.open(URL(string: "https://example.com/remaining")!)!
+  let remainingFolder = session.addFolder(name: "Remaining", in: source)!
+  let placedRemaining = session.moveTab(
+    remainingTab, from: source, to: source, folderID: remainingFolder)
+  #expect(placedRemaining)
+  let movingTab = session.open(URL(string: "https://example.com/moving")!)!
+  let movingFolder = session.addFolder(name: "Moving", in: source)!
+  let placedMoving = session.moveTab(movingTab, from: source, to: source, folderID: movingFolder)
+  #expect(placedMoving)
+  let profileID = session.selectedSpace.profileID
+  let destination = session.addSpace(name: "Shared", sharingProfile: profileID)!
+  session.selectSpace(source)
+  let collapsed = session.toggleFolder(remainingFolder, in: source)
+  #expect(collapsed)
+
+  let moved = session.moveFolder(movingFolder, from: source, to: destination)
+  #expect(moved)
+
+  let sourceAfter = try #require(session.spaces.first { $0.id == source })
+  #expect(sourceAfter.selectedTabID == remainingTab)
+  #expect(sourceAfter.folderPath(to: remainingFolder).allSatisfy { !$0.isCollapsed })
+}
+
 @Test func commandSearchFindsCollapsedFolderContentsAndRevealsTheChosenContext() throws {
   var session = BrowserSession.fresh()
   let space = session.selectedSpaceID

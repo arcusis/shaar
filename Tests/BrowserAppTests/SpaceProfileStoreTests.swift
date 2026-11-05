@@ -9,6 +9,21 @@ import Testing
 @testable import ArcusisBrowser
 
 @Suite @MainActor struct SpaceProfileStoreTests {
+  @Test func openingSpaceEditorCancelsPendingSplitCommand() throws {
+    let store = BrowserStore()
+    store.perform(.open(URL(string: "https://example.com")!))
+    let target = try #require(store.session.selectedSpace.selectedTabID)
+    store.openSplitPane(beside: target, edge: .right)
+    #expect(store.commandIsOpen)
+    #expect(store.pendingSplitPlacement?.target == target)
+
+    store.spaceEditor = .create
+
+    #expect(store.spaceEditor == .create)
+    #expect(!store.commandIsOpen)
+    #expect(store.pendingSplitPlacement == nil)
+  }
+
   @Test func reassignmentBroadcastsAndPersistsAllWindows() throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }

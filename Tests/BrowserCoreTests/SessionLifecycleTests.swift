@@ -97,3 +97,13 @@ import Testing
   #expect(updates == [false, false, true])
   #expect(session.selectedSpace.symbol == "star")
 }
+
+@Test func spaceSymbolUpdateRejectsWhitespaceOnlyName() {
+  var session = BrowserSession.fresh()
+  let space = session.selectedSpaceID
+  let original = session.selectedSpace.symbol
+
+  let changed = session.updateSpaceSymbol(space, symbol: " \t\n ")
+  #expect(!changed)
+  #expect(session.selectedSpace.symbol == original)
+}

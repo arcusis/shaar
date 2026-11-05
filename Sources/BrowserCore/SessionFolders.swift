@@ -147,11 +147,17 @@ extension BrowserSession {
         updated[source].selectedTabID = fallback?.id
         updated[source].expandFolderPath(fallback?.folderID)
       }
+      let destinationSelectionChanged =
+        followsSelection || updated[destination].selectedTabID == nil
       if followsSelection {
         updated[destination].selectedTabID = selected
         updated[destination].selectedFavoriteID = nil
       } else if updated[destination].selectedTabID == nil {
         updated[destination].selectedTabID = members.first?.id
+      }
+      if destinationSelectionChanged {
+        let selectedFolder = updated[destination].selectedTab?.folderID
+        updated[destination].expandFolderPath(selectedFolder)
       }
     }
     for index in updated[destination].tabs.indices

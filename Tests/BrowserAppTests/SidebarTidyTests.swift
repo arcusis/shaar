@@ -32,3 +32,53 @@ import Testing
   #expect(groups.first { $0.topic == "localhost:4000" }?.tabIDs == [second.id])
   #expect(groups.first { $0.topic == "[::1]:8080" }?.tabIDs == [ipv6.id])
 }
+
+@Test @MainActor func emptyTidyResultKeepsManualTodayFolderMembership() throws {
+  let store = BrowserStore()
+  let space = store.session.selectedSpaceID
+  store.perform(.open(URL(string: "https://example.com/one")!))
+  let tab = try #require(store.session.selectedSpace.selectedTab)
+  let folder = try #require(store.createFolder(name: "Manual", in: space, section: .today))
+  #expect(store.moveTab(tab.id, from: space, to: space, folderID: folder))
+
+  store.applyTidyGroups([], in: space)
+
+  #expect(store.session.selectedSpace.tabs.first { $0.id == tab.id }?.folderID == folder)
+}
+
+@Test @MainActor func repeatingTidyDoesNotCreateDuplicateEmptyFolders() throws {
+  let store = BrowserStore()
+  let space = store.session.selectedSpaceID
+  store.perform(.open(URL(string: "https://example.com/one")!))
+  let first = try #require(store.session.selectedSpace.selectedTab?.id)
+  store.perform(.open(URL(string: "https://example.com/two")!))
+  let second = try #require(store.session.selectedSpace.selectedTab?.id)
+  let group = SidebarTidyGroup(topic: "example.com", tabIDs: [first, second])
+
+  store.applyTidyGroups([group], in: space)
+  let firstFolder = try #require(store.session.selectedSpace.folders.first?.id)
+  store.applyTidyGroups([group], in: space)
+
+  #expect(store.session.selectedSpace.folders.map(\.id) == [firstFolder])
+  #expect(store.session.selectedSpace.tabs.allSatisfy { $0.folderID == firstFolder })
+}
+
+@Test @MainActor func repeatedTopicProposalsFormOneUsefulGroup() throws {
+  let store = BrowserStore()
+  let space = store.session.selectedSpaceID
+  store.perform(.open(URL(string: "https://example.com/one")!))
+  let first = try #require(store.session.selectedSpace.selectedTab?.id)
+  store.perform(.open(URL(string: "https://example.com/two")!))
+  let second = try #require(store.session.selectedSpace.selectedTab?.id)
+  let proposals = [
+    SidebarTidyGroup(topic: "Research", tabIDs: [first]),
+    SidebarTidyGroup(topic: "Research", tabIDs: [second]),
+  ]
+
+  store.applyTidyGroups(proposals, in: space)
+
+  let folder = try #require(store.session.selectedSpace.folders.first)
+  #expect(store.session.selectedSpace.folders.count == 1)
+  #expect(folder.name == "Research")
+  #expect(store.session.selectedSpace.tabs.allSatisfy { $0.folderID == folder.id })
+}

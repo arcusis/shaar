@@ -242,6 +242,24 @@ import Testing
   #expect(results.map(\.action) == expected)
 }
 
+@Test func mostVisitedKeepsDistinctPathWithAndWithoutTrailingSlash() throws {
+  var fixture = try LauncherFixture()
+  let opened = fixture.session.open(URL(string: "https://example.com/docs/")!)
+  #expect(opened != nil)
+  let history = [
+    try entry(
+      "https://example.com/docs", visits: 8, profile: fixture.profileID)
+  ]
+
+  let results = CommandLauncher.mostVisited(in: fixture.session, history: history)
+
+  #expect(
+    results.map(\.action) == [
+      .history(profile: fixture.profileID, address: "https://example.com/docs")
+    ])
+  #expect(CommandLauncher.pageKey("https://example.com/") == "https://example.com")
+}
+
 @Test func selectionFollowsItsRowAndClampsWhenTheRowIsGone() {
   let rows = ["a", "b", "c"].map(row)
   var selection = CommandSelection(index: 1, in: rows)

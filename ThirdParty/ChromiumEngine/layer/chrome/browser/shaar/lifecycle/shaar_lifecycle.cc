@@ -221,6 +221,7 @@ void EngineReady(shaar_engine* engine) {
 void EngineQuitCancelled() {
   if (!g_state.engine || !g_state.closing || g_state.shutting_down)
     return;
+  shaar::windows_tabs::Registry().CancelEngineQuit(g_state.engine);
   g_state.closing = false;
   Emit(g_state.engine, kQuitCancelled);
 }
@@ -229,6 +230,7 @@ void EngineWillShutDown(shaar_engine* engine) {
   if (g_state.engine != engine || g_state.shutting_down)
     return;
   g_state.shutting_down = true;
+  shaar::windows_tabs::Registry().BeginEngineQuit(engine);
   shaar_history::StopObservingLifecycle(engine);
   shaar::windows_tabs::StopObservingLifecycle();
   Emit(engine, kWillShutDown);
@@ -307,6 +309,7 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_engine_run(
   engine->run_active = false;
   g_state = {};
   Emit(engine, kStopped);
+  shaar::windows_tabs::Registry().CancelEngineQuit(engine);
   return result == 0 ? Fail(SHAAR_OK, "", 0, error)
                      : Fail(SHAAR_CHROMIUM_ERROR, "Chromium startup or run failed",
                             result, error);
@@ -326,6 +329,7 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_engine_request_quit(
                 error);
 
   g_state.closing = true;
+  shaar::windows_tabs::Registry().BeginEngineQuit(engine);
   Emit(engine, kQuitRequested);
   // The Mac application delegate's termination route can wait on native
   // prompts while Shaar still owns hidden browser windows. Close Chromium's

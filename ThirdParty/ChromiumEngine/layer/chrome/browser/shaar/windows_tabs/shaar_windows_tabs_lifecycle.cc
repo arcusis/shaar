@@ -261,6 +261,8 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_window_open(
       (kind == SHAAR_WINDOW_REGULAR && private_session) ||
       (kind == SHAAR_WINDOW_PRIVATE && !private_session))
     return Result(SHAAR_INVALID_ARGUMENT, error);
+  if (shaar::windows_tabs::Registry().EngineQuitRequested(engine))
+    return Result(SHAAR_SHUTTING_DOWN, error);
 
   Profile* private_profile = nullptr;
   std::string private_profile_id;
@@ -359,6 +361,8 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_tab_open(
   if (!windows.contains(window))
     return Result(SHAAR_NOT_FOUND, error);
   shaar_engine* engine = window->engine;
+  if (shaar::windows_tabs::Registry().EngineQuitRequested(engine))
+    return Result(SHAAR_SHUTTING_DOWN, error);
   shaar_error_code status = SHAAR_OK;
   Profile* profile = ResolveScope(engine, window, scope, &status);
   if (!profile)

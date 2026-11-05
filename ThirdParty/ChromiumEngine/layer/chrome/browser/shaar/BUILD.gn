@@ -185,7 +185,13 @@ test("shaar_private_sessions_unittests") {
 
 test("shaar_profiles_unittests") {
   sources = [ "profiles/shaar_profiles_unittest.cc" ]
-  deps = [ ":engine", "//testing/gtest" ]
+  deps = [
+    ":engine",
+    "//chrome/test/base:testing_profile_impl",
+    "//components/prefs:test_support",
+    "//content/test:test_support",
+    "//testing/gtest",
+  ]
 }
 
 test("shaar_windows_tabs_unittests") {

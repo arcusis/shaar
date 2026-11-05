@@ -794,8 +794,9 @@ struct BrowserSidebar: View {
               Menu(ShellL10n.string("Move to Folder")) {
                 ForEach(space.folders) { folder in
                   Button(folderLabel(folder.id, in: space)) {
-                    _ = store.moveTab(id, from: space.id, to: space.id, folderID: folder.id)
+                    _ = store.moveSplitMemberToFolder(id, in: space.id, folderID: folder.id)
                   }
+                  .disabled(space.tabs.first { $0.id == id }?.folderID == folder.id)
                 }
                 if space.folders.isEmpty { ShellL10n.text("Create a folder first") }
               }

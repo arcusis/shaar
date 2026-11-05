@@ -987,6 +987,16 @@ final class BrowserStore {
   }
 
   @discardableResult
+  func moveSplitMemberToFolder(_ id: UUID, in space: UUID, folderID: UUID) -> Bool {
+    guard
+      let tab = session.spaces.first(where: { $0.id == space })?
+        .tabs.first(where: { $0.id == id }),
+      tab.folderID != folderID
+    else { return false }
+    return moveTab(id, from: space, to: space, folderID: folderID)
+  }
+
+  @discardableResult
   func acceptSidebarDrop(
     _ item: SidebarTransfer, into space: UUID, before targetTab: UUID? = nil,
     pinned: Bool? = nil, beforeSpace: UUID? = nil, folderID: UUID? = nil, beforeFolder: UUID? = nil

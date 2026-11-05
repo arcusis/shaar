@@ -52,8 +52,7 @@ struct SharedExtensionSettingsTests {
     defer { try? FileManager.default.removeItem(at: file) }
     let transport = SettingsExtensionsTransport(
       profiles: [profileID: true], rejectManage: true)
-    let adapter = ShaarExtensionsAdapter(
-      implementation: .shaar, ardia: UnusedArdiaExtensions(), shaar: transport)
+    let adapter = ShaarExtensionsAdapter(shaar: transport)
     let home = try ShaarExtensionHome(fileURL: file, adapter: adapter)
     _ = try await home.recordApprovedInstall(
       "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", approvedVersion: "1.2", profileIDs: [profileID])

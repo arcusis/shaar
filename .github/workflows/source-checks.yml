@@ -380,7 +380,7 @@ jobs:
           app="$PWD/build/Shaar Verification.app"
           evidence="$PWD/build/ci/shaar-engine-simulation"
           "$app/Contents/MacOS/ShaarVerification" \
-            --probe-shaar-first-tab --shaar-engine-backend=shaar \
+            --probe-shaar-first-tab \
             --probe-shaar-private-privacy \
             --probe-framework "$app/Contents/Frameworks/Chromium Framework.framework" \
             --probe-output "$evidence/private-privacy.json" \

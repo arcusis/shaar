@@ -25,6 +25,7 @@
     "Ask": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לשאול"}}}},
     "Site data cleared.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "נתוני האתרים נוקו."}}}},
     "Cache cleared.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "המטמון נוקה."}}}},
+    "Could not clear this profile's data. Try again.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לא ניתן לנקות את נתוני הפרופיל הזה. נסו שוב."}}}},
     "Site permissions reset to defaults.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "הרשאות האתר אופסו לברירות המחדל."}}}},
     "Cookies and Site Data": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "קובצי Cookie ונתוני אתרים"}}}},
     "Clear Site Data…": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "ניקוי נתוני אתרים…"}}}},

@@ -153,7 +153,7 @@ final class ProfilePrivacyModel {
   }
 
   func clear(siteData: Bool) async {
-    await run {
+    await run(failureMessage: "Could not clear this profile's data. Try again.") {
       try await self.backend.loadProfile(self.profileID)
       if siteData {
         try await self.backend.clearSiteData(self.profileID)
@@ -194,12 +194,14 @@ final class ProfilePrivacyModel {
     sites = result
   }
 
-  private func run(_ operation: () async throws -> Void) async {
+  private func run(failureMessage: String? = nil, _ operation: () async throws -> Void) async {
     guard !busy else { return }
     busy = true
     failure = nil
     message = nil
     defer { busy = false }
-    do { try await operation() } catch { failure = error.localizedDescription }
+    do { try await operation() } catch {
+      failure = failureMessage.map(SettingsL10n.string) ?? error.localizedDescription
+    }
   }
 }

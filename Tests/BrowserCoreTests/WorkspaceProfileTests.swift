@@ -196,6 +196,22 @@ import Testing
     #expect(decoded == workspace)
   }
 
+  @Test func profileCreationAndEditingRejectBlankSymbols() throws {
+    var workspace = try BrowserWorkspace(session: .fresh())
+    let profileID = workspace.catalog.profiles[0].id
+    let original = workspace
+
+    for symbol in ["", " \t\n"] {
+      #expect(throws: WorkspaceError.self) {
+        try workspace.createProfile(name: "New", symbol: symbol)
+      }
+      #expect(throws: WorkspaceError.self) {
+        try workspace.setProfileSymbol(profileID, symbol: symbol)
+      }
+    }
+    #expect(workspace == original)
+  }
+
   @Test func profileCreationRejectsAnIdentityAlreadyInUse() throws {
     var workspace = try BrowserWorkspace(session: .fresh())
     let original = workspace

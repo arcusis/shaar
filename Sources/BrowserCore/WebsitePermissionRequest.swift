@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import Darwin
 import Foundation
 
 /// Website permissions the engine forwards for a decision, named as the engine reports them.
@@ -34,8 +35,7 @@ public struct WebsitePermissionRequest: Identifiable, Equatable, Sendable {
     let secureOrigin =
       scheme == "https"
       || (scheme == "http"
-        && ["localhost", "127.0.0.1", "::1", "[::1]"].contains(
-          requestingOrigin.host()?.lowercased() ?? ""))
+        && Self.isLocalHTTPHost(requestingOrigin.host()?.lowercased() ?? ""))
     guard !id.isEmpty, id.utf8.count <= 128, NavigationInput.isWebURL(pageURL),
       NavigationInput.isWebURL(requestingOrigin), requestingOrigin.user == nil,
       requestingOrigin.password == nil, requestingOrigin.query == nil,
@@ -49,6 +49,25 @@ public struct WebsitePermissionRequest: Identifiable, Equatable, Sendable {
     self.pageURL = pageURL
     self.requestingOrigin = requestingOrigin
     self.kinds = WebsitePermissionKind.allCases.filter(kinds.contains)
+  }
+
+  private static func isLocalHTTPHost(_ host: String) -> Bool {
+    ["localhost", "localhost.", "::1", "[::1]"].contains(host)
+      || host.hasSuffix(".localhost") || host.hasSuffix(".localhost.")
+      || isIPv4Loopback(host) || isIPv6Loopback(host)
+  }
+
+  private static func isIPv4Loopback(_ host: String) -> Bool {
+    var address = in_addr()
+    guard host.withCString({ inet_aton($0, &address) }) == 1 else { return false }
+    return UInt32(bigEndian: address.s_addr) >> 24 == 127
+  }
+
+  private static func isIPv6Loopback(_ host: String) -> Bool {
+    var address = in6_addr()
+    guard host.withCString({ inet_pton(AF_INET6, $0, &address) }) == 1 else { return false }
+    var loopback = in6addr_loopback
+    return memcmp(&address, &loopback, MemoryLayout<in6_addr>.size) == 0
   }
 
   public func matches(_ session: BrowserSession) -> Bool {

@@ -12,6 +12,21 @@ import XCTest
 
 @Suite @MainActor
 struct MiniBrowserTests {
+  @Test func rejectedProfileSwitchKeepsMiniDestination() {
+    let current = UUID()
+    let requested = UUID()
+    var selection = MiniDestinationSelection(id: current)
+    var routed: UUID?
+    selection.select(requested) { id in
+      routed = id
+      return false
+    }
+    #expect(routed == requested)
+    #expect(selection.id == current)
+    selection.select(requested) { _ in true }
+    #expect(selection.id == requested)
+  }
+
   @Test func externalURLRoutingHonorsPreferenceAndRejectsOtherSchemes() {
     let url = URL(string: "https://example.com")!
     #expect(MiniLinkRoute.route(url, inMainWindow: false) == .mini(url))
@@ -40,7 +55,7 @@ struct MiniBrowserTests {
     store.perform(.open(URL(string: "https://example.com")!))
     let view = MiniBrowserWindow(
       store: store, engine: nil, destinations: [space],
-      destination: space.id, onNavigate: { _ in }, onDestination: { _ in }, onOpen: {})
+      destination: space.id, onNavigate: { _ in }, onDestination: { _ in true }, onOpen: {})
     let host = NSHostingView(rootView: view.frame(width: 680, height: 520))
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 680, height: 520),

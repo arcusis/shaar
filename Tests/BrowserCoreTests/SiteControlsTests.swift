@@ -19,6 +19,18 @@ import Testing
   #expect(SiteOrigin.string(for: URL(string: "about:blank")!) == nil)
 }
 
+@Test func siteOriginNormalizesExplicitDefaultPorts() {
+  #expect(
+    SiteOrigin.string(for: URL(string: "https://example.test:443/page")!)
+      == SiteOrigin.string(for: URL(string: "https://example.test/page")!))
+  #expect(
+    SiteOrigin.string(for: URL(string: "http://example.test:80/page")!)
+      == SiteOrigin.string(for: URL(string: "http://example.test/page")!))
+  #expect(
+    SiteOrigin.string(for: URL(string: "https://example.test:8443/page")!)
+      == "https://example.test:8443")
+}
+
 @Test func siteSecurityTreatsEveryEngineWarningAsNotSecure() {
   #expect(SiteSecurity(engineLevel: "secure") == .secure)
   for level in ["insecure", "certificateError", "mixed"] {

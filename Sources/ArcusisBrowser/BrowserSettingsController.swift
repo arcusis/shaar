@@ -20,6 +20,7 @@ final class BrowserSettingsState {
   private(set) var deletingProfileID: UUID?
   private(set) var selectedProfileID: UUID?
   private(set) var downloadDirectoryRevision = 0
+  private(set) var downloadDirectoryErrors: [UUID: String] = [:]
   private var didPresent = false
   let downloadDirectorySettingsEnabled: Bool
   private let applyDownloadDirectoryToEngine: ProfileDownloadDirectoryApplier?
@@ -145,9 +146,7 @@ final class BrowserSettingsState {
     panel.canCreateDirectories = false
     panel.prompt = SettingsL10n.string("Choose")
     panel.message = SettingsL10n.string("Choose a download folder for this profile.")
-    if panel.runModal() == .OK, let url = panel.url,
-      DownloadDirectoryPolicy.validate(url, bundleURL: Bundle.main.bundleURL)
-    {
+    if panel.runModal() == .OK, let url = panel.url {
       Task { _ = await applyDownloadDirectory(url, for: profileID) }
     }
   }
@@ -169,15 +168,24 @@ final class BrowserSettingsState {
     else { return false }
     if let directory, !DownloadDirectoryPolicy.validate(directory, bundleURL: Bundle.main.bundleURL)
     {
+      downloadDirectoryErrors[profileID] = SettingsL10n.string(
+        "The download folder could not be changed. Try again.")
       return false
     }
     do {
       let acknowledged = try await applyDownloadDirectoryToEngine(profileID, directory)
-      if directory != nil && acknowledged == nil { return false }
+      if directory != nil && acknowledged == nil {
+        downloadDirectoryErrors[profileID] = SettingsL10n.string(
+          "The download folder could not be changed. Try again.")
+        return false
+      }
       preferences.setDownloadDirectory(directory == nil ? nil : acknowledged, for: profileID)
+      downloadDirectoryErrors[profileID] = nil
       downloadDirectoryRevision &+= 1
       return true
     } catch {
+      downloadDirectoryErrors[profileID] = SettingsL10n.string(
+        "The download folder could not be changed. Try again.")
       return false
     }
   }
@@ -270,6 +278,7 @@ private struct BrowserSettingsRoot: View {
       selectedSearchEngine: Binding(
         get: { state.selectedSearchEngine }, set: { _ = state.selectSearchEngine($0) }),
       storageNotice: state.storageNotice,
+      downloadDirectoryErrors: state.downloadDirectoryErrors,
       onRestart: state.onRestart,
       onAddProfile: state.onAddProfile,
       onRenameProfile: { state.renameProfile($0, name: $1) },

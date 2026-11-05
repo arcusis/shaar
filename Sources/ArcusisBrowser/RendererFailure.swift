@@ -5,7 +5,7 @@
 import BrowserCore
 import Foundation
 
-/// Transient state for a failed document. The live tab and its profile stay owned by Chromium.
+/// Transient state for a failed document. Its saved tab and profile survive native document loss.
 struct RendererFailure: Identifiable, Equatable {
   let id = UUID()
   let profileID: UUID

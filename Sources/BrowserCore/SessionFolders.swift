@@ -76,6 +76,14 @@ extension BrowserSession {
     for i in space.tabs.indices where space.tabs[i].folderID == id {
       space.tabs[i].folderID = folder.parentID
     }
+    for i in closedTabs.indices
+    where closedTabs[i].spaceID == spaceID && closedTabs[i].tab.folderID == id {
+      let snapshot = closedTabs[i]
+      var tab = snapshot.tab
+      tab.folderID = folder.parentID
+      closedTabs[i] = ClosedBrowserTab(
+        tab: tab, spaceID: snapshot.spaceID, profileID: snapshot.profileID, index: snapshot.index)
+    }
     space.folders.removeAll { $0.id == id }
     space.normalizeFolders()
     spaces[index] = space

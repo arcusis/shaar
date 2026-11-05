@@ -139,6 +139,23 @@ private let legacySession = Data(
   try session.validate()
 }
 
+@Test func removingNestedFolderPromotesClosedTabRecoveryToParent() throws {
+  var session = BrowserSession.fresh()
+  let space = session.selectedSpaceID
+  let parent = session.addFolder(name: "Parent", in: space)!
+  let child = session.addFolder(name: "Child", in: space, parentID: parent)!
+  let tab = session.open(URL(string: "https://example.com/closed")!)!
+  let grouped = session.moveTab(tab, from: space, to: space, folderID: child)
+  #expect(grouped)
+  session.closeTab(tab)
+
+  let removed = session.removeFolder(child, in: space)
+  #expect(removed)
+  let reopened = try #require({ session.reopenClosedTab(tab, in: space) }())
+  #expect(session.selectedSpace.tabs.first { $0.id == reopened }?.folderID == parent)
+  try session.validate()
+}
+
 @Test func folderSubtreesMoveOnlyWithinTheirProfileAndNeverCreateCycles() throws {
   var session = BrowserSession.fresh()
   let source = session.selectedSpace

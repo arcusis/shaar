@@ -219,6 +219,31 @@ private func workspaceFixture() throws -> BrowserSession {
   #expect(destination.tabs[0].folderID == folder)
 }
 
+@Test func removingSharedNestedFolderPromotesPeerClosedTabRecovery() throws {
+  var initial = BrowserSession.fresh()
+  let space = initial.selectedSpaceID
+  let parent = initial.addFolder(name: "Parent", in: space)!
+  let child = initial.addFolder(name: "Child", in: space, parentID: parent)!
+  var workspace = try BrowserWorkspace(session: initial)
+  let firstID = workspace.windows[0].id
+  let secondID = try workspace.addWindow(from: firstID)
+  var second = workspace.window(secondID)!.session
+  let tab = second.open(URL(string: "https://example.com/closed")!)!
+  let grouped = second.moveTab(tab, from: space, to: space, folderID: child)
+  #expect(grouped)
+  second.closeTab(tab)
+  try workspace.updateWindow(secondID, session: second)
+
+  var first = workspace.window(firstID)!.session
+  let removed = first.removeFolder(child, in: space)
+  #expect(removed)
+  try workspace.updateWindow(firstID, session: first)
+  var projected = workspace.window(secondID)!.session
+  let reopened = try #require({ projected.reopenClosedTab(tab, in: space) }())
+  #expect(projected.selectedSpace.tabs.first { $0.id == reopened }?.folderID == parent)
+  try projected.validate()
+}
+
 @Test func lastWindowClosurePreservesCatalogAndReopeningDoesNotRestoreClosedLivePages() throws {
   var workspace = try BrowserWorkspace(session: workspaceFixture())
   let catalog = workspace.catalog

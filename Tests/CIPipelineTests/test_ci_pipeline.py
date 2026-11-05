@@ -44,6 +44,7 @@ SWIFT_REPORTS = load_script("ci-swift-reports")
 EXTRACTION = load_script("check-codeql-extraction")
 CODEQL_BUILD = load_script("codeql-build")
 RELEASE_CI = load_script("check-release-ci")
+SCANNING_ISSUES = load_script("sync-code-scanning-issues")
 
 
 class PipelineGateTests(unittest.TestCase):
@@ -57,7 +58,7 @@ class PipelineGateTests(unittest.TestCase):
         for alerts in ([], [{"number": 1, "state": "open"}]):
             responses = [{"workflow_runs": [valid]},
                          {"jobs": [{"name": "CI required", "status": "completed", "conclusion": "success"}]},
-                         {"workflow_runs": [dict(valid, id=10)]},
+                         {"workflow_runs": [dict(valid, id=10, event="schedule")]},
                          {"jobs": [{"name": "Swift security required", "status": "completed", "conclusion": "success"}]},
                          alerts]
             with patch.object(RELEASE_CI, "api", side_effect=responses):
@@ -70,6 +71,36 @@ class PipelineGateTests(unittest.TestCase):
         with patch.object(RELEASE_CI, "api", side_effect=[{"workflow_runs": [valid]}, {"jobs": []}]):
             with self.assertRaises(ValueError):
                 RELEASE_CI.require_release_ci("arcusis/shaar", revision)
+        swift_events = RELEASE_CI.SWIFT_SECURITY_EVENTS
+        for event in ("schedule", "workflow_dispatch"):
+            run = dict(valid, event=event)
+            self.assertEqual(RELEASE_CI.production_runs({"workflow_runs": [run]}, revision, swift_events), [run])
+        for event in ("push", "pull_request", "merge_group"):
+            run = dict(valid, event=event)
+            self.assertEqual(RELEASE_CI.production_runs({"workflow_runs": [run]}, revision, swift_events), [])
+
+    def test_code_scanning_issue_sync_opens_reopens_and_closes_by_alert_number(self):
+        def alert(number):
+            return {"number": number, "html_url": f"https://example.invalid/{number}",
+                    "rule": {"id": f"swift/rule-{number}", "description": "Rule", "security_severity_level": "high"},
+                    "tool": {"name": "CodeQL"},
+                    "most_recent_instance": {"location": {"path": "Sources/A.swift", "start_line": 3}}}
+
+        def issue(number, alert_number, state):
+            return {"number": number, "state": state, "title": f"[code-scanning #{alert_number}] Rule"}
+
+        alerts = [alert(1), alert(2), alert(3)]
+        issues = [issue(10, 1, "open"), issue(11, 2, "closed"), issue(12, 4, "open"), issue(13, 5, "closed"),
+                  {"number": 14, "state": "open", "title": "Unrelated"}]
+        to_create, to_reopen, to_close = SCANNING_ISSUES.plan(alerts, issues)
+        self.assertEqual([a["number"] for a in to_create], [3])
+        self.assertEqual([i["number"] for i in to_reopen], [11])
+        self.assertEqual([i["number"] for i in to_close], [12])
+        self.assertEqual(SCANNING_ISSUES.issue_title(alert(3)), "[code-scanning #3] Rule")
+        body = SCANNING_ISSUES.issue_body(alert(3))
+        self.assertIn("`swift/rule-3`", body)
+        self.assertIn("`Sources/A.swift:3`", body)
+        self.assertIn("high", body)
 
     def test_known_non_native_diffs_and_unknown_changes_select_required_coverage(self):
         for paths in (["Notebook/Note.md"], ["Notebook/probe.py"], ["README.md", "CONTRIBUTING.md"],

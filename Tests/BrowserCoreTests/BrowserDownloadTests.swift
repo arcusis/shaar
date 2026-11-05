@@ -84,3 +84,12 @@ import Testing
       sourceURL: "https://example.com", state: .finished, paused: false, dangerous: false,
       offTheRecord: false, received: 0, total: 0, startTime: 0) == nil)
 }
+
+@Test func whitespaceOnlyDownloadFilenameUsesDefaultName() {
+  let download = BrowserDownload(
+    id: "9b948ba6-d386-4e34-acdf-b2fb92fdb34b", profileID: UUID(), filename: "  \n\t",
+    path: "/tmp/file", sourceURL: "https://example.com", state: .finished, paused: false,
+    dangerous: false, offTheRecord: false, received: 1, total: 1, startTime: 0)
+
+  #expect(download?.filename == "Download")
+}

@@ -31,6 +31,19 @@ import Testing
   #expect(session.selectedSpace.selectedTab?.title == "docs.example.com")
 }
 
+@Test func whitespacePageTitlesUseHostForTabLabels() throws {
+  let url = URL(string: "https://docs.example.com/read")!
+  let nativeTab = BrowserTab(url: url, title: " \t ")
+  #expect(nativeTab.title == "docs.example.com")
+
+  var session = BrowserSession.fresh()
+  let opened = session.open(url)
+  let id = try #require(opened)
+  let updated = session.updateTab(id, url: url, title: " \n ")
+  #expect(!updated)
+  #expect(session.selectedSpace.selectedTab?.title == "docs.example.com")
+}
+
 @Test func engineTabsJoinTheirProfileAndOnlyForegroundTabsTakeSelection() {
   var session = BrowserSession.fresh()
   let personal = session.spaces[0]

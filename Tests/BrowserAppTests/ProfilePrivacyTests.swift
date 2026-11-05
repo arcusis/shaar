@@ -144,7 +144,12 @@ struct ProfilePrivacyTests {
     await model.load()
     backend.failureAction = "data"
     await model.clear(siteData: true)
-    #expect(model.failure != nil && model.message == nil && !model.busy)
+    #expect(model.failure == SettingsL10n.string("Could not clear this profile's data. Try again."))
+    #expect(model.message == nil && !model.busy)
+    backend.failureAction = "cache"
+    await model.clear(siteData: false)
+    #expect(model.failure == SettingsL10n.string("Could not clear this profile's data. Try again."))
+    #expect(model.message == nil && !model.busy)
     backend.failureAction = "reset"
     await model.resetPermissions(origin: "https://example.test")
     #expect(model.failure != nil && model.sites.count == 1 && model.message == nil)

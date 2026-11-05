@@ -368,7 +368,7 @@ final class BrowserStore {
   func showPageFind() {
     guard canFindCurrentPage, let tab = session.selectedPage?.tab else { return }
     closeLibraryDrawer()
-    commandIsOpen = false
+    dismissCommand()
     engine?.extensionPanel = nil
     if var current = pageFind, current.matches(session) {
       current.focusRequest = UUID()

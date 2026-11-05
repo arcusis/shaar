@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import AppKit
+import BrowserCore
 import ChromiumBridge
 import Observation
 
@@ -62,6 +63,17 @@ final class ExtensionManagerModel {
     self.pinnedIDs = pinnedIDs
   }
 
+  static func sortedExtensions(
+    _ extensions: [ManagedExtension], language: BrowserLanguage = .currentLaunchLanguage
+  ) -> [ManagedExtension] {
+    let locale = Locale(identifier: language.localeIdentifier)
+    return extensions.sorted { lhs, rhs in
+      let order = lhs.name.compare(
+        rhs.name, options: [.caseInsensitive, .diacriticInsensitive, .numeric], locale: locale)
+      return order == .orderedSame ? lhs.id < rhs.id : order == .orderedAscending
+    }
+  }
+
   var pinnedExtensions: [ManagedExtension] {
     pinnedIDs.compactMap { id in extensions.first { $0.id == id && $0.enabled } }
   }
@@ -88,9 +100,7 @@ final class ExtensionManagerModel {
           case .value(let data)? = ExtensionManagementResult(json: json),
           let list = try? JSONDecoder().decode([ManagedExtension].self, from: data)
         else { return }
-        self.extensions = list.sorted {
-          $0.name.localizedStandardCompare($1.name) == .orderedAscending
-        }
+        self.extensions = Self.sortedExtensions(list)
         self.loadIcons()
       }
     }

@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import AppKit
+import BrowserCore
 import Foundation
 import Testing
 
@@ -150,6 +151,21 @@ extension ExtensionManagementTests {
     #expect(model.pinnedExtensions == [enabled])
     model.setPinned(enabled.id, pinned: false)
     #expect(model.pinnedIDs.contains(enabled.id))
+  }
+
+  @Test @MainActor func managedExtensionNamesFollowTheSelectedLanguageOrder() {
+    let english = ManagedExtension(
+      id: String(repeating: "a", count: 32), name: "A", version: "1", description: "",
+      enabled: true, mayDisable: true, permissions: [], hostPermissions: [])
+    let hebrew = ManagedExtension(
+      id: String(repeating: "b", count: 32), name: "אב", version: "1", description: "",
+      enabled: true, mayDisable: true, permissions: [], hostPermissions: [])
+    #expect(
+      ExtensionManagerModel.sortedExtensions([english, hebrew], language: .hebrew).map(\.id)
+        == [hebrew.id, english.id])
+    #expect(
+      ExtensionManagerModel.sortedExtensions([english, hebrew], language: .english).map(\.id)
+        == [english.id, hebrew.id])
   }
 
   private func managed(id: String, enabled: Bool) -> ManagedExtension {

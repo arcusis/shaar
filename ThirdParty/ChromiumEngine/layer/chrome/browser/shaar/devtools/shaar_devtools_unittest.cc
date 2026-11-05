@@ -18,6 +18,8 @@
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/devtools_agent_host_client.h"
 #include "content/public/test/mock_devtools_agent_host.h"
+#include "content/public/test/test_browser_context.h"
+#include "content/public/test/test_renderer_host.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace shaar::devtools {
@@ -356,6 +358,28 @@ TEST(ShaarDevToolsTest, CaptureRejectsUnownedWindowTabPair) {
                                     &CaptureReply, &captured, &error));
   EXPECT_EQ(SHAAR_NOT_FOUND, error.code);
   EXPECT_EQ(0u, captured.request_id);
+}
+
+class ShaarPrivateDevToolsPageTargetTest
+    : public content::RenderViewHostTestHarness {
+ protected:
+  std::unique_ptr<content::BrowserContext> CreateBrowserContext() override {
+    auto context = std::make_unique<content::TestBrowserContext>();
+    context->set_is_off_the_record(true);
+    return context;
+  }
+};
+
+TEST_F(ShaarPrivateDevToolsPageTargetTest, ProtocolUsesPrivatePageTarget) {
+  ASSERT_TRUE(browser_context()->IsOffTheRecord());
+  auto host = ProtocolAgentHostFor(web_contents());
+  ASSERT_TRUE(host);
+  EXPECT_EQ(content::DevToolsAgentHost::kTypePage, host->GetType());
+  EXPECT_EQ(web_contents(), host->GetWebContents());
+  auto tab_host =
+      content::DevToolsAgentHost::GetOrCreateForTab(web_contents());
+  ASSERT_TRUE(tab_host);
+  EXPECT_NE(tab_host.get(), host.get());
 }
 
 TEST(ShaarDevToolsTest, LifecycleEntryRegistersOnlyItsOperationRange) {

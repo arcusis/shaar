@@ -776,7 +776,6 @@ bool IsProtocolPageTargetFor(content::WebContents* contents,
          host->GetType() == content::DevToolsAgentHost::kTypePage &&
          host->GetWebContents() == contents;
 }
-
 scoped_refptr<content::DevToolsAgentHost> ProtocolAgentHostFor(
     content::WebContents* contents) {
   if (!contents)

@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import AppKit
+import BrowserCore
 import SwiftUI
 
 struct ProfileExtensionsSection: View {
@@ -18,6 +19,19 @@ struct ProfileExtensionsSection: View {
     self.model = model
     self.sharedModel = sharedModel
     self.onAddExtensions = onAddExtensions
+  }
+
+  static func sortedProfileIDs(
+    for row: SharedExtensionSettingsRow, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> [UUID] {
+    let locale = Locale(identifier: language.localeIdentifier)
+    return row.profiles.keys.sorted { lhs, rhs in
+      let lhsName = row.profiles[lhs]?.name ?? ""
+      let rhsName = row.profiles[rhs]?.name ?? ""
+      let order = lhsName.compare(
+        rhsName, options: [.caseInsensitive, .diacriticInsensitive, .numeric], locale: locale)
+      return order == .orderedSame ? lhs.uuidString < rhs.uuidString : order == .orderedAscending
+    }
   }
 
   var body: some View {
@@ -73,11 +87,7 @@ private struct SharedExtensionSettingsSection: View {
         ForEach(model.rows) { row in
           VStack(alignment: .leading, spacing: 6) {
             Text(row.name).font(.headline)
-            ForEach(
-              row.profiles.keys.sorted(by: {
-                (row.profiles[$0]?.name ?? "") < (row.profiles[$1]?.name ?? "")
-              }), id: \.self
-            ) { profileID in
+            ForEach(ProfileExtensionsSection.sortedProfileIDs(for: row), id: \.self) { profileID in
               if let state = row.profiles[profileID] {
                 if let enabled = state.enabled {
                   Toggle(

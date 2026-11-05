@@ -38,6 +38,8 @@ REQUIRED_EXPORTS = (
     "_shaar_engine_run",
     "_shaar_engine_request_quit",
     "_shaar_engine_release",
+    "_shaar_test_keep_alive_state",
+    "_shaar_test_load_component_extension",
     "_shaar_submit",
     "_shaar_cancel_request",
     "_shaar_profile_open",
@@ -258,7 +260,8 @@ def load_config(repo: Path) -> dict:
         "operationRange": [800, 899],
         "moduleID": 1300,
         "layerFiles": list(EXTENSIONS_MODULE_LAYER_FILES),
-        "requiredExports": ["_shaar_extension_popup_view"],
+        "requiredExports": ["_shaar_extension_popup_view",
+                            "_shaar_test_load_component_extension"],
     }:
         raise BuildError("extensions module block is missing or inconsistent")
 

@@ -11,16 +11,19 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <vector>
 
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/chrome_browser_main.h"
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/lifetime/application_lifetime_desktop.h"
+#include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "chrome/browser/shaar/engine/shaar_module_registry.h"
 #include "chrome/browser/shaar/history/shaar_history.h"
@@ -30,6 +33,7 @@
 #include "content/public/browser/browser_main_parts.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
+#include "components/keep_alive_registry/keep_alive_registry.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/net_errors.h"
 #include "services/network/public/mojom/web_transport.mojom.h"
@@ -59,6 +63,21 @@ struct State {
 
 State g_state;
 bool g_run_was_started = false;
+thread_local std::string g_probe_keep_alive_state;
+
+bool IsMarkedProbeRoot(const shaar_engine* engine) {
+  const base::FilePath data_root = base::MakeAbsoluteFilePath(
+      base::FilePath::FromUTF8Unsafe(engine->data_root));
+  if (data_root.empty())
+    return false;
+  const base::FilePath root = data_root.DirName();
+  if (data_root != root.Append("Chromium") ||
+      root.BaseName().value().rfind("arcusis-engine-probe-", 0) != 0)
+    return false;
+  std::string marker;
+  return base::ReadFileToString(root.Append(".arcusis-probe"), &marker) &&
+         marker == "arcusis-engine-probe-v1\n";
+}
 
 shaar_error_code Fail(shaar_error_code code,
                       const char* message,
@@ -253,6 +272,28 @@ bool EngineIsShuttingDown(shaar_engine* engine) {
 }
 
 }  // namespace shaar::lifecycle
+
+extern "C" SHAAR_EXPORT shaar_error_code shaar_test_keep_alive_state(
+    shaar_engine* engine, shaar_bytes* out, shaar_error* error) {
+  if (out) *out = {};
+  if (!engine || !out)
+    return Fail(SHAAR_INVALID_ARGUMENT, "missing probe input", 0, error);
+  if (!pthread_main_np())
+    return Fail(SHAAR_INVALID_ARGUMENT, "main thread required", 0, error);
+  if (g_state.engine != engine || !g_state.ready || !engine->run_active)
+    return Fail(SHAAR_NOT_READY, "engine is not running", 0, error);
+  const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
+  if (!testing || std::strcmp(testing, "1") != 0)
+    return Fail(SHAAR_POLICY_BLOCKED, "verification mode required", 0, error);
+  if (!IsMarkedProbeRoot(engine))
+    return Fail(SHAAR_POLICY_BLOCKED, "foreign probe root", 0, error);
+  std::ostringstream state;
+  state << *KeepAliveRegistry::GetInstance()
+        << " trying_to_quit=" << browser_shutdown::IsTryingToQuit();
+  g_probe_keep_alive_state = state.str();
+  *out = {g_probe_keep_alive_state.data(), g_probe_keep_alive_state.size()};
+  return Fail(SHAAR_OK, "", 0, error);
+}
 
 extern "C" SHAAR_EXPORT shaar_error_code shaar_engine_run(
     shaar_engine* engine,

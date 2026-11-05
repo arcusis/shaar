@@ -21,6 +21,15 @@
 
 namespace shaar {
 
+// Chromium's extension entry points use this policy before dispatching into an
+// OTR browser context. Keep it independent of the normal profile's grants.
+inline bool PrivateExtensionsDisabled(const Profile* profile) {
+  return profile && profile->IsOffTheRecord();
+}
+
+shaar_error_code ConfigurePrivateProfile(Profile* otr);
+std::string PrivateProfilePrivacyStatus(Profile* otr);
+
 // Owns Shaar's identity and lease for Chromium's primary OTR profile. The
 // ProfileManager remains the owner of the Profile itself; this registry keeps
 // it alive by retaining a live session until every child handle is closed.

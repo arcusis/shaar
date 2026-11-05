@@ -21,6 +21,19 @@ BrowserTabRegistryImpl g_registry;
 
 BrowserTabRegistryImpl& Registry() { return g_registry; }
 
+void BrowserTabRegistryImpl::BeginEngineQuit(shaar_engine* engine) {
+  if (engine)
+    quitting_engines_.insert(engine);
+}
+
+void BrowserTabRegistryImpl::CancelEngineQuit(shaar_engine* engine) {
+  quitting_engines_.erase(engine);
+}
+
+bool BrowserTabRegistryImpl::EngineQuitRequested(shaar_engine* engine) const {
+  return quitting_engines_.contains(engine);
+}
+
 BrowserTabRegistryImpl::WindowState* BrowserTabRegistryImpl::FindWindowState(
     shaar_engine* engine, shaar_window* window) {
   for (auto& entry : windows_)
@@ -32,7 +45,7 @@ BrowserTabRegistryImpl::WindowState* BrowserTabRegistryImpl::FindWindowState(
 bool BrowserTabRegistryImpl::ReserveWindow(shaar_engine* engine,
                                            shaar_window* window,
                                            std::string id) {
-  if (!engine || !window || id.empty())
+  if (!engine || !window || id.empty() || EngineQuitRequested(engine))
     return false;
   for (const auto& entry : windows_)
     if (entry.handle == window ||
@@ -55,7 +68,7 @@ bool BrowserTabRegistryImpl::ReserveTab(shaar_engine* engine,
                                         shaar_window* window,
                                         shaar_tab* tab,
                                         std::string id) {
-  if (!engine || !window || !tab || id.empty() ||
+  if (!engine || !window || !tab || id.empty() || EngineQuitRequested(engine) ||
       !FindWindowState(engine, window) || HasTabID(engine, window, id))
     return false;
   for (const auto& entry : tabs_)
@@ -135,6 +148,16 @@ Browser* BrowserTabRegistryImpl::FindBrowser(shaar_engine* engine,
     if (entry.engine == engine && entry.handle == window)
       return entry.browser;
   return nullptr;
+}
+
+bool BrowserTabRegistryImpl::IsSelectedWebContents(
+    shaar_engine* engine, shaar_window* window, shaar_tab* tab,
+    content::WebContents* contents) {
+  WindowState* state = FindWindowState(engine, window);
+  Browser* owner = FindBrowserForTab(engine, window, tab);
+  return state && contents && owner && state->active_browser == owner &&
+         FindWebContents(engine, window, tab) == contents &&
+         owner->tab_strip_model()->GetActiveWebContents() == contents;
 }
 
 content::WebContents* BrowserTabRegistryImpl::FindWebContents(

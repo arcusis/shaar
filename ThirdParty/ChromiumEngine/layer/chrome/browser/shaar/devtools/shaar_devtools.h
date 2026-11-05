@@ -9,6 +9,7 @@
 #include <string_view>
 
 #include "base/memory/scoped_refptr.h"
+#include "base/functional/callback_helpers.h"
 
 #include "chrome/browser/shaar/engine/shaar_module_registry.h"
 #include "chrome/browser/shaar/public/shaar_engine.h"
@@ -18,6 +19,7 @@ class Value;
 }
 namespace content {
 class DevToolsAgentHost;
+class WebContents;
 }
 
 namespace shaar::devtools {
@@ -27,6 +29,9 @@ struct ModuleHandlers {
 };
 
 void BindRuntimeServices();
+
+// Keeps a hidden tab producing compositor frames until the returned guard dies.
+base::ScopedClosureRunner StartHiddenProbeCapture(content::WebContents* contents);
 
 // Returns a fixed protocol method only when the command belongs to the
 // requested capability. Cookie commands are restricted to Developer.
@@ -60,6 +65,12 @@ bool StartProtocolRequest(scoped_refptr<content::DevToolsAgentHost> host,
                           shaar_reply_fn reply,
                           void* reply_context,
                           const std::string& request_json);
+
+// Selects the page protocol target for the scoped tab, including OTR tabs.
+scoped_refptr<content::DevToolsAgentHost> ProtocolAgentHostFor(
+    content::WebContents* contents);
+bool IsProtocolPageTargetFor(content::WebContents* contents,
+                             content::DevToolsAgentHost* host);
 
 shaar_error_code HandleDevToolsOperation(
     shaar::ShaarEngineContext* context,

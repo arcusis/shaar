@@ -69,6 +69,10 @@ class BrowserTabRegistry {
   virtual content::WebContents* FindWebContents(shaar_engine* engine,
                                                  shaar_window* window,
                                                  shaar_tab* tab) = 0;
+  virtual bool IsSelectedWebContents(shaar_engine*, shaar_window*, shaar_tab*,
+                                     content::WebContents*) {
+    return false;
+  }
   virtual content::WebContents* FindWebContentsByID(
       shaar_engine* engine,
       shaar_window* window,

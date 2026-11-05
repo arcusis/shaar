@@ -37,6 +37,8 @@ class BrowserTabRegistryImpl final : public shaar::BrowserTabRegistry {
     std::unordered_set<Browser*> pending_closes;
   };
   Browser* FindBrowser(shaar_engine*, shaar_window*) override;
+  bool IsSelectedWebContents(shaar_engine*, shaar_window*, shaar_tab*,
+                             content::WebContents*) override;
   content::WebContents* FindWebContents(shaar_engine*, shaar_window*,
                                          shaar_tab*) override;
   content::WebContents* FindWebContentsByID(shaar_engine*, shaar_window*,
@@ -61,6 +63,9 @@ class BrowserTabRegistryImpl final : public shaar::BrowserTabRegistry {
   void UnbindTab(shaar_engine*, shaar_window*, shaar_tab*);
   void UnbindBrowser(shaar_engine*, shaar_window*, Browser*);
   bool BeginWindowClose(shaar_engine*, shaar_window*);
+  void BeginEngineQuit(shaar_engine*);
+  void CancelEngineQuit(shaar_engine*);
+  bool EngineQuitRequested(shaar_engine*) const;
   bool WindowCloseReady(shaar_engine*, shaar_window*) const;
   WindowState* FindWindowState(shaar_engine*, shaar_window*);
   bool HasTabID(shaar_engine*, shaar_window*, std::string_view) const;
@@ -83,6 +88,7 @@ class BrowserTabRegistryImpl final : public shaar::BrowserTabRegistry {
   };
   std::vector<WindowState> windows_;
   std::vector<TabEntry> tabs_;
+  std::unordered_set<shaar_engine*> quitting_engines_;
 };
 
 BrowserTabRegistryImpl& Registry();

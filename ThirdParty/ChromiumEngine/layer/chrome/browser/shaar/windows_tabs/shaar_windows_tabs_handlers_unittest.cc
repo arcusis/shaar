@@ -264,6 +264,45 @@ TEST(ShaarWindowsTabsHandlersTest, RegularWindowABIReservesAndClosesHandle) {
   EXPECT_EQ(shaar_window_close(window, &error), SHAAR_NOT_FOUND);
 }
 
+TEST(ShaarWindowsTabsHandlersTest, QuitRejectsLateWindowAndTabOpen) {
+  shaar_engine engine_storage;
+  auto* engine = &engine_storage;
+  static constexpr char kFirst[] = "quit-window";
+  static constexpr char kSecond[] = "late-window";
+  static constexpr char kTab[] = "late-tab";
+  shaar_error error = {.size = sizeof(shaar_error)};
+  shaar_window* window = nullptr;
+  EXPECT_EQ(shaar_window_open(engine, SHAAR_WINDOW_REGULAR, nullptr,
+                              {kFirst, sizeof(kFirst) - 1}, &window, &error),
+            SHAAR_OK);
+  if (!window)
+    return;
+
+  Registry().BeginEngineQuit(engine);
+  shaar_window* late_window = nullptr;
+  EXPECT_EQ(shaar_window_open(engine, SHAAR_WINDOW_REGULAR, nullptr,
+                              {kSecond, sizeof(kSecond) - 1}, &late_window,
+                              &error),
+            SHAAR_SHUTTING_DOWN);
+  EXPECT_EQ(late_window, nullptr);
+  shaar_scope scope = {.size = sizeof(shaar_scope),
+                       .profile = reinterpret_cast<shaar_profile*>(1)};
+  shaar_tab* late_tab = nullptr;
+  EXPECT_EQ(shaar_tab_open(scope, window, {kTab, sizeof(kTab) - 1}, {}, 1,
+                           &late_tab, &error),
+            SHAAR_SHUTTING_DOWN);
+  EXPECT_EQ(late_tab, nullptr);
+
+  Registry().CancelEngineQuit(engine);
+  EXPECT_EQ(shaar_window_open(engine, SHAAR_WINDOW_REGULAR, nullptr,
+                              {kSecond, sizeof(kSecond) - 1}, &late_window,
+                              &error),
+            SHAAR_OK);
+  if (late_window)
+    EXPECT_EQ(shaar_window_close(late_window, &error), SHAAR_OK);
+  EXPECT_EQ(shaar_window_close(window, &error), SHAAR_OK);
+}
+
 // BEGIN find
 TEST(ShaarWindowsTabsHandlersTest, WindowOpenBindsPublicIDForScopedEvents) {
   BrowserTabRegistryImpl registry;
@@ -453,6 +492,30 @@ TEST(ShaarWindowsTabsHandlersTest, TabActivationResolutionUsesExactScope) {
   EXPECT_EQ(captured.window, window);
   EXPECT_EQ(captured.tab, tab);
   EXPECT_FALSE(captured.accepted);
+}
+
+TEST(ShaarWindowsTabsHandlersTest, ProbeStateRejectsUnregisteredHandles) {
+  auto* engine = reinterpret_cast<shaar_engine*>(1);
+  auto* window = reinterpret_cast<shaar_window*>(2);
+  auto* tab = reinterpret_cast<shaar_tab*>(3);
+  shaar_error error = {};
+  error.size = sizeof(error);
+  shaar_tab_probe_state state = {};
+  state.size = sizeof(state);
+  shaar_scope scope = {.size = sizeof(shaar_scope),
+                       .profile = reinterpret_cast<shaar_profile*>(4)};
+  EXPECT_EQ(shaar_tab_get_probe_state(engine, scope, window, tab, &state, &error),
+            SHAAR_NOT_FOUND);
+  EXPECT_EQ(error.code, SHAAR_NOT_FOUND);
+  EXPECT_EQ(state.live_web_contents, 0);
+  EXPECT_EQ(state.selected_native_tab, 0);
+  EXPECT_EQ(state.displayed_native_web_contents, 0);
+  EXPECT_EQ(state.context_is_private, 0);
+  EXPECT_EQ(state.scope_owns_tab, 0);
+  state.size = sizeof(state) - 1;
+  EXPECT_EQ(shaar_tab_get_probe_state(engine, scope, window, tab, &state, &error),
+            SHAAR_INVALID_ARGUMENT);
+  EXPECT_EQ(error.code, SHAAR_INVALID_ARGUMENT);
 }
 
 }  // namespace

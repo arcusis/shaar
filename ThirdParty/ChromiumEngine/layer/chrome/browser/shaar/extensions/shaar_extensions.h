@@ -12,6 +12,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include "base/files/file_path.h"
 
 class Browser;
 class Profile;
@@ -42,6 +43,9 @@ bool SharedHomeVersionSatisfied(std::string_view installed,
                                 std::string_view approved);
 
 namespace shaar::extensions_host {
+// Canonicalizes and restricts the verification component to the marked root.
+bool ValidProbeExtensionPath(const base::FilePath& data_root,
+                             const base::FilePath& requested);
 bool ValidPopupOrigin(std::string_view extension_id, const GURL& url);
 std::optional<std::string> OpenPopup(shaar_engine*,
                                      shaar_profile*,

@@ -3,10 +3,48 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #include "chrome/browser/shaar/engine/shaar_module_registry.h"
+#include "chrome/browser/shaar/lifecycle/shaar_lifecycle.h"
+
+#include <algorithm>
 
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
+
+TEST(ShaarLifecycleProbeTest, BackgroundSwitchesAreVerificationOnly) {
+  const auto production = shaar::lifecycle::ChromeMainArguments(
+      "/test/Shaar", "/tmp/prod", "en", false);
+  const auto verification = shaar::lifecycle::ChromeMainArguments(
+      "/test/Shaar", "/tmp/probe", "en", true);
+  EXPECT_NE(std::find(production.begin(), production.end(), "--no-startup-window"),
+            production.end());
+  EXPECT_NE(std::find(verification.begin(), verification.end(),
+                      "--no-startup-window"),
+            verification.end());
+  for (const char* option : {"--disable-renderer-backgrounding",
+                             "--disable-backgrounding-occluded-windows",
+                             "--disable-background-timer-throttling"}) {
+    EXPECT_EQ(std::find(production.begin(), production.end(), option),
+              production.end());
+    EXPECT_NE(std::find(verification.begin(), verification.end(), option),
+              verification.end());
+  }
+}
+
+TEST(ShaarLifecycleProbeTest, KeepAliveStateRequiresActiveEngine) {
+  shaar_error error = {};
+  error.size = sizeof(error);
+  shaar_bytes state = {"old", 3};
+  EXPECT_EQ(shaar_test_keep_alive_state(nullptr, &state, &error),
+            SHAAR_INVALID_ARGUMENT);
+  EXPECT_EQ(state.data, nullptr);
+  EXPECT_EQ(error.code, SHAAR_INVALID_ARGUMENT);
+  EXPECT_EQ(shaar_test_keep_alive_state(
+                reinterpret_cast<shaar_engine*>(1), &state, &error),
+            SHAAR_NOT_READY);
+  EXPECT_EQ(state.data, nullptr);
+  EXPECT_EQ(error.code, SHAAR_NOT_READY);
+}
 
 shaar_error_code FakeProfileHandler(shaar::ShaarEngineContext*,
                                     shaar_engine*,

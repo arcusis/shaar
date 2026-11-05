@@ -3,7 +3,9 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #include "chrome/browser/shaar/devtools/shaar_devtools.h"
+#include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
 
+#include <memory>
 #include <string>
 
 #include "base/containers/span.h"
@@ -304,10 +306,63 @@ TEST(ShaarDevToolsTest, ProtocolClientPreservesProtocolErrorMessage) {
   EXPECT_EQ("Method not found", captured.message);
 }
 
+class ScopedProtocolHost final : public content::MockDevToolsAgentHost {
+ public:
+  ScopedProtocolHost(content::WebContents* contents, std::string type)
+      : contents_(contents), type_(std::move(type)) {}
+  content::WebContents* GetWebContents() override { return contents_; }
+  std::string GetType() override { return type_; }
+
+ private:
+  ~ScopedProtocolHost() override = default;
+  content::WebContents* contents_;
+  std::string type_;
+};
+
+TEST(ShaarDevToolsTest, ProtocolRequiresExactPageTargetForScopedTab) {
+  auto* tab = reinterpret_cast<content::WebContents*>(1);
+  auto* other_tab = reinterpret_cast<content::WebContents*>(2);
+  auto page = base::MakeRefCounted<ScopedProtocolHost>(
+      tab, content::DevToolsAgentHost::kTypePage);
+  auto tab_target = base::MakeRefCounted<ScopedProtocolHost>(
+      tab, content::DevToolsAgentHost::kTypeTab);
+  EXPECT_TRUE(IsProtocolPageTargetFor(tab, page.get()));
+  EXPECT_FALSE(IsProtocolPageTargetFor(other_tab, page.get()));
+  EXPECT_FALSE(IsProtocolPageTargetFor(tab, tab_target.get()));
+  EXPECT_FALSE(IsProtocolPageTargetFor(nullptr, page.get()));
+  EXPECT_FALSE(IsProtocolPageTargetFor(tab, nullptr));
+}
+
+TEST(ShaarDevToolsTest, CaptureRejectsUnownedWindowTabPair) {
+  shaar::windows_tabs::BrowserTabRegistryImpl registry;
+  auto* engine = reinterpret_cast<shaar_engine*>(1);
+  auto* owned_window = reinterpret_cast<shaar_window*>(2);
+  auto* other_window = reinterpret_cast<shaar_window*>(3);
+  auto* tab = reinterpret_cast<shaar_tab*>(4);
+  auto* browser = reinterpret_cast<Browser*>(5);
+  auto* contents = reinterpret_cast<content::WebContents*>(6);
+  registry.BindWindow(engine, owned_window, browser);
+  registry.BindTab(engine, owned_window, tab, "tab-a", browser, contents);
+  shaar::ShaarEngineContext context{};
+  context.browser_tabs = &registry;
+  shaar_scope scope{sizeof(shaar_scope), reinterpret_cast<shaar_profile*>(7), nullptr};
+  CapturedReply captured;
+  shaar_error error{};
+  error.size = sizeof(error);
+  EXPECT_EQ(SHAAR_NOT_FOUND,
+            HandleDevToolsOperation(&context, engine, scope, other_window, tab,
+                                    SHAAR_OP_PROBE_CAPTURE_TAB,
+                                    Bytes(R"({"schemaVersion":1})"), 44,
+                                    &CaptureReply, &captured, &error));
+  EXPECT_EQ(SHAAR_NOT_FOUND, error.code);
+  EXPECT_EQ(0u, captured.request_id);
+}
+
 TEST(ShaarDevToolsTest, LifecycleEntryRegistersOnlyItsOperationRange) {
   ShaarModuleRegistry registry;
   shaar_devtools_register(&registry);
   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_CALL));
+  EXPECT_NE(nullptr, registry.Find(SHAAR_OP_PROBE_CAPTURE_TAB));
   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_UI_SHOW));
   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_CONTROL_STATUS));
   EXPECT_EQ(nullptr, registry.Find(SHAAR_OP_MEDIA_GET_STATE));

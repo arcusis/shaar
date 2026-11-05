@@ -9,10 +9,19 @@
 
 #include "chrome/browser/shaar/public/shaar_engine.h"
 
+class PrefService;
+class Profile;
+
 namespace shaar::profiles {
 
 // Validates the canonical ID and returns its only permitted relative path.
 bool CanonicalDirectory(shaar_bytes profile_id, std::string* directory);
+
+// Reorders a loaded profile's page languages and stores the app locale for
+// this launch. The app language remains first when opening an existing profile.
+void ApplyApplicationLocale(Profile* profile,
+                            PrefService* local_state,
+                            const std::string& locale);
 
 }  // namespace shaar::profiles
 

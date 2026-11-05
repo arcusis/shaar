@@ -13,13 +13,16 @@
 
 #include "base/check.h"
 #include "base/json/json_reader.h"
+#include "base/json/json_writer.h"
 #include "base/strings/string_util.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "chrome/browser/shaar/lifecycle/shaar_lifecycle.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
+#include "components/prefs/pref_service.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -61,9 +64,18 @@ shaar_error_code PrivateSessionRegistry::Open(
   if (retired_ids_.contains(session_id))
     return SHAAR_CONFLICT;
 
+  const bool already_has_otr =
+      parent->GetPrimaryOTRProfile(/*create_if_needed=*/false) != nullptr;
   Profile* otr = parent->GetPrimaryOTRProfile(/*create_if_needed=*/true);
   if (!otr || !otr->IsOffTheRecord() || otr->GetOriginalProfile() != parent)
     return SHAAR_CHROMIUM_ERROR;
+
+  const shaar_error_code privacy = ConfigurePrivateProfile(otr);
+  if (privacy != SHAAR_OK) {
+    if (!already_has_otr)
+      parent->DestroyOffTheRecordProfile(otr);
+    return privacy;
+  }
 
   auto session = std::make_unique<Session>();
   session->id = session_id;
@@ -236,7 +248,10 @@ void PrivateSessionRegistry::MaybeRetire(Session* session) {
     parent->RemoveObserver(this);
     TrackerProtection().RemoveProfile(otr);
     TrackerProtection().RemoveProfile(parent);
-    parent->DestroyOffTheRecordProfile(otr);
+    // Closing the last Chromium private Browser may already have retired the
+    // primary OTR profile. Do not pass its stale pointer back to ProfileImpl.
+    if (parent->GetPrimaryOTRProfile(/*create_if_needed=*/false) == otr)
+      parent->DestroyOffTheRecordProfile(otr);
   }
   session->parent = nullptr;
   session->otr = nullptr;
@@ -245,6 +260,74 @@ void PrivateSessionRegistry::MaybeRetire(Session* session) {
 }  // namespace shaar
 
 namespace shaar {
+
+shaar_error_code ConfigurePrivateProfile(Profile* otr) {
+  if (!otr || !otr->IsOffTheRecord())
+    return SHAAR_WRONG_PROFILE;
+  auto* settings = HostContentSettingsMapFactory::GetForProfile(otr);
+  PrefService* prefs = otr->GetPrefs();
+  if (!settings || !prefs)
+    return SHAAR_NOT_READY;
+  settings->SetDefaultContentSetting(ContentSettingsType::COOKIES,
+                                     CONTENT_SETTING_BLOCK);
+  prefs->SetBoolean(prefs::kHttpsOnlyModeEnabled, true);
+  prefs->SetBoolean(prefs::kEnableReferrers, false);
+  prefs->SetString(prefs::kWebRTCIPHandlingPolicy,
+                   "disable_non_proxied_udp");
+  prefs->SetList(prefs::kWebRTCIPHandlingUrl, base::ListValue());
+  prefs->SetList(prefs::kWebRtcLocalIpsAllowedUrls, base::ListValue());
+  prefs->SetBoolean("credentials_enable_service", false);
+  prefs->SetBoolean("autofill.profile_enabled", false);
+  prefs->SetBoolean("autofill.credit_card_enabled", false);
+  const GURL probe("https://shaar-privacy.invalid/");
+  return settings->GetContentSetting(probe, probe, ContentSettingsType::COOKIES) ==
+                     CONTENT_SETTING_BLOCK &&
+                 prefs->GetBoolean(prefs::kHttpsOnlyModeEnabled) &&
+                 !prefs->GetBoolean(prefs::kEnableReferrers) &&
+                 prefs->GetString(prefs::kWebRTCIPHandlingPolicy) ==
+                     "disable_non_proxied_udp" &&
+                 prefs->GetList(prefs::kWebRTCIPHandlingUrl).empty() &&
+                 prefs->GetList(prefs::kWebRtcLocalIpsAllowedUrls).empty() &&
+                 !prefs->GetBoolean("credentials_enable_service") &&
+                 !prefs->GetBoolean("autofill.profile_enabled") &&
+                 !prefs->GetBoolean("autofill.credit_card_enabled")
+             ? SHAAR_OK
+             : SHAAR_POLICY_BLOCKED;
+}
+
+std::string PrivateProfilePrivacyStatus(Profile* otr) {
+  if (!otr || !otr->IsOffTheRecord())
+    return {};
+  auto* settings = HostContentSettingsMapFactory::GetForProfile(otr);
+  PrefService* prefs = otr->GetPrefs();
+  if (!settings || !prefs)
+    return {};
+  base::DictValue status;
+  status.Set("offTheRecord", true);
+  const GURL probe("https://shaar-privacy.invalid/");
+  status.Set("globalCookies",
+             settings->GetContentSetting(probe, probe, ContentSettingsType::COOKIES) ==
+                     CONTENT_SETTING_BLOCK ? "block" : "other");
+  status.Set("httpsOnly", prefs->GetBoolean(prefs::kHttpsOnlyModeEnabled));
+  status.Set("referrersEnabled", prefs->GetBoolean(prefs::kEnableReferrers));
+  status.Set("webRTCIPHandlingPolicy",
+             prefs->GetString(prefs::kWebRTCIPHandlingPolicy));
+  status.Set("webRTCPolicyExceptionCount",
+             static_cast<int>(prefs->GetList(prefs::kWebRTCIPHandlingUrl).size()));
+  status.Set("localIPExceptionCount",
+             static_cast<int>(prefs->GetList(prefs::kWebRtcLocalIpsAllowedUrls).size()));
+  status.Set("extensionsDisabled", PrivateExtensionsDisabled(otr));
+  for (const char* key : {"credentials_enable_service", "autofill.profile_enabled",
+                          "autofill.credit_card_enabled"}) {
+    status.Set(std::string(key) + "Private", prefs->GetBoolean(key));
+    status.Set(std::string(key) + "Normal",
+               otr->GetOriginalProfile()->GetPrefs()->GetBoolean(key));
+  }
+  std::string json;
+  if (!base::JSONWriter::Write(status, &json))
+    return {};
+  return json;
+}
 
 shaar_error_code OpenPrivateSessionHandler(
     void* context,
@@ -455,6 +538,27 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_private_session_cookie_setting(
   if (code == SHAAR_OK)
     *allowed = value ? 1 : 0;
   return Result(code, error);
+}
+
+extern "C" SHAAR_EXPORT shaar_error_code shaar_private_session_privacy_status(
+    shaar_private_session *handle, char *json, size_t capacity,
+    shaar_error *error) {
+  if (!pthread_main_np() || !handle || !json || capacity == 0)
+    return Result(SHAAR_INVALID_ARGUMENT, error);
+  auto found = g_handles.find(handle);
+  if (found == g_handles.end())
+    return Result(SHAAR_NOT_FOUND, error);
+  Profile *otr = nullptr;
+  if (!g_services.Resolve(found->second, handle, nullptr, &otr, nullptr,
+                          nullptr))
+    return Result(SHAAR_NOT_FOUND, error);
+  const std::string status = shaar::PrivateProfilePrivacyStatus(otr);
+  if (status.empty())
+    return Result(SHAAR_NOT_READY, error);
+  if (status.size() + 1 > capacity)
+    return Result(SHAAR_INVALID_ARGUMENT, error);
+  std::memcpy(json, status.c_str(), status.size() + 1);
+  return Result(SHAAR_OK, error);
 }
 
 extern "C" SHAAR_EXPORT shaar_error_code shaar_private_session_tracker_rules(

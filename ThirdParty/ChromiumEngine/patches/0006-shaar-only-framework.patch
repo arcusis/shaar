@@ -168,3 +168,102 @@
  
    overlay_window->SetColorModeOverride(ui::ColorProviderKey::ColorMode::kDark);
  
+--- a/chrome/browser/extensions/chrome_content_browser_client_extensions_part.cc
++++ b/chrome/browser/extensions/chrome_content_browser_client_extensions_part.cc
+@@ -24,6 +24,7 @@
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/profiles/profile_manager.h"
+ #include "chrome/browser/profiles/profile_selections.h"
++#include "chrome/browser/shaar/private_sessions/shaar_private_sessions.h"
+ #include "chrome/browser/sync_file_system/local/sync_file_system_backend.h"
+ #include "chrome/common/chrome_constants.h"
+ #include "chrome/common/chrome_switches.h"
+@@ -737,8 +738,9 @@
+ // static
+ bool ChromeContentBrowserClientExtensionsPart::AreExtensionsDisabledForProfile(
+     content::BrowserContext* browser_context) {
+-  return AreKeyedServicesDisabledForProfileByDefault(
+-      Profile::FromBrowserContext(browser_context));
++  Profile* profile = Profile::FromBrowserContext(browser_context);
++  return shaar::PrivateExtensionsDisabled(profile) ||
++         AreKeyedServicesDisabledForProfileByDefault(profile);
+ }
+ 
+ // static
+--- a/chrome/browser/extensions/chrome_extensions_browser_client.cc
++++ b/chrome/browser/extensions/chrome_extensions_browser_client.cc
+@@ -405,23 +405,22 @@
+ }
+ 
+ bool ChromeExtensionsBrowserClient::IsExtensionIncognitoEnabled(
+-    const ExtensionId& extension_id,
+-    content::BrowserContext* context) const {
+-  return IsGuestSession(context) ||
+-         util::IsIncognitoEnabled(extension_id, context);
++    const ExtensionId& /*extension_id*/,
++    content::BrowserContext* /*context*/) const {
++  // Shaar does not grant installed extensions access to private sessions.
++  return false;
+ }
+ 
+ bool ChromeExtensionsBrowserClient::IsExtensionIncognitoEnabled(
+-    const Extension* extension,
+-    content::BrowserContext* context) const {
+-  return IsGuestSession(context) ||
+-         util::IsIncognitoEnabled(extension, context);
++    const Extension* /*extension*/,
++    content::BrowserContext* /*context*/) const {
++  return false;
+ }
+ 
+ bool ChromeExtensionsBrowserClient::CanExtensionCrossIncognito(
+-    const Extension* extension,
+-    content::BrowserContext* context) const {
+-  return IsGuestSession(context) || util::CanCrossIncognito(extension, context);
++    const Extension* /*extension*/,
++    content::BrowserContext* /*context*/) const {
++  return false;
+ }
+ 
+ base::FilePath ChromeExtensionsBrowserClient::GetBundleResourcePath(
+--- a/chrome/browser/ui/tab_helpers.cc
++++ b/chrome/browser/ui/tab_helpers.cc
+@@ -233,6 +233,7 @@
+ #endif
+ 
+ #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
++#include "chrome/browser/extensions/chrome_content_browser_client_extensions_part.h"
+ #include "chrome/browser/extensions/api/web_navigation/web_navigation_tab_observer.h"
+ #include "chrome/browser/extensions/navigation_extension_enabler.h"
+ #include "chrome/browser/extensions/tab_helper.h"
+@@ -809,7 +810,10 @@
+ #endif
+ 
+ #if BUILDFLAG(ENABLE_EXTENSIONS)
+-  extensions::AppTabHelper::CreateForWebContents(web_contents);
++  if (!extensions::ChromeContentBrowserClientExtensionsPart::
++          AreExtensionsDisabledForProfile(profile)) {
++    extensions::AppTabHelper::CreateForWebContents(web_contents);
++  }
+ #endif
+ 
+ #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+@@ -818,10 +822,14 @@
+       web_contents);
+ #endif
+ 
+-  // These helpers are used on Win/Mac/Linux and also desktop Android.
+-  extensions::NavigationExtensionEnabler::CreateForWebContents(web_contents);
+-  extensions::WebNavigationTabObserver::CreateForWebContents(web_contents);
+-  extensions::TabHelper::CreateForWebContents(web_contents);
++  // The universal extension observer is absent when extensions are disabled
++  // for this profile. TabHelper requires that observer.
++  if (!extensions::ChromeContentBrowserClientExtensionsPart::
++          AreExtensionsDisabledForProfile(profile)) {
++    extensions::NavigationExtensionEnabler::CreateForWebContents(web_contents);
++    extensions::WebNavigationTabObserver::CreateForWebContents(web_contents);
++    extensions::TabHelper::CreateForWebContents(web_contents);
++  }
+ #endif  // BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+ 
+ #if BUILDFLAG(ENABLE_OFFLINE_PAGES)

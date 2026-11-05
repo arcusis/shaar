@@ -13,7 +13,7 @@ extern "C" {
 #endif
 
 #define SHAAR_ENGINE_ABI_MAJOR 1u
-#define SHAAR_ENGINE_ABI_MINOR 3u
+#define SHAAR_ENGINE_ABI_MINOR 4u
 #define SHAAR_EXPORT __attribute__((visibility("default")))
 
 typedef struct shaar_engine shaar_engine;
@@ -188,6 +188,8 @@ typedef enum {
   SHAAR_OP_DEVTOOLS_CONTROL_ENABLE = 1005,
   SHAAR_OP_DEVTOOLS_CONTROL_DISABLE = 1006,
   SHAAR_OP_DEVTOOLS_CONTROL_STATUS = 1007,
+  // Testing only: capture the selected owned tab without showing its window.
+  SHAAR_OP_PROBE_CAPTURE_TAB = 1008,
   // END devtools operation IDs.
 
   // BEGIN media
@@ -301,6 +303,15 @@ SHAAR_EXPORT shaar_error_code shaar_engine_run(
 SHAAR_EXPORT shaar_error_code shaar_engine_request_quit(
     shaar_engine *, shaar_error *error);
 SHAAR_EXPORT void shaar_engine_release(shaar_engine *);
+/* Verification-only diagnostics. Calls require SHAAR_ENGINE_TESTING=1 and the
+ * active engine; output bytes are borrowed until the next call on this thread. */
+SHAAR_EXPORT shaar_error_code shaar_test_keep_alive_state(
+    shaar_engine *, shaar_bytes *out, shaar_error *error);
+/* Loads only the fixture at <owned marked probe root>/Extension in a regular
+ * profile. This is unavailable to shipping runs. */
+SHAAR_EXPORT shaar_error_code shaar_test_load_component_extension(
+    shaar_engine *, shaar_profile *, shaar_bytes path, shaar_bytes *extension_id,
+    shaar_error *error);
 
 /* On SHAAR_OK, out is a reserved handle; one later reply confirms readiness. */
 SHAAR_EXPORT shaar_error_code shaar_profile_open(
@@ -335,6 +346,10 @@ SHAAR_EXPORT shaar_error_code shaar_private_session_close(
 SHAAR_EXPORT shaar_error_code shaar_private_session_cookie_setting(
     shaar_private_session *, shaar_bytes origin, int set, int allow,
     int *allowed, shaar_error *error);
+/* Live OTR defaults and parent comparison, encoded as a NUL-terminated JSON
+ * object. The caller owns the buffer; no private profile pointer escapes. */
+SHAAR_EXPORT shaar_error_code shaar_private_session_privacy_status(
+    shaar_private_session *, char *json, size_t capacity, shaar_error *error);
 /* Rules are canonical DNS names in a JSON string array (max 4 MiB). Revision
  * identifies exact content and cannot be reused with different rules. */
 SHAAR_EXPORT shaar_error_code shaar_private_session_tracker_rules(
@@ -363,6 +378,19 @@ SHAAR_EXPORT shaar_error_code shaar_tab_open(
 SHAAR_EXPORT shaar_error_code shaar_tab_close(
     shaar_tab *, shaar_error *error);
 SHAAR_EXPORT void *shaar_tab_host_view(shaar_tab *); /* borrowed NSView* */
+/* Verification-only native ownership and display evidence. Caller sets size;
+ * every field is derived from the registered Chromium tab and page host. */
+typedef struct {
+  uint32_t size;
+  int live_web_contents;
+  int selected_native_tab;
+  int displayed_native_web_contents;
+  int context_is_private;
+  int scope_owns_tab;
+} shaar_tab_probe_state;
+SHAAR_EXPORT shaar_error_code shaar_tab_get_probe_state(
+    shaar_engine *, shaar_scope, shaar_window *, shaar_tab *,
+    shaar_tab_probe_state *out, shaar_error *error);
 /* Borrowed until POPUP_CLOSE or its owning tab or window closes. */
 SHAAR_EXPORT void *shaar_extension_popup_view(
     shaar_engine *, shaar_window *, shaar_bytes popup_id);

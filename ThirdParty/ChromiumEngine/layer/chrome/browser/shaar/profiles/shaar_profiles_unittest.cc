@@ -7,11 +7,40 @@
 #include <string>
 
 #include "chrome/browser/shaar/engine/shaar_module_registry.h"
+#include "chrome/test/base/testing_profile.h"
+#include "components/language/core/browser/pref_names.h"
+#include "components/prefs/pref_service.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/testing_pref_service.h"
+#include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
 
 void NoopReply(void*, const shaar_result*) {}
+
+TEST(ShaarProfilesTest, LoadedProfileFollowsApplicationLanguage) {
+  content::BrowserTaskEnvironment task_environment;
+  TestingProfile profile;
+  TestingPrefServiceSimple local_state;
+  local_state.registry()->RegisterStringPref(
+      language::prefs::kApplicationLocale, "en-US");
+  profile.GetPrefs()->SetString(language::prefs::kSelectedLanguages,
+                                "en-US,en");
+  profile.GetPrefs()->SetString(language::prefs::kAcceptLanguages, "en-US,en");
+
+  shaar::profiles::ApplyApplicationLocale(&profile, &local_state, "he");
+  EXPECT_EQ(local_state.GetString(language::prefs::kApplicationLocale), "he");
+  EXPECT_EQ(profile.GetPrefs()->GetString(language::prefs::kSelectedLanguages),
+            "he,en-US,en");
+  EXPECT_EQ(profile.GetPrefs()->GetString(language::prefs::kAcceptLanguages),
+            "he,en-US,en");
+
+  shaar::profiles::ApplyApplicationLocale(&profile, &local_state, "en");
+  EXPECT_EQ(local_state.GetString(language::prefs::kApplicationLocale), "en");
+  EXPECT_EQ(profile.GetPrefs()->GetString(language::prefs::kAcceptLanguages),
+            "en,he,en-US");
+}
 
 TEST(ShaarProfilesTest, UUIDMappingIsCanonicalAndContained) {
   std::string relative;

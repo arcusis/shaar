@@ -43,6 +43,15 @@ def select_stages(paths: list[str] | None, event: str, draft: bool = False) -> t
     return native, website, True
 
 
+def uses_fast_lane(name: str) -> bool:
+    """Pull requests run the fast lane; the full native pipeline runs once, in the merge queue.
+
+    Running it on both the pull request and its merge group doubled macOS runner use and left
+    merge groups waiting for hosted runners.
+    """
+    return name == "pull_request"
+
+
 def iteration_count(event: dict, name: str) -> int:
     if name == "schedule":
         return 3
@@ -84,7 +93,7 @@ def main() -> None:
         if result.returncode == 0:
             paths = [path for path in result.stdout.decode().split("\0") if path]
     draft = name == "pull_request" and event.get("pull_request", {}).get("draft") is True
-    full, website, swift = select_stages(paths, name, draft)
+    full, website, swift = select_stages(paths, name, uses_fast_lane(name))
     queue_pr = merge_group_pr_number(event, name)
     with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
         output.write(f"full={str(full).lower()}\nbase={base}\niterations={iterations}\nwebsite={str(website).lower()}\nswift={str(swift).lower()}\nqueue_pr={queue_pr}\n")

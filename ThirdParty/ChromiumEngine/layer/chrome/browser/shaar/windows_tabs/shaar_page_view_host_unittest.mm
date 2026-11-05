@@ -5,6 +5,7 @@
 #import <AppKit/AppKit.h>
 
 #include "chrome/browser/shaar/windows_tabs/shaar_page_view_host.h"
+#include "chrome/browser/shaar/public/shaar_engine.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 @interface ShaarFocusProbeWindow : NSWindow

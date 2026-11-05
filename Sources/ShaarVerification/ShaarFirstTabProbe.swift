@@ -147,7 +147,8 @@ final class ShaarFirstTabProbe {
       Task { @MainActor [weak self] in
         guard let self else { return }
         guard opened, error == nil else {
-          self.finish(error: "Shaar private context could not be created: \(String(describing: error)).")
+          self.finish(
+            error: "Shaar private context could not be created: \(String(describing: error)).")
           return
         }
         self.privatePolicyStatus = await self.runtime.privatePrivacyStatus(forContextID: contextID)

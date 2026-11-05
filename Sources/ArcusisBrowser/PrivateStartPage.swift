@@ -15,15 +15,18 @@ struct PrivateProtectionStatus {
 
   init(_ status: [AnyHashable: Any]) {
     let privateProfile = status["offTheRecord"] as? Bool == true && status["error"] == nil
-    cookiesAndStorage = privateProfile
+    cookiesAndStorage =
+      privateProfile
       && status["globalCookies"] as? String == "block"
-    trackers = privateProfile
+    trackers =
+      privateProfile
       && status["trackerProtectionEnabled"] as? Bool == true
       && (status["trackerDomainCount"] as? Int ?? 0) > 0
       && !(status["trackerRulesRevision"] as? String ?? "").isEmpty
     httpsOnly = privateProfile && status["httpsOnly"] as? Bool == true
     referrers = privateProfile && status["referrersEnabled"] as? Bool == false
-    webRTC = privateProfile
+    webRTC =
+      privateProfile
       && status["webRTCIPHandlingPolicy"] as? String == "disable_non_proxied_udp"
       && status["webRTCPolicyExceptionCount"] as? Int == 0
       && status["localIPExceptionCount"] as? Int == 0
@@ -59,7 +62,9 @@ struct PrivateStartPage: View {
           )
           .foregroundStyle(.secondary)
         }
-        Button { store.showCommand() } label: {
+        Button {
+          store.showCommand()
+        } label: {
           HStack {
             Image(systemName: "magnifyingglass")
             ShellL10n.text("Search or enter address")
@@ -75,7 +80,8 @@ struct PrivateStartPage: View {
         .frame(maxWidth: 420)
         VStack(alignment: .leading, spacing: 12) {
           ShellL10n.text("Private protections").font(.headline)
-          protection("Cookies and site storage blocked by default", active: status?.cookiesAndStorage)
+          protection(
+            "Cookies and site storage blocked by default", active: status?.cookiesAndStorage)
           protection("Trackers blocked", active: status?.trackers)
           protection("HTTPS-only browsing", active: status?.httpsOnly)
           protection("Referrers trimmed", active: status?.referrers)

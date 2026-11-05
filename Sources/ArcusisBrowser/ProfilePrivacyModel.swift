@@ -70,6 +70,17 @@ struct EngineProfileSettings: ProfileSettingsBackend {
   }
 }
 
+enum ProfilePermissionDataError: LocalizedError {
+  case invalidException
+
+  var errorDescription: String? { description(language: .currentLaunchLanguage) }
+
+  func description(language: BrowserLanguage) -> String {
+    BrowserLocalization.string(
+      "The engine returned invalid site permission data.", table: "Settings", language: language)
+  }
+}
+
 struct ProfileSitePermission: Identifiable, Equatable {
   let id: String
   let value: SitePermissionValue
@@ -108,12 +119,12 @@ struct ProfileSitePermission: Identifiable, Equatable {
   static func exceptions(_ settings: [String: NSDictionary]) throws -> [Self] {
     try settings.sorted { $0.key < $1.key }.compactMap { name, entry in
       guard let isDefault = entry["isDefault"] as? Bool else {
-        throw CocoaError(.coderInvalidValue)
+        throw ProfilePermissionDataError.invalidException
       }
       if isDefault { return nil }
       guard let rawValue = entry["value"] as? String,
         let value = SitePermissionValue(rawValue: rawValue)
-      else { throw CocoaError(.coderInvalidValue) }
+      else { throw ProfilePermissionDataError.invalidException }
       return Self(id: name, value: value)
     }
   }

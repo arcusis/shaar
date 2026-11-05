@@ -32,7 +32,11 @@ struct SpaceSwipeNavigation: NSViewRepresentable {
 
 @MainActor
 final class SpaceSwipeMonitorView: NSView {
-  weak var store: BrowserStore?
+  weak var store: BrowserStore? {
+    didSet {
+      if let store { owner?.attach(self, store: store) }
+    }
+  }
   weak var pager: SpacePagerState?
   var isRightToLeft = false
   private var owner: SpaceSwipeWindowMonitor?

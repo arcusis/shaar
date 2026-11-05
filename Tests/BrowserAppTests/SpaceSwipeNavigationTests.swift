@@ -12,6 +12,41 @@ import Testing
 @Suite
 struct SpaceSwipeNavigationTests {
   @MainActor
+  @Test func changingSidebarStoreRebindsItsWindowSwipeMonitor() throws {
+    func makeStore() throws -> BrowserStore {
+      let profile = BrowserProfile(name: "Personal")
+      let first = BrowserSpace(
+        profileID: profile.id, name: "First", symbol: "house", tint: .lavender)
+      let second = BrowserSpace(
+        profileID: profile.id, name: "Second", symbol: "briefcase", tint: .ocean)
+      let session = try BrowserSession(
+        profiles: [profile], spaces: [first, second], selectedSpaceID: first.id)
+      return BrowserStore(sessionFile: nil, session: session)
+    }
+
+    let originalStore = try makeStore()
+    let replacementStore = try makeStore()
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 640, height: 480),
+      styleMask: [.titled], backing: .buffered, defer: false)
+    let view = SpaceSwipeMonitorView(frame: window.contentView!.bounds)
+    let pager = SpacePagerState()
+    view.store = originalStore
+    view.pager = pager
+    window.contentView?.addSubview(view)
+    defer { view.detachFromWindow() }
+    let monitor = SpaceSwipeWindowMonitor.owner(for: window)
+    let event = try #require(makeWindowEvent(for: window))
+    let originalSpaceID = originalStore.session.selectedSpaceID
+    let replacementSpaceID = replacementStore.session.selectedSpaceID
+
+    view.store = replacementStore
+    #expect(monitor.route(event, deltaX: 2, deltaY: 0) == nil)
+    #expect(originalStore.session.selectedSpaceID == originalSpaceID)
+    #expect(replacementStore.session.selectedSpaceID != replacementSpaceID)
+  }
+
+  @MainActor
   @Test func monitorRoutesAuthoredWindowEventWithLibraryDrawerGuard() throws {
     let pageURL = URL(string: "https://example.test")!
     let profile = BrowserProfile(name: "Personal")

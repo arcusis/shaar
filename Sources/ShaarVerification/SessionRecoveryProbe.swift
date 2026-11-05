@@ -286,7 +286,9 @@ final class SessionRecoveryProbe {
     async throws
   {
     try await waitFor("the fixture document loads in \(id)") {
-      runtime.nativeTabID(forID: id.uuidString) >= 0 && engine.pages[id]?.loading == false
+      runtime.windowID(forTabID: id.uuidString) != nil
+        && runtime.view(forTabID: id.uuidString) != nil
+        && engine.pages[id]?.loading == false
     }
     for _ in 0..<100 {
       let marker = try? await evaluate(

@@ -4,9 +4,21 @@
 
 import AppKit
 import BrowserCore
+import ChromiumBridge
 import Testing
 
 @testable import ArcusisBrowser
+
+@Test @MainActor func newMiniWindowRequiresANormalWindowTarget() throws {
+  let workspace = try BrowserWorkspaceStore()
+  try workspace.removeWindow(workspace.workspace.windows[0].id)
+  let host = NativeBrowserHost(
+    events: BrowserRuntimeEvents(runtime: ARCChromiumRuntime()), workspace: workspace,
+    presentation: .hiddenProbe, usesPrimaryWindow: false, keyWindow: { nil })
+
+  #expect(workspace.workspace.windows.isEmpty)
+  #expect(!host.canPerform(.newMiniWindow))
+}
 
 @Test @MainActor func nativeMenusMatchArcGroupsAndRouteEveryImplementedCommandOnce() {
   let application = NSApplication.shared

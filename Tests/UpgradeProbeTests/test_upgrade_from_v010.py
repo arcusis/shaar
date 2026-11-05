@@ -68,6 +68,14 @@ class UpgradeFromV010Tests(unittest.TestCase):
         self.assertNotIn('sign_engine_framework "$app/Contents/Frameworks/Chromium Framework.framework"', patched)
         self.assertIn('codesign --verify --deep --strict "$app/Contents/Frameworks/Chromium Framework.framework"', patched)
 
+    def test_old_hidden_probe_keeps_renderer_and_timers_active(self):
+        source = subprocess.check_output(
+            ["git", "show", "v0.1.0:Sources/ChromiumBridge/ChromiumBridge.mm"],
+            cwd=upgrade_from_v010.ROOT, text=True)
+        patched = upgrade_from_v010.add_legacy_hidden_rendering_switches(source)
+        for option in ("--disable-renderer-backgrounding", "--disable-background-timer-throttling"):
+            self.assertEqual(patched.count(f'"{option}"'), 1)
+
     def test_old_harness_routes_native_startup_errors_to_owned_log(self):
         source = subprocess.check_output(
             ["git", "show", "v0.1.0:Sources/ChromiumBridge/ChromiumBridge.mm"],

@@ -77,6 +77,15 @@ def add_legacy_startup_logging(source):
                         "startup logging")
 
 
+def add_legacy_hidden_rendering_switches(source):
+    return replace_once(
+        source, '    strings.push_back("--disable-backgrounding-occluded-windows");\n',
+        '    strings.push_back("--disable-backgrounding-occluded-windows");\n'
+        '    strings.push_back("--disable-renderer-backgrounding");\n'
+        '    strings.push_back("--disable-background-timer-throttling");\n',
+        "hidden renderer switches")
+
+
 def add_legacy_bookmarks(source):
     marker = "        try runtime.openTabID(sharedA, profileID: profileA, url: fixture.absoluteString)"
     addition = """        for (profile, account) in [(profileA, "alpha"), (profileB, "beta")] {
@@ -196,8 +205,8 @@ def extract_old_source(destination, release):
 
 def prepare_old_harness(source, released_framework):
     bridge = source / "Sources/ChromiumBridge/ChromiumBridge.mm"
-    bridge.write_text(add_legacy_startup_logging(
-        make_mock_keychain_control_switch(bridge.read_text())))
+    bridge.write_text(add_legacy_hidden_rendering_switches(
+        add_legacy_startup_logging(make_mock_keychain_control_switch(bridge.read_text()))))
     probe = source / "Sources/ShaarVerification/EngineProbe.swift"
     probe.write_text(add_legacy_bookmarks(probe.read_text()))
     main = source / "Sources/ShaarVerification/ShaarVerificationMain.swift"

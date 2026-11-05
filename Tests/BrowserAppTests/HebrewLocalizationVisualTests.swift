@@ -42,6 +42,25 @@ final class HebrewLocalizationVisualTests: XCTestCase {
       engine.downloads.notices[profile], PanelsL10n.string("Download controls are unavailable."))
   }
 
+  func testClosedEngineLibraryWriteUsesLaunchLanguage() throws {
+    let store = BrowserStore()
+    let events = BrowserRuntimeEvents(runtime: ARCChromiumRuntime())
+    let engine = try BrowserEngine(events: events, store: store)
+    events.router.windowClosed(engine.windowID, quitting: false)
+    XCTAssertTrue(engine.isClosed)
+
+    let profile = store.session.selectedSpace.profileID
+    var succeeded: Bool?
+    let accepted = store.library.mutate(.bookmark(["op": "remove"]), profile: profile) {
+      succeeded = $0
+    }
+    XCTAssertTrue(accepted)
+    XCTAssertEqual(succeeded, false)
+    XCTAssertEqual(
+      store.library.notice(profile, section: .bookmarks),
+      PanelsL10n.string("The browser engine is unavailable."))
+  }
+
   func testLanguageRestartPromptRendersOffscreen() throws {
     for (theme, appearance) in [(ColorScheme.light, NSAppearance.Name.aqua), (.dark, .darkAqua)] {
       try capture(

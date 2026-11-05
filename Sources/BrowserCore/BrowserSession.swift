@@ -383,7 +383,8 @@ public struct BrowserSession: Codable, Equatable, Sendable {
 
   public mutating func cycleSpace(by offset: Int) {
     guard let index = spaces.firstIndex(where: { $0.id == selectedSpaceID }) else { return }
-    let next = ((index + offset) % spaces.count + spaces.count) % spaces.count
+    let step = offset % spaces.count
+    let next = ((index + step) % spaces.count + spaces.count) % spaces.count
     selectedSpaceID = spaces[next].id
   }
 

@@ -136,6 +136,23 @@ class UpgradeFromV010Tests(unittest.TestCase):
                 upgrade_from_v010.retain_old_fixture_evidence(
                     "Probe evidence: /tmp/unrelated\n", root, evidence)
 
+    def test_old_crash_capture_keeps_only_recent_probe_report(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reports = root / "Library/Logs/DiagnosticReports"
+            reports.mkdir(parents=True)
+            (reports / "ShaarVerification-2026.ips").write_text("probe crash\n")
+            (reports / "OtherApp-2026.ips").write_text("unrelated\n")
+            evidence = root / "evidence"
+            evidence.mkdir()
+
+            captured = upgrade_from_v010.retain_crash_evidence(
+                [reports], evidence, started=0)
+
+            self.assertTrue(captured)
+            self.assertEqual((evidence / "old-probe-crash.ips").read_text(), "probe crash\n")
+            self.assertEqual(len(list(evidence.iterdir())), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

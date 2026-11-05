@@ -14,6 +14,7 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import pwd
 import re
 import secrets
 import shutil
@@ -23,6 +24,7 @@ import subprocess
 import tarfile
 import tempfile
 import threading
+import time
 import urllib.request
 from urllib.parse import urlsplit
 import uuid
@@ -271,6 +273,23 @@ def retain_old_fixture_evidence(transcript, parent, evidence):
             shutil.copy2(child_log, evidence / f"old-fixture-{phase}.log")
 
 
+def retain_crash_evidence(directories, evidence, started):
+    reports = []
+    for directory in directories:
+        for pattern in ("ShaarVerification*.ips", "ShaarVerification*.crash"):
+            for report in directory.glob(pattern):
+                if report.is_symlink() or not report.is_file():
+                    continue
+                status = report.stat()
+                if status.st_uid == os.getuid() and status.st_mtime >= started and status.st_size <= 2_000_000:
+                    reports.append(report)
+    if not reports:
+        return False
+    latest = max(reports, key=lambda report: report.stat().st_mtime)
+    shutil.copy2(latest, evidence / f"old-probe-crash{latest.suffix}")
+    return True
+
+
 def account_url_from_session(session):
     urls = {tab["url"] for space in session["spaces"] for tab in space["tabs"]}
     accounts = set()
@@ -425,12 +444,22 @@ def execute(output):
             old_app = old_source / "build/Shaar Verification.app"
             set_shipping_bundle_id(old_app)
             fixture_log = evidence / "old-fixture.log"
+            fixture_started = time.time()
             try:
                 old_log = run_checked(["nice", "-n", "19", "python3",
                                        "scripts/engine_fixture.py"], cwd=old_source,
                                       env=environment, timeout=900, output=fixture_log)
             except RuntimeError:
-                retain_old_fixture_evidence(fixture_log.read_text(), root, evidence)
+                transcript = fixture_log.read_text()
+                retain_old_fixture_evidence(transcript, root, evidence)
+                if re.search(r"failed \(-\d+\)", transcript):
+                    user_home = Path(pwd.getpwuid(os.getuid()).pw_dir)
+                    directories = [home / "Library/Logs/DiagnosticReports",
+                                   user_home / "Library/Logs/DiagnosticReports"]
+                    for _ in range(6):
+                        if retain_crash_evidence(directories, evidence, fixture_started):
+                            break
+                        time.sleep(0.5)
                 raise
             fixture = fixture_root_from_log(old_log, root)
             data_root = stage_old_data(fixture, home)

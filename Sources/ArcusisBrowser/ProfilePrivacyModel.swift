@@ -137,6 +137,14 @@ final class ProfilePrivacyModel {
   private(set) var failure: String?
   private(set) var message: String?
 
+  static func resetSuccessMessage(
+    origin: String, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    BrowserLocalization.format(
+      "Site permissions for %@ reset to defaults.", table: "Settings", language: language,
+      arguments: [.string(origin)])
+  }
+
   init(profileID: UUID, backend: any ProfileSettingsBackend) {
     self.profileID = profileID
     self.backend = backend
@@ -170,7 +178,7 @@ final class ProfilePrivacyModel {
       try await self.backend.loadProfile(self.profileID)
       try await self.backend.resetPermissions(self.profileID, origin: origin)
       try await self.refreshPermissions()
-      self.message = SettingsL10n.string("Site permissions reset to defaults.")
+      self.message = Self.resetSuccessMessage(origin: origin)
     }
   }
 

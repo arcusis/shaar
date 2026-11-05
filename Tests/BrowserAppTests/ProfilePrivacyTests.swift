@@ -21,6 +21,13 @@ struct ProfilePrivacyTests {
         == "איפוס ההרשאות עבור \u{2068}https://example.test\u{2069}")
   }
 
+  @Test func resetSuccessMessageNamesTheSiteInHebrew() {
+    #expect(
+      ProfilePrivacyModel.resetSuccessMessage(
+        origin: "https://example.test", language: .hebrew)
+        == "הרשאות האתר \u{2068}https://example.test\u{2069} אופסו לברירות המחדל.")
+  }
+
   @Test func settingsUseSelectedShaarRuntimeForPrivacyBackend() throws {
     let runtime = ARCShaarRuntime()
     let workspace = try BrowserWorkspaceStore(initialSession: .fresh())
@@ -105,6 +112,7 @@ struct ProfilePrivacyTests {
     await model.clear(siteData: false)
     await model.resetPermissions(origin: "https://example.test")
     #expect(model.sites.isEmpty)
+    #expect(model.message == "Site permissions for https://example.test reset to defaults.")
     #expect(backend.exceptions[other]?.count == 1)
     #expect(backend.calls.allSatisfy { $0.1 == selected })
     #expect(backend.calls.filter { ["data", "cache", "reset"].contains($0.0) }.count == 3)

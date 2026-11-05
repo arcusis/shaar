@@ -26,6 +26,7 @@
     "Site data cleared.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "נתוני האתרים נוקו."}}}},
     "Cache cleared.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "המטמון נוקה."}}}},
     "Site permissions reset to defaults.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "הרשאות האתר אופסו לברירות המחדל."}}}},
+    "Site permissions for %@ reset to defaults.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "הרשאות האתר %@ אופסו לברירות המחדל."}}}},
     "Cookies and Site Data": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "קובצי Cookie ונתוני אתרים"}}}},
     "Clear Site Data…": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "ניקוי נתוני אתרים…"}}}},
     "Cached Files": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "קבצים במטמון"}}}},

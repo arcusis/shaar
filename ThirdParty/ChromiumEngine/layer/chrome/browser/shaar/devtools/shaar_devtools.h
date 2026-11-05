@@ -30,7 +30,8 @@ struct ModuleHandlers {
 
 void BindRuntimeServices();
 
-// Keeps a hidden tab producing compositor frames until the returned guard dies.
+// Keeps the native window hidden while temporarily showing the page to the
+// renderer for capture. The guard restores the previous page visibility.
 base::ScopedClosureRunner StartHiddenProbeCapture(content::WebContents* contents);
 
 // Returns a fixed protocol method only when the command belongs to the

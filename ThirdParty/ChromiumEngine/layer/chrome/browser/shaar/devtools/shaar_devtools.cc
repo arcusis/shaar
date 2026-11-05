@@ -23,22 +23,24 @@
 #include "base/containers/span.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/memory/weak_ptr.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/devtools/devtools_window.h"
-#include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
+#include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/render_widget_host_view.h"
+#include "content/public/browser/visibility.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/size.h"
-#include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/image/image.h"
 
 namespace shaar::devtools {
 namespace {
@@ -219,37 +221,52 @@ class ProbeCaptureRequest final
   explicit ProbeCaptureRequest(ReplyContext reply) : reply_(reply) {}
 
   void Start(content::WebContents* contents) {
+    contents_ = contents->GetWeakPtr();
     auto* view = contents->GetRenderWidgetHostView();
     if (!view) {
       Finish({}, "renderer view is unavailable");
       return;
     }
-    // An empty capture size preserves the hidden WebContents' layout and page
-    // visibility. The returned guard balances DecrementCapturerCount on every
-    // completion path, including timeout and copy failure.
+    // Keep the native window ordered out while briefly making the page visible
+    // to Chromium. A first shown transition is needed to produce a frame in a
+    // window that has never been ordered in. The scoped lease restores the
+    // original page visibility on success, failure, and timeout.
     capturer_ = StartHiddenProbeCapture(contents);
+    // Visibility observers may replace the renderer view or close the tab.
+    auto* live_contents = contents_.get();
+    if (!live_contents) {
+      Finish({}, "renderer tab closed during capture");
+      return;
+    }
+    view = live_contents->GetRenderWidgetHostView();
+    auto* widget = view ? content::RenderWidgetHostImpl::From(
+                              view->GetRenderWidgetHost())
+                        : nullptr;
+    if (!widget) {
+      Finish({}, "renderer widget is unavailable");
+      return;
+    }
     timer_.Start(FROM_HERE, kProbeCaptureTimeout,
                  base::BindOnce(&ProbeCaptureRequest::OnTimeout,
                                 base::WrapRefCounted(this)));
-    auto ui_runner = base::SequencedTaskRunner::GetCurrentDefault();
-    view->CopyFromSurface(
-        gfx::Rect(), gfx::Size(), kProbeCaptureTimeout,
+    // Chromium's snapshot path forces a renderer redraw before copying from
+    // the surface. CopyFromSurface issued immediately after the capture lease
+    // can wait for a frame that has not yet been submitted.
+    widget->GetSnapshotFromBrowser(
         base::BindOnce(
             [](scoped_refptr<ProbeCaptureRequest> request,
-               scoped_refptr<base::SequencedTaskRunner> ui_runner,
-               const content::CopyFromSurfaceResult& result) {
+               const gfx::Image& image) {
               std::vector<unsigned char> png;
-              if (result.has_value() && !result->bitmap.drawsNothing()) {
+              if (!image.IsEmpty()) {
                 auto encoded = gfx::PNGCodec::EncodeBGRASkBitmap(
-                    result->bitmap, /*discard_transparency=*/false);
+                    image.AsBitmap(), /*discard_transparency=*/false);
                 if (encoded)
                   png = std::move(*encoded);
               }
-              ui_runner->PostTask(
-                  FROM_HERE, base::BindOnce(&ProbeCaptureRequest::OnCopy,
-                                            std::move(request), std::move(png)));
+              request->OnCopy(std::move(png));
             },
-            base::WrapRefCounted(this), std::move(ui_runner)));
+            base::WrapRefCounted(this)),
+        /*from_surface=*/true);
   }
 
  private:
@@ -284,6 +301,7 @@ class ProbeCaptureRequest final
   }
 
   ReplyContext reply_;
+  base::WeakPtr<content::WebContents> contents_;
   base::ScopedClosureRunner capturer_;
   base::OneShotTimer timer_;
   bool finished_ = false;
@@ -727,9 +745,28 @@ shaar_error_code DecodeOperation(shaar_operation operation,
 }  // namespace
 
 base::ScopedClosureRunner StartHiddenProbeCapture(content::WebContents* contents) {
-  return contents->IncrementCapturerCount(
+  const content::Visibility original_visibility = contents->GetVisibility();
+  auto weak_contents = contents->GetWeakPtr();
+  auto capturer = contents->IncrementCapturerCount(
       gfx::Size(), /*stay_hidden=*/true, /*stay_awake=*/true,
       /*is_activity=*/false);
+  // UpdateWebContentsVisibility handles the first shown transition even when
+  // GetVisibility() already reports VISIBLE for a never-shown WebContents.
+  if (weak_contents)
+    weak_contents->UpdateWebContentsVisibility(content::Visibility::VISIBLE);
+  return base::ScopedClosureRunner(base::BindOnce(
+      [](base::WeakPtr<content::WebContents> weak_contents,
+         content::Visibility visibility,
+         base::ScopedClosureRunner capturer) {
+        if (weak_contents) {
+          if (visibility == content::Visibility::HIDDEN)
+            weak_contents->WasHidden();
+          else if (visibility == content::Visibility::OCCLUDED)
+            weak_contents->WasOccluded();
+        }
+        capturer.RunAndReset();
+      },
+      std::move(weak_contents), original_visibility, std::move(capturer)));
 }
 
 void BindRuntimeServices() {

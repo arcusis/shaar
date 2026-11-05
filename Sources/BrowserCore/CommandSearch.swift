@@ -17,7 +17,7 @@ public enum NavigationInput {
     if let url = URL(string: input), isWebURL(url) { return url }
     if hasUnsupportedScheme(input) { return nil }
     let host = String(input.prefix { !"/?#".contains($0) })
-    guard !input.contains(where: \.isWhitespace), !input.contains("@"),
+    guard !input.contains(where: \.isWhitespace), !host.contains("@"),
       host.contains(".") || host == "localhost" || host.hasPrefix("localhost:")
         || host.hasPrefix("["),
       let url = URL(string: "https://" + input), isWebURL(url)

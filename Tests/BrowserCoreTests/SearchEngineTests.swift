@@ -69,6 +69,9 @@ import Testing
   let components = try #require(URLComponents(url: destination, resolvingAgainstBaseURL: false))
   #expect(components.host == "www.google.com")
   #expect(components.queryItems?.first?.value == input)
+  #expect(
+    NavigationInput.address(for: "example.com/path@alice")?.absoluteString
+      == "https://example.com/path@alice")
 }
 
 @Test func commandSearchKeepsGoogleDefaultAndAcceptsSelectedEngine() throws {

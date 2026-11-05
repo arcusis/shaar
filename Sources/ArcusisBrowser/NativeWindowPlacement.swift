@@ -17,8 +17,8 @@ enum NativeWindowPlacement {
       ?? NSRect(x: fallback.midX - 600, y: fallback.midY - 390, width: 1200, height: 780)
     let screen =
       usable.max { intersectionArea(proposed, $0) < intersectionArea(proposed, $1) } ?? fallback
-    let width = min(max(proposed.width, 760), max(screen.width, 760))
-    let height = min(max(proposed.height, 520), max(screen.height, 520))
+    let width = min(max(proposed.width, 760), screen.width)
+    let height = min(max(proposed.height, 520), screen.height)
     return NSRect(
       x: min(max(proposed.minX, screen.minX), max(screen.minX, screen.maxX - width)),
       y: min(max(proposed.minY, screen.minY), max(screen.minY, screen.maxY - height)),

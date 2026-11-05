@@ -383,14 +383,15 @@ enum LibrarySpacesOverviewModel {
       let profile = profiles[space.profileID]
       let spaceMatches =
         needle.isEmpty || contains(space.name, needle) || contains(profile?.name ?? "", needle)
-      var items = space.pinnedItems(includingCollapsed: true).compactMap {
-        item -> LibrarySpaceCardItem? in
-        switch item {
-        case .folder(let folder, let depth): return .folder(folder, depth: depth)
-        case .tab(let tab, let depth): return .tab(tab, depth: depth)
+      var items =
+        (space.pinnedItems(includingCollapsed: true)
+        + space.items(isPinned: false, includingCollapsed: true)).compactMap {
+          item -> LibrarySpaceCardItem? in
+          switch item {
+          case .folder(let folder, let depth): return .folder(folder, depth: depth)
+          case .tab(let tab, let depth): return .tab(tab, depth: depth)
+          }
         }
-      }
-      items += space.tabs.filter { !$0.isPinned }.map { .tab($0, depth: 0) }
       if !spaceMatches && !needle.isEmpty {
         let matchingFolderIDs = Set(space.folders.filter { contains($0.name, needle) }.map(\.id))
         items = items.filter { item in

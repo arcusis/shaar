@@ -11,6 +11,32 @@ import XCTest
 
 @MainActor
 final class LibrarySpacesOverviewTests: XCTestCase {
+  func testTodayFoldersAndNestedTabsAppearInSpaceCard() throws {
+    let profile = BrowserProfile(name: "Daily")
+    let folder = BrowserFolder(name: "Reading list", isPinned: false)
+    let tab = BrowserTab(
+      url: URL(string: "https://example.com/article")!, title: "Article", folderID: folder.id)
+    let space = BrowserSpace(
+      profileID: profile.id, name: "Daily", symbol: "book", tint: .ocean,
+      tabs: [tab], folders: [folder])
+    let session = try BrowserSession(
+      profiles: [profile], spaces: [space], selectedSpaceID: space.id)
+
+    let card = try XCTUnwrap(LibrarySpacesOverviewModel.cards(in: session, query: "").first)
+    XCTAssertEqual(card.items.count, 2)
+    guard case .folder(let shownFolder, let folderDepth) = card.items[0],
+      case .tab(let shownTab, let tabDepth) = card.items[1]
+    else { return XCTFail("Today folder and nested tab should appear in order") }
+    XCTAssertEqual(shownFolder.id, folder.id)
+    XCTAssertEqual(folderDepth, 0)
+    XCTAssertEqual(shownTab.id, tab.id)
+    XCTAssertEqual(tabDepth, 1)
+
+    let match = try XCTUnwrap(
+      LibrarySpacesOverviewModel.cards(in: session, query: "Reading list").first)
+    XCTAssertEqual(match.items.count, 2)
+  }
+
   func testSearchMatchesSpaceProfileFolderTitleAndURL() throws {
     let (session, ids) = makeSession()
 

@@ -43,6 +43,15 @@ struct ProfileExtensionsSection: View {
       arguments: [.string(extensionName), .string(profileName)])
   }
 
+  static func installRetryLabel(
+    extensionName: String, profileName: String,
+    language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    BrowserLocalization.format(
+      "Retry installing %@ for %@", table: "Settings", language: language,
+      arguments: [.string(extensionName), .string(profileName)])
+  }
+
   var body: some View {
     Group {
       if let model, let item = model.extensions.first(where: { $0.id == detailID }) {
@@ -121,6 +130,9 @@ private struct SharedExtensionSettingsSection: View {
                     Button(SettingsL10n.string("Retry")) {
                       Task { await model.reconcile(profileID: profileID) }
                     }
+                    .accessibilityLabel(
+                      ProfileExtensionsSection.installRetryLabel(
+                        extensionName: row.name, profileName: state.name))
                   }
                 } else {
                   LabeledContent(state.name, value: statusText(state))

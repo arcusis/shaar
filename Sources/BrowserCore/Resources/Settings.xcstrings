@@ -674,6 +674,7 @@
     "Disable %@ for %@": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "השבתת התוסף %@ בפרופיל %@"}}}},
     "Not installed": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לא מותקן"}}}},
     "Retry": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "ניסיון חוזר"}}}},
+    "Retry installing %@ for %@": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "ניסיון חוזר להתקנת התוסף %@ בפרופיל %@"}}}},
     "Add Extensions…": {
       "localizations": {
         "he": {

@@ -28,6 +28,17 @@ final class ProfileExtensionsSectionTests: XCTestCase {
       [english, hebrew])
   }
 
+  func testSharedExtensionRetryLabelNamesTheExtensionAndProfile() {
+    XCTAssertEqual(
+      ProfileExtensionsSection.installRetryLabel(
+        extensionName: "Notes", profileName: "Work", language: .english),
+      "Retry installing Notes for Work")
+    XCTAssertEqual(
+      ProfileExtensionsSection.installRetryLabel(
+        extensionName: "Notes", profileName: "Work", language: .hebrew),
+      "ניסיון חוזר להתקנת התוסף \u{2068}Notes\u{2069} בפרופיל \u{2068}Work\u{2069}")
+  }
+
   func testSharedExtensionToggleLabelsNameTheActionExtensionAndProfile() {
     XCTAssertEqual(
       ProfileExtensionsSection.toggleLabel(

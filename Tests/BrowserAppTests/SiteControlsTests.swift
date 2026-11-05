@@ -120,6 +120,22 @@ private func target(_ address: String) -> SiteControlTarget {
   #expect(model.permissionValues[.camera] == .allow)
 }
 
+@MainActor @Test func olderPermissionReadCannotReplaceNewerRefresh() async {
+  let backend = FakeSiteBackend()
+  let model = SiteControlsModel(target: target("https://mail.example"), backend: backend)
+  backend.suspendNextRead = true
+  let older = Task { await model.load() }
+  for _ in 0..<100 where backend.finishRead == nil { await Task.yield() }
+  #expect(backend.finishRead != nil)
+
+  backend.values[.camera] = .allow
+  await model.load()
+  #expect(model.permissionValues[.camera] == .allow)
+  backend.finishRead?.resume()
+  await older.value
+  #expect(model.permissionValues[.camera] == .allow)
+}
+
 @MainActor @Test func siteControlsDoNotOverlapWritesToTheSamePermission() async {
   let backend = FakeSiteBackend()
   backend.suspendFirstWrite = true

@@ -104,6 +104,7 @@ final class SiteControlsModel: Identifiable {
   private(set) var failure: String?
   @ObservationIgnored private weak var backend: SiteControlBackend?
   @ObservationIgnored private var permissionChangeRevision = 0
+  @ObservationIgnored private var permissionLoadRevision = 0
 
   init(target: SiteControlTarget, backend: SiteControlBackend) {
     self.target = target
@@ -126,14 +127,22 @@ final class SiteControlsModel: Identifiable {
 
   func load() async {
     guard let backend, target.origin != nil else { return }
-    let revision = permissionChangeRevision
+    permissionLoadRevision += 1
+    let loadRevision = permissionLoadRevision
+    let changeRevision = permissionChangeRevision
     do {
       let values = try await backend.permissionValues(for: target)
-      guard revision == permissionChangeRevision else { return }
+      guard loadRevision == permissionLoadRevision, changeRevision == permissionChangeRevision
+      else {
+        return
+      }
       permissionValues = values
       failure = nil
     } catch {
-      guard revision == permissionChangeRevision else { return }
+      guard loadRevision == permissionLoadRevision, changeRevision == permissionChangeRevision
+      else {
+        return
+      }
       failure = error.localizedDescription
     }
   }

@@ -9,6 +9,26 @@ import Testing
 @testable import ArcusisBrowser
 
 @Suite @MainActor struct BrowserWindowSidebarTests {
+  @Test func compactScreenDoesNotRequireOversizedBrowserContent() {
+    let store = BrowserStore(sessionFile: nil)
+    let size = NSSize(width: 620, height: 480)
+    let host = NSHostingView(rootView: BrowserWindow(store: store))
+    let window = NSWindow(
+      contentRect: NSRect(origin: .zero, size: size),
+      styleMask: .borderless, backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.contentView = host
+    defer {
+      window.contentView = nil
+      window.close()
+    }
+    host.layoutSubtreeIfNeeded()
+
+    #expect(host.fittingSize.width <= size.width)
+    #expect(host.fittingSize.height <= size.height)
+    #expect(!window.isVisible && !window.isKeyWindow && !window.isMainWindow)
+  }
+
   @Test func pinChangesUpdateAnExistingOffscreenWindow() async throws {
     let store = BrowserStore(sessionFile: nil)
     let content = BrowserWindow(store: store).transaction {

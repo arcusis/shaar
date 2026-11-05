@@ -8,6 +8,21 @@
 
 namespace {
 
+TEST(ShaarLifecycleProbeTest, KeepAliveStateRequiresActiveEngine) {
+  shaar_error error = {};
+  error.size = sizeof(error);
+  shaar_bytes state = {"old", 3};
+  EXPECT_EQ(shaar_test_keep_alive_state(nullptr, &state, &error),
+            SHAAR_INVALID_ARGUMENT);
+  EXPECT_EQ(state.data, nullptr);
+  EXPECT_EQ(error.code, SHAAR_INVALID_ARGUMENT);
+  EXPECT_EQ(shaar_test_keep_alive_state(
+                reinterpret_cast<shaar_engine*>(1), &state, &error),
+            SHAAR_NOT_READY);
+  EXPECT_EQ(state.data, nullptr);
+  EXPECT_EQ(error.code, SHAAR_NOT_READY);
+}
+
 shaar_error_code FakeProfileHandler(shaar::ShaarEngineContext*,
                                     shaar_engine*,
                                     shaar_scope,

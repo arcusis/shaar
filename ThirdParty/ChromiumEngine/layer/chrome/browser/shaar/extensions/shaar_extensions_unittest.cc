@@ -6,6 +6,8 @@
 
 #include <string>
 
+#include "base/files/file_util.h"
+#include "base/files/scoped_temp_dir.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -207,6 +209,37 @@ TEST(ShaarExtensionsModuleTest, PopupURLMustBelongToOwningExtension) {
       GURL("chrome-extension://bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/popup.html")));
   EXPECT_FALSE(shaar::extensions_host::ValidPopupOrigin(
       "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", GURL("https://example.com/popup")));
+}
+
+TEST(ShaarExtensionsModuleTest, ProbeComponentRequiresOwnedMarkedDirectory) {
+  base::ScopedTempDir temp;
+  ASSERT_TRUE(temp.CreateUniqueTempDir());
+  const auto root = temp.GetPath().Append("arcusis-engine-probe-owned");
+  const auto data_root = root.Append("Chromium");
+  const auto extension = root.Append("Extension");
+  ASSERT_TRUE(base::CreateDirectory(data_root));
+  ASSERT_TRUE(base::CreateDirectory(extension));
+  EXPECT_FALSE(shaar::extensions_host::ValidProbeExtensionPath(data_root, extension));
+  ASSERT_TRUE(base::WriteFile(root.Append(".arcusis-probe"),
+                              "arcusis-engine-probe-v1\n"));
+  EXPECT_TRUE(shaar::extensions_host::ValidProbeExtensionPath(data_root, extension));
+  EXPECT_FALSE(shaar::extensions_host::ValidProbeExtensionPath(
+      data_root, root.Append("Other")));
+  const auto outside = temp.GetPath().Append("outside");
+  ASSERT_TRUE(base::CreateDirectory(outside));
+  EXPECT_FALSE(shaar::extensions_host::ValidProbeExtensionPath(data_root, outside));
+}
+
+TEST(ShaarExtensionsModuleTest, ProbeComponentRejectsMissingEngineAndProfile) {
+  shaar_error error = {};
+  error.size = sizeof(error);
+  shaar_bytes extension_id = {};
+  constexpr char kPath[] = "/tmp/fixture/Extension";
+  EXPECT_EQ(shaar_test_load_component_extension(
+                nullptr, nullptr, {kPath, sizeof(kPath) - 1}, &extension_id,
+                &error),
+            SHAAR_INVALID_ARGUMENT);
+  EXPECT_EQ(extension_id.data, nullptr);
 }
 
 TEST(ShaarExtensionsModuleTest, SharedInstallDoesNotConfirmOlderVersion) {

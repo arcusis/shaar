@@ -49,7 +49,7 @@
   },
   "layer": {
     "path": "ThirdParty/ChromiumEngine/layer",
-    "sha256": "1e1c88067a24e73a5b1ce5732f37ed784b71bea8ca7f9dafb49902c71f307edf",
+    "sha256": "c3d00f6e8bc6cf8c78fe0ab6581c61b8dabfd57d6a485742c60472d675f1772d",
     "files": {
       "chrome/browser/shaar/BUILD.gn": "2df453e4d24f303b0348d4a7b8a5d818f71727bd3971367bfaf7b09c8ed01350",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks.cc": "da94500fa2d7b3106d58dcf3afc2f46072c6cc57a6e1868d1cdd132cafa714fd",
@@ -59,7 +59,7 @@
       "chrome/browser/shaar/devtools/shaar_devtools.cc": "ac3b5a88da3b9370edd3f53a7a4494daa5593927ff884f2b27262855e1d63380",
       "chrome/browser/shaar/devtools/shaar_devtools.h": "ff734e5bdeecff86d0f14f95aeb046a7b081655843a407a908f819482959c40d",
       "chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc": "0c190fb2e64e605316399d167d1193070eb1cacf7a2e3bfa6f9d00f24f7e95bf",
-      "chrome/browser/shaar/devtools/shaar_devtools_unittest.cc": "62116be9675f79667220cf03bbe50ae476970b0507026abcd4d1ad83eb70aa0f",
+      "chrome/browser/shaar/devtools/shaar_devtools_unittest.cc": "069cfa4b119a2ca455b4e7713d44d84a1d3429fb7cdb08adbcadd125c693a210",
       "chrome/browser/shaar/downloads/shaar_downloads.cc": "77b53ecd80858cf1d7c6d1baebd4189a3ab4250bd18cc11019025cb74ceb84e1",
       "chrome/browser/shaar/downloads/shaar_downloads.h": "7850f59946003f47402e7cdeffed5d473eb87e79cf805a50f8ee73704ea9a6e7",
       "chrome/browser/shaar/downloads/shaar_downloads_lifecycle_adapter.cc": "7454e60730ba1bf4ba34212a33c8fd289237ae0e47412b1732d1de5cbf245e76",

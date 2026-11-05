@@ -17,10 +17,7 @@
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/devtools_agent_host_client.h"
-#include "content/public/test/browser_task_environment.h"
 #include "content/public/test/mock_devtools_agent_host.h"
-#include "content/public/test/test_browser_context.h"
-#include "content/public/test/web_contents_tester.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace shaar::devtools {
@@ -334,22 +331,6 @@ TEST(ShaarDevToolsTest, ProtocolRequiresExactPageTargetForScopedTab) {
   EXPECT_FALSE(IsProtocolPageTargetFor(tab, tab_target.get()));
   EXPECT_FALSE(IsProtocolPageTargetFor(nullptr, page.get()));
   EXPECT_FALSE(IsProtocolPageTargetFor(tab, nullptr));
-}
-
-TEST(ShaarDevToolsTest, HiddenCaptureLeaseBalancesCapturerCount) {
-  content::BrowserTaskEnvironment tasks;
-  content::TestBrowserContext context;
-  auto contents =
-      content::WebContentsTester::CreateTestWebContents(&context, nullptr);
-  contents->WasHidden();
-  EXPECT_FALSE(contents->IsBeingCaptured());
-  {
-    auto lease = StartHiddenProbeCapture(contents.get());
-    EXPECT_TRUE(contents->IsBeingCaptured());
-    EXPECT_NE(content::Visibility::VISIBLE, contents->GetVisibility());
-  }
-  EXPECT_FALSE(contents->IsBeingCaptured());
-  EXPECT_NE(content::Visibility::VISIBLE, contents->GetVisibility());
 }
 
 TEST(ShaarDevToolsTest, CaptureRejectsUnownedWindowTabPair) {

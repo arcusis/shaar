@@ -23,8 +23,13 @@ struct ShaarInspectorSessionProbe {
       throw InspectorFailure("Normal Inspector target is missing.")
     }
     let normal = InspectorModel(target: target, engine: engine)
-    try await checkSession(normal)
-    record("normalSequentialDOMCSS")
+    var failures: [String] = []
+    do {
+      try await checkSession(normal)
+      record("normalSequentialDOMCSS")
+    } catch {
+      failures.append("normal: \(error)")
+    }
     let privateHost = PrivateBrowserHost(
       runtime: runtime, presentsWindows: false, sourceProfileID: { profileID.uuidString })
     privateHost.installCallbacks()
@@ -34,8 +39,17 @@ struct ShaarInspectorSessionProbe {
     guard let owner = privateHost.ownedWindows.first else {
       throw InspectorFailure("Private Inspector window is missing.")
     }
-    owner.store.perform(.open(fixture))
-    owner.page.confirmHTTP(useHTTPS: false)
+    guard
+      let calls = ARCProbeTracePrivateSelection(
+        runtime,
+        {
+          owner.store.perform(.open(fixture))
+          owner.page.confirmHTTP(useHTTPS: false)
+        })
+    else { throw InspectorFailure("Private selection tracing requires an owned probe root.") }
+    let callBytes = try JSONSerialization.data(withJSONObject: calls, options: [.sortedKeys])
+    FileHandle.standardError.write(
+      Data("Product private selection calls: ".utf8) + callBytes + Data("\n".utf8))
     try await wait("private page load") {
       owner.hosting.layoutSubtreeIfNeeded()
       return owner.page.inspectorTarget?.url == fixture
@@ -44,11 +58,29 @@ struct ShaarInspectorSessionProbe {
     guard let privateTarget = owner.page.inspectorTarget else {
       throw InspectorFailure("Private Inspector target is missing.")
     }
+    guard
+      calls.contains(where: {
+        $0["tabID"] as? String == privateTarget.tabID.uuidString
+          && $0["windowID"] as? String == owner.windowID
+          && $0["contextID"] as? String == owner.contextID
+          && $0["accepted"] as? Bool == true
+      })
+    else { throw InspectorFailure("The product did not select the private Inspector fixture.") }
+    record("productSelectedPrivateFixture")
     let model = InspectorModel(target: privateTarget, privateSession: owner.page)
     do {
       try await checkSession(model)
       record("privateSequentialDOMCSS")
     } catch {
+      if let audit = runtime.privateProbeAudit(forContextID: owner.contextID) {
+        let bytes = try JSONSerialization.data(withJSONObject: audit, options: [.sortedKeys])
+        FileHandle.standardError.write(
+          Data("Private native audit: ".utf8) + bytes + Data("\n".utf8))
+      }
+      if let document = try? await model.call("DOM.getDocument", params: ["depth": 0]) {
+        let bytes = try JSONSerialization.data(withJSONObject: document, options: [.sortedKeys])
+        FileHandle.standardError.write(Data("Private DOM root: ".utf8) + bytes + Data("\n".utf8))
+      }
       let other: String? = await withCheckedContinuation { continuation in
         runtime.evaluatePrivateProbeTabID(
           privateTarget.tabID.uuidString,
@@ -57,12 +89,48 @@ struct ShaarInspectorSessionProbe {
       }
       FileHandle.standardError.write(
         Data("Developer capability comparison: \(other ?? "nil")\n".utf8))
-      throw error
+      if CommandLine.arguments.contains("--probe-inspector-capture-diagnostic") {
+        await captureDiagnostic(owner, model: model, record: record)
+      }
+      failures.append("private: \(error)")
     }
     guard NSApp.windows.allSatisfy({ !$0.isVisible }) else {
       throw InspectorFailure("Inspector session probe exposed a window.")
     }
     record("allWindowsHidden")
+    guard failures.isEmpty else { throw InspectorFailure(failures.joined(separator: "; ")) }
+  }
+
+  private func captureDiagnostic(
+    _ owner: PrivateBrowserHost.Owner, model: InspectorModel, record: (String) -> Void
+  ) async {
+    let capture: (Data?, String?) = await withCheckedContinuation { continuation in
+      runtime.capturePrivateProbeTabID(
+        model.target.tabID.uuidString, windowID: owner.windowID, contextID: owner.contextID
+      ) { continuation.resume(returning: ($0, $1)) }
+    }
+    let arguments = CommandLine.arguments
+    if let png = capture.0, let index = arguments.firstIndex(of: "--probe-output"),
+      arguments.indices.contains(index + 1)
+    {
+      let destination = URL(filePath: arguments[index + 1]).deletingLastPathComponent()
+        .appending(path: "private-capture-diagnostic.png")
+      do {
+        try png.write(to: destination)
+        FileHandle.standardError.write(Data("Diagnostic capture: \(destination.path)\n".utf8))
+      } catch {
+        FileHandle.standardError.write(Data("Diagnostic capture write failed: \(error)\n".utf8))
+      }
+    } else {
+      FileHandle.standardError.write(
+        Data("Diagnostic capture failed: \(capture.1 ?? "no PNG")\n".utf8))
+    }
+    do {
+      try await checkSession(model)
+      record("diagnosticPrivateSequentialDOMCSSAfterCapture")
+    } catch {
+      FileHandle.standardError.write(Data("After diagnostic capture: \(error)\n".utf8))
+    }
   }
 
   private func checkSession(_ model: InspectorModel) async throws {

@@ -106,7 +106,9 @@ final class ShaarFirstTabProbe {
         self.finish(error: "Browser host restore failed: \(error)")
       }
     }
-    DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in
+    // The optional session diagnostic covers two scopes and a bounded renderer capture.
+    let timeout: TimeInterval = checksInspector ? 45 : 20
+    DispatchQueue.main.asyncAfter(deadline: .now() + timeout) { [weak self] in
       self?.finish(error: "Timed out waiting for a native Shaar tab.")
     }
     let result = runtime.run(withDataDirectory: dataRoot.appending(path: "Chromium"), testing: true)

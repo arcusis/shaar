@@ -35,6 +35,11 @@ FOUNDATION_EXPORT NSDictionary<NSString *, id> *ARCProbeNormalSelectionAudit(
 /// Extracts a JSON value from a scoped Shaar Runtime.evaluate reply.
 FOUNDATION_EXPORT NSString * _Nullable ARCProbePrivateEvaluationJSON(NSDictionary *reply);
 
+/// Observe the real private selection method during a synchronous product action, forwarding unchanged.
+/// Requires the owned Inspector probe root; restores the original method before returning.
+FOUNDATION_EXPORT NSArray<NSDictionary *> * _Nullable ARCProbeTracePrivateSelection(
+  ARCChromiumRuntime *runtime, void (^action)(void));
+
 /// Await async privacy scripts before returning a copied JSON value.
 FOUNDATION_EXPORT NSDictionary<NSString *, id> *ARCProbePrivacyEvaluationParameters(
   NSString *expression);

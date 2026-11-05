@@ -68,6 +68,36 @@ bool PrivateTabState(ARCShaarRuntime *runtime, NSString *tabID,
 
 }  // namespace
 
+NSArray<NSDictionary *> *ARCProbeTracePrivateSelection(
+    ARCChromiumRuntime *runtime, void (^action)(void)) {
+  if (!ProbeCaptureAllowed() ||
+      ![NSProcessInfo.processInfo.arguments containsObject:@"--probe-shaar-inspector"])
+    return nil;
+  NSCAssert(NSThread.isMainThread, @"Selection tracing requires the main thread");
+  SEL selector = @selector(selectPrivateTabID:windowID:contextID:);
+  Method method = class_getInstanceMethod(runtime.class, selector);
+  if (!method) return nil;
+  IMP previous = method_getImplementation(method);
+  using Select = BOOL (*)(id, SEL, NSString *, NSString *, NSString *);
+  Select original = reinterpret_cast<Select>(previous);
+  NSMutableArray *calls = [NSMutableArray array];
+  IMP trace = imp_implementationWithBlock(^BOOL(id receiver, NSString *tabID,
+                                               NSString *windowID, NSString *contextID) {
+    BOOL accepted = original(receiver, selector, tabID, windowID, contextID);
+    if (receiver == runtime)
+      [calls addObject:@{@"tabID": tabID, @"windowID": windowID,
+                         @"contextID": contextID, @"accepted": @(accepted)}];
+    return accepted;
+  });
+  method_setImplementation(method, trace);
+  @try { action(); }
+  @finally {
+    method_setImplementation(method, previous);
+    imp_removeBlock(trace);
+  }
+  return [calls copy];
+}
+
 NSData *ARCProbePNGFromDevToolsResult(NSDictionary *result) {
   NSString *encoded = result[@"data"];
   if (![encoded isKindOfClass:NSString.class] || encoded.length > 44 * 1024 * 1024)
@@ -305,8 +335,11 @@ void ARCCompletePrivateQuitDialogCancellation(
     NSURLComponents *parts = [NSURLComponents componentsWithString:url];
     BOOL loopback = [parts.scheme isEqualToString:@"http"] &&
         [parts.host isEqualToString:@"127.0.0.1"];
-    [documentStates addObject:@{@"url": url ?: @"", @"requestedURL": requestedURL ?: @"",
+    [documentStates addObject:@{@"tabID": tabID, @"url": url ?: @"", @"requestedURL": requestedURL ?: @"",
         @"loading": @(loading), @"phase": tab[@"navigationPhase"] ?: @"unknown",
+        @"nativeStateSupported": @(nativeReady),
+        @"selectedNativeTab": @(nativeReady && nativeState.selected_native_tab),
+        @"displayedNativeWebContents": @(nativeReady && nativeState.displayed_native_web_contents),
         @"failure": tab[@"navigationFailure"] ?: [NSNull null]}];
     allTabsLoaded &= loaded;
     allTabsLoopback &= loopback;

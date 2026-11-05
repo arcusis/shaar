@@ -544,6 +544,7 @@
         }
       }
     },
+    "Open %@": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "פתיחת המרחב %@"}}}},
     "Accounts": {
       "localizations": {
         "he": {
@@ -594,6 +595,7 @@
         }
       }
     },
+    "Disconnect %@ from %@": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "ניתוק %@ מ-%@"}}}},
     "Open Settings": {
       "localizations": {
         "he": {
@@ -604,6 +606,7 @@
         }
       }
     },
+    "Open %@ Settings": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "פתיחת הגדרות %@"}}}},
     "macOS Permissions": {
       "localizations": {
         "he": {

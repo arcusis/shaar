@@ -6,6 +6,30 @@ import AppKit
 import BrowserCore
 import SwiftUI
 
+enum BrowserSettingsAccessibility {
+  static func openSpaceLabel(
+    name: String, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    BrowserLocalization.format(
+      "Open %@", table: "Settings", language: language, arguments: [.string(name)])
+  }
+
+  static func disconnectAccountLabel(
+    account: ConnectedAccount, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    BrowserLocalization.format(
+      "Disconnect %@ from %@", table: "Settings", language: language,
+      arguments: [.string(account.email), .string(account.provider.title)])
+  }
+
+  static func openPermissionSettingsLabel(
+    name: String, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    BrowserLocalization.format(
+      "Open %@ Settings", table: "Settings", language: language, arguments: [.string(name)])
+  }
+}
+
 struct BrowserSettingsProfile: Identifiable {
   let id: UUID
   let name: String
@@ -573,6 +597,7 @@ struct BrowserSettingsView: View {
               Label(space.name, systemImage: space.symbol)
               Spacer()
               Button(SettingsL10n.string("Open")) { onOpenSpace(space.id) }
+                .accessibilityLabel(BrowserSettingsAccessibility.openSpaceLabel(name: space.name))
             }
           }
         }
@@ -702,7 +727,11 @@ struct ConnectedAccountRow: View {
         }
       }
       Spacer(minLength: 0)
-      if let disconnect { Button(SettingsL10n.string("Disconnect"), action: disconnect) }
+      if let disconnect {
+        Button(SettingsL10n.string("Disconnect"), action: disconnect)
+          .accessibilityLabel(
+            BrowserSettingsAccessibility.disconnectAccountLabel(account: account))
+      }
     }
   }
 }
@@ -720,6 +749,9 @@ private struct MacPermissionsSection: View {
               .foregroundStyle(.secondary)
             if let url = permission.settingsURL {
               Button(SettingsL10n.string("Open Settings")) { NSWorkspace.shared.open(url) }
+                .accessibilityLabel(
+                  BrowserSettingsAccessibility.openPermissionSettingsLabel(
+                    name: permission.title))
             }
           }
         } label: {

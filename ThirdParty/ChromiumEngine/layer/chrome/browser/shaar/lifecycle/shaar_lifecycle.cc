@@ -20,6 +20,7 @@
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/lifetime/application_lifetime_desktop.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "chrome/browser/shaar/engine/shaar_module_registry.h"
 #include "chrome/browser/shaar/history/shaar_history.h"
@@ -326,6 +327,9 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_engine_request_quit(
 
   g_state.closing = true;
   Emit(engine, kQuitRequested);
-  chrome::AttemptExit();
+  // The Mac application delegate's termination route can wait on native
+  // prompts while Shaar still owns hidden browser windows. Close Chromium's
+  // browsers directly so their normal unload and shutdown callbacks run.
+  chrome::CloseAllBrowsersAndQuit();
   return Fail(SHAAR_OK, "", 0, error);
 }

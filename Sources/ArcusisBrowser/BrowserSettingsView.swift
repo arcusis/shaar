@@ -13,6 +13,14 @@ enum BrowserSettingsAccessibility {
     BrowserLocalization.format(
       "Open %@", table: "Settings", language: language, arguments: [.string(name)])
   }
+
+  static func disconnectAccountLabel(
+    account: ConnectedAccount, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    BrowserLocalization.format(
+      "Disconnect %@ from %@", table: "Settings", language: language,
+      arguments: [.string(account.email), .string(account.provider.title)])
+  }
 }
 
 struct BrowserSettingsProfile: Identifiable {
@@ -677,7 +685,11 @@ struct ConnectedAccountRow: View {
         }
       }
       Spacer(minLength: 0)
-      if let disconnect { Button(SettingsL10n.string("Disconnect"), action: disconnect) }
+      if let disconnect {
+        Button(SettingsL10n.string("Disconnect"), action: disconnect)
+          .accessibilityLabel(
+            BrowserSettingsAccessibility.disconnectAccountLabel(account: account))
+      }
     }
   }
 }

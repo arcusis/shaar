@@ -585,6 +585,7 @@
         }
       }
     },
+    "Disconnect %@ from %@": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "ניתוק %@ מ-%@"}}}},
     "Open Settings": {
       "localizations": {
         "he": {

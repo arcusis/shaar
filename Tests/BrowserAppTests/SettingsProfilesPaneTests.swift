@@ -18,6 +18,17 @@ import Testing
       == "פתיחת המרחב \u{2068}Research\u{2069}")
 }
 
+@Test func disconnectButtonNamesTheAccountAndProviderInBothLanguages() {
+  let account = ConnectedAccount(
+    provider: .google, email: "alice@example.com", name: "Alice", photoURL: nil, photoData: nil)
+  #expect(
+    BrowserSettingsAccessibility.disconnectAccountLabel(account: account, language: .english)
+      == "Disconnect alice@example.com from Google")
+  #expect(
+    BrowserSettingsAccessibility.disconnectAccountLabel(account: account, language: .hebrew)
+      == "ניתוק \u{2068}alice@example.com\u{2069} מ-\u{2068}Google\u{2069}")
+}
+
 @Test @MainActor func profilePaneMasterDetailFitsLightAndDarkAppearances() {
   let id = UUID()
   let selectedProfileID = Binding<UUID?>(get: { id }, set: { _ in })

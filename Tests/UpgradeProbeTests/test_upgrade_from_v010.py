@@ -61,6 +61,16 @@ class UpgradeFromV010Tests(unittest.TestCase):
         self.assertIn('ProcessInfo.processInfo.environment["TMPDIR"]', patched)
         self.assertIn('"arcusis-engine-probe-v1\\n"', patched)
 
+    def test_old_fixture_debugger_keeps_the_first_probe_hidden(self):
+        source = subprocess.check_output(
+            ["git", "show", "v0.1.0:scripts/engine_fixture.py"],
+            cwd=upgrade_from_v010.ROOT, text=True)
+        patched = upgrade_from_v010.patch_legacy_fixture_debugger(source)
+        self.assertIn('if phase == "initial":', patched)
+        self.assertIn('arguments = ["lldb", "--batch", "-o", "run",', patched)
+        self.assertIn('"thread backtrace all", "--", *arguments]', patched)
+        compile(patched, "engine_fixture.py", "exec")
+
     def test_annotated_release_tag_resolves_to_pinned_commit(self):
         self.assertEqual(upgrade_from_v010.v010_commit(),
                          "f887d5d7308670fd3c2215ebe4814abe457afa0f")

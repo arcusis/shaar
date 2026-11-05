@@ -99,6 +99,16 @@ def patch_legacy_temporary_guard(source):
     return replace_once(source, old, new, "temporary root guard")
 
 
+def patch_legacy_fixture_debugger(source):
+    old = ("                process = subprocess.Popen(arguments, stdout=log, stderr=log, "
+           "start_new_session=True, env=probe_env)")
+    new = ("                if phase == \"initial\":\n"
+           "                    arguments = [\"lldb\", \"--batch\", \"-o\", \"run\",\n"
+           "                                 \"-o\", \"thread backtrace all\", \"--\", "
+           "*arguments]\n" + old)
+    return replace_once(source, old, new, "fixture debugger")
+
+
 def add_hidden_window_guard(source):
     source = replace_once(source, "import Foundation\n", "import AppKit\nimport Foundation\n",
                           "main import")
@@ -187,6 +197,8 @@ def prepare_old_harness(source, released_framework):
     fetch = source / "scripts/fetch-engine.sh"
     fetch.write_text("#!/bin/bash\nset -euo pipefail\nprintf '%s\\n' " +
                      json.dumps(str(released_framework)) + "\n")
+    fixture = source / "scripts/engine_fixture.py"
+    fixture.write_text(patch_legacy_fixture_debugger(fixture.read_text()))
 
 
 def set_shipping_bundle_id(app):

@@ -592,11 +592,15 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
         references.append(WorkspacePinReference(tabID: tab.id, pinID: pin.id))
         return tab
       }
+      let todayFolderIDs = Set(space.folders.filter { !$0.isPinned }.map(\.id))
       space.tabs += (prior?.tabs ?? []).filter { !retainedPins.contains($0.id) }.map {
         var tab = $0
         // Removing a shared pin keeps another window's existing live document as an ordinary tab.
+        // Ordinary Today tabs keep their local folder when that folder still exists.
+        if tab.isPinned || tab.folderID.map({ todayFolderIDs.contains($0) }) != true {
+          tab.folderID = nil
+        }
         tab.isPinned = false
-        tab.folderID = nil
         return tab
       }
       let pinBindings = Dictionary(uniqueKeysWithValues: references.map { ($0.pinID, $0.tabID) })

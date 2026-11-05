@@ -244,6 +244,32 @@ private func workspaceFixture() throws -> BrowserSession {
   try projected.validate()
 }
 
+@Test func sharedSpaceRenameKeepsPeerTodayTabInItsFolder() throws {
+  var initial = BrowserSession.fresh()
+  let space = initial.selectedSpaceID
+  let folder = initial.addFolder(name: "Reading", in: space, section: .today)!
+  var workspace = try BrowserWorkspace(session: initial)
+  let firstID = workspace.windows[0].id
+  let secondID = try workspace.addWindow(from: firstID)
+  var second = workspace.window(secondID)!.session
+  let tab = second.open(URL(string: "https://example.com/article")!)!
+  let grouped = second.moveTab(tab, from: space, to: space, folderID: folder)
+  #expect(grouped)
+  try workspace.updateWindow(secondID, session: second)
+  #expect(
+    workspace.window(secondID)!.session.selectedSpace.tabs.first { $0.id == tab }?.folderID
+      == folder)
+
+  var first = workspace.window(firstID)!.session
+  let renamed = first.updateSpace(space, name: "Renamed", tint: .rose)
+  #expect(renamed)
+  try workspace.updateWindow(firstID, session: first)
+  let projected = workspace.window(secondID)!.session
+  #expect(projected.selectedSpace.tabs.first { $0.id == tab }?.folderID == folder)
+  #expect(projected.selectedSpace.tabs.first { $0.id == tab }?.isPinned == false)
+  try workspace.validate()
+}
+
 @Test func lastWindowClosurePreservesCatalogAndReopeningDoesNotRestoreClosedLivePages() throws {
   var workspace = try BrowserWorkspace(session: workspaceFixture())
   let catalog = workspace.catalog

@@ -227,7 +227,9 @@ public enum CommandLauncher {
       limit: CommandSearch.resultLimit - actions.results.count)
     let hits = CommandSection(id: "top-hits", title: "", results: results.filter { !$0.isOpen })
     let open = CommandSection(id: "open", title: "", results: results.filter(\.isOpen))
-    if hasProviderSearch { return [hits, actions, open] }
+    if hasProviderSearch, NavigationInput.address(for: query) == nil {
+      return [hits, actions, open]
+    }
     if hits.results.isEmpty { return [open, actions] }
     if results.first?.isOpen == true { return [open, hits, actions] }
     return [hits, actions, open]

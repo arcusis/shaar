@@ -387,7 +387,8 @@ public struct BrowserSession: Codable, Equatable, Sendable {
 
   public mutating func cycleSpace(by offset: Int) {
     guard let index = spaces.firstIndex(where: { $0.id == selectedSpaceID }) else { return }
-    let next = ((index + offset) % spaces.count + spaces.count) % spaces.count
+    let step = offset % spaces.count
+    let next = ((index + step) % spaces.count + spaces.count) % spaces.count
     selectedSpaceID = spaces[next].id
   }
 
@@ -458,6 +459,8 @@ public struct BrowserSession: Codable, Equatable, Sendable {
         let remaining = updated[source].tabs
         updated[source].selectedTabID =
           remaining.isEmpty ? nil : remaining[min(position, remaining.count - 1)].id
+        let fallbackFolder = updated[source].selectedTab?.folderID
+        updated[source].expandFolderPath(fallbackFolder)
       }
       if followsSelection || updated[destination].selectedTabID == nil {
         updated[destination].selectedTabID = id

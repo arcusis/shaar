@@ -69,6 +69,29 @@ import Testing
   #expect(duplicate == nil && unknownProfile == nil)
 }
 
+@Test func movingSelectedTabRevealsSourceFallbackInsideCollapsedFolder() throws {
+  var session = BrowserSession.fresh()
+  let source = session.selectedSpaceID
+  let profile = session.selectedSpace.profileID
+  let fallback = session.open(URL(string: "https://fallback.example")!)!
+  let moved = session.open(URL(string: "https://moved.example")!)!
+  let folder = session.addFolder(name: "Saved", in: source)!
+  let placed = session.moveTab(fallback, from: source, to: source, folderID: folder)
+  #expect(placed)
+  let collapsed = session.toggleFolder(folder, in: source)
+  #expect(collapsed)
+  let destination = session.addSpace(name: "Shared", sharingProfile: profile)!
+  session.selectSpace(source)
+  session.selectTab(moved, in: source)
+
+  let transferred = session.moveTab(moved, from: source, to: destination)
+  #expect(transferred)
+  session.selectSpace(source)
+  #expect(session.selectedSpace.selectedTabID == fallback)
+  #expect(session.selectedSpace.folderPath(to: folder).allSatisfy { !$0.isCollapsed })
+  try session.validate()
+}
+
 @Test func removingAProfilesLastSpaceAsksBeforeClosingOpenFavorites() {
   var session = BrowserSession.fresh()
   let personal = session.spaces[0]

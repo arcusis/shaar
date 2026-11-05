@@ -8,6 +8,11 @@ import Testing
 
 @testable import ArcusisBrowser
 
+@MainActor
+private final class DownloadDirectoryFailureSwitch {
+  var enabled = true
+}
+
 @Suite @MainActor
 struct DownloadDirectoryTests {
   @Test func defaultBackendDoesNotOfferFolderSelection() throws {
@@ -46,7 +51,32 @@ struct DownloadDirectoryTests {
         .downloadDirectory(for: profile) == acknowledged)
   }
 
-  @Test func failedEngineUpdateLeavesSavedFolderUntouched() async throws {
+  @Test func failedEngineUpdateShowsErrorUntilSuccessfulRetry() async throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let workspace = try BrowserWorkspaceStore(initialSession: .fresh())
+    let profile = try #require(workspace.workspace.catalog.profiles.first?.id)
+    let preferences = BrowserPreferencesStore()
+    let failure = DownloadDirectoryFailureSwitch()
+    let state = BrowserSettingsState(
+      workspace: workspace, preferences: preferences, downloadDirectorySettingsEnabled: true,
+      applyDownloadDirectory: { _, _ in
+        if failure.enabled { throw CocoaError(.featureUnsupported) }
+        return root
+      })
+    #expect(await state.applyDownloadDirectory(root, for: profile) == false)
+    #expect(preferences.downloadDirectory(for: profile) == nil)
+    #expect(
+      state.downloadDirectoryErrors[profile]
+        == SettingsL10n.string("The download folder could not be changed. Try again."))
+    failure.enabled = false
+    #expect(await state.applyDownloadDirectory(root, for: profile))
+    #expect(state.downloadDirectoryErrors[profile] == nil)
+    #expect(preferences.downloadDirectory(for: profile)?.path == root.path)
+  }
+
+  @Test func missingEngineAcknowledgementShowsError() async throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: root) }
@@ -55,9 +85,12 @@ struct DownloadDirectoryTests {
     let preferences = BrowserPreferencesStore()
     let state = BrowserSettingsState(
       workspace: workspace, preferences: preferences, downloadDirectorySettingsEnabled: true,
-      applyDownloadDirectory: { _, _ in throw CocoaError(.featureUnsupported) })
+      applyDownloadDirectory: { _, _ in nil })
     #expect(await state.applyDownloadDirectory(root, for: profile) == false)
     #expect(preferences.downloadDirectory(for: profile) == nil)
+    #expect(
+      state.downloadDirectoryErrors[profile]
+        == SettingsL10n.string("The download folder could not be changed. Try again."))
   }
 
   @Test func resetUsesEngineAcknowledgementAndClearsSavedOverride() async throws {

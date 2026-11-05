@@ -96,10 +96,14 @@ private struct SharedExtensionSettingsSection: View {
   var body: some View {
     if model.rows.isEmpty {
       if let error = model.error {
-        ContentUnavailableView(
-          SettingsL10n.string("Extensions unavailable"), systemImage: "exclamationmark.triangle",
-          description: Text(error)
-        )
+        VStack(spacing: 8) {
+          ContentUnavailableView(
+            SettingsL10n.string("Extensions unavailable"), systemImage: "exclamationmark.triangle",
+            description: Text(error)
+          )
+          Button(SettingsL10n.string("Retry")) { Task { await model.reload() } }
+            .accessibilityIdentifier("settings.extensions.reload")
+        }
         .padding(.vertical, 12)
       } else {
         ContentUnavailableView(
@@ -149,7 +153,13 @@ private struct SharedExtensionSettingsSection: View {
             }
           }
         }
-        if let error = model.error { Text(error).foregroundStyle(.red) }
+        if let error = model.error {
+          HStack {
+            Text(error).foregroundStyle(.red)
+            Button(SettingsL10n.string("Retry")) { Task { await model.reload() } }
+              .accessibilityIdentifier("settings.extensions.reload")
+          }
+        }
       }
       .padding(.vertical, 8)
     }

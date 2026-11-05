@@ -132,7 +132,10 @@ public struct BrowserHistoryEntry: Identifiable, Equatable, Sendable {
 
 public enum LibraryAddress {
   public static func isValid(_ value: String) -> Bool {
-    value.utf8.count <= 32768 && !value.contains("\0") && URL(string: value)?.scheme != nil
+    guard value.utf8.count <= 32768, !value.contains("\0"),
+      let url = URL(string: value), let scheme = url.scheme?.lowercased()
+    else { return false }
+    return !["http", "https"].contains(scheme) || NavigationInput.isWebURL(url)
   }
 
   public static func destination(_ value: String) -> URL? {

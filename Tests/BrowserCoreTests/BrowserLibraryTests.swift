@@ -54,6 +54,22 @@ import Testing
       == 303)
 }
 
+@Test func libraryRejectsWebAddressesWithoutHosts() {
+  let address = "https:/missing-host"
+  #expect(!LibraryAddress.isValid(address))
+  #expect(throws: LibraryDataError.self) {
+    try BookmarkTree(
+      profileID: UUID(),
+      payload: bookmarkPayload(children: [
+        ["id": UUID().uuidString, "k": "u", "t": "Broken", "u": address]
+      ]))
+  }
+  #expect(throws: LibraryDataError.self) {
+    try BrowserHistoryEntry(
+      profileID: UUID(), payload: ["u": address, "t": "Broken", "n": 1, "v": [1000]])
+  }
+}
+
 @Test func historyDatesCountsAndAddressesAreValidatedBeforeDisplay() throws {
   let profile = UUID()
   let wire: [String: Any] = [

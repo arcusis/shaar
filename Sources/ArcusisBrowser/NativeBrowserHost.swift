@@ -290,7 +290,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   func canPerform(_ command: BrowserMenuCommand) -> Bool {
     guard !events.runtime.isQuitting else { return false }
     if command == .quit { return true }
-    if command == .newMiniWindow { return privateHost?.hasActiveWindow != true }
+    if command == .newMiniWindow {
+      return privateHost?.hasActiveWindow != true && !contexts.isEmpty
+    }
     if command == .checkForUpdates { return canCheckForUpdates }
     if command == .newPrivateWindow {
       return activeContext != nil || privateHost?.hasActiveWindow == true

@@ -3,9 +3,19 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import AppKit
+import BrowserCore
+import ChromiumBridge
 import Testing
 
 @testable import ArcusisBrowser
+
+@Test @MainActor func newMiniWindowRequiresANormalWindowTarget() throws {
+  let host = NativeBrowserHost(
+    events: BrowserRuntimeEvents(runtime: ARCChromiumRuntime()),
+    workspace: try BrowserWorkspaceStore(initialSession: .fresh()),
+    presentation: .hiddenProbe, keyWindow: { nil })
+  #expect(!host.canPerform(.newMiniWindow))
+}
 
 @Test @MainActor func nativeMenusMatchArcGroupsAndRouteEveryImplementedCommandOnce() {
   let application = NSApplication.shared

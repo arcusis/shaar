@@ -194,6 +194,13 @@ private func openTab(_ address: String, in session: inout BrowserSession) throws
       == "https://localhost#section")
 }
 
+@Test func navigationInputRecognizesUppercaseLocalhost() throws {
+  let address = try #require(NavigationInput.address(for: "LOCALHOST:3000/path"))
+  #expect(address.host()?.lowercased() == "localhost")
+  #expect(address.port == 3000)
+  #expect(address.path == "/path")
+}
+
 @Test func commandResultsAlwaysKeepNavigationAvailable() {
   var session = BrowserSession.fresh()
   for index in 0..<20 { session.open(URL(string: "https://example.com/\(index)")!) }

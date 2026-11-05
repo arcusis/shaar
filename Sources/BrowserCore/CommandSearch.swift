@@ -17,8 +17,9 @@ public enum NavigationInput {
     if let url = URL(string: input), isWebURL(url) { return url }
     if hasUnsupportedScheme(input) { return nil }
     let host = String(input.prefix { !"/?#".contains($0) })
+    let lowercaseHost = host.lowercased()
     guard !input.contains(where: \.isWhitespace),
-      host.contains(".") || host == "localhost" || host.hasPrefix("localhost:")
+      host.contains(".") || lowercaseHost == "localhost" || lowercaseHost.hasPrefix("localhost:")
         || host.hasPrefix("["),
       let url = URL(string: "https://" + input), isWebURL(url)
     else { return nil }

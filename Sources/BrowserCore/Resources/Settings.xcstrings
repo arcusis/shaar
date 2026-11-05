@@ -39,6 +39,7 @@
     "Refresh": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "רענון"}}}},
     "No site permission exceptions found.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לא נמצאו חריגות בהרשאות אתרים."}}}},
     "Reset Permissions…": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "איפוס הרשאות…"}}}},
+    "Reset permissions for %@": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "איפוס ההרשאות עבור %@"}}}},
     "Site Permissions": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "הרשאות אתרים"}}}},
     "Review site exceptions for this profile. Resetting removes saved choices and restores defaults. Wildcard and managed rules are not listed by this engine.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "אפשר לבדוק חריגות של אתרים בפרופיל הזה. האיפוס מסיר בחירות שמורות ומשחזר ברירות מחדל. המנוע הזה לא מציג כללי תווים כלליים וכללים מנוהלים."}}}},
     "Clear site data for this profile?": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לנקות את נתוני האתרים בפרופיל הזה?"}}}},

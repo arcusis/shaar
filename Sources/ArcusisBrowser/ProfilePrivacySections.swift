@@ -5,6 +5,16 @@
 import BrowserCore
 import SwiftUI
 
+enum ProfilePrivacyCopy {
+  static func resetPermissionsAccessibilityLabel(
+    origin: String, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    BrowserLocalization.format(
+      "Reset permissions for %@", table: "Settings", language: language,
+      arguments: [.string(origin)])
+  }
+}
+
 struct ProfilePrivacySections: View {
   @State private var model: ProfilePrivacyModel
   @State private var confirmClear = false
@@ -109,6 +119,8 @@ struct ProfilePrivacySections: View {
             Button(SettingsL10n.string("Reset Permissions…"), role: .destructive) {
               resettingOrigin = site.id
             }
+            .accessibilityLabel(
+              ProfilePrivacyCopy.resetPermissionsAccessibilityLabel(origin: site.id))
           } label: {
             Text(site.id).textSelection(.enabled)
               .environment(\.layoutDirection, .leftToRight)

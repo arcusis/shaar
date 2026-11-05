@@ -11,6 +11,16 @@ import Testing
 
 @Suite @MainActor
 struct ProfilePrivacyTests {
+  @Test func resetPermissionsActionNamesTheSiteInBothLanguages() {
+    let origin = "https://example.test"
+    #expect(
+      ProfilePrivacyCopy.resetPermissionsAccessibilityLabel(origin: origin, language: .english)
+        == "Reset permissions for https://example.test")
+    #expect(
+      ProfilePrivacyCopy.resetPermissionsAccessibilityLabel(origin: origin, language: .hebrew)
+        == "איפוס ההרשאות עבור \u{2068}https://example.test\u{2069}")
+  }
+
   @Test func settingsUseSelectedShaarRuntimeForPrivacyBackend() throws {
     let runtime = ARCShaarRuntime()
     let workspace = try BrowserWorkspaceStore(initialSession: .fresh())

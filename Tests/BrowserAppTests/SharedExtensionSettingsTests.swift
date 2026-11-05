@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import AppKit
+import BrowserCore
 import Foundation
 import ShaarEngineABI
 import SwiftUI
@@ -89,6 +90,19 @@ struct SharedExtensionSettingsTests {
     await model.reload()
     #expect(model.rows.isEmpty)
     #expect(model.error == SettingsL10n.string("Could not load extensions. Try again."))
+  }
+
+  @Test @MainActor func extensionNamesFollowTheSelectedLanguageOrder() {
+    let rows = [
+      SharedExtensionSettingsRow(id: "english", name: "A", version: "1", profiles: [:]),
+      SharedExtensionSettingsRow(id: "hebrew", name: "אב", version: "1", profiles: [:]),
+    ]
+    #expect(
+      SharedExtensionSettingsModel.sortedRows(rows, language: .hebrew).map(\.id)
+        == ["hebrew", "english"])
+    #expect(
+      SharedExtensionSettingsModel.sortedRows(rows, language: .english).map(\.id)
+        == ["english", "hebrew"])
   }
 
   @Test @MainActor func oneInstallHasIndependentProfileToggles() async throws {

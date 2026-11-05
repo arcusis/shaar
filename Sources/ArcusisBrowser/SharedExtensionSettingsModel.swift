@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import BrowserCore
 import Foundation
 import Observation
 import ShaarEngineABI
@@ -40,6 +41,17 @@ final class SharedExtensionSettingsModel {
     self.profileNames = profiles
   }
 
+  static func sortedRows(
+    _ rows: [SharedExtensionSettingsRow], language: BrowserLanguage = .currentLaunchLanguage
+  ) -> [SharedExtensionSettingsRow] {
+    let locale = Locale(identifier: language.localeIdentifier)
+    return rows.sorted { lhs, rhs in
+      let order = lhs.name.compare(
+        rhs.name, options: [.caseInsensitive, .diacriticInsensitive, .numeric], locale: locale)
+      return order == .orderedSame ? lhs.id < rhs.id : order == .orderedAscending
+    }
+  }
+
   func reload() async {
     let names = profileNames()
     let ids = await home.extensionIDs
@@ -53,29 +65,30 @@ final class SharedExtensionSettingsModel {
         self.error = SettingsL10n.string("Could not load extensions. Try again.")
       }
     }
-    rows = ids.map { id in
-      let known = installed.values.compactMap { $0[id] }.first
-      let states = names.mapValues { name in
-        SharedExtensionProfileState(name: name, enabled: nil, pending: false, failed: false)
-      }
-      var profiles = states
-      for profileID in names.keys {
-        if let item = installed[profileID]?[id] {
-          profiles[profileID] = SharedExtensionProfileState(
-            name: names[profileID] ?? "", enabled: item.enabled, pending: false, failed: false)
-          pending[id]?.remove(profileID)
-          failed[id]?.remove(profileID)
-        } else if pending[id]?.contains(profileID) == true {
-          profiles[profileID] = SharedExtensionProfileState(
-            name: names[profileID] ?? "", enabled: nil, pending: true, failed: false)
-        } else if failed[id]?.contains(profileID) == true {
-          profiles[profileID] = SharedExtensionProfileState(
-            name: names[profileID] ?? "", enabled: nil, pending: false, failed: true)
+    rows = Self.sortedRows(
+      ids.map { id in
+        let known = installed.values.compactMap { $0[id] }.first
+        let states = names.mapValues { name in
+          SharedExtensionProfileState(name: name, enabled: nil, pending: false, failed: false)
         }
-      }
-      return SharedExtensionSettingsRow(
-        id: id, name: known?.name ?? id, version: known?.version ?? "", profiles: profiles)
-    }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        var profiles = states
+        for profileID in names.keys {
+          if let item = installed[profileID]?[id] {
+            profiles[profileID] = SharedExtensionProfileState(
+              name: names[profileID] ?? "", enabled: item.enabled, pending: false, failed: false)
+            pending[id]?.remove(profileID)
+            failed[id]?.remove(profileID)
+          } else if pending[id]?.contains(profileID) == true {
+            profiles[profileID] = SharedExtensionProfileState(
+              name: names[profileID] ?? "", enabled: nil, pending: true, failed: false)
+          } else if failed[id]?.contains(profileID) == true {
+            profiles[profileID] = SharedExtensionProfileState(
+              name: names[profileID] ?? "", enabled: nil, pending: false, failed: true)
+          }
+        }
+        return SharedExtensionSettingsRow(
+          id: id, name: known?.name ?? id, version: known?.version ?? "", profiles: profiles)
+      })
   }
 
   func recordApprovedInstall(id: String, version: String) async throws -> ShaarSharedInstallResult {

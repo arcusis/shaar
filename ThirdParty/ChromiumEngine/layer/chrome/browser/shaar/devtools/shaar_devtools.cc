@@ -476,8 +476,10 @@ class ProtocolClient final : public content::DevToolsAgentHostClient {
     const auto response_id = dict.FindInt("id");
     if (!response_id || *response_id != static_cast<int>(request_.request_id))
       return;
-    if (dict.Find("error")) {
-      Finish(SHAAR_CHROMIUM_ERROR, {}, "protocol command failed");
+    if (const auto* error = dict.FindDict("error")) {
+      const std::string* detail = error->FindString("message");
+      Finish(SHAAR_CHROMIUM_ERROR, {},
+             detail && !detail->empty() ? *detail : "protocol command failed");
       return;
     }
     const base::DictValue* result = dict.FindDict("result");
@@ -786,7 +788,9 @@ shaar_error_code HandleDevToolsOperation(
         EncodeProtocolRequest(args_json, request_id, &protocol_request, &reason);
     if (status != SHAAR_OK)
       return Fail(error, status, reason.c_str());
-    auto host = content::DevToolsAgentHost::GetOrCreateForTab(contents);
+    // Chromium's tab target handles Target/Tracing only. Page commands such as
+    // Runtime.evaluate are dispatched by the primary frame's page target.
+    auto host = content::DevToolsAgentHost::GetOrCreateFor(contents);
     if (!host || host->GetWebContents() != contents)
       return Fail(error, SHAAR_NOT_READY, "DevTools protocol target is unavailable");
     if (!StartProtocolRequest(std::move(host), request_id, reply,

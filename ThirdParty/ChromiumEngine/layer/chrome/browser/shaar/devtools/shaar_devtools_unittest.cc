@@ -65,6 +65,9 @@ void CaptureEvent(void* opaque, const shaar_event* event) {
 
 class ReplyingAgentHost final : public content::MockDevToolsAgentHost {
  public:
+  explicit ReplyingAgentHost(
+      std::string response = R"({"id":44,"result":{"value":7}})")
+      : response_(std::move(response)) {}
   void DispatchProtocolMessage(content::DevToolsAgentHostClient* client,
                                base::span<const uint8_t> message) override {
     request.assign(reinterpret_cast<const char*>(message.data()), message.size());
@@ -77,15 +80,16 @@ class ReplyingAgentHost final : public content::MockDevToolsAgentHost {
  private:
   ~ReplyingAgentHost() override = default;
   void SendReply(content::DevToolsAgentHostClient* client) {
-    constexpr std::string_view response = R"({"id":44,"result":{"value":7}})";
-    client->DispatchProtocolMessage(this, base::as_byte_span(response));
+    client->DispatchProtocolMessage(this, base::as_byte_span(response_));
   }
+  std::string response_;
 };
 
 struct CapturedReply {
   shaar_request_id request_id = 0;
   shaar_error_code code = SHAAR_CHROMIUM_ERROR;
   std::string payload;
+  std::string message;
 };
 
 void CaptureReply(void* opaque, const shaar_result* result) {
@@ -93,6 +97,8 @@ void CaptureReply(void* opaque, const shaar_result* result) {
   captured->request_id = result->request_id;
   captured->code = result->error.code;
   captured->payload.assign(result->payload_json.data, result->payload_json.size);
+  captured->message.assign(result->error.message.data,
+                           result->error.message.size);
 }
 
 TEST(ShaarDevToolsTest, CommandMapIsCapabilityScoped) {
@@ -283,6 +289,19 @@ TEST(ShaarDevToolsTest, ProtocolClientAttachesRepliesAndDetaches) {
   const auto* result = payload->GetDict().FindDict("result");
   ASSERT_NE(nullptr, result);
   EXPECT_EQ(7, result->FindInt("value"));
+}
+
+TEST(ShaarDevToolsTest, ProtocolClientPreservesProtocolErrorMessage) {
+  base::test::TaskEnvironment tasks;
+  auto host = base::MakeRefCounted<ReplyingAgentHost>(
+      R"({"id":44,"error":{"code":-32601,"message":"Method not found"}})");
+  CapturedReply captured;
+  ASSERT_TRUE(StartProtocolRequest(host, 44, &CaptureReply, &captured,
+                                   R"({"id":44,"method":"Runtime.evaluate"})"));
+  tasks.RunUntilIdle();
+  EXPECT_FALSE(host->IsAttached());
+  EXPECT_EQ(SHAAR_CHROMIUM_ERROR, captured.code);
+  EXPECT_EQ("Method not found", captured.message);
 }
 
 TEST(ShaarDevToolsTest, LifecycleEntryRegistersOnlyItsOperationRange) {

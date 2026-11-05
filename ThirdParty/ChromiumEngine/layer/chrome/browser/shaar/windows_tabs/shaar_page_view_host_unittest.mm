@@ -5,7 +5,10 @@
 #import <AppKit/AppKit.h>
 
 #include "chrome/browser/shaar/windows_tabs/shaar_page_view_host.h"
+#include "chrome/browser/shaar/windows_tabs/shaar_page_view_binding.h"
 #include "chrome/browser/shaar/public/shaar_engine.h"
+#include "content/public/browser/web_contents.h"
+#include "content/public/test/test_renderer_host.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 @interface ShaarFocusProbeWindow : NSWindow
@@ -20,8 +23,53 @@
 }
 @end
 
+@interface ShaarVisibilityProbeWindow : NSWindow
+@property(nonatomic) BOOL probeVisible;
+@property(nonatomic) BOOL probeMiniaturized;
+@property(nonatomic) NSWindowOcclusionState probeOcclusion;
+@end
+
+@implementation ShaarVisibilityProbeWindow
+- (BOOL)isVisible { return self.probeVisible; }
+- (BOOL)isMiniaturized { return self.probeMiniaturized; }
+- (NSWindowOcclusionState)occlusionState { return self.probeOcclusion; }
+@end
+
 namespace shaar::windows_tabs {
 namespace {
+
+class ShaarTabVisibilityTest : public content::RenderViewHostTestHarness {};
+
+TEST_F(ShaarTabVisibilityTest, SelectionShowsRendererAndDeselectionHidesIt) {
+  web_contents()->WasHidden();
+  EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::HIDDEN);
+  ShowSelectedWebContents(nullptr, web_contents());
+  EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::VISIBLE);
+  ShowSelectedWebContents(web_contents(), nullptr);
+  EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::HIDDEN);
+}
+
+TEST_F(ShaarTabVisibilityTest, HostTracksWindowOcclusionWithoutOrderingIt) {
+  web_contents()->WasHidden();
+  ShaarVisibilityProbeWindow* window = [[ShaarVisibilityProbeWindow alloc]
+      initWithContentRect:NSMakeRect(0, 0, 800, 600)
+              styleMask:NSWindowStyleMaskBorderless
+                backing:NSBackingStoreBuffered
+                  defer:YES];
+  PageViewHost host(NSMakeRect(0, 0, 800, 600), window);
+  host.SetSelectedWebContents(web_contents());
+  EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::HIDDEN);
+  window.probeVisible = YES;
+  window.probeOcclusion = NSWindowOcclusionStateVisible;
+  host.RefreshVisibility();
+  EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::VISIBLE);
+  window.probeOcclusion = 0;
+  host.RefreshVisibility();
+  EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::OCCLUDED);
+  window.probeMiniaturized = YES;
+  host.RefreshVisibility();
+  EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::HIDDEN);
+}
 
 TEST(ShaarPageViewHostTest, ReplacingSelectionDetachesOldViewAndResizesNewView) {
   PageViewHost host(NSMakeRect(0, 0, 800, 600));
@@ -48,6 +96,10 @@ TEST(ShaarPageViewHostTest, WindowStartsHiddenAndRejectsForeignFocus) {
   EXPECT_FALSE(host.window().isVisible);
   EXPECT_FALSE(host.Focus(tab));
   EXPECT_TRUE(host.Attach(tab));
+  EXPECT_EQ(tab.window, host.window());
+  EXPECT_FALSE(host.window().isVisible);
+  host.Resize(NSMakeSize(640, 480));
+  EXPECT_FALSE(host.window().isVisible);
   EXPECT_FALSE(host.Focus([[NSView alloc] initWithFrame:NSZeroRect]));
 }
 
@@ -60,12 +112,24 @@ TEST(ShaarPageViewHostTest, FocusUsesTheAttachedViewsKeyWindow) {
               styleMask:NSWindowStyleMaskBorderless
                 backing:NSBackingStoreBuffered
                   defer:YES];
+  target.releasedWhenClosed = NO;
   target.contentView = tab;
   EXPECT_FALSE(target.isVisible);
   EXPECT_TRUE(host.Focus(tab));
   EXPECT_EQ(target.acceptedResponder, tab);
   host.Detach(tab);
   [target close];
+}
+
+TEST(ShaarPageViewHostTest, ReattachesSelectionAfterItsPreviousPresenterDetaches) {
+  PageViewHost host(NSMakeRect(0, 0, 800, 600));
+  NSView* tab = [[NSView alloc] initWithFrame:NSZeroRect];
+  ASSERT_TRUE(host.Attach(tab));
+  [tab removeFromSuperview];
+  ASSERT_EQ(tab.window, nil);
+  ASSERT_TRUE(host.Attach(tab));
+  EXPECT_EQ(tab.window, host.window());
+  EXPECT_EQ(tab.superview, host.view());
 }
 
 TEST(ShaarPageViewHostTest, MovingViewLeavesPreviousHostEmpty) {

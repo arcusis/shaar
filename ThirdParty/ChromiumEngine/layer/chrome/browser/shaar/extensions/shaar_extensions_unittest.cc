@@ -14,6 +14,16 @@
 
 namespace {
 
+TEST(ShaarExtensionsModuleTest, ComponentExtensionsStayInternal) {
+  using extensions::mojom::ManifestLocation;
+  EXPECT_FALSE(shaar::extensions_host::ShouldListLocation(
+      ManifestLocation::kComponent));
+  EXPECT_FALSE(shaar::extensions_host::ShouldListLocation(
+      ManifestLocation::kExternalComponent));
+  EXPECT_TRUE(shaar::extensions_host::ShouldListLocation(
+      ManifestLocation::kInternal));
+}
+
 class EmptyProfileServices final : public shaar::ProfileServices {
  public:
   Profile* ResolveProfile(shaar_engine*, shaar_profile*) override {

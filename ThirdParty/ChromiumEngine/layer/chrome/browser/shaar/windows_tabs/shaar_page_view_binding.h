@@ -7,8 +7,19 @@
 
 #include "chrome/browser/shaar/public/shaar_engine.h"
 
+class Browser;
+
+namespace content {
+class WebContents;
+}
+
 namespace shaar::windows_tabs {
 void ReleasePageHost(shaar_window* window);
+void ShowSelectedWebContents(content::WebContents* previous,
+                             content::WebContents* selected);
+void ActivatePageHost(shaar_window* window, Browser* browser,
+                      content::WebContents* previous,
+                      content::WebContents* selected);
 }  // namespace shaar::windows_tabs
 
 #endif  // CHROME_BROWSER_SHAAR_WINDOWS_TABS_SHAAR_PAGE_VIEW_BINDING_H_

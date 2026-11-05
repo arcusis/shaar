@@ -13,6 +13,7 @@
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_page_view_host.h"
@@ -61,6 +62,28 @@ NSView* FindTabView(shaar_engine* engine,
   return contents ? contents->GetNativeView().GetNativeNSView() : nil;
 }
 
+// Moving an NSView alone leaves Chromium's WebView owning its compositor.
+// Release that presentation before Shaar borrows the view, while retaining its
+// existing Swift/AppKit container if it has already been placed in our window.
+void DetachChromePresentation(Browser* browser, content::WebContents* contents,
+                             PageViewHost* host) {
+  if (!browser || !contents || !host)
+    return;
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
+  if (!browser_view || !browser_view->contents_web_view() ||
+      browser_view->contents_web_view()->web_contents() != contents)
+    return;
+  NSView* native_view = contents->GetNativeView().GetNativeNSView();
+  NSView* parent = native_view.window == host->window()
+                       ? native_view.superview : nil;
+  const NSRect frame = native_view.frame;
+  browser_view->contents_web_view()->SetWebContents(nullptr);
+  if (parent) {
+    [parent addSubview:native_view];
+    native_view.frame = frame;
+  }
+}
+
 shaar_error_code Result(shaar_error_code status, shaar_error* error) {
   if (error) {
     const uint32_t size = error->size;
@@ -78,6 +101,26 @@ shaar_error_code Result(shaar_error_code status, shaar_error* error) {
 }  // namespace
 
 namespace shaar::windows_tabs {
+void ShowSelectedWebContents(content::WebContents* previous,
+                             content::WebContents* selected) {
+  if (previous && previous != selected)
+    previous->UpdateWebContentsVisibility(content::Visibility::HIDDEN);
+  if (selected)
+    selected->UpdateWebContentsVisibility(content::Visibility::VISIBLE);
+}
+
+void ActivatePageHost(shaar_window* window, Browser* browser,
+                      content::WebContents* previous,
+                      content::WebContents* selected) {
+  if (PageViewHost* host = FindHost(window, false)) {
+    DetachChromePresentation(browser, selected, host);
+    host->Attach(selected->GetNativeView().GetNativeNSView());
+    host->SetSelectedWebContents(selected);
+  } else {
+    ShowSelectedWebContents(previous, selected);
+  }
+}
+
 void ReleasePageHost(shaar_window* window) {
   if (pthread_main_np())
     Hosts().erase(window);
@@ -202,7 +245,17 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_tab_view_attach(
   if (!view)
     return Result(SHAAR_NOT_FOUND, error);
   PageViewHost* host = FindHost(window, true);
-  return Result(host && host->Attach(view) ? SHAAR_OK : SHAAR_NOT_READY, error);
+  if (!host)
+    return Result(SHAAR_NOT_READY, error);
+  content::WebContents* contents =
+      shaar::windows_tabs::Registry().FindWebContents(engine, window, tab);
+  Browser* browser =
+      shaar::windows_tabs::Registry().FindBrowserForTab(engine, window, tab);
+  DetachChromePresentation(browser, contents, host);
+  if (!host->Attach(view))
+    return Result(SHAAR_NOT_READY, error);
+  host->SetSelectedWebContents(contents);
+  return Result(SHAAR_OK, error);
 }
 
 extern "C" SHAAR_EXPORT shaar_error_code shaar_tab_view_detach(

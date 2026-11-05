@@ -1,0 +1,56 @@
+diff --git a/content/app_shim_remote_cocoa/render_widget_host_ns_view_bridge.h b/content/app_shim_remote_cocoa/render_widget_host_ns_view_bridge.h
+index 1f515437b6..0359d0d3dd 100644
+--- a/content/app_shim_remote_cocoa/render_widget_host_ns_view_bridge.h
++++ b/content/app_shim_remote_cocoa/render_widget_host_ns_view_bridge.h
+@@ -63,6 +63,9 @@ class RenderWidgetHostNSViewBridge : public mojom::RenderWidgetHostNSView,
+                    uint64_t popup_parent_ns_view_id) override;
+   void SetParentWebContentsNSView(uint64_t parent_ns_view_id) override;
+   void DisableDisplay() override;
++  // Ardia: undoes DisableDisplay() (RenderWidgetHostViewMac::SetParentUiLayer
++  // with no parent layer): the NSView shows its own compositor's frames again.
++  void EnableDisplay();
+   void MakeFirstResponder() override;
+   void SetBounds(const gfx::Rect& rect) override;
+   void SetCALayerParams(gfx::CALayerParams ca_layer_params) override;
+diff --git a/content/app_shim_remote_cocoa/render_widget_host_ns_view_bridge.mm b/content/app_shim_remote_cocoa/render_widget_host_ns_view_bridge.mm
+index 2eda2e79d7..6bcac6e5f6 100644
+--- a/content/app_shim_remote_cocoa/render_widget_host_ns_view_bridge.mm
++++ b/content/app_shim_remote_cocoa/render_widget_host_ns_view_bridge.mm
+@@ -120,6 +120,18 @@
+   display_disabled_ = true;
+ }
+ 
++void RenderWidgetHostNSViewBridge::EnableDisplay() {
++  if (!display_disabled_)
++    return;
++  display_disabled_ = false;
++  ScopedCAActionDisabler disabler;
++  display_ca_layer_tree_ =
++      std::make_unique<ui::DisplayCALayerTree>(background_layer_);
++  // The tree's (autoresizing) layer starts empty and only follows later
++  // resizes, unlike at construction, when this view had no size yet.
++  background_layer_.sublayers.lastObject.frame = background_layer_.bounds;
++}
++
+ void RenderWidgetHostNSViewBridge::SetBounds(const gfx::Rect& rect) {
+   // |rect.size()| is view coordinates, |rect.origin| is screen coordinates,
+   // TODO(thakis): fix, http://crbug.com/73362
+diff --git a/content/browser/renderer_host/render_widget_host_view_mac.mm b/content/browser/renderer_host/render_widget_host_view_mac.mm
+index 0e5f95d678..167caa4514 100644
+--- a/content/browser/renderer_host/render_widget_host_view_mac.mm
++++ b/content/browser/renderer_host/render_widget_host_view_mac.mm
+@@ -409,6 +409,14 @@ void SendVisibleTimeRequestToDelegatedFrameHost(
+     // changes (e.g, due to MigrateNSViewBridge), see
+     // https://crbug.com/1222976#c49.
+     ns_view_->DisableDisplay();
++  } else if (in_process_ns_view_bridge_ &&
++             ns_view_ == in_process_ns_view_bridge_.get()) {
++    // Ardia: detached from Views (a WebView gave it up, e.g. DevTools
++    // docking back into a client window that hosts their NSView itself). Draw
++    // with this view's own compositor into its own NSView again, as before it
++    // was first attached; the next attach switches back.
++    in_process_ns_view_bridge_->EnableDisplay();
++    ns_view_->SetBackgroundColor(background_layer_color_);
+   }
+   if (browser_compositor_)
+     browser_compositor_->SetParentUiLayer(parent_ui_layer);

@@ -1,0 +1,58 @@
+--- a/chrome/browser/chrome_browser_main.cc
++++ b/chrome/browser/chrome_browser_main.cc
+@@ -2130,7 +2130,12 @@
+ #endif
+ 
+   // This step is costly.
+-  if (browser_creator_->Start(*base::CommandLine::ForCurrentProcess(),
++  // Shaar embeds Chromium content and owns every application window. Keep
++  // Chromium's run loop so the engine remains controllable through its ABI.
++  const bool shaar_embedder =
++      base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder");
++  if (shaar_embedder ||
++      browser_creator_->Start(*base::CommandLine::ForCurrentProcess(),
+                               base::FilePath(), profile_info,
+                               last_opened_profiles)) {
+ #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
+--- a/chrome/browser/chrome_browser_main_mac.mm
++++ b/chrome/browser/chrome_browser_main_mac.mm
+@@ -154,16 +154,20 @@
+     return ret;
+   }
+ 
+-  // Create the app delegate by requesting the shared AppController.
+-  CHECK_EQ(nil, NSApp.delegate);
+-  AppController* app_controller = AppController.sharedController;
+-  CHECK_NE(nil, NSApp.delegate);
+-
+-  chrome::BuildMainMenu(NSApp, app_controller,
+-                        l10n_util::GetStringUTF16(IDS_PRODUCT_NAME),
+-                        /*is_pwa=*/false,
+-                        /*is_rtl=*/base::i18n::IsRTL());
+-  [app_controller mainMenuCreated];
++  // Shaar owns NSApp, its menus, and Dock actions. Chromium's AppController
++  // must never replace the embedding application's delegate.
++  if (!base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder")) {
++    // Create the app delegate by requesting the shared AppController.
++    CHECK_EQ(nil, NSApp.delegate);
++    AppController* app_controller = AppController.sharedController;
++    CHECK_NE(nil, NSApp.delegate);
++  
++    chrome::BuildMainMenu(NSApp, app_controller,
++                          l10n_util::GetStringUTF16(IDS_PRODUCT_NAME),
++                          /*is_pwa=*/false,
++                          /*is_rtl=*/base::i18n::IsRTL());
++    [app_controller mainMenuCreated];
++  }
+ 
+   return content::RESULT_CODE_NORMAL_EXIT;
+ }
+@@ -182,5 +186,7 @@
+ }
+ 
+ void ChromeBrowserMainPartsMac::DidEndMainMessageLoop() {
+-  [AppController.sharedController didEndMainMessageLoop];
++  if (!base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder")) {
++    [AppController.sharedController didEndMainMessageLoop];
++  }
+ }

@@ -232,7 +232,7 @@ std::vector<std::string> ChromeMainArguments(
   std::vector<std::string> arguments = {
       executable_path, "--user-data-dir=" + data_root, "--no-first-run",
       "--no-default-browser-check", "--no-startup-window",
-      "--disable-background-mode"};
+      "--disable-background-mode", "--shaar-embedder"};
   if (testing) {
     arguments.push_back("--use-mock-keychain");
     arguments.push_back("--disable-renderer-backgrounding");

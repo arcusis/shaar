@@ -13,6 +13,7 @@
 #include <string>
 #include <string_view>
 #include "base/files/file_path.h"
+#include "extensions/common/manifest.h"
 
 class Browser;
 class Profile;
@@ -43,6 +44,8 @@ bool SharedHomeVersionSatisfied(std::string_view installed,
                                 std::string_view approved);
 
 namespace shaar::extensions_host {
+// Component extensions remain installed in Chromium but are not user entries.
+bool ShouldListLocation(extensions::mojom::ManifestLocation location);
 // Canonicalizes and restricts the verification component to the marked root.
 bool ValidProbeExtensionPath(const base::FilePath& data_root,
                              const base::FilePath& requested);

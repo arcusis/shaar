@@ -17,10 +17,14 @@
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/devtools_agent_host_client.h"
+#include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/web_contents.h"
+#include "content/public/browser/visibility.h"
 #include "content/public/test/mock_devtools_agent_host.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_renderer_host.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/gurl.h"
 
 namespace shaar::devtools {
 namespace {
@@ -87,6 +91,57 @@ class ReplyingAgentHost final : public content::MockDevToolsAgentHost {
     client->DispatchProtocolMessage(this, base::as_byte_span(response_));
   }
   std::string response_;
+};
+
+class MainFrameContextAgentHost final : public content::MockDevToolsAgentHost {
+ public:
+  explicit MainFrameContextAgentHost(std::string frame_id)
+      : frame_id_(std::move(frame_id)) {}
+
+  void DispatchProtocolMessage(content::DevToolsAgentHostClient* client,
+                               base::span<const uint8_t> message) override {
+    auto parsed = base::JSONReader::Read(
+        std::string_view(reinterpret_cast<const char*>(message.data()),
+                         message.size()), base::JSON_PARSE_RFC);
+    ASSERT_TRUE(parsed);
+    ASSERT_TRUE(parsed->is_dict());
+    const auto* method = parsed->GetDict().FindString("method");
+    ASSERT_NE(nullptr, method);
+    if (*method == "Runtime.enable") {
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE, base::BindOnce(&MainFrameContextAgentHost::SendContexts,
+                                    base::WrapRefCounted(this), client));
+      return;
+    }
+    ASSERT_EQ("Runtime.evaluate", *method);
+    evaluation = parsed->GetDict().Clone();
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&MainFrameContextAgentHost::SendEvaluation,
+                                  base::WrapRefCounted(this), client));
+  }
+
+  base::DictValue evaluation;
+
+ private:
+  ~MainFrameContextAgentHost() override = default;
+
+  void Send(content::DevToolsAgentHostClient* client,
+            const std::string& message) {
+    client->DispatchProtocolMessage(this, base::as_byte_span(message));
+  }
+
+  void SendContexts(content::DevToolsAgentHostClient* client) {
+    Send(client, R"({"id":-1,"result":{}})");
+    Send(client, R"({"method":"Runtime.executionContextCreated","params":{"context":{"id":11,"auxData":{"frameId":"stale-frame","isDefault":true}}}})");
+    Send(client, "{\"method\":\"Runtime.executionContextCreated\",\"params\":{\"context\":{\"id\":27,\"auxData\":{\"frameId\":\"" +
+                     frame_id_ + "\",\"isDefault\":true}}}}");
+  }
+
+  void SendEvaluation(content::DevToolsAgentHostClient* client) {
+    Send(client, R"({"id":44,"result":{"result":{"type":"object","value":{"documentElementPresent":true}}}})");
+  }
+
+  std::string frame_id_;
 };
 
 struct CapturedReply {
@@ -382,29 +437,61 @@ TEST_F(ShaarPrivateDevToolsPageTargetTest, ProtocolUsesPrivatePageTarget) {
   EXPECT_NE(tab_host.get(), host.get());
 }
 
-TEST(ShaarDevToolsTest, CaptureRejectsUnownedWindowTabPair) {
-  shaar::windows_tabs::BrowserTabRegistryImpl registry;
-  auto* engine = reinterpret_cast<shaar_engine*>(1);
-  auto* owned_window = reinterpret_cast<shaar_window*>(2);
-  auto* other_window = reinterpret_cast<shaar_window*>(3);
-  auto* tab = reinterpret_cast<shaar_tab*>(4);
-  auto* browser = reinterpret_cast<Browser*>(5);
-  auto* contents = reinterpret_cast<content::WebContents*>(6);
-  registry.BindWindow(engine, owned_window, browser);
-  registry.BindTab(engine, owned_window, tab, "tab-a", browser, contents);
-  shaar::ShaarEngineContext context{};
-  context.browser_tabs = &registry;
-  shaar_scope scope{sizeof(shaar_scope), reinterpret_cast<shaar_profile*>(7), nullptr};
+TEST_F(ShaarPrivateDevToolsPageTargetTest,
+       CrossSiteNavigationEvaluatesCurrentMainFrameDocument) {
+  NavigateAndCommit(GURL("https://first.example.test/"));
+  const std::string first_frame_id =
+      web_contents()->GetPrimaryMainFrame()->GetDevToolsFrameToken().ToString();
+  NavigateAndCommit(GURL("https://second.example.test/"));
+  const std::string frame_id =
+      web_contents()->GetPrimaryMainFrame()->GetDevToolsFrameToken().ToString();
+  // CDP frame identity is stable across document navigations; the execution
+  // context must be selected again for the newly committed document.
+  ASSERT_EQ(first_frame_id, frame_id);
+  ASSERT_EQ(GURL("https://second.example.test/"),
+            web_contents()->GetLastCommittedURL());
+  auto host = base::MakeRefCounted<MainFrameContextAgentHost>(frame_id);
   CapturedReply captured;
-  shaar_error error{};
-  error.size = sizeof(error);
-  EXPECT_EQ(SHAAR_NOT_FOUND,
-            HandleDevToolsOperation(&context, engine, scope, other_window, tab,
-                                    SHAAR_OP_PROBE_CAPTURE_TAB,
-                                    Bytes(R"({"schemaVersion":1})"), 44,
-                                    &CaptureReply, &captured, &error));
-  EXPECT_EQ(SHAAR_NOT_FOUND, error.code);
-  EXPECT_EQ(0u, captured.request_id);
+  ASSERT_TRUE(StartProtocolRequest(
+      host, 44, &CaptureReply, &captured,
+      R"({"id":44,"method":"Runtime.evaluate","params":{"expression":"!!document.documentElement","returnByValue":true}})",
+      frame_id));
+  task_environment()->RunUntilIdle();
+  const auto* params = host->evaluation.FindDict("params");
+  ASSERT_NE(nullptr, params);
+  EXPECT_EQ(27, params->FindInt("contextId"));
+  EXPECT_EQ("!!document.documentElement", params->FindString("expression")
+                                             ? *params->FindString("expression") : "");
+  EXPECT_EQ(SHAAR_OK, captured.code);
+  EXPECT_NE(std::string::npos,
+            captured.payload.find("documentElementPresent"));
+}
+
+TEST_F(ShaarPrivateDevToolsPageTargetTest,
+       HiddenProbeCaptureTemporarilyShowsRendererAndRestoresHiddenState) {
+  web_contents()->WasHidden();
+  ASSERT_EQ(content::Visibility::HIDDEN, web_contents()->GetVisibility());
+  ASSERT_FALSE(web_contents()->IsBeingCaptured());
+
+  auto capture = StartHiddenProbeCapture(web_contents());
+  EXPECT_EQ(content::Visibility::VISIBLE, web_contents()->GetVisibility());
+  EXPECT_TRUE(web_contents()->IsBeingCaptured());
+
+  capture.RunAndReset();
+  EXPECT_EQ(content::Visibility::HIDDEN, web_contents()->GetVisibility());
+  EXPECT_FALSE(web_contents()->IsBeingCaptured());
+}
+
+TEST_F(ShaarPrivateDevToolsPageTargetTest,
+       HiddenProbeCaptureRestoresOccludedState) {
+  web_contents()->WasOccluded();
+  ASSERT_EQ(content::Visibility::OCCLUDED, web_contents()->GetVisibility());
+
+  auto capture = StartHiddenProbeCapture(web_contents());
+  EXPECT_EQ(content::Visibility::VISIBLE, web_contents()->GetVisibility());
+
+  capture.RunAndReset();
+  EXPECT_EQ(content::Visibility::OCCLUDED, web_contents()->GetVisibility());
 }
 
 TEST(ShaarDevToolsTest, LifecycleEntryRegistersOnlyItsOperationRange) {

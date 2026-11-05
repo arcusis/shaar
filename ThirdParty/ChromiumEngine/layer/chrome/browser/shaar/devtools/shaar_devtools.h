@@ -30,7 +30,8 @@ struct ModuleHandlers {
 
 void BindRuntimeServices();
 
-// Keeps a hidden tab producing compositor frames until the returned guard dies.
+// Keeps the native window hidden while temporarily showing the page to the
+// renderer for capture. The guard restores the previous page visibility.
 base::ScopedClosureRunner StartHiddenProbeCapture(content::WebContents* contents);
 
 // Returns a fixed protocol method only when the command belongs to the
@@ -64,7 +65,8 @@ bool StartProtocolRequest(scoped_refptr<content::DevToolsAgentHost> host,
                           shaar_request_id request_id,
                           shaar_reply_fn reply,
                           void* reply_context,
-                          const std::string& request_json);
+                          const std::string& request_json,
+                          std::string main_frame_id = {});
 
 // Selects the page protocol target for the scoped tab, including OTR tabs.
 scoped_refptr<content::DevToolsAgentHost> ProtocolAgentHostFor(

@@ -14,11 +14,12 @@
 #include "chrome/browser/apps/app_service/publishers/publisher_host_factory_impl.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/testing_browser_process.h"
-#include "content/public/browser/content_browser_client.h"
+#include "content/public/browser/network_service_util.h"
 #include "content/public/common/content_paths.h"
 #include "content/public/common/content_client.h"
 #include "mojo/core/embedder/embedder.h"
 #include "content/public/test/content_test_suite_base.h"
+#include "content/public/test/test_content_client_initializer.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_paths.h"
 
@@ -31,6 +32,7 @@ class ShaarTestSuite final : public content::ContentTestSuiteBase {
 
  protected:
   void Initialize() override {
+    content::ForceInProcessNetworkService();
     content::ContentTestSuiteBase::Initialize();
     base::test::AllowCheckIsTestForTesting();
     mojo::core::Init();
@@ -45,9 +47,11 @@ class ShaarTestSuite final : public content::ContentTestSuiteBase {
         repack_dir.AppendASCII("locales").AppendASCII("en.pak"));
     ui::ResourceBundle::GetSharedInstance().AddDataPackFromPath(
         repack_dir.AppendASCII("resources.pak"), ui::kScaleFactorNone);
-    content::SetContentClient(&content_client_);
-    content::SetBrowserClientForTesting(&browser_client_);
-    content::ContentTestSuiteBase::RegisterContentSchemes(&content_client_);
+    content_client_initializer_ =
+        std::make_unique<content::TestContentClientInitializer>();
+    content_client_initializer_->CreateTestRenderViewHosts();
+    content::ContentTestSuiteBase::RegisterContentSchemes(
+        content::GetContentClientForTesting());
     content::ContentTestSuiteBase::RegisterInProcessThreads();
     publisher_host_factory_resetter_ =
         apps::AppServiceProxyFactory::GetInstance()->SetPublisherHostFactory(
@@ -58,15 +62,14 @@ class ShaarTestSuite final : public content::ContentTestSuiteBase {
   void Shutdown() override {
     TestingBrowserProcess::TearDownAndDeleteInstance();
     publisher_host_factory_resetter_.reset();
-    content::SetBrowserClientForTesting(nullptr);
-    content::SetContentClient(nullptr);
+    content_client_initializer_.reset();
     ui::ResourceBundle::CleanupSharedInstance();
     content::ContentTestSuiteBase::Shutdown();
   }
 
  private:
-  content::ContentClient content_client_;
-  content::ContentBrowserClient browser_client_;
+  std::unique_ptr<content::TestContentClientInitializer>
+      content_client_initializer_;
   std::optional<base::AutoReset<std::unique_ptr<apps::PublisherHostFactory>>>
       publisher_host_factory_resetter_;
 };

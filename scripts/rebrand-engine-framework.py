@@ -6,11 +6,14 @@
 """Set Shaar bundle identifiers on the copied, SHA-checked Chromium framework."""
 
 import plistlib
+import shutil
 import sys
 from pathlib import Path
 
 
 FRAMEWORK_ID = "com.arcusis.shaar.framework"
+SHAAR_ICON = Path(__file__).resolve().parents[1] / "Resources/Branding/Shaar.icns"
+COCOA_NOTICES = Path(__file__).resolve().parents[1] / "ThirdParty/ChromiumEngine/notices"
 HELPER_IDS = {
     "Chromium Helper.app": "com.arcusis.shaar.helper",
     "Chromium Helper (GPU).app": "com.arcusis.shaar.helper",
@@ -23,11 +26,13 @@ HELPER_IDS = {
 }
 
 
-def set_identifier(path: Path, identifier: str) -> None:
+def set_identity(path: Path, identifier: str, display_name: str) -> None:
     info = plistlib.loads(path.read_bytes())
     if not isinstance(info, dict) or not isinstance(info.get("CFBundleIdentifier"), str):
         raise ValueError(f"Missing bundle identifier: {path}")
     info["CFBundleIdentifier"] = identifier
+    info["CFBundleDisplayName"] = display_name
+    info["CFBundleName"] = display_name
     path.write_bytes(plistlib.dumps(info))
 
 
@@ -37,9 +42,30 @@ def rebrand(framework: Path) -> None:
     actual = {path.name for path in helpers.glob("*.app")}
     if actual != set(HELPER_IDS):
         raise ValueError("Unexpected Chromium helper set")
-    set_identifier(versioned / "Resources/Info.plist", FRAMEWORK_ID)
+    set_identity(versioned / "Resources/Info.plist", FRAMEWORK_ID, "Shaar Engine")
+    notices = versioned / "Resources/ThirdPartyNotices"
+    notices.mkdir(exist_ok=True)
+    for name in ("cocoa-display-LICENSE", "cocoa-display-NOTICE"):
+        shutil.copyfile(COCOA_NOTICES / name, notices / name)
     for name, identifier in HELPER_IDS.items():
-        set_identifier(helpers / name / "Contents/Info.plist", identifier)
+        helper = helpers / name / "Contents"
+        display_name = name.removesuffix(".app").replace("Chromium", "Shaar", 1)
+        info_path = helper / "Info.plist"
+        set_identity(info_path, identifier, display_name)
+        info = plistlib.loads(info_path.read_bytes())
+        info["CFBundleIconFile"] = "Shaar.icns"
+        info.pop("CFBundleIconName", None)
+        info_path.write_bytes(plistlib.dumps(info))
+        resources = helper / "Resources"
+        resources.mkdir(exist_ok=True)
+        for localized in resources.glob("*.lproj/InfoPlist.strings"):
+            values = plistlib.loads(localized.read_bytes())
+            for key in ("CFBundleDisplayName", "CFBundleName"):
+                if key in values:
+                    values[key] = display_name
+            localized.write_bytes(plistlib.dumps(values))
+        shutil.copyfile(SHAAR_ICON, resources / "Shaar.icns")
+        (resources / "Assets.car").unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

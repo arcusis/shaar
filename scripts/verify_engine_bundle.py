@@ -35,6 +35,7 @@ HEX64 = re.compile(r"^[0-9a-f]{64}$")
 APP_ID = "com.arcusis.browser"
 APP_EXECUTABLE = "ArcusisBrowser"
 FRAMEWORK_ID = "com.arcusis.shaar.framework"
+SHAAR_ICON = SCRIPT_REPO / "Resources/Branding/Shaar.icns"
 HELPERS = {
     "Chromium Helper.app": ("com.arcusis.shaar.helper", "Chromium Helper"),
     "Chromium Helper (GPU).app": ("com.arcusis.shaar.helper", "Chromium Helper (GPU)"),
@@ -349,7 +350,9 @@ def _bundle_metadata(app: Path) -> tuple[Path, Path, list[tuple[Path, str]]]:
         engine_info = plistlib.loads(framework_plist)
     except (plistlib.InvalidFileException, ValueError) as error:
         raise VerifyError("framework_plist_invalid") from error
-    if engine_info.get("CFBundleIdentifier") != FRAMEWORK_ID:
+    if (engine_info.get("CFBundleIdentifier"), engine_info.get("CFBundleDisplayName")) != (
+        FRAMEWORK_ID, "Shaar Engine"
+    ):
         raise VerifyError("framework_identity_mismatch")
     helper_root = versioned / "Helpers"
     _check_dir(versioned, owner)
@@ -368,8 +371,14 @@ def _bundle_metadata(app: Path) -> tuple[Path, Path, list[tuple[Path, str]]]:
             values = plistlib.loads(helper_info)
         except (plistlib.InvalidFileException, ValueError) as error:
             raise VerifyError("helper_plist_invalid") from error
-        if (values.get("CFBundleIdentifier"), values.get("CFBundleExecutable")) != (identifier, executable_name):
+        display_name = name.removesuffix(".app").replace("Chromium", "Shaar", 1)
+        if (values.get("CFBundleIdentifier"), values.get("CFBundleExecutable"),
+                values.get("CFBundleDisplayName"), values.get("CFBundleIconFile")) != (
+                identifier, executable_name, display_name, "Shaar.icns"):
             raise VerifyError("helper_identity_mismatch")
+        icon = helper / "Contents/Resources/Shaar.icns"
+        if _hash_regular(icon, 2 * 1024 * 1024, owner) != hashlib.sha256(SHAAR_ICON.read_bytes()).hexdigest():
+            raise VerifyError("helper_icon_mismatch")
         _check_regular(helper / "Contents/MacOS" / executable_name, 512 * 1024 * 1024, owner)
         helper_paths.append((helper, identifier))
     return framework, executable, helper_paths

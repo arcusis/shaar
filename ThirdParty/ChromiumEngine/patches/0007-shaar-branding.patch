@@ -1,0 +1,32 @@
+--- a/chrome/app/theme/chromium/BRANDING
++++ b/chrome/app/theme/chromium/BRANDING
+@@ -1,10 +1,10 @@
+ COMPANY_FULLNAME=The Chromium Authors
+ COMPANY_SHORTNAME=The Chromium Authors
+-PRODUCT_FULLNAME=Chromium
+-PRODUCT_SHORTNAME=Chromium
+-PRODUCT_INSTALLER_FULLNAME=Chromium Installer
+-PRODUCT_INSTALLER_SHORTNAME=Chromium Installer
++PRODUCT_FULLNAME=Shaar
++PRODUCT_SHORTNAME=Shaar
++PRODUCT_INSTALLER_FULLNAME=Shaar Installer
++PRODUCT_INSTALLER_SHORTNAME=Shaar Installer
+ COPYRIGHT=Copyright @LASTCHANGE_YEAR@ The Chromium Authors. All rights reserved.
+-MAC_BUNDLE_ID=org.chromium.Chromium
++MAC_BUNDLE_ID=com.arcusis.shaar.engine
+ MAC_CREATOR_CODE=Cr24
+ MAC_TEAM_ID=
+--- a/chrome/BUILD.gn
++++ b/chrome/BUILD.gn
+@@ -480,8 +480,9 @@
+     outputs = [ "$root_out_dir/First Run" ]
+   }
+ } else if (is_mac) {
+-  chrome_helper_name = chrome_product_full_name + " Helper"
+-  chrome_framework_name = chrome_product_full_name + " Framework"
++  # Keep the framework and helper binary paths stable for the Shaar loader.
++  chrome_helper_name = "Chromium Helper"
++  chrome_framework_name = "Chromium Framework"
+   chrome_framework_version = chrome_version_full
+ 
+   verify_dynamic_libraries = !is_component_build && !is_asan && !is_ubsan_any

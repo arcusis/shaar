@@ -156,6 +156,7 @@ import Testing
 
 @Test func domainDropsLeadingWWW() {
   #expect(CommandText.domain(of: URL(string: "https://www.apple.com/mac")) == "apple.com")
+  #expect(CommandText.domain(of: URL(string: "https://WWW.Example.com/path")) == "Example.com")
   #expect(CommandText.domain(of: URL(string: "https://docs.swift.org")) == "docs.swift.org")
   #expect(CommandText.domain(of: nil) == "")
 }

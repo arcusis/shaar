@@ -13,7 +13,7 @@ extern "C" {
 #endif
 
 #define SHAAR_ENGINE_ABI_MAJOR 1u
-#define SHAAR_ENGINE_ABI_MINOR 3u
+#define SHAAR_ENGINE_ABI_MINOR 4u
 #define SHAAR_EXPORT __attribute__((visibility("default")))
 
 typedef struct shaar_engine shaar_engine;
@@ -372,6 +372,19 @@ SHAAR_EXPORT shaar_error_code shaar_tab_open(
 SHAAR_EXPORT shaar_error_code shaar_tab_close(
     shaar_tab *, shaar_error *error);
 SHAAR_EXPORT void *shaar_tab_host_view(shaar_tab *); /* borrowed NSView* */
+/* Verification-only native ownership and display evidence. Caller sets size;
+ * every field is derived from the registered Chromium tab and page host. */
+typedef struct {
+  uint32_t size;
+  int live_web_contents;
+  int selected_native_tab;
+  int displayed_native_web_contents;
+  int context_is_private;
+  int scope_owns_tab;
+} shaar_tab_probe_state;
+SHAAR_EXPORT shaar_error_code shaar_tab_get_probe_state(
+    shaar_engine *, shaar_scope, shaar_window *, shaar_tab *,
+    shaar_tab_probe_state *out, shaar_error *error);
 /* Borrowed until POPUP_CLOSE or its owning tab or window closes. */
 SHAAR_EXPORT void *shaar_extension_popup_view(
     shaar_engine *, shaar_window *, shaar_bytes popup_id);

@@ -29,10 +29,9 @@ enum CommandText {
   static func sameAddress(_ url: URL?, _ address: URL) -> Bool {
     guard let url else { return false }
     func key(_ value: URL) -> String {
-      var text = value.absoluteString
-      if let host = value.host() {
-        text = text.replacingOccurrences(of: host, with: host.lowercased())
-      }
+      var components = URLComponents(url: value, resolvingAgainstBaseURL: false)
+      if let host = components?.host { components?.host = host.lowercased() }
+      let text = components?.string ?? value.absoluteString
       return text.hasSuffix("/") ? String(text.dropLast()) : text
     }
     return key(url) == key(address)

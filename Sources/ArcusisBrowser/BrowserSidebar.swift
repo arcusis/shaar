@@ -522,25 +522,35 @@ struct BrowserSidebar: View {
     let profileID = store.session.selectedSpace.profileID
     let downloads = store.engine?.downloads
     let epoch = recentDownloads.epoch
+    let isActive = store.isPrivate ? store.libraryDrawerSection == .spaces : recentDownloads.isOpen
+    let controlLabel = store.isPrivate ? ShellL10n.string("Spaces") : ShellL10n.string("Library")
     return Button(action: toggleLibraryDrawerFromButton) {
-      Image(systemName: "archivebox")
+      Image(systemName: store.isPrivate ? "square.grid.2x2" : "archivebox")
         .font(.system(size: 16))
-        .foregroundStyle(Color.primary.opacity(recentDownloads.isOpen ? 0.9 : 0.55))
+        .foregroundStyle(Color.primary.opacity(isActive ? 0.9 : 0.55))
         .frame(width: 30, height: 30)
         .background(
-          Color.primary.opacity(recentDownloads.isOpen ? 0.1 : 0),
+          Color.primary.opacity(isActive ? 0.1 : 0),
           in: RoundedRectangle(cornerRadius: 8))
     }
     .contextMenu {
-      Button(ShellL10n.string("Bookmarks…")) { store.showLibrary(.bookmarks) }
-      Button(ShellL10n.string("History…")) { store.showLibrary(.history) }
+      if store.isPrivate {
+        Button(ShellL10n.string("Spaces")) { _ = store.toggleLibraryDrawer() }
+      } else {
+        Button(ShellL10n.string("Bookmarks…")) { store.showLibrary(.bookmarks) }
+        Button(ShellL10n.string("History…")) { store.showLibrary(.history) }
+      }
     }
-    .accessibilityLabel(ShellL10n.string("Library"))
-    .accessibilityHint(ShellL10n.string("Open Library; hover to see recent downloads"))
-    .help(ShellL10n.string("Library"))
+    .accessibilityLabel(controlLabel)
+    .accessibilityHint(
+      store.isPrivate ? "" : ShellL10n.string("Open Library; hover to see recent downloads")
+    )
+    .help(controlLabel)
     .buttonStyle(.plain)
     .onHover {
-      recentDownloadsHoverChanged(.anchor, inside: $0, profileID: profileID, epoch: epoch)
+      if !store.isPrivate {
+        recentDownloadsHoverChanged(.anchor, inside: $0, profileID: profileID, epoch: epoch)
+      }
     }
     .overlay(alignment: .bottomLeading) {
       Group {
@@ -779,6 +789,7 @@ struct BrowserSidebar: View {
                   .tab(
                     sessionID: store.dragSessionID, sourceSpaceID: space.id, tabID: id))
               }
+              .disabled(!store.canAddTabToFavorites(id, in: space.id))
               Menu(ShellL10n.string("Move to Folder")) {
                 ForEach(space.folders) { folder in
                   Button(folderLabel(folder.id, in: space)) {
@@ -949,8 +960,7 @@ struct BrowserSidebar: View {
         Button(ShellL10n.string("Add to Favorites")) {
           addToFavorites(tabID: tab.id, spaceID: space.id, profileID: space.profileID)
         }
-        .disabled(
-          store.sheet != nil || store.commandIsOpen || !NavigationInput.isWebURL(tab.url))
+        .disabled(!store.canAddTabToFavorites(tab.id, in: space.id))
         Divider()
         Button(ShellL10n.string(tab.isPinned ? "Unpin tab" : "Pin tab")) { store.togglePin(tab.id) }
         Button(ShellL10n.string("Move up")) { shiftTab(tab, in: space, by: -1) }.disabled(

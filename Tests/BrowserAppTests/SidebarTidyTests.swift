@@ -45,3 +45,20 @@ import Testing
 
   #expect(store.session.selectedSpace.tabs.first { $0.id == tab.id }?.folderID == folder)
 }
+
+@Test @MainActor func repeatingTidyDoesNotCreateDuplicateEmptyFolders() throws {
+  let store = BrowserStore()
+  let space = store.session.selectedSpaceID
+  store.perform(.open(URL(string: "https://example.com/one")!))
+  let first = try #require(store.session.selectedSpace.selectedTab?.id)
+  store.perform(.open(URL(string: "https://example.com/two")!))
+  let second = try #require(store.session.selectedSpace.selectedTab?.id)
+  let group = SidebarTidyGroup(topic: "example.com", tabIDs: [first, second])
+
+  store.applyTidyGroups([group], in: space)
+  let firstFolder = try #require(store.session.selectedSpace.folders.first?.id)
+  store.applyTidyGroups([group], in: space)
+
+  #expect(store.session.selectedSpace.folders.map(\.id) == [firstFolder])
+  #expect(store.session.selectedSpace.tabs.allSatisfy { $0.folderID == firstFolder })
+}

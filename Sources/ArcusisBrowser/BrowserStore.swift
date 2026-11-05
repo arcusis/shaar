@@ -551,14 +551,32 @@ final class BrowserStore {
     var handled: Set<UUID> = []
     for group in groups where group.tabIDs.count > 1 {
       let ids = Set(group.tabIDs)
-      guard ids.isSubset(of: todayIDs), ids.isDisjoint(with: handled),
-        let folder = createFolder(name: group.topic, in: spaceID, section: .today)
-      else { continue }
+      guard ids.isSubset(of: todayIDs), ids.isDisjoint(with: handled) else { continue }
+      if tidyGroupIsCurrent(group, ids: ids, in: space) {
+        handled.formUnion(ids)
+        continue
+      }
+      guard let folder = createFolder(name: group.topic, in: spaceID, section: .today) else {
+        continue
+      }
       for id in group.tabIDs {
         _ = moveTab(id, from: spaceID, to: spaceID, folderID: folder)
       }
       handled.formUnion(ids)
     }
+  }
+
+  private func tidyGroupIsCurrent(
+    _ group: SidebarTidyGroup, ids: Set<UUID>, in space: BrowserSpace
+  ) -> Bool {
+    guard let first = group.tabIDs.first,
+      let folderID = space.tabs.first(where: { $0.id == first })?.folderID,
+      space.folders.contains(where: {
+        $0.id == folderID && !$0.isPinned
+          && $0.name == group.topic.trimmingCharacters(in: .whitespacesAndNewlines)
+      })
+    else { return false }
+    return Set(space.tabs.filter { $0.folderID == folderID }.map(\.id)) == ids
   }
 
   func nativeTabClosed(_ id: UUID) {

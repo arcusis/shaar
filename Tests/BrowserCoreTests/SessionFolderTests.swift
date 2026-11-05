@@ -196,6 +196,25 @@ private let legacySession = Data(
   #expect(sourceAfter.folderPath(to: remainingFolder).allSatisfy { !$0.isCollapsed })
 }
 
+@Test func closingSelectedTabRevealsFallbackInsideCollapsedFolder() throws {
+  var session = BrowserSession.fresh()
+  let space = session.selectedSpaceID
+  let first = session.open(URL(string: "https://first.example")!)!
+  let fallback = session.open(URL(string: "https://fallback.example")!)!
+  let folder = session.addFolder(name: "Saved", in: space)!
+  let moved = session.moveTab(fallback, from: space, to: space, folderID: folder)
+  #expect(moved)
+  let collapsed = session.toggleFolder(folder, in: space)
+  #expect(collapsed)
+  session.selectTab(first, in: space)
+  #expect(session.selectedSpace.folderPath(to: folder).contains { $0.isCollapsed })
+
+  session.closeTab(first)
+  #expect(session.selectedSpace.selectedTabID == fallback)
+  #expect(session.selectedSpace.folderPath(to: folder).allSatisfy { !$0.isCollapsed })
+  try session.validate()
+}
+
 @Test func commandSearchFindsCollapsedFolderContentsAndRevealsTheChosenContext() throws {
   var session = BrowserSession.fresh()
   let space = session.selectedSpaceID

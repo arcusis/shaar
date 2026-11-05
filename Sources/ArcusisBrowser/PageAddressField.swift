@@ -8,6 +8,12 @@ import SwiftUI
 struct PageAddressField: View {
   @Bindable var store: BrowserStore
 
+  static func displayAddress(for url: URL?) -> String? {
+    guard let url, let host = url.host(), !host.isEmpty else { return nil }
+    let shownHost = host.contains(":") && !host.hasPrefix("[") ? "[\(host)]" : host
+    return url.port.map { "\(shownHost):\($0)" } ?? shownHost
+  }
+
   var body: some View {
     let url = store.session.selectedPage?.tab.url
     Button {
@@ -15,7 +21,7 @@ struct PageAddressField: View {
     } label: {
       HStack(spacing: 6) {
         Image(systemName: url == nil ? "magnifyingglass" : "link")
-        Text(url?.host() ?? ShellL10n.string("Search or enter address"))
+        Text(Self.displayAddress(for: url) ?? ShellL10n.string("Search or enter address"))
           .lineLimit(1)
           .truncationMode(.middle)
       }

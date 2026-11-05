@@ -6,6 +6,7 @@ import AppKit
 import ChromiumBridge
 import ChromiumBridgeVerification
 import Foundation
+import Observation
 import SwiftUI
 
 @testable import ArcusisBrowser
@@ -333,9 +334,24 @@ import SwiftUI
     }
     throw InspectorFailure("AI copy probe timed out waiting for \(label).")
   }
+  static func waitForSelectionLock(_ ready: @escaping @MainActor () -> Bool) async {
+    while !ready() {
+      await withCheckedContinuation { continuation in
+        withObservationTracking {
+          _ = ready()
+        } onChange: {
+          continuation.resume()
+        }
+      }
+    }
+  }
+
   private func pick(_ inspector: InspectorModel, _ selector: String) async throws {
     let targetSelector = selector == "#ai-card" ? "#ai-save" : selector
-    inspector.pick()
+    guard let activation = inspector.pick() else {
+      throw InspectorFailure("AI Inspector picker is unavailable.")
+    }
+    await activation.value
     let accepted: Bool = await withCheckedContinuation { continuation in
       engine.runtime.inspectorProbePointer(
         inTabID: inspector.target.tabID.uuidString, selector: targetSelector, frames: [],
@@ -344,13 +360,19 @@ import SwiftUI
       ) { continuation.resume(returning: $0) }
     }
     try check(accepted, "Trusted AI fixture selection failed.")
-    try await wait("selection lock for \(selector)") {
-      guard inspector.selection?.locked == true,
-        let state = try await inspector.evaluate("globalThis.__shaarInspectorV2.read().selection")
-          as? [String: Any]
-      else { return false }
-      return state["id"] as? Int == inspector.selection?.id
+    await Self.waitForSelectionLock {
+      inspector.failure != nil || !inspector.isOpen
+        || (inspector.mode == .locked && inspector.selection?.locked == true)
     }
+    if let failure = inspector.failure { throw InspectorFailure(failure) }
+    guard inspector.isOpen, let selection = inspector.selection, selection.locked else {
+      throw InspectorFailure("AI Inspector closed before selection locked.")
+    }
+    try check(
+      try await inspector.evaluate(
+        "(()=>{const api=globalThis.__shaarInspectorV2,state=api?.read().selection;return state?.locked===true&&state.id===\(selection.id)&&api.element()===document.querySelector('\(targetSelector)');})()"
+      ) as? Bool == true,
+      "Renderer did not lock the requested AI fixture element.")
     if selector == "#ai-card" {
       guard
         let ancestor = inspector.selection?.ancestors.first(where: { $0.label.hasPrefix("main") })

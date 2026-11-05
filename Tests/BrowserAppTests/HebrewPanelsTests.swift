@@ -12,9 +12,22 @@ import Testing
 struct HebrewPanelsTests {
   @Test func selectedLanguagesKeepLocalizedFormattingAndEnglishRegionalDefaults() {
     #expect(PanelsL10n.formattingLocale(for: .hebrew).identifier == "he")
-    #expect(
-      PanelsL10n.formattingLocale(for: .english).identifier == Locale.autoupdatingCurrent.identifier
-    )
+    let english = PanelsL10n.formattingLocale(for: .english)
+    #expect(english.language.languageCode?.identifier == "en")
+    #expect(english.region == Locale.autoupdatingCurrent.region)
+  }
+
+  @Test func englishPanelValuesDoNotUseMacOSHebrewLanguage() {
+    let macLocale = Locale(identifier: "he_IL")
+    let english = PanelsL10n.formattingLocale(for: .english, systemLocale: macLocale)
+    #expect(english.language.languageCode?.identifier == "en")
+    #expect(english.region?.identifier == "IL")
+    let bytes = PanelsL10n.byteCount(1, language: .english, systemLocale: macLocale)
+    #expect(bytes == "1 byte")
+    let date = Date(timeIntervalSince1970: 1_768_435_200)
+    let dateLabel = date.formatted(
+      Date.FormatStyle(date: .abbreviated, time: .omitted).locale(english))
+    #expect(dateLabel.contains("Jan"))
   }
 
   @Test func panelCatalogContainsHebrewPinHelpAndNaturalTerms() {

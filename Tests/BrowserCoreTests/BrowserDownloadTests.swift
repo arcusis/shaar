@@ -54,6 +54,8 @@ import Testing
   #expect(source("ftp://files.example.com/file") == "Download")
   #expect(source("not a url") == "Download")
   #expect(source("https://" + String(repeating: "a", count: 8200) + ".example") == "Download")
+  #expect(source("DATA:text/plain,secret") == "Generated file")
+  #expect(source("BLOB:https://docs.example.com/id") == "docs.example.com")
 }
 
 @Test func downloadActionsFollowStateAndPause() {
@@ -84,4 +86,13 @@ import Testing
       id: "not-a-uuid", profileID: UUID(), filename: "file", path: "/tmp/file",
       sourceURL: "https://example.com", state: .finished, paused: false, dangerous: false,
       offTheRecord: false, received: 0, total: 0, startTime: 0) == nil)
+}
+
+@Test func whitespaceOnlyDownloadFilenameUsesDefaultName() {
+  let download = BrowserDownload(
+    id: "9b948ba6-d386-4e34-acdf-b2fb92fdb34b", profileID: UUID(), filename: "  \n\t",
+    path: "/tmp/file", sourceURL: "https://example.com", state: .finished, paused: false,
+    dangerous: false, offTheRecord: false, received: 1, total: 1, startTime: 0)
+
+  #expect(download?.filename == "Download")
 }

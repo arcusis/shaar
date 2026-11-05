@@ -197,9 +197,7 @@ private enum FirefoxHistoryReader {
       var parent = node.parent
       var seen: Set<Int64> = []
       while let folder = byID[parent], folder.type == 2, seen.insert(parent).inserted {
-        if !["places root", "menu", "toolbar", "unfiled", "mobile", "tags"].contains(
-          folder.title.lowercased())
-        {
+        if folder.parent != 0 && byID[folder.parent]?.parent != 0 {
           folders.append(folder.title)
         }
         parent = folder.parent

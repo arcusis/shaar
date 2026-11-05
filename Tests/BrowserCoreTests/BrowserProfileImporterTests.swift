@@ -63,6 +63,26 @@ import Testing
   #expect(batch.items.allSatisfy { $0.source == .firefox })
 }
 
+@Test func firefoxImportKeepsUserFoldersNamedLikeBuiltInRoots() throws {
+  let databaseURL = try databaseURLProfile(name: "FirefoxMenu", databaseName: "places.sqlite")
+  try createDatabase(sqlFixture: "FirefoxPlaces.sql", at: databaseURL)
+  var database: OpaquePointer?
+  guard sqlite3_open_v2(databaseURL.path, &database, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK,
+    let database
+  else { throw BrowserImport.ImportError.databaseUnavailable("fixture setup") }
+  defer { sqlite3_close(database) }
+  let sql = """
+    INSERT INTO moz_bookmarks VALUES(8, 2, NULL, 2, 1, 'Menu');
+    INSERT INTO moz_bookmarks VALUES(9, 1, 2, 8, 0, 'Bookmark in user Menu');
+    """
+  guard sqlite3_exec(database, sql, nil, nil, nil) == SQLITE_OK else {
+    throw BrowserImport.ImportError.databaseUnavailable("fixture setup")
+  }
+
+  let batch = try BrowserImport.readProfile(at: databaseURL, source: .firefox)
+  #expect(batch.bookmarks.first { $0.title == "Bookmark in user Menu" }?.folder == "Menu")
+}
+
 @Test func privateBrowserProfileDirectoriesAreRejectedBeforeReading() throws {
   for name in ["Incognito", "InPrivate", "Guest Profile", "Private Browsing"] {
     let profile = try profileDirectory(name: name)

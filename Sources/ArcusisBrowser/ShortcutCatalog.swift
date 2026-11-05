@@ -209,7 +209,7 @@ enum ShortcutPageRouting {
         let shiftedSymbol = flags.contains(.shift) && itemKey != key && itemKey == typedKey
         if shiftedSymbol { itemFlags.insert(.shift) }
         guard
-          !itemKey.isEmpty && (itemKey == key || shiftedSymbol)
+          item.isEnabled && !itemKey.isEmpty && (itemKey == key || shiftedSymbol)
             && itemFlags == flags
         else { continue }
         if pageHasFocus && standardEditItem { return false }

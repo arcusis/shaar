@@ -49,7 +49,7 @@
   },
   "layer": {
     "path": "ThirdParty/ChromiumEngine/layer",
-    "sha256": "795b227ca0f7bf79f3b0daacb2dc5ab7c7697f3df7b7e06c65988f2d813bff0a",
+    "sha256": "4bab07785115c1d2eb01cba04b1d7932d8e2a101438c2b0658da37173065c5d6",
     "files": {
       "chrome/browser/shaar/BUILD.gn": "2df453e4d24f303b0348d4a7b8a5d818f71727bd3971367bfaf7b09c8ed01350",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks.cc": "da94500fa2d7b3106d58dcf3afc2f46072c6cc57a6e1868d1cdd132cafa714fd",
@@ -83,7 +83,7 @@
       "chrome/browser/shaar/history/shaar_history.h": "be7cf95eec6c7accc48a4cb28acb59577ceb6822407fddc4d665c3ee0532c579",
       "chrome/browser/shaar/history/shaar_history_lifecycle_adapter.cc": "a84c4e8775c8d68e96f7c60912d0aafffa810db257d41db31c5a17337944d084",
       "chrome/browser/shaar/history/shaar_history_unittest.cc": "05d22d884eacbd1b0a1d848608e75ff94c061173f2601aa30bc5e515383a3093",
-      "chrome/browser/shaar/lifecycle/shaar_lifecycle.cc": "e0051eea90b7a14c1175a1783f77315c4af23fc353536fab8d29e7ebbb838793",
+      "chrome/browser/shaar/lifecycle/shaar_lifecycle.cc": "eb6c291254761a1a185f38b56fa7a8edbfbdb5dd3ccec4458ff7365c2bd87ded",
       "chrome/browser/shaar/lifecycle/shaar_lifecycle.h": "3eee9d02f45c652807c3c247db8e8fc3f036470eb3fca02c2f55886edc56250a",
       "chrome/browser/shaar/lifecycle/shaar_module_registry.cc": "a3eb2de11416047f275071ea9417bb888a6c39e51d1cf3d586c7d9a34909e89c",
       "chrome/browser/shaar/lifecycle/shaar_module_registry_unittest.cc": "769146d57cb80500d72d5545eee2a54318e726733fd4becbd5b7868aba6c6140",
@@ -117,7 +117,7 @@
       "chrome/browser/shaar/storage_keychain/shaar_storage_keychain_migration_probe_unittest.mm": "ca1f4c09bfd4c53e23f326909659c7f5809899753b617b51f94f01b69038b886",
       "chrome/browser/shaar/storage_keychain/shaar_storage_keychain_unittest.cc": "eb37d6db3b03c02404341691e1fbbddf54495fe8f3358c2373450f116ade92ff",
       "chrome/browser/shaar/testing/shaar_test_link_stubs.cc": "04ad08f1397a614ec625477846e3c6fc205b8ba019962056a953b6b0d67deca8",
-      "chrome/browser/shaar/testing/shaar_test_main.cc": "2e11cfb0f6de1dd693d9058e576c6f3fe401bb6e9e4a0631d648868e3f229ae0",
+      "chrome/browser/shaar/testing/shaar_test_main.cc": "7a90e56c6d92106169ae84469d3e2a2ccf0f34202caa221d773ab8b15a4c4487",
       "chrome/browser/shaar/windows_tabs/shaar_page_view_binding.h": "31c52f5d1bfa3d86166f6ff5132160bb634438d0b92df8f200981b11ee86c6ab",
       "chrome/browser/shaar/windows_tabs/shaar_page_view_binding.mm": "a355c8fb5a7365eb07339c5c5e566279fadf7df1170aa30ea459e33b7cf5fe0c",
       "chrome/browser/shaar/windows_tabs/shaar_page_view_host.h": "6c99d5a8bf48e8e47052e2d910931c457048c5e6a2265186c7c4eafac01e658d",

@@ -71,16 +71,18 @@ final class MiniBrowserController {
     target.session.spaces
   }
 
-  func chooseDestination(_ id: UUID) {
-    guard let space = target.session.spaces.first(where: { $0.id == id }) else { return }
+  func chooseDestination(_ id: UUID) -> Bool {
+    guard let space = target.session.spaces.first(where: { $0.id == id }) else { return false }
     if space.profileID == profileID {
       destinationID = id
-      return
+      return true
     }
     if onProfileChange?(id, store.session.selectedSpace.selectedTab?.url) == true {
       moved = true
       engine.runtime.closeWindowID(engine.windowID)
+      return true
     }
+    return false
   }
 
   func openInSpace() {
@@ -108,15 +110,23 @@ final class MiniBrowserController {
   }
 }
 
+struct MiniDestinationSelection {
+  private(set) var id: UUID
+
+  mutating func select(_ requested: UUID, route: (UUID) -> Bool) {
+    if route(requested) { id = requested }
+  }
+}
+
 struct MiniBrowserWindow: View {
   let store: BrowserStore
   let engine: BrowserEngine?
   let destinations: [BrowserSpace]
   let onNavigate: (String) -> Void
-  let onDestination: (UUID) -> Void
+  let onDestination: (UUID) -> Bool
   let onOpen: () -> Void
   @State private var address: String
-  @State private var destination: UUID
+  @State private var destination: MiniDestinationSelection
 
   init(controller: MiniBrowserController) {
     self.init(
@@ -128,7 +138,7 @@ struct MiniBrowserWindow: View {
 
   init(
     store: BrowserStore, engine: BrowserEngine?, destinations: [BrowserSpace], destination: UUID,
-    onNavigate: @escaping (String) -> Void, onDestination: @escaping (UUID) -> Void,
+    onNavigate: @escaping (String) -> Void, onDestination: @escaping (UUID) -> Bool,
     onOpen: @escaping () -> Void
   ) {
     self.store = store
@@ -137,7 +147,7 @@ struct MiniBrowserWindow: View {
     self.onNavigate = onNavigate
     self.onDestination = onDestination
     self.onOpen = onOpen
-    _destination = State(initialValue: destination)
+    _destination = State(initialValue: MiniDestinationSelection(id: destination))
     _address = State(
       initialValue: store.session.selectedSpace.selectedTab?.url.absoluteString ?? "")
   }
@@ -149,14 +159,18 @@ struct MiniBrowserWindow: View {
           .textFieldStyle(.roundedBorder)
           .environment(\.layoutDirection, .leftToRight)
           .onSubmit { onNavigate(address) }
-        Picker(PanelsL10n.string("Space"), selection: $destination) {
+        Picker(
+          PanelsL10n.string("Space"),
+          selection: Binding(
+            get: { destination.id },
+            set: { destination.select($0, route: onDestination) })
+        ) {
           ForEach(destinations) { space in
             Text("\(space.name)").tag(space.id)
           }
         }
         .labelsHidden()
         .frame(width: 130)
-        .onChange(of: destination) { _, value in onDestination(value) }
         Button(PanelsL10n.string("Open in Space"), action: onOpen)
           .disabled(store.session.selectedSpace.selectedTab == nil)
       }

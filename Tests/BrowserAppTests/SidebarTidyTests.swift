@@ -20,3 +20,15 @@ import Testing
       SidebarTidyGroup(topic: "b.example", tabIDs: [first.id, third.id]),
     ])
 }
+
+@Test func tidyFallbackKeepsDifferentLocalPortsInSeparateGroups() async {
+  let first = BrowserTab(url: URL(string: "http://localhost:3000/one")!)
+  let second = BrowserTab(url: URL(string: "http://localhost:4000/two")!)
+  let third = BrowserTab(url: URL(string: "http://localhost:3000/three")!)
+  let ipv6 = BrowserTab(url: URL(string: "http://[::1]:8080/four")!)
+  let groups = await SidebarSiteGrouping().groups(for: [first, second, third, ipv6])
+  #expect(groups.count == 3)
+  #expect(groups.first { $0.topic == "localhost:3000" }?.tabIDs == [first.id, third.id])
+  #expect(groups.first { $0.topic == "localhost:4000" }?.tabIDs == [second.id])
+  #expect(groups.first { $0.topic == "[::1]:8080" }?.tabIDs == [ipv6.id])
+}

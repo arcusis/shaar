@@ -22,6 +22,10 @@ sys.modules[FEED_SPEC.name] = release_feed
 FEED_SPEC.loader.exec_module(release_feed)
 ICON = REPO / "Resources" / "Branding" / "Shaar.icns"
 PSL = REPO / "Sources" / "BrowserCore" / "Resources" / "public_suffix_list.dat"
+ALERT_HELPERS = (
+    "Chromium Helper (Alerts).app",
+    "Chromium Helper (Aperitif Alerts).app",
+)
 
 
 class BundleAppTests(unittest.TestCase):
@@ -98,7 +102,16 @@ class BundleAppTests(unittest.TestCase):
         ):
             helper = helpers / name
             (helper / "Contents/MacOS").mkdir(parents=True)
-            (helper / "Contents/Info.plist").write_bytes(plistlib.dumps({"CFBundleIdentifier": "legacy.helper"}))
+            info = {"CFBundleIdentifier": "legacy.helper"}
+            if name in ALERT_HELPERS:
+                info.update(CFBundleName=name.removesuffix(".app"),
+                            CFBundleDisplayName=name.removesuffix(".app"),
+                            CFBundleIconFile="app.icns", CFBundleIconName="AppIcon")
+                alert_resources = helper / "Contents/Resources"
+                alert_resources.mkdir()
+                (alert_resources / "app.icns").write_bytes(b"Chromium placeholder icon")
+                (alert_resources / "Assets.car").write_bytes(b"Chromium placeholder assets")
+            (helper / "Contents/Info.plist").write_bytes(plistlib.dumps(info))
             (helper / "Contents/MacOS/Helper").write_text("stub helper")
 
         self._tool(
@@ -255,6 +268,30 @@ class BundleAppTests(unittest.TestCase):
         self.assertNotIn("ShaarEngineBackend", plist)
         bundled_pin = self.root / "build/Shaar Engine Preview.app/Contents/Resources/ChromiumEngine/pin.json"
         self.assertEqual(bundled_pin.read_text(), "pin.json")
+
+    def test_alert_helpers_use_product_name_and_icon(self):
+        for args, app_path, product_name in (
+            (("--with-engine",), "build/Shaar.app", "Shaar"),
+            (("--with-engine", "--preview-shaar-engine"),
+             "build/Shaar Engine Preview.app", "Shaar Engine Preview"),
+        ):
+            with self.subTest(product_name=product_name):
+                result = self._run(*args)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                helpers = (self.root / app_path / "Contents/Frameworks/Chromium Framework.framework"
+                           / "Versions/Current/Helpers")
+                for name in ALERT_HELPERS:
+                    with self.subTest(helper=name):
+                        contents = helpers / name / "Contents"
+                        info = plistlib.loads((contents / "Info.plist").read_bytes())
+                        self.assertEqual(info["CFBundleIdentifier"],
+                                         "com.arcusis.shaar.framework.AlertNotificationService")
+                        self.assertEqual(info.get("CFBundleName"), product_name)
+                        self.assertEqual(info.get("CFBundleDisplayName"), product_name)
+                        self.assertEqual(info.get("CFBundleIconFile"), "app.icns")
+                        self.assertNotIn("CFBundleIconName", info)
+                        self.assertEqual((contents / "Resources/app.icns").read_bytes(), ICON.read_bytes())
+                        self.assertFalse((contents / "Resources/Assets.car").exists())
 
     def test_preview_shaar_requires_engine_and_excludes_updates(self):
         for args in (("--preview-shaar-engine",),

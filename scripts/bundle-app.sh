@@ -193,6 +193,37 @@ if $with_engine; then
   ditto "$framework" "$app/Contents/Frameworks/Chromium Framework.framework"
   python3 scripts/rebrand-engine-framework.py \
     "$app/Contents/Frameworks/Chromium Framework.framework"
+  python3 - "$app/Contents/Frameworks/Chromium Framework.framework" "$bundle_name" \
+    Resources/Branding/Shaar.icns <<'PY'
+import plistlib
+import shutil
+import sys
+from pathlib import Path
+
+framework = Path(sys.argv[1])
+product_name = sys.argv[2]
+app_icon = Path(sys.argv[3])
+helpers = sorted((framework / "Versions/Current/Helpers").glob("*Alerts*.app"))
+if len(helpers) != 2:
+    raise SystemExit("Expected both Chromium Alerts helpers in the bundled framework.")
+for helper in helpers:
+    contents = helper / "Contents"
+    info_path = contents / "Info.plist"
+    info = plistlib.loads(info_path.read_bytes())
+    if info.get("CFBundleIdentifier") != "com.arcusis.shaar.framework.AlertNotificationService":
+        raise SystemExit(f"Unexpected Alerts helper identifier: {helper}")
+    info["CFBundleName"] = product_name
+    info["CFBundleDisplayName"] = product_name
+    info["CFBundleIconFile"] = "app.icns"
+    info.pop("CFBundleIconName", None)
+    info_path.write_bytes(plistlib.dumps(info))
+    resources = contents / "Resources"
+    resources.mkdir(exist_ok=True)
+    icon_path = resources / "app.icns"
+    icon_path.unlink(missing_ok=True)
+    shutil.copyfile(app_icon, icon_path)
+    (resources / "Assets.car").unlink(missing_ok=True)
+PY
   sign_engine_framework "$app/Contents/Frameworks/Chromium Framework.framework" adhoc_sign
 fi
 # Only release bundles carry the update feed; without it the app never starts Sparkle.

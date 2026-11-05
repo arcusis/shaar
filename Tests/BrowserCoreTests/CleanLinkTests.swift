@@ -13,6 +13,12 @@ import Testing
     CleanLink.clean(input).absoluteString == "https://www.amazon.com/dp/B012345678?color=blue")
 }
 
+@Test func cleanLinkKeepsAmazonNamedNonAmazonPageData() {
+  let address = "https://amazon.example.com/product/ref=manual?tag=category"
+  let url = URL(string: address)!
+  #expect(CleanLink.clean(url) == url)
+}
+
 @Test func cleanLinkRemovesSocialTrackingAndPreservesPageParameters() {
   #expect(
     CleanLink.clean(URL(string: "https://www.instagram.com/p/abc/?igsh=one&utm_source=x")!)

@@ -24,7 +24,12 @@ final class TabSwitcherController {
   func advance(store: BrowserStore, reverse: Bool) {
     let space = store.session.selectedSpace
     if choices.isEmpty {
-      var available = space.tabs.map(\.id)
+      let favoriteIDs = Set(store.session.favorites(for: space.profileID).map(\.id))
+      var available =
+        space.tabs.map(\.id)
+        + store.session.favoritePages.filter {
+          favoriteIDs.contains($0.favoriteID)
+        }.map(\.tab.id)
       if let selected = store.session.selectedPage?.tab.id, !available.contains(selected) {
         available.insert(selected, at: 0)
       }

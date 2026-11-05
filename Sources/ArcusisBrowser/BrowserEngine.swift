@@ -105,6 +105,7 @@ final class BrowserEngine {
   ) throws {
     let runtime = events.runtime
     self.runtime = runtime
+    notice = runtime.startupNotice
     self.events = events
     self.downloadDirectoryApplier = downloadDirectoryApplier
     self.windowID = windowID ?? runtime.primaryWindowID

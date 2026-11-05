@@ -91,6 +91,8 @@ FOUNDATION_EXPORT NSString *ARCBridgeLocalizedString(NSString *message);
 @property(copy, nullable) NSString * _Nullable (NS_SWIFT_UI_ACTOR ^onWindowRequest)(NSString *profileID, NSString *type);
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onWindowShowRequest)(NSString *windowID, BOOL active);
 @property(copy, nullable) void (^onNotice)(NSString *message);
+/// A launch-wide notice retained for windows created after the engine reports it.
+@property(nonatomic, readonly, nullable) NSString *startupNotice;
 @property(copy, nullable) void (^onInstallRequest)(NSDictionary<NSString *, id> *request);
 @property(copy, nullable) void (^onExtensionPopup)(NSDictionary<NSString *, id> *popup);
 @property(copy, nullable) void (^onExtensionPopupClosed)(NSString *popupID);

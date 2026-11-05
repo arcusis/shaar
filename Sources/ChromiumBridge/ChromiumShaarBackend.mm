@@ -108,6 +108,7 @@ struct Symbols {
   uint64_t _nextRequestID;
   BOOL _shaarQuitting;
   BOOL _shaarTesting;
+  NSString *_shaarStartupNotice;
 }
 - (void)receiveEvent:(const shaar_event *)event;
 - (BOOL)submitTabID:(NSString *)tabID operation:(shaar_operation)operation
@@ -128,6 +129,8 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
 }
 
 @implementation ARCShaarRuntime
+
+- (NSString *)startupNotice { return _shaarStartupNotice; }
 
 - (instancetype)initWithFrameworkURL:(NSURL *)url error:(NSError **)error {
   if (!(self = [super init])) return nil;
@@ -215,6 +218,15 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   if (![payload isKindOfClass:NSDictionary.class]) return;
   [self shaarExtensionEvent:event payload:payload];
   NSString *kind = payload[@"kind"];
+  if (event->kind == SHAAR_EVENT_ENGINE && !event->session_id.size &&
+      [kind isEqualToString:@"storage.keychainUnavailable"] &&
+      [payload[@"schemaVersion"] isEqual:@1] &&
+      [payload[@"restartRequired"] isEqual:@YES] &&
+      [payload[@"persistentCookiesAvailable"] isEqual:@NO]) {
+    _shaarStartupNotice = ARCBridgeLocalizedString(@"Browsing is available, but saved cookies and passwords are unavailable for this launch. Unlock your keychain or approve access, then restart Shaar.");
+    if (self.onNotice) self.onNotice(_shaarStartupNotice);
+    return;
+  }
   if (event->session_id.size) {
     [self receivePrivateEvent:event payload:payload];
     return;

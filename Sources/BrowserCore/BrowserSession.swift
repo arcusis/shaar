@@ -60,7 +60,11 @@ public struct BrowserTab: Codable, Identifiable, Equatable, Sendable {
   ) {
     self.id = id
     self.url = url
-    self.title = title ?? url.host() ?? url.absoluteString
+    if let title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      self.title = title
+    } else {
+      self.title = url.host() ?? url.absoluteString
+    }
     self.isPinned = isPinned
     self.folderID = folderID
   }

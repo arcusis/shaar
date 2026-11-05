@@ -23,6 +23,9 @@ private final class FakeSiteBackend: SiteControlBackend {
   ]
   var failsWrites = false
   var performed: [SiteAction] = []
+  var suspendFirstWrite = false
+  var writeCount = 0
+  var finishFirstWrite: CheckedContinuation<Void, Never>?
 
   func security(of target: SiteControlTarget) -> SiteSecurity { securityValue }
 
@@ -33,6 +36,10 @@ private final class FakeSiteBackend: SiteControlBackend {
   func setPermission(_ permission: SitePermission, allowed: Bool, for target: SiteControlTarget)
     async throws
   {
+    writeCount += 1
+    if writeCount == 1, suspendFirstWrite {
+      await withCheckedContinuation { continuation in finishFirstWrite = continuation }
+    }
     if failsWrites { throw FakeFailure() }
     values[permission] = allowed ? .allow : .block
   }
@@ -70,6 +77,24 @@ private func target(_ address: String) -> SiteControlTarget {
   await model.setPermission(.microphone, allowed: true)
   #expect(model.permissionValues[.microphone] == .ask)
   #expect(model.failure == "The engine refused.")
+}
+
+@MainActor @Test func siteControlsDoNotOverlapWritesToTheSamePermission() async {
+  let backend = FakeSiteBackend()
+  backend.suspendFirstWrite = true
+  let model = SiteControlsModel(target: target("https://mail.example"), backend: backend)
+  await model.load()
+
+  let first = Task { await model.setPermission(.camera, allowed: true) }
+  for _ in 0..<100 where backend.finishFirstWrite == nil { await Task.yield() }
+  #expect(backend.finishFirstWrite != nil)
+  await model.setPermission(.camera, allowed: false)
+  #expect(backend.writeCount == 1)
+  #expect(model.permissionValues[.camera] == .allow)
+
+  backend.finishFirstWrite?.resume()
+  await first.value
+  #expect(backend.values[.camera] == .allow)
 }
 
 @MainActor @Test func pagesWithoutWebOriginsOfferOnlyReloads() async {

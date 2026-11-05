@@ -195,7 +195,7 @@ public enum BrowserImport {
     guard
       let expression = try? NSRegularExpression(
         pattern:
-          #"(?is)<H3\b[^>]*>(.*?)</H3>|<A\b[^>]*\bHREF\s*=\s*["']([^"']+)["'][^>]*>(.*?)</A>|</?DL\b[^>]*>"#
+          #"(?is)<H3\b[^>]*>(.*?)</H3>|<A\b[^>]*\bHREF\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))[^>]*>(.*?)</A>|</?DL\b[^>]*>"#
       )
     else { return [] }
     let range = NSRange(html.startIndex..., in: html)
@@ -208,9 +208,11 @@ public enum BrowserImport {
         pendingFolder = htmlText(String(html[headingRange]))
         continue
       }
-      if let addressRange = Range(match.range(at: 2), in: html),
-        let titleRange = Range(match.range(at: 3), in: html)
-      {
+      let addressRange =
+        Range(match.range(at: 2), in: html)
+        ?? Range(match.range(at: 3), in: html)
+        ?? Range(match.range(at: 4), in: html)
+      if let addressRange, let titleRange = Range(match.range(at: 5), in: html) {
         let address = htmlText(String(html[addressRange]))
         guard valid(address) else { continue }
         let title = htmlText(String(html[titleRange]))

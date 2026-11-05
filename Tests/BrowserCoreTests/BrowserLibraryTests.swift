@@ -390,6 +390,16 @@ private func bookmarkPayload(children: [[String: Any]]) -> [String: Any] {
   #expect(try BrowserImport.read(url).map(\.address) == ["https://example.com"])
 }
 
+@Test func browserImportReadsUnquotedBookmarkLinks() throws {
+  let url = FileManager.default.temporaryDirectory.appending(path: "Bookmarks-\(UUID()).html")
+  defer { try? FileManager.default.removeItem(at: url) }
+  try #"<DL><DT><A HREF=https://example.com/?a=1&amp;b=2>Example</A></DL>"#
+    .write(to: url, atomically: true, encoding: .utf8)
+
+  let items = try BrowserImport.read(url)
+  #expect(items.map(\.address) == ["https://example.com/?a=1&b=2"])
+}
+
 @Test func firefoxJSONRootDoesNotBecomeAnImportedFolder() throws {
   let url = FileManager.default.temporaryDirectory.appending(path: "Firefox-\(UUID()).json")
   defer { try? FileManager.default.removeItem(at: url) }

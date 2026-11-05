@@ -70,10 +70,14 @@ final class BrowserSettingsState {
   }
 
   func openExtensions(for profileID: UUID) {
-    guard
-      let store = workspace.stores.values.first(where: {
+    let focused = workspace.workspace.focusedWindowID.flatMap { workspace.stores[$0] }
+    let store =
+      (focused?.session.spaces.contains { $0.profileID == profileID } == true ? focused : nil)
+      ?? workspace.stores.values.first(where: {
         $0.session.spaces.contains { $0.profileID == profileID }
-      }), let spaceID = store.session.spaces.first(where: { $0.profileID == profileID })?.id
+      })
+    guard
+      let store, let spaceID = store.session.spaces.first(where: { $0.profileID == profileID })?.id
     else {
       return
     }

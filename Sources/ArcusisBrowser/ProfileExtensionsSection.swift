@@ -95,11 +95,23 @@ private struct SharedExtensionSettingsSection: View {
 
   var body: some View {
     if model.rows.isEmpty {
-      ContentUnavailableView(
-        SettingsL10n.string("No Extensions"), systemImage: "puzzlepiece.extension",
-        description: Text(SettingsL10n.string("Extensions you add appear here for this profile."))
-      )
-      .padding(.vertical, 12)
+      if let error = model.error {
+        VStack(spacing: 8) {
+          ContentUnavailableView(
+            SettingsL10n.string("Extensions unavailable"), systemImage: "exclamationmark.triangle",
+            description: Text(error)
+          )
+          Button(SettingsL10n.string("Retry")) { Task { await model.reload() } }
+            .accessibilityIdentifier("settings.extensions.reload")
+        }
+        .padding(.vertical, 12)
+      } else {
+        ContentUnavailableView(
+          SettingsL10n.string("No Extensions"), systemImage: "puzzlepiece.extension",
+          description: Text(SettingsL10n.string("Extensions you add appear here for this profile."))
+        )
+        .padding(.vertical, 12)
+      }
     } else {
       VStack(alignment: .leading, spacing: 12) {
         ForEach(model.rows) { row in
@@ -141,7 +153,13 @@ private struct SharedExtensionSettingsSection: View {
             }
           }
         }
-        if let error = model.error { Text(error).foregroundStyle(.red) }
+        if let error = model.error {
+          HStack {
+            Text(error).foregroundStyle(.red)
+            Button(SettingsL10n.string("Retry")) { Task { await model.reload() } }
+              .accessibilityIdentifier("settings.extensions.reload")
+          }
+        }
       }
       .padding(.vertical, 8)
     }

@@ -50,7 +50,7 @@ final class SharedExtensionSettingsModel {
         let list = try await adapter.list(profileID: profileID)
         installed[profileID] = Dictionary(uniqueKeysWithValues: list.map { ($0.id, $0) })
       } catch {
-        self.error = String(describing: error)
+        self.error = SettingsL10n.string("Could not load extensions. Try again.")
       }
     }
     rows = ids.map { id in

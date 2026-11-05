@@ -6,6 +6,14 @@ import AppKit
 import BrowserCore
 import SwiftUI
 
+enum BrowserSettingsCopy {
+  static func macPermissionsFooter(language: BrowserLanguage = .currentLaunchLanguage) -> String {
+    BrowserLocalization.string(
+      "Websites can only use what macOS allows. If a site's request is blocked here, change it in System Settings.",
+      table: "Settings", language: language)
+  }
+}
+
 struct BrowserSettingsProfile: Identifiable {
   let id: UUID
   let name: String
@@ -694,9 +702,7 @@ private struct MacPermissionsSection: View {
     } header: {
       Text(SettingsL10n.string("macOS Permissions"))
     } footer: {
-      Text(
-        "Websites can only use what macOS allows. If a site's request is blocked here, change it in System Settings."
-      )
+      Text(BrowserSettingsCopy.macPermissionsFooter())
     }
     .task { await refresh() }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))

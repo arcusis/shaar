@@ -116,6 +116,7 @@ struct BrowserSettingsView: View {
   @Binding var sidebarInitiallyVisible: Bool
   @Binding var selectedSearchEngine: String
   let storageNotice: String?
+  let downloadDirectoryErrors: [UUID: String]
   let onRestart: (() -> String?)?
   let onAddProfile: () -> Void
   let onRenameProfile: (UUID, String) -> Bool
@@ -141,6 +142,7 @@ struct BrowserSettingsView: View {
     profiles: [BrowserSettingsProfile], searchEngines: [BrowserSettingsChoice],
     selectedProfileID: Binding<UUID?>, sidebarInitiallyVisible: Binding<Bool>,
     selectedSearchEngine: Binding<String>, storageNotice: String? = nil,
+    downloadDirectoryErrors: [UUID: String] = [:],
     onRestart: (() -> String?)? = nil,
     onAddProfile: @escaping () -> Void = {},
     onRenameProfile: @escaping (UUID, String) -> Bool = { _, _ in false },
@@ -167,6 +169,7 @@ struct BrowserSettingsView: View {
     _sidebarInitiallyVisible = sidebarInitiallyVisible
     _selectedSearchEngine = selectedSearchEngine
     self.storageNotice = storageNotice
+    self.downloadDirectoryErrors = downloadDirectoryErrors
     self.onRestart = onRestart
     self.onAddProfile = onAddProfile
     self.onRenameProfile = onRenameProfile
@@ -526,6 +529,11 @@ struct BrowserSettingsView: View {
               }
               .accessibilityIdentifier("settings.downloadFolder.reset")
             }
+          }
+          if let error = downloadDirectoryErrors[profile.id] {
+            Text(error)
+              .foregroundStyle(.red)
+              .accessibilityIdentifier("settings.downloadFolder.error")
           }
         }
       }

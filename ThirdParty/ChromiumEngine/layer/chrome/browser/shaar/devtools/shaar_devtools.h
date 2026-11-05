@@ -65,6 +65,8 @@ bool StartProtocolRequest(scoped_refptr<content::DevToolsAgentHost> host,
 // Selects the page protocol target for the scoped tab, including OTR tabs.
 scoped_refptr<content::DevToolsAgentHost> ProtocolAgentHostFor(
     content::WebContents* contents);
+bool IsProtocolPageTargetFor(content::WebContents* contents,
+                             content::DevToolsAgentHost* host);
 
 shaar_error_code HandleDevToolsOperation(
     shaar::ShaarEngineContext* context,

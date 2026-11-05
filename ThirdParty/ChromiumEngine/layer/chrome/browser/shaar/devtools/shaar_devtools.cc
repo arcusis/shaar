@@ -677,13 +677,20 @@ shaar_error_code EncodeProtocolRequest(shaar_bytes args_json,
   return SHAAR_OK;
 }
 
+bool IsProtocolPageTargetFor(content::WebContents* contents,
+                             content::DevToolsAgentHost* host) {
+  return contents && host &&
+         host->GetType() == content::DevToolsAgentHost::kTypePage &&
+         host->GetWebContents() == contents;
+}
+
 scoped_refptr<content::DevToolsAgentHost> ProtocolAgentHostFor(
     content::WebContents* contents) {
   if (!contents)
     return nullptr;
   // A tab target accepts Target/Tracing but not Runtime or Page methods.
   auto host = content::DevToolsAgentHost::GetOrCreateFor(contents);
-  return host && host->GetWebContents() == contents ? host : nullptr;
+  return IsProtocolPageTargetFor(contents, host.get()) ? host : nullptr;
 }
 
 void EmitFrontendStateEvent(shaar_engine* engine,

@@ -61,6 +61,16 @@ import Testing
   }
 }
 
+@Test func bareEmailAddressSearchesInsteadOfNavigatingWithUserInfo() throws {
+  let input = "alice@example.com"
+  #expect(NavigationInput.address(for: input) == nil)
+
+  let destination = try #require(NavigationInput.destination(for: input))
+  let components = try #require(URLComponents(url: destination, resolvingAgainstBaseURL: false))
+  #expect(components.host == "www.google.com")
+  #expect(components.queryItems?.first?.value == input)
+}
+
 @Test func commandSearchKeepsGoogleDefaultAndAcceptsSelectedEngine() throws {
   let session = BrowserSession.fresh()
   let defaultResult = try #require(

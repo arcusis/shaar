@@ -59,6 +59,25 @@ struct SidebarTransferTests {
     #expect(store.sidebarNotice == nil)
   }
 
+  @Test func crossProfileSplitDropExplainsWhyItWasRejected() throws {
+    let store = BrowserStore(session: session())
+    let source = store.session.spaces[0]
+    let other = store.session.spaces[1]
+    let shared = store.session.spaces[2]
+    store.splitTabs(source.tabs[0].id, source.tabs[1].id)
+    let split = try #require(store.session.spaces[0].splits.first)
+    let payload = SidebarTransfer.split(
+      sessionID: store.dragSessionID, sourceSpaceID: source.id, splitID: split.id)
+    let before = store.session
+
+    #expect(!store.acceptSidebarDrop(payload, into: other.id))
+    #expect(store.session == before)
+    #expect(store.sidebarNotice == "Split stacks can move only between spaces sharing a profile.")
+    #expect(store.acceptSidebarDrop(payload, into: shared.id))
+    #expect(store.sidebarNotice == nil)
+    try store.session.validate()
+  }
+
   @Test func dropsPersistOrderAndOwnershipWithoutPersistingTheirRuntimeAuthority() throws {
     let folder = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: folder) }

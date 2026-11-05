@@ -75,7 +75,7 @@ public struct BrowserDownload: Identifiable, Equatable, Sendable {
     if ["http", "https"].contains(url.scheme?.lowercased() ?? ""), let host = url.host() {
       return host
     }
-    return url.scheme == "chrome-extension"
+    return url.scheme?.lowercased() == "chrome-extension"
       ? BrowserLocalization.string("Extension") : BrowserLocalization.string("Download")
   }
 }

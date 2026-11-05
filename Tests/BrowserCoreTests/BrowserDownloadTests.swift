@@ -50,6 +50,7 @@ import Testing
       dangerous: false, offTheRecord: false, received: 1, total: 1, startTime: 0)?.source
   }
   #expect(source("chrome-extension://abcdefghijklmnopabcdefghijklmnop/file") == "Extension")
+  #expect(source("CHROME-EXTENSION://abcdefghijklmnopabcdefghijklmnop/file") == "Extension")
   #expect(source("ftp://files.example.com/file") == "Download")
   #expect(source("not a url") == "Download")
   #expect(source("https://" + String(repeating: "a", count: 8200) + ".example") == "Download")

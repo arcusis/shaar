@@ -53,6 +53,8 @@ import Testing
   #expect(source("ftp://files.example.com/file") == "Download")
   #expect(source("not a url") == "Download")
   #expect(source("https://" + String(repeating: "a", count: 8200) + ".example") == "Download")
+  #expect(source("DATA:text/plain,secret") == "Generated file")
+  #expect(source("BLOB:https://docs.example.com/id") == "docs.example.com")
 }
 
 @Test func downloadActionsFollowStateAndPause() {

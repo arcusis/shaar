@@ -60,7 +60,11 @@ public struct BrowserTab: Codable, Identifiable, Equatable, Sendable {
   ) {
     self.id = id
     self.url = url
-    self.title = title ?? url.host() ?? url.absoluteString
+    if let title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      self.title = title
+    } else {
+      self.title = url.host() ?? url.absoluteString
+    }
     self.isPinned = isPinned
     self.folderID = folderID
   }
@@ -637,7 +641,9 @@ public struct BrowserSession: Codable, Equatable, Sendable {
       let space = spaces.firstIndex(where: { $0.tabs.contains { $0.id == id } }),
       let tab = spaces[space].tabs.firstIndex(where: { $0.id == id })
     else { return false }
-    let title = title.isEmpty ? url.host() ?? url.absoluteString : title
+    let title =
+      title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      ? url.host() ?? url.absoluteString : title
     guard spaces[space].tabs[tab].url != url || spaces[space].tabs[tab].title != title else {
       return false
     }

@@ -10,10 +10,15 @@ BOOL ARCIsCanonicalID(NSString *value);
 NSString *ARCValidatedProfileID(NSString *profileID);
 
 @interface ARCShaarRuntime (DevToolsTransport)
+- (nullable NSString *)shaarDevToolsProfileIDForTabID:(NSString *)tabID;
 - (BOOL)shaarDevToolsOwnsTabID:(NSString *)tabID profileID:(NSString *)profileID
                     windowID:(NSString *)windowID;
 - (void)shaarDevToolsCall:(NSString *)method params:(NSDictionary *)params
               capability:(NSUInteger)capability tabID:(NSString *)tabID
                profileID:(NSString *)profileID windowID:(NSString *)windowID
               completion:(void (NS_SWIFT_UI_ACTOR ^)(NSDictionary<NSString *, id> *, NSError *))completion;
+- (void)shaarPrivateDevToolsCall:(NSString *)method params:(NSDictionary *)params
+                     capability:(NSUInteger)capability tabID:(NSString *)tabID
+                       windowID:(NSString *)windowID contextID:(NSString *)contextID
+                     completion:(void (NS_SWIFT_UI_ACTOR ^)(NSDictionary<NSString *, id> *, NSError *))completion;
 @end

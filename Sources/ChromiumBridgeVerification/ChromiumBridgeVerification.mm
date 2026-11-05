@@ -3,7 +3,40 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #import "include/ChromiumBridgeVerification.h"
+#import "../ChromiumBridge/ChromiumProbeRoot.h"
+#import "../ChromiumBridge/ChromiumRuntimeInternal.h"
 #import "../ChromiumBridge/ChromiumShaarPrivateSupport.h"
+
+#include <cstdlib>
+#include <cstring>
+
+#include "../../ThirdParty/ChromiumEngine/layer/chrome/browser/shaar/public/shaar_engine.h"
+
+namespace {
+BOOL ProbeCaptureAllowed(void) {
+  const char *testing = std::getenv("SHAAR_ENGINE_TESTING");
+  if (!testing || std::strcmp(testing, "1") != 0) return NO;
+  NSArray<NSString *> *arguments = NSProcessInfo.processInfo.arguments;
+  NSUInteger index = [arguments indexOfObject:@"--probe-data-dir"];
+  if (index == NSNotFound || index + 1 >= arguments.count) return NO;
+  return ARCProbeRootIsOwned([NSURL fileURLWithPath:arguments[index + 1]]);
+}
+
+NSDictionary *ProbeCaptureParameters(void) {
+  return @{@"format": @"png", @"fromSurface": @YES,
+           @"captureBeyondViewport": @NO};
+}
+}  // namespace
+
+NSData *ARCProbePNGFromDevToolsResult(NSDictionary *result) {
+  NSString *encoded = result[@"data"];
+  if (![encoded isKindOfClass:NSString.class] || encoded.length > 44 * 1024 * 1024)
+    return nil;
+  NSData *data = [[NSData alloc] initWithBase64EncodedString:encoded options:0];
+  static const unsigned char signature[] = {137, 80, 78, 71, 13, 10, 26, 10};
+  return data.length >= sizeof(signature) &&
+      std::memcmp(data.bytes, signature, sizeof(signature)) == 0 ? data : nil;
+}
 
 static NSError *ProbeUnsupported(void) {
   return [NSError errorWithDomain:@"org.arcusis.shaar.probe" code:1
@@ -57,7 +90,32 @@ void ARCCompletePrivateQuitDialogCancellation(
 - (BOOL)probeInspectFound { return NO; }
 - (NSDictionary *)probeInspectAudit { return nil; }
 - (NSDictionary *)probeExternalAppLaunchAuditForURL:(NSString *)url { return nil; }
-- (void)captureProbeTabID:(NSString *)tabID completion:(void (^)(NSData *))completion { completion(nil); }
+- (void)captureProbeTabID:(NSString *)tabID completion:(void (^)(NSData *))completion {
+  if (![self isKindOfClass:ARCShaarRuntime.class] || !ProbeCaptureAllowed()) {
+    completion(nil);
+    return;
+  }
+  ARCShaarRuntime *runtime = (ARCShaarRuntime *)self;
+  NSString *profileID = [runtime shaarDevToolsProfileIDForTabID:tabID];
+  NSString *windowID = [runtime windowIDForTabID:tabID];
+  if (![runtime shaarDevToolsOwnsTabID:tabID profileID:profileID windowID:windowID]) {
+    completion(nil);
+    return;
+  }
+  __weak ARCShaarRuntime *weakRuntime = runtime;
+  [runtime shaarDevToolsCall:@"Page.captureScreenshot" params:ProbeCaptureParameters()
+                 capability:SHAAR_DEVTOOLS_CAPABILITY_INSPECTOR tabID:tabID
+                  profileID:profileID windowID:windowID
+                 completion:^(NSDictionary *reply, NSError *error) {
+    ARCShaarRuntime *owner = weakRuntime;
+    if (error || !owner || !ProbeCaptureAllowed() ||
+        ![owner shaarDevToolsOwnsTabID:tabID profileID:profileID windowID:windowID]) {
+      completion(nil);
+      return;
+    }
+    completion(ARCProbePNGFromDevToolsResult(reply));
+  }];
+}
 - (void)captureMarketingProbeTabID:(NSString *)tabID completion:(void (^)(NSData *))completion { completion(nil); }
 - (void)evaluatePrivateProbeTabID:(NSString *)tabID script:(NSString *)script
                        completion:(void (^)(NSString *))completion {
@@ -182,7 +240,29 @@ void ARCCompletePrivateQuitDialogCancellation(
 - (void)capturePrivateProbeTabID:(NSString *)tabID windowID:(NSString *)windowID
                        contextID:(NSString *)contextID
                       completion:(void (^)(NSData *, NSString *))completion {
-  completion(nil, @"Shaar native capture probe is unsupported.");
+  if (![self isKindOfClass:ARCShaarRuntime.class] || !ProbeCaptureAllowed()) {
+    completion(nil, @"Private capture requires an owned verification probe.");
+    return;
+  }
+  ARCShaarRuntime *runtime = (ARCShaarRuntime *)self;
+  if (![runtime privateTabOwned:tabID windowID:windowID contextID:contextID]) {
+    completion(nil, @"Private capture target is no longer owned.");
+    return;
+  }
+  __weak ARCShaarRuntime *weakRuntime = runtime;
+  [runtime shaarPrivateDevToolsCall:@"Page.captureScreenshot" params:ProbeCaptureParameters()
+                         capability:SHAAR_DEVTOOLS_CAPABILITY_INSPECTOR tabID:tabID
+                           windowID:windowID contextID:contextID
+                         completion:^(NSDictionary *reply, NSError *error) {
+    ARCShaarRuntime *owner = weakRuntime;
+    if (error || !owner || !ProbeCaptureAllowed() ||
+        ![owner privateTabOwned:tabID windowID:windowID contextID:contextID]) {
+      completion(nil, error.localizedDescription ?: @"Private capture target changed.");
+      return;
+    }
+    NSData *png = ARCProbePNGFromDevToolsResult(reply);
+    completion(png, png ? nil : @"Private renderer returned no PNG capture.");
+  }];
 }
 - (NSDictionary *)normalProbeSelectionAuditForTabID:(NSString *)tabID {
   if (![self isKindOfClass:ARCShaarRuntime.class]) return @{@"supported": @NO};

@@ -54,4 +54,41 @@ final class TabSwitcherFavoriteTests: XCTestCase {
     switcher.commit(store: store)
     XCTAssertEqual(store.session.selectedFavorite?.id, first)
   }
+
+  func testClosingPendingChoiceSelectsNextAvailableTab() throws {
+    let store = BrowserStore()
+    store.perform(.open(URL(string: "https://first.example")!))
+    store.perform(.open(URL(string: "https://second.example")!))
+    store.perform(.open(URL(string: "https://third.example")!))
+    let selected = try XCTUnwrap(store.session.selectedSpace.selectedTabID)
+
+    let switcher = TabSwitcherController()
+    switcher.advance(store: store, reverse: false)
+    XCTAssertEqual(switcher.choices.count, 3)
+    let pending = switcher.choices[switcher.index]
+    let next = switcher.choices[TabRecency.cycle(switcher.index, count: 3, reverse: false)]
+    XCTAssertNotEqual(pending, selected)
+
+    store.closeTab(pending)
+    switcher.commit(store: store)
+
+    XCTAssertEqual(store.session.selectedSpace.selectedTabID, next)
+  }
+
+  func testClosingReversePendingChoiceSelectsPreviousAvailableTab() throws {
+    let store = BrowserStore()
+    for host in ["first", "second", "third"] {
+      store.perform(.open(URL(string: "https://\(host).example")!))
+    }
+    let switcher = TabSwitcherController()
+    switcher.advance(store: store, reverse: true)
+    XCTAssertEqual(switcher.choices.count, 3)
+    let pending = switcher.choices[switcher.index]
+    let previous = switcher.choices[TabRecency.cycle(switcher.index, count: 3, reverse: true)]
+
+    store.closeTab(pending)
+    switcher.commit(store: store)
+
+    XCTAssertEqual(store.session.selectedSpace.selectedTabID, previous)
+  }
 }

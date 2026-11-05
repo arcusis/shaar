@@ -94,6 +94,11 @@ class PipelineGateTests(unittest.TestCase):
             self.assertEqual(PLAN.select_stages(["Notebook/Note.md"], event), (True, True, True))
         self.assertTrue(PLAN.select_stages(["scripts/tool.py"], "merge_group")[2])
 
+    def test_only_pull_requests_use_the_fast_lane(self):
+        self.assertTrue(PLAN.uses_fast_lane("pull_request"))
+        for event in ("merge_group", "push", "schedule", "workflow_dispatch"):
+            self.assertFalse(PLAN.uses_fast_lane(event))
+
     def test_draft_pull_requests_skip_native_stages_and_preserve_website_checks(self):
         for paths in (None, []):
             self.assertEqual(PLAN.select_stages(paths, "pull_request", draft=True), (False, True, True))

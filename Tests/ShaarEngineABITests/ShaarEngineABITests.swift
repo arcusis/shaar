@@ -45,7 +45,7 @@ struct ShaarEngineABITests {
     let loader = try ShaarEngineLoader(resolver: FakeEngine())
     #expect(loader.currentMajor() == 1)
     #expect(loader.implementation == .shaar)
-    #expect(ShaarEngineImplementation.shippingDefault == .ardia)
+    #expect(ShaarEngineImplementation.shippingDefault == .shaar)
   }
 
   @Test func loaderRejectsMismatchedMajorWithTypedError() {

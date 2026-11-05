@@ -103,6 +103,19 @@ final class PrivateWindowProbe {
     "productCancelledQuitRetiresOnlyConfirmedPrivateLease",
   ]
 
+  static func writeEarlyFailure(root: URL, phase: String, runID: String, error: String) throws {
+    let checks = Dictionary(uniqueKeysWithValues: checkNames.map { ($0, false) })
+    let report: [String: Any] = [
+      "schema": 1, "mode": mode, "phase": phase, "runID": runID,
+      "passed": false, "checkCount": checks.count, "requiredCheckCount": checkNames.count,
+      "checks": checks, "expectedFailures": [:], "lastStage": "engine-preflight",
+      "error": error, "productLifecycleBlocker": error,
+      "cleanup": ["windowsRemaining": 0, "contextsRemaining": 0, "passed": false],
+    ]
+    try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
+      .write(to: root.appending(path: "\(phase)-private-window.json"), options: .atomic)
+  }
+
   init(
     runtime: ARCChromiumRuntime, root: URL, fixture: URL, phase: String,
     sourceA: String, sourceB: String, normalTab: String, runID: String,
@@ -125,23 +138,32 @@ final class PrivateWindowProbe {
       restorePrivateCallbackAudit()
       return result
     } catch {
-      await cleanupOwnedObjects()
-      restorePrivateCallbackAudit()
       if productLifecycleBlocker?.isEmpty != false {
         productLifecycleBlocker = error.localizedDescription
       }
       for name in Self.checkNames where name.hasPrefix("product") {
         if checks[name] == nil { checks[name] = false }
       }
+      // Preserve the cause before native cleanup, which can itself abort the process.
+      try? writeReport(runID: runID)
+      await cleanupOwnedObjects()
+      restorePrivateCallbackAudit()
       try? writeReport(runID: runID)
       throw error
     }
   }
 
+  private func markStage(_ name: String) {
+    stage = name
+    try? name.write(
+      to: root.appending(path: "\(phase)-private-window-stage.txt"), atomically: true,
+      encoding: .utf8)
+  }
+
   private func exercise() async throws -> [String] {
     let marker = runID.lowercased()
     installPrivateCallbackAudit()
-    stage = "normal-fixture-preflight"
+    markStage("normal-fixture-preflight")
     let contextA = UUID().uuidString.uppercased()
     let contextB = UUID().uuidString.uppercased()
     let contextC = UUID().uuidString.uppercased()
@@ -175,14 +197,19 @@ final class PrivateWindowProbe {
         "Normal fixture account state was not established before private work.")
     }
 
+    markStage("opening-main-private-context")
+    checks["sourceProfileAccepted"] = try await begin(contextA, sourceA)
+    privateContexts.append(contextA)
+    markStage("opening-pending-private-contexts")
     checks["sameSourcePendingCallbacksShareOTR"] = await beginReentrantPair(
-      contextA, UUID().uuidString.uppercased(), sourceA)
+      UUID().uuidString.uppercased(), UUID().uuidString.uppercased(), sourceA)
+    markStage("authoring-normal-history")
     if phase == "initial" {
       try await authorNormalHistory(path: normalPath)
     }
     checks["normalHistoryIncludesAuthoredVisit"] = try await history(
       sourceA, contains: normalPath)
-    checks["sourceProfileAccepted"] = try await begin(contextA, sourceA)
+    markStage("validating-private-context-identity")
     checks["unknownSourceRejected"] = try await rejectedContext(
       UUID().uuidString.uppercased(), "unknown-source")
     checks["otrSourceRejected"] = try await rejectedAsOTR(contextA)
@@ -193,18 +220,23 @@ final class PrivateWindowProbe {
     let w2 = UUID().uuidString.uppercased()
     let t1 = UUID().uuidString.uppercased()
     let t2 = UUID().uuidString.uppercased()
+    markStage("opening-private-windows")
     try open(w1, contextA, t1, fixture.appending(path: "private-window-\(marker)-a").absoluteString)
+    privateWindows.append(w1)
     try open(w2, contextA, t2, fixture.appending(path: "private-window-\(marker)-b").absoluteString)
-    privateWindows += [w1, w2]
-    privateContexts.append(contextA)
+    privateWindows.append(w2)
+    markStage("verifying-private-renderers")
     guard runtime.selectPrivateTabID(t1, windowID: w1, contextID: contextA) else {
       throw PrivateWindowFailure("Private first tab could not be selected.")
     }
+    markStage("waiting-for-first-private-document")
     try await waitForFixture(tabID: t1, privateTab: true, contextID: contextA)
+    markStage("checking-private-privacy")
     let privacy = try await PrivatePrivacyProbe(
       runtime: runtime, root: root, fixture: fixture, phase: phase,
       tabID: t1, windowID: w1, contextID: contextA, normalTabID: normalTab
     ).run()
+    markStage("checking-private-sharing")
     checks["privatePrivacyDefaultsAndCookieAllow"] = privacy
     // Lifecycle sharing below deliberately opts into this origin after proving default denial.
     _ = runtime.selectPrivateTabID(t2, windowID: w2, contextID: contextA)
@@ -778,6 +810,8 @@ final class PrivateWindowProbe {
             "privateEvaluationStale": audit["privateEvaluationStale"] as? Bool == true,
             "privateEvaluationSucceeded": audit["privateEvaluationSucceeded"] as? Bool == true,
             "privateEvaluationTimedOut": audit["privateEvaluationTimedOut"] as? Bool == true,
+            "probeEvaluationError": audit["probeEvaluationError"] as? String ?? "",
+            "documentStates": audit["documentStates"] ?? [],
           ]
           if lastDocumentAudit["allTabsLoaded"] as? Bool != true {
             try await Task.sleep(for: .milliseconds(100))

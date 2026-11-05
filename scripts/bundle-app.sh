@@ -95,14 +95,11 @@ if [[ ${SHAAR_TEST_SHAAR_ENGINE:-0} == 1 ]] && ! $with_verification; then
   echo 'The Shaar test engine is allowed only in a verification bundle.' >&2
   exit 2
 fi
-if $preview_shaar_engine && { ! $with_engine || $with_updates; }; then
-  echo '--preview-shaar-engine requires --with-engine and excludes --with-updates.' >&2
+if $preview_shaar_engine && { ! $with_engine || $with_updates || $with_verification; }; then
+  echo '--preview-shaar-engine requires --with-engine and excludes --with-updates and --verification.' >&2
   exit 2
 fi
-engine_pin=ThirdParty/ArdiaCore/pin.json
-if $preview_shaar_engine; then
-  engine_pin=ThirdParty/ChromiumEngine/preview-pin.json
-fi
+engine_pin=ThirdParty/ChromiumEngine/pin.json
 
 bundle_identifier=$SHAAR_BUNDLE_IDENTIFIER
 bundle_name=Shaar
@@ -176,10 +173,10 @@ cp Resources/Branding/Shaar.icns "$app/Contents/Resources/Shaar.icns"
 cp -R Resources/ExtensionManager "$app/Contents/Resources/ExtensionManager"
 mkdir -p "$app/Contents/Resources/Privacy"
 cp Resources/Privacy/tracker-domains.json "$app/Contents/Resources/Privacy/"
-mkdir -p "$app/Contents/Resources/ArdiaCore"
-cp ThirdParty/ArdiaCore/LICENSE ThirdParty/ArdiaCore/NOTICE \
-  "$app/Contents/Resources/ArdiaCore/"
-cp "$engine_pin" "$app/Contents/Resources/ArdiaCore/pin.json"
+mkdir -p "$app/Contents/Resources/ChromiumEngine"
+cp "$engine_pin" "$app/Contents/Resources/ChromiumEngine/pin.json"
+cp LICENSE NOTICE THIRD_PARTY_NOTICES.md \
+  "$app/Contents/Resources/ChromiumEngine/"
 # The executable links Sparkle, so every bundle embeds it. Copy the pinned SwiftPM artifact
 # unchanged: its own signatures and entitlements stay intact for release re-signing.
 mkdir -p "$app/Contents/Frameworks"
@@ -189,32 +186,17 @@ cp "$scratch_path/artifacts/sparkle/Sparkle/LICENSE" "$app/Contents/Resources/Sp
 if $with_engine; then
   if $with_verification && [[ ${SHAAR_TEST_SHAAR_ENGINE:-0} == 1 ]]; then
     framework=$(bash scripts/fetch-shaar-test-engine.sh)
-  elif $with_verification && [[ ${SHAAR_TEST_BUILT_ENGINE:-0} == 1 ]]; then
-    receipt=build/EngineSource/receipt.json
-    jq -e '.status == "succeeded" and (.framework.path | type == "string")' "$receipt" >/dev/null
-    built_binary="build/EngineSource/$(jq -er .framework.path "$receipt")"
-    [[ $(shasum -a 256 "$built_binary" | cut -d ' ' -f 1) == $(jq -er .framework.sha256 "$receipt") ]] || {
-      echo 'Built engine does not match its source-build receipt.' >&2
-      exit 1
-    }
-    framework=${built_binary%/Versions/*/Chromium Framework}
-    [[ $framework != "$built_binary" && -d "$framework/Versions" ]] || {
-      echo 'Built engine receipt has an unexpected framework path.' >&2
-      exit 1
-    }
   else
-    framework=$(SHAAR_ENGINE_PIN="$engine_pin" bash scripts/fetch-engine.sh)
+    framework=$(bash scripts/fetch-engine.sh)
   fi
   # Keep version symlinks and upstream resources. Re-sign nested code inside out.
   ditto "$framework" "$app/Contents/Frameworks/Chromium Framework.framework"
+  python3 scripts/rebrand-engine-framework.py \
+    "$app/Contents/Frameworks/Chromium Framework.framework"
   sign_engine_framework "$app/Contents/Frameworks/Chromium Framework.framework" adhoc_sign
 fi
 # Only release bundles carry the update feed; without it the app never starts Sparkle.
 update_keys=''
-backend_key=''
-if $preview_shaar_engine; then
-  backend_key='  <key>ShaarEngineBackend</key><string>shaar</string>'
-fi
 if $with_updates; then
   update_keys="  <key>SUFeedURL</key><string>$SHAAR_FEED_URL</string>
   <key>SUPublicEDKey</key><string>$SHAAR_SPARKLE_PUBLIC_ED_KEY</string>
@@ -255,7 +237,6 @@ cat > "$app/Contents/Info.plist" <<PLIST
   <key>NSLocationWhenInUseUsageDescription</key><string>Allow websites you approve to use your location, such as maps and delivery sites.</string>
   <key>NSBluetoothAlwaysUsageDescription</key><string>Allow websites you approve to connect to Bluetooth devices, such as security keys and phones used for passkey sign-in.</string>
 $update_keys
-$backend_key
 $preview_keychain_key
 </dict></plist>
 PLIST

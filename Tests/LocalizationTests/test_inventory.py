@@ -44,7 +44,7 @@ class InventoryTests(unittest.TestCase):
             "Resources/ExtensionManager/manager.html": '<title>Shaar Extension Manager</title>\n',
             "Resources/ExtensionManager/manifest.json": '{"name": "Shaar Extension Manager"}\n',
             "Sources/ChromiumBridge/ChromiumExtensions.mm":
-                'openExtensionView:url profile:profile kind:@"popup"\n',
+                'return info ? [self shaarExtensionPopupViewForID:popupID windowID:info[@"windowID"]] : nil;\n',
         }
         for name, text in files.items():
             path = self.root / name
@@ -95,6 +95,8 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(translated["source_file"], "Sources/BrowserCore/View.swift")
         self.assertEqual(translated["source_line"], "1")
         self.assertTrue(any(row["disposition"] == "retained product brand" for row in rows))
+        self.assertTrue(any(row["key"] == "Extension popup visibility boundary" and
+                            row["english"] == "engine-owned popup view" for row in rows))
         self.assertFalse((self.root / "Notebook/Hebrew_String_Inventory.csv").exists())
         self.assertEqual(self.run_check("--write-inventory"), 0)
         self.assertEqual(output.read_bytes(), expected)

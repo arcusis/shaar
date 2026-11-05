@@ -566,7 +566,8 @@ final class BrowserEngine {
   }
 
   func reconcile() {
-    guard !isClosed, !reconciling, !receivingNativeSelection, let store else { return }
+    guard !isClosed, !runtime.isQuitting, !reconciling, !receivingNativeSelection, let store
+    else { return }
     reconciling = true
     defer { reconciling = false }
     let session = store.session
@@ -683,6 +684,18 @@ final class BrowserEngine {
     runtime.activateProfileID(session.selectedSpace.profileID.uuidString, windowID: windowID)
     if let selected = session.selectedPage?.tab.id {
       runtime.activateTabID(selected.uuidString)
+      // Chromium can move the active WebContents to its own BrowserView while
+      // processing native activation. Restore the page after that queued call.
+      DispatchQueue.main.async { [weak self] in
+        guard let self, !self.isClosed,
+          self.store?.session.selectedPage?.tab.id == selected,
+          self.runtime.windowID(forTabID: selected.uuidString) == self.windowID,
+          let view = self.runtime.view(forTabID: selected.uuidString),
+          let window = self.runtime.window(forID: self.windowID)
+        else { return }
+        _ = ChromiumPageContainerView.restoreSelectedPage(
+          view, tabID: selected, in: window)
+      }
     } else {
       runtime.clearActiveTab(inWindowID: windowID)
     }

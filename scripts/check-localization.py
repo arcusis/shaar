@@ -108,13 +108,13 @@ def inventory_rows():
          "hebrew": "unchanged", "disposition": "never rewritten during locale change"},
         {"source_file": "Resources/ExtensionManager/manager.html", "source_line": source_line("Resources/ExtensionManager/manager.html", "<title>"),
          "table": "Disposition", "key": "Shaar Extension Manager document title", "english": "Shaar Extension Manager",
-         "hebrew": "retained", "disposition": "internal extension view is never a browser tab or session entry; ChromiumExtensions.mm opens it as popup service view"},
+         "hebrew": "retained", "disposition": "internal extension resource; popup presentation uses a Shaar-owned view"},
         {"source_file": "Resources/ExtensionManager/manifest.json", "source_line": source_line("Resources/ExtensionManager/manifest.json", '"name":'),
          "table": "Disposition", "key": "Extension Manager component name and description", "english": "Shaar Extension Manager; built-in management API component",
          "hebrew": "retained", "disposition": "internal component metadata, not displayed browser UI"},
-        {"source_file": "Sources/ChromiumBridge/ChromiumExtensions.mm", "source_line": source_line("Sources/ChromiumBridge/ChromiumExtensions.mm", "openExtensionView:url profile:profile kind:@\"popup\""),
-         "table": "Disposition", "key": "Extension Manager visibility boundary", "english": "internal extension popup service view",
-         "hebrew": "not translated", "disposition": "source confirms component view is not a tab or persisted session page"},
+        {"source_file": "Sources/ChromiumBridge/ChromiumExtensions.mm", "source_line": source_line("Sources/ChromiumBridge/ChromiumExtensions.mm", 'return info ? [self shaarExtensionPopupViewForID:popupID windowID:info[@"windowID"]] : nil;'),
+         "table": "Disposition", "key": "Extension popup visibility boundary", "english": "engine-owned popup view",
+         "hebrew": "not translated", "disposition": "borrowed Shaar popup host view bound to its owning window"},
     ])
     return sorted(rows, key=lambda row: (row["source_file"], int(row["source_line"]), row["table"], row["key"]))
 

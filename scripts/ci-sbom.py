@@ -54,7 +54,8 @@ def build_document(app: Path, candidate: Path, revision: str, pin: dict, depende
     app_package.update(filesAnalyzed=True, checksums=candidate_checksums,
                        packageVerificationCode=dict(packageVerificationCodeValue=verification))
     app_package["comment"] = "CI-built ad-hoc signed candidate; no Developer ID signature, notarization or Sparkle signing."
-    engine = package("SPDXRef-ArdiaCore", "ArdiaCore Chromium", pin["chromiumVersion"], pin["archiveURL"])
+    engine = package("SPDXRef-ShaarEngine", "Shaar Chromium", pin["releaseTag"].split("engine-", 1)[1].split("-shaar.", 1)[0],
+                     f"https://github.com/arcusis/shaar/releases/download/{pin['releaseTag']}/{pin['asset']}")
     engine["checksums"] = [dict(algorithm="SHA256", checksumValue=pin["sha256"])]
     packages = [app_package, engine]
     for index, dependency in enumerate(dependencies):
@@ -81,7 +82,7 @@ def main() -> None:
     candidate = directory / "Shaar-unsigned-candidate.zip"
     subprocess.run(["ditto", "-c", "-k", "--keepParent", str(app), str(candidate)], check=True)
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
-    pin = json.loads((ROOT / "ThirdParty/ArdiaCore/pin.json").read_text())
+    pin = json.loads((ROOT / "ThirdParty/ChromiumEngine/pin.json").read_text())
     dependencies = json.loads((ROOT / "Package.resolved").read_text())["pins"]
     document, links = build_document(app, candidate, revision, pin, dependencies)
     (directory / "sbom.spdx.json").write_text(json.dumps(document, indent=2) + "\n")

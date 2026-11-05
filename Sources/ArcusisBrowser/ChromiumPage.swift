@@ -32,15 +32,30 @@ final class ChromiumPageContainerView: NSView {
   /// Containers on screen. During split animations an outgoing container can briefly hold a
   /// page that a newer container also shows; on teardown the page is handed back.
   private static let live = NSHashTable<ChromiumPageContainerView>.weakObjects()
+  private static var nextSelectionOrder: UInt64 = 0
+
+  static func restoreSelectedPage(_ page: NSView, tabID: UUID, in window: NSWindow) -> Bool {
+    guard
+      let target = live.allObjects
+        .filter({ $0.shownTabID == tabID && $0.window === window })
+        .max(by: { $0.selectionOrder < $1.selectionOrder })
+    else { return false }
+    _ = target.attach(page)
+    page.isHidden = false
+    return page.superview === target && page.window === window
+  }
 
   private(set) weak var pageView: NSView?
   private var retainedPages: [UUID: NSView] = [:]
   private var shownTabID: UUID?
+  private var selectionOrder: UInt64 = 0
 
   @discardableResult
   func select(_ page: NSView?, tabID: UUID, liveTabs: Set<UUID>) -> Bool {
     Self.live.add(self)
     shownTabID = page == nil ? nil : tabID
+    Self.nextSelectionOrder &+= 1
+    selectionOrder = Self.nextSelectionOrder
     wantsLayer = true
     layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
     for id in retainedPages.keys.filter({ !liveTabs.contains($0) }) {

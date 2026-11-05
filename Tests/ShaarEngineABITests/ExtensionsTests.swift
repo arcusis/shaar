@@ -35,32 +35,13 @@ private actor FakeExtensionsTransport: ShaarExtensionsTransport {
   func setListReply(_ value: String) { listReply = Data(value.utf8) }
 }
 
-private actor FakeArdiaExtensions: ArdiaExtensionsBackend {
-  private(set) var listCalls: [UUID] = []
-  private(set) var manageCalls: [(UUID, ShaarExtensionManagementAction)] = []
-
-  func list(profileID: UUID) async throws -> [ShaarExtensionSummary] {
-    listCalls.append(profileID)
-    return [
-      .init(
-        id: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", name: "Ardia", version: "1.0", enabled: true,
-        mayDisable: true, incognitoEnabled: false, source: 1)
-    ]
-  }
-
-  func manage(profileID: UUID, action: ShaarExtensionManagementAction) async throws {
-    manageCalls.append((profileID, action))
-  }
-}
-
 @Suite("Shaar extensions adapter")
 struct ShaarExtensionsAdapterTests {
   @Test func sharedInstallReportsEveryProfileAndNeverHidesPartialFailure() async throws {
     let first = UUID()
     let second = UUID()
     let fake = FakeExtensionsTransport(#"{"schemaVersion":1,"installed":true}"#)
-    let adapter = ShaarExtensionsAdapter(
-      implementation: .shaar, ardia: FakeArdiaExtensions(), shaar: fake)
+    let adapter = ShaarExtensionsAdapter(shaar: fake)
     let result = await adapter.installAcrossProfiles(
       extensionID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", approvedVersion: "1.2.3",
       profileIDs: [first, second])
@@ -101,8 +82,7 @@ struct ShaarExtensionsAdapterTests {
     await fake.setListReply(
       #"{"schemaVersion":1,"extensions":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"Example","version":"1.0","enabled":true,"mayDisable":true,"incognitoEnabled":false,"source":4,"fromWebStore":true}]}"#
     )
-    let adapter = ShaarExtensionsAdapter(
-      implementation: .shaar, ardia: FakeArdiaExtensions(), shaar: fake)
+    let adapter = ShaarExtensionsAdapter(shaar: fake)
     let home = try ShaarExtensionHome(fileURL: file, adapter: adapter)
     let initial = try await home.recordApprovedInstall(
       id, approvedVersion: "1.0", profileIDs: [first])
@@ -119,8 +99,7 @@ struct ShaarExtensionsAdapterTests {
     defer { try? FileManager.default.removeItem(at: file) }
     let fake = FakeExtensionsTransport(#"{"schemaVersion":1,"installed":true}"#)
     await fake.setListReply(#"{"schemaVersion":1,"extensions":[]}"#)
-    let adapter = ShaarExtensionsAdapter(
-      implementation: .shaar, ardia: FakeArdiaExtensions(), shaar: fake)
+    let adapter = ShaarExtensionsAdapter(shaar: fake)
     let home = try ShaarExtensionHome(fileURL: file, adapter: adapter)
     await #expect(throws: ShaarExtensionsAdapterError.installNotConfirmed) {
       try await home.recordApprovedInstall(
@@ -137,8 +116,7 @@ struct ShaarExtensionsAdapterTests {
     await fake.setListReply(
       #"{"schemaVersion":1,"extensions":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"Local","version":"1.0","enabled":true,"mayDisable":true,"incognitoEnabled":false,"source":4,"fromWebStore":false}]}"#
     )
-    let adapter = ShaarExtensionsAdapter(
-      implementation: .shaar, ardia: FakeArdiaExtensions(), shaar: fake)
+    let adapter = ShaarExtensionsAdapter(shaar: fake)
     let home = try ShaarExtensionHome(fileURL: file, adapter: adapter)
     await #expect(throws: ShaarExtensionsAdapterError.installNotConfirmed) {
       try await home.recordApprovedInstall(
@@ -146,16 +124,14 @@ struct ShaarExtensionsAdapterTests {
     }
   }
 
-  @Test func shippingDefaultRemainsArdiaAndDoesNotSubmitToShaar() async throws {
+  @Test func shippingDefaultSubmitsToShaar() async throws {
     let profile = UUID()
-    let ardia = FakeArdiaExtensions()
     let fake = FakeExtensionsTransport(#"{"schemaVersion":1,"extensions":[]}"#)
-    let adapter = ShaarExtensionsAdapter(ardia: ardia, shaar: fake)
+    let adapter = ShaarExtensionsAdapter(shaar: fake)
     let result = try await adapter.list(profileID: profile)
-    #expect(ShaarEngineImplementation.shippingDefault == .ardia)
-    #expect(result.first?.name == "Ardia")
-    #expect(await fake.calls.isEmpty)
-    #expect(await ardia.listCalls == [profile])
+    #expect(ShaarEngineImplementation.shippingDefault == .shaar)
+    #expect(result.isEmpty)
+    #expect(await fake.calls.count == 1)
   }
 
   @Test func listDecodesStrictRowsAndUsesExplicitProfile() async throws {
@@ -163,8 +139,7 @@ struct ShaarExtensionsAdapterTests {
     let fake = FakeExtensionsTransport(
       #"{"schemaVersion":1,"extensions":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"Example","version":"2.1","enabled":false,"mayDisable":true,"incognitoEnabled":false,"source":4}]}"#
     )
-    let adapter = ShaarExtensionsAdapter(
-      implementation: .shaar, ardia: FakeArdiaExtensions(), shaar: fake)
+    let adapter = ShaarExtensionsAdapter(shaar: fake)
     let extensions = try await adapter.list(profileID: profile)
     #expect(
       extensions == [
@@ -185,8 +160,7 @@ struct ShaarExtensionsAdapterTests {
     let fake = FakeExtensionsTransport(
       #"{"schemaVersion":1,"extensions":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"Example","version":"2.1","description":"Details","permissions":["storage"],"hostPermissions":[],"enabled":true,"mayDisable":true,"incognitoEnabled":false,"source":4,"fromWebStore":true}]}"#
     )
-    let adapter = ShaarExtensionsAdapter(
-      implementation: .shaar, ardia: FakeArdiaExtensions(), shaar: fake)
+    let adapter = ShaarExtensionsAdapter(shaar: fake)
     let result = try await adapter.list(profileID: UUID())
     #expect(result.first?.name == "Example")
     #expect(result.first?.fromWebStore == true)
@@ -195,8 +169,7 @@ struct ShaarExtensionsAdapterTests {
   @Test func managementActionsAreClosedAndRequireConfirmedResults() async throws {
     let profile = UUID()
     let fake = FakeExtensionsTransport(#"{"schemaVersion":1,"updated":true}"#)
-    let adapter = ShaarExtensionsAdapter(
-      implementation: .shaar, ardia: FakeArdiaExtensions(), shaar: fake)
+    let adapter = ShaarExtensionsAdapter(shaar: fake)
     try await adapter.manage(
       profileID: profile,
       action: .setEnabled("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", true))
@@ -219,8 +192,7 @@ struct ShaarExtensionsAdapterTests {
     let fake = FakeExtensionsTransport(
       #"{"schemaVersion":1,"extensions":[{"id":"../extension","name":"bad","version":"1","enabled":true,"mayDisable":true,"incognitoEnabled":false,"source":0}]}"#
     )
-    let adapter = ShaarExtensionsAdapter(
-      implementation: .shaar, ardia: FakeArdiaExtensions(), shaar: fake)
+    let adapter = ShaarExtensionsAdapter(shaar: fake)
     await #expect(throws: ShaarExtensionsAdapterError.invalidResponse("malformed extension row")) {
       try await adapter.list(profileID: UUID())
     }

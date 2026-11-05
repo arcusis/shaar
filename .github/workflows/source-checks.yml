@@ -225,7 +225,7 @@ jobs:
           path: build/ci/engine-build
       - name: Identify exact source tree for bundle validation
         run: |
-          echo "CI_BUNDLE_INPUTS=${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**', 'Resources/**', 'Plugins/**', 'ThirdParty/ArdiaCore/**', 'scripts/bundle-app.sh', 'scripts/ci-stage.py', 'scripts/release-config.sh', 'scripts/engine-signing.sh', 'scripts/fetch-engine.sh', 'scripts/stage-browser-resources.py', 'scripts/release_feed.py') }}" >> "$GITHUB_ENV"
+          echo "CI_BUNDLE_INPUTS=${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**', 'Resources/**', 'Plugins/**', 'ThirdParty/ChromiumEngine/**', 'scripts/bundle-app.sh', 'scripts/ci-stage.py', 'scripts/release-config.sh', 'scripts/engine-signing.sh', 'scripts/fetch-engine.sh', 'scripts/rebrand-engine-framework.py', 'scripts/engine_payload.py', 'scripts/verify_engine_bundle.py', 'scripts/stage-browser-resources.py', 'scripts/release_feed.py') }}" >> "$GITHUB_ENV"
           echo "CI_SOURCE_TREE=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_ENV"
       - name: Restore verified bundle and run normal browsing smoke
         run: .venv/bin/python scripts/ci-stage.py basic-browsing
@@ -296,7 +296,7 @@ jobs:
           path: build/ci/engine-build
       - name: Identify exact source tree for bundle validation
         run: |
-          echo "CI_BUNDLE_INPUTS=${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**', 'Resources/**', 'Plugins/**', 'ThirdParty/ArdiaCore/**', 'scripts/bundle-app.sh', 'scripts/ci-stage.py', 'scripts/release-config.sh', 'scripts/engine-signing.sh', 'scripts/fetch-engine.sh', 'scripts/stage-browser-resources.py', 'scripts/release_feed.py') }}" >> "$GITHUB_ENV"
+          echo "CI_BUNDLE_INPUTS=${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**', 'Resources/**', 'Plugins/**', 'ThirdParty/ChromiumEngine/**', 'scripts/bundle-app.sh', 'scripts/ci-stage.py', 'scripts/release-config.sh', 'scripts/engine-signing.sh', 'scripts/fetch-engine.sh', 'scripts/rebrand-engine-framework.py', 'scripts/engine_payload.py', 'scripts/verify_engine_bundle.py', 'scripts/stage-browser-resources.py', 'scripts/release_feed.py') }}" >> "$GITHUB_ENV"
           echo "CI_SOURCE_TREE=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_ENV"
       - name: Capture English and Hebrew screens and verify native engine language
         run: .venv/bin/python scripts/ci-stage.py localization
@@ -338,7 +338,7 @@ jobs:
       shards: ${{ needs.engine-bundle.outputs.shards }}
 
   shaar-engine-simulation:
-    name: Shaar engine simulation (opt-in first tab)
+    name: Shaar engine simulation (first tab)
     needs: plan
     if: needs.plan.outputs.full == 'true'
     runs-on: macos-26
@@ -361,13 +361,13 @@ jobs:
         env:
           SHAAR_TEST_SHAAR_ENGINE: '1'
         run: bash scripts/bundle-app.sh --configuration release --with-engine --verification
-      - name: Open the first tab through the opt-in Shaar backend
+      - name: Open the first tab through the Shaar backend
         run: |
           app="$PWD/build/Shaar Verification.app"
           evidence="$PWD/build/ci/shaar-engine-simulation"
           mkdir -p "$evidence"
           "$app/Contents/MacOS/ShaarVerification" \
-            --probe-shaar-first-tab --shaar-engine-backend=shaar \
+            --probe-shaar-first-tab \
             --probe-framework "$app/Contents/Frameworks/Chromium Framework.framework" \
             --probe-output "$evidence/first-tab.json" \
             --probe-data-dir "$RUNNER_TEMP/shaar-engine-first-tab" \
@@ -380,7 +380,7 @@ jobs:
           app="$PWD/build/Shaar Verification.app"
           evidence="$PWD/build/ci/shaar-engine-simulation"
           "$app/Contents/MacOS/ShaarVerification" \
-            --probe-shaar-first-tab --shaar-engine-backend=shaar \
+            --probe-shaar-first-tab \
             --probe-shaar-private-privacy \
             --probe-framework "$app/Contents/Frameworks/Chromium Framework.framework" \
             --probe-output "$evidence/private-privacy.json" \

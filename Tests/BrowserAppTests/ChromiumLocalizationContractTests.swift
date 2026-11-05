@@ -32,7 +32,7 @@ final class ChromiumLocalizationContractTests: XCTestCase {
     for testCase in cases {
       ARCConfigureLocalization(BrowserLocalization.resourceBundleURL, testCase.language)
 
-      XCTAssertThrowsError(try ARCChromiumRuntime(frameworkURL: frameworkURL)) { error in
+      XCTAssertThrowsError(try ARCShaarRuntime(frameworkURL: frameworkURL)) { error in
         let bridgeError = error as NSError
         XCTAssertEqual(bridgeError.domain, "com.arcusis.browser.chromium")
         XCTAssertEqual(bridgeError.code, 1)

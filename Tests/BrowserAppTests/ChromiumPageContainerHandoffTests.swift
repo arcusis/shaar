@@ -10,6 +10,38 @@ import XCTest
 
 @MainActor
 final class ChromiumPageContainerHandoffTests: XCTestCase {
+  func testNativeActivationReturnsReparentedPageToLatestContainer() {
+    let tab = UUID()
+    let page = NSView()
+    let browser = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 500, height: 400), styleMask: [],
+      backing: .buffered, defer: false)
+    let foreign = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 500, height: 400), styleMask: [],
+      backing: .buffered, defer: false)
+    browser.isReleasedWhenClosed = false
+    foreign.isReleasedWhenClosed = false
+    browser.contentView = NSView(frame: NSRect(x: 0, y: 0, width: 500, height: 400))
+    foreign.contentView = NSView(frame: NSRect(x: 0, y: 0, width: 500, height: 400))
+    defer {
+      browser.close()
+      foreign.close()
+    }
+    let old = ChromiumPageContainerView(frame: browser.contentView!.bounds)
+    let latest = ChromiumPageContainerView(frame: browser.contentView!.bounds)
+    browser.contentView?.addSubview(old)
+    browser.contentView?.addSubview(latest)
+    old.select(page, tabID: tab, liveTabs: [tab])
+    latest.select(page, tabID: tab, liveTabs: [tab])
+    foreign.contentView?.addSubview(page)
+    XCTAssertTrue(page.window === foreign)
+
+    XCTAssertTrue(
+      ChromiumPageContainerView.restoreSelectedPage(page, tabID: tab, in: browser))
+    XCTAssertTrue(page.superview === latest)
+    XCTAssertTrue(page.window === browser)
+  }
+
   func testOutgoingContainerHandsPageBackOnTeardown() {
     let tab = UUID()
     let page = NSView()

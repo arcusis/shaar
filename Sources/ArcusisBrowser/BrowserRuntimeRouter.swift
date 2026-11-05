@@ -64,6 +64,9 @@ final class BrowserRuntimeRouter {
   private var retiredWindows: Set<String> = []
   private var tabOwners: [String: String] = [:]
   private var contexts: [Context: [String: String]] = [:]
+  private var isQuitting = false
+
+  func prepareForQuit() { isQuitting = true }
 
   func register(_ client: BrowserRuntimeClient) throws {
     guard subscriptions[client.windowID] == nil, !retiredWindows.contains(client.windowID) else {
@@ -99,6 +102,7 @@ final class BrowserRuntimeRouter {
 
   func tabClosed(_ id: String) {
     guard let owner = tabOwners.removeValue(forKey: id) else { return }
+    guard !isQuitting else { return }
     subscriptions[owner]?.client?.onTabClosed?(id)
   }
 

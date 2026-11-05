@@ -167,7 +167,7 @@ class ReleaseFeedTests(unittest.TestCase):
 
     def test_engine_prerelease_asset_can_never_be_the_update(self):
         engine_url = ("https://github.com/arcusis/shaar/releases/download/"
-                      "engine-155.0.8059.84-shaar.1/ArdiaCore-0fd438ac5e78.tar.xz")
+                      "engine-155.0.8059.84-shaar.4/ShaarEngine-155.0.8059.84-shaar.4.tar.xz")
         appcast = self._appcast().replace(self.config.zip_url, engine_url)
         with self.assertRaises(release_feed.ReleaseError):
             release_feed.validate_appcast(appcast, self.config)

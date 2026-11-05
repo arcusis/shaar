@@ -22,7 +22,6 @@ import sys
 import tempfile
 import time
 from typing import Any
-from urllib.parse import urlsplit
 
 SCHEMA_VERSION = 1
 SCRIPT_REPO = Path(__file__).resolve().parents[1]
@@ -31,21 +30,20 @@ MAX_METADATA_BYTES = 8 * 1024 * 1024
 MAX_TOOL_OUTPUT = 32 * 1024
 TOOL_TIMEOUT_SECONDS = 30
 TOOL_ENV = {"PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C"}
-PIN_KEYS = {"repository", "sourceCommit", "sourceTag", "engineTree", "archiveURL", "sha256", "chromiumVersion", "architecture"}
-HEX40 = re.compile(r"^[0-9a-f]{40}$")
+PIN_KEYS = {"schemaVersion", "sourceKind", "releaseTag", "asset", "sha256"}
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
 APP_ID = "com.arcusis.browser"
 APP_EXECUTABLE = "ArcusisBrowser"
-FRAMEWORK_ID = "com.ardia.browser.framework"
+FRAMEWORK_ID = "com.arcusis.shaar.framework"
 HELPERS = {
-    "Chromium Helper.app": ("com.ardia.browser.helper", "Chromium Helper"),
-    "Chromium Helper (GPU).app": ("com.ardia.browser.helper", "Chromium Helper (GPU)"),
-    "Chromium Helper (Renderer).app": ("com.ardia.browser.helper.renderer", "Chromium Helper (Renderer)"),
-    "Chromium Helper (Alerts).app": ("com.ardia.browser.framework.AlertNotificationService", "Chromium Helper (Alerts)"),
-    "Chromium Helper (Aperitif).app": ("com.ardia.browser.helper", "Chromium Helper (Aperitif)"),
-    "Chromium Helper (Aperitif GPU).app": ("com.ardia.browser.helper", "Chromium Helper (Aperitif GPU)"),
-    "Chromium Helper (Aperitif Renderer).app": ("com.ardia.browser.helper.renderer", "Chromium Helper (Aperitif Renderer)"),
-    "Chromium Helper (Aperitif Alerts).app": ("com.ardia.browser.framework.AlertNotificationService", "Chromium Helper (Aperitif Alerts)"),
+    "Chromium Helper.app": ("com.arcusis.shaar.helper", "Chromium Helper"),
+    "Chromium Helper (GPU).app": ("com.arcusis.shaar.helper", "Chromium Helper (GPU)"),
+    "Chromium Helper (Renderer).app": ("com.arcusis.shaar.helper.renderer", "Chromium Helper (Renderer)"),
+    "Chromium Helper (Alerts).app": ("com.arcusis.shaar.framework.AlertNotificationService", "Chromium Helper (Alerts)"),
+    "Chromium Helper (Aperitif).app": ("com.arcusis.shaar.helper", "Chromium Helper (Aperitif)"),
+    "Chromium Helper (Aperitif GPU).app": ("com.arcusis.shaar.helper", "Chromium Helper (Aperitif GPU)"),
+    "Chromium Helper (Aperitif Renderer).app": ("com.arcusis.shaar.helper.renderer", "Chromium Helper (Aperitif Renderer)"),
+    "Chromium Helper (Aperitif Alerts).app": ("com.arcusis.shaar.framework.AlertNotificationService", "Chromium Helper (Aperitif Alerts)"),
 }
 
 
@@ -141,25 +139,21 @@ def _stop_process(process: subprocess.Popen) -> None:
 
 
 def _load_pin(repo: Path) -> tuple[dict[str, str], bytes]:
-    raw = _read_regular(repo / "ThirdParty/ArdiaCore/pin.json", MAX_PIN_BYTES)
+    raw = _read_regular(repo / "ThirdParty/ChromiumEngine/pin.json", MAX_PIN_BYTES)
     try:
         pin = json.loads(raw.decode("utf-8"))
     except (UnicodeError, json.JSONDecodeError) as error:
         raise VerifyError("pin_malformed") from error
-    if not isinstance(pin, dict) or set(pin) != PIN_KEYS or any(
-        not isinstance(pin[key], str) or not pin[key] or len(pin[key]) > 2048 for key in PIN_KEYS
-    ):
+    if not isinstance(pin, dict) or set(pin) != PIN_KEYS or pin.get("schemaVersion") != 1 or pin.get("sourceKind") != "shaar":
         raise VerifyError("pin_schema_invalid")
-    if not HEX64.fullmatch(pin["sha256"]) or not HEX40.fullmatch(pin["sourceCommit"]) or not HEX40.fullmatch(pin["engineTree"]):
+    if not isinstance(pin["sha256"], str) or not HEX64.fullmatch(pin["sha256"]):
         raise VerifyError("pin_digest_invalid")
-    urls = (urlsplit(pin["repository"]), urlsplit(pin["archiveURL"]))
-    if any(url.scheme != "https" or not url.hostname or url.username or url.password for url in urls):
-        raise VerifyError("pin_url_invalid")
-    if (not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+-]{0,127}", pin["sourceTag"])
-            or not re.fullmatch(r"[0-9]+(?:\.[0-9]+){1,3}", pin["chromiumVersion"])):
+    tag = pin["releaseTag"]
+    asset = pin["asset"]
+    if (not isinstance(tag, str) or not isinstance(asset, str)
+            or not re.fullmatch(r"engine-155\.0\.8059\.84-shaar\.[1-9][0-9]*", tag)
+            or asset != f"ShaarEngine-{tag.removeprefix('engine-')}.tar.xz"):
         raise VerifyError("pin_version_invalid")
-    if pin["architecture"] != "arm64":
-        raise VerifyError("pin_architecture_unsupported")
     return pin, raw
 
 
@@ -301,7 +295,7 @@ def _contained_framework_links(framework: Path) -> None:
 
 
 def _check_bundle_tree(app: Path, framework: Path, owner: int) -> None:
-    framework_root = framework.resolve(strict=True)
+    app_root = app.resolve(strict=True)
     for parent, directories, files in os.walk(app, followlinks=False):
         for name in directories + files:
             path = Path(parent) / name
@@ -313,7 +307,7 @@ def _check_bundle_tree(app: Path, framework: Path, owner: int) -> None:
                 raise VerifyError("bundle_input_not_user_owned")
             if stat.S_ISLNK(info.st_mode):
                 try:
-                    path.resolve(strict=True).relative_to(framework_root)
+                    path.resolve(strict=True).relative_to(app_root)
                 except (OSError, ValueError) as error:
                     raise VerifyError("bundle_link_escapes") from error
             elif not (stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode)):
@@ -399,15 +393,15 @@ def verify(repo: Path, app: Path, archive: Path) -> dict[str, Any]:
     try:
         pin, pin_raw = _load_pin(repo)
         report["pinSha256"] = hashlib.sha256(pin_raw).hexdigest()
-        packaged = app / "Contents/Resources/ArdiaCore"
+        packaged = app / "Contents/Resources/ChromiumEngine"
         _check_dir(packaged, os.getuid())
         if _read_regular(packaged / "pin.json", MAX_PIN_BYTES, os.getuid()) != pin_raw:
             raise VerifyError("packaged_pin_mismatch")
         report["inputPinVerified"] = True
         license_hashes: dict[str, str] = {}
         license_bytes: dict[str, bytes] = {}
-        for name in ("LICENSE", "NOTICE"):
-            source = _read_regular(repo / "ThirdParty/ArdiaCore" / name, MAX_METADATA_BYTES)
+        for name in ("LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"):
+            source = _read_regular(repo / name, MAX_METADATA_BYTES)
             bundle = _read_regular(packaged / name, MAX_METADATA_BYTES, os.getuid())
             if source != bundle:
                 raise VerifyError("packaged_license_mismatch")
@@ -443,7 +437,13 @@ def verify(repo: Path, app: Path, archive: Path) -> dict[str, Any]:
         report["signatureIdentitySha256"] = hashlib.sha256(json.dumps(
             report["signatureIdentitiesSha256"], sort_keys=True, separators=(",", ":")
         ).encode()).hexdigest()
-        payload = payload_module.compare_payload(archive, framework, pin)
+        version = os.readlink(framework / "Versions/Current")
+        identity_map = {f"Versions/{version}/Resources/Info.plist": FRAMEWORK_ID}
+        identity_map.update({
+            f"Versions/{version}/Helpers/{name}/Contents/Info.plist": identifier
+            for name, (identifier, _) in HELPERS.items()
+        })
+        payload = payload_module.compare_payload(archive, framework, pin, identity_map=identity_map)
         members = payload.get("members", [])
         report["payload"] = {"memberCount": len(members), "mismatchCount": sum(
             item.get("status") != "match" for item in members
@@ -459,12 +459,12 @@ def verify(repo: Path, app: Path, archive: Path) -> dict[str, Any]:
         if not report["payloadMatch"]:
             raise VerifyError("payload_mismatch")
         # Bind source inputs again after all external tools and payload parsing.
-        if hashlib.sha256(_read_regular(repo / "ThirdParty/ArdiaCore/pin.json", MAX_PIN_BYTES)).hexdigest() != report["pinSha256"]:
+        if hashlib.sha256(_read_regular(repo / "ThirdParty/ChromiumEngine/pin.json", MAX_PIN_BYTES)).hexdigest() != report["pinSha256"]:
             raise VerifyError("input_changed_during_verification")
         if _read_regular(packaged / "pin.json", MAX_PIN_BYTES, os.getuid()) != pin_raw:
             raise VerifyError("input_changed_during_verification")
         for name, original in license_bytes.items():
-            if (_read_regular(repo / "ThirdParty/ArdiaCore" / name, MAX_METADATA_BYTES) != original
+            if (_read_regular(repo / name, MAX_METADATA_BYTES) != original
                     or _read_regular(packaged / name, MAX_METADATA_BYTES, os.getuid()) != original):
                 raise VerifyError("input_changed_during_verification")
         if _hash_regular(archive, payload_module.MAX_ARCHIVE_SIZE, os.getuid()) != archive_hash:
@@ -528,8 +528,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     report = verify(SCRIPT_REPO, args.app, args.archive)
     if args.report:
-        inputs = [SCRIPT_REPO / "ThirdParty/ArdiaCore/pin.json", SCRIPT_REPO / "ThirdParty/ArdiaCore/LICENSE",
-                  SCRIPT_REPO / "ThirdParty/ArdiaCore/NOTICE", args.archive, args.app]
+        inputs = [SCRIPT_REPO / "ThirdParty/ChromiumEngine/pin.json", SCRIPT_REPO / "LICENSE",
+                  SCRIPT_REPO / "NOTICE", SCRIPT_REPO / "THIRD_PARTY_NOTICES.md", args.archive, args.app]
         try:
             _atomic_report(args.report, report, inputs)
         except VerifyError as error:

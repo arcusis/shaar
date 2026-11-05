@@ -38,7 +38,7 @@ final class MarketingScreenshots {
     guard let frameworks = Bundle.main.privateFrameworksURL else {
       throw Failure("Run the bundled verification executable.")
     }
-    runtime = try ARCChromiumRuntime(
+    runtime = try ARCShaarRuntime(
       frameworkURL: frameworks.appending(path: "Chromium Framework.framework"))
   }
 

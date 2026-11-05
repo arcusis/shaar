@@ -431,7 +431,11 @@ class SupplyChainTests(unittest.TestCase):
             (app / "Alias").symlink_to("Main")
             candidate = root / "candidate.zip"
             candidate.write_bytes(b"authored candidate")
-            pin = {"chromiumVersion": "1.2.3", "archiveURL": "https://example.invalid/engine.zip", "sha256": "a" * 64}
+            pin = {
+                "schemaVersion": 1, "sourceKind": "shaar",
+                "releaseTag": "engine-1.2.3-shaar.1",
+                "asset": "ShaarEngine-1.2.3-shaar.1.tar.xz", "sha256": "a" * 64,
+            }
             document, links = SBOM.build_document(app, candidate, "b" * 40, pin, [])
             self.assertEqual(len(document["files"]), 2)
             self.assertEqual(links, {"./Shaar.app/Alias": "Main"})
@@ -710,7 +714,7 @@ class EngineTransferTests(unittest.TestCase):
             "CI_SOURCE_TREE": "a" * 40, "CI_BUNDLE_INPUTS": "b" * 64, "CI_TOOLCHAIN_ID": "toolchain",
         }):
             root = Path(temporary)
-            pin = root / "ThirdParty/ArdiaCore/pin.json"
+            pin = root / "ThirdParty/ChromiumEngine/pin.json"
             pin.parent.mkdir(parents=True)
             pin.write_text(json.dumps({"sha256": "b" * 64}))
             bundle = root / "build" / BUNDLE_NAME
@@ -743,7 +747,7 @@ class EngineTransferTests(unittest.TestCase):
             "CI_SOURCE_TREE": "a" * 40, "CI_BUNDLE_INPUTS": "b" * 64, "CI_TOOLCHAIN_ID": "toolchain",
         }):
             root = Path(temporary)
-            pin = root / "ThirdParty/ArdiaCore/pin.json"
+            pin = root / "ThirdParty/ChromiumEngine/pin.json"
             pin.parent.mkdir(parents=True)
             pin.write_text(json.dumps({"sha256": "b" * 64}))
             (root / "build" / BUNDLE_NAME).mkdir(parents=True)
@@ -772,7 +776,7 @@ class EngineTransferTests(unittest.TestCase):
         from ci_engine import BUNDLE_NAME, archive_bundle, engine_shards
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            pin = root / "ThirdParty/ArdiaCore/pin.json"
+            pin = root / "ThirdParty/ChromiumEngine/pin.json"
             pin.parent.mkdir(parents=True)
             pin.write_text(json.dumps({"sha256": "b" * 64}))
             (root / "build" / BUNDLE_NAME).mkdir(parents=True)

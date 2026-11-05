@@ -3,6 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #import "include/ChromiumBridge.h"
+#import "ChromiumRuntimeInternal.h"
+#import "ChromiumLocalState.h"
 #import "ChromiumShaarExtensionsInternal.h"
 #import "ChromiumShaarPrivateSupport.h"
 
@@ -146,7 +148,14 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   NSURL *binary = [url URLByAppendingPathComponent:@"Versions/Current/Chromium Framework"];
   _shaarLibrary = dlopen(binary.fileSystemRepresentation, RTLD_NOW | RTLD_GLOBAL);
   if (!_shaarLibrary || !_symbols.Load(_shaarLibrary)) {
-    if (error) *error = ShaarError(@"The Chromium framework does not expose the Shaar engine ABI.");
+    if (error) {
+      NSString *format = ARCBridgeLocalizedString(@"Cannot load Chromium: %@");
+      NSString *message = [NSString stringWithFormat:format, binary.path];
+      *error = [NSError errorWithDomain:@"com.arcusis.browser.chromium" code:1
+                              userInfo:@{NSLocalizedDescriptionKey: message}];
+    }
+    if (_shaarLibrary) dlclose(_shaarLibrary);
+    _shaarLibrary = nullptr;
     return nil;
   }
   return self;
@@ -156,6 +165,7 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   NSAssert(NSThread.isMainThread, @"Shaar engine requires the main thread");
   if (![NSFileManager.defaultManager createDirectoryAtURL:directory
                               withIntermediateDirectories:YES attributes:nil error:nil]) return 1;
+  ARCDisableBackgroundMode(directory);
   char *resolved = realpath(directory.fileSystemRepresentation, nullptr);
   if (!resolved) return 1;
   NSString *path = [NSString stringWithUTF8String:resolved];
@@ -183,6 +193,7 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   _shaarTesting = testing;
   const shaar_error_code result = _symbols.run(_shaarEngine, &error);
   unsetenv("SHAAR_ENGINE_TESTING");
+  for (NSString *windowID in [_shaarWindows.allKeys copy]) [self finishWindowID:windowID];
   for (id observer in _hostResizeObservers.allValues)
     [NSNotificationCenter.defaultCenter removeObserver:observer];
   [_hostResizeObservers removeAllObjects];
@@ -334,6 +345,7 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
 }
 
 - (shaar_engine *)privateEngineHandle { return _shaarEngine; }
+- (uint64_t)nextPrivateDevToolsRequestID { return _nextRequestID++; }
 - (shaar_profile *)privateProfileHandleForID:(NSString *)profileID {
   return (shaar_profile *)_shaarProfiles[profileID].pointerValue;
 }
@@ -651,7 +663,7 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
 - (int)nativeTabIDForID:(NSString *)tabID { return -1; }
 
 - (void)resolveExternalAppRequestID:(NSString *)requestID accepted:(BOOL)accepted {
-  // No Shaar external-app request ABI exists; there is no Ardia request to resolve.
+  // No Shaar external-app request ABI exists yet.
 }
 
 - (BOOL)findInTabID:(NSString *)tabID profileID:(NSString *)profileID
@@ -687,7 +699,29 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
 
 - (void)evaluateInTabID:(NSString *)tabID script:(NSString *)script
             completion:(void (^)(NSString *))completion {
-  completion(nil);  // SHAAR_OP_TAB_EVALUATE is reserved but has no layer handler.
+  NSString *profileID = _shaarTabProfiles[tabID];
+  NSString *windowID = _shaarTabWindows[tabID];
+  if (!script.length || ![self shaarDevToolsOwnsTabID:tabID profileID:profileID
+                                           windowID:windowID]) {
+    completion(nil);
+    return;
+  }
+  [self shaarDevToolsCall:@"Runtime.evaluate"
+                  params:@{@"expression": script, @"returnByValue": @YES}
+              capability:SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER tabID:tabID
+               profileID:profileID windowID:windowID
+              completion:^(NSDictionary *result, NSError *error) {
+    NSDictionary *remote = [result[@"result"] isKindOfClass:NSDictionary.class]
+                             ? result[@"result"] : nil;
+    id value = remote[@"value"];
+    if (error || result[@"exceptionDetails"] || !value) {
+      completion(nil);
+      return;
+    }
+    NSData *json = [NSJSONSerialization dataWithJSONObject:value
+                                               options:NSJSONWritingFragmentsAllowed error:nil];
+    completion(json ? [[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding] : nil);
+  }];
 }
 
 - (void)bookmarksForProfileID:(NSString *)profileID
@@ -887,6 +921,30 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   _shaarQuitting = YES;
   shaar_error error = EmptyError();
   _symbols.request_quit(_shaarEngine, &error);
+}
+
+- (BOOL)findInPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID
+                contextID:(NSString *)contextID requestID:(NSString *)requestID
+                     text:(NSString *)text forward:(BOOL)forward {
+  if (self.onNotice) self.onNotice(@"Private page find is unsupported by this Shaar engine.");
+  return NO;
+}
+
+- (void)stopFindingInPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID
+                       contextID:(NSString *)contextID {
+  if (self.onNotice) self.onNotice(@"Private page find is unsupported by this Shaar engine.");
+}
+
+- (void)resolveInstallRequestID:(NSString *)requestID accepted:(BOOL)accepted {
+  if (self.onNotice) self.onNotice(@"Extension installation is unsupported by this Shaar engine.");
+}
+
+- (void)resolveWebsiteMediaRequestID:(NSString *)requestID accepted:(BOOL)accepted {
+  if (self.onNotice) self.onNotice(@"Website media approval is unsupported by this Shaar engine.");
+}
+
+- (void)resolveDesktopCaptureRequestID:(NSString *)requestID sourceID:(NSString *)sourceID {
+  if (self.onNotice) self.onNotice(@"Desktop capture is unsupported by this Shaar engine.");
 }
 
 - (void)dealloc {

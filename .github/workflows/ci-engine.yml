@@ -28,7 +28,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Identify verification bundle build inputs
-        run: echo "CI_BUNDLE_INPUTS=${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**', 'Resources/**', 'Plugins/**', 'ThirdParty/ArdiaCore/**', 'scripts/bundle-app.sh', 'scripts/ci-stage.py', 'scripts/release-config.sh', 'scripts/engine-signing.sh', 'scripts/fetch-engine.sh', 'scripts/stage-browser-resources.py', 'scripts/release_feed.py') }}" >> "$GITHUB_ENV"
+        run: echo "CI_BUNDLE_INPUTS=${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**', 'Resources/**', 'Plugins/**', 'ThirdParty/ChromiumEngine/**', 'scripts/bundle-app.sh', 'scripts/ci-stage.py', 'scripts/release-config.sh', 'scripts/engine-signing.sh', 'scripts/fetch-engine.sh', 'scripts/rebrand-engine-framework.py', 'scripts/engine_payload.py', 'scripts/verify_engine_bundle.py', 'scripts/stage-browser-resources.py', 'scripts/release_feed.py') }}" >> "$GITHUB_ENV"
       - uses: ./.github/actions/ci-setup
         with:
           mode: engine-probe

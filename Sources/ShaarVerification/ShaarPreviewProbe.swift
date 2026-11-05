@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import AppKit
+import BrowserCore
 import ChromiumBridge
 import Foundation
 
@@ -17,6 +18,8 @@ final class ShaarPreviewProbe {
   private let output: URL
   private let dataRoot: URL
   private let downloadURL: URL?
+  private let pendingQuitURL: URL?
+  private let directQuit: Bool
   private let firstWindowID: UUID
   private let firstTabID: UUID
   private let firstProfileID: UUID
@@ -25,6 +28,7 @@ final class ShaarPreviewProbe {
   private var privateHost: PrivateBrowserHost?
   private var committed: [String: String] = [:]
   private var latest: [String: String] = [:]
+  private var loading: [String: Bool] = [:]
   private var downloads: [[String: Any]] = []
   private var results: [String: [String: Any]] = [:]
   private var privatePolicyStatus: [AnyHashable: Any] = [:]
@@ -37,27 +41,36 @@ final class ShaarPreviewProbe {
     host.contexts[firstWindowID]?.nativeID ?? ""
   }
 
+  static func pendingQuitTarget(arguments: [String]) throws -> URL? {
+    guard let index = arguments.firstIndex(of: "--probe-pending-quit-url") else { return nil }
+    guard arguments.indices.contains(index + 1),
+      let url = URL(string: arguments[index + 1]),
+      url.scheme == "http", url.host() == "127.0.0.1"
+    else { throw Failure("Pending navigation requires a loopback HTTP URL.") }
+    return url
+  }
+
   private init(arguments: [String]) throws {
     func value(_ flag: String) throws -> String {
       guard let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1)
       else { throw Failure("Missing \(flag).") }
       return arguments[index + 1]
     }
-    guard
-      BrowserBackendSelection.choose(
-        environment: ProcessInfo.processInfo.environment, arguments: arguments) == .shaar
-    else { throw Failure("Shaar backend switch is required.") }
     output = URL(filePath: try value("--probe-output"))
     dataRoot = URL(filePath: try value("--probe-data-dir"), directoryHint: .isDirectory)
     downloadURL = try? URL(string: value("--probe-download-url"))
+    pendingQuitURL = try Self.pendingQuitTarget(arguments: arguments)
+    directQuit = arguments.contains("--probe-direct-quit")
     let framework = URL(filePath: try value("--probe-framework"))
     guard
-      let selected = try NativeBrowserHost.makeRuntime(
-        frameworkURL: framework, environment: ProcessInfo.processInfo.environment,
-        arguments: arguments) as? ARCShaarRuntime
+      let selected = try NativeBrowserHost.makeRuntime(frameworkURL: framework)
+        as? ARCShaarRuntime
     else { throw Failure("Backend selector did not construct Shaar runtime.") }
     runtime = selected
-    workspace = try BrowserWorkspaceStore()
+    let file = WorkspaceFile(
+      url: dataRoot.appending(path: "workspace.json"),
+      legacySessionURL: dataRoot.appending(path: "unused-session.json"))
+    workspace = try BrowserWorkspaceStore(file: file)
     guard let window = workspace.workspace.windows.first,
       let store = workspace.stores[window.id]
     else { throw Failure("Fresh workspace has no window.") }
@@ -89,6 +102,7 @@ final class ShaarPreviewProbe {
     runtime.onTabChanged = { [weak self] tab, url, title, loading, back, forward in
       previousChanged?(tab, url, title, loading, back, forward)
       self?.latest[tab] = url
+      self?.loading[tab] = loading
     }
     let previousCommitted = runtime.onDocumentCommitted
     runtime.onDocumentCommitted = { [weak self] tab, profile in
@@ -105,7 +119,13 @@ final class ShaarPreviewProbe {
       guard let self else { return }
       do {
         try self.host.restore()
-        Task { await self.exercise() }
+        Task {
+          if self.pendingQuitURL != nil {
+            await self.exercisePendingQuit()
+          } else {
+            await self.exercise()
+          }
+        }
       } catch { self.finish(error: "Host restore: \(error)") }
     }
     DispatchQueue.main.asyncAfter(deadline: .now() + 60) { [weak self] in
@@ -245,6 +265,25 @@ final class ShaarPreviewProbe {
     finish(error: nil)
   }
 
+  private func exercisePendingQuit() async {
+    await check("openTab") {
+      try await self.wait("first committed tab") {
+        self.committed[self.firstTabID.uuidString] == self.firstURL.absoluteString
+      }
+    }
+    await check("pendingNavigation") {
+      guard let url = self.pendingQuitURL,
+        self.runtime.navigateTabID(
+          self.firstTabID.uuidString, profileID: self.firstProfileID.uuidString,
+          windowID: self.firstNativeWindowID, url: url.absoluteString)
+      else { throw Failure("Shaar rejected the pending navigation.") }
+      try await self.wait("pending navigation started") {
+        self.loading[self.firstTabID.uuidString] == true
+      }
+    }
+    finish(error: nil)
+  }
+
   private func extensionList(profileID: UUID) async throws -> [[String: Any]] {
     let json = await withCheckedContinuation { continuation in
       runtime.manageExtensions(
@@ -318,6 +357,11 @@ final class ShaarPreviewProbe {
   }
 
   private func shutdown() async {
+    if pendingQuitURL != nil || directQuit {
+      markShutdown("engine quit requested with live windows")
+      runtime.quit()
+      return
+    }
     markShutdown("private close begin")
     for owner in privateHost?.ownedWindows ?? [] {
       await withCheckedContinuation { continuation in

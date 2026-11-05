@@ -38,7 +38,6 @@ final class EngineProbe {
   private var finished = false
   private var passed = false
   private var localFixturesPassed = false
-  private var loadedTabs: Set<String> = []
   private var switchMetrics = SwitchProbeMetricsRecorder()
   private let store: BrowserStore
   private var browserEngine: BrowserEngine?
@@ -98,7 +97,7 @@ final class EngineProbe {
     }
     let language = BrowserLanguage.currentLaunchLanguage
     ARCConfigureLocalization(BrowserLocalization.resourceBundleURL, language.localeIdentifier)
-    runtime = try ARCChromiumRuntime(
+    runtime = try ARCShaarRuntime(
       frameworkURL: frameworks.appending(path: "Chromium Framework.framework"))
     runtime.languageIdentifier = language.localeIdentifier
     if sessionRecoveryMode {
@@ -207,7 +206,7 @@ final class EngineProbe {
       else {
         throw ProbeFailure("Private window fixture run identity is malformed.")
       }
-      let noLaunchGuard = arguments.contains("--ardia-test-external-protocol-no-launch")
+      let noLaunchGuard = arguments.contains("--shaar-test-external-protocol-no-launch")
       let conflictingFlags = [
         "--bitwarden", "--bitwarden-onboarding-control",
         "--probe-await-abrupt-termination", "--probe-expect-abrupt-recovery",
@@ -291,12 +290,6 @@ final class EngineProbe {
     browserEngine = try BrowserEngine(
       events: BrowserRuntimeEvents(runtime: runtime), store: store, presentsNativePanels: false,
       lazyPinnedTabs: savedTabCapacityMode)
-    let changed = runtime.onTabChanged
-    runtime.onTabChanged = { [weak self] id, url, title, loading, back, forward in
-      changed?(id, url, title, loading, back, forward)
-      guard let self else { return }
-      if !loading && url == self.fixture.absoluteString { self.loadedTabs.insert(id) }
-    }
     guard let content = runtime.hostView else { return }
     let host = NSHostingView(rootView: BrowserWindow(store: store))
     host.frame = content.bounds
@@ -312,6 +305,18 @@ final class EngineProbe {
         if let error { continuation.resume(throwing: error) } else { continuation.resume() }
       }
     }
+  }
+
+  private func waitForRestoredTab(_ id: String) async throws {
+    for _ in 0..<100 {
+      if runtime.windowID(forTabID: id) == runtime.primaryWindowID,
+        runtime.view(forTabID: id) != nil
+      {
+        return
+      }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    throw ProbeFailure("Saved tab did not materialize in the Shaar window: \(id).")
   }
 
   private func evaluate(_ tab: String, _ script: String) async throws -> Any {
@@ -350,19 +355,16 @@ final class EngineProbe {
         cookie:document.cookie, local:localStorage.getItem('account'),
         session:sessionStorage.getItem('account'), instance:window.arcusisInstance})
       """
+    var receivedJavaScript = false
     for _ in 0..<80 {
-      if !loadedTabs.contains(tab) {
-        try await Task.sleep(for: .milliseconds(100))
-        continue
-      }
-      if let result = try? await evaluate(tab, script) as? [String: Any],
-        result["fixture"] as? String == "v1"
-      {
-        return result
+      if let result = try? await evaluate(tab, script) as? [String: Any] {
+        receivedJavaScript = true
+        if result["fixture"] as? String == "v1" { return result }
       }
       try await Task.sleep(for: .milliseconds(100))
     }
-    throw ProbeFailure("Loopback fixture did not load in \(tab).")
+    let detail = "JavaScript response received: \(receivedJavaScript)."
+    throw ProbeFailure("Loopback fixture did not load in \(tab); \(detail)")
   }
 
   private func expect(_ condition: Bool, _ name: String) throws {
@@ -450,13 +452,14 @@ final class EngineProbe {
       bootstrapStage = .loadingBeta
       try await load(profileB)
       bootstrapStage = .openingAlpha
-      try runtime.openTabID(tabA, profileID: profileA, url: fixture.absoluteString)
+      browserEngine?.reconcile()
+      try await waitForRestoredTab(tabA)
       bootstrapStage = .openingBeta
-      try runtime.openTabID(tabB, profileID: profileB, url: fixture.absoluteString)
+      try await waitForRestoredTab(tabB)
+      try await waitForRestoredTab(sharedA)
       if localizationMode {
         // Restored tabs retain the previous scenario URL; reuse their profiles with this fixture.
         for (tab, profile) in [(tabA, profileA), (tabB, profileB)] {
-          loadedTabs.remove(tab)
           guard
             runtime.navigateTabID(
               tab, profileID: profile, windowID: runtime.primaryWindowID,
@@ -548,7 +551,6 @@ final class EngineProbe {
               "profile A sign-in leaves profile B empty")
           }
         }
-        try runtime.openTabID(sharedA, profileID: profileA, url: fixture.absoluteString)
         let shared = try await snapshot(sharedA)
         firstShared = shared
         try expect(
@@ -560,9 +562,6 @@ final class EngineProbe {
           rejected = true
         }
         try expect(rejected, "live tab cannot be reassigned to another profile")
-      }
-      if runtime.nativeTabID(forID: sharedA) < 0 {
-        try runtime.openTabID(sharedA, profileID: profileA, url: fixture.absoluteString)
       }
       let sharedOriginal: [String: Any]
       if let firstShared {
@@ -580,8 +579,10 @@ final class EngineProbe {
         store.perform(.space(alphaSpace.id))
         store.perform(.tab(space: alphaSpace.id, tab: alphaTab))
         var nativeAlphaSelected = false
+        var selectionAudit: [AnyHashable: Any] = [:]
         for _ in 0..<100 {
           let selection = runtime.normalProbeSelectionAudit(forTabID: tabA)
+          selectionAudit = selection
           nativeAlphaSelected =
             selection["selectedNativeTab"] as? Bool == true
             && selection["displayedNativeWebContents"] as? Bool == true
@@ -589,7 +590,8 @@ final class EngineProbe {
           try await Task.sleep(for: .milliseconds(100))
         }
         try expect(
-          nativeAlphaSelected, "store selects live normal Alpha WebContents before private fixture")
+          nativeAlphaSelected,
+          "store selects live normal Alpha WebContents before private fixture: \(selectionAudit)")
         try await waitForSessionToSettle()
         let before = store.session
         let privateProbe = PrivateWindowProbe(
@@ -859,6 +861,21 @@ final class EngineProbe {
     guard !finished else { return }
     finished = true
     resultError = error
+    if privateWindowMode {
+      let report = root.appending(path: "\(phase)-private-window.json")
+      if !FileManager.default.fileExists(atPath: report.path) {
+        let message =
+          resultError?.localizedDescription
+          ?? "Private-window probe ended without its evidence report."
+        do {
+          try PrivateWindowProbe.writeEarlyFailure(
+            root: root, phase: phase, runID: privateWindowRunID!, error: message)
+        } catch {
+          resultError = ProbeFailure(
+            "\(message) Private-window report write failed: \(error.localizedDescription)")
+        }
+      }
+    }
     do { try nativeHostProbe?.prepareForQuit() } catch {
       resultError = ProbeFailure(
         "\(resultError?.localizedDescription ?? "") Host quit snapshot: \(error.localizedDescription)"
@@ -879,7 +896,11 @@ final class EngineProbe {
   /// The quit probe must leave through the host's own Quit command, as a person would.
   private func quit() {
     guard let quitExitProbe else {
-      runtime.quit()
+      if let browserEngine {
+        browserEngine.events.quit()
+      } else {
+        runtime.quit()
+      }
       return
     }
     do { try quitExitProbe.requestQuit() } catch {
@@ -944,7 +965,8 @@ final class EngineProbe {
       throw ProbeFailure("Normal address bar did not open its search tab.")
     }
     for _ in 0..<100 {
-      if runtime.nativeTabID(forID: selected.id.uuidString) >= 0,
+      if runtime.windowID(forTabID: selected.id.uuidString) == runtime.primaryWindowID,
+        runtime.view(forTabID: selected.id.uuidString) != nil,
         runtime.normalProbeSelectionAudit(forTabID: selected.id.uuidString)[
           "displayedNativeWebContents"]
           as? Bool == true

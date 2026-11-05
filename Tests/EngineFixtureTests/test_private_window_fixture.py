@@ -108,6 +108,37 @@ class PrivateWindowFixtureTests(unittest.TestCase):
             self.assertEqual(json.loads((self.root / 'proof' / f'{phase}.json').read_text()),
                              self.report(phase))
 
+    def test_missing_private_report_names_the_probe_error(self):
+        report = self.report('initial')
+        report['passed'] = False
+        report['error'] = 'store selects live normal Alpha WebContents before private fixture'
+        with self.assertRaisesRegex(RuntimeError, 'store selects live normal Alpha WebContents'):
+            fixture.validate_private_window_report(self.root, 'initial', report, 1)
+
+    def test_failed_private_report_names_its_error(self):
+        evidence = self.evidence('initial')
+        evidence['passed'] = False
+        evidence['error'] = 'Shaar native selection audit failed'
+        (self.root / 'initial-private-window.json').write_text(json.dumps(evidence))
+        report = self.report('initial')
+        report['passed'] = False
+        report['error'] = 'Shaar native selection audit failed'
+        with self.assertRaisesRegex(RuntimeError, 'Shaar native selection audit failed'):
+            fixture.validate_private_window_report(self.root, 'initial', report, 1)
+
+    def test_crashed_probe_keeps_main_and_private_failure_receipts(self):
+        (self.root / 'initial.log').write_text('length_error was thrown in -fno-exceptions mode')
+        (self.root / 'initial-private-window-stage.txt').write_text('private-document-load')
+        fixture.ensure_private_failure_reports(self.root, 'initial', self.run_id, -6)
+        main = json.loads((self.root / 'initial.json').read_text())
+        private = json.loads((self.root / 'initial-private-window.json').read_text())
+        self.assertFalse(main['passed'])
+        self.assertFalse(private['passed'])
+        self.assertEqual(private['runID'], self.run_id)
+        self.assertIn('exit -6', private['error'])
+        self.assertIn('length_error', private['error'])
+        self.assertEqual(private['lastStage'], 'private-document-load')
+
     def test_summary_preserves_failing_observed_count_and_runs_both_phases(self):
         initial = self.evidence('initial')
         initial['checks'].pop('staleContextRejected')

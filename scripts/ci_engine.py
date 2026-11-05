@@ -107,7 +107,7 @@ def shard_modes(shard: str, iterations: int) -> list[tuple[str, range]]:
 
 
 def context(root: Path) -> dict:
-    pin = json.loads((root / "ThirdParty/ArdiaCore/pin.json").read_text())
+    pin = json.loads((root / "ThirdParty/ChromiumEngine/pin.json").read_text())
     return {"sourceTree": os.environ["CI_SOURCE_TREE"], "inputs": os.environ["CI_BUNDLE_INPUTS"],
             "toolchain": os.environ["CI_TOOLCHAIN_ID"],
             "engine": pin["sha256"]}

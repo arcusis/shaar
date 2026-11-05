@@ -1,31 +1,16 @@
 # Third-party notices
 
-Shaar's default app bundle includes the pinned ArdiaCore engine distribution,
-which contains Chromium and its bundled dependencies, and Public Suffix List
-data. Notices below identify source and license. The project does not reproduce
-upstream license texts here; follow the listed source notices.
+Shaar's app bundle includes a SHA-256-pinned Shaar Chromium engine distribution
+and Public Suffix List data. License and component credits for the exact bundled
+Chromium framework remain available at `chrome://credits`.
 
 ## Chromium and bundled dependencies
 
-- **Component:** Chromium 155.0.8059.84, distributed as the Chromium Framework
-  through the pinned ArdiaCore engine archive.
-- **Source:** [ArdiaCore pin](ThirdParty/ArdiaCore/pin.json), including archive
-  URL and SHA-256.
-- **License:** Chromium is distributed under BSD-style terms and includes
-  components under additional licenses.
-- **Notices:** Complete component-level credits ship inside the framework and
-  are shown by Chromium at `chrome://credits`. Preserve these credits with any
-  redistributed framework. The license set can vary with Chromium's bundled
-  components; consult the credits in the exact engine build being distributed.
-
-## ArdiaCore
-
-- **Component:** ArdiaCore public native API headers and pinned engine
-  distribution metadata.
-- **Source:** [ArdiaCore repository and pin](ThirdParty/ArdiaCore/pin.json).
-- **License:** Apache-2.0.
-- **Notices:** [License](ThirdParty/ArdiaCore/LICENSE) and
-  [upstream notice](ThirdParty/ArdiaCore/NOTICE).
+- **Component:** Chromium 155.0.8059.84 in Chromium Framework.
+- **Source:** [Shaar engine pin](ThirdParty/ChromiumEngine/pin.json).
+- **License:** Chromium uses BSD-style terms and includes components under
+  additional licenses. Preserve the framework's component credits with any
+  redistributed build.
 
 ## Public Suffix List
 

@@ -3,765 +3,502 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #import "include/ChromiumBridgeVerification.h"
-#import "../ChromiumBridge/ChromiumRuntimeInternal.h"
 #import "../ChromiumBridge/ChromiumProbeRoot.h"
-#include <cmath>
+#import "../ChromiumBridge/ChromiumRuntimeInternal.h"
+#import "../ChromiumBridge/ChromiumShaarPrivateSupport.h"
+#import <objc/runtime.h>
+
+#include <cstdlib>
+#include <cstring>
+#include <dlfcn.h>
+
+#include "../../ThirdParty/ChromiumEngine/layer/chrome/browser/shaar/public/shaar_engine.h"
+
+namespace {
+BOOL ProbeCaptureAllowed(void) {
+  const char *testing = std::getenv("SHAAR_ENGINE_TESTING");
+  if (!testing || std::strcmp(testing, "1") != 0) return NO;
+  NSArray<NSString *> *arguments = NSProcessInfo.processInfo.arguments;
+  NSUInteger index = [arguments indexOfObject:@"--probe-data-dir"];
+  if (index == NSNotFound || index + 1 >= arguments.count) return NO;
+  return ARCProbeRootIsOwned([NSURL fileURLWithPath:arguments[index + 1]]);
+}
+
+NSDictionary *ProbeTable(ARCShaarRuntime *runtime, const char *name) {
+  Ivar field = class_getInstanceVariable(runtime.class, name);
+  return field ? object_getIvar(runtime, field) : nil;
+}
+
+bool NativeProbeState(ARCShaarRuntime *runtime, shaar_scope scope, shaar_window *window,
+                      shaar_tab *tab, shaar_tab_probe_state *state) {
+  auto probe = reinterpret_cast<decltype(&shaar_tab_get_probe_state)>(
+      dlsym(RTLD_DEFAULT, "shaar_tab_get_probe_state"));
+  if (!probe || !window || !tab || !state) return false;
+  state->size = sizeof(*state);
+  shaar_error error = ARCPrivateShaarEmptyError();
+  return probe([runtime privateEngineHandle], scope, window, tab, state, &error) == SHAAR_OK;
+}
+
+NSDictionary *PrivateContext(ARCShaarRuntime *runtime, NSString *contextID) {
+  return ARCPrivateShaarState(runtime)[@"contexts"][contextID];
+}
+
+NSDictionary *PrivateWindow(ARCShaarRuntime *runtime, NSString *windowID) {
+  return ARCPrivateShaarState(runtime)[@"windows"][windowID];
+}
+
+NSDictionary *PrivateTab(ARCShaarRuntime *runtime, NSString *tabID) {
+  return ARCPrivateShaarState(runtime)[@"tabs"][tabID];
+}
+
+bool PrivateTabState(ARCShaarRuntime *runtime, NSString *tabID,
+                     NSString *windowID, NSString *contextID,
+                     shaar_tab_probe_state *state) {
+  if (!tabID.length || !windowID.length || !contextID.length ||
+      ![runtime privateTabOwned:tabID windowID:windowID contextID:contextID])
+    return false;
+  shaar_scope scope = {};
+  scope.size = sizeof(scope);
+  scope.private_session = (shaar_private_session *)[
+      PrivateContext(runtime, contextID)[@"session"] pointerValue];
+  return NativeProbeState(runtime, scope,
+      (shaar_window *)[PrivateWindow(runtime, windowID)[@"handle"] pointerValue],
+      (shaar_tab *)[PrivateTab(runtime, tabID)[@"handle"] pointerValue], state);
+}
+
+}  // namespace
+
+NSData *ARCProbePNGFromDevToolsResult(NSDictionary *result) {
+  NSString *encoded = result[@"data"];
+  if (![encoded isKindOfClass:NSString.class] || encoded.length > 44 * 1024 * 1024)
+    return nil;
+  NSData *data = [[NSData alloc] initWithBase64EncodedString:encoded options:0];
+  static const unsigned char signature[] = {137, 80, 78, 71, 13, 10, 26, 10};
+  return data.length >= sizeof(signature) &&
+      std::memcmp(data.bytes, signature, sizeof(signature)) == 0 ? data : nil;
+}
+
+static NSError *ProbeUnsupported(void) {
+  return [NSError errorWithDomain:@"org.arcusis.shaar.probe" code:1
+                         userInfo:@{NSLocalizedDescriptionKey: @"This native probe is not supported by the Shaar engine."}];
+}
+
+NSDictionary<NSString *, id> *ARCProbeNormalSelectionAudit(
+    NSView *tabView, NSView *hostView, NSWindow *window) {
+  BOOL attached = tabView && hostView && [tabView isDescendantOf:hostView];
+  BOOL selected = attached && window && hostView.window == window && tabView.window == window;
+  return @{@"supported": @YES, @"liveTab": @(tabView != nil),
+           @"selectedNativeTab": @(selected),
+           @"displayedNativeWebContents": @(selected),
+           @"selectedViewAttached": @(attached),
+           @"selectedViewVisible": @(selected && !tabView.isHiddenOrHasHiddenAncestor),
+           @"hostHasWindow": @(hostView.window != nil),
+           @"tabHasWindow": @(tabView.window != nil),
+           @"windowAvailable": @(window != nil),
+           @"nativeTabToken": tabView ? [NSString stringWithFormat:@"%p", tabView] : @""};
+}
+
+NSString *ARCProbePrivateEvaluationJSON(NSDictionary *reply) {
+  if (![reply[@"schemaVersion"] isEqual:@1] || reply[@"error"]) return nil;
+  NSDictionary *result = [reply[@"result"] isKindOfClass:NSDictionary.class]
+      ? reply[@"result"] : nil;
+  NSDictionary *remote = [result[@"result"] isKindOfClass:NSDictionary.class]
+      ? result[@"result"] : nil;
+  id value = remote[@"value"];
+  if (result[@"exceptionDetails"] || !value) return nil;
+  NSData *data = [NSJSONSerialization dataWithJSONObject:value
+      options:NSJSONWritingFragmentsAllowed error:nil];
+  return data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
+}
+
+NSDictionary<NSString *, id> *ARCProbePrivacyEvaluationParameters(NSString *expression) {
+  return @{@"expression": expression, @"returnByValue": @YES,
+           @"awaitPromise": @YES};
+}
+
+template <typename T> static T ShaarProbeField(ARCShaarRuntime *runtime, const char *name) {
+  T value = {};
+  Ivar field = class_getInstanceVariable(ARCShaarRuntime.class, name);
+  if (field)
+    std::memcpy(&value, reinterpret_cast<char *>((__bridge void *)runtime) +
+                           ivar_getOffset(field), sizeof(value));
+  return value;
+}
+
+static NSError *ShaarProbeError(shaar_error error, NSString *fallback) {
+  NSString *message = fallback;
+  if (error.message.data && error.message.size)
+    message = [[NSString alloc] initWithBytes:error.message.data length:error.message.size
+                                   encoding:NSUTF8StringEncoding] ?: fallback;
+  return [NSError errorWithDomain:@"org.arcusis.shaar.probe" code:error.code
+                         userInfo:@{NSLocalizedDescriptionKey: message}];
+}
 
 void ARCCompletePrivateQuitDialogCancellation(
     BOOL ownerCurrent, NSString *dialogError, void (^releaseHold)(void), void (^reject)(void)) {
-  if (!ownerCurrent || dialogError) {
-    reject();
-    return;
-  }
+  if (!ownerCurrent || dialogError) { reject(); return; }
   releaseHold();
 }
 
-static void ClickProbeTarget(ArdiaCoreTab *tab, NSString *expression, BOOL (^current)(void),
-                             void (^completion)(BOOL)) {
-  [tab devToolsCall:@"Runtime.evaluate" params:@{@"expression": expression, @"returnByValue": @YES}
-               timeout:5 completion:^(NSDictionary *result, NSString *error) {
-    NSDictionary *point = result[@"result"][@"value"];
-    if (error || ![point isKindOfClass:NSDictionary.class] || !current() ||
-        ![point[@"x"] isKindOfClass:NSNumber.class] || ![point[@"y"] isKindOfClass:NSNumber.class] ||
-        !std::isfinite([point[@"x"] doubleValue]) || !std::isfinite([point[@"y"] doubleValue])) {
-      completion(NO);
-      return;
-    }
-    NSDictionary *press = @{@"type": @"mousePressed", @"x": point[@"x"], @"y": point[@"y"],
-                             @"button": @"left", @"buttons": @1, @"clickCount": @1};
-    [tab devToolsCall:@"Input.dispatchMouseEvent" params:press timeout:5
-            completion:^(NSDictionary *ignored, NSString *pressError) {
-      if (pressError || !current()) { completion(NO); return; }
-      NSDictionary *release = @{@"type": @"mouseReleased", @"x": point[@"x"], @"y": point[@"y"],
-                                 @"button": @"left", @"buttons": @0, @"clickCount": @1};
-      [tab devToolsCall:@"Input.dispatchMouseEvent" params:release timeout:5
-              completion:^(NSDictionary *ignoredRelease, NSString *releaseError) {
-        completion(releaseError == nil && current());
-      }];
-    }];
-  }];
-}
-
-static NSString *ProbeButtonExpression(NSString *literal) {
-  return [NSString stringWithFormat:
-    @"(()=>{const title=%@;const excluded=e=>{for(let n=e;n&&n.nodeType===1;n=n.parentElement){"
-     "if(n.hidden||n.inert||n.getAttribute('aria-hidden')?.toLowerCase()==='true')return true;"
-     "const s=getComputedStyle(n);if(s.display==='none'||s.visibility==='hidden'||s.visibility==='collapse'||s.opacity==='0')return true;}return false;};"
-     "const text=e=>{const w=document.createTreeWalker(e,NodeFilter.SHOW_TEXT);let out='',n;"
-     "while((n=w.nextNode()))if(!excluded(n.parentElement))out+=' '+n.nodeValue;return out.trim().replace(/\\s+/g,' ');};"
-     "const label=e=>(e.getAttribute('aria-label')||text(e)).trim().replace(/\\s+/g,' ');"
-     "const candidates=[...document.querySelectorAll('button,a,[role=button]')],exact=candidates.filter(e=>label(e)===title),"
-     "visible=exact.filter(e=>!excluded(e)),sized=visible.filter(e=>{const r=e.getBoundingClientRect();return r.width>0&&r.height>0;}),"
-     "eligible=sized.filter(e=>!e.disabled&&e.getAttribute('aria-disabled')?.toLowerCase()!=='true');"
-     "const hit=(e,x,y)=>{const top=document.elementFromPoint(x,y);return !!top&&(top===e||e.contains(top));};"
-     "const point=e=>{const r=e.getBoundingClientRect();if(r.width<=0||r.height<=0)return null;const x=r.x+r.width/2,y=r.y+r.height/2;"
-     "if(x>=0&&y>=0&&x<innerWidth&&y<innerHeight&&hit(e,x,y))return {x,y};const l=Math.max(0,r.left),t=Math.max(0,r.top),"
-     "rr=Math.min(innerWidth,r.right),bb=Math.min(innerHeight,r.bottom);if(rr<=l||bb<=t)return null;"
-     "for(const fx of [.1,.5,.9])for(const fy of [.1,.5,.9]){const px=l+(rr-l)*fx,py=t+(bb-t)*fy;if(hit(e,px,py))return {x:px,y:py};}return null;};"
-     "if(eligible.length!==1)return null;const button=eligible[0];let visiblePoint=point(button);if(!visiblePoint){button.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});visiblePoint=point(button);}return visiblePoint;})()",
-    literal];
-}
-
-static BOOL ProbeViewIsVisibleInWindow(NSView *view, NSWindow *window) {
-  if (!view || !window || view.window != window) return NO;
-  for (NSView *ancestor = view; ancestor; ancestor = ancestor.superview) {
-    if (ancestor.hidden) return NO;
-  }
-  return YES;
-}
-
 @implementation ARCChromiumRuntime (Verification)
-
-- (void)grantProbeGeolocationInTabID:(NSString *)tabID completion:(void (NS_SWIFT_UI_ACTOR ^)(NSError *))completion {
-  ArdiaCoreTab *tab = [self liveTabForID:tabID];
-  if (!_testing || !ARCProbeRootIsOwned(_probeRoot) || !tab || ![self isSelectedTabID:tabID]) {
-    completion(ARCBridgeError(@"Geolocation test override requires an owned probe tab."));
-    return;
-  }
-  NSString *origin = tab.securityInfo[@"origin"];
-  if (![origin hasPrefix:@"http://inspector.localhost:"]) {
-    completion(ARCBridgeError(@"Geolocation test override requires the developer loopback site."));
-    return;
-  }
-  [tab devToolsCall:@"Target.getTargetInfo" params:@{} timeout:5 completion:^(NSDictionary *result, NSString *error) {
-    if (error) { completion(ARCBridgeError(error)); return; }
-    NSMutableDictionary *params = [@{@"permissions": @[@"geolocation"], @"origin": origin} mutableCopy];
-    NSString *context = result[@"targetInfo"][@"browserContextId"];
-    if (context.length) params[@"browserContextId"] = context;
-    [tab devToolsCall:@"Browser.grantPermissions" params:params timeout:5 completion:^(NSDictionary *granted, NSString *failure) {
-      completion(failure ? ARCBridgeError(failure) : nil);
-    }];
-  }];
+- (void)grantProbeGeolocationInTabID:(NSString *)tabID completion:(void (^)(NSError *))completion {
+  completion(ProbeUnsupported());
 }
-
-
-- (BOOL)inspectorProbeOwnsTabID:(NSString *)identity {
-  ArdiaCoreTab *tab = [self liveTabForID:identity];
-  NSURLComponents *url = [NSURLComponents componentsWithString:tab.url ?: @""];
-  BOOL local = [url.scheme isEqual:@"http"] && [url.host isEqual:@"inspector.localhost"];
-  BOOL publicPage = [url.scheme isEqual:@"https"] &&
-    [@[@"developer.mozilla.org", @"www.w3.org", @"react.dev"] containsObject:url.host];
-  return _testing && ARCProbeRootIsOwned(_probeRoot) && tab &&
-    [self isSelectedTabID:identity] && (local || publicPage);
-}
-
-- (void)inspectorProbePointerInTabID:(NSString *)identity selector:(NSString *)selector
+- (void)inspectorProbePointerInTabID:(NSString *)tabID selector:(NSString *)selector
                             frames:(NSArray<NSString *> *)frames click:(BOOL)click modifiers:(NSInteger)modifiers
-                        completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion {
-  if (![self inspectorProbeOwnsTabID:identity] || selector.length > 2048 || frames.count > 8 || (modifiers != 0 && modifiers != 1)) {
-    completion(NO); return;
-  }
-  ArdiaCoreTab *tab = [self liveTabForID:identity];
-  NSData *encoded = [NSJSONSerialization dataWithJSONObject:@[selector, frames] options:0 error:nil];
-  NSString *literal = encoded ? [[NSString alloc] initWithData:encoded encoding:NSUTF8StringEncoding] : nil;
-  if (!literal) { completion(NO); return; }
-  NSString *expression = [NSString stringWithFormat:
-    @"(()=>{const [selector,frames]=%@;let doc=document;"
-     "for(const name of frames){doc=doc.querySelector(name)?.contentDocument;if(!doc)return null;}"
-     "const e=doc.querySelector(selector);if(!e)return null;e.scrollIntoView({block:'center'});"
-     "const r=e.getBoundingClientRect();let x=r.x+r.width/2,y=r.y+r.height/2;"
-     "for(let win=doc.defaultView;win!==window;){const f=win.frameElement,b=f.getBoundingClientRect(),sx=b.width/(f.offsetWidth||b.width||1),sy=b.height/(f.offsetHeight||b.height||1);"
-     "x=b.left+(x+f.clientLeft)*sx;y=b.top+(y+f.clientTop)*sy;win=f.ownerDocument.defaultView;}return {x,y};})()", literal];
-  [tab devToolsCall:@"Runtime.evaluate" params:@{@"expression":expression, @"returnByValue":@YES}
-           timeout:5 completion:^(NSDictionary *result, NSString *error) {
-    NSDictionary *point = result[@"result"][@"value"];
-    if (error || ![point isKindOfClass:NSDictionary.class] || ![self inspectorProbeOwnsTabID:identity] ||
-        ![point[@"x"] isKindOfClass:NSNumber.class] || ![point[@"y"] isKindOfClass:NSNumber.class] ||
-        !std::isfinite([point[@"x"] doubleValue]) || !std::isfinite([point[@"y"] doubleValue])) {
-      completion(NO); return;
-    }
-    [tab devToolsCall:@"Input.dispatchMouseEvent" params:@{@"type":@"mouseMoved", @"x":point[@"x"], @"y":point[@"y"], @"modifiers":@(modifiers)}
-             timeout:5 completion:^(NSDictionary *ignored, NSString *failure) {
-      if (failure || ![self inspectorProbeOwnsTabID:identity]) { completion(NO); return; }
-      if (!click) { completion(YES); return; }
-      ClickProbeTarget(tab, expression, ^BOOL { return [self inspectorProbeOwnsTabID:identity]; }, completion);
-    }];
-  }];
-}
-
-- (void)inspectorProbeKeyInTabID:(NSString *)identity key:(NSString *)key
-                    completion:(void (NS_SWIFT_UI_ACTOR ^)(BOOL))completion {
-  NSDictionary *codes = @{@"ArrowUp":@38, @"ArrowDown":@40, @"ArrowLeft":@37, @"ArrowRight":@39, @"Escape":@27};
-  if (![self inspectorProbeOwnsTabID:identity] || !codes[key]) { completion(NO); return; }
-  ArdiaCoreTab *tab = [self liveTabForID:identity];
-  NSDictionary *down = @{@"type":@"keyDown", @"key":key, @"code":key, @"windowsVirtualKeyCode":codes[key]};
-  [tab devToolsCall:@"Input.dispatchKeyEvent" params:down timeout:5 completion:^(NSDictionary *ignored, NSString *error) {
-    if (error || ![self inspectorProbeOwnsTabID:identity]) { completion(NO); return; }
-    [tab devToolsCall:@"Input.dispatchKeyEvent"
-              params:@{@"type":@"keyUp", @"key":key, @"code":key, @"windowsVirtualKeyCode":codes[key]}
-             timeout:5 completion:^(NSDictionary *result, NSString *failure) {
-      completion(failure == nil && [self inspectorProbeOwnsTabID:identity]);
-    }];
-  }];
-}
-
-- (BOOL)inspectProbeElementInTabID:(NSString *)tabID {
-  ArdiaCoreTab *tab = [self liveTabForID:tabID];
-  NSURLComponents *url = [NSURLComponents componentsWithString:tab.url ?: @""];
-  if (!_testing || !_probeRoot || !ARCProbeRootIsOwned(_probeRoot) || !tab ||
-      ![url.scheme isEqualToString:@"http"] ||
-      ![@[@"127.0.0.1", @"localhost"] containsObject:url.host.lowercaseString] ||
-      ![self isSelectedTabID:tabID]) return NO;
-  _probeInspectTabID = [tabID copy];
-  _probeInspectFound = NO;
-  _probeInspectAudit = [@{@"pressed": @NO, @"released": @NO, @"menuSeen": @NO} mutableCopy];
-  [tab devToolsCall:@"Input.dispatchMouseEvent"
-            params:@{@"type": @"mousePressed", @"x": @80, @"y": @80,
-                     @"button": @"right", @"buttons": @2, @"clickCount": @1}
-           timeout:5 completion:^(NSDictionary *result, NSString *error) {
-    self->_probeInspectAudit[@"pressed"] = @(error == nil);
-    if (error) self->_probeInspectAudit[@"pressError"] = error;
-    [tab devToolsCall:@"Input.dispatchMouseEvent"
-              params:@{@"type": @"mouseReleased", @"x": @80, @"y": @80,
-                       @"button": @"right", @"buttons": @0, @"clickCount": @1}
-             timeout:5 completion:^(NSDictionary *released, NSString *releaseError) {
-      self->_probeInspectAudit[@"released"] = @(releaseError == nil);
-      if (releaseError) self->_probeInspectAudit[@"releaseError"] = releaseError;
-    }];
-  }];
-  return YES;
-}
-
-- (BOOL)probeInspectFound { return _testing && _probeInspectFound; }
-- (NSDictionary *)probeInspectAudit { return _testing ? [_probeInspectAudit copy] : nil; }
-
-// The engine offers this hook only in background mode. Production keeps Chromium's native
-// context menu, including its Inspect command and the original clicked-node coordinates.
-- (NSDictionary *)tab:(ArdiaCoreTab *)tab runContextMenu:(NSDictionary *)menu {
-  NSString *identity = [self identityForTab:tab];
-  if (!_testing || !identity || ![_probeInspectTabID isEqualToString:identity]) return nil;
-  _probeInspectTabID = nil;
-  _probeInspectAudit[@"menuSeen"] = @YES;
-  _probeInspectAudit[@"items"] = menu[@"items"] ?: @[];
-  for (NSDictionary *item in menu[@"items"]) {
-    NSString *label = [item[@"label"] isKindOfClass:NSString.class] ? item[@"label"] : @"";
-    label = [label stringByReplacingOccurrencesOfString:@"&" withString:@""];
-    if ([label isEqualToString:@"Inspect"] && [item[@"enabled"] boolValue] &&
-        [item[@"id"] isKindOfClass:NSNumber.class]) {
-      _probeInspectFound = YES;
-      _probeInspectAudit[@"selected"] = item[@"id"];
-      return @{@"command": item[@"id"]};
-    }
-  }
-  return nil;
-}
-
-- (BOOL)privateProbeEnabled {
-  return _testing && _probeRoot && ARCProbeRootIsOwned(_probeRoot) && !_closingBrowser;
-}
-
-- (void)evaluatePrivateProbeTabID:(NSString *)tabID script:(NSString *)script
-                       completion:(void (^)(NSString *))completion {
-  NSDictionary *entry = _privateProbeTabs[tabID];
-  ArdiaCoreTab *tab = entry[@"tab"];
-  NSMutableDictionary *context = _privateProbeContexts[entry[@"contextID"]];
-  if (![self privateProbeEnabled] || !tab || tab.closed || !context ||
-      !tab.profile.offTheRecord || tab.profile != context[@"profile"]) {
-    if (context) context[@"privateEvaluationRejected"] = @YES;
+                        completion:(void (^)(BOOL))completion { completion(NO); }
+- (void)inspectorProbeKeyInTabID:(NSString *)tabID key:(NSString *)key
+                    completion:(void (^)(BOOL))completion { completion(NO); }
+- (BOOL)inspectProbeElementInTabID:(NSString *)tabID { return NO; }
+- (BOOL)probeInspectFound { return NO; }
+- (NSDictionary *)probeInspectAudit { return nil; }
+- (NSDictionary *)probeExternalAppLaunchAuditForURL:(NSString *)url { return nil; }
+- (void)captureProbeTabID:(NSString *)tabID completion:(void (^)(NSData *))completion {
+  if (![self isKindOfClass:ARCShaarRuntime.class] || !ProbeCaptureAllowed()) {
     completion(nil);
     return;
   }
-  NSMutableDictionary *capturedContext = context;
-  NSMutableDictionary *lease = _privateProbeSourceLeases[context[@"sourceProfileID"]];
-  ArdiaCoreProfile *source = context[@"sourceProfile"];
-  [self evaluateTab:tab script:script completion:^(NSString *json) {
-    NSDictionary *current = self->_privateProbeTabs[tabID];
-    BOOL currentOwner = current == entry && self->_privateProbeContexts[entry[@"contextID"]] == capturedContext &&
-      self->_privateProbeSourceLeases[capturedContext[@"sourceProfileID"]] == lease &&
-      self->_profiles[capturedContext[@"sourceProfileID"]] == source && !source.destroyed &&
-      capturedContext[@"profile"] == tab.profile && !tab.closed;
-    if (!currentOwner) capturedContext[@"privateEvaluationStale"] = @YES;
-    else if (json) capturedContext[@"privateEvaluationSucceeded"] = @YES;
-    else capturedContext[@"privateEvaluationTimedOut"] = @YES;
-    completion(currentOwner ? json : nil);
-  }];
-}
-
-- (void)probePrivateNetworkControlsForTabID:(NSString *)tabID completion:(void (^)(BOOL))completion {
-  ArdiaCoreTab *tab = _privateProbeTabs[tabID][@"tab"];
-  if (![self privateProbeEnabled] || !tab || tab.closed || !tab.profile.offTheRecord) {
-    completion(NO);
-    return;
-  }
-  [tab devToolsCall:@"Network.enable" params:@{} timeout:5 completion:^(NSDictionary *result, NSString *error) {
-    if (error) { completion(NO); return; }
-    [tab devToolsCall:@"Network.setBlockedURLs" params:@{@"urls": @[@"*tracker.localhost*", @"http://*"]}
-      timeout:5 completion:^(NSDictionary *result, NSString *error) {
-      if (error) { completion(NO); return; }
-      [tab devToolsCall:@"Network.setCookieControls" params:@{@"enableThirdPartyCookieRestriction": @YES}
-        timeout:5 completion:^(NSDictionary *result, NSString *error) { completion(error == nil); }];
-    }];
-  }];
-}
-
-- (NSDictionary *)privatePrivacyStatusForProbeTabID:(NSString *)tabID {
-  NSDictionary *entry = _privateProbeTabs[tabID];
-  ArdiaCoreTab *tab = entry[@"tab"];
-  if (![self privateProbeEnabled] || !tab || tab.closed || !tab.profile.offTheRecord) return nil;
-  return @{@"ready": entry[@"privacyReady"] ?: @NO, @"failure": entry[@"loadFailure"] ?: @{},
-    @"error": entry[@"privacyError"] ?: NSNull.null};
-}
-
-- (NSDictionary *)privatePrivacyPreferencesForContextID:(NSString *)contextID {
-  if (![self privateProbeEnabled]) return nil;
-  NSDictionary *context = _privateProbeContexts[contextID];
-  ArdiaCoreProfile *profile = context[@"profile"];
-  ArdiaCoreProfile *source = context[@"sourceProfile"];
-  if (!profile || !profile.offTheRecord || profile.destroyed || !source || source.destroyed) return nil;
-  NSMutableDictionary *values = [NSMutableDictionary dictionary];
-  for (NSString *key in @[@"credentials_enable_service", @"autofill.profile_enabled", @"autofill.credit_card_enabled",
-      @"enable_referrers", @"webrtc.ip_handling_policy", @"profile.block_third_party_cookies"]) {
-    values[key] = @{@"private": [profile boolPreference:key] ?: NSNull.null,
-                    @"normal": [source boolPreference:key] ?: NSNull.null};
-  }
-  __block NSDictionary *wildcard = nil;
-  [self->_services call:@"site_settings.set" profileID:context[@"sourceProfileID"]
-    args:@{@"offTheRecord": @YES, @"origin": @"*", @"type": @"cookies", @"value": @"block"}
-    completion:^(NSDictionary *reply) { wildcard = reply; }];
-  values[@"wildcardCookieSetting"] = wildcard ?: @{};
-  return values;
-}
-
-- (void)evaluatePrivacyProbeTabID:(NSString *)tabID script:(NSString *)script
-                          completion:(void (^)(NSString *))completion {
-  NSDictionary *entry = _privateProbeTabs[tabID];
-  ArdiaCoreTab *tab = entry[@"tab"] ?: _tabs[tabID];
-  if (![self privateProbeEnabled] || !tab || tab.closed) {
+  ARCShaarRuntime *runtime = (ARCShaarRuntime *)self;
+  NSString *profileID = [runtime shaarDevToolsProfileIDForTabID:tabID];
+  NSString *windowID = [runtime windowIDForTabID:tabID];
+  if (![runtime shaarDevToolsOwnsTabID:tabID profileID:profileID windowID:windowID]) {
     completion(nil);
     return;
   }
-  [tab devToolsCall:@"Runtime.evaluate" params:@{@"expression": script, @"returnByValue": @YES, @"awaitPromise": @YES}
-    timeout:10 completion:^(NSDictionary *result, NSString *error) {
-    if (error || result[@"exceptionDetails"] || self->_privateProbeTabs[tabID] != entry || tab.closed) {
+  __weak ARCShaarRuntime *weakRuntime = runtime;
+  [runtime shaarDevToolsSubmit:SHAAR_OP_PROBE_CAPTURE_TAB tabID:tabID
+                    profileID:profileID windowID:windowID
+                      payload:@{@"schemaVersion": @1}
+                   completion:^(NSDictionary *reply, NSError *error) {
+    ARCShaarRuntime *owner = weakRuntime;
+    if (error || !owner || !ProbeCaptureAllowed() ||
+        ![owner shaarDevToolsOwnsTabID:tabID profileID:profileID windowID:windowID]) {
+      if (error) NSLog(@"Shaar normal renderer capture failed: %@", error.localizedDescription);
       completion(nil);
       return;
     }
-    id value = result[@"result"][@"value"];
-    NSData *data = [value isKindOfClass:NSDictionary.class] ? [NSJSONSerialization dataWithJSONObject:value options:0 error:nil] : nil;
-    completion(data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil);
+    NSData *png = ARCProbePNGFromDevToolsResult(reply);
+    if (!png) NSLog(@"Shaar normal renderer capture returned no PNG: %@", reply);
+    completion(png);
   }];
 }
-
-- (BOOL)attemptCancelledPrivateProbeCloseID:(NSString *)windowID {
-  NSMutableDictionary *entry = _privateProbeWindows[windowID];
-  if (![self privateProbeEnabled] || !entry || [entry[@"closing"] boolValue]) return NO;
-  [_privateProbeCancelledCloses addObject:windowID];
-  [((ArdiaCoreWindow *)entry[@"native"]).window performClose:nil];
-  NSString *tabID = [entry[@"tabIDs"] anyObject];
-  NSDictionary *tabEntry = _privateProbeTabs[tabID];
-  return _privateProbeWindows[windowID] == entry && ![entry[@"closing"] boolValue] &&
-    tabEntry && ![tabEntry[@"tab"] closed];
-}
-
-- (NSDictionary *)privateProbeAuditForContextID:(NSString *)contextID {
-  NSMutableDictionary *context = _privateProbeContexts[contextID];
-  ArdiaCoreProfile *source = context[@"sourceProfile"];
-  ArdiaCoreProfile *profile = context[@"profile"];
-  BOOL ownedTestingRoot = _testing && _probeRoot && ARCProbeRootIsOwned(_probeRoot) && _engine;
-  if (!ownedTestingRoot || !context || !source || !profile) return nil;
-  NSUInteger tabCount = 0;
-  BOOL allHidden = YES;
-  BOOL allWindowsNativeWindowsAlive = YES;
-  BOOL allTabsLoaded = YES;
-  BOOL allTabsAuthoredLoopbackURL = YES;
-  BOOL anyTabLoading = NO;
-  BOOL allTabsInNativeProfileBrowser = YES;
-  BOOL allTabsAttachedToHostView = YES;
-  BOOL allTabsDetachedFromHostView = YES;
-  BOOL allWindowsUsePrivateActiveProfile = YES;
-  BOOL allWindowsDisplayOwnedWebContents = YES;
-  BOOL allWindowsSelectOwnedWebContents = YES;
-  NSUInteger visibleNativeViewportCount = 0;
-  for (NSString *windowID in context[@"windows"]) {
-    NSMutableDictionary *window = _privateProbeWindows[windowID];
-    ArdiaCoreWindow *nativeWindowObject = window[@"native"];
-    NSUInteger visiblePrivateViews = 0;
-    if (nativeWindowObject.activeProfile != profile) allWindowsUsePrivateActiveProfile = NO;
-    NSString *selectedTabID = window[@"selectedTabID"];
-    if (!selectedTabID || ![window[@"tabIDs"] containsObject:selectedTabID] ||
-        !_privateProbeTabs[selectedTabID][@"tab"])
-      allWindowsSelectOwnedWebContents = NO;
-    for (NSString *tabID in window[@"tabIDs"]) {
-      ArdiaCoreTab *tab = _privateProbeTabs[tabID][@"tab"];
-      NSURL *tabURL = [NSURL URLWithString:tab.url ?: @""];
-      tabCount++;
-      if (!tab || ![[nativeWindowObject tabsForProfile:profile] containsObject:tab])
-        allTabsInNativeProfileBrowser = NO;
-      if (!tab.view || tab.view.superview != nativeWindowObject.hostView)
-        allTabsAttachedToHostView = NO;
-      if (!tab.view || tab.view.superview == nativeWindowObject.hostView)
-        allTabsDetachedFromHostView = NO;
-      BOOL selected = [window[@"selectedTabID"] isEqualToString:tabID];
-      if (tab.view && !tab.view.hidden && tab.view.window == nativeWindowObject.window) visiblePrivateViews++;
-      if (selected && (!tab.view || tab.view.hidden || tab.view.window != nativeWindowObject.window))
-        allWindowsDisplayOwnedWebContents = NO;
-      BOOL loopback = [tabURL.host isEqualToString:@"127.0.0.1"];
-      if (!tab || tab.closed || tab.loading || !loopback) allTabsLoaded = NO;
-      if (!loopback) allTabsAuthoredLoopbackURL = NO;
-      if (tab.loading) anyTabLoading = YES;
-    }
-    visibleNativeViewportCount += visiblePrivateViews;
-    NSWindow *nativeWindow = [window[@"native"] window];
-    if (!nativeWindow) allWindowsNativeWindowsAlive = NO;
-    if (visiblePrivateViews != 1) allWindowsDisplayOwnedWebContents = NO;
-    if (!nativeWindow || nativeWindow.isVisible) allHidden = NO;
+- (void)captureMarketingProbeTabID:(NSString *)tabID completion:(void (^)(NSData *))completion { completion(nil); }
+- (void)evaluatePrivateProbeTabID:(NSString *)tabID script:(NSString *)script
+                       completion:(void (^)(NSString *))completion {
+  if (![self isKindOfClass:ARCShaarRuntime.class] || !script.length) { completion(nil); return; }
+  ARCShaarRuntime *runtime = (ARCShaarRuntime *)self;
+  NSDictionary *state = ARCPrivateShaarState(runtime);
+  NSDictionary *tab = state[@"tabs"][tabID];
+  NSString *contextID = tab[@"contextID"];
+  NSString *windowID = tab[@"windowID"];
+  NSMutableDictionary *context = state[@"contexts"][contextID];
+  NSDictionary *window = state[@"windows"][windowID];
+  if (![runtime privateTabOwned:tabID windowID:windowID contextID:contextID] ||
+      !context || !window) { completion(nil); return; }
+  shaar_scope scope = {};
+  scope.size = sizeof(scope);
+  scope.private_session = (shaar_private_session *)
+      ((NSValue *)context[@"session"]).pointerValue;
+  shaar_window *nativeWindow = (shaar_window *)
+      ((NSValue *)window[@"handle"]).pointerValue;
+  shaar_tab *nativeTab = (shaar_tab *)((NSValue *)tab[@"handle"]).pointerValue;
+  NSDictionary *payload = @{@"schemaVersion": @1,
+      @"capability": @(SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER),
+      @"command": @(SHAAR_DEVTOOLS_RUNTIME_EVALUATE),
+      @"params": ARCProbePrivacyEvaluationParameters(script)};
+  BOOL submitted = ARCPrivateShaarSubmit(runtime, scope, nativeWindow, nativeTab,
+      SHAAR_OP_DEVTOOLS_CALL, payload, ^(NSDictionary *reply) {
+    NSString *value = ARCProbePrivateEvaluationJSON(reply);
+    context[@"probeEvaluationError"] = value ? @"" : [reply description];
+    completion(value);
+  });
+  if (!submitted) {
+    context[@"probeEvaluationError"] = @"Shaar rejected scoped Runtime.evaluate.";
+    completion(nil);
   }
-  NSString *sourceProfileID = context[@"sourceProfileID"];
-  NSDictionary *lease = _privateProbeSourceLeases[sourceProfileID];
-  return @{@"sourceIsRegular": @(!source.destroyed && !source.offTheRecord),
-           @"contextIsPrivate": @(!profile.destroyed && profile.offTheRecord),
-           @"contextDistinct": @(profile != source),
-           @"windowCount": @([context[@"windows"] count]), @"tabCount": @(tabCount),
-           @"allWindowsNativeWindowsAlive": @(allWindowsNativeWindowsAlive),
-           @"allWindowsHidden": @(allHidden), @"allTabsLoaded": @(allTabsLoaded),
-           @"allTabsAuthoredLoopbackURL": @(allTabsAuthoredLoopbackURL),
-           @"anyTabLoading": @(anyTabLoading),
-           @"allTabsInNativeProfileBrowser": @(allTabsInNativeProfileBrowser),
-           @"allTabsAttachedToHostView": @(allTabsAttachedToHostView),
-           @"allTabsDetachedFromHostView": @(allTabsDetachedFromHostView),
-           @"allWindowsUsePrivateActiveProfile": @(allWindowsUsePrivateActiveProfile),
-           @"allWindowsDisplayOwnedWebContents": @(allWindowsDisplayOwnedWebContents),
-           @"allWindowsSelectOwnedWebContents": @(allWindowsSelectOwnedWebContents),
-           @"visibleNativeViewportCount": @(visibleNativeViewportCount),
-           @"pendingWindowCount": @([(NSSet *)context[@"pendingWindows"] count]),
-           @"pendingReleaseRejected": context[@"pendingReleaseRejected"] ?: @NO,
-           @"sourceLeaseOwnsContext": @([lease[@"contextIDs"] containsObject:contextID]),
-           @"privateEvaluationRejected": context[@"privateEvaluationRejected"] ?: @NO,
-           @"privateEvaluationStale": context[@"privateEvaluationStale"] ?: @NO,
-           @"privateEvaluationSucceeded": context[@"privateEvaluationSucceeded"] ?: @NO,
-           @"privateEvaluationTimedOut": context[@"privateEvaluationTimedOut"] ?: @NO,
-           @"privateQuitDialogCancelResult": context[@"privateQuitDialogCancelResult"] ?: @"not-attempted",
-           @"profileToken": [NSString stringWithFormat:@"%p", profile],
-           @"profileAlive": @(!profile.destroyed),
-           @"noPendingFactory": @([(NSDictionary *)lease[@"pending"] count] == 0)};
 }
-
+- (void)probePrivateNetworkControlsForTabID:(NSString *)tabID completion:(void (^)(BOOL))completion { completion(NO); }
+- (NSDictionary *)privatePrivacyStatusForProbeTabID:(NSString *)tabID { return nil; }
+- (NSDictionary *)privatePrivacyPreferencesForContextID:(NSString *)contextID { return nil; }
+- (void)evaluatePrivacyProbeTabID:(NSString *)tabID script:(NSString *)script
+                          completion:(void (^)(NSString *))completion {
+  if (![self isKindOfClass:ARCShaarRuntime.class] || !script.length) {
+    completion(nil);
+    return;
+  }
+  ARCShaarRuntime *runtime = (ARCShaarRuntime *)self;
+  if (ARCPrivateShaarState(runtime)[@"tabs"][tabID]) {
+    [runtime evaluatePrivateProbeTabID:tabID script:script completion:completion];
+    return;
+  }
+  NSString *profileID = [runtime shaarDevToolsProfileIDForTabID:tabID];
+  NSString *windowID = [runtime windowIDForTabID:tabID];
+  if (![runtime shaarDevToolsOwnsTabID:tabID profileID:profileID windowID:windowID]) {
+    completion(nil);
+    return;
+  }
+  [runtime shaarDevToolsCall:@"Runtime.evaluate"
+                    params:ARCProbePrivacyEvaluationParameters(script)
+                capability:SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER tabID:tabID
+                 profileID:profileID windowID:windowID
+                completion:^(NSDictionary *reply, NSError *error) {
+    if (error) { completion(nil); return; }
+    completion(ARCProbePrivateEvaluationJSON(
+        @{@"schemaVersion": @1, @"result": reply ?: @{}}));
+  }];
+}
+- (BOOL)attemptCancelledPrivateProbeCloseID:(NSString *)windowID { return NO; }
+- (NSDictionary *)privateProbeAuditForContextID:(NSString *)contextID {
+  if (![self isKindOfClass:ARCShaarRuntime.class]) return nil;
+  ARCShaarRuntime *runtime = (ARCShaarRuntime *)self;
+  NSDictionary *state = ARCPrivateShaarState(runtime);
+  NSDictionary *context = state[@"contexts"][contextID];
+  if (!context) return nil;
+  NSArray<NSString *> *windowIDs = [context[@"windows"] allObjects];
+  BOOL allWindowsAlive = YES;
+  BOOL allWindowsHidden = YES;
+  BOOL allSelectedViewsAttached = YES;
+  BOOL allLive = YES, allPrivate = YES, allDisplayed = YES;
+  NSUInteger pendingCount = 0;
+  NSUInteger selectedViewCount = 0;
+  for (NSString *windowID in windowIDs) {
+    NSDictionary *entry = state[@"windows"][windowID];
+    NSString *selectedID = entry[@"selectedTabID"];
+    NSWindow *window = [runtime windowForPrivateWindowID:windowID contextID:contextID];
+    NSView *host = [runtime hostViewForPrivateWindowID:windowID contextID:contextID];
+    NSView *selected = selectedID
+        ? [runtime viewForPrivateTabID:selectedID windowID:windowID contextID:contextID] : nil;
+    BOOL attached = selected && host && window &&
+        [selected isDescendantOf:host] && selected.window == window;
+    allWindowsAlive &= window != nil;
+    allWindowsHidden &= window != nil && !window.isVisible;
+    allSelectedViewsAttached &= attached;
+    if (attached) ++selectedViewCount;
+    pendingCount += [entry[@"closing"] boolValue] ? 1 : 0;
+    shaar_tab_probe_state selectedState = {};
+    BOOL selectedReady = PrivateTabState(runtime, selectedID, windowID, contextID,
+                                         &selectedState);
+    allDisplayed &= selectedReady && selectedState.selected_native_tab &&
+                    selectedState.displayed_native_web_contents &&
+                    selectedState.scope_owns_tab;
+  }
+  NSUInteger tabCount = 0;
+  BOOL allTabsLoaded = YES;
+  BOOL allTabsLoopback = YES;
+  BOOL anyTabLoading = NO;
+  BOOL allBackgroundViewsDetached = YES;
+  NSMutableArray *documentStates = [NSMutableArray array];
+  for (NSString *tabID in state[@"tabs"]) {
+    NSDictionary *tab = state[@"tabs"][tabID];
+    if (![tab[@"contextID"] isEqualToString:contextID]) continue;
+    ++tabCount;
+    shaar_tab_probe_state nativeState = {};
+    BOOL nativeReady = PrivateTabState(runtime, tabID, tab[@"windowID"], contextID,
+                                       &nativeState);
+    allLive &= nativeReady && nativeState.live_web_contents;
+    allPrivate &= nativeReady && nativeState.context_is_private &&
+                  nativeState.scope_owns_tab;
+    NSString *url = tab[@"url"];
+    NSString *requestedURL = tab[@"requestedURL"];
+    BOOL loading = [tab[@"loading"] boolValue];
+    BOOL loaded = url.length && [url isEqualToString:requestedURL] && !loading;
+    NSURLComponents *parts = [NSURLComponents componentsWithString:url];
+    BOOL loopback = [parts.scheme isEqualToString:@"http"] &&
+        [parts.host isEqualToString:@"127.0.0.1"];
+    [documentStates addObject:@{@"url": url ?: @"", @"requestedURL": requestedURL ?: @"",
+        @"loading": @(loading), @"phase": tab[@"navigationPhase"] ?: @"unknown",
+        @"failure": tab[@"navigationFailure"] ?: [NSNull null]}];
+    allTabsLoaded &= loaded;
+    allTabsLoopback &= loopback;
+    anyTabLoading |= loading;
+    NSString *windowID = tab[@"windowID"];
+    NSDictionary *window = state[@"windows"][windowID];
+    if (![window[@"selectedTabID"] isEqualToString:tabID]) {
+      NSView *view = [runtime viewForPrivateTabID:tabID
+          windowID:windowID contextID:contextID];
+      NSView *host = [runtime hostViewForPrivateWindowID:windowID contextID:contextID];
+      allBackgroundViewsDetached &= view && host && ![view isDescendantOf:host];
+    }
+  }
+  NSString *sourceID = context[@"sourceProfileID"];
+  BOOL profileAlive = [runtime privateProfileHandleForID:sourceID] != nullptr;
+  return @{@"sourceIsRegular": @(profileAlive),
+      @"contextIsPrivate": @(allPrivate && tabCount > 0),
+      @"contextDistinct": @(![contextID isEqual:sourceID]),
+      @"profileAlive": @(profileAlive),
+      @"sourceLeaseOwnsContext": @(context[@"session"] != nil),
+      @"windowCount": @(windowIDs.count), @"tabCount": @(tabCount),
+      @"allTabsLoaded": @(tabCount > 0 && allTabsLoaded),
+      @"allTabsAuthoredLoopbackURL": @(tabCount > 0 && allTabsLoopback),
+      @"anyTabLoading": @(anyTabLoading),
+      @"allWindowsNativeWindowsAlive": @(allWindowsAlive),
+      @"allWindowsHidden": @(allWindowsHidden),
+      @"allTabsInNativeProfileBrowser": @(tabCount > 0 && allLive && allPrivate),
+      @"allTabsAttachedToHostView": @(allSelectedViewsAttached),
+      @"allTabsDetachedFromHostView": @(allBackgroundViewsDetached),
+      @"allWindowsUsePrivateActiveProfile": @(windowIDs.count > 0 && allPrivate && allDisplayed),
+      @"allWindowsDisplayOwnedWebContents": @(allDisplayed),
+      @"allWindowsSelectOwnedWebContents": @(allDisplayed),
+      @"visibleNativeViewportCount": @(selectedViewCount),
+      @"pendingWindowCount": @(pendingCount),
+      @"pendingReleaseRejected": @(windowIDs.count > 0),
+      @"documentStates": documentStates,
+      @"probeEvaluationError": context[@"probeEvaluationError"] ?: @""};
+}
 - (BOOL)privateProbeCaptureIsReadyForTabID:(NSString *)tabID windowID:(NSString *)windowID
                               contextID:(NSString *)contextID {
-  ArdiaCoreTab *tab = nil;
-  ArdiaCoreWindow *nativeWindow = nil;
-  NSMutableDictionary *window = _privateProbeWindows[windowID];
-  BOOL valid = [self privateProbeEnabled] &&
-      [self privateOwnerForTabID:tabID windowID:windowID contextID:contextID tab:&tab window:&nativeWindow] &&
-      [window[@"selectedTabID"] isEqualToString:tabID] && ![window[@"closing"] boolValue] &&
-      !tab.loading && tab.profile.offTheRecord && tab.view &&
-      (tab.view == nativeWindow.hostView || [tab.view isDescendantOf:nativeWindow.hostView]) &&
-      ProbeViewIsVisibleInWindow(tab.view, nativeWindow.window);
-  NSURL *url = [NSURL URLWithString:tab.url ?: @""];
-  valid = valid && [url.scheme isEqualToString:@"http"] &&
-      [@[@"127.0.0.1", @"localhost"] containsObject:url.host.lowercaseString ?: @""];
-  return valid;
+  if (![self isKindOfClass:ARCShaarRuntime.class]) return NO;
+  ARCShaarRuntime *runtime = (ARCShaarRuntime *)self;
+  shaar_tab_probe_state state = {};
+  NSView *view = [runtime viewForPrivateTabID:tabID windowID:windowID
+                                  contextID:contextID];
+  return PrivateTabState(runtime, tabID, windowID, contextID, &state) &&
+         state.live_web_contents && state.selected_native_tab &&
+         state.displayed_native_web_contents && state.context_is_private &&
+         state.scope_owns_tab &&
+         view.bounds.size.width > 100 && view.bounds.size.height > 100;
 }
-
 - (void)capturePrivateProbeTabID:(NSString *)tabID windowID:(NSString *)windowID
                        contextID:(NSString *)contextID
                       completion:(void (^)(NSData *, NSString *))completion {
-  if (![self privateProbeCaptureIsReadyForTabID:tabID windowID:windowID contextID:contextID]) {
-    ArdiaCoreTab *tab = _privateProbeTabs[tabID][@"tab"];
-    completion(nil, tab.loading ? @"private-owner-loading" : @"private-owner-rejected");
+  if (![self isKindOfClass:ARCShaarRuntime.class] || !ProbeCaptureAllowed()) {
+    completion(nil, @"Private capture requires an owned verification probe.");
     return;
   }
-  ArdiaCoreTab *tab = _privateProbeTabs[tabID][@"tab"];
-  NSMutableDictionary *window = _privateProbeWindows[windowID];
-  NSDictionary *capturedEntry = _privateProbeTabs[tabID];
-  [self captureProbeTab:tab diagnosticCompletion:^(NSData *data, NSString *error) {
-    BOOL current = self->_privateProbeTabs[tabID] == capturedEntry &&
-        [self privateOwnerForTabID:tabID windowID:windowID contextID:contextID tab:nil window:nil] &&
-        [window[@"selectedTabID"] isEqualToString:tabID] && !tab.closed && !tab.loading;
-    completion(current ? data : nil, !current ? @"private-owner-stale" : error);
-  }];
+  ARCShaarRuntime *runtime = (ARCShaarRuntime *)self;
+  if (![runtime privateTabOwned:tabID windowID:windowID contextID:contextID]) {
+    completion(nil, @"Private capture target is no longer owned.");
+    return;
+  }
+  __weak ARCShaarRuntime *weakRuntime = runtime;
+  NSDictionary *state = ARCPrivateShaarState(runtime);
+  NSDictionary *context = state[@"contexts"][contextID];
+  NSDictionary *window = state[@"windows"][windowID];
+  NSDictionary *tab = state[@"tabs"][tabID];
+  shaar_scope scope = {};
+  scope.size = sizeof(scope);
+  scope.private_session = static_cast<shaar_private_session *>(
+      [context[@"session"] pointerValue]);
+  auto *windowHandle = static_cast<shaar_window *>([window[@"handle"] pointerValue]);
+  auto *tabHandle = static_cast<shaar_tab *>([tab[@"handle"] pointerValue]);
+  BOOL submitted = ARCPrivateShaarSubmit(runtime, scope, windowHandle, tabHandle,
+      SHAAR_OP_PROBE_CAPTURE_TAB, @{@"schemaVersion": @1}, ^(NSDictionary *envelope) {
+    ARCShaarRuntime *owner = weakRuntime;
+    if (!owner || !ProbeCaptureAllowed() ||
+        ![owner privateTabOwned:tabID windowID:windowID contextID:contextID]) {
+      completion(nil, @"Private capture target changed.");
+      return;
+    }
+    NSDictionary *reply = [envelope[@"result"] isKindOfClass:NSDictionary.class]
+        ? envelope[@"result"] : nil;
+    NSData *png = ARCProbePNGFromDevToolsResult(reply);
+    completion(png, png ? nil : @"Private renderer returned no PNG capture.");
+  });
+  if (!submitted) completion(nil, @"Private capture request was rejected.");
 }
-
 - (NSDictionary *)normalProbeSelectionAuditForTabID:(NSString *)tabID {
-  if (![self privateProbeEnabled]) return @{};
-  ArdiaCoreTab *tab = _tabs[tabID];
-  ARCNativeWindowState *state = [self stateForTabID:tabID];
-  NSView *view = tab.view;
-  NSWindow *window = state.native.window;
-  __block NSUInteger visibleTabViewCount = 0;
-  [_tabs enumerateKeysAndObjectsUsingBlock:^(NSString *identity, ArdiaCoreTab *ownedTab, BOOL *stop) {
-    if (ownedTab.view && ProbeViewIsVisibleInWindow(ownedTab.view, window)) visibleTabViewCount++;
-  }];
-  BOOL primaryWindow = state && [state.identity isEqualToString:_primaryWindowID];
-  BOOL selectedID = state && [state.selectedTabID isEqualToString:tabID];
-  BOOL activeProfile = state && tab && state.native.activeProfile == tab.profile;
-  BOOL liveTab = tab && !tab.closed;
-  BOOL nativeProfileOwnsTab = state && tab &&
-    [[state.native tabsForProfile:tab.profile] containsObject:tab];
-  BOOL selected = primaryWindow && selectedID && activeProfile && liveTab && nativeProfileOwnsTab &&
-    !state.closed && !state.closing && !_closingBrowser;
-  BOOL attached = selected && view && state.native.hostView &&
-    (view == state.native.hostView || [view isDescendantOf:state.native.hostView]);
-  BOOL visible = selected && ProbeViewIsVisibleInWindow(view, window);
-  BOOL displayed = visible && attached && visibleTabViewCount == 1;
-  return @{@"selectedNativeTab": @(selected), @"displayedNativeWebContents": @(displayed),
-           @"primaryWindow": @(primaryWindow), @"selectedID": @(selectedID),
-           @"activeProfile": @(activeProfile), @"liveTab": @(liveTab),
-           @"nativeProfileOwnsTab": @(nativeProfileOwnsTab),
-           @"selectedViewAttached": @(attached), @"selectedViewVisible": @(visible),
-           @"visibleNativeViewCount": @(visibleTabViewCount),
-           @"nativeTabToken": tab ? [NSString stringWithFormat:@"%p", tab] : @"missing"};
+  if (![self isKindOfClass:ARCShaarRuntime.class]) return @{@"supported": @NO};
+  ARCShaarRuntime *runtime = (ARCShaarRuntime *)self;
+  NSString *windowID = [runtime windowIDForTabID:tabID];
+  NSView *view = [runtime viewForTabID:tabID];
+  NSView *host = windowID ? [runtime hostViewForWindowID:windowID] : nil;
+  NSWindow *window = windowID ? [runtime windowForID:windowID] : nil;
+  NSString *profileID = ProbeTable(runtime, "_shaarTabProfiles")[tabID];
+  shaar_scope scope = {};
+  scope.size = sizeof(scope);
+  scope.profile = profileID ? (shaar_profile *)[
+      ProbeTable(runtime, "_shaarProfiles")[profileID] pointerValue] : nullptr;
+  shaar_tab_probe_state state = {};
+  BOOL supported = windowID && scope.profile && NativeProbeState(runtime, scope,
+      (shaar_window *)[ProbeTable(runtime, "_shaarWindows")[windowID] pointerValue],
+      (shaar_tab *)[ProbeTable(runtime, "_shaarTabs")[tabID] pointerValue], &state);
+  NSDictionary *attachment = ARCProbeNormalSelectionAudit(view, host, window);
+  BOOL selected = supported && state.selected_native_tab && state.scope_owns_tab;
+  BOOL displayed = supported && state.displayed_native_web_contents &&
+                   state.scope_owns_tab;
+  return @{@"supported": @(supported), @"liveTab": @(supported && state.live_web_contents),
+           @"selectedNativeTab": @(selected),
+           @"displayedNativeWebContents": @(displayed),
+           @"selectedViewAttached": attachment[@"selectedViewAttached"],
+           @"selectedViewVisible": attachment[@"selectedViewVisible"],
+           @"hostHasWindow": attachment[@"hostHasWindow"],
+           @"tabHasWindow": attachment[@"tabHasWindow"],
+           @"windowAvailable": attachment[@"windowAvailable"],
+           @"tabWindowMatchesHost": @(view.window == window),
+           @"tabViewHidden": @(view.isHiddenOrHasHiddenAncestor),
+           @"tabSuperviewClass": view.superview ? NSStringFromClass(view.superview.class) : @"none",
+           @"primaryWindow": @([windowID isEqual:runtime.primaryWindowID]),
+           @"selectedID": @(selected), @"activeProfile": @(selected),
+           @"nativeProfileOwnsTab": @(supported && state.scope_owns_tab &&
+                                         !state.context_is_private),
+           @"visibleNativeViewCount": @(displayed ? 1 : 0),
+           @"nativeTabToken": attachment[@"nativeTabToken"]};
 }
-
-- (NSDictionary *)privateQuitCDPHoldAuditForTabID:(NSString *)tabID {
-  if (!_testing || !_probeRoot || !ARCProbeRootIsOwned(_probeRoot)) return nil;
-  NSMutableDictionary *owner = (NSMutableDictionary *)_privateQuitProbeTabs[tabID];
-  ArdiaCoreTab *tab = _tabs[tabID];
-  ARCNativeWindowState *state = [self stateForTabID:tabID];
-  if (!owner || !tab || owner[@"tab"] != tab || tab.closed ||
-      ![owner[@"windowID"] isEqualToString:_primaryWindowID] ||
-      ![state.identity isEqualToString:_primaryWindowID]) return nil;
-  return @{@"holdCommandPending": owner[@"holdCommandPending"] ?: @NO,
-           @"holdConfirmedPending": owner[@"holdConfirmedPending"] ?: @NO,
-           @"selectedNormalTab": @([state.selectedTabID isEqualToString:tabID])};
-}
-
+- (NSDictionary *)privateQuitCDPHoldAuditForTabID:(NSString *)tabID { return nil; }
 - (void)preparePrivateQuitCancellationProbeTabID:(NSString *)tabID
-                                      completion:(void (^)(BOOL))completion {
-  ArdiaCoreTab *tab = _tabs[tabID];
-  ARCNativeWindowState *state = [self stateForTabID:tabID];
-  NSURLComponents *url = [NSURLComponents componentsWithString:tab.url ?: @""];
-  NSString *host = url.host.lowercaseString ?: @"";
-  BOOL ownedLoopback = _testing && _probeRoot && ARCProbeRootIsOwned(_probeRoot) &&
-      [url.scheme.lowercaseString isEqualToString:@"http"] &&
-      [@[@"127.0.0.1", @"localhost"] containsObject:host];
-  BOOL valid = ownedLoopback && !_closingBrowser && _engine && tab && !tab.closed &&
-      !tab.profile.offTheRecord && state && [state.identity isEqualToString:_primaryWindowID] &&
-      [state.selectedTabID isEqualToString:tabID] && _privateProbeContexts.count > 0;
-  if (!valid) { completion(NO); return; }
-  NSString *event = [@"arcusis-private-quit-cdp-" stringByAppendingString:NSUUID.UUID.UUIDString];
-  NSMutableDictionary *owner = [@{@"tab": tab, @"windowID": state.identity, @"event": event,
-                                  @"holdCommandPending": @YES,
-                                  @"holdConfirmedPending": @NO,
-                                  @"releaseStarted": @NO} mutableCopy];
-  _privateQuitProbeTabs[tabID] = owner;
-  NSString *expression = [NSString stringWithFormat:
-    @"(()=>{const key='%@';const holds=window.__arcusisPrivateQuitCDPHolds||(window.__arcusisPrivateQuitCDPHolds=Object.create(null));"
-     "holds[key]={started:true,timedOut:false};return new Promise(resolve=>{const timer=setTimeout(()=>{holds[key].timedOut=true;resolve(true)},30000);"
-     "addEventListener(key,()=>{clearTimeout(timer);delete holds[key];resolve(true)},{once:true});});})()", event];
-  [tab devToolsCall:@"Runtime.evaluate"
-             params:@{@"expression": expression, @"awaitPromise": @YES}
-            timeout:35 completion:^(NSDictionary *holdResult, NSString *holdError) {
-    NSMutableDictionary *currentOwner = (NSMutableDictionary *)self->_privateQuitProbeTabs[tabID];
-    if (currentOwner == owner) currentOwner[@"holdCommandPending"] = @NO;
-    if (currentOwner == owner) {
-      if (holdError || self->_tabs[tabID] != tab || tab.closed)
-        currentOwner[@"holdConfirmedPending"] = @NO;
-      [self endPrivateQuitCDPHoldForTabID:tabID tab:tab completion:^(BOOL ended) {}];
-    }
-  }];
-  [tab devToolsCall:@"Page.enable" params:@{} timeout:5
-         completion:^(NSDictionary *result, NSString *error) {
-    BOOL current = self->_privateQuitProbeTabs[tabID] == owner &&
-        self->_tabs[tabID] == tab && !tab.closed;
-    if (error || !current) {
-      if (self->_privateQuitProbeTabs[tabID] == owner)
-        [self endPrivateQuitCDPHoldForTabID:tabID tab:tab completion:^(BOOL ended) {}];
-      completion(NO);
-    } else {
-      NSString *verify = [NSString stringWithFormat:
-        @"(()=>{const holds=window.__arcusisPrivateQuitCDPHolds;return holds&&holds['%@']||null})()", event];
-      [tab devToolsCall:@"Runtime.evaluate"
-                 params:@{@"expression": verify, @"returnByValue": @YES}
-                timeout:5 completion:^(NSDictionary *verifyResult, NSString *verifyError) {
-        NSMutableDictionary *verifiedOwner = (NSMutableDictionary *)self->_privateQuitProbeTabs[tabID];
-        id holdState = verifyResult[@"result"][@"value"];
-        BOOL pending = !verifyError && verifiedOwner == owner &&
-            self->_tabs[tabID] == tab && !tab.closed &&
-            [holdState isKindOfClass:NSDictionary.class] &&
-            [holdState[@"started"] boolValue] && ![holdState[@"timedOut"] boolValue] &&
-            [verifiedOwner[@"holdCommandPending"] boolValue];
-        verifiedOwner[@"holdConfirmedPending"] = @(pending);
-        if (!pending && verifiedOwner == owner)
-          [self endPrivateQuitCDPHoldForTabID:tabID tab:tab completion:^(BOOL ended) {}];
-        completion(pending);
-      }];
-    }
-  }];
-}
-
-- (void)endPrivateQuitCDPHoldForTabID:(NSString *)tabID
-                                  tab:(ArdiaCoreTab *)tab
-                           completion:(void (^)(BOOL))completion {
-  NSDictionary *owner = _privateQuitProbeTabs[tabID];
-  NSString *event = owner[@"event"];
-  if (!owner || owner[@"tab"] != tab || !event || _tabs[tabID] != tab || tab.closed) {
-    completion(NO);
-    return;
-  }
-  if ([owner[@"releaseStarted"] boolValue]) { completion(NO); return; }
-  ((NSMutableDictionary *)owner)[@"releaseStarted"] = @YES;
-  NSString *expression = [NSString stringWithFormat:@"dispatchEvent(new Event('%@'))", event];
-  [tab devToolsCall:@"Runtime.evaluate" params:@{@"expression": expression}
-           timeout:5 completion:^(NSDictionary *result, NSString *error) {
-    BOOL current = self->_privateQuitProbeTabs[tabID] == owner &&
-        self->_tabs[tabID] == tab && !tab.closed;
-    if (!current) { completion(NO); return; }
-    [tab devToolsCall:@"Page.disable" params:@{} timeout:5
-           completion:^(NSDictionary *ignored, NSString *disableError) {
-      BOOL stillCurrent = self->_privateQuitProbeTabs[tabID] == owner &&
-          self->_tabs[tabID] == tab && !tab.closed;
-      if (stillCurrent) [self->_privateQuitProbeTabs removeObjectForKey:tabID];
-      completion(error == nil && disableError == nil && stillCurrent);
-    }];
-  }];
-}
-
+                                      completion:(void (^)(BOOL))completion { completion(NO); }
 - (void)cancelPrivateQuitDialogForProbeTabID:(NSString *)tabID
-                                  completion:(void (^)(BOOL))completion {
-  NSDictionary *owner = _privateQuitProbeTabs[tabID];
-  ArdiaCoreTab *tab = owner[@"tab"];
-  ARCNativeWindowState *state = [self stateForTabID:tabID];
-  NSString *invalidReason = nil;
-  if (!_testing || !_probeRoot || !ARCProbeRootIsOwned(_probeRoot)) invalidReason = @"probe-root";
-  else if (!_closingBrowser) invalidReason = @"not-quitting";
-  else if (!_engine) invalidReason = @"engine-missing";
-  else if (!owner || !tab) invalidReason = @"probe-tab-missing";
-  else if (_tabs[tabID] != tab || tab.closed) invalidReason = @"tab-retired";
-  else if (tab.profile.offTheRecord) invalidReason = @"tab-profile-private";
-  else if (!state) invalidReason = @"window-state-missing";
-  else if (![state.identity isEqualToString:owner[@"windowID"]]) invalidReason = @"owner-window-mismatch";
-  else if (![state.identity isEqualToString:_primaryWindowID]) invalidReason = @"not-primary-window";
-  if (invalidReason) {
-    for (NSMutableDictionary *context in self->_privateProbeContexts.allValues) {
-      context[@"privateQuitDialogCancelResult"] =
-          [@"rejected-" stringByAppendingString:invalidReason];
-    }
-    completion(NO);
-    return;
-  }
-  [tab devToolsCall:@"Page.handleJavaScriptDialog"
-             params:@{@"accept": @NO}
-            timeout:1
-         completion:^(NSDictionary *result, NSString *error) {
-    BOOL current = self->_privateQuitProbeTabs[tabID][@"tab"] == tab &&
-        self->_tabs[tabID] == tab && !tab.closed;
-    NSString *lowerError = error.lowercaseString ?: @"";
-    for (NSMutableDictionary *context in self->_privateProbeContexts.allValues) {
-      context[@"privateQuitDialogCancelResult"] = !current ? @"owner-stale" : error ?
-          ([lowerError containsString:@"dialog"] && [lowerError containsString:@"no"] ?
-            @"no-dialog" : @"devtools-error") : @"cancelled";
-    }
-    ARCCompletePrivateQuitDialogCancellation(current, error, ^{
-      [self endPrivateQuitCDPHoldForTabID:tabID tab:tab completion:^(BOOL ended) {
-        completion(ended);
-      }];
-    }, ^{ completion(NO); });
-  }];
+                                  completion:(void (^)(BOOL))completion { completion(NO); }
+- (NSString *)loadProbeExtensionAtURL:(NSURL *)url profileID:(NSString *)profileID
+                                 error:(NSError **)error {
+  if (error) *error = ProbeUnsupported();
+  return nil;
 }
+- (void)evaluateProbePopupID:(NSString *)popupID script:(NSString *)script
+                 completion:(void (^)(NSString *))completion { completion(nil); }
+- (void)captureProbePopupID:(NSString *)popupID completion:(void (^)(NSData *))completion { completion(nil); }
+- (void)evaluateProbeUserGestureInTabID:(NSString *)tabID script:(NSString *)script
+                           completion:(void (^)(NSString *))completion { completion(nil); }
+- (void)clickProbePopupID:(NSString *)popupID buttonTitle:(NSString *)title
+              completion:(void (^)(BOOL))completion { completion(NO); }
+- (void)clickProbeElementInTabID:(NSString *)tabID elementID:(NSString *)elementID
+                    completion:(void (^)(BOOL))completion { completion(NO); }
+- (BOOL)crashProbeTabID:(NSString *)tabID { return NO; }
+- (NSString *)probeKeepAliveState { return nil; }
+- (BOOL)probeQuitStoppedEventLoop { return NO; }
+@end
 
-- (NSDictionary *)probeExternalAppLaunchAuditForURL:(NSString *)url {
-  if (!_externalAppProbeTesting || !_testing || !_engineClass || !_probeRoot ||
-      !ARCProbeRootIsOwned(_probeRoot)) return nil;
-  NSArray *launches = [_engineClass testExternalLaunches];
-  return ARCProbeExternalAppLaunchAuditForTesting(url, launches, _probeRoot, YES);
-}
-
-- (void)evaluateProbeUserGestureInTabID:(NSString *)tabID script:(NSString *)script completion:(void (^)(NSString *))completion {
-  if (!_testing) { completion(nil); return; }
-  [self evaluateTab:_tabs[tabID] script:script userGesture:YES completion:completion];
-}
-
-- (NSString *)loadProbeExtensionAtURL:(NSURL *)url profileID:(NSString *)profileID error:(NSError **)error {
-  NSURL *resolved = url.URLByStandardizingPath.URLByResolvingSymlinksInPath;
-  NSString *prefix = [_probeRoot.path stringByAppendingString:@"/"];
-  if (!_testing || !prefix || ![resolved.path hasPrefix:prefix] || !_profiles[profileID]) {
-    if (error) *error = ARCBridgeError(@"Component loading is restricted to disposable probe profiles.");
+@implementation ARCShaarRuntime (Verification)
+- (NSString *)loadProbeExtensionAtURL:(NSURL *)url profileID:(NSString *)profileID
+                                 error:(NSError **)error {
+  void *library = ShaarProbeField<void *>(self, "_shaarLibrary");
+  shaar_engine *engine = ShaarProbeField<shaar_engine *>(self, "_shaarEngine");
+  Ivar profiles_field = class_getInstanceVariable(ARCShaarRuntime.class, "_shaarProfiles");
+  NSDictionary *profiles = profiles_field ? object_getIvar(self, profiles_field) : nil;
+  shaar_profile *profile = static_cast<shaar_profile *>([profiles[profileID] pointerValue]);
+  using Load = decltype(&shaar_test_load_component_extension);
+  Load load = library ? reinterpret_cast<Load>(dlsym(library, "shaar_test_load_component_extension"))
+                      : nullptr;
+  if (!load) {
+    if (error) *error = ProbeUnsupported();
     return nil;
   }
-  NSString *identity = [_profiles[profileID] loadComponentExtension:resolved.path];
-  if (!identity) {
-    if (error) *error = ARCBridgeError(@"The MV3 probe extension could not be loaded.");
+  const char *path = url.path.UTF8String;
+  shaar_bytes extension_id = {};
+  shaar_error native_error = {};
+  native_error.size = sizeof(native_error);
+  shaar_error_code status = load(engine, profile, {path, path ? std::strlen(path) : 0},
+                                 &extension_id, &native_error);
+  if (status != SHAAR_OK || !extension_id.data || !extension_id.size) {
+    if (error) *error = ShaarProbeError(native_error, @"Shaar probe extension did not load.");
     return nil;
   }
-  if (!_probeExtensions[profileID]) _probeExtensions[profileID] = [NSMutableArray array];
-  NSData *manifestData = [NSData dataWithContentsOfURL:[resolved URLByAppendingPathComponent:@"manifest.json"]];
-  NSDictionary *manifest = manifestData ? [NSJSONSerialization JSONObjectWithData:manifestData options:0 error:nil] : nil;
-  [_probeExtensions[profileID] addObject:@{@"id": identity, @"name": manifest[@"name"] ?: @"Probe extension",
-                                         @"version": manifest[@"version"] ?: @"unknown"}];
-  return identity;
-}
-
-- (void)evaluateProbePopupID:(NSString *)popupID script:(NSString *)script completion:(void (^)(NSString *))completion {
-  ARCNativeWindowState *state = [self stateForPopupID:popupID];
-  if (!_testing || !state || state.closed) { completion(nil); return; }
-  [self evaluateTab:state.popup script:script completion:completion];
-}
-
-- (BOOL)ownedProbePopupID:(NSString *)popupID state:(ARCNativeWindowState **)stateOut {
-  ARCNativeWindowState *state = [self stateForPopupID:popupID];
-  ArdiaCoreTab *popup = state.popup;
-  NSString *ownerTabID = state.popupOwnerTabID;
-  ArdiaCoreTab *owner = ownerTabID ? _tabs[ownerTabID] : nil;
-  NSURL *url = [NSURL URLWithString:popup.url ?: @""];
-  BOOL valid = _testing && state && !state.closed && !state.closing && !_closingBrowser &&
-    popup && !popup.closed && [state.popupID isEqualToString:popupID] &&
-    [state.popupExtensionID isEqualToString:@"nngceckbapebfimnlniiiahkandclblb"] &&
-    [url.scheme isEqualToString:@"chrome-extension"] && [url.host isEqualToString:state.popupExtensionID] &&
-    !url.user && !url.password && !url.port && ownerTabID.length > 0 && owner && !owner.closed &&
-    [self stateForTabID:ownerTabID] == state && [self isSelectedTabID:ownerTabID] &&
-    popup.profile == owner.profile && popup.profile == state.native.activeProfile;
-  if (valid && stateOut) *stateOut = state;
-  return valid;
-}
-
-- (void)captureProbeTabID:(NSString *)tabID completion:(void (^)(NSData *))completion {
-  [self captureProbeTab:_tabs[tabID] completion:completion];
-}
-
-- (void)captureMarketingProbeTabID:(NSString *)tabID completion:(void (^)(NSData *))completion {
-  ArdiaCoreTab *tab = _tabs[tabID];
-  NSSize size = tab.view.bounds.size;
-  if (!_testing || !ARCProbeRootIsOwned(_probeRoot) || !tab || tab.closed ||
-      ![NSProcessInfo.processInfo.arguments containsObject:@"--marketing-screenshots"] ||
-      size.width < 200 || size.height < 200) { completion(nil); return; }
-  [tab devToolsCall:@"Page.captureScreenshot"
-             params:@{@"format": @"png", @"fromSurface": @YES, @"captureBeyondViewport": @NO,
-                      @"clip": @{@"x": @0, @"y": @0, @"width": @(size.width),
-                                 @"height": @(size.height), @"scale": @1}}
-            timeout:5 completion:^(NSDictionary *result, NSString *error) {
-    NSString *base64 = result[@"data"];
-    NSData *data = !error && [base64 isKindOfClass:NSString.class]
-        ? [[NSData alloc] initWithBase64EncodedString:base64 options:0] : nil;
-    completion(data);
-  }];
-}
-
-- (void)clickProbePopupID:(NSString *)popupID buttonTitle:(NSString *)title completion:(void (^)(BOOL))completion {
-  ARCNativeWindowState *state = nil;
-  if (![self ownedProbePopupID:popupID state:&state] || ![title isKindOfClass:NSString.class] ||
-      title.length == 0 || title.length > 256) {
-    completion(NO); return;
-  }
-  NSData *encoded = [NSJSONSerialization dataWithJSONObject:title options:NSJSONWritingFragmentsAllowed error:nil];
-  NSString *literal = encoded ? [[NSString alloc] initWithData:encoded encoding:NSUTF8StringEncoding] : nil;
-  if (!literal) { completion(NO); return; }
-  NSString *expression = ProbeButtonExpression(literal);
-  ArdiaCoreTab *popup = state.popup;
-  ClickProbeTarget(popup, expression, ^BOOL {
-    return [self ownedProbePopupID:popupID state:nil] && state.popup == popup;
-  }, completion);
-}
-
-- (void)clickProbeElementInTabID:(NSString *)tabID elementID:(NSString *)elementID completion:(void (^)(BOOL))completion {
-  ArdiaCoreTab *tab = _tabs[tabID];
-  if (!_testing || !tab || tab.closed || ![self isSelectedTabID:tabID] || elementID.length > 128) {
-    completion(NO);
-    return;
-  }
-  NSData *data = [NSJSONSerialization dataWithJSONObject:elementID options:NSJSONWritingFragmentsAllowed error:nil];
-  NSString *literal = data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
-  if (!literal) { completion(NO); return; }
-  NSString *expression = [NSString stringWithFormat:
-    @"(()=>{const e=document.getElementById(%@);if(!e)return null;e.scrollIntoView({block:'center'});"
-     "const r=e.getBoundingClientRect();return r.width>0&&r.height>0?{x:r.x+r.width/2,y:r.y+r.height/2}:null;})()", literal];
-  ClickProbeTarget(tab, expression, ^BOOL {
-    return !tab.closed && self->_tabs[tabID] == tab && [self isSelectedTabID:tabID];
-  }, completion);
-}
-
-- (void)captureProbePopupID:(NSString *)popupID completion:(void (^)(NSData *))completion {
-  ARCNativeWindowState *state = [self stateForPopupID:popupID];
-  if (!state || state.closed) { completion(nil); return; }
-  [self captureProbeTab:state.popup completion:completion];
-}
-
-- (BOOL)crashProbeTabID:(NSString *)tabID {
-  ArdiaCoreTab *tab = _tabs[tabID];
-  NSURL *url = tab ? [NSURL URLWithString:tab.url] : nil;
-  if (!_testing || !tab || tab.closed || ![@[@"127.0.0.1", @"localhost"] containsObject:url.host] ||
-      ![url.scheme isEqualToString:@"http"] || ![url.path hasPrefix:@"/renderer-crash-"]) return NO;
-  // The target may disappear before CDP can acknowledge Page.crash; the renderer callback is the evidence.
-  [tab devToolsCall:@"Page.crash" params:@{} timeout:5 completion:^(NSDictionary *result, NSString *error) {}];
-  return YES;
+  return [[NSString alloc] initWithBytes:extension_id.data length:extension_id.size
+                               encoding:NSUTF8StringEncoding];
 }
 
 - (NSString *)probeKeepAliveState {
-  if (!_testing || !_probeRoot || !_engine) return nil;
-  return _engine.keepAliveState;
+  void *library = ShaarProbeField<void *>(self, "_shaarLibrary");
+  shaar_engine *engine = ShaarProbeField<shaar_engine *>(self, "_shaarEngine");
+  using State = decltype(&shaar_test_keep_alive_state);
+  State state = library ? reinterpret_cast<State>(dlsym(library, "shaar_test_keep_alive_state"))
+                        : nullptr;
+  if (!state) return nil;
+  shaar_bytes value = {};
+  shaar_error native_error = {};
+  native_error.size = sizeof(native_error);
+  if (state(engine, &value, &native_error) != SHAAR_OK || !value.data) return nil;
+  return [[NSString alloc] initWithBytes:value.data length:value.size
+                               encoding:NSUTF8StringEncoding];
 }
-
-- (BOOL)probeQuitStoppedEventLoop {
-  return _testing && _probeRoot && _shutdownGuard.stoppedEventLoop;
-}
-
-- (void)captureProbeTab:(ArdiaCoreTab *)tab completion:(void (^)(NSData *))completion {
-  [self captureProbeTab:tab diagnosticCompletion:^(NSData *data, NSString *error) {
-    completion(data);
-  }];
-}
-
-- (void)captureProbeTab:(ArdiaCoreTab *)tab diagnosticCompletion:(void (^)(NSData *, NSString *))completion {
-  if (!_testing || !tab || tab.closed) { completion(nil, @"probe-tab-unavailable"); return; }
-  [tab devToolsCall:@"Page.captureScreenshot"
-            params:@{@"format": @"png", @"captureBeyondViewport": @YES}
-            timeout:15
-         completion:^(NSDictionary *result, NSString *error) {
-    NSString *base64 = result[@"data"];
-    NSData *data = [base64 isKindOfClass:NSString.class]
-        ? [[NSData alloc] initWithBase64EncodedString:base64 options:0] : nil;
-    completion(data, error ?: (data ? nil : @"screenshot-data-missing-or-invalid-base64"));
-  }];
-}
-
 @end

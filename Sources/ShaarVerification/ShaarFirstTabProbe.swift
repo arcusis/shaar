@@ -38,20 +38,13 @@ final class ShaarFirstTabProbe {
       return arguments[index + 1]
     }
 
-    guard
-      BrowserBackendSelection.choose(
-        environment: ProcessInfo.processInfo.environment, arguments: arguments) == .shaar
-    else { throw Failure("The Shaar backend switch is required.") }
-
     let framework = URL(filePath: try value(after: "--probe-framework"))
     output = URL(filePath: try value(after: "--probe-output"))
     dataRoot = URL(filePath: try value(after: "--probe-data-dir"), directoryHint: .isDirectory)
     checksCoreRoutes = arguments.contains("--probe-shaar-core-routes")
     checksExtensions = arguments.contains("--probe-shaar-extensions")
     checksPrivatePrivacy = arguments.contains("--probe-shaar-private-privacy")
-    let selected = try NativeBrowserHost.makeRuntime(
-      frameworkURL: framework, environment: ProcessInfo.processInfo.environment,
-      arguments: arguments)
+    let selected = try NativeBrowserHost.makeRuntime(frameworkURL: framework)
     guard let selected = selected as? ARCShaarRuntime else {
       throw Failure("The backend selector did not construct the Shaar runtime.")
     }

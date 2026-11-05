@@ -170,6 +170,11 @@ final class BrowserRuntimeEvents {
     }
   }
 
+  func quit() {
+    router.prepareForQuit()
+    runtime.quit()
+  }
+
   private func tabClient(_ id: String) -> BrowserRuntimeClient? {
     router.client(forTab: id, nativeWindowID: runtime.windowID(forTabID: id))
   }

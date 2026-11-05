@@ -16,7 +16,7 @@ Colors support HEX, RGB and OKLCH, preserving alpha in calculations. WCAG 2.2 co
 
 `InspectorPage` allocates page-card space to the native SwiftUI panel; no separate tools window opens. Models belong to an exact tab, profile and native window, revalidate ownership before and after calls, reset on document changes, and close on tab/window teardown. Selection payloads have size, shape and finite-value bounds. Remote objects use unique groups released after each query.
 
-The pinned ArdiaCore Chromium 155 bridge drops DevTools events. Inspector polls a page script rather than subscribing to events. The bridge also detaches idle DevTools clients, invalidating DOM/CSS IDs: overlapping bounded 30-second Runtime promises retain the inspection session; closing stops renewal. No debugging port opens. Closing removes the page overlay and stops polling and lease renewal; already pending bounded lease calls can take up to 35 seconds to finish. The script runs in the page's world; hostile pages can modify it, so these results are inspection aids, not trusted security evidence.
+Inspector polls a page script rather than subscribing to DevTools events. No debugging port opens. The page script's results remain inspection aids, not trusted security evidence. Native Shaar DevTools and Inspector behavior still needs runtime verification.
 
 ## Verification and captures
 

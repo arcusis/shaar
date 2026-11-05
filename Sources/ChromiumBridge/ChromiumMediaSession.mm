@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #import "ChromiumRuntimeInternal.h"
+#import "ChromiumMediaSession.h"
 #import "ChromiumShaarFeatureTransport.h"
 #import <objc/runtime.h>
 #include <cmath>
@@ -254,74 +255,6 @@ static NSDictionary<NSString *, id> *ARCMediaSessionStateFromJSON(NSString *json
   };
 }
 
-@implementation ARCMediaSessionTracker {
-  // tab -> frame -> state, plus each tab's frames in report order.
-  NSMutableDictionary<NSString *, NSMutableDictionary<NSString *, NSDictionary *> *> *_frames;
-  NSMutableDictionary<NSString *, NSMutableArray<NSString *> *> *_order;
-}
-
-- (instancetype)init {
-  if (!(self = [super init])) return nil;
-  _frames = [NSMutableDictionary dictionary];
-  _order = [NSMutableDictionary dictionary];
-  return self;
-}
-
-- (BOOL)receiveJSON:(NSString *)json frameID:(NSString *)frameID tabID:(NSString *)tabID {
-  NSDictionary *before = [self stateForTabID:tabID];
-  NSDictionary *state = ARCMediaSessionStateFromJSON(json);
-  NSMutableArray *order = _order[tabID] ?: [NSMutableArray array];
-  [order removeObject:frameID];
-  if (state) {
-    if (!_frames[tabID]) _frames[tabID] = [NSMutableDictionary dictionary];
-    _frames[tabID][frameID] = state;
-    [order addObject:frameID];
-    _order[tabID] = order;
-  } else {
-    [_frames[tabID] removeObjectForKey:frameID];
-    if (!_frames[tabID].count) [self forgetTabID:tabID];
-  }
-  NSDictionary *after = [self stateForTabID:tabID];
-  return !(before == after || [before isEqualToDictionary:after]);
-}
-
-/// A playing frame wins; otherwise the frame that reported most recently.
-- (NSString *)frameIDForTabID:(NSString *)tabID {
-  NSArray<NSString *> *order = _order[tabID];
-  for (NSString *frameID in order.reverseObjectEnumerator) {
-    if ([_frames[tabID][frameID][@"playbackState"] isEqualToString:@"playing"]) return frameID;
-  }
-  return order.lastObject;
-}
-
-/// The reduced frame's state with the picture-in-picture video of whichever frame has one.
-- (NSDictionary<NSString *, id> *)stateForTabID:(NSString *)tabID {
-  NSString *frameID = [self frameIDForTabID:tabID];
-  if (!frameID) return nil;
-  NSMutableDictionary *state = [_frames[tabID][frameID] mutableCopy];
-  for (NSString *other in _order[tabID].reverseObjectEnumerator) {
-    id video = _frames[tabID][other][@"pictureInPicture"];
-    if ([video isKindOfClass:NSDictionary.class]) {
-      state[@"pictureInPicture"] = video;
-      break;
-    }
-  }
-  return state;
-}
-
-- (NSArray<NSString *> *)frameIDsForTabID:(NSString *)tabID {
-  return [_order[tabID] copy] ?: @[];
-}
-
-- (BOOL)forgetTabID:(NSString *)tabID {
-  BOOL had = _frames[tabID].count > 0;
-  [_frames removeObjectForKey:tabID];
-  [_order removeObjectForKey:tabID];
-  return had;
-}
-
-@end
-
 static const void *ShaarMediaCacheKey = &ShaarMediaCacheKey;
 static const void *ShaarMediaRefreshKey = &ShaarMediaRefreshKey;
 static NSString *ARCMediaSessionActionName(ARCMediaSessionAction action);
@@ -454,80 +387,3 @@ static NSString *ARCMediaSessionActionName(ARCMediaSessionAction action) {
   }
   return nil;
 }
-
-@implementation ARCChromiumRuntime (MediaSession)
-
-- (NSDictionary<NSString *, id> *)mediaSessionStateForTabID:(NSString *)tabID {
-  ArdiaCoreTab *tab = [self liveTabForID:tabID];
-  NSDictionary *state = [_mediaSessions stateForTabID:tabID];
-  if (!tab || !state) return nil;
-  NSMutableDictionary *result = [state mutableCopy];
-  result[@"muted"] = @(tab.muted);
-  return result;
-}
-
-- (BOOL)sendMediaSessionAction:(ARCMediaSessionAction)action seconds:(double)seconds tabID:(NSString *)tabID {
-  ArdiaCoreTab *tab = [self liveTabForID:tabID];
-  NSString *name = ARCMediaSessionActionName(action);
-  NSString *frameID = [_mediaSessions frameIDForTabID:tabID];
-  NSArray *supported = [_mediaSessions stateForTabID:tabID][@"actions"];
-  if (!tab || !name || !frameID || ![supported containsObject:name]) return NO;
-  NSData *data = [NSJSONSerialization dataWithJSONObject:@{
-    @"action": name, @"seconds": @(std::isfinite(seconds) ? seconds : 0),
-  } options:0 error:nil];
-  if (!data) return NO;
-  // Chromium may freeze a hidden page; an explicit control must reach it. Shaar never
-  // freezes pages itself, so this only undoes the engine's background freezing.
-  tab.frozen = NO;
-  [tab callFrame:frameID kind:ARCMediaActionMessage
-            json:[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]];
-  return YES;
-}
-
-- (BOOL)setMuted:(BOOL)muted tabID:(NSString *)tabID {
-  ArdiaCoreTab *tab = [self liveTabForID:tabID];
-  if (!tab) return NO;
-  tab.muted = muted;
-  [self publishMediaSessionForTabID:tabID];
-  return YES;
-}
-
-- (BOOL)setMediaVolume:(double)volume tabID:(NSString *)tabID {
-  if (!std::isfinite(volume) || volume < 0 || volume > 1) return NO;
-  ArdiaCoreTab *tab = [self liveTabForID:tabID];
-  NSString *frameID = [_mediaSessions frameIDForTabID:tabID];
-  id current = [_mediaSessions stateForTabID:tabID][@"volume"];
-  if (!tab || !frameID || ![current isKindOfClass:NSNumber.class]) return NO;
-  NSData *data = [NSJSONSerialization dataWithJSONObject:@{@"volume": @(volume)} options:0 error:nil];
-  if (!data) return NO;
-  tab.frozen = NO;
-  if (volume > 0) tab.muted = NO;
-  [tab callFrame:frameID kind:ARCMediaVolumeMessage
-            json:[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]];
-  [self publishMediaSessionForTabID:tabID];
-  return YES;
-}
-
-@end
-
-@implementation ARCChromiumRuntime (MediaSessionSupport)
-
-- (void)receiveMediaSessionJSON:(NSString *)json frameID:(NSString *)frameID tab:(ArdiaCoreTab *)tab {
-  NSString *identity = [self identityForTab:tab];
-  if (!identity || !frameID.length || tab.closed) return;
-  if ([_mediaSessions receiveJSON:json frameID:frameID tabID:identity]) {
-    [self publishMediaSessionForTabID:identity];
-  }
-}
-
-- (void)publishMediaSessionForTabID:(NSString *)tabID {
-  ARCNativeWindowState *state = [self stateForTabID:tabID];
-  if (!state || state.closing || state.closed || _closingBrowser || !self.onMediaSessionChanged) return;
-  self.onMediaSessionChanged(tabID, [self mediaSessionStateForTabID:tabID]);
-}
-
-- (void)resetMediaSessionForTabID:(NSString *)tabID notify:(BOOL)notify {
-  if ([_mediaSessions forgetTabID:tabID] && notify) [self publishMediaSessionForTabID:tabID];
-}
-
-@end

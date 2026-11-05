@@ -119,8 +119,8 @@ struct DevToolsTests {
         withSensitiveField, scope: scope, windowID: "window-a", tabID: "tab-a") == nil)
   }
 
-  @Test func ardiaRemainsDefaultAndDoesNotConstructShaarAdapter() {
-    #expect(ShaarEngineImplementation.shippingDefault == .ardia)
-    #expect(ShaarDevToolsAdapter(engine: FakeDevToolsEngine()) == nil)
+  @Test func shaarDefaultConstructsAdapter() {
+    #expect(ShaarEngineImplementation.shippingDefault == .shaar)
+    #expect(ShaarDevToolsAdapter(engine: FakeDevToolsEngine()) != nil)
   }
 }

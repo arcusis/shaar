@@ -617,7 +617,7 @@ def _read_framework_bytes(root: Path, relative: str, limit: int) -> bytes:
 
 def _code_resources_match(archive_data: bytes, framework_data: bytes, path: str,
                           normalized_macho_paths: set[str], exact_matched_paths: set[str],
-                          framework_root: Path) -> bool:
+                          framework_root: Path, identity_rewritten_paths: set[str]) -> bool:
     if len(archive_data) > MAX_CODE_RESOURCES_SIZE or len(framework_data) > MAX_CODE_RESOURCES_SIZE:
         raise PayloadError("CodeResources member exceeds size cap")
     try:
@@ -655,8 +655,7 @@ def _code_resources_match(archive_data: bytes, framework_data: bytes, path: str,
     validate_entries(current["files"], True)
     validate_entries(old_files2, False)
     validate_entries(new_files2, False)
-    if (original["files"] != current["files"] or original["rules"] != current["rules"]
-            or original["rules2"] != current["rules2"]):
+    if original["rules"] != current["rules"] or original["rules2"] != current["rules2"]:
         return False
     if original == current:
         return True
@@ -666,6 +665,18 @@ def _code_resources_match(archive_data: bytes, framework_data: bytes, path: str,
     version_root = path.removesuffix("/_CodeSignature/CodeResources")
     if version_root == path:
         raise PayloadError("CodeResources path is unsupported")
+    if set(original["files"]) != set(current["files"]):
+        return False
+    for resource_path, old_hash in original["files"].items():
+        new_hash = current["files"][resource_path]
+        if old_hash == new_hash:
+            continue
+        candidate = f"{version_root}/{resource_path}"
+        if candidate not in identity_rewritten_paths or not isinstance(new_hash, bytes):
+            return False
+        if new_hash != hashlib.sha1(_read_framework_bytes(framework_root, candidate, 1024 * 1024)).digest():
+            return False
+        changed = True
     for resource_path, old_entry in old_files2.items():
         new_entry = new_files2[resource_path]
         if set(old_entry) != set(new_entry):
@@ -692,14 +703,16 @@ def _code_resources_match(archive_data: bytes, framework_data: bytes, path: str,
             changed = True
             bundle_seal = (policy_path.startswith("Helpers/") and policy_path.endswith(".app")
                            and field in ("cdhash", "requirement"))
-            if macho_path is None and not bundle_seal:
+            identity_seal = (field == "hash2" and
+                             f"{version_root}/{policy_path}" in identity_rewritten_paths)
+            if macho_path is None and not bundle_seal and not identity_seal:
                 return False
             if field in ("cdhash", "requirement"):
                 if not policy_path.startswith("Helpers/"):
                     return False
                 if policy_path.endswith(".app"):
                     info_path = f"{version_root}/{policy_path}/Contents/Info.plist"
-                    if info_path not in exact_matched_paths:
+                    if info_path not in exact_matched_paths | identity_rewritten_paths:
                         return False
                     try:
                         info = plistlib.loads(_read_framework_bytes(framework_root, info_path, 1024 * 1024))
@@ -718,16 +731,38 @@ def _code_resources_match(archive_data: bytes, framework_data: bytes, path: str,
                 if field == "requirement" and not all(isinstance(value, str) for value in (old_entry[field], new_entry[field])):
                     raise PayloadError("CodeResources requirement field is malformed")
             elif field == "hash2":
-                if not policy_path.startswith("Libraries/") or not policy_path.endswith(".dylib"):
-                    return False
                 if not all(isinstance(value, bytes) for value in (old_entry[field], new_entry[field])):
                     raise PayloadError("CodeResources hash2 field is malformed")
+                identity_path = f"{version_root}/{policy_path}"
+                if identity_path in identity_rewritten_paths:
+                    if new_entry[field] != hashlib.sha256(
+                            _read_framework_bytes(framework_root, identity_path, 1024 * 1024)).digest():
+                        return False
+                elif not policy_path.startswith("Libraries/") or not policy_path.endswith(".dylib"):
+                    return False
             else:
                 return False
     return changed
 
 
-def compare_payload(archive: Path, framework: Path, pin: dict) -> dict:
+def _identity_rewrite_matches(original: bytes, current: bytes, identifier: str) -> bool:
+    try:
+        source_info = plistlib.loads(original)
+        bundle_info = plistlib.loads(current)
+    except (plistlib.InvalidFileException, TypeError, ValueError, OverflowError, RecursionError):
+        return False
+    if not isinstance(source_info, dict) or not isinstance(bundle_info, dict):
+        return False
+    if not isinstance(source_info.get("CFBundleIdentifier"), str):
+        return False
+    if bundle_info.get("CFBundleIdentifier") != identifier:
+        return False
+    source_info["CFBundleIdentifier"] = identifier
+    return source_info == bundle_info
+
+
+def compare_payload(archive: Path, framework: Path, pin: dict,
+                    identity_map: dict[str, str] | None = None) -> dict:
     report = {
         "schema": 1,
         "archive_metadata_verified": False,
@@ -798,6 +833,7 @@ def compare_payload(archive: Path, framework: Path, pin: dict) -> dict:
             pending = {item["path"] for item in results if item["status"] == "pending"}
             missing_files = {path for path in differences if selected.get(path, {}).get("kind") == "file"}
             deferred_code_resources: dict[str, tuple[bytes, bytes]] = {}
+            identity_rewritten_paths: set[str] = set()
             if pending or missing_files:
                 source.seek(0)
                 compressed = lzma.LZMAFile(source, "rb")
@@ -828,6 +864,24 @@ def compare_payload(archive: Path, framework: Path, pin: dict) -> dict:
                                 item.update({"normalization": "exact", "archive_sha256": hashlib.sha256(archive_data).hexdigest(),
                                              "framework_sha256": hashlib.sha256(framework_data).hexdigest()})
                                 deferred_code_resources[relative] = (archive_data, framework_data)
+                            elif relative in pending and relative in (identity_map or {}):
+                                size = selected[relative]["size"]
+                                if size > 1024 * 1024:
+                                    raise PayloadError("bundle identifier plist exceeds cap")
+                                archive_data = _read_exact(stream, size)
+                                stream.close()
+                                framework_data = _read_framework_bytes(framework, relative, 1024 * 1024)
+                                item = next(item for item in results if item["path"] == relative)
+                                match = _identity_rewrite_matches(
+                                    archive_data, framework_data, identity_map[relative])
+                                item.update({"status": "match" if match else "mismatch",
+                                             "normalization": "bundle_identifier_rewrite",
+                                             "archive_sha256": hashlib.sha256(archive_data).hexdigest(),
+                                             "framework_sha256": hashlib.sha256(framework_data).hexdigest()})
+                                if match:
+                                    identity_rewritten_paths.add(relative)
+                                else:
+                                    differences.append(relative)
                             elif relative in pending:
                                 result = _read_archive_member(stream, selected[relative], framework, relative)
                                 item = next(item for item in results if item["path"] == relative)
@@ -856,7 +910,7 @@ def compare_payload(archive: Path, framework: Path, pin: dict) -> dict:
             for path, (archive_data, framework_data) in deferred_code_resources.items():
                 item = next(item for item in results if item["path"] == path)
                 match = _code_resources_match(archive_data, framework_data, path, normalized_macho_paths,
-                                              exact_matched_paths, framework)
+                                              exact_matched_paths, framework, identity_rewritten_paths)
                 item["status"] = "match" if match else "mismatch"
                 if match and archive_data != framework_data:
                     item["normalization"] = "codesign_resources_signing_envelope"
@@ -880,7 +934,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--archive", type=Path, required=True)
     parser.add_argument("--framework", type=Path,
                         default=Path("build/Shaar Candidate.app/Contents/Frameworks") / FRAMEWORK_NAME)
-    parser.add_argument("--pin", type=Path, default=Path("ThirdParty/ArdiaCore/pin.json"))
+    parser.add_argument("--pin", type=Path, default=Path("ThirdParty/ChromiumEngine/pin.json"))
     args = parser.parse_args(argv)
     try:
         pin = json.loads(args.pin.read_text(encoding="utf-8"))

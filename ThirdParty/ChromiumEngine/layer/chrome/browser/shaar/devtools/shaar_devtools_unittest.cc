@@ -18,6 +18,8 @@
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/devtools_agent_host_client.h"
 #include "content/public/test/mock_devtools_agent_host.h"
+#include "content/public/test/test_browser_context.h"
+#include "content/public/test/test_renderer_host.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace shaar::devtools {
@@ -331,6 +333,53 @@ TEST(ShaarDevToolsTest, ProtocolRequiresExactPageTargetForScopedTab) {
   EXPECT_FALSE(IsProtocolPageTargetFor(tab, tab_target.get()));
   EXPECT_FALSE(IsProtocolPageTargetFor(nullptr, page.get()));
   EXPECT_FALSE(IsProtocolPageTargetFor(tab, nullptr));
+}
+
+TEST(ShaarDevToolsTest, CaptureRejectsUnownedWindowTabPair) {
+  shaar::windows_tabs::BrowserTabRegistryImpl registry;
+  auto* engine = reinterpret_cast<shaar_engine*>(1);
+  auto* owned_window = reinterpret_cast<shaar_window*>(2);
+  auto* other_window = reinterpret_cast<shaar_window*>(3);
+  auto* tab = reinterpret_cast<shaar_tab*>(4);
+  auto* browser = reinterpret_cast<Browser*>(5);
+  auto* contents = reinterpret_cast<content::WebContents*>(6);
+  registry.BindWindow(engine, owned_window, browser);
+  registry.BindTab(engine, owned_window, tab, "tab-a", browser, contents);
+  shaar::ShaarEngineContext context{};
+  context.browser_tabs = &registry;
+  shaar_scope scope{sizeof(shaar_scope), reinterpret_cast<shaar_profile*>(7), nullptr};
+  CapturedReply captured;
+  shaar_error error{};
+  error.size = sizeof(error);
+  EXPECT_EQ(SHAAR_NOT_FOUND,
+            HandleDevToolsOperation(&context, engine, scope, other_window, tab,
+                                    SHAAR_OP_PROBE_CAPTURE_TAB,
+                                    Bytes(R"({"schemaVersion":1})"), 44,
+                                    &CaptureReply, &captured, &error));
+  EXPECT_EQ(SHAAR_NOT_FOUND, error.code);
+  EXPECT_EQ(0u, captured.request_id);
+}
+
+class ShaarPrivateDevToolsPageTargetTest
+    : public content::RenderViewHostTestHarness {
+ protected:
+  std::unique_ptr<content::BrowserContext> CreateBrowserContext() override {
+    auto context = std::make_unique<content::TestBrowserContext>();
+    context->set_is_off_the_record(true);
+    return context;
+  }
+};
+
+TEST_F(ShaarPrivateDevToolsPageTargetTest, ProtocolUsesPrivatePageTarget) {
+  ASSERT_TRUE(browser_context()->IsOffTheRecord());
+  auto host = ProtocolAgentHostFor(web_contents());
+  ASSERT_TRUE(host);
+  EXPECT_EQ(content::DevToolsAgentHost::kTypePage, host->GetType());
+  EXPECT_EQ(web_contents(), host->GetWebContents());
+  auto tab_host =
+      content::DevToolsAgentHost::GetOrCreateForTab(web_contents());
+  ASSERT_TRUE(tab_host);
+  EXPECT_NE(tab_host.get(), host.get());
 }
 
 TEST(ShaarDevToolsTest, CaptureRejectsUnownedWindowTabPair) {

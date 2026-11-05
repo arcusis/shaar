@@ -21,8 +21,22 @@ FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeExternalAppLaunchAuditForTest
 FOUNDATION_EXPORT void ARCCompletePrivateQuitDialogCancellation(
   BOOL ownerCurrent, NSString * _Nullable dialogError, void (^releaseHold)(void), void (^reject)(void));
 
+/// Decode a bounded PNG returned by Page.captureScreenshot; reject missing or malformed evidence.
+FOUNDATION_EXPORT NSData * _Nullable ARCProbePNGFromDevToolsResult(NSDictionary * _Nullable result);
+
 /// The shipped media reporter, for deterministic JavaScript event-order tests without an engine.
 FOUNDATION_EXPORT NSString *ARCMediaSessionPageScript(void);
+
+/// Test-only audit of a Shaar page view's attachment to its owning hidden window.
+FOUNDATION_EXPORT NSDictionary<NSString *, id> *ARCProbeNormalSelectionAudit(
+  NSView * _Nullable tabView, NSView * _Nullable hostView, NSWindow * _Nullable window);
+
+/// Extracts a JSON value from a scoped Shaar Runtime.evaluate reply.
+FOUNDATION_EXPORT NSString * _Nullable ARCProbePrivateEvaluationJSON(NSDictionary *reply);
+
+/// Await async privacy scripts before returning a copied JSON value.
+FOUNDATION_EXPORT NSDictionary<NSString *, id> *ARCProbePrivacyEvaluationParameters(
+  NSString *expression);
 
 @interface ARCChromiumRuntime (Verification)
 /// Grants geolocation only on the selected disposable Inspector loopback fixture.

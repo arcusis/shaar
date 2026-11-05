@@ -24,11 +24,6 @@ BOOL ProbeCaptureAllowed(void) {
   return ARCProbeRootIsOwned([NSURL fileURLWithPath:arguments[index + 1]]);
 }
 
-NSDictionary *ProbeCaptureParameters(void) {
-  return @{@"format": @"png", @"fromSurface": @YES,
-           @"captureBeyondViewport": @NO};
-}
-
 NSDictionary *ProbeTable(ARCShaarRuntime *runtime, const char *name) {
   Ivar field = class_getInstanceVariable(runtime.class, name);
   return field ? object_getIvar(runtime, field) : nil;
@@ -171,10 +166,10 @@ void ARCCompletePrivateQuitDialogCancellation(
     return;
   }
   __weak ARCShaarRuntime *weakRuntime = runtime;
-  [runtime shaarDevToolsCall:@"Page.captureScreenshot" params:ProbeCaptureParameters()
-                 capability:SHAAR_DEVTOOLS_CAPABILITY_INSPECTOR tabID:tabID
-                  profileID:profileID windowID:windowID
-                 completion:^(NSDictionary *reply, NSError *error) {
+  [runtime shaarDevToolsSubmit:SHAAR_OP_PROBE_CAPTURE_TAB tabID:tabID
+                    profileID:profileID windowID:windowID
+                      payload:@{@"schemaVersion": @1}
+                   completion:^(NSDictionary *reply, NSError *error) {
     ARCShaarRuntime *owner = weakRuntime;
     if (error || !owner || !ProbeCaptureAllowed() ||
         ![owner shaarDevToolsOwnsTabID:tabID profileID:profileID windowID:windowID]) {
@@ -373,19 +368,30 @@ void ARCCompletePrivateQuitDialogCancellation(
     return;
   }
   __weak ARCShaarRuntime *weakRuntime = runtime;
-  [runtime shaarPrivateDevToolsCall:@"Page.captureScreenshot" params:ProbeCaptureParameters()
-                         capability:SHAAR_DEVTOOLS_CAPABILITY_INSPECTOR tabID:tabID
-                           windowID:windowID contextID:contextID
-                         completion:^(NSDictionary *reply, NSError *error) {
+  NSDictionary *state = ARCPrivateShaarState(runtime);
+  NSDictionary *context = state[@"contexts"][contextID];
+  NSDictionary *window = state[@"windows"][windowID];
+  NSDictionary *tab = state[@"tabs"][tabID];
+  shaar_scope scope = {};
+  scope.size = sizeof(scope);
+  scope.private_session = static_cast<shaar_private_session *>(
+      [context[@"session"] pointerValue]);
+  auto *windowHandle = static_cast<shaar_window *>([window[@"handle"] pointerValue]);
+  auto *tabHandle = static_cast<shaar_tab *>([tab[@"handle"] pointerValue]);
+  BOOL submitted = ARCPrivateShaarSubmit(runtime, scope, windowHandle, tabHandle,
+      SHAAR_OP_PROBE_CAPTURE_TAB, @{@"schemaVersion": @1}, ^(NSDictionary *envelope) {
     ARCShaarRuntime *owner = weakRuntime;
-    if (error || !owner || !ProbeCaptureAllowed() ||
+    if (!owner || !ProbeCaptureAllowed() ||
         ![owner privateTabOwned:tabID windowID:windowID contextID:contextID]) {
-      completion(nil, error.localizedDescription ?: @"Private capture target changed.");
+      completion(nil, @"Private capture target changed.");
       return;
     }
+    NSDictionary *reply = [envelope[@"result"] isKindOfClass:NSDictionary.class]
+        ? envelope[@"result"] : nil;
     NSData *png = ARCProbePNGFromDevToolsResult(reply);
     completion(png, png ? nil : @"Private renderer returned no PNG capture.");
-  }];
+  });
+  if (!submitted) completion(nil, @"Private capture request was rejected.");
 }
 - (NSDictionary *)normalProbeSelectionAuditForTabID:(NSString *)tabID {
   if (![self isKindOfClass:ARCShaarRuntime.class]) return @{@"supported": @NO};

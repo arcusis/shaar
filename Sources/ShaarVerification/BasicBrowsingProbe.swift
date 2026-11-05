@@ -112,9 +112,15 @@ struct BasicBrowsingProbe {
   }
 
   private func waitForNonBlackCapture(_ id: UUID) async throws {
+    try expect(
+      NSApp.windows.allSatisfy { !$0.isVisible },
+      "renderer capture starts with hidden windows")
     let data: Data? = await withCheckedContinuation { continuation in
       runtime.captureProbeTabID(id.uuidString) { continuation.resume(returning: $0) }
     }
+    try expect(
+      NSApp.windows.allSatisfy { !$0.isVisible },
+      "renderer capture keeps windows hidden")
     guard let data, let bitmap = NSBitmapImageRep(data: data),
       bitmap.pixelsWide > 0, bitmap.pixelsHigh > 0
     else { throw Failure("Live page \(id) produced no renderer capture.") }

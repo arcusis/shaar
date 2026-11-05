@@ -251,7 +251,7 @@ final class BrowserEngine {
     callbacks.onNotice = { [weak self] message in self?.notice = message }
     downloads.onCommand = { [weak self] action, id, profile, completion in
       guard let self, !self.isClosed else {
-        completion("Download controls are unavailable.")
+        completion(PanelsL10n.string("Download controls are unavailable."))
         return
       }
       self.runtime.downloadCommand(action.rawValue, downloadID: id, profileID: profile.uuidString) {

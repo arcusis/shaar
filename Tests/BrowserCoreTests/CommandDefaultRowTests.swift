@@ -45,6 +45,15 @@ private func sessionWithGmailFavoriteAndGitHubTab() throws -> (BrowserSession, U
   #expect(title.first?.title == "Inbox - david@example.com")
 }
 
+@Test func typedSitePrefixMatchesUppercaseWWWHost() throws {
+  var session = BrowserSession.fresh()
+  let opened = session.open(URL(string: "https://WWW.EXAMPLE.COM/page")!)
+  let tabID = try #require(opened)
+
+  let results = CommandSearch.results(for: "example", in: session)
+  #expect(results.first?.action == .tab(space: session.selectedSpaceID, tab: tabID))
+}
+
 @Test func typedExactAddressOfAnOpenTabSwitchesToIt() throws {
   let (session, _, tabID) = try sessionWithGmailFavoriteAndGitHubTab()
   let results = CommandSearch.results(for: "github.com/arcusis/shaar", in: session)

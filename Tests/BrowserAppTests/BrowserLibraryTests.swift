@@ -16,6 +16,22 @@ struct BrowserLibraryTests {
     #expect(!LibraryPanelSearch.matches("Café https://example.test", query: "resume"))
   }
 
+  @Test func bookmarkImportRequiresDestinationTreeAfterLoadFailure() {
+    let bookmark = BrowserImportItem(title: "Page", address: "https://example.test")
+    let history = BrowserImportItem(
+      kind: .history, title: "Visited", address: "https://example.test",
+      visitTimes: [Date()])
+    #expect(
+      !LibraryPanel.canImportPreview(
+        items: [bookmark], hasBookmarkTree: false, busy: false, loading: false))
+    #expect(
+      LibraryPanel.canImportPreview(
+        items: [history], hasBookmarkTree: false, busy: false, loading: false))
+    #expect(
+      LibraryPanel.canImportPreview(
+        items: [bookmark], hasBookmarkTree: true, busy: false, loading: false))
+  }
+
   @Test func newerReadsWinAndMalformedRepliesKeepLastGoodProfileSnapshot() throws {
     let model = BrowserLibraryModel()
     let a = UUID()

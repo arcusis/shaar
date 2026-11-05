@@ -50,7 +50,7 @@ struct RecentlyClosedPanel: View {
                   Image(systemName: entry.tab.isPinned ? "pin" : "globe")
                     .foregroundStyle(.secondary).frame(width: 20)
                   VStack(alignment: .leading, spacing: 4) {
-                    Text(entry.tab.title).font(.headline).lineLimit(1)
+                    Text(entry.recoveryTitle).font(.headline).lineLimit(1)
                     Text(entry.tab.url.absoluteString).font(.caption).foregroundStyle(.secondary)
                       .lineLimit(1).truncationMode(.middle)
                   }
@@ -59,8 +59,9 @@ struct RecentlyClosedPanel: View {
                 }
                 .padding(.vertical, 12).contentShape(Rectangle())
               }
-              .buttonStyle(.plain).help(PanelsL10n.format("Reopen %@", .string(entry.tab.title)))
-              .accessibilityLabel(PanelsL10n.format("Reopen %@", .string(entry.tab.title)))
+              .buttonStyle(.plain)
+              .help(PanelsL10n.format("Reopen %@", .string(entry.recoveryTitle)))
+              .accessibilityLabel(Self.reopenAccessibilityLabel(for: entry))
               Divider()
             }
           }
@@ -76,5 +77,10 @@ struct RecentlyClosedPanel: View {
     }
     .padding(24).frame(width: 520, height: 410)
     .background(Color(nsColor: .windowBackgroundColor))
+  }
+
+  static func reopenAccessibilityLabel(for entry: ClosedBrowserTab) -> String {
+    PanelsL10n.format(
+      "Reopen %@", .string("\(entry.recoveryTitle), \(entry.tab.url.absoluteString)"))
   }
 }

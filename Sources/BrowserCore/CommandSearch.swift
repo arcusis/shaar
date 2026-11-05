@@ -194,7 +194,7 @@ extension CommandResult {
 
   static func reopen(_ entry: ClosedBrowserTab, subtitle: String) -> CommandResult {
     CommandResult(
-      title: entry.tab.title, subtitle: subtitle, symbol: "arrow.uturn.backward",
+      title: entry.recoveryTitle, subtitle: subtitle, symbol: "arrow.uturn.backward",
       action: .reopen(space: entry.spaceID, tab: entry.id))
   }
 

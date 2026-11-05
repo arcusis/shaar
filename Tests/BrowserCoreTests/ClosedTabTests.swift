@@ -109,6 +109,26 @@ import Testing
     try JSONDecoder().decode(BrowserSession.self, from: JSONEncoder().encode(session)) == session)
 }
 
+@Test func savedUntitledClosedTabHasReadableRecoveryResult() throws {
+  var session = BrowserSession.fresh()
+  let id = session.open(URL(string: "https://archive.example/reopen")!)!
+  session.closeTab(id)
+  var wire = try jsonObject(session)
+  var entries = try #require(wire["closedTabs"] as? [[String: Any]])
+  var tab = try #require(entries[0]["tab"] as? [String: Any])
+  tab["title"] = " \t\n"
+  entries[0]["tab"] = tab
+  wire["closedTabs"] = entries
+  let restored = try JSONDecoder().decode(
+    BrowserSession.self, from: JSONSerialization.data(withJSONObject: wire))
+  let entry = try #require(restored.recentlyClosedTabs(in: restored.selectedSpaceID).first)
+  let result = try #require(
+    CommandSearch.results(for: "reopen", in: restored).first {
+      $0.action == .reopen(space: restored.selectedSpaceID, tab: entry.id)
+    })
+  #expect(result.title == "archive.example")
+}
+
 @Test func v2MigrationPreservesFoldersSelectionsAndOriginalFileUntilSave() throws {
   let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
   defer { try? FileManager.default.removeItem(at: root) }

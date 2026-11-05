@@ -758,12 +758,9 @@ base::ScopedClosureRunner StartHiddenProbeCapture(content::WebContents* contents
       [](base::WeakPtr<content::WebContents> weak_contents,
          content::Visibility visibility,
          base::ScopedClosureRunner capturer) {
-        if (weak_contents) {
-          if (visibility == content::Visibility::HIDDEN)
-            weak_contents->WasHidden();
-          else if (visibility == content::Visibility::OCCLUDED)
-            weak_contents->WasOccluded();
-        }
+        if (weak_contents && visibility != content::Visibility::VISIBLE &&
+            weak_contents->GetVisibility() == content::Visibility::VISIBLE)
+          weak_contents->UpdateWebContentsVisibility(visibility);
         capturer.RunAndReset();
       },
       std::move(weak_contents), original_visibility, std::move(capturer)));

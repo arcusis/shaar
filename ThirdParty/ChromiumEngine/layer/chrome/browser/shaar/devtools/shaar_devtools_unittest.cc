@@ -19,6 +19,7 @@
 #include "content/public/browser/devtools_agent_host_client.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/browser/visibility.h"
 #include "content/public/test/mock_devtools_agent_host.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_renderer_host.h"
@@ -466,12 +467,15 @@ TEST_F(ShaarPrivateDevToolsPageTargetTest,
        HiddenProbeCaptureTemporarilyShowsRendererAndRestoresHiddenState) {
   web_contents()->WasHidden();
   ASSERT_EQ(content::Visibility::HIDDEN, web_contents()->GetVisibility());
+  ASSERT_FALSE(web_contents()->IsBeingCaptured());
 
   auto capture = StartHiddenProbeCapture(web_contents());
   EXPECT_EQ(content::Visibility::VISIBLE, web_contents()->GetVisibility());
+  EXPECT_TRUE(web_contents()->IsBeingCaptured());
 
   capture.RunAndReset();
   EXPECT_EQ(content::Visibility::HIDDEN, web_contents()->GetVisibility());
+  EXPECT_FALSE(web_contents()->IsBeingCaptured());
 }
 
 TEST_F(ShaarPrivateDevToolsPageTargetTest,

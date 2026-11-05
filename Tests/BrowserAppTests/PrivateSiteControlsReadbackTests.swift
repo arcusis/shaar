@@ -31,10 +31,11 @@ private final class CookieReadbackRuntime: ARCChromiumRuntime {
 
 @MainActor @Test func privateCookieSwitchReflectsEngineReadbackAfterWrite() async throws {
   let runtime = CookieReadbackRuntime()
-  let model = try #require(PrivateSiteControlsModel(
-    tabID: UUID().uuidString, windowID: UUID().uuidString,
-    contextID: UUID().uuidString, url: URL(string: "https://example.test")!,
-    runtime: runtime))
+  let model = try #require(
+    PrivateSiteControlsModel(
+      tabID: UUID().uuidString, windowID: UUID().uuidString,
+      contextID: UUID().uuidString, url: URL(string: "https://example.test")!,
+      runtime: runtime))
   await model.load()
   #expect(model.allowed == false)
 

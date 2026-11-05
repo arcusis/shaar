@@ -59,7 +59,9 @@ final class PrivateSiteControlsModel: Identifiable {
         forTabID: tabID, windowID: windowID, contextID: contextID, origin: origin
       ).boolValue
       allowed = applied
-      failure = applied == value ? nil
+      failure =
+        applied == value
+        ? nil
         : ARCBridgeLocalizedString("The private cookie setting was not applied.")
     } catch { failure = error.localizedDescription }
   }

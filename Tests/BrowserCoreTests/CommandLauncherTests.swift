@@ -53,6 +53,23 @@ import Testing
   #expect(results.first?.subtitle == "frequent.example")
 }
 
+@Test func mostVisitedSkipsTheOpenFavoritePage() throws {
+  var fixture = try LauncherFixture()
+  let selected = fixture.session.selectFavorite(fixture.favoriteID, in: fixture.spaceID)
+  #expect(selected)
+  let history = [
+    try entry("https://favorite.example/", visits: 90, profile: fixture.profileID),
+    try entry("https://unopened.example/", visits: 2, profile: fixture.profileID),
+  ]
+
+  let results = CommandLauncher.mostVisited(in: fixture.session, history: history)
+
+  #expect(
+    results.map(\.action) == [
+      .history(profile: fixture.profileID, address: "https://unopened.example/")
+    ])
+}
+
 @Test func emptySpaceStillSuggestsFavoritesClosedTabsAndHistory() throws {
   var fixture = try LauncherFixture()
   for id in [fixture.openTabID, fixture.pinnedTabID, fixture.closedTabID] {
@@ -156,6 +173,7 @@ import Testing
 
 @Test func domainDropsLeadingWWW() {
   #expect(CommandText.domain(of: URL(string: "https://www.apple.com/mac")) == "apple.com")
+  #expect(CommandText.domain(of: URL(string: "https://WWW.Example.com/path")) == "Example.com")
   #expect(CommandText.domain(of: URL(string: "https://docs.swift.org")) == "docs.swift.org")
   #expect(CommandText.domain(of: nil) == "")
 }
@@ -174,6 +192,24 @@ import Testing
     typed.results.first { $0.action == .tab(space: fixture.spaceID, tab: tab) })
   #expect(typedTab.subtitle == "Main · domain-check.example")
   #expect(chip.results.first?.subtitle == "domain-check.example")
+}
+
+@Test func tabsFilterFindsTabsByCollapsedFolderPath() throws {
+  var session = BrowserSession.fresh()
+  let spaceID = session.selectedSpaceID
+  let opened = session.open(URL(string: "https://example.com")!)
+  let tabID = try #require(opened)
+  let added = session.addFolder(name: "Research", in: spaceID)
+  let folderID = try #require(added)
+  _ = session.moveTab(tabID, from: spaceID, to: spaceID, folderID: folderID)
+  _ = session.toggleFolder(folderID, in: spaceID)
+
+  let action = CommandAction.tab(space: spaceID, tab: tabID)
+  let unfiltered = CommandLauncher.sections(for: "Research", filter: nil, in: session)
+  let filtered = CommandLauncher.sections(for: "Research", filter: .tabs, in: session)
+
+  #expect(unfiltered.results.contains { $0.action == action })
+  #expect(filtered.results.contains { $0.action == action })
 }
 
 @Test func plainWordsWithNoHitsKeepWebSearchAsTheDefaultRow() throws {

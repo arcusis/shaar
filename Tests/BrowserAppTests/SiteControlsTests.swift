@@ -21,6 +21,7 @@ private final class FakeSiteBackend: SiteControlBackend {
     .microphone: .ask, .camera: .block, .location: .ask, .notifications: .ask,
     .popups: .block, .sound: .allow, .autoPictureInPicture: .allow,
   ]
+  var failsReads = false
   var failsWrites = false
   var performed: [SiteAction] = []
 
@@ -28,7 +29,10 @@ private final class FakeSiteBackend: SiteControlBackend {
 
   func permissionValues(for target: SiteControlTarget) async throws -> [SitePermission:
     SitePermissionValue]
-  { values }
+  {
+    if failsReads { throw FakeFailure() }
+    return values
+  }
 
   func setPermission(_ permission: SitePermission, allowed: Bool, for target: SiteControlTarget)
     async throws
@@ -60,6 +64,20 @@ private func target(_ address: String) -> SiteControlTarget {
   #expect(model.isAllowed(.sound) && !model.isAllowed(.camera))
   await model.setPermission(.camera, allowed: true)
   #expect(model.isAllowed(.camera) && backend.values[.camera] == .allow && model.failure == nil)
+}
+
+@MainActor @Test func successfulPermissionRetryClearsStaleFailure() async {
+  let backend = FakeSiteBackend()
+  let model = SiteControlsModel(target: target("https://mail.example"), backend: backend)
+  backend.failsReads = true
+  await model.load()
+  #expect(model.failure == "The engine refused.")
+
+  backend.failsReads = false
+  backend.values[.camera] = .allow
+  await model.load()
+  #expect(model.isAllowed(.camera))
+  #expect(model.failure == nil)
 }
 
 @MainActor @Test func rejectedPermissionChangeRestoresTheEngineValue() async {

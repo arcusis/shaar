@@ -121,6 +121,7 @@ final class SiteControlsModel: Identifiable {
     guard let backend, target.origin != nil else { return }
     do {
       permissionValues = try await backend.permissionValues(for: target)
+      failure = nil
     } catch {
       failure = error.localizedDescription
     }

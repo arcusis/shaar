@@ -14,6 +14,13 @@ struct PageAddressField: View {
     return url.port.map { "\(shownHost):\($0)" } ?? shownHost
   }
 
+  static func accessibilityLabel(for url: URL?) -> String {
+    guard let url else { return ShellL10n.string("Search or enter address") }
+    return ShellL10n.format(
+      "Current address: %@. Search or enter address",
+      arguments: [.string(url.absoluteString)])
+  }
+
   var body: some View {
     let url = store.session.selectedPage?.tab.url
     Button {
@@ -31,7 +38,7 @@ struct PageAddressField: View {
       .frame(height: 26)
       .contentShape(Rectangle())
     }
-    .accessibilityLabel(ShellL10n.string("Search or enter address"))
+    .accessibilityLabel(Self.accessibilityLabel(for: url))
     .browserChromeControl("browser.chrome.address")
     .help(url?.absoluteString ?? ShellL10n.string("Search or enter address"))
   }

@@ -6,9 +6,11 @@
 #import "../ChromiumBridge/ChromiumProbeRoot.h"
 #import "../ChromiumBridge/ChromiumRuntimeInternal.h"
 #import "../ChromiumBridge/ChromiumShaarPrivateSupport.h"
+#import <objc/runtime.h>
 
 #include <cstdlib>
 #include <cstring>
+#include <dlfcn.h>
 
 #include "../../ThirdParty/ChromiumEngine/layer/chrome/browser/shaar/public/shaar_engine.h"
 
@@ -74,6 +76,24 @@ NSString *ARCProbePrivateEvaluationJSON(NSDictionary *reply) {
 NSDictionary<NSString *, id> *ARCProbePrivacyEvaluationParameters(NSString *expression) {
   return @{@"expression": expression, @"returnByValue": @YES,
            @"awaitPromise": @YES};
+}
+
+template <typename T> static T ShaarProbeField(ARCShaarRuntime *runtime, const char *name) {
+  T value = {};
+  Ivar field = class_getInstanceVariable(ARCShaarRuntime.class, name);
+  if (field)
+    std::memcpy(&value, reinterpret_cast<char *>((__bridge void *)runtime) +
+                           ivar_getOffset(field), sizeof(value));
+  return value;
+}
+
+static NSError *ShaarProbeError(shaar_error error, NSString *fallback) {
+  NSString *message = fallback;
+  if (error.message.data && error.message.size)
+    message = [[NSString alloc] initWithBytes:error.message.data length:error.message.size
+                                   encoding:NSUTF8StringEncoding] ?: fallback;
+  return [NSError errorWithDomain:@"org.arcusis.shaar.probe" code:error.code
+                         userInfo:@{NSLocalizedDescriptionKey: message}];
 }
 
 void ARCCompletePrivateQuitDialogCancellation(
@@ -324,4 +344,49 @@ void ARCCompletePrivateQuitDialogCancellation(
 - (BOOL)crashProbeTabID:(NSString *)tabID { return NO; }
 - (NSString *)probeKeepAliveState { return nil; }
 - (BOOL)probeQuitStoppedEventLoop { return NO; }
+@end
+
+@implementation ARCShaarRuntime (Verification)
+- (NSString *)loadProbeExtensionAtURL:(NSURL *)url profileID:(NSString *)profileID
+                                 error:(NSError **)error {
+  void *library = ShaarProbeField<void *>(self, "_shaarLibrary");
+  shaar_engine *engine = ShaarProbeField<shaar_engine *>(self, "_shaarEngine");
+  Ivar profiles_field = class_getInstanceVariable(ARCShaarRuntime.class, "_shaarProfiles");
+  NSDictionary *profiles = profiles_field ? object_getIvar(self, profiles_field) : nil;
+  shaar_profile *profile = static_cast<shaar_profile *>([profiles[profileID] pointerValue]);
+  using Load = decltype(&shaar_test_load_component_extension);
+  Load load = library ? reinterpret_cast<Load>(dlsym(library, "shaar_test_load_component_extension"))
+                      : nullptr;
+  if (!load) {
+    if (error) *error = ProbeUnsupported();
+    return nil;
+  }
+  const char *path = url.path.UTF8String;
+  shaar_bytes extension_id = {};
+  shaar_error native_error = {};
+  native_error.size = sizeof(native_error);
+  shaar_error_code status = load(engine, profile, {path, path ? std::strlen(path) : 0},
+                                 &extension_id, &native_error);
+  if (status != SHAAR_OK || !extension_id.data || !extension_id.size) {
+    if (error) *error = ShaarProbeError(native_error, @"Shaar probe extension did not load.");
+    return nil;
+  }
+  return [[NSString alloc] initWithBytes:extension_id.data length:extension_id.size
+                               encoding:NSUTF8StringEncoding];
+}
+
+- (NSString *)probeKeepAliveState {
+  void *library = ShaarProbeField<void *>(self, "_shaarLibrary");
+  shaar_engine *engine = ShaarProbeField<shaar_engine *>(self, "_shaarEngine");
+  using State = decltype(&shaar_test_keep_alive_state);
+  State state = library ? reinterpret_cast<State>(dlsym(library, "shaar_test_keep_alive_state"))
+                        : nullptr;
+  if (!state) return nil;
+  shaar_bytes value = {};
+  shaar_error native_error = {};
+  native_error.size = sizeof(native_error);
+  if (state(engine, &value, &native_error) != SHAAR_OK || !value.data) return nil;
+  return [[NSString alloc] initWithBytes:value.data length:value.size
+                               encoding:NSUTF8StringEncoding];
+}
 @end

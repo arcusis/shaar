@@ -13,6 +13,11 @@ import Testing
     CleanLink.clean(input).absoluteString == "https://www.amazon.com/dp/B012345678?color=blue")
 }
 
+@Test func cleanLinkPreservesAmazonPathSeparators() {
+  let address = "https://www.amazon.com/a//b/"
+  #expect(CleanLink.clean(URL(string: address)!).absoluteString == address)
+}
+
 @Test func cleanLinkRemovesSocialTrackingAndPreservesPageParameters() {
   #expect(
     CleanLink.clean(URL(string: "https://www.instagram.com/p/abc/?igsh=one&utm_source=x")!)

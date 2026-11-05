@@ -42,6 +42,21 @@ import Testing
   #expect(request("http://app.localhost.evil:8080") == nil)
 }
 
+@Test func websitePermissionRequestsAccept127LoopbackRange() {
+  func request(_ origin: String) -> WebsitePermissionRequest? {
+    WebsitePermissionRequest(
+      id: "loopback", profileID: UUID(), tabID: UUID(),
+      pageURL: URL(string: "http://127.0.0.2:8080/page")!,
+      requestingOrigin: URL(string: origin)!, kinds: [.camera])
+  }
+
+  #expect(request("http://127.0.0.2:8080") != nil)
+  #expect(request("http://127.255.255.254:8080") != nil)
+  #expect(request("http://127.1:8080") != nil)
+  #expect(request("http://128.0.0.1:8080") == nil)
+  #expect(request("http://127.0.0.2.evil:8080") == nil)
+}
+
 @Test func websitePermissionRequestsAcceptEveryForwardedKindAndOnlyMediaAndLocationAreOneTime() {
   let request = WebsitePermissionRequest(
     id: "p2", profileID: UUID(), tabID: UUID(), pageURL: URL(string: "https://maps.example")!,

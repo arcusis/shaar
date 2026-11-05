@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import Darwin
 import Foundation
 
 /// Website permissions the engine forwards for a decision, named as the engine reports them.
@@ -51,8 +52,15 @@ public struct WebsitePermissionRequest: Identifiable, Equatable, Sendable {
   }
 
   private static func isLocalHTTPHost(_ host: String) -> Bool {
-    ["localhost", "localhost.", "127.0.0.1", "::1", "[::1]"].contains(host)
+    ["localhost", "localhost.", "::1", "[::1]"].contains(host)
       || host.hasSuffix(".localhost") || host.hasSuffix(".localhost.")
+      || isIPv4Loopback(host)
+  }
+
+  private static func isIPv4Loopback(_ host: String) -> Bool {
+    var address = in_addr()
+    guard host.withCString({ inet_aton($0, &address) }) == 1 else { return false }
+    return UInt32(bigEndian: address.s_addr) >> 24 == 127
   }
 
   public func matches(_ session: BrowserSession) -> Bool {

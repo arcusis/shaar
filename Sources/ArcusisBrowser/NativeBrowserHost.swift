@@ -756,10 +756,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     window.titlebarAppearsTransparent = true
     window.styleMask.insert(.fullSizeContentView)
     window.isMovable = true
-    window.minSize = NSSize(width: 760, height: 520)
-    window.setFrame(
-      NativeWindowPlacement.frame(saved: record.geometry, source: source, screens: screens()),
-      display: false)
+    let frame = NativeWindowPlacement.frame(
+      saved: record.geometry, source: source, screens: screens())
+    window.minSize = NSSize(width: min(760, frame.width), height: min(520, frame.height))
+    window.setFrame(frame, display: false)
     hosting.frame = content.bounds
     hosting.autoresizingMask = [.width, .height]
     content.addSubview(hosting)

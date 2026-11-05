@@ -89,7 +89,6 @@ struct BrowserWindow: View {
     .environment(\.browserWindowIsFullScreen, isFullScreen)
     .coordinateSpace(name: "browser-window")
     .onPreferenceChange(WebContentFramePreferenceKey.self) { webContentFrame = $0 }
-    .frame(minWidth: 760, minHeight: 520)
     .animation(
       reduceMotion ? nil : .spring(duration: 0.18, bounce: 0.15), value: store.commandIsOpen
     )

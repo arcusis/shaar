@@ -19,3 +19,12 @@ import Testing
     saved: nil, source: NSRect(x: 100, y: 100, width: 900, height: 650), screens: [screen])
   #expect(cascaded == NSRect(x: 122, y: 78, width: 900, height: 650))
 }
+
+@Test func restoredWindowFitsScreenSmallerThanNormalWindowMinimum() {
+  let screen = NSRect(x: 120, y: 80, width: 700, height: 480)
+  let frame = NativeWindowPlacement.frame(
+    saved: WorkspaceWindowGeometry(x: 9000, y: -9000, width: 1200, height: 800),
+    source: nil, screens: [screen])
+  #expect(screen.contains(frame))
+  #expect(frame == screen)
+}

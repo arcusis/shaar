@@ -20,4 +20,15 @@ import Testing
         "/tmp/shaar-preview-data",
       ]) == 1)
   }
+
+  @Test func pendingQuitProbeRequiresLoopbackHTTP() throws {
+    let target = try ShaarPreviewProbe.pendingQuitTarget(arguments: [
+      "--probe-pending-quit-url", "http://127.0.0.1:8080/stall",
+    ])
+    #expect(target?.absoluteString == "http://127.0.0.1:8080/stall")
+    #expect(
+      (try? ShaarPreviewProbe.pendingQuitTarget(arguments: [
+        "--probe-pending-quit-url", "https://example.com/stall",
+      ])) == nil)
+  }
 }

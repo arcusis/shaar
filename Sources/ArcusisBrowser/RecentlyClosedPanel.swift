@@ -61,7 +61,7 @@ struct RecentlyClosedPanel: View {
               }
               .buttonStyle(.plain)
               .help(PanelsL10n.format("Reopen %@", .string(entry.recoveryTitle)))
-              .accessibilityLabel(PanelsL10n.format("Reopen %@", .string(entry.recoveryTitle)))
+              .accessibilityLabel(Self.reopenAccessibilityLabel(for: entry))
               Divider()
             }
           }
@@ -77,5 +77,10 @@ struct RecentlyClosedPanel: View {
     }
     .padding(24).frame(width: 520, height: 410)
     .background(Color(nsColor: .windowBackgroundColor))
+  }
+
+  static func reopenAccessibilityLabel(for entry: ClosedBrowserTab) -> String {
+    PanelsL10n.format(
+      "Reopen %@", .string("\(entry.recoveryTitle), \(entry.tab.url.absoluteString)"))
   }
 }

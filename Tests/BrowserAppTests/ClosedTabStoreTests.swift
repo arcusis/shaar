@@ -10,6 +10,22 @@ import Testing
 
 @Suite @MainActor
 struct ClosedTabStoreTests {
+  @Test func sameTitleRecoveryActionsIdentifyTheirAddressesForVoiceOver() {
+    let space = UUID()
+    let profile = UUID()
+    let first = ClosedBrowserTab(
+      tab: BrowserTab(url: URL(string: "https://first.example/home")!, title: "Home"),
+      spaceID: space, profileID: profile, index: 0)
+    let second = ClosedBrowserTab(
+      tab: BrowserTab(url: URL(string: "https://second.example/home")!, title: "Home"),
+      spaceID: space, profileID: profile, index: 1)
+    let firstLabel = RecentlyClosedPanel.reopenAccessibilityLabel(for: first)
+    let secondLabel = RecentlyClosedPanel.reopenAccessibilityLabel(for: second)
+    #expect(firstLabel != secondLabel)
+    #expect(firstLabel.contains("first.example"))
+    #expect(secondLabel.contains("second.example"))
+  }
+
   @Test func onlyConfirmedCloseIsArchivedAndLateCallbackCannotDeleteRestoredTab() throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }

@@ -24,8 +24,7 @@ final class TabSwitcherController {
       return
     }
     guard !choices.isEmpty else { return }
-    var available = Set(store.session.selectedSpace.tabs.map(\.id))
-    if let selected = store.session.selectedPage?.tab.id { available.insert(selected) }
+    let available = Set(availableTabIDs(store: store))
     let highlighted = choices.indices.contains(index) ? choices[index] : nil
     choices.removeAll { !available.contains($0) }
     if choices.count < 2 {

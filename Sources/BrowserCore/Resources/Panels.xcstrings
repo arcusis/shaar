@@ -1340,6 +1340,26 @@
         }
       }
     },
+    "Search Spaces": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חיפוש במרחבים"
+          }
+        }
+      }
+    },
+    "Search Spaces…": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "חיפוש במרחבים…"
+          }
+        }
+      }
+    },
     "Select %@": {
       "localizations": {
         "he": {

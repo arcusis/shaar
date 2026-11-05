@@ -232,9 +232,7 @@ private struct LibrarySpaceItemsView: View {
     ScrollView(.vertical) {
       LazyVStack(alignment: .leading, spacing: 3) {
         ForEach(visibleItems) { item in
-          if case .tab(let tab, _) = item, !tab.isPinned,
-            item.id == firstTodayID
-          {
+          if item.id == firstTodayID {
             Divider().padding(.vertical, 5)
           }
           row(item)
@@ -249,8 +247,10 @@ private struct LibrarySpaceItemsView: View {
 
   private var firstTodayID: String? {
     card.items.first { item in
-      if case .tab(let tab, _) = item { return !tab.isPinned }
-      return false
+      switch item {
+      case .folder(let folder, _): return !folder.isPinned
+      case .tab(let tab, _): return !tab.isPinned
+      }
     }?.id
   }
 
@@ -394,13 +394,27 @@ enum LibrarySpacesOverviewModel {
         }
       if !spaceMatches && !needle.isEmpty {
         let matchingFolderIDs = Set(space.folders.filter { contains($0.name, needle) }.map(\.id))
+        var visibleFolderIDs = matchingFolderIDs
+        for folder in space.folders {
+          let path = Set(space.folderPath(to: folder.id).map(\.id))
+          if !path.isDisjoint(with: matchingFolderIDs) {
+            visibleFolderIDs.formUnion(path)
+          }
+        }
+        let matchingTabIDs = Set(
+          space.tabs.filter { tab in
+            let path = Set(space.folderPath(to: tab.folderID).map(\.id))
+            return tabMatches(tab, needle) || !path.isDisjoint(with: matchingFolderIDs)
+          }.map(\.id))
+        for tab in space.tabs where matchingTabIDs.contains(tab.id) {
+          visibleFolderIDs.formUnion(space.folderPath(to: tab.folderID).map(\.id))
+        }
         items = items.filter { item in
           switch item {
           case .folder(let folder, _):
-            return matchingFolderIDs.contains(folder.id)
+            return visibleFolderIDs.contains(folder.id)
           case .tab(let tab, _):
-            let folderPath = Set(space.folderPath(to: tab.folderID).map(\.id))
-            return tabMatches(tab, needle) || !folderPath.isDisjoint(with: matchingFolderIDs)
+            return matchingTabIDs.contains(tab.id)
           }
         }
       }

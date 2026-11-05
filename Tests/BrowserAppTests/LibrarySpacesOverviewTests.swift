@@ -57,6 +57,49 @@ final class LibrarySpacesOverviewTests: XCTestCase {
     XCTAssertEqual(LibrarySpacesOverviewModel.cards(in: session, query: "").count, 3)
   }
 
+  func testTodayFolderAndItsTabKeepTheirHierarchyInSpaceCard() throws {
+    let profile = BrowserProfile(name: "Daily")
+    let folder = BrowserFolder(name: "Today's work", isPinned: false)
+    let tab = BrowserTab(
+      url: URL(string: "https://example.com/today")!, title: "Today page",
+      isPinned: false, folderID: folder.id)
+    let space = BrowserSpace(
+      profileID: profile.id, name: "Work", symbol: "tray", tint: .ocean,
+      tabs: [tab], selectedTabID: tab.id, folders: [folder])
+    let session = try BrowserSession(
+      profiles: [profile], spaces: [space], selectedSpaceID: space.id)
+
+    let items = try XCTUnwrap(LibrarySpacesOverviewModel.cards(in: session, query: "").first).items
+    XCTAssertEqual(items.map(\.id), ["folder-\(folder.id)", "tab-\(tab.id)"])
+    if case .tab(_, let depth) = items.last {
+      XCTAssertEqual(depth, 1)
+    } else {
+      XCTFail("Expected tab inside Today folder")
+    }
+  }
+
+  func testSearchRetainsNestedFolderContextForMatchingTabOrParentFolder() throws {
+    let profile = BrowserProfile(name: "Daily")
+    let parent = BrowserFolder(name: "Research")
+    let child = BrowserFolder(name: "Reports", parentID: parent.id)
+    let tab = BrowserTab(
+      url: URL(string: "https://example.com/report")!, title: "Quarterly results",
+      isPinned: true, folderID: child.id)
+    let space = BrowserSpace(
+      profileID: profile.id, name: "Work", symbol: "tray", tint: .ocean,
+      tabs: [tab], selectedTabID: tab.id, folders: [parent, child])
+    let session = try BrowserSession(
+      profiles: [profile], spaces: [space], selectedSpaceID: space.id)
+    let expected = ["folder-\(parent.id)", "folder-\(child.id)", "tab-\(tab.id)"]
+
+    XCTAssertEqual(
+      LibrarySpacesOverviewModel.cards(in: session, query: "Quarterly").first?.items.map(\.id),
+      expected)
+    XCTAssertEqual(
+      LibrarySpacesOverviewModel.cards(in: session, query: "Research").first?.items.map(\.id),
+      expected)
+  }
+
   func testCapturedCallbacksRejectRemovedOrReassignedSpaceAndTab() throws {
     let (session, ids) = makeSession()
     let liveSpace = session.spaces.first { $0.id == ids.longSpace }!

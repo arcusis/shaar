@@ -121,6 +121,7 @@ source_set("engine") {
     "//components/content_settings/core/browser",
     "//components/bookmarks/browser",
     "//components/content_settings/core/common",
+    "//components/language/core/browser:browser",
     "//components/prefs",
     "//components/history/core/browser",
     "//components/keep_alive_registry",
@@ -188,6 +189,7 @@ test("shaar_profiles_unittests") {
   deps = [
     ":engine",
     "//chrome/test/base:testing_profile_impl",
+    "//components/language/core/browser:browser",
     "//components/prefs:test_support",
     "//content/test:test_support",
     "//testing/gtest",

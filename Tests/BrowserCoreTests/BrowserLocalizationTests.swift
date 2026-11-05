@@ -133,3 +133,13 @@ import Testing
     BrowserLocalization.plural("%d active downloads", count: 3, table: "Bridge", language: .hebrew)
       == "הסגירה תבטל 3 הורדות פעילות.")
 }
+
+@Test func importPreviewMetadataHasHebrewLabelsAroundBrowserBrands() {
+  let source = BrowserLocalization.format(
+    "From %@", table: "Panels", language: .hebrew, arguments: [.string("Chrome")]
+  ).replacingOccurrences(of: "\u{2068}", with: "")
+    .replacingOccurrences(of: "\u{2069}", with: "")
+  #expect(source == "מקור: Chrome")
+  #expect(BrowserLocalization.string("Bookmark", table: "Panels", language: .hebrew) == "סימנייה")
+  #expect(BrowserLocalization.string("History", table: "Panels", language: .hebrew) == "היסטוריה")
+}

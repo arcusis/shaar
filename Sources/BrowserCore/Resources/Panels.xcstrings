@@ -5,6 +5,8 @@
     "Import Data": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Import Data"}},"he":{"stringUnit":{"state":"translated","value":"ייבוא נתונים"}}}},
     "%d bookmarks and %d history entries are ready to import into %@.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"%d bookmarks and %d history entries are ready to import into %@."}},"he":{"stringUnit":{"state":"translated","value":"%d סימניות ו־%d פריטי היסטוריה מוכנים לייבוא לפרופיל %@."}}}},
     "Import from another browser": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Import from another browser"}},"he":{"stringUnit":{"state":"translated","value":"ייבוא מדפדפן אחר"}}}},
+    "From %@": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"מקור: %@"}}}},
+    "Bookmark": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"סימנייה"}}}},
     "%d bookmarks are ready to import into %@.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"%d bookmarks are ready to import into %@."}},"he":{"stringUnit":{"state":"translated","value":"%d סימניות מוכנות לייבוא לפרופיל %@."}}}},
     "History import requires an engine feature that is not available in this build.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"History import requires an engine feature that is not available in this build."}},"he":{"stringUnit":{"state":"translated","value":"ייבוא היסטוריה דורש יכולת מנוע שאינה זמינה בגרסה זו."}}}},
     "Import Bookmarks": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Import Bookmarks"}},"he":{"stringUnit":{"state":"translated","value":"ייבוא סימניות"}}}},

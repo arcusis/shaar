@@ -431,12 +431,15 @@ public struct BrowserSession: Codable, Equatable, Sendable {
     let followsSelection =
       sourceID == selectedSpaceID
       && spaces[source].selectedFavoriteID == nil && spaces[source].selectedTabID == id
-    let changesSection =
-      source != destination || tab.isPinned != spaces[source].tabs[position].isPinned
-      || tab.folderID != spaces[source].tabs[position].folderID
+    let staysInSection =
+      source == destination && tab.isPinned == spaces[source].tabs[position].isPinned
+      && tab.folderID == spaces[source].tabs[position].folderID
+    let targetInSameSplit = spaces[source].splits.contains { split in
+      split.tabIDs.contains(id) && targetID.map(split.tabIDs.contains) == true
+    }
     var updated = spaces
     updated[source].tabs.remove(at: position)
-    if changesSection {
+    if !staysInSection || !targetInSameSplit {
       // A tab payload always moves one page, including when its drag presentation expired.
       updated[source].splits = updated[source].splits.compactMap { split in
         guard split.tabIDs.contains(id) else { return split }

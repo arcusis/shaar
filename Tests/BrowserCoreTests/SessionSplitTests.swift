@@ -61,12 +61,15 @@ final class SessionSplitTests: XCTestCase {
     let spaceID = session.selectedSpaceID
     let first = try XCTUnwrap(session.open(URL(string: "https://one.example")!))
     let second = try XCTUnwrap(session.open(URL(string: "https://two.example")!))
+    let third = try XCTUnwrap(session.open(URL(string: "https://three.example")!))
     XCTAssertTrue(session.splitTabs(first, second, in: spaceID))
     let split = try XCTUnwrap(session.selectedSpace.splits.first)
 
     XCTAssertTrue(session.moveTab(second, from: spaceID, to: spaceID, before: first))
     XCTAssertEqual(session.selectedSpace.splits, [split])
-    XCTAssertEqual(session.selectedSpace.tabs.map(\.id), [second, first])
+    XCTAssertEqual(session.selectedSpace.tabs.map(\.id), [second, first, third])
+    XCTAssertTrue(session.moveTab(second, from: spaceID, to: spaceID, before: third))
+    XCTAssertTrue(session.selectedSpace.splits.isEmpty)
     try session.validate()
   }
 }

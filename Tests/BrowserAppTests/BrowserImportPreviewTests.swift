@@ -16,6 +16,13 @@ import Testing
       == "מקור: \u{2068}Chrome\u{2069}")
 }
 
+@Test func importPreviewItemKindsUseTheSelectedLanguage() {
+  #expect(BrowserImportPreviewCopy.itemKindLabel(.bookmark, language: .english) == "Bookmark")
+  #expect(BrowserImportPreviewCopy.itemKindLabel(.history, language: .english) == "History")
+  #expect(BrowserImportPreviewCopy.itemKindLabel(.bookmark, language: .hebrew) == "סימנייה")
+  #expect(BrowserImportPreviewCopy.itemKindLabel(.history, language: .hebrew) == "היסטוריה")
+}
+
 @Test @MainActor func browserImportPreviewRendersReadyAndErrorStatesOffscreen() throws {
   let item = BrowserImportItem(title: "Research", address: "https://example.com", folder: "Work")
   let destination = FileManager.default.temporaryDirectory.appendingPathComponent(

@@ -1,6 +1,7 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Bookmark": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "סימנייה"}}}},
     "From %@": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "מקור: %@"}}}},
     "Import…": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Import…"}},"he":{"stringUnit":{"state":"translated","value":"ייבוא…"}}}},
     "Import Data": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Import Data"}},"he":{"stringUnit":{"state":"translated","value":"ייבוא נתונים"}}}},

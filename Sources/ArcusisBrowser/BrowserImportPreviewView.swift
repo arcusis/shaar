@@ -12,6 +12,13 @@ enum BrowserImportPreviewCopy {
     BrowserLocalization.format(
       "From %@", table: "Panels", language: language, arguments: [.string(source.title)])
   }
+
+  static func itemKindLabel(
+    _ kind: BrowserImportItem.Kind, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    BrowserLocalization.string(
+      kind == .bookmark ? "Bookmark" : "History", table: "Panels", language: language)
+  }
 }
 
 struct BrowserImportPreviewView: View {
@@ -55,7 +62,7 @@ struct BrowserImportPreviewView: View {
             HStack {
               Text(item.title).lineLimit(1)
               Spacer()
-              Text(verbatim: item.kind == .bookmark ? "Bookmark" : "History")
+              Text(BrowserImportPreviewCopy.itemKindLabel(item.kind))
                 .font(.caption).foregroundStyle(.secondary)
             }
             Text(item.address).font(.caption).foregroundStyle(.secondary).lineLimit(1)

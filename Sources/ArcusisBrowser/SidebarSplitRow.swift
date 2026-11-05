@@ -17,6 +17,16 @@ struct SidebarSplitRow: View {
 
   static let titleMinimumWidth: CGFloat = 64
 
+  static func showsTitles(
+    totalWidth: CGFloat, segmentCount: Int, hasStackDragHandle: Bool
+  ) -> Bool {
+    guard segmentCount > 0 else { return false }
+    let handleWidth: CGFloat = hasStackDragHandle ? 18 : 0
+    let gaps = segmentCount - 1 + (hasStackDragHandle ? 1 : 0)
+    let contentWidth = totalWidth - 6 - handleWidth - CGFloat(gaps) * 2
+    return contentWidth / CGFloat(segmentCount) >= titleMinimumWidth
+  }
+
   let segments: [Segment]
   let focusedID: UUID?
   let isSelected: Bool
@@ -31,7 +41,9 @@ struct SidebarSplitRow: View {
 
   var body: some View {
     GeometryReader { geometry in
-      let segmentWidth = geometry.size.width / CGFloat(max(segments.count, 1))
+      let showsTitle = Self.showsTitles(
+        totalWidth: geometry.size.width, segmentCount: segments.count,
+        hasStackDragHandle: onStackDrag != nil)
       HStack(spacing: 2) {
         if let onStackDrag {
           Image(systemName: "rectangle.split.2x1")
@@ -42,7 +54,7 @@ struct SidebarSplitRow: View {
             .draggable(onStackDrag())
         }
         ForEach(segments) { segment in
-          segmentView(segment, showsTitle: segmentWidth >= Self.titleMinimumWidth)
+          segmentView(segment, showsTitle: showsTitle)
         }
       }
       .padding(3)

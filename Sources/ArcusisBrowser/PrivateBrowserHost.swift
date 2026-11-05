@@ -185,12 +185,17 @@ final class PrivateBrowserHost {
     guard let owner = activeOwner, !runtime.isQuitting,
       Self.supportsPrivateCommand(command), owner.store.sheet == nil
     else { return false }
+    return Self.windowCanPerform(command, store: owner.store)
+  }
+
+  static func windowCanPerform(_ command: BrowserMenuCommand, store: BrowserStore) -> Bool {
     return switch command {
-    case .reopenClosed: owner.store.canReopenClosedTab
-    case .splitView: owner.store.session.selectedSpace.tabs.count >= 2
-    case .reload, .hardReload: owner.store.canReloadCurrentPage
-    case .find: owner.store.canFindCurrentPage
-    case .findNext, .findPrevious: owner.store.pageFind?.canMove == true
+    case .reopenClosed: store.canReopenClosedTab
+    case .splitView: store.session.selectedSpace.tabs.count >= 2
+    case .addFavorite: store.canFavoriteCurrentPage
+    case .reload, .hardReload: store.canReloadCurrentPage
+    case .find: store.canFindCurrentPage
+    case .findNext, .findPrevious: store.pageFind?.canMove == true
     default: true
     }
   }

@@ -30,6 +30,20 @@ struct LibraryDownloadTests {
         language: .hebrew) == "PDF")
   }
 
+  @Test func fileTypeSubtitleUsesAppLanguage() {
+    func readable(_ filename: String) -> String {
+      LibraryDownloadsView.fileType(for: URL(filePath: "/tmp/\(filename)"), language: .hebrew)
+        .replacingOccurrences(of: "\u{2068}", with: "")
+        .replacingOccurrences(of: "\u{2069}", with: "")
+    }
+    #expect(readable("report.pdf") == "מסמך PDF")
+    #expect(readable("photo.png") == "תמונת PNG")
+    #expect(readable("clip.mp4") == "סרטון MP4")
+    #expect(readable("bundle.zip") == "ארכיון ZIP")
+    #expect(
+      LibraryDownloadsView.fileType(for: nil, language: .hebrew) == "קובץ")
+  }
+
   private func record(
     _ id: String = UUID().uuidString.lowercased(),
     filename: String = "sample.jpg",

@@ -1,6 +1,12 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "%@ image": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"תמונת %@"}}}},
+    "%@ video": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"סרטון %@"}}}},
+    "%@ audio file": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"קובץ שמע %@"}}}},
+    "%@ archive": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"ארכיון %@"}}}},
+    "%@ document": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"מסמך %@"}}}},
+    "%@ file": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"קובץ %@"}}}},
     "Import…": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Import…"}},"he":{"stringUnit":{"state":"translated","value":"ייבוא…"}}}},
     "Import Data": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Import Data"}},"he":{"stringUnit":{"state":"translated","value":"ייבוא נתונים"}}}},
     "%d bookmarks and %d history entries are ready to import into %@.": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"%d bookmarks and %d history entries are ready to import into %@."}},"he":{"stringUnit":{"state":"translated","value":"%d סימניות ו־%d פריטי היסטוריה מוכנים לייבוא לפרופיל %@."}}}},

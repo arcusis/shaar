@@ -336,10 +336,31 @@ struct LibraryDownloadsView: View {
   }
 
   private func fileType(_ item: BrowserDownload) -> String {
-    guard let url = item.fileURL, let type = UTType(filenameExtension: url.pathExtension),
-      let description = type.localizedDescription
-    else { return PanelsL10n.string("File") }
-    return description
+    Self.fileType(for: item.fileURL, language: .currentLaunchLanguage)
+  }
+
+  static func fileType(for url: URL?, language: BrowserLanguage) -> String {
+    let fallback = BrowserLocalization.string("File", table: "Panels", language: language)
+    guard let url, let type = UTType(filenameExtension: url.pathExtension) else { return fallback }
+    guard language.resolved == .hebrew else { return type.localizedDescription ?? fallback }
+
+    let template: String
+    if type.conforms(to: .image) {
+      template = "%@ image"
+    } else if type.conforms(to: .movie) || type.conforms(to: .video) {
+      template = "%@ video"
+    } else if type.conforms(to: .audio) {
+      template = "%@ audio file"
+    } else if type.conforms(to: .archive) {
+      template = "%@ archive"
+    } else if type.conforms(to: .content) {
+      template = "%@ document"
+    } else {
+      template = "%@ file"
+    }
+    return BrowserLocalization.format(
+      template, table: "Panels", language: language,
+      arguments: [.string(url.pathExtension.uppercased())])
   }
 
   private func fileIcon(for item: BrowserDownload) -> NSImage {

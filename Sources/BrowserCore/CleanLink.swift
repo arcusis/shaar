@@ -22,10 +22,13 @@ public enum CleanLink {
     }
     let host = components.host?.lowercased() ?? ""
     let kept = components.queryItems?.filter { !isTracking($0.name.lowercased(), host: host) }
-    components.queryItems = kept?.isEmpty == true ? nil : kept
-    if isAmazonDomain(host) {
-      components.path = pathWithoutAmazonReferral(components.path)
+    let cleanedPath =
+      isAmazonDomain(host) ? pathWithoutAmazonReferral(components.path) : components.path
+    if kept?.count == components.queryItems?.count && cleanedPath == components.path {
+      return url
     }
+    components.queryItems = kept?.isEmpty == true ? nil : kept
+    components.path = cleanedPath
     return components.url ?? url
   }
 

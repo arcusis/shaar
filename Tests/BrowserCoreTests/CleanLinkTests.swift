@@ -126,6 +126,14 @@ import Testing
       .absoluteString == "https://example.com/page#section")
 }
 
+@Test func cleanLinkPreservesQueryEncodingWhenThereIsNoTracking() {
+  let input = URL(
+    string:
+      "https://storage.example.com/object?download=https%3A%2F%2Fexample.com%2Ffile&sig=abc"
+  )!
+  #expect(CleanLink.clean(input).absoluteString == input.absoluteString)
+}
+
 @Test func cleanLinkRemovesEveryAdvertisingClickIdentifier() {
   let input = URL(
     string:

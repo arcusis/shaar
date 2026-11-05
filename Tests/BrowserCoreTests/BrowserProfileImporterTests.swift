@@ -129,6 +129,20 @@ import Testing
   #expect(bookmark.folderComponents == ["Research", "toolbar"])
 }
 
+@Test func firefoxImportOmitsRootFoldersWithLocalizedTitles() throws {
+  let database = try databaseURLProfile(name: "Firefox", databaseName: "places.sqlite")
+  try createDatabase(
+    sqlFixture: "FirefoxPlaces.sql", at: database,
+    extraSQL: """
+      UPDATE moz_bookmarks SET title = 'Wurzel' WHERE id = 1;
+      UPDATE moz_bookmarks SET title = 'Lesezeichenleiste' WHERE id = 2;
+      """)
+
+  let batch = try BrowserImport.readProfile(at: database, source: .firefox)
+  let bookmark = try #require(batch.bookmarks.first { $0.title == "Firefox bookmark" })
+  #expect(bookmark.folderComponents == nil)
+}
+
 @Test func privateBrowserProfileDirectoriesAreRejectedBeforeReading() throws {
   for name in ["Incognito", "InPrivate", "Guest Profile", "Guest Profile 2", "Private Browsing"] {
     let profile = try profileDirectory(name: name)

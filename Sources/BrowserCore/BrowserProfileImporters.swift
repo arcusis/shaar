@@ -228,11 +228,8 @@ private struct FirefoxBookmarkNode {
 private func isFirefoxRootFolder(
   _ folder: FirefoxBookmarkNode, in nodes: [Int64: FirefoxBookmarkNode]
 ) -> Bool {
-  if folder.parent == 0 && folder.title.lowercased() == "places root" { return true }
-  guard let parent = nodes[folder.parent], parent.parent == 0,
-    parent.title.lowercased() == "places root"
-  else { return false }
-  return ["menu", "toolbar", "unfiled", "mobile", "tags"].contains(folder.title.lowercased())
+  if folder.parent == 0 { return true }
+  return nodes[folder.parent]?.parent == 0
 }
 
 private func groupedHistory(

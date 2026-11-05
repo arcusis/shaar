@@ -433,6 +433,23 @@ class SupplyChainTests(unittest.TestCase):
             self.assertEqual((Path(directory) / "periphery").read_bytes(), b"executable")
             self.assertEqual((Path(directory) / "libIndexStore.dylib").read_bytes(), b"runtime library")
 
+    def test_installer_retries_transient_download_failures_only(self):
+        def http_error(code):
+            return INSTALL.urllib.error.HTTPError("https://example.invalid/tool", code, "error", {}, None)
+
+        sleeps = []
+        responses = [http_error(504), http_error(502), io.BytesIO(b"payload")]
+        with patch.object(INSTALL.urllib.request, "urlopen", side_effect=responses):
+            self.assertEqual(INSTALL.download("https://example.invalid/tool", sleeps.append), b"payload")
+        self.assertEqual(sleeps, [2, 4])
+        with patch.object(INSTALL.urllib.request, "urlopen", side_effect=[http_error(404)]):
+            with self.assertRaises(INSTALL.urllib.error.HTTPError):
+                INSTALL.download("https://example.invalid/tool", sleeps.append)
+        failures = [http_error(503)] * INSTALL.DOWNLOAD_ATTEMPTS
+        with patch.object(INSTALL.urllib.request, "urlopen", side_effect=failures):
+            with self.assertRaises(INSTALL.urllib.error.HTTPError):
+                INSTALL.download("https://example.invalid/tool", lambda seconds: None)
+
     def archive(self, symbolic=False):
         output = io.BytesIO()
         with tarfile.open(fileobj=output, mode="w:gz") as archive:

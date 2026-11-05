@@ -1,0 +1,45 @@
+name: v0.1.0 to Shaar upgrade
+on:
+  pull_request:
+    paths:
+      - .github/workflows/upgrade-v010.yml
+      - scripts/upgrade_from_v010.py
+      - Sources/ShaarVerification/UpgradeProbe.swift
+      - Sources/ShaarVerification/ShaarVerificationMain.swift
+      - Tests/ShaarVerificationTests/UpgradeProbeTests.swift
+      - Tests/UpgradeProbeTests/**
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  upgrade:
+    runs-on: macos-26
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/ci-setup
+        with:
+          mode: verification
+          products: build/swiftpm/verification
+      - name: Verify disposable Apple silicon runner
+        run: |
+          test "$(id -un)" = runner
+          test "$(uname -m)" = arm64
+          test "$GITHUB_ACTIONS" = true
+      - name: Focused upgrade contracts
+        run: |
+          nice -n 19 .venv/bin/python -m unittest discover -s Tests/UpgradeProbeTests -p 'test_*.py'
+          nice -n 19 swift test --jobs 4 --filter UpgradeProbeTests
+      - name: Run isolated Ardia to Shaar upgrade
+        run: nice -n 19 .venv/bin/python scripts/upgrade_from_v010.py
+      - name: Upload redacted upgrade evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: upgrade-v010-${{ github.run_id }}
+          path: build/ci/upgrade-v010/
+          if-no-files-found: warn
+          retention-days: 7

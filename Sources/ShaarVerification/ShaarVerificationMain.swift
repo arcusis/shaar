@@ -8,6 +8,9 @@ import Foundation
 @main
 enum ShaarVerificationMain {
   @MainActor static func main() {
+    if CommandLine.arguments.contains("--probe-upgrade") {
+      exit(UpgradeProbe.run(arguments: CommandLine.arguments))
+    }
     if CommandLine.arguments.contains("--probe-shaar-preview") {
       exit(ShaarPreviewProbe.run(arguments: CommandLine.arguments))
     }

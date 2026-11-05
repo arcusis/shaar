@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+import plistlib
 from unittest.mock import patch
 
 from scripts import upgrade_from_v010
@@ -39,6 +40,17 @@ class UpgradeFromV010Tests(unittest.TestCase):
         patched = upgrade_from_v010.make_mock_keychain_control_switch(source)
         self.assertIn('objectForKey:@"SHAAR_UPGRADE_MOCK_CONTROL"', patched)
         self.assertNotIn('\n    strings.push_back("--use-mock-keychain");', patched)
+
+    def test_old_control_requires_shipping_bundle_identifier(self):
+        with tempfile.TemporaryDirectory() as directory:
+            app = Path(directory) / "Shaar Verification.app"
+            info = app / "Contents/Info.plist"
+            info.parent.mkdir(parents=True)
+            info.write_bytes(plistlib.dumps({"CFBundleIdentifier": "com.arcusis.browser.verification"}))
+            with self.assertRaisesRegex(RuntimeError, "shipping bundle identifier"):
+                upgrade_from_v010.require_shipping_bundle_id(app)
+            info.write_bytes(plistlib.dumps({"CFBundleIdentifier": "com.arcusis.browser"}))
+            upgrade_from_v010.require_shipping_bundle_id(app)
 
     def test_old_harness_routes_native_startup_errors_to_owned_log(self):
         source = subprocess.check_output(

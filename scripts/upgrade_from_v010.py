@@ -220,6 +220,12 @@ def set_shipping_bundle_id(app):
     run_checked(["codesign", "--verify", "--deep", "--strict", str(app)])
 
 
+def require_shipping_bundle_id(app):
+    info = plistlib.loads((app / "Contents/Info.plist").read_bytes())
+    if info.get("CFBundleIdentifier") != "com.arcusis.browser":
+        raise RuntimeError("Old control requires the shipping bundle identifier")
+
+
 @contextmanager
 def throwaway_keychain(root, environment):
     keychain = root / "upgrade.keychain-db"
@@ -432,7 +438,8 @@ def run_upgrade_probe(app, fixture, home, data_root, environment, expected_passw
         thread.join()
 
 
-def run_mock_control(source, system_temp, environment, evidence):
+def run_mock_control(source, app, system_temp, environment, evidence):
+    require_shipping_bundle_id(app)
     with tempfile.TemporaryDirectory(prefix="arcusis-engine-probe-", dir=system_temp) as temporary:
         root = Path(temporary).resolve(strict=True)
         (root / "home").mkdir(mode=0o700)
@@ -486,9 +493,9 @@ def execute(output):
             run_checked(["nice", "-n", "19", "bash", "scripts/bundle-app.sh",
                          "--with-engine", "--verification"], cwd=old_source,
                         env=environment, timeout=900, output=evidence / "old-bundle.log")
-            run_mock_control(old_source, system_temp, environment, evidence)
             old_app = old_source / "build/Shaar Verification.app"
             set_shipping_bundle_id(old_app)
+            run_mock_control(old_source, old_app, system_temp, environment, evidence)
             fixture_log = evidence / "old-fixture.log"
             fixture_started = time.time()
             try:

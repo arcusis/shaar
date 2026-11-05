@@ -4,6 +4,7 @@
 
 #import "include/ChromiumBridge.h"
 #import "ChromiumRuntimeInternal.h"
+#import "ChromiumLocalState.h"
 #import "ChromiumShaarExtensionsInternal.h"
 #import "ChromiumShaarPrivateSupport.h"
 
@@ -164,6 +165,7 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   NSAssert(NSThread.isMainThread, @"Shaar engine requires the main thread");
   if (![NSFileManager.defaultManager createDirectoryAtURL:directory
                               withIntermediateDirectories:YES attributes:nil error:nil]) return 1;
+  ARCDisableBackgroundMode(directory);
   char *resolved = realpath(directory.fileSystemRepresentation, nullptr);
   if (!resolved) return 1;
   NSString *path = [NSString stringWithUTF8String:resolved];

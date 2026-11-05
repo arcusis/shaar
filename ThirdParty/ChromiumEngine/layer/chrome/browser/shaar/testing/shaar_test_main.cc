@@ -14,9 +14,9 @@
 #include "chrome/browser/apps/app_service/publishers/publisher_host_factory_impl.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/testing_browser_process.h"
+#include "content/public/browser/content_browser_client.h"
 #include "content/public/common/content_paths.h"
 #include "content/public/common/content_client.h"
-#include "content/public/test/test_content_client_initializer.h"
 #include "mojo/core/embedder/embedder.h"
 #include "content/public/test/content_test_suite_base.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -45,10 +45,9 @@ class ShaarTestSuite final : public content::ContentTestSuiteBase {
         repack_dir.AppendASCII("locales").AppendASCII("en.pak"));
     ui::ResourceBundle::GetSharedInstance().AddDataPackFromPath(
         repack_dir.AppendASCII("resources.pak"), ui::kScaleFactorNone);
-    content_test_clients_ =
-        std::make_unique<content::TestContentClientInitializer>();
-    content::ContentTestSuiteBase::RegisterContentSchemes(
-        &content_client_);
+    content::SetContentClient(&content_client_);
+    content::SetBrowserClientForTesting(&browser_client_);
+    content::ContentTestSuiteBase::RegisterContentSchemes(&content_client_);
     content::ContentTestSuiteBase::RegisterInProcessThreads();
     publisher_host_factory_resetter_ =
         apps::AppServiceProxyFactory::GetInstance()->SetPublisherHostFactory(
@@ -59,14 +58,15 @@ class ShaarTestSuite final : public content::ContentTestSuiteBase {
   void Shutdown() override {
     TestingBrowserProcess::TearDownAndDeleteInstance();
     publisher_host_factory_resetter_.reset();
-    content_test_clients_.reset();
+    content::SetBrowserClientForTesting(nullptr);
+    content::SetContentClient(nullptr);
     ui::ResourceBundle::CleanupSharedInstance();
     content::ContentTestSuiteBase::Shutdown();
   }
 
  private:
   content::ContentClient content_client_;
-  std::unique_ptr<content::TestContentClientInitializer> content_test_clients_;
+  content::ContentBrowserClient browser_client_;
   std::optional<base::AutoReset<std::unique_ptr<apps::PublisherHostFactory>>>
       publisher_host_factory_resetter_;
 };

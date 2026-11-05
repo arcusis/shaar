@@ -17,8 +17,6 @@
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/devtools_agent_host_client.h"
 #include "content/public/test/mock_devtools_agent_host.h"
-#include "content/public/test/test_browser_context.h"
-#include "content/public/test/test_renderer_host.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace shaar::devtools {
@@ -307,24 +305,31 @@ TEST(ShaarDevToolsTest, ProtocolClientPreservesProtocolErrorMessage) {
   EXPECT_EQ("Method not found", captured.message);
 }
 
-class ShaarPrivateDevToolsPageTargetTest
-    : public content::RenderViewHostTestHarness {};
+class ScopedProtocolHost final : public content::MockDevToolsAgentHost {
+ public:
+  ScopedProtocolHost(content::WebContents* contents, std::string type)
+      : contents_(contents), type_(std::move(type)) {}
+  content::WebContents* GetWebContents() override { return contents_; }
+  std::string GetType() override { return type_; }
 
-TEST_F(ShaarPrivateDevToolsPageTargetTest, ProtocolUsesPrivatePageTarget) {
-  // A fresh off-the-record TestBrowserContext cannot initialize a render
-  // process in this minimal headless harness. Mark the ready test context OTR
-  // before selecting the DevTools target.
-  static_cast<content::TestBrowserContext*>(browser_context())
-      ->set_is_off_the_record(true);
-  ASSERT_TRUE(browser_context()->IsOffTheRecord());
-  auto host = ProtocolAgentHostFor(web_contents());
-  ASSERT_TRUE(host);
-  EXPECT_EQ(content::DevToolsAgentHost::kTypePage, host->GetType());
-  EXPECT_EQ(web_contents(), host->GetWebContents());
-  auto tab_host =
-      content::DevToolsAgentHost::GetOrCreateForTab(web_contents());
-  ASSERT_TRUE(tab_host);
-  EXPECT_NE(tab_host.get(), host.get());
+ private:
+  ~ScopedProtocolHost() override = default;
+  content::WebContents* contents_;
+  std::string type_;
+};
+
+TEST(ShaarDevToolsTest, ProtocolRequiresExactPageTargetForScopedTab) {
+  auto* tab = reinterpret_cast<content::WebContents*>(1);
+  auto* other_tab = reinterpret_cast<content::WebContents*>(2);
+  auto page = base::MakeRefCounted<ScopedProtocolHost>(
+      tab, content::DevToolsAgentHost::kTypePage);
+  auto tab_target = base::MakeRefCounted<ScopedProtocolHost>(
+      tab, content::DevToolsAgentHost::kTypeTab);
+  EXPECT_TRUE(IsProtocolPageTargetFor(tab, page.get()));
+  EXPECT_FALSE(IsProtocolPageTargetFor(other_tab, page.get()));
+  EXPECT_FALSE(IsProtocolPageTargetFor(tab, tab_target.get()));
+  EXPECT_FALSE(IsProtocolPageTargetFor(nullptr, page.get()));
+  EXPECT_FALSE(IsProtocolPageTargetFor(tab, nullptr));
 }
 
 TEST(ShaarDevToolsTest, LifecycleEntryRegistersOnlyItsOperationRange) {

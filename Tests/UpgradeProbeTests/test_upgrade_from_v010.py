@@ -53,23 +53,30 @@ class UpgradeFromV010Tests(unittest.TestCase):
         self.assertIn("runtime.applyBookmarkOperation(operation, profileID: profile)", patched)
         self.assertEqual(patched.count("Alpha console"), 1)
 
-    def test_old_native_guard_accepts_the_owned_tmpdir(self):
-        source = subprocess.check_output(
-            ["git", "show", "v0.1.0:Sources/ShaarVerification/EngineProbe.swift"],
-            cwd=upgrade_from_v010.ROOT, text=True)
-        patched = upgrade_from_v010.patch_legacy_temporary_guard(source)
-        self.assertIn('ProcessInfo.processInfo.environment["TMPDIR"]', patched)
-        self.assertIn('"arcusis-engine-probe-v1\\n"', patched)
-
-    def test_old_fixture_debugger_keeps_the_first_probe_hidden(self):
+    def test_old_fixture_uses_precreated_system_temp_root(self):
         source = subprocess.check_output(
             ["git", "show", "v0.1.0:scripts/engine_fixture.py"],
             cwd=upgrade_from_v010.ROOT, text=True)
-        patched = upgrade_from_v010.patch_legacy_fixture_debugger(source)
-        self.assertIn('if phase == "initial":', patched)
-        self.assertIn('arguments = ["lldb", "--batch", "-o", "run",', patched)
-        self.assertIn('"-k", "thread backtrace all", "--", *arguments]', patched)
+        patched = upgrade_from_v010.patch_legacy_fixture_root(source)
+        self.assertIn('os.environ["SHAAR_UPGRADE_FIXTURE_ROOT"]', patched)
         compile(patched, "engine_fixture.py", "exec")
+
+    def test_upgrade_home_and_fixture_share_system_temp_root(self):
+        with tempfile.TemporaryDirectory(prefix="arcusis-engine-probe-") as directory:
+            root = Path(directory)
+            home = root / "home"
+            home.mkdir()
+            environment = upgrade_from_v010.upgrade_environment(
+                {"HOME": "/not-used", "TMPDIR": "/not-used"}, root)
+            self.assertEqual(environment["HOME"], str(home))
+            self.assertEqual(environment["CFFIXED_USER_HOME"], str(home))
+            self.assertEqual(environment["SHAAR_UPGRADE_FIXTURE_ROOT"], str(root))
+            self.assertEqual(environment["TMPDIR"], str(root.parent))
+
+    def test_system_temp_matches_macos_user_temp(self):
+        expected = Path(subprocess.check_output(
+            ["getconf", "DARWIN_USER_TEMP_DIR"], text=True).strip()).resolve()
+        self.assertEqual(upgrade_from_v010.system_temporary_directory({}), expected)
 
     def test_annotated_release_tag_resolves_to_pinned_commit(self):
         self.assertEqual(upgrade_from_v010.v010_commit(),

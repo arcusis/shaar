@@ -90,23 +90,24 @@ def add_legacy_bookmarks(source):
     return replace_once(source, marker, addition + marker, "bookmark probe")
 
 
-def patch_legacy_temporary_guard(source):
-    old = ("      let temporary = FileManager.default.temporaryDirectory.standardizedFileURL\n"
-           "        .resolvingSymlinksInPath()")
-    new = ("      let temporary = URL(filePath: ProcessInfo.processInfo.environment[\"TMPDIR\"]"
-           " ?? NSTemporaryDirectory(), directoryHint: .isDirectory)\n"
-           "        .standardizedFileURL.resolvingSymlinksInPath()")
-    return replace_once(source, old, new, "temporary root guard")
+def patch_legacy_fixture_root(source):
+    old = '    root = Path(tempfile.mkdtemp(prefix="arcusis-engine-probe-"))'
+    new = '    root = Path(os.environ["SHAAR_UPGRADE_FIXTURE_ROOT"]).resolve()'
+    return replace_once(source, old, new, "fixture root")
 
 
-def patch_legacy_fixture_debugger(source):
-    old = ("                process = subprocess.Popen(arguments, stdout=log, stderr=log, "
-           "start_new_session=True, env=probe_env)")
-    new = ("                if phase == \"initial\":\n"
-           "                    arguments = [\"lldb\", \"--batch\", \"-o\", \"run\",\n"
-           "                                 \"-k\", \"thread backtrace all\", \"--\", "
-           "*arguments]\n" + old)
-    return replace_once(source, old, new, "fixture debugger")
+def system_temporary_directory(environment):
+    path = Path(run_checked(["getconf", "DARWIN_USER_TEMP_DIR"], env=environment).strip())
+    path = path.resolve(strict=True)
+    if not path.is_dir() or path.stat().st_uid != os.getuid():
+        raise RuntimeError("Upgrade test requires an owned macOS temporary directory")
+    return path
+
+
+def upgrade_environment(base, root):
+    home = root / "home"
+    return dict(base, HOME=str(home), CFFIXED_USER_HOME=str(home),
+                TMPDIR=str(root.parent), SHAAR_UPGRADE_FIXTURE_ROOT=str(root))
 
 
 def add_hidden_window_guard(source):
@@ -184,7 +185,7 @@ def prepare_old_harness(source, released_framework):
     bridge = source / "Sources/ChromiumBridge/ChromiumBridge.mm"
     bridge.write_text(remove_mock_keychain_switch(bridge.read_text()))
     probe = source / "Sources/ShaarVerification/EngineProbe.swift"
-    probe.write_text(patch_legacy_temporary_guard(add_legacy_bookmarks(probe.read_text())))
+    probe.write_text(add_legacy_bookmarks(probe.read_text()))
     main = source / "Sources/ShaarVerification/ShaarVerificationMain.swift"
     main.write_text(add_hidden_window_guard(main.read_text()))
     shutil.copy2(ROOT / "Sources/ShaarVerification/HiddenWindowOrderGuard.swift",
@@ -198,7 +199,7 @@ def prepare_old_harness(source, released_framework):
     fetch.write_text("#!/bin/bash\nset -euo pipefail\nprintf '%s\\n' " +
                      json.dumps(str(released_framework)) + "\n")
     fixture = source / "scripts/engine_fixture.py"
-    fixture.write_text(patch_legacy_fixture_debugger(fixture.read_text()))
+    fixture.write_text(patch_legacy_fixture_root(fixture.read_text()))
 
 
 def set_shipping_bundle_id(app):
@@ -423,17 +424,17 @@ def run_upgrade_probe(app, fixture, home, data_root, environment, expected_passw
 
 
 def execute(output):
-    runner_temp = require_disposable_runner(os.environ, getpass.getuser())
+    require_disposable_runner(os.environ, getpass.getuser())
     if os.uname().machine != "arm64":
         raise RuntimeError("Upgrade test requires Apple silicon")
+    system_temp = system_temporary_directory(os.environ)
     evidence = output.parent
     evidence.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="arcusis-upgrade-", dir=runner_temp) as temporary:
+    with tempfile.TemporaryDirectory(prefix="arcusis-engine-probe-", dir=system_temp) as temporary:
         root = Path(temporary).resolve(strict=True)
         home = root / "home"
         home.mkdir(mode=0o700)
-        environment = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home),
-                           TMPDIR=str(root))
+        environment = upgrade_environment(os.environ, root)
         check_isolated_home(root, environment)
         release_zip = root / "Shaar-0.1.0-macos.zip"
         release = fetch_release_zip(release_zip)
@@ -463,7 +464,7 @@ def execute(output):
                                       env=environment, timeout=900, output=fixture_log)
             except RuntimeError:
                 transcript = fixture_log.read_text()
-                retain_old_fixture_evidence(transcript, root, evidence)
+                retain_old_fixture_evidence(transcript, root.parent, evidence)
                 if re.search(r"failed \(-\d+\)", transcript):
                     user_home = Path(pwd.getpwuid(os.getuid()).pw_dir)
                     directories = [home / "Library/Logs/DiagnosticReports",
@@ -473,7 +474,9 @@ def execute(output):
                             break
                         time.sleep(0.5)
                 raise
-            fixture = fixture_root_from_log(old_log, root)
+            fixture = fixture_root_from_log(old_log, root.parent)
+            if fixture != root:
+                raise RuntimeError("v0.1.0 fixture did not use the owned upgrade root")
             data_root = stage_old_data(fixture, home)
             session = json.loads((fixture / "session.json").read_text())
             fixture_url = account_url_from_session(session)

@@ -19,15 +19,28 @@ final class TabSwitcherController {
     if let tab = store.session.selectedPage?.tab.id {
       recency.record(tab, in: store.session.selectedSpaceID)
     }
-    if spaceID != nil && spaceID != store.session.selectedSpaceID { cancel() }
+    if spaceID != nil && spaceID != store.session.selectedSpaceID {
+      cancel()
+      return
+    }
+    guard !choices.isEmpty else { return }
+    var available = Set(store.session.selectedSpace.tabs.map(\.id))
+    if let selected = store.session.selectedPage?.tab.id { available.insert(selected) }
+    let highlighted = choices.indices.contains(index) ? choices[index] : nil
+    choices.removeAll { !available.contains($0) }
+    if choices.count < 2 {
+      cancel()
+    } else {
+      index = highlighted.flatMap { choices.firstIndex(of: $0) } ?? min(index, choices.count - 1)
+    }
   }
 
   func advance(store: BrowserStore, reverse: Bool) {
+    record(store: store)
     let space = store.session.selectedSpace
     if choices.isEmpty {
       let available = availableTabIDs(store: store)
       guard available.count > 1 else { return }
-      record(store: store)
       choices = recency.ordered(in: space.id, available: available)
       spaceID = space.id
       index = 0
@@ -37,6 +50,7 @@ final class TabSwitcherController {
   }
 
   func commit(store: BrowserStore) {
+    record(store: store)
     guard let spaceID, choices.indices.contains(index), store.session.selectedSpaceID == spaceID
     else {
       cancel()
@@ -118,6 +132,9 @@ struct TabSwitcherPanel: View {
     .onAppear { controller.record(store: store) }
     .onChange(of: store.session.selectedSpaceID) { _, _ in controller.record(store: store) }
     .onChange(of: store.session.selectedPage?.tab.id) { _, _ in controller.record(store: store) }
+    .onChange(of: store.session.selectedSpace.tabs.map(\.id)) { _, _ in
+      controller.record(store: store)
+    }
   }
 }
 

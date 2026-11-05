@@ -91,7 +91,7 @@ extension BrowserSession {
     spaces[spaceIndex].reconcileSplits()
     if spaces[spaceIndex].selectedTabID == tabID {
       let ordinary = spaces[spaceIndex].tabs.filter { !$0.isPinned }
-      spaces[spaceIndex].selectedTabID = ordinary.first?.id
+      spaces[spaceIndex].selectedTabID = ordinary.first?.id ?? spaces[spaceIndex].tabs.first?.id
     }
     favorites.append(
       BrowserFavorite(

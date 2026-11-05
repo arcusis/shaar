@@ -53,6 +53,23 @@ import Testing
   #expect(results.first?.subtitle == "frequent.example")
 }
 
+@Test func mostVisitedSkipsTheOpenFavoritePage() throws {
+  var fixture = try LauncherFixture()
+  let selected = fixture.session.selectFavorite(fixture.favoriteID, in: fixture.spaceID)
+  #expect(selected)
+  let history = [
+    try entry("https://favorite.example/", visits: 90, profile: fixture.profileID),
+    try entry("https://unopened.example/", visits: 2, profile: fixture.profileID),
+  ]
+
+  let results = CommandLauncher.mostVisited(in: fixture.session, history: history)
+
+  #expect(
+    results.map(\.action) == [
+      .history(profile: fixture.profileID, address: "https://unopened.example/")
+    ])
+}
+
 @Test func emptySpaceStillSuggestsFavoritesClosedTabsAndHistory() throws {
   var fixture = try LauncherFixture()
   for id in [fixture.openTabID, fixture.pinnedTabID, fixture.closedTabID] {

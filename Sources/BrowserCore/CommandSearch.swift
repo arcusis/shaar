@@ -43,6 +43,7 @@ public enum NavigationInput {
     let lowercased = input.lowercased()
     return input.contains("://") || lowercased.hasPrefix("javascript:")
       || lowercased.hasPrefix("data:") || lowercased.hasPrefix("file:")
+      || lowercased.hasPrefix("mailto:")
   }
 }
 

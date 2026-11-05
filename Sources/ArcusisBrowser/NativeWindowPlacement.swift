@@ -16,7 +16,12 @@ enum NativeWindowPlacement {
       ?? source?.offsetBy(dx: 22, dy: -22)
       ?? NSRect(x: fallback.midX - 600, y: fallback.midY - 390, width: 1200, height: 780)
     let screen =
-      usable.max { intersectionArea(proposed, $0) < intersectionArea(proposed, $1) } ?? fallback
+      usable.max {
+        let firstArea = intersectionArea(proposed, $0)
+        let secondArea = intersectionArea(proposed, $1)
+        if firstArea != secondArea { return firstArea < secondArea }
+        return separationSquared(proposed, $0) > separationSquared(proposed, $1)
+      } ?? fallback
     let width = min(max(proposed.width, 760), screen.width)
     let height = min(max(proposed.height, 520), screen.height)
     return NSRect(
@@ -28,5 +33,11 @@ enum NativeWindowPlacement {
   private static func intersectionArea(_ first: NSRect, _ second: NSRect) -> CGFloat {
     let intersection = first.intersection(second)
     return intersection.isNull ? 0 : intersection.width * intersection.height
+  }
+
+  private static func separationSquared(_ first: NSRect, _ second: NSRect) -> CGFloat {
+    let dx = max(0, max(second.minX - first.maxX, first.minX - second.maxX))
+    let dy = max(0, max(second.minY - first.maxY, first.minY - second.maxY))
+    return dx * dx + dy * dy
   }
 }

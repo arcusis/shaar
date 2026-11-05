@@ -147,6 +147,32 @@ struct SidebarDropRuleTests {
     try store.session.validate()
   }
 
+  @Test func splitMemberCurrentFolderActionPreservesSplit() throws {
+    let store = BrowserStore()
+    let space = store.session.selectedSpaceID
+    let openedFirst = store.session.open(URL(string: "https://first.example")!)
+    let first = try #require(openedFirst)
+    let openedSecond = store.session.open(URL(string: "https://second.example")!)
+    let second = try #require(openedSecond)
+    store.togglePin(first)
+    store.togglePin(second)
+    let folder = try #require(store.createFolder(name: "Projects", in: space))
+    #expect(store.moveTab(first, from: space, to: space, folderID: folder))
+    #expect(store.moveTab(second, from: space, to: space, folderID: folder))
+    store.splitTabs(first, second)
+    let before = store.session
+    #expect(before.selectedSpace.splits.count == 1)
+
+    #expect(!store.moveSplitMemberToFolder(second, in: space, folderID: folder))
+    #expect(store.session == before)
+
+    let other = try #require(store.createFolder(name: "Other", in: space))
+    #expect(store.moveSplitMemberToFolder(second, in: space, folderID: other))
+    #expect(store.session.selectedSpace.splits.isEmpty)
+    #expect(store.session.selectedSpace.tabs.first { $0.id == second }?.folderID == other)
+    try store.session.validate()
+  }
+
   @Test func folderCreationMovesPagesInOrderAndRemovalPromotesThem() throws {
     let (store, space, tabs) = fixture()
     let payload = transfer(store, space, tabs[3])

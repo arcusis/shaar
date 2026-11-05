@@ -66,6 +66,18 @@ final class BrowserSplitStoreTests: XCTestCase {
     XCTAssertEqual(SplitDropZone.edge(at: CGPoint(x: 200, y: 290), in: size), .bottom)
   }
 
+  func testSplitDropRejectsStaleTargetWithoutConsumingDrag() throws {
+    var session = BrowserSession.fresh()
+    let dragged = try XCTUnwrap(session.open(URL(string: "https://drag.example")!))
+    let target = try XCTUnwrap(session.open(URL(string: "https://target.example")!))
+    let store = BrowserStore(session: session)
+    _ = store.beginTabDrag(dragged, spaceID: store.session.selectedSpaceID, fromSplitPane: false)
+    XCTAssertFalse(store.canDropTab(beside: UUID()))
+    XCTAssertFalse(store.dropTab(beside: UUID(), edge: .right))
+    XCTAssertEqual(store.tabDrag?.tabID, dragged)
+    XCTAssertTrue(store.dropTab(beside: target, edge: .right))
+  }
+
   func testDropEdgeHoldsNearCornersAndDefaultsForEmptyPages() {
     let size = CGSize(width: 400, height: 400)
     let nearCorner = CGPoint(x: 30, y: 25)

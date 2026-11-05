@@ -154,7 +154,8 @@ extension BrowserStore {
   /// Whether dropping the dragged tab beside `target` would change anything.
   func canDropTab(beside target: UUID) -> Bool {
     guard let drag = tabDrag, drag.tabID != target,
-      session.selectedSpace.tabs.contains(where: { $0.id == drag.tabID })
+      session.selectedSpace.tabs.contains(where: { $0.id == drag.tabID }),
+      session.selectedSpace.tabs.contains(where: { $0.id == target })
     else { return false }
     let split = session.selectedSpace.splits.first { $0.tabIDs.contains(target) }
     let joining = split?.tabIDs.contains(drag.tabID) != true

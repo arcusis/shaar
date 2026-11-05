@@ -18,6 +18,8 @@ final class PrivateSiteControlsModel: Identifiable {
   private(set) var saving = false
   private(set) var failure: String?
   private let runtime: ARCChromiumRuntime
+  @ObservationIgnored private var changeRevision = 0
+  @ObservationIgnored private var readRevision = 0
 
   init?(
     tabID: String, windowID: String, contextID: String, url: URL,
@@ -41,17 +43,29 @@ final class PrivateSiteControlsModel: Identifiable {
   }
 
   func load() async {
+    readRevision += 1
+    let currentRead = readRevision
+    let currentChange = changeRevision
     do {
-      allowed = try await runtime.privateCookies(
+      let current = try await runtime.privateCookies(
         forTabID: tabID, windowID: windowID, contextID: contextID, origin: origin
       ).boolValue
-    } catch { failure = error.localizedDescription }
+      guard currentRead == readRevision, currentChange == changeRevision else { return }
+      allowed = current
+    } catch {
+      guard currentRead == readRevision, currentChange == changeRevision else { return }
+      failure = error.localizedDescription
+    }
   }
 
   func setAllowed(_ value: Bool) async {
     guard !saving, allowed != nil else { return }
+    changeRevision += 1
     saving = true
-    defer { saving = false }
+    defer {
+      saving = false
+      changeRevision += 1
+    }
     do {
       try await runtime.setPrivateCookiesAllowed(
         value, tabID: tabID, windowID: windowID, contextID: contextID, origin: origin)

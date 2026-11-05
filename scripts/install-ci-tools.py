@@ -11,6 +11,8 @@ import io
 import json
 import platform
 import tarfile
+import time
+import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -32,6 +34,18 @@ def binary_from_archive(payload: bytes, name: str, digest: str) -> bytes:
         return archive.extractfile(members[0]).read()
 
 
+def download_archive(url: str) -> bytes:
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(url, timeout=60) as response:
+                return response.read(100_000_001)
+        except urllib.error.HTTPError as error:
+            if error.code < 500 or attempt == 2:
+                raise
+            time.sleep(2 ** attempt)
+    raise AssertionError("unreachable")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--destination", type=Path, default=Path("build/ci-tools"))
@@ -44,8 +58,7 @@ def main() -> None:
         if name == "periphery" and not options.include_periphery:
             continue
         pin = platforms[host]
-        with urllib.request.urlopen(pin["url"], timeout=60) as response:
-            payload = response.read(100_000_001)
+        payload = download_archive(pin["url"])
         for member in (name, *pin.get("companions", [])):
             binary = binary_from_archive(payload, member, pin["sha256"])
             destination = options.destination / member

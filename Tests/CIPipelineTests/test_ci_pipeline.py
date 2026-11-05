@@ -15,6 +15,7 @@ import tempfile
 import tomllib
 from types import SimpleNamespace
 import unittest
+import urllib.error
 import zipfile
 from unittest.mock import patch
 import xml.etree.ElementTree as ET
@@ -432,6 +433,33 @@ class SupplyChainTests(unittest.TestCase):
                 INSTALL.main()
             self.assertEqual((Path(directory) / "periphery").read_bytes(), b"executable")
             self.assertEqual((Path(directory) / "libIndexStore.dylib").read_bytes(), b"runtime library")
+
+    def test_installer_retries_transient_asset_error_and_preserves_final_failure(self):
+        url = "https://example.invalid/tool.tar.gz"
+        timeout = lambda code: urllib.error.HTTPError(url, code, "asset unavailable", None, None)
+        with (
+            patch.object(INSTALL.urllib.request, "urlopen", side_effect=[timeout(504), io.BytesIO(b"archive")]) as open_url,
+            patch.object(INSTALL.time, "sleep") as sleep,
+        ):
+            self.assertEqual(INSTALL.download_archive(url), b"archive")
+            self.assertEqual(open_url.call_count, 2)
+            sleep.assert_called_once()
+        with (
+            patch.object(INSTALL.urllib.request, "urlopen", side_effect=timeout(404)) as open_url,
+            patch.object(INSTALL.time, "sleep") as sleep,
+        ):
+            with self.assertRaises(urllib.error.HTTPError):
+                INSTALL.download_archive(url)
+            self.assertEqual(open_url.call_count, 1)
+            sleep.assert_not_called()
+        with (
+            patch.object(INSTALL.urllib.request, "urlopen", side_effect=timeout(504)) as open_url,
+            patch.object(INSTALL.time, "sleep") as sleep,
+        ):
+            with self.assertRaises(urllib.error.HTTPError):
+                INSTALL.download_archive(url)
+            self.assertEqual(open_url.call_count, 3)
+            self.assertEqual(sleep.call_count, 2)
 
     def archive(self, symbolic=False):
         output = io.BytesIO()

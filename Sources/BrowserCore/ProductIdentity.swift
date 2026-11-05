@@ -8,26 +8,45 @@ import Foundation
 public enum ProductIdentity {
   public static let enginePreviewBundleIdentifier = "com.arcusis.browser.engine-preview"
   public static var isEnginePreviewBundle: Bool {
-    Bundle.main.bundleIdentifier == enginePreviewBundleIdentifier
+    isEnginePreviewBundle(bundleIdentifier: Bundle.main.bundleIdentifier)
+  }
+  static func isEnginePreviewBundle(bundleIdentifier: String?) -> Bool {
+    bundleIdentifier == enginePreviewBundleIdentifier
   }
   public static var name: String {
-    isEnginePreviewBundle ? "Shaar Engine Preview" : "Shaar"
+    name(forBundleIdentifier: Bundle.main.bundleIdentifier)
+  }
+  static func name(forBundleIdentifier bundleIdentifier: String?) -> String {
+    if isEnginePreviewBundle(bundleIdentifier: bundleIdentifier) {
+      return "Shaar Engine Preview"
+    }
+    return "Shaar"
   }
   public static var meaning: String {
     "שער — " + BrowserLocalization.string("the gateway to the internet", table: "Core")
   }
   /// The installed engine Preview must never load the regular browser's workspace or profiles.
   public static var dataFolderName: String {
-    if isEnginePreviewBundle {
-      return Bundle.main.object(forInfoDictionaryKey: "ShaarDataFolderName") as? String
-        ?? "Shaar Engine Preview"
+    dataFolderName(
+      forBundleIdentifier: Bundle.main.bundleIdentifier, info: Bundle.main.infoDictionary)
+  }
+  static func dataFolderName(forBundleIdentifier bundleIdentifier: String?, info: [String: Any]?)
+    -> String
+  {
+    if isEnginePreviewBundle(bundleIdentifier: bundleIdentifier) {
+      return info?["ShaarDataFolderName"] as? String ?? "Shaar Engine Preview"
     }
     return "Arcusis Browser"
   }
   public static var cacheFolderName: String {
-    if isEnginePreviewBundle {
-      return Bundle.main.object(forInfoDictionaryKey: "ShaarCacheFolderName") as? String
-        ?? "Shaar Engine Preview"
+    cacheFolderName(
+      forBundleIdentifier: Bundle.main.bundleIdentifier, info: Bundle.main.infoDictionary)
+  }
+  static func cacheFolderName(forBundleIdentifier bundleIdentifier: String?, info: [String: Any]?)
+    -> String
+  {
+    if isEnginePreviewBundle(bundleIdentifier: bundleIdentifier) {
+      return info?["ShaarCacheFolderName"] as? String ?? "Shaar Engine Preview"
     }
     return "Shaar"
   }

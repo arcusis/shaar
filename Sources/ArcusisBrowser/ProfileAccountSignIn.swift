@@ -47,6 +47,10 @@ final class ProfileAccountSignIn {
       session: try BrowserSession(profiles: [profile], spaces: [space], selectedSpaceID: space.id))
     let id = UUID().uuidString
     try events.runtime.createWindowID(id)
+    var initialized = false
+    defer {
+      if !initialized { _ = events.runtime.closeWindowID(id) }
+    }
     guard let window = events.runtime.window(forID: id),
       let content = events.runtime.hostView(forWindowID: id)
     else { throw WorkspaceError.invalidState }
@@ -71,6 +75,7 @@ final class ProfileAccountSignIn {
       window.makeKeyAndOrderFront(nil)
     }
     watcher = Task { [weak self] in await self?.watch() }
+    initialized = true
   }
 
   /// Polls the page until the provider reports a finished sign-in, or until sign-out has loaded.
@@ -226,6 +231,10 @@ private final class SignInPopup {
         profiles: [profile], spaces: [space], selectedSpaceID: space.id))
     let id = UUID().uuidString
     try events.runtime.createWindowID(id)
+    var initialized = false
+    defer {
+      if !initialized { _ = events.runtime.closeWindowID(id) }
+    }
     guard let window = events.runtime.window(forID: id),
       let content = events.runtime.hostView(forWindowID: id)
     else { throw WorkspaceError.invalidState }
@@ -240,6 +249,7 @@ private final class SignInPopup {
     hosting.autoresizingMask = [.width, .height]
     content.addSubview(hosting)
     window.setContentSize(NSSize(width: 520, height: 680))
+    initialized = true
   }
 }
 

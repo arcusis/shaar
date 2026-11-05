@@ -124,7 +124,9 @@ public struct BrowserHistoryEntry: Identifiable, Equatable, Sendable {
     else { throw LibraryDataError.invalidHistory }
     self.profileID = profileID
     self.address = address
-    self.title = title.isEmpty ? URL(string: address)?.host() ?? address : title
+    self.title =
+      title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      ? URL(string: address)?.host() ?? address : title
     visitCount = count.int64Value
     lastVisit = Date(timeIntervalSince1970: last / 1000)
   }

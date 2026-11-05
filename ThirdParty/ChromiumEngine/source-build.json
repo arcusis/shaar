@@ -252,10 +252,6 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0004-shaar-minimal-layer-tests.patch",
       "sha256": "4def0096d1c9dc15fe9fc8e54bdaf24550cc2a9253f2070c034826c154b63bd4"
-    },
-    {
-      "file": "ThirdParty/ChromiumEngine/patches/0005-private-extension-tab-helpers.patch",
-      "sha256": "26b76dbbf8c05586bfa80524cf8a66bd903b0b5b44d05ee4df3a15ca371fc424"
     }
   ],
   "requiredExports": [
@@ -520,6 +516,6 @@
   },
   "finalPatch": {
     "file": "ThirdParty/ChromiumEngine/patches/0006-shaar-only-framework.patch",
-    "sha256": "39eb84ab65212d0c285601d70fcdea26ca12840fe40631f27619089cdba64a39"
+    "sha256": "c6c94de7f9ec689a4d888eb8dc273c166ed1b826d02dfe996fd14a8082c8adb9"
   }
 }

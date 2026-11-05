@@ -13,6 +13,10 @@ NSString *ARCValidatedProfileID(NSString *profileID);
 - (nullable NSString *)shaarDevToolsProfileIDForTabID:(NSString *)tabID;
 - (BOOL)shaarDevToolsOwnsTabID:(NSString *)tabID profileID:(NSString *)profileID
                     windowID:(NSString *)windowID;
+- (BOOL)shaarDevToolsSubmit:(NSUInteger)operation tabID:(NSString *)tabID
+                 profileID:(NSString *)profileID windowID:(NSString *)windowID
+                   payload:(NSDictionary *)payload
+                completion:(void (^)(NSDictionary *, NSError *))completion;
 - (void)shaarDevToolsCall:(NSString *)method params:(NSDictionary *)params
               capability:(NSUInteger)capability tabID:(NSString *)tabID
                profileID:(NSString *)profileID windowID:(NSString *)windowID

@@ -107,3 +107,25 @@ import Testing
   #expect(!changed)
   #expect(session.selectedSpace.symbol == original)
 }
+
+@Test func blankSavedSymbolsUseVisibleModelFallbacks() throws {
+  let session = BrowserSession.fresh()
+  let profile = BrowserProfile(name: "Personal", symbol: " \t ")
+  let space = BrowserSpace(
+    profileID: profile.id, name: "Personal", symbol: " \t ", tint: .lavender)
+  #expect(profile.symbol == nil)
+  #expect(space.symbol == "square.stack")
+
+  var json = try #require(
+    JSONSerialization.jsonObject(with: JSONEncoder().encode(session)) as? [String: Any])
+  var profiles = try #require(json["profiles"] as? [[String: Any]])
+  var spaces = try #require(json["spaces"] as? [[String: Any]])
+  profiles[0]["symbol"] = " \t "
+  spaces[0]["symbol"] = " \t "
+  json["profiles"] = profiles
+  json["spaces"] = spaces
+  let restored = try JSONDecoder().decode(
+    BrowserSession.self, from: JSONSerialization.data(withJSONObject: json))
+  #expect(restored.profiles[0].symbol == nil)
+  #expect(restored.spaces[0].symbol == "square.stack")
+}

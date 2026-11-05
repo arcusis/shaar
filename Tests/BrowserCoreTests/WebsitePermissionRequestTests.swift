@@ -29,6 +29,19 @@ import Testing
   #expect(WebsitePermissionKind(rawValue: "cameraPanTiltZoom") == nil)
 }
 
+@Test func websitePermissionRequestsAcceptLocalhostSubdomains() {
+  func request(_ origin: String) -> WebsitePermissionRequest? {
+    WebsitePermissionRequest(
+      id: "local", profileID: UUID(), tabID: UUID(),
+      pageURL: URL(string: "http://app.localhost:8080/page")!,
+      requestingOrigin: URL(string: origin)!, kinds: [.camera])
+  }
+
+  #expect(request("http://app.localhost:8080") != nil)
+  #expect(request("http://app.localhost.:8080") != nil)
+  #expect(request("http://app.localhost.evil:8080") == nil)
+}
+
 @Test func websitePermissionRequestsAcceptEveryForwardedKindAndOnlyMediaAndLocationAreOneTime() {
   let request = WebsitePermissionRequest(
     id: "p2", profileID: UUID(), tabID: UUID(), pageURL: URL(string: "https://maps.example")!,

@@ -34,8 +34,7 @@ public struct WebsitePermissionRequest: Identifiable, Equatable, Sendable {
     let secureOrigin =
       scheme == "https"
       || (scheme == "http"
-        && ["localhost", "127.0.0.1", "::1", "[::1]"].contains(
-          requestingOrigin.host()?.lowercased() ?? ""))
+        && Self.isLocalHTTPHost(requestingOrigin.host()?.lowercased() ?? ""))
     guard !id.isEmpty, id.utf8.count <= 128, NavigationInput.isWebURL(pageURL),
       NavigationInput.isWebURL(requestingOrigin), requestingOrigin.user == nil,
       requestingOrigin.password == nil, requestingOrigin.query == nil,
@@ -49,6 +48,11 @@ public struct WebsitePermissionRequest: Identifiable, Equatable, Sendable {
     self.pageURL = pageURL
     self.requestingOrigin = requestingOrigin
     self.kinds = WebsitePermissionKind.allCases.filter(kinds.contains)
+  }
+
+  private static func isLocalHTTPHost(_ host: String) -> Bool {
+    ["localhost", "localhost.", "127.0.0.1", "::1", "[::1]"].contains(host)
+      || host.hasSuffix(".localhost") || host.hasSuffix(".localhost.")
   }
 
   public func matches(_ session: BrowserSession) -> Bool {

@@ -139,6 +139,24 @@ struct SidebarDropRuleTests {
     try store.session.validate()
   }
 
+  @Test func movingOutsideFolderKeepsTheTabsOriginalSection() throws {
+    let (store, space, tabs) = fixture()
+    let today = try #require(store.createFolder(name: "Today", in: space, section: .today))
+    #expect(store.moveTab(tabs[3], from: space, to: space, folderID: today))
+    #expect(store.moveTabOutsideFolder(tabs[3], in: space))
+    let todayTab = try #require(store.session.selectedSpace.tabs.first { $0.id == tabs[3] })
+    #expect(todayTab.folderID == nil)
+    #expect(!todayTab.isPinned)
+
+    let pinned = try #require(store.createFolder(name: "Pinned", in: space, section: .pinned))
+    #expect(store.moveTab(tabs[0], from: space, to: space, folderID: pinned))
+    #expect(store.moveTabOutsideFolder(tabs[0], in: space))
+    let pinnedTab = try #require(store.session.selectedSpace.tabs.first { $0.id == tabs[0] })
+    #expect(pinnedTab.folderID == nil)
+    #expect(pinnedTab.isPinned)
+    try store.session.validate()
+  }
+
   @Test func fullFavoritesAndInvalidURLsLeaveSessionUntouched() throws {
     let (store, space, tabs) = fixture()
     for index in 0..<BrowserSession.maximumFavoritesPerProfile {

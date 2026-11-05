@@ -32,6 +32,16 @@ struct PrivateParityTests {
     #expect(store.session.selectedSpace.tabs.count == 2)
   }
 
+  @Test func splitMemberFavoriteActionRejectsNonWebPages() throws {
+    let store = try makeStore()
+    let blank = try #require(store.session.selectedSpace.selectedTabID)
+    store.perform(.open(URL(string: "https://example.com/private")!))
+    let web = try #require(store.session.selectedSpace.selectedTabID)
+    store.splitTabs(blank, web)
+    #expect(!store.canAddTabToFavorites(blank, in: store.session.selectedSpaceID))
+    #expect(store.canAddTabToFavorites(web, in: store.session.selectedSpaceID))
+  }
+
   @Test func privateCommandSurfaceIncludesBrowserTabCommands() {
     for command in [
       BrowserMenuCommand.newTab, .search, .closeTab, .reopenClosed, .createFolder,

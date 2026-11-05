@@ -779,6 +779,7 @@ struct BrowserSidebar: View {
                   .tab(
                     sessionID: store.dragSessionID, sourceSpaceID: space.id, tabID: id))
               }
+              .disabled(!store.canAddTabToFavorites(id, in: space.id))
               Menu(ShellL10n.string("Move to Folder")) {
                 ForEach(space.folders) { folder in
                   Button(folderLabel(folder.id, in: space)) {
@@ -949,8 +950,7 @@ struct BrowserSidebar: View {
         Button(ShellL10n.string("Add to Favorites")) {
           addToFavorites(tabID: tab.id, spaceID: space.id, profileID: space.profileID)
         }
-        .disabled(
-          store.sheet != nil || store.commandIsOpen || !NavigationInput.isWebURL(tab.url))
+        .disabled(!store.canAddTabToFavorites(tab.id, in: space.id))
         Divider()
         Button(ShellL10n.string(tab.isPinned ? "Unpin tab" : "Pin tab")) { store.togglePin(tab.id) }
         Button(ShellL10n.string("Move up")) { shiftTab(tab, in: space, by: -1) }.disabled(

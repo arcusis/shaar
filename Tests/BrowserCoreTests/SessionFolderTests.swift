@@ -232,6 +232,28 @@ private let legacySession = Data(
   try session.validate()
 }
 
+@Test func movingCollapsedFolderIntoEmptySpaceRevealsSelectedTab() throws {
+  var session = BrowserSession.fresh()
+  let source = session.selectedSpaceID
+  let profileID = session.selectedSpace.profileID
+  let movingTab = session.open(URL(string: "https://example.com/moving")!)!
+  let folder = session.addFolder(name: "Projects", in: source)!
+  let placed = session.moveTab(movingTab, from: source, to: source, folderID: folder)
+  #expect(placed)
+  _ = session.open(URL(string: "https://example.com/remaining")!)
+  let collapsed = session.toggleFolder(folder, in: source)
+  #expect(collapsed)
+  let destination = session.addSpace(name: "Shared", sharingProfile: profileID)!
+  session.selectSpace(source)
+
+  let moved = session.moveFolder(folder, from: source, to: destination)
+
+  #expect(moved)
+  let destinationSpace = try #require(session.spaces.first { $0.id == destination })
+  #expect(destinationSpace.selectedTabID == movingTab)
+  #expect(destinationSpace.folderPath(to: folder).allSatisfy { !$0.isCollapsed })
+}
+
 @Test func commandSearchFindsCollapsedFolderContentsAndRevealsTheChosenContext() throws {
   var session = BrowserSession.fresh()
   let space = session.selectedSpaceID

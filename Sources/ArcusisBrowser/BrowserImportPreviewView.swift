@@ -34,7 +34,8 @@ struct BrowserImportPreviewView: View {
       if let error {
         Text(error).foregroundStyle(.secondary)
       } else {
-        Text(verbatim: "From \(source.title)").font(.caption).foregroundStyle(.secondary)
+        Text(PanelsL10n.format("From %@", .string(source.title)))
+          .font(.caption).foregroundStyle(.secondary)
         Text(
           PanelsL10n.format(
             "%d bookmarks and %d history entries are ready to import into %@.",
@@ -45,7 +46,7 @@ struct BrowserImportPreviewView: View {
             HStack {
               Text(item.title).lineLimit(1)
               Spacer()
-              Text(verbatim: item.kind == .bookmark ? "Bookmark" : "History")
+              Text(PanelsL10n.string(item.kind == .bookmark ? "Bookmark" : "History"))
                 .font(.caption).foregroundStyle(.secondary)
             }
             Text(item.address).font(.caption).foregroundStyle(.secondary).lineLimit(1)

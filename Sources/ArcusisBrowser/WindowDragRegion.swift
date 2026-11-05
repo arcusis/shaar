@@ -29,16 +29,17 @@ struct WindowDragRegion: NSViewRepresentable {
     let originY = isFlipped ? contentBounds.minY : contentLayoutRect.maxY
     let startX: CGFloat
     let endX: CGFloat
-    if isRightToLeft {
+    if isRightToLeft && trafficLightsFrame.midX > contentBounds.midX {
       startX = contentBounds.minX
       endX = min(
         trafficLightsFrame.minX - 8 - BrowserChromeLayout.titlebarAccessoryWidth,
         contentBounds.maxX - trailingAccessoryWidth)
     } else {
+      let accessoryWidth = isRightToLeft ? 0 : BrowserChromeLayout.titlebarAccessoryWidth
       startX = max(
         contentBounds.minX,
-        trafficLightsFrame.maxX + 8 + BrowserChromeLayout.titlebarAccessoryWidth)
-      endX = contentBounds.maxX
+        trafficLightsFrame.maxX + 8 + accessoryWidth)
+      endX = contentBounds.maxX - (isRightToLeft ? trailingAccessoryWidth : 0)
     }
     guard startX < endX else { return nil }
     return NSRect(x: startX, y: originY, width: endX - startX, height: top)

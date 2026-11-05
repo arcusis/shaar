@@ -160,6 +160,21 @@ class CatalogValidatorTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Untitled bookmark"):
                 VALIDATOR.validate_source_references(root, catalogs, include_app=True)
 
+    def test_rejects_direct_swiftui_text_when_hebrew_catalog_translation_exists(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "Sources/ArcusisBrowser/ExampleView.swift"
+            source.parent.mkdir(parents=True)
+            source.write_text('Text("Translated footer")\n', encoding="utf-8")
+            catalog_path = root / "Sources/BrowserCore/Resources/Settings.xcstrings"
+            catalog_path.parent.mkdir(parents=True)
+            catalog_path.write_text(
+                json.dumps({"strings": {"Translated footer": {
+                    "localizations": {"he": unit("כותרת תחתונה מתורגמת")}
+                }}}), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "unlocalized Text.*Translated footer"):
+                VALIDATOR.validate_source_references(root, [catalog_path], include_app=True)
+
 
 if __name__ == "__main__":
     unittest.main()

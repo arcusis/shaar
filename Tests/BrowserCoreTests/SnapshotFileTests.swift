@@ -52,6 +52,29 @@ import Testing
     #expect(try temporaryFiles().isEmpty)
   }
 
+  @Test func saveRestrictsPermissionsOnRotatedLegacySnapshot() throws {
+    defer { try? FileManager.default.removeItem(at: root) }
+    let first = session(opening: "https://example.com/private")
+    try file.save(first)
+    try FileManager.default.setAttributes(
+      [.posixPermissions: 0o644], ofItemAtPath: file.url.path)
+    #expect(try posixPermissions(file.url) == 0o644)
+
+    try file.save(session(opening: "https://example.com/next"))
+    #expect(try posixPermissions(snapshot.backupURL) == 0o600)
+    #expect(try SnapshotFile<BrowserSession>(url: snapshot.backupURL).loadPrimary() == first)
+  }
+
+  @Test func saveRestrictsPermissionsOnExistingWorkspaceDirectory() throws {
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    try FileManager.default.setAttributes([.posixPermissions: 0o777], ofItemAtPath: root.path)
+    #expect(try posixPermissions(root) == 0o777)
+
+    try file.save(.fresh())
+    #expect(try posixPermissions(root) == 0o700)
+  }
+
   @Test func unreadablePrimaryFallsBackToTheBackupAndIsSetAside() throws {
     defer { try? FileManager.default.removeItem(at: root) }
     let good = session(opening: "https://example.com/good")
@@ -68,6 +91,21 @@ import Testing
     #expect(try file.load() == next)
     // The damaged file never rotates into the backup.
     #expect(try SnapshotFile<BrowserSession>(url: snapshot.backupURL).loadPrimary() == good)
+  }
+
+  @Test func damagedLegacySnapshotIsRestrictedWhenMovedAside() throws {
+    defer { try? FileManager.default.removeItem(at: root) }
+    let good = session(opening: "https://example.com/good")
+    try file.save(good)
+    try file.save(good)
+    let damaged = Data("{\"url\":\"https://private.example\"".utf8)
+    try damaged.write(to: file.url)
+    try FileManager.default.setAttributes(
+      [.posixPermissions: 0o644], ofItemAtPath: file.url.path)
+
+    #expect(try file.load() == good)
+    #expect(try posixPermissions(snapshot.damagedURL) == 0o600)
+    #expect(try Data(contentsOf: snapshot.damagedURL) == damaged)
   }
 
   @Test func primaryThatFailsValidationFallsBackToTheBackup() throws {

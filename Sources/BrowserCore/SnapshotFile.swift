@@ -63,6 +63,7 @@ enum DurableFileWriter {
     let directory = url.deletingLastPathComponent()
     try FileManager.default.createDirectory(
       at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+    try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
     removeStaleTemporaryFiles(of: url)
     let temporary = directory.appending(path: ".\(url.lastPathComponent).\(UUID().uuidString).tmp")
     do {
@@ -77,8 +78,17 @@ enum DurableFileWriter {
   }
 
   static func move(_ source: URL, to destination: URL) throws {
+    try restrictToOwner(source)
     try rename(source, to: destination)
     try flushDirectory(source.deletingLastPathComponent())
+  }
+
+  private static func restrictToOwner(_ url: URL) throws {
+    let descriptor = open(url.path, O_RDONLY | O_NONBLOCK | O_CLOEXEC | O_NOFOLLOW)
+    guard descriptor >= 0 else { throw posixError() }
+    defer { close(descriptor) }
+    guard fchmod(descriptor, mode_t(0o600)) == 0 else { throw posixError() }
+    try flush(descriptor)
   }
 
   /// One process owns the file and writes serially, so leftovers belong to a killed writer.
@@ -114,6 +124,7 @@ enum DurableFileWriter {
       path: ".\(backup.lastPathComponent).\(UUID().uuidString).tmp")
     guard link(url.path, staged.path) == 0 else { throw posixError() }
     do {
+      try restrictToOwner(staged)
       try rename(staged, to: backup)
     } catch {
       unlink(staged.path)

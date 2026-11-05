@@ -62,7 +62,10 @@ final class PrivateSiteControlsModel: Identifiable {
     guard !saving, allowed != nil else { return }
     changeRevision += 1
     saving = true
-    defer { saving = false }
+    defer {
+      saving = false
+      changeRevision += 1
+    }
     do {
       try await runtime.setPrivateCookiesAllowed(
         value, tabID: tabID, windowID: windowID, contextID: contextID, origin: origin)

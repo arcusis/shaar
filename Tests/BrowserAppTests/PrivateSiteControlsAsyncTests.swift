@@ -87,3 +87,25 @@ private func privateCookieModel(_ runtime: ARCChromiumRuntime) throws -> Private
   await older.value
   #expect(model.allowed == true)
 }
+
+@MainActor @Test func privateCookieReadDuringWriteCannotUndoCompletion() async throws {
+  let runtime = PrivateCookieAsyncRuntime()
+  let model = try privateCookieModel(runtime)
+  await model.load()
+  runtime.delayNextWrite = true
+  let write = Task { await model.setAllowed(true) }
+  for _ in 0..<100 where runtime.finishWrite == nil { await Task.yield() }
+  #expect(runtime.finishWrite != nil)
+
+  runtime.delayNextRead = true
+  let refresh = Task { await model.load() }
+  for _ in 0..<100 where runtime.finishRead == nil { await Task.yield() }
+  #expect(runtime.finishRead != nil)
+
+  runtime.finishWrite?()
+  await write.value
+  #expect(model.allowed == true)
+  runtime.finishRead?()
+  await refresh.value
+  #expect(model.allowed == true)
+}

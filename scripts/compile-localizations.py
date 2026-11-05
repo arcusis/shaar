@@ -306,16 +306,30 @@ def split_arguments(source, open_paren):
 
 def validate_source_references(root, catalogs, include_app=False):
     catalog_keys = {}
+    translated_text_keys = set()
     for catalog in catalogs:
-        catalog_keys[catalog.stem] = set(json.loads(catalog.read_text(encoding="utf-8"))["strings"])
+        strings = json.loads(catalog.read_text(encoding="utf-8"))["strings"]
+        catalog_keys[catalog.stem] = set(strings)
+        for key, entry in strings.items():
+            hebrew = entry.get("localizations", {}).get("he", {}).get("stringUnit", {}).get("value")
+            if hebrew is not None and hebrew != key:
+                translated_text_keys.add(key)
     wrappers = {"BrowserLocalization": "Core", "ShellL10n": "Shell",
                 "SettingsL10n": "Settings", "PanelsL10n": "Panels",
                 "InspectorL10n": "Inspector", "InspectorDetailsL10n": "InspectorDetails",
                 "InspectorToolsL10n": "InspectorTools"}
     call = re.compile(r"\b(" + "|".join(map(re.escape, wrappers)) + r")\.(?:string|text|format|plural)\s*\(")
+    direct_text = re.compile(r'\bText\s*\(\s*("(?:[^"\\]|\\.)*")\s*\)')
     source_root = root / "Sources" if include_app else root / "Sources/BrowserCore"
     for path in sorted(source_root.rglob("*.swift")):
         source = path.read_text(encoding="utf-8")
+        for match in direct_text.finditer(source):
+            key = decode_swift_literal(match.group(1))
+            if key in translated_text_keys:
+                line = source.count("\n", 0, match.start()) + 1
+                raise ValueError(
+                    f"unlocalized Text for catalog key {key!r} ({path.relative_to(root)}:{line})"
+                )
         for match in call.finditer(source):
             wrapper = match.group(1)
             argument = first_argument(source, match.end() - 1)

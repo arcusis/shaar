@@ -298,7 +298,7 @@ struct BrowserSettingsView: View {
       Section {
         Picker(SettingsL10n.string("Language"), selection: languageSelection) {
           Text(SettingsL10n.string("System Default")).tag(BrowserLanguage.systemDefault.rawValue)
-          Text("English").tag(BrowserLanguage.english.rawValue)
+          Text(verbatim: "English").tag(BrowserLanguage.english.rawValue)
           Text("עברית").tag(BrowserLanguage.hebrew.rawValue)
         }
         Text(SettingsL10n.string("Language changes after you restart the app."))
@@ -695,8 +695,9 @@ private struct MacPermissionsSection: View {
       Text(SettingsL10n.string("macOS Permissions"))
     } footer: {
       Text(
-        "Websites can only use what macOS allows. If a site's request is blocked here, change it in System Settings."
-      )
+        SettingsL10n.string(
+          "Websites can only use what macOS allows. If a site's request is blocked here, change it in System Settings."
+        ))
     }
     .task { await refresh() }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))

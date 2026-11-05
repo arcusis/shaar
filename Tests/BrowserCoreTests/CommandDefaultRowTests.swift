@@ -81,6 +81,26 @@ private func sessionWithGmailFavoriteAndGitHubTab() throws -> (BrowserSession, U
   #expect(results.first?.action == .open(typed))
 }
 
+@Test func typedExactAddressOfALateOpenTabSwitchesToIt() throws {
+  let profile = BrowserProfile(name: "Personal")
+  let spaceID = UUID()
+  let tabs = (1...9).map { index in
+    BrowserTab(
+      url: URL(string: "https://example.com/target-\(index)")!, title: "Target \(index)")
+  }
+  let exactTab = BrowserTab(url: URL(string: "https://example.com/target")!, title: "Target")
+  let space = BrowserSpace(
+    id: spaceID, profileID: profile.id, name: "Main", symbol: "house", tint: .ocean,
+    tabs: tabs + [exactTab])
+  let session = try BrowserSession(
+    profiles: [profile], spaces: [space], selectedSpaceID: spaceID)
+
+  let results = CommandSearch.results(for: "example.com/target", in: session)
+
+  #expect(results.count == 10)
+  #expect(results.first?.action == .tab(space: spaceID, tab: exactTab.id))
+}
+
 @Test func launcherSectionsPutOpenFirstWhenItIsTheDefaultRow() throws {
   let (session, _, _) = try sessionWithGmailFavoriteAndGitHubTab()
   let sections = CommandLauncher.sections(

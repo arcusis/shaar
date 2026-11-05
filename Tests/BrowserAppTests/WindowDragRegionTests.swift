@@ -49,6 +49,21 @@ final class WindowDragRegionTests: XCTestCase {
     XCTAssertEqual(frame, NSRect(x: 124, y: 0, width: 776, height: 28))
   }
 
+  func testRightToLeftTitlebarLeavesDragAreaBeforeRightSideTrafficLights() throws {
+    let bounds = NSRect(x: 0, y: 0, width: 1200, height: 800)
+    let layout = NSRect(x: 0, y: 0, width: 1200, height: 772)
+    let trafficLights = NSRect(x: 1120, y: 778, width: 72, height: 16)
+
+    let frame = try XCTUnwrap(
+      WindowDragRegion.titlebarDragFrame(
+        contentBounds: bounds, contentLayoutRect: layout,
+        trafficLightsFrame: trafficLights, isRightToLeft: true,
+        trailingAccessoryWidth: 112))
+
+    XCTAssertEqual(frame, NSRect(x: 0, y: 772, width: 1076, height: 28))
+    XCTAssertFalse(frame.intersects(trafficLights))
+  }
+
   private func capture(bounds: NSRect, trafficLights: NSRect, dragFrame: NSRect) throws {
     let view = DragGeometryCaptureView(
       frame: bounds, trafficLights: trafficLights, dragFrame: dragFrame)

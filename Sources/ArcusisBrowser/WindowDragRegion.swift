@@ -30,8 +30,10 @@ struct WindowDragRegion: NSViewRepresentable {
     let startX: CGFloat
     let endX: CGFloat
     if isRightToLeft {
-      startX = max(contentBounds.minX, trafficLightsFrame.maxX + 8)
-      endX = min(contentBounds.maxX, contentBounds.maxX - trailingAccessoryWidth)
+      startX = contentBounds.minX
+      endX = min(
+        trafficLightsFrame.minX - 8 - BrowserChromeLayout.titlebarAccessoryWidth,
+        contentBounds.maxX - trailingAccessoryWidth)
     } else {
       startX = max(
         contentBounds.minX,

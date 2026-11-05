@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import AppKit
+import BrowserCore
 import Testing
 
 @testable import ArcusisBrowser
@@ -76,4 +77,15 @@ import Testing
   #expect(item("Paste")?.action == NSSelectorFromString("paste:"))
   #expect(item("Select All")?.action == NSSelectorFromString("selectAll:"))
   #expect(item("Undo")?.target == nil && item("Paste")?.target == nil)
+}
+
+@Test @MainActor func copyURLMenuUsesTheActivePrivatePage() throws {
+  let session = try BrowserSession.privateWindow(
+    sourceProfileID: UUID(), firstTabID: UUID())
+  let privateStore = BrowserStore(privateSession: session)
+  privateStore.perform(.open(URL(string: "https://private.example/page")!))
+
+  #expect(NativeBrowserHost.copyURLMenuAvailable(in: privateStore, menusEnabled: true))
+  #expect(!NativeBrowserHost.copyURLMenuAvailable(in: BrowserStore(), menusEnabled: true))
+  #expect(!NativeBrowserHost.copyURLMenuAvailable(in: privateStore, menusEnabled: false))
 }

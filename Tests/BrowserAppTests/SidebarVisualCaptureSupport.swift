@@ -87,7 +87,9 @@ final class MountedChromeSidebar {
       host.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
     }
     window.contentView = host
-    window.orderFrontRegardless()
+    // The hosted view can be laid out and captured without showing a window.
+    // Keep CI captures offscreen so they cannot steal focus from other work.
+    window.displayIfNeeded()
   }
 
   func waitUntil(_ condition: () -> Bool) async -> Bool {

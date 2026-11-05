@@ -16,7 +16,7 @@ public enum NavigationInput {
     guard !input.isEmpty else { return nil }
     if let url = URL(string: input), isWebURL(url) { return url }
     if hasUnsupportedScheme(input) { return nil }
-    let host = input.split(separator: "/", maxSplits: 1).first.map(String.init) ?? ""
+    let host = String(input.prefix { !"/?#".contains($0) })
     guard !input.contains(where: \.isWhitespace),
       host.contains(".") || host == "localhost" || host.hasPrefix("localhost:")
         || host.hasPrefix("["),
@@ -43,6 +43,7 @@ public enum NavigationInput {
     let lowercased = input.lowercased()
     return input.contains("://") || lowercased.hasPrefix("javascript:")
       || lowercased.hasPrefix("data:") || lowercased.hasPrefix("file:")
+      || lowercased.hasPrefix("mailto:")
   }
 }
 

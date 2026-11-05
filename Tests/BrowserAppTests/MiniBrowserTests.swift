@@ -4,6 +4,7 @@
 
 import AppKit
 import BrowserCore
+import ChromiumBridge
 import SwiftUI
 import Testing
 import XCTest
@@ -62,6 +63,38 @@ struct MiniBrowserTests {
         BrowserTab(url: URL(string: "https://mini.example")!), in: spaceID,
         profileID: profileID, archive: true))
     #expect(store.session.selectedSpace.selectedFavoriteID == favoriteID)
+  }
+
+  @Test func failedMiniWindowCreationClosesNativeWindow() {
+    let runtime = MiniWindowCreationRuntime()
+    let target = BrowserStore()
+    let targetWindow = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 680, height: 520), styleMask: [.borderless],
+      backing: .buffered, defer: false)
+    targetWindow.isReleasedWhenClosed = false
+    defer { targetWindow.close() }
+
+    #expect(throws: (any Error).self) {
+      try MiniBrowserController(
+        events: BrowserRuntimeEvents(runtime: runtime), target: target,
+        targetWindow: targetWindow, url: nil)
+    }
+    #expect(runtime.createdIDs.count == 1)
+    #expect(runtime.closedIDs == runtime.createdIDs)
+  }
+}
+
+private final class MiniWindowCreationRuntime: ARCChromiumRuntime {
+  var createdIDs: [String] = []
+  var closedIDs: [String] = []
+
+  override func createWindowID(_ windowID: String) throws {
+    createdIDs.append(windowID)
+  }
+
+  override func closeWindowID(_ windowID: String) -> Bool {
+    closedIDs.append(windowID)
+    return true
   }
 }
 

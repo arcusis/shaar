@@ -39,6 +39,10 @@ final class MiniBrowserController {
         spaces: [space], selectedSpaceID: space.id))
     let id = UUID().uuidString
     try events.runtime.createWindowID(id)
+    var initialized = false
+    defer {
+      if !initialized { _ = events.runtime.closeWindowID(id) }
+    }
     guard let window = events.runtime.window(forID: id),
       let content = events.runtime.hostView(forWindowID: id)
     else { throw WorkspaceError.invalidState }
@@ -65,6 +69,7 @@ final class MiniBrowserController {
     engine.reconcile()
     window.center()
     window.makeKeyAndOrderFront(nil)
+    initialized = true
   }
 
   var destinations: [BrowserSpace] {

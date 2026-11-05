@@ -251,18 +251,19 @@ struct CommandPanel: View {
     }
   }
 
-  private func isWebSearch(_ url: URL) -> Bool {
-    guard
-      let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-      components.queryItems?.contains(where: { $0.name == "q" && !($0.value ?? "").isEmpty })
-        == true
-    else { return false }
-    return switch (url.host(), components.path) {
-    case ("www.google.com", "/search"), ("www.bing.com", "/search"),
-      ("duckduckgo.com", "/"):
-      true
-    default:
-      false
+  func isWebSearch(_ url: URL) -> Bool {
+    guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+      return false
+    }
+    return BrowserSearchEngine.allCases.contains { engine in
+      let endpoint = engine.searchEndpoint
+      guard let expected = URLComponents(string: endpoint.url),
+        components.scheme == expected.scheme, components.host == expected.host,
+        components.path == expected.path
+      else { return false }
+      return components.queryItems?.contains {
+        $0.name == endpoint.queryName && !($0.value ?? "").isEmpty
+      } == true
     }
   }
 }

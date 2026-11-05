@@ -10,6 +10,28 @@ import XCTest
 
 @MainActor
 final class ProfileOnboardingAccountPersistenceTests: XCTestCase {
+  func testUnwritableWorkspaceDoesNotSaveAccountOrReportProfileCreated() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let workspaceURL = root.appending(path: "workspace.json")
+    let workspaceFile = WorkspaceFile(
+      url: workspaceURL, legacySessionURL: root.appending(path: "legacy.json"))
+    let workspace = try BrowserWorkspaceStore(file: workspaceFile)
+    let before = workspace.workspace
+    let preferences = BrowserPreferencesStore(fileURL: root.appending(path: "preferences.json"))
+    let profileID = UUID()
+    let draft = ProfileDraft(
+      id: profileID, name: "Work", color: .none,
+      accounts: [ConnectedAccount(provider: .google, email: "alex@example.test")], spaceID: nil)
+
+    try FileManager.default.removeItem(at: workspaceURL)
+    try FileManager.default.createDirectory(at: workspaceURL, withIntermediateDirectories: false)
+
+    XCTAssertThrowsError(try draft.create(in: workspace, preferences: preferences))
+    XCTAssertEqual(workspace.workspace, before)
+    XCTAssertTrue(preferences.accounts(for: profileID).isEmpty)
+  }
+
   func testSuccessfulOnboardingPersistsProfileAndAccountAcrossReload() throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }

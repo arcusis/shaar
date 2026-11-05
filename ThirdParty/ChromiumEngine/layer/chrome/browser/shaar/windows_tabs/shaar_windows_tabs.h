@@ -61,6 +61,9 @@ class BrowserTabRegistryImpl final : public shaar::BrowserTabRegistry {
   void UnbindTab(shaar_engine*, shaar_window*, shaar_tab*);
   void UnbindBrowser(shaar_engine*, shaar_window*, Browser*);
   bool BeginWindowClose(shaar_engine*, shaar_window*);
+  void BeginEngineQuit(shaar_engine*);
+  void CancelEngineQuit(shaar_engine*);
+  bool EngineQuitRequested(shaar_engine*) const;
   bool WindowCloseReady(shaar_engine*, shaar_window*) const;
   WindowState* FindWindowState(shaar_engine*, shaar_window*);
   bool HasTabID(shaar_engine*, shaar_window*, std::string_view) const;
@@ -83,6 +86,7 @@ class BrowserTabRegistryImpl final : public shaar::BrowserTabRegistry {
   };
   std::vector<WindowState> windows_;
   std::vector<TabEntry> tabs_;
+  std::unordered_set<shaar_engine*> quitting_engines_;
 };
 
 BrowserTabRegistryImpl& Registry();

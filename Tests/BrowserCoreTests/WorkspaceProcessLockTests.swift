@@ -47,6 +47,19 @@ private func temporaryWorkspaceLockDirectory() -> URL {
   #expect(try Data(contentsOf: target) == bytes)
 }
 
+@Test func workspaceLockRestrictsExistingDirectoryPermissions() throws {
+  let root = temporaryWorkspaceLockDirectory()
+  defer { try? FileManager.default.removeItem(at: root) }
+  try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+  try FileManager.default.setAttributes([.posixPermissions: 0o777], ofItemAtPath: root.path)
+
+  let lock = try WorkspaceProcessLock(directory: root)
+  let mode = try #require(
+    FileManager.default.attributesOfItem(atPath: root.path)[.posixPermissions] as? Int)
+  #expect(mode == 0o700)
+  withExtendedLifetime(lock) {}
+}
+
 @Test func geometrySurvivesCatalogProjectionAndOldSnapshotsCanOmitIt() throws {
   var workspace = try BrowserWorkspace(session: .fresh())
   let id = workspace.windows[0].id

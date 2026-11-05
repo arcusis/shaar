@@ -65,6 +65,16 @@ import Testing
     #expect(try SnapshotFile<BrowserSession>(url: snapshot.backupURL).loadPrimary() == first)
   }
 
+  @Test func saveRestrictsPermissionsOnExistingWorkspaceDirectory() throws {
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    try FileManager.default.setAttributes([.posixPermissions: 0o777], ofItemAtPath: root.path)
+    #expect(try posixPermissions(root) == 0o777)
+
+    try file.save(.fresh())
+    #expect(try posixPermissions(root) == 0o700)
+  }
+
   @Test func unreadablePrimaryFallsBackToTheBackupAndIsSetAside() throws {
     defer { try? FileManager.default.removeItem(at: root) }
     let good = session(opening: "https://example.com/good")

@@ -63,6 +63,7 @@ enum DurableFileWriter {
     let directory = url.deletingLastPathComponent()
     try FileManager.default.createDirectory(
       at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+    try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
     removeStaleTemporaryFiles(of: url)
     let temporary = directory.appending(path: ".\(url.lastPathComponent).\(UUID().uuidString).tmp")
     do {

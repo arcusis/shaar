@@ -31,9 +31,7 @@ extension BrowserStore {
 
   /// Adds the most recently used other tab beside the selected one.
   func splitSelectedTab() {
-    guard session.selectedSpace.selectedFavoriteID == nil,
-      let selected = session.selectedSpace.selectedTabID
-    else { return }
+    guard canSplitSelectedTab, let selected = session.selectedSpace.selectedTabID else { return }
     let inSplit = Set(selectedSplit?.tabIDs ?? [selected])
     let ids = Set(session.selectedSpace.tabs.map(\.id)).subtracting(inSplit)
     let recent = splitTabRecency.reversed().first { ids.contains($0) }
@@ -48,6 +46,14 @@ extension BrowserStore {
 
   var selectedSplitIsFull: Bool {
     (selectedSplit?.tabIDs.count ?? 1) >= BrowserSplit.maxPanes
+  }
+
+  var canSplitSelectedTab: Bool {
+    guard session.selectedSpace.selectedFavoriteID == nil,
+      let selected = session.selectedSpace.selectedTabID, !selectedSplitIsFull
+    else { return false }
+    let inSplit = Set(selectedSplit?.tabIDs ?? [selected])
+    return session.selectedSpace.tabs.contains { !inSplit.contains($0.id) }
   }
 
   func addToSplit(_ tabID: UUID, beside target: UUID, edge: SplitEdge) {

@@ -65,6 +65,18 @@ struct PrivateParityTests {
     #expect(PrivateBrowserHost.windowCanPerform(.addFavorite, store: store))
   }
 
+  @Test func splitMenuRequiresAnAvailableTabOutsideTheCurrentSplit() throws {
+    let store = try makeStore()
+    let first = try #require(store.session.selectedSpace.selectedTabID)
+    store.perform(.open(URL(string: "https://example.com/private")!))
+    let second = try #require(store.session.selectedSpace.selectedTabID)
+    #expect(PrivateBrowserHost.windowCanPerform(.splitView, store: store))
+
+    store.splitTabs(first, second)
+
+    #expect(!PrivateBrowserHost.windowCanPerform(.splitView, store: store))
+  }
+
   @Test func privateTabsFoldersAndSplitsNeverEnterWorkspaceFile() throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }

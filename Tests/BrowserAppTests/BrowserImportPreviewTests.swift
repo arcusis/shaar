@@ -9,6 +9,13 @@ import Testing
 
 @testable import ArcusisBrowser
 
+@Test func importPreviewSourceHeadingUsesTheSelectedLanguage() {
+  #expect(BrowserImportPreviewCopy.sourceHeading(.chrome, language: .english) == "From Chrome")
+  #expect(
+    BrowserImportPreviewCopy.sourceHeading(.chrome, language: .hebrew)
+      == "מקור: \u{2068}Chrome\u{2069}")
+}
+
 @Test @MainActor func browserImportPreviewRendersReadyAndErrorStatesOffscreen() throws {
   let item = BrowserImportItem(title: "Research", address: "https://example.com", folder: "Work")
   let destination = FileManager.default.temporaryDirectory.appendingPathComponent(

@@ -5,6 +5,15 @@
 import BrowserCore
 import SwiftUI
 
+enum BrowserImportPreviewCopy {
+  static func sourceHeading(
+    _ source: BrowserImportSource, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    BrowserLocalization.format(
+      "From %@", table: "Panels", language: language, arguments: [.string(source.title)])
+  }
+}
+
 struct BrowserImportPreviewView: View {
   let items: [BrowserImportItem]
   let source: BrowserImportSource
@@ -34,7 +43,8 @@ struct BrowserImportPreviewView: View {
       if let error {
         Text(error).foregroundStyle(.secondary)
       } else {
-        Text(verbatim: "From \(source.title)").font(.caption).foregroundStyle(.secondary)
+        Text(BrowserImportPreviewCopy.sourceHeading(source)).font(.caption).foregroundStyle(
+          .secondary)
         Text(
           PanelsL10n.format(
             "%d bookmarks and %d history entries are ready to import into %@.",

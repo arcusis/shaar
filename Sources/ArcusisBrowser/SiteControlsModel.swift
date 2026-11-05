@@ -103,6 +103,8 @@ final class SiteControlsModel: Identifiable {
   private(set) var runningAction: SiteAction?
   private(set) var failure: String?
   @ObservationIgnored private weak var backend: SiteControlBackend?
+  @ObservationIgnored private var permissionChangeRevision = 0
+  @ObservationIgnored private var permissionLoadRevision = 0
 
   init(target: SiteControlTarget, backend: SiteControlBackend) {
     self.target = target
@@ -125,18 +127,38 @@ final class SiteControlsModel: Identifiable {
 
   func load() async {
     guard let backend, target.origin != nil else { return }
+    permissionLoadRevision += 1
+    let loadRevision = permissionLoadRevision
+    let changeRevision = permissionChangeRevision
     do {
-      permissionValues = try await backend.permissionValues(for: target)
+      let values = try await backend.permissionValues(for: target)
+      guard loadRevision == permissionLoadRevision, changeRevision == permissionChangeRevision
+      else {
+        return
+      }
+      var refreshed = values
+      for permission in savingPermissions {
+        refreshed[permission] = permissionValues[permission]
+      }
+      permissionValues = refreshed
       failure = nil
     } catch {
+      guard loadRevision == permissionLoadRevision, changeRevision == permissionChangeRevision
+      else {
+        return
+      }
       failure = error.localizedDescription
     }
   }
 
   func setPermission(_ permission: SitePermission, allowed: Bool) async {
     guard let backend, !savingPermissions.contains(permission) else { return }
+    permissionChangeRevision += 1
     savingPermissions.insert(permission)
-    defer { savingPermissions.remove(permission) }
+    defer {
+      savingPermissions.remove(permission)
+      permissionChangeRevision += 1
+    }
     let previous = permissionValues[permission]
     permissionValues[permission] = allowed ? .allow : .block
     do {

@@ -173,10 +173,13 @@ void ARCCompletePrivateQuitDialogCancellation(
     ARCShaarRuntime *owner = weakRuntime;
     if (error || !owner || !ProbeCaptureAllowed() ||
         ![owner shaarDevToolsOwnsTabID:tabID profileID:profileID windowID:windowID]) {
+      if (error) NSLog(@"Shaar normal renderer capture failed: %@", error.localizedDescription);
       completion(nil);
       return;
     }
-    completion(ARCProbePNGFromDevToolsResult(reply));
+    NSData *png = ARCProbePNGFromDevToolsResult(reply);
+    if (!png) NSLog(@"Shaar normal renderer capture returned no PNG: %@", reply);
+    completion(png);
   }];
 }
 - (void)captureMarketingProbeTabID:(NSString *)tabID completion:(void (^)(NSData *))completion { completion(nil); }

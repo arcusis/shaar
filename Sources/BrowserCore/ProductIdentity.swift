@@ -6,10 +6,29 @@ import Foundation
 
 /// The browser is Shaar (Hebrew שער, "gateway"); Arcusis is the company that makes it.
 public enum ProductIdentity {
-  public static let name = "Shaar"
+  public static let enginePreviewBundleIdentifier = "com.arcusis.browser.engine-preview"
+  public static var isEnginePreviewBundle: Bool {
+    Bundle.main.bundleIdentifier == enginePreviewBundleIdentifier
+  }
+  public static var name: String {
+    isEnginePreviewBundle ? "Shaar Engine Preview" : "Shaar"
+  }
   public static var meaning: String {
     "שער — " + BrowserLocalization.string("the gateway to the internet", table: "Core")
   }
-  /// Kept from Arcusis Browser builds so existing profiles, sessions, and passwords still load.
-  public static let dataFolderName = "Arcusis Browser"
+  /// The installed engine Preview must never load the regular browser's workspace or profiles.
+  public static var dataFolderName: String {
+    if isEnginePreviewBundle {
+      return Bundle.main.object(forInfoDictionaryKey: "ShaarDataFolderName") as? String
+        ?? "Shaar Engine Preview"
+    }
+    return "Arcusis Browser"
+  }
+  public static var cacheFolderName: String {
+    if isEnginePreviewBundle {
+      return Bundle.main.object(forInfoDictionaryKey: "ShaarCacheFolderName") as? String
+        ?? "Shaar Engine Preview"
+    }
+    return "Shaar"
+  }
 }

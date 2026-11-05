@@ -105,6 +105,10 @@ if $preview_shaar_engine; then
 fi
 
 bundle_identifier=$SHAAR_BUNDLE_IDENTIFIER
+bundle_name=Shaar
+data_folder_name='Arcusis Browser'
+cache_folder_name=Shaar
+preview_keychain_key=''
 if $with_verification; then
   executable=ShaarVerification
   bundle_identifier=$SHAAR_VERIFICATION_BUNDLE_IDENTIFIER
@@ -113,7 +117,16 @@ if $with_verification; then
 elif $with_engine; then
   executable=ArcusisBrowser
   scratch_path="build/swiftpm/default"
-  app="build/Shaar.app"
+  if $preview_shaar_engine; then
+    bundle_identifier=com.arcusis.browser.engine-preview
+    bundle_name='Shaar Engine Preview'
+    data_folder_name='Shaar Engine Preview'
+    cache_folder_name='Shaar Engine Preview'
+    preview_keychain_key='  <key>ShaarUseMockKeychain</key><true/>'
+    app="build/Shaar Engine Preview.app"
+  else
+    app="build/Shaar.app"
+  fi
 else
   executable=ArcusisBrowser
   scratch_path="build/swiftpm/default"
@@ -216,7 +229,10 @@ cat > "$app/Contents/Info.plist" <<PLIST
   <key>CFBundleLocalizations</key><array><string>en</string><string>he</string></array>
   <key>CFBundleExecutable</key><string>$executable</string>
   <key>CFBundleIdentifier</key><string>$bundle_identifier</string>
-  <key>CFBundleName</key><string>Shaar</string>
+  <key>CFBundleName</key><string>$bundle_name</string>
+  <key>CFBundleDisplayName</key><string>$bundle_name</string>
+  <key>ShaarDataFolderName</key><string>$data_folder_name</string>
+  <key>ShaarCacheFolderName</key><string>$cache_folder_name</string>
   <key>CFBundleURLTypes</key><array><dict>
     <key>CFBundleURLName</key><string>Web URLs</string>
     <key>CFBundleURLSchemes</key><array><string>http</string><string>https</string></array>
@@ -240,6 +256,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
   <key>NSBluetoothAlwaysUsageDescription</key><string>Allow websites you approve to connect to Bluetooth devices, such as security keys and phones used for passkey sign-in.</string>
 $update_keys
 $backend_key
+$preview_keychain_key
 </dict></plist>
 PLIST
 adhoc_sign "$app"

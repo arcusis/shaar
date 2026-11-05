@@ -169,7 +169,13 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   config.on_event = ShaarEventCallback;
   config.event_context = (__bridge void *)self;
   shaar_error error = EmptyError();
-  setenv("SHAAR_ENGINE_TESTING", testing ? "1" : "0", 1);
+  // shaar.6 has a fixed Safe Storage keychain identity shared with the regular app.
+  BOOL previewBundle = [NSBundle.mainBundle.bundleIdentifier
+      isEqualToString:@"com.arcusis.browser.engine-preview"];
+  id mockKeychainSetting = [NSBundle.mainBundle objectForInfoDictionaryKey:@"ShaarUseMockKeychain"];
+  BOOL previewMockKeychain = previewBundle &&
+      [mockKeychainSetting respondsToSelector:@selector(boolValue)] && [mockKeychainSetting boolValue];
+  setenv("SHAAR_ENGINE_TESTING", testing || previewMockKeychain ? "1" : "0", 1);
   if (_symbols.create(&config, &_shaarEngine, &error) != SHAAR_OK) {
     unsetenv("SHAAR_ENGINE_TESTING");
     return 1;

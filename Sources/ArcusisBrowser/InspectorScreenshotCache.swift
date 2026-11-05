@@ -2,15 +2,19 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import BrowserCore
 import Foundation
 
 struct InspectorScreenshotCache {
   let directory: URL
-  init(
-    directory: URL = FileManager.default.homeDirectoryForCurrentUser.appending(
-      path: "Library/Caches/Shaar/Inspector", directoryHint: .isDirectory)
-  ) {
+  init(directory: URL = InspectorScreenshotCache.defaultDirectory) {
     self.directory = directory
+  }
+
+  static var defaultDirectory: URL {
+    FileManager.default.homeDirectoryForCurrentUser.appending(
+      path: "Library/Caches/\(ProductIdentity.cacheFolderName)/Inspector",
+      directoryHint: .isDirectory)
   }
 
   func save(_ png: Data, tag: String, now: Date = .now) throws -> URL {

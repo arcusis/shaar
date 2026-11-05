@@ -196,8 +196,11 @@ def throwaway_keychain(root, environment):
     old_list = [item.strip().strip('"') for item in old_list]
     old_default = None
     if old_list:
-        old_default = run_checked(["security", "default-keychain", "-d", "user"],
-                                  env=environment).strip().strip('"')
+        try:
+            old_default = run_checked(["security", "default-keychain", "-d", "user"],
+                                      env=environment).strip().strip('"')
+        except RuntimeError:
+            pass
     run_checked(["security", "create-keychain", "-p", password, str(keychain)],
                 env=environment)
     try:

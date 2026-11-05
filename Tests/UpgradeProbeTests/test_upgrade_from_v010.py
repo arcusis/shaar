@@ -84,6 +84,27 @@ class UpgradeFromV010Tests(unittest.TestCase):
         self.assertEqual(len(restores), 1)
         self.assertTrue(restores[0][-1].endswith("upgrade.keychain-db"))
 
+    def test_keychain_search_list_can_exist_without_a_default(self):
+        calls = []
+
+        def security(arguments, **_options):
+            calls.append(arguments)
+            if arguments[:2] == ["security", "list-keychains"] and "-s" not in arguments:
+                return '"/tmp/existing.keychain-db"\n'
+            if arguments[:2] == ["security", "default-keychain"] and "-s" not in arguments:
+                raise RuntimeError("security failed (1)")
+            return ""
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(upgrade_from_v010, "run_checked", side_effect=security):
+                with upgrade_from_v010.throwaway_keychain(Path(directory), {}):
+                    pass
+        restores = [call for call in calls if call[:2] ==
+                    ["security", "default-keychain"] and "-s" in call]
+        self.assertEqual(len(restores), 1)
+        self.assertIn(["security", "list-keychains", "-d", "user", "-s",
+                       "/tmp/existing.keychain-db"], calls)
+
     def test_timed_out_probe_reports_owned_process_group_failure(self):
         with self.assertRaisesRegex(RuntimeError, "timed out"):
             upgrade_from_v010.run_checked(["sleep", "1"], timeout=0.01)

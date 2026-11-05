@@ -25,6 +25,29 @@ import Testing
   }
 }
 
+@Test @MainActor func disabledMenuShortcutDoesNotInvokeItsAction() {
+  _ = NSApplication.shared
+  let target = ShortcutTestTarget()
+  let menu = NSMenu()
+  let group = NSMenuItem()
+  let section = NSMenu(title: "File")
+  let item = NSMenuItem(
+    title: "Unavailable", action: #selector(ShortcutTestTarget.invoke(_:)), keyEquivalent: "u")
+  item.target = target
+  item.representedObject = "unavailable"
+  item.isEnabled = false
+  section.addItem(item)
+  group.submenu = section
+  menu.addItem(group)
+  let event = NSEvent.keyEvent(
+    with: .keyDown, location: .zero, modifierFlags: .command,
+    timestamp: 0, windowNumber: 0, context: nil, characters: "u", charactersIgnoringModifiers: "u",
+    isARepeat: false, keyCode: 32)!
+
+  #expect(!ShortcutPageRouting.route(event, menu: menu, responder: NSView()))
+  #expect(target.invoked.isEmpty)
+}
+
 private final class ShortcutFocusableView: NSView {
   override var acceptsFirstResponder: Bool { true }
 }

@@ -160,6 +160,7 @@ extension BrowserSession {
         updated[destination].selectedFavoriteID = nil
       } else if updated[destination].selectedTabID == nil {
         updated[destination].selectedTabID = members.first?.id
+        updated[destination].expandFolderPath(members.first?.folderID)
       }
     }
     for index in updated[destination].tabs.indices

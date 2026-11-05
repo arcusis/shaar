@@ -305,15 +305,26 @@ public enum BrowserImport {
     case databaseUnavailable(String)
     case tooManyRows
     public var errorDescription: String? {
+      description(language: .currentLaunchLanguage)
+    }
+
+    public func description(language: BrowserLanguage) -> String {
       switch self {
       case .unsupported:
-        "Choose a Chrome, Edge, Brave, Arc, Safari, or Firefox profile folder or bookmark export."
+        BrowserLocalization.string(
+          "Choose a Chrome, Edge, Brave, Arc, Safari, or Firefox profile folder or bookmark export.",
+          language: language)
       case .privateProfile:
-        "Private browser profiles cannot be imported. Choose a regular profile."
+        BrowserLocalization.string(
+          "Private browser profiles cannot be imported. Choose a regular profile.",
+          language: language)
       case .databaseUnavailable:
-        "The selected browser history database could not be read safely."
+        BrowserLocalization.string(
+          "The selected browser history database could not be read safely.", language: language)
       case .tooManyRows:
-        "The selected browser profile contains more data than can be imported at once."
+        BrowserLocalization.string(
+          "The selected browser profile contains more data than can be imported at once.",
+          language: language)
       }
     }
   }

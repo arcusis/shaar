@@ -1,6 +1,46 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Choose a Chrome, Edge, Brave, Arc, Safari, or Firefox profile folder or bookmark export.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "בחרו תיקיית פרופיל או קובץ ייצוא סימניות של Chrome, Edge, Brave, Arc, Safari או Firefox."
+          }
+        }
+      }
+    },
+    "Private browser profiles cannot be imported. Choose a regular profile.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "אי אפשר לייבא פרופילים פרטיים של דפדפן. בחרו פרופיל רגיל."
+          }
+        }
+      }
+    },
+    "The selected browser history database could not be read safely.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "לא ניתן לקרוא בבטחה את מסד נתוני ההיסטוריה של הדפדפן שנבחר."
+          }
+        }
+      }
+    },
+    "The selected browser profile contains more data than can be imported at once.": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "פרופיל הדפדפן שנבחר מכיל יותר נתונים ממה שניתן לייבא בבת אחת."
+          }
+        }
+      }
+    },
     "%d active downloads": {
       "localizations": {
         "en": {

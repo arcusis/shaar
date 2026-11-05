@@ -20,6 +20,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import urllib.error
 import urllib.request
 import uuid
 import xml.etree.ElementTree as ET
@@ -75,6 +76,23 @@ def verify_archive(path: Path, expected: str, size: int | None = None) -> None:
                     raise ValueError("Fixture archive contains an escaping symlink")
         if archive.namelist().count("Shaar.app/Contents/Info.plist") != 1:
             raise ValueError("Fixture archive needs one top-level Shaar.app")
+
+
+def download_previous_release(url: str, destination: Path) -> None:
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(url, timeout=60) as response, destination.open("wb") as output:
+                shutil.copyfileobj(response, output)
+            return
+        except urllib.error.HTTPError as error:
+            destination.unlink(missing_ok=True)
+            if error.code not in {429, 500, 502, 503, 504} or attempt == 2:
+                raise
+        except (urllib.error.URLError, TimeoutError, ConnectionError):
+            destination.unlink(missing_ok=True)
+            if attempt == 2:
+                raise
+        time.sleep(2 ** attempt)
 
 
 def helper_pids(root: Path, exclude: int) -> list[int]:
@@ -373,8 +391,7 @@ def run_simulation(evidence: Path) -> None:
     with tempfile.TemporaryDirectory(prefix="shaar-sparkle-", dir=os.environ.get("RUNNER_TEMP")) as temporary:
         work = Path(temporary).resolve()
         previous = work / "previous.zip"
-        with urllib.request.urlopen(pin["url"], timeout=60) as response, previous.open("wb") as output:
-            shutil.copyfileobj(response, output)
+        download_previous_release(pin["url"], previous)
         verify_archive(previous, pin["sha256"], pin["size"])
         sdk = ROOT / "build/swiftpm/default"
         framework = ROOT / "build/Shaar.app/Contents/Frameworks/Sparkle.framework"

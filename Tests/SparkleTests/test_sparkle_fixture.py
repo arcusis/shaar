@@ -3,6 +3,7 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import base64
+import io
 import os
 from pathlib import Path
 import sys
@@ -21,6 +22,39 @@ import sparkle_fixture as fixture
 
 
 class SparkleFixtureTests(unittest.TestCase):
+    def test_previous_release_download_retries_transient_gateway_failure(self):
+        gateway_error = urllib.error.HTTPError("https://example.test/previous.zip", 504, "Gateway Time-out", {}, None)
+        with tempfile.TemporaryDirectory() as temporary, \
+                patch.object(fixture.urllib.request, "urlopen", side_effect=[gateway_error, io.BytesIO(b"complete")]) as open_url, \
+                patch.object(fixture.time, "sleep") as sleep:
+            previous = Path(temporary) / "previous.zip"
+            fixture.download_previous_release("https://example.test/previous.zip", previous)
+            self.assertEqual(previous.read_bytes(), b"complete")
+            self.assertEqual(open_url.call_count, 2)
+            sleep.assert_called_once_with(1)
+
+    def test_previous_release_download_fails_fast_on_404(self):
+        missing = urllib.error.HTTPError("https://example.test/previous.zip", 404, "Not Found", {}, None)
+        with tempfile.TemporaryDirectory() as temporary, \
+                patch.object(fixture.urllib.request, "urlopen", side_effect=missing) as open_url, \
+                patch.object(fixture.time, "sleep") as sleep:
+            with self.assertRaises(urllib.error.HTTPError):
+                fixture.download_previous_release("https://example.test/previous.zip", Path(temporary) / "previous.zip")
+            open_url.assert_called_once()
+            sleep.assert_not_called()
+
+    def test_previous_release_download_stops_after_three_gateway_failures(self):
+        gateway_error = urllib.error.HTTPError("https://example.test/previous.zip", 504, "Gateway Time-out", {}, None)
+        with tempfile.TemporaryDirectory() as temporary, \
+                patch.object(fixture.urllib.request, "urlopen", side_effect=gateway_error) as open_url, \
+                patch.object(fixture.time, "sleep") as sleep:
+            previous = Path(temporary) / "previous.zip"
+            with self.assertRaises(urllib.error.HTTPError):
+                fixture.download_previous_release("https://example.test/previous.zip", previous)
+            self.assertFalse(previous.exists())
+            self.assertEqual(open_url.call_count, 3)
+            self.assertEqual([call.args[0] for call in sleep.call_args_list], [1, 2])
+
     def test_diagnostic_patch_fails_closed_on_sdk_callback_drift(self):
         source = """- (void)showUpdaterError:(NSError *)__unused error acknowledgement:(void (^)(void))acknowledgement
 {

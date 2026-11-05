@@ -66,7 +66,7 @@ static NSString *ShaarJSONString(id value) {
   return data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
 }
 
-static NSArray<NSDictionary *> *ShaarExtensionRows(NSString *json) {
+NSArray<NSDictionary<NSString *, id> *> *ARCVisibleShaarExtensionRows(NSString *json) {
   NSData *data = [json dataUsingEncoding:NSUTF8StringEncoding];
   NSDictionary *object = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
   if (![object isKindOfClass:NSDictionary.class] || ![object[@"schemaVersion"] isEqual:@1] ||
@@ -195,7 +195,7 @@ static NSArray<NSDictionary *> *ShaarExtensionRows(NSString *json) {
       tabID:nil payload:payload completion:^(NSString *json, shaar_error_code code) {
         if (code != SHAAR_OK) { completion(nil); return; }
         if (operation == ARCExtensionManagementOperationList) {
-          NSArray *rows = ShaarExtensionRows(json);
+          NSArray *rows = ARCVisibleShaarExtensionRows(json);
           if (rows) ShaarExtensionState(self).lists[validated] = rows;
           completion(rows ? ShaarJSONString(rows) : nil);
         } else {

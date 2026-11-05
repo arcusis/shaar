@@ -73,6 +73,12 @@ final class SpaceSwipeMonitorView: NSView {
 
 @MainActor
 final class SpaceSwipeWindowMonitor {
+  private final class WeakClientView {
+    weak var value: SpaceSwipeMonitorView?
+
+    init(_ value: SpaceSwipeMonitorView) { self.value = value }
+  }
+
   private final class WeakOwner {
     let identity: ObjectIdentifier
     weak var value: SpaceSwipeWindowMonitor?
@@ -89,6 +95,7 @@ final class SpaceSwipeWindowMonitor {
   private let windowID: ObjectIdentifier
   private weak var store: BrowserStore?
   private weak var clientView: SpaceSwipeMonitorView?
+  private var clientViews: [WeakClientView] = []
   private var tracking = false
   private var gestureActive = false
   private var consumeMomentum = false
@@ -140,13 +147,23 @@ final class SpaceSwipeWindowMonitor {
 
   func attach(_ client: AnyObject, store: BrowserStore) {
     self.store = store
-    clientView = client as? SpaceSwipeMonitorView
+    if let view = client as? SpaceSwipeMonitorView {
+      clientViews.removeAll { $0.value == nil || $0.value === view }
+      clientViews.append(WeakClientView(view))
+      clientView = view
+    }
     ownership.attach(client)
   }
 
   func detach(_ client: AnyObject) {
     ownership.detach(client)
-    if !ownership.hasClients { Self.removeOwner(self) }
+    clientViews.removeAll { $0.value == nil || $0.value === client }
+    clientView = clientViews.last?.value
+    if let clientView { store = clientView.store }
+    if !ownership.hasClients {
+      store = nil
+      Self.removeOwner(self)
+    }
   }
 
   private func installMonitor() {

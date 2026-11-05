@@ -99,6 +99,36 @@ struct SpaceSwipeNavigationTests {
     #expect(store.session.selectedSpaceID == afterSwipeSpaceID)
   }
 
+  @MainActor
+  @Test func detachingNewestSwipeClientRestoresEarlierRightToLeftClient() throws {
+    let store = BrowserStore()
+    let firstSpace = store.session.spaces[0].id
+    let nextSpace = store.session.spaces[1].id
+    #expect(
+      store.createSpace(
+        name: "Third", sharingProfile: store.session.spaces[0].profileID, tint: .forest))
+    store.perform(.space(firstSpace))
+
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 640, height: 480),
+      styleMask: [.titled], backing: .buffered, defer: false)
+    let monitor = SpaceSwipeWindowMonitor.owner(for: window)
+    let earlier = SpaceSwipeMonitorView()
+    earlier.store = store
+    earlier.isRightToLeft = true
+    let newer = SpaceSwipeMonitorView()
+    newer.store = store
+    newer.isRightToLeft = false
+    monitor.attach(earlier, store: store)
+    monitor.attach(newer, store: store)
+    defer { monitor.detach(earlier) }
+    monitor.detach(newer)
+
+    let event = try #require(makeWindowEvent(for: window))
+    #expect(monitor.route(event, deltaX: 2, deltaY: 0) == nil)
+    #expect(store.session.selectedSpaceID == nextSpace)
+  }
+
   @Test func handledSwipeConsumesEventAndCyclesInExpectedDirection() {
     var offsets: [Int] = []
 

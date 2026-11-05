@@ -168,6 +168,18 @@ struct LibraryDownloadTests {
       ).isEmpty)
   }
 
+  @Test func searchFindsFilenamesWithoutTypingAccents() {
+    let profile = UUID()
+    let model = DownloadsModel()
+    let id = UUID().uuidString.lowercased()
+    model.restore([record(id, filename: "Résumé.pdf")], profileID: profile)
+
+    let matches = LibraryDownloadQuery.filtered(
+      model.items(in: profile), search: "resume", profileID: profile,
+      currentProfileID: profile, downloads: model)
+    #expect(matches.map(\.id) == [id])
+  }
+
   @Test func fileTypeFiltersAndRelativeDates() throws {
     let profile = UUID()
     let model = DownloadsModel()

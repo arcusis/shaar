@@ -276,7 +276,8 @@ shaar_error_code ConfigurePrivateProfile(Profile* otr) {
   prefs->SetBoolean("credentials_enable_service", false);
   prefs->SetBoolean("autofill.profile_enabled", false);
   prefs->SetBoolean("autofill.credit_card_enabled", false);
-  return settings->GetDefaultContentSetting(ContentSettingsType::COOKIES) ==
+  const GURL probe("https://shaar-privacy.invalid/");
+  return settings->GetContentSetting(probe, probe, ContentSettingsType::COOKIES) ==
                      CONTENT_SETTING_BLOCK &&
                  prefs->GetBoolean(prefs::kHttpsOnlyModeEnabled) &&
                  !prefs->GetBoolean(prefs::kEnableReferrers) &&
@@ -300,8 +301,9 @@ std::string PrivateProfilePrivacyStatus(Profile* otr) {
     return {};
   base::DictValue status;
   status.Set("offTheRecord", true);
+  const GURL probe("https://shaar-privacy.invalid/");
   status.Set("globalCookies",
-             settings->GetDefaultContentSetting(ContentSettingsType::COOKIES) ==
+             settings->GetContentSetting(probe, probe, ContentSettingsType::COOKIES) ==
                      CONTENT_SETTING_BLOCK ? "block" : "other");
   status.Set("httpsOnly", prefs->GetBoolean(prefs::kHttpsOnlyModeEnabled));
   status.Set("referrersEnabled", prefs->GetBoolean(prefs::kEnableReferrers));

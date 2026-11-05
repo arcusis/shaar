@@ -61,6 +61,7 @@ REQUIRED_EXPORTS = (
     "_shaar_window_host_view",
     "_shaar_window_native_window",
     "_shaar_tab_host_view",
+    "_shaar_tab_get_probe_state",
     "_shaar_tab_view_attach",
     "_shaar_tab_view_detach",
     "_shaar_tab_view_focus",

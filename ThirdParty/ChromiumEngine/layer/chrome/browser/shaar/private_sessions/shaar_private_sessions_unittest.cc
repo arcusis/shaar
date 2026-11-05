@@ -169,7 +169,9 @@ TEST_F(PrivateSessionRegistryTest, GlobalCookiesAndStorageDefaultIsOTROnly) {
             SHAAR_OK);
   auto* private_settings = HostContentSettingsMapFactory::GetForProfile(session->otr);
   ASSERT_NE(private_settings, nullptr);
-  EXPECT_EQ(private_settings->GetDefaultContentSetting(ContentSettingsType::COOKIES),
+  const GURL other_site("https://unrelated.example.test/");
+  EXPECT_EQ(private_settings->GetContentSetting(other_site, other_site,
+                                                 ContentSettingsType::COOKIES),
             CONTENT_SETTING_BLOCK);
   EXPECT_EQ(private_settings->GetContentSetting(inherited_site, inherited_site,
                                                 ContentSettingsType::COOKIES),

@@ -78,6 +78,17 @@ import Testing
   #expect(CleanLink.clean(plain) == plain)
 }
 
+@Test func cleanLinkUnwrapsGoogleCountryDomainRedirects() {
+  for host in ["www.google.co.uk", "google.de", "www.google.com.au"] {
+    let wrapper = URL(
+      string: "https://\(host)/url?q=https%3A%2F%2Fexample.com%2Fstory%3Futm_source%3Dgoogle"
+    )!
+    #expect(CleanLink.clean(wrapper).absoluteString == "https://example.com/story")
+  }
+  let lookalike = URL(string: "https://google.example.com/url?q=https%3A%2F%2Fexample.com")!
+  #expect(CleanLink.clean(lookalike).host() == "google.example.com")
+}
+
 @Test func cleanLinkRemovesSpotifyShareParameter() {
   #expect(
     CleanLink.clean(URL(string: "https://open.spotify.com/track/id?si=share&foo=bar")!)
@@ -113,6 +124,14 @@ import Testing
   #expect(
     CleanLink.clean(URL(string: "https://example.com/page?utm_medium=mail#section")!)
       .absoluteString == "https://example.com/page#section")
+}
+
+@Test func cleanLinkPreservesQueryEncodingWhenThereIsNoTracking() {
+  let input = URL(
+    string:
+      "https://storage.example.com/object?download=https%3A%2F%2Fexample.com%2Ffile&sig=abc"
+  )!
+  #expect(CleanLink.clean(input).absoluteString == input.absoluteString)
 }
 
 @Test func cleanLinkRemovesEveryAdvertisingClickIdentifier() {

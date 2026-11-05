@@ -10,7 +10,8 @@ public enum UpdateFeed {
   /// bundles and placeholder keys never start the updater.
   public static func isConfigured(in infoDictionary: [String: Any]) -> Bool {
     guard let feed = infoDictionary["SUFeedURL"] as? String,
-      let feedURL = URL(string: feed), feedURL.scheme == "https", feedURL.host() != nil,
+      let feedURL = URL(string: feed), feedURL.scheme?.lowercased() == "https",
+      feedURL.host() != nil,
       let publicEDKey = infoDictionary["SUPublicEDKey"] as? String
     else { return false }
     return Data(base64Encoded: publicEDKey)?.count == 32

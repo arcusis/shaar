@@ -14,6 +14,13 @@ private let key = Data(repeating: 7, count: 32).base64EncodedString()
   #expect(UpdateFeed.isConfigured(in: ["SUFeedURL": feed, "SUPublicEDKey": key]))
 }
 
+@Test func uppercaseHTTPSFeedEnablesUpdater() {
+  #expect(
+    UpdateFeed.isConfigured(in: [
+      "SUFeedURL": "HTTPS://arcusis.github.io/shaar/appcast.xml", "SUPublicEDKey": key,
+    ]))
+}
+
 @Test func developmentBundleWithoutFeedKeysStaysInert() {
   #expect(!UpdateFeed.isConfigured(in: [:]))
   #expect(!UpdateFeed.isConfigured(in: ["SUFeedURL": feed]))

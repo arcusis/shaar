@@ -21,6 +21,7 @@ struct ExtensionManagementTests {
     let component = String(repeating: "c", count: 32)
     let externalComponent = String(repeating: "d", count: 32)
     let policyExtension = String(repeating: "e", count: 32)
+    let missingLocation = String(repeating: "f", count: 32)
     let reply: [String: Any] = [
       "schemaVersion": 1,
       "extensions": [
@@ -28,6 +29,7 @@ struct ExtensionManagementTests {
         row(userPDF, name: "Chromium PDF Viewer", source: 4),
         row(externalComponent, name: "External PDF", source: 10),
         row(policyExtension, name: "Policy Extension", source: 9),
+        ["id": missingLocation, "name": "Unknown", "version": "1.0"],
       ],
     ]
     let data = try JSONSerialization.data(withJSONObject: reply)

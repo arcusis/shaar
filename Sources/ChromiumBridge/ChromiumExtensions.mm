@@ -6,6 +6,9 @@
 #import "ChromiumShaarExtensionsInternal.h"
 
 static NSString *const ARCExtensionManagerID = @"bphhlegomeaogfihjcipdbcfbgkcfafp";
+// Chromium 155 extensions/common/mojom/manifest.mojom ManifestLocation values.
+static const NSInteger ARCComponentExtensionLocation = 5;
+static const NSInteger ARCExternalComponentExtensionLocation = 10;
 
 static BOOL ARCExtensionIDIsValid(NSString *extensionID) {
   if (![extensionID isKindOfClass:NSString.class] || extensionID.length != 32) return NO;
@@ -74,6 +77,10 @@ NSArray<NSDictionary<NSString *, id> *> *ARCVisibleShaarExtensionRows(NSString *
   NSMutableArray *rows = [NSMutableArray array];
   for (id entry in object[@"extensions"]) {
     if (![entry isKindOfClass:NSDictionary.class]) return nil;
+    NSNumber *location = entry[@"source"];
+    if (![location isKindOfClass:NSNumber.class] ||
+        location.integerValue == ARCComponentExtensionLocation ||
+        location.integerValue == ARCExternalComponentExtensionLocation) continue;
     NSString *identity = entry[@"id"];
     if (!ARCExtensionIDIsValid(identity) || ![entry[@"name"] isKindOfClass:NSString.class] ||
         ![entry[@"version"] isKindOfClass:NSString.class]) return nil;

@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import AppKit
 import BrowserCore
 import ChromiumBridge
 import XCTest
@@ -10,6 +11,26 @@ import XCTest
 
 @MainActor
 final class SettingsOpenSpaceTests: XCTestCase {
+  func testHiddenSettingsSpaceSelectionDoesNotOrderWindowFront() {
+    final class RecordingWindow: NSWindow {
+      var orderFrontCount = 0
+
+      override func makeKeyAndOrderFront(_ sender: Any?) {
+        orderFrontCount += 1
+      }
+    }
+
+    let window = RecordingWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 200, height: 100), styleMask: .borderless,
+      backing: .buffered, defer: false)
+    NativeBrowserHost.presentSettingsSpaceWindow(window, presentation: .hiddenProbe)
+    XCTAssertEqual(window.orderFrontCount, 0)
+    XCTAssertFalse(window.isVisible)
+    NativeBrowserHost.presentSettingsSpaceWindow(window, presentation: .visible)
+    XCTAssertEqual(window.orderFrontCount, 1)
+    XCTAssertFalse(window.isVisible)
+  }
+
   func testSettingsCreatesSavedWindowOnRequestedSpaceWhenAllWindowsAreClosed() throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }

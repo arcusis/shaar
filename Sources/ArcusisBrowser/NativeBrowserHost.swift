@@ -284,7 +284,12 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       }
     }
     context.store.perform(.space(spaceID))
-    context.window.makeKeyAndOrderFront(nil)
+    Self.presentSettingsSpaceWindow(context.window, presentation: presentation)
+  }
+
+  static func presentSettingsSpaceWindow(_ window: NSWindow, presentation: Presentation) {
+    guard presentation == .visible else { return }
+    window.makeKeyAndOrderFront(nil)
   }
 
   func canPerform(_ command: BrowserMenuCommand) -> Bool {

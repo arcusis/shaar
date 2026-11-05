@@ -109,7 +109,7 @@ enum LibraryDownloadQuery {
         else { return false }
       }
       guard !query.isEmpty else { return true }
-      return item.filename.localizedCaseInsensitiveContains(query)
+      return item.filename.localizedStandardContains(query)
     }
   }
 

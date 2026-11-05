@@ -76,6 +76,20 @@ private func openTab(_ address: String, in session: inout BrowserSession) throws
   try session.validate()
 }
 
+@Test func nativeTabWithUnknownFolderDoesNotInvalidateSession() throws {
+  var session = BrowserSession.fresh()
+  let before = session
+  let tab = BrowserTab(
+    url: URL(string: "https://example.com")!, isPinned: true, folderID: UUID())
+
+  let inserted = session.insertNativeTab(
+    tab, profileID: session.selectedSpace.profileID, openerID: nil, foreground: true)
+
+  #expect(inserted == nil)
+  #expect(session == before)
+  try session.validate()
+}
+
 @Test func profileSharingIsExplicitAndNewSpacesDefaultToNewProfiles() throws {
   var session = BrowserSession.fresh()
   let initialProfile = session.selectedSpace.profileID

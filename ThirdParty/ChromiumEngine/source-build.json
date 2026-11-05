@@ -49,7 +49,7 @@
   },
   "layer": {
     "path": "ThirdParty/ChromiumEngine/layer",
-    "sha256": "12812e79937a41a5fa34c35fc8be5f0a9242c07a6d5901f85e90474b9b461c0d",
+    "sha256": "3308913a21c0ba45f323f2696cc59a653363756e89cd757a757c5e92c3eb5f00",
     "files": {
       "chrome/browser/shaar/BUILD.gn": "ead72f88e0f6be870378cbb7b11b65d2b1cd9cd33cdc81de58f7fb572877e18a",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks.cc": "da94500fa2d7b3106d58dcf3afc2f46072c6cc57a6e1868d1cdd132cafa714fd",
@@ -96,17 +96,17 @@
       "chrome/browser/shaar/navigation/shaar_navigation_context.h": "2e08bb5166249ecd7ceb38a16a09adbbd10e650f0fe555663928c01c12a38f75",
       "chrome/browser/shaar/navigation/shaar_navigation_lifecycle_adapter.cc": "7ca45a29a16458fafd4fb75c3dd6b2c4bf584dcec5b47397150b5afe6fa7e381",
       "chrome/browser/shaar/navigation/shaar_navigation_unittest.cc": "0c0e314e7b69562857bd9561a9f335283d4584470e5d8965620a354049b856d1",
-      "chrome/browser/shaar/private_sessions/shaar_private_sessions.cc": "d0208a64e57aa56db5cab1e7f47ae64c1f5aa85fd648bab290da04cc784e9007",
-      "chrome/browser/shaar/private_sessions/shaar_private_sessions.h": "a0129e64aa207c5ee7369357fe24d570e73aef70ed1c20980d6318322ffc5239",
+      "chrome/browser/shaar/private_sessions/shaar_private_sessions.cc": "ecd3c6f98308a7e02c4bc47d1a22f86584db4423006ff048e0ecc0c1c5b408a2",
+      "chrome/browser/shaar/private_sessions/shaar_private_sessions.h": "da23899517a9d8884f8eb63521fd6e7429ae54b50e743aa5178bc95fad2809fe",
       "chrome/browser/shaar/private_sessions/shaar_private_sessions_module.h": "6f3f20d6fa5778c723baf2ef6d1df4fdc5444359da8fac5f66178e349a92699c",
-      "chrome/browser/shaar/private_sessions/shaar_private_sessions_unittest.cc": "55b88cbaa51575eeda8ed85b0dca5249a93026dc04f8996f3f85b4cd45dfab0d",
+      "chrome/browser/shaar/private_sessions/shaar_private_sessions_unittest.cc": "efe54b44ab24b24c7bf4821e854c44fdf6e584660201fdc84ae7764b6804a27b",
       "chrome/browser/shaar/private_sessions/shaar_private_trackers.cc": "30698595b297a8e7f04284d0b100da9ff584dc488111a8e57167b5ca50d99606",
       "chrome/browser/shaar/private_sessions/shaar_private_trackers.h": "8880671a60291cce6154c461c75ea5c91b392e79fc01f88fb97a8f9e6c978811",
       "chrome/browser/shaar/profiles/shaar_profiles.cc": "7aab1d62867f2df1acbffd2832abffc7ee9189a1fb1fd690d6105d1044ccdd23",
       "chrome/browser/shaar/profiles/shaar_profiles.h": "5db95a6d1b6098b19726e336041ac78983230329cf9f347111b189d2a26d9c67",
       "chrome/browser/shaar/profiles/shaar_profiles_unittest.cc": "3e26258390bb73400cb90fda87983bd9bad0794d700c59c1faade8fa207c35d8",
-      "chrome/browser/shaar/public/shaar_engine.h": "b3e9d64c919620ae0b4743ffa470331a094276fd1bfc85125b9ffda6abdb4964",
-      "chrome/browser/shaar/shaar_engine.exports": "44c50505e6e281bfbc80a30f2e645d7eade9c36e5ead1fb782762cd94a15b2cf",
+      "chrome/browser/shaar/public/shaar_engine.h": "7d79fe21b5af2e9aaea278146c8278892a6d9463600e59f96562f3c1fe0641c7",
+      "chrome/browser/shaar/shaar_engine.exports": "46b10028dab7ee953d88279b288986a692382b79bb13cafcca00945ded1e8537",
       "chrome/browser/shaar/site_data/shaar_site_data.cc": "6decb114e315ee08e663f2fac15acaf8722d879f8bc11ff8544b18b82035399e",
       "chrome/browser/shaar/site_data/shaar_site_data.h": "a5af588331f905aa00048ab9fa02140334206943e9c1250e5bb50b241f3f89ed",
       "chrome/browser/shaar/site_data/shaar_site_data_lifecycle_adapter.cc": "3645b165bca6d1a2c014318f5247638696b2c71b9dee83928f5dc536f52a5aa5",
@@ -273,6 +273,7 @@
     "_shaar_private_session_open",
     "_shaar_private_session_close",
     "_shaar_private_session_cookie_setting",
+    "_shaar_private_session_privacy_status",
     "_shaar_private_session_tracker_rules",
     "_shaar_private_session_tracker_status",
     "_shaar_private_session_tracker_allowance",
@@ -511,6 +512,6 @@
   },
   "finalPatch": {
     "file": "ThirdParty/ChromiumEngine/patches/0006-shaar-only-framework.patch",
-    "sha256": "3bd09a788c8ab34be1e53c88bff63e0f685d94075aa39ccb7f6eee955ee6973b"
+    "sha256": "39eb84ab65212d0c285601d70fcdea26ca12840fe40631f27619089cdba64a39"
   }
 }

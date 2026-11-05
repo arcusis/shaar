@@ -104,7 +104,7 @@ def patch_legacy_fixture_debugger(source):
            "start_new_session=True, env=probe_env)")
     new = ("                if phase == \"initial\":\n"
            "                    arguments = [\"lldb\", \"--batch\", \"-o\", \"run\",\n"
-           "                                 \"-o\", \"thread backtrace all\", \"--\", "
+           "                                 \"-k\", \"thread backtrace all\", \"--\", "
            "*arguments]\n" + old)
     return replace_once(source, old, new, "fixture debugger")
 

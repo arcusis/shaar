@@ -68,7 +68,7 @@ class UpgradeFromV010Tests(unittest.TestCase):
         patched = upgrade_from_v010.patch_legacy_fixture_debugger(source)
         self.assertIn('if phase == "initial":', patched)
         self.assertIn('arguments = ["lldb", "--batch", "-o", "run",', patched)
-        self.assertIn('"thread backtrace all", "--", *arguments]', patched)
+        self.assertIn('"-k", "thread backtrace all", "--", *arguments]', patched)
         compile(patched, "engine_fixture.py", "exec")
 
     def test_annotated_release_tag_resolves_to_pinned_commit(self):

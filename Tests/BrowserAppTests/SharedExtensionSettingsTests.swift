@@ -14,16 +14,23 @@ private actor SettingsExtensionsTransport: ShaarExtensionsTransport {
   var calls: [(UUID, ShaarExtensionsOperation, Data)] = []
   let profiles: [UUID: Bool]
   let missing: Set<UUID>
+  let rejectManage: Bool
 
-  init(profiles: [UUID: Bool], missing: Set<UUID> = []) {
+  init(profiles: [UUID: Bool], missing: Set<UUID> = [], rejectManage: Bool = false) {
     self.profiles = profiles
     self.missing = missing
+    self.rejectManage = rejectManage
   }
 
   func submitExtensions(
     profileID: UUID, operation: ShaarExtensionsOperation, arguments: Data
   ) async throws -> Data {
     calls.append((profileID, operation, arguments))
+    if operation == .manage && rejectManage {
+      throw NSError(
+        domain: "ShaarTestError", code: 42,
+        userInfo: [NSLocalizedDescriptionKey: "Raw English engine failure"])
+    }
     if operation == .list {
       if missing.contains(profileID) {
         return Data(#"{"schemaVersion":1,"extensions":[]}"#.utf8)
@@ -44,6 +51,27 @@ private struct UnusedArdiaExtensions: ArdiaExtensionsBackend {
 
 @Suite("Shared extension Settings")
 struct SharedExtensionSettingsTests {
+  @Test @MainActor func failedToggleShowsLocalizedActionableError() async throws {
+    let profileID = UUID()
+    let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")
+    defer { try? FileManager.default.removeItem(at: file) }
+    let transport = SettingsExtensionsTransport(
+      profiles: [profileID: true], rejectManage: true)
+    let adapter = ShaarExtensionsAdapter(
+      implementation: .shaar, ardia: UnusedArdiaExtensions(), shaar: transport)
+    let home = try ShaarExtensionHome(fileURL: file, adapter: adapter)
+    _ = try await home.recordApprovedInstall(
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", approvedVersion: "1.2", profileIDs: [profileID])
+    let model = SharedExtensionSettingsModel(
+      home: home, adapter: adapter, profiles: { [profileID: "Work"] })
+    await model.reload()
+    let row = try #require(model.rows.first)
+
+    await model.setEnabled(false, extensionID: row.id, profileID: profileID)
+    #expect(model.rows.first?.profiles[profileID]?.enabled == true)
+    #expect(model.error == SettingsL10n.string("Could not update the extension. Try again."))
+  }
+
   @Test @MainActor func oneInstallHasIndependentProfileToggles() async throws {
     let first = UUID()
     let second = UUID()

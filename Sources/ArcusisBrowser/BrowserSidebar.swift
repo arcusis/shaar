@@ -966,7 +966,7 @@ struct BrowserSidebar: View {
           if tab.folderID != nil {
             Divider()
             Button(ShellL10n.string("Outside folders")) {
-              store.moveTab(tab.id, from: space.id, to: space.id, pinned: true)
+              store.moveTabOutsideFolder(tab.id, in: space.id)
             }
           }
           if space.folders.isEmpty { ShellL10n.text("Create a folder first") }

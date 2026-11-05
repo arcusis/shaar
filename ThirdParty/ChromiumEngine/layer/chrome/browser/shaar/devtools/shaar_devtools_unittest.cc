@@ -17,10 +17,13 @@
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/devtools_agent_host_client.h"
+#include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/test/mock_devtools_agent_host.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_renderer_host.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/gurl.h"
 
 namespace shaar::devtools {
 namespace {
@@ -87,6 +90,57 @@ class ReplyingAgentHost final : public content::MockDevToolsAgentHost {
     client->DispatchProtocolMessage(this, base::as_byte_span(response_));
   }
   std::string response_;
+};
+
+class MainFrameContextAgentHost final : public content::MockDevToolsAgentHost {
+ public:
+  explicit MainFrameContextAgentHost(std::string frame_id)
+      : frame_id_(std::move(frame_id)) {}
+
+  void DispatchProtocolMessage(content::DevToolsAgentHostClient* client,
+                               base::span<const uint8_t> message) override {
+    auto parsed = base::JSONReader::Read(
+        std::string_view(reinterpret_cast<const char*>(message.data()),
+                         message.size()), base::JSON_PARSE_RFC);
+    ASSERT_TRUE(parsed);
+    ASSERT_TRUE(parsed->is_dict());
+    const auto* method = parsed->GetDict().FindString("method");
+    ASSERT_NE(nullptr, method);
+    if (*method == "Runtime.enable") {
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE, base::BindOnce(&MainFrameContextAgentHost::SendContexts,
+                                    base::WrapRefCounted(this), client));
+      return;
+    }
+    ASSERT_EQ("Runtime.evaluate", *method);
+    evaluation = parsed->GetDict().Clone();
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&MainFrameContextAgentHost::SendEvaluation,
+                                  base::WrapRefCounted(this), client));
+  }
+
+  base::DictValue evaluation;
+
+ private:
+  ~MainFrameContextAgentHost() override = default;
+
+  void Send(content::DevToolsAgentHostClient* client,
+            const std::string& message) {
+    client->DispatchProtocolMessage(this, base::as_byte_span(message));
+  }
+
+  void SendContexts(content::DevToolsAgentHostClient* client) {
+    Send(client, R"({"id":-1,"result":{}})");
+    Send(client, R"({"method":"Runtime.executionContextCreated","params":{"context":{"id":11,"auxData":{"frameId":"stale-frame","isDefault":true}}}})");
+    Send(client, "{\"method\":\"Runtime.executionContextCreated\",\"params\":{\"context\":{\"id\":27,\"auxData\":{\"frameId\":\"" +
+                     frame_id_ + "\",\"isDefault\":true}}}}");
+  }
+
+  void SendEvaluation(content::DevToolsAgentHostClient* client) {
+    Send(client, R"({"id":44,"result":{"result":{"type":"object","value":{"documentElementPresent":true}}}})");
+  }
+
+  std::string frame_id_;
 };
 
 struct CapturedReply {
@@ -380,6 +434,29 @@ TEST_F(ShaarPrivateDevToolsPageTargetTest, ProtocolUsesPrivatePageTarget) {
       content::DevToolsAgentHost::GetOrCreateForTab(web_contents());
   ASSERT_TRUE(tab_host);
   EXPECT_NE(tab_host.get(), host.get());
+}
+
+TEST_F(ShaarPrivateDevToolsPageTargetTest,
+       CrossSiteNavigationEvaluatesCurrentMainFrameDocument) {
+  NavigateAndCommit(GURL("https://first.example.test/"));
+  NavigateAndCommit(GURL("https://second.example.test/"));
+  const std::string frame_id =
+      web_contents()->GetPrimaryMainFrame()->GetDevToolsFrameToken().ToString();
+  auto host = base::MakeRefCounted<MainFrameContextAgentHost>(frame_id);
+  CapturedReply captured;
+  ASSERT_TRUE(StartProtocolRequest(
+      host, 44, &CaptureReply, &captured,
+      R"({"id":44,"method":"Runtime.evaluate","params":{"expression":"!!document.documentElement","returnByValue":true}})",
+      frame_id));
+  task_environment()->RunUntilIdle();
+  const auto* params = host->evaluation.FindDict("params");
+  ASSERT_NE(nullptr, params);
+  EXPECT_EQ(27, params->FindInt("contextId"));
+  EXPECT_EQ("!!document.documentElement", params->FindString("expression")
+                                             ? *params->FindString("expression") : "");
+  EXPECT_EQ(SHAAR_OK, captured.code);
+  EXPECT_NE(std::string::npos,
+            captured.payload.find("documentElementPresent"));
 }
 
 TEST(ShaarDevToolsTest, CaptureRejectsUnownedWindowTabPair) {

@@ -52,6 +52,28 @@ final class LibrarySpacesOverviewTests: XCTestCase {
     }
   }
 
+  func testSearchRetainsNestedFolderContextForMatchingTabOrParentFolder() throws {
+    let profile = BrowserProfile(name: "Daily")
+    let parent = BrowserFolder(name: "Research")
+    let child = BrowserFolder(name: "Reports", parentID: parent.id)
+    let tab = BrowserTab(
+      url: URL(string: "https://example.com/report")!, title: "Quarterly results",
+      isPinned: true, folderID: child.id)
+    let space = BrowserSpace(
+      profileID: profile.id, name: "Work", symbol: "tray", tint: .ocean,
+      tabs: [tab], selectedTabID: tab.id, folders: [parent, child])
+    let session = try BrowserSession(
+      profiles: [profile], spaces: [space], selectedSpaceID: space.id)
+    let expected = ["folder-\(parent.id)", "folder-\(child.id)", "tab-\(tab.id)"]
+
+    XCTAssertEqual(
+      LibrarySpacesOverviewModel.cards(in: session, query: "Quarterly").first?.items.map(\.id),
+      expected)
+    XCTAssertEqual(
+      LibrarySpacesOverviewModel.cards(in: session, query: "Research").first?.items.map(\.id),
+      expected)
+  }
+
   func testCapturedCallbacksRejectRemovedOrReassignedSpaceAndTab() throws {
     let (session, ids) = makeSession()
     let liveSpace = session.spaces.first { $0.id == ids.longSpace }!

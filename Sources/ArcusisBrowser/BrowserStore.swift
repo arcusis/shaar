@@ -273,7 +273,7 @@ final class BrowserStore {
       closeLibraryDrawer()
       return true
     }
-    return showLibraryDrawer(.downloads)
+    return showLibraryDrawer(isPrivate ? .spaces : .downloads)
   }
 
   @discardableResult
@@ -573,6 +573,13 @@ final class BrowserStore {
   }
 
   var canFavoriteCurrentPage: Bool { !commandIsOpen && currentPageAllowsFavorite }
+
+  func canAddTabToFavorites(_ tabID: UUID, in spaceID: UUID) -> Bool {
+    guard sheet == nil, !commandIsOpen, session.selectedSpaceID == spaceID,
+      let tab = session.selectedSpace.tabs.first(where: { $0.id == tabID })
+    else { return false }
+    return NavigationInput.isWebURL(tab.url)
+  }
 
   /// Whether the page could become a Favorite, ignoring the open launcher.
   var currentPageAllowsFavorite: Bool {

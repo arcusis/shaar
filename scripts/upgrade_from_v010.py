@@ -122,8 +122,7 @@ def add_hidden_window_guard(source):
     source = replace_once(source, "import Foundation\n", "import AppKit\nimport Foundation\n",
                           "main import")
     old = "    exit(EngineProbe.run(arguments: CommandLine.arguments))"
-    new = """    NSApplication.shared.setActivationPolicy(.prohibited)
-    let windowGuard = try! HiddenWindowOrderGuard.install()
+    new = """    let windowGuard = try! HiddenWindowOrderGuard.install()
     let result = EngineProbe.run(arguments: CommandLine.arguments)
     windowGuard.restore()
     exit(result)"""

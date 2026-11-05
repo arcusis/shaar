@@ -52,6 +52,14 @@ class UpgradeFromV010Tests(unittest.TestCase):
             info.write_bytes(plistlib.dumps({"CFBundleIdentifier": "com.arcusis.browser"}))
             upgrade_from_v010.require_shipping_bundle_id(app)
 
+    def test_hidden_guard_does_not_initialize_appkit_before_ardia(self):
+        source = subprocess.check_output(
+            ["git", "show", "v0.1.0:Sources/ShaarVerification/ShaarVerificationMain.swift"],
+            cwd=upgrade_from_v010.ROOT, text=True)
+        patched = upgrade_from_v010.add_hidden_window_guard(source)
+        self.assertIn("let windowGuard = try! HiddenWindowOrderGuard.install()", patched)
+        self.assertNotIn("NSApplication.shared.setActivationPolicy", patched)
+
     def test_old_harness_routes_native_startup_errors_to_owned_log(self):
         source = subprocess.check_output(
             ["git", "show", "v0.1.0:Sources/ChromiumBridge/ChromiumBridge.mm"],

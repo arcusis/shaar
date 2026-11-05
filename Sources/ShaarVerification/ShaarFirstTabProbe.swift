@@ -16,6 +16,9 @@ final class ShaarFirstTabProbe {
   private let workspace: BrowserWorkspaceStore
   private let tabID: UUID
   private let profileID: UUID
+  private let checksInspector: Bool
+  private let inspectorFixture: URL?
+  private var inspectorChecks: [String] = []
   private let checksCoreRoutes: Bool
   private let checksExtensions: Bool
   private let checksPrivatePrivacy: Bool
@@ -41,6 +44,15 @@ final class ShaarFirstTabProbe {
     let framework = URL(filePath: try value(after: "--probe-framework"))
     output = URL(filePath: try value(after: "--probe-output"))
     dataRoot = URL(filePath: try value(after: "--probe-data-dir"), directoryHint: .isDirectory)
+    checksInspector = arguments.contains("--probe-shaar-inspector")
+    if checksInspector {
+      guard let url = URL(string: try value(after: "--probe-inspector-url")),
+        url.scheme == "http", url.host == "127.0.0.1"
+      else { throw Failure("Inspector probe requires an authored loopback fixture.") }
+      inspectorFixture = url
+    } else {
+      inspectorFixture = nil
+    }
     checksCoreRoutes = arguments.contains("--probe-shaar-core-routes")
     checksExtensions = arguments.contains("--probe-shaar-extensions")
     checksPrivatePrivacy = arguments.contains("--probe-shaar-private-privacy")
@@ -115,7 +127,9 @@ final class ShaarFirstTabProbe {
       navigationCommitted,
       !window.isVisible, NSApp.windows.allSatisfy({ !$0.isVisible })
     {
-      if checksExtensions {
+      if checksInspector {
+        checkInspector(tabID: tab, nativeView: view)
+      } else if checksExtensions {
         checkExtensionRoute(tabID: tab, nativeView: view)
       } else if checksCoreRoutes {
         checkCoreRoutes(tabID: tab, nativeView: view)
@@ -128,6 +142,24 @@ final class ShaarFirstTabProbe {
     }
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
       self?.checkTab()
+    }
+  }
+
+  private func checkInspector(tabID: String, nativeView: NSView) {
+    guard !coreChecksStarted else { return }
+    coreChecksStarted = true
+    Task { @MainActor in
+      do {
+        guard let inspectorFixture,
+          let context = host.contexts.values.first(where: { $0.engine.pages[self.tabID] != nil })
+        else { throw Failure("Inspector has no owning browser context.") }
+        try await ShaarInspectorSessionProbe(
+          runtime: runtime, engine: context.engine, profileID: profileID, fixture: inspectorFixture
+        ).run { inspectorChecks.append($0) }
+        finish(tabID: tabID, nativeView: nativeView)
+      } catch {
+        finish(error: "Inspector session check failed: \(error)")
+      }
     }
   }
 
@@ -236,6 +268,7 @@ final class ShaarFirstTabProbe {
       "nativeView": nativeView != nil,
       "navigationObserved": navigationCommitted,
       "coreRoutesObserved": coreRoutesObserved,
+      "inspectorChecks": inspectorChecks,
       "extensionListObserved": extensionListObserved,
       "privatePolicyStatus": privatePolicyStatus,
       "privatePolicyChecks": privatePolicyChecks,

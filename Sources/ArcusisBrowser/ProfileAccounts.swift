@@ -104,8 +104,14 @@ struct ConnectedAccount: Codable, Equatable, Sendable {
   var photoData: Data?
 
   var initials: String {
-    let words = (name?.isEmpty == false ? name! : email.components(separatedBy: "@")[0])
-      .split(whereSeparator: { $0.isWhitespace })
+    let trimmedName = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let source: String
+    if let trimmedName, !trimmedName.isEmpty {
+      source = trimmedName
+    } else {
+      source = email.components(separatedBy: "@")[0]
+    }
+    let words = source.split(whereSeparator: { $0.isWhitespace })
     return words.prefix(2).compactMap(\.first).map(String.init).joined().uppercased()
   }
 }

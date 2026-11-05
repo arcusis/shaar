@@ -273,7 +273,7 @@ final class BrowserStore {
       closeLibraryDrawer()
       return true
     }
-    return showLibraryDrawer(.downloads)
+    return showLibraryDrawer(isPrivate ? .spaces : .downloads)
   }
 
   @discardableResult

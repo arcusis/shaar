@@ -91,6 +91,15 @@ struct PrivateParityTests {
     #expect(store.engine == nil && store.faviconCache == nil)
   }
 
+  @Test func privateSidebarLibraryControlOpensSpaces() throws {
+    let store = try makeStore()
+    #expect(store.toggleLibraryDrawer())
+    #expect(store.libraryDrawerSection == .spaces)
+    #expect(store.toggleLibraryDrawer())
+    #expect(store.libraryDrawerSection == nil)
+    #expect(!store.showLibraryDrawer(.downloads))
+  }
+
   @Test func privateFaviconCannotWriteEvenWhenCacheIsInjected() throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }

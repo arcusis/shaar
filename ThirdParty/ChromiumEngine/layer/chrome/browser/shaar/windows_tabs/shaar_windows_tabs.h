@@ -37,6 +37,8 @@ class BrowserTabRegistryImpl final : public shaar::BrowserTabRegistry {
     std::unordered_set<Browser*> pending_closes;
   };
   Browser* FindBrowser(shaar_engine*, shaar_window*) override;
+  bool IsSelectedWebContents(shaar_engine*, shaar_window*, shaar_tab*,
+                             content::WebContents*) override;
   content::WebContents* FindWebContents(shaar_engine*, shaar_window*,
                                          shaar_tab*) override;
   content::WebContents* FindWebContentsByID(shaar_engine*, shaar_window*,

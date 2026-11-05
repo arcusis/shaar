@@ -188,6 +188,8 @@ typedef enum {
   SHAAR_OP_DEVTOOLS_CONTROL_ENABLE = 1005,
   SHAAR_OP_DEVTOOLS_CONTROL_DISABLE = 1006,
   SHAAR_OP_DEVTOOLS_CONTROL_STATUS = 1007,
+  // Testing only: capture the selected owned tab without showing its window.
+  SHAAR_OP_PROBE_CAPTURE_TAB = 1008,
   // END devtools operation IDs.
 
   // BEGIN media

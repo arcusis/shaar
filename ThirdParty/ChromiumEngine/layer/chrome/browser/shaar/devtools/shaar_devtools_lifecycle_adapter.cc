@@ -13,6 +13,8 @@ extern "C" void shaar_devtools_register(ShaarModuleRegistry* registry) {
   registry->RegisterModule(SHAAR_MODULE_DEVTOOLS, &handlers);
   registry->Register(SHAAR_OP_DEVTOOLS_CALL, SHAAR_OP_DEVTOOLS_CALL,
                      &shaar::devtools::HandleDevToolsOperation);
+  registry->Register(SHAAR_OP_PROBE_CAPTURE_TAB, SHAAR_OP_PROBE_CAPTURE_TAB,
+                     &shaar::devtools::HandleDevToolsOperation);
   registry->Register(SHAAR_OP_DEVTOOLS_UI_SHOW, SHAAR_OP_DEVTOOLS_UI_STATE,
                      &shaar::devtools::HandleDevToolsOperation);
   registry->Register(SHAAR_OP_DEVTOOLS_UI_SET_DOCK,

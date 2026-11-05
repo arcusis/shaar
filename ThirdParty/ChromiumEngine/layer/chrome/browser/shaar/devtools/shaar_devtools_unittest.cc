@@ -439,9 +439,12 @@ TEST_F(ShaarPrivateDevToolsPageTargetTest, ProtocolUsesPrivatePageTarget) {
 TEST_F(ShaarPrivateDevToolsPageTargetTest,
        CrossSiteNavigationEvaluatesCurrentMainFrameDocument) {
   NavigateAndCommit(GURL("https://first.example.test/"));
+  const std::string first_frame_id =
+      web_contents()->GetPrimaryMainFrame()->GetDevToolsFrameToken().ToString();
   NavigateAndCommit(GURL("https://second.example.test/"));
   const std::string frame_id =
       web_contents()->GetPrimaryMainFrame()->GetDevToolsFrameToken().ToString();
+  ASSERT_NE(first_frame_id, frame_id);
   auto host = base::MakeRefCounted<MainFrameContextAgentHost>(frame_id);
   CapturedReply captured;
   ASSERT_TRUE(StartProtocolRequest(

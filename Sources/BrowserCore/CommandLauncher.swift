@@ -192,7 +192,13 @@ public enum CommandLauncher {
     -> [CommandResult]
   {
     let profileID = session.selectedSpace.profileID
-    let open = Set(session.selectedSpace.tabs.map { pageKey($0.url.absoluteString) })
+    let favoriteIDs = Set(session.favorites(for: profileID).map(\.id))
+    let openURLs =
+      session.selectedSpace.tabs.map(\.url)
+      + session.favoritePages.filter {
+        favoriteIDs.contains($0.favoriteID)
+      }.map(\.tab.url)
+    let open = Set(openURLs.map { pageKey($0.absoluteString) })
     var top = TopRanked<BrowserHistoryEntry>(limit: mostVisitedLimit) {
       ($0.visitCount, $0.lastVisit) > ($1.visitCount, $1.lastVisit)
     }
@@ -241,7 +247,7 @@ public enum CommandLauncher {
     }
     let tabs = orderedSpaces.lazy.flatMap { space in
       space.orderedTabs.lazy
-        .filter { CommandText.matches(query, CommandFields.tab($0)) }
+        .filter { tabMatches($0, query: query, in: space) }
         .map { tab in
           CommandResult.tab(
             tab, space: space.id, subtitle: tabSubtitle(tab, in: space, session: session))
@@ -331,6 +337,13 @@ public enum CommandLauncher {
   {
     let domain = CommandText.domain(of: tab.url)
     return space.id == session.selectedSpaceID ? domain : "\(space.name) · \(domain)"
+  }
+
+  private static func tabMatches(_ tab: BrowserTab, query: String, in space: BrowserSpace) -> Bool {
+    if CommandText.matches(query, CommandFields.tab(tab)) { return true }
+    guard let folderID = tab.folderID else { return false }
+    let path = space.folderPath(to: folderID).reversed().map(\.name).joined(separator: " / ")
+    return CommandText.matches(query, [path])
   }
 
   /// Compares pages so "https://site.example" and "https://site.example/" are one page.

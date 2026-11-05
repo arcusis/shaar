@@ -32,6 +32,16 @@ struct PrivateParityTests {
     #expect(store.session.selectedSpace.tabs.count == 2)
   }
 
+  @Test func splitMemberFavoriteActionRejectsNonWebPages() throws {
+    let store = try makeStore()
+    let blank = try #require(store.session.selectedSpace.selectedTabID)
+    store.perform(.open(URL(string: "https://example.com/private")!))
+    let web = try #require(store.session.selectedSpace.selectedTabID)
+    store.splitTabs(blank, web)
+    #expect(!store.canAddTabToFavorites(blank, in: store.session.selectedSpaceID))
+    #expect(store.canAddTabToFavorites(web, in: store.session.selectedSpaceID))
+  }
+
   @Test func privateCommandSurfaceIncludesBrowserTabCommands() {
     for command in [
       BrowserMenuCommand.newTab, .search, .closeTab, .reopenClosed, .createFolder,
@@ -46,6 +56,13 @@ struct PrivateParityTests {
     #expect(ShortcutCatalog.shortcut(for: .createFolder)?.key == "n")
     #expect(!PrivateBrowserHost.supportsPrivateCommand(.history))
     #expect(!PrivateBrowserHost.supportsPrivateCommand(.downloads))
+  }
+
+  @Test func privateFavoriteMenuRequiresWebPage() throws {
+    let store = try makeStore()
+    #expect(!PrivateBrowserHost.windowCanPerform(.addFavorite, store: store))
+    store.perform(.open(URL(string: "https://example.com/private")!))
+    #expect(PrivateBrowserHost.windowCanPerform(.addFavorite, store: store))
   }
 
   @Test func privateTabsFoldersAndSplitsNeverEnterWorkspaceFile() throws {
@@ -89,6 +106,15 @@ struct PrivateParityTests {
     #expect(store.library.history.isEmpty && store.library.bookmarks.isEmpty)
     #expect(store.library.onLoad == nil && store.library.onMutation == nil)
     #expect(store.engine == nil && store.faviconCache == nil)
+  }
+
+  @Test func privateSidebarLibraryControlOpensSpaces() throws {
+    let store = try makeStore()
+    #expect(store.toggleLibraryDrawer())
+    #expect(store.libraryDrawerSection == .spaces)
+    #expect(store.toggleLibraryDrawer())
+    #expect(store.libraryDrawerSection == nil)
+    #expect(!store.showLibraryDrawer(.downloads))
   }
 
   @Test func privateFaviconCannotWriteEvenWhenCacheIsInjected() throws {

@@ -690,7 +690,8 @@ struct BrowserSidebar: View {
   }
 
   private func folderDraftRow(depth: Int) -> some View {
-    HStack(spacing: 8) {
+    let cancelLabel = folderDraft?.cancelAccessibilityLabel ?? ShellL10n.string("Cancel")
+    return HStack(spacing: 8) {
       Image(systemName: "folder").font(.system(size: 12)).foregroundStyle(.secondary)
       TextField(
         "Untitled",
@@ -710,8 +711,8 @@ struct BrowserSidebar: View {
         Image(systemName: "xmark")
       }
       .font(.system(size: 9, weight: .medium))
-      .help(ShellL10n.string("Cancel new folder"))
-      .accessibilityLabel(ShellL10n.string("Cancel new folder"))
+      .help(cancelLabel)
+      .accessibilityLabel(cancelLabel)
     }
     .padding(.vertical, 7).padding(.horizontal, 10)
     .padding(.leading, indentation(depth))

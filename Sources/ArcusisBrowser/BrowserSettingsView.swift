@@ -6,6 +6,15 @@ import AppKit
 import BrowserCore
 import SwiftUI
 
+enum BrowserSettingsAccessibility {
+  static func openSpaceLabel(
+    name: String, language: BrowserLanguage = .currentLaunchLanguage
+  ) -> String {
+    BrowserLocalization.format(
+      "Open %@", table: "Settings", language: language, arguments: [.string(name)])
+  }
+}
+
 struct BrowserSettingsProfile: Identifiable {
   let id: UUID
   let name: String
@@ -538,6 +547,7 @@ struct BrowserSettingsView: View {
               Label(space.name, systemImage: space.symbol)
               Spacer()
               Button(SettingsL10n.string("Open")) { onOpenSpace(space.id) }
+                .accessibilityLabel(BrowserSettingsAccessibility.openSpaceLabel(name: space.name))
             }
           }
         }

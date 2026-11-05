@@ -3,10 +3,20 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import AppKit
+import BrowserCore
 import SwiftUI
 import Testing
 
 @testable import ArcusisBrowser
+
+@Test func openSpaceButtonNamesItsDestinationInBothLanguages() {
+  #expect(
+    BrowserSettingsAccessibility.openSpaceLabel(name: "Research", language: .english)
+      == "Open Research")
+  #expect(
+    BrowserSettingsAccessibility.openSpaceLabel(name: "Research", language: .hebrew)
+      == "פתיחת המרחב \u{2068}Research\u{2069}")
+}
 
 @Test @MainActor func profilePaneMasterDetailFitsLightAndDarkAppearances() {
   let id = UUID()

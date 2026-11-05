@@ -534,6 +534,7 @@
         }
       }
     },
+    "Open %@": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "פתיחת המרחב %@"}}}},
     "Accounts": {
       "localizations": {
         "he": {

@@ -21,6 +21,9 @@ FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeExternalAppLaunchAuditForTest
 FOUNDATION_EXPORT void ARCCompletePrivateQuitDialogCancellation(
   BOOL ownerCurrent, NSString * _Nullable dialogError, void (^releaseHold)(void), void (^reject)(void));
 
+/// Decode a bounded PNG returned by Page.captureScreenshot; reject missing or malformed evidence.
+FOUNDATION_EXPORT NSData * _Nullable ARCProbePNGFromDevToolsResult(NSDictionary * _Nullable result);
+
 /// The shipped media reporter, for deterministic JavaScript event-order tests without an engine.
 FOUNDATION_EXPORT NSString *ARCMediaSessionPageScript(void);
 

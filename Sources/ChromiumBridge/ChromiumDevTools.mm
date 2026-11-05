@@ -3,8 +3,10 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #import "ChromiumRuntimeInternal.h"
+#import "ChromiumShaarPrivateSupport.h"
 #import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
+#include <climits>
 #include <dlfcn.h>
 #include <cstring>
 #include "../../ThirdParty/ChromiumEngine/layer/chrome/browser/shaar/public/shaar_engine.h"
@@ -79,43 +81,18 @@ const NSArray<NSString *> *ShaarMethods() {
   return methods;
 }
 
-}  // namespace
-
-@implementation ARCShaarRuntime (DevToolsTransport)
-
-- (BOOL)shaarDevToolsOwnsTabID:(NSString *)tabID profileID:(NSString *)profileID
-                    windowID:(NSString *)windowID {
-  if (!tabID.length || !profileID.length || !windowID.length) return NO;
-  return ShaarEngineHandle(self) && [ShaarTable(self, "_shaarTabProfiles")[tabID] isEqual:profileID] &&
-         [ShaarTable(self, "_shaarTabWindows")[tabID] isEqual:windowID] &&
-         ShaarTable(self, "_shaarTabs")[tabID] && ShaarTable(self, "_shaarWindows")[windowID] &&
-         ShaarTable(self, "_shaarProfiles")[profileID];
-}
-
-- (BOOL)shaarDevToolsSubmit:(NSUInteger)operation tabID:(NSString *)tabID
-                 profileID:(NSString *)profileID windowID:(NSString *)windowID
-                   payload:(NSDictionary *)payload
-                completion:(void (^)(NSDictionary *, NSError *))completion {
-  NSAssert(NSThread.isMainThread, @"Shaar DevTools requires the main thread");
-  if (![self shaarDevToolsOwnsTabID:tabID profileID:profileID windowID:windowID]) {
-    if (completion) completion(nil, ShaarDevToolsError(@"The DevTools target is no longer available."));
-    return NO;
-  }
+BOOL SubmitShaarDevTools(ARCShaarRuntime *runtime, shaar_scope scope,
+                         shaar_window *window, shaar_tab *tab,
+                         NSUInteger operation, NSDictionary *payload,
+                         void (^completion)(NSDictionary *, NSError *)) {
   auto submit = reinterpret_cast<decltype(&shaar_submit)>(dlsym(RTLD_DEFAULT, "shaar_submit"));
   NSData *json = [NSJSONSerialization dataWithJSONObject:payload options:0 error:nil];
-  if (!submit || !json) {
+  if (!submit || !json || ![runtime privateEngineHandle]) {
     if (completion) completion(nil, ShaarDevToolsError(@"Shaar DevTools is unavailable."));
     return NO;
   }
-  shaar_scope scope = {};
-  scope.size = sizeof(scope);
-  scope.profile = static_cast<shaar_profile *>(
-      [ShaarTable(self, "_shaarProfiles")[profileID] pointerValue]);
-  auto *window = static_cast<shaar_window *>(
-      [ShaarTable(self, "_shaarWindows")[windowID] pointerValue]);
-  auto *tab = static_cast<shaar_tab *>([ShaarTable(self, "_shaarTabs")[tabID] pointerValue]);
-  uint64_t requestID = ShaarRequestID(self);
-  if (!requestID) {
+  uint64_t requestID = ShaarRequestID(runtime);
+  if (!requestID || requestID > INT_MAX) {
     if (completion) completion(nil, ShaarDevToolsError(@"Shaar DevTools request ID is unavailable."));
     return NO;
   }
@@ -124,7 +101,7 @@ const NSArray<NSString *> *ShaarMethods() {
   void *context = (__bridge_retained void *)reply;
   shaar_error error = {};
   error.size = sizeof(error);
-  shaar_error_code status = submit(ShaarEngineHandle(self), scope, window, tab,
+  shaar_error_code status = submit([runtime privateEngineHandle], scope, window, tab,
       static_cast<shaar_operation>(operation), {(const char *)json.bytes, json.length},
       requestID, [](void *context, const shaar_result *result) {
         void (^finish)(NSDictionary *, NSError *) = (__bridge_transfer id)context;
@@ -151,6 +128,45 @@ const NSArray<NSString *> *ShaarMethods() {
   return YES;
 }
 
+}  // namespace
+
+@implementation ARCShaarRuntime (DevToolsTransport)
+
+- (NSString *)shaarDevToolsProfileIDForTabID:(NSString *)tabID {
+  NSString *profileID = ShaarTable(self, "_shaarTabProfiles")[tabID];
+  NSString *windowID = ShaarTable(self, "_shaarTabWindows")[tabID];
+  return [self shaarDevToolsOwnsTabID:tabID profileID:profileID windowID:windowID]
+    ? profileID : nil;
+}
+
+- (BOOL)shaarDevToolsOwnsTabID:(NSString *)tabID profileID:(NSString *)profileID
+                    windowID:(NSString *)windowID {
+  if (!tabID.length || !profileID.length || !windowID.length) return NO;
+  return ShaarEngineHandle(self) && [ShaarTable(self, "_shaarTabProfiles")[tabID] isEqual:profileID] &&
+         [ShaarTable(self, "_shaarTabWindows")[tabID] isEqual:windowID] &&
+         ShaarTable(self, "_shaarTabs")[tabID] && ShaarTable(self, "_shaarWindows")[windowID] &&
+         ShaarTable(self, "_shaarProfiles")[profileID];
+}
+
+- (BOOL)shaarDevToolsSubmit:(NSUInteger)operation tabID:(NSString *)tabID
+                 profileID:(NSString *)profileID windowID:(NSString *)windowID
+                   payload:(NSDictionary *)payload
+                completion:(void (^)(NSDictionary *, NSError *))completion {
+  NSAssert(NSThread.isMainThread, @"Shaar DevTools requires the main thread");
+  if (![self shaarDevToolsOwnsTabID:tabID profileID:profileID windowID:windowID]) {
+    if (completion) completion(nil, ShaarDevToolsError(@"The DevTools target is no longer available."));
+    return NO;
+  }
+  shaar_scope scope = {};
+  scope.size = sizeof(scope);
+  scope.profile = static_cast<shaar_profile *>(
+      [ShaarTable(self, "_shaarProfiles")[profileID] pointerValue]);
+  auto *window = static_cast<shaar_window *>(
+      [ShaarTable(self, "_shaarWindows")[windowID] pointerValue]);
+  auto *tab = static_cast<shaar_tab *>([ShaarTable(self, "_shaarTabs")[tabID] pointerValue]);
+  return SubmitShaarDevTools(self, scope, window, tab, operation, payload, completion);
+}
+
 - (void)shaarDevToolsCall:(NSString *)method params:(NSDictionary *)params
               capability:(NSUInteger)capability tabID:(NSString *)tabID
                profileID:(NSString *)profileID windowID:(NSString *)windowID
@@ -165,6 +181,37 @@ const NSArray<NSString *> *ShaarMethods() {
                             @"command": @(index + 1), @"params": params ?: @{}};
   [self shaarDevToolsSubmit:SHAAR_OP_DEVTOOLS_CALL tabID:tabID profileID:profileID
                    windowID:windowID payload:payload completion:completion];
+}
+
+- (void)shaarPrivateDevToolsCall:(NSString *)method params:(NSDictionary *)params
+                     capability:(NSUInteger)capability tabID:(NSString *)tabID
+                       windowID:(NSString *)windowID contextID:(NSString *)contextID
+                     completion:(void (NS_SWIFT_UI_ACTOR ^)(NSDictionary<NSString *, id> *, NSError *))completion {
+  NSAssert(NSThread.isMainThread, @"Shaar DevTools requires the main thread");
+  NSUInteger index = [ShaarMethods() indexOfObject:method];
+  if (index == NSNotFound || (capability != SHAAR_DEVTOOLS_CAPABILITY_INSPECTOR &&
+                             capability != SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER)) {
+    completion(nil, ShaarDevToolsError(@"This DevTools command is unavailable."));
+    return;
+  }
+  if (![self privateTabOwned:tabID windowID:windowID contextID:contextID]) {
+    completion(nil, ShaarDevToolsError(@"The private DevTools target is no longer available."));
+    return;
+  }
+  NSDictionary *state = ARCPrivateShaarState(self);
+  NSDictionary *context = state[@"contexts"][contextID];
+  NSDictionary *window = state[@"windows"][windowID];
+  NSDictionary *tab = state[@"tabs"][tabID];
+  shaar_scope scope = {};
+  scope.size = sizeof(scope);
+  scope.private_session = static_cast<shaar_private_session *>(
+      [context[@"session"] pointerValue]);
+  auto *windowHandle = static_cast<shaar_window *>([window[@"handle"] pointerValue]);
+  auto *tabHandle = static_cast<shaar_tab *>([tab[@"handle"] pointerValue]);
+  NSDictionary *payload = @{@"schemaVersion": @1, @"capability": @(capability),
+                            @"command": @(index + 1), @"params": params ?: @{}};
+  SubmitShaarDevTools(self, scope, windowHandle, tabHandle,
+                      SHAAR_OP_DEVTOOLS_CALL, payload, completion);
 }
 
 - (NSView *)devToolsViewForTabID:(NSString *)tabID {

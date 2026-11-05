@@ -81,7 +81,10 @@ final class BrowserStore {
     }
     set {
       if sheet?.isConsent == true { return }
-      if newValue != nil { dismissPageFind() }
+      if newValue != nil {
+        dismissCommand()
+        dismissPageFind()
+      }
       sheet = newValue.map(BrowserSheet.space)
     }
   }

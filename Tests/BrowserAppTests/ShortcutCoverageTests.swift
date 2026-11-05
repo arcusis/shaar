@@ -33,3 +33,16 @@ import Testing
   #expect(Set(catalog.entries.map(\.title)).isSuperset(of: Set(commands.map { $0.1.title })))
   #expect(catalog.entries.contains { $0.title == "New Folder" && $0.displayKeys == "⌃⌘N" })
 }
+
+@Test @MainActor func shortcutSettingsSearchFindsTitleWithoutTypingAccents() {
+  let menu = NSMenu()
+  let group = NSMenuItem(title: "File", action: nil, keyEquivalent: "")
+  let submenu = NSMenu(title: "File")
+  submenu.addItem(NSMenuItem(title: "Résumé", action: nil, keyEquivalent: "r"))
+  group.submenu = submenu
+  menu.addItem(group)
+  let catalog = ShortcutCatalog(menu: menu)
+
+  #expect(catalog.matching("resume").map(\.title) == ["Résumé"])
+  #expect(catalog.matching("missing").isEmpty)
+}

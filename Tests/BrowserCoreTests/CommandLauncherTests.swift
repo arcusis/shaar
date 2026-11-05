@@ -139,6 +139,31 @@ import Testing
   #expect(actions(.actions, "set") == [.command("settings")])
 }
 
+@Test func launcherFindsAccentedBookmarkWithoutTypingAccents() throws {
+  let fixture = try LauncherFixture()
+  let bookmark = BrowserBookmark(
+    id: fixture.bookmarkID, profileID: fixture.profileID, parentID: nil,
+    title: "Résumé", address: "https://careers.example/", depth: 1,
+    path: "Bookmarks bar", isPermanent: false)
+  let sources = CommandSources(bookmarks: [bookmark], history: [], commands: [])
+
+  let results = CommandLauncher.sections(
+    for: "resume", filter: .bookmarks, in: fixture.session, sources: sources)
+  #expect(results.results.map(\.action) == [.bookmark(profile: fixture.profileID, id: bookmark.id)])
+}
+
+@Test func accentedTitlePrefixLeadsInsteadOfSearching() throws {
+  let profile = BrowserProfile(name: "Personal")
+  let tab = BrowserTab(url: URL(string: "https://careers.example/")!, title: "Résumé")
+  let space = BrowserSpace(
+    profileID: profile.id, name: "Main", symbol: "house", tint: .ocean, tabs: [tab])
+  let session = try BrowserSession(
+    profiles: [profile], spaces: [space], selectedSpaceID: space.id)
+
+  let results = CommandSearch.results(for: "resume", in: session)
+  #expect(results.first?.action == .tab(space: space.id, tab: tab.id))
+}
+
 @Test func tabsChipListsOtherSpacesAfterTheSelectedOne() throws {
   let fixture = try LauncherFixture(extraSpace: true)
 

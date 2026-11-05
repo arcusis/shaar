@@ -20,9 +20,12 @@ enum CommandText {
     return domain(of: url).lowercased().hasPrefix(query.lowercased())
   }
 
-  /// True when the title starts with the non-empty query, ignoring case.
+  /// True when the title starts with the non-empty query, ignoring case and accents.
   static func titleStarts(with query: String, _ title: String) -> Bool {
-    !query.isEmpty && title.lowercased().hasPrefix(query.lowercased())
+    guard !query.isEmpty else { return false }
+    return title.range(
+      of: query, options: [.anchored, .caseInsensitive, .diacriticInsensitive], locale: .current)
+      != nil
   }
 
   /// True when both URLs name the same page, ignoring a trailing slash and host case.
@@ -39,7 +42,7 @@ enum CommandText {
 
   /// True when the query is empty or any field contains it, ignoring case.
   static func matches(_ query: String, _ fields: [String]) -> Bool {
-    query.isEmpty || fields.contains { $0.localizedCaseInsensitiveContains(query) }
+    query.isEmpty || fields.contains { $0.localizedStandardContains(query) }
   }
 }
 

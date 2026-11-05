@@ -49,6 +49,7 @@ struct ProfileDraft: Equatable {
     let liveSpaceID = spaceID.flatMap { id in
       workspace.workspace.catalog.spaces.contains { $0.id == id } ? id : nil
     }
+    try workspace.validateWritableSnapshot()
     for account in accounts { try preferences.persistAccount(account, for: id) }
     do {
       return try workspace.createProfile(profile, assigningSpace: liveSpaceID)

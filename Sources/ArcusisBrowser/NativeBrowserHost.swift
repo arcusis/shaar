@@ -165,6 +165,12 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     privateHost?.activeOwner?.store ?? activeContext?.store
   }
 
+  var privateWindowSourceProfileID: String? {
+    privateHost?.activeOwner?.sourceProfileID
+      ?? activeContext?.store.session.selectedSpace.profileID.uuidString
+      ?? workspace.workspace.catalog.spaces.first?.profileID.uuidString
+  }
+
   func restore() throws {
     guard !started else { throw WorkspaceError.invalidState }
     started = true
@@ -183,12 +189,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       runtime: events.runtime, presentsWindows: presentation == .visible,
       keyWindow: keyWindow,
       preferences: preferences,
-      sourceProfileID: { [weak self] in
-        if let privateSource = self?.privateHost?.activeOwner?.sourceProfileID {
-          return privateSource
-        }
-        return self?.activeContext?.store.session.selectedSpace.profileID.uuidString
-      })
+      sourceProfileID: { [weak self] in self?.privateWindowSourceProfileID })
     self.privateHost = privateHost
     privateHost.installCallbacks()
     events.onWindowRequest = { [weak self] profile, type in
@@ -295,7 +296,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     }
     if command == .checkForUpdates { return canCheckForUpdates }
     if command == .newPrivateWindow {
-      return activeContext != nil || privateHost?.hasActiveWindow == true
+      return privateWindowSourceProfileID != nil
     }
     if privateHost?.hasActiveWindow == true {
       return privateHost?.canPerform(command) == true

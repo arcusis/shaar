@@ -17,6 +17,58 @@ import Testing
   #expect(!host.canPerform(.newMiniWindow))
 }
 
+@Test @MainActor func newPrivateWindowStaysAvailableAfterLastNormalWindowCloses() throws {
+  _ = NSApplication.shared
+  let workspace = try BrowserWorkspaceStore(initialSession: .fresh())
+  let runtime = PrivateMenuRuntime()
+  let host = NativeBrowserHost(
+    events: BrowserRuntimeEvents(runtime: runtime), workspace: workspace,
+    presentation: .hiddenProbe, usesPrimaryWindow: false, keyWindow: { nil })
+  defer {
+    host.detach()
+    runtime.testWindow?.close()
+  }
+  try host.restore()
+  let context = try #require(host.contexts.values.first)
+  context.engine.onClosed?(false)
+  #expect(workspace.workspace.windows.isEmpty)
+
+  #expect(
+    host.privateWindowSourceProfileID
+      == workspace.workspace.catalog.spaces.first?.profileID.uuidString)
+  #expect(host.canPerform(.newPrivateWindow))
+  host.perform(.newPrivateWindow)
+  #expect(
+    runtime.privateSourceIDs
+      == [workspace.workspace.catalog.spaces.first?.profileID.uuidString].compactMap { $0 })
+}
+
+private final class PrivateMenuRuntime: ARCChromiumRuntime, @unchecked Sendable {
+  var testWindow: NSWindow?
+  var privateSourceIDs: [String] = []
+
+  override func createWindowID(_ windowID: String) throws {
+    MainActor.assumeIsolated {
+      testWindow = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 900, height: 700),
+        styleMask: [.borderless], backing: .buffered, defer: false)
+    }
+  }
+
+  override func window(forID windowID: String) -> NSWindow? { testWindow }
+  override func hostView(forWindowID windowID: String) -> NSView? {
+    MainActor.assumeIsolated { testWindow?.contentView }
+  }
+
+  @MainActor override func createPrivateContextID(
+    _ contextID: String, sourceProfileID: String,
+    completion: @escaping @MainActor @Sendable (Bool, Error?) -> Void
+  ) {
+    privateSourceIDs.append(sourceProfileID)
+    completion(false, nil)
+  }
+}
+
 @Test @MainActor func nativeMenusMatchArcGroupsAndRouteEveryImplementedCommandOnce() {
   let application = NSApplication.shared
   let menu = NativeBrowserHost.makeMenu(target: application)

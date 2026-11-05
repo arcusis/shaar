@@ -89,6 +89,17 @@ import Testing
       == "https://www.amazon.co.uk/Desk-Lamp/dp/B0?keywords=lamp&qid=1")
 }
 
+@Test func cleanLinkPreservesAmazonPathSeparators() {
+  for (address, expected) in [
+    ("https://www.amazon.com/dp/B0/", "https://www.amazon.com/dp/B0/"),
+    ("https://www.amazon.com/gp//product/B0/?tag=store", "https://www.amazon.com/gp//product/B0/"),
+    ("https://www.amazon.com/gp//product/B0/ref=share/", "https://www.amazon.com/gp//product/B0/"),
+  ] {
+    let input = URL(string: address)!
+    #expect(CleanLink.clean(input).absoluteString == expected)
+  }
+}
+
 @Test func cleanLinkMatchesTrackingKeysCaseInsensitivelyAndKeepsFragments() {
   #expect(
     CleanLink.clean(URL(string: "https://example.com/a?UTM_Source=x&FBCLID=y&id=7")!)

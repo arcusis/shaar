@@ -44,8 +44,9 @@ public enum CleanLink {
 
   /// Amazon appends `/ref=…` segments that only identify the click source.
   private static func pathWithoutAmazonReferral(_ path: String) -> String {
-    let segments = path.split(separator: "/").filter { !$0.lowercased().hasPrefix("ref=") }
-    return "/" + segments.joined(separator: "/")
+    let segments = path.split(separator: "/", omittingEmptySubsequences: false)
+      .filter { !$0.lowercased().hasPrefix("ref=") }
+    return segments.joined(separator: "/")
   }
 
   private static func googleRedirectDestination(_ components: URLComponents) -> URL? {

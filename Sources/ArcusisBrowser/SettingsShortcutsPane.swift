@@ -11,16 +11,7 @@ struct SettingsShortcutsPane: View {
   @State private var catalog = ShortcutCatalog.installed()
 
   private var entries: [ShortcutCatalog.Entry] {
-    guard !search.isEmpty else { return catalog.entries }
-    return catalog.entries.filter {
-      $0.localizedTitle.localizedCaseInsensitiveContains(search)
-        || $0.localizedMenu.localizedCaseInsensitiveContains(search)
-        || $0.displayKeys.localizedCaseInsensitiveContains(search)
-        || $0.title.localizedCaseInsensitiveContains(search)
-        || $0.menu.localizedCaseInsensitiveContains(search)
-        || $0.englishTitle?.localizedCaseInsensitiveContains(search) == true
-        || $0.englishMenu?.localizedCaseInsensitiveContains(search) == true
-    }
+    catalog.matching(search)
   }
 
   private var menus: [String] {

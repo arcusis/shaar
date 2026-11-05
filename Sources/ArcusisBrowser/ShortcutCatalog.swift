@@ -70,6 +70,17 @@ struct ShortcutCatalog {
 
   let entries: [Entry]
 
+  func matching(_ search: String) -> [Entry] {
+    guard !search.isEmpty else { return entries }
+    return entries.filter { entry in
+      let fields = [
+        entry.localizedTitle, entry.localizedMenu, entry.displayKeys,
+        entry.title, entry.menu, entry.englishTitle, entry.englishMenu,
+      ].compactMap { $0 }
+      return fields.contains { $0.localizedStandardContains(search) }
+    }
+  }
+
   /// macOS leaves these standard items without shortcuts; web pages keep those keys.
   static let unassignedTitles: Set<String> = [
     "About \(ProductIdentity.name)", "Check for Updates…", "Show All", "Bring All to Front",

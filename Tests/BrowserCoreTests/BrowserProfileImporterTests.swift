@@ -79,13 +79,24 @@ import Testing
 }
 
 @Test func privateBrowserProfileDirectoriesAreRejectedBeforeReading() throws {
-  for name in ["Incognito", "InPrivate", "Guest Profile", "Private Browsing"] {
+  for name in ["Incognito", "InPrivate", "Guest Profile", "Guest Profile 2", "Private Browsing"] {
     let profile = try profileDirectory(name: name)
     #expect(throws: BrowserImport.ImportError.self) {
       try BrowserImport.readProfile(at: profile, source: .chrome)
     }
   }
   #expect(BrowserImport.ImportError.privateProfile.errorDescription?.contains("Private") == true)
+}
+
+@Test func ordinaryProfileFolderContainingGuestImportsNormally() throws {
+  let profile = try profileDirectory(name: "Guesthouse")
+  try copyFixture("ChromiumBookmarks", to: profile.appending(path: "Bookmarks"))
+  try createDatabase(sqlFixture: "ChromiumHistory.sql", at: profile.appending(path: "History"))
+
+  let batch = try BrowserImport.readProfile(at: profile, source: .chrome)
+
+  #expect(batch.bookmarks.count == 1)
+  #expect(batch.history.count == 1)
 }
 
 @Test func browserImportAttributesBookmarkExportsAndReportsImporterErrors() throws {

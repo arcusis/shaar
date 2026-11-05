@@ -246,14 +246,20 @@ private func groupedHistory(
     if grouped[address] == nil { order.append(address) }
     let title = row["title"]?.string ?? ""
     var existing = grouped[address] ?? (title, [])
-    if !title.isEmpty { existing.0 = title }
+    if !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { existing.0 = title }
     existing.1.append(visit)
     grouped[address] = existing
   }
   return order.compactMap { address in
     guard let (title, visits) = grouped[address], !visits.isEmpty else { return nil }
+    let displayTitle: String
+    if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      displayTitle = URL(string: address)?.host() ?? address
+    } else {
+      displayTitle = title
+    }
     return BrowserImportItem(
-      kind: .history, source: source, title: title, address: address,
+      kind: .history, source: source, title: displayTitle, address: address,
       visitTimes: visits.sorted())
   }
 }

@@ -33,6 +33,26 @@ import Testing
   }
 }
 
+@Test func historyImportPreviewUsesHostForMissingTitles() throws {
+  let profile = try profileDirectory(name: "ChromeUntitledHistory")
+  try copyFixture("ChromiumBookmarks", to: profile.appending(path: "Bookmarks"))
+  try createDatabase(
+    sqlFixture: "ChromiumHistory.sql", at: profile.appending(path: "History"),
+    extraSQL: """
+      INSERT INTO urls VALUES(2, 'https://untitled.example.test/path', NULL, 1, 13344473603000000);
+      INSERT INTO visits VALUES(4, 2, 13344473603000000, 0);
+      INSERT INTO urls VALUES(3, 'https://spaces.example.test/path', '   ', 1, 13344473604000000);
+      INSERT INTO visits VALUES(5, 3, 13344473604000000, 0);
+      INSERT INTO urls VALUES(4, 'https://history.example.test/', '   ', 1, 13344473605000000);
+      INSERT INTO visits VALUES(6, 4, 13344473605000000, 0);
+      """)
+
+  let batch = try BrowserImport.readProfile(at: profile, source: .chrome)
+  #expect(
+    batch.history.map(\.title)
+      == ["History page", "untitled.example.test", "spaces.example.test"])
+}
+
 @Test func safariProfileImportsItsBookmarkPlistAndSafariEpochHistory() throws {
   let profile = try profileDirectory(name: "Safari")
   try copyFixture("SafariBookmarks.plist", to: profile.appending(path: "Bookmarks.plist"))

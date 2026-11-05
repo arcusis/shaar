@@ -111,20 +111,20 @@ public enum CommandProviderSearch {
     let services = provider == .google ? google : microsoft
     let lowered = query.lowercased()
     let requestedService = (google + microsoft).first {
-      lowered.hasPrefix($0.keyword + " ")
+      matchesKeyword($0.keyword, in: lowered)
     }
     if let requestedService,
       !services.contains(where: { $0.keyword == requestedService.keyword })
     {
       return []
     }
-    let narrowed = services.first { lowered.hasPrefix($0.keyword + " ") }
+    let narrowed = services.first { matchesKeyword($0.keyword, in: lowered) }
     return services.compactMap { service in
       if let narrowed, narrowed.keyword != service.keyword { return nil }
       let term =
         narrowed == nil
         ? query
-        : String(query.dropFirst(service.keyword.count + 1))
+        : String(query.dropFirst(service.keyword.count))
           .trimmingCharacters(in: .whitespacesAndNewlines)
       guard !term.isEmpty else { return nil }
       guard let url = url(for: service, query: term) else { return nil }
@@ -135,6 +135,10 @@ public enum CommandProviderSearch {
         symbol: "magnifyingglass",
         action: .providerSearch(url))
     }
+  }
+
+  private static func matchesKeyword(_ keyword: String, in query: String) -> Bool {
+    query.hasPrefix(keyword) && query.dropFirst(keyword.count).first?.isWhitespace == true
   }
 
   /// URL construction is public for focused coverage of service-specific encoding.

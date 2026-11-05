@@ -401,7 +401,7 @@ final class BrowserStore {
     pageFind = current
     if current.query.isEmpty {
       onStopFinding?(current.tabID)
-    } else if onFindRequest?(current, forward) == false {
+    } else if onFindRequest?(current, forward) != true {
       current.searching = false
       current.unavailable = true
       pageFind = current

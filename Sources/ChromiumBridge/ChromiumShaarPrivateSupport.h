@@ -24,3 +24,4 @@ BOOL ARCPrivateShaarSubmit(ARCShaarRuntime *runtime, shaar_scope scope,
                            shaar_window *window, shaar_tab *tab,
                            shaar_operation operation, NSDictionary *payload,
                            void (^completion)(NSDictionary *reply));
+BOOL ARCPrivateShaarInstallTrackerRules(shaar_private_session *session);

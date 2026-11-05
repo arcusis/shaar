@@ -144,3 +144,8 @@ import Testing
     )
     .absoluteString == "https://example.com/")
 }
+
+@Test func cleanLinkKeepsGoogleRedirectToHostlessURL() {
+  let original = URL(string: "https://www.google.com/url?q=https:/missing-host")!
+  #expect(CleanLink.clean(original) == original)
+}

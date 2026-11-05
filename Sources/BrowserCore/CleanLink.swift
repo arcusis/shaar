@@ -54,7 +54,7 @@ public enum CleanLink {
       components.path == "/url",
       let value = components.queryItems?.first(where: { $0.name == "q" })?.value,
       let destination = URL(string: value),
-      ["http", "https"].contains(destination.scheme?.lowercased() ?? "")
+      NavigationInput.isWebURL(destination)
     else { return nil }
     return destination
   }

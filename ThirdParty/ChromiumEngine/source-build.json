@@ -49,7 +49,7 @@
   },
   "layer": {
     "path": "ThirdParty/ChromiumEngine/layer",
-    "sha256": "a66c33037b073afe2676b592195c3be9843b4820e06e4334f13b2eb70920ac1b",
+    "sha256": "8cef65cfec624199ade960cb77b1a6b4a4c707e82f8d8a8967ef4eb3c6f2d08d",
     "files": {
       "chrome/browser/shaar/BUILD.gn": "3cdbf23c302a08839522b9fdb49e0c721515ddb47264be8b0a7d1142270d0d22",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks.cc": "da94500fa2d7b3106d58dcf3afc2f46072c6cc57a6e1868d1cdd132cafa714fd",
@@ -96,10 +96,10 @@
       "chrome/browser/shaar/navigation/shaar_navigation_context.h": "2e08bb5166249ecd7ceb38a16a09adbbd10e650f0fe555663928c01c12a38f75",
       "chrome/browser/shaar/navigation/shaar_navigation_lifecycle_adapter.cc": "7ca45a29a16458fafd4fb75c3dd6b2c4bf584dcec5b47397150b5afe6fa7e381",
       "chrome/browser/shaar/navigation/shaar_navigation_unittest.cc": "0c0e314e7b69562857bd9561a9f335283d4584470e5d8965620a354049b856d1",
-      "chrome/browser/shaar/private_sessions/shaar_private_sessions.cc": "d0208a64e57aa56db5cab1e7f47ae64c1f5aa85fd648bab290da04cc784e9007",
+      "chrome/browser/shaar/private_sessions/shaar_private_sessions.cc": "a16714dfe025eccde41b6daf99e39290e7bc9982bd03c7cf89363a1c20027a79",
       "chrome/browser/shaar/private_sessions/shaar_private_sessions.h": "a0129e64aa207c5ee7369357fe24d570e73aef70ed1c20980d6318322ffc5239",
       "chrome/browser/shaar/private_sessions/shaar_private_sessions_module.h": "6f3f20d6fa5778c723baf2ef6d1df4fdc5444359da8fac5f66178e349a92699c",
-      "chrome/browser/shaar/private_sessions/shaar_private_sessions_unittest.cc": "55b88cbaa51575eeda8ed85b0dca5249a93026dc04f8996f3f85b4cd45dfab0d",
+      "chrome/browser/shaar/private_sessions/shaar_private_sessions_unittest.cc": "63214ec86b10d9d34a396cf0cb146693051a2a04cfecb71fd00c81ae4804c952",
       "chrome/browser/shaar/private_sessions/shaar_private_trackers.cc": "30698595b297a8e7f04284d0b100da9ff584dc488111a8e57167b5ca50d99606",
       "chrome/browser/shaar/private_sessions/shaar_private_trackers.h": "8880671a60291cce6154c461c75ea5c91b392e79fc01f88fb97a8f9e6c978811",
       "chrome/browser/shaar/profiles/shaar_profiles.cc": "7aab1d62867f2df1acbffd2832abffc7ee9189a1fb1fd690d6105d1044ccdd23",

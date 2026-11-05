@@ -101,6 +101,21 @@ private func sessionWithGmailFavoriteAndGitHubTab() throws -> (BrowserSession, U
   #expect(results.first?.action == .tab(space: spaceID, tab: exactTab.id))
 }
 
+@Test func typedAddressKeepsDistinctTrailingSlashPathAsOpenDefault() throws {
+  var session = BrowserSession.fresh()
+  let openTab = session.open(URL(string: "https://example.com/docs/")!)
+  let tabID = try #require(openTab)
+  let address = "https://example.com/docs"
+
+  let results = CommandSearch.results(for: address, in: session)
+
+  #expect(results.first?.action == .open(URL(string: address)!))
+  #expect(results.contains { $0.action == .tab(space: session.selectedSpaceID, tab: tabID) })
+  #expect(
+    CommandText.sameAddress(
+      URL(string: "https://example.com/"), URL(string: "https://example.com")!))
+}
+
 @Test func launcherSectionsPutOpenFirstWhenItIsTheDefaultRow() throws {
   let (session, _, _) = try sessionWithGmailFavoriteAndGitHubTab()
   let sections = CommandLauncher.sections(

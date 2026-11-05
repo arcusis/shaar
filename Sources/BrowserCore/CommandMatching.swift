@@ -28,14 +28,15 @@ enum CommandText {
       != nil
   }
 
-  /// True when both URLs name the same page, ignoring a trailing slash and host case.
+  /// True when both URLs name the same page, ignoring a root slash and host case.
   static func sameAddress(_ url: URL?, _ address: URL) -> Bool {
     guard let url else { return false }
     func key(_ value: URL) -> String {
       var components = URLComponents(url: value, resolvingAgainstBaseURL: false)
       if let host = components?.host { components?.host = host.lowercased() }
       let text = components?.string ?? value.absoluteString
-      return text.hasSuffix("/") ? String(text.dropLast()) : text
+      let hasRootSlash = value.path == "/" && value.query == nil && value.fragment == nil
+      return hasRootSlash && text.hasSuffix("/") ? String(text.dropLast()) : text
     }
     return key(url) == key(address)
   }

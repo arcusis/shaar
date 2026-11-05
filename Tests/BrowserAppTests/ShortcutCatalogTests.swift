@@ -71,6 +71,38 @@ private final class ShortcutFocusableView: NSView {
   #expect(ShortcutPageRouting.route(event, menu: menu, responder: NSView()))
 }
 
+@Test @MainActor func shiftedQuestionMarkRoutesHelpWithPageFocus() {
+  _ = NSApplication.shared
+  let target = ShortcutTestTarget()
+  let menu = NSMenu()
+  let group = NSMenuItem()
+  let help = NSMenu(title: "Help")
+  let item = NSMenuItem(
+    title: "Help", action: #selector(ShortcutTestTarget.invoke(_:)), keyEquivalent: "?")
+  item.keyEquivalentModifierMask = .command
+  item.target = target
+  item.representedObject = BrowserMenuCommand.help.rawValue
+  help.addItem(item)
+  group.submenu = help
+  menu.addItem(group)
+  let event = NSEvent.keyEvent(
+    with: .keyDown, location: .zero, modifierFlags: [.command, .shift],
+    timestamp: 0, windowNumber: 0, context: nil, characters: "?",
+    charactersIgnoringModifiers: "/", isARepeat: false, keyCode: 44)!
+  let container = ChromiumPageContainerView()
+  let page = ShortcutFocusableView()
+  container.attach(page)
+  #expect(ShortcutPageRouting.route(event, menu: menu, responder: page))
+  #expect(target.invoked == ["Help"])
+  target.invoked.removeAll()
+  let unshifted = NSEvent.keyEvent(
+    with: .keyDown, location: .zero, modifierFlags: .command,
+    timestamp: 0, windowNumber: 0, context: nil, characters: "/",
+    charactersIgnoringModifiers: "/", isARepeat: false, keyCode: 44)!
+  #expect(!ShortcutPageRouting.route(unshifted, menu: menu, responder: page))
+  #expect(target.invoked.isEmpty)
+}
+
 @Test @MainActor func typingWithoutCommandControlOrOptionIsNeverRoutedToMenus() {
   _ = NSApplication.shared
   let target = ShortcutTestTarget()

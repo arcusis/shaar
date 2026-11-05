@@ -181,6 +181,7 @@ enum ShortcutPageRouting {
     // Edit > Emoji & Symbols is fn-E; once fn is masked off it would match a plain E keystroke.
     guard !flags.isDisjoint(with: [.command, .control, .option]) else { return false }
     let key = (event.charactersIgnoringModifiers ?? "").lowercased()
+    let typedKey = (event.characters ?? "").lowercased()
     for section in menu.items.compactMap(\.submenu) {
       for item in section.items {
         let standardEditItem =
@@ -191,8 +192,13 @@ enum ShortcutPageRouting {
           .command, .option, .control, .shift,
         ])
         if item.keyEquivalent != item.keyEquivalent.lowercased() { itemFlags.insert(.shift) }
+        let itemKey = item.keyEquivalent.lowercased()
+        // Punctuation such as ? is produced by Shift-/ on many keyboards. AppKit stores the
+        // resulting symbol as the menu key equivalent, while this event's base key is /.
+        let shiftedSymbol = flags.contains(.shift) && itemKey != key && itemKey == typedKey
+        if shiftedSymbol { itemFlags.insert(.shift) }
         guard
-          !item.keyEquivalent.isEmpty && item.keyEquivalent.lowercased() == key
+          !itemKey.isEmpty && (itemKey == key || shiftedSymbol)
             && itemFlags == flags
         else { continue }
         if pageHasFocus && standardEditItem { return false }

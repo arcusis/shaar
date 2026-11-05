@@ -193,6 +193,7 @@ final class PrivateBrowserHost {
     case .reopenClosed: store.canReopenClosedTab
     case .splitView: store.canSplitSelectedTab
     case .nextSpace, .previousSpace: store.session.spaces.count > 1
+    case .closeTab: store.session.selectedPage == nil || store.canCloseCurrentPage
     case .addFavorite: store.canFavoriteCurrentPage
     case .reload, .hardReload: store.canReloadCurrentPage
     case .find: store.canFindCurrentPage

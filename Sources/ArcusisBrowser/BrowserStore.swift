@@ -683,8 +683,12 @@ final class BrowserStore {
   }
 
   func closeCurrentPage() {
-    guard sheet == nil, !commandIsOpen, let page = session.selectedPage else { return }
+    guard canCloseCurrentPage, let page = session.selectedPage else { return }
     closeTab(page.tab.id)
+  }
+
+  var canCloseCurrentPage: Bool {
+    sheet == nil && !commandIsOpen && session.selectedPage != nil
   }
 
   func nativeFavoriteActivated(_ id: UUID, profileID: UUID) -> Bool {

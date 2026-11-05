@@ -360,7 +360,7 @@ private struct BrowserApplication: App {
           store.closeCurrentPage()
         }
         .keyboardShortcut("w")
-        .disabled(store.session.selectedPage == nil)
+        .disabled(!store.canCloseCurrentPage)
         Button(ShellL10n.string("Reopen last closed tab")) { store.reopenLastClosedTab() }
           .keyboardShortcut("t", modifiers: [.command, .shift])
           .disabled(!store.canReopenClosedTab)

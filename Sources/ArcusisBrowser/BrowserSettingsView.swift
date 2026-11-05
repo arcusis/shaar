@@ -548,7 +548,7 @@ struct BrowserSettingsView: View {
             .accessibilityIdentifier("settings.renameProfile")
             .onSubmit { saveProfileName(profile) }
           Button(SettingsL10n.string("Save")) { saveProfileName(profile) }
-            .disabled(profileNameEdits[profile.id] == nil)
+            .disabled(!ProfileNameEditPolicy.canSave(profileNameEdits[profile.id]))
         }
         ProfileColorPicker(color: profileColorBinding(profile))
           .accessibilityIdentifier("settings.profileColor")
@@ -678,7 +678,7 @@ struct BrowserSettingsView: View {
 
   private func saveProfileName(_ profile: BrowserSettingsProfile) {
     guard let name = profileNameEdits[profile.id],
-      name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+      ProfileNameEditPolicy.canSave(name)
     else { return }
     if onRenameProfile(profile.id, name) { profileNameEdits[profile.id] = nil }
   }
@@ -687,6 +687,12 @@ struct BrowserSettingsView: View {
     BrowserLocalization.plural("%d Spaces", count: count, table: "Settings")
   }
 
+}
+
+enum ProfileNameEditPolicy {
+  static func canSave(_ edit: String?) -> Bool {
+    edit?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+  }
 }
 
 struct BrowserLanguageRestartPrompt: View {

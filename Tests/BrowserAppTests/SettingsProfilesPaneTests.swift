@@ -80,3 +80,9 @@ import Testing
   controller.show()
   #expect(controller.selectedProfileID == second)
 }
+
+@Test func inlineProfileSaveRejectsBlankNameEdits() {
+  #expect(!ProfileNameEditPolicy.canSave(nil))
+  #expect(!ProfileNameEditPolicy.canSave(" \n "))
+  #expect(ProfileNameEditPolicy.canSave(" Work "))
+}

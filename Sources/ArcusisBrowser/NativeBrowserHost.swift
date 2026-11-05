@@ -165,6 +165,11 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     privateHost?.activeOwner?.store ?? activeContext?.store
   }
 
+  private var miniWindowTarget: NativeBrowserContext? {
+    activeContext ?? workspace.workspace.focusedWindowID.flatMap { contexts[$0] }
+      ?? contexts.values.first
+  }
+
   func restore() throws {
     guard !started else { throw WorkspaceError.invalidState }
     started = true
@@ -290,7 +295,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   func canPerform(_ command: BrowserMenuCommand) -> Bool {
     guard !events.runtime.isQuitting else { return false }
     if command == .quit { return true }
-    if command == .newMiniWindow { return privateHost?.hasActiveWindow != true }
+    if command == .newMiniWindow {
+      return privateHost?.hasActiveWindow != true && miniWindowTarget != nil
+    }
     if command == .checkForUpdates { return canCheckForUpdates }
     if command == .newPrivateWindow {
       return activeContext != nil || privateHost?.hasActiveWindow == true
@@ -703,12 +710,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   private func openMiniWindow(
     url: URL?, context: NativeBrowserContext? = nil, destination: UUID? = nil
   ) -> Bool {
-    guard
-      let target = context ?? activeContext ?? workspace.workspace.focusedWindowID.flatMap({
-        contexts[$0]
-      })
-        ?? contexts.values.first
-    else { return false }
+    guard let target = context ?? miniWindowTarget else { return false }
     do {
       let mini = try MiniBrowserController(
         events: events, target: target.store, targetWindow: target.window, url: url,

@@ -163,4 +163,12 @@ struct PageFindTests {
     #expect(store.pageFind?.query == current.query)
     #expect(store.pageFind?.focusRequest != current.focusRequest)
   }
+
+  @Test func missingPageHandlerDoesNotLeaveFindSearchingForever() {
+    let store = store()
+    store.showPageFind()
+    store.updatePageFindQuery("find me")
+    #expect(store.pageFind?.status == "Page unavailable")
+    #expect(store.pageFind?.canMove == false)
+  }
 }

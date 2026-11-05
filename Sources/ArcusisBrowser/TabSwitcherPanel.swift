@@ -13,6 +13,7 @@ final class TabSwitcherController {
   private(set) var choices: [UUID] = []
   private(set) var index = 0
   private var spaceID: UUID?
+  private var lastReverse = false
 
   func record(store: BrowserStore) {
     if let tab = store.session.selectedPage?.tab.id {
@@ -24,21 +25,14 @@ final class TabSwitcherController {
   func advance(store: BrowserStore, reverse: Bool) {
     let space = store.session.selectedSpace
     if choices.isEmpty {
-      let favoriteIDs = Set(store.session.favorites(for: space.profileID).map(\.id))
-      var available =
-        space.tabs.map(\.id)
-        + store.session.favoritePages.filter {
-          favoriteIDs.contains($0.favoriteID)
-        }.map(\.tab.id)
-      if let selected = store.session.selectedPage?.tab.id, !available.contains(selected) {
-        available.insert(selected, at: 0)
-      }
+      let available = availableTabIDs(store: store)
       guard available.count > 1 else { return }
       record(store: store)
       choices = recency.ordered(in: space.id, available: available)
       spaceID = space.id
       index = 0
     }
+    lastReverse = reverse
     index = TabRecency.cycle(index, count: choices.count, reverse: reverse)
   }
 
@@ -48,15 +42,41 @@ final class TabSwitcherController {
       cancel()
       return
     }
-    let tab = choices[index]
+    let available = Set(availableTabIDs(store: store))
+    var tab: UUID?
+    var candidateIndex = index
+    for _ in choices {
+      let candidate = choices[candidateIndex]
+      if available.contains(candidate) {
+        tab = candidate
+        break
+      }
+      candidateIndex = TabRecency.cycle(
+        candidateIndex, count: choices.count, reverse: lastReverse)
+    }
     cancel()
-    store.perform(.tab(space: spaceID, tab: tab))
+    if let tab { store.perform(.tab(space: spaceID, tab: tab)) }
   }
 
   func cancel() {
     choices = []
     spaceID = nil
     index = 0
+    lastReverse = false
+  }
+
+  private func availableTabIDs(store: BrowserStore) -> [UUID] {
+    let space = store.session.selectedSpace
+    let favoriteIDs = Set(store.session.favorites(for: space.profileID).map(\.id))
+    var available =
+      space.tabs.map(\.id)
+      + store.session.favoritePages.filter {
+        favoriteIDs.contains($0.favoriteID)
+      }.map(\.tab.id)
+    if let selected = store.session.selectedPage?.tab.id, !available.contains(selected) {
+      available.insert(selected, at: 0)
+    }
+    return available
   }
 }
 

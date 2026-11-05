@@ -72,11 +72,12 @@ private struct SafariProfileImporter: BrowserProfileImporter {
     let directory = isDirectory ? url : url.deletingLastPathComponent()
     let bookmarksURL = directory.appending(path: "Bookmarks.plist")
     let historyURL = directory.appending(path: "History.db")
-    guard FileManager.default.fileExists(atPath: bookmarksURL.path),
-      FileManager.default.fileExists(atPath: historyURL.path)
-    else { throw BrowserImport.ImportError.unsupported }
-    let bookmarkItems = try BrowserImport.read(bookmarksURL).map { $0.with(source: source) }
-    let historyItems = try SafariHistoryReader.read(historyURL)
+    let hasBookmarks = FileManager.default.fileExists(atPath: bookmarksURL.path)
+    let hasHistory = FileManager.default.fileExists(atPath: historyURL.path)
+    guard hasBookmarks || hasHistory else { throw BrowserImport.ImportError.unsupported }
+    let bookmarkItems =
+      hasBookmarks ? try BrowserImport.read(bookmarksURL).map { $0.with(source: source) } : []
+    let historyItems = hasHistory ? try SafariHistoryReader.read(historyURL) : []
     return BrowserImportBatch(source: source, items: bookmarkItems + historyItems)
   }
 }

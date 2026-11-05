@@ -82,6 +82,21 @@ import Testing
   #expect(batch.items.allSatisfy { $0.source == .safari })
 }
 
+@Test func safariProfileImportsAvailableDataWithoutTheOtherFile() throws {
+  let bookmarksProfile = try profileDirectory(name: "SafariBookmarksOnly")
+  try copyFixture("SafariBookmarks.plist", to: bookmarksProfile.appending(path: "Bookmarks.plist"))
+  let bookmarkBatch = try BrowserImport.readProfile(at: bookmarksProfile, source: .safari)
+  #expect(bookmarkBatch.bookmarks.map(\.address) == ["https://safari.example.test/"])
+  #expect(bookmarkBatch.history.isEmpty)
+
+  let historyProfile = try profileDirectory(name: "SafariHistoryOnly")
+  try createDatabase(
+    sqlFixture: "SafariHistory.sql", at: historyProfile.appending(path: "History.db"))
+  let historyBatch = try BrowserImport.readProfile(at: historyProfile, source: .safari)
+  #expect(historyBatch.bookmarks.isEmpty)
+  #expect(historyBatch.history.map(\.address) == ["https://safari-history.example.test/"])
+}
+
 @Test func firefoxPlacesImportsBookmarkFoldersAndUnixMicrosecondVisits() throws {
   let profile = try databaseURLProfile(name: "Firefox", databaseName: "places.sqlite")
   try createDatabase(sqlFixture: "FirefoxPlaces.sql", at: profile)

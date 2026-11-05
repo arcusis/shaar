@@ -78,10 +78,17 @@ struct BrowserSidebar: View {
         guard selectionKey == activeSidebarSelectionKey,
           case .tab(let tab) = store.session.selectedPage
         else { return }
+        let reveal = {
+          if store.session.selectedSpace.tabs.last(where: { !$0.isPinned })?.id == tab.id {
+            proxy.scrollTo(tab.id, anchor: .top)
+          } else {
+            proxy.scrollTo(tab.id)
+          }
+        }
         if sidebarReduceMotion {
-          proxy.scrollTo(tab.id)
+          reveal()
         } else {
-          withAnimation(.easeOut(duration: 0.12)) { proxy.scrollTo(tab.id) }
+          withAnimation(.easeOut(duration: 0.12), reveal)
         }
       }
     }

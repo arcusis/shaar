@@ -61,6 +61,11 @@ import Testing
   }
 }
 
+@Test func capitalizedLocalhostNavigates() {
+  #expect(NavigationInput.address(for: "LOCALHOST")?.host()?.lowercased() == "localhost")
+  #expect(NavigationInput.address(for: "LOCALHOST:3000")?.port == 3000)
+}
+
 @Test func commandSearchKeepsGoogleDefaultAndAcceptsSelectedEngine() throws {
   let session = BrowserSession.fresh()
   let defaultResult = try #require(

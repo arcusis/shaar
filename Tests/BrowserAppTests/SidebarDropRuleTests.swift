@@ -155,4 +155,20 @@ struct SidebarDropRuleTests {
         .url(URL(string: "https://valid.example")!), into: space, folderID: UUID()))
     #expect(store.session == before)
   }
+
+  @Test func urlDropOnBackgroundSpaceOpensThereWithoutSwitchingSpaces() throws {
+    let store = BrowserStore()
+    let selected = store.session.selectedSpaceID
+    let background = try #require(store.session.spaces.first { $0.id != selected })
+    let originalTabs = background.tabs.map(\.id)
+    let url = try #require(URL(string: "https://background-drop.example/path"))
+
+    #expect(store.acceptSidebarDrop(.url(url), into: background.id))
+    #expect(store.session.selectedSpaceID == selected)
+    let updated = try #require(store.session.spaces.first { $0.id == background.id })
+    #expect(updated.tabs.count == originalTabs.count + 1)
+    #expect(updated.tabs.last?.url == url)
+    #expect(store.session.selectedSpace.tabs.allSatisfy { $0.url != url })
+    try store.session.validate()
+  }
 }

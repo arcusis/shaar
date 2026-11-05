@@ -992,12 +992,15 @@ final class BrowserStore {
         payload.favoriteID, in: space, before: targetTab, pinned: pinned ?? false,
         folderID: folderID)
     case .url(let url):
-      guard NavigationInput.isWebURL(url), space == session.selectedSpaceID else { return false }
+      guard NavigationInput.isWebURL(url) else { return false }
       var draft = session
+      let selectedSpaceID = draft.selectedSpaceID
+      draft.selectSpace(space)
       guard let tab = draft.open(url) else { return false }
       let moved = draft.moveTab(
         tab, from: space, to: space, before: targetTab, pinned: pinned, folderID: folderID)
       guard moved || (targetTab == nil && folderID == nil && pinned != true) else { return false }
+      draft.selectSpace(selectedSpaceID)
       session = draft
       save()
       return true

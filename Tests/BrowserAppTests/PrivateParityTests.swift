@@ -95,6 +95,14 @@ struct PrivateParityTests {
     #expect(!PrivateBrowserHost.windowCanPerform(.previousSpace, store: store))
   }
 
+  @Test func privateInspectorAndDevToolsAreSupportedButRequireAnOwnedPage() throws {
+    let store = try makeStore()
+    for command in [BrowserMenuCommand.developerTools, .inspector, .inspectorCopy] {
+      #expect(PrivateBrowserHost.supportsPrivateCommand(command))
+      #expect(!PrivateBrowserHost.windowCanPerform(command, store: store))
+    }
+  }
+
   @Test func privateTabsFoldersAndSplitsNeverEnterWorkspaceFile() throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }

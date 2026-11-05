@@ -10,13 +10,33 @@ struct InspectorPage: View {
   let tabID: UUID
   var autofocus = true
   var body: some View {
+    InspectorPageLayout(model: engine.inspectors[tabID]) {
+      ChromiumPage(engine: engine, tabID: tabID, autofocus: autofocus)
+    }
+  }
+}
+
+struct PrivateInspectorPage: View {
+  let session: PrivatePageSession
+  let tabID: UUID
+  var inSplit = false
+  var body: some View {
+    InspectorPageLayout(model: session.inspectors[tabID]) {
+      PrivateBrowserPage(session: session, tabID: tabID, inSplit: inSplit)
+    }
+  }
+}
+
+private struct InspectorPageLayout<Page: View>: View {
+  let model: InspectorModel?
+  @ViewBuilder let page: () -> Page
+  var body: some View {
     GeometryReader { geometry in
-      let model = engine.inspectors[tabID]
       let vertical = geometry.size.width < 560
       let layout =
         vertical ? AnyLayout(VStackLayout(spacing: 0)) : AnyLayout(HStackLayout(spacing: 0))
       layout {
-        ChromiumPage(engine: engine, tabID: tabID, autofocus: autofocus)
+        page()
           .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
         if let model, model.isOpen {
           Divider()

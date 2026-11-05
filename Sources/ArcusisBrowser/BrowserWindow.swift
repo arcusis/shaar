@@ -189,7 +189,7 @@ struct BrowserWindow: View {
           if let split = store.selectedSplit {
             PrivateSplitPageView(store: store, session: privatePage, split: split)
           } else {
-            PrivateBrowserPage(session: privatePage, tabID: id)
+            PrivateInspectorPage(session: privatePage, tabID: id)
               .overlay { SplitDropZone(store: store, targetID: id) }
               .overlay {
                 if store.showsStartPage { PrivateStartPage(store: store) }

@@ -116,6 +116,7 @@ final class PrivateBrowserHost {
   }
 
   private func retire(_ owner: Owner) {
+    owner.page.retireInspectors()
     owner.window.endEditing(for: nil)
     _ = owner.window.makeFirstResponder(nil)
     Self.retireHostingContent(owner.hosting)
@@ -174,7 +175,6 @@ final class PrivateBrowserHost {
   static func supportsPrivateCommand(_ command: BrowserMenuCommand) -> Bool {
     switch command {
     case .bookmarkPage, .bookmarks, .history, .downloads, .extensions, .settings,
-      .developerTools, .inspector, .inspectorCopy,
       .newMiniWindow, .checkForUpdates:
       false
     default: true
@@ -190,7 +190,12 @@ final class PrivateBrowserHost {
 
   static func windowCanPerform(_ command: BrowserMenuCommand, store: BrowserStore) -> Bool {
     return switch command {
-    case .closeTab: !store.commandIsOpen || store.session.selectedPage == nil
+    case .closeTab: !store.commandIsOpen && store.session.selectedPage != nil
+    case .developerTools, .inspector:
+      !store.commandIsOpen && store.privatePage?.inspectorTarget != nil
+    case .inspectorCopy:
+      store.session.selectedPage.flatMap { store.privatePage?.inspectors[$0.tab.id] }?
+        .aiCopy.canCopy == true
     case .reopenClosed: store.canReopenClosedTab
     case .splitView: store.canSplitSelectedTab
     case .addFavorite: store.canFavoriteCurrentPage
@@ -206,6 +211,14 @@ final class PrivateBrowserHost {
     guard let owner = activeOwner, canPerform(command) else { return }
     let store = owner.store
     switch command {
+    case .developerTools: owner.page.toggleDeveloperTools()
+    case .inspector: owner.page.toggleInspector()
+    case .inspectorCopy:
+      if let target = owner.page.inspectorTarget,
+        let inspector = owner.page.inspectors[target.tabID]
+      {
+        Task { await inspector.aiCopy.copyElement() }
+      }
     case .newTab: store.showCommand()
     case .search: store.showAddressEditor()
     case .newSpace: store.spaceEditor = .create

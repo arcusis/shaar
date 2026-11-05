@@ -17,11 +17,9 @@ extension BrowserEngine {
   func toggleDeveloperTools() {
     guard let target = siteControlTarget else { return }
     let identity = target.tabID.uuidString
-    if runtime.devToolsView(forTabID: identity) != nil {
-      runtime.closeDevTools(forTabID: identity)
-    } else {
-      runtime.showDevTools(forTabID: identity)
+    runtime.toggleDevTools(forTabID: identity) { [weak self] error in
+      if let error { self?.reportNotice(error.localizedDescription) }
+      self?.developerModels[target.tabID]?.update(target: target)
     }
-    developerModels[target.tabID]?.update(target: target)
   }
 }

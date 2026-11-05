@@ -106,6 +106,10 @@ final class BrowserBackendSelectionTests: XCTestCase {
   func testShaarOverridesDevToolsAndInspector() {
     for selector in [
       "devToolsViewForTabID:", "showDevToolsForTabID:", "closeDevToolsForTabID:",
+      "toggleDevToolsForTabID:completion:",
+      "toggleDevToolsForPrivateTabID:windowID:contextID:completion:",
+      "beginInspectorForPrivateTabID:windowID:contextID:",
+      "privateInspectorCall:params:tabID:windowID:contextID:completion:",
       "beginInspectorForTabID:profileID:windowID:", "endInspectorForTabID:",
       "inspectorCall:params:tabID:profileID:windowID:completion:",
       "beginDeveloperSessionForTabID:profileID:windowID:",

@@ -81,6 +81,12 @@ FOUNDATION_EXPORT NSString *ARCBridgeLocalizedString(NSString *message);
 /// Restricted Inspector commands. Each call validates the tab's profile and native window.
 - (BOOL)beginInspectorForTabID:(NSString *)tabID profileID:(NSString *)profileID windowID:(NSString *)windowID;
 - (void)endInspectorForTabID:(NSString *)tabID;
+- (BOOL)beginInspectorForPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID;
+- (void)privateInspectorCall:(NSString *)method params:(NSDictionary *)params tabID:(NSString *)tabID
+                    windowID:(NSString *)windowID contextID:(NSString *)contextID
+                  completion:(void (NS_SWIFT_UI_ACTOR ^)(NSDictionary<NSString *, id> * _Nullable, NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
+- (void)toggleDevToolsForPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID
+                         completion:(void (NS_SWIFT_UI_ACTOR ^)(NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
 - (void)inspectorCall:(NSString *)method params:(NSDictionary *)params tabID:(NSString *)tabID
            profileID:(NSString *)profileID windowID:(NSString *)windowID
           completion:(void (NS_SWIFT_UI_ACTOR ^)(NSDictionary<NSString *, id> * _Nullable, NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
@@ -227,6 +233,8 @@ FOUNDATION_EXPORT NSString *ARCBridgeLocalizedString(NSString *message);
 /// Chromium's own inspector, hosted alongside its inspected page inside the page card.
 @interface ARCChromiumRuntime (DevTools)
 - (BOOL)showDevToolsForTabID:(NSString *)tabID;
+- (void)toggleDevToolsForTabID:(NSString *)tabID
+                   completion:(void (NS_SWIFT_UI_ACTOR ^)(NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
 - (BOOL)closeDevToolsForTabID:(NSString *)tabID;
 - (nullable NSView *)devToolsViewForTabID:(NSString *)tabID;
 @end

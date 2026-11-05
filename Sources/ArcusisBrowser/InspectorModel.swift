@@ -40,6 +40,8 @@ final class InspectorModel {
   var documentGeneration: Int { generation }
   var isOpen: Bool { mode != .closed }
   @ObservationIgnored weak var engine: BrowserEngine?
+  @ObservationIgnored private let connection: InspectorConnection?
+  var supportsPageTools: Bool { connection?.contextID == nil }
   @ObservationIgnored private var generation = 0
   @ObservationIgnored private var installed = false
   @ObservationIgnored private var lastRevision = -1
@@ -53,6 +55,12 @@ final class InspectorModel {
   init(target: SiteControlTarget, engine: BrowserEngine?) {
     self.target = target
     self.engine = engine
+    connection = engine.map(InspectorConnection.init)
+  }
+
+  init(target: SiteControlTarget, privateSession: PrivatePageSession) {
+    self.target = target
+    connection = InspectorConnection(session: privateSession)
   }
 
   func open() {
@@ -87,7 +95,7 @@ final class InspectorModel {
     details.reset()
     selection = nil
     installed = false
-    engine?.runtime.endInspector(forTabID: target.tabID.uuidString)
+    connection?.end(target)
     let revision = generation
     Task { [weak self] in
       guard let self, self.generation == revision, !self.isOpen else { return }
@@ -114,12 +122,13 @@ final class InspectorModel {
       lastRevision = -1
       selection = nil
       if isOpen { mode = .picking }
-      engine?.runtime.endInspector(forTabID: target.tabID.uuidString)
+      connection?.end(target)
     }
   }
 
   func setPanelMode(_ value: PanelMode) {
     guard isOpen else { return }
+    guard value == .element || supportsPageTools else { return }
     presentation.copyMenuOpen = false
     panelMode = value
     if value == .page, pageTools == nil, let engine {
@@ -200,8 +209,7 @@ final class InspectorModel {
   }
 
   func refresh() async {
-    guard !refreshing, isOpen, let engine, !engine.isClosed,
-      engine.pages[target.tabID]?.loading == false
+    guard !refreshing, isOpen, let connection, connection.isReady(for: target)
     else { return }
     refreshing = true
     defer { refreshing = false }
@@ -209,9 +217,7 @@ final class InspectorModel {
     do {
       if !installed {
         guard
-          engine.runtime.beginInspector(
-            forTabID: target.tabID.uuidString, profileID: target.profileID.uuidString,
-            windowID: engine.windowID)
+          connection.begin(target)
         else { throw InspectorFailure(InspectorL10n.string("This page is no longer available.")) }
         _ = try await evaluate(InspectorPageScript.install)
         _ = try await evaluate(InspectorStyleScript.install)
@@ -366,13 +372,12 @@ final class InspectorModel {
   }
 
   func releaseGroup(_ group: String, target: SiteControlTarget) {
-    guard let engine else { return }
-    let window = engine.windowID
-    Task { [weak runtime = engine.runtime] in
+    guard let connection else { return }
+    Task {
       // Unique groups let stale cleanup release its own objects without touching a new selection.
-      _ = try? await runtime?.inspectorCall(
+      _ = try? await connection.call(
         "Runtime.releaseObjectGroup", params: ["objectGroup": group],
-        tabID: target.tabID.uuidString, profileID: target.profileID.uuidString, windowID: window)
+        target: target)
     }
   }
 
@@ -414,17 +419,13 @@ final class InspectorModel {
   }
 
   func call(_ method: String, params: [String: Any] = [:]) async throws -> [String: Any] {
-    guard let engine, !engine.isClosed,
-      engine.store?.session.profileID(forTabID: target.tabID) == target.profileID,
-      engine.runtime.windowID(forTabID: target.tabID.uuidString) == engine.windowID
+    guard let connection
     else {
       throw InspectorFailure(InspectorL10n.string("This Inspector target is no longer available."))
     }
     let destination = target
     let revision = generation
-    let result = try await engine.runtime.inspectorCall(
-      method, params: params, tabID: destination.tabID.uuidString,
-      profileID: destination.profileID.uuidString, windowID: engine.windowID)
+    let result = try await connection.call(method, params: params, target: destination)
     guard destination == target, revision == generation else { throw CancellationError() }
     return result
   }

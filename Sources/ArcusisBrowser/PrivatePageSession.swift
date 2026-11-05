@@ -24,6 +24,8 @@ final class PrivatePageSession {
   let contextID: String
   let windowID: String
   private(set) var pages: [UUID: PageState] = [:]
+  var inspectors: [UUID: InspectorModel] = [:]
+  private(set) var isClosed = false
   private(set) var failure: String?
   private(set) var pendingHTTP: URL?
   @ObservationIgnored private var pendingHTTPTabID: UUID?
@@ -148,6 +150,10 @@ final class PrivatePageSession {
     back: Bool, forward: Bool
   ) {
     guard liveTabs.contains(id) || store?.session.page(forTabID: id) != nil else { return }
+    if let parsed = URL(string: url) {
+      inspectors[id]?.documentChanged(
+        url: parsed, committed: loading && pages[id]?.loading == false)
+    }
     if loading, store?.pageFind?.tabID == id { store?.dismissPageFind() }
     pages[id] = PageState(loading: loading, canGoBack: back, canGoForward: forward)
     if let parsed = URL(string: url) {
@@ -165,6 +171,7 @@ final class PrivatePageSession {
 
   func tabClosed(_ id: UUID) {
     guard liveTabs.remove(id) != nil else { return }
+    inspectors.removeValue(forKey: id)?.close()
     pages[id] = nil
     if store?.pageFind?.tabID == id { store?.dismissPageFind() }
     store?.nativeTabClosed(id)
@@ -172,6 +179,44 @@ final class PrivatePageSession {
   }
 
   func navigationFailed(_ message: String) { failure = message }
+
+  func retireInspectors() {
+    isClosed = true
+    for model in inspectors.values { model.close() }
+    inspectors.removeAll()
+  }
+
+  var inspectorTarget: SiteControlTarget? {
+    guard let store, let tab = store.session.selectedPage?.tab else { return nil }
+    let target = SiteControlTarget(
+      tabID: tab.id, profileID: store.session.selectedSpace.profileID, url: tab.url)
+    return ownsInspectorTarget(target) ? target : nil
+  }
+
+  func ownsInspectorTarget(_ target: SiteControlTarget) -> Bool {
+    !isClosed && liveTabs.contains(target.tabID)
+      && store?.session.profileID(forTabID: target.tabID) == target.profileID
+      && runtime.view(
+        forPrivateTabID: target.tabID.uuidString,
+        windowID: windowID, contextID: contextID) != nil
+  }
+
+  func toggleInspector() {
+    guard let target = inspectorTarget else { return }
+    let model = inspectors[target.tabID] ?? InspectorModel(target: target, privateSession: self)
+    inspectors[target.tabID] = model
+    if model.isOpen { model.close() } else { model.open() }
+  }
+
+  func toggleDeveloperTools() {
+    guard let target = inspectorTarget else { return }
+    runtime.toggleDevTools(
+      forPrivateTabID: target.tabID.uuidString,
+      windowID: windowID, contextID: contextID
+    ) { [weak self] error in
+      if let error { self?.failure = error.localizedDescription }
+    }
+  }
 
   private func allow(_ url: URL, for id: UUID) -> Bool {
     guard url.scheme?.lowercased() != "http" || approvedHTTP.remove(id) != nil else {

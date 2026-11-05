@@ -308,16 +308,14 @@ TEST(ShaarDevToolsTest, ProtocolClientPreservesProtocolErrorMessage) {
 }
 
 class ShaarPrivateDevToolsPageTargetTest
-    : public content::RenderViewHostTestHarness {
- protected:
-  std::unique_ptr<content::BrowserContext> CreateBrowserContext() override {
-    auto context = std::make_unique<content::TestBrowserContext>();
-    context->set_is_off_the_record(true);
-    return context;
-  }
-};
+    : public content::RenderViewHostTestHarness {};
 
 TEST_F(ShaarPrivateDevToolsPageTargetTest, ProtocolUsesPrivatePageTarget) {
+  // A fresh off-the-record TestBrowserContext cannot initialize a render
+  // process in this minimal headless harness. Mark the ready test context OTR
+  // before selecting the DevTools target.
+  static_cast<content::TestBrowserContext*>(browser_context())
+      ->set_is_off_the_record(true);
   ASSERT_TRUE(browser_context()->IsOffTheRecord());
   auto host = ProtocolAgentHostFor(web_contents());
   ASSERT_TRUE(host);

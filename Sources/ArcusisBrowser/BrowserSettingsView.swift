@@ -502,7 +502,7 @@ struct BrowserSettingsView: View {
               VStack(alignment: .leading, spacing: 2) {
                 Text(profile.name).lineLimit(1)
                 if let account = profile.accounts.first {
-                  Text(account.name ?? account.email).font(.caption).foregroundStyle(.secondary)
+                  Text(account.displayName).font(.caption).foregroundStyle(.secondary)
                     .lineLimit(1)
                 }
                 Text(spaceCountLabel(profile.spaces.count)).font(.caption).foregroundStyle(
@@ -548,7 +548,7 @@ struct BrowserSettingsView: View {
             .accessibilityIdentifier("settings.renameProfile")
             .onSubmit { saveProfileName(profile) }
           Button(SettingsL10n.string("Save")) { saveProfileName(profile) }
-            .disabled(profileNameEdits[profile.id] == nil)
+            .disabled(!ProfileNameEditPolicy.canSave(profileNameEdits[profile.id]))
         }
         ProfileColorPicker(color: profileColorBinding(profile))
           .accessibilityIdentifier("settings.profileColor")
@@ -678,7 +678,7 @@ struct BrowserSettingsView: View {
 
   private func saveProfileName(_ profile: BrowserSettingsProfile) {
     guard let name = profileNameEdits[profile.id],
-      name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+      ProfileNameEditPolicy.canSave(name)
     else { return }
     if onRenameProfile(profile.id, name) { profileNameEdits[profile.id] = nil }
   }
@@ -687,6 +687,12 @@ struct BrowserSettingsView: View {
     BrowserLocalization.plural("%d Spaces", count: count, table: "Settings")
   }
 
+}
+
+enum ProfileNameEditPolicy {
+  static func canSave(_ edit: String?) -> Bool {
+    edit?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+  }
 }
 
 struct BrowserLanguageRestartPrompt: View {
@@ -711,13 +717,13 @@ struct ConnectedAccountRow: View {
     HStack(spacing: 10) {
       ProfileIdentityBadge(account: account, color: color)
       VStack(alignment: .leading, spacing: 1) {
-        if let name = account.name {
-          Text(name).lineLimit(1)
+        if account.displayName != account.email {
+          Text(account.displayName).lineLimit(1)
         } else {
           Text(account.email).lineLimit(1)
             .environment(\.layoutDirection, .leftToRight)
         }
-        if account.name == nil {
+        if account.displayName == account.email {
           Text(account.provider.title)
             .font(.caption).foregroundStyle(.secondary).lineLimit(1)
         } else {

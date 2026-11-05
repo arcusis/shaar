@@ -106,15 +106,15 @@ final class BrowserSettingsState {
   var storageNotice: String? { workspace.storageNotice ?? preferences.storageNotice }
 
   func prepareFirstPresentation(for profileID: UUID?) {
-    guard !didPresent else { return }
-    didPresent = true
-    guard let profileID,
+    if let profileID,
       workspace.workspace.catalog.profiles.contains(where: { $0.id == profileID })
-    else {
+    {
+      didPresent = true
+      selectedProfileID = profileID
+    } else if !didPresent {
+      didPresent = true
       selectedProfileID = nil
-      return
     }
-    selectedProfileID = profileID
   }
 
   @discardableResult

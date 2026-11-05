@@ -46,6 +46,13 @@ import Testing
         == "A")
   }
 
+  @Test func whitespaceOnlyAccountNameUsesEmailFallback() {
+    let account = ConnectedAccount(
+      provider: .google, email: "alex@example.test", name: " \n ")
+    #expect(account.displayName == "alex@example.test")
+    #expect(account.initials == "A")
+  }
+
   @Test func menuWithoutConnectedAccountUsesProfileSymbolAndTint() throws {
     let profile = BrowserProfile(name: "Fixture", tint: .ocean, symbol: "star.fill")
     let image = try #require(ProfileIdentityLabel.image(profile: profile, account: nil))

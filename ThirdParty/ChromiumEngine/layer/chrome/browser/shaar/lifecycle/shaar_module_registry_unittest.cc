@@ -16,6 +16,11 @@ TEST(ShaarLifecycleProbeTest, BackgroundSwitchesAreVerificationOnly) {
       "/test/Shaar", "/tmp/prod", "en", false);
   const auto verification = shaar::lifecycle::ChromeMainArguments(
       "/test/Shaar", "/tmp/probe", "en", true);
+  EXPECT_NE(std::find(production.begin(), production.end(), "--no-startup-window"),
+            production.end());
+  EXPECT_NE(std::find(verification.begin(), verification.end(),
+                      "--no-startup-window"),
+            verification.end());
   for (const char* option : {"--disable-renderer-backgrounding",
                              "--disable-backgrounding-occluded-windows",
                              "--disable-background-timer-throttling"}) {

@@ -212,8 +212,13 @@ final class PrivatePageSession {
   }
 
   func cancelHTTP() {
+    let pendingTabID = pendingHTTPTabID
     pendingHTTP = nil
     pendingHTTPTabID = nil
+    guard let pendingTabID, !liveTabs.contains(pendingTabID),
+      let blank = URL(string: "about:blank")
+    else { return }
+    store?.nativeTabChanged(pendingTabID, url: blank, title: "")
   }
 }
 

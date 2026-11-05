@@ -340,6 +340,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       guard let target = context.engine.siteControlTarget else { return false }
       return context.engine.inspectors[target.tabID]?.aiCopy.canCopy == true
     case .splitView: return store.canSplitSelectedTab
+    case .nextSpace, .previousSpace: return store.canCycleSpace
     case .reopenClosed: return store.canReopenClosedTab
     case .bookmarkPage: return store.canBookmarkCurrentPage
     case .addFavorite:
@@ -980,13 +981,13 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
 
   func validateMenuItem(_ item: NSMenuItem) -> Bool {
     if let id = item.representedObject as? UUID {
-      guard canPerform(.nextSpace), let store = activeBrowserStore else { return false }
+      guard canPerform(.editSpace), let store = activeBrowserStore else { return false }
       item.state = store.session.selectedSpaceID == id ? .on : .off
       return store.session.spaces.contains { $0.id == id }
     }
     if item.action == #selector(copyCurrentURL(_:)) {
       return Self.copyURLMenuAvailable(
-        in: activeBrowserStore, menusEnabled: canPerform(.nextSpace))
+        in: activeBrowserStore, menusEnabled: canPerform(.editSpace))
     }
     guard let raw = item.representedObject as? String,
       let command = BrowserMenuCommand(rawValue: raw)
@@ -1130,7 +1131,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   }
 
   @objc private func copyCurrentURL(_ sender: NSMenuItem) {
-    guard canPerform(.nextSpace), let url = activeBrowserStore?.session.selectedPage?.tab.url
+    guard canPerform(.editSpace), let url = activeBrowserStore?.session.selectedPage?.tab.url
     else {
       return
     }
@@ -1139,7 +1140,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   }
 
   @objc private func selectMenuSpace(_ sender: NSMenuItem) {
-    guard canPerform(.nextSpace), let id = sender.representedObject as? UUID,
+    guard canPerform(.editSpace), let id = sender.representedObject as? UUID,
       let store = activeBrowserStore,
       store.session.spaces.contains(where: { $0.id == id })
     else { return }
@@ -1154,7 +1155,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     while let item = menu.items.first(where: { $0.representedObject is UUID || $0.tag == 91827 }) {
       menu.removeItem(item)
     }
-    guard canPerform(.nextSpace), let store = activeBrowserStore else { return }
+    guard canPerform(.editSpace), let store = activeBrowserStore else { return }
     let separator = NSMenuItem.separator()
     separator.tag = 91827
     menu.addItem(separator)

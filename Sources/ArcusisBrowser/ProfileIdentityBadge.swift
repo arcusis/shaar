@@ -44,7 +44,7 @@ struct ProfileIdentityBadge: View {
           .background(Color(nsColor: .windowBackgroundColor), in: Circle())
       }
     }
-    .accessibilityLabel(account.map { "\($0.provider.title): \($0.name ?? $0.email)" } ?? "")
+    .accessibilityLabel(account.map { "\($0.provider.title): \($0.displayName)" } ?? "")
   }
 
   private func initials(_ account: ConnectedAccount) -> some View {
@@ -74,7 +74,7 @@ struct ProfileIdentityLabel: View {
 
   var body: some View {
     Label {
-      Text(verbatim: account.map { "\(profile.name) · \($0.name ?? $0.email)" } ?? profile.name)
+      Text(verbatim: account.map { "\(profile.name) · \($0.displayName)" } ?? profile.name)
     } icon: {
       if let image = Self.image(profile: profile, account: account) {
         Image(nsImage: image)

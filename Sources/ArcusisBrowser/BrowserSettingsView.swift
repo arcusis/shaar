@@ -502,7 +502,7 @@ struct BrowserSettingsView: View {
               VStack(alignment: .leading, spacing: 2) {
                 Text(profile.name).lineLimit(1)
                 if let account = profile.accounts.first {
-                  Text(account.name ?? account.email).font(.caption).foregroundStyle(.secondary)
+                  Text(account.displayName).font(.caption).foregroundStyle(.secondary)
                     .lineLimit(1)
                 }
                 Text(spaceCountLabel(profile.spaces.count)).font(.caption).foregroundStyle(
@@ -711,13 +711,13 @@ struct ConnectedAccountRow: View {
     HStack(spacing: 10) {
       ProfileIdentityBadge(account: account, color: color)
       VStack(alignment: .leading, spacing: 1) {
-        if let name = account.name {
-          Text(name).lineLimit(1)
+        if account.displayName != account.email {
+          Text(account.displayName).lineLimit(1)
         } else {
           Text(account.email).lineLimit(1)
             .environment(\.layoutDirection, .leftToRight)
         }
-        if account.name == nil {
+        if account.displayName == account.email {
           Text(account.provider.title)
             .font(.caption).foregroundStyle(.secondary).lineLimit(1)
         } else {

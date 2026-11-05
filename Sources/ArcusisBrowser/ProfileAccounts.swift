@@ -105,6 +105,11 @@ struct ConnectedAccount: Codable, Equatable, Sendable {
   /// No credentials, tokens, or cookies are copied into preferences.
   var photoData: Data?
 
+  var displayName: String {
+    let preferred = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return preferred.isEmpty ? email : preferred
+  }
+
   var initials: String {
     let trimmedName = name?.trimmingCharacters(in: .whitespacesAndNewlines)
     let source: String

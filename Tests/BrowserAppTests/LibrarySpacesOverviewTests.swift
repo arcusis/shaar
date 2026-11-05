@@ -31,6 +31,37 @@ final class LibrarySpacesOverviewTests: XCTestCase {
     XCTAssertEqual(LibrarySpacesOverviewModel.cards(in: session, query: "").count, 3)
   }
 
+  func testTodayFolderAndItsTabAppearInOverviewSearch() throws {
+    let profile = BrowserProfile(name: "Personal")
+    let folder = BrowserFolder(name: "Later", isPinned: false)
+    let tab = BrowserTab(
+      url: URL(string: "https://example.com/today")!, title: "Unrelated page",
+      isPinned: false, folderID: folder.id)
+    let space = BrowserSpace(
+      profileID: profile.id, name: "Main", symbol: "house", tint: .ocean,
+      tabs: [tab], folders: [folder])
+    let session = try BrowserSession(
+      profiles: [profile], spaces: [space], selectedSpaceID: space.id)
+
+    let card = try XCTUnwrap(LibrarySpacesOverviewModel.cards(in: session, query: "Later").first)
+    guard card.items.count == 2 else {
+      XCTFail("Expected the Today folder and its tab, got \(card.items.count) items")
+      return
+    }
+    if case .folder(let found, let depth) = card.items[0] {
+      XCTAssertEqual(found.id, folder.id)
+      XCTAssertEqual(depth, 0)
+    } else {
+      XCTFail("Today folder missing")
+    }
+    if case .tab(let found, let depth) = card.items[1] {
+      XCTAssertEqual(found.id, tab.id)
+      XCTAssertEqual(depth, 1)
+    } else {
+      XCTFail("Today folder tab missing")
+    }
+  }
+
   func testCapturedCallbacksRejectRemovedOrReassignedSpaceAndTab() throws {
     let (session, ids) = makeSession()
     let liveSpace = session.spaces.first { $0.id == ids.longSpace }!

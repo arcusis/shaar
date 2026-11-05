@@ -260,10 +260,19 @@ struct LibraryDownloadsView: View {
   }
 
   private func subtitle(_ item: BrowserDownload) -> String {
-    let kind = fileType(item)
-    let host = item.source
-    return ["Download", "Generated file", "Extension"].contains(host)
-      ? kind : "\(kind) from \(host)"
+    Self.subtitle(kind: fileType(item), source: item.source, language: .currentLaunchLanguage)
+  }
+
+  static func subtitle(kind: String, source: String, language: BrowserLanguage) -> String {
+    let genericSources = ["Download", "Generated file", "Extension"]
+    if genericSources.contains(where: {
+      source == $0 || source == BrowserLocalization.string($0, language: language)
+    }) {
+      return kind
+    }
+    return BrowserLocalization.format(
+      "%@ from %@", table: "Panels", language: language,
+      arguments: [.string(kind), .string(source)])
   }
 
   private func mediaGrid(_ items: [BrowserDownload]) -> some View {

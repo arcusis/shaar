@@ -37,7 +37,7 @@ public struct BrowserImportItem: Identifiable, Equatable, Sendable {
 public enum BrowserImport {
   public static func read(_ url: URL) throws -> [BrowserImportItem] {
     let data = try Data(contentsOf: url)
-    if url.pathExtension.lowercased() == "html" {
+    if ["html", "htm"].contains(url.pathExtension.lowercased()) {
       guard let html = String(data: data, encoding: .utf8) else { throw ImportError.unsupported }
       return htmlBookmarks(html)
     }

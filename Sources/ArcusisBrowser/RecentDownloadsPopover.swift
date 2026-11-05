@@ -123,7 +123,7 @@ struct RecentDownloadsPopover: View {
         ? "\(item.filename), \(relativeAge(item))"
         : accessibilityLabel(for: item, stateLabel: stateLabel)
     )
-    .task(id: item.id) { await loadThumbnail(item) }
+    .task(id: item.state.rawValue) { await loadThumbnail(item) }
     .onDrag {
       guard selectedProfileID() == profileID, let url = dragURL(item) else {
         return NSItemProvider()

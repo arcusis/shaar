@@ -81,8 +81,7 @@ struct SharedExtensionSettingsTests {
     let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")
     defer { try? FileManager.default.removeItem(at: file) }
     let transport = SettingsExtensionsTransport(profiles: [:], rejectList: true)
-    let adapter = ShaarExtensionsAdapter(
-      implementation: .shaar, ardia: UnusedArdiaExtensions(), shaar: transport)
+    let adapter = ShaarExtensionsAdapter(shaar: transport)
     let home = try ShaarExtensionHome(fileURL: file, adapter: adapter)
     let model = SharedExtensionSettingsModel(
       home: home, adapter: adapter, profiles: { [profileID: "Work"] })

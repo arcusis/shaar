@@ -11,7 +11,7 @@ enum CommandText {
   static func domain(of url: URL?) -> String {
     guard let url else { return "" }
     let host = url.host() ?? url.absoluteString
-    return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+    return host.lowercased().hasPrefix("www.") ? String(host.dropFirst(4)) : host
   }
 
   /// True when the URL's site (host without `www.`) starts with the non-empty query.

@@ -121,6 +121,18 @@ struct SessionAccountPageTests {
     )
   }
 
+  @Test func secureSchemeRelativeAccountPhotoCanBeCached() throws {
+    let body = try snapshot(
+      url: "https://www.icloud.com/", email: "alex@example.test",
+      photo: "//images.example.test/avatar.png")
+    let account = try #require(SessionAccountPage.account(from: body, provider: .apple))
+    let source = SessionAccountPage.photoSource(from: body, provider: .apple)
+
+    #expect(account.photoURL?.absoluteString == "https://images.example.test/avatar.png")
+    #expect(source?.absoluteString == account.photoURL?.absoluteString)
+    #expect(source.flatMap(SessionAccountPage.photoScript(url:)) != nil)
+  }
+
   @Test func metadataTrimsAccountFieldsAndKeepsSessionPhotoBytes() throws {
     let photo = try AccountPhotoFixture.data()
     let body = try snapshot(

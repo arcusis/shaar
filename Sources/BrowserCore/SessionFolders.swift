@@ -143,8 +143,9 @@ extension BrowserSession {
       updated[destination].splits += movedSplits
       if selected.map(memberIDs.contains) == true {
         let remaining = updated[source].tabs
-        updated[source].selectedTabID =
-          remaining.isEmpty ? nil : remaining[min(oldPosition, remaining.count - 1)].id
+        let fallback = remaining.isEmpty ? nil : remaining[min(oldPosition, remaining.count - 1)]
+        updated[source].selectedTabID = fallback?.id
+        updated[source].expandFolderPath(fallback?.folderID)
       }
       if followsSelection {
         updated[destination].selectedTabID = selected

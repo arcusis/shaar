@@ -18,6 +18,7 @@ final class ShaarFirstTabProbe {
   private let profileID: UUID
   private let checksCoreRoutes: Bool
   private let checksExtensions: Bool
+  private let checksPrivatePrivacy: Bool
   private let output: URL
   private let dataRoot: URL
   private let pageURL = URL(string: "https://example.com")!
@@ -27,6 +28,8 @@ final class ShaarFirstTabProbe {
   private var coreChecksStarted = false
   private var coreRoutesObserved = false
   private var extensionListObserved = false
+  private var privatePolicyStatus: [AnyHashable: Any] = [:]
+  private var privatePolicyChecks: [String: Bool] = [:]
 
   private init(arguments: [String]) throws {
     func value(after flag: String) throws -> String {
@@ -45,6 +48,7 @@ final class ShaarFirstTabProbe {
     dataRoot = URL(filePath: try value(after: "--probe-data-dir"), directoryHint: .isDirectory)
     checksCoreRoutes = arguments.contains("--probe-shaar-core-routes")
     checksExtensions = arguments.contains("--probe-shaar-extensions")
+    checksPrivatePrivacy = arguments.contains("--probe-shaar-private-privacy")
     let selected = try NativeBrowserHost.makeRuntime(
       frameworkURL: framework, environment: ProcessInfo.processInfo.environment,
       arguments: arguments)
@@ -122,6 +126,8 @@ final class ShaarFirstTabProbe {
         checkExtensionRoute(tabID: tab, nativeView: view)
       } else if checksCoreRoutes {
         checkCoreRoutes(tabID: tab, nativeView: view)
+      } else if checksPrivatePrivacy {
+        checkPrivatePrivacy(tabID: tab, nativeView: view)
       } else {
         finish(tabID: tab, nativeView: view)
       }
@@ -129,6 +135,31 @@ final class ShaarFirstTabProbe {
     }
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
       self?.checkTab()
+    }
+  }
+
+  private func checkPrivatePrivacy(tabID: String, nativeView: NSView) {
+    guard !coreChecksStarted else { return }
+    coreChecksStarted = true
+    let contextID = UUID().uuidString
+    runtime.createPrivateContextID(contextID, sourceProfileID: profileID.uuidString) {
+      [weak self] opened, error in
+      Task { @MainActor [weak self] in
+        guard let self else { return }
+        guard opened, error == nil else {
+          self.finish(error: "Shaar private context could not be created: \(String(describing: error)).")
+          return
+        }
+        self.privatePolicyStatus = await self.runtime.privatePrivacyStatus(forContextID: contextID)
+        self.privatePolicyChecks = PrivatePrivacyEvidence.engineStatus(self.privatePolicyStatus)
+        let released = self.runtime.releasePrivateContextID(contextID)
+        let failed = self.privatePolicyChecks.filter { !$0.value }.keys.sorted()
+        guard released, failed.isEmpty else {
+          self.finish(error: "Shaar private policies failed: \(failed.joined(separator: ", ")).")
+          return
+        }
+        self.finish(tabID: tabID, nativeView: nativeView)
+      }
     }
   }
 
@@ -212,6 +243,8 @@ final class ShaarFirstTabProbe {
       "navigationObserved": navigationCommitted,
       "coreRoutesObserved": coreRoutesObserved,
       "extensionListObserved": extensionListObserved,
+      "privatePolicyStatus": privatePolicyStatus,
+      "privatePolicyChecks": privatePolicyChecks,
       "requestedURL": pageURL.absoluteString,
       "allWindowsHidden": NSApp.windows.allSatisfy { !$0.isVisible },
       "error": error ?? "",

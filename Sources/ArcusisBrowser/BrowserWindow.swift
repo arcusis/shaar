@@ -192,6 +192,9 @@ struct BrowserWindow: View {
           } else {
             PrivateBrowserPage(session: privatePage, tabID: id)
               .overlay { SplitDropZone(store: store, targetID: id) }
+              .overlay {
+                if store.showsStartPage { PrivateStartPage(store: store) }
+              }
           }
           if let failure = privatePage.failure {
             Text(failure)

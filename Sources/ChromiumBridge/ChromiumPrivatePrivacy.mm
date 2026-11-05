@@ -6,6 +6,7 @@
 #import "ChromiumShaarPrivateSupport.h"
 
 #include <dlfcn.h>
+#include <cstring>
 
 static NSString *ARCPrivateOrigin(NSString *url) {
   NSURLComponents *parts = [NSURLComponents componentsWithString:url];
@@ -123,6 +124,8 @@ using CookieSetting = decltype(&shaar_private_session_cookie_setting);
 using TrackerRules = decltype(&shaar_private_session_tracker_rules);
 using TrackerStatus = decltype(&shaar_private_session_tracker_status);
 using TrackerAllowance = decltype(&shaar_private_session_tracker_allowance);
+using PrivacyStatus = shaar_error_code (*)(shaar_private_session *, char *, size_t,
+                                           shaar_error *);
 
 CookieSetting PrivateCookieSymbol() {
   return reinterpret_cast<CookieSetting>(dlsym(RTLD_DEFAULT,
@@ -142,6 +145,11 @@ TrackerStatus PrivateTrackerStatusSymbol() {
 TrackerAllowance PrivateTrackerAllowanceSymbol() {
   return reinterpret_cast<TrackerAllowance>(dlsym(RTLD_DEFAULT,
       "shaar_private_session_tracker_allowance"));
+}
+
+PrivacyStatus PrivatePrivacyStatusSymbol() {
+  return reinterpret_cast<PrivacyStatus>(dlsym(RTLD_DEFAULT,
+      "shaar_private_session_privacy_status"));
 }
 
 shaar_private_session *Session(NSDictionary *context) {
@@ -204,7 +212,8 @@ BOOL ARCPrivateShaarInstallTrackerRules(shaar_private_session *session) {
 
 - (BOOL)privatePrivacyAvailable {
   return PrivateCookieSymbol() && PrivateTrackerRulesSymbol() &&
-         PrivateTrackerStatusSymbol() && PrivateTrackerAllowanceSymbol();
+         PrivateTrackerStatusSymbol() && PrivateTrackerAllowanceSymbol() &&
+         PrivatePrivacyStatusSymbol();
 }
 
 - (BOOL)shaarPrivateOriginAllowed:(NSString *)origin sourceProfileID:(NSString *)sourceID
@@ -226,24 +235,40 @@ BOOL ARCPrivateShaarInstallTrackerRules(shaar_private_session *session) {
   NSDictionary *context = ARCPrivateShaarState(self)[@"contexts"][contextID];
   if (!context) { completion(@{@"error": @"Private context is unavailable."}); return; }
   auto status = PrivateTrackerStatusSymbol();
-  if (!status) {
-    completion(@{@"error": @"Private tracker status is unavailable."});
+  auto policy = PrivatePrivacyStatusSymbol();
+  if (!status || !policy) {
+    completion(@{@"error": @"Private privacy status is unavailable."});
+    return;
+  }
+  char policyJSON[4096] = {};
+  shaar_error error = ARCPrivateShaarEmptyError();
+  if (policy(Session(context), policyJSON, sizeof(policyJSON), &error) != SHAAR_OK) {
+    completion(@{@"error": @"Private privacy status failed."});
+    return;
+  }
+  const char *end = static_cast<const char *>(memchr(policyJSON, '\0', sizeof(policyJSON)));
+  NSData *data = end ? [NSData dataWithBytes:policyJSON length:end - policyJSON] : nil;
+  NSDictionary *values = data ? [NSJSONSerialization JSONObjectWithData:data
+      options:0 error:nil] : nil;
+  if (![values isKindOfClass:NSDictionary.class]) {
+    completion(@{@"error": @"Private privacy status is malformed."});
     return;
   }
   char revision[201] = {};
   int domains = 0;
   int blocked = 0;
-  shaar_error error = ARCPrivateShaarEmptyError();
+  error = ARCPrivateShaarEmptyError();
   if (status(Session(context), revision, sizeof(revision), &domains,
              &blocked, &error) != SHAAR_OK) {
     completion(@{@"error": @"Private tracker status failed."});
     return;
   }
-  completion(@{@"offTheRecord": @YES,
-    @"trackerProtectionEnabled": @YES,
-    @"trackerRulesRevision": [NSString stringWithUTF8String:revision] ?: @"",
-    @"trackerDomainCount": @(domains),
-    @"blockedTrackerRequests": @(blocked)});
+  NSMutableDictionary *result = [values mutableCopy];
+  result[@"trackerProtectionEnabled"] = @YES;
+  result[@"trackerRulesRevision"] = [NSString stringWithUTF8String:revision] ?: @"";
+  result[@"trackerDomainCount"] = @(domains);
+  result[@"blockedTrackerRequests"] = @(blocked);
+  completion(result);
 }
 
 - (void)setPrivateCookieSettingForContextID:(NSString *)contextID origin:(NSString *)origin

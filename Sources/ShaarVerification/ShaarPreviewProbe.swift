@@ -27,6 +27,7 @@ final class ShaarPreviewProbe {
   private var latest: [String: String] = [:]
   private var downloads: [[String: Any]] = []
   private var results: [String: [String: Any]] = [:]
+  private var privatePolicyStatus: [AnyHashable: Any] = [:]
   private var profileTabID: UUID?
   private var visibleWindowEvidence: [String] = []
   private var finished = false
@@ -182,6 +183,14 @@ final class ShaarPreviewProbe {
         throw Failure("Private window became visible.")
       }
     }
+    if let owner = privateHost?.ownedWindows.first {
+      privatePolicyStatus = await runtime.privatePrivacyStatus(forContextID: owner.contextID)
+    }
+    for (name, enabled) in PrivatePrivacyEvidence.engineStatus(privatePolicyStatus) {
+      await check(name) {
+        guard enabled else { throw Failure("Native private policy readback failed: \(name).") }
+      }
+    }
     await check("profilesSwitch") {
       let id = try self.workspace.createProfile(name: "Preview B")
       guard let store = self.host.contexts[self.firstWindowID]?.store,
@@ -296,6 +305,7 @@ final class ShaarPreviewProbe {
           in: firstProfileID
         ).count ?? 0,
         "firstEngineNotice": host.contexts[firstWindowID]?.engine.notice ?? "",
+        "privatePolicyStatus": privatePolicyStatus,
       ] as [String: Any],
     ]
     do {

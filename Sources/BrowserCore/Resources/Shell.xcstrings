@@ -1,6 +1,16 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Private protections": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"הגנות בחלון פרטי"}}}},
+    "Cookies and site storage blocked by default": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"קובצי Cookie ואחסון אתרים חסומים כברירת מחדל"}}}},
+    "Trackers blocked": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"עוקבים חסומים"}}}},
+    "HTTPS-only browsing": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"גלישה ב-HTTPS בלבד"}}}},
+    "Referrers trimmed": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"פרטי הדף המפנה מצומצמים"}}}},
+    "WebRTC local IP exposure limited": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"חשיפת כתובת IP מקומית ב-WebRTC מוגבלת"}}}},
+    "Extensions disabled": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"תוספים מושבתים"}}}},
+    "On": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"פעיל"}}}},
+    "Unavailable": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"לא זמין"}}}},
+    "Checking…": {"localizations":{"he":{"stringUnit":{"state":"translated","value":"בבדיקה…"}}}},
     "Pinned": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Pinned"}},"he":{"stringUnit":{"state":"translated","value":"נעוצים"}}}},
     "Single tabs only": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Single tabs only"}},"he":{"stringUnit":{"state":"translated","value":"לשוניות בודדות בלבד"}}}},
     "Drop tabs here": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Drop tabs here"}},"he":{"stringUnit":{"state":"translated","value":"יש לגרור לכאן לשוניות"}}}},

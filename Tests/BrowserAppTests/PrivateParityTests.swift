@@ -176,6 +176,39 @@ struct PrivateParityTests {
     withExtendedLifetime(page) {}
   }
 
+  @Test func privateStartPageShowsEngineControlsOnlyAfterStatusReadback() throws {
+    let store = try makeStore()
+    let first = try #require(store.session.selectedPage?.tab.id)
+    let page = PrivatePageSession(
+      runtime: ARCChromiumRuntime(), contextID: UUID().uuidString,
+      windowID: UUID().uuidString, firstTabID: first, store: store)
+    #expect(store.showsStartPage)
+    #expect(!PrivateProtectionStatus([:]).allEnabled)
+    let policy: [String: Any] = [
+      "offTheRecord": true, "globalCookies": "block",
+      "httpsOnly": true, "referrersEnabled": false,
+      "webRTCIPHandlingPolicy": "disable_non_proxied_udp",
+      "webRTCPolicyExceptionCount": 0, "localIPExceptionCount": 0,
+      "extensionsDisabled": true, "trackerProtectionEnabled": true,
+      "trackerDomainCount": 1, "trackerRulesRevision": "test",
+    ]
+    let status = PrivateProtectionStatus(policy)
+    #expect(status.allEnabled)
+    for key in policy.keys {
+      var incomplete = policy
+      incomplete.removeValue(forKey: key)
+      #expect(!PrivateProtectionStatus(incomplete).allEnabled)
+    }
+    var failedReadback = policy
+    failedReadback["error"] = "status failed"
+    #expect(!PrivateProtectionStatus(failedReadback).allEnabled)
+    let hosting = NSHostingView(rootView: PrivateStartPage(store: store, status: status))
+    hosting.frame = NSRect(x: 0, y: 0, width: 800, height: 700)
+    hosting.layoutSubtreeIfNeeded()
+    #expect(hosting.fittingSize.height > 0)
+    withExtendedLifetime(page) {}
+  }
+
   @Test func retiringSharedPrivateWindowReleasesItsStore() async throws {
     weak var releasedStore: BrowserStore?
     let hosting = try autoreleasepool { () -> NSHostingView<BrowserWindow?> in

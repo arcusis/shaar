@@ -1,6 +1,7 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Private privacy defaults could not be verified." : { "localizations" : { "he" : { "stringUnit" : { "state" : "translated", "value" : "לא ניתן לאמת את הגדרות הפרטיות של החלון הפרטי." } } } },
     "A loaded profile and a local folder are required." : { "localizations" : { "he" : { "stringUnit" : { "state" : "translated", "value" : "נדרשים פרופיל טעון ותיקייה מקומית." } } } },
     "The download folder could not be saved." : { "localizations" : { "he" : { "stringUnit" : { "state" : "translated", "value" : "לא ניתן לשמור את תיקיית ההורדות." } } } },
     "Site permissions could not be read for this profile.": {"localizations": {"he": {"stringUnit": {"state": "translated", "value": "לא ניתן לקרוא את הרשאות האתרים בפרופיל הזה."}}}},

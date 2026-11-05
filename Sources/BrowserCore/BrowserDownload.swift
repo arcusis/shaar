@@ -39,7 +39,9 @@ public struct BrowserDownload: Identifiable, Equatable, Sendable {
     else { return nil }
     self.id = id
     self.profileID = profileID
-    self.filename = filename.isEmpty ? BrowserLocalization.string("Download") : filename
+    self.filename =
+      filename.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      ? BrowserLocalization.string("Download") : filename
     self.fileURL = path.isEmpty ? nil : URL(filePath: path)
     self.source = Self.sourceDescription(sourceURL)
     self.state = state

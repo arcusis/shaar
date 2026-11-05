@@ -23,7 +23,12 @@ struct SiteControlTarget: Equatable {
   let url: URL
 
   var origin: String? { SiteOrigin.string(for: url) }
-  var host: String { url.host(percentEncoded: false) ?? url.absoluteString }
+  var host: String {
+    guard let host = url.host(percentEncoded: false) else { return url.absoluteString }
+    guard let port = url.port else { return host }
+    if host.contains(":") { return "[\(host)]:\(port)" }
+    return "\(host):\(port)"
+  }
 }
 
 /// Page actions offered by the site control center, in display order.

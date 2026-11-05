@@ -180,6 +180,7 @@ final class BrowserPreferencesStore {
       sidebarInitiallyVisible = document.sidebarInitiallyVisible
       profileSearchEngines = document.profileSearchEngines
       profileDownloadDirectories = document.profileDownloadDirectories
+      profileDownloadBookmarks = document.profileDownloadBookmarks
       connectedAccounts = document.connectedAccounts
       pinnedExtensions = document.pinnedExtensions
       autoPictureInPictureOffSites = document.autoPictureInPictureOffSites

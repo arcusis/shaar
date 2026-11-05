@@ -70,6 +70,15 @@ import Testing
     ])
 }
 
+@Test func mostVisitedSkipsOpenPageWithDifferentHostCase() throws {
+  let fixture = try LauncherFixture()
+  let history = [try entry("https://OPEN.EXAMPLE/", visits: 100, profile: fixture.profileID)]
+
+  let results = CommandLauncher.mostVisited(in: fixture.session, history: history)
+
+  #expect(results.isEmpty)
+}
+
 @Test func emptySpaceStillSuggestsFavoritesClosedTabsAndHistory() throws {
   var fixture = try LauncherFixture()
   for id in [fixture.openTabID, fixture.pinnedTabID, fixture.closedTabID] {

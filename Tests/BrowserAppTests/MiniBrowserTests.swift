@@ -29,6 +29,40 @@ struct MiniBrowserTests {
     #expect(store.receiveMiniTab(tab, in: space.id, profileID: space.profileID, archive: true))
     #expect(store.session.recentlyClosedTabs(in: space.id).first?.tab.url == tab.url)
   }
+
+  @Test func archivingMiniTabDoesNotChangeMainWindowSelection() throws {
+    var session = BrowserSession.fresh()
+    let first = session.open(URL(string: "https://first.example")!)!
+    _ = session.open(URL(string: "https://second.example")!)
+    let spaceID = session.selectedSpaceID
+    session.selectTab(first, in: spaceID)
+    let store = BrowserStore(session: session)
+    let miniTab = BrowserTab(url: URL(string: "https://mini.example")!)
+
+    #expect(
+      store.receiveMiniTab(
+        miniTab, in: spaceID, profileID: session.selectedSpace.profileID, archive: true))
+    #expect(store.session.selectedSpace.selectedTabID == first)
+    #expect(store.session.recentlyClosedTabs(in: spaceID).first?.tab.url == miniTab.url)
+  }
+
+  @Test func archivingMiniTabKeepsSelectedFavorite() throws {
+    var session = BrowserSession.fresh()
+    let spaceID = session.selectedSpaceID
+    let profileID = session.selectedSpace.profileID
+    _ = session.open(URL(string: "https://ordinary.example")!)
+    let favoriteID = session.addFavorite(
+      profileID: profileID, originalURL: URL(string: "https://favorite.example")!)!
+    let selected = session.selectFavorite(favoriteID, in: spaceID)
+    #expect(selected)
+    let store = BrowserStore(session: session)
+
+    #expect(
+      store.receiveMiniTab(
+        BrowserTab(url: URL(string: "https://mini.example")!), in: spaceID,
+        profileID: profileID, archive: true))
+    #expect(store.session.selectedSpace.selectedFavoriteID == favoriteID)
+  }
 }
 
 @MainActor final class MiniBrowserVisualTests: XCTestCase {

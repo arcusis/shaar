@@ -32,6 +32,29 @@ import Testing
   #expect(!legacy.isFolder && legacy.address != nil && legacy.destination == nil)
 }
 
+@Test func whitespaceOnlyBookmarkTitlesUseUntitledFallbacks() throws {
+  let folderID = UUID()
+  let bookmarkID = UUID()
+  let tree = try BookmarkTree(
+    profileID: UUID(),
+    payload: bookmarkPayload(children: [
+      [
+        "id": folderID.uuidString, "k": "f", "t": "  \n",
+        "c": [
+          [
+            "id": bookmarkID.uuidString, "k": "u", "t": " \t", "u": "https://example.com",
+          ]
+        ],
+      ]
+    ]))
+
+  #expect(tree.items.first { $0.id == folderID }?.title == "Untitled folder")
+  #expect(tree.items.first { $0.id == bookmarkID }?.title == "Untitled bookmark")
+  #expect(
+    tree.items.first { $0.id == bookmarkID }?.path
+      == "Bookmarks bar / Untitled folder / Untitled bookmark")
+}
+
 @Test func malformedBookmarkTreesRejectDuplicateIDsAndInvalidShapes() throws {
   let id = UUID().uuidString
   for children in [
@@ -103,6 +126,14 @@ import Testing
       try BrowserHistoryEntry(profileID: profile, payload: value)
     }
   }
+}
+
+@Test func whitespaceOnlyHistoryTitleFallsBackToHost() throws {
+  let entry = try BrowserHistoryEntry(
+    profileID: UUID(),
+    payload: ["u": "https://example.com/account", "t": "  \n\t", "n": 1, "v": [1000]])
+
+  #expect(entry.title == "example.com")
 }
 
 @Test func launcherLibraryResultsStayInSelectedProfileAndPreferBookmarksToDuplicateHistory() throws
@@ -377,6 +408,15 @@ private func bookmarkPayload(children: [[String: Any]]) -> [String: Any] {
 
   let items = try BrowserImport.read(url)
   #expect(items.map(\.title) == ["R&D <map> 'guide' 🌍 ' &unknown;"])
+}
+
+@Test func browserImportReadsHTMBookmarkExports() throws {
+  let url = FileManager.default.temporaryDirectory.appending(path: "Bookmarks-\(UUID()).htm")
+  defer { try? FileManager.default.removeItem(at: url) }
+  try #"<DL><DT><A HREF="https://example.com">Example</A></DL>"#
+    .write(to: url, atomically: true, encoding: .utf8)
+
+  #expect(try BrowserImport.read(url).map(\.address) == ["https://example.com"])
 }
 
 @Test func firefoxJSONRootDoesNotBecomeAnImportedFolder() throws {

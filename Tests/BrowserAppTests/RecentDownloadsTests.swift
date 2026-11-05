@@ -14,6 +14,42 @@ import Testing
 struct RecentDownloadsTests {
   private let id = "8ce51349-a188-4bad-bd1c-011b48e48ca6"
 
+  @Test func finishedDownloadRetriesThumbnailAfterCardStateChanges() async throws {
+    final class Calls { var count = 0 }
+    let calls = Calls()
+    let profile = UUID()
+    func card(_ state: DownloadState) -> RecentDownloadsPopover {
+      let item = BrowserDownload(
+        id: id, profileID: profile, filename: "report.pdf", path: "",
+        sourceURL: "https://example.test/report.pdf", state: state,
+        paused: false, dangerous: false, offTheRecord: false,
+        received: 1, total: 1, startTime: 1)!
+      return RecentDownloadsPopover(
+        items: [item], profileID: profile, selectedProfileID: { profile },
+        dragURL: { _ in
+          calls.count += 1
+          return nil
+        }, dismiss: {}, animatesReveal: false)
+    }
+    let host = NSHostingView(rootView: card(.finished))
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 300, height: 420),
+      styleMask: [.titled], backing: .buffered, defer: false)
+    window.contentView = host
+    host.layoutSubtreeIfNeeded()
+    try await Task.sleep(for: .milliseconds(100))
+    #expect(calls.count == 1)
+
+    host.rootView = card(.downloading)
+    host.layoutSubtreeIfNeeded()
+    try await Task.sleep(for: .milliseconds(100))
+    host.rootView = card(.finished)
+    host.layoutSubtreeIfNeeded()
+    try await Task.sleep(for: .milliseconds(100))
+
+    #expect(calls.count == 2)
+  }
+
   @Test func completedReadableRegularFileIsAllowedOnlyForCurrentProfile() throws {
     let model = DownloadsModel()
     let profile = UUID()

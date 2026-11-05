@@ -462,6 +462,30 @@ TEST_F(ShaarPrivateDevToolsPageTargetTest,
             captured.payload.find("documentElementPresent"));
 }
 
+TEST_F(ShaarPrivateDevToolsPageTargetTest,
+       HiddenProbeCaptureTemporarilyShowsRendererAndRestoresHiddenState) {
+  web_contents()->WasHidden();
+  ASSERT_EQ(content::Visibility::HIDDEN, web_contents()->GetVisibility());
+
+  auto capture = StartHiddenProbeCapture(web_contents());
+  EXPECT_EQ(content::Visibility::VISIBLE, web_contents()->GetVisibility());
+
+  capture.RunAndReset();
+  EXPECT_EQ(content::Visibility::HIDDEN, web_contents()->GetVisibility());
+}
+
+TEST_F(ShaarPrivateDevToolsPageTargetTest,
+       HiddenProbeCaptureRestoresOccludedState) {
+  web_contents()->WasOccluded();
+  ASSERT_EQ(content::Visibility::OCCLUDED, web_contents()->GetVisibility());
+
+  auto capture = StartHiddenProbeCapture(web_contents());
+  EXPECT_EQ(content::Visibility::VISIBLE, web_contents()->GetVisibility());
+
+  capture.RunAndReset();
+  EXPECT_EQ(content::Visibility::OCCLUDED, web_contents()->GetVisibility());
+}
+
 TEST(ShaarDevToolsTest, CaptureRejectsUnownedWindowTabPair) {
   shaar::windows_tabs::BrowserTabRegistryImpl registry;
   auto* engine = reinterpret_cast<shaar_engine*>(1);

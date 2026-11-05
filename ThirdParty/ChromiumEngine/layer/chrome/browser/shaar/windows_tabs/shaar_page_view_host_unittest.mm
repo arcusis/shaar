@@ -48,6 +48,10 @@ TEST(ShaarPageViewHostTest, WindowStartsHiddenAndRejectsForeignFocus) {
   EXPECT_FALSE(host.window().isVisible);
   EXPECT_FALSE(host.Focus(tab));
   EXPECT_TRUE(host.Attach(tab));
+  EXPECT_EQ(tab.window, host.window());
+  EXPECT_FALSE(host.window().isVisible);
+  host.Resize(NSMakeSize(640, 480));
+  EXPECT_FALSE(host.window().isVisible);
   EXPECT_FALSE(host.Focus([[NSView alloc] initWithFrame:NSZeroRect]));
 }
 

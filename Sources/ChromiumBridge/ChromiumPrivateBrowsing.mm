@@ -34,6 +34,23 @@ shaar_window *PrivateWindow(NSDictionary *entry) {
 shaar_tab *PrivateTab(NSDictionary *entry) {
   return (shaar_tab *)((NSValue *)entry[@"handle"]).pointerValue;
 }
+
+BOOL PrivatePoliciesReady(NSDictionary *status) {
+  if (![status isKindOfClass:NSDictionary.class] || status[@"error"]) return NO;
+  if (![status[@"trackerDomainCount"] isKindOfClass:NSNumber.class] ||
+      ![status[@"trackerRulesRevision"] isKindOfClass:NSString.class]) return NO;
+  return [status[@"offTheRecord"] isEqual:@YES] &&
+    [status[@"globalCookies"] isEqual:@"block"] &&
+    [status[@"httpsOnly"] isEqual:@YES] &&
+    [status[@"referrersEnabled"] isEqual:@NO] &&
+    [status[@"webRTCIPHandlingPolicy"] isEqual:@"disable_non_proxied_udp"] &&
+    [status[@"webRTCPolicyExceptionCount"] isEqual:@0] &&
+    [status[@"localIPExceptionCount"] isEqual:@0] &&
+    [status[@"extensionsDisabled"] isEqual:@YES] &&
+    [status[@"trackerProtectionEnabled"] isEqual:@YES] &&
+    [status[@"trackerDomainCount"] intValue] > 0 &&
+    [status[@"trackerRulesRevision"] length] > 0;
+}
 }  // namespace
 
 @implementation ARCChromiumRuntime (PrivateBrowsing)
@@ -705,7 +722,8 @@ shaar_tab *PrivateTab(NSDictionary *entry) {
       "shaar_private_session_open");
   if (![self privateContextEnabled] || !ARCIsCanonicalID(contextID) ||
       !ARCIsCanonicalID(sourceProfileID) || !profile ||
-      [self privateIdentityOccupied:contextID] || !open) {
+      [self privateIdentityOccupied:contextID] || !open ||
+      !self.privatePrivacyAvailable) {
     completion(NO, ARCBridgeError(@"Invalid private probe context or source profile."));
     return;
   }
@@ -727,6 +745,21 @@ shaar_tab *PrivateTab(NSDictionary *entry) {
   state[@"contexts"][contextID] = [@{@"sourceProfileID": sourceProfileID,
     @"session": [NSValue valueWithPointer:session],
     @"windows": [NSMutableSet set]} mutableCopy];
+  __block NSDictionary *readback = nil;
+  [self privatePrivacyStatusForContextID:contextID completion:^(NSDictionary *value) {
+    readback = value;
+  }];
+  if (!PrivatePoliciesReady(readback)) {
+    [state[@"contexts"] removeObjectForKey:contextID];
+    auto close = PrivateSymbol<decltype(&shaar_private_session_close)>(
+        "shaar_private_session_close");
+    if (close) {
+      error = ARCPrivateShaarEmptyError();
+      close(session, &error);
+    }
+    completion(NO, ARCBridgeError(@"Private privacy defaults could not be verified."));
+    return;
+  }
   completion(YES, nil);
 }
 

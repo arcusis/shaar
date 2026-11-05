@@ -2,7 +2,17 @@
 
 Private windows use the pinned engine's primary off-the-record (OTR) profile for their source profile. They share temporary cookies and storage with other private windows for that profile. Regular windows retain their persistent profiles. Closing the last private window releases its OTR profile. Private tabs and cookie allowances are not written to Shaar's workspace or preferences. Private views and their editable bindings keep weak store references; the native host owns the store. The page adapter carries immutable window/context IDs instead of retaining the model, so cached SwiftUI actions and editors cannot extend private-store lifetime. Confirmed closure ends field editing and retires the optional SwiftUI root before clearing the store; see [[Private_Fixture_Readiness]].
 
-New private tabs show a native start page with search using the source profile's selected search engine, the supported protections, and engine limitations. `about:blank` remains an internal engine placeholder; it is not the presented start page or address-field text.
+New private tabs show a native start page with the shared browser search command and live protection status. `about:blank` remains an internal engine placeholder; it is not the presented start page or address-field text. The Privacy & Security settings pane lists the private-window controls. These are engine defaults, not user preference switches. The private site controls retain the exact-origin cookie allowance.
+
+## Shaar private-session defaults (#364)
+
+The Shaar bridge opens a private session for an already loaded regular profile and installs the bundled tracker rules. Before creating a private window, it reads `shaar_private_session_privacy_status` and `shaar_private_session_tracker_status` from that session. Creation fails unless the readback confirms an OTR profile, a global cookie block, HTTPS-Only Mode, disabled referrers, `disable_non_proxied_udp` WebRTC policy without IP exceptions, disabled extensions, and an installed nonempty tracker ruleset. The bridge uses `dlsym` for the new ABI symbol so a missing engine capability fails closed rather than silently claiming protection. It never writes these defaults to a regular profile.
+
+Chromium's cookie content setting governs cookies and site storage. The exact-origin **Allow cookies for this site** control remains temporary for the OTR session. It is scoped to the selected private tab and the granting window; closing that window revokes its allowance.
+
+The hidden Shaar preview probe records the live policy JSON and evaluates each field separately. The hosted Shaar first-tab job also opens an OTR context and requires every policy readback to pass before releasing it. With the shaar.10 test pin, local first-tab policy readback and the broader hidden preview each passed 3/3 runs: all seven OTR checks were active, the preview opened a private window, and every window remained hidden. These reports establish native configuration readback and hidden private-window creation. The existing private privacy fixture exercises cookie and storage blocking, per-site allow/revoke, tracker requests, and normal-window controls through the Ardia path; it does not establish Shaar native behavior. Shaar initial/restart loopback behavior remains a separate verification boundary.
+
+The earlier sections below describe the pinned Ardia path and its limits. They remain relevant while Ardia is the shipping default.
 
 ## Supported protections
 

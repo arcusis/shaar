@@ -389,6 +389,33 @@ struct BrowserSettingsView: View {
         ProfilePrivacySections(profileID: selectedProfileID, backend: profileBackend)
           .id(selectedProfileID)
       }
+      Section {
+        LabeledContent(
+          SettingsL10n.string("Cookies and site storage"),
+          value: SettingsL10n.string("Engine controlled"))
+        LabeledContent(
+          SettingsL10n.string("Trackers"),
+          value: SettingsL10n.string("Engine controlled"))
+        LabeledContent(
+          SettingsL10n.string("HTTPS-only browsing"),
+          value: SettingsL10n.string("Engine controlled"))
+        LabeledContent(
+          SettingsL10n.string("Referrers"),
+          value: SettingsL10n.string("Engine controlled"))
+        LabeledContent(
+          SettingsL10n.string("WebRTC local IP exposure"),
+          value: SettingsL10n.string("Engine controlled"))
+        LabeledContent(
+          SettingsL10n.string("Extensions"),
+          value: SettingsL10n.string("Engine controlled"))
+      } header: {
+        Text(SettingsL10n.string("Private Windows"))
+      } footer: {
+        Text(
+          SettingsL10n.string(
+            "The private start page shows which protections are active. Use site controls to allow cookies for a specific site."
+          ))
+      }
       MacPermissionsSection()
     }.formStyle(.grouped)
       .confirmationDialog(

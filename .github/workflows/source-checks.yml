@@ -375,6 +375,20 @@ jobs:
           jq -e '.passed == true and .backend == "shaar" and .nativeView == true and
             .navigationObserved == true and .allWindowsHidden == true' \
             "$evidence/first-tab.json" >/dev/null
+      - name: Verify Shaar private policy readback in an OTR session
+        run: |
+          app="$PWD/build/Shaar Verification.app"
+          evidence="$PWD/build/ci/shaar-engine-simulation"
+          "$app/Contents/MacOS/ShaarVerification" \
+            --probe-shaar-first-tab --shaar-engine-backend=shaar \
+            --probe-shaar-private-privacy \
+            --probe-framework "$app/Contents/Frameworks/Chromium Framework.framework" \
+            --probe-output "$evidence/private-privacy.json" \
+            --probe-data-dir "$RUNNER_TEMP/shaar-engine-private-privacy" \
+            > "$evidence/private-privacy.log" 2>&1
+          jq -e '.passed == true and .backend == "shaar" and .allWindowsHidden == true and
+            (.privatePolicyChecks | length == 7 and all(.[]; . == true))' \
+            "$evidence/private-privacy.json" >/dev/null
       - uses: ./.github/actions/ci-evidence
         if: always()
         with:

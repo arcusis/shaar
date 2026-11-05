@@ -99,6 +99,7 @@ final class SiteControlsModel: Identifiable {
   let target: SiteControlTarget
   private(set) var security: SiteSecurity
   private(set) var permissionValues: [SitePermission: SitePermissionValue] = [:]
+  private(set) var savingPermissions: Set<SitePermission> = []
   private(set) var runningAction: SiteAction?
   private(set) var failure: String?
   @ObservationIgnored private weak var backend: SiteControlBackend?
@@ -132,7 +133,9 @@ final class SiteControlsModel: Identifiable {
   }
 
   func setPermission(_ permission: SitePermission, allowed: Bool) async {
-    guard let backend else { return }
+    guard let backend, !savingPermissions.contains(permission) else { return }
+    savingPermissions.insert(permission)
+    defer { savingPermissions.remove(permission) }
     let previous = permissionValues[permission]
     permissionValues[permission] = allowed ? .allow : .block
     do {

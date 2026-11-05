@@ -106,6 +106,16 @@ private func orderedSession() throws -> BrowserSession {
   #expect(restored == session)
 }
 
+@Test func cyclingSpacesWrapsLargeOffsetsWithoutOverflow() {
+  var session = BrowserSession.fresh()
+  let firstSpace = session.spaces[0].id
+  session.selectSpace(session.spaces[1].id)
+
+  session.cycleSpace(by: Int.max)
+
+  #expect(session.selectedSpaceID == firstSpace)
+}
+
 @Test func repeatedMovesKeepAllDocumentsAndOriginalProfileOwners() throws {
   var session = try orderedSession()
   let originals = Dictionary(

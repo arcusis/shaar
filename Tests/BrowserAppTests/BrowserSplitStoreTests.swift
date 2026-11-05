@@ -29,6 +29,35 @@ final class BrowserSplitStoreTests: XCTestCase {
     XCTAssertTrue(store.session.selectedSpace.tabs.contains { $0.id == third })
   }
 
+  func testChoosingExistingTabCancelsPendingSplitPlacement() throws {
+    var session = BrowserSession.fresh()
+    let first = try XCTUnwrap(session.open(URL(string: "https://one.example")!))
+    let second = try XCTUnwrap(session.open(URL(string: "https://two.example")!))
+    let store = BrowserStore(session: session)
+    let space = store.session.selectedSpaceID
+
+    store.openSplitPane(beside: first, edge: .right)
+    XCTAssertNotNil(store.pendingSplitPlacement)
+    store.perform(.tab(space: space, tab: second))
+    XCTAssertNil(store.pendingSplitPlacement)
+
+    store.perform(.open(URL(string: "https://later.example")!))
+    XCTAssertTrue(store.session.selectedSpace.splits.isEmpty)
+  }
+
+  func testSwitchingSpaceCancelsPendingSplitPlacement() throws {
+    var session = BrowserSession.fresh()
+    let first = try XCTUnwrap(session.open(URL(string: "https://one.example")!))
+    let otherSpace = session.spaces[1].id
+    let store = BrowserStore(session: session)
+
+    store.openSplitPane(beside: first, edge: .right)
+    store.perform(.space(otherSpace))
+
+    XCTAssertEqual(store.session.selectedSpaceID, otherSpace)
+    XCTAssertNil(store.pendingSplitPlacement)
+  }
+
   func testDroppingTabsBuildsAndSeparatesSplits() throws {
     var session = BrowserSession.fresh()
     let ids = try (0..<5).map {

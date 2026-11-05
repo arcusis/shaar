@@ -50,13 +50,22 @@ public enum CleanLink {
   }
 
   private static func googleRedirectDestination(_ components: URLComponents) -> URL? {
-    guard isDomain(components.host?.lowercased() ?? "", in: ["google.com"]),
+    guard isGoogleDomain(components.host?.lowercased() ?? ""),
       components.path == "/url",
       let value = components.queryItems?.first(where: { $0.name == "q" })?.value,
       let destination = URL(string: value),
       NavigationInput.isWebURL(destination)
     else { return nil }
     return destination
+  }
+
+  private static func isGoogleDomain(_ host: String) -> Bool {
+    let labels = host.split(separator: ".")
+    guard let last = labels.last, labels.count >= 2 else { return false }
+    let previous = labels[labels.count - 2]
+    if previous == "google" { return last == "com" || last.count == 2 }
+    return labels.count >= 3 && labels[labels.count - 3] == "google"
+      && (previous == "co" || previous == "com") && last.count == 2
   }
 
   /// True when any dot-separated label of the host is one of `names`, as in `www.amazon.co.uk`.

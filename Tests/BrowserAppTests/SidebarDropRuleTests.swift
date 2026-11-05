@@ -122,6 +122,26 @@ struct SidebarDropRuleTests {
     try store.session.validate()
   }
 
+  @Test func crossProfileFavoriteDropExplainsTheBoundary() throws {
+    let store = BrowserStore()
+    let source = store.session.selectedSpace
+    let other = try #require(store.session.spaces.first { $0.id != source.id })
+    let created = store.session.addFavorite(
+      profileID: source.profileID, originalURL: URL(string: "https://favorite.example")!)
+    let favorite = try #require(created)
+    let payload = ProfileFavoriteDrag(
+      profileID: source.profileID, dragSessionID: store.dragSessionID,
+      favoriteID: favorite, favoriteIDs: store.profileFavorites.map(\.id))
+    let before = store.session
+
+    #expect(!store.acceptSidebarDrop(.favorite(payload), into: other.id))
+    #expect(store.session == before)
+    #expect(store.sidebarNotice == "Favorites can move only between spaces sharing a profile.")
+    #expect(store.acceptSidebarDrop(.favorite(payload), into: source.id, pinned: false))
+    #expect(store.sidebarNotice == nil)
+    try store.session.validate()
+  }
+
   @Test func stackMovesPreserveLayoutOrderAndFolderMembership() throws {
     let (store, space, tabs) = fixture()
     store.splitTabs(tabs[0], tabs[1])

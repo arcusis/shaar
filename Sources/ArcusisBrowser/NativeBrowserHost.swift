@@ -684,18 +684,30 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
 
   private func openExternalURL(_ url: URL) {
     guard
-      let context = activeContext ?? workspace.workspace.focusedWindowID.flatMap({ contexts[$0] })
-        ?? contexts.values.first
+      let route = MiniLinkRoute.route(
+        url, inMainWindow: UserDefaults.standard.bool(forKey: "externalLinksInMainWindow"))
     else { return }
-    switch MiniLinkRoute.route(
-      url, inMainWindow: UserDefaults.standard.bool(forKey: "externalLinksInMainWindow"))
+    let context: NativeBrowserContext
+    if let existing = activeContext ?? workspace.workspace.focusedWindowID.flatMap({ contexts[$0] })
+      ?? contexts.values.first
     {
+      context = existing
+    } else {
+      do {
+        let id = try newWindow()
+        guard let created = contexts[id] else { throw WorkspaceError.invalidState }
+        context = created
+      } catch {
+        report(error)
+        return
+      }
+    }
+    switch route {
     case .main(let url):
       context.store.perform(.open(url))
-      context.window.makeKeyAndOrderFront(nil)
+      if presentation == .visible { context.window.makeKeyAndOrderFront(nil) }
     case .mini(let url):
       openMiniWindow(url: url, context: context)
-    case nil: break
     }
   }
 

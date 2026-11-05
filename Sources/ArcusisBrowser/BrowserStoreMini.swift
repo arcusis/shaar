@@ -9,7 +9,10 @@ extension BrowserStore {
   @discardableResult
   func receiveMiniTab(_ tab: BrowserTab, in spaceID: UUID, profileID: UUID, archive: Bool) -> Bool {
     updateMiniSession { session in
-      guard session.spaces.contains(where: { $0.id == spaceID && $0.profileID == profileID }),
+      guard
+        let destination = session.spaces.first(where: {
+          $0.id == spaceID && $0.profileID == profileID
+        }),
         NavigationInput.isWebURL(tab.url)
       else { return false }
       let previousSpace = session.selectedSpaceID
@@ -18,6 +21,11 @@ extension BrowserStore {
       _ = session.updateTab(id, url: tab.url, title: tab.title)
       if archive {
         session.closeTab(id)
+        if let favoriteID = destination.selectedFavoriteID {
+          _ = session.selectFavorite(favoriteID, in: spaceID)
+        } else if let tabID = destination.selectedTabID {
+          session.selectTab(tabID, in: spaceID)
+        }
         session.selectSpace(previousSpace)
       }
       return true

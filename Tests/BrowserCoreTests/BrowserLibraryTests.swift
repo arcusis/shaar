@@ -107,6 +107,22 @@ import Testing
   #expect(entry.title == "example.com")
 }
 
+@Test func whitespaceHistoryTitleUsesHostInCommandResults() throws {
+  let session = BrowserSession.fresh()
+  let entry = try BrowserHistoryEntry(
+    profileID: session.selectedSpace.profileID,
+    payload: [
+      "u": "https://docs.example.com/read", "t": " \t\n ", "n": 1, "v": [1000],
+    ])
+
+  let sections = CommandLauncher.sections(
+    for: "docs.example.com", filter: .history, in: session,
+    sources: CommandSources(history: [entry]))
+
+  #expect(entry.title == "docs.example.com")
+  #expect(sections.results.first?.title == "docs.example.com")
+}
+
 @Test func launcherLibraryResultsStayInSelectedProfileAndPreferBookmarksToDuplicateHistory() throws
 {
   var session = BrowserSession.fresh()

@@ -375,9 +375,10 @@ typedef struct {
   int selected_native_tab;
   int displayed_native_web_contents;
   int context_is_private;
+  int scope_owns_tab;
 } shaar_tab_probe_state;
 SHAAR_EXPORT shaar_error_code shaar_tab_get_probe_state(
-    shaar_engine *, shaar_window *, shaar_tab *,
+    shaar_engine *, shaar_scope, shaar_window *, shaar_tab *,
     shaar_tab_probe_state *out, shaar_error *error);
 /* Borrowed until POPUP_CLOSE or its owning tab or window closes. */
 SHAAR_EXPORT void *shaar_extension_popup_view(

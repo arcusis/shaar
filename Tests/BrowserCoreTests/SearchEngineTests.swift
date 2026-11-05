@@ -54,6 +54,15 @@ import Testing
   }
 }
 
+@Test func bareLocalhostWithQueryOrFragmentNavigates() {
+  #expect(
+    NavigationInput.address(for: "localhost?view=dashboard")?.absoluteString
+      == "https://localhost?view=dashboard")
+  #expect(
+    NavigationInput.address(for: "localhost#status")?.absoluteString
+      == "https://localhost#status")
+}
+
 @Test func commandSearchKeepsGoogleDefaultAndAcceptsSelectedEngine() throws {
   let session = BrowserSession.fresh()
   let defaultResult = try #require(

@@ -59,7 +59,8 @@ public enum SiteOrigin {
     var components = URLComponents()
     components.scheme = scheme
     components.host = host
-    components.port = url.port
+    let defaultPort = scheme == "https" ? 443 : 80
+    if url.port != defaultPort { components.port = url.port }
     return components.string
   }
 }

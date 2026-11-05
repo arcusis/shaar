@@ -12,7 +12,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[2]
-PATCH = ROOT / "ThirdParty/ChromiumEngine/patches/0006-shaar-only-framework.patch"
+PATCH = ROOT / "ThirdParty/ChromiumEngine/patches/0005-private-extension-tab-helpers.patch"
 MANIFEST = ROOT / "ThirdParty/ChromiumEngine/source-build.json"
 
 
@@ -31,9 +31,10 @@ class PrivateExtensionTabHelpersTests(unittest.TestCase):
             self.assertRegex(source, rf"\+\s+extensions::{helper}::CreateForWebContents")
 
     def test_patch_is_pinned_in_source_build(self):
-        entry = json.loads(MANIFEST.read_text())["finalPatch"]
-        self.assertEqual(entry["file"], str(PATCH.relative_to(ROOT)))
-        self.assertEqual(entry["sha256"], hashlib.sha256(PATCH.read_bytes()).hexdigest())
+        patches = json.loads(MANIFEST.read_text())["patches"]
+        matching = [entry for entry in patches if entry["file"] == str(PATCH.relative_to(ROOT))]
+        self.assertEqual(len(matching), 1)
+        self.assertEqual(matching[0]["sha256"], hashlib.sha256(PATCH.read_bytes()).hexdigest())
 
 
 if __name__ == "__main__":

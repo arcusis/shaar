@@ -27,6 +27,8 @@ private final class FakeSiteBackend: SiteControlBackend {
   var suspendFirstWrite = false
   var writeCount = 0
   var finishFirstWrite: CheckedContinuation<Void, Never>?
+  var suspendNextRead = false
+  var finishRead: CheckedContinuation<Void, Never>?
 
   func security(of target: SiteControlTarget) -> SiteSecurity { securityValue }
 
@@ -34,7 +36,12 @@ private final class FakeSiteBackend: SiteControlBackend {
     SitePermissionValue]
   {
     if failsReads { throw FakeFailure() }
-    return values
+    let snapshot = values
+    if suspendNextRead {
+      suspendNextRead = false
+      await withCheckedContinuation { continuation in finishRead = continuation }
+    }
+    return snapshot
   }
 
   func setPermission(_ permission: SitePermission, allowed: Bool, for target: SiteControlTarget)
@@ -95,6 +102,22 @@ private func target(_ address: String) -> SiteControlTarget {
   await model.setPermission(.microphone, allowed: true)
   #expect(model.permissionValues[.microphone] == .ask)
   #expect(model.failure == "The engine refused.")
+}
+
+@MainActor @Test func latePermissionRefreshDoesNotUndoNewerToggle() async {
+  let backend = FakeSiteBackend()
+  let model = SiteControlsModel(target: target("https://mail.example"), backend: backend)
+  await model.load()
+  backend.suspendNextRead = true
+  let refresh = Task { await model.load() }
+  for _ in 0..<100 where backend.finishRead == nil { await Task.yield() }
+  #expect(backend.finishRead != nil)
+
+  await model.setPermission(.camera, allowed: true)
+  #expect(model.permissionValues[.camera] == .allow)
+  backend.finishRead?.resume()
+  await refresh.value
+  #expect(model.permissionValues[.camera] == .allow)
 }
 
 @MainActor @Test func siteControlsDoNotOverlapWritesToTheSamePermission() async {

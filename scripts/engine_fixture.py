@@ -484,8 +484,21 @@ MEDIA_CLIP = Path(__file__).resolve().parent.parent / 'Tests/Fixtures/Media/seek
 
 
 class Fixture(http.server.BaseHTTPRequestHandler):
+    cross_site_origin = None
+
     def do_GET(self):
         path = urlparse(self.path).path
+        if path == '/cross-site-a':
+            destination = f'{self.cross_site_origin}/cross-site-b'
+            self.html(f'''<!doctype html><meta charset="utf-8"><title>Origin A</title>
+<a id="plain" href="{destination}">Plain link</a>
+<a id="blank" target="_blank" href="{destination}" onclick="document.documentElement.dataset.clicked='blank'">New tab link</a>
+<button id="popup" onclick="document.documentElement.dataset.clicked='popup';window.open('{destination}', '_blank')">Open window</button>'''.encode(),
+                      csp="default-src 'self'; script-src 'unsafe-inline'")
+            return
+        if path == '/cross-site-b':
+            self.html(b'<!doctype html><meta charset="utf-8"><title>Origin B</title><main id="destination">Cross-site destination loaded</main>')
+            return
         if path == '/devmode-next':
             self.html(b'<!doctype html><title>Next fixture</title><div id="__next"></div><script src="/_next/static/chunk.js"></script>',
                       csp=PAGE_CSP.replace("script-src 'unsafe-inline'", "script-src 'self' 'unsafe-inline'"))
@@ -817,6 +830,8 @@ def argument_parser():
                       help="SIGKILL the exact probe PID while it saves a managed workspace, then verify the restored session")
     mode.add_argument("--basic-browsing", action="store_true",
                       help="Run the normal-window address/search/tab/close/reopen/quit smoke")
+    mode.add_argument("--reload-window", action="store_true",
+                      help="Run hidden two-origin link, failed-page Reload, and closed-window recovery probe")
     mode.add_argument("--dev-mode", action="store_true",
                       help="Prove Next.js and Vite detection on hidden local fixture tabs")
     parser.add_argument("--probe-phase", choices=("initial", "restart"),
@@ -831,6 +846,7 @@ def build_engine_probe_arguments(executable, root, fixture_url, phase, *, includ
                                  private_window_run_id=None, quit_exit=False,
                                  quit_pending_navigation=False, session_recovery=False,
                                  private_multitab=False, basic_browsing=False,
+                                 reload_window=False,
                                  dev_mode=False):
     arguments = [str(executable), "--probe-data-dir", str(root),
                  "--probe-url", fixture_url, "--probe-phase", phase,
@@ -862,6 +878,8 @@ def build_engine_probe_arguments(executable, root, fixture_url, phase, *, includ
         arguments.append('--probe-session-recovery')
     if basic_browsing:
         arguments.append('--probe-basic-browsing')
+    if reload_window:
+        arguments.append('--probe-reload-window')
     if dev_mode:
         arguments.append('--probe-dev-mode-only')
     return arguments
@@ -1573,6 +1591,7 @@ def main(argv=None):
     if split_phase and (options.bitwarden or options.bitwarden_onboarding_control or options.abrupt_restart
                         or options.abrupt_control or options.saved_tab_capacity or options.external_app_consent
                         or options.quit_exit or options.session_recovery or options.basic_browsing
+                        or options.reload_window
                         or options.dev_mode
                         or not options.probe_root):
         raise ValueError("Split probe phases require only the baseline or private-window mode and a probe root")
@@ -1597,6 +1616,8 @@ def main(argv=None):
         print('SESSION RECOVERY ONLY: SIGKILL of the exact probe PID during saves, then restore', flush=True)
     if options.basic_browsing:
         print('BASIC BROWSING: hidden normal window, authored pages, real renderer captures, clean quit', flush=True)
+    if options.reload_window:
+        print('RELOAD WINDOW: hidden two-origin links and closed-window Reload', flush=True)
     if options.dev_mode:
         print('DEV MODE: hidden local Next.js and Vite fixture pages; no desktop window', flush=True)
     app = VERIFICATION_APP.resolve()
@@ -1641,6 +1662,11 @@ def main(argv=None):
                         dirs_exist_ok=True)
     server = http.server.ThreadingHTTPServer(
         ("127.0.0.1", saved_phase_state["port"] if saved_phase_state else 0), Fixture)
+    cross_site_server = None
+    if options.reload_window:
+        cross_site_server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Fixture)
+        Fixture.cross_site_origin = f"http://127.0.0.1:{cross_site_server.server_port}"
+        threading.Thread(target=cross_site_server.serve_forever, daemon=True).start()
     server_port = server.server_port
     if split_phase and options.probe_phase == "initial":
         (root / "engine-phase-state.json").write_text(json.dumps({
@@ -1658,7 +1684,8 @@ def main(argv=None):
     failures = []
     try:
         phases = ((options.probe_phase,) if split_phase else
-                  ("initial",) if options.basic_browsing or options.dev_mode else ("initial", "restart"))
+                  ("initial",) if options.basic_browsing or options.reload_window or options.dev_mode
+                  else ("initial", "restart"))
         for phase in phases:
             if options.private_window and phase == 'restart' and failures:
                 print('SKIPPED restart: initial fixture failed; no valid seeded restart baseline', flush=True)
@@ -1675,7 +1702,8 @@ def main(argv=None):
                 quit_pending_navigation=options.quit_pending_navigation,
                 session_recovery=options.session_recovery,
                 private_multitab=options.private_multitab,
-                basic_browsing=options.basic_browsing, dev_mode=options.dev_mode)
+                basic_browsing=options.basic_browsing, reload_window=options.reload_window,
+                dev_mode=options.dev_mode)
             with (root / f"{phase}.log").open("w") as log:
                 process = subprocess.Popen(arguments, stdout=log, stderr=log, start_new_session=True, env=probe_env)
                 print(f"Probe PID: {process.pid}", flush=True)
@@ -1755,6 +1783,21 @@ def main(argv=None):
                         or not isinstance(checks, list) or not required.issubset(checks)
                         or any(not isinstance(check, str) or not check for check in checks)):
                     raise RuntimeError('Basic browsing report has wrong phase, mode, or check evidence')
+            elif options.reload_window:
+                checks = report.get('checks') if isinstance(report, dict) else None
+                required = {
+                    'plain reaches the second origin without a failed page or visible window',
+                    'target blank reaches the second origin without a failed page or visible window',
+                    'window.open reaches the second origin without a failed page or visible window',
+                    'failed-page Reload recreates a destroyed pinned tab',
+                    'Reload after engine-window closure rehomes the tab without quitting',
+                    'clean quit closes the normal window and engine client',
+                }
+                if (code != 0 or not isinstance(report, dict) or report.get('phase') != phase
+                        or report.get('probeMode') != 'reload-window' or report.get('passed') is not True
+                        or report.get('localFixturesPassed') is not True
+                        or not isinstance(checks, list) or not required.issubset(checks)):
+                    raise RuntimeError(f"Reload window report failed: {report.get('error') if isinstance(report, dict) else report}")
             elif options.dev_mode:
                 evidence_path = root / f'{phase}-dev-mode.json'
                 try:
@@ -1800,6 +1843,9 @@ def main(argv=None):
         STALL_RELEASE.set()
         server.shutdown()
         server.server_close()
+        if cross_site_server:
+            cross_site_server.shutdown()
+            cross_site_server.server_close()
     if split_phase and options.probe_phase == "initial":
         listener_closed = verify_fixture_listener_closed(server_port)
         if not listener_closed:

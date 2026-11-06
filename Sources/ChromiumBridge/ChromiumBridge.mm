@@ -120,6 +120,8 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 
 - (int)runWithDataDirectory:(NSURL *)directory testing:(BOOL)testing { return 1; }
 - (BOOL)closeWindowID:(NSString *)windowID { return NO; }
+- (BOOL)isWindowOpenID:(NSString *)windowID { return YES; }
+- (void)retireClosedWindowID:(NSString *)windowID {}
 - (NSView *)hostViewForWindowID:(NSString *)windowID { return nil; }
 - (NSString *)windowIDForTabID:(NSString *)tabID { return nil; }
 - (int)chromeWindowIDForProfileID:(NSString *)profileID windowID:(NSString *)windowID { return -1; }

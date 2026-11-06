@@ -69,6 +69,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   let events: BrowserRuntimeEvents
   let workspace: BrowserWorkspaceStore
   private(set) var contexts: [UUID: NativeBrowserContext] = [:]
+  private var appClosingWindows: Set<UUID> = []
   private(set) var menu: NSMenu?
   private(set) var lastError: String?
   private let presentation: Presentation
@@ -530,10 +531,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       if store.session.selectedPage != nil {
         store.closeCurrentPage()
       } else {
-        events.runtime.closeWindowID(context.nativeID)
+        requestCloseWindow(context)
       }
     case .addFavorite: _ = store.addCurrentPageAsFavorite()
-    case .closeWindow: events.runtime.closeWindowID(context.nativeID)
+    case .closeWindow: requestCloseWindow(context)
     case .reopenClosed: store.reopenLastClosedTab()
     case .recentlyClosed: store.showRecentlyClosed()
     case .bookmarkPage: store.bookmarkCurrentPage()
@@ -860,7 +861,9 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     }
   }
 
-  private func attach(_ id: UUID, source: NSRect?, reconcile: Bool = true) throws {
+  private func attach(
+    _ id: UUID, source: NSRect?, reconcile: Bool = true, nativeWindowID: String? = nil
+  ) throws {
     guard let store = workspace.stores[id], let record = workspace.workspace.window(id) else {
       throw WorkspaceError.unknownWindow
     }
@@ -872,7 +875,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       claimedPrimary = true
       nativeID = runtime.primaryWindowID
     } else {
-      nativeID = id.uuidString
+      nativeID = nativeWindowID ?? id.uuidString
       try runtime.createWindowID(nativeID)
       creationGuard = NativeWindowCreationGuard { _ = runtime.closeWindowID(nativeID) }
     }
@@ -918,6 +921,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       run: { [weak self] name in self?.performLauncherCommand(name, inWindow: id) })
     store.onNewProfile = { [weak self] spaceID in self?.presentNewProfile(assigningSpace: spaceID) }
     engine.onClosed = { [weak self] quitting in self?.closed(id, quitting: quitting) }
+    engine.onNativeWindowLost = { [weak self] in self?.recoverLostWindow(id) }
     observe(context)
     if reconcile { engine.reconcile() }
   }
@@ -1047,6 +1051,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       ) { [weak self, weak context] _ in
         MainActor.assumeIsolated {
           guard let self, let context else { return }
+          self.appClosingWindows.insert(context.id)
           self.events.windowClosed(context.nativeID, quitting: false)
         }
       })
@@ -1108,7 +1113,16 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
   }
 
   private func closed(_ id: UUID, quitting: Bool) {
+    if !quitting, !appClosingWindows.contains(id),
+      let context = contexts[id],
+      let selected = context.store.session.selectedPage?.tab.id,
+      context.store.rendererFailures[selected] != nil
+    {
+      recoverLostWindow(id)
+      return
+    }
     guard let context = contexts.removeValue(forKey: id) else { return }
+    appClosingWindows.remove(id)
     engineRequestedWindows.remove(context.nativeID)
     stopObserving(context)
     saveGeometry(context)
@@ -1118,6 +1132,30 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       workspace.persistSnapshot()
     }
     onClosed?(id, quitting)
+  }
+
+  private func requestCloseWindow(_ context: NativeBrowserContext) {
+    appClosingWindows.insert(context.id)
+    if !events.runtime.closeWindowID(context.nativeID) {
+      appClosingWindows.remove(context.id)
+    }
+  }
+
+  private func recoverLostWindow(_ id: UUID) {
+    guard let context = contexts[id], !events.runtime.isQuitting else { return }
+    let frame = context.window.frame
+    context.engine.onClosed = nil
+    stopObserving(context)
+    context.window.orderOut(nil)
+    events.runtime.retireClosedWindowID(context.nativeID)
+    events.windowClosed(context.nativeID, quitting: false)
+    contexts[id] = nil
+    do {
+      try attach(id, source: frame, nativeWindowID: UUID().uuidString)
+      if presentation == .visible { contexts[id]?.window.makeKeyAndOrderFront(nil) }
+    } catch {
+      report(error)
+    }
   }
 
   private func stopObserving(_ context: NativeBrowserContext) {

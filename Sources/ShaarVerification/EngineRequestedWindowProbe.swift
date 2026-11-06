@@ -135,6 +135,9 @@ final class EngineRequestedWindowProbe {
     try expect(
       host.workspace.workspace.window(page.id) == nil && host.contexts[beta.id] === beta,
       "script popup closure removes only its confirmed managed window")
+    try expect(
+      page.engine.isClosed && !page.store.reloadCurrentPage(),
+      "closed engine popup cannot reload its saved tab through a retired window handle")
 
     var retained: UUID?
     for type in ["normal", "popup"] {

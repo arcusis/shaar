@@ -932,6 +932,15 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     let center = NotificationCenter.default
     context.observers.append(
       center.addObserver(
+        forName: NSWindow.willCloseNotification, object: context.window, queue: .main
+      ) { [weak self, weak context] _ in
+        MainActor.assumeIsolated {
+          guard let self, let context else { return }
+          self.events.windowClosed(context.nativeID, quitting: false)
+        }
+      })
+    context.observers.append(
+      center.addObserver(
         forName: NSWindow.didBecomeKeyNotification, object: context.window, queue: .main
       ) {
         [weak self, weak context] _ in

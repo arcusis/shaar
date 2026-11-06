@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -31,6 +32,7 @@ VISUAL_FILTERS = (
 )
 ENGINE_MODES = ("baseline", "dev-mode", "private-multitab", "private-window", "quit-exit", "session-recovery")
 MINIMUM_REPETITIONS = {"private-window": 3, "quit-exit": 3}
+SWIFT_TEST_CRASH_PROCESSES = ("swiftpm-testing-helper", "ArcusisBrowserPackageTests")
 
 
 def require_hosted_mac() -> None:
@@ -52,12 +54,42 @@ def prepare_coverage(cwd: Path, scratch: str) -> Path:
 def run_swift_tests(checks: Commands, name: str, arguments: list[str], *, cwd: Path = ROOT, env=None) -> int:
     for report in (*checks.directory.glob("swift*.xml"), checks.directory / "xctest.xml"):
         report.unlink(missing_ok=True)
+    started = time.time()
     with registered_sidebar_type():
         status = checks.run(name, arguments, cwd=cwd, env=env)
+    if status and "unexpected signal code" in (checks.directory / f"{name}.log").read_text():
+        copy_swift_test_crash_reports(checks.directory, started)
     reports = checks.run("test-reports", [sys.executable, str(ROOT / "scripts/ci-swift-reports.py"),
                         "--log", str(checks.directory / f"{name}.log"),
                         "--directory", str(checks.directory)])
     return int(bool(status or reports))
+
+
+def copy_swift_test_crash_reports(directory: Path, started: float) -> None:
+    report_root = Path.home() / "Library/Logs/DiagnosticReports"
+    deadline = time.monotonic() + 5
+    reports = []
+    while time.monotonic() < deadline:
+        candidates = [path for folder in (report_root, report_root / "Retired")
+                      for process in SWIFT_TEST_CRASH_PROCESSES
+                      for path in folder.glob(f"{process}-*.ips")]
+        for path in sorted(candidates):
+            try:
+                if path.stat().st_mtime >= started:
+                    reports.append(path)
+            except OSError:
+                continue
+        if reports:
+            break
+        time.sleep(0.25)
+    copied = 0
+    for index, path in enumerate(reports[:4], start=1):
+        try:
+            shutil.copyfile(path, directory / f"swift-test-crash-{index}.ips")
+            copied += 1
+        except OSError:
+            continue
+    print(f"Swift Testing crash reports captured: {copied}", flush=True)
 
 
 def test_commands(checks: Commands, *, cwd: Path = ROOT, scratch: str = ".build") -> int:

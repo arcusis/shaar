@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import AVKit
 import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
@@ -11,6 +12,15 @@ struct ShaarReproPanel: View {
   let directory: URL?
   let onSaved: (URL) -> Void
   @State private var importing = false
+  @State private var viewerTab = ViewerTab.console
+
+  private enum ViewerTab: String, CaseIterable {
+    case video = "Video"
+    case console = "Console"
+    case network = "Network"
+    case dom = "DOM"
+    case environment = "Environment"
+  }
 
   var body: some View {
     HStack(spacing: 0) {
@@ -42,7 +52,17 @@ struct ShaarReproPanel: View {
         if let failure = model.failure {
           Text(failure).font(.system(size: 11)).foregroundStyle(.red)
         }
-        Spacer(minLength: 4)
+        if let contents = model.viewerContents {
+          Picker(ShellL10n.string("Bundle viewer"), selection: $viewerTab) {
+            ForEach(ViewerTab.allCases, id: \.self) { tab in
+              Text(ShellL10n.string(tab.rawValue)).tag(tab)
+            }
+          }
+          .labelsHidden().pickerStyle(.segmented).controlSize(.small)
+          viewer(contents).frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+          Spacer(minLength: 4)
+        }
         Text(
           ShellL10n.string(
             "Cookies, auth headers and DOM form values are redacted. Video and console may show sensitive text. No upload."
@@ -66,6 +86,95 @@ struct ShaarReproPanel: View {
       }
     }
     .accessibilityIdentifier("shaar.devtools.reproPanel")
+  }
+
+  @ViewBuilder private func viewer(_ contents: ShaarReproContents) -> some View {
+    switch viewerTab {
+    case .video:
+      if let videoURL = model.videoURL {
+        VideoPlayer(player: AVPlayer(url: videoURL))
+          .accessibilityIdentifier("shaar.devtools.reproVideo")
+      }
+    case .console:
+      ScrollView {
+        LazyVStack(alignment: .leading, spacing: 0) {
+          ForEach(contents.console.indices, id: \.self) { index in
+            let row = contents.console[index]
+            HStack(alignment: .top, spacing: 8) {
+              Text(row.level.uppercased()).frame(width: 60, alignment: .leading)
+                .foregroundStyle(.secondary)
+              Text(row.message).frame(maxWidth: .infinity, alignment: .leading)
+              Text(row.source).foregroundStyle(.secondary)
+            }
+            .font(.system(size: 10, design: .monospaced))
+            .padding(.vertical, 6)
+            Divider()
+          }
+        }
+      }
+      .accessibilityIdentifier("shaar.devtools.reproConsole")
+    case .network:
+      ScrollView {
+        LazyVStack(alignment: .leading, spacing: 0) {
+          ForEach(contents.network.indices, id: \.self) { index in
+            let row = contents.network[index]
+            HStack(spacing: 8) {
+              Text(row.request.method).frame(width: 48, alignment: .leading)
+              Text(row.request.url).lineLimit(1).truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+              Text(String(row.response.status))
+            }
+            .font(.system(size: 10, design: .monospaced))
+            .padding(.vertical, 6)
+            Divider()
+          }
+        }
+      }
+      .accessibilityIdentifier("shaar.devtools.reproNetwork")
+    case .dom:
+      ScrollView {
+        Text(Self.domText(contents.dom))
+          .font(.system(size: 10, design: .monospaced))
+          .textSelection(.enabled)
+          .frame(maxWidth: .infinity, alignment: .leading)
+      }
+      .accessibilityIdentifier("shaar.devtools.reproDOM")
+    case .environment:
+      ScrollView {
+        VStack(alignment: .leading, spacing: 8) {
+          environmentRow("URL", contents.manifest.environment.url)
+          environmentRow("Shaar", contents.manifest.environment.shaarVersion)
+          environmentRow("Engine", contents.manifest.environment.engineVersion)
+          environmentRow("OS", contents.manifest.environment.operatingSystem)
+          environmentRow(
+            "Viewport",
+            "\(contents.manifest.environment.viewportWidth) × \(contents.manifest.environment.viewportHeight)"
+          )
+          environmentRow("User agent", contents.manifest.environment.userAgent)
+        }
+      }
+      .accessibilityIdentifier("shaar.devtools.reproEnvironment")
+    }
+  }
+
+  private func environmentRow(_ name: String, _ value: String) -> some View {
+    HStack(alignment: .top, spacing: 8) {
+      Text(ShellL10n.string(name)).foregroundStyle(.secondary)
+        .frame(width: 75, alignment: .leading)
+      Text(value).textSelection(.enabled)
+    }.font(.system(size: 10, design: .monospaced))
+  }
+
+  private static func domText(_ root: ShaarReproDOMNode) -> String {
+    var lines: [String] = []
+    func append(_ node: ShaarReproDOMNode, depth: Int) {
+      guard lines.count < 2_000 else { return }
+      let indent = String(repeating: "  ", count: min(depth, 32))
+      lines.append(indent + "<" + node.tag + "> " + node.text)
+      for child in node.children { append(child, depth: depth + 1) }
+    }
+    append(root, depth: 0)
+    return lines.joined(separator: "\n")
   }
 
   private var capability: some View {

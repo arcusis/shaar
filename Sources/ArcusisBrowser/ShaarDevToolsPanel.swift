@@ -135,6 +135,12 @@ struct ShaarDevToolsPanel: View {
           inspector?.engine?.downloads.registerGeneratedFile(
             file, profileID: model.target.profileID)
         })
+    case .viewports:
+      if model.viewports.available {
+        ShaarViewportsPanel(model: model.viewports)
+      } else {
+        unavailablePanel
+      }
     }
   }
 
@@ -177,6 +183,7 @@ struct ShaarDevToolsPanel: View {
     if model.section == .performance { return "Live Performance needs engine shaar.17" }
     if model.section == .sources { return "Live Sources need engine shaar.17" }
     if model.section == .repro { return "Repro capture needs engine support" }
+    if model.section == .viewports { return "Live Viewports need engine support" }
     return "Live console and network need engine shaar.17"
   }
 
@@ -218,6 +225,11 @@ struct ShaarDevToolsPanel: View {
         : "Sources need engine shaar.17"
     }
     if model.section == .repro { return "Repro data is scoped to this tab" }
+    if model.section == .viewports {
+      return model.viewports.available
+        ? "Viewports are scoped to this tab"
+        : "Viewports need engine support"
+    }
     guard model.streamAvailable else { return "Console commands need engine shaar.17" }
     if model.section == .network { return "Network requests are scoped to this tab" }
     return "Open Console to evaluate JavaScript"

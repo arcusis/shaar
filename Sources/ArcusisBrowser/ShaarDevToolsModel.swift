@@ -13,6 +13,7 @@ enum ShaarDevToolsSection: String, CaseIterable {
   case performance = "Performance"
   case sources = "Sources"
   case repro = "Repro"
+  case viewports = "Viewports"
 }
 
 enum ShaarDevToolsDock: String, CaseIterable {
@@ -152,6 +153,7 @@ final class ShaarDevToolsModel {
   let performance: ShaarPerformanceModel
   let sources: ShaarSourcesModel
   let repro: ShaarReproModel
+  let viewports: ShaarViewportsModel
   @ObservationIgnored private let transport: any ShaarDevToolsEventTransport
   @ObservationIgnored private var eventTask: Task<Void, Never>?
   @ObservationIgnored private var streamGeneration = 0
@@ -162,7 +164,8 @@ final class ShaarDevToolsModel {
     transport: any ShaarDevToolsEventTransport = ShaarDevToolsPendingTransport(),
     phase2Transport: any ShaarPhase2Transport = ShaarPhase2PendingTransport(),
     sourceLoader: @escaping @Sendable (URL) async throws -> Data = DevelopmentSourceHTTP.load,
-    reproTransport: any ShaarReproTransport = ShaarReproPendingTransport()
+    reproTransport: any ShaarReproTransport = ShaarReproPendingTransport(),
+    viewportsTransport: any ShaarViewportsTransport = ShaarViewportsPendingTransport()
   ) {
     self.target = target
     self.transport = transport
@@ -172,6 +175,7 @@ final class ShaarDevToolsModel {
     performance = ShaarPerformanceModel(target: target, phase2: phase2)
     sources = ShaarSourcesModel(phase2: phase2, loadSourceData: sourceLoader)
     repro = ShaarReproModel(target: target, transport: reproTransport)
+    viewports = ShaarViewportsModel(target: target, transport: viewportsTransport)
   }
 
   func open(inspector: InspectorModel) {
@@ -183,6 +187,7 @@ final class ShaarDevToolsModel {
     isOpen = true
     startStream()
     phase2.open()
+    viewports.open()
   }
 
   func close() {
@@ -194,6 +199,7 @@ final class ShaarDevToolsModel {
     console.clearEntries()
     network.clearSelection()
     phase2.close()
+    viewports.close()
     application.reset()
     performance.reset()
     sources.reset()
@@ -211,6 +217,7 @@ final class ShaarDevToolsModel {
     console.clearEntries()
     network.clearSelection()
     phase2.updateTarget(target, committed: committed)
+    viewports.updateTarget(target, committed: committed)
     application.reset()
     sources.reset()
     repro.updateTarget(target, committed: committed)

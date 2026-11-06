@@ -67,4 +67,40 @@ import Testing
     #expect(model.resources.isEmpty && model.content == nil && !phase2.available)
     phase2.close()
   }
+
+  @Test func localResourceUsesWorkspaceMetadataAndSourceMap() async throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let file = root.appending(path: "src/app.ts")
+    try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data("export const app = true".utf8).write(to: file)
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "http://localhost:3000/")!)
+    let fixture = ShaarPhase2FixtureTransport { command in
+      switch command {
+      case .resourceTree:
+        return ["items": [["url": "http://localhost:3000/app.js", "type": "Script"]]]
+      case .resourceContent:
+        return [
+          "items": [], "body": "console.log(1);\n//# sourceMappingURL=app.js.map",
+          "base64Encoded": false,
+        ]
+      default: return ["items": []]
+      }
+    }
+    let phase2 = ShaarPhase2Model(target: target, transport: fixture)
+    let model = ShaarSourcesModel(phase2: phase2) { url in
+      if url.path.hasSuffix("com.chrome.devtools.json") {
+        return Data(#"{"workspace":{"root":"\#(root.path)"}}"#.utf8)
+      }
+      return Data(#"{"version":3,"sources":["webpack://_N_E/./src/app.ts"]}"#.utf8)
+    }
+    phase2.open()
+    for _ in 0..<20 where !phase2.available { await Task.yield() }
+    await model.refresh()
+    await model.findLocalFiles(framework: .nextJS)
+    #expect(model.localFiles.map(\.path) == [file.path])
+    #expect(model.sourceFailure == nil)
+    phase2.close()
+  }
 }

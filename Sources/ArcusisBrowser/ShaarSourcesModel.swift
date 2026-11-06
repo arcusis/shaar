@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import BrowserCore
 import Foundation
 import Observation
 import ShaarEngineABI
@@ -34,16 +35,30 @@ final class ShaarSourcesModel {
   private(set) var contentTruncated = false
   private(set) var loading = false
   private(set) var contentLoading = false
+  private(set) var sourceLoading = false
+  private(set) var localFiles: [InspectorSourceLocation] = []
+  private(set) var localRoot: String?
+  var sourceFailure: String?
   var failure: String?
   var search = ""
   var prettyPrint = false
   @ObservationIgnored private let phase2: ShaarPhase2Model
+  @ObservationIgnored private let loadSourceData: @Sendable (URL) async throws -> Data
   @ObservationIgnored private var generation = 0
 
-  init(phase2: ShaarPhase2Model) { self.phase2 = phase2 }
+  init(
+    phase2: ShaarPhase2Model,
+    loadSourceData: @escaping @Sendable (URL) async throws -> Data = DevelopmentSourceHTTP.load
+  ) {
+    self.phase2 = phase2
+    self.loadSourceData = loadSourceData
+  }
 
   var selected: ShaarSourceResource? {
     resources.first { $0.url == selectedURL }
+  }
+  var isDevelopmentPage: Bool {
+    DevelopmentPage.detect(url: phase2.target.url).isDevelopmentPage
   }
   var truncated: Bool { listTruncated || contentTruncated }
 
@@ -77,6 +92,10 @@ final class ShaarSourcesModel {
     contentTruncated = false
     loading = false
     contentLoading = false
+    sourceLoading = false
+    localFiles = []
+    localRoot = nil
+    sourceFailure = nil
     failure = nil
     search = ""
     prettyPrint = false
@@ -118,7 +137,59 @@ final class ShaarSourcesModel {
     content = nil
     binary = false
     contentTruncated = false
+    localFiles = []
+    localRoot = nil
+    sourceFailure = nil
     await loadSelected()
+  }
+
+  func findLocalFiles(framework: DevelopmentFramework?, workspaceRootOverride: String? = nil) async {
+    guard !sourceLoading else { return }
+    guard let selected, let resourceURL = URL(string: selected.url),
+      DevelopmentPage.detect(url: phase2.target.url).isDevelopmentPage,
+      DevelopmentSourceResolver.sameOrigin(resourceURL, phase2.target.url),
+      let workspaceURL = DevelopmentSourceResolver.workspaceURL(for: phase2.target.url)
+    else {
+      sourceFailure = ShellL10n.string("Local files are available for development pages only")
+      return
+    }
+    let selection = selected.url
+    let generation = generation
+    sourceLoading = true
+    sourceFailure = nil
+    localFiles = []
+    defer { if generation == self.generation { sourceLoading = false } }
+    do {
+      let root: String
+      if let workspaceRootOverride {
+        root = workspaceRootOverride
+      } else {
+        let metadata = try await loadSourceData(workspaceURL)
+        guard generation == self.generation, selectedURL == selection else { return }
+        guard let providedRoot = DevelopmentSourceResolver.workspaceRoot(from: metadata) else {
+          sourceFailure = ShellL10n.string("The development server did not provide a project root")
+          return
+        }
+        root = providedRoot
+      }
+      let mapURL = content.flatMap {
+        DevelopmentSourceResolver.sourceMapURL(in: $0, resourceURL: resourceURL)
+      }
+      var sourceMap: Data?
+      if let mapURL { sourceMap = try await loadSourceData(mapURL) }
+      guard generation == self.generation, selectedURL == selection else { return }
+      localFiles = DevelopmentSourceResolver.locations(
+        resourceURL: resourceURL, workspaceRoot: root, framework: framework,
+        sourceMap: sourceMap)
+      localRoot = root
+      if localFiles.isEmpty {
+        sourceFailure = ShellL10n.string("No matching local files were found")
+      }
+    } catch {
+      if generation == self.generation, selectedURL == selection {
+        sourceFailure = ShellL10n.string("Local source files could not be loaded")
+      }
+    }
   }
 
   func selectAdjacent(forward: Bool) async {

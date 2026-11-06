@@ -151,7 +151,8 @@ final class ShaarDevToolsModel {
   init(
     target: SiteControlTarget,
     transport: any ShaarDevToolsEventTransport = ShaarDevToolsPendingTransport(),
-    phase2Transport: any ShaarPhase2Transport = ShaarPhase2PendingTransport()
+    phase2Transport: any ShaarPhase2Transport = ShaarPhase2PendingTransport(),
+    sourceLoader: @escaping @Sendable (URL) async throws -> Data = DevelopmentSourceHTTP.load
   ) {
     self.target = target
     self.transport = transport
@@ -159,7 +160,7 @@ final class ShaarDevToolsModel {
     self.phase2 = phase2
     application = ShaarApplicationModel(phase2: phase2)
     performance = ShaarPerformanceModel(target: target, phase2: phase2)
-    sources = ShaarSourcesModel(phase2: phase2)
+    sources = ShaarSourcesModel(phase2: phase2, loadSourceData: sourceLoader)
   }
 
   func open(inspector: InspectorModel) {

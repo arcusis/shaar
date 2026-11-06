@@ -18,15 +18,21 @@ import XCTest
     let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
       .appending(path: "Evidence/issue-1134")
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let projectRoot = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: projectRoot) }
+    let localFile = projectRoot.appending(path: "src/Dashboard.tsx")
+    try FileManager.default.createDirectory(
+      at: localFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data("export default function Dashboard() {}".utf8).write(to: localFile)
     let target = SiteControlTarget(
-      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/dashboard")!)
+      tabID: UUID(), profileID: UUID(), url: URL(string: "http://localhost:3000/dashboard")!)
     let fixture = ShaarPhase2FixtureTransport { command in
       switch command {
       case .resourceTree:
         return [
           "items": [
-            ["url": "https://example.com/dashboard", "type": "Document", "mimeType": "text/html"],
-            ["url": "https://example.com/app.js", "type": "Script", "mimeType": "text/javascript"],
+            ["url": "http://localhost:3000/dashboard", "type": "Document", "mimeType": "text/html"],
+            ["url": "http://localhost:3000/app.js", "type": "Script", "mimeType": "text/javascript"],
             [
               "url": "https://example.com/api/config.json", "type": "Other",
               "mimeType": "application/json",
@@ -52,6 +58,7 @@ import XCTest
                 count: orders.length,
               };
             }
+            //# sourceMappingURL=app.js.map
             """, "base64Encoded": false,
           ]
         }
@@ -72,7 +79,14 @@ import XCTest
         appearance: appearance, root: root)
       pending.close()
 
-      let live = ShaarDevToolsModel(target: target, phase2Transport: fixture)
+      let live = ShaarDevToolsModel(
+        target: target, phase2Transport: fixture,
+        sourceLoader: { url in
+          if url.path.hasSuffix("com.chrome.devtools.json") {
+            return Data(#"{"workspace":{"root":"\#(projectRoot.path)"}}"#.utf8)
+          }
+          return Data(#"{"version":3,"sources":["webpack://_N_E/./src/Dashboard.tsx"]}"#.utf8)
+        })
       live.section = .sources
       live.open(inspector: inspector)
       for _ in 0..<30 where !live.phase2.available { await Task.yield() }
@@ -80,9 +94,11 @@ import XCTest
       await live.sources.refresh()
       let script = try XCTUnwrap(live.sources.resources.first { $0.name == "app.js" })
       await live.sources.select(script)
+      await live.sources.findLocalFiles(framework: .nextJS)
+      XCTAssertEqual(live.sources.localFiles.map(\.path), [localFile.path])
       try capture(
         ShaarDevToolsPanel(model: live, inspector: inspector, openChromium: {}),
-        named: "after-sources-code-\(suffix)", scheme: scheme,
+        named: "after-sources-local-files-\(suffix)", scheme: scheme,
         appearance: appearance, root: root)
       live.close()
     }

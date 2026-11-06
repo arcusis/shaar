@@ -49,7 +49,7 @@
   },
   "layer": {
     "path": "ThirdParty/ChromiumEngine/layer",
-    "sha256": "e8b4e642773d584a7d4552b9970357c9dd98866e14b45e232fc642b5ac0194bb",
+    "sha256": "34fa0ccdb97031860f848390ec899596a204903e6933024d6e74838f7c5a1988",
     "files": {
       "chrome/browser/shaar/BUILD.gn": "fe9b1e49608e170bbbad0ea75a4f2a1a7e72833a94925439ff40e6c11bdc2657",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks.cc": "da94500fa2d7b3106d58dcf3afc2f46072c6cc57a6e1868d1cdd132cafa714fd",
@@ -58,12 +58,12 @@
       "chrome/browser/shaar/bookmarks/shaar_bookmarks_unittest.cc": "01301adddd0c3f0a5226efcfaf5a080df3a0423e94a9392e401a8327487bd377",
       "chrome/browser/shaar/devtools/shaar_agent_bridge.cc": "3d511dc53a49c68c5357892cb4edc1fda57a30fdd1212907669f0a1f07911a9b",
       "chrome/browser/shaar/devtools/shaar_agent_bridge.h": "5afbf3d57001d0c1dd3ab08068b9bbb18a3cecce326b7c0d25ba2852d5675600",
-      "chrome/browser/shaar/devtools/shaar_devtools.cc": "675172e3a3d2ddfd6321456d2d69d22cc8a537033663f2eda0b17b44c26e5585",
+      "chrome/browser/shaar/devtools/shaar_devtools.cc": "b940a6887d1ada3e7ef7fa0ea5569979761dffed1d5857b2f43c8852ccac16d6",
       "chrome/browser/shaar/devtools/shaar_devtools.h": "f5fc00b3d9e29ee45f0d8f02619456edbb269215d386707f8c404f120a4a4fe5",
-      "chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc": "78ee2400b6d356d100bdbdd99f3c4b519a7bcaba58976e7cc86849ea6d21d4a9",
+      "chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc": "9ffa926247c4ac09ad3bb17bcbb62ef2d1d5a58edcc34bdbd54d832cd2b81751",
       "chrome/browser/shaar/devtools/shaar_devtools_panel.cc": "2a160dba7827c84e5c5aefe466aeed2e3c157b545c51536b937b7de1954d235e",
       "chrome/browser/shaar/devtools/shaar_devtools_panel.h": "d926559cb85df4b6f8259275198b3faf1b2c2d77bff8ea3fdf6b065a59dbf9f2",
-      "chrome/browser/shaar/devtools/shaar_devtools_unittest.cc": "9c138750d20b1caf1f9f83700e71f3143a0d457475058a838d534bc2c315dee4",
+      "chrome/browser/shaar/devtools/shaar_devtools_unittest.cc": "e77ad45e934265f6a32b2039cdab8089a4a0f4ecc8b619a0540a576748a14f8f",
       "chrome/browser/shaar/downloads/shaar_downloads.cc": "77b53ecd80858cf1d7c6d1baebd4189a3ab4250bd18cc11019025cb74ceb84e1",
       "chrome/browser/shaar/downloads/shaar_downloads.h": "7850f59946003f47402e7cdeffed5d473eb87e79cf805a50f8ee73704ea9a6e7",
       "chrome/browser/shaar/downloads/shaar_downloads_lifecycle_adapter.cc": "7454e60730ba1bf4ba34212a33c8fd289237ae0e47412b1732d1de5cbf245e76",
@@ -109,7 +109,7 @@
       "chrome/browser/shaar/profiles/shaar_profiles.cc": "fdcc18f0e846c10f5e48a5230bd77fb036eafc572fb702e9a4d13145a9bff5cc",
       "chrome/browser/shaar/profiles/shaar_profiles.h": "91358bd6b07df96e48393d6c9d125b17c9ae4cfb6d29000b3d0c106c6ba1817f",
       "chrome/browser/shaar/profiles/shaar_profiles_unittest.cc": "1af5ec0d7bdf1a3c7ee8708f3f8e890028289a49ae833222ad402d87ccbca078",
-      "chrome/browser/shaar/public/shaar_engine.h": "004c4298c54307c5e918d95db8a44cf20a57921ebd06d2087b0436349f11c1f9",
+      "chrome/browser/shaar/public/shaar_engine.h": "951e3fbdf098203f64fa313da7a57ab24346ad5f433f0f675865dd97fad988a1",
       "chrome/browser/shaar/shaar_engine.exports": "ca5dd73785bae1f489161ad02f2232e2fbcb5389d375984ee721519cc2477b2d",
       "chrome/browser/shaar/site_data/shaar_site_data.cc": "6decb114e315ee08e663f2fac15acaf8722d879f8bc11ff8544b18b82035399e",
       "chrome/browser/shaar/site_data/shaar_site_data.h": "a5af588331f905aa00048ab9fa02140334206943e9c1250e5bb50b241f3f89ed",
@@ -305,6 +305,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0016-shaar-agent-bridge.patch",
       "sha256": "62a72f276311815778d82dacb2023dbcb9dfef8090ed6a768e4b290ba34191de"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0017-shaar-devtools-phase2.patch",
+      "sha256": "5f2f551ac5d52d67f455d5c0c6f3800371b47f1ea19e83c276d311d1c429da4f"
     }
   ],
   "requiredExports": [
@@ -548,7 +552,8 @@
         "chrome/browser/shaar/devtools/shaar_devtools_panel.h",
         "chrome/browser/shaar/devtools/shaar_devtools_unittest.cc",
         "chrome/browser/shaar/engine/shaar_engine_context.cc",
-        "chrome/browser/shaar/engine/shaar_engine_context.h"
+        "chrome/browser/shaar/engine/shaar_engine_context.h",
+        "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.cc"
       ]
     },
     "media": {

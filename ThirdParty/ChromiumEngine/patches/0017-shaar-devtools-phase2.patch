@@ -1,0 +1,915 @@
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
+--- a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
+@@ -8,10 +8,12 @@
+ 
+ #include <algorithm>
+ #include <climits>
++#include <cmath>
+ #include <cstring>
+ #include <deque>
+ #include <map>
+ #include <memory>
++#include <optional>
+ #include <set>
+ #include <string>
+ #include <string_view>
+@@ -32,6 +34,8 @@
+ #include "content/public/browser/navigation_handle.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/browser/web_contents_observer.h"
++#include "url/gurl.h"
++#include "url/origin.h"
+ 
+ namespace shaar::devtools {
+ namespace {
+@@ -44,6 +48,8 @@
+ constexpr size_t kMaxQueuedBytes = 2 * 1024 * 1024;
+ constexpr size_t kMaxRequestIDs = 512;
+ constexpr size_t kMaxPendingBodies = 16;
++constexpr size_t kMaxPhase2Rows = 50;
++constexpr size_t kMaxPhase2ReplyBytes = 128 * 1024;
+ 
+ struct ReplyTarget {
+   shaar_request_id id;
+@@ -267,6 +273,648 @@
+   envelope.Set("data", std::move(projection.data));
+   return base::JSONWriter::Write(base::Value(std::move(envelope)), output) &&
+          output->size() <= kMaxEventBytes;
++}
++
++bool SameOriginURL(const std::string& value, const std::string& origin) {
++  GURL url(value);
++  return url.is_valid() && url.SchemeIsHTTPOrHTTPS() &&
++         !url.has_username() && !url.has_password() &&
++         url::Origin::Create(url).Serialize() == origin;
++}
++
++bool BoundedString(const base::DictValue& args, std::string_view key,
++                   size_t maximum = kMaxFieldBytes) {
++  const auto* value = args.FindString(key);
++  return value && !value->empty() && value->size() <= maximum;
++}
++
++bool BoundedStorageText(const base::DictValue& args, std::string_view key,
++                        size_t maximum = kMaxFieldBytes) {
++  const auto* value = args.FindString(key);
++  return value && value->size() <= maximum;
++}
++
++bool BoundedPage(const base::DictValue& args) {
++  auto skip = args.FindInt("skipCount");
++  auto page = args.FindInt("pageSize");
++  return skip && *skip >= 0 && *skip <= 10000 && page &&
++         *page > 0 && *page <= static_cast<int>(kMaxPhase2Rows);
++}
++
++void CopyText(base::DictValue* output, std::string_view target,
++              const base::DictValue& source, std::string_view source_key,
++              bool* truncated) {
++  PutString(output, target, source.FindString(source_key), truncated);
++}
++
++bool BuildPhase2Command(int command_id, const base::DictValue& args,
++                        const std::string& origin,
++                        const std::set<std::string>& cache_ids,
++                        const std::map<std::string, std::set<std::string>>& cache_urls,
++                        const std::set<std::string>& worker_scopes,
++                        const std::set<std::string>& resource_urls,
++                        const std::string& frame_id,
++                        base::DictValue* command) {
++  base::DictValue params;
++  const char* method = nullptr;
++  switch (command_id) {
++    case SHAAR_DEVTOOLS_PHASE2_DOM_STORAGE_ITEMS:
++    case SHAAR_DEVTOOLS_PHASE2_DOM_STORAGE_SET:
++    case SHAAR_DEVTOOLS_PHASE2_DOM_STORAGE_REMOVE:
++    case SHAAR_DEVTOOLS_PHASE2_DOM_STORAGE_CLEAR: {
++      if (!args.FindBool("isLocalStorage").has_value())
++        return false;
++      const bool local = *args.FindBool("isLocalStorage");
++      base::DictValue storage;
++      storage.Set("securityOrigin", origin);
++      storage.Set("isLocalStorage", local);
++      params.Set("storageId", std::move(storage));
++      if (command_id == SHAAR_DEVTOOLS_PHASE2_DOM_STORAGE_ITEMS) {
++        if (!HasKeys(args, {"isLocalStorage", "skipCount", "pageSize"}) ||
++            !BoundedPage(args))
++          return false;
++        method = "DOMStorage.getDOMStorageItems";
++      } else if (command_id == SHAAR_DEVTOOLS_PHASE2_DOM_STORAGE_SET) {
++        if (!HasKeys(args, {"isLocalStorage", "key", "value"}) ||
++            !BoundedStorageText(args, "key") ||
++            !BoundedStorageText(args, "value", 16 * 1024))
++          return false;
++        params.Set("key", *args.FindString("key"));
++        params.Set("value", *args.FindString("value"));
++        method = "DOMStorage.setDOMStorageItem";
++      } else if (command_id == SHAAR_DEVTOOLS_PHASE2_DOM_STORAGE_REMOVE) {
++        if (!HasKeys(args, {"isLocalStorage", "key"}) ||
++            !BoundedStorageText(args, "key"))
++          return false;
++        params.Set("key", *args.FindString("key"));
++        method = "DOMStorage.removeDOMStorageItem";
++      } else {
++        if (!HasKeys(args, {"isLocalStorage"}))
++          return false;
++        method = "DOMStorage.clear";
++      }
++      break;
++    }
++    case SHAAR_DEVTOOLS_PHASE2_INDEXED_DB_NAMES:
++    case SHAAR_DEVTOOLS_PHASE2_INDEXED_DB_SCHEMA:
++    case SHAAR_DEVTOOLS_PHASE2_INDEXED_DB_DATA:
++      params.Set("securityOrigin", origin);
++      if (command_id == SHAAR_DEVTOOLS_PHASE2_INDEXED_DB_NAMES) {
++        if (!args.empty())
++          return false;
++        method = "IndexedDB.requestDatabaseNames";
++      } else if (command_id == SHAAR_DEVTOOLS_PHASE2_INDEXED_DB_SCHEMA) {
++        if (!HasKeys(args, {"databaseName"}) ||
++            !BoundedString(args, "databaseName"))
++          return false;
++        params.Set("databaseName", *args.FindString("databaseName"));
++        method = "IndexedDB.requestDatabase";
++      } else {
++        if (!HasKeys(args, {"databaseName", "objectStoreName", "skipCount",
++                            "pageSize"}) ||
++            !BoundedString(args, "databaseName") ||
++            !BoundedString(args, "objectStoreName") || !BoundedPage(args))
++          return false;
++        params.Set("databaseName", *args.FindString("databaseName"));
++        params.Set("objectStoreName", *args.FindString("objectStoreName"));
++        params.Set("skipCount", *args.FindInt("skipCount"));
++        params.Set("pageSize", *args.FindInt("pageSize"));
++        method = "IndexedDB.requestData";
++      }
++      break;
++    case SHAAR_DEVTOOLS_PHASE2_CACHE_NAMES:
++      if (!args.empty())
++        return false;
++      params.Set("securityOrigin", origin);
++      method = "CacheStorage.requestCacheNames";
++      break;
++    case SHAAR_DEVTOOLS_PHASE2_CACHE_ENTRIES:
++    case SHAAR_DEVTOOLS_PHASE2_CACHE_RESPONSE:
++      if (!BoundedString(args, "cacheID", 256) ||
++          !cache_ids.contains(*args.FindString("cacheID")))
++        return false;
++      params.Set("cacheId", *args.FindString("cacheID"));
++      if (command_id == SHAAR_DEVTOOLS_PHASE2_CACHE_ENTRIES) {
++        if (!HasKeys(args, {"cacheID", "skipCount", "pageSize"}) ||
++            !BoundedPage(args))
++          return false;
++        params.Set("skipCount", *args.FindInt("skipCount"));
++        params.Set("pageSize", *args.FindInt("pageSize"));
++        method = "CacheStorage.requestEntries";
++      } else {
++        auto known_urls = cache_urls.find(*args.FindString("cacheID"));
++        if (!HasKeys(args, {"cacheID", "requestURL"}) ||
++            !BoundedString(args, "requestURL") ||
++            !SameOriginURL(*args.FindString("requestURL"), origin) ||
++            known_urls == cache_urls.end() ||
++            !known_urls->second.contains(*args.FindString("requestURL")))
++          return false;
++        params.Set("requestURL", *args.FindString("requestURL"));
++        params.Set("requestHeaders", base::ListValue());
++        method = "CacheStorage.requestCachedResponse";
++      }
++      break;
++    case SHAAR_DEVTOOLS_PHASE2_SERVICE_WORKER_UPDATE:
++    case SHAAR_DEVTOOLS_PHASE2_SERVICE_WORKER_UNREGISTER:
++      if (!HasKeys(args, {"scopeURL"}) ||
++          !BoundedString(args, "scopeURL") ||
++          !SameOriginURL(*args.FindString("scopeURL"), origin) ||
++          !worker_scopes.contains(*args.FindString("scopeURL")))
++        return false;
++      params.Set("scopeURL", *args.FindString("scopeURL"));
++      method = command_id == SHAAR_DEVTOOLS_PHASE2_SERVICE_WORKER_UPDATE
++                   ? "ServiceWorker.updateRegistration"
++                   : "ServiceWorker.unregister";
++      break;
++    case SHAAR_DEVTOOLS_PHASE2_PERFORMANCE_METRICS:
++    case SHAAR_DEVTOOLS_PHASE2_DOM_COUNTERS:
++    case SHAAR_DEVTOOLS_PHASE2_RESOURCE_TREE:
++    case SHAAR_DEVTOOLS_PHASE2_LONG_TASKS:
++    case SHAAR_DEVTOOLS_PHASE2_VITALS_INPUTS:
++      if (!args.empty())
++        return false;
++      if (command_id == SHAAR_DEVTOOLS_PHASE2_PERFORMANCE_METRICS)
++        method = "Performance.getMetrics";
++      else if (command_id == SHAAR_DEVTOOLS_PHASE2_DOM_COUNTERS)
++        method = "Memory.getDOMCounters";
++      else if (command_id == SHAAR_DEVTOOLS_PHASE2_RESOURCE_TREE)
++        method = "Page.getResourceTree";
++      else {
++        method = "Runtime.evaluate";
++        if (command_id == SHAAR_DEVTOOLS_PHASE2_LONG_TASKS) {
++          params.Set("expression",
++                     "JSON.stringify(performance.getEntriesByType('longtask').slice(-50).map(e=>({name:e.name,startTime:e.startTime,duration:e.duration})))");
++        } else {
++          params.Set("expression",
++                     "JSON.stringify({ttfb:performance.getEntriesByType('navigation')[0]?.responseStart,fcp:performance.getEntriesByName('first-contentful-paint')[0]?.startTime,events:performance.getEntriesByType('event').slice(-50).map(e=>({duration:e.duration,startTime:e.startTime,interactionId:e.interactionId}))})");
++        }
++        params.Set("returnByValue", true);
++        params.Set("silent", true);
++      }
++      break;
++    case SHAAR_DEVTOOLS_PHASE2_RESOURCE_CONTENT:
++      if (!HasKeys(args, {"resourceURL"}) ||
++          !BoundedString(args, "resourceURL") || frame_id.empty() ||
++          !resource_urls.contains(*args.FindString("resourceURL")) ||
++          !SameOriginURL(*args.FindString("resourceURL"), origin))
++        return false;
++      params.Set("frameId", frame_id);
++      params.Set("url", *args.FindString("resourceURL"));
++      method = "Page.getResourceContent";
++      break;
++    default:
++      return false;
++  }
++  command->Set("method", method);
++  command->Set("params", std::move(params));
++  return true;
++}
++
++bool ProjectPhase2Result(int command_id, const base::DictValue& result,
++                         const base::DictValue& args, const std::string& origin,
++                         std::set<std::string>* cache_ids,
++                         std::map<std::string, std::set<std::string>>* cache_urls,
++                         std::set<std::string>* resource_urls,
++                         std::string* frame_id, std::string* output) {
++  base::DictValue reply;
++  reply.Set("schemaVersion", 1);
++  reply.Set("commandID", command_id);
++  base::ListValue items;
++  bool truncated = false;
++  const base::ListValue* source = nullptr;
++  switch (command_id) {
++    case SHAAR_DEVTOOLS_PHASE2_DOM_STORAGE_ITEMS:
++      source = result.FindList("entries");
++      if (!source)
++        return false;
++      for (size_t i = static_cast<size_t>(*args.FindInt("skipCount"));
++           i < source->size() &&
++           items.size() < static_cast<size_t>(*args.FindInt("pageSize")); ++i) {
++        const auto& row = (*source)[i];
++        if (!row.is_list() || row.GetList().size() != 2 ||
++            !row.GetList()[0].is_string() || !row.GetList()[1].is_string())
++          continue;
++        base::DictValue item;
++        PutString(&item, "key", &row.GetList()[0].GetString(), &truncated);
++        PutString(&item, "value", &row.GetList()[1].GetString(), &truncated);
++        items.Append(std::move(item));
++      }
++      reply.Set("hasMore", source->size() >
++                               static_cast<size_t>(*args.FindInt("skipCount")) +
++                                   items.size());
++      break;
++    case SHAAR_DEVTOOLS_PHASE2_INDEXED_DB_NAMES:
++      source = result.FindList("databaseNames");
++      if (!source)
++        return false;
++      for (const auto& row : *source) {
++        if (items.size() == kMaxPhase2Rows) {
++          truncated = true;
++          break;
++        }
++        if (!row.is_string())
++          continue;
++        base::DictValue item;
++        PutString(&item, "name", &row.GetString(), &truncated);
++        items.Append(std::move(item));
++      }
++      break;
++    case SHAAR_DEVTOOLS_PHASE2_INDEXED_DB_SCHEMA: {
++      const auto* database = result.FindDict("databaseWithObjectStores");
++      source = database ? database->FindList("objectStores") : nullptr;
++      if (!source)
++        return false;
++      for (const auto& row : *source) {
++        if (items.size() == kMaxPhase2Rows) {
++          truncated = true;
++          break;
++        }
++        if (!row.is_dict())
++          continue;
++        base::DictValue item;
++        CopyText(&item, "name", row.GetDict(), "name", &truncated);
++        items.Append(std::move(item));
++      }
++      break;
++    }
++    case SHAAR_DEVTOOLS_PHASE2_INDEXED_DB_DATA:
++      source = result.FindList("objectStoreDataEntries");
++      if (!source || source->size() > kMaxPhase2Rows)
++        return false;
++      for (const auto& row : *source) {
++        if (!row.is_dict())
++          continue;
++        base::DictValue item;
++        const auto& entry = row.GetDict();
++        for (const char* field : {"key", "primaryKey", "value"}) {
++          const auto* object = entry.FindDict(field);
++          if (!object)
++            continue;
++          const auto* value = object->FindString("description");
++          if (!value)
++            value = object->FindString("value");
++          PutString(&item, field, value, &truncated);
++        }
++        items.Append(std::move(item));
++      }
++      reply.Set("hasMore", result.FindBool("hasMore").value_or(false));
++      break;
++    case SHAAR_DEVTOOLS_PHASE2_CACHE_NAMES:
++      source = result.FindList("caches");
++      if (!source)
++        return false;
++      cache_ids->clear();
++      cache_urls->clear();
++      for (const auto& row : *source) {
++        if (items.size() == kMaxPhase2Rows) {
++          truncated = true;
++          break;
++        }
++        if (!row.is_dict())
++          continue;
++        const auto& cache = row.GetDict();
++        const auto* id = cache.FindString("cacheId");
++        const auto* security_origin = cache.FindString("securityOrigin");
++        if (!id || id->size() > 256 || !security_origin ||
++            *security_origin != origin)
++          continue;
++        cache_ids->insert(*id);
++        base::DictValue item;
++        item.Set("cacheID", *id);
++        CopyText(&item, "name", cache, "cacheName", &truncated);
++        items.Append(std::move(item));
++      }
++      break;
++    case SHAAR_DEVTOOLS_PHASE2_CACHE_ENTRIES:
++      source = result.FindList("cacheDataEntries");
++      if (!source || source->size() > kMaxPhase2Rows)
++        return false;
++      (*cache_urls)[*args.FindString("cacheID")].clear();
++      for (const auto& row : *source) {
++        if (!row.is_dict())
++          continue;
++        const auto& entry = row.GetDict();
++        const auto* url = entry.FindString("requestURL");
++        if (!url || !SameOriginURL(*url, origin))
++          continue;
++        (*cache_urls)[*args.FindString("cacheID")].insert(*url);
++        base::DictValue item;
++        CopyText(&item, "url", entry, "requestURL", &truncated);
++        CopyText(&item, "method", entry, "requestMethod", &truncated);
++        if (auto status = entry.FindInt("responseStatus"))
++          item.Set("status", *status);
++        items.Append(std::move(item));
++      }
++      if (auto total = result.FindDouble("returnCount")) {
++        reply.Set("hasMore", *total > *args.FindInt("skipCount") + items.size());
++      } else {
++        reply.Set("hasMore", items.size() == kMaxPhase2Rows);
++      }
++      break;
++    case SHAAR_DEVTOOLS_PHASE2_CACHE_RESPONSE: {
++      const auto* response = result.FindDict("response");
++      const auto* body = response ? response->FindString("body") : nullptr;
++      if (!body || body->size() > kMaxBodyBytes)
++        return false;
++      reply.Set("body", *body);
++      reply.Set("base64Encoded", true);
++      break;
++    }
++    case SHAAR_DEVTOOLS_PHASE2_PERFORMANCE_METRICS:
++      source = result.FindList("metrics");
++      if (!source)
++        return false;
++      for (const auto& row : *source) {
++        if (items.size() == 32) {
++          truncated = true;
++          break;
++        }
++        if (!row.is_dict())
++          continue;
++        const auto& metric = row.GetDict();
++        const auto* name = metric.FindString("name");
++        auto value = metric.FindDouble("value");
++        if (!name || !value || !std::isfinite(*value))
++          continue;
++        if (*name != "Timestamp" && *name != "Documents" &&
++            *name != "Nodes" && *name != "JSEventListeners" &&
++            *name != "TaskDuration" && *name != "JSHeapUsedSize" &&
++            *name != "JSHeapTotalSize" && *name != "FirstContentfulPaint" &&
++            *name != "DomContentLoaded" && *name != "NavigationStart")
++          continue;
++        base::DictValue item;
++        item.Set("name", *name);
++        item.Set("value", *value);
++        items.Append(std::move(item));
++      }
++      break;
++    case SHAAR_DEVTOOLS_PHASE2_DOM_COUNTERS:
++      for (const char* name : {"documents", "nodes", "jsEventListeners"}) {
++        auto value = result.FindInt(name);
++        if (!value || *value < 0)
++          return false;
++        reply.Set(name, *value);
++      }
++      break;
++    case SHAAR_DEVTOOLS_PHASE2_RESOURCE_TREE: {
++      const auto* tree = result.FindDict("frameTree");
++      const auto* frame = tree ? tree->FindDict("frame") : nullptr;
++      source = tree ? tree->FindList("resources") : nullptr;
++      const auto* id = frame ? frame->FindString("id") : nullptr;
++      if (!id || id->size() > 256 || !source)
++        return false;
++      *frame_id = *id;
++      resource_urls->clear();
++      const auto* document_url = frame->FindString("url");
++      if (document_url && document_url->size() <= kMaxFieldBytes &&
++          SameOriginURL(*document_url, origin)) {
++        resource_urls->insert(*document_url);
++        base::DictValue document;
++        document.Set("url", *document_url);
++        document.Set("type", "Document");
++        items.Append(std::move(document));
++      }
++      for (const auto& row : *source) {
++        if (items.size() == kMaxPhase2Rows) {
++          truncated = true;
++          break;
++        }
++        if (!row.is_dict())
++          continue;
++        const auto& resource = row.GetDict();
++        const auto* url = resource.FindString("url");
++        if (!url || url->size() > kMaxFieldBytes ||
++            !SameOriginURL(*url, origin))
++          continue;
++        resource_urls->insert(*url);
++        base::DictValue item;
++        item.Set("url", *url);
++        CopyText(&item, "type", resource, "type", &truncated);
++        CopyText(&item, "mimeType", resource, "mimeType", &truncated);
++        items.Append(std::move(item));
++      }
++      break;
++    }
++    case SHAAR_DEVTOOLS_PHASE2_RESOURCE_CONTENT: {
++      const auto* content = result.FindString("content");
++      if (!content || content->size() > kMaxBodyBytes)
++        return false;
++      reply.Set("body", *content);
++      reply.Set("base64Encoded", result.FindBool("base64Encoded").value_or(false));
++      break;
++    }
++    case SHAAR_DEVTOOLS_PHASE2_LONG_TASKS:
++    case SHAAR_DEVTOOLS_PHASE2_VITALS_INPUTS: {
++      const auto* remote = result.FindDict("result");
++      const auto* json = remote ? remote->FindString("value") : nullptr;
++      if (!json || json->size() > kMaxPhase2ReplyBytes)
++        return false;
++      auto parsed = base::JSONReader::Read(*json, base::JSON_PARSE_RFC);
++      if (!parsed)
++        return false;
++      if (command_id == SHAAR_DEVTOOLS_PHASE2_LONG_TASKS) {
++        if (!parsed->is_list() || parsed->GetList().size() > kMaxPhase2Rows)
++          return false;
++        for (const auto& row : parsed->GetList()) {
++          if (!row.is_dict())
++            continue;
++          const auto& task = row.GetDict();
++          auto start = task.FindDouble("startTime");
++          auto duration = task.FindDouble("duration");
++          if (!start || !duration || !std::isfinite(*start) ||
++              !std::isfinite(*duration) || *duration < 0)
++            continue;
++          base::DictValue item;
++          CopyText(&item, "name", task, "name", &truncated);
++          item.Set("startTime", *start);
++          item.Set("duration", *duration);
++          items.Append(std::move(item));
++        }
++      } else {
++        if (!parsed->is_dict())
++          return false;
++        const auto& vitals = parsed->GetDict();
++        for (const char* field : {"ttfb", "fcp"}) {
++          auto value = vitals.FindDouble(field);
++          if (!value || !std::isfinite(*value) || *value < 0)
++            continue;
++          base::DictValue item;
++          item.Set("name", field);
++          item.Set("value", *value);
++          items.Append(std::move(item));
++        }
++        const auto* events = vitals.FindList("events");
++        if (events && events->size() > kMaxPhase2Rows)
++          return false;
++        if (events) {
++          for (const auto& row : *events) {
++            if (items.size() == kMaxPhase2Rows) {
++              truncated = true;
++              break;
++            }
++            if (!row.is_dict())
++              continue;
++            const auto& event = row.GetDict();
++            auto start = event.FindDouble("startTime");
++            auto duration = event.FindDouble("duration");
++            auto interaction = event.FindInt("interactionId");
++            if (!start || !duration || !interaction ||
++                !std::isfinite(*start) || !std::isfinite(*duration) ||
++                *duration < 0 || *interaction <= 0)
++              continue;
++            base::DictValue item;
++            item.Set("name", "event");
++            item.Set("startTime", *start);
++            item.Set("duration", *duration);
++            item.Set("interactionID", *interaction);
++            items.Append(std::move(item));
++          }
++        }
++      }
++      break;
++    }
++    default:
++      if (!result.empty())
++        return false;
++      break;
++  }
++  reply.Set("items", std::move(items));
++  reply.Set("truncated", truncated);
++  return base::JSONWriter::Write(base::Value(std::move(reply)), output) &&
++         output->size() <= (command_id == SHAAR_DEVTOOLS_PHASE2_CACHE_RESPONSE ||
++                                    command_id == SHAAR_DEVTOOLS_PHASE2_RESOURCE_CONTENT
++                                ? kMaxBodyBytes + 1024
++                                : kMaxPhase2ReplyBytes);
++}
++
++bool ProjectPhase2Event(std::string_view method, const base::DictValue& params,
++                        const std::string& origin, Projection* projection,
++                        std::set<std::string>* worker_scopes) {
++  auto& data = projection->data;
++  if (method.starts_with("DOMStorage.")) {
++    const auto* storage = params.FindDict("storageId");
++    const auto* security_origin = storage ? storage->FindString("securityOrigin") : nullptr;
++    auto local = storage ? storage->FindBool("isLocalStorage") : std::nullopt;
++    if (!security_origin || *security_origin != origin || !local)
++      return false;
++    data.Set("isLocalStorage", *local);
++    if (method == "DOMStorage.domStorageItemAdded") {
++      projection->id = SHAAR_DEVTOOLS_PANEL_DOM_STORAGE_ADDED;
++      CopyText(&data, "key", params, "key", &projection->truncated);
++      CopyText(&data, "value", params, "newValue", &projection->truncated);
++    } else if (method == "DOMStorage.domStorageItemUpdated") {
++      projection->id = SHAAR_DEVTOOLS_PANEL_DOM_STORAGE_UPDATED;
++      CopyText(&data, "key", params, "key", &projection->truncated);
++      CopyText(&data, "value", params, "newValue", &projection->truncated);
++    } else if (method == "DOMStorage.domStorageItemRemoved") {
++      projection->id = SHAAR_DEVTOOLS_PANEL_DOM_STORAGE_REMOVED;
++      CopyText(&data, "key", params, "key", &projection->truncated);
++    } else if (method == "DOMStorage.domStorageItemsCleared") {
++      projection->id = SHAAR_DEVTOOLS_PANEL_DOM_STORAGE_CLEARED;
++    } else {
++      return false;
++    }
++  } else if (method == "ServiceWorker.workerRegistrationUpdated") {
++    projection->id = SHAAR_DEVTOOLS_PANEL_SERVICE_WORKER_REGISTRATION;
++    const auto* registrations = params.FindList("registrations");
++    if (!registrations)
++      return false;
++    base::ListValue items;
++    for (const auto& row : *registrations) {
++      if (items.size() == 32) {
++        projection->truncated = true;
++        break;
++      }
++      if (!row.is_dict())
++        continue;
++      const auto& registration = row.GetDict();
++      const auto* scope = registration.FindString("scopeURL");
++      if (!scope || scope->size() > kMaxFieldBytes ||
++          !SameOriginURL(*scope, origin))
++        continue;
++      if (registration.FindBool("isDeleted").value_or(false))
++        worker_scopes->erase(*scope);
++      else
++        worker_scopes->insert(*scope);
++      base::DictValue item;
++      item.Set("scopeURL", *scope);
++      CopyText(&item, "registrationID", registration, "registrationId",
++               &projection->truncated);
++      item.Set("deleted", registration.FindBool("isDeleted").value_or(false));
++      items.Append(std::move(item));
++    }
++    data.Set("items", std::move(items));
++  } else if (method == "ServiceWorker.workerVersionUpdated") {
++    projection->id = SHAAR_DEVTOOLS_PANEL_SERVICE_WORKER_VERSION;
++    const auto* versions = params.FindList("versions");
++    if (!versions)
++      return false;
++    base::ListValue items;
++    for (const auto& row : *versions) {
++      if (items.size() == 32) {
++        projection->truncated = true;
++        break;
++      }
++      if (!row.is_dict())
++        continue;
++      const auto& version = row.GetDict();
++      const auto* script = version.FindString("scriptURL");
++      if (!script || !SameOriginURL(*script, origin))
++        continue;
++      base::DictValue item;
++      CopyText(&item, "scriptURL", version, "scriptURL", &projection->truncated);
++      CopyText(&item, "registrationID", version, "registrationId", &projection->truncated);
++      CopyText(&item, "versionID", version, "versionId", &projection->truncated);
++      CopyText(&item, "status", version, "status", &projection->truncated);
++      CopyText(&item, "runningStatus", version, "runningStatus", &projection->truncated);
++      items.Append(std::move(item));
++    }
++    data.Set("items", std::move(items));
++  } else if (method == "ServiceWorker.workerErrorReported") {
++    projection->id = SHAAR_DEVTOOLS_PANEL_SERVICE_WORKER_ERROR;
++    const auto* error = params.FindDict("errorMessage");
++    if (!error)
++      return false;
++    const auto* script = error->FindString("sourceURL");
++    if (!script || !SameOriginURL(*script, origin))
++      return false;
++    CopyText(&data, "text", *error, "errorMessage", &projection->truncated);
++  } else if (method == "PerformanceTimeline.timelineEventAdded") {
++    projection->id = SHAAR_DEVTOOLS_PANEL_PERFORMANCE_TIMELINE;
++    const auto* entry = params.FindDict("event");
++    const auto* type = entry ? entry->FindString("type") : nullptr;
++    if (!type || (*type != "largest-contentful-paint" &&
++                  *type != "layout-shift"))
++      return false;
++    data.Set("type", *type);
++    CopyText(&data, "name", *entry, "name", &projection->truncated);
++    if (auto time = entry->FindDouble("time"))
++      data.Set("time", *time);
++    else
++      return false;
++    if (auto duration = entry->FindDouble("duration"))
++      data.Set("duration", *duration);
++    if (*type == "largest-contentful-paint") {
++      const auto* lcp = entry->FindDict("lcpDetails");
++      if (!lcp)
++        return false;
++      for (const char* field : {"renderTime", "loadTime", "size"}) {
++        if (auto value = lcp->FindDouble(field))
++          data.Set(field, *value);
++      }
++    } else {
++      const auto* shift = entry->FindDict("layoutShiftDetails");
++      if (!shift)
++        return false;
++      if (auto value = shift->FindDouble("value"))
++        data.Set("value", *value);
++      data.Set("hadRecentInput", shift->FindBool("hadRecentInput").value_or(false));
++    }
++  } else {
++    return false;
++  }
++  data.Set("truncated", projection->truncated);
++  return true;
+ }
+ 
+ class PanelClient;
+@@ -289,7 +937,8 @@
+       : content::WebContentsObserver(contents), engine_(engine), scope_(scope),
+         window_(window), tab_(tab), contents_(contents),
+         identity_(std::move(identity)), host_(std::move(host)),
+-        lease_id_(lease_id) {}
++        lease_id_(lease_id),
++        origin_(url::Origin::Create(contents->GetLastCommittedURL()).Serialize()) {}
+ 
+   bool Attach() {
+     attached_ = host_->AttachClient(this);
+@@ -301,9 +950,14 @@
+         R"({"id":-3,"method":"Network.enable"})",
+         R"({"id":-4,"method":"Page.enable"})",
+         R"({"id":-5,"method":"Page.setLifecycleEventsEnabled","params":{"enabled":true}})",
+-        R"({"id":-6,"method":"Performance.enable"})"};
+-    for (const char* command : commands)
++        R"({"id":-6,"method":"Performance.enable"})",
++        R"({"id":-7,"method":"DOMStorage.enable"})",
++        R"({"id":-8,"method":"IndexedDB.enable"})",
++        R"({"id":-9,"method":"ServiceWorker.enable"})",
++        R"({"id":-10,"method":"PerformanceTimeline.enable","params":{"eventTypes":["largest-contentful-paint","layout-shift"]}})"};
++    for (const char* command : commands) {
+       host_->DispatchProtocolMessage(this, base::as_byte_span(std::string_view(command)));
++    }
+     return true;
+   }
+ 
+@@ -332,10 +986,13 @@
+     closing_ = true;
+     Leases().erase(contents_);
+     auto pending = std::move(pending_bodies_);
++    auto phase2 = std::move(pending_phase2_);
+     queue_.clear();
+     queued_bytes_ = 0;
+     for (auto& entry : pending)
+       Reply(entry.second, SHAAR_CANCELLED, {}, "DevTools panel lease closed");
++    for (auto& entry : phase2)
++      Reply(entry.second.reply, SHAAR_CANCELLED, {}, "DevTools panel lease closed");
+     delete this;
+   }
+ 
+@@ -366,6 +1023,30 @@
+     return SHAAR_OK;
+   }
+ 
++  shaar_error_code Phase2Command(int command_id, const base::DictValue& args,
++                                  ReplyTarget reply, shaar_error* error) {
++    if (origin_ == "null" || !SameOriginURL(contents_->GetLastCommittedURL().spec(), origin_))
++      return Fail(error, SHAAR_POLICY_BLOCKED, "phase 2 requires a web origin");
++    if (pending_phase2_.size() >= kMaxPendingBodies || next_command_id_ == INT_MAX)
++      return Fail(error, SHAAR_NOT_READY, "too many pending phase 2 commands");
++    base::DictValue command;
++    if (!BuildPhase2Command(command_id, args, origin_, cache_ids_, cache_urls_,
++                            worker_scopes_, resource_urls_, frame_id_, &command))
++      return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid phase 2 command");
++    const int id = next_command_id_++;
++    command.Set("id", id);
++    std::string json;
++    if (!base::JSONWriter::Write(base::Value(std::move(command)), &json))
++      return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid phase 2 request");
++    pending_phase2_.emplace(id, PendingPhase2{reply, command_id, args.Clone()});
++    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
++        FROM_HERE, base::BindOnce(&PanelClient::Phase2TimedOut,
++                                  weak_factory_.GetWeakPtr(), id),
++        base::Seconds(15));
++    host_->DispatchProtocolMessage(this, base::as_byte_span(json));
++    return SHAAR_OK;
++  }
++
+   void DispatchProtocolMessage(content::DevToolsAgentHost*,
+                                base::span<const uint8_t> message) override {
+     if (closing_)
+@@ -381,6 +1062,23 @@
+       return;
+     const auto& root = parsed->GetDict();
+     if (auto id = root.FindInt("id")) {
++      auto phase2 = pending_phase2_.find(*id);
++      if (phase2 != pending_phase2_.end()) {
++        PendingPhase2 pending = std::move(phase2->second);
++        pending_phase2_.erase(phase2);
++        const auto* result = root.FindDict("result");
++        std::string output;
++        if (!result || root.FindDict("error") ||
++            !ProjectPhase2Result(pending.command_id, *result, pending.args,
++                                 origin_, &cache_ids_, &cache_urls_, &resource_urls_,
++                                 &frame_id_, &output)) {
++          Reply(pending.reply, SHAAR_CHROMIUM_ERROR, {},
++                "phase 2 result unavailable or too large");
++        } else {
++          Reply(pending.reply, SHAAR_OK, std::move(output));
++        }
++        return;
++      }
+       auto found = pending_bodies_.find(*id);
+       if (found == pending_bodies_.end())
+         return;
+@@ -410,7 +1108,9 @@
+       return;
+     }
+     Projection projection{};
+-    if (!Project(*method, *params, &projection))
++    if (!Project(*method, *params, &projection) &&
++        !ProjectPhase2Event(*method, *params, origin_, &projection,
++                            &worker_scopes_))
+       return;
+     if (projection.id == SHAAR_DEVTOOLS_PANEL_REQUEST_WILL_BE_SENT) {
+       const auto* request_id = params->FindString("requestId");
+@@ -438,6 +1138,21 @@
+   }
+ 
+  private:
++  struct PendingPhase2 {
++    ReplyTarget reply;
++    int command_id;
++    base::DictValue args;
++  };
++
++  void Phase2TimedOut(int command_id) {
++    auto found = pending_phase2_.find(command_id);
++    if (found == pending_phase2_.end())
++      return;
++    ReplyTarget target = found->second.reply;
++    pending_phase2_.erase(found);
++    Reply(target, SHAAR_NOT_READY, {}, "phase 2 command timed out");
++  }
++
+   void BodyTimedOut(int command_id) {
+     auto found = pending_bodies_.find(command_id);
+     if (found == pending_bodies_.end())
+@@ -526,6 +1241,7 @@
+   DevToolsTargetIdentity identity_;
+   scoped_refptr<content::DevToolsAgentHost> host_;
+   int lease_id_;
++  std::string origin_;
+   int next_command_id_ = 1000000;
+   bool attached_ = false;
+   bool closing_ = false;
+@@ -537,6 +1253,12 @@
+   std::set<std::string> known_requests_;
+   std::deque<std::string> request_order_;
+   std::map<int, ReplyTarget> pending_bodies_;
++  std::map<int, PendingPhase2> pending_phase2_;
++  std::set<std::string> cache_ids_;
++  std::map<std::string, std::set<std::string>> cache_urls_;
++  std::set<std::string> worker_scopes_;
++  std::set<std::string> resource_urls_;
++  std::string frame_id_;
+   base::WeakPtrFactory<PanelClient> weak_factory_{this};
+ };
+ 
+@@ -556,6 +1278,38 @@
+          EncodeProjectedEvent(std::move(projection), lease_id, output);
+ }
+ 
++bool BuildPhase2CommandForTesting(int command_id, std::string_view params,
++                                  std::string_view origin, std::string* output) {
++  if (!output || params.size() > 20 * 1024)
++    return false;
++  auto parsed = base::JSONReader::Read(params, base::JSON_PARSE_RFC);
++  if (!parsed || !parsed->is_dict())
++    return false;
++  base::DictValue command;
++  if (!BuildPhase2Command(command_id, parsed->GetDict(), std::string(origin),
++                          {}, {}, {}, {}, {}, &command))
++    return false;
++  return base::JSONWriter::Write(base::Value(std::move(command)), output);
++}
++
++bool ProjectPhase2EventForTesting(std::string_view message,
++                                  std::string_view origin, int lease_id,
++                                  std::string* output) {
++  if (!output || lease_id <= 0 || message.size() > kMaxEventInputBytes)
++    return false;
++  auto parsed = base::JSONReader::Read(message, base::JSON_PARSE_RFC);
++  if (!parsed || !parsed->is_dict())
++    return false;
++  const auto* method = parsed->GetDict().FindString("method");
++  const auto* params = parsed->GetDict().FindDict("params");
++  std::set<std::string> scopes;
++  Projection projection{};
++  return method && params &&
++         ProjectPhase2Event(*method, *params, std::string(origin),
++                             &projection, &scopes) &&
++         EncodeProjectedEvent(std::move(projection), lease_id, output);
++}
++
+ void ClosePanelLeaseForTab(content::WebContents* contents) {
+   auto found = Leases().find(contents);
+   if (found != Leases().end())
+@@ -578,7 +1332,7 @@
+     shaar_bytes args_json, shaar_request_id request_id, shaar_reply_fn reply,
+     void* reply_context, shaar_error* error) {
+   if (!context || !context->devtools_runtime || !engine || !contents || !reply ||
+-      !args_json.data || args_json.size == 0 || args_json.size > 1024)
++      !args_json.data || args_json.size == 0 || args_json.size > 20 * 1024)
+     return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid panel request");
+   auto parsed = base::JSONReader::Read(
+       std::string_view(args_json.data, args_json.size), base::JSON_PARSE_RFC);
+@@ -638,6 +1392,18 @@
+       return Fail(error, SHAAR_NOT_FOUND, "panel lease not found");
+     return lease->GetBody(*id, target, error);
+   }
++  if (operation == SHAAR_OP_DEVTOOLS_PANEL_PHASE2_COMMAND) {
++    if (!HasKeys(args, {"schemaVersion", "leaseID", "commandID", "params"}))
++      return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid phase 2 schema");
++    auto command_id = args.FindInt("commandID");
++    const auto* params = args.FindDict("params");
++    if (!command_id || !params)
++      return Fail(error, SHAAR_INVALID_ARGUMENT, "invalid phase 2 parameters");
++    if (!lease || !lease->Matches(engine, identity) ||
++        lease->lease_id() != *lease_id)
++      return Fail(error, SHAAR_NOT_FOUND, "panel lease not found");
++    return lease->Phase2Command(*command_id, *params, target, error);
++  }
+   return Fail(error, SHAAR_INVALID_ARGUMENT, "unknown panel operation");
+ }
+ 
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.h b/chrome/browser/shaar/devtools/shaar_devtools_panel.h
+--- a/chrome/browser/shaar/devtools/shaar_devtools_panel.h
++++ b/chrome/browser/shaar/devtools/shaar_devtools_panel.h
+@@ -12,6 +12,11 @@
+ // Test seam for the same allowlist and payload encoder used by live leases.
+ bool ProjectPanelEventForTesting(std::string_view message, int lease_id,
+                                  std::string* output);
++bool BuildPhase2CommandForTesting(int command_id, std::string_view params,
++                                  std::string_view origin, std::string* output);
++bool ProjectPhase2EventForTesting(std::string_view message,
++                                  std::string_view origin, int lease_id,
++                                  std::string* output);
+ void ClosePanelLeaseForTab(content::WebContents* contents);
+ void ClosePanelLeasesForEngine(shaar_engine* engine);
+ 

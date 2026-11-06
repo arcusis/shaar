@@ -773,6 +773,7 @@ TEST(ShaarDevToolsTest, LifecycleEntryRegistersOnlyItsOperationRange) {
   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_PANEL_OPEN));
   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_PANEL_CLOSE));
   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_PANEL_GET_RESPONSE_BODY));
+  EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_PANEL_PHASE2_COMMAND));
   EXPECT_EQ(nullptr, registry.Find(SHAAR_OP_MEDIA_GET_STATE));
   EXPECT_NE(nullptr, registry.FindModule(SHAAR_MODULE_DEVTOOLS));
 }
@@ -811,6 +812,41 @@ TEST(ShaarDevToolsPanelTest, ClipsTextAndRejectsUnboundedProtocolInput) {
   EXPECT_EQ(true, data->FindBool("truncated"));
   EXPECT_FALSE(ProjectPanelEventForTesting(
       std::string(257 * 1024, 'x'), 1, &output));
+}
+
+TEST(ShaarDevToolsPanelTest, Phase2CommandsHaveFixedMethodsAndBoundedPages) {
+  std::string output;
+  EXPECT_TRUE(BuildPhase2CommandForTesting(
+      SHAAR_DEVTOOLS_PHASE2_DOM_STORAGE_ITEMS,
+      R"({"isLocalStorage":false,"skipCount":0,"pageSize":50})",
+      "https://example.test", &output));
+  EXPECT_NE(std::string::npos, output.find("DOMStorage.getDOMStorageItems"));
+  EXPECT_NE(std::string::npos, output.find("https://example.test"));
+  EXPECT_FALSE(BuildPhase2CommandForTesting(
+      SHAAR_DEVTOOLS_PHASE2_DOM_STORAGE_ITEMS,
+      R"({"isLocalStorage":true,"skipCount":0,"pageSize":51})",
+      "https://example.test", &output));
+  EXPECT_FALSE(BuildPhase2CommandForTesting(
+      SHAAR_DEVTOOLS_PHASE2_DOM_STORAGE_ITEMS,
+      R"({"isLocalStorage":true,"skipCount":0,"pageSize":1,"securityOrigin":"https://other.test"})",
+      "https://example.test", &output));
+  EXPECT_FALSE(BuildPhase2CommandForTesting(
+      99, "{}", "https://example.test", &output));
+}
+
+TEST(ShaarDevToolsPanelTest, Phase2EventsRejectOtherOriginsAndPayloadFields) {
+  std::string output;
+  EXPECT_TRUE(ProjectPhase2EventForTesting(
+      R"({"method":"DOMStorage.domStorageItemAdded","params":{"storageId":{"securityOrigin":"https://example.test","isLocalStorage":true},"key":"a","newValue":"b","secret":"not-projected"}})",
+      "https://example.test", 42, &output));
+  EXPECT_NE(std::string::npos, output.find("\"eventID\":12"));
+  EXPECT_EQ(std::string::npos, output.find("not-projected"));
+  EXPECT_FALSE(ProjectPhase2EventForTesting(
+      R"({"method":"DOMStorage.domStorageItemAdded","params":{"storageId":{"securityOrigin":"https://other.test","isLocalStorage":true},"key":"a","newValue":"b"}})",
+      "https://example.test", 42, &output));
+  EXPECT_FALSE(ProjectPhase2EventForTesting(
+      R"({"method":"Network.getCookies","params":{}})",
+      "https://example.test", 42, &output));
 }
 
 }  // namespace

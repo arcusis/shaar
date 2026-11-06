@@ -1013,6 +1013,7 @@ bool PolicyAllowsOperation(DevToolsRuntimeServices* runtime,
     case SHAAR_OP_DEVTOOLS_PANEL_OPEN:
     case SHAAR_OP_DEVTOOLS_PANEL_CLOSE:
     case SHAAR_OP_DEVTOOLS_PANEL_GET_RESPONSE_BODY:
+    case SHAAR_OP_DEVTOOLS_PANEL_PHASE2_COMMAND:
       break;
     case SHAAR_OP_DEVTOOLS_UI_SET_DOCK:
     case SHAAR_OP_DEVTOOLS_CONTROL_ENABLE:
@@ -1023,7 +1024,8 @@ bool PolicyAllowsOperation(DevToolsRuntimeServices* runtime,
   }
   const bool panel_operation = operation == SHAAR_OP_DEVTOOLS_PANEL_OPEN ||
       operation == SHAAR_OP_DEVTOOLS_PANEL_CLOSE ||
-      operation == SHAAR_OP_DEVTOOLS_PANEL_GET_RESPONSE_BODY;
+      operation == SHAAR_OP_DEVTOOLS_PANEL_GET_RESPONSE_BODY ||
+      operation == SHAAR_OP_DEVTOOLS_PANEL_PHASE2_COMMAND;
   if ((operation == SHAAR_OP_DEVTOOLS_CALL && capability != kInspector &&
        capability != kDeveloper) ||
       (panel_operation && capability != kPanel) ||
@@ -1225,7 +1227,8 @@ shaar_error_code HandleDevToolsOperation(
 
   if (operation == SHAAR_OP_DEVTOOLS_PANEL_OPEN ||
       operation == SHAAR_OP_DEVTOOLS_PANEL_CLOSE ||
-      operation == SHAAR_OP_DEVTOOLS_PANEL_GET_RESPONSE_BODY) {
+      operation == SHAAR_OP_DEVTOOLS_PANEL_GET_RESPONSE_BODY ||
+      operation == SHAAR_OP_DEVTOOLS_PANEL_PHASE2_COMMAND) {
     if (!PolicyAllowsOperation(context->devtools_runtime, engine, scope,
                                contents, operation, kPanel))
       return Fail(error, SHAAR_POLICY_BLOCKED, "DevTools panel is blocked");

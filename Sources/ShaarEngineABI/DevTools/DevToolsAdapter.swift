@@ -17,6 +17,7 @@ public enum ShaarDevToolsOperation: UInt32, Sendable {
   case panelOpen = 1009
   case panelClose = 1010
   case panelGetResponseBody = 1011
+  case panelPhase2Command = 1012
 }
 
 public enum ShaarDevToolsCapability: UInt32, Sendable {
@@ -322,6 +323,29 @@ public struct ShaarDevToolsAdapter: Sendable {
             return .failure(.invalidEvent("invalid panel response body"))
           }
           return .success(body)
+        })
+    }
+  }
+
+  public func phase2Command(
+    _ command: ShaarDevToolsPhase2Command, leaseID: UInt32,
+    scope: ShaarNavigationScope, windowID: String, tabID: String,
+    completion: @escaping @Sendable (Result<ShaarDevToolsPhase2Reply, ShaarEngineError>) -> Void
+  ) throws -> UInt64 {
+    guard leaseID > 0, let parameters = command.parameters else {
+      throw ShaarEngineError.invalidEvent("invalid phase 2 command")
+    }
+    return try submitPanel(
+      .panelPhase2Command,
+      fields: ["leaseID": leaseID, "commandID": command.id, "params": parameters],
+      scope: scope, windowID: windowID, tabID: tabID
+    ) { result in
+      completion(
+        result.flatMap { data in
+          guard let reply = ShaarDevToolsPhase2Reply.decode(data, command: command) else {
+            return .failure(.invalidEvent("invalid phase 2 reply"))
+          }
+          return .success(reply)
         })
     }
   }

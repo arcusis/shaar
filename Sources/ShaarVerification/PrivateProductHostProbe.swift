@@ -934,7 +934,11 @@ final class PrivateProductHostProbe {
       if store.tabs.first(where: { $0.id == tabID })?.url.contains(value) == true { return }
       try await Task.sleep(for: .milliseconds(50))
     }
-    throw PrivateWindowFailure("Private product navigation callback timed out.")
+    let observed = store.tabs.first(where: { $0.id == tabID })?.url ?? "missing tab"
+    let nativeFailure = store.privatePage?.failure ?? "none"
+    throw PrivateWindowFailure(
+      "Private product navigation callback timed out: expected \(value), observed \(observed), selected tab \(store.selectedTabID), native failure \(nativeFailure)."
+    )
   }
 
   private func capturePrivateWindow(

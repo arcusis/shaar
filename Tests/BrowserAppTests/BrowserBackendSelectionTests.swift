@@ -54,6 +54,7 @@ final class BrowserBackendSelectionTests: XCTestCase {
       "closePrivateTabID:windowID:contextID:completion:",
       "navigatePrivateTabID:windowID:contextID:url:",
       "reloadPrivateTabID:windowID:contextID:",
+      "reloadPrivateTabID:windowID:contextID:mode:",
       "goBackPrivateTabID:windowID:contextID:",
       "goForwardPrivateTabID:windowID:contextID:",
       "windowForPrivateWindowID:contextID:",

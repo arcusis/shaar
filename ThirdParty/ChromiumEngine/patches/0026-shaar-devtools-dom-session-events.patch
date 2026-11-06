@@ -1,0 +1,154 @@
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools.h b/chrome/browser/shaar/devtools/shaar_devtools.h
+--- a/chrome/browser/shaar/devtools/shaar_devtools.h
++++ b/chrome/browser/shaar/devtools/shaar_devtools.h
+@@ -82,6 +82,10 @@
+                           std::string main_frame_id = {},
+                           base::ScopedClosureRunner visibility_lease = {});
+ 
++// The panel lease subscribes to DOM events on this command client's CDP
++// session, so projected node IDs match the Inspector command route.
++void EnableProtocolDOMForPanel(content::DevToolsAgentHost* host);
++
+ // Closes a synthetic target that does not emit AgentHostClosed in tests.
+ void CloseProtocolSessionForTesting(content::DevToolsAgentHost* host);
+ 
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.h b/chrome/browser/shaar/devtools/shaar_devtools_panel.h
+--- a/chrome/browser/shaar/devtools/shaar_devtools_panel.h
++++ b/chrome/browser/shaar/devtools/shaar_devtools_panel.h
+@@ -12,6 +12,9 @@
+ // Test seam for the same allowlist and payload encoder used by live leases.
+ bool ProjectPanelEventForTesting(std::string_view message, int lease_id,
+                                  std::string* output);
++bool HasDOMPanelLeaseForHost(content::DevToolsAgentHost* host);
++void RouteDOMPanelEventForProtocolHost(content::DevToolsAgentHost* host,
++                                       std::string_view message);
+ void ClosePanelLeaseForTab(content::WebContents* contents);
+ void ClosePanelLeasesForEngine(shaar_engine* engine);
+ 
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools.cc b/chrome/browser/shaar/devtools/shaar_devtools.cc
+--- a/chrome/browser/shaar/devtools/shaar_devtools.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools.cc
+@@ -695,7 +695,17 @@
+ 
+   bool Attach() {
+     attached_ = host_->AttachClient(this);
++    if (attached_ && HasDOMPanelLeaseForHost(host_.get()))
++      EnableDOMForPanel();
+     return attached_;
++  }
++
++  void EnableDOMForPanel() {
++    if (!attached_ || dom_enabled_)
++      return;
++    dom_enabled_ = true;
++    const std::string enable = R"({"id":-2,"method":"DOM.enable"})";
++    host_->DispatchProtocolMessage(this, base::as_byte_span(enable));
+   }
+ 
+   ~ProtocolClient() override {
+@@ -731,6 +741,7 @@
+     const auto& dict = parsed->GetDict();
+     const auto* method = dict.FindString("method");
+     if (method) {
++      RouteDOMPanelEventForProtocolHost(host_.get(), input);
+       if (*method == "Runtime.executionContextsCleared") {
+         contexts_.clear();
+       } else if (*method == "Runtime.executionContextDestroyed") {
+@@ -878,6 +889,7 @@
+   bool active_ = false;
+   bool awaiting_context_ = false;
+   bool attached_ = false;
++  bool dom_enabled_ = false;
+   base::WeakPtrFactory<ProtocolClient> weak_factory_{this};
+ };
+ 
+@@ -1069,6 +1081,12 @@
+   }
+   return client->Submit({request_id, reply, reply_context}, request_json,
+                          std::move(main_frame_id), std::move(visibility_lease));
++}
++
++void EnableProtocolDOMForPanel(content::DevToolsAgentHost* host) {
++  auto found = ProtocolClients().find(host);
++  if (found != ProtocolClients().end())
++    found->second->EnableDOMForPanel();
+ }
+ 
+ void CloseProtocolSessionForTesting(content::DevToolsAgentHost* host) {
+diff --git a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
+--- a/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_panel.cc
+@@ -392,8 +392,7 @@
+         R"({"id":-3,"method":"Network.enable"})",
+         R"({"id":-4,"method":"Page.enable"})",
+         R"({"id":-5,"method":"Page.setLifecycleEventsEnabled","params":{"enabled":true}})",
+-        R"({"id":-6,"method":"Performance.enable"})",
+-        R"({"id":-7,"method":"DOM.enable"})"};
++        R"({"id":-6,"method":"Performance.enable"})"};
+     for (const char* command : commands)
+       host_->DispatchProtocolMessage(this, base::as_byte_span(std::string_view(command)));
+     return true;
+@@ -405,10 +404,22 @@
+   }
+ 
+   int lease_id() const { return lease_id_; }
++  content::DevToolsAgentHost* host() const { return host_.get(); }
+   shaar_engine* engine() const { return engine_; }
+   void Activate() {
+     ready_ = true;
+     ScheduleFlush();
++    EnableProtocolDOMForPanel(host_.get());
++  }
++
++  void ReceiveDOMEvent(std::string_view method, const base::DictValue& params) {
++    if (!StillOwnsTarget()) {
++      Close();
++      return;
++    }
++    Projection projection{};
++    if (Project(method, params, &projection))
++      Enqueue(std::move(projection));
+   }
+   const DevToolsTargetIdentity& identity() const { return identity_; }
+   bool Matches(shaar_engine* engine, const DevToolsTargetIdentity& identity) const {
+@@ -497,6 +508,10 @@
+     const auto* params = root.FindDict("params");
+     if (!method || !params)
+       return;
++    // DOM node IDs belong to this client's CDP session. The Inspector command
++    // client projects its own DOM events to this lease instead.
++    if (method->rfind("DOM.", 0) == 0)
++      return;
+     if (message.size() > kMaxEventInputBytes) {
+       Drop();
+       return;
+@@ -633,6 +648,29 @@
+ };
+ 
+ }  // namespace
++
++bool HasDOMPanelLeaseForHost(content::DevToolsAgentHost* host) {
++  if (!host)
++    return false;
++  auto found = Leases().find(host->GetWebContents());
++  return found != Leases().end() && found->second->host() == host;
++}
++
++void RouteDOMPanelEventForProtocolHost(content::DevToolsAgentHost* host,
++                                       std::string_view message) {
++  if (!HasDOMPanelLeaseForHost(host) || message.size() > kMaxEventInputBytes)
++    return;
++  auto parsed = base::JSONReader::Read(message, base::JSON_PARSE_RFC);
++  if (!parsed || !parsed->is_dict())
++    return;
++  const auto* method = parsed->GetDict().FindString("method");
++  const auto* params = parsed->GetDict().FindDict("params");
++  if (!method || method->rfind("DOM.", 0) != 0 || !params)
++    return;
++  auto found = Leases().find(host->GetWebContents());
++  if (found != Leases().end())
++    found->second->ReceiveDOMEvent(*method, *params);
++}
+ 
+ bool ProjectPanelEventForTesting(std::string_view message, int lease_id,
+                                  std::string* output) {

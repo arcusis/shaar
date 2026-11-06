@@ -41,19 +41,26 @@ struct CommandLauncherStoreTests {
 
     store.preferences.setAccount(
       ConnectedAccount(provider: .google, email: "work@example.test"), for: profileID)
+    #expect(!store.results.contains { if case .providerSearch = $0.action { true } else { false } })
+    store.commandQuery = "gmail"
+    #expect(store.activateCommandProviderKeyword())
+    store.commandQuery = "gmail quarterly plan"
     let googleRows = store.results.filter {
       if case .providerSearch = $0.action { return true }
       return false
     }
-    #expect(googleRows.map(\.subtitle) == ["Gmail", "Drive", "Calendar"])
+    #expect(googleRows.map(\.subtitle) == ["Gmail"])
 
     store.preferences.setAccount(
       ConnectedAccount(provider: .microsoft, email: "work@example.test"), for: profileID)
+    store.commandQuery = "outlook"
+    #expect(store.activateCommandProviderKeyword())
+    store.commandQuery = "outlook quarterly plan"
     let microsoftRows = store.results.filter {
       if case .providerSearch = $0.action { return true }
       return false
     }
-    #expect(microsoftRows.map(\.subtitle) == ["Outlook", "OneDrive", "Teams"])
+    #expect(microsoftRows.map(\.subtitle) == ["Outlook"])
 
     store.preferences.setAccount(
       ConnectedAccount(provider: .apple, email: "work@example.test"), for: profileID)
@@ -66,6 +73,8 @@ struct CommandLauncherStoreTests {
     store.preferences.setAccount(
       ConnectedAccount(provider: .google, email: "work@example.test"), for: profileID)
     store.showCommand()
+    store.commandQuery = "gmail"
+    #expect(store.activateCommandProviderKeyword())
     store.commandQuery = "gmail quarterly plan"
 
     #expect(store.selectedCommandResult?.title == "Search Gmail for “quarterly plan”")

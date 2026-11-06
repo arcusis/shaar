@@ -72,6 +72,15 @@ final class BrowserChromeLayoutTests: XCTestCase {
     XCTAssertEqual(frame.midY, content.midY)
   }
 
+  func testNoResultsShowsOnlyTheSearchRow() {
+    let content = CGRect(x: 10, y: 55, width: 1180, height: 715)
+    let frame = BrowserChromeLayout.commandPanelFrame(in: content, resultCount: 0)
+
+    XCTAssertEqual(frame.height, BrowserChromeLayout.commandSearchHeight)
+    XCTAssertEqual(
+      BrowserChromeLayout.commandResultsHeight(resultCount: 0, availableHeight: frame.height), 0)
+  }
+
   func testShortWindowBoundsResultsToRemainingPanelHeight() {
     let content = CGRect(x: 10, y: 105, width: 980, height: 185)
     let frame = BrowserChromeLayout.commandPanelFrame(in: content, resultCount: 100)

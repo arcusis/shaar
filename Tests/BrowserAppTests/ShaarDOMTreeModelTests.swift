@@ -55,6 +55,30 @@ import Testing
     ]
   ]
 
+  static func twentyThousandNodeDocument() -> [String: Any] {
+    var nextID = 2
+    var sections: [[String: Any]] = []
+    for sectionIndex in 0..<200 {
+      let sectionID = nextID
+      nextID += 1
+      let childCount = sectionIndex == 199 ? 98 : 99
+      let children: [[String: Any]] = (0..<childCount).map { _ in
+        defer { nextID += 1 }
+        return ["nodeId": nextID, "nodeType": 1, "nodeName": "SPAN", "nodeValue": ""]
+      }
+      sections.append([
+        "nodeId": sectionID, "nodeType": 1, "nodeName": "SECTION", "nodeValue": "",
+        "children": children,
+      ])
+    }
+    return [
+      "root": [
+        "nodeId": 1, "nodeType": 9, "nodeName": "#document", "nodeValue": "",
+        "children": sections,
+      ]
+    ]
+  }
+
   func messages(for target: SiteControlTarget) -> AsyncStream<ShaarDOMMessage> {
     AsyncStream { continuation in
       self.continuation = continuation
@@ -90,6 +114,18 @@ import Testing
 }
 
 @Suite @MainActor struct ShaarDOMTreeModelTests {
+  @Test func twentyThousandNodeFixtureIsVisible() async {
+    let fixture = DOMFixtureTransport()
+    fixture.document = DOMFixtureTransport.twentyThousandNodeDocument()
+    let model = ShaarDOMTreeModel(target: target(), transport: fixture)
+    model.open()
+    for _ in 0..<100 where model.rootID == nil && model.failure == nil { await Task.yield() }
+    #expect(model.failure == nil)
+    #expect(model.nodes.count == 20_000)
+    #expect(model.rows.count == 20_000)
+    model.close()
+  }
+
   private func target() -> SiteControlTarget {
     SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.test")!)

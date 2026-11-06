@@ -97,7 +97,7 @@ final class ShaarDOMTreeModel {
     guard let rootID else { return [] }
     var result: [ShaarDOMRow] = []
     func append(_ id: Int, depth: Int) {
-      guard depth <= 40, result.count < 10_000, let node = nodes[id] else { return }
+      guard depth <= 40, result.count < 20_000, let node = nodes[id] else { return }
       result.append(ShaarDOMRow(node: node, depth: depth))
       if expanded.contains(id) {
         for child in node.childrenIDs { append(child, depth: depth + 1) }
@@ -250,7 +250,7 @@ final class ShaarDOMTreeModel {
       let result = try await execute(.search(String(query.prefix(512))))
       guard let id = result["searchId"] as? String,
         let count = result["resultCount"] as? Int,
-        count >= 0, count <= 10_000
+        count >= 0, count <= 20_000
       else { throw ShaarDOMFailure("DOM search could not be completed") }
       searchID = id
       let found = try await execute(.searchResults(id, min(count, 500)))

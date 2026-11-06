@@ -8,6 +8,9 @@
 #include <algorithm>
 
 #include "testing/gtest/include/gtest/gtest.h"
+#include "components/keep_alive_registry/keep_alive_registry.h"
+#include "components/keep_alive_registry/scoped_keep_alive.h"
+#include "components/keep_alive_registry/keep_alive_types.h"
 
 namespace {
 
@@ -37,6 +40,22 @@ TEST(ShaarLifecycleProbeTest, BackgroundSwitchesAreVerificationOnly) {
     EXPECT_NE(std::find(verification.begin(), verification.end(), option),
               verification.end());
   }
+}
+
+TEST(ShaarLifecycleProbeTest, ClosingDevToolsKeepsHostAliveUntilExplicitRelease) {
+  auto host = shaar::lifecycle::CreateHostKeepAlive();
+  {
+    ScopedKeepAlive devtools(KeepAliveOrigin::DEVTOOLS_WINDOW,
+                            KeepAliveRestartOption::DISABLED);
+    EXPECT_TRUE(KeepAliveRegistry::GetInstance()->IsOriginRegistered(
+        KeepAliveOrigin::DEVTOOLS_WINDOW));
+  }
+  EXPECT_TRUE(KeepAliveRegistry::GetInstance()->IsKeepingAlive());
+  EXPECT_TRUE(KeepAliveRegistry::GetInstance()->IsOriginRegistered(
+      KeepAliveOrigin::APP_CONTROLLER));
+  host.reset();
+  EXPECT_FALSE(KeepAliveRegistry::GetInstance()->IsOriginRegistered(
+      KeepAliveOrigin::APP_CONTROLLER));
 }
 
 TEST(ShaarLifecycleProbeTest, KeepAliveStateRequiresActiveEngine) {

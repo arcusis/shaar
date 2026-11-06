@@ -22,6 +22,8 @@ class WebContents;
 namespace shaar::windows_tabs {
 
 bool HasHiddenNativeWindow(content::WebContents* contents);
+void UpdateDockedDevTools(content::WebContents* inspected,
+                          content::WebContents* frontend);
 
 class BrowserTabRegistryImpl final : public shaar::BrowserTabRegistry {
  public:

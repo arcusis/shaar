@@ -209,7 +209,9 @@ struct ShaarDevToolsPanel: View {
         clearSiteData: siteAction(.clearSiteData))
     case .performance:
       if model.phase2.available {
-        ShaarPerformancePanel(model: model.performance, phase2: model.phase2)
+        ShaarPerformancePanel(
+          model: model.performance, phase2: model.phase2,
+          developer: inspector?.engine?.developerModel(for: model.target))
       } else {
         unavailablePanel
       }

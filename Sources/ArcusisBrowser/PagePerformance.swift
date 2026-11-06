@@ -32,6 +32,7 @@ struct PagePerformanceSnapshot: Equatable {
   let heapBytes: Double?
   let requests: Int
   let transferredBytes: Double
+  let javascriptBytes: Double?
 
   var lcpQuality: PerformanceQuality { .rate(lcp, good: 2500, poor: 4000) }
   var inpQuality: PerformanceQuality { .rate(inp, good: 200, poor: 500) }
@@ -50,6 +51,7 @@ struct PagePerformanceSnapshot: Equatable {
     heapBytes = number(engineMetrics.first { $0["name"] as? String == "JSHeapUsedSize" }?["value"])
     requests = Int(min(number(page["requests"]) ?? 0, Double(Int32.max)))
     transferredBytes = number(page["bytes"]) ?? 0
+    javascriptBytes = number(page["javascriptBytes"])
   }
 }
 
@@ -60,7 +62,7 @@ enum PagePerformanceScript {
       if(globalThis.__shaarPerformanceV1)return true;
       const observers=[],interactions=new Map();
       let lcp=null,cls=0,session=0,firstShift=0,lastShift=0,fps=null,frames=0,lastFrame=performance.now(),raf=0;
-      let requests=0,bytes=0,firstInteraction=Infinity,lastInteraction=0;
+      let requests=0,bytes=0,javascriptBytes=0,javascriptBytesUnavailable=false,firstInteraction=Infinity,lastInteraction=0;
       const observe=(type,callback,extra={})=>{
         if(!PerformanceObserver.supportedEntryTypes.includes(type))return;
         const observer=new PerformanceObserver(list=>callback(list.getEntries()));
@@ -83,7 +85,7 @@ enum PagePerformanceScript {
           interactions.delete(key);
         }
       }},{durationThreshold:16});
-      observe('resource',entries=>{for(const e of entries){requests++;bytes+=e.transferSize||0;}});
+      observe('resource',entries=>{for(const e of entries){requests++;bytes+=e.transferSize||0;if(e.initiatorType==='script'){if(e.encodedBodySize>0)javascriptBytes+=e.encodedBodySize;else javascriptBytesUnavailable=true;}}});
       const navigation=performance.getEntriesByType('navigation')[0];
       if(navigation){requests++;bytes+=navigation.transferSize||0;}
       const tick=t=>{frames++;if(t-lastFrame>=1000){fps=frames*1000/(t-lastFrame);frames=0;lastFrame=t;}raf=requestAnimationFrame(tick);};
@@ -94,7 +96,7 @@ enum PagePerformanceScript {
           const estimate=lastInteraction?(lastInteraction-firstInteraction)/7+1:0;
           const count=performance.interactionCount??estimate;
           const inp=sorted.length?sorted[Math.min(sorted.length-1,Math.floor(count/50))]:null;
-          return {timeOrigin:performance.timeOrigin,lcp,inp,cls,fps:document.hidden?null:fps,requests,bytes};
+          return {timeOrigin:performance.timeOrigin,lcp,inp,cls,fps:document.hidden?null:fps,requests,bytes,javascriptBytes:javascriptBytesUnavailable?null:javascriptBytes};
         },
         dispose(){for(const o of observers)o.disconnect();cancelAnimationFrame(raf);delete globalThis.__shaarPerformanceV1;}
       };return true;

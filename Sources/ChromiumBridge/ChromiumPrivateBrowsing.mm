@@ -296,9 +296,17 @@ BOOL PrivatePoliciesReady(NSDictionary *status) {
 
 - (BOOL)reloadPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID
                  contextID:(NSString *)contextID {
+  return [self reloadPrivateTabID:tabID windowID:windowID contextID:contextID
+                            mode:ARCPageReloadModeNormal];
+}
+- (BOOL)reloadPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID
+                 contextID:(NSString *)contextID mode:(ARCPageReloadMode)mode {
+  if (mode == ARCPageReloadModeNewRenderer) return NO;
+  NSString *nativeMode = @"normal";
+  if (mode == ARCPageReloadModeBypassingCache) nativeMode = @"bypass_cache";
   return [self privateTabOperation:SHAAR_OP_TAB_RELOAD tabID:tabID windowID:windowID
                         contextID:contextID payload:@{@"schemaVersion": @1,
-                                                      @"mode": @"normal"}];
+                                                      @"mode": nativeMode}];
 }
 - (BOOL)goBackPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID
                  contextID:(NSString *)contextID {

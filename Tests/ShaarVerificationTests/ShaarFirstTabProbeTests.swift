@@ -9,6 +9,37 @@ import Testing
 
 @MainActor
 @Suite struct ShaarFirstTabProbeTests {
+  @Test func privatePresentationRequiresTheExactSelectedVisibleViewInAHiddenWindow() {
+    let state: [String: Any] = [
+      "tabID": "fixture", "nativeStateSupported": true, "selectedNativeTab": true,
+      "displayedNativeWebContents": true,
+      "nativeViewHierarchy": [
+        "inExpectedWindow": true, "hasWindow": true, "hidden": false,
+        "hiddenOrHasHiddenAncestor": false, "windowVisible": false,
+      ],
+    ]
+    let audit: [AnyHashable: Any] = ["allWindowsHidden": true, "documentStates": [state]]
+    #expect(ShaarInspectorSessionProbe.privatePresentationReady(audit, tabID: "fixture"))
+    #expect(!ShaarInspectorSessionProbe.privatePresentationReady(audit, tabID: "other"))
+    #expect(!ShaarInspectorSessionProbe.privatePresentationReady([:], tabID: "fixture"))
+    for field in ["nativeStateSupported", "selectedNativeTab", "displayedNativeWebContents"] {
+      var changed = state
+      changed[field] = false
+      let ready = ShaarInspectorSessionProbe.privatePresentationReady(
+        ["allWindowsHidden": true, "documentStates": [changed]], tabID: "fixture")
+      #expect(!ready)
+    }
+    for field in ["hidden", "hiddenOrHasHiddenAncestor", "windowVisible"] {
+      var changed = state
+      var hierarchy = state["nativeViewHierarchy"] as! [String: Bool]
+      hierarchy[field] = true
+      changed["nativeViewHierarchy"] = hierarchy
+      let ready = ShaarInspectorSessionProbe.privatePresentationReady(
+        ["allWindowsHidden": true, "documentStates": [changed]], tabID: "fixture")
+      #expect(!ready)
+    }
+  }
+
   @Test func missingArgumentsFailBeforeStartingTheEngine() {
     #expect(ShaarFirstTabProbe.run(arguments: []) == 1)
     #expect(

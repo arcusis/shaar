@@ -1,0 +1,137 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+import AppKit
+import BrowserCore
+import ChromiumBridge
+import Testing
+
+@testable import ArcusisBrowser
+
+private final class PrivateInspectorRuntime: ARCChromiumRuntime {
+  var tabID = ""
+  var pageView: NSView?
+  var calls: [String] = []
+  var expressions: [String] = []
+  var ended: [String] = []
+  var opened = false
+
+  override func view(forPrivateTabID tabID: String, windowID: String, contextID: String) -> NSView?
+  {
+    guard tabID == self.tabID, windowID == "private-window", contextID == "private-context"
+    else { return nil }
+    return pageView
+  }
+
+  override func beginInspector(forPrivateTabID tabID: String, windowID: String, contextID: String)
+    -> Bool
+  {
+    view(forPrivateTabID: tabID, windowID: windowID, contextID: contextID) != nil
+  }
+
+  override func endInspector(forTabID tabID: String) { ended.append(tabID) }
+
+  @MainActor override func privateInspectorCall(
+    _ method: String, params: [AnyHashable: Any], tabID: String, windowID: String,
+    contextID: String,
+    completion: @escaping @MainActor @Sendable ([String: Any]?, Error?) -> Void
+  ) {
+    guard view(forPrivateTabID: tabID, windowID: windowID, contextID: contextID) != nil else {
+      completion(nil, InspectorFailure("Wrong scope"))
+      return
+    }
+    calls.append(method)
+    if let expression = params["expression"] as? String { expressions.append(expression) }
+    completion(["result": ["value": 42]], nil)
+  }
+
+  @MainActor override func toggleDevTools(
+    forPrivateTabID tabID: String, windowID: String, contextID: String,
+    completion: @escaping @MainActor @Sendable (Error?) -> Void
+  ) {
+    opened = view(forPrivateTabID: tabID, windowID: windowID, contextID: contextID) != nil
+    completion(nil)
+  }
+}
+
+@Suite @MainActor struct PrivateInspectorTests {
+  @Test func closingReleasedInspectorStillRemovesRendererShield() async throws {
+    let tabID = UUID()
+    let store = BrowserStore(
+      privateSession: try .privateWindow(sourceProfileID: UUID(), firstTabID: tabID))
+    let runtime = PrivateInspectorRuntime()
+    runtime.tabID = tabID.uuidString
+    runtime.pageView = NSView()
+    let session = PrivatePageSession(
+      runtime: runtime, contextID: "private-context", windowID: "private-window",
+      firstTabID: tabID, store: store)
+    let target = try #require(session.inspectorTarget)
+    var model: InspectorModel? = InspectorModel(target: target, privateSession: session)
+    weak var released = model
+    model?.open()
+    model?.close()
+    model = nil
+    for _ in 0..<20 {
+      if released == nil && runtime.expressions.contains(where: { $0.contains(".stop()") }) {
+        break
+      }
+      try await Task.sleep(for: .milliseconds(5))
+    }
+    #expect(runtime.expressions.contains(where: { $0.contains(".stop()") }))
+    #expect(released == nil)
+  }
+
+  @Test func privateCommandsUseTheirOwnContextAndRetireWithTheTab() async throws {
+    let tabID = UUID()
+    let profileID = UUID()
+    let store = BrowserStore(
+      privateSession: try .privateWindow(
+        sourceProfileID: profileID, firstTabID: tabID))
+    let runtime = PrivateInspectorRuntime()
+    runtime.tabID = tabID.uuidString
+    runtime.pageView = NSView()
+    let session = PrivatePageSession(
+      runtime: runtime, contextID: "private-context",
+      windowID: "private-window", firstTabID: tabID, store: store)
+    session.tabChanged(
+      tabID, url: "https://example.com/private", title: "Private",
+      loading: false, back: false, forward: false)
+    #expect(PrivateBrowserHost.windowCanPerform(.inspector, store: store))
+    session.toggleInspector()
+    let model = try #require(session.inspectors[tabID])
+    #expect(model.isOpen && !model.supportsPageTools)
+    #expect(try await model.evaluate("6 * 7") as? Int == 42)
+    #expect(runtime.calls.contains("Runtime.evaluate"))
+    model.setPanelMode(.page)
+    #expect(model.panelMode == .element)
+    session.toggleDeveloperTools()
+    #expect(runtime.opened)
+    let wrong = SiteControlTarget(tabID: tabID, profileID: UUID(), url: model.target.url)
+    #expect(!session.ownsInspectorTarget(wrong))
+    session.tabClosed(tabID)
+    #expect(!model.isOpen && session.inspectors.isEmpty)
+    #expect(runtime.ended.contains(tabID.uuidString))
+    await #expect(throws: (any Error).self) { _ = try await model.evaluate("42") }
+    #expect(!PrivateBrowserHost.windowCanPerform(.inspector, store: store))
+  }
+
+  @Test func retiringAWindowPreventsFurtherPrivateInspectorCalls() async throws {
+    let tabID = UUID()
+    let store = BrowserStore(
+      privateSession: try .privateWindow(
+        sourceProfileID: UUID(), firstTabID: tabID))
+    let runtime = PrivateInspectorRuntime()
+    runtime.tabID = tabID.uuidString
+    runtime.pageView = NSView()
+    let session = PrivatePageSession(
+      runtime: runtime, contextID: "private-context",
+      windowID: "private-window", firstTabID: tabID, store: store)
+    session.toggleInspector()
+    let model = try #require(session.inspectors[tabID])
+    session.retireInspectors()
+    #expect(session.inspectorTarget == nil && !model.isOpen)
+    await #expect(throws: (any Error).self) { _ = try await model.evaluate("42") }
+    #expect(runtime.calls.isEmpty)
+  }
+}

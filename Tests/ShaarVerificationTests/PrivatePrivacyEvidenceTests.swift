@@ -4,11 +4,60 @@
 
 import ChromiumBridge
 import ChromiumBridgeVerification
+import ShaarEngineC
 import Testing
 
 @testable import ShaarVerification
 
 @Suite struct PrivatePrivacyEvidenceTests {
+  @Test func permissionPresentationRequiresTemporaryRendererVisibilityAndHiddenWindows() {
+    let observations: [String: Any] = [
+      "before": "hidden", "during": "visible", "completion": "visible", "after": "hidden",
+      "nativeWindowsHiddenBefore": true, "nativeWindowsHiddenAfter": true,
+    ]
+    #expect(PrivatePrivacyEvidence.permissionPresentation(observations).values.allSatisfy { $0 })
+    for key in observations.keys {
+      var missing = observations
+      missing.removeValue(forKey: key)
+      #expect(PrivatePrivacyEvidence.permissionPresentation(missing).values.contains(false))
+      var wrong = observations
+      wrong[key] = false
+      #expect(PrivatePrivacyEvidence.permissionPresentation(wrong).values.contains(false))
+    }
+  }
+
+  @Test func nativePreferencesPreserveBothControlsAndWildcardRejection() {
+    let keys = [
+      "credentials_enable_service", "autofill.profile_enabled", "autofill.credit_card_enabled",
+    ]
+    var status: [String: Any] = [:]
+    for key in keys {
+      status[key + "Normal"] = true
+      status[key + "Private"] = false
+    }
+    let rejected = Int(SHAAR_INVALID_ARGUMENT.rawValue)
+    let observations = ARCProbePrivatePrivacyPreferences(status, rejected)
+    #expect(PrivatePrivacyEvidence.preferences(observations).values.allSatisfy { $0 })
+    for key in status.keys {
+      var missing = status
+      missing.removeValue(forKey: key)
+      #expect(
+        PrivatePrivacyEvidence.preferences(ARCProbePrivatePrivacyPreferences(missing, rejected))
+          .values.contains(false))
+      var inverted = status
+      inverted[key] = !(status[key] as! Bool)
+      #expect(
+        PrivatePrivacyEvidence.preferences(ARCProbePrivatePrivacyPreferences(inverted, rejected))
+          .values.contains(false))
+    }
+    for code in [SHAAR_OK, SHAAR_NOT_FOUND] {
+      #expect(
+        PrivatePrivacyEvidence.preferences(
+          ARCProbePrivatePrivacyPreferences(status, Int(code.rawValue)))[
+            "wildcardCookieDefaultUnavailable"] == false)
+    }
+  }
+
   @Test func engineStatusRequiresEveryPrivatePolicy() {
     let status: [AnyHashable: Any] = [
       "offTheRecord": true, "globalCookies": "block", "httpsOnly": true,

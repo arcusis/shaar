@@ -296,7 +296,7 @@ struct PrivateSplitPageView: View {
     ) { id in
       SplitPaneToolbar(store: store, tabID: id)
     } pane: { id in
-      PrivateBrowserPage(session: session, tabID: id, inSplit: true)
+      PrivateInspectorPage(session: session, tabID: id, inSplit: true)
         .overlay { SplitDropZone(store: store, targetID: id) }
     }
     .padding(2)

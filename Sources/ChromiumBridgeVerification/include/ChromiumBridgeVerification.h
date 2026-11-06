@@ -35,9 +35,26 @@ FOUNDATION_EXPORT NSDictionary<NSString *, id> *ARCProbeNormalSelectionAudit(
 /// Extracts a JSON value from a scoped Shaar Runtime.evaluate reply.
 FOUNDATION_EXPORT NSString * _Nullable ARCProbePrivateEvaluationJSON(NSDictionary *reply);
 
+/// Observe the real private selection method during a synchronous product action, forwarding unchanged.
+/// Requires the owned Inspector probe root; restores the original method before returning.
+FOUNDATION_EXPORT NSArray<NSDictionary *> * _Nullable ARCProbeTracePrivateSelection(
+  ARCChromiumRuntime *runtime, void (^action)(void));
+
 /// Await async privacy scripts before returning a copied JSON value.
 FOUNDATION_EXPORT NSDictionary<NSString *, id> *ARCProbePrivacyEvaluationParameters(
   NSString *expression);
+/// Only the dedicated permission fixture requests a scoped renderer visibility lease.
+FOUNDATION_EXPORT NSDictionary<NSString *, id> *ARCProbePrivateEvaluationPayload(
+  NSString *expression, BOOL probeVisibleForRenderer);
+
+/// Preserve native normal/private preference observations and wildcard rejection.
+FOUNDATION_EXPORT NSDictionary<NSString *, id> *ARCProbePrivatePrivacyPreferences(
+  NSDictionary *status, NSInteger wildcardStatus);
+
+/// Reads native-owned dock geometry without retaining or reparenting its frontend.
+FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeDevToolsDockAudit(
+  ARCChromiumRuntime *runtime, NSString *tabID, NSString *windowID,
+  NSString * _Nullable contextID);
 
 @interface ARCChromiumRuntime (Verification)
 /// Grants geolocation only on the selected disposable Inspector loopback fixture.
@@ -65,6 +82,8 @@ FOUNDATION_EXPORT NSDictionary<NSString *, id> *ARCProbePrivacyEvaluationParamet
 - (nullable NSDictionary *)privatePrivacyPreferencesForContextID:(NSString *)contextID;
 - (void)evaluatePrivacyProbeTabID:(NSString *)tabID script:(NSString *)script
                           completion:(void (^)(NSString * _Nullable))completion;
+- (void)evaluatePrivatePermissionProbeTabID:(NSString *)tabID script:(NSString *)script
+                                completion:(void (^)(NSString * _Nullable))completion;
 - (BOOL)attemptCancelledPrivateProbeCloseID:(NSString *)windowID;
 - (nullable NSDictionary *)privateProbeAuditForContextID:(NSString *)contextID;
 /// The selected owned loopback tab is loaded and attached; does not start a capture.

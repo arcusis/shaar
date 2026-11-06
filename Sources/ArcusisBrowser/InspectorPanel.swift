@@ -14,7 +14,7 @@ struct InspectorPanel: View {
       VStack(spacing: 0) {
         header
         Divider()
-        modeSwitch.padding(.vertical, 6)
+        if model.supportsPageTools { modeSwitch.padding(.vertical, 6) }
         if model.panelMode == .element {
           VStack(alignment: .leading, spacing: 7) {
             if let selection = model.selection { elementHeader(selection) }

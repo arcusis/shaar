@@ -51,6 +51,28 @@ NSDictionary *PrivateTab(ARCShaarRuntime *runtime, NSString *tabID) {
   return ARCPrivateShaarState(runtime)[@"tabs"][tabID];
 }
 
+NSDictionary *ProbeViewHierarchy(NSView *view, NSWindow *expectedWindow) {
+  NSMutableArray *ancestors = [NSMutableArray array];
+  for (NSView *ancestor = view; ancestor; ancestor = ancestor.superview) {
+    [ancestors addObject:@{
+        @"class": NSStringFromClass(ancestor.class),
+        @"address": [NSString stringWithFormat:@"%p", ancestor],
+        @"hidden": @(ancestor.isHidden),
+        @"hiddenOrHasHiddenAncestor": @(ancestor.isHiddenOrHasHiddenAncestor),
+        @"frame": NSStringFromRect(ancestor.frame),
+        @"bounds": NSStringFromRect(ancestor.bounds),
+        @"windowNumber": @(ancestor.window ? ancestor.window.windowNumber : -1)}];
+  }
+  return @{@"exists": @(view != nil),
+      @"hasWindow": @(view.window != nil),
+      @"inExpectedWindow": @(expectedWindow && view.window == expectedWindow),
+      @"expectedWindowNumber": @(expectedWindow ? expectedWindow.windowNumber : -1),
+      @"windowVisible": @(view.window.isVisible),
+      @"hidden": @(view.isHidden),
+      @"hiddenOrHasHiddenAncestor": @(view.isHiddenOrHasHiddenAncestor),
+      @"ancestors": ancestors};
+}
+
 bool PrivateTabState(ARCShaarRuntime *runtime, NSString *tabID,
                      NSString *windowID, NSString *contextID,
                      shaar_tab_probe_state *state) {
@@ -67,6 +89,78 @@ bool PrivateTabState(ARCShaarRuntime *runtime, NSString *tabID,
 }
 
 }  // namespace
+
+NSDictionary *ARCProbeDevToolsDockAudit(ARCChromiumRuntime *baseRuntime,
+    NSString *tabID, NSString *windowID, NSString *contextID) {
+  if (!ProbeCaptureAllowed() || ![baseRuntime isKindOfClass:ARCShaarRuntime.class]) return nil;
+  auto frontend = reinterpret_cast<decltype(&shaar_devtools_frontend_view)>(
+      dlsym(RTLD_DEFAULT, "shaar_devtools_frontend_view"));
+  if (!frontend) return nil;
+  ARCShaarRuntime *runtime = (ARCShaarRuntime *)baseRuntime;
+  shaar_scope scope = {};
+  scope.size = sizeof(scope);
+  shaar_window *windowHandle = nullptr;
+  shaar_tab *tabHandle = nullptr;
+  NSView *page = nil;
+  NSView *host = nil;
+  if (contextID.length) {
+    if (![runtime privateTabOwned:tabID windowID:windowID contextID:contextID]) return nil;
+    scope.private_session = (shaar_private_session *)[PrivateContext(runtime, contextID)[@"session"] pointerValue];
+    windowHandle = (shaar_window *)[PrivateWindow(runtime, windowID)[@"handle"] pointerValue];
+    tabHandle = (shaar_tab *)[PrivateTab(runtime, tabID)[@"handle"] pointerValue];
+    page = [runtime viewForPrivateTabID:tabID windowID:windowID contextID:contextID];
+    host = [runtime hostViewForPrivateWindowID:windowID contextID:contextID];
+  } else {
+    NSString *profileID = ProbeTable(runtime, "_shaarTabProfiles")[tabID];
+    if (![runtime shaarDevToolsOwnsTabID:tabID profileID:profileID windowID:windowID]) return nil;
+    scope.profile = (shaar_profile *)[ProbeTable(runtime, "_shaarProfiles")[profileID] pointerValue];
+    windowHandle = (shaar_window *)[ProbeTable(runtime, "_shaarWindows")[windowID] pointerValue];
+    tabHandle = (shaar_tab *)[ProbeTable(runtime, "_shaarTabs")[tabID] pointerValue];
+    page = [runtime viewForTabID:tabID];
+    host = [runtime hostViewForWindowID:windowID];
+  }
+  NSView *dock = (__bridge NSView *)frontend([runtime privateEngineHandle], scope, windowHandle, tabHandle);
+  BOOL hidden = YES;
+  for (NSWindow *window in NSApp.windows) hidden &= !window.isVisible;
+  return @{@"open": @(dock != nil), @"sameWindow": @(page.window && dock.window == page.window),
+      @"sameContainer": @(page.superview && dock.superview == page.superview),
+      @"containerWidth": @(page.superview.bounds.size.width),
+      @"nonOverlapping": @(dock && NSMaxX(page.frame) <= NSMinX(dock.frame) + 1),
+      @"allWindowsHidden": @(hidden), @"pageWidth": @(page.frame.size.width),
+      @"pageHeight": @(page.frame.size.height), @"hostWidth": @(host.bounds.size.width),
+      @"frontendWidth": @(dock.frame.size.width), @"frontendHeight": @(dock.frame.size.height),
+      @"pageFrame": NSStringFromRect(page.frame), @"frontendFrame": NSStringFromRect(dock.frame)};
+}
+
+NSArray<NSDictionary *> *ARCProbeTracePrivateSelection(
+    ARCChromiumRuntime *runtime, void (^action)(void)) {
+  if (!ProbeCaptureAllowed() ||
+      ![NSProcessInfo.processInfo.arguments containsObject:@"--probe-shaar-inspector"])
+    return nil;
+  NSCAssert(NSThread.isMainThread, @"Selection tracing requires the main thread");
+  SEL selector = @selector(selectPrivateTabID:windowID:contextID:);
+  Method method = class_getInstanceMethod(runtime.class, selector);
+  if (!method) return nil;
+  IMP previous = method_getImplementation(method);
+  using Select = BOOL (*)(id, SEL, NSString *, NSString *, NSString *);
+  Select original = reinterpret_cast<Select>(previous);
+  NSMutableArray *calls = [NSMutableArray array];
+  IMP trace = imp_implementationWithBlock(^BOOL(id receiver, NSString *tabID,
+                                               NSString *windowID, NSString *contextID) {
+    BOOL accepted = original(receiver, selector, tabID, windowID, contextID);
+    if (receiver == runtime)
+      [calls addObject:@{@"tabID": tabID, @"windowID": windowID,
+                         @"contextID": contextID, @"accepted": @(accepted)}];
+    return accepted;
+  });
+  method_setImplementation(method, trace);
+  @try { action(); }
+  @finally {
+    method_setImplementation(method, previous);
+    imp_removeBlock(trace);
+  }
+  return [calls copy];
+}
 
 NSData *ARCProbePNGFromDevToolsResult(NSDictionary *result) {
   NSString *encoded = result[@"data"];
@@ -114,6 +208,38 @@ NSString *ARCProbePrivateEvaluationJSON(NSDictionary *reply) {
 NSDictionary<NSString *, id> *ARCProbePrivacyEvaluationParameters(NSString *expression) {
   return @{@"expression": expression, @"returnByValue": @YES,
            @"awaitPromise": @YES};
+}
+
+NSDictionary<NSString *, id> *ARCProbePrivateEvaluationPayload(
+    NSString *expression, BOOL probeVisibleForRenderer) {
+  NSMutableDictionary *payload = [@{@"schemaVersion": @1,
+      @"capability": @(SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER),
+      @"command": @(SHAAR_DEVTOOLS_RUNTIME_EVALUATE),
+      @"params": ARCProbePrivacyEvaluationParameters(expression)} mutableCopy];
+  if (probeVisibleForRenderer) payload[@"probeVisibleForRenderer"] = @YES;
+  return payload;
+}
+
+NSDictionary<NSString *, id> *ARCProbePrivatePrivacyPreferences(
+    NSDictionary *status, NSInteger wildcardStatus) {
+  NSMutableDictionary *result = [NSMutableDictionary dictionary];
+  for (NSString *key in @[@"credentials_enable_service", @"autofill.profile_enabled",
+                          @"autofill.credit_card_enabled"]) {
+    NSMutableDictionary *pair = [NSMutableDictionary dictionary];
+    id normal = status[[key stringByAppendingString:@"Normal"]];
+    id privateValue = status[[key stringByAppendingString:@"Private"]];
+    if (normal) pair[@"normal"] = normal;
+    if (privateValue) pair[@"private"] = privateValue;
+    result[key] = pair;
+  }
+  if (wildcardStatus == SHAAR_INVALID_ARGUMENT) {
+    result[@"wildcardCookieSetting"] = @{
+        @"error": @"origin must be an http(s) origin",
+        @"nativeStatus": @(wildcardStatus)};
+  } else {
+    result[@"wildcardCookieSetting"] = @{@"nativeStatus": @(wildcardStatus)};
+  }
+  return result;
 }
 
 template <typename T> static T ShaarProbeField(ARCShaarRuntime *runtime, const char *name) {
@@ -184,6 +310,7 @@ void ARCCompletePrivateQuitDialogCancellation(
 }
 - (void)captureMarketingProbeTabID:(NSString *)tabID completion:(void (^)(NSData *))completion { completion(nil); }
 - (void)evaluatePrivateProbeTabID:(NSString *)tabID script:(NSString *)script
+        probeVisibleForRenderer:(BOOL)probeVisibleForRenderer
                        completion:(void (^)(NSString *))completion {
   if (![self isKindOfClass:ARCShaarRuntime.class] || !script.length) { completion(nil); return; }
   ARCShaarRuntime *runtime = (ARCShaarRuntime *)self;
@@ -195,6 +322,13 @@ void ARCCompletePrivateQuitDialogCancellation(
   NSDictionary *window = state[@"windows"][windowID];
   if (![runtime privateTabOwned:tabID windowID:windowID contextID:contextID] ||
       !context || !window) { completion(nil); return; }
+  if (probeVisibleForRenderer) {
+    NSURLComponents *url = [NSURLComponents componentsWithString:tab[@"url"] ?: @""];
+    NSWindow *native = [runtime windowForPrivateWindowID:windowID contextID:contextID];
+    if (!ProbeCaptureAllowed() || ![window[@"selectedTabID"] isEqual:tabID] ||
+        ![url.scheme isEqual:@"http"] || ![url.host isEqual:@"127.0.0.1"] ||
+        !native || native.isVisible) { completion(nil); return; }
+  }
   shaar_scope scope = {};
   scope.size = sizeof(scope);
   scope.private_session = (shaar_private_session *)
@@ -202,14 +336,12 @@ void ARCCompletePrivateQuitDialogCancellation(
   shaar_window *nativeWindow = (shaar_window *)
       ((NSValue *)window[@"handle"]).pointerValue;
   shaar_tab *nativeTab = (shaar_tab *)((NSValue *)tab[@"handle"]).pointerValue;
-  NSDictionary *payload = @{@"schemaVersion": @1,
-      @"capability": @(SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER),
-      @"command": @(SHAAR_DEVTOOLS_RUNTIME_EVALUATE),
-      @"params": ARCProbePrivacyEvaluationParameters(script)};
+  NSDictionary *payload = ARCProbePrivateEvaluationPayload(script, probeVisibleForRenderer);
   BOOL submitted = ARCPrivateShaarSubmit(runtime, scope, nativeWindow, nativeTab,
       SHAAR_OP_DEVTOOLS_CALL, payload, ^(NSDictionary *reply) {
     NSString *value = ARCProbePrivateEvaluationJSON(reply);
     context[@"probeEvaluationError"] = value ? @"" : [reply description];
+    if (!value) NSLog(@"Private privacy evaluation failed: %@", reply);
     completion(value);
   });
   if (!submitted) {
@@ -217,9 +349,39 @@ void ARCCompletePrivateQuitDialogCancellation(
     completion(nil);
   }
 }
+- (void)evaluatePrivateProbeTabID:(NSString *)tabID script:(NSString *)script
+                       completion:(void (^)(NSString *))completion {
+  [self evaluatePrivateProbeTabID:tabID script:script probeVisibleForRenderer:NO
+                      completion:completion];
+}
+- (void)evaluatePrivatePermissionProbeTabID:(NSString *)tabID script:(NSString *)script
+                                completion:(void (^)(NSString *))completion {
+  [self evaluatePrivateProbeTabID:tabID script:script probeVisibleForRenderer:YES
+                      completion:completion];
+}
 - (void)probePrivateNetworkControlsForTabID:(NSString *)tabID completion:(void (^)(BOOL))completion { completion(NO); }
 - (NSDictionary *)privatePrivacyStatusForProbeTabID:(NSString *)tabID { return nil; }
-- (NSDictionary *)privatePrivacyPreferencesForContextID:(NSString *)contextID { return nil; }
+- (NSDictionary *)privatePrivacyPreferencesForContextID:(NSString *)contextID {
+  if (![self isKindOfClass:ARCShaarRuntime.class] || !ProbeCaptureAllowed()) return nil;
+  auto policy = reinterpret_cast<decltype(&shaar_private_session_privacy_status)>(
+      dlsym(RTLD_DEFAULT, "shaar_private_session_privacy_status"));
+  auto cookie = reinterpret_cast<decltype(&shaar_private_session_cookie_setting)>(
+      dlsym(RTLD_DEFAULT, "shaar_private_session_cookie_setting"));
+  NSDictionary *context = PrivateContext((ARCShaarRuntime *)self, contextID);
+  shaar_private_session *session = (shaar_private_session *)[context[@"session"] pointerValue];
+  if (!policy || !cookie || !session) return nil;
+  char buffer[4096] = {};
+  shaar_error error = ARCPrivateShaarEmptyError();
+  if (policy(session, buffer, sizeof(buffer), &error) != SHAAR_OK) return nil;
+  const char *end = static_cast<const char *>(memchr(buffer, '\0', sizeof(buffer)));
+  NSData *data = end ? [NSData dataWithBytes:buffer length:end - buffer] : nil;
+  NSDictionary *status = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+  if (![status isKindOfClass:NSDictionary.class]) return nil;
+  int allowed = 0;
+  error = ARCPrivateShaarEmptyError();
+  shaar_error_code wildcardStatus = cookie(session, {"*", 1}, 1, 1, &allowed, &error);
+  return ARCProbePrivatePrivacyPreferences(status, wildcardStatus);
+}
 - (void)evaluatePrivacyProbeTabID:(NSString *)tabID script:(NSString *)script
                           completion:(void (^)(NSString *))completion {
   if (![self isKindOfClass:ARCShaarRuntime.class] || !script.length) {
@@ -242,9 +404,15 @@ void ARCCompletePrivateQuitDialogCancellation(
                 capability:SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER tabID:tabID
                  profileID:profileID windowID:windowID
                 completion:^(NSDictionary *reply, NSError *error) {
-    if (error) { completion(nil); return; }
-    completion(ARCProbePrivateEvaluationJSON(
-        @{@"schemaVersion": @1, @"result": reply ?: @{}}));
+    if (error) {
+      NSLog(@"Normal privacy evaluation failed: %@", error);
+      completion(nil);
+      return;
+    }
+    NSString *value = ARCProbePrivateEvaluationJSON(
+        @{@"schemaVersion": @1, @"result": reply ?: @{}});
+    if (!value) NSLog(@"Normal privacy evaluation returned no value: %@", reply);
+    completion(value);
   }];
 }
 - (BOOL)attemptCancelledPrivateProbeCloseID:(NSString *)windowID { return NO; }
@@ -305,8 +473,16 @@ void ARCCompletePrivateQuitDialogCancellation(
     NSURLComponents *parts = [NSURLComponents componentsWithString:url];
     BOOL loopback = [parts.scheme isEqualToString:@"http"] &&
         [parts.host isEqualToString:@"127.0.0.1"];
-    [documentStates addObject:@{@"url": url ?: @"", @"requestedURL": requestedURL ?: @"",
+    NSView *nativeView = [runtime viewForPrivateTabID:tabID
+        windowID:tab[@"windowID"] contextID:contextID];
+    NSWindow *nativeWindow = [runtime windowForPrivateWindowID:tab[@"windowID"]
+        contextID:contextID];
+    [documentStates addObject:@{@"tabID": tabID, @"url": url ?: @"", @"requestedURL": requestedURL ?: @"",
         @"loading": @(loading), @"phase": tab[@"navigationPhase"] ?: @"unknown",
+        @"nativeStateSupported": @(nativeReady),
+        @"selectedNativeTab": @(nativeReady && nativeState.selected_native_tab),
+        @"displayedNativeWebContents": @(nativeReady && nativeState.displayed_native_web_contents),
+        @"nativeViewHierarchy": ProbeViewHierarchy(nativeView, nativeWindow),
         @"failure": tab[@"navigationFailure"] ?: [NSNull null]}];
     allTabsLoaded &= loaded;
     allTabsLoopback &= loopback;

@@ -33,6 +33,22 @@ The production app selection path was unchanged for this harness-only measuremen
 
 Related: [[Source_And_Native_Verification]], [[Engine_Interop_Boundary]], [[Build_And_Run]].
 
+## Hidden performance footprint probe
+
+`scripts/measure-footprint.py` launches `build/Shaar Verification.app` with a marked disposable profile and a local-only static HTML fixture. It runs 1, 10 and 30 saved tabs in separate hidden app processes, waits until every fixture document is complete, and records launch-to-ready time, app-plus-descendant RSS, sampled process-tree CPU time, process count, app bundle size and Chromium Framework size. The script never opens the shipping bundle or sends desktop input.
+
+Build the verification bundle once with `nice -n 15 bash scripts/bundle-app.sh --with-engine --verification`, then run `python3 scripts/measure-footprint.py --sample-seconds 15`. The result is written to `build/performance-baseline.json`. RSS is summed from `ps` rows for the app and its descendants; physical footprint, energy and physical paint are not measured. The verification app size includes its harness executable and must not be reported as the shipping bundle size.
+
+Production head `9d9d675a`, two runs measured 2026-11-06 on arm64 Mac. Values are mean across runs; parentheses show the observed cross-run or sample range:
+
+| Tabs | Launch to all pages ready | Process-tree RSS mean (range) | Idle CPU mean (range) | Mean process count |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 1.041 s (0.840–1.241) | 919.5 MiB (911.8–928.4) | 1.07% (0.97–1.17) | 7 |
+| 10 | 0.607 s (0.503–0.710) | 2,034.9 MiB (2,013.2–2,047.3) | 3.13% (2.85–3.40) | 16 |
+| 30 | 1.426 s (1.405–1.446) | 4,485.7 MiB (4,433.2–4,505.8) | 7.50% (2.56–12.43) | 36 |
+
+Verification bundle: 414,748 KiB total; Chromium Framework 352,912 KiB. Two runs per tab count; the 30-tab CPU spread shows short-window load sensitivity. The verification executable is included in total app size. See [issue #1058](https://github.com/arcusis/shaar/issues/1058) for the top-win investigation and limitations.
+
 ## Production CI repair after the Shaar switch
 
 Production `59413b3d` reproduces the non-private failures reported by merge-group

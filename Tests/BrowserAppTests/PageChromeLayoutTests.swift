@@ -24,7 +24,9 @@ final class PageChromeLayoutTests: XCTestCase {
     XCTAssertNotEqual(label, PageAddressField.accessibilityLabel(for: nil))
     XCTAssertEqual(
       PageAddressField.accessibilityLabel(for: nil),
-      ShellL10n.string("Search or enter address"))
+      CommandPanel.searchPrompt)
+    XCTAssertEqual(CommandPanel.displayName, "Nativ")
+    XCTAssertTrue(label.contains(CommandPanel.localizedDisplayName))
   }
 
   func testPageCardUsesArcInsetsAndCornerRadius() {

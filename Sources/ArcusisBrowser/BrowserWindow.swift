@@ -244,7 +244,7 @@ struct BrowserWindow: View {
             } label: {
               HStack {
                 Image(systemName: "magnifyingglass")
-                ShellL10n.text("Search or enter address")
+                Text(CommandPanel.searchPrompt)
                 Spacer(minLength: 40)
                 ShellL10n.text("⌘T").foregroundStyle(.tertiary)
               }

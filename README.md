@@ -29,7 +29,7 @@
 
 <br>
 
-<img src=".github/assets/command-t.png" alt="Shaar with the Command-T launcher open over a Space" width="860">
+<img src=".github/assets/command-t.png" alt="Shaar with Nativ open over a Space" width="860">
 
 </div>
 
@@ -58,9 +58,9 @@ A new profile takes four short steps: name and color, then connect **Google** an
   <img src=".github/assets/settings-profiles.png" alt="Settings, Profiles: color, search engine, Spaces and connected accounts" width="520">
 </p>
 
-### Command-T launcher
+### Nativ (⌘T)
 
-One keyboard shortcut to search open tabs, favorites, history, bookmarks and browser actions. Filter chips narrow results to one kind, the selected row shows what Enter will do, and the panel opens and closes with smooth motion that respects Reduce Motion.
+Search open tabs, favorites, history, bookmarks and browser actions. Four round buttons beside the search field filter results. The selected row shows what Enter will do, and the panel respects Reduce Motion.
 
 ### Clean links
 
@@ -130,7 +130,7 @@ ShaarVerification — separate harness that drives the real engine in tests; nev
 
 | Module | Role |
 |---|---|
-| `Sources/ArcusisBrowser` | The app: windows, sidebar, Spaces, Library, settings, Command-T, extension and permission consent. |
+| `Sources/ArcusisBrowser` | The app: windows, sidebar, Spaces, Library, settings, Nativ, extension and permission consent. |
 | `Sources/BrowserCore` | Platform-independent model: sessions, profiles, workspaces, search, clean links, update feed. |
 | `Sources/ChromiumBridge` | Objective-C++ bridge between Swift and the Chromium framework. |
 | `Sources/Shaar` | The thin executable that starts the app. |

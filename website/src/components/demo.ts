@@ -6,6 +6,7 @@
 // Command-T from the address, and open the site controls. Page content is a real capture of
 // each site. Behavior lives in src/demo.ts; without JavaScript the first Space shows statically.
 
+import { commandInterfaceName } from "../content";
 import { escapeHtml } from "../html";
 
 export interface DemoTab {
@@ -99,8 +100,8 @@ function siteControls(): string {
 }
 
 function launcher(): string {
-  return `<div class="demo-launcher" role="dialog" aria-label="Command-T" hidden>
-    <label class="demo-launcher-field">${icon.search}<input type="text" placeholder="Search tabs or enter an address" autocomplete="off" spellcheck="false" aria-label="Search tabs or enter an address"></label>
+  return `<div class="demo-launcher" role="dialog" aria-label="${commandInterfaceName}" hidden>
+    <label class="demo-launcher-field">${icon.search}<input type="text" placeholder="Search with ${commandInterfaceName} or enter an address" autocomplete="off" spellcheck="false" aria-label="Search with ${commandInterfaceName} or enter an address"></label>
     <ul class="demo-results" role="listbox"></ul>
   </div>`;
 }
@@ -122,13 +123,13 @@ export function ShaarDemo(): string {
       <div class="demo-main">
         <div class="demo-toolbar">
           <span class="demo-icon" aria-hidden="true">${icon.back}</span><span class="demo-icon" aria-hidden="true">${icon.forward}</span><span class="demo-icon" aria-hidden="true">${icon.reload}</span>
-          <button type="button" class="demo-address" data-launcher aria-label="Open Command-T">${icon.lock}<span data-host>arcusis.com</span></button>
+          <button type="button" class="demo-address" data-launcher aria-label="Open ${commandInterfaceName}">${icon.lock}<span data-host>arcusis.com</span></button>
           <button type="button" class="demo-icon demo-controls-button" data-controls aria-label="Site controls" aria-expanded="false">${icon.sliders}</button>
         </div>
         <div class="demo-page">${pages()}</div>
         ${launcher()}${siteControls()}
       </div>
     </div>
-    <p class="demo-hint">This is a working copy of Shaar. Click a tab, switch Spaces with the dots, or click the address to open Command-T.</p>
+    <p class="demo-hint">This is a working copy of Shaar. Click a tab, switch Spaces with the dots, or click the address to open ${commandInterfaceName}.</p>
   </div>`;
 }

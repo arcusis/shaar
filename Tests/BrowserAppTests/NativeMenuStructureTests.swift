@@ -103,7 +103,7 @@ import Testing
   #expect(item("New Private Window")?.keyEquivalent == "n")
   #expect(item("New Private Window")?.keyEquivalentModifierMask == [.command, .shift])
   #expect(item("New tab")?.keyEquivalent == "t")
-  #expect(item("Search or enter address")?.keyEquivalent == "l")
+  #expect(item(CommandPanel.searchPrompt)?.keyEquivalent == "l")
   #expect(item("Close tab")?.keyEquivalentModifierMask == .command)
   #expect(item("Close window")?.keyEquivalentModifierMask == [.command, .shift])
   #expect(item("Find in Page…")?.keyEquivalent == "f")

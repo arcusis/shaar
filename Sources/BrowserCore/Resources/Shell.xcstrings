@@ -1578,6 +1578,22 @@
         }
       }
     },
+    "Nativ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nativ"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "נתיב"
+          }
+        }
+      }
+    },
     "New Folder": {
       "localizations": {
         "en": {

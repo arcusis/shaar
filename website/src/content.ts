@@ -5,6 +5,7 @@
 export const repository = "https://github.com/arcusis/shaar";
 export const siteOrigin = "https://shaar.arcusis.com";
 export const appcast = "https://arcusis.github.io/shaar/appcast.xml";
+export const commandInterfaceName = "Nativ";
 
 // Published release snapshot. Update alongside a published release, not an unreleased version bump.
 export const release = {
@@ -17,7 +18,7 @@ export const release = {
   zip: `${repository}/releases/download/v0.1.0/Shaar-0.1.0-macos.zip`,
   highlights: [
     "Spaces and profiles with separate sign-ins, profile colors and step-by-step onboarding for Google and Microsoft accounts, including work accounts.",
-    "Command-T launcher with suggestions, filters and actions.",
+    `${commandInterfaceName} search with suggestions, filters and actions.`,
     "Clean links: Command-Shift-C copies the current link without tracking parameters.",
     "Chrome Web Store extensions, managed per profile.",
     "Search engines per profile, private windows and a Library for downloads.",
@@ -51,7 +52,7 @@ export const screens = {
     file: "command-t.png",
     width: 2880,
     height: 1920,
-    alt: "Command-T launcher searching for freight across history, open tabs and Spaces",
+    alt: `${commandInterfaceName} searching for freight across history, open tabs and Spaces`,
   },
   siteControls: {
     file: "site-controls.png",

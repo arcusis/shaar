@@ -9,6 +9,7 @@ import SwiftUI
 struct SplitPaneToolbar: View {
   @Bindable var store: BrowserStore
   let tabID: UUID
+  var engine: BrowserEngine? = nil
 
   @Environment(\.colorScheme) private var colorScheme
   @Environment(\.layoutDirection) private var layoutDirection
@@ -19,6 +20,11 @@ struct SplitPaneToolbar: View {
 
   var body: some View {
     HStack(spacing: 2) {
+      PageNavigationButtons(store: store, engine: engine, tabID: tabID)
+        .controlSize(.small)
+      PageAddressField(store: store, tabID: tabID)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .layoutPriority(1)
       toolbarButton("plus", label: ShellL10n.string("New Tab in Split")) {
         store.openSplitPane(beside: tabID, edge: physicalRightEdge)
       }

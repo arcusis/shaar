@@ -47,6 +47,29 @@ struct SidebarDropTests {
     #expect(store.session.selectedSpace.tabs.contains { $0.id == second })
   }
 
+  @Test func draggingSplitPaneToAnotherSpaceClosesTheSourceSplit() throws {
+    var session = BrowserSession.fresh()
+    let source = session.selectedSpace
+    let openedFirst = session.open(URL(string: "https://one.example")!)
+    let first = try #require(openedFirst)
+    let openedSecond = session.open(URL(string: "https://two.example")!)
+    let second = try #require(openedSecond)
+    let store = BrowserStore(session: session)
+    store.splitTabs(first, second)
+    #expect(
+      store.createSpace(name: "Shared profile", sharingProfile: source.profileID, tint: .ocean))
+    let destination = store.session.selectedSpaceID
+    store.perform(.space(source.id))
+
+    let payload = store.beginTabDrag(second, spaceID: source.id, fromSplitPane: true)
+    #expect(store.acceptSidebarDrop(payload, into: destination, pinned: false))
+
+    #expect(store.session.spaces.first { $0.id == source.id }?.splits.isEmpty == true)
+    #expect(store.session.spaces.first { $0.id == destination }?.tabs.map(\.id) == [second])
+    #expect(store.session.selectedSpaceID == source.id)
+    try store.session.validate()
+  }
+
   @Test func clearTodayTabsClosesOnlyCurrentSpaceUnpinnedTabs() throws {
     let store = BrowserStore()
     let space = store.session.selectedSpaceID

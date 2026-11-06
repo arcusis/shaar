@@ -7,14 +7,16 @@ import SwiftUI
 struct PageNavigationButtons: View {
   @Bindable var store: BrowserStore
   let engine: BrowserEngine?
+  var tabID: UUID? = nil
 
   var body: some View {
-    let id = store.session.selectedPage?.tab.id
+    let id = tabID ?? store.session.selectedPage?.tab.id
     let state = id.flatMap { engine?.pages[$0] ?? store.privatePage?.pages[$0] }
 
-    HStack(spacing: 4) {
+    HStack(spacing: tabID == nil ? 4 : 0) {
       navigationButton("chevron.backward", label: ShellL10n.string("Back")) {
         if let id {
+          if tabID != nil { store.focusSplitTab(id) }
           if let privatePage = store.privatePage {
             privatePage.goBack(id)
           } else {
@@ -27,6 +29,7 @@ struct PageNavigationButtons: View {
 
       navigationButton("chevron.forward", label: ShellL10n.string("Forward")) {
         if let id {
+          if tabID != nil { store.focusSplitTab(id) }
           if let privatePage = store.privatePage {
             privatePage.goForward(id)
           } else {
@@ -38,9 +41,14 @@ struct PageNavigationButtons: View {
       .browserChromeControl("browser.chrome.forward")
 
       navigationButton("arrow.clockwise", label: ShellL10n.string("Reload (Command-R)")) {
-        store.reloadCurrentPage()
+        if let tabID {
+          store.focusSplitTab(tabID)
+          store.reloadCurrentPage()
+        } else {
+          store.reloadCurrentPage()
+        }
       }
-      .disabled(!store.canReloadCurrentPage)
+      .disabled(tabID.map { !store.canReloadPage($0) } ?? !store.canReloadCurrentPage)
       .browserChromeControl("browser.chrome.reload")
     }
   }
@@ -51,7 +59,7 @@ struct PageNavigationButtons: View {
     Button(action: action) {
       Image(systemName: symbol)
         .font(.system(size: 13))
-        .frame(width: 28, height: 28)
+        .frame(width: tabID == nil ? 28 : 22, height: tabID == nil ? 28 : 22)
         .contentShape(Rectangle())
     }
     .help(label)

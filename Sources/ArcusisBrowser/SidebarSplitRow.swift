@@ -92,7 +92,7 @@ struct SidebarSplitRow: View {
         .shadow(color: .black.opacity(raised ? 0.18 : 0), radius: 2, y: 1)
     }
     .contentShape(RoundedRectangle(cornerRadius: 7))
-    .onTapGesture { onSelect(segment.id) }
+    .simultaneousGesture(TapGesture().onEnded { onSelect(segment.id) })
     .onHover { inside in
       hoveredID = hoveredID.updatingTarget(segment.id, isActive: inside)
     }

@@ -68,9 +68,11 @@ struct BrowserChromeSurface: View {
       pageActions
     }
     .overlay {
-      PageAddressField(store: store)
-        .frame(maxWidth: 520)
-        .padding(.horizontal, store.selectedSplit == nil ? 120 : 190)
+      if store.selectedSplit == nil {
+        PageAddressField(store: store)
+          .frame(maxWidth: 520)
+          .padding(.horizontal, 120)
+      }
     }
     .padding(.horizontal, 6)
     .frame(height: 34)

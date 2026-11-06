@@ -260,7 +260,7 @@ struct BrowserSplitPageView: View {
       onFocus: { focus($0) },
       onWeightsChange: { store.setSplitWeights($0, at: $1, splitID: split.id) }
     ) { id in
-      SplitPaneToolbar(store: store, tabID: id)
+      SplitPaneToolbar(store: store, tabID: id, engine: engine)
     } pane: { id in
       if let failure = store.rendererFailures[id] {
         FailedPageView(store: store, failure: failure)
@@ -294,7 +294,7 @@ struct PrivateSplitPageView: View {
       onFocus: { store.focusSplitTab($0) },
       onWeightsChange: { store.setSplitWeights($0, at: $1, splitID: split.id) }
     ) { id in
-      SplitPaneToolbar(store: store, tabID: id)
+      SplitPaneToolbar(store: store, tabID: id, engine: nil)
     } pane: { id in
       PrivateInspectorPage(session: session, tabID: id, inSplit: true)
         .overlay { SplitDropZone(store: store, targetID: id) }

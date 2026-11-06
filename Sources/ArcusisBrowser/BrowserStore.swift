@@ -254,9 +254,12 @@ final class BrowserStore {
     commandIsOpen = true
   }
 
-  func showAddressEditor() {
+  func showAddressEditor(tabID: UUID? = nil) {
     showCommand()
-    guard let url = session.selectedPage?.tab.url else { return }
+    guard
+      let url = tabID.flatMap({ session.page(forTabID: $0)?.tab.url })
+        ?? session.selectedPage?.tab.url
+    else { return }
     commandEditsCurrentURL = true
     commandQuery = url.absoluteString
   }
@@ -765,12 +768,19 @@ final class BrowserStore {
     rendererFailures[id] = failure
   }
 
-  var canReloadCurrentPage: Bool { !commandIsOpen && currentPageAllowsReload }
+  var canReloadCurrentPage: Bool {
+    !commandIsOpen && session.selectedPage.map { canReloadPage($0.tab.id) } == true
+  }
 
   /// Whether the page could reload, ignoring the open launcher.
   var currentPageAllowsReload: Bool {
     guard sheet == nil, let tab = session.selectedPage?.tab else { return false }
-    return rendererFailures[tab.id]?.reloading != true && onReloadPage != nil
+    return canReloadPage(tab.id)
+  }
+
+  func canReloadPage(_ id: UUID) -> Bool {
+    guard sheet == nil, session.profileID(forTabID: id) != nil else { return false }
+    return rendererFailures[id]?.reloading != true && onReloadPage != nil
   }
 
   func canReloadFailure(_ id: UUID) -> Bool {

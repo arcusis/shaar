@@ -880,7 +880,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       creationGuard = NativeWindowCreationGuard { _ = runtime.closeWindowID(nativeID) }
     }
     defer { creationGuard?.closeIfUnowned() }
-    guard let window = runtime.window(forID: nativeID),
+    guard runtime.isWindowOpenID(nativeID),
+      let window = runtime.window(forID: nativeID),
       let content = runtime.hostView(forWindowID: nativeID)
     else {
       throw WorkspaceError.invalidState

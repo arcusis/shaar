@@ -46,7 +46,8 @@ extension BrowserSession {
     }
     let tab = BrowserTab(
       url: snapshot.tab.url, title: snapshot.tab.title,
-      isPinned: folder?.isPinned ?? snapshot.tab.isPinned, folderID: folder?.id)
+      isPinned: folder?.isPinned ?? snapshot.tab.isPinned, folderID: folder?.id,
+      keepAlive: snapshot.tab.keepAlive)
     spaces[space].tabs.insert(tab, at: min(snapshot.index, spaces[space].tabs.count))
     spaces[space].selectedTabID = tab.id
     spaces[space].selectedFavoriteID = nil

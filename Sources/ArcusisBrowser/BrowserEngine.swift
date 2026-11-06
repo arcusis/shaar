@@ -30,6 +30,18 @@ private struct NativeTabPlacement: Equatable {
 @MainActor @Observable
 final class BrowserEngine {
   private static let tabSuspensionDelay: TimeInterval = 5 * 60
+  private static let suspensionSnapshotScript = """
+    ({x:scrollX,y:scrollY,edited:[...document.querySelectorAll('input,textarea,select,[contenteditable]')].some(e=>{
+      if(e.isContentEditable)return true;
+      if(e instanceof HTMLInputElement){
+        if(e.type==='checkbox'||e.type==='radio')return e.checked!==e.defaultChecked;
+        return e.value!==e.defaultValue;
+      }
+      if(e instanceof HTMLTextAreaElement)return e.value!==e.defaultValue;
+      if(e instanceof HTMLSelectElement)return [...e.options].some(o=>o.selected!==o.defaultSelected);
+      return true;
+    })})
+    """
   let runtime: ARCChromiumRuntime
   let events: BrowserRuntimeEvents
   let downloadDirectoryApplier: ProfileDownloadDirectoryApplier?
@@ -529,15 +541,11 @@ final class BrowserEngine {
 
   func suspendInactiveTabs(now: Date = Date()) {
     guard !isClosed, let store else { return }
-    let visible = store.visiblePageIDs
     let candidates =
       store.session.spaces.flatMap(\.tabs)
       + store.session.favoritePages.map(\.tab)
     for tab in candidates {
-      guard !visible.contains(tab.id), !tab.isPinned,
-        store.media.sessions[tab.id]?.isPlaying != true,
-        inspectors[tab.id] == nil, developerModels[tab.id] == nil,
-        liveTabs.contains(tab.id)
+      guard canSuspend(tab.id, in: store)
       else {
         inactiveSince[tab.id] = nil
         continue
@@ -549,25 +557,32 @@ final class BrowserEngine {
     }
   }
 
-  private func suspend(_ tabID: UUID) {
-    guard let store, liveTabs.contains(tabID), !suspendingTabs.contains(tabID),
+  private func canSuspend(_ tabID: UUID, in store: BrowserStore) -> Bool {
+    guard liveTabs.contains(tabID),
       let tab = store.session.page(forTabID: tabID)?.tab,
-      !tab.isPinned, !store.visiblePageIDs.contains(tabID),
+      let profile = store.session.profileID(forTabID: tabID),
+      !tab.isPinned, !tab.keepAlive,
+      !store.visiblePageIDs.contains(tabID),
       store.media.sessions[tabID]?.isPlaying != true,
-      store.session.profileID(forTabID: tabID) != nil
+      mediaAccess[tabID]?.isCapturing != true,
+      inspectors[tabID] == nil, developerModels[tabID] == nil
+    else { return false }
+    // Download records have no source tab identity in the current bridge.
+    return !downloads.items(in: profile).contains { $0.state == .downloading }
+  }
+
+  private func suspend(_ tabID: UUID) {
+    guard let store, !suspendingTabs.contains(tabID), canSuspend(tabID, in: store)
     else { return }
     runtime.evaluate(
       inTabID: tabID.uuidString,
-      script: "({x:scrollX,y:scrollY})"
+      script: Self.suspensionSnapshotScript
     ) { [weak self] result in
       MainActor.assumeIsolated {
         guard let self, let store = self.store, let result, let data = result.data(using: .utf8),
           let position = (try? JSONSerialization.jsonObject(with: data)) as? [String: NSNumber],
-          self.liveTabs.contains(tabID),
-          !store.visiblePageIDs.contains(tabID),
-          store.session.page(forTabID: tabID)?.tab.isPinned == false,
-          store.media.sessions[tabID]?.isPlaying != true,
-          self.inspectors[tabID] == nil, self.developerModels[tabID] == nil
+          position["edited"]?.boolValue == false,
+          self.canSuspend(tabID, in: store)
         else { return }
         self.suspendedScrollPositions[tabID] = CGPoint(
           x: CGFloat(position["x"]?.doubleValue ?? 0),
@@ -681,7 +696,8 @@ final class BrowserEngine {
             && (session.selectedPage?.tab.id == tab.id
               || store.selectedSplit?.tabIDs.contains(tab.id) == true),
           isLive: liveTabs.contains(tab.id),
-          lazy: lazyPinnedTabs || suspendedScrollPositions[tab.id] != nil)
+          lazy: lazyPinnedTabs || suspendedScrollPositions[tab.id] != nil,
+          keepAlive: tab.keepAlive)
         guard decision == .materialize else { continue }
         guard events.router.bindTab(tab.id.uuidString, windowID: windowID) else {
           failedTabs.insert(tab.id)
@@ -710,7 +726,8 @@ final class BrowserEngine {
       let decision = TabMaterializationPolicy.decision(
         isSelected: session.selectedSpace.selectedFavoriteID == favorite.id,
         isLive: liveTabs.contains(page.tab.id),
-        lazy: lazyPinnedTabs || suspendedScrollPositions[page.tab.id] != nil)
+        lazy: lazyPinnedTabs || suspendedScrollPositions[page.tab.id] != nil,
+        keepAlive: page.tab.keepAlive)
       guard decision == .materialize else { continue }
       guard events.router.bindTab(page.tab.id.uuidString, windowID: windowID) else {
         failedTabs.insert(page.tab.id)
@@ -794,12 +811,11 @@ final class BrowserEngine {
         loadedProfiles.insert(profile)
         store?.library.refresh(profile, section: .bookmarks)
         store?.library.refresh(profile, section: .history)
+        // One snapshot restores records after startup; events keep them current afterwards.
         Task { [weak self] in
-          for delay in [300, 700, 2000] {
-            try? await Task.sleep(for: .milliseconds(delay))
-            guard let self, !self.isClosed else { return }
-            self.runtime.refreshDownloads(forProfileID: profile.uuidString)
-          }
+          try? await Task.sleep(for: .milliseconds(300))
+          guard let self, !self.isClosed, !Task.isCancelled else { return }
+          self.runtime.refreshDownloads(forProfileID: profile.uuidString)
         }
       } catch {
         failedProfiles.insert(profile)

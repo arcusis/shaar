@@ -1,0 +1,44 @@
+{
+  "schema": 2,
+  "scope": "Hidden verification app; fixed loopback fixture; app and descendant process RSS",
+  "appBundleBytes": 429043712,
+  "engineFrameworkBytes": 361512960,
+  "cases": [
+    {
+      "tabs": 1,
+      "mode": "eager",
+      "coldLaunchToReadySeconds": 0.895,
+      "readiness": "all-pages",
+      "processTreeRSSMiBMean": 1274.4,
+      "processTreeRSSMiBMin": 1004.1,
+      "processTreeRSSMiBMax": 1296.8,
+      "processTreeCountMean": 9.9,
+      "idleCPUPercentMean": 13.58,
+      "samples": 15
+    },
+    {
+      "tabs": 10,
+      "mode": "eager",
+      "coldLaunchToReadySeconds": 0.658,
+      "readiness": "all-pages",
+      "processTreeRSSMiBMean": 2492.7,
+      "processTreeRSSMiBMin": 2476.1,
+      "processTreeRSSMiBMax": 2496.7,
+      "processTreeCountMean": 19.0,
+      "idleCPUPercentMean": 2.79,
+      "samples": 15
+    },
+    {
+      "tabs": 30,
+      "mode": "eager",
+      "coldLaunchToReadySeconds": 1.229,
+      "readiness": "all-pages",
+      "processTreeRSSMiBMean": 5159.2,
+      "processTreeRSSMiBMin": 5119.0,
+      "processTreeRSSMiBMax": 5167.1,
+      "processTreeCountMean": 39.0,
+      "idleCPUPercentMean": 10.55,
+      "samples": 15
+    }
+  ]
+}

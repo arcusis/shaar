@@ -6,6 +6,22 @@ import BrowserCore
 import Foundation
 import Testing
 
+@Test func keepAliveTabSurvivesLegacyDecodeAndRoundTrip() throws {
+  let url = URL(string: "https://example.com/keep")!
+  var session = BrowserSession.fresh()
+  let opened = session.open(url)
+  let tabID = try #require(opened)
+  let changed = session.setKeepAlive(true, for: tabID)
+  let unchanged = session.setKeepAlive(true, for: tabID)
+  #expect(changed && !unchanged)
+  let restored = try JSONDecoder().decode(BrowserSession.self, from: JSONEncoder().encode(session))
+  #expect(restored.selectedSpace.selectedTab?.keepAlive == true)
+  let legacy =
+    #"{"id":"00000000-0000-4000-8000-000000000001","url":"https://example.com/keep","title":"Keep","isPinned":false}"#
+  let old = try JSONDecoder().decode(BrowserTab.self, from: Data(legacy.utf8))
+  #expect(!old.keepAlive)
+}
+
 @Test func sessionProfilesNeedANonBlankName() {
   var session = BrowserSession.fresh()
   let created = session.createProfile(name: "  Studio \n")

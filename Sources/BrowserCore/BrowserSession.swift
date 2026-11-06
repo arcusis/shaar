@@ -58,10 +58,12 @@ public struct BrowserTab: Codable, Identifiable, Equatable, Sendable {
   public var url: URL
   public var title: String
   public var isPinned: Bool
+  public var keepAlive: Bool
   public var folderID: UUID?
 
   public init(
-    id: UUID = UUID(), url: URL, title: String? = nil, isPinned: Bool = false, folderID: UUID? = nil
+    id: UUID = UUID(), url: URL, title: String? = nil, isPinned: Bool = false,
+    folderID: UUID? = nil, keepAlive: Bool = false
   ) {
     self.id = id
     self.url = url
@@ -71,7 +73,30 @@ public struct BrowserTab: Codable, Identifiable, Equatable, Sendable {
       self.title = url.host() ?? url.absoluteString
     }
     self.isPinned = isPinned
+    self.keepAlive = keepAlive
     self.folderID = folderID
+  }
+
+  private enum CodingKeys: String, CodingKey { case id, url, title, isPinned, folderID, keepAlive }
+
+  public init(from decoder: Decoder) throws {
+    let values = try decoder.container(keyedBy: CodingKeys.self)
+    id = try values.decode(UUID.self, forKey: .id)
+    url = try values.decode(URL.self, forKey: .url)
+    title = try values.decode(String.self, forKey: .title)
+    isPinned = try values.decode(Bool.self, forKey: .isPinned)
+    folderID = try values.decodeIfPresent(UUID.self, forKey: .folderID)
+    keepAlive = try values.decodeIfPresent(Bool.self, forKey: .keepAlive) ?? false
+  }
+
+  public func encode(to encoder: Encoder) throws {
+    var values = encoder.container(keyedBy: CodingKeys.self)
+    try values.encode(id, forKey: .id)
+    try values.encode(url, forKey: .url)
+    try values.encode(title, forKey: .title)
+    try values.encode(isPinned, forKey: .isPinned)
+    try values.encodeIfPresent(folderID, forKey: .folderID)
+    if keepAlive { try values.encode(true, forKey: .keepAlive) }
   }
 }
 
@@ -722,5 +747,15 @@ public struct BrowserSession: Codable, Equatable, Sendable {
     else { return }
     let space = spaces[index]
     moveTab(tabID, from: space.id, to: space.id, pinned: !space.tabs[tabIndex].isPinned)
+  }
+
+  @discardableResult
+  public mutating func setKeepAlive(_ enabled: Bool, for tabID: UUID) -> Bool {
+    guard let space = spaces.firstIndex(where: { $0.tabs.contains { $0.id == tabID } }),
+      let tab = spaces[space].tabs.firstIndex(where: { $0.id == tabID }),
+      spaces[space].tabs[tab].keepAlive != enabled
+    else { return false }
+    spaces[space].tabs[tab].keepAlive = enabled
+    return true
   }
 }

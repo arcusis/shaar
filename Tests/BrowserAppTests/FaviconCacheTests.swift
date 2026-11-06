@@ -114,7 +114,7 @@ struct FaviconCacheTests {
     #expect(FaviconCache(directory: directory).icon(for: itemID, profileID: profileID) == nil)
   }
 
-  @Test func workspaceKeepsIconsOnlyForFavoritesAndPinnedTabs() throws {
+  @Test func workspaceKeepsIconsForAllSavedTabs() throws {
     let directory = temporaryDirectory()
     defer { try? FileManager.default.removeItem(at: directory) }
     let (session, favoriteID, pinnedID, ordinaryID) = sidebarSession()
@@ -132,7 +132,7 @@ struct FaviconCacheTests {
     store.rememberFavicon(FaviconFixture.icon(.red), forTab: ordinaryID)
     #expect(cache.icon(for: favoriteID, profileID: profileID) != nil)
     #expect(cache.icon(for: pinID, profileID: profileID) != nil)
-    #expect(cache.icon(for: ordinaryID, profileID: profileID) == nil)
+    #expect(cache.icon(for: ordinaryID, profileID: profileID) != nil)
     let pinned = try #require(store.session.page(forTabID: pinnedID)?.tab)
     #expect(store.favicon(for: favorite).map { FaviconFixture.matches($0, .red) } == true)
     #expect(
@@ -143,7 +143,8 @@ struct FaviconCacheTests {
     store.togglePin(pinnedID)
     let restarted = FaviconCache(directory: directory)
     #expect(restarted.icon(for: favoriteID, profileID: profileID) == nil)
-    #expect(restarted.icon(for: pinID, profileID: profileID) == nil)
+    #expect(restarted.icon(for: pinID, profileID: profileID) != nil)
+    #expect(restarted.icon(for: ordinaryID, profileID: profileID) != nil)
   }
 
   @Test func pinnedTabIconIsSharedWithNewWindows() throws {

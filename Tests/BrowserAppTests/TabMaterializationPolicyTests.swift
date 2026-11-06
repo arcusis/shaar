@@ -34,4 +34,10 @@ struct TabMaterializationPolicyTests {
     #expect(
       TabMaterializationPolicy.decision(isSelected: false, isLive: false, lazy: true) == .deferred)
   }
+
+  @Test func keepAliveBackgroundTabMaterializesWithoutSelection() {
+    #expect(
+      TabMaterializationPolicy.decision(
+        isSelected: false, isLive: false, lazy: true, keepAlive: true) == .materialize)
+  }
 }

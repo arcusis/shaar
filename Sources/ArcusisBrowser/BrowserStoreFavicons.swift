@@ -6,12 +6,12 @@ import AppKit
 import BrowserCore
 
 extension BrowserStore {
-  /// The live page icon, or the last icon saved for a pinned tab whose page has not loaded.
+  /// The live page icon, or the last icon saved for a tab whose page has not loaded.
   func favicon(for tab: BrowserTab, profileID: UUID) -> NSImage? {
     if isPrivate { return nil }
     if let live = engine?.favicons[tab.id] { return live }
-    guard tab.isPinned, let pinID = sharedPinID?(tab.id) else { return nil }
-    return faviconCache?.icon(for: pinID, profileID: profileID)
+    guard let itemID = faviconItemID(forTab: tab.id) else { return nil }
+    return faviconCache?.icon(for: itemID, profileID: profileID)
   }
 
   /// The live page icon, or the last icon saved for the Favorite.
@@ -25,7 +25,7 @@ extension BrowserStore {
     return faviconCache?.icon(for: favorite.id, profileID: favorite.profileID)
   }
 
-  /// The icon for any page by its tab: live, or saved for its Favorite or pinned tab.
+  /// The icon for any page by its tab: live, or saved for its Favorite or tab.
   func favicon(forPage tabID: UUID) -> NSImage? {
     switch session.page(forTabID: tabID) {
     case .tab(let tab):
@@ -41,7 +41,7 @@ extension BrowserStore {
     }
   }
 
-  /// Saves a page icon reported by the engine when the page is a Favorite or a pinned tab.
+  /// Saves a page icon reported by the engine for a saved tab or Favorite.
   func rememberFavicon(_ image: NSImage, forTab tabID: UUID) {
     guard !isPrivate else { return }
     guard let itemID = faviconItemID(forTab: tabID),
@@ -58,7 +58,7 @@ extension BrowserStore {
   private func faviconItemID(forTab tabID: UUID) -> UUID? {
     switch session.page(forTabID: tabID) {
     case .favorite(let page): page.favoriteID
-    case .tab(let tab) where tab.isPinned: sharedPinID?(tab.id)
+    case .tab(let tab): tab.isPinned ? (sharedPinID?(tab.id) ?? tab.id) : tab.id
     default: nil
     }
   }

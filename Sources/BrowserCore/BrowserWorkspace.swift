@@ -522,7 +522,7 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
         let definition = oldDefinitions[pinID]
         return BrowserTab(
           id: pinID, url: definition?.url ?? tab.url, title: definition?.title ?? tab.title,
-          isPinned: true, folderID: tab.folderID)
+          isPinned: true, folderID: tab.folderID, keepAlive: tab.keepAlive)
       }
       let bindings = Dictionary(uniqueKeysWithValues: references.map { ($0.tabID, $0.pinID) })
       space.splits = source.splits.compactMap { split in
@@ -586,7 +586,9 @@ public struct BrowserWorkspace: Codable, Equatable, Sendable {
       space.tabs = definition.tabs.map { pin in
         var tab =
           bindings[pin.id].flatMap { oldTabs[$0] }
-          ?? BrowserTab(id: Self.allocate(&allocated), url: pin.url, title: pin.title)
+          ?? BrowserTab(
+            id: Self.allocate(&allocated), url: pin.url, title: pin.title,
+            keepAlive: pin.keepAlive)
         tab.isPinned = true
         tab.folderID = pin.folderID
         references.append(WorkspacePinReference(tabID: tab.id, pinID: pin.id))

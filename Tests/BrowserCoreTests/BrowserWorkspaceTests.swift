@@ -66,6 +66,19 @@ private func workspaceFixture() throws -> BrowserSession {
   try workspace.validate()
 }
 
+@Test func keepAlivePinnedDefinitionReachesNewWindows() throws {
+  var session = try workspaceFixture()
+  let firstPin = session.selectedSpace.tabs.first { $0.isPinned }
+  let pin = try #require(firstPin)
+  let marked = session.setKeepAlive(true, for: pin.id)
+  #expect(marked)
+  var workspace = try BrowserWorkspace(session: session)
+  let secondID = try workspace.addWindow(from: workspace.windows[0].id)
+  let second = try #require(workspace.window(secondID))
+  let nextPin = second.session.selectedSpace.tabs.first { $0.isPinned }
+  #expect(nextPin?.keepAlive == true)
+}
+
 @Test func workspaceLegacyV1AndV2MigrationPreservesIDsAndNilSelection() throws {
   for version in [1, 2] {
     let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)

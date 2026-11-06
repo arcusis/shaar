@@ -2074,6 +2074,7 @@
         }
       }
     },
+    "Keep tab alive": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Keep tab alive"}},"he":{"stringUnit":{"state":"translated","value":"השארת הלשונית פעילה"}}}},
     "Pin tab": {
       "localizations": {
         "en": {
@@ -3042,6 +3043,7 @@
         }
       }
     },
+    "Stop keeping tab alive": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Stop keeping tab alive"}},"he":{"stringUnit":{"state":"translated","value":"הפסקת השארת הלשונית פעילה"}}}},
     "Unpin tab": {
       "localizations": {
         "en": {

@@ -11,9 +11,11 @@ enum TabMaterializationPolicy {
     case deferred
   }
 
-  static func decision(isSelected: Bool, isLive: Bool, lazy: Bool) -> Decision {
+  static func decision(
+    isSelected: Bool, isLive: Bool, lazy: Bool, keepAlive: Bool = false
+  ) -> Decision {
     if isLive { return .keepLive }
-    if !lazy || isSelected { return .materialize }
+    if !lazy || isSelected || keepAlive { return .materialize }
     return .deferred
   }
 }

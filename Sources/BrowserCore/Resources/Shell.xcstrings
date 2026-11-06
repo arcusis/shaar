@@ -31,6 +31,8 @@
     "DOM tree could not be read": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"DOM tree could not be read"}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן לקרוא את עץ ה-DOM"}}}},
     "DOM search could not be completed": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"DOM search could not be completed"}},"he":{"stringUnit":{"state":"translated","value":"לא ניתן להשלים את החיפוש ב-DOM"}}}},
     "Open Chromium DevTools": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Open Chromium DevTools"}},"he":{"stringUnit":{"state":"translated","value":"פתיחת כלי הפיתוח של Chromium"}}}},
+    "Connect server log file…": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Connect server log file…"}},"he":{"stringUnit":{"state":"translated","value":"חיבור לקובץ יומן השרת…"}}}},
+    "Disconnect server log": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Disconnect server log"}},"he":{"stringUnit":{"state":"translated","value":"ניתוק יומן השרת"}}}},
     "Individual cookies need a newer Shaar engine": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Individual cookies need a newer Shaar engine"}},"he":{"stringUnit":{"state":"translated","value":"ניהול עוגיות בודדות דורש גרסה חדשה יותר של מנוע שער"}}}},
     "Filter cookies": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Filter cookies"}},"he":{"stringUnit":{"state":"translated","value":"סינון עוגיות"}}}},
     "No cookies for this page": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"No cookies for this page"}},"he":{"stringUnit":{"state":"translated","value":"אין עוגיות בדף הזה"}}}},

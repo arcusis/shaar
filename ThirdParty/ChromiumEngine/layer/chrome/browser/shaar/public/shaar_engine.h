@@ -13,7 +13,7 @@ extern "C" {
 #endif
 
 #define SHAAR_ENGINE_ABI_MAJOR 1u
-#define SHAAR_ENGINE_ABI_MINOR 4u
+#define SHAAR_ENGINE_ABI_MINOR 5u
 #define SHAAR_EXPORT __attribute__((visibility("default")))
 
 typedef struct shaar_engine shaar_engine;
@@ -399,6 +399,18 @@ SHAAR_EXPORT void *shaar_extension_popup_view(
  */
 SHAAR_EXPORT void *shaar_devtools_frontend_view(shaar_engine *, shaar_scope,
                                                 shaar_window *, shaar_tab *);
+/* Verification-only geometry reported by the DevTools frontend and the native
+ * page host. Available only with SHAAR_ENGINE_TESTING=1 after docking. */
+typedef struct {
+  uint32_t size;
+  double container_width;
+  double inspected_page_right;
+  double frontend_placeholder_right;
+  double frontend_width;
+} shaar_devtools_geometry;
+SHAAR_EXPORT shaar_error_code shaar_test_devtools_geometry(
+    shaar_engine *, shaar_scope, shaar_window *, shaar_tab *,
+    shaar_devtools_geometry *out, shaar_error *error);
 /* UI-thread page hosting. Handles must be registered to the same engine/window.
  * Attach selects a tab; detach is idempotent for an unselected tab. */
 SHAAR_EXPORT shaar_error_code shaar_tab_view_attach(

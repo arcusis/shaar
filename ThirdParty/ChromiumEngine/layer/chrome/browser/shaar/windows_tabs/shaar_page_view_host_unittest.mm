@@ -80,14 +80,30 @@ TEST(ShaarPageViewHostTest, DockedFrontendResizesAndClosesWithoutClosingHost) {
   EXPECT_EQ(page.window, host.window());
   EXPECT_EQ(frontend.window, host.window());
   EXPECT_EQ(page.frame.size.width, 480);
-  EXPECT_EQ(frontend.frame.origin.x, 480);
-  EXPECT_EQ(frontend.frame.size.width, 320);
+  EXPECT_EQ(frontend.frame.origin.x, 0);
+  EXPECT_EQ(frontend.frame.size.width, 800);
+  EXPECT_GT([host.view().subviews indexOfObject:page],
+            [host.view().subviews indexOfObject:frontend]);
   EXPECT_FALSE(host.window().isVisible);
+  host.SetDevToolsPageBounds(gfx::Rect(0, 0, 530, 600));
+  EXPECT_EQ(page.frame.size.width, 530);
+  shaar_devtools_geometry geometry = {.size = sizeof(geometry)};
+  ASSERT_TRUE(host.GetDevToolsGeometry(&geometry));
+  EXPECT_DOUBLE_EQ(geometry.inspected_page_right,
+                   geometry.frontend_placeholder_right);
+  EXPECT_DOUBLE_EQ(geometry.frontend_width, geometry.container_width);
   host.Resize(NSMakeSize(1000, 700));
-  EXPECT_EQ(page.frame.size.width, 600);
-  EXPECT_EQ(frontend.frame.origin.x, 600);
-  EXPECT_EQ(frontend.frame.size.width, 400);
+  EXPECT_EQ(frontend.frame.size.width, 1000);
   EXPECT_EQ(frontend.frame.size.height, 700);
+  // DevTools sends new inspected-page bounds after a window resize and after
+  // its divider is dragged. Both must move the page with its placeholder.
+  host.SetDevToolsPageBounds(gfx::Rect(0, 0, 620, 700));
+  EXPECT_EQ(page.frame.size.width, 620);
+  host.SetDevToolsPageBounds(gfx::Rect(0, 0, 410, 700));
+  EXPECT_EQ(page.frame.size.width, 410);
+  ASSERT_TRUE(host.GetDevToolsGeometry(&geometry));
+  EXPECT_DOUBLE_EQ(geometry.inspected_page_right,
+                   geometry.frontend_placeholder_right);
   host.SetDevToolsView(nil);
   EXPECT_EQ(frontend.superview, nil);
   EXPECT_EQ(page.frame.size.width, 1000);
@@ -106,14 +122,15 @@ TEST(ShaarPageViewHostTest, DockFollowsBorrowedPageContainerAndSurvivesAppLayout
   host.SetDevToolsView(frontend);
   EXPECT_EQ(frontend.superview, app);
   EXPECT_EQ(page.frame.size.width, 480);
-  EXPECT_EQ(frontend.frame.origin.x, 480);
+  EXPECT_EQ(frontend.frame.origin.x, 0);
+  EXPECT_EQ(frontend.frame.size.width, 800);
   page.frame = app.bounds;  // Simulate ChromiumPage's SwiftUI layout callback.
   EXPECT_EQ(page.frame.size.width, 480);
-  EXPECT_EQ(frontend.frame.size.width, 320);
+  EXPECT_EQ(frontend.frame.size.width, 800);
   app.frame = NSMakeRect(200, 80, 600, 500);
   page.frame = app.bounds;
   EXPECT_EQ(page.frame.size.width, 360);
-  EXPECT_EQ(frontend.frame.origin.x, 360);
+  EXPECT_EQ(frontend.frame.size.width, 600);
   host.SetDevToolsView(nil);
   EXPECT_EQ(page.frame.size.width, 600);
   EXPECT_EQ(frontend.superview, nil);

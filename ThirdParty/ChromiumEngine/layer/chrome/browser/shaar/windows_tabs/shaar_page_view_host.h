@@ -8,6 +8,8 @@
 #import <AppKit/AppKit.h>
 
 #include "base/memory/weak_ptr.h"
+#include "chrome/browser/shaar/public/shaar_engine.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace content {
 class WebContents;
@@ -35,6 +37,8 @@ class PageViewHost final {
   void RefreshVisibility();
   void SetDevToolsView(NSView* frontend);
   void SetDevToolsContents(content::WebContents* frontend);
+  void SetDevToolsPageBounds(const gfx::Rect& bounds);
+  bool GetDevToolsGeometry(shaar_devtools_geometry* out) const;
   void LayoutPages();
 
  private:
@@ -43,6 +47,7 @@ class PageViewHost final {
   __strong NSView* selected_view_ = nil;
   __strong NSView* devtools_view_ = nil;
   base::WeakPtr<content::WebContents> devtools_contents_;
+  gfx::Rect devtools_page_bounds_;
   __strong id frame_observer_ = nil;
   __strong id page_frame_observer_ = nil;
   bool laying_out_pages_ = false;

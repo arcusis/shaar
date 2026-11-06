@@ -10,6 +10,7 @@
 #import <objc/runtime.h>
 
 #include <cstdlib>
+#include <cmath>
 #include <cstring>
 #include <dlfcn.h>
 
@@ -161,12 +162,29 @@ NSDictionary *ARCProbeDevToolsDockAudit(ARCChromiumRuntime *baseRuntime,
     host = [runtime hostViewForWindowID:windowID];
   }
   NSView *dock = (__bridge NSView *)frontend([runtime privateEngineHandle], scope, windowHandle, tabHandle);
+  auto geometry = reinterpret_cast<decltype(&shaar_test_devtools_geometry)>(
+      dlsym(RTLD_DEFAULT, "shaar_test_devtools_geometry"));
+  shaar_devtools_geometry measured = {};
+  measured.size = sizeof(measured);
+  shaar_error geometryError = ARCPrivateShaarEmptyError();
+  BOOL geometryReady = dock && geometry &&
+      geometry([runtime privateEngineHandle], scope, windowHandle, tabHandle,
+               &measured, &geometryError) == SHAAR_OK;
+  double gap = geometryReady ? std::abs(measured.frontend_placeholder_right -
+                                       measured.inspected_page_right) : -1;
   BOOL hidden = YES;
   for (NSWindow *window in NSApp.windows) hidden &= !window.isVisible;
   return @{@"open": @(dock != nil), @"sameWindow": @(page.window && dock.window == page.window),
       @"sameContainer": @(page.superview && dock.superview == page.superview),
       @"containerWidth": @(page.superview.bounds.size.width),
-      @"nonOverlapping": @(dock && NSMaxX(page.frame) <= NSMinX(dock.frame) + 1),
+      @"pageAboveFrontend": @(dock && page.superview &&
+          [page.superview.subviews indexOfObject:page] >
+          [page.superview.subviews indexOfObject:dock]),
+      @"geometryReady": @(geometryReady), @"gap": @(gap),
+      @"frontendPlaceholderRight": @(measured.frontend_placeholder_right),
+      @"inspectedPageRight": @(measured.inspected_page_right),
+      @"frontendCoversContainer": @(dock && page.superview &&
+          std::abs(NSWidth(dock.frame) - NSWidth(page.superview.bounds)) <= 1),
       @"allWindowsHidden": @(hidden), @"pageWidth": @(page.frame.size.width),
       @"pageHeight": @(page.frame.size.height), @"hostWidth": @(host.bounds.size.width),
       @"frontendWidth": @(dock.frame.size.width), @"frontendHeight": @(dock.frame.size.height),

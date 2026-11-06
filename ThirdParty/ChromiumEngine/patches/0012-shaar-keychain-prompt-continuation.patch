@@ -1,0 +1,172 @@
+--- a/components/os_crypt/async/browser/keychain_key_provider.mm
++++ b/components/os_crypt/async/browser/keychain_key_provider.mm
+@@ -11,8 +11,6 @@
+ #include "base/command_line.h"
+ #include "base/functional/bind.h"
+ #include "base/task/thread_pool.h"
+-#include "base/task/sequenced_task_runner.h"
+-#include "base/time/time.h"
+ #include "base/types/expected.h"
+ #include "components/os_crypt/async/common/algorithm.mojom.h"
+ #include "components/os_crypt/common/keychain_password_mac.h"
+@@ -82,38 +80,22 @@
+ KeychainKeyProvider::~KeychainKeyProvider() = default;
+ 
+ void KeychainKeyProvider::GetKey(KeyCallback callback) {
+-  // Network cookie initialization must not wait indefinitely for SecurityAgent.
+-  // Keep the keychain request on its worker and release startup with an explicitly
+-  // unavailable key. A late approval cannot replace the key ring mid-session.
++  // A prompt can remain open for human time. Keep the key request pending so
++  // approval initializes cookies and passwords in this same process. Cookie
++  // requests are released independently while the keychain worker waits.
+   const bool embedded = base::CommandLine::ForCurrentProcess()->HasSwitch(
+       "shaar-embedder");
+-  auto pending = std::make_shared<KeyCallback>(std::move(callback));
+-  if (embedded) {
+-    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+-        FROM_HERE,
+-        base::BindOnce([](std::shared_ptr<KeyCallback> pending) {
+-          if (!*pending)
+-            return;
+-          if (shaar::lifecycle::SafeStorageUnavailable)
+-            shaar::lifecycle::SafeStorageUnavailable();
+-          std::move(*pending).Run(
+-              kKeyTag, base::unexpected(KeyError::kTemporarilyUnavailable));
+-        }, pending),
+-        base::Milliseconds(500));
+-  }
+   base::ThreadPool::PostTaskAndReplyWithResult(
+       FROM_HERE, {base::TaskPriority::USER_BLOCKING, base::MayBlock()},
+       base::BindOnce(&GetKeyTask, crypto::SubtlePassKey{}, keychain_for_testing_),
+-      base::BindOnce([](std::shared_ptr<KeyCallback> pending, bool embedded,
++      base::BindOnce([](KeyCallback callback, bool embedded,
+                        base::expected<Encryptor::Key, KeyError> key) {
+-        if (!*pending)
+-          return;
+         if (embedded && !key.has_value() &&
+             shaar::lifecycle::SafeStorageUnavailable) {
+           shaar::lifecycle::SafeStorageUnavailable();
+         }
+-        std::move(*pending).Run(kKeyTag, std::move(key));
+-      }, pending, embedded));
++        std::move(callback).Run(kKeyTag, std::move(key));
++      }, std::move(callback), embedded));
+ }
+ 
+ bool KeychainKeyProvider::UseForEncryption() {
+--- a/net/cookies/cookie_monster.h
++++ b/net/cookies/cookie_monster.h
+@@ -510,6 +510,9 @@
+ 
+   // Fetches all cookies from the backing store.
+   void FetchAllCookies();
++
++  // Let embedded pages continue while a human answers a keychain prompt.
++  void ReleasePendingTasksForShaar();
+ 
+   // Whether all cookies should be fetched as soon as any is requested.
+   bool ShouldFetchAllCookiesWhenFetchingAnyCookie();
+@@ -862,6 +865,7 @@
+   bool started_fetching_all_cookies_ = false;
+   // Indicates whether the cookie store has finished fetching all cookies.
+   bool finished_fetching_all_cookies_ = false;
++  bool shaar_pending_load_released_ = false;
+ 
+   // List of domain keys that have been loaded from the DB.
+   std::set<std::string> keys_loaded_;
+--- a/net/cookies/cookie_monster.cc
++++ b/net/cookies/cookie_monster.cc
+@@ -59,6 +59,7 @@
+ #include <vector>
+ 
+ #include "base/check.h"
++#include "base/command_line.h"
+ #include "base/check_is_test.h"
+ #include "base/compiler_specific.h"
+ #include "base/containers/flat_map.h"
+@@ -1016,8 +1017,38 @@
+   store_->Load(base::BindOnce(&CookieMonster::OnLoaded,
+                               weak_ptr_factory_.GetWeakPtr(), TimeTicks::Now()),
+                net_log_);
++  if (base::CommandLine::InitializedForCurrentProcess() &&
++      base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder")) {
++    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
++        FROM_HERE,
++        base::BindOnce(&CookieMonster::ReleasePendingTasksForShaar,
++                       weak_ptr_factory_.GetWeakPtr()),
++        base::Milliseconds(500));
++  }
+ }
+ 
++void CookieMonster::ReleasePendingTasksForShaar() {
++  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
++  if (finished_fetching_all_cookies_)
++    return;
++  // The persistent read stays in flight. When keychain access is approved,
++  // OnLoaded merges saved cookies into this same CookieMonster. Only requests
++  // waiting for the read are released to the in-memory jar.
++  shaar_pending_load_released_ = true;
++  seen_global_task_ = true;
++  for (auto& [key, tasks] : tasks_pending_for_key_) {
++    tasks_pending_.insert(tasks_pending_.end(),
++                          std::make_move_iterator(tasks.begin()),
++                          std::make_move_iterator(tasks.end()));
++  }
++  tasks_pending_for_key_.clear();
++  while (!tasks_pending_.empty()) {
++    base::OnceClosure task = std::move(tasks_pending_.front());
++    tasks_pending_.pop_front();
++    std::move(task).Run();
++  }
++}
++
+ void CookieMonster::OnLoaded(
+     TimeTicks beginning_time,
+     std::vector<std::unique_ptr<CanonicalCookie>> cookies) {
+@@ -2903,6 +2934,10 @@
+   FetchAllCookiesIfNecessary();
+   seen_global_task_ = true;
+ 
++  if (shaar_pending_load_released_) {
++    std::move(callback).Run();
++    return;
++  }
+   if (!finished_fetching_all_cookies_ && store_.get()) {
+     if (tasks_pending_.empty()) {
+       time_start_block_load_all_ = base::TimeTicks::Now();
+@@ -2941,6 +2976,12 @@
+   MarkCookieStoreAsInitialized();
+   FetchAllCookiesIfNecessary();
+ 
++  // If a keychain prompt is pending, requests use the in-memory cookie jar.
++  // The saved cookies are merged when their asynchronous load completes.
++  if (shaar_pending_load_released_) {
++    std::move(callback).Run();
++    return;
++  }
+   // If cookies for the requested domain key (eTLD+1) have been loaded from DB
+   // then run the task, otherwise load from DB.
+   if (!finished_fetching_all_cookies_ && store_.get()) {
+--- a/net/extras/sqlite/sqlite_persistent_cookie_store.cc
++++ b/net/extras/sqlite/sqlite_persistent_cookie_store.cc
+@@ -773,6 +773,9 @@
+   // Browsing can use in-memory cookies while Safe Storage is unavailable.
+   // Do not open/migrate/delete persistent data until a key is available.
+   if ((!crypto_ || crypto_->IsEncryptionAvailable()) && InitializeDatabase()) {
++    // Writes made while an embedded page waited for Safe Storage can now be
++    // persisted. Commit them before loading saved cookies so newer values win.
++    DoCommit();
+     if (!key.has_value()) {
+       ChainLoadCookies(std::move(loaded_callback));
+       RecordLoadAndNotifyInBackgroundMetrics(timer.Elapsed());
+@@ -1296,6 +1299,10 @@
+ 
+ void SQLitePersistentCookieStore::Backend::DoCommit() {
+   DCHECK(background_task_runner()->RunsTasksInCurrentSequence());
++  // A keychain prompt can keep the database unopened past the first commit
++  // timer. Preserve pending writes for the load that follows approval.
++  if (!db())
++    return;
+ 
+   PendingOperationsMap ops;
+   {

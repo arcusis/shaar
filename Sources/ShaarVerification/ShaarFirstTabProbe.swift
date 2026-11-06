@@ -17,6 +17,7 @@ final class ShaarFirstTabProbe {
   private let tabID: UUID
   private let profileID: UUID
   private let checksInspector: Bool
+  private let systemQuit: Bool
   private let inspectorFixture: URL?
   private var inspectorChecks: [String] = []
   private let checksCoreRoutes: Bool
@@ -45,6 +46,7 @@ final class ShaarFirstTabProbe {
     output = URL(filePath: try value(after: "--probe-output"))
     dataRoot = URL(filePath: try value(after: "--probe-data-dir"), directoryHint: .isDirectory)
     checksInspector = arguments.contains("--probe-shaar-inspector")
+    systemQuit = arguments.contains("--probe-system-quit")
     if checksInspector {
       guard let url = URL(string: try value(after: "--probe-inspector-url")),
         url.scheme == "http", url.host == "127.0.0.1"
@@ -276,6 +278,7 @@ final class ShaarFirstTabProbe {
       "privatePolicyChecks": privatePolicyChecks,
       "requestedURL": pageURL.absoluteString,
       "allWindowsHidden": NSApp.windows.allSatisfy { !$0.isVisible },
+      "systemQuitRequested": systemQuit,
       "error": error ?? "",
     ]
     do {
@@ -291,7 +294,12 @@ final class ShaarFirstTabProbe {
     if passed {
       for context in host.contexts.values { _ = runtime.closeWindowID(context.nativeID) }
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-        self?.runtime.quit()
+        guard let self else { return }
+        if self.systemQuit {
+          NSApp.terminate(nil)
+        } else {
+          self.runtime.quit()
+        }
       }
     } else {
       runtime.quit()

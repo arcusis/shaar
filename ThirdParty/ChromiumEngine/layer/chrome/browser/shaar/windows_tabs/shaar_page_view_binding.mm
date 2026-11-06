@@ -5,6 +5,8 @@
 #include "chrome/browser/shaar/windows_tabs/shaar_page_view_binding.h"
 
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
 #include <memory>
 #include <pthread.h>
 #include <unordered_map>
@@ -234,6 +236,26 @@ extern "C" SHAAR_EXPORT void *shaar_devtools_frontend_view(shaar_engine *engine,
       DevToolsWindow::GetInTabWebContents(inspected, nullptr);
   return frontend ? (__bridge void *)frontend->GetNativeView().GetNativeNSView()
                   : nullptr;
+}
+
+extern "C" SHAAR_EXPORT shaar_error_code shaar_test_devtools_geometry(
+    shaar_engine* engine, shaar_scope scope, shaar_window* window,
+    shaar_tab* tab, shaar_devtools_geometry* out, shaar_error* error) {
+  if (!pthread_main_np() || !out || out->size < sizeof(*out) ||
+      !std::getenv("SHAAR_ENGINE_TESTING") ||
+      std::strcmp(std::getenv("SHAAR_ENGINE_TESTING"), "1") != 0)
+    return Result(SHAAR_INVALID_ARGUMENT, error);
+  out->container_width = 0;
+  out->inspected_page_right = 0;
+  out->frontend_placeholder_right = 0;
+  out->frontend_width = 0;
+  if (!shaar_devtools_frontend_view(engine, scope, window, tab))
+    return Result(SHAAR_NOT_READY, error);
+  PageViewHost* host = FindHost(window, false);
+  if (!host || host->selected_view() != FindTabView(engine, window, tab) ||
+      !host->GetDevToolsGeometry(out))
+    return Result(SHAAR_NOT_READY, error);
+  return Result(SHAAR_OK, error);
 }
 
 extern "C" SHAAR_EXPORT shaar_error_code shaar_tab_view_attach(

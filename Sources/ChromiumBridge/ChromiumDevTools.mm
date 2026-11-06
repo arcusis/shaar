@@ -13,6 +13,7 @@
 
 namespace {
 char kShaarFrontendViews;
+char kShaarDockTabs;
 
 NSMutableDictionary<NSString *, NSView *> *ShaarFrontendViews(ARCShaarRuntime *runtime) {
   NSMutableDictionary *views = objc_getAssociatedObject(runtime, &kShaarFrontendViews);
@@ -23,6 +24,14 @@ NSMutableDictionary<NSString *, NSView *> *ShaarFrontendViews(ARCShaarRuntime *r
   return views;
 }
 
+NSMutableSet<NSString *> *ShaarDockTabs(ARCShaarRuntime *runtime) {
+  NSMutableSet *tabs = objc_getAssociatedObject(runtime, &kShaarDockTabs);
+  if (!tabs) {
+    tabs = [NSMutableSet set];
+    objc_setAssociatedObject(runtime, &kShaarDockTabs, tabs, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  }
+  return tabs;
+}
 NSDictionary *ShaarTable(id runtime, const char *name) {
   Ivar field = class_getInstanceVariable([runtime class], name);
   return field ? object_getIvar(runtime, field) : nil;
@@ -129,6 +138,11 @@ BOOL SubmitShaarDevTools(ARCShaarRuntime *runtime, shaar_scope scope,
 }
 
 }  // namespace
+
+@interface ARCShaarRuntime (NativeFrontend)
+- (NSView *)shaarNativeFrontendViewForTabID:(NSString *)tabID
+                                 profileID:(NSString *)profileID windowID:(NSString *)windowID;
+@end
 
 @implementation ARCShaarRuntime (DevToolsTransport)
 
@@ -247,11 +261,29 @@ BOOL SubmitShaarDevTools(ARCShaarRuntime *runtime, shaar_scope scope,
   NSString *windowID = ShaarTable(self, "_shaarTabWindows")[tabID];
   if (![self shaarDevToolsOwnsTabID:tabID profileID:profileID windowID:windowID]) {
     [ShaarFrontendViews(self) removeObjectForKey:tabID];
+    [ShaarDockTabs(self) removeObject:tabID];
     return nil;
   }
-  // The ABI has no borrowed frontend view. This private marker exposes open state
-  // to the app's existing toggle and developer tools model.
+  NSView *native = [self shaarNativeFrontendViewForTabID:tabID
+                                             profileID:profileID windowID:windowID];
+  if (native) [ShaarDockTabs(self) addObject:tabID];
+  if ([ShaarDockTabs(self) containsObject:tabID]) return native;
+  // Published shaar.13 opens an undocked native window and exposes no view.
   return ShaarFrontendViews(self)[tabID];
+}
+
+- (NSView *)shaarNativeFrontendViewForTabID:(NSString *)tabID
+                                 profileID:(NSString *)profileID windowID:(NSString *)windowID {
+  auto frontend = reinterpret_cast<decltype(&shaar_devtools_frontend_view)>(
+      dlsym(RTLD_DEFAULT, "shaar_devtools_frontend_view"));
+  if (!frontend) return nil;
+  shaar_scope scope = {};
+  scope.size = sizeof(scope);
+  scope.profile = (shaar_profile *)[ShaarTable(self, "_shaarProfiles")[profileID] pointerValue];
+  auto *window = (shaar_window *)[ShaarTable(self, "_shaarWindows")[windowID] pointerValue];
+  auto *tab = (shaar_tab *)[ShaarTable(self, "_shaarTabs")[tabID] pointerValue];
+  if (!scope.profile || !window || !tab) return nil;
+  return (__bridge NSView *)frontend(ShaarEngineHandle(self), scope, window, tab);
 }
 
 - (BOOL)showDevToolsForTabID:(NSString *)tabID {
@@ -267,6 +299,9 @@ BOOL SubmitShaarDevTools(ARCShaarRuntime *runtime, shaar_scope scope,
       return;
     }
     ShaarFrontendViews(self)[tabID] = [NSView new];
+    if ([self shaarNativeFrontendViewForTabID:tabID profileID:profileID windowID:windowID]) {
+      [ShaarDockTabs(self) addObject:tabID];
+    }
   }];
   return accepted;
 }
@@ -289,8 +324,16 @@ BOOL SubmitShaarDevTools(ARCShaarRuntime *runtime, shaar_scope scope,
     [self shaarDevToolsSubmit:operation tabID:tabID profileID:profileID windowID:windowID
                       payload:payload completion:^(NSDictionary *reply, NSError *failure) {
       if (!failure) {
-        if (open) ShaarFrontendViews(self)[tabID] = [NSView new];
-        else [ShaarFrontendViews(self) removeObjectForKey:tabID];
+        if (open) {
+          ShaarFrontendViews(self)[tabID] = [NSView new];
+          if ([self shaarNativeFrontendViewForTabID:tabID
+                                         profileID:profileID windowID:windowID]) {
+            [ShaarDockTabs(self) addObject:tabID];
+          }
+        } else {
+          [ShaarFrontendViews(self) removeObjectForKey:tabID];
+          [ShaarDockTabs(self) removeObject:tabID];
+        }
       }
       completion(failure);
     }];
@@ -307,7 +350,10 @@ BOOL SubmitShaarDevTools(ARCShaarRuntime *runtime, shaar_scope scope,
                                 completion:^(NSDictionary *result, NSError *error) {
     if (error && marker) ShaarFrontendViews(self)[tabID] = marker;
   }];
-  if (accepted) [ShaarFrontendViews(self) removeObjectForKey:tabID];
+  if (accepted) {
+    [ShaarFrontendViews(self) removeObjectForKey:tabID];
+    [ShaarDockTabs(self) removeObject:tabID];
+  }
   return accepted;
 }
 

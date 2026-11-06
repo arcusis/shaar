@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import AppKit
 import ChromiumBridge
 import ShaarEngineC
 import Testing
@@ -10,6 +11,12 @@ private final class RejectedDevToolsRuntime: ARCShaarRuntime {
   var rejects = true
   var frontendOpen = false
   var operations: [UInt] = []
+  var actualFrontend: NSView?
+
+  @objc(shaarNativeFrontendViewForTabID:profileID:windowID:)
+  func nativeFrontend(_ tabID: String, profileID: String?, windowID: String?) -> NSView? {
+    frontendOpen ? actualFrontend : nil
+  }
   @objc(shaarDevToolsOwnsTabID:profileID:windowID:)
   func owns(_ tabID: String, profileID: String?, windowID: String?) -> Bool { true }
 
@@ -38,6 +45,13 @@ private final class RejectedDevToolsRuntime: ARCShaarRuntime {
 }
 
 @Suite @MainActor struct DevToolsPresentationTests {
+  @Test func publishedUndockedFrontendKeepsLegacyOpenState() {
+    let runtime = RejectedDevToolsRuntime()
+    runtime.rejects = false
+    #expect(runtime.showDevTools(forTabID: "tab"))
+    #expect(runtime.devToolsView(forTabID: "tab") != nil)
+  }
+
   @Test func nativeRejectionDoesNotLeaveAFakeOpenFrontendAndReportsTheError() {
     let runtime = RejectedDevToolsRuntime()
     var notice: String?
@@ -50,9 +64,11 @@ private final class RejectedDevToolsRuntime: ARCShaarRuntime {
   @Test func shortcutReopensAFrontendClosedThroughItsNativeWindow() async throws {
     let runtime = RejectedDevToolsRuntime()
     runtime.rejects = false
+    runtime.actualFrontend = NSView()
     #expect(runtime.showDevTools(forTabID: "tab"))
     #expect(runtime.devToolsView(forTabID: "tab") != nil)
     runtime.frontendOpen = false
+    #expect(runtime.devToolsView(forTabID: "tab") == nil)
     runtime.operations = []
     try await runtime.toggleDevTools(forTabID: "tab")
     #expect(runtime.frontendOpen)

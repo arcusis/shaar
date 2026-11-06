@@ -63,6 +63,7 @@ final class BrowserStore {
   var sidebarIsVisible = true
   private(set) var pageFind: PageFindState?
   private(set) var rendererFailures: [UUID: RendererFailure] = [:]
+  @ObservationIgnored private var requestedTabCloses: Set<UUID> = []
   var sheet: BrowserSheet? {
     didSet {
       if sheet != nil { closeLibraryDrawer() }
@@ -529,6 +530,8 @@ final class BrowserStore {
   }
 
   func closeTab(_ id: UUID) {
+    guard session.page(forTabID: id) != nil else { return }
+    requestedTabCloses.insert(id)
     if let onCloseTab {
       onCloseTab(id)
       return
@@ -586,6 +589,10 @@ final class BrowserStore {
   }
 
   func nativeTabClosed(_ id: UUID) {
+    let requested = requestedTabCloses.remove(id) != nil
+    // WebContents destruction also reports "closed". Losing a native document
+    // is not permission to delete a saved pin.
+    guard requested || session.page(forTabID: id)?.tab.isPinned != true else { return }
     rendererFailures[id] = nil
     if pendingSplitPlacement?.target == id { dismissCommand() }
     if let favoritePage = session.favoritePages.first(where: { $0.tab.id == id }) {
@@ -732,6 +739,7 @@ final class BrowserStore {
     guard status != "normal", session.profileID(forTabID: id) == profileID,
       let tab = session.page(forTabID: id)?.tab
     else { return }
+    requestedTabCloses.remove(id)
     rendererFailures[id] = RendererFailure(
       profileID: profileID, tabID: id, pageURL: tab.url, status: status, exitCode: exitCode)
     if pageFind?.tabID == id { dismissPageFind() }
@@ -741,6 +749,7 @@ final class BrowserStore {
   }
 
   func nativeDocumentCommitted(_ id: UUID, profileID: UUID) {
+    if session.profileID(forTabID: id) == profileID { requestedTabCloses.remove(id) }
     guard rendererFailures[id]?.profileID == profileID else { return }
     rendererFailures[id] = nil
   }

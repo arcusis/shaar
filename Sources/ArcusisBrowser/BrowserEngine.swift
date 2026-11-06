@@ -122,8 +122,7 @@ final class BrowserEngine {
     try events.router.register(callbacks)
     store.engine = self
     store.onReloadPage = { [weak self] tab, profile, mode in
-      self?.runtime.reloadTabID(
-        tab.uuidString, profileID: profile.uuidString, mode: mode.engineMode) ?? false
+      self?.reloadPage(tab, profile: profile, mode: mode) ?? false
     }
     store.onNavigatePage = { [weak self] tab, profile, url in
       guard let self, !self.isClosed, let store = self.store,
@@ -434,6 +433,15 @@ final class BrowserEngine {
       self.forgetMedia(id)
       self.favicons[id] = nil
       self.store?.nativeTabClosed(id)
+      if let store = self.store, store.session.page(forTabID: id)?.tab.isPinned == true,
+        let profile = store.session.profileID(forTabID: id)
+      {
+        // Wait for Reload instead of immediately recreating a failing renderer
+        // inside its close callback (or repeatedly during reconciliation).
+        self.failedTabs.insert(id)
+        self.lastTabOrders[profile] = nil
+        store.nativeRendererGone(id, profileID: profile, status: "native_tab_closed", exitCode: 0)
+      }
     }
     callbacks.onTabActivated = { [weak self] identity, owner in
       guard let self, self.runtime.windowID(forTabID: identity) == self.windowID,
@@ -569,6 +577,21 @@ final class BrowserEngine {
       favicons[id] = nil
       runtime.discardTabID(id.uuidString)
     }
+  }
+
+  private func reloadPage(_ tab: UUID, profile: UUID, mode: PageReloadMode) -> Bool {
+    guard !isClosed, !runtime.isQuitting, store?.session.profileID(forTabID: tab) == profile
+    else { return false }
+    if liveTabs.contains(tab) {
+      return runtime.reloadTabID(
+        tab.uuidString, profileID: profile.uuidString, mode: mode.engineMode)
+    }
+    // A failed open or destroyed WebContents has no native target to reload.
+    // Materialize the retained session entry again with its original identity.
+    failedTabs.remove(tab)
+    failedProfiles.remove(profile)
+    reconcile()
+    return liveTabs.contains(tab) || loadingProfiles.contains(profile)
   }
 
   func reconcile() {

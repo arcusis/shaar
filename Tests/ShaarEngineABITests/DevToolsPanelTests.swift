@@ -279,11 +279,20 @@ struct DevToolsPanelTests {
     let withHeaders = safe.replacingOccurrences(
       of: #""name":"assets""#, with: #""headers":{"Cookie":"secret"}"#)
     #expect(ShaarDevToolsPhase2Reply.decode(Data(withHeaders.utf8), command: command) == nil)
-    let huge =
-      #"{"schemaVersion":1,"commandID":16,"items":[],"body":"\#(String(repeating: "x", count: 1_048_577))","base64Encoded":false,"truncated":false}"#
-    #expect(
+    func resourceReply(bodyBytes: Int) -> Data {
+      let body = String(repeating: "x", count: bodyBytes)
+      let reply =
+        #"{"schemaVersion":1,"commandID":16,"items":[],"body":"\#(body)","base64Encoded":false,"truncated":false}"#
+      return Data(reply.utf8)
+    }
+    let resource = ShaarDevToolsPhase2Command.resourceContent(url: "https://example.test/a.js")
+    let acceptedBodyBytes = ShaarDevToolsPhase2Reply.decode(
+      resourceReply(bodyBytes: 1_048_577), command: resource)?.body?.utf8.count
+    #expect(acceptedBodyBytes == 1_048_577)
+    let rejectsOverLimit =
       ShaarDevToolsPhase2Reply.decode(
-        Data(huge.utf8), command: .resourceContent(url: "https://example.test/a.js")) == nil)
+        resourceReply(bodyBytes: 5 * 1_048_576 + 1), command: resource) == nil
+    #expect(rejectsOverLimit)
     let vitals =
       #"{"schemaVersion":1,"commandID":18,"items":[{"name":"ttfb","value":120.0},{"name":"event","startTime":300.0,"duration":80.0,"interactionID":1}],"truncated":false}"#
     #expect(

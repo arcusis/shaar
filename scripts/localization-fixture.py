@@ -30,7 +30,7 @@ MARKER = ".arcusis-localization-probe"
 
 
 def safe_environment():
-    allowed = ("PATH", "HOME", "TMPDIR", "DEVELOPER_DIR", "SDKROOT", "TOOLCHAINS")
+    allowed = ("PATH", "HOME", "TMPDIR", "DEVELOPER_DIR", "SDKROOT", "TOOLCHAINS", "SWIFT_BACKTRACE")
     return {key: os.environ[key] for key in allowed if key in os.environ}
 
 
@@ -195,8 +195,12 @@ def run():
     domain = f"com.arcusis.localization-fixture.{uuid.uuid4().hex}"
     info["CFBundleIdentifier"] = domain
     info_path.write_bytes(plistlib.dumps(info))
-    subprocess.run(["codesign", "--force", "--timestamp=none", "--sign", "-", str(isolated_app)],
-                   check=True, capture_output=True)
+    sign_command = ["codesign", "--force", "--timestamp=none", "--sign", "-"]
+    if os.environ.get("SWIFT_BACKTRACE"):
+        entitlements = outer / "backtrace-entitlements.plist"
+        entitlements.write_bytes(plistlib.dumps({"com.apple.security.get-task-allow": True}))
+        sign_command.extend(["--entitlements", str(entitlements)])
+    subprocess.run([*sign_command, str(isolated_app)], check=True, capture_output=True)
     executable = isolated_app / "Contents/MacOS/ShaarVerification"
 
     def store_selection(selection):

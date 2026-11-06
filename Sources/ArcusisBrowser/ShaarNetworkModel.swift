@@ -6,7 +6,7 @@ import CoreFoundation
 import Foundation
 import Observation
 
-enum ShaarNetworkFilter: String, CaseIterable {
+enum ShaarNetworkFilter: String, CaseIterable, Sendable {
   case all = "All"
   case fetch = "Fetch/XHR"
   case script = "JS"
@@ -17,7 +17,7 @@ enum ShaarNetworkFilter: String, CaseIterable {
   case errors = "Errors"
 }
 
-struct ShaarNetworkRequest: Identifiable, Equatable {
+struct ShaarNetworkRequest: Identifiable, Equatable, Sendable {
   let id: String
   var method: String
   var url: String
@@ -72,12 +72,20 @@ struct ShaarNetworkJSONNode: Equatable {
   let children: [Self]
 }
 
+struct ShaarNetworkProjection: Sendable {
+  let rows: [ShaarNetworkRequest]
+  let totalCount: Int
+  let firstTime: TimeInterval
+  let lastTime: TimeInterval
+}
+
 @MainActor @Observable
 final class ShaarNetworkModel {
   var filter = ShaarNetworkFilter.all
   var search = ""
   var selectedID: String?
   var detailTab = DetailTab.headers
+  let projection = ShaarDevToolsListProjection<ShaarNetworkProjection>()
 
   enum DetailTab: String, CaseIterable {
     case headers = "Headers"
@@ -87,6 +95,7 @@ final class ShaarNetworkModel {
   }
 
   func clearSelection() {
+    projection.clear()
     selectedID = nil
     detailTab = .headers
   }
@@ -102,11 +111,31 @@ final class ShaarNetworkModel {
   }
 
   func requests(from events: [ShaarDevToolsEvent]) -> [ShaarNetworkRequest] {
+    Self.buildRequests(events, failureLabel: ShellL10n.string("Request failed"))
+  }
+
+  func scheduleRows(from events: [ShaarDevToolsEvent]) {
+    let filter = filter
+    let search = search
+    let failureLabel = ShellL10n.string("Request failed")
+    projection.schedule {
+      let requests = Self.buildRequests(events, failureLabel: failureLabel)
+      let visible = Self.filterRequests(requests, filter: filter, search: search)
+      return ShaarNetworkProjection(
+        rows: visible, totalCount: requests.count,
+        firstTime: visible.map(\.startedAt).min() ?? 0,
+        lastTime: visible.map { $0.completedAt ?? $0.startedAt }.max() ?? 0)
+    }
+  }
+
+  nonisolated private static func buildRequests(
+    _ events: [ShaarDevToolsEvent], failureLabel: String
+  ) -> [ShaarNetworkRequest] {
     var rows: [ShaarNetworkRequest] = []
     var indexes: [String: Int] = [:]
     for case .network(let event) in events {
       if let index = indexes[event.requestID] {
-        merge(event, into: &rows[index])
+        merge(event, into: &rows[index], failureLabel: failureLabel)
       } else {
         indexes[event.requestID] = rows.count
         var row = ShaarNetworkRequest(
@@ -115,7 +144,7 @@ final class ShaarNetworkModel {
           respondedAt: nil, completedAt: nil, failure: nil,
           requestHeaders: [], responseHeaders: [],
           payload: nil, responseBody: nil)
-        merge(event, into: &row)
+        merge(event, into: &row, failureLabel: failureLabel)
         rows.append(row)
       }
     }
@@ -123,10 +152,16 @@ final class ShaarNetworkModel {
   }
 
   func visibleRequests(from events: [ShaarDevToolsEvent]) -> [ShaarNetworkRequest] {
-    requests(from: events).filter { row in
+    Self.filterRequests(requests(from: events), filter: filter, search: search)
+  }
+
+  nonisolated private static func filterRequests(
+    _ requests: [ShaarNetworkRequest], filter: ShaarNetworkFilter, search: String
+  ) -> [ShaarNetworkRequest] {
+    let needle = search.trimmingCharacters(in: .whitespacesAndNewlines)
+    return requests.filter { row in
       if filter == .errors && !row.isError { return false }
       if filter != .all && filter != .errors && filter != row.resource { return false }
-      let needle = search.trimmingCharacters(in: .whitespacesAndNewlines)
       return needle.isEmpty || row.url.localizedStandardContains(needle)
         || row.method.localizedStandardContains(needle)
         || row.status.map(String.init)?.contains(needle) == true
@@ -179,7 +214,9 @@ final class ShaarNetworkModel {
     return String(lines.joined(separator: "\n").prefix(16_384))
   }
 
-  private func merge(_ event: ShaarNetworkEvent, into row: inout ShaarNetworkRequest) {
+  nonisolated private static func merge(
+    _ event: ShaarNetworkEvent, into row: inout ShaarNetworkRequest, failureLabel: String
+  ) {
     if !event.method.isEmpty { row.method = event.method }
     if !event.url.isEmpty { row.url = event.url }
     if let status = event.status { row.status = status }
@@ -197,7 +234,7 @@ final class ShaarNetworkModel {
       if let encodedBytes = event.encodedBytes { row.encodedBytes = encodedBytes }
     case .failed:
       row.completedAt = event.time
-      row.failure = event.failure ?? ShellL10n.string("Request failed")
+      row.failure = event.failure ?? failureLabel
     }
   }
 

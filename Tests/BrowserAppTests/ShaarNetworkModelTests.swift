@@ -8,6 +8,28 @@ import Testing
 @testable import ArcusisBrowser
 
 @Suite @MainActor struct ShaarNetworkModelTests {
+  @Test func fiftyThousandRequestFilterProjectsOffMainActor() async {
+    let events: [ShaarDevToolsEvent] = (0..<50_000).map { index in
+      .network(
+        .init(
+          id: UUID(), method: "GET", url: "https://example.com/item/\(index)",
+          status: index.isMultiple(of: 2) ? 500 : 200, time: Double(index)))
+    }
+    let model = ShaarNetworkModel()
+    model.scheduleRows(from: events)
+    model.filter = .errors
+    model.scheduleRows(from: events)
+    let start = ContinuousClock.now
+    for _ in 0..<500 where model.projection.result?.rows.count != 25_000 {
+      try? await Task.sleep(for: .milliseconds(10))
+    }
+    let elapsed = start.duration(to: .now)
+    print("Network 50,000-request projection: \(elapsed)")
+    #expect(model.projection.result?.rows.count == 25_000)
+    #expect(model.projection.result?.totalCount == 50_000)
+    #expect(elapsed < .seconds(5))
+  }
+
   @Test func phasesMergeByRequestIDAndFiltersUseFinalState() {
     let model = ShaarNetworkModel()
     let id = UUID()

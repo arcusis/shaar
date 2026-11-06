@@ -13,7 +13,12 @@ struct ShaarNetworkPanel: View {
   let openChromium: () -> Void
   @FocusState private var focusedRequest: String?
 
-  private var rows: [ShaarNetworkRequest] { model.visibleRequests(from: events) }
+  private var rows: [ShaarNetworkRequest] {
+    if events.count <= 500 && model.projection.result == nil {
+      return model.visibleRequests(from: events)
+    }
+    return model.projection.result?.rows ?? []
+  }
   private var selected: ShaarNetworkRequest? { rows.first { $0.id == model.selectedID } }
 
   var body: some View {
@@ -36,6 +41,10 @@ struct ShaarNetworkPanel: View {
       }
     }
     .accessibilityIdentifier("shaar.devtools.networkPanel")
+    .task { model.scheduleRows(from: events) }
+    .onChange(of: events.last) { _, _ in model.scheduleRows(from: events) }
+    .onChange(of: model.filter) { _, _ in model.scheduleRows(from: events) }
+    .onChange(of: model.search) { _, _ in model.scheduleRows(from: events) }
   }
 
   private var filters: some View {
@@ -85,6 +94,11 @@ struct ShaarNetworkPanel: View {
 
   private var requestList: some View {
     GeometryReader { geometry in
+      let currentRows = rows
+      let first = model.projection.result?.firstTime ?? currentRows.map(\.startedAt).min() ?? 0
+      let last =
+        model.projection.result?.lastTime
+        ?? currentRows.map { $0.completedAt ?? $0.startedAt }.max() ?? 0
       ScrollView([.horizontal, .vertical]) {
         LazyVStack(spacing: 0) {
           tableHeader
@@ -95,18 +109,18 @@ struct ShaarNetworkPanel: View {
               .padding(10)
               .accessibilityIdentifier("shaar.devtools.networkDropped")
           }
-          if rows.isEmpty {
+          if currentRows.isEmpty {
             Text(ShellL10n.string(emptyListMessage))
               .font(.system(size: 11))
               .foregroundStyle(.secondary)
               .frame(width: 700, height: 130)
           }
-          ForEach(rows) { row in
+          ForEach(currentRows) { row in
             Button {
               model.selectedID = row.id
               focusedRequest = row.id
             } label: {
-              tableRow(row)
+              tableRow(row, first: first, last: last)
             }
             .buttonStyle(.plain)
             .focusable()
@@ -127,15 +141,15 @@ struct ShaarNetworkPanel: View {
       }
       .onMoveCommand { direction in
         guard focusedRequest != nil else { return }
-        if direction == .down { model.selectAdjacent(in: rows, forward: true) }
-        if direction == .up { model.selectAdjacent(in: rows, forward: false) }
+        if direction == .down { model.selectAdjacent(in: currentRows, forward: true) }
+        if direction == .up { model.selectAdjacent(in: currentRows, forward: false) }
         focusedRequest = model.selectedID
       }
     }
   }
 
   private var emptyListMessage: String {
-    if !model.requests(from: events).isEmpty {
+    if (model.projection.result?.totalCount ?? model.requests(from: events).count) > 0 {
       return "No matching requests"
     }
     return "No network requests yet"
@@ -163,7 +177,9 @@ struct ShaarNetworkPanel: View {
     Text(ShellL10n.string(title)).frame(width: width, alignment: .leading)
   }
 
-  private func tableRow(_ row: ShaarNetworkRequest) -> some View {
+  private func tableRow(
+    _ row: ShaarNetworkRequest, first: TimeInterval, last: TimeInterval
+  ) -> some View {
     HStack(spacing: 8) {
       Text(row.failure != nil ? "×" : row.status.map(String.init) ?? "·")
         .foregroundStyle(row.isError ? .red : .primary)
@@ -174,7 +190,7 @@ struct ShaarNetworkPanel: View {
         .frame(width: 70, alignment: .leading)
       Text(sizeLabel(row.encodedBytes)).frame(width: 60, alignment: .leading)
       Text(timeLabel(row.duration)).frame(width: 56, alignment: .leading)
-      waterfall(row).frame(maxWidth: .infinity)
+      waterfall(row, first: first, last: last).frame(maxWidth: .infinity)
     }
     .font(.system(size: 10, design: .monospaced))
     .padding(.horizontal, 12)
@@ -183,11 +199,11 @@ struct ShaarNetworkPanel: View {
     .contentShape(Rectangle())
   }
 
-  private func waterfall(_ row: ShaarNetworkRequest) -> some View {
+  private func waterfall(
+    _ row: ShaarNetworkRequest, first: TimeInterval, last: TimeInterval
+  ) -> some View {
     GeometryReader { geometry in
       let duration = row.duration ?? 0
-      let first = rows.map(\.startedAt).min() ?? row.startedAt
-      let last = rows.compactMap(\.completedAt).max() ?? row.startedAt
       let span = max(0.001, last - first)
       let start = max(0, row.startedAt - first)
       Capsule()

@@ -11,7 +11,10 @@ struct ShaarConsolePanel: View {
   let droppedCount: Int
   let inspector: InspectorModel?
 
-  private var rows: [ShaarConsoleRow] { model.rows(from: events) }
+  private var rows: [ShaarConsoleRow] {
+    if events.count <= 500 && model.projection.result == nil { return model.rows(from: events) }
+    return model.projection.result ?? []
+  }
 
   var body: some View {
     VStack(spacing: 0) {
@@ -28,6 +31,11 @@ struct ShaarConsolePanel: View {
       }
     }
     .accessibilityIdentifier("shaar.devtools.consolePanel")
+    .task { model.scheduleRows(from: events) }
+    .onChange(of: events.last) { _, _ in model.scheduleRows(from: events) }
+    .onChange(of: model.level) { _, _ in model.scheduleRows(from: events) }
+    .onChange(of: model.origin) { _, _ in model.scheduleRows(from: events) }
+    .onChange(of: model.search) { _, _ in model.scheduleRows(from: events) }
   }
 
   private var filters: some View {

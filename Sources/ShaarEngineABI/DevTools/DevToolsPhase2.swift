@@ -50,7 +50,7 @@ public enum ShaarDevToolsPhase2Command: Equatable, Sendable {
     }
   }
 
-  var parameters: [String: Any]? {
+  public var parameters: [String: Any]? {
     switch self {
     case .storageItems(let local, let skip, let count):
       guard Self.validPage(skip, count) else { return nil }

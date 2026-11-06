@@ -49,6 +49,7 @@ extension BrowserEngine {
         windowID: windowID)
       shell = ShaarDevToolsModel(
         target: target, transport: panel,
+        phase2Transport: ShaarPhase2NativeTransport(panel: panel),
         reproTransport: ShaarReproNativeTransport(
           runtime: shaar, panel: panel, inspector: inspector),
         viewportsTransport: ShaarViewportsNativeTransport(

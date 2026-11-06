@@ -20,7 +20,7 @@ enum ShaarPhase2Message {
 
 private struct ShaarPhase2Unavailable: LocalizedError {
   var errorDescription: String? {
-    ShellL10n.string("Live Application needs engine shaar.17")
+    ShellL10n.string("Live Application is unavailable for this tab")
   }
 }
 
@@ -49,6 +49,10 @@ final class ShaarPhase2Model {
   @ObservationIgnored private let transport: any ShaarPhase2Transport
   @ObservationIgnored private var task: Task<Void, Never>?
   @ObservationIgnored private var generation = 0
+
+  var nativeFailure: String? {
+    (transport as? ShaarPhase2NativeTransport)?.panel.phase2Failure
+  }
 
   init(target: SiteControlTarget, transport: any ShaarPhase2Transport) {
     self.target = target

@@ -65,6 +65,11 @@ NSString *ShaarErrorMessage(shaar_bytes bytes) {
                                encoding:NSUTF8StringEncoding] ?: @"DevTools request failed.";
 }
 
+NSError *ShaarDevToolsEngineError(shaar_error_code code, shaar_bytes message) {
+  return [NSError errorWithDomain:@"org.arcusis.shaar.engine.devtools" code:code
+                         userInfo:@{NSLocalizedDescriptionKey: ShaarErrorMessage(message)}];
+}
+
 const NSArray<NSString *> *ShaarMethods() {
   static NSArray<NSString *> *methods;
   static dispatch_once_t once;
@@ -122,7 +127,7 @@ BOOL SubmitShaarDevTools(ARCShaarRuntime *runtime, shaar_scope scope,
         void (^finish)(NSDictionary *, NSError *) = (__bridge_transfer id)context;
         if (!result) { finish(nil, ShaarDevToolsError(@"DevTools returned no reply.")); return; }
         if (result->error.code != SHAAR_OK) {
-          finish(nil, ShaarDevToolsError(ShaarErrorMessage(result->error.message)));
+          finish(nil, ShaarDevToolsEngineError(result->error.code, result->error.message));
           return;
         }
         NSData *data = [NSData dataWithBytes:result->payload_json.data ?: ""
@@ -137,7 +142,7 @@ BOOL SubmitShaarDevTools(ARCShaarRuntime *runtime, shaar_scope scope,
       }, context, &error);
   if (status != SHAAR_OK) {
     CFBridgingRelease(context);
-    if (completion) completion(nil, ShaarDevToolsError(ShaarErrorMessage(error.message)));
+    if (completion) completion(nil, ShaarDevToolsEngineError(status, error.message));
     return NO;
   }
   return YES;
@@ -158,6 +163,7 @@ BOOL SubmitShaarDevTools(ARCShaarRuntime *runtime, shaar_scope scope,
         completion:(void (NS_SWIFT_UI_ACTOR ^)(NSDictionary<NSString *, id> *, NSError *))completion {
   if (operation != SHAAR_OP_DEVTOOLS_PANEL_OPEN &&
       operation != SHAAR_OP_DEVTOOLS_PANEL_CLOSE &&
+      operation != SHAAR_OP_DEVTOOLS_PANEL_PHASE2_COMMAND &&
       operation != SHAAR_OP_DEVTOOLS_PANEL_SCREENCAST &&
       operation != 1080 /* SHAAR_OP_DEVTOOLS_PANEL_NETWORK_RULES in patch 0024 */) {
     completion(nil, ShaarDevToolsError(@"This panel operation is unavailable."));

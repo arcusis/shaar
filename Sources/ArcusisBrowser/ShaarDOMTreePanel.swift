@@ -68,7 +68,7 @@ struct ShaarDOMTreePanel: View {
         VStack(spacing: 9) {
           Image(systemName: "point.3.connected.trianglepath.dotted")
             .font(.system(size: 22, weight: .ultraLight)).foregroundStyle(.tertiary)
-          Text(ShellL10n.string("Live DOM tree needs a newer Shaar engine"))
+          Text(ShellL10n.string("Live DOM tree is unavailable for this tab"))
             .font(.system(size: 12, weight: .medium))
           Button(ShellL10n.string("Open Chromium DevTools"), action: openChromium)
             .controlSize(.small)

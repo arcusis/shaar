@@ -1,0 +1,16 @@
+{
+  "exitCode": 0,
+  "report": {
+    "normalBundle": "com.arcusis.browser.engine-preview",
+    "domAvailable": false,
+    "allWindowsHidden": true,
+    "streamAvailable": true,
+    "phase2Failure": "",
+    "phase2Available": true,
+    "nativeFailure": "",
+    "viewportsAvailable": false,
+    "targetURL": "http://127.0.0.1:55041/",
+    "pageLoading": false
+  },
+  "stderrTail": ""
+}

@@ -44,6 +44,10 @@ private struct ShaarPanelReply: @unchecked Sendable {
 
 private enum ShaarPanelError: Error { case unavailable }
 
+private struct ShaarPhase2NativeError: LocalizedError {
+  let errorDescription: String?
+}
+
 @MainActor private final class ShaarPanelSession {
   let target: SiteControlTarget
   var leaseID: UInt32?
@@ -60,9 +64,14 @@ private enum ShaarPanelError: Error { case unavailable }
   private(set) var recordingAvailable = false
   private(set) var recordingFailure: String?
   private(set) var recordingStarting = false
+  private(set) var failure: String?
+  private(set) var phase2Failure: String?
   @ObservationIgnored private let requester: any ShaarPanelRequesting
   @ObservationIgnored private let windowID: String
   @ObservationIgnored private var session: ShaarPanelSession?
+  @ObservationIgnored private var phase2Observers: [
+    UUID: (SiteControlTarget, AsyncStream<ShaarPhase2Message>.Continuation)
+  ] = [:]
   @ObservationIgnored var onLeaseOpened: (() -> Void)?
 
   var hasActiveLease: Bool {
@@ -73,6 +82,40 @@ private enum ShaarPanelError: Error { case unavailable }
   func activeLease(for target: SiteControlTarget) -> UInt32? {
     guard let session, !session.closed, session.target == target else { return nil }
     return session.leaseID
+  }
+
+  func phase2Messages(for target: SiteControlTarget) -> AsyncStream<ShaarPhase2Message> {
+    let token = UUID()
+    return AsyncStream(bufferingPolicy: .bufferingNewest(32)) { continuation in
+      phase2Observers[token] = (target, continuation)
+      continuation.yield(activeLease(for: target) == nil ? .unavailable : .available)
+      continuation.onTermination = { @Sendable [weak self] _ in
+        Task { @MainActor [weak self] in self?.phase2Observers[token] = nil }
+      }
+    }
+  }
+
+  func phase2Command(
+    _ command: ShaarDevToolsPhase2Command, for target: SiteControlTarget
+  ) async throws -> ShaarDevToolsPhase2Reply {
+    guard let leaseID = activeLease(for: target), let params = command.parameters else {
+      throw ShaarPhase2NativeError(errorDescription: "DevTools panel is unavailable.")
+    }
+    let result = try await requester.request(
+      .panelPhase2Command, target: target,
+      payload: [
+        "schemaVersion": 1, "leaseID": leaseID,
+        "commandID": command.id, "params": params,
+      ])
+    guard activeLease(for: target) == leaseID,
+      let data = try? JSONSerialization.data(withJSONObject: result),
+      let reply = ShaarDevToolsPhase2Reply.decode(data, command: command)
+    else { throw ShaarPhase2NativeError(errorDescription: "Invalid DevTools panel reply.") }
+    return reply
+  }
+
+  func recordPhase2Failure(_ error: Error?) {
+    phase2Failure = error?.localizedDescription
   }
 
   func setNetworkRules(_ rules: [ShaarResolvedNetworkRule], for target: SiteControlTarget)
@@ -131,6 +174,15 @@ private enum ShaarPanelError: Error { case unavailable }
       sequence: sequence, kind: 14, profileID: Data(profileID.utf8),
       sessionID: Data(), windowID: Data(windowID.utf8),
       tabID: Data(tabID.utf8), payloadJSON: payload)
+    if let phase2 = ShaarDevToolsPhase2EventRouter.decode(
+      event, scope: ShaarNavigationScope(profileID: profileID),
+      windowID: windowID, tabID: tabID, leaseID: leaseID,
+      afterSequence: session.sequence)
+    {
+      session.sequence = sequence
+      emitPhase2(.event(phase2), for: session.target)
+      return
+    }
     guard
       let projected = ShaarDevToolsPanelEventRouter.decode(
         event, scope: ShaarNavigationScope(profileID: profileID), windowID: windowID,
@@ -170,7 +222,10 @@ private enum ShaarPanelError: Error { case unavailable }
         return
       }
       session.leaseID = leaseID
+      failure = nil
+      phase2Failure = nil
       emit(.streamAvailable, to: session)
+      emitPhase2(.available, for: session.target)
       onLeaseOpened?()
       guard !session.closed else { return }
       recordingStarting = true
@@ -189,6 +244,7 @@ private enum ShaarPanelError: Error { case unavailable }
       recordingStarting = false
     } catch {
       guard !session.closed else { return }
+      failure = error.localizedDescription
       emit(.streamUnavailable, to: session)
       close(session)
     }
@@ -211,6 +267,7 @@ private enum ShaarPanelError: Error { case unavailable }
     session.task?.cancel()
     if self.session === session { self.session = nil }
     session.continuation?.finish()
+    emitPhase2(.unavailable, for: session.target)
     guard let leaseID = session.leaseID else { return }
     Task { [requester] in
       if session.recording {
@@ -221,6 +278,12 @@ private enum ShaarPanelError: Error { case unavailable }
       try? await requester.request(
         .panelClose, target: session.target,
         payload: ["schemaVersion": 1, "leaseID": leaseID])
+    }
+  }
+
+  private func emitPhase2(_ message: ShaarPhase2Message, for target: SiteControlTarget) {
+    for (scope, continuation) in phase2Observers.values where scope == target {
+      continuation.yield(message)
     }
   }
 

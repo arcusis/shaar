@@ -4,6 +4,7 @@
 
 import Foundation
 import Testing
+
 @testable import ShaarEngineABI
 
 private final class FakePanelEngine: ShaarDevToolsSubmitting, @unchecked Sendable {
@@ -49,42 +50,55 @@ struct DevToolsPanelTests {
   }
 
   @Test func exactScopeLeaseAndSequenceAreRequired() {
-    let payload = #"{"schemaVersion":1,"kind":"panelEvent","eventID":4,"leaseID":42,"data":{"requestID":"r1","url":"https://example.test","method":"GET","truncated":false}}"#
+    let payload =
+      #"{"schemaVersion":1,"kind":"panelEvent","eventID":4,"leaseID":42,"data":{"requestID":"r1","url":"https://example.test","method":"GET","truncated":false}}"#
     let privateEvent = event(payload, scope: privateScope)
     let decoded = ShaarDevToolsPanelEventRouter.decode(
       privateEvent, scope: privateScope, windowID: "window-a", tabID: "tab-a", leaseID: 42)
     #expect(decoded?.id == .requestWillBeSent)
     #expect(decoded?.data.url == "https://example.test")
-    #expect(ShaarDevToolsPanelEventRouter.decode(
-      privateEvent, scope: regular, windowID: "window-a", tabID: "tab-a", leaseID: 42) == nil)
-    #expect(ShaarDevToolsPanelEventRouter.decode(
-      privateEvent, scope: privateScope, windowID: "window-b", tabID: "tab-a", leaseID: 42) == nil)
-    #expect(ShaarDevToolsPanelEventRouter.decode(
-      privateEvent, scope: privateScope, windowID: "window-a", tabID: "tab-a", leaseID: 41) == nil)
-    #expect(ShaarDevToolsPanelEventRouter.decode(
-      privateEvent, scope: privateScope, windowID: "window-a", tabID: "tab-a",
-      leaseID: 42, afterSequence: 10) == nil)
+    #expect(
+      ShaarDevToolsPanelEventRouter.decode(
+        privateEvent, scope: regular, windowID: "window-a", tabID: "tab-a", leaseID: 42) == nil)
+    #expect(
+      ShaarDevToolsPanelEventRouter.decode(
+        privateEvent, scope: privateScope, windowID: "window-b", tabID: "tab-a", leaseID: 42) == nil
+    )
+    #expect(
+      ShaarDevToolsPanelEventRouter.decode(
+        privateEvent, scope: privateScope, windowID: "window-a", tabID: "tab-a", leaseID: 41) == nil
+    )
+    #expect(
+      ShaarDevToolsPanelEventRouter.decode(
+        privateEvent, scope: privateScope, windowID: "window-a", tabID: "tab-a",
+        leaseID: 42, afterSequence: 10) == nil)
   }
 
   @Test func fixedAllowlistAndBoundsRejectUntrustedPayloads() {
-    let safe = #"{"schemaVersion":1,"kind":"panelEvent","eventID":1,"leaseID":42,"data":{"text":"hello","level":"log","truncated":false}}"#
-    #expect(ShaarDevToolsPanelEventRouter.decode(
-      event(safe, scope: regular), scope: regular, windowID: "window-a",
-      tabID: "tab-a", leaseID: 42)?.data.text == "hello")
+    let safe =
+      #"{"schemaVersion":1,"kind":"panelEvent","eventID":1,"leaseID":42,"data":{"text":"hello","level":"log","truncated":false}}"#
+    #expect(
+      ShaarDevToolsPanelEventRouter.decode(
+        event(safe, scope: regular), scope: regular, windowID: "window-a",
+        tabID: "tab-a", leaseID: 42)?.data.text == "hello")
     for payload in [
       safe.replacingOccurrences(of: #""eventID":1"#, with: #""eventID":99"#),
       safe.replacingOccurrences(of: #""text":"hello""#, with: #""headers":{"Cookie":"secret"}"#),
-      safe.replacingOccurrences(of: #""text":"hello""#, with: #""text":"\#(String(repeating: "x", count: 4_097))""#),
+      safe.replacingOccurrences(
+        of: #""text":"hello""#, with: #""text":"\#(String(repeating: "x", count: 4_097))""#),
       safe.replacingOccurrences(of: #""leaseID":42"#, with: #""leaseID":43"#),
     ] {
-      #expect(ShaarDevToolsPanelEventRouter.decode(
-        event(payload, scope: regular), scope: regular, windowID: "window-a",
-        tabID: "tab-a", leaseID: 42) == nil)
+      #expect(
+        ShaarDevToolsPanelEventRouter.decode(
+          event(payload, scope: regular), scope: regular, windowID: "window-a",
+          tabID: "tab-a", leaseID: 42) == nil)
     }
-    let dropped = #"{"schemaVersion":1,"kind":"panelEvent","eventID":11,"leaseID":42,"data":{"count":3}}"#
-    #expect(ShaarDevToolsPanelEventRouter.decode(
-      event(dropped, scope: regular), scope: regular, windowID: "window-a",
-      tabID: "tab-a", leaseID: 42)?.data.droppedCount == 3)
+    let dropped =
+      #"{"schemaVersion":1,"kind":"panelEvent","eventID":11,"leaseID":42,"data":{"count":3}}"#
+    #expect(
+      ShaarDevToolsPanelEventRouter.decode(
+        event(dropped, scope: regular), scope: regular, windowID: "window-a",
+        tabID: "tab-a", leaseID: 42)?.data.droppedCount == 3)
   }
 
   @Test func adapterSubmitsVersionedLeaseOperations() throws {
@@ -93,28 +107,39 @@ struct DevToolsPanelTests {
     _ = try adapter.openPanel(scope: privateScope, windowID: "window-a", tabID: "tab-a") { _ in }
     #expect(fake.request?.operation == .panelOpen)
     #expect(fake.request?.scope.sessionID == "private-a")
-    _ = try adapter.closePanel(leaseID: 42, scope: privateScope,
-      windowID: "window-a", tabID: "tab-a") { _ in }
+    _ = try adapter.closePanel(
+      leaseID: 42, scope: privateScope,
+      windowID: "window-a", tabID: "tab-a"
+    ) { _ in }
     #expect(fake.request?.operation == .panelClose)
-    _ = try adapter.getPanelResponseBody(leaseID: 42, requestID: "r1", scope: privateScope,
-      windowID: "window-a", tabID: "tab-a") { _ in }
+    _ = try adapter.getPanelResponseBody(
+      leaseID: 42, requestID: "r1", scope: privateScope,
+      windowID: "window-a", tabID: "tab-a"
+    ) { _ in }
     #expect(fake.request?.operation == .panelGetResponseBody)
     let request = try #require(fake.request)
-    let object = try #require(JSONSerialization.jsonObject(
-      with: request.payload) as? [String: Any])
+    let object = try #require(
+      JSONSerialization.jsonObject(
+        with: request.payload) as? [String: Any])
     #expect(object["leaseID"] as? Int == 42)
     #expect(object["requestID"] as? String == "r1")
     #expect(throws: ShaarEngineError.self) {
-      try adapter.closePanel(leaseID: 0, scope: regular,
-        windowID: "window-a", tabID: "tab-a") { _ in }
+      try adapter.closePanel(
+        leaseID: 0, scope: regular,
+        windowID: "window-a", tabID: "tab-a"
+      ) { _ in }
     }
   }
 
   @Test func responseBodyRejectsOversizeAndExtraFields() {
-    #expect(ShaarDevToolsResponseBody.decode(Data(
-      #"{"schemaVersion":1,"body":"ok","base64Encoded":false}"#.utf8))?.body == "ok")
-    #expect(ShaarDevToolsResponseBody.decode(Data(
-      #"{"schemaVersion":1,"body":"ok","base64Encoded":false,"headers":{}}"#.utf8)) == nil)
+    #expect(
+      ShaarDevToolsResponseBody.decode(
+        Data(
+          #"{"schemaVersion":1,"body":"ok","base64Encoded":false}"#.utf8))?.body == "ok")
+    #expect(
+      ShaarDevToolsResponseBody.decode(
+        Data(
+          #"{"schemaVersion":1,"body":"ok","base64Encoded":false,"headers":{}}"#.utf8)) == nil)
     let huge = String(repeating: "x", count: 1_048_577)
     let payload = #"{"schemaVersion":1,"body":"\#(huge)","base64Encoded":false}"#
     #expect(ShaarDevToolsResponseBody.decode(Data(payload.utf8)) == nil)

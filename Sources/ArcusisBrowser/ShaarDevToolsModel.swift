@@ -109,9 +109,9 @@ struct ShaarNetworkEvent: Equatable, Sendable {
   }
 }
 
-struct ShaarNetworkHeader: Equatable, Sendable {
-  let name: String
-  let value: String
+struct ShaarNetworkHeader: Codable, Equatable, Sendable {
+  var name: String
+  var value: String
 }
 
 enum ShaarDevToolsEvent: Equatable, Sendable {
@@ -172,6 +172,7 @@ final class ShaarDevToolsModel {
   private(set) var localAvailableSources: Set<String> = []
   let console = ShaarConsoleModel()
   let network = ShaarNetworkModel()
+  let rules: ShaarNetworkRulesModel
   let phase2: ShaarPhase2Model
   let application: ShaarApplicationModel
   let cookies = ShaarCookieModel()
@@ -194,12 +195,16 @@ final class ShaarDevToolsModel {
     sourceLoader: @escaping @Sendable (URL) async throws -> Data = DevelopmentSourceHTTP.load,
     reproTransport: any ShaarReproTransport = ShaarReproPendingTransport(),
     viewportsTransport: any ShaarViewportsTransport = ShaarViewportsPendingTransport(),
-    localTransports: [any ShaarLocalConsoleTransport] = []
+    localTransports: [any ShaarLocalConsoleTransport] = [],
+    rulesTransport: any ShaarNetworkRulesTransport = ShaarNetworkRulesPendingTransport(),
+    rulesStore: ShaarNetworkRuleStore = ShaarNetworkRuleStore()
   ) {
     self.target = target
     self.transport = transport
     self.localTransports = Dictionary(
       uniqueKeysWithValues: localTransports.map { ($0.sourceID, $0) })
+    rules = ShaarNetworkRulesModel(
+      target: target, store: rulesStore, transport: rulesTransport)
     let phase2 = ShaarPhase2Model(target: target, transport: phase2Transport)
     self.phase2 = phase2
     application = ShaarApplicationModel(phase2: phase2)
@@ -221,6 +226,7 @@ final class ShaarDevToolsModel {
     startLocalStreams()
     phase2.open()
     if section == .viewports { viewports.open() }
+    rules.resume()
   }
 
   func close() {
@@ -235,6 +241,7 @@ final class ShaarDevToolsModel {
     localAvailableSources.removeAll()
     console.clearEntries()
     network.clearSelection()
+    rules.close()
     phase2.close()
     viewports.close()
     application.reset()
@@ -258,6 +265,7 @@ final class ShaarDevToolsModel {
     localAvailableSources.removeAll()
     console.clearEntries()
     network.clearSelection()
+    rules.updateTarget(target)
     phase2.updateTarget(target, committed: committed)
     viewports.updateTarget(target, committed: committed)
     application.reset()
@@ -272,6 +280,7 @@ final class ShaarDevToolsModel {
       repro.history.start(for: target)
       startStream()
       startLocalStreams()
+      rules.resume()
     }
   }
 

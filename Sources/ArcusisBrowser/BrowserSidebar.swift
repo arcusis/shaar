@@ -729,7 +729,9 @@ struct BrowserSidebar: View {
       _ = store.toggleLibraryDrawer()
       return
     }
-    guard store.libraryDrawerSection == nil, !store.commandIsOpen, store.sheet == nil else { return }
+    guard store.libraryDrawerSection == nil, !store.commandIsOpen, store.sheet == nil else {
+      return
+    }
     recentDownloads.toggle(
       profileID: store.session.selectedSpace.profileID, epoch: recentDownloads.epoch)
   }

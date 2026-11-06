@@ -16,6 +16,7 @@ extension ShaarDevToolsSection {
     case .sources: "curlybraces"
     case .repro: "record.circle"
     case .viewports: "rectangle.on.rectangle"
+    case .comparison: "square.split.2x1"
     }
   }
 
@@ -29,6 +30,7 @@ extension ShaarDevToolsSection {
     case .sources: "Sources"
     case .repro: "Repro"
     case .viewports: "Views"
+    case .comparison: "WebKit"
     }
   }
 }
@@ -72,9 +74,9 @@ struct ShaarDevToolsPanel: View {
         ForEach(visible, id: \.self) { section in
           sectionButton(section, showsLabel: showsLabels)
         }
-        if visible.count < ShaarDevToolsSection.allCases.count {
+        if visible.count < model.sections.count {
           Menu {
-            ForEach(ShaarDevToolsSection.allCases.filter { !visible.contains($0) }, id: \.self) {
+            ForEach(model.sections.filter { !visible.contains($0) }, id: \.self) {
               section in
               Button(ShellL10n.string(section.rawValue)) { model.section = section }
             }
@@ -108,7 +110,7 @@ struct ShaarDevToolsPanel: View {
   private func visibleSections(width: CGFloat, showsLabels: Bool) -> [ShaarDevToolsSection] {
     let tabWidth: CGFloat = showsLabels ? 73 : 33
     let room = max(0, width - 82)
-    let all = ShaarDevToolsSection.allCases
+    let all = model.sections
     let fit = min(all.count, max(1, Int(room / tabWidth)))
     if fit == all.count { return all }
     let count = max(1, Int((room - 30) / tabWidth))
@@ -233,6 +235,13 @@ struct ShaarDevToolsPanel: View {
       } else {
         unavailablePanel
       }
+    case .comparison:
+      if model.allowsWebKitComparison {
+        ShaarWebKitComparisonPanel(
+          model: model.comparison, chromiumEvents: model.consoleEvents)
+      } else {
+        unavailablePanel
+      }
     }
   }
 
@@ -275,6 +284,7 @@ struct ShaarDevToolsPanel: View {
     if model.section == .sources { return "Live Sources are unavailable for this tab" }
     if model.section == .repro { return "Repro capture needs engine support" }
     if model.section == .viewports { return "Live Viewports need engine support" }
+    if model.section == .comparison { return "WebKit comparison is unavailable for this tab" }
     return "Live console and network are unavailable for this tab"
   }
 
@@ -346,6 +356,7 @@ struct ShaarDevToolsPanel: View {
         ? "Viewports are scoped to this tab"
         : "Viewports need engine support"
     }
+    if model.section == .comparison { return "WebKit comparison is scoped to this tab" }
     guard model.streamAvailable else { return "Console commands are unavailable for this tab" }
     if model.section == .network { return "Network requests are scoped to this tab" }
     return "Open Console to evaluate JavaScript"
@@ -359,15 +370,15 @@ struct ShaarDevToolsPanel: View {
 
   private func moveSection(_ direction: MoveCommandDirection) {
     guard focusedSection != nil,
-      let index = ShaarDevToolsSection.allCases.firstIndex(of: model.section)
+      let index = model.sections.firstIndex(of: model.section)
     else { return }
     let next: Int
     switch direction {
     case .left: next = max(0, index - 1)
-    case .right: next = min(ShaarDevToolsSection.allCases.count - 1, index + 1)
+    case .right: next = min(model.sections.count - 1, index + 1)
     default: return
     }
-    model.section = ShaarDevToolsSection.allCases[next]
+    model.section = model.sections[next]
     focusedSection = model.section
   }
 }

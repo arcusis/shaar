@@ -15,6 +15,7 @@ enum ShaarDevToolsSection: String, CaseIterable {
   case sources = "Sources"
   case repro = "Repro"
   case viewports = "Viewports"
+  case comparison = "Comparison"
 }
 
 enum ShaarDevToolsDock: String, CaseIterable {
@@ -216,9 +217,18 @@ final class ShaarDevToolsModel {
   private(set) var isOpen = false
   var section: ShaarDevToolsSection = .elements {
     didSet {
+      if section == .comparison && !allowsWebKitComparison {
+        section = oldValue
+        return
+      }
       guard isOpen, section != oldValue else { return }
       if section == .viewports { viewports.open() } else { viewports.close() }
       if section == .elements { dom.open() } else { dom.close() }
+      if section == .comparison {
+        comparison.open(inspector: comparisonInspector)
+      } else {
+        comparison.close()
+      }
     }
   }
   var dock: ShaarDevToolsDock = .right {
@@ -259,6 +269,11 @@ final class ShaarDevToolsModel {
   let sources: ShaarSourcesModel
   let repro: ShaarReproModel
   let viewports: ShaarViewportsModel
+  let comparison: ShaarWebKitComparisonModel
+  let allowsWebKitComparison: Bool
+  var sections: [ShaarDevToolsSection] {
+    ShaarDevToolsSection.allCases.filter { $0 != .comparison || allowsWebKitComparison }
+  }
   @ObservationIgnored private let transport: any ShaarDevToolsEventTransport
   @ObservationIgnored private var localTransports: [String: any ShaarLocalConsoleTransport]
   @ObservationIgnored private var eventTask: Task<Void, Never>?
@@ -266,6 +281,7 @@ final class ShaarDevToolsModel {
   @ObservationIgnored private var localTokens: [String: UUID] = [:]
   @ObservationIgnored private var streamGeneration = 0
   @ObservationIgnored private var ownedInspector: InspectorModel?
+  @ObservationIgnored private weak var comparisonInspector: InspectorModel?
 
   init(
     target: SiteControlTarget,
@@ -278,9 +294,13 @@ final class ShaarDevToolsModel {
     rulesTransport: any ShaarNetworkRulesTransport = ShaarNetworkRulesPendingTransport(),
     domTransport: any ShaarDOMTransport = ShaarDOMPendingTransport(),
     rulesStore: ShaarNetworkRuleStore = ShaarNetworkRuleStore(),
-    layoutDefaults: UserDefaults = .standard
+    layoutDefaults: UserDefaults = .standard,
+    allowsWebKitComparison: Bool = false,
+    comparisonPreview: ShaarWebKitComparisonPreview? = nil
   ) {
     self.target = target
+    self.allowsWebKitComparison = allowsWebKitComparison
+    comparison = ShaarWebKitComparisonModel(target: target, preview: comparisonPreview)
     self.layoutDefaults = layoutDefaults
     if let saved = layoutDefaults.string(forKey: "shaar.devtools.dock"),
       let dock = ShaarDevToolsDock(rawValue: saved)
@@ -315,6 +335,7 @@ final class ShaarDevToolsModel {
 
   func open(inspector: InspectorModel) {
     guard !isOpen else { return }
+    comparisonInspector = inspector
     if !inspector.isOpen {
       inspector.open()
       ownedInspector = inspector
@@ -328,6 +349,7 @@ final class ShaarDevToolsModel {
     if section == .viewports { viewports.open() }
     rules.resume()
     if section == .elements { dom.open() }
+    if section == .comparison && allowsWebKitComparison { comparison.open(inspector: inspector) }
   }
 
   func close() {
@@ -348,6 +370,8 @@ final class ShaarDevToolsModel {
     rules.close()
     phase2.close()
     viewports.close()
+    comparison.close()
+    comparisonInspector = nil
     dom.close()
     application.reset()
     cookies.reset()
@@ -374,6 +398,7 @@ final class ShaarDevToolsModel {
     rules.updateTarget(target, committed: committed)
     phase2.updateTarget(target, committed: committed)
     viewports.updateTarget(target, committed: committed)
+    comparison.updateTarget(target, committed: committed)
     dom.updateTarget(target, committed: committed)
     application.reset()
     cookies.reset()

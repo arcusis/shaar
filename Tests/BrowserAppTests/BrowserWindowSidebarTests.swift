@@ -9,12 +9,9 @@ import Testing
 
 @testable import ArcusisBrowser
 
-private final class OffscreenSimulatedKeyWindow: NSWindow {
-  // Let SwiftUI apply FocusState without making this window key or visible.
+private final class OffscreenKeyEligibleWindow: NSWindow {
   override var canBecomeKey: Bool { true }
   override var canBecomeMain: Bool { true }
-  override var isKeyWindow: Bool { true }
-  override var isMainWindow: Bool { true }
 }
 
 @Suite @MainActor struct BrowserWindowSidebarTests {
@@ -85,7 +82,7 @@ private final class OffscreenSimulatedKeyWindow: NSWindow {
     let store = BrowserStore(session: session)
     let size = NSSize(width: 900, height: 600)
     let host = NSHostingView(rootView: BrowserWindow(store: store))
-    let window = OffscreenSimulatedKeyWindow(
+    let window = OffscreenKeyEligibleWindow(
       contentRect: NSRect(origin: .zero, size: size),
       styleMask: .borderless, backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
@@ -97,17 +94,18 @@ private final class OffscreenSimulatedKeyWindow: NSWindow {
     host.layoutSubtreeIfNeeded()
 
     #expect(window.canBecomeKey && window.canBecomeMain)
-    #expect(!window.isVisible && NSApp.keyWindow !== window && NSApp.mainWindow !== window)
+    #expect(!window.isVisible && !window.isKeyWindow && !window.isMainWindow)
     // This is the action wired to the pane + button.
     store.openSplitPane(beside: first, edge: .right)
-    let deadline = ContinuousClock.now + .seconds(2)
-    while ContinuousClock.now < deadline, !(window.firstResponder is NSTextView) {
+    // A delayed hosted sleep must not consume the entire focus readiness window.
+    for _ in 0..<40 {
+      if window.firstResponder is NSTextView { break }
       host.layoutSubtreeIfNeeded()
-      try await Task.sleep(for: .milliseconds(16))
+      try await Task.sleep(for: .milliseconds(50))
     }
 
     #expect(store.commandIsOpen)
     #expect(window.firstResponder is NSTextView)
-    #expect(!window.isVisible && NSApp.keyWindow !== window && NSApp.mainWindow !== window)
+    #expect(!window.isVisible && !window.isKeyWindow && !window.isMainWindow)
   }
 }

@@ -8,7 +8,7 @@ import ChromiumBridge
 import SwiftUI
 
 enum BrowserMenuCommand: String, CaseIterable {
-  case newPrivateWindow, newMiniWindow, newTab, search, newSpace, editSpace, closeTab,
+  case newPrivateWindow, newMiniWindow, newTab, search, newSpace, editSpace, closeTab, sharePage,
     closeWindow,
     addFavorite
   case reopenClosed, recentlyClosed, bookmarkPage, bookmarks, history, downloads
@@ -366,6 +366,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .nextSpace, .previousSpace: return store.canCycleSpace
     case .reopenClosed: return store.canReopenClosedTab
     case .bookmarkPage: return store.canBookmarkCurrentPage
+    case .sharePage: return Self.shareURL(for: store) != nil
     case .addFavorite:
       return afterLauncher ? store.currentPageAllowsFavorite : store.canFavoriteCurrentPage
     default: return true
@@ -476,6 +477,19 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     ShellL10n.string(store.session.selectedPage == nil ? "Close window" : "Close tab")
   }
 
+  static func shareURL(for store: BrowserStore?) -> URL? {
+    guard let url = store?.session.selectedPage?.tab.url,
+      NavigationInput.isWebURL(url)
+    else { return nil }
+    return CleanLink.clean(url)
+  }
+
+  static func presentSharePicker(for url: URL, in window: NSWindow) {
+    guard let contentView = window.contentView else { return }
+    let picker = NSSharingServicePicker(items: [url])
+    picker.show(relativeTo: .zero, of: contentView, preferredEdge: .minY)
+  }
+
   private func perform(_ command: BrowserMenuCommand, in context: NativeBrowserContext) {
     let store = context.store
     switch command {
@@ -504,6 +518,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .bookmarks: store.showLibrary(.bookmarks)
     case .history: store.showLibrary(.history)
     case .downloads: store.showDownloads()
+    case .sharePage:
+      if let url = Self.shareURL(for: store) {
+        Self.presentSharePicker(for: url, in: context.window)
+      }
     case .find: store.showPageFind()
     case .findNext: store.movePageFind(forward: true)
     case .findPrevious: store.movePageFind(forward: false)
@@ -1132,6 +1150,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     add(.newMiniWindow, "New Mini Window", to: file)
     add(.newTab, "New tab", to: file)
     add(.search, "Search or enter address", to: file)
+    add(.sharePage, "Share Page…", to: file)
     add(.downloads, "Downloads", to: file)
     add(.closeWindow, "Close window", to: file)
     let edit = section("Edit")

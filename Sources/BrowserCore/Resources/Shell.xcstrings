@@ -2296,6 +2296,22 @@
         }
       }
     },
+    "Share Page…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share Page…"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "שיתוף העמוד…"
+          }
+        }
+      }
+    },
     "Search tabs, spaces, or the web": {
       "localizations": {
         "en": {

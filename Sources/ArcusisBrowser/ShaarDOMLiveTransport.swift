@@ -28,9 +28,12 @@ struct ShaarDOMRequest {
       params = ["searchId": searchID]
     case .highlight(let id):
       method = "Overlay.highlightNode"
-      params = ["nodeId": id, "highlightConfig": [
-        "showInfo": true, "contentColor": ["r": 67, "g": 145, "b": 244, "a": 0.22],
-      ]]
+      params = [
+        "nodeId": id,
+        "highlightConfig": [
+          "showInfo": true, "contentColor": ["r": 67, "g": 145, "b": 244, "a": 0.22],
+        ],
+      ]
     case .hideHighlight:
       method = "Overlay.hideHighlight"
       params = [:]
@@ -72,7 +75,8 @@ struct ShaarDOMRequest {
 /// the fixture-free Elements empty state.
 @MainActor
 final class ShaarDOMLiveTransport: ShaarDOMTransport {
-  typealias CommandCall = @MainActor (ShaarDOMCommand, SiteControlTarget) async throws -> [String: Any]
+  typealias CommandCall =
+    @MainActor (ShaarDOMCommand, SiteControlTarget) async throws -> [String: Any]
 
   private let panel: ShaarDevToolsNativeTransport
   private let call: CommandCall

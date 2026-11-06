@@ -55,7 +55,9 @@ import Foundation
       if let target = context.engine.siteControlTarget,
         target.url == pageURL,
         context.engine.pages[target.tabID]?.loading == false
-      { break }
+      {
+        break
+      }
       try? await Task.sleep(for: .milliseconds(100))
     }
     guard let target = context.engine.siteControlTarget,
@@ -80,18 +82,19 @@ import Foundation
         try? await Task.sleep(for: .milliseconds(100))
       }
     }
-    write([
-      "normalBundle": Bundle.main.bundleIdentifier ?? "",
-      "allWindowsHidden": host.contexts.values.allSatisfy { !$0.window.isVisible },
-      "streamAvailable": shell.streamAvailable,
-      "phase2Available": shell.phase2.available,
-      "domAvailable": shell.dom.available,
-      "viewportsAvailable": shell.viewports.available,
-      "nativeFailure": shell.nativeStreamFailure ?? "",
-      "phase2Failure": shell.nativePhase2Failure ?? "",
-      "targetURL": target.url.absoluteString,
-      "pageLoading": context.engine.pages[target.tabID]?.loading ?? true,
-    ], to: outputURL)
+    write(
+      [
+        "normalBundle": Bundle.main.bundleIdentifier ?? "",
+        "allWindowsHidden": host.contexts.values.allSatisfy { !$0.window.isVisible },
+        "streamAvailable": shell.streamAvailable,
+        "phase2Available": shell.phase2.available,
+        "domAvailable": shell.dom.available,
+        "viewportsAvailable": shell.viewports.available,
+        "nativeFailure": shell.nativeStreamFailure ?? "",
+        "phase2Failure": shell.nativePhase2Failure ?? "",
+        "targetURL": target.url.absoluteString,
+        "pageLoading": context.engine.pages[target.tabID]?.loading ?? true,
+      ], to: outputURL)
     shell.close()
   }
 

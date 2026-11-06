@@ -70,6 +70,7 @@ public enum ShaarDevToolsCommand: UInt32, CaseIterable, Sendable {
   case networkGetCookies = 41
   case networkSetCookie = 42
   case networkDeleteCookies = 43
+  case emulationSetSafeAreaInsetsOverride = 44
 
   fileprivate func permits(_ capability: ShaarDevToolsCapability) -> Bool {
     switch capability {
@@ -77,6 +78,7 @@ public enum ShaarDevToolsCommand: UInt32, CaseIterable, Sendable {
       return rawValue <= 25
     case .developer:
       return rawValue <= 4 || (15...18).contains(rawValue) || (26...40).contains(rawValue)
+        || self == .emulationSetSafeAreaInsetsOverride
     case .devToolsPanel:
       return false
     }

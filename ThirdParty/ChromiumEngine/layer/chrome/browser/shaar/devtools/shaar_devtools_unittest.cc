@@ -364,6 +364,37 @@ TEST(ShaarDevToolsTest, CommandMapIsCapabilityScoped) {
                               SHAAR_DEVTOOLS_PAGE_CAPTURE_SCREENSHOT));
 }
 
+TEST(ShaarDevToolsTest, SafeAreaInsetsAreBoundedAndDeveloperOnly) {
+  EXPECT_STREQ("Emulation.setSafeAreaInsetsOverride",
+               ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER,
+                              SHAAR_DEVTOOLS_EMULATION_SET_SAFE_AREA_INSETS_OVERRIDE));
+  EXPECT_EQ(nullptr,
+            ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_INSPECTOR,
+                           SHAAR_DEVTOOLS_EMULATION_SET_SAFE_AREA_INSETS_OVERRIDE));
+  for (const std::string args : {
+           R"({"schemaVersion":1,"capability":2,"command":44,"params":{"insets":{"top":59,"bottom":34,"topMax":59,"bottomMax":34}}})",
+           R"({"schemaVersion":1,"capability":2,"command":44,"params":{"insets":{}}})"}) {
+    std::string output;
+    std::string reason;
+    EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(Bytes(args), 44, &output, &reason))
+        << reason;
+    EXPECT_NE(std::string::npos,
+              output.find("Emulation.setSafeAreaInsetsOverride"));
+  }
+  for (const std::string args : {
+           R"({"schemaVersion":1,"capability":1,"command":44,"params":{"insets":{}}})",
+           R"({"schemaVersion":1,"capability":2,"command":44,"params":{}})",
+           R"({"schemaVersion":1,"capability":2,"command":44,"params":{"insets":{"top":-1}}})",
+           R"({"schemaVersion":1,"capability":2,"command":44,"params":{"insets":{"top":201}}})",
+           R"({"schemaVersion":1,"capability":2,"command":44,"params":{"insets":{"top":1.5}}})",
+           R"({"schemaVersion":1,"capability":2,"command":44,"params":{"insets":{"unreviewed":1}}})"}) {
+    std::string output;
+    std::string reason;
+    EXPECT_NE(SHAAR_OK, EncodeProtocolRequest(Bytes(args), 44, &output, &reason));
+    EXPECT_TRUE(output.empty());
+  }
+}
+
 TEST(ShaarDevToolsTest, EncodesOnlyFixedMethodsWithNumericRequestIDs) {
   const std::string args =
       R"({"schemaVersion":1,"capability":1,"command":6,"params":{"depth":2}})";

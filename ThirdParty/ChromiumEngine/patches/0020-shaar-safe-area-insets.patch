@@ -1,0 +1,97 @@
+--- a/chrome/browser/shaar/public/shaar_engine.h
++++ b/chrome/browser/shaar/public/shaar_engine.h
+@@ -331,7 +331,8 @@
+   SHAAR_DEVTOOLS_PAGE_REMOVE_SCRIPT_TO_EVALUATE_ON_NEW_DOCUMENT = 40,
+   SHAAR_DEVTOOLS_NETWORK_GET_COOKIES = 41,
+   SHAAR_DEVTOOLS_NETWORK_SET_COOKIE = 42,
+-  SHAAR_DEVTOOLS_NETWORK_DELETE_COOKIES = 43
++  SHAAR_DEVTOOLS_NETWORK_DELETE_COOKIES = 43,
++  SHAAR_DEVTOOLS_EMULATION_SET_SAFE_AREA_INSETS_OVERRIDE = 44
+ } shaar_devtools_command;
+ typedef enum { SHAAR_MODULE_DEVTOOLS = 1202 } shaar_devtools_module_id;
+ // END devtools command and module IDs.
+--- a/chrome/browser/shaar/devtools/shaar_devtools.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools.cc
+@@ -201,6 +201,8 @@
+     {SHAAR_DEVTOOLS_NETWORK_SET_COOKIE, "Network.setCookie", false, true},
+     {SHAAR_DEVTOOLS_NETWORK_DELETE_COOKIES, "Network.deleteCookies", false,
+      true},
++    {SHAAR_DEVTOOLS_EMULATION_SET_SAFE_AREA_INSETS_OVERRIDE,
++     "Emulation.setSafeAreaInsetsOverride", false, true},
+ };
+ 
+ struct ReplyContext {
+@@ -415,6 +417,24 @@
+     case SHAAR_DEVTOOLS_ACCESSIBILITY_GET_PARTIAL_AX_TREE:
+       return ParamsHaveOnly(params, {"objectId", "backendNodeId", "nodeId",
+           "fetchRelatives"});
++    case SHAAR_DEVTOOLS_EMULATION_SET_SAFE_AREA_INSETS_OVERRIDE: {
++      if (!ParamsHaveOnly(params, {"insets"}))
++        return false;
++      const auto* insets = params.FindDict("insets");
++      if (!insets || insets->size() > 8)
++        return false;
++      for (const auto item : *insets) {
++        if (item.first != "top" && item.first != "right" &&
++            item.first != "bottom" && item.first != "left" &&
++            item.first != "topMax" && item.first != "rightMax" &&
++            item.first != "bottomMax" && item.first != "leftMax")
++          return false;
++        if (!item.second.is_int() || item.second.GetInt() < 0 ||
++            item.second.GetInt() > 200)
++          return false;
++      }
++      return true;
++    }
+     case SHAAR_DEVTOOLS_EMULATION_SET_DEVICE_METRICS_OVERRIDE:
+       return ParamsHaveOnly(params, {"width", "height", "deviceScaleFactor",
+           "mobile", "scale", "screenWidth", "screenHeight", "positionX",
+@@ -513,6 +533,8 @@
+       return HasRequiredInteger(params, "nodeId") ||
+              HasRequiredInteger(params, "backendNodeId") ||
+              HasRequiredString(params, "objectId");
++    case SHAAR_DEVTOOLS_EMULATION_SET_SAFE_AREA_INSETS_OVERRIDE:
++      return params.FindDict("insets") != nullptr;
+     case SHAAR_DEVTOOLS_EMULATION_SET_DEVICE_METRICS_OVERRIDE:
+       return HasRequiredInteger(params, "width") &&
+              HasRequiredInteger(params, "height") &&
+--- a/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
++++ b/chrome/browser/shaar/devtools/shaar_devtools_unittest.cc
+@@ -364,6 +364,37 @@
+                               SHAAR_DEVTOOLS_PAGE_CAPTURE_SCREENSHOT));
+ }
+ 
++TEST(ShaarDevToolsTest, SafeAreaInsetsAreBoundedAndDeveloperOnly) {
++  EXPECT_STREQ("Emulation.setSafeAreaInsetsOverride",
++               ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_DEVELOPER,
++                              SHAAR_DEVTOOLS_EMULATION_SET_SAFE_AREA_INSETS_OVERRIDE));
++  EXPECT_EQ(nullptr,
++            ProtocolMethod(SHAAR_DEVTOOLS_CAPABILITY_INSPECTOR,
++                           SHAAR_DEVTOOLS_EMULATION_SET_SAFE_AREA_INSETS_OVERRIDE));
++  for (const std::string args : {
++           R"({"schemaVersion":1,"capability":2,"command":44,"params":{"insets":{"top":59,"bottom":34,"topMax":59,"bottomMax":34}}})",
++           R"({"schemaVersion":1,"capability":2,"command":44,"params":{"insets":{}}})"}) {
++    std::string output;
++    std::string reason;
++    EXPECT_EQ(SHAAR_OK, EncodeProtocolRequest(Bytes(args), 44, &output, &reason))
++        << reason;
++    EXPECT_NE(std::string::npos,
++              output.find("Emulation.setSafeAreaInsetsOverride"));
++  }
++  for (const std::string args : {
++           R"({"schemaVersion":1,"capability":1,"command":44,"params":{"insets":{}}})",
++           R"({"schemaVersion":1,"capability":2,"command":44,"params":{}})",
++           R"({"schemaVersion":1,"capability":2,"command":44,"params":{"insets":{"top":-1}}})",
++           R"({"schemaVersion":1,"capability":2,"command":44,"params":{"insets":{"top":201}}})",
++           R"({"schemaVersion":1,"capability":2,"command":44,"params":{"insets":{"top":1.5}}})",
++           R"({"schemaVersion":1,"capability":2,"command":44,"params":{"insets":{"unreviewed":1}}})"}) {
++    std::string output;
++    std::string reason;
++    EXPECT_NE(SHAAR_OK, EncodeProtocolRequest(Bytes(args), 44, &output, &reason));
++    EXPECT_TRUE(output.empty());
++  }
++}
++
+ TEST(ShaarDevToolsTest, EncodesOnlyFixedMethodsWithNumericRequestIDs) {
+   const std::string args =
+       R"({"schemaVersion":1,"capability":1,"command":6,"params":{"depth":2}})";

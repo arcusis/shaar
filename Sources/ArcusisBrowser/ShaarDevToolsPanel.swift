@@ -25,6 +25,13 @@ struct ShaarDevToolsPanel: View {
     .onChange(of: inspector?.isOpen) { _, open in
       if open == false && model.isOpen { model.close() }
     }
+    .onChange(of: model.sources.localRoot) { _, root in
+      Task {
+        do { try await model.rules.useProjectRoot(root) } catch {
+          model.rules.failure = error.localizedDescription
+        }
+      }
+    }
     .accessibilityIdentifier("shaar.devtools.shell")
   }
 

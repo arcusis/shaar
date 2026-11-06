@@ -265,7 +265,7 @@ final class ShaarDevToolsModel {
     localAvailableSources.removeAll()
     console.clearEntries()
     network.clearSelection()
-    rules.updateTarget(target)
+    rules.updateTarget(target, committed: committed)
     phase2.updateTarget(target, committed: committed)
     viewports.updateTarget(target, committed: committed)
     application.reset()

@@ -109,6 +109,43 @@ import Testing
     #expect(model.activeCount == 0)
   }
 
+  @Test func mappedProjectsAtSameOriginKeepSeparateRules() async throws {
+    let temporary = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    let first = temporary.appending(path: "first")
+    let second = temporary.appending(path: "second")
+    try FileManager.default.createDirectory(at: first, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: second, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: temporary) }
+    let transport = ShaarNetworkRulesFixtureTransport()
+    let model = ShaarNetworkRulesModel(
+      target: target(), store: ShaarNetworkRuleStore(root: temporary.appending(path: "store")),
+      transport: transport)
+    try await model.useProjectRoot(first.path)
+    model.create(from: request())
+    model.draft?.enabled = true
+    try await model.saveDraft()
+    let firstProject = try #require(model.project)
+    #expect(model.activeCount == 1)
+    try await model.useProjectRoot(second.path)
+    #expect(model.rules.isEmpty)
+    #expect(model.activeCount == 0)
+    #expect(transport.lastRules.isEmpty)
+    #expect(model.project != firstProject)
+    try await model.useProjectRoot(first.path)
+    #expect(model.rules.count == 1)
+    #expect(model.activeCount == 1)
+    #expect(model.projectLabel == "first")
+    try await model.useProjectRoot(nil)
+    #expect(model.projectRoot == nil)
+    #expect(model.rules.isEmpty)
+    #expect(transport.lastRules.isEmpty)
+    try await model.useProjectRoot(first.path)
+    model.updateTarget(model.target, committed: true)
+    #expect(model.activeCount == 0)
+    #expect(model.projectRoot == nil)
+    #expect(model.rules.isEmpty)
+  }
+
   private func request() -> ShaarNetworkRequest {
     ShaarNetworkRequest(
       id: "request-1", method: "GET", url: "http://localhost:3000/api",

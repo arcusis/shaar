@@ -125,7 +125,8 @@ final class InspectorSourceActions {
           rawValue: UserDefaults.standard.string(forKey: "inspectorSourceEditor") ?? "vscode")
         ?? .vscode
       if let local = InspectorSourceLocation.parse(source),
-        Self.openLocation(local, editor: editor) {
+        Self.openLocation(local, editor: editor)
+      {
         location = nil
       }
     } catch {

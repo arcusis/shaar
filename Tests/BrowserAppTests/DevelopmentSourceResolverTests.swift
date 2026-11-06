@@ -13,9 +13,11 @@ import Testing
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }
     let file = root.appending(path: "src/app/page.tsx")
-    try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(
+      at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
     try Data("export default function Page() {}".utf8).write(to: file)
-    let map = Data(#"{"version":3,"sources":["webpack://_N_E/./src/app/page.tsx","../outside.tsx"]}"#.utf8)
+    let map = Data(
+      #"{"version":3,"sources":["webpack://_N_E/./src/app/page.tsx","../outside.tsx"]}"#.utf8)
     let result = DevelopmentSourceResolver.locations(
       resourceURL: URL(string: "http://localhost:3000/_next/static/chunks/app.js")!,
       workspaceRoot: root.path, framework: .nextJS, sourceMap: map)
@@ -26,7 +28,8 @@ import Testing
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }
     let file = root.appending(path: "src/main.ts")
-    try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(
+      at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
     try Data().write(to: file)
     let result = DevelopmentSourceResolver.locations(
       resourceURL: URL(string: "http://localhost:5173/src/main.ts?t=123")!,

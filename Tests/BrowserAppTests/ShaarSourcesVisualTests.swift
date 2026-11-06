@@ -31,8 +31,13 @@ import XCTest
       case .resourceTree:
         return [
           "items": [
-            ["url": "http://localhost:3000/dashboard", "type": "Document", "mimeType": "text/html"],
-            ["url": "http://localhost:3000/app.js", "type": "Script", "mimeType": "text/javascript"],
+            [
+              "url": "http://localhost:3000/dashboard", "type": "Document", "mimeType": "text/html",
+            ],
+            [
+              "url": "http://localhost:3000/app.js", "type": "Script",
+              "mimeType": "text/javascript",
+            ],
             [
               "url": "https://example.com/api/config.json", "type": "Other",
               "mimeType": "application/json",

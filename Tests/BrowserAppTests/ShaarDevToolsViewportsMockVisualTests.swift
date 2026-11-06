@@ -54,7 +54,10 @@ private struct ViewportsMock: View {
           Image(systemName: "chevron.left.forwardslash.chevron.right")
             .foregroundStyle(.secondary).frame(width: 28)
           ForEach(
-            ["Elements", "Console", "Network", "Application", "Performance", "Sources", "Viewports"],
+            [
+              "Elements", "Console", "Network", "Application", "Performance", "Sources",
+              "Viewports",
+            ],
             id: \.self
           ) { title in
             Text(title)

@@ -108,7 +108,10 @@ enum DevelopmentSourceResolver {
     guard raw.count <= 1024, !raw.contains("\0"), !raw.contains("\\") else { return nil }
     var path = raw
     for prefix in ["webpack://_N_E/", "webpack://", "vite://"] {
-      if path.hasPrefix(prefix) { path.removeFirst(prefix.count); break }
+      if path.hasPrefix(prefix) {
+        path.removeFirst(prefix.count)
+        break
+      }
     }
     while path.hasPrefix("./") { path.removeFirst(2) }
     while path.hasPrefix("/") { path.removeFirst() }
@@ -123,7 +126,8 @@ enum DevelopmentSourceHTTP {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.timeoutIntervalForRequest = 3
     configuration.timeoutIntervalForResource = 3
-    let session = URLSession(configuration: configuration, delegate: NoSourceRedirects(), delegateQueue: nil)
+    let session = URLSession(
+      configuration: configuration, delegate: NoSourceRedirects(), delegateQueue: nil)
     defer { session.invalidateAndCancel() }
     let (data, response) = try await session.data(from: url)
     guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),

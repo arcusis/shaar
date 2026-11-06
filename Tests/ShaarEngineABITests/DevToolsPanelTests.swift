@@ -27,6 +27,9 @@ private final class FakePanelEngine: ShaarDevToolsSubmitting, @unchecked Sendabl
     case .panelOpen: reply = #"{"schemaVersion":1,"leaseID":42}"#
     case .panelGetResponseBody:
       reply = #"{"schemaVersion":1,"body":"ok","base64Encoded":false}"#
+    case .panelPhase2Command:
+      reply =
+        #"{"schemaVersion":1,"commandID":1,"items":[{"key":"a","value":"b"}],"hasMore":false,"truncated":false}"#
     default: reply = #"{"schemaVersion":1}"#
     }
     Task { completion(.success(Data(reply.utf8))) }
@@ -143,5 +146,71 @@ struct DevToolsPanelTests {
     let huge = String(repeating: "x", count: 1_048_577)
     let payload = #"{"schemaVersion":1,"body":"\#(huge)","base64Encoded":false}"#
     #expect(ShaarDevToolsResponseBody.decode(Data(payload.utf8)) == nil)
+  }
+
+  @Test func phase2FixtureUsesFixedCommandAndScopedLease() throws {
+    let fake = FakePanelEngine()
+    let adapter = try #require(ShaarDevToolsAdapter(implementation: .shaar, engine: fake))
+    let command = ShaarDevToolsPhase2Command.storageItems(local: false, skip: 0, count: 50)
+    _ = try adapter.phase2Command(
+      command, leaseID: 42, scope: privateScope, windowID: "window-a", tabID: "tab-a"
+    ) { _ in }
+    let request = try #require(fake.request)
+    #expect(request.operation == .panelPhase2Command)
+    #expect(request.scope.sessionID == "private-a")
+    let root = try #require(JSONSerialization.jsonObject(with: request.payload) as? [String: Any])
+    #expect(root["commandID"] as? Int == 1)
+    #expect(root["leaseID"] as? Int == 42)
+    let params = try #require(root["params"] as? [String: Any])
+    #expect(params["isLocalStorage"] as? Bool == false)
+    #expect(params["pageSize"] as? Int == 50)
+    #expect(throws: ShaarEngineError.self) {
+      try adapter.phase2Command(
+        .indexedDBData(database: "db", store: "store", skip: 0, count: 51),
+        leaseID: 42, scope: regular, windowID: "window-a", tabID: "tab-a"
+      ) { _ in }
+    }
+  }
+
+  @Test func phase2RepliesAreBoundedAndCommandMatched() {
+    let command = ShaarDevToolsPhase2Command.cacheNames
+    let safe =
+      #"{"schemaVersion":1,"commandID":8,"items":[{"cacheID":"c1","name":"assets"}],"truncated":false}"#
+    #expect(
+      ShaarDevToolsPhase2Reply.decode(Data(safe.utf8), command: command)?.items.first?.text["name"]
+        == "assets")
+    #expect(ShaarDevToolsPhase2Reply.decode(Data(safe.utf8), command: .indexedDBNames) == nil)
+    let withHeaders = safe.replacingOccurrences(
+      of: #""name":"assets""#, with: #""headers":{"Cookie":"secret"}"#)
+    #expect(ShaarDevToolsPhase2Reply.decode(Data(withHeaders.utf8), command: command) == nil)
+    let huge =
+      #"{"schemaVersion":1,"commandID":16,"items":[],"body":"\#(String(repeating: "x", count: 1_048_577))","base64Encoded":false,"truncated":false}"#
+    #expect(
+      ShaarDevToolsPhase2Reply.decode(
+        Data(huge.utf8), command: .resourceContent(url: "https://example.test/a.js")) == nil)
+    let vitals =
+      #"{"schemaVersion":1,"commandID":18,"items":[{"name":"ttfb","value":120.0},{"name":"event","startTime":300.0,"duration":80.0,"interactionID":1}],"truncated":false}"#
+    #expect(
+      ShaarDevToolsPhase2Reply.decode(Data(vitals.utf8), command: .vitalsInputs)?
+        .items.last?.number["interactionID"] == 1)
+  }
+
+  @Test func phase2EventsRejectOtherSessionAndUnknownFields() {
+    let payload =
+      #"{"schemaVersion":1,"kind":"panelEvent","eventID":12,"leaseID":42,"data":{"isLocalStorage":true,"key":"k","value":"v","truncated":false}}"#
+    let source = event(payload, scope: privateScope)
+    let decoded = ShaarDevToolsPhase2EventRouter.decode(
+      source, scope: privateScope, windowID: "window-a", tabID: "tab-a", leaseID: 42)
+    #expect(decoded?.id == .storageAdded)
+    #expect(decoded?.text["value"] == "v")
+    #expect(
+      ShaarDevToolsPhase2EventRouter.decode(
+        source, scope: regular, windowID: "window-a", tabID: "tab-a", leaseID: 42) == nil)
+    let injected = payload.replacingOccurrences(
+      of: #""key":"k""#, with: #""headers":{"Cookie":"secret"}"#)
+    #expect(
+      ShaarDevToolsPhase2EventRouter.decode(
+        event(injected, scope: privateScope), scope: privateScope,
+        windowID: "window-a", tabID: "tab-a", leaseID: 42) == nil)
   }
 }

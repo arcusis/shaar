@@ -146,6 +146,7 @@ import Foundation
       if let delayRule = shell.rules.rules.first {
         shell.rules.edit(delayRule)
         shell.rules.draft?.kind = .requestHeaders
+        shell.rules.draft?.delayMilliseconds = 0
         shell.rules.draft?.url = self.url("/inspector-echo-header").absoluteString
         shell.rules.draft?.headers = [
           ShaarNetworkHeader(name: "X-Shaar-Probe", value: "request-modified")

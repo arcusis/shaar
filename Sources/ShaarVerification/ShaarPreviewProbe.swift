@@ -5,6 +5,7 @@
 import AppKit
 import BrowserCore
 import ChromiumBridge
+import ChromiumBridgeVerification
 import Foundation
 
 @testable import ArcusisBrowser
@@ -25,7 +26,7 @@ final class ShaarPreviewProbe {
   private let firstWindowID: UUID
   private let firstTabID: UUID
   private let firstProfileID: UUID
-  private let firstURL = URL(string: "https://example.com/")!
+  private let firstURL: URL
   private let nextURL = URL(string: "https://example.com/?shaar-preview=two")!
   private var privateHost: PrivateBrowserHost?
   private var committed: [String: String] = [:]
@@ -52,6 +53,18 @@ final class ShaarPreviewProbe {
     return url
   }
 
+  static func paintTarget(arguments: [String], required: Bool) throws -> URL? {
+    guard let index = arguments.firstIndex(of: "--probe-paint-url") else {
+      if required { throw Failure("Paint check requires an authored loopback /paint URL.") }
+      return nil
+    }
+    guard arguments.indices.contains(index + 1),
+      let url = URL(string: arguments[index + 1]),
+      url.scheme == "http", url.host() == "127.0.0.1", url.path() == "/paint"
+    else { throw Failure("Paint check requires an authored loopback /paint URL.") }
+    return url
+  }
+
   private init(arguments: [String]) throws {
     func value(_ flag: String) throws -> String {
       guard let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1)
@@ -70,6 +83,10 @@ final class ShaarPreviewProbe {
     guard !privateCloseLive || pendingQuitURL == nil else {
       throw Failure("Private close and pending Quit are separate probes.")
     }
+    firstURL =
+      try Self.paintTarget(
+        arguments: arguments, required: arguments.contains("--probe-direct-quit"))
+      ?? URL(string: "https://example.com/")!
     directQuit = arguments.contains("--probe-direct-quit")
     let framework = URL(filePath: try value("--probe-framework"))
     guard
@@ -156,6 +173,13 @@ final class ShaarPreviewProbe {
           && self.host.contexts[self.firstWindowID]?.engine.pages[self.firstTabID] != nil
           && self.committed[self.firstTabID.uuidString] == self.firstURL.absoluteString
       }
+    }
+    await check("paint") {
+      try await self.waitForPaint()
+    }
+    guard results["paint"]?["status"] as? String == "pass" else {
+      finish(error: "Paint check failed.")
+      return
     }
     await check("navigate") {
       guard
@@ -277,6 +301,67 @@ final class ShaarPreviewProbe {
     finish(error: nil)
   }
 
+  static func paintMatchesFixture(_ bitmap: NSBitmapImageRep) -> Bool {
+    guard bitmap.pixelsWide >= 40, bitmap.pixelsHigh >= 40 else { return false }
+    var matching = 0
+    var sampled = 0
+    var pixel: [UInt] = [0, 0, 0, 0]
+    for xPercent in stride(from: 36, through: 64, by: 4) {
+      for yPercent in stride(from: 36, through: 64, by: 4) {
+        let x = bitmap.pixelsWide * xPercent / 100
+        let y = bitmap.pixelsHigh * yPercent / 100
+        sampled += 1
+        bitmap.getPixel(&pixel, atX: x, y: y)
+        if abs(Int(pixel[0]) - 0x16) < 26 && abs(Int(pixel[1]) - 0x78) < 26
+          && abs(Int(pixel[2]) - 0xC6) < 26
+        {
+          matching += 1
+        }
+      }
+    }
+    return matching * 5 >= sampled * 4
+  }
+
+  private func waitForPaint() async throws {
+    for _ in 0..<2 {
+      let data: Data? = await withCheckedContinuation { continuation in
+        runtime.captureProbeTabID(firstTabID.uuidString) {
+          continuation.resume(returning: $0)
+        }
+      }
+      if let data, let bitmap = NSBitmapImageRep(data: data), Self.paintMatchesFixture(bitmap) {
+        return
+      }
+      try await Task.sleep(for: .milliseconds(500))
+    }
+    throw Failure("Page committed, but its renderer capture did not paint fixture blue #1678C6.")
+  }
+
+  static func reportPasses(
+    _ results: [String: [String: Any]], pendingQuit: Bool = false,
+    pendingPrivateQuit: Bool = false, privateCloseLive: Bool = false
+  ) -> Bool {
+    let required: Set<String>
+    if privateCloseLive {
+      required = ["openTab", "privateWindow", "privateWindowClose", "normalTabSurvives"]
+    } else if pendingQuit {
+      required = pendingPrivateQuit
+        ? ["openTab", "privateWindow", "pendingNavigation"]
+        : ["openTab", "pendingNavigation"]
+    } else {
+      required = [
+        "openTab", "paint", "navigate", "backForward", "devTools", "newWindow",
+        "privateWindow", "profilesSwitch", "extensions", "downloads",
+        "privateEngineProfileIsOffTheRecord", "privateEngineGlobalCookiesBlocked",
+        "privateEngineHTTPSOnlyEnabled", "privateEngineReferrersDisabled",
+        "privateEngineWebRTCPublicIPOnly", "privateEngineExtensionsDisabled",
+        "privateEngineTrackerRulesLoaded",
+      ]
+    }
+    return Set(results.keys) == required
+      && results.values.allSatisfy { $0["status"] as? String == "pass" }
+  }
+
   private func exercisePendingQuit() async {
     await check("openTab") {
       try await self.wait("first committed tab") {
@@ -383,7 +468,9 @@ final class ShaarPreviewProbe {
     if !auditVisibleWindows() {
       results["headless"] = ["status": "fail", "detail": "A probe window became visible."]
     }
-    passed = !results.values.contains { $0["status"] as? String == "fail" }
+    passed = Self.reportPasses(
+      results, pendingQuit: pendingQuitURL != nil,
+      pendingPrivateQuit: pendingPrivateQuit, privateCloseLive: privateCloseLive)
     let report: [String: Any] = [
       "schemaVersion": 1, "probeMode": "shaar-preview", "backend": "shaar",
       "allWindowsHidden": NSApp.windows.allSatisfy { !$0.isVisible },

@@ -71,6 +71,21 @@ import Testing
     #expect(har.contains("trace-kept"))
   }
 
+  @Test func plaintextEditableValuesAreRedacted() {
+    for mode in ["", "plaintext-only"] {
+      let node = ShaarReproDOMNode(
+        tag: "div", text: "editable-secret", attributes: ["contenteditable": mode],
+        children: [
+          ShaarReproDOMNode(
+            tag: "span", text: "editable-secret", attributes: [:], children: [])
+        ])
+      let redacted = node.redacted()
+      #expect(redacted.text == "[redacted]")
+      #expect(redacted.attributes.isEmpty)
+      #expect(redacted.children.isEmpty)
+    }
+  }
+
   @Test func savesAndOpensLocalBundle() async throws {
     let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }

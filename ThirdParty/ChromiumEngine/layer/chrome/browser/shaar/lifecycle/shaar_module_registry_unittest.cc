@@ -29,7 +29,8 @@ TEST(ShaarLifecycleProbeTest, BackgroundSwitchesAreVerificationOnly) {
   }
   for (const char* option : {"--disable-renderer-backgrounding",
                              "--disable-backgrounding-occluded-windows",
-                             "--disable-background-timer-throttling"}) {
+                             "--disable-background-timer-throttling",
+                             "--host-resolver-rules=MAP trackertest.org 127.0.0.1"}) {
     EXPECT_EQ(std::find(production.begin(), production.end(), option),
               production.end());
     EXPECT_NE(std::find(verification.begin(), verification.end(), option),

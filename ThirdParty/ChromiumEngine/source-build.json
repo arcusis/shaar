@@ -49,7 +49,7 @@
   },
   "layer": {
     "path": "ThirdParty/ChromiumEngine/layer",
-    "sha256": "f62afff7ffd9999d819ff55ade6a4c631e9425bd42f72bcbe992b91eb5f1012c",
+    "sha256": "f2c6136cf70079908652b79ccbe31512f86776af02e37095d30e70dcfe9e1004",
     "files": {
       "chrome/browser/shaar/BUILD.gn": "8ddd4746eb8341066b8686ef077762ce744ce0c3b38c024670f8f4bd628d72fe",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks.cc": "da94500fa2d7b3106d58dcf3afc2f46072c6cc57a6e1868d1cdd132cafa714fd",
@@ -83,10 +83,10 @@
       "chrome/browser/shaar/history/shaar_history.h": "be7cf95eec6c7accc48a4cb28acb59577ceb6822407fddc4d665c3ee0532c579",
       "chrome/browser/shaar/history/shaar_history_lifecycle_adapter.cc": "a84c4e8775c8d68e96f7c60912d0aafffa810db257d41db31c5a17337944d084",
       "chrome/browser/shaar/history/shaar_history_unittest.cc": "05d22d884eacbd1b0a1d848608e75ff94c061173f2601aa30bc5e515383a3093",
-      "chrome/browser/shaar/lifecycle/shaar_lifecycle.cc": "21178388d89def8daf856a8c2db0015f568614fe8d7c127540343332c7cd2d91",
+      "chrome/browser/shaar/lifecycle/shaar_lifecycle.cc": "597ca53f7cecbcc80f0e77ff3b6e865f59a056c0516c882c04a4fbd54c3f970b",
       "chrome/browser/shaar/lifecycle/shaar_lifecycle.h": "384be3fd72b9a52d026e1fdc911869e64b8ea31f5efc351809ffbb0e0a4b0851",
       "chrome/browser/shaar/lifecycle/shaar_module_registry.cc": "a3eb2de11416047f275071ea9417bb888a6c39e51d1cf3d586c7d9a34909e89c",
-      "chrome/browser/shaar/lifecycle/shaar_module_registry_unittest.cc": "681315d49df3651f49a97def963ff130b1e437e35918ab4e3010c588f2a64814",
+      "chrome/browser/shaar/lifecycle/shaar_module_registry_unittest.cc": "35dfcd1c5b445ea16e4d83a273cd455da060c91c9001da6547b8f44a9fe1769e",
       "chrome/browser/shaar/media/shaar_media.cc": "5fb8a58363725c2d118e9cbd89c8b1bd4c9d83ee64be70d116b3cf0be7d2cf7d",
       "chrome/browser/shaar/media/shaar_media.h": "92c9a22fc8cd104ecca33cde45a47177b4e23d0aa6dfc96175c5b5ebd94929e3",
       "chrome/browser/shaar/media/shaar_media_lifecycle_adapter.cc": "9c63e066e207ab9f74b30649269667243f8d1d78eae71bd2fb62c6f615ba2b2d",

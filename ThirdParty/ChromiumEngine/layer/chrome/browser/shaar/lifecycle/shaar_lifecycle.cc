@@ -239,6 +239,9 @@ std::vector<std::string> ChromeMainArguments(
     arguments.push_back("--disable-renderer-backgrounding");
     arguments.push_back("--disable-backgrounding-occluded-windows");
     arguments.push_back("--disable-background-timer-throttling");
+    // Private privacy fixtures use this synthetic tracker hostname with the
+    // owned loopback server. Never send those requests to the public network.
+    arguments.push_back("--host-resolver-rules=MAP trackertest.org 127.0.0.1");
   }
   if (!locale.empty())
     arguments.push_back("--lang=" + locale);

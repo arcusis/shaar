@@ -764,13 +764,16 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     store.usePreferences(preferences)
     let runtime = events.runtime
     let nativeID: String
+    var creationGuard: NativeWindowCreationGuard?
     if usesPrimaryWindow && !claimedPrimary && runtime.window != nil {
       claimedPrimary = true
       nativeID = runtime.primaryWindowID
     } else {
       nativeID = id.uuidString
       try runtime.createWindowID(nativeID)
+      creationGuard = NativeWindowCreationGuard { _ = runtime.closeWindowID(nativeID) }
     }
+    defer { creationGuard?.closeIfUnowned() }
     guard let window = runtime.window(forID: nativeID),
       let content = runtime.hostView(forWindowID: nativeID)
     else {
@@ -806,6 +809,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       id: id, nativeID: nativeID, window: window, store: store, engine: engine, hosting: hosting,
       contentView: content, titlebarDragView: titlebarDragView)
     contexts[id] = context
+    creationGuard?.transferToOwner()
     store.launcherActions = LauncherActions(
       available: { [weak self] in self?.launcherCommands(inWindow: id) ?? [] },
       run: { [weak self] name in self?.performLauncherCommand(name, inWindow: id) })

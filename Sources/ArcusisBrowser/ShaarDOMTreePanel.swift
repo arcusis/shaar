@@ -48,11 +48,16 @@ struct ShaarDOMTreePanel: View {
       }
     }
     .onChange(of: inspector.selection?.id) { _, _ in
-      Task {
-        if let id = await inspector.currentDOMNodeID() { model.select(id) }
-      }
+      syncInspectorSelection()
     }
+    .onChange(of: model.rootID) { _, _ in syncInspectorSelection() }
     .accessibilityIdentifier("shaar.devtools.domTree")
+  }
+
+  private func syncInspectorSelection() {
+    Task {
+      if let id = await inspector.currentDOMNodeID() { model.select(id) }
+    }
   }
 
   private var tree: some View {

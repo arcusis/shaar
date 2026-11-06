@@ -103,6 +103,7 @@ struct ShortcutCatalog {
     case .reload: ("r", .command)
     case .hardReload: ("r", [.command, .shift])
     case .developerTools: ("i", [.command, .option])
+    case .chromiumDeveloperTools: ("i", [.command, .option, .shift])
     case .inspector: ("c", [.command, .option])
     case .inspectorSource: ("o", [.command, .option])
     case .inspectorAgentCopy: ("a", [.command, .option, .shift])
@@ -177,6 +178,16 @@ struct ShortcutCatalog {
           englishTitle: englishTitle?.isEmpty == false ? englishTitle : nil)
       }
     }
+  }
+}
+
+enum ShaarDevToolsShortcut {
+  static func isF12(_ event: NSEvent) -> Bool {
+    isF12(keyCode: event.keyCode, modifiers: event.modifierFlags)
+  }
+
+  static func isF12(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> Bool {
+    keyCode == 111 && modifiers.intersection([.command, .option, .control, .shift]).isEmpty
   }
 }
 

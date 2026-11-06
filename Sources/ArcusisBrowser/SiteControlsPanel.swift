@@ -301,7 +301,7 @@ struct SiteActionsSection: View {
       Button(action: showDeveloperTools) {
         HStack(spacing: 10) {
           Image(systemName: "chevron.left.forwardslash.chevron.right").frame(width: 20)
-          ShellL10n.text("Developer Tools")
+          ShellL10n.text("Shaar DevTools")
           Spacer(minLength: 0)
           Text(ShortcutCatalog.displayKeys(for: .developerTools) ?? "")
             .environment(\.layoutDirection, .leftToRight)

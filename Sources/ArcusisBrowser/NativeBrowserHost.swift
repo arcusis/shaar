@@ -13,7 +13,7 @@ enum BrowserMenuCommand: String, CaseIterable {
     addFavorite
   case reopenClosed, recentlyClosed, bookmarkPage, bookmarks, history, downloads
   case find, findNext, findPrevious, sidebar, nextSpace, previousSpace, reload, hardReload,
-    developerTools
+    developerTools, chromiumDeveloperTools
   case splitView
   case extensions, help, minimizeWindow, zoomWindow, bringAllToFront, settings, quit, createFolder
   case checkForUpdates, inspector, inspectorCopy, inspectorSource, inspectorAgentCopy
@@ -369,7 +369,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .findNext, .findPrevious: return store.pageFind?.canMove == true
     case .reload, .hardReload:
       return afterLauncher ? store.currentPageAllowsReload : store.canReloadCurrentPage
-    case .developerTools:
+    case .developerTools, .chromiumDeveloperTools:
       return context.engine.siteControlTarget != nil && (afterLauncher || !store.commandIsOpen)
     case .inspector:
       return context.engine.siteControlTarget != nil && (afterLauncher || !store.commandIsOpen)
@@ -549,6 +549,7 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .reload: store.reloadCurrentPage()
     case .hardReload: store.reloadCurrentPage(.bypassingCache)
     case .developerTools: context.engine.toggleDeveloperTools()
+    case .chromiumDeveloperTools: context.engine.toggleChromiumDeveloperTools()
     case .inspector: context.engine.toggleInspector()
     case .inspectorCopy:
       if let target = context.engine.siteControlTarget,
@@ -1198,7 +1199,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     add(.sidebar, "Toggle sidebar", to: view)
     add(.reload, "Reload", to: view)
     add(.hardReload, "Hard Reload", to: view)
-    add(.developerTools, "Developer Tools", to: view)
+    add(.developerTools, "Shaar DevTools", to: view)
+    add(.chromiumDeveloperTools, "Open Chromium DevTools", to: view)
     add(.inspector, "Inspect Element", to: view)
     add(.inspectorSource, "Open source", to: view)
     add(.inspectorAgentCopy, "Copy for agent", to: view)
@@ -1309,7 +1311,12 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       main.items.first(where: { $0.submenu?.identifier?.rawValue == "Help" })?.submenu
     NSApp.mainMenu = main
     shortcutMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-      guard let self, let menu = self.menu, NSApp.mainMenu === menu,
+      guard let self, let menu = self.menu, NSApp.mainMenu === menu else { return event }
+      if ShaarDevToolsShortcut.isF12(event), self.canPerform(.developerTools) {
+        self.perform(.developerTools)
+        return nil
+      }
+      guard
         ShortcutPageRouting.route(event, menu: menu, responder: event.window?.firstResponder)
       else { return event }
       return nil

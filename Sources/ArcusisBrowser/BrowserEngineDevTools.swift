@@ -39,12 +39,37 @@ extension BrowserEngine {
   @discardableResult
   func showDeveloperTools(for target: SiteControlTarget) -> Bool {
     guard siteControlTarget == target else { return false }
-    let shown = runtime.showDevTools(forTabID: target.tabID.uuidString)
-    developerModels[target.tabID]?.update(target: target)
-    return shown
+    let shell = shaarDevTools[target.tabID] ?? ShaarDevToolsModel(target: target)
+    let inspector = inspectors[target.tabID] ?? InspectorModel(target: target, engine: self)
+    shaarDevTools[target.tabID] = shell
+    inspectors[target.tabID] = inspector
+    shell.updateTarget(target)
+    shell.open(inspector: inspector)
+    return true
   }
 
   func toggleDeveloperTools() {
+    guard let target = siteControlTarget else { return }
+    if let shell = shaarDevTools[target.tabID], shell.isOpen {
+      shell.close()
+    } else {
+      _ = showDeveloperTools(for: target)
+    }
+  }
+
+  @discardableResult
+  func openChromiumDeveloperTools(for tabID: UUID) -> Bool {
+    guard !isClosed, liveTabs.contains(tabID),
+      runtime.windowID(forTabID: tabID.uuidString) == windowID
+    else { return false }
+    let shown = runtime.showDevTools(forTabID: tabID.uuidString)
+    if let target = siteControlTarget, target.tabID == tabID {
+      developerModels[tabID]?.update(target: target)
+    }
+    return shown
+  }
+
+  func toggleChromiumDeveloperTools() {
     guard let target = siteControlTarget else { return }
     let identity = target.tabID.uuidString
     runtime.toggleDevTools(forTabID: identity) { [weak self] error in

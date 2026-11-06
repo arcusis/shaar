@@ -9,9 +9,12 @@ import Testing
 
 @testable import ArcusisBrowser
 
-private final class OffscreenKeyEligibleWindow: NSWindow {
+private final class OffscreenSimulatedKeyWindow: NSWindow {
+  // Let SwiftUI apply FocusState without making this window key or visible.
   override var canBecomeKey: Bool { true }
   override var canBecomeMain: Bool { true }
+  override var isKeyWindow: Bool { true }
+  override var isMainWindow: Bool { true }
 }
 
 @Suite @MainActor struct BrowserWindowSidebarTests {
@@ -82,7 +85,7 @@ private final class OffscreenKeyEligibleWindow: NSWindow {
     let store = BrowserStore(session: session)
     let size = NSSize(width: 900, height: 600)
     let host = NSHostingView(rootView: BrowserWindow(store: store))
-    let window = OffscreenKeyEligibleWindow(
+    let window = OffscreenSimulatedKeyWindow(
       contentRect: NSRect(origin: .zero, size: size),
       styleMask: .borderless, backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
@@ -94,7 +97,7 @@ private final class OffscreenKeyEligibleWindow: NSWindow {
     host.layoutSubtreeIfNeeded()
 
     #expect(window.canBecomeKey && window.canBecomeMain)
-    #expect(!window.isVisible && !window.isKeyWindow && !window.isMainWindow)
+    #expect(!window.isVisible && NSApp.keyWindow !== window && NSApp.mainWindow !== window)
     // This is the action wired to the pane + button.
     store.openSplitPane(beside: first, edge: .right)
     let deadline = ContinuousClock.now + .seconds(2)
@@ -105,6 +108,6 @@ private final class OffscreenKeyEligibleWindow: NSWindow {
 
     #expect(store.commandIsOpen)
     #expect(window.firstResponder is NSTextView)
-    #expect(!window.isVisible && !window.isKeyWindow && !window.isMainWindow)
+    #expect(!window.isVisible && NSApp.keyWindow !== window && NSApp.mainWindow !== window)
   }
 }

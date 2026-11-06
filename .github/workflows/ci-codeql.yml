@@ -16,10 +16,12 @@ on:
         default: false
 permissions:
   contents: read
-  security-events: write
 jobs:
   analyze:
     name: CodeQL ${{ matrix.language }}
+    permissions:
+      contents: read
+      security-events: write
     runs-on: ${{ matrix.language == 'swift' && 'macos-26-intel' || 'ubuntu-24.04' }}
     env:
       CI_SWIFT_SCOPE: ${{ inputs.full && 'full' || 'shipping' }}

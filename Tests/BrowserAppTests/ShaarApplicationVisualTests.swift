@@ -3,11 +3,34 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import AppKit
+import BrowserCore
 import ShaarEngineABI
 import SwiftUI
 import XCTest
 
 @testable import ArcusisBrowser
+
+@MainActor private final class ApplicationCookieFixture: ShaarCookieStore {
+  let items: [ShaarSiteCookie]
+  init() {
+    items = [
+      ["name": "session", "value": "abc123", "domain": "example.com", "path": "/",
+       "secure": true, "httpOnly": true, "sameSite": "Lax", "expiresUnixMs": NSNull(),
+       "partitionSite": NSNull(), "partitionCrossSite": NSNull(),
+       "sourceScheme": 2, "sourcePort": 443],
+      ["name": "theme", "value": "dark", "domain": "example.com", "path": "/",
+       "secure": true, "httpOnly": false, "sameSite": "Strict", "expiresUnixMs": NSNull(),
+       "partitionSite": NSNull(), "partitionCrossSite": NSNull(),
+       "sourceScheme": 2, "sourcePort": 443],
+    ].compactMap(ShaarSiteCookie.init(dictionary:))
+  }
+  func siteCookies(for target: SiteControlTarget) async throws -> [ShaarSiteCookie] { items }
+  func setSiteCookie(
+    _ cookie: ShaarSiteCookie, value: String, secure: Bool, httpOnly: Bool,
+    sameSite: ShaarCookieSameSite, for target: SiteControlTarget
+  ) async throws {}
+  func deleteSiteCookie(_ cookie: ShaarSiteCookie, for target: SiteControlTarget) async throws {}
+}
 
 @MainActor final class ShaarApplicationVisualTests: XCTestCase {
   func testApplicationRendersOffscreenInBothAppearances() async throws {
@@ -37,6 +60,7 @@ import XCTest
       }
     }
     let inspector = InspectorModel(target: target, engine: nil)
+    let cookieFixture = ApplicationCookieFixture()
     for scheme in [ColorScheme.light, .dark] {
       let suffix = scheme == .dark ? "dark" : "light"
       let appearance: NSAppearance.Name = scheme == .dark ? .darkAqua : .aqua
@@ -45,7 +69,7 @@ import XCTest
       pending.open(inspector: inspector)
       try capture(
         ShaarDevToolsPanel(model: pending, inspector: inspector, openChromium: {}),
-        named: "after-application-unavailable-\(suffix)", scheme: scheme,
+        named: "after-application-cookie-unavailable-\(suffix)", scheme: scheme,
         appearance: appearance, root: root)
       pending.close()
 
@@ -61,9 +85,13 @@ import XCTest
         named: "after-application-storage-\(suffix)", scheme: scheme,
         appearance: appearance, root: root)
       live.application.selectArea(.cookies)
+      live.cookies.configure(store: cookieFixture, target: target)
+      await live.cookies.refresh()
+      live.cookies.selectedID = live.cookies.cookies.first?.id
       try capture(
-        ShaarDevToolsPanel(model: live, inspector: inspector, openChromium: {}),
-        named: "after-application-cookies-\(suffix)", scheme: scheme,
+        ShaarDevToolsPanel(
+          model: live, inspector: inspector, openChromium: {}, cookieStore: cookieFixture),
+        named: "after-application-cookie-items-\(suffix)", scheme: scheme,
         appearance: appearance, root: root)
       live.close()
     }

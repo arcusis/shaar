@@ -328,6 +328,16 @@ FOUNDATION_EXPORT NSString *ARCBridgeLocalizedString(NSString *message);
 /// Deletes every cookie the selected tab's page would send, including partitioned ones.
 - (void)clearCookiesForTabID:(NSString *)tabID profileID:(NSString *)profileID
                   completion:(void (NS_SWIFT_UI_ACTOR ^)(NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
+/// Individual cookies for the selected web page. This site-data route is independent of DevTools.
+- (void)siteCookiesForTabID:(NSString *)tabID profileID:(NSString *)profileID origin:(NSString *)origin
+                completion:(void (NS_SWIFT_UI_ACTOR ^)(NSArray<NSDictionary<NSString *, id> *> * _Nullable,
+                                                       NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
+- (void)setSiteCookie:(NSDictionary<NSString *, id> *)cookie tabID:(NSString *)tabID
+           profileID:(NSString *)profileID origin:(NSString *)origin
+          completion:(void (NS_SWIFT_UI_ACTOR ^)(NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
+- (void)deleteSiteCookie:(NSDictionary<NSString *, id> *)cookie tabID:(NSString *)tabID
+              profileID:(NSString *)profileID origin:(NSString *)origin
+             completion:(void (NS_SWIFT_UI_ACTOR ^)(NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
 @end
 
 /// Product private browsing API. Contexts bind to an already-loaded regular Profile.

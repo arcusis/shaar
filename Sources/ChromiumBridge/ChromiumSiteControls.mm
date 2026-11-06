@@ -7,6 +7,9 @@
 #import <objc/runtime.h>
 
 static const NSTimeInterval ARCSiteControlTimeout = 10;
+static constexpr shaar_operation ARCSiteCookieItems = static_cast<shaar_operation>(709);
+static constexpr shaar_operation ARCSiteCookieSet = static_cast<shaar_operation>(710);
+static constexpr shaar_operation ARCSiteCookieDelete = static_cast<shaar_operation>(711);
 
 static BOOL ARCIsSiteOrigin(NSString *origin) {
   if (![origin isKindOfClass:NSString.class] || origin.length > 2048) return NO;
@@ -19,6 +22,14 @@ static BOOL ARCIsSiteOrigin(NSString *origin) {
 
 static NSError *ARCServiceFailure(NSDictionary *result, NSString *message) {
   return result[@"error"] || ![result[@"ok"] isEqual:@YES] ? ARCBridgeError(message) : nil;
+}
+
+static BOOL ARCIsSelectedCookieScope(ARCShaarRuntime *runtime, NSString *tabID,
+                                     NSString *profileID, NSString *origin) {
+  if (!ARCIsSiteOrigin(origin) ||
+      ![runtime shaarHasTabID:tabID profileID:profileID selected:YES]) return NO;
+  NSDictionary *security = [runtime shaarSecurityInfoForTabID:tabID profileID:profileID];
+  return [security[@"origin"] isEqualToString:origin];
 }
 
 static const void *ShaarCookiePolicyCacheKey = &ShaarCookiePolicyCacheKey;
@@ -190,6 +201,52 @@ static NSMutableDictionary<NSString *, NSNumber *> *ShaarManagedCookiePolicyCach
            payload:@{@"schemaVersion": @1, @"origin": origin}
         completion:^(NSDictionary *result, NSError *error) {
     completion(error ?: ([result[@"complete"] isEqual:@YES] ? nil : ARCBridgeError(@"Some cookies were not cleared.")));
+  }];
+}
+
+- (void)siteCookiesForTabID:(NSString *)tabID profileID:(NSString *)profileID origin:(NSString *)origin
+                completion:(void (^)(NSArray<NSDictionary<NSString *, id> *> *, NSError *))completion {
+  if (!ARCIsSelectedCookieScope(self, tabID, profileID, origin)) {
+    completion(nil, ARCBridgeError(@"The selected page has changed."));
+    return;
+  }
+  [self shaarSubmit:ARCSiteCookieItems profileID:profileID tabID:tabID
+           payload:@{@"schemaVersion": @1, @"origin": origin}
+        completion:^(NSDictionary *result, NSError *error) {
+    NSArray *cookies = result[@"cookies"];
+    completion([cookies isKindOfClass:NSArray.class] ? cookies : nil,
+               error ?: ([cookies isKindOfClass:NSArray.class] ? nil : ARCBridgeError(@"Cookies could not be read.")));
+  }];
+}
+
+- (void)setSiteCookie:(NSDictionary<NSString *, id> *)cookie tabID:(NSString *)tabID
+           profileID:(NSString *)profileID origin:(NSString *)origin
+          completion:(void (^)(NSError *))completion {
+  [self shaarMutateSiteCookie:cookie operation:ARCSiteCookieSet tabID:tabID
+                   profileID:profileID origin:origin completion:completion];
+}
+
+- (void)deleteSiteCookie:(NSDictionary<NSString *, id> *)cookie tabID:(NSString *)tabID
+              profileID:(NSString *)profileID origin:(NSString *)origin
+             completion:(void (^)(NSError *))completion {
+  [self shaarMutateSiteCookie:cookie operation:ARCSiteCookieDelete tabID:tabID
+                   profileID:profileID origin:origin completion:completion];
+}
+
+- (void)shaarMutateSiteCookie:(NSDictionary<NSString *, id> *)cookie operation:(shaar_operation)operation
+                       tabID:(NSString *)tabID profileID:(NSString *)profileID origin:(NSString *)origin
+                  completion:(void (^)(NSError *))completion {
+  if (!ARCIsSelectedCookieScope(self, tabID, profileID, origin) ||
+      ![cookie isKindOfClass:NSDictionary.class]) {
+    completion(ARCBridgeError(@"The selected page has changed."));
+    return;
+  }
+  NSMutableDictionary *payload = [cookie mutableCopy];
+  payload[@"schemaVersion"] = @1;
+  payload[@"origin"] = origin;
+  [self shaarSubmit:operation profileID:profileID tabID:tabID payload:payload
+        completion:^(NSDictionary *result, NSError *error) {
+    completion(error ?: ([result[@"complete"] isEqual:@YES] ? nil : ARCBridgeError(@"The cookie was not changed.")));
   }];
 }
 

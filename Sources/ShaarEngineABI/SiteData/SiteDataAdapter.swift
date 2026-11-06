@@ -14,6 +14,84 @@ public enum ShaarSiteDataOperation: UInt32, Sendable {
   case siteCookiesClear = 706
   case thirdPartyCookiesGet = 707
   case thirdPartyCookiesSet = 708
+  case siteCookieItems = 709
+  case siteCookieSet = 710
+  case siteCookieDelete = 711
+}
+
+public enum ShaarCookieSameSite: String, CaseIterable, Sendable {
+  case unspecified = "Unspecified"
+  case lax = "Lax"
+  case strict = "Strict"
+  case none = "None"
+}
+
+public struct ShaarSiteCookie: Equatable, Sendable, Identifiable {
+  public let name: String
+  public let value: String
+  public let domain: String
+  public let path: String
+  public let secure: Bool
+  public let httpOnly: Bool
+  public let sameSite: ShaarCookieSameSite
+  public let expiresUnixMs: Int64?
+  public let partitionSite: String?
+  public let partitionCrossSite: Bool?
+  public let sourceScheme: Int
+  public let sourcePort: Int
+
+  public var id: String {
+    [name, domain, path, partitionSite ?? "", partitionCrossSite.map(String.init) ?? "",
+     String(sourceScheme), String(sourcePort)]
+      .joined(separator: "\u{0}")
+  }
+
+  public init?(dictionary: [String: Any]) {
+    guard Set(dictionary.keys) == [
+      "name", "value", "domain", "path", "secure", "httpOnly", "sameSite",
+      "expiresUnixMs", "partitionSite", "partitionCrossSite", "sourceScheme", "sourcePort",
+    ],
+      let name = dictionary["name"] as? String, name.count <= 256,
+      let value = dictionary["value"] as? String, value.count <= 4096,
+      let domain = dictionary["domain"] as? String, !domain.isEmpty, domain.count <= 256,
+      let path = dictionary["path"] as? String, path.hasPrefix("/"), path.count <= 1024,
+      let secure = dictionary["secure"] as? Bool,
+      let httpOnly = dictionary["httpOnly"] as? Bool,
+      let rawSameSite = dictionary["sameSite"] as? String,
+      let sameSite = ShaarCookieSameSite(rawValue: rawSameSite),
+      let sourceScheme = dictionary["sourceScheme"] as? Int, (0...2).contains(sourceScheme),
+      let sourcePort = dictionary["sourcePort"] as? Int, (-1...65535).contains(sourcePort)
+    else { return nil }
+    let expires = dictionary["expiresUnixMs"]
+    let partition = dictionary["partitionSite"]
+    let crossSite = dictionary["partitionCrossSite"]
+    guard expires is NSNull || expires as? Int64 != nil,
+      partition is NSNull || partition as? String != nil,
+      crossSite is NSNull || crossSite as? Bool != nil,
+      (partition is NSNull) == (crossSite is NSNull)
+    else { return nil }
+    self.name = name
+    self.value = value
+    self.domain = domain
+    self.path = path
+    self.secure = secure
+    self.httpOnly = httpOnly
+    self.sameSite = sameSite
+    expiresUnixMs = expires as? Int64
+    partitionSite = partition as? String
+    partitionCrossSite = crossSite as? Bool
+    self.sourceScheme = sourceScheme
+    self.sourcePort = sourcePort
+  }
+
+  public var identity: [String: Any] {
+    [
+      "name": name, "domain": domain, "path": path,
+      "partitionSite": partitionSite ?? NSNull(),
+      "partitionCrossSite": partitionCrossSite.map { $0 as Any } ?? NSNull(),
+      "sourceScheme": sourceScheme, "sourcePort": sourcePort,
+    ]
+  }
 }
 
 public enum ShaarSiteSettingValue: String, Codable, Sendable {
@@ -175,6 +253,44 @@ public struct ShaarSiteDataAdapter: Sendable {
   {
     try Self.decodeCookiePolicy(
       await submit(.thirdPartyCookiesSet, ["blocked": blocked]))
+  }
+
+  public func cookies(origin: String) async throws -> [ShaarSiteCookie] {
+    let root = try await submit(.siteCookieItems, ["origin": try Self.canonicalOrigin(origin)])
+    guard Set(root.keys) == ["schemaVersion", "cookies"],
+      let items = root["cookies"] as? [[String: Any]], items.count <= 500,
+      items.allSatisfy({ ShaarSiteCookie(dictionary: $0) != nil })
+    else { throw ShaarSiteDataError.malformedResponse }
+    return items.compactMap(ShaarSiteCookie.init(dictionary:))
+  }
+
+  public func setCookie(
+    _ cookie: ShaarSiteCookie, value: String, secure: Bool, httpOnly: Bool,
+    sameSite: ShaarCookieSameSite, origin: String
+  ) async throws {
+    guard value.count <= 4096 else { throw ShaarSiteDataError.malformedResponse }
+    var arguments = cookie.identity
+    arguments["origin"] = try Self.canonicalOrigin(origin)
+    arguments["value"] = value
+    arguments["secure"] = secure
+    arguments["httpOnly"] = httpOnly
+    arguments["sameSite"] = sameSite.rawValue
+    try await requireComplete(.siteCookieSet, arguments)
+  }
+
+  public func deleteCookie(_ cookie: ShaarSiteCookie, origin: String) async throws {
+    var arguments = cookie.identity
+    arguments["origin"] = try Self.canonicalOrigin(origin)
+    try await requireComplete(.siteCookieDelete, arguments)
+  }
+
+  private func requireComplete(_ operation: ShaarSiteDataOperation, _ arguments: [String: Any])
+    async throws
+  {
+    let root = try await submit(operation, arguments)
+    guard Set(root.keys) == ["schemaVersion", "complete"],
+      root["complete"] as? Bool == true
+    else { throw ShaarSiteDataError.malformedResponse }
   }
 
   private static let settingNames: Set<String> = [

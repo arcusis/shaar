@@ -21,6 +21,7 @@ import Testing
     shell.open(inspector: inspector)
     for _ in 0..<20 where shell.events.count < 2 { await Task.yield() }
     #expect(shell.isOpen && inspector.isOpen)
+    #expect(shell.streamAvailable)
     #expect(shell.events == fixture)
     #expect(shell.consoleCount == 1 && shell.networkCount == 1)
 
@@ -43,6 +44,33 @@ import Testing
     shell.close()
     #expect(inspector.isOpen)
     inspector.close()
+  }
+
+  @Test func productionTransportNeverEnablesFixtureEvents() async {
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com")!)
+    let inspector = InspectorModel(target: target, engine: nil)
+    let shell = ShaarDevToolsModel(target: target)
+    shell.open(inspector: inspector)
+    for _ in 0..<10 { await Task.yield() }
+    #expect(!shell.streamAvailable && shell.events.isEmpty)
+    shell.close()
+  }
+
+  @Test func losingStreamCapabilityClearsLiveEvents() async {
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com")!)
+    let inspector = InspectorModel(target: target, engine: nil)
+    let fixture: [ShaarDevToolsEvent] = [
+      .console(ShaarConsoleEvent(id: UUID(), level: .log, message: "Ready", source: nil))
+    ]
+    let shell = ShaarDevToolsModel(
+      target: target,
+      transport: ShaarDevToolsFixtureTransport(fixture: fixture, revokeAfterEvents: true))
+    shell.open(inspector: inspector)
+    for _ in 0..<20 { await Task.yield() }
+    #expect(!shell.streamAvailable && shell.events.isEmpty)
+    shell.close()
   }
 
   @Test func dockSizesRespectTheAvailablePane() {

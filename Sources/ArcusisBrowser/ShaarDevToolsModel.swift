@@ -22,6 +22,33 @@ struct ShaarConsoleEvent: Equatable, Sendable {
   let level: Level
   let message: String
   let source: String?
+  let stack: [ShaarConsoleFrame]
+  let objectID: String?
+  let previewProperties: [ShaarConsoleProperty]
+
+  init(
+    id: UUID, level: Level, message: String, source: String?,
+    stack: [ShaarConsoleFrame] = [], objectID: String? = nil,
+    previewProperties: [ShaarConsoleProperty] = []
+  ) {
+    self.id = id
+    self.level = level
+    self.message = message
+    self.source = source
+    self.stack = stack
+    self.objectID = objectID
+    self.previewProperties = previewProperties
+  }
+}
+
+struct ShaarConsoleFrame: Hashable, Sendable {
+  let function: String
+  let source: String
+}
+
+struct ShaarConsoleProperty: Equatable, Sendable {
+  let name: String
+  let value: String
 }
 
 struct ShaarNetworkEvent: Equatable, Sendable {
@@ -36,24 +63,22 @@ enum ShaarDevToolsEvent: Equatable, Sendable {
   case network(ShaarNetworkEvent)
 }
 
+enum ShaarDevToolsTransportMessage: Equatable, Sendable {
+  case streamAvailable
+  case streamUnavailable
+  case event(ShaarDevToolsEvent)
+}
+
 @MainActor
 protocol ShaarDevToolsEventTransport {
-  func events(for target: SiteControlTarget) -> AsyncStream<ShaarDevToolsEvent>
+  func messages(for target: SiteControlTarget) -> AsyncStream<ShaarDevToolsTransportMessage>
 }
 
-/// A quiet production transport until the engine stream is connected in #1123.
+/// Production stays unavailable until shaar.17 reports its live panel capability.
 struct ShaarDevToolsPendingTransport: ShaarDevToolsEventTransport {
-  func events(for target: SiteControlTarget) -> AsyncStream<ShaarDevToolsEvent> {
-    AsyncStream { _ in }
-  }
-}
-
-struct ShaarDevToolsFixtureTransport: ShaarDevToolsEventTransport {
-  let fixture: [ShaarDevToolsEvent]
-
-  func events(for target: SiteControlTarget) -> AsyncStream<ShaarDevToolsEvent> {
+  func messages(for target: SiteControlTarget) -> AsyncStream<ShaarDevToolsTransportMessage> {
     AsyncStream { continuation in
-      for event in fixture { continuation.yield(event) }
+      continuation.yield(.streamUnavailable)
       continuation.finish()
     }
   }
@@ -67,7 +92,9 @@ final class ShaarDevToolsModel {
   var dock: ShaarDevToolsDock = .bottom
   var bottomHeight: CGFloat = 380
   var rightWidth: CGFloat = 420
+  private(set) var streamAvailable = false
   private(set) var events: [ShaarDevToolsEvent] = []
+  let console = ShaarConsoleModel()
   @ObservationIgnored private let transport: any ShaarDevToolsEventTransport
   @ObservationIgnored private var eventTask: Task<Void, Never>?
   @ObservationIgnored private var streamGeneration = 0
@@ -95,6 +122,9 @@ final class ShaarDevToolsModel {
     streamGeneration += 1
     eventTask?.cancel()
     eventTask = nil
+    streamAvailable = false
+    events.removeAll()
+    console.clearEntries()
     ownedInspector?.close()
     ownedInspector = nil
     isOpen = false
@@ -103,7 +133,9 @@ final class ShaarDevToolsModel {
   func updateTarget(_ target: SiteControlTarget, committed: Bool = false) {
     guard self.target != target || committed else { return }
     self.target = target
+    streamAvailable = false
     events.removeAll()
+    console.clearEntries()
     streamGeneration += 1
     eventTask?.cancel()
     eventTask = nil
@@ -122,13 +154,26 @@ final class ShaarDevToolsModel {
     let target = target
     let generation = streamGeneration
     eventTask = Task { [weak self, transport] in
-      for await event in transport.events(for: target) {
+      for await message in transport.messages(for: target) {
         guard let self, self.isOpen, self.target == target,
           self.streamGeneration == generation
         else { return }
-        self.events.append(event)
-        if self.events.count > 2_000 { self.events.removeFirst(self.events.count - 2_000) }
+        self.receive(message)
       }
+    }
+  }
+
+  private func receive(_ message: ShaarDevToolsTransportMessage) {
+    switch message {
+    case .streamAvailable: streamAvailable = true
+    case .streamUnavailable:
+      streamAvailable = false
+      events.removeAll()
+      console.clearEntries()
+    case .event(let event):
+      guard streamAvailable else { return }
+      events.append(event)
+      if events.count > 2_000 { events.removeFirst(events.count - 2_000) }
     }
   }
 

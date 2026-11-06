@@ -12,7 +12,7 @@ enum ShaarLocalConsoleHTTP {
     configuration.timeoutIntervalForResource = 3
     configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
     let session = URLSession(
-      configuration: configuration, delegate: NoRedirects(), delegateQueue: nil)
+      configuration: configuration, delegate: ShaarNoRedirects(), delegateQueue: nil)
     defer { session.invalidateAndCancel() }
     let (data, response) = try await session.data(for: request)
     guard let http = response as? HTTPURLResponse, http.statusCode == 200,
@@ -22,7 +22,7 @@ enum ShaarLocalConsoleHTTP {
   }
 }
 
-private final class NoRedirects: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+final class ShaarNoRedirects: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
   func urlSession(
     _ session: URLSession, task: URLSessionTask,
     willPerformHTTPRedirection response: HTTPURLResponse,

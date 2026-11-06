@@ -104,6 +104,16 @@ struct ShaarDevToolsPanel: View {
       } else {
         unavailablePanel
       }
+    case .application:
+      if model.phase2.available {
+        ShaarApplicationPanel(
+          model: model.application, phase2: model.phase2,
+          openChromium: openChromium,
+          clearCookies: siteAction(.clearCookiesAndReload),
+          clearSiteData: siteAction(.clearSiteData))
+      } else {
+        unavailablePanel
+      }
     }
   }
 
@@ -126,7 +136,7 @@ struct ShaarDevToolsPanel: View {
       Image(systemName: "bolt.slash")
         .font(.system(size: 22, weight: .ultraLight))
         .foregroundStyle(.tertiary)
-      Text(ShellL10n.string("Live console and network need engine shaar.17"))
+      Text(ShellL10n.string(unavailableMessage))
         .font(.system(size: 12, weight: .medium))
       Text(ShellL10n.string("Use Chromium DevTools until the live stream is available."))
         .font(.system(size: 11))
@@ -139,6 +149,11 @@ struct ShaarDevToolsPanel: View {
     .multilineTextAlignment(.center)
     .padding(24)
     .accessibilityIdentifier("shaar.devtools.streamUnavailable")
+  }
+
+  private var unavailableMessage: String {
+    if model.section == .application { return "Live Application needs engine shaar.17" }
+    return "Live console and network need engine shaar.17"
   }
 
   @ViewBuilder private var commandLine: some View {
@@ -163,9 +178,20 @@ struct ShaarDevToolsPanel: View {
   }
 
   private var footerMessage: String {
+    if model.section == .application {
+      return model.phase2.available
+        ? "Application data is scoped to this tab"
+        : "Application data needs engine shaar.17"
+    }
     guard model.streamAvailable else { return "Console commands need engine shaar.17" }
     if model.section == .network { return "Network requests are scoped to this tab" }
     return "Open Console to evaluate JavaScript"
+  }
+
+  private func siteAction(_ action: SiteAction) -> (() async throws -> Void)? {
+    guard let engine = inspector?.engine else { return nil }
+    let target = model.target
+    return { try await engine.perform(action, for: target) }
   }
 
   private func moveSection(_ direction: MoveCommandDirection) {

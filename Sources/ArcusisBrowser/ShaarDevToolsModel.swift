@@ -9,6 +9,7 @@ enum ShaarDevToolsSection: String, CaseIterable {
   case elements = "Elements"
   case console = "Console"
   case network = "Network"
+  case application = "Application"
 }
 
 enum ShaarDevToolsDock: String, CaseIterable {
@@ -136,6 +137,8 @@ final class ShaarDevToolsModel {
   private(set) var events: [ShaarDevToolsEvent] = []
   let console = ShaarConsoleModel()
   let network = ShaarNetworkModel()
+  let phase2: ShaarPhase2Model
+  let application: ShaarApplicationModel
   @ObservationIgnored private let transport: any ShaarDevToolsEventTransport
   @ObservationIgnored private var eventTask: Task<Void, Never>?
   @ObservationIgnored private var streamGeneration = 0
@@ -143,10 +146,14 @@ final class ShaarDevToolsModel {
 
   init(
     target: SiteControlTarget,
-    transport: any ShaarDevToolsEventTransport = ShaarDevToolsPendingTransport()
+    transport: any ShaarDevToolsEventTransport = ShaarDevToolsPendingTransport(),
+    phase2Transport: any ShaarPhase2Transport = ShaarPhase2PendingTransport()
   ) {
     self.target = target
     self.transport = transport
+    let phase2 = ShaarPhase2Model(target: target, transport: phase2Transport)
+    self.phase2 = phase2
+    application = ShaarApplicationModel(phase2: phase2)
   }
 
   func open(inspector: InspectorModel) {
@@ -157,6 +164,7 @@ final class ShaarDevToolsModel {
     }
     isOpen = true
     startStream()
+    phase2.open()
   }
 
   func close() {
@@ -167,6 +175,8 @@ final class ShaarDevToolsModel {
     events.removeAll()
     console.clearEntries()
     network.clearSelection()
+    phase2.close()
+    application.reset()
     ownedInspector?.close()
     ownedInspector = nil
     isOpen = false
@@ -179,6 +189,8 @@ final class ShaarDevToolsModel {
     events.removeAll()
     console.clearEntries()
     network.clearSelection()
+    phase2.updateTarget(target, committed: committed)
+    application.reset()
     streamGeneration += 1
     eventTask?.cancel()
     eventTask = nil

@@ -2,8 +2,10 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import AppKit
 import BrowserCore
 import Foundation
+import SwiftUI
 import XCTest
 
 @testable import ArcusisBrowser
@@ -81,6 +83,44 @@ final class BrowserSplitStoreTests: XCTestCase {
 
     XCTAssertEqual(store.session.selectedSpaceID, otherSpace)
     XCTAssertNil(store.pendingSplitPlacement)
+  }
+
+  func testSplitPaneAddressEditorUsesThePaneTab() throws {
+    var session = BrowserSession.fresh()
+    let first = try XCTUnwrap(session.open(URL(string: "https://first-pane.example/path")!))
+    let second = try XCTUnwrap(session.open(URL(string: "https://second-pane.example")!))
+    let store = BrowserStore(session: session)
+    store.splitTabs(first, second)
+
+    store.focusSplitTab(first)
+    store.showAddressEditor(tabID: first)
+
+    XCTAssertTrue(store.commandEditsCurrentURL)
+    XCTAssertEqual(store.commandQuery, "https://first-pane.example/path")
+    store.dismissCommand()
+    var reloadedTab: UUID?
+    store.onReloadPage = { tabID, _, _ in
+      reloadedTab = tabID
+      return true
+    }
+    XCTAssertTrue(store.canReloadPage(first))
+    store.focusSplitTab(first)
+    XCTAssertTrue(store.reloadCurrentPage())
+    XCTAssertEqual(reloadedTab, first)
+  }
+
+  func testSplitPaneToolbarBuildsAtMinimumPaneWidth() throws {
+    var session = BrowserSession.fresh()
+    let first = try XCTUnwrap(session.open(URL(string: "https://first.example")!))
+    let second = try XCTUnwrap(session.open(URL(string: "https://second.example")!))
+    let store = BrowserStore(session: session)
+    store.splitTabs(first, second)
+    let host = NSHostingView(rootView: SplitPaneToolbar(store: store, tabID: first, engine: nil))
+    host.frame = NSRect(x: 0, y: 0, width: 160, height: 30)
+    host.layoutSubtreeIfNeeded()
+
+    XCTAssertGreaterThan(host.fittingSize.width, 0)
+    XCTAssertGreaterThan(host.fittingSize.height, 0)
   }
 
   func testClosingSplitTargetCancelsPendingPaneCommand() throws {

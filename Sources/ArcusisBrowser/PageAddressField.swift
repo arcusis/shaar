@@ -7,6 +7,7 @@ import SwiftUI
 /// Arc-style address shown centered in the page card's top bar.
 struct PageAddressField: View {
   @Bindable var store: BrowserStore
+  var tabID: UUID? = nil
 
   static func displayAddress(for url: URL?) -> String? {
     guard let url, let host = url.host(), !host.isEmpty else { return nil }
@@ -22,9 +23,12 @@ struct PageAddressField: View {
   }
 
   var body: some View {
-    let url = store.session.selectedPage?.tab.url
+    let url =
+      tabID.flatMap { id in store.session.selectedSpace.tabs.first { $0.id == id }?.url }
+      ?? store.session.selectedPage?.tab.url
     Button {
-      store.showAddressEditor()
+      if let tabID { store.focusSplitTab(tabID) }
+      store.showAddressEditor(tabID: tabID)
     } label: {
       HStack(spacing: 6) {
         Image(systemName: url == nil ? "magnifyingglass" : "link")

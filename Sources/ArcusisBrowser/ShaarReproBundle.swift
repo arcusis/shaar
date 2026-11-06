@@ -325,6 +325,7 @@ struct ShaarReproPendingTransport: ShaarReproTransport {
 }
 
 @MainActor @Observable final class ShaarReproModel {
+  @ObservationIgnored let history = ShaarReproHistory()
   private(set) var target: SiteControlTarget
   private(set) var busy = false
   private(set) var savedURL: URL?
@@ -357,7 +358,17 @@ struct ShaarReproPendingTransport: ShaarReproTransport {
     defer { busy = false }
     let target = target
     do {
-      let capture = try await transport.capture(for: target, seconds: ShaarReproBundle.seconds)
+      let captured = try await transport.capture(for: target, seconds: ShaarReproBundle.seconds)
+      let capture: ShaarReproCapture
+      if history.isActive {
+        let recent = history.snapshot()
+        capture = ShaarReproCapture(
+          videoMP4: captured.videoMP4, durationSeconds: captured.durationSeconds,
+          dom: captured.dom, console: recent.console, network: recent.network,
+          environment: captured.environment)
+      } else {
+        capture = captured
+      }
       guard self.target == target else { throw CancellationError() }
       let file = try await ShaarReproBundle.save(capture, target: target, directory: directory)
       guard self.target == target else {

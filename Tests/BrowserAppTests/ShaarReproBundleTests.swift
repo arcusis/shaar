@@ -125,6 +125,23 @@ import Testing
     #expect(!FileManager.default.fileExists(atPath: video.path))
   }
 
+  @Test func captureUsesRecentPanelHistory() async throws {
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let model = ShaarReproModel(
+      target: target, transport: ShaarReproFixtureTransport(snapshot: fixture()))
+    model.history.start(for: target)
+    model.history.record(
+      .console(
+        ShaarConsoleEvent(
+          id: UUID(), level: .warning, message: "Recent panel warning", source: "panel.js")),
+      for: target)
+    let file = try #require(await model.capture(to: directory))
+    let contents = try await ShaarReproBundle.read(at: file)
+    #expect(contents.console.map(\.message) == ["Recent panel warning"])
+    #expect(contents.network.isEmpty)
+  }
+
   @Test func productionTransportKeepsCaptureUnavailable() async {
     let model = ShaarReproModel(target: target)
     #expect(!model.available)

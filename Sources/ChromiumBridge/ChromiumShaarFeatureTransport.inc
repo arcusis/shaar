@@ -69,7 +69,7 @@
     fprintf(stderr, "Shaar feature submit rejected: operation=%d status=%d native=%d\n",
             (int)operation, (int)status, (int)error.code);
   }
-  if (completion) completion(nil, ShaarError(@"Shaar rejected the feature operation."));
+  if (completion) completion(nil, ShaarStatusError(@"Shaar rejected the feature operation.", status));
   return NO;
 }
 

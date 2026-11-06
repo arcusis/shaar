@@ -11,6 +11,17 @@ static NSError *ServiceError(NSString *message) {
       userInfo:@{NSLocalizedDescriptionKey: ARCBridgeLocalizedString(message)}];
 }
 static const void *ShaarDownloadDirectoryKey = &ShaarDownloadDirectoryKey;
+static const void *ShaarDownloadRetryKey = &ShaarDownloadRetryKey;
+static const NSUInteger ShaarDownloadReadinessLimit = 3;
+static const int64_t ShaarDownloadRetryDelay = 2500 * NSEC_PER_MSEC;
+
+@interface ShaarDownloadReadiness : NSObject
+@property(nonatomic) NSUInteger failures;
+@property(nonatomic, strong) NSUUID *retryToken;
+@end
+
+@implementation ShaarDownloadReadiness
+@end
 
 static NSMutableDictionary<NSString *, NSURL *> *ShaarDownloadDirectories(ARCShaarRuntime *runtime) {
   NSMutableDictionary *cache = objc_getAssociatedObject(runtime, ShaarDownloadDirectoryKey);
@@ -19,6 +30,62 @@ static NSMutableDictionary<NSString *, NSURL *> *ShaarDownloadDirectories(ARCSha
     objc_setAssociatedObject(runtime, ShaarDownloadDirectoryKey, cache, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
   }
   return cache;
+}
+
+static NSMutableDictionary<NSString *, ShaarDownloadReadiness *> *ShaarDownloadRetries(ARCShaarRuntime *runtime) {
+  NSMutableDictionary *tokens = objc_getAssociatedObject(runtime, ShaarDownloadRetryKey);
+  if (!tokens) {
+    tokens = [NSMutableDictionary dictionary];
+    objc_setAssociatedObject(runtime, ShaarDownloadRetryKey, tokens, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  }
+  return tokens;
+}
+
+static BOOL IsDownloadNotReady(NSError *error) {
+  return [error.domain isEqualToString:@"org.arcusis.shaar.engine"] && error.code == SHAAR_NOT_READY;
+}
+
+static void RefreshDownloads(ARCShaarRuntime *runtime, NSString *profileID) {
+  [runtime shaarSubmit:SHAAR_OP_DOWNLOAD_LIST profileID:profileID tabID:nil
+              payload:@{@"schemaVersion": @1} completion:^(NSDictionary *result, NSError *error) {
+    if (IsDownloadNotReady(error)) {
+      // Profile load may precede download manager readiness; keep a final error if retries fail.
+      NSMutableDictionary<NSString *, ShaarDownloadReadiness *> *retries = ShaarDownloadRetries(runtime);
+      ShaarDownloadReadiness *readiness = retries[profileID];
+      if (!readiness) {
+        readiness = [ShaarDownloadReadiness new];
+        retries[profileID] = readiness;
+      }
+      readiness.failures += 1;
+      if (readiness.failures < ShaarDownloadReadinessLimit) {
+        NSUUID *token = [NSUUID UUID];
+        readiness.retryToken = token;
+        __weak ARCShaarRuntime *weakRuntime = runtime;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, ShaarDownloadRetryDelay),
+                       dispatch_get_main_queue(), ^{
+          ARCShaarRuntime *owner = weakRuntime;
+          if (!owner) return;
+          ShaarDownloadReadiness *pending = ShaarDownloadRetries(owner)[profileID];
+          if (![pending.retryToken isEqual:token]) return;
+          if ([owner isQuitting] || ![owner shaarHasProfileID:profileID]) {
+            [ShaarDownloadRetries(owner) removeObjectForKey:profileID];
+            return;
+          }
+          RefreshDownloads(owner, profileID);
+        });
+        return;
+      }
+    }
+    [ShaarDownloadRetries(runtime) removeObjectForKey:profileID];
+    NSArray *downloads = result[@"downloads"];
+    if (error || ![downloads isKindOfClass:NSArray.class]) {
+      if (runtime.onNotice) runtime.onNotice((error ?: [NSError errorWithDomain:@"com.arcusis.browser.downloads"
+          code:1 userInfo:@{NSLocalizedDescriptionKey: @"Downloads could not be restored."}]).localizedDescription);
+      return;
+    }
+    for (id row in downloads) if (![row isKindOfClass:NSDictionary.class]) return;
+    if (runtime.onDownloadsRestored) runtime.onDownloadsRestored(profileID, downloads);
+  }];
 }
 
 @implementation ARCShaarRuntime (EngineServices)
@@ -76,17 +143,7 @@ static NSMutableDictionary<NSString *, NSURL *> *ShaarDownloadDirectories(ARCSha
 
 - (void)refreshDownloadsForProfileID:(NSString *)profileID {
   if (![self shaarHasProfileID:profileID]) return;
-  [self shaarSubmit:SHAAR_OP_DOWNLOAD_LIST profileID:profileID tabID:nil
-           payload:@{@"schemaVersion": @1} completion:^(NSDictionary *result, NSError *error) {
-    NSArray *downloads = result[@"downloads"];
-    if (error || ![downloads isKindOfClass:NSArray.class]) {
-      if (self.onNotice) self.onNotice((error ?: [NSError errorWithDomain:@"com.arcusis.browser.downloads"
-          code:1 userInfo:@{NSLocalizedDescriptionKey: @"Downloads could not be restored."}]).localizedDescription);
-      return;
-    }
-    for (id row in downloads) if (![row isKindOfClass:NSDictionary.class]) return;
-    if (self.onDownloadsRestored) self.onDownloadsRestored(profileID, downloads);
-  }];
+  RefreshDownloads(self, profileID);
 }
 
 - (void)shaarReceiveDownloadEventForProfileID:(NSString *)profileID payload:(NSDictionary *)payload {

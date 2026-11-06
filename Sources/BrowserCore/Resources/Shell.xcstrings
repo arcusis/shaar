@@ -236,6 +236,7 @@
     "Console commands are unavailable for this tab": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Console commands are unavailable for this tab"}},"he":{"stringUnit":{"state":"translated","value":"פקודות המסוף אינן זמינות ללשונית זו"}}}},
     "No console messages yet": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"No console messages yet"}},"he":{"stringUnit":{"state":"translated","value":"אין עדיין הודעות במסוף"}}}},
     "No network requests yet": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"No network requests yet"}},"he":{"stringUnit":{"state":"translated","value":"אין עדיין בקשות רשת"}}}},
+    "older entries dropped": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"older entries dropped"}},"he":{"stringUnit":{"state":"translated","value":"רשומות ישנות הושמטו"}}}},
     "All": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"All"}},"he":{"stringUnit":{"state":"translated","value":"הכול"}}}},
     "Errors": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Errors"}},"he":{"stringUnit":{"state":"translated","value":"שגיאות"}}}},
     "Warnings": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Warnings"}},"he":{"stringUnit":{"state":"translated","value":"אזהרות"}}}},

@@ -183,7 +183,9 @@ struct ShaarDevToolsPanel: View {
       }
     case .console:
       if model.consoleAvailable {
-        ShaarConsolePanel(model: model.console, events: model.consoleEvents, inspector: inspector)
+        ShaarConsolePanel(
+          model: model.console, events: model.consoleEvents,
+          droppedCount: model.droppedConsoleCount, inspector: inspector)
       } else {
         unavailablePanel
       }
@@ -191,6 +193,7 @@ struct ShaarDevToolsPanel: View {
       if model.streamAvailable {
         ShaarNetworkPanel(
           model: model.network, rules: model.rules, events: model.events,
+          droppedCount: model.droppedNetworkCount,
           openChromium: openChromium)
       } else {
         unavailablePanel

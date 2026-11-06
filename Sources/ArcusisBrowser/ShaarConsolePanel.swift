@@ -8,6 +8,7 @@ import SwiftUI
 struct ShaarConsolePanel: View {
   @Bindable var model: ShaarConsoleModel
   let events: [ShaarDevToolsEvent]
+  let droppedCount: Int
   let inspector: InspectorModel?
 
   private var rows: [ShaarConsoleRow] { model.rows(from: events) }
@@ -88,6 +89,13 @@ struct ShaarConsolePanel: View {
   private var rowList: some View {
     ScrollView {
       LazyVStack(spacing: 0) {
+        if droppedCount > 0 {
+          Text("\(droppedCount) \(ShellL10n.string("older entries dropped"))")
+            .font(.system(size: 10)).foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(10)
+            .accessibilityIdentifier("shaar.devtools.consoleDropped")
+        }
         if rows.isEmpty {
           Text(ShellL10n.string("No console messages yet"))
             .font(.system(size: 11))

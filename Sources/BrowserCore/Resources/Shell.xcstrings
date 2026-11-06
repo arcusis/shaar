@@ -64,6 +64,8 @@
     "Enabled": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Enabled"}},"he":{"stringUnit":{"state":"translated","value":"מופעל"}}}},
     "Exact request URL": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Exact request URL"}},"he":{"stringUnit":{"state":"translated","value":"כתובת URL מדויקת של הבקשה"}}}},
     "Network rules": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Network rules"}},"he":{"stringUnit":{"state":"translated","value":"כללי רשת"}}}},
+    "Site": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Site"}},"he":{"stringUnit":{"state":"translated","value":"אתר"}}}},
+    "Project": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Project"}},"he":{"stringUnit":{"state":"translated","value":"פרויקט"}}}},
     "Network rules need engine support": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Network rules need engine support"}},"he":{"stringUnit":{"state":"translated","value":"כללי רשת דורשים תמיכת מנוע"}}}},
     "New rule": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"New rule"}},"he":{"stringUnit":{"state":"translated","value":"כלל חדש"}}}},
     "No saved rules for this site": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"No saved rules for this site"}},"he":{"stringUnit":{"state":"translated","value":"אין כללים שמורים לאתר הזה"}}}},

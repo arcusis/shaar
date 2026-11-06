@@ -32,7 +32,7 @@ import Testing
   }
 }
 
-@Test func providerSearchRowsFollowRankedHitsAndPrecedeWebSearch() throws {
+@Test func providerSearchRowsRequireAnExplicitKeywordAndStayOutOfDefaultResults() throws {
   let profile = BrowserProfile(name: "Personal")
   let space = BrowserSpace(
     profileID: profile.id, name: "Main", symbol: "house", tint: .ocean)
@@ -43,24 +43,17 @@ import Testing
 
   let sections = CommandLauncher.sections(
     for: "budget", filter: nil, in: session, sources: sources)
-  #expect(sections.map(\.id) == ["actions", "open"])
-  #expect(
-    sections[0].results.map(\.title) == [
-      "Search Gmail for “budget”", "Search Drive for “budget”", "Search Calendar for “budget”",
-    ])
-  #expect(
-    sections[0].results.allSatisfy {
-      if case .providerSearch = $0.action { return true }
-      return false
-    })
-  #expect(sections[1].results.first?.isOpen == true)
+  #expect(sections.first?.id == "open")
+  #expect(sections.first?.results.first?.action == .open(
+    NavigationInput.destination(for: "budget")!))
+  #expect(!sections.results.contains { if case .providerSearch = $0.action { true } else { false } })
 
   let narrowed = CommandLauncher.sections(
     for: "gmail budget", filter: .actions, in: session, sources: sources)
   #expect(narrowed.results.map(\.title) == ["Search Gmail for “budget”"])
 }
 
-@Test func typedWebAddressLeadsConnectedProviderSearches() {
+@Test func typedWebAddressDoesNotAddConnectedProviderSearches() {
   let session = BrowserSession.fresh()
   var sources = CommandSources()
   sources.providerSearch = .google
@@ -69,13 +62,14 @@ import Testing
     for: "https://example.com/path", filter: nil, in: session, sources: sources)
 
   #expect(sections.results.first?.action == .open(URL(string: "https://example.com/path")!))
-  #expect(sections.results.filter { $0.symbol == "magnifyingglass" }.count == 3)
+  #expect(sections.results.filter { $0.symbol == "magnifyingglass" }.isEmpty)
 }
 
 @Test func providerSearchRowsRequireOneOfTheSupportedConnectedProviders() throws {
   #expect(CommandProviderSearch.results(for: "budget", provider: nil).isEmpty)
-  #expect(CommandProviderSearch.results(for: "budget", provider: .google).count == 3)
-  #expect(CommandProviderSearch.results(for: "budget", provider: .microsoft).count == 3)
+  #expect(CommandProviderSearch.results(for: "budget", provider: .google).isEmpty)
+  #expect(CommandProviderSearch.results(for: "gmail budget", provider: .google).count == 1)
+  #expect(CommandProviderSearch.results(for: "outlook budget", provider: .microsoft).count == 1)
   #expect(CommandProviderSearch.results(for: "gmail budget", provider: .microsoft).isEmpty)
 }
 

@@ -115,6 +115,9 @@ public enum CommandProviderSearch {
     guard !query.isEmpty else { return [] }
     let services = provider == .google ? google : microsoft
     let lowered = query.lowercased()
+    guard (google + microsoft).contains(where: {
+      hasKeywordSeparator(lowered, keyword: $0.keyword)
+    }) else { return [] }
     let requestedService = (google + microsoft).first {
       hasKeywordSeparator(lowered, keyword: $0.keyword)
     }
@@ -250,13 +253,16 @@ public enum CommandSearch {
     searchEngine: BrowserSearchEngine, limit: Int
   ) -> [CommandResult] {
     let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
-    let openURL = NavigationInput.destination(for: query, searchEngine: searchEngine)
-    let candidateLimit = openURL == nil ? limit : limit - 1
     let typedAddress = NavigationInput.address(for: query)
+    let completion = typedAddress == nil ? nil : recentURLCompletion(
+      for: query, history: history, profileID: session.selectedSpace.profileID)
+    let targetAddress = completion ?? typedAddress
+    let openURL = completion ?? NavigationInput.destination(for: query, searchEngine: searchEngine)
+    let candidateLimit = openURL == nil ? limit : limit - 1
     var results: [CommandResult] = []
     var leadingIndex: Int?
     func leads(_ result: CommandResult, _ url: URL?) -> Bool {
-      if let typedAddress { return CommandText.sameAddress(url, typedAddress) }
+      if let targetAddress { return CommandText.sameAddress(url, targetAddress) }
       return CommandText.siteStarts(with: query, url)
         || CommandText.titleStarts(with: query, result.title)
     }
@@ -268,7 +274,7 @@ public enum CommandSearch {
         results[candidateLimit - 1] = result
         leadingIndex = candidateLimit - 1
       }
-      return results.count >= candidateLimit && (typedAddress == nil || leadingIndex != nil)
+      return results.count >= candidateLimit && (targetAddress == nil || leadingIndex != nil)
     }
 
     let orderedSpaces = session.spaces.sorted {
@@ -294,7 +300,7 @@ public enum CommandSearch {
       }
     }
     search: for space in orderedSpaces
-    where results.count < candidateLimit || (typedAddress != nil && leadingIndex == nil) {
+    where results.count < candidateLimit || (targetAddress != nil && leadingIndex == nil) {
       let foldersByID = Dictionary(
         space.folders.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
       var folderPaths: [UUID?: String] = [nil: ""]
@@ -411,7 +417,7 @@ public enum CommandSearch {
     }
     guard let openURL else { return results }
     let openRow = CommandResult(
-      title: query,
+      title: completion?.absoluteString ?? query,
       subtitle: BrowserLocalization.format(
         "Open in %@", arguments: [.string(session.selectedSpace.name)]),
       symbol: "arrow.up.right", action: .open(openURL))
@@ -422,6 +428,25 @@ public enum CommandSearch {
       results.insert(openRow, at: 0)
     }
     return results
+  }
+
+  private static func recentURLCompletion(
+    for query: String, history: [BrowserHistoryEntry], profileID: UUID
+  ) -> URL? {
+    let prefix = query.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !prefix.isEmpty else { return nil }
+    var match: (url: URL, lastVisit: Date)?
+    for entry in history where entry.profileID == profileID {
+      guard let url = entry.destination else { continue }
+      let address = url.absoluteString.lowercased()
+      let withoutScheme = address.replacingOccurrences(
+        of: #"^https?://"#, with: "", options: .regularExpression)
+      guard address.hasPrefix(prefix) || withoutScheme.hasPrefix(prefix) else { continue }
+      if match.map({ entry.lastVisit > $0.lastVisit }) ?? true {
+        match = (url, entry.lastVisit)
+      }
+    }
+    return match?.url
   }
 
 }

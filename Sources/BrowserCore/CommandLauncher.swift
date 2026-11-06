@@ -214,31 +214,19 @@ public enum CommandLauncher {
 
   // MARK: Typed query
 
-  /// Sections follow `CommandSearch`'s default row: when Open leads (a typed address, or text no
-  /// result's site or title starts with) it comes first, so Enter navigates or searches.
-  /// Otherwise the ranked hits lead, matching Actions come next and Open follows them.
+  /// Plain text defaults to web search. Typed addresses default to opening the address.
   static func searchSections(
     for query: String, in session: BrowserSession, sources: CommandSources
   ) -> [CommandSection] {
-    let actionLimit = searchActionLimit + (sources.providerSearch == nil ? 0 : 3)
-    let actions = actionSection(
-      for: query, sources: sources, limit: actionLimit)
-    let hasProviderSearch = actions.results.contains {
-      if case .providerSearch = $0.action { return true }
-      return false
-    }
+    let actions = actionSection(for: query, sources: sources, limit: searchActionLimit)
     let results = CommandSearch.results(
       for: query, in: session, bookmarks: sources.bookmarks, history: sources.history,
       searchEngine: sources.searchEngine,
       limit: CommandSearch.resultLimit - actions.results.count)
     let hits = CommandSection(id: "top-hits", title: "", results: results.filter { !$0.isOpen })
     let open = CommandSection(id: "open", title: "", results: results.filter(\.isOpen))
-    if hasProviderSearch, NavigationInput.address(for: query) == nil {
-      return [hits, actions, open]
-    }
     if hits.results.isEmpty { return [open, actions] }
-    if results.first?.isOpen == true { return [open, hits, actions] }
-    return [hits, actions, open]
+    return [open, hits, actions]
   }
 
   // MARK: Chips

@@ -11,6 +11,7 @@ enum ShaarDevToolsSection: String, CaseIterable {
   case network = "Network"
   case application = "Application"
   case performance = "Performance"
+  case sources = "Sources"
 }
 
 enum ShaarDevToolsDock: String, CaseIterable {
@@ -141,6 +142,7 @@ final class ShaarDevToolsModel {
   let phase2: ShaarPhase2Model
   let application: ShaarApplicationModel
   let performance: ShaarPerformanceModel
+  let sources: ShaarSourcesModel
   @ObservationIgnored private let transport: any ShaarDevToolsEventTransport
   @ObservationIgnored private var eventTask: Task<Void, Never>?
   @ObservationIgnored private var streamGeneration = 0
@@ -157,6 +159,7 @@ final class ShaarDevToolsModel {
     self.phase2 = phase2
     application = ShaarApplicationModel(phase2: phase2)
     performance = ShaarPerformanceModel(target: target, phase2: phase2)
+    sources = ShaarSourcesModel(phase2: phase2)
   }
 
   func open(inspector: InspectorModel) {
@@ -181,6 +184,7 @@ final class ShaarDevToolsModel {
     phase2.close()
     application.reset()
     performance.reset()
+    sources.reset()
     ownedInspector?.close()
     ownedInspector = nil
     isOpen = false
@@ -196,6 +200,7 @@ final class ShaarDevToolsModel {
     network.clearSelection()
     phase2.updateTarget(target, committed: committed)
     application.reset()
+    sources.reset()
     streamGeneration += 1
     eventTask?.cancel()
     eventTask = nil

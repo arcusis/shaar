@@ -120,6 +120,12 @@ struct ShaarDevToolsPanel: View {
       } else {
         unavailablePanel
       }
+    case .sources:
+      if model.phase2.available {
+        ShaarSourcesPanel(model: model.sources, inspector: inspector)
+      } else {
+        unavailablePanel
+      }
     }
   }
 
@@ -160,6 +166,7 @@ struct ShaarDevToolsPanel: View {
   private var unavailableMessage: String {
     if model.section == .application { return "Live Application needs engine shaar.17" }
     if model.section == .performance { return "Live Performance needs engine shaar.17" }
+    if model.section == .sources { return "Live Sources need engine shaar.17" }
     return "Live console and network need engine shaar.17"
   }
 
@@ -194,6 +201,11 @@ struct ShaarDevToolsPanel: View {
       return model.phase2.available
         ? "Performance data is scoped to this tab"
         : "Performance data needs engine shaar.17"
+    }
+    if model.section == .sources {
+      return model.phase2.available
+        ? "Source resources are scoped to this tab"
+        : "Sources need engine shaar.17"
     }
     guard model.streamAvailable else { return "Console commands need engine shaar.17" }
     if model.section == .network { return "Network requests are scoped to this tab" }

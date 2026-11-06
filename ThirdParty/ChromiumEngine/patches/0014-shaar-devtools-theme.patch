@@ -1,0 +1,256 @@
+--- a/chrome/browser/devtools/devtools_ui_bindings.cc
++++ b/chrome/browser/devtools/devtools_ui_bindings.cc
+@@ -2346,6 +2346,16 @@
+           extensions::switches::AreExtensionsOnExtensionURLsAllowed()));
+ #endif
+ 
++  const bool is_shaar_embedder =
++      base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder");
++  response_dict.Set("isShaarEmbedder", is_shaar_embedder);
++  if (is_shaar_embedder) {
++    response_dict.FindDict("aidaAvailability")->Set("enabled", false);
++    response_dict.Set("devToolsGlobalAiButton",
++                      base::DictValue().Set("enabled", false));
++    response_dict.FindDict("devToolsConsoleInsightsTeasers")
++        ->Set("enabled", false);
++  }
+   return response_dict;
+ }
+ 
+--- a/third_party/devtools-frontend/src/front_end/core/root/Runtime.ts
++++ b/third_party/devtools-frontend/src/front_end/core/root/Runtime.ts
+@@ -580,6 +580,7 @@
+    * or guest mode, rather than a "normal" profile.
+    */
+   isOffTheRecord: boolean,
++  isShaarEmbedder: boolean,
+   devToolsEnableOriginBoundCookies: HostConfigEnableOriginBoundCookies,
+   devToolsAnimationStylesInStylesTab: HostConfigAnimationStylesInStylesTab,
+   devToolsJpegXlImageFormat: HostConfigJpegXlImageFormat,
+--- a/third_party/devtools-frontend/src/front_end/entrypoints/main/MainImpl.ts
++++ b/third_party/devtools-frontend/src/front_end/entrypoints/main/MainImpl.ts
+@@ -198,6 +198,9 @@
+ 
+     console.timeStamp('Main._gotPreferences');
+     this.#initializeGlobalsForLayoutTests();
++    if (config.isShaarEmbedder) {
++      this.#configureShaarFrontend();
++    }
+     Object.assign(Root.Runtime.hostConfig, config);
+ 
+     const creationOptions: Foundation.Universe.CreationOptions = {
+@@ -213,6 +216,9 @@
+       initAutomaticFilesystem: true,
+     };
+     this.#universe = new Foundation.Universe.Universe(creationOptions);
++    if (config.isShaarEmbedder && !('apca' in prefs)) {
++      this.#universe.settings.resolve(SDK.SDKSettings.apcaSettingDescriptor).set(true);
++    }
+     Root.DevToolsContext.setGlobalInstance(this.#universe.context as Root.DevToolsContext.WritableDevToolsContext);
+     // Needed to allow CD4A to access the server bridge class.
+     (globalThis as unknown as {universe: Foundation.Universe.Universe}).universe = this.#universe;
+@@ -254,6 +260,24 @@
+     }
+ 
+     void this.#createAppUI();
++  }
++
++  #configureShaarFrontend(): void {
++    document.documentElement.classList.add('shaar-theme');
++
++    UI.ViewManager.maybeRemoveViewExtension('release-note');
++    UI.ActionRegistration.maybeRemoveActionExtension('help.release-notes');
++    UI.ActionRegistration.maybeRemoveActionExtension('help.report-issue');
++    Common.Settings.maybeRemoveSettingExtension('help.show-release-note');
++    UI.ContextMenu.maybeRemoveItem({
++      location: UI.ContextMenu.ItemLocation.MAIN_MENU_HELP_DEFAULT,
++      actionId: 'help.release-notes',
++    });
++    UI.ContextMenu.maybeRemoveItem({
++      location: UI.ContextMenu.ItemLocation.MAIN_MENU_HELP_DEFAULT,
++      actionId: 'help.report-issue',
++    });
++    Common.Runnable.maybeRemoveLateInitializationRunnable('whats-new');
+   }
+ 
+   #initializeGlobalsForLayoutTests(): void {
+@@ -878,14 +902,15 @@
+ 
+     contextMenu.defaultSection().appendAction('freestyler.main-menu', undefined, /* optional */ true);
+ 
+-    contextMenu.defaultSection().appendItem(i18nString(UIStrings.getDevToolsMcp), () => {
+-      UIHelpers.openInNewTab('https://github.com/ChromeDevTools/chrome-devtools-mcp');
+-    }, {
+-      additionalElement: UI.UIUtils.maybeCreateNewBadge('get-devtools-mcp'),
+-      jslogContext: 'get-devtools-mcp',
+-    });
+-
+-    contextMenu.defaultSection().appendSeparator();
++    if (!Root.Runtime.hostConfig.isShaarEmbedder) {
++      contextMenu.defaultSection().appendItem(i18nString(UIStrings.getDevToolsMcp), () => {
++        UIHelpers.openInNewTab('https://github.com/ChromeDevTools/chrome-devtools-mcp');
++      }, {
++        additionalElement: UI.UIUtils.maybeCreateNewBadge('get-devtools-mcp'),
++        jslogContext: 'get-devtools-mcp',
++      });
++      contextMenu.defaultSection().appendSeparator();
++    }
+ 
+     if (dockController.dockSide() === UI.DockController.DockState.UNDOCKED) {
+       const mainTarget = SDK.TargetManager.TargetManager.instance().primaryPageTarget();
+--- a/third_party/devtools-frontend/src/front_end/ui/legacy/theme_support/ThemeSupport.ts
++++ b/third_party/devtools-frontend/src/front_end/ui/legacy/theme_support/ThemeSupport.ts
+@@ -105,6 +105,9 @@
+    * `window.document` in which this ThemeSupport instance was created.
+    */
+   addDocumentToTheme(document: Document): void {
++    if (Root.Runtime.hostConfig.isShaarEmbedder) {
++      document.documentElement.classList.add('shaar-theme');
++    }
+     this.#documentsToTheme.add(document);
+     this.#fetchColorsAndApplyHostTheme(document);
+   }
+--- a/third_party/devtools-frontend/src/front_end/panels/settings/SettingsScreen.ts
++++ b/third_party/devtools-frontend/src/front_end/panels/settings/SettingsScreen.ts
+@@ -460,7 +460,7 @@
+                           }}>
+                         </devtools-button>
+                       ` : Lit.nothing}
+-                      ${experiment.feedbackLink ? html`
++                      ${experiment.feedbackLink && !Root.Runtime.hostConfig.isShaarEmbedder ? html`
+                         <devtools-link
+                           class="feedback-link"
+                           href=${experiment.feedbackLink}
+--- a/third_party/devtools-frontend/src/front_end/design_system_tokens.css
++++ b/third_party/devtools-frontend/src/front_end/design_system_tokens.css
+@@ -1060,3 +1060,45 @@
+   --ref-palette-indigo99: rgb(255 251 255 / 100%);
+   --ref-palette-indigo100: rgb(255 255 255 / 100%);
+ }
++
++/* Shaar DevTools palette. */
++:root.shaar-theme {
++  --default-font-family: system-ui, sans-serif;
++  --sys-color-surface: #fbfcfd;
++  --sys-color-base: #f2f5f7;
++  --sys-color-base-container: #f7f9fa;
++  --sys-color-base-container-elevated: #ffffff;
++  --sys-color-on-surface: #202b35;
++  --sys-color-on-surface-subtle: #586877;
++  --sys-color-on-base: #202b35;
++  --sys-color-primary: #39758f;
++  --sys-color-on-primary: #ffffff;
++  --sys-color-tonal-container: #e6f0f4;
++  --sys-color-on-tonal-container: #254d61;
++  --sys-color-outline: #8999a7;
++  --sys-color-divider: #d8e0e5;
++  --sys-color-divider-prominent: #aab8c1;
++  --sys-color-state-focus-ring: #39758f;
++  --sys-color-state-focus-select: #d5e9f0;
++  --sys-color-cdt-base: var(--sys-color-base-container);
++}
++
++:root.shaar-theme.theme-with-dark-background {
++  --sys-color-surface: #171f26;
++  --sys-color-base: #1c2730;
++  --sys-color-base-container: #202c35;
++  --sys-color-base-container-elevated: #283640;
++  --sys-color-on-surface: #e8eef1;
++  --sys-color-on-surface-subtle: #aebfc8;
++  --sys-color-on-base: #e8eef1;
++  --sys-color-primary: #8fc6dc;
++  --sys-color-on-primary: #173846;
++  --sys-color-tonal-container: #294453;
++  --sys-color-on-tonal-container: #d8ecf4;
++  --sys-color-outline: #8195a0;
++  --sys-color-divider: #374a55;
++  --sys-color-divider-prominent: #657a86;
++  --sys-color-state-focus-ring: #8fc6dc;
++  --sys-color-state-focus-select: #315567;
++  --sys-color-cdt-base: var(--sys-color-base-container);
++}
+--- a/third_party/devtools-frontend/src/front_end/panels/autofill/AutofillView.ts
++++ b/third_party/devtools-frontend/src/front_end/panels/autofill/AutofillView.ts
+@@ -10,6 +10,7 @@
+ import * as Host from '../../core/host/host.js';
+ import * as i18n from '../../core/i18n/i18n.js';
+ import type * as Platform from '../../core/platform/platform.js';
++import * as Root from '../../core/root/root.js';
+ import * as SDK from '../../core/sdk/sdk.js';
+ import * as Protocol from '../../generated/protocol.js';
+ import * as AutofillManager from '../../models/autofill_manager/autofill_manager.js';
+@@ -104,6 +105,15 @@
+ 
+ const str_ = i18n.i18n.registerUIStrings('panels/autofill/AutofillView.ts', UIStrings);
+ export const i18nString: i18n.LocalizeString = i18n.i18n.getLocalizedString.bind(undefined, str_);
++
++function renderAutofillFeedback(): Lit.LitTemplate {
++  if (Root.Runtime.hostConfig.isShaarEmbedder) {
++    return Lit.nothing;
++  }
++  return html`<devtools-link href=${AUTOFILL_FEEDBACK_URL} class="feedback link" jslogcontext="feedback">
++    ${i18nString(UIStrings.sendFeedback)}
++  </devtools-link>`;
++}
+ 
+ interface ViewInput {
+   autoOpenViewSetting: Common.Settings.Setting<boolean>;
+@@ -236,7 +246,7 @@
+                 title=${i18nString(UIStrings.autoShowTooltip)}>
+               ${i18nString(UIStrings.autoShow)}
+             </devtools-checkbox>
+-            <devtools-link href=${AUTOFILL_FEEDBACK_URL} class="feedback link" jslogcontext="feedback">${i18nString(UIStrings.sendFeedback)}</devtools-link>
++            ${renderAutofillFeedback()}
+           </div>
+           <div class="placeholder-container" jslog=${VisualLogging.pane('autofill-empty')}>
+             <div class="empty-state">
+@@ -275,7 +285,7 @@
+                 ${i18nString(UIStrings.autoShow)}
+               </devtools-checkbox>
+             </div>
+-            <devtools-link href=${AUTOFILL_FEEDBACK_URL} class="feedback link" jslogcontext="feedback">${i18nString(UIStrings.sendFeedback)}</devtools-link>
++            ${renderAutofillFeedback()}
+           </div>
+           <div role="region" aria-label=${i18nString(UIStrings.addressPreview)}>
+             ${renderAddress()}
+--- a/third_party/devtools-frontend/src/front_end/panels/recorder/RecorderPanel.ts
++++ b/third_party/devtools-frontend/src/front_end/panels/recorder/RecorderPanel.ts
+@@ -18,7 +18,7 @@
+ import * as Dialogs from '../../ui/components/dialogs/dialogs.js';
+ import type * as Menus from '../../ui/components/menus/menus.js';
+ import * as UI from '../../ui/legacy/legacy.js';
+-import {Directives, html, type LitTemplate, render} from '../../ui/lit/lit.js';
++import {Directives, html, type LitTemplate, nothing, render} from '../../ui/lit/lit.js';
+ import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
+ 
+ import * as Converters from './converters/converters.js';
+@@ -262,6 +262,16 @@
+ }
+ 
+ export type View = (input: ViewInput, output: ViewOutput, target: DocumentFragment) => void;
++
++function renderRecorderFeedback(): LitTemplate {
++  if (Root.Runtime.hostConfig.isShaarEmbedder) {
++    return nothing;
++  }
++  return html`<div class="feedback">
++    <devtools-link class="devtools-link" title=${i18nString(UIStrings.sendFeedback)} href=${FEEDBACK_URL}
++        jslogcontext="feedback">${i18nString(UIStrings.sendFeedback)}</devtools-link>
++  </div>`;
++}
+ 
+ export const DEFAULT_VIEW: View = (input, output, target): void => {
+   function renderCurrentPage(): LitTemplate {
+@@ -558,11 +568,7 @@
+                 } as Buttons.Button.ButtonData
+               }
+             ></devtools-button>
+-            <div class="feedback">
+-              <devtools-link class="devtools-link" title=${i18nString(UIStrings.sendFeedback)} href=${
+-                FEEDBACK_URL
+-              } jslogcontext="feedback">${i18nString(UIStrings.sendFeedback)}</devtools-link>
+-            </div>
++            ${renderRecorderFeedback()}
+             <div class="separator"></div>
+             <devtools-shortcut-dialog
+               .data=${

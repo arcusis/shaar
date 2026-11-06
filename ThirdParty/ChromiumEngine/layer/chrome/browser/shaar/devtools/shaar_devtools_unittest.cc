@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #include "chrome/browser/shaar/devtools/shaar_devtools.h"
+#include "chrome/browser/shaar/devtools/shaar_devtools_panel.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
 
 #include <memory>
@@ -721,8 +722,47 @@ TEST(ShaarDevToolsTest, LifecycleEntryRegistersOnlyItsOperationRange) {
   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_PROBE_CAPTURE_TAB));
   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_UI_SHOW));
   EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_CONTROL_STATUS));
+  EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_PANEL_OPEN));
+  EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_PANEL_CLOSE));
+  EXPECT_NE(nullptr, registry.Find(SHAAR_OP_DEVTOOLS_PANEL_GET_RESPONSE_BODY));
   EXPECT_EQ(nullptr, registry.Find(SHAAR_OP_MEDIA_GET_STATE));
   EXPECT_NE(nullptr, registry.FindModule(SHAAR_MODULE_DEVTOOLS));
+}
+
+TEST(ShaarDevToolsPanelTest, ProjectsOnlyNamedFieldsFromAllowlistedEvents) {
+  std::string output;
+  EXPECT_TRUE(ProjectPanelEventForTesting(
+      R"({"method":"Network.requestWillBeSent","params":{"requestId":"r1","request":{"url":"https://example.test","method":"GET","headers":{"Cookie":"secret"},"postData":"secret"}}})",
+      42, &output));
+  auto parsed = base::JSONReader::Read(output, base::JSON_PARSE_RFC);
+  ASSERT_TRUE(parsed && parsed->is_dict());
+  EXPECT_EQ(4, parsed->GetDict().FindInt("eventID"));
+  EXPECT_EQ(42, parsed->GetDict().FindInt("leaseID"));
+  EXPECT_EQ("r1", *parsed->GetDict().FindDict("data")->FindString("requestID"));
+  EXPECT_EQ(std::string::npos, output.find("secret"));
+  EXPECT_EQ(std::string::npos, output.find("headers"));
+  EXPECT_FALSE(ProjectPanelEventForTesting(
+      R"({"method":"Runtime.evaluate","params":{"expression":"secret"}})",
+      42, &output));
+  EXPECT_FALSE(ProjectPanelEventForTesting(
+      R"({"method":"Network.requestWillBeSent","params":{}})",
+      0, &output));
+}
+
+TEST(ShaarDevToolsPanelTest, ClipsTextAndRejectsUnboundedProtocolInput) {
+  std::string output;
+  const std::string message =
+      R"({"method":"Log.entryAdded","params":{"entry":{"text":")" +
+      std::string(4097, 'x') + R"(","level":"warning"}}})";
+  EXPECT_TRUE(ProjectPanelEventForTesting(message, 1, &output));
+  auto parsed = base::JSONReader::Read(output, base::JSON_PARSE_RFC);
+  ASSERT_TRUE(parsed && parsed->is_dict());
+  const auto* data = parsed->GetDict().FindDict("data");
+  ASSERT_NE(nullptr, data);
+  EXPECT_EQ(4096u, data->FindString("text")->size());
+  EXPECT_EQ(true, data->FindBool("truncated"));
+  EXPECT_FALSE(ProjectPanelEventForTesting(
+      std::string(257 * 1024, 'x'), 1, &output));
 }
 
 }  // namespace

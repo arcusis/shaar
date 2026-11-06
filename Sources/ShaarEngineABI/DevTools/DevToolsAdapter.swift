@@ -14,11 +14,15 @@ public enum ShaarDevToolsOperation: UInt32, Sendable {
   case controlEnable = 1005
   case controlDisable = 1006
   case controlStatus = 1007
+  case panelOpen = 1009
+  case panelClose = 1010
+  case panelGetResponseBody = 1011
 }
 
 public enum ShaarDevToolsCapability: UInt32, Sendable {
   case inspector = 1
   case developer = 2
+  case devToolsPanel = 3
 }
 
 public enum ShaarDevToolsCommand: UInt32, CaseIterable, Sendable {
@@ -72,6 +76,8 @@ public enum ShaarDevToolsCommand: UInt32, CaseIterable, Sendable {
       return rawValue <= 25
     case .developer:
       return rawValue <= 4 || (15...18).contains(rawValue) || (26...40).contains(rawValue)
+    case .devToolsPanel:
+      return false
     }
   }
 }
@@ -266,6 +272,70 @@ public struct ShaarDevToolsAdapter: Sendable {
       ShaarDevToolsRequest(
         operation: .state, scope: scope, windowID: windowID, tabID: tabID,
         payload: Data("{\"schemaVersion\":1}".utf8)), completion: completion)
+  }
+
+  public func openPanel(
+    scope: ShaarNavigationScope, windowID: String, tabID: String,
+    completion: @escaping @Sendable (Result<UInt32, ShaarEngineError>) -> Void
+  ) throws -> UInt64 {
+    return try submitPanel(.panelOpen, fields: [:], scope: scope, windowID: windowID, tabID: tabID) {
+      result in
+      completion(result.flatMap { payload in
+        guard let object = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
+          Set(object.keys) == ["schemaVersion", "leaseID"],
+          object["schemaVersion"] as? Int == 1,
+          let leaseID = object["leaseID"] as? Int,
+          leaseID > 0, let value = UInt32(exactly: leaseID)
+        else { return .failure(.invalidEvent("invalid panel lease reply")) }
+        return .success(value)
+      })
+    }
+  }
+
+  public func closePanel(
+    leaseID: UInt32, scope: ShaarNavigationScope, windowID: String, tabID: String,
+    completion: @escaping @Sendable (Result<Data, ShaarEngineError>) -> Void
+  ) throws -> UInt64 {
+    guard leaseID > 0 else { throw ShaarEngineError.invalidEvent("invalid panel lease") }
+    return try submitPanel(.panelClose, fields: ["leaseID": leaseID], scope: scope,
+                           windowID: windowID, tabID: tabID, completion: completion)
+  }
+
+  public func getPanelResponseBody(
+    leaseID: UInt32, requestID: String, scope: ShaarNavigationScope,
+    windowID: String, tabID: String,
+    completion: @escaping @Sendable (Result<ShaarDevToolsResponseBody, ShaarEngineError>) -> Void
+  ) throws -> UInt64 {
+    guard leaseID > 0, !requestID.isEmpty, requestID.utf8.count <= 128 else {
+      throw ShaarEngineError.invalidEvent("invalid panel response request")
+    }
+    return try submitPanel(
+      .panelGetResponseBody, fields: ["leaseID": leaseID, "requestID": requestID],
+      scope: scope, windowID: windowID, tabID: tabID
+    ) { result in
+      completion(result.flatMap { data in
+        guard let body = ShaarDevToolsResponseBody.decode(data) else {
+          return .failure(.invalidEvent("invalid panel response body"))
+        }
+        return .success(body)
+      })
+    }
+  }
+
+  private func submitPanel(
+    _ operation: ShaarDevToolsOperation, fields: [String: Any],
+    scope: ShaarNavigationScope, windowID: String, tabID: String,
+    completion: @escaping @Sendable (Result<Data, ShaarEngineError>) -> Void
+  ) throws -> UInt64 {
+    guard !scope.profileID.isEmpty, scope.sessionID.map({ !$0.isEmpty }) ?? true,
+      !windowID.isEmpty, !tabID.isEmpty
+    else { throw ShaarEngineError.invalidEvent("invalid panel target") }
+    var envelope = fields
+    envelope["schemaVersion"] = 1
+    let payload = try JSONSerialization.data(withJSONObject: envelope, options: [.sortedKeys])
+    return try engine.submit(ShaarDevToolsRequest(
+      operation: operation, scope: scope, windowID: windowID, tabID: tabID,
+      payload: payload), completion: completion)
   }
 }
 

@@ -17,6 +17,7 @@
 #include "base/functional/callback.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
+#include "base/logging.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/bind_post_task.h"
@@ -199,6 +200,7 @@ void OnProfileReady(shaar_profile* handle,
   std::string framework_failure;
   if (!shaar::extensions_host::RegisterBundledFrameworkDevTools(
           profile, &framework_failure)) {
+    LOG(ERROR) << "Shaar framework DevTools unavailable: " << framework_failure;
     const std::string framework_payload =
         "{\"kind\":\"frameworkDevToolsUnavailable\",\"schemaVersion\":1,\"reason\":\"" +
         framework_failure + "\"}";

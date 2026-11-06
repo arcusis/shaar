@@ -173,6 +173,8 @@ typedef enum {
   SHAAR_OP_EXTENSION_WEB_STORE_ZOOM = 805,
   SHAAR_OP_EXTENSION_ACTION_STATE = 806,
   SHAAR_OP_EXTENSION_MANAGER_OPEN = 807,
+  /* Testing only: audit the three vetted bundled component registrations. */
+  SHAAR_OP_PROBE_FRAMEWORK_DEVTOOLS = 890,
 
   // BEGIN find
   SHAAR_OP_TAB_FIND = 900,

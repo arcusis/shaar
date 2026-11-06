@@ -60,8 +60,11 @@ final class DevToolsRouteProbe {
       engine.liveTabs.contains(tab) && engine.pages[tab]?.loading == false
         && runtime.view(forTabID: identity)?.superview != nil
     }
-    guard let target = engine.siteControlTarget else { throw Failure("No selected target") }
-    try expect(engine.showDeveloperTools(for: target), "open selected tab DevTools")
+    guard let target = engine.siteControlTarget, target.tabID == tab else {
+      throw Failure("No selected target")
+    }
+    try await verifyFrameworkDevTools(profileID: target.profileID.uuidString)
+    try expect(engine.openChromiumDeveloperTools(for: tab), "open selected tab DevTools")
     try await wait("DevTools docks in the hidden Shaar host") {
       let audit = self.dockAudit(identity)
       return audit?["open"] as? Bool == true && audit?["sameContainer"] as? Bool == true
@@ -117,6 +120,7 @@ final class DevToolsRouteProbe {
     try await wait("DevTools close leaves the page alive") {
       engine.liveTabs.contains(tab) && runtime.devToolsView(forTabID: identity) == nil
     }
+    try await verifyAgentBridge(tabID: identity, target: target)
     store.perform(.space(returningTo))
     try expect(store.removeSpace(space), "close the isolated DevTools Space")
   }
@@ -145,6 +149,160 @@ final class DevToolsRouteProbe {
         continuation.resume(returning: $0)
       }
     }
+  }
+
+  private func agentRequest(
+    operation: Int, tabID: String, target: SiteControlTarget
+  ) async -> (Data?, String?) {
+    await withCheckedContinuation { continuation in
+      engine.runtime.agentBridgeRequest(
+        UInt(operation), forTabID: tabID, profileID: target.profileID.uuidString,
+        windowID: engine.windowID
+      ) { value, error in
+        let data = value.flatMap { try? JSONSerialization.data(withJSONObject: $0) }
+        continuation.resume(returning: (data, error?.localizedDescription))
+      }
+    }
+  }
+
+  private func verifyFrameworkDevTools(profileID: String) async throws {
+    guard let runtime = engine.runtime as? ARCShaarRuntime else {
+      throw Failure("Framework DevTools audit needs the Shaar runtime")
+    }
+    let (data, failure): (Data?, String?) = await withCheckedContinuation { continuation in
+      runtime.probeFrameworkDevTools(forProfileID: profileID) { value, error in
+        let data = value.flatMap { try? JSONSerialization.data(withJSONObject: $0) }
+        continuation.resume(returning: (data, error?.localizedDescription))
+      }
+    }
+    guard failure == nil, let data,
+      let result = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+      let components = result["components"] as? [[String: Any]], components.count == 3,
+      components.allSatisfy({
+        $0["registered"] as? Bool == true && $0["enabled"] as? Bool == true
+      })
+    else {
+      let detail = failure ?? String(data: data ?? Data(), encoding: .utf8) ?? "no result"
+      throw Failure("Framework DevTools native audit failed: \(detail)")
+    }
+    checks.append("three bundled framework DevTools register and enable in the regular profile")
+  }
+
+  private func verifyAgentBridge(tabID: String, target: SiteControlTarget) async throws {
+    let (enabledData, error) = await agentRequest(operation: 1005, tabID: tabID, target: target)
+    guard error == nil, let enabledData,
+      let enabled = try JSONSerialization.jsonObject(with: enabledData) as? [String: Any],
+      enabled["enabled"] as? Bool == true,
+      let token = enabled["token"] as? String, token.count == 43,
+      let endpoint = enabled["wsEndpoint"] as? String,
+      let url = URL(string: endpoint), url.host() == "127.0.0.1"
+    else {
+      throw Failure(
+        "Agent bridge did not return a scoped loopback grant: \(String(describing: error))")
+    }
+    checks.append("agent bridge grants only the selected regular tab on loopback")
+    defer {
+      Task { _ = await self.agentRequest(operation: 1006, tabID: tabID, target: target) }
+    }
+    let session = URLSession(
+      configuration: {
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 5
+        return config
+      }())
+    defer { session.invalidateAndCancel() }
+    var discovery = URLRequest(url: URL(string: "http://127.0.0.1:\(url.port ?? 0)/json")!)
+    discovery.timeoutInterval = 5
+    let (_, response) = try await session.data(for: discovery)
+    let discoveryStatus = (response as? HTTPURLResponse)?.statusCode
+    try expect(
+      discoveryStatus == 403 || discoveryStatus == 404,
+      "agent bridge hides unauthenticated discovery (HTTP \(discoveryStatus ?? -1))")
+    var wrong = URLRequest(url: url)
+    wrong.setValue(
+      "Bearer \(String(repeating: "A", count: 43))", forHTTPHeaderField: "Authorization")
+    let rejected = session.webSocketTask(with: wrong)
+    rejected.resume()
+    do {
+      try await rejected.send(.string("{\"id\":1,\"method\":\"Target.getTargets\"}"))
+      _ = try await rejected.receive()
+      throw Failure("Agent bridge accepted a wrong token")
+    } catch is Failure {
+      throw Failure("Agent bridge accepted a wrong token")
+    } catch {
+      checks.append("agent bridge rejects the wrong bearer token")
+    }
+    rejected.cancel(with: .normalClosure, reason: nil)
+    let missing = session.webSocketTask(with: url)
+    missing.resume()
+    do {
+      try await missing.send(.string("{\"id\":1,\"method\":\"Target.getTargets\"}"))
+      _ = try await missing.receive()
+      throw Failure("Agent bridge accepted a missing token")
+    } catch is Failure {
+      throw Failure("Agent bridge accepted a missing token")
+    } catch {
+      checks.append("agent bridge rejects a missing bearer token")
+    }
+    missing.cancel(with: .normalClosure, reason: nil)
+    var authorized = URLRequest(url: url)
+    authorized.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    let socket = session.webSocketTask(with: authorized)
+    socket.resume()
+    defer { socket.cancel(with: .normalClosure, reason: nil) }
+    try await socket.send(.string("{\"id\":1,\"method\":\"Target.getTargets\"}"))
+    let targets = try await socket.receive()
+    guard case .string(let targetsJSON) = targets,
+      let targetsData = targetsJSON.data(using: .utf8),
+      let targetsObject = try JSONSerialization.jsonObject(with: targetsData) as? [String: Any],
+      let result = targetsObject["result"] as? [String: Any],
+      let targetInfos = result["targetInfos"] as? [[String: Any]], targetInfos.count == 1,
+      let targetID = targetInfos[0]["targetId"] as? String
+    else { throw Failure("Agent bridge did not expose exactly one target") }
+    checks.append("agent bridge discovers exactly one owned tab")
+    try await socket.send(
+      .string(
+        "{\"id\":2,\"method\":\"Target.attachToTarget\",\"params\":{\"targetId\":\"foreign-target\",\"flatten\":true}}"
+      ))
+    let foreign = try await socket.receive()
+    guard case .string(let foreignJSON) = foreign, foreignJSON.contains("error") else {
+      throw Failure("Agent bridge accepted a foreign target")
+    }
+    checks.append("agent bridge rejects a foreign target")
+    try await socket.send(.string("{\"id\":3,\"method\":\"Input.dispatchMouseEvent\"}"))
+    let input = try await socket.receive()
+    guard case .string(let inputJSON) = input, inputJSON.contains("error") else {
+      throw Failure("Agent bridge accepted input injection")
+    }
+    checks.append("agent bridge rejects input injection")
+    try await socket.send(
+      .string(
+        "{\"id\":4,\"method\":\"Target.attachToTarget\",\"params\":{\"targetId\":\"\(targetID)\",\"flatten\":true}}"
+      ))
+    let attached = try await socket.receive()
+    guard case .string(let attachedJSON) = attached, attachedJSON.contains("sessionId") else {
+      throw Failure("Agent bridge could not attach to its owned tab")
+    }
+    checks.append("agent bridge attaches to its owned tab")
+    try expect(
+      engine.runtime.navigateTabID(
+        tabID, profileID: target.profileID.uuidString, windowID: engine.windowID,
+        url: fixture.appending(path: "agent-bridge-revoked").absoluteString),
+      "navigate the granted tab")
+    var revoked = false
+    for _ in 0..<50 {
+      let (statusData, statusError) = await agentRequest(
+        operation: 1007, tabID: tabID, target: target)
+      if statusError == nil, let statusData,
+        let status = try? JSONSerialization.jsonObject(with: statusData) as? [String: Any],
+        status["enabled"] as? Bool == false
+      {
+        revoked = true
+        break
+      }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    try expect(revoked, "agent bridge revokes the grant on navigation")
   }
 
   private func wait(_ message: String, _ condition: () -> Bool) async throws {

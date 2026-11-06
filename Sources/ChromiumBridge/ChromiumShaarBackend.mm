@@ -957,7 +957,9 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   NSString *windowID = tabID ? _shaarTabWindows[tabID] : _shaarPrimaryWindowID;
   shaar_window *window = (shaar_window *)_shaarWindows[windowID].pointerValue;
   shaar_tab *tab = tabID ? (shaar_tab *)_shaarTabs[tabID].pointerValue : nullptr;
-  if (!_shaarEngine || !profile || !window || (tabID && (!tab ||
+  const BOOL profileOnly = operation == SHAAR_OP_EXTENSION_LIST ||
+      operation == SHAAR_OP_PROBE_FRAMEWORK_DEVTOOLS;
+  if (!_shaarEngine || !profile || (!profileOnly && !window) || (tabID && (!tab ||
       ![_shaarTabProfiles[tabID] isEqualToString:profileID]))) return NO;
   NSData *json = [NSJSONSerialization dataWithJSONObject:payload options:0 error:nil];
   if (!json) return NO;

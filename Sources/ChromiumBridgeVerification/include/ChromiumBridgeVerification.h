@@ -8,6 +8,12 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+@interface ARCShaarRuntime (FrameworkDevToolsVerification)
+/// Returns native component registration state only in SHAAR_ENGINE_TESTING mode.
+- (void)probeFrameworkDevToolsForProfileID:(NSString *)profileID
+    completion:(void (^)(NSDictionary<NSString *, id> * _Nullable, NSError * _Nullable))completion;
+@end
+
 // Verification interface for the ShaarVerification harness, imported from Swift as
 // `ChromiumBridgeVerification`. The app never imports it. Each entry point does nothing
 // unless the runtime started in testing mode with an owned, marked disposable probe root.

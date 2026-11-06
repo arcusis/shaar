@@ -748,7 +748,41 @@ void ARCCompletePrivateQuitDialogCancellation(
                  completion:(void (^)(NSString *))completion { completion(nil); }
 - (void)captureProbePopupID:(NSString *)popupID completion:(void (^)(NSData *))completion { completion(nil); }
 - (void)evaluateProbeUserGestureInTabID:(NSString *)tabID script:(NSString *)script
-                           completion:(void (^)(NSString *))completion { completion(nil); }
+                           completion:(void (^)(NSString *))completion {
+  static NSString *const kAuthoredGesture =
+      @"(()=>{document.getElementById('video').play();return {started:true};})()";
+  static NSString *const kAuthoredClipGesture =
+      @"(()=>{const c=document.getElementById('clip');c.currentTime=5;"
+       "c.play().then(()=>c.requestPictureInPicture());return {opened:true};})()";
+  BOOL clipGesture = [script isEqualToString:kAuthoredClipGesture];
+  if (![self isKindOfClass:ARCShaarRuntime.class] || !ProbeCaptureAllowed() ||
+      (![script isEqualToString:kAuthoredGesture] && !clipGesture)) {
+    completion(nil);
+    return;
+  }
+  ARCShaarRuntime *runtime = (ARCShaarRuntime *)self;
+  NSString *profileID = [runtime shaarDevToolsProfileIDForTabID:tabID];
+  NSString *windowID = [runtime windowIDForTabID:tabID];
+  if (![runtime shaarDevToolsOwnsTabID:tabID profileID:profileID
+                            windowID:windowID]) {
+    completion(nil);
+    return;
+  }
+  BOOL submitted = [runtime shaarDevToolsSubmit:SHAAR_OP_PROBE_MEDIA_GESTURE
+      tabID:tabID profileID:profileID windowID:windowID
+      payload:@{@"schemaVersion": @1, @"action": clipGesture ? @"playPiP" : @"play",
+                @"elementID": clipGesture ? @"clip" : @"video"}
+      completion:^(NSDictionary *reply, NSError *error) {
+        if (error || ![reply[clipGesture ? @"opened" : @"started"] boolValue]) {
+          completion(nil);
+          return;
+        }
+        completion(clipGesture ? @"{\"opened\":true}" : @"{\"started\":true}");
+      }];
+  if (!submitted) {
+    completion(nil);
+  }
+}
 - (void)clickProbePopupID:(NSString *)popupID buttonTitle:(NSString *)title
               completion:(void (^)(BOOL))completion { completion(NO); }
 - (void)clickProbeElementInTabID:(NSString *)tabID elementID:(NSString *)elementID

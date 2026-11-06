@@ -24,6 +24,42 @@ TEST(ShaarExtensionsModuleTest, ComponentExtensionsStayInternal) {
       ManifestLocation::kInternal));
 }
 
+TEST(ShaarExtensionsModuleTest, FrameworkDevToolsHavePinnedIdentities) {
+  EXPECT_EQ(shaar::extensions_host::FrameworkDevToolsID("react"),
+            "fmkadmapgofadopljbjfkapdkoienihi");
+  EXPECT_EQ(shaar::extensions_host::FrameworkDevToolsID("vue"),
+            "nhdogjmejiglipccpnnnanhbledajbpd");
+  EXPECT_EQ(shaar::extensions_host::FrameworkDevToolsID("angular"),
+            "ienfalfjdbdpebioblfackkekamfmbnh");
+  EXPECT_TRUE(shaar::extensions_host::FrameworkDevToolsID("other").empty());
+}
+
+TEST(ShaarExtensionsModuleTest, FrameworkDevToolsPathCannotEscapeBundle) {
+  base::ScopedTempDir bundle;
+  ASSERT_TRUE(bundle.CreateUniqueTempDir());
+  const base::FilePath root = bundle.GetPath().Append("FrameworkDevTools");
+  ASSERT_TRUE(base::CreateDirectory(root.Append("react")));
+  EXPECT_TRUE(shaar::extensions_host::ValidFrameworkDevToolsPath(
+      root, root.Append("react")));
+  EXPECT_FALSE(shaar::extensions_host::ValidFrameworkDevToolsPath(
+      root, root.Append("../foreign")));
+  EXPECT_FALSE(shaar::extensions_host::ValidFrameworkDevToolsPath(
+      root, root.Append("missing")));
+  ASSERT_TRUE(base::CreateSymbolicLink(root.Append("react"),
+                                       root.Append("linked")));
+  EXPECT_FALSE(shaar::extensions_host::ValidFrameworkDevToolsPath(
+      root, root.Append("linked")));
+}
+
+TEST(ShaarExtensionsModuleTest, FrameworkDevToolsManifestRejectsRemoteHosts) {
+  const std::string local = R"({"host_permissions":["http://localhost/*"],"content_scripts":[{"matches":["http://127.0.0.1/*"]}],"web_accessible_resources":[{"matches":["https://localhost/*"]}]})";
+  const std::string remote = R"({"host_permissions":["https://example.com/*"],"content_scripts":[{"matches":["http://localhost/*"]}]})";
+  const std::string remote_script = R"({"host_permissions":["http://localhost/*"],"content_scripts":[{"matches":["<all_urls>"]}]})";
+  EXPECT_TRUE(shaar::extensions_host::FrameworkDevToolsManifestIsLocal(local));
+  EXPECT_FALSE(shaar::extensions_host::FrameworkDevToolsManifestIsLocal(remote));
+  EXPECT_FALSE(shaar::extensions_host::FrameworkDevToolsManifestIsLocal(remote_script));
+}
+
 class EmptyProfileServices final : public shaar::ProfileServices {
  public:
   Profile* ResolveProfile(shaar_engine*, shaar_profile*) override {

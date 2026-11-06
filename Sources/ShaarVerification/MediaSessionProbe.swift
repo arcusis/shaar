@@ -377,9 +377,20 @@ final class MediaSessionProbe {
   }
 
   private func waitForPictureInPicture(_ tab: UUID, open: Bool) async throws {
-    try await waitUntil("picture-in-picture \(open ? "opens" : "closes")") {
-      await self.pictureInPictureOpen(tab) == open
-        && self.engine.autoPictureInPicture.openPages.contains(tab) == open
+    do {
+      try await waitUntil("picture-in-picture \(open ? "opens" : "closes")") {
+        await self.pictureInPictureOpen(tab) == open
+          && self.engine.autoPictureInPicture.openPages.contains(tab) == open
+      }
+    } catch {
+      let page =
+        await evaluate(
+          tab,
+          "({enabled:document.pictureInPictureEnabled,visibility:document.visibilityState,open:document.pictureInPictureElement!==null,videoReady:document.getElementById('video')?.readyState,videoPaused:document.getElementById('video')?.paused,videoSource:!!document.getElementById('video')?.srcObject,videoCurrentSrc:document.getElementById('video')?.currentSrc,videoPipDisabled:document.getElementById('video')?.disablePictureInPicture,pipError:document.documentElement.getAttribute('data-shaar-pip-error')})"
+        ) ?? [:]
+      throw MediaSessionProbeFailure(
+        "Picture-in-picture \(open ? "open" : "close") timed out: page=\(page), reported=\(engine.autoPictureInPicture.openPages.contains(tab))"
+      )
     }
   }
 
@@ -397,12 +408,17 @@ final class MediaSessionProbe {
   private func startPlayback(_ tab: UUID) async throws {
     let started = await evaluate(
       tab,
-      "(()=>{const video=document.getElementById('video');return video.play().then(()=>({started:!video.paused,readyState:video.readyState,videoWidth:video.videoWidth}));})()",
+      "(()=>{document.getElementById('video').play();return {started:true};})()",
       userGesture: true)
-    try expect(
-      started?["started"] as? Bool == true && (started?["readyState"] as? Int ?? 0) >= 2
-        && (started?["videoWidth"] as? Int ?? 0) > 0,
-      "fixture video starts on a user gesture and produces a frame")
+    try expect(started?["started"] as? Bool == true, "fixture video starts on a user gesture")
+    try await waitUntil("fixture video produces a decoded frame") {
+      let frame = await self.evaluate(
+        tab,
+        "({readyState:document.getElementById('video').readyState,videoWidth:document.getElementById('video').videoWidth})"
+      )
+      return (frame?["readyState"] as? Int ?? 0) >= 2
+        && (frame?["videoWidth"] as? Int ?? 0) > 0
+    }
   }
 
   private func expectHandled(_ action: MediaSessionAction, _ name: String, in media: UUID)

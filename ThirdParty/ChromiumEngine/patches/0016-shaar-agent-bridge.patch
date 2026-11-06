@@ -1,0 +1,572 @@
+--- a/content/public/browser/shaar_agent_bridge.h
++++ b/content/public/browser/shaar_agent_bridge.h
+@@ -0,0 +1,47 @@
++// Copyright 2026 Shaar contributors. MPL-2.0.
++#ifndef CONTENT_PUBLIC_BROWSER_SHAAR_AGENT_BRIDGE_H_
++#define CONTENT_PUBLIC_BROWSER_SHAAR_AGENT_BRIDGE_H_
++
++#include <cstddef>
++#include <memory>
++#include <string>
++#include <string_view>
++
++#include "content/common/content_export.h"
++
++class GURL;
++namespace content {
++class DevToolsAgentHost;
++class DevToolsAgentHostClient;
++class DevToolsSocketFactory;
++class RenderFrameHost;
++}
++
++// All callbacks are installed by the Shaar layer on the UI thread. A null
++// callback keeps the remote bridge unavailable.
++class ShaarAgentBridgeClient {
++ public:
++  virtual ~ShaarAgentBridgeClient() = default;
++  virtual bool FilterCommand(std::string& message, std::string* reply) = 0;
++  virtual bool FilterEvent(std::string& message) = 0;
++  virtual bool ShouldClose() const = 0;
++  virtual bool MayAttachToURL(const GURL& url, bool is_webui) = 0;
++  virtual bool MayAttachToRenderFrameHost(content::RenderFrameHost*) = 0;
++};
++
++extern CONTENT_EXPORT bool (*g_shaar_agent_bridge_factory)(
++    const content::DevToolsSocketFactory*);
++extern CONTENT_EXPORT bool (*g_shaar_agent_bridge_accepts)(
++    const content::DevToolsSocketFactory*, std::string_view token);
++extern CONTENT_EXPORT void (*g_shaar_agent_bridge_server)(
++    const content::DevToolsSocketFactory*, std::string_view browser_path,
++    int port, size_t connections);
++extern CONTENT_EXPORT std::unique_ptr<ShaarAgentBridgeClient> (*g_shaar_agent_bridge_client)(
++    const content::DevToolsSocketFactory*, content::DevToolsAgentHostClient*,
++    content::DevToolsAgentHost*);
++extern CONTENT_EXPORT bool (*g_shaar_agent_bridge_may_attach)(
++    content::DevToolsAgentHostClient*, content::DevToolsAgentHost*);
++extern CONTENT_EXPORT bool (*g_shaar_agent_bridge_may_input)(
++    content::DevToolsAgentHostClient*, content::RenderFrameHost*);
++
++#endif  // CONTENT_PUBLIC_BROWSER_SHAAR_AGENT_BRIDGE_H_
+--- a/content/public/browser/BUILD.gn
++++ b/content/public/browser/BUILD.gn
+@@ -154,6 +154,7 @@
+     "devtools_manager_delegate.h",
+     "devtools_network_transaction_factory.h",
+     "devtools_socket_factory.h",
++    "shaar_agent_bridge.h",
+     "digital_credentials_cross_device.h",
+     "digital_identity_interstitial_type.h",
+     "digital_identity_provider.cc",
+--- a/content/browser/devtools/devtools_http_handler.h
++++ b/content/browser/devtools/devtools_http_handler.h
+@@ -113,6 +113,7 @@
+ 
+   void DecompressAndSendJsonProtocol(int connection_id);
+   void ReportArdiaTokenServer();
++  void ReportShaarAgentBridgeServer();
+ 
+   // Returns the front end url without the host at the beginning.
+   std::string GetFrontendURLInternal(
+@@ -126,6 +127,7 @@
+ 
+   DevToolsAgentHost::RemoteDebuggingServerMode mode_;
+   bool ardia_token_mode_ = false;
++  bool shaar_agent_mode_ = false;
+   std::set<std::string> remote_allow_origins_;
+   // The thread used by the devtools handler to run server socket.
+   std::unique_ptr<base::Thread> thread_;
+--- a/content/browser/devtools/devtools_http_handler.cc
++++ b/content/browser/devtools/devtools_http_handler.cc
+@@ -69,6 +69,7 @@
+ #endif
+ 
+ #include "ardia/core/ac_content_hooks.h"  // nogncheck
++#include "content/public/browser/shaar_agent_bridge.h"
+ 
+ bool (*g_ardia_devtools_token_factory)(
+     const content::DevToolsSocketFactory* factory) = nullptr;
+@@ -88,6 +89,16 @@
+     const content::DevToolsSocketFactory* factory,
+     content::DevToolsAgentHostClient* client,
+     content::DevToolsAgentHost* host) = nullptr;
++
++bool (*g_shaar_agent_bridge_factory)(
++    const content::DevToolsSocketFactory*) = nullptr;
++bool (*g_shaar_agent_bridge_accepts)(
++    const content::DevToolsSocketFactory*, std::string_view) = nullptr;
++void (*g_shaar_agent_bridge_server)(
++    const content::DevToolsSocketFactory*, std::string_view, int, size_t) = nullptr;
++std::unique_ptr<ShaarAgentBridgeClient> (*g_shaar_agent_bridge_client)(
++    const content::DevToolsSocketFactory*, content::DevToolsAgentHostClient*,
++    content::DevToolsAgentHost*) = nullptr;
+ 
+ namespace content {
+ 
+@@ -183,7 +194,7 @@
+   ServerWrapper(base::WeakPtr<DevToolsHttpHandler> handler,
+                 std::unique_ptr<net::ServerSocket> socket,
+                 const base::FilePath& debug_frontend_dir,
+-                bool bundles_resources);
++                bool bundles_resources, bool shaar_agent_mode);
+ 
+   int GetLocalAddress(net::IPEndPoint* address);
+ 
+@@ -203,7 +214,7 @@
+ 
+  private:
+   // net::HttpServer::Delegate implementation.
+-  void OnConnect(int connection_id) override {}
++  void OnConnect(int connection_id) override;
+   void OnHttpRequest(int connection_id,
+                      const net::HttpServerRequestInfo& info) override;
+   void OnWebSocketRequest(int connection_id,
+@@ -215,16 +226,24 @@
+   std::unique_ptr<net::HttpServer> server_;
+   base::FilePath debug_frontend_dir_;
+   bool bundles_resources_;
++  bool shaar_agent_mode_;
+ };
+ 
+ ServerWrapper::ServerWrapper(base::WeakPtr<DevToolsHttpHandler> handler,
+                              std::unique_ptr<net::ServerSocket> socket,
+                              const base::FilePath& debug_frontend_dir,
+-                             bool bundles_resources)
++                             bool bundles_resources,
++                             bool shaar_agent_mode)
+     : handler_(handler),
+       server_(new net::HttpServer(std::move(socket), this)),
+       debug_frontend_dir_(debug_frontend_dir),
+-      bundles_resources_(bundles_resources) {}
++      bundles_resources_(bundles_resources),
++      shaar_agent_mode_(shaar_agent_mode) {}
++
++void ServerWrapper::OnConnect(int connection_id) {
++  if (shaar_agent_mode_)
++    server_->SetReceiveBufferSize(connection_id, 65536);
++}
+ 
+ int ServerWrapper::GetLocalAddress(net::IPEndPoint* address) {
+   return server_->GetLocalAddress(address);
+@@ -233,7 +252,8 @@
+ void ServerWrapper::AcceptWebSocket(int connection_id,
+                                     const net::HttpServerRequestInfo& request) {
+   server_->SetSendBufferSize(connection_id, kSendBufferSizeForDevTools);
+-  server_->SetReceiveBufferSize(connection_id, kReceiveBufferSizeForDevTools);
++  server_->SetReceiveBufferSize(connection_id,
++                                shaar_agent_mode_ ? 65536 : kReceiveBufferSizeForDevTools);
+   server_->AcceptWebSocket(connection_id, request,
+                            kDevtoolsHttpHandlerTrafficAnnotation);
+ }
+@@ -304,6 +324,10 @@
+         g_ardia_devtools_token_server) {
+       g_ardia_devtools_token_server(socket_factory, "", 0, 0);
+     }
++    if (handler && handler->shaar_agent_mode_ &&
++        g_shaar_agent_bridge_server) {
++      g_shaar_agent_bridge_server(socket_factory, "", 0, 0);
++    }
+     TerminateOnUI(std::move(thread),
+                   std::unique_ptr<ServerWrapper>(server_wrapper),
+                   std::unique_ptr<DevToolsSocketFactory>(socket_factory));
+@@ -317,7 +341,8 @@
+     const base::FilePath& output_directory,
+     const base::FilePath& debug_frontend_dir,
+     const std::string& browser_guid,
+-    bool bundles_resources) {
++    bool bundles_resources,
++    bool shaar_agent_mode) {
+   CHECK(thread->task_runner()->BelongsToCurrentThread(),
+         base::NotFatalUntil::M159);
+   std::unique_ptr<ServerWrapper> server_wrapper;
+@@ -327,7 +352,8 @@
+   if (server_socket) {
+     server_wrapper =
+         std::make_unique<ServerWrapper>(handler, std::move(server_socket),
+-                                        debug_frontend_dir, bundles_resources);
++                                        debug_frontend_dir, bundles_resources,
++                                        shaar_agent_mode);
+     if (server_wrapper->GetLocalAddress(ip_address.get()) != net::OK)
+       ip_address.reset();
+   } else {
+@@ -338,8 +364,10 @@
+     std::string message = base::StringPrintf(
+         "\nDevTools listening on ws://%s%s\n", ip_address->ToString().c_str(),
+         browser_guid.c_str());
+-    fprintf(stderr, "%s", message.c_str());
+-    fflush(stderr);
++    if (!shaar_agent_mode) {
++      fprintf(stderr, "%s", message.c_str());
++      fflush(stderr);
++    }
+ 
+     // Write this port to a well-known file in the profile directory
+     // so Telemetry, ChromeDriver, etc. can pick it up.
+@@ -376,16 +404,26 @@
+       ServerWrapper* server_wrapper,
+       int connection_id,
+       scoped_refptr<DevToolsAgentHost> agent_host,
+-      const DevToolsSocketFactory* ardia_token_factory = nullptr)
++      const DevToolsSocketFactory* token_factory = nullptr)
+       : task_runner_(std::move(task_runner)),
+         server_wrapper_(server_wrapper),
+         connection_id_(connection_id),
+         agent_host_(agent_host) {
+     CHECK_CURRENTLY_ON(BrowserThread::UI, base::NotFatalUntil::M159);
+-    if (ardia_token_factory) {
++    if (token_factory && g_shaar_agent_bridge_factory &&
++        g_shaar_agent_bridge_factory(token_factory)) {
++      if (g_shaar_agent_bridge_client) {
++        shaar_agent_client_ = g_shaar_agent_bridge_client(
++            token_factory, this, agent_host_.get());
++      }
++      if (!shaar_agent_client_) {
++        agent_host_ = nullptr;
++        return;
++      }
++    } else if (token_factory) {
+       if (g_ardia_devtools_token_client) {
+         ardia_token_client_ = g_ardia_devtools_token_client(
+-            ardia_token_factory, this, agent_host_.get());
++            token_factory, this, agent_host_.get());
+       }
+       if (!ardia_token_client_) {
+         agent_host_ = nullptr;
+@@ -399,6 +437,8 @@
+   bool attached() const { return attached_; }
+ 
+   bool MayAttachToURL(const GURL& url, bool is_webui) override {
++    if (shaar_agent_client_)
++      return shaar_agent_client_->MayAttachToURL(url, is_webui);
+     return ardia_token_client_
+                ? ardia_token_client_->MayAttachToURL(url, is_webui)
+                : DevToolsAgentHostClient::MayAttachToURL(url, is_webui);
+@@ -406,6 +446,8 @@
+ 
+   bool MayAttachToRenderFrameHost(
+       RenderFrameHost* render_frame_host) override {
++    if (shaar_agent_client_)
++      return shaar_agent_client_->MayAttachToRenderFrameHost(render_frame_host);
+     return ardia_token_client_
+                ? ardia_token_client_->MayAttachToRenderFrameHost(
+                      render_frame_host)
+@@ -414,11 +456,12 @@
+   }
+ 
+   bool MayReadLocalFiles() override {
+-    return !ardia_token_client_ && DevToolsAgentHostClient::MayReadLocalFiles();
++    return !ardia_token_client_ && !shaar_agent_client_ &&
++           DevToolsAgentHostClient::MayReadLocalFiles();
+   }
+ 
+   bool MayWriteLocalFiles() override {
+-    return !ardia_token_client_ &&
++    return !ardia_token_client_ && !shaar_agent_client_ &&
+            DevToolsAgentHostClient::MayWriteLocalFiles();
+   }
+ 
+@@ -451,7 +494,8 @@
+     CHECK_CURRENTLY_ON(BrowserThread::UI, base::NotFatalUntil::M159);
+     CHECK(agent_host == agent_host_.get(), base::NotFatalUntil::M159);
+     std::string text(message.begin(), message.end());
+-    if (ardia_token_client_ && !ardia_token_client_->FilterEvent(text)) {
++    if ((ardia_token_client_ && !ardia_token_client_->FilterEvent(text)) ||
++        (shaar_agent_client_ && !shaar_agent_client_->FilterEvent(text))) {
+       return;
+     }
+     SendToSocket(std::move(text));
+@@ -462,8 +506,25 @@
+     if (!agent_host_) {
+       return;
+     }
+-    if (ardia_token_client_) {
++    if (shaar_agent_client_ || ardia_token_client_) {
+       std::string command(message.begin(), message.end());
++      if (shaar_agent_client_) {
++        std::string reply;
++        if (command.size() > 65536 ||
++            !shaar_agent_client_->FilterCommand(command, &reply)) {
++          if (!reply.empty())
++            SendToSocket(std::move(reply));
++          if (command.size() > 65536 || shaar_agent_client_->ShouldClose()) {
++            task_runner_->PostTask(
++                FROM_HERE, base::BindOnce(&ServerWrapper::Close,
++                                          base::Unretained(server_wrapper_),
++                                          connection_id_));
++          }
++          return;
++        }
++        agent_host_->DispatchProtocolMessage(this, base::as_byte_span(command));
++        return;
++      }
+       std::string reply;
+       if (!ardia_token_client_->FilterCommand(command, &reply)) {
+         if (!reply.empty()) {
+@@ -489,6 +550,7 @@
+   const int connection_id_;
+   scoped_refptr<DevToolsAgentHost> agent_host_;
+   std::unique_ptr<ArdiaDevToolsTokenClient> ardia_token_client_;
++  std::unique_ptr<ShaarAgentBridgeClient> shaar_agent_client_;
+   bool attached_ = false;
+ 
+   void SendToSocket(std::string text) {
+@@ -527,6 +589,8 @@
+   if (ardia_token_mode_ && socket_factory_ && g_ardia_devtools_token_server) {
+     g_ardia_devtools_token_server(socket_factory_.get(), "", 0, 0);
+   }
++  if (shaar_agent_mode_ && socket_factory_ && g_shaar_agent_bridge_server)
++    g_shaar_agent_bridge_server(socket_factory_.get(), "", 0, 0);
+   TerminateOnUI(std::move(thread_), std::move(server_wrapper_),
+                 std::move(socket_factory_));
+   delegate_ = nullptr;
+@@ -582,6 +646,10 @@
+   }
+ 
+   server_->SetSendBufferSize(connection_id, kSendBufferSizeForDevTools);
++  if (shaar_agent_mode_) {
++    server_->Send404(connection_id, kDevtoolsHttpHandlerTrafficAnnotation);
++    return;
++  }
+ 
+   if (base::StartsWith(info.path, "/ardia/", base::CompareCase::SENSITIVE)) {
+     GetUIThreadTaskRunner({})->PostTask(
+@@ -649,6 +717,10 @@
+ }
+ 
+ void ServerWrapper::OnWebSocketMessage(int connection_id, std::string data) {
++  if (shaar_agent_mode_ && data.size() > 65536) {
++    server_->Close(connection_id);
++    return;
++  }
+   GetUIThreadTaskRunner({})->PostTask(
+       FROM_HERE, base::BindOnce(&DevToolsHttpHandler::OnWebSocketMessage,
+                                 handler_, connection_id, std::move(data)));
+@@ -709,7 +781,7 @@
+     const net::HttpServerRequestInfo& info) {
+   if (mode_ ==
+           DevToolsAgentHost::RemoteDebuggingServerMode::kWithApprovalOnly ||
+-      ardia_token_mode_) {
++      ardia_token_mode_ || shaar_agent_mode_) {
+     Send404(connection_id);
+     return;
+   }
+@@ -907,7 +979,7 @@
+ void DevToolsHttpHandler::OnDiscoveryPageRequest(int connection_id) {
+   if (mode_ ==
+           DevToolsAgentHost::RemoteDebuggingServerMode::kWithApprovalOnly ||
+-      ardia_token_mode_) {
++      ardia_token_mode_ || shaar_agent_mode_) {
+     Send404(connection_id);
+     return;
+   }
+@@ -926,7 +998,7 @@
+                                                     std::string_view path) {
+   if (mode_ ==
+           DevToolsAgentHost::RemoteDebuggingServerMode::kWithApprovalOnly ||
+-      ardia_token_mode_) {
++      ardia_token_mode_ || shaar_agent_mode_) {
+     Send404(connection_id);
+     return;
+   }
+@@ -965,9 +1037,21 @@
+   if (!thread_)
+     return;
+ 
+-  if (ardia_token_mode_ && request.headers.count("origin")) {
++  if ((ardia_token_mode_ || shaar_agent_mode_) &&
++      request.headers.count("origin")) {
+     Send403(connection_id, "Connection rejected");
+     return;
++  }
++  if (shaar_agent_mode_) {
++    const std::string authorization = request.GetHeaderValue("authorization");
++    if (request.path != browser_guid_ || request.path.size() > 128 ||
++        !base::StartsWith(authorization, "Bearer ") ||
++        !g_shaar_agent_bridge_accepts ||
++        !g_shaar_agent_bridge_accepts(
++            socket_factory_.get(), std::string_view(authorization).substr(7))) {
++      Send403(connection_id, "Connection rejected");
++      return;
++    }
+   }
+ 
+   if (request.headers.count("origin") &&
+@@ -1032,8 +1116,10 @@
+                                 base::Unretained(socket_factory_.get())));
+     auto browser_client = std::make_unique<DevToolsAgentHostClientImpl>(
+         thread_->task_runner(), server_wrapper_.get(), connection_id,
+-        browser_agent, ardia_token_mode_ ? socket_factory_.get() : nullptr);
+-    if (ardia_token_mode_ && !browser_client->attached()) {
++        browser_agent, (ardia_token_mode_ || shaar_agent_mode_)
++                           ? socket_factory_.get() : nullptr);
++    if ((ardia_token_mode_ || shaar_agent_mode_) &&
++        !browser_client->attached()) {
+       Send403(connection_id, "Connection rejected");
+       return;
+     }
+@@ -1042,7 +1128,8 @@
+     return;
+   }
+ 
+-  if (!base::StartsWith(routed.path, kPageUrlPrefix,
++  if (shaar_agent_mode_ ||
++      !base::StartsWith(routed.path, kPageUrlPrefix,
+                         base::CompareCase::SENSITIVE)) {
+     Send404(connection_id);
+     return;
+@@ -1078,9 +1165,10 @@
+ 
+ void DevToolsHttpHandler::OnClose(int connection_id) {
+   auto removed_count = connection_to_client_.erase(connection_id);
+-  if (removed_count > 0 && ardia_token_mode_) {
++  if (removed_count > 0 && ardia_token_mode_)
+     ReportArdiaTokenServer();
+-  }
++  if (removed_count > 0 && shaar_agent_mode_)
++    ReportShaarAgentBridgeServer();
+   if (delegate_ && removed_count > 0 &&
+       mode_ ==
+           DevToolsAgentHost::RemoteDebuggingServerMode::kWithApprovalOnly) {
+@@ -1097,8 +1185,10 @@
+     : mode_(mode), delegate_(delegate) {
+   ardia_token_mode_ = g_ardia_devtools_token_factory &&
+                       g_ardia_devtools_token_factory(socket_factory.get());
++  shaar_agent_mode_ = g_shaar_agent_bridge_factory &&
++                      g_shaar_agent_bridge_factory(socket_factory.get());
+   browser_guid_ =
+-      delegate_->IsBrowserTargetDiscoverable()
++      !shaar_agent_mode_ && delegate_->IsBrowserTargetDiscoverable()
+           ? kBrowserUrlPrefix
+           : base::StringPrintf(
+                 "%s/%s", kBrowserUrlPrefix,
+@@ -1114,7 +1204,8 @@
+         base::BindOnce(&StartServerOnHandlerThread, weak_factory_.GetWeakPtr(),
+                        std::move(thread), std::move(socket_factory),
+                        output_directory, debug_frontend_dir, browser_guid_,
+-                       delegate_->HasBundledFrontendResources()));
++                       delegate_->HasBundledFrontendResources(),
++                       shaar_agent_mode_));
+   }
+   std::string remote_allow_origins = base::ToLowerASCII(
+       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+@@ -1135,8 +1226,18 @@
+   server_wrapper_ = std::move(server_wrapper);
+   socket_factory_ = std::move(socket_factory);
+   server_ip_address_ = std::move(ip_address);
+-  if (ardia_token_mode_) {
++  if (ardia_token_mode_)
+     ReportArdiaTokenServer();
++  if (shaar_agent_mode_)
++    ReportShaarAgentBridgeServer();
++}
++
++void DevToolsHttpHandler::ReportShaarAgentBridgeServer() {
++  if (g_shaar_agent_bridge_server && socket_factory_) {
++    g_shaar_agent_bridge_server(
++        socket_factory_.get(), browser_guid_,
++        server_ip_address_ ? server_ip_address_->port() : 0,
++        connection_to_client_.size());
+   }
+ }
+ 
+@@ -1228,9 +1329,10 @@
+       DevToolsAgentHost::RemoteDebuggingServerMode::kWithApprovalOnly) {
+     delegate_->SetActiveWebSocketConnections(connection_to_client_.size());
+   }
+-  if (ardia_token_mode_) {
++  if (ardia_token_mode_)
+     ReportArdiaTokenServer();
+-  }
++  if (shaar_agent_mode_)
++    ReportShaarAgentBridgeServer();
+   thread_->task_runner()->PostTask(
+       FROM_HERE, base::BindOnce(&ServerWrapper::AcceptWebSocket,
+                                 base::Unretained(server_wrapper_.get()),
+--- a/content/browser/devtools/devtools_agent_host_impl.cc
++++ b/content/browser/devtools/devtools_agent_host_impl.cc
+@@ -47,9 +47,13 @@
+ #endif
+ 
+ #include "ardia/core/ac_content_hooks.h"  // nogncheck
++#include "content/public/browser/shaar_agent_bridge.h"
+ 
+ bool (*g_ardia_devtools_may_attach)(content::DevToolsAgentHostClient* root_client,
+                                     content::DevToolsAgentHost* host) = nullptr;
++
++bool (*g_shaar_agent_bridge_may_attach)(
++    content::DevToolsAgentHostClient*, content::DevToolsAgentHost*) = nullptr;
+ 
+ namespace content {
+ 
+@@ -329,6 +333,11 @@
+                                    this)) {
+     return false;
+   }
++  if (g_shaar_agent_bridge_may_attach &&
++      !g_shaar_agent_bridge_may_attach(
++          session->GetRootSession()->GetClient(), this)) {
++    return false;
++  }
+   session->SetAgentHost(this);
+   if (!AttachSession(session)) {
+     return false;
+--- a/content/browser/devtools/protocol/input_handler.cc
++++ b/content/browser/devtools/protocol/input_handler.cc
+@@ -57,11 +57,15 @@
+ #include "ui/gfx/range/range.h"
+ 
+ #include "ardia/core/ac_content_hooks.h"  // nogncheck
++#include "content/public/browser/shaar_agent_bridge.h"
+ #include "content/browser/devtools/devtools_session.h"
+ #include "content/public/browser/web_contents.h"
+ 
+ bool (*g_ardia_devtools_may_input)(content::DevToolsAgentHostClient* root_client,
+                                    content::RenderFrameHost* frame) = nullptr;
++
++bool (*g_shaar_agent_bridge_may_input)(
++    content::DevToolsAgentHostClient*, content::RenderFrameHost*) = nullptr;
+ 
+ namespace content::protocol {
+ 
+@@ -70,9 +74,8 @@
+ bool ArdiaMayInject(DevToolsSession* session,
+                     RenderFrameHostImpl* host,
+                     RenderWidgetHostImpl* widget) {
+-  if (!g_ardia_devtools_may_input) {
++  if (!g_ardia_devtools_may_input && !g_shaar_agent_bridge_may_input)
+     return true;
+-  }
+   WebContents* contents = host ? WebContents::FromRenderFrameHost(host) : nullptr;
+   if (!session || !widget || !contents) {
+     return false;
+@@ -83,7 +86,10 @@
+   contents->ForEachRenderFrameHost([&](RenderFrameHost* frame) {
+     if (frame->GetRenderWidgetHost() == widget) {
+       found = true;
+-      allowed = allowed && g_ardia_devtools_may_input(client, frame);
++      if (g_ardia_devtools_may_input)
++        allowed = allowed && g_ardia_devtools_may_input(client, frame);
++      if (g_shaar_agent_bridge_may_input)
++        allowed = allowed && g_shaar_agent_bridge_may_input(client, frame);
+     }
+   });
+   return found && allowed;
+@@ -1712,10 +1718,14 @@
+     std::optional<double> timestamp,
+     std::unique_ptr<DispatchTouchEventCallback> callback) {
+   if (base::FeatureList::IsEnabled(features::kSyntheticPointerActions)) {
+-    if (g_ardia_devtools_may_input &&
+-        (!session() ||
+-         !g_ardia_devtools_may_input(session()->GetRootSession()->GetClient(),
+-                                     nullptr))) {
++    if ((g_ardia_devtools_may_input &&
++         (!session() ||
++          !g_ardia_devtools_may_input(session()->GetRootSession()->GetClient(),
++                                      nullptr))) ||
++        (g_shaar_agent_bridge_may_input &&
++         (!session() ||
++          !g_shaar_agent_bridge_may_input(
++              session()->GetRootSession()->GetClient(), nullptr)))) {
+       callback->sendFailure(Response::InvalidParams("Not allowed"));
+       return;
+     }

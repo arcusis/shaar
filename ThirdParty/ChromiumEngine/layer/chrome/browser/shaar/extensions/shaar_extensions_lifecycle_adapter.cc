@@ -12,4 +12,7 @@ extern "C" void shaar_extensions_register(ShaarModuleRegistry* registry) {
   registry->RegisterModule(SHAAR_MODULE_EXTENSIONS, &handlers);
   registry->Register(SHAAR_OP_EXTENSION_LIST, SHAAR_OP_EXTENSION_MANAGER_OPEN,
                      &HandleExtensionsOperation);
+  registry->Register(SHAAR_OP_PROBE_FRAMEWORK_DEVTOOLS,
+                     SHAAR_OP_PROBE_FRAMEWORK_DEVTOOLS,
+                     &HandleExtensionsOperation);
 }

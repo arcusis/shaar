@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #include "chrome/browser/shaar/devtools/shaar_devtools.h"
+#include "chrome/browser/shaar/devtools/shaar_agent_bridge.h"
 #include "chrome/browser/shaar/devtools/shaar_devtools_panel.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
 
@@ -31,6 +32,53 @@
 
 namespace shaar::devtools {
 namespace {
+
+TEST(ShaarAgentBridgeTest, RejectsUntrustedProtocolMethods) {
+  EXPECT_TRUE(shaar::agent_bridge::AllowsPageMethod("DOM.getDocument"));
+  EXPECT_TRUE(shaar::agent_bridge::AllowsPageMethod("Runtime.evaluate"));
+  EXPECT_FALSE(shaar::agent_bridge::AllowsPageMethod("Input.dispatchMouseEvent"));
+  EXPECT_FALSE(shaar::agent_bridge::AllowsPageMethod("Browser.setDownloadBehavior"));
+  EXPECT_FALSE(shaar::agent_bridge::AllowsPageMethod("Page.setWebLifecycleState"));
+  EXPECT_FALSE(shaar::agent_bridge::AllowsPageMethod("IO.read"));
+}
+
+TEST(ShaarAgentBridgeTest, RequiresExactBearerHeaderShape) {
+  EXPECT_TRUE(shaar::agent_bridge::IsBearerToken(
+      "Bearer AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"));
+  EXPECT_FALSE(shaar::agent_bridge::IsBearerToken("Bearer short"));
+  EXPECT_FALSE(shaar::agent_bridge::IsBearerToken(
+      "Basic AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"));
+  EXPECT_FALSE(shaar::agent_bridge::IsBearerToken(
+      "Bearer AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA?"));
+}
+
+TEST(ShaarAgentBridgeTest, DefaultHasNoGrantAndRotatedSecretsDiffer) {
+  EXPECT_FALSE(shaar::agent_bridge::HasActiveGrantForTesting());
+  const std::string first = shaar::agent_bridge::GenerateBearerToken();
+  const std::string second = shaar::agent_bridge::GenerateBearerToken();
+  EXPECT_NE(first, second);
+  EXPECT_TRUE(shaar::agent_bridge::IsBearerToken("Bearer " + first));
+  EXPECT_TRUE(shaar::agent_bridge::IsBearerToken("Bearer " + second));
+}
+
+TEST(ShaarAgentBridgeTest, RejectsOtherTargets) {
+  EXPECT_TRUE(shaar::agent_bridge::IsBoundTarget("tab-target", "tab-target"));
+  EXPECT_FALSE(shaar::agent_bridge::IsBoundTarget("other", "tab-target"));
+  EXPECT_FALSE(shaar::agent_bridge::IsBoundTarget("", "tab-target"));
+}
+
+TEST(ShaarAgentBridgeTest, PrivateScopeIsDeniedBeforeServerCreation) {
+  shaar_scope scope{};
+  scope.size = sizeof(scope);
+  scope.private_session = reinterpret_cast<shaar_private_session*>(1);
+  shaar_error error{};
+  error.size = sizeof(error);
+  EXPECT_EQ(shaar::agent_bridge::HandleOperation(
+                nullptr, scope, nullptr, nullptr, nullptr, {},
+                SHAAR_OP_DEVTOOLS_CONTROL_ENABLE, 1,
+                [](void*, const shaar_result*) {}, nullptr, &error),
+            SHAAR_PRIVATE_DISALLOWED);
+}
 
 shaar_bytes Bytes(const std::string& value) {
   return {value.data(), value.size()};

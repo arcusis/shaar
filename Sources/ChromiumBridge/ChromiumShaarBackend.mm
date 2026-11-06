@@ -56,6 +56,7 @@ struct Symbols {
   decltype(&shaar_window_native_window) window_native_window = nullptr;
   decltype(&shaar_tab_open) tab_open = nullptr;
   decltype(&shaar_tab_close) tab_close = nullptr;
+  decltype(&shaar_tab_favicon_png) tab_favicon_png = nullptr;
   decltype(&shaar_tab_host_view) tab_host_view = nullptr;
   decltype(&shaar_tab_view_attach) tab_view_attach = nullptr;
   decltype(&shaar_tab_view_detach) tab_view_detach = nullptr;
@@ -77,6 +78,7 @@ struct Symbols {
     SHAAR_LOAD(window_native_window, window_native_window);
     SHAAR_LOAD(tab_open, tab_open);
     SHAAR_LOAD(tab_close, tab_close);
+    SHAAR_LOAD(tab_favicon_png, tab_favicon_png);
     SHAAR_LOAD(tab_host_view, tab_host_view);
     SHAAR_LOAD(tab_view_attach, tab_view_attach);
     SHAAR_LOAD(tab_view_detach, tab_view_detach);
@@ -85,7 +87,7 @@ struct Symbols {
 #undef SHAAR_LOAD
     return create && run && request_quit && release && profile_open &&
            window_open && window_close && window_host_view && window_host_resize &&
-           window_native_window && tab_open && tab_close && tab_host_view &&
+           window_native_window && tab_open && tab_close && tab_favicon_png && tab_host_view &&
            tab_view_attach && tab_view_detach && tab_view_focus && submit;
   }
 };
@@ -746,7 +748,18 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
 
 - (NSImage *)faviconForTabID:(NSString *)tabID profileID:(NSString *)profileID
                     windowID:(NSString *)windowID {
-  return nil;  // The Shaar ABI does not export favicon bytes yet.
+  if (!_shaarEngine || ![_shaarTabProfiles[tabID] isEqualToString:profileID] ||
+      ![_shaarTabWindows[tabID] isEqualToString:windowID]) return nil;
+  shaar_profile *profile = (shaar_profile *)_shaarProfiles[profileID].pointerValue;
+  shaar_window *window = (shaar_window *)_shaarWindows[windowID].pointerValue;
+  shaar_tab *tab = (shaar_tab *)_shaarTabs[tabID].pointerValue;
+  if (!profile || !window || !tab) return nil;
+  shaar_scope scope = {.size = sizeof(scope), .profile = profile};
+  shaar_bytes png = {};
+  shaar_error error = EmptyError();
+  if (_symbols.tab_favicon_png(_shaarEngine, scope, window, tab, &png, &error) != SHAAR_OK ||
+      !png.data || !png.size) return nil;
+  return [[NSImage alloc] initWithData:[NSData dataWithBytes:png.data length:png.size]];
 }
 
 - (int)chromeWindowIDForProfileID:(NSString *)profileID windowID:(NSString *)windowID {
@@ -944,7 +957,9 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   NSString *windowID = tabID ? _shaarTabWindows[tabID] : _shaarPrimaryWindowID;
   shaar_window *window = (shaar_window *)_shaarWindows[windowID].pointerValue;
   shaar_tab *tab = tabID ? (shaar_tab *)_shaarTabs[tabID].pointerValue : nullptr;
-  if (!_shaarEngine || !profile || !window || (tabID && (!tab ||
+  const BOOL profileOnly = operation == SHAAR_OP_EXTENSION_LIST ||
+      operation == SHAAR_OP_PROBE_FRAMEWORK_DEVTOOLS;
+  if (!_shaarEngine || !profile || (!profileOnly && !window) || (tabID && (!tab ||
       ![_shaarTabProfiles[tabID] isEqualToString:profileID]))) return NO;
   NSData *json = [NSJSONSerialization dataWithJSONObject:payload options:0 error:nil];
   if (!json) return NO;

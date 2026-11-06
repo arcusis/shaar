@@ -7,39 +7,109 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdlib>
 #include <cstring>
 #include <initializer_list>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
+#include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
+#include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "chrome/common/chrome_isolated_world_ids.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "content/public/browser/media_session.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "services/media_session/public/mojom/media_session.mojom.h"
+#include "third_party/blink/public/mojom/frame/user_activation_notification_type.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
 namespace {
 
 constexpr size_t kMaximumArgumentsBytes = 64 * 1024;
+std::unordered_map<content::WebContents*, base::DictValue> element_states;
+
+base::DictValue NoElementState() {
+  base::DictValue state;
+  state.Set("playbackState", "none");
+  state.Set("supportedActions", base::ListValue());
+  state.Set("canSeek", false);
+  state.Set("hasVideo", false);
+  state.Set("pageVolume", base::Value());
+  state.Set("silent", base::Value());
+  state.Set("pipVideoState", "none");
+  state.Set("pipVideoIsLive", false);
+  state.Set("videoWidth", base::Value());
+  state.Set("videoHeight", base::Value());
+  return state;
+}
+
+shaar_bytes Bytes(const std::string& value) {
+  return {value.data(), value.size()};
+}
+
+base::DictValue OverlayElementState(content::WebContents* contents,
+                                    base::DictValue state) {
+  const auto found = element_states.find(contents);
+  if (found == element_states.end())
+    return state;
+  for (auto item : found->second)
+    state.Set(item.first, item.second.Clone());
+  if (const auto playable = found->second.FindBool("elementPlayable")) {
+    base::ListValue actions;
+    const bool can_seek = found->second.FindBool("canSeek") == true;
+    if (const auto* existing = state.FindList("supportedActions")) {
+      for (const auto& action : *existing) {
+        if (action.is_int() && !can_seek &&
+            (action.GetInt() == SHAAR_MEDIA_SEEK_BACKWARD ||
+             action.GetInt() == SHAAR_MEDIA_SEEK_FORWARD ||
+             action.GetInt() == SHAAR_MEDIA_SEEK_TO))
+          continue;
+        actions.Append(action.Clone());
+      }
+    }
+    auto append_action = [&actions](int action) {
+      for (const auto& existing : actions)
+        if (existing.is_int() && existing.GetInt() == action)
+          return;
+      actions.Append(action);
+    };
+    if (*playable) {
+      append_action(SHAAR_MEDIA_PLAY);
+      append_action(SHAAR_MEDIA_PAUSE);
+    }
+    if (can_seek) {
+      append_action(SHAAR_MEDIA_SEEK_BACKWARD);
+      append_action(SHAAR_MEDIA_SEEK_FORWARD);
+    }
+    state.Set("supportedActions", std::move(actions));
+    state.Remove("elementPlayable");
+  }
+  return state;
+}
 
 struct ReplyContext {
   shaar_request_id request_id;
@@ -147,12 +217,13 @@ base::DictValue StateFor(content::WebContents* contents) {
   state.Set("pageVolume", base::Value());
   state.Set("silent", base::Value());
   state.Set("pipVideoState", base::Value());
+  state.Set("pipVideoIsLive", base::Value());
   state.Set("videoWidth", base::Value());
   state.Set("videoHeight", base::Value());
 
   content::MediaSession* session = content::MediaSession::GetIfExists(contents);
   if (!session)
-    return state;
+    return OverlayElementState(contents, std::move(state));
 
   const auto info = session->GetMediaSessionInfoSync();
   if (info) {
@@ -189,7 +260,7 @@ base::DictValue StateFor(content::WebContents* contents) {
                 std::find(actions.begin(), actions.end(),
                           media_session::mojom::MediaSessionAction::kSeekForward) !=
                     actions.end());
-  return state;
+  return OverlayElementState(contents, std::move(state));
 }
 
 bool ValidScopeForTab(shaar::ShaarEngineContext* context,
@@ -217,6 +288,28 @@ bool ValidScopeForTab(shaar::ShaarEngineContext* context,
          context->media_services &&
          context->media_services->OwnsPrivateTab(engine, scope, window, tab,
                                                   *contents);
+}
+
+bool IsMarkedMediaProbe(shaar_engine* engine, content::WebContents* contents) {
+  const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
+  if (!testing || std::strcmp(testing, "1") != 0 || !engine || !contents)
+    return false;
+  const base::FilePath data_root = base::MakeAbsoluteFilePath(
+      base::FilePath::FromUTF8Unsafe(engine->data_root));
+  if (data_root.empty())
+    return false;
+  const base::FilePath root = data_root.DirName();
+  if (data_root != root.Append("Chromium") ||
+      root.BaseName().value().rfind("arcusis-engine-probe-", 0) != 0)
+    return false;
+  std::string marker;
+  if (!base::ReadFileToString(root.Append(".arcusis-probe"), &marker) ||
+      marker != "arcusis-engine-probe-v1\n")
+    return false;
+  const GURL& url = contents->GetLastCommittedURL();
+  return url.SchemeIs("http") &&
+         (url.host() == "127.0.0.1" || url.host() == "localhost" ||
+          url.host() == "[::1]");
 }
 
 bool HasAction(content::MediaSession* session,
@@ -290,6 +383,41 @@ public:
 
 RuntimeServices g_runtime_services;
 
+constexpr char16_t kElementStateScript[] = uR"JS((()=>{
+  let best=null, score=-1;
+  let artwork=null;
+  try {
+    const entry=navigator.mediaSession?.metadata?.artwork?.[0];
+    if(entry?.src) {
+      const url=new URL(entry.src,document.baseURI);
+      if((url.protocol==='http:'||url.protocol==='https:') && url.href.length<4096)
+        artwork=url.href;
+    }
+  } catch (_) {}
+  for(const element of document.querySelectorAll('audio,video')) {
+    if(element.ended || (!element.currentSrc && !element.srcObject)) continue;
+    const playing=!element.paused;
+    const video=element instanceof HTMLVideoElement;
+    const decoded=video && element.readyState>=HTMLMediaElement.HAVE_CURRENT_DATA &&
+        element.videoWidth>0 && element.videoHeight>0;
+    const area=decoded ? element.videoWidth*element.videoHeight : 0;
+    const candidate=(document.pictureInPictureElement===element?2e12:0)+
+        (playing?1e12:0)+area;
+    if(candidate<=score) continue;
+    score=candidate;
+    const duration=element.duration;
+    const seekable=Number.isFinite(duration) && duration>0 && element.seekable.length>0;
+    best={elementPlayable:true,playbackState:playing?'playing':'paused',
+      pageVolume:element.volume,silent:element.muted || element.volume===0,
+      hasVideo:decoded,canSeek:seekable,
+      pipVideoState:document.pictureInPictureElement===element?'inPictureInPicture':'none',
+      pipVideoIsLive:document.pictureInPictureElement===element && !seekable,
+      videoWidth:decoded?element.videoWidth:null,
+      videoHeight:decoded?element.videoHeight:null,artwork,score};
+  }
+  return best;
+})())JS";
+
 struct VolumeRequest {
   explicit VolumeRequest(ReplyContext reply_context)
       : reply_context(reply_context) {}
@@ -316,6 +444,10 @@ struct VolumeRequest {
       return;
     if (value.is_int() && value.GetInt() > 0)
       changed_elements += value.GetInt();
+    else if (value.is_double() && value.GetDouble() > 0)
+      ++changed_elements;
+    else if (value.is_bool() && value.GetBool())
+      ++changed_elements;
     if (--pending_frames == 0)
       Finish();
   }
@@ -327,13 +459,112 @@ struct VolumeRequest {
   base::OneShotTimer timer;
 };
 
+struct ElementActionRequest {
+  explicit ElementActionRequest(ReplyContext reply_context, bool probe,
+                                bool probe_pip)
+      : reply_context(reply_context), probe(probe), probe_pip(probe_pip) {}
+
+  void Finish() {
+    if (finished)
+      return;
+    finished = true;
+    timer.Stop();
+    if (changed_elements > 0) {
+      base::DictValue result;
+      result.Set("schemaVersion", 1);
+      if (probe)
+        result.Set(probe_pip ? "opened" : "started", true);
+      Reply(reply_context, std::move(result));
+    } else {
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE, base::BindOnce(&DeliverReply, reply_context,
+                                    SHAAR_UNSUPPORTED_CAPABILITY,
+                                    std::string(),
+                                    std::string("no eligible media element")));
+    }
+  }
+
+  void OnFrameResult(base::Value value) {
+    if (finished)
+      return;
+    if (value.is_int() && value.GetInt() > 0)
+      changed_elements += value.GetInt();
+    else if (value.is_double() && value.GetDouble() > 0)
+      ++changed_elements;
+    else if (value.is_bool() && value.GetBool())
+      ++changed_elements;
+    if (--pending_frames == 0)
+      Finish();
+  }
+
+  ReplyContext reply_context;
+  int pending_frames = 0;
+  int changed_elements = 0;
+  bool finished = false;
+  bool probe = false;
+  bool probe_pip = false;
+  base::OneShotTimer timer;
+};
+
+std::u16string ElementActionScript(uint32_t command, double value) {
+  const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
+  const bool debug = testing && std::strcmp(testing, "1") == 0;
+  const std::string prefix =
+      "(()=>{const command=" + std::to_string(command) +
+      ",value=" + std::to_string(value) +
+      ",debug=" + (debug ? "true" : "false") + ";";
+  const std::string body = R"JS(
+    let best=null, score=-1;
+    const pip=document.pictureInPictureElement;
+    for(const element of document.querySelectorAll('audio,video')) {
+      if(element.ended || (!element.currentSrc && !element.srcObject)) continue;
+      if((command===9 || command===10 || command===11) && element!==pip) continue;
+      if(command===12 && (!(element instanceof HTMLVideoElement) ||
+          element.paused || element.disablePictureInPicture)) continue;
+      if(command===13 && element!==pip) continue;
+      const playing=!element.paused;
+      const area=element instanceof HTMLVideoElement ?
+          element.videoWidth*element.videoHeight : 0;
+      const candidate=(playing?1e12:0)+area;
+      if(candidate>score){score=candidate;best=element;}
+    }
+    if(!best) return 0;
+    if(command===0 || command===9){best.play().catch(()=>{});return 1;}
+    if(command===1 || command===10){best.pause();return 1;}
+    if(command===4 || command===5 || command===6 || command===11){
+      if(!Number.isFinite(best.duration) || best.duration<=0 ||
+          best.seekable.length===0) return 0;
+      const destination=command===6?value:
+          best.currentTime+(command===4?-value:
+          command===5?value:value);
+      best.currentTime=Math.max(0,Math.min(best.duration,destination));
+      return 1;
+    }
+    if(command===8){best.volume=value;if(value>0)best.muted=false;return 1;}
+    if(command===12){
+      try {
+        best.requestPictureInPicture().catch(e=>{
+          if(debug)document.documentElement.setAttribute('data-shaar-pip-error',e.name+':'+e.message);
+        });
+        return 1;
+      } catch(e) {
+        if(debug)document.documentElement.setAttribute('data-shaar-pip-error',e.name+':'+e.message);
+        return 0;
+      }
+    }
+    if(command===13){document.exitPictureInPicture().catch(()=>{});return 1;}
+    return 0;
+  })())JS";
+  return base::UTF8ToUTF16(prefix + body);
+}
+
 std::u16string VolumeScript(double value) {
   std::u16string script =
       u"(()=>{let changed=0;for(const element of "
       u"document.querySelectorAll('audio,video')){"
       u"if(!element.paused&&!element.ended){element.volume=";
   script += base::UTF8ToUTF16(std::to_string(value));
-  script += u";changed++;}}return changed;})()";
+  script += u";if(element.volume>0)element.muted=false;changed++;}}return changed;})()";
   return script;
 }
 
@@ -341,12 +572,184 @@ std::u16string VolumeScript(double value) {
 
 namespace shaar::media {
 
+class MediaTracker final : public content::WebContentsObserver {
+ public:
+  MediaTracker(shaar_engine* engine, content::WebContents* contents,
+               std::string profile_id, std::string session_id,
+               std::string window_id, std::string tab_id)
+      : content::WebContentsObserver(contents),
+        engine_(engine), contents_(contents), profile_id_(std::move(profile_id)),
+        session_id_(std::move(session_id)), window_id_(std::move(window_id)),
+        tab_id_(std::move(tab_id)) {}
+
+  ~MediaTracker() override {
+    timer_.Stop();
+    element_states.erase(contents_);
+  }
+
+  void MediaStartedPlaying(const MediaPlayerInfo&,
+                           const content::MediaPlayerId&) override {
+    if (!timer_.IsRunning()) {
+      timer_.Start(FROM_HERE, base::Milliseconds(500), this,
+                   &MediaTracker::Refresh);
+    }
+    Refresh();
+  }
+
+  void MediaStoppedPlaying(const MediaPlayerInfo&, const content::MediaPlayerId&,
+                           MediaStoppedReason) override {
+    Refresh();
+  }
+
+  void MediaMetadataChanged(const MediaPlayerInfo&,
+                            const content::MediaPlayerId&) override {
+    Refresh();
+  }
+
+  void MediaPictureInPictureChanged(bool) override { Refresh(); }
+  void OnAudioStateChanged(bool) override { Refresh(); }
+
+  void DidFinishNavigation(content::NavigationHandle* navigation) override {
+    if (!navigation->HasCommitted() || !navigation->IsInPrimaryMainFrame() ||
+        navigation->IsSameDocument())
+      return;
+    element_states[contents_] = NoElementState();
+    EmitChangedState();
+  }
+
+  void WebContentsDestroyed() override {
+    timer_.Stop();
+    element_states.erase(contents_);
+    contents_ = nullptr;
+    weak_factory_.InvalidateWeakPtrs();
+  }
+
+ private:
+  void Refresh() {
+    if (!contents_ || pending_)
+      return;
+    content::RenderFrameHost* primary = contents_->GetPrimaryMainFrame();
+    if (!primary || !primary->IsRenderFrameLive()) {
+      EmitChangedState();
+      return;
+    }
+    std::vector<content::RenderFrameHost*> frames;
+    primary->ForEachRenderFrameHost([&](content::RenderFrameHost* frame) {
+      if (frame->IsRenderFrameLive())
+        frames.push_back(frame);
+    });
+    if (frames.empty()) {
+      EmitChangedState();
+      return;
+    }
+    pending_ = static_cast<int>(frames.size());
+    best_score_ = -1;
+    best_state_.clear();
+    for (content::RenderFrameHost* frame : frames) {
+      frame->ExecuteJavaScriptInIsolatedWorld(
+          kElementStateScript,
+          base::BindOnce(&MediaTracker::OnFrameState,
+                         weak_factory_.GetWeakPtr()),
+          ISOLATED_WORLD_ID_CHROME_INTERNAL);
+    }
+  }
+
+  void OnFrameState(base::Value value) {
+    if (!contents_ || pending_ <= 0)
+      return;
+    if (value.is_dict()) {
+      base::DictValue candidate = std::move(value.GetDict());
+      double score = -1;
+      if (const base::Value* score_item = candidate.Find("score")) {
+        if (score_item->is_double())
+          score = score_item->GetDouble();
+        else if (score_item->is_int())
+          score = score_item->GetInt();
+      }
+      if (score > best_score_) {
+        best_score_ = score;
+        candidate.Remove("score");
+        best_state_ = std::move(candidate);
+      }
+    }
+    if (--pending_ != 0)
+      return;
+    if (best_score_ < 0) {
+      element_states[contents_] = NoElementState();
+      timer_.Stop();
+    } else {
+      element_states[contents_] = std::move(best_state_);
+    }
+    EmitChangedState();
+  }
+
+  void EmitChangedState() {
+    if (!contents_)
+      return;
+    base::DictValue state = StateFor(contents_);
+    std::string state_json;
+    base::JSONWriter::Write(base::Value(state.Clone()), &state_json);
+    if (state_json == previous_state_)
+      return;
+    const std::string* pip = state.FindString("pipVideoState");
+    const std::string pip_state = pip ? *pip : "none";
+    base::DictValue payload;
+    payload.Set("schemaVersion", 1);
+    payload.Set("kind", "state_changed");
+    payload.Set("state", std::move(state));
+    std::string json;
+    base::JSONWriter::Write(base::Value(std::move(payload)), &json);
+    shaar::EmitEvent(engine_, SHAAR_EVENT_MEDIA, Bytes(profile_id_),
+                     Bytes(session_id_), Bytes(window_id_), Bytes(tab_id_),
+                     Bytes(json));
+    if (pip_state != previous_pip_) {
+      base::DictValue pip_event;
+      pip_event.Set("schemaVersion", 1);
+      pip_event.Set("kind", "pip_changed");
+      pip_event.Set("state", pip_state);
+      base::JSONWriter::Write(base::Value(std::move(pip_event)), &json);
+      shaar::EmitEvent(engine_, SHAAR_EVENT_MEDIA, Bytes(profile_id_),
+                       Bytes(session_id_), Bytes(window_id_), Bytes(tab_id_),
+                       Bytes(json));
+      previous_pip_ = pip_state;
+    }
+    previous_state_ = std::move(state_json);
+  }
+
+  shaar_engine* engine_;
+  content::WebContents* contents_;
+  std::string profile_id_, session_id_, window_id_, tab_id_;
+  base::RepeatingTimer timer_;
+  int pending_ = 0;
+  double best_score_ = -1;
+  base::DictValue best_state_;
+  std::string previous_state_, previous_pip_ = "none";
+  base::WeakPtrFactory<MediaTracker> weak_factory_{this};
+};
+
+MediaTrackerPtr CreateMediaTracker(shaar_engine* engine,
+                                   content::WebContents* contents,
+                                   std::string profile_id,
+                                   std::string session_id,
+                                   std::string window_id,
+                                   std::string tab_id) {
+  return MediaTrackerPtr(
+      new MediaTracker(engine, contents, std::move(profile_id),
+                       std::move(session_id), std::move(window_id),
+                       std::move(tab_id)),
+      [](MediaTracker* tracker) { delete tracker; });
+}
+
 void BindRuntimeServices() {
   shaar::SetMediaRuntimeServices(&g_runtime_services);
 }
 
 std::u16string VolumeScriptForTesting(double value) {
   return VolumeScript(value);
+}
+
+std::u16string ElementActionScriptForTesting(uint32_t command, double value) {
+  return ElementActionScript(command, value);
 }
 
 shaar_error_code ApplyElementVolume(content::WebContents *contents,
@@ -383,6 +786,56 @@ shaar_error_code ApplyElementVolume(content::WebContents *contents,
   return SHAAR_OK;
 }
 
+shaar_error_code ApplyElementAction(content::WebContents* contents,
+                                    uint32_t command, double value,
+                                    ReplyContext reply_context,
+                                    shaar_error* error,
+                                    bool probe = false,
+                                    bool probe_pip = false) {
+  content::RenderFrameHost* primary = contents->GetPrimaryMainFrame();
+  if (!primary)
+    return Fail(error, SHAAR_NOT_READY, "media page has no primary frame");
+  std::vector<content::RenderFrameHost*> frames;
+  primary->ForEachRenderFrameHost([&](content::RenderFrameHost* frame) {
+    if (frame->IsRenderFrameLive())
+      frames.push_back(frame);
+  });
+  if (frames.empty())
+    return Fail(error, SHAAR_NOT_READY, "media page has no live frame");
+  auto request =
+      std::make_shared<ElementActionRequest>(reply_context, probe, probe_pip);
+  request->pending_frames = static_cast<int>(frames.size());
+  request->timer.Start(FROM_HERE, base::Seconds(2),
+                       base::BindOnce(
+                           [](std::shared_ptr<ElementActionRequest> pending) {
+                             pending->Finish();
+                           }, request));
+  const std::u16string script = probe_pip
+      ? u"(()=>{const clip=document.getElementById('clip');"
+        u"if(!clip)return 0;clip.currentTime=5;"
+        u"clip.play().then(()=>clip.requestPictureInPicture()).catch(()=>{});"
+        u"return 1;})()"
+      : probe
+          ? u"(()=>{const video=document.getElementById('video');"
+            u"if(!video)return 0;video.play().catch(()=>{});return 1;})()"
+          : ElementActionScript(command, value);
+  for (content::RenderFrameHost* frame : frames) {
+    if (command == SHAAR_MEDIA_PIP_ENTER || probe) {
+      frame->NotifyUserActivation(
+          blink::mojom::UserActivationNotificationType::kInteraction);
+    }
+    frame->ExecuteJavaScriptInIsolatedWorld(
+        script,
+        base::BindOnce(
+            [](std::shared_ptr<ElementActionRequest> pending,
+               base::Value result) {
+              pending->OnFrameResult(std::move(result));
+            }, request),
+        ISOLATED_WORLD_ID_CHROME_INTERNAL);
+  }
+  return SHAAR_OK;
+}
+
 bool IsValidControl(uint32_t command, double value, bool has_value) {
   if (command > SHAAR_MEDIA_PIP_EXIT)
     return false;
@@ -396,6 +849,9 @@ bool IsValidControl(uint32_t command, double value, bool has_value) {
   if (command == SHAAR_MEDIA_PIP_SKIP)
     return has_value && std::isfinite(value) && value != 0 && value >= -86400 &&
            value <= 86400;
+  if (command == SHAAR_MEDIA_SEEK_BACKWARD ||
+      command == SHAAR_MEDIA_SEEK_FORWARD)
+    return !has_value || (std::isfinite(value) && value > 0 && value <= 86400);
   return !has_value;
 }
 
@@ -451,6 +907,24 @@ shaar_error_code HandleMediaOperation(
                 "invalid media request envelope");
 
   const ReplyContext request{request_id, reply, reply_context};
+  if (operation == SHAAR_OP_PROBE_MEDIA_GESTURE) {
+    if (!IsMarkedMediaProbe(engine, contents))
+      return Fail(immediate_error, SHAAR_POLICY_BLOCKED,
+                  "media gesture requires an owned loopback probe");
+    const std::string* action = args->FindString("action");
+    const std::string* element_id = args->FindString("elementID");
+    const bool start_video = action && element_id &&
+                             *action == "play" && *element_id == "video";
+    const bool open_clip = action && element_id &&
+                           *action == "playPiP" && *element_id == "clip";
+    if (!HasOnlyKeys(*args, {"schemaVersion", "action", "elementID"}) ||
+        (!start_video && !open_clip))
+      return Fail(immediate_error, SHAAR_INVALID_ARGUMENT,
+                  "probe supports only authored media gestures");
+    return shaar::media::ApplyElementAction(contents, SHAAR_MEDIA_PLAY, 0,
+                                           request, immediate_error, true,
+                                           open_clip);
+  }
   if (operation == SHAAR_OP_MEDIA_GET_STATE) {
     if (!HasOnlyKeys(*args, {"schemaVersion"}))
       return Fail(immediate_error, SHAAR_INVALID_ARGUMENT,
@@ -484,23 +958,42 @@ shaar_error_code HandleMediaOperation(
       return SHAAR_OK;
     }
     if (*command == SHAAR_MEDIA_SET_ELEMENT_VOLUME)
+    {
+      if (value > 0)
+        contents->SetAudioMuted(false);
       return shaar::media::ApplyElementVolume(contents, value, request,
                                               immediate_error);
+    }
     content::MediaSession* session = content::MediaSession::GetIfExists(contents);
     media_session::mojom::MediaSessionAction action;
-    bool action_mapped = false;
-    if (*command == SHAAR_MEDIA_PIP_SKIP) {
-      action = value < 0
-                   ? media_session::mojom::MediaSessionAction::kPreviousTrack
-                   : media_session::mojom::MediaSessionAction::kNextTrack;
-      action_mapped = true;
-    } else {
-      action_mapped = shaar::media::MapSessionAction(*command, &action);
+    const bool action_mapped =
+        shaar::media::MapSessionAction(*command, &action);
+    if (action_mapped && session && HasAction(session, action) &&
+        *command != SHAAR_MEDIA_SEEK_BACKWARD &&
+        *command != SHAAR_MEDIA_SEEK_FORWARD &&
+        *command != SHAAR_MEDIA_SEEK_TO &&
+        *command != SHAAR_MEDIA_PIP_PLAY &&
+        *command != SHAAR_MEDIA_PIP_PAUSE) {
+      session->DidReceiveAction(action);
+      Reply(request, base::DictValue().Set("schemaVersion", 1));
+      return SHAAR_OK;
     }
-    if (!session || !action_mapped || !HasAction(session, action)) {
+    if (*command == SHAAR_MEDIA_PIP_SKIP ||
+        *command == SHAAR_MEDIA_SEEK_BACKWARD ||
+        *command == SHAAR_MEDIA_SEEK_FORWARD ||
+        *command == SHAAR_MEDIA_SEEK_TO ||
+        *command == SHAAR_MEDIA_PIP_PLAY ||
+        *command == SHAAR_MEDIA_PIP_PAUSE ||
+        *command == SHAAR_MEDIA_PLAY || *command == SHAAR_MEDIA_PAUSE) {
+      if ((*command == SHAAR_MEDIA_SEEK_BACKWARD ||
+           *command == SHAAR_MEDIA_SEEK_FORWARD) && !has_value)
+        value = 10;
+      return shaar::media::ApplyElementAction(contents, *command, value,
+                                             request, immediate_error);
+    }
+    if (!session || !action_mapped || !HasAction(session, action))
       return Fail(immediate_error, SHAAR_UNSUPPORTED_CAPABILITY,
                   "media session does not advertise this action");
-    }
     session->DidReceiveAction(action);
     Reply(request, base::DictValue().Set("schemaVersion", 1));
     return SHAAR_OK;
@@ -510,16 +1003,10 @@ shaar_error_code HandleMediaOperation(
     if (!HasOnlyKeys(*args, {"schemaVersion"}))
       return Fail(immediate_error, SHAAR_INVALID_ARGUMENT,
                   "PiP operation accepts no additional fields");
-    content::MediaSession* session = content::MediaSession::GetIfExists(contents);
-    const auto action = operation == SHAAR_OP_MEDIA_ENTER_PIP
-                            ? media_session::mojom::MediaSessionAction::kEnterPictureInPicture
-                            : media_session::mojom::MediaSessionAction::kExitPictureInPicture;
-    if (!session || !HasAction(session, action))
-      return Fail(immediate_error, SHAAR_UNSUPPORTED_CAPABILITY,
-                  "tab media session does not advertise the PiP action");
-    session->DidReceiveAction(action);
-    Reply(request, base::DictValue().Set("schemaVersion", 1));
-    return SHAAR_OK;
+    return shaar::media::ApplyElementAction(
+        contents, operation == SHAAR_OP_MEDIA_ENTER_PIP
+                      ? SHAAR_MEDIA_PIP_ENTER : SHAAR_MEDIA_PIP_EXIT,
+        0, request, immediate_error);
   }
   if (operation == SHAAR_OP_MEDIA_SET_AUTO_PIP) {
     if (!HasOnlyKeys(*args, {"schemaVersion", "allowed"}) ||

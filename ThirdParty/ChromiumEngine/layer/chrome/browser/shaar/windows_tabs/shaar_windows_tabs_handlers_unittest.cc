@@ -563,5 +563,26 @@ TEST(ShaarWindowsTabsHandlersTest, ProbeStateRejectsUnregisteredHandles) {
   EXPECT_EQ(error.code, SHAAR_INVALID_ARGUMENT);
 }
 
+TEST(ShaarWindowsTabsHandlersTest, FaviconBytesRejectUnregisteredAndAmbiguousScope) {
+  auto* engine = reinterpret_cast<shaar_engine*>(1);
+  auto* window = reinterpret_cast<shaar_window*>(2);
+  auto* tab = reinterpret_cast<shaar_tab*>(3);
+  shaar_scope scope = {.size = sizeof(shaar_scope),
+                       .profile = reinterpret_cast<shaar_profile*>(4)};
+  shaar_bytes png = {"stale", 5};
+  shaar_error error = {};
+  error.size = sizeof(error);
+  EXPECT_EQ(shaar_tab_favicon_png(engine, scope, window, tab, &png, &error),
+            SHAAR_NOT_FOUND);
+  EXPECT_EQ(error.code, SHAAR_NOT_FOUND);
+  EXPECT_EQ(png.data, nullptr);
+  EXPECT_EQ(png.size, 0u);
+
+  scope.private_session = reinterpret_cast<shaar_private_session*>(5);
+  EXPECT_EQ(shaar_tab_favicon_png(engine, scope, window, tab, &png, &error),
+            SHAAR_INVALID_ARGUMENT);
+  EXPECT_EQ(error.code, SHAAR_INVALID_ARGUMENT);
+}
+
 }  // namespace
 }  // namespace shaar::windows_tabs

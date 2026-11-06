@@ -17,6 +17,7 @@
 #include "base/functional/callback.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
+#include "base/logging.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/bind_post_task.h"
@@ -30,6 +31,8 @@
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/shaar/engine/shaar_event_bridge.h"
 #include "chrome/browser/shaar/engine/shaar_engine_context.h"
+#include "chrome/browser/shaar/extensions/shaar_extensions.h"
+#include "chrome/browser/shaar/devtools/shaar_agent_bridge.h"
 #include "chrome/browser/shaar/engine/shaar_module_registry.h"
 #include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
@@ -194,6 +197,17 @@ void OnProfileReady(shaar_profile* handle,
   }
   handle->native = profile;
   handle->ready = true;
+  std::string framework_failure;
+  if (!shaar::extensions_host::RegisterBundledFrameworkDevTools(
+          profile, &framework_failure)) {
+    LOG(ERROR) << "Shaar framework DevTools unavailable: " << framework_failure;
+    const std::string framework_payload =
+        "{\"kind\":\"frameworkDevToolsUnavailable\",\"schemaVersion\":1,\"reason\":\"" +
+        framework_failure + "\"}";
+    shaar::EmitEvent(handle->engine, SHAAR_EVENT_EXTENSION,
+                     {handle->id.data(), handle->id.size()}, {}, {}, {},
+                     {framework_payload.data(), framework_payload.size()});
+  }
   const std::string payload = "{\"kind\":\"loaded\",\"schemaVersion\":1}";
   shaar::EmitEvent(handle->engine, SHAAR_EVENT_PROFILE,
                    {handle->id.data(), handle->id.size()}, {}, {},
@@ -628,6 +642,7 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_profile_delete(
           profile->native->GetPath());
   if (!attributes || attributes->IsEphemeral())
     return Fail(SHAAR_CONFLICT, "profile is unavailable for deletion", error);
+  shaar::agent_bridge::RevokeForProfile(profile->engine, profile);
   profile->deleting = true;
   const std::string deleting = "{\"kind\":\"deleting\",\"schemaVersion\":1}";
   shaar::EmitEvent(profile->engine, SHAAR_EVENT_PROFILE,

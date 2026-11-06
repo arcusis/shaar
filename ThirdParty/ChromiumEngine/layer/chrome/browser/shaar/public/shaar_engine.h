@@ -13,7 +13,7 @@ extern "C" {
 #endif
 
 #define SHAAR_ENGINE_ABI_MAJOR 1u
-#define SHAAR_ENGINE_ABI_MINOR 5u
+#define SHAAR_ENGINE_ABI_MINOR 7u
 #define SHAAR_EXPORT __attribute__((visibility("default")))
 
 typedef struct shaar_engine shaar_engine;
@@ -173,6 +173,8 @@ typedef enum {
   SHAAR_OP_EXTENSION_WEB_STORE_ZOOM = 805,
   SHAAR_OP_EXTENSION_ACTION_STATE = 806,
   SHAAR_OP_EXTENSION_MANAGER_OPEN = 807,
+  /* Testing only: audit the three vetted bundled component registrations. */
+  SHAAR_OP_PROBE_FRAMEWORK_DEVTOOLS = 890,
 
   // BEGIN find
   SHAAR_OP_TAB_FIND = 900,
@@ -208,6 +210,7 @@ typedef enum {
   SHAAR_OP_MEDIA_EXIT_PIP = 1104,
   SHAAR_OP_MEDIA_LIST_CAPTURE_SOURCES = 1105,
   SHAAR_OP_MEDIA_CAPTURE_REPLY = 1106,
+  SHAAR_OP_PROBE_MEDIA_GESTURE = 1107,
   // END media
   // BEGIN storage_keychain
   SHAAR_OP_STORAGE_KEYCHAIN_IDENTITY = 1400
@@ -442,6 +445,12 @@ typedef struct {
 SHAAR_EXPORT shaar_error_code shaar_tab_get_probe_state(
     shaar_engine *, shaar_scope, shaar_window *, shaar_tab *,
     shaar_tab_probe_state *out, shaar_error *error);
+/* Borrowed PNG bytes remain valid until the next favicon query on this tab or
+ * its close. The caller copies them before returning to its own event loop.
+ * The scope must own the live tab in the supplied window. */
+SHAAR_EXPORT shaar_error_code shaar_tab_favicon_png(
+    shaar_engine *, shaar_scope, shaar_window *, shaar_tab *,
+    shaar_bytes *out_png, shaar_error *error);
 /* Borrowed until POPUP_CLOSE or its owning tab or window closes. */
 SHAAR_EXPORT void *shaar_extension_popup_view(
     shaar_engine *, shaar_window *, shaar_bytes popup_id);

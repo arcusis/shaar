@@ -16,6 +16,7 @@
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/json/json_reader.h"
 #include "base/uuid.h"
 #include "chrome/browser/extensions/component_loader.h"
 #include "chrome/browser/extensions/extension_view.h"
@@ -34,6 +35,15 @@
 namespace {
 
 constexpr char kManagerID[] = "bphhlegomeaogfihjcipdbcfbgkcfafp";
+struct FrameworkDevToolsBundle {
+  const char* name;
+  const char* id;
+};
+constexpr FrameworkDevToolsBundle kFrameworkDevTools[] = {
+    {"react", "fmkadmapgofadopljbjfkapdkoienihi"},
+    {"vue", "nhdogjmejiglipccpnnnanhbledajbpd"},
+    {"angular", "ienfalfjdbdpebioblfackkekamfmbnh"},
+};
 thread_local std::string g_probe_extension_id;
 
 shaar_error_code ProbeFailure(shaar_error_code code, const char* message,
@@ -175,6 +185,107 @@ bool RegisterBundledManager(Profile* profile) {
     return true;
   return loader->AddOrReplace(
              base::FilePath::FromUTF8Unsafe(path.UTF8String)) == kManagerID;
+}
+
+std::string_view FrameworkDevToolsID(std::string_view name) {
+  for (const auto& bundle : kFrameworkDevTools) {
+    if (name == bundle.name)
+      return bundle.id;
+  }
+  return {};
+}
+
+bool ValidFrameworkDevToolsPath(const base::FilePath& root,
+                                const base::FilePath& requested) {
+  const base::FilePath canonical_root = base::MakeAbsoluteFilePath(root);
+  const base::FilePath canonical_path = base::MakeAbsoluteFilePath(requested);
+  return !canonical_root.empty() && !canonical_path.empty() &&
+         !base::IsLink(requested) &&
+         canonical_path.DirName() == canonical_root &&
+         FrameworkDevToolsID(canonical_path.BaseName().AsUTF8Unsafe()).size() &&
+         base::DirectoryExists(canonical_path);
+}
+
+bool FrameworkDevToolsManifestIsLocal(std::string_view manifest) {
+  auto parsed = base::JSONReader::Read(manifest, base::JSON_PARSE_RFC);
+  if (!parsed || !parsed->is_dict())
+    return false;
+  const auto allowed_match = [](const base::Value& value) {
+    if (!value.is_string())
+      return false;
+    const std::string& match = value.GetString();
+    return match == "http://localhost/*" ||
+           match == "https://localhost/*" ||
+           match == "http://127.0.0.1/*" ||
+           match == "https://127.0.0.1/*";
+  };
+  const auto allowed_matches = [&](const base::ListValue* matches) {
+    if (!matches || matches->empty())
+      return false;
+    for (const auto& match : *matches) {
+      if (!allowed_match(match))
+        return false;
+    }
+    return true;
+  };
+  const auto& dict = parsed->GetDict();
+  if (!allowed_matches(dict.FindList("host_permissions")) ||
+      dict.contains("optional_host_permissions"))
+    return false;
+  for (const char* field : {"content_scripts", "web_accessible_resources"}) {
+    const auto* entries = dict.FindList(field);
+    if (!entries)
+      return false;
+    for (const auto& entry : *entries) {
+      if (!entry.is_dict() ||
+          !allowed_matches(entry.GetDict().FindList("matches")))
+        return false;
+    }
+  }
+  return true;
+}
+
+bool RegisterBundledFrameworkDevTools(Profile* profile, std::string* failure) {
+  if (failure)
+    failure->clear();
+  if (!profile || profile->IsOffTheRecord()) {
+    if (failure)
+      *failure = "regularProfileRequired";
+    return false;
+  }
+  NSString* resources = [[NSBundle mainBundle] resourcePath];
+  auto* loader = extensions::ComponentLoader::Get(profile);
+  if (!resources || !loader) {
+    if (failure)
+      *failure = "bundleOrLoaderUnavailable";
+    return false;
+  }
+  const base::FilePath root =
+      base::FilePath::FromUTF8Unsafe(resources.UTF8String)
+          .Append("FrameworkDevTools");
+  for (const auto& bundle : kFrameworkDevTools) {
+    const base::FilePath path = root.Append(bundle.name);
+    if (!ValidFrameworkDevToolsPath(root, path)) {
+      if (failure)
+        *failure = std::string(bundle.name) + "MissingOrUnsafe";
+      return false;
+    }
+    std::string manifest;
+    if (!base::ReadFileToString(path.Append("manifest.json"), &manifest) ||
+        !FrameworkDevToolsManifestIsLocal(manifest)) {
+      if (failure)
+        *failure = std::string(bundle.name) + "ManifestUnsafe";
+      return false;
+    }
+    if (loader->Exists(bundle.id))
+      continue;
+    if (loader->AddOrReplace(path) != bundle.id) {
+      if (failure)
+        *failure = std::string(bundle.name) + "IdentityMismatch";
+      return false;
+    }
+  }
+  return true;
 }
 
 void ClosePopupsForWindow(shaar_engine* engine, shaar_window* window) {

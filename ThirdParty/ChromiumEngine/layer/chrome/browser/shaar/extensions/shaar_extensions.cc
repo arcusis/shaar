@@ -9,6 +9,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
 #include <initializer_list>
 #include <memory>
 #include <optional>
@@ -23,6 +25,7 @@
 #include "base/values.h"
 #include "base/version.h"
 #include "chrome/browser/extensions/extension_action_runner.h"
+#include "chrome/browser/extensions/component_loader.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -302,6 +305,9 @@ shaar_error_code HandleExtensionsOperation(shaar::ShaarEngineContext* context,
     if (!HasOnlyKeys(input, {"schemaVersion"}))
       return Fail(SHAAR_INVALID_ARGUMENT, "invalid manager open request",
                   error);
+  } else if (operation == SHAAR_OP_PROBE_FRAMEWORK_DEVTOOLS) {
+    if (!HasOnlyKeys(input, {"schemaVersion"}))
+      return Fail(SHAAR_INVALID_ARGUMENT, "invalid component audit schema", error);
   } else {
     return Fail(SHAAR_UNSUPPORTED_CAPABILITY, "unknown extension operation",
                 error);
@@ -349,6 +355,34 @@ shaar_error_code HandleExtensionsOperation(shaar::ShaarEngineContext* context,
   auto* registry = extensions::ExtensionRegistry::Get(profile);
   if (!registry)
     return Fail(SHAAR_NOT_READY, "extension registry is unavailable", error);
+
+  if (operation == SHAAR_OP_PROBE_FRAMEWORK_DEVTOOLS) {
+    const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
+    if (!testing || std::strcmp(testing, "1") != 0)
+      return Fail(SHAAR_POLICY_BLOCKED, "component audit requires testing mode", error);
+    if (!HasOnlyKeys(input, {"schemaVersion"}))
+      return Fail(SHAAR_INVALID_ARGUMENT, "invalid component audit schema", error);
+    auto* loader = extensions::ComponentLoader::Get(profile);
+    base::ListValue entries;
+    for (std::string_view name : {"react", "vue", "angular"}) {
+      const std::string id(shaar::extensions_host::FrameworkDevToolsID(name));
+      base::DictValue row;
+      row.Set("name", name);
+      row.Set("id", id);
+      row.Set("registered", loader && loader->Exists(id));
+      row.Set("enabled", registry->GetExtensionById(
+                             id, extensions::ExtensionRegistry::ENABLED) != nullptr);
+      entries.Append(std::move(row));
+    }
+    base::DictValue result;
+    result.Set("schemaVersion", 1);
+    result.Set("components", std::move(entries));
+    std::string json;
+    if (!base::JSONWriter::Write(base::Value(std::move(result)), &json))
+      return Fail(SHAAR_CHROMIUM_ERROR, "could not encode component audit", error);
+    ReplyLater({reply, reply_context, request_id}, SHAAR_OK, std::move(json));
+    return SHAAR_OK;
+  }
 
   if (operation == SHAAR_OP_EXTENSION_LIST) {
     if (!HasOnlyKeys(input, {"schemaVersion"}))

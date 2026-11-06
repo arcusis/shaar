@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import AppKit
+import BrowserCore
 import ChromiumBridge
 import Foundation
 
@@ -17,6 +18,7 @@ final class ShaarFirstTabProbe {
   private let tabID: UUID
   private let profileID: UUID
   private let checksInspector: Bool
+  private let checksFavicon: Bool
   private let systemQuit: Bool
   private let inspectorFixture: URL?
   private var inspectorChecks: [String] = []
@@ -25,7 +27,10 @@ final class ShaarFirstTabProbe {
   private let checksPrivatePrivacy: Bool
   private let output: URL
   private let dataRoot: URL
-  private let pageURL = URL(string: "https://example.com")!
+  private let pageURL: URL
+  private var faviconObserved = false
+  private var faviconCacheRestored = false
+  private var inactiveFaviconObserved = false
   private var finished = false
   private var passed = false
   private var navigationCommitted = false
@@ -46,6 +51,15 @@ final class ShaarFirstTabProbe {
     output = URL(filePath: try value(after: "--probe-output"))
     dataRoot = URL(filePath: try value(after: "--probe-data-dir"), directoryHint: .isDirectory)
     checksInspector = arguments.contains("--probe-shaar-inspector")
+    checksFavicon = arguments.contains("--probe-favicon-url")
+    if checksFavicon {
+      guard let iconPage = URL(string: try value(after: "--probe-favicon-url")),
+        iconPage.scheme == "http", iconPage.host == "127.0.0.1"
+      else { throw Failure("Favicon probe requires an authored loopback page.") }
+      pageURL = iconPage
+    } else {
+      pageURL = URL(string: "https://example.com")!
+    }
     systemQuit = arguments.contains("--probe-system-quit")
     if checksInspector {
       guard let url = URL(string: try value(after: "--probe-inspector-url")),
@@ -63,7 +77,15 @@ final class ShaarFirstTabProbe {
       throw Failure("The backend selector did not construct the Shaar runtime.")
     }
     runtime = selected
-    workspace = try BrowserWorkspaceStore()
+    if checksFavicon {
+      workspace = try BrowserWorkspaceStore(
+        file: WorkspaceFile(
+          url: dataRoot.appending(path: "workspace.json"),
+          legacySessionURL: dataRoot.appending(path: "session.json")),
+        faviconCache: FaviconCache(directory: dataRoot.appending(path: "favicons")))
+    } else {
+      workspace = try BrowserWorkspaceStore()
+    }
     guard let window = workspace.workspace.windows.first,
       let store = workspace.stores[window.id]
     else { throw Failure("The fresh workspace has no browser window.") }
@@ -76,6 +98,7 @@ final class ShaarFirstTabProbe {
       throw Failure("The first tab has no profile.")
     }
     profileID = owner
+    if checksFavicon { store.togglePin(id) }
     host = NativeBrowserHost(
       events: BrowserRuntimeEvents(runtime: runtime), workspace: workspace,
       presentation: .hiddenProbe)
@@ -131,6 +154,41 @@ final class ShaarFirstTabProbe {
       navigationCommitted,
       !window.isVisible, NSApp.windows.allSatisfy({ !$0.isVisible })
     {
+      if checksFavicon {
+        guard
+          runtime.favicon(
+            forTabID: tab, profileID: profileID.uuidString, windowID: windowID) != nil
+        else {
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            self?.checkTab()
+          }
+          return
+        }
+        faviconObserved = true
+        guard let store = workspace.stores.values.first,
+          let pinID = workspace.workspace.windows.first?.pins.first(where: {
+            $0.tabID == tabID
+          })?.pinID,
+          FaviconCache(directory: dataRoot.appending(path: "favicons"))
+            .icon(for: pinID, profileID: profileID) != nil
+        else {
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            self?.checkTab()
+          }
+          return
+        }
+        faviconCacheRestored = true
+        store.perform(
+          .open(pageURL.appending(queryItems: [URLQueryItem(name: "inactive", value: "1")])))
+        inactiveFaviconObserved =
+          store.session.selectedSpace.selectedTabID != tabID
+          && runtime.favicon(
+            forTabID: tab, profileID: profileID.uuidString, windowID: windowID) != nil
+        guard inactiveFaviconObserved else {
+          finish(error: "An inactive native tab lost its favicon.")
+          return
+        }
+      }
       if checksInspector {
         checkInspector(tabID: tab, nativeView: view)
       } else if checksExtensions {
@@ -271,6 +329,9 @@ final class ShaarFirstTabProbe {
       "tabID": tabID ?? "",
       "nativeView": nativeView != nil,
       "navigationObserved": navigationCommitted,
+      "faviconObserved": faviconObserved,
+      "faviconCacheRestored": faviconCacheRestored,
+      "inactiveFaviconObserved": inactiveFaviconObserved,
       "coreRoutesObserved": coreRoutesObserved,
       "inspectorChecks": inspectorChecks,
       "extensionListObserved": extensionListObserved,

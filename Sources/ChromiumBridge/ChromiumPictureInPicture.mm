@@ -4,7 +4,10 @@
 
 #import "ChromiumRuntimeInternal.h"
 #import "ChromiumShaarFeatureTransport.h"
+#import "ChromiumProbeRoot.h"
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
 
 // Runs with a user gesture so Chromium accepts the request. It picks the largest playing
 // video the page allows in picture-in-picture and opens Chromium's own video window.
@@ -26,6 +29,20 @@ static BOOL ARCIsPictureInPictureVideoWindow(NSWindow *window) {
   return [NSStringFromClass(window.class) hasPrefix:@"NativeWidgetMac"] && window.isVisible
     && window.level == NSFloatingWindowLevel
     && (window.collectionBehavior & NSWindowCollectionBehaviorCanJoinAllSpaces) != 0;
+}
+
+static NSWindow *ARCHideProbePictureInPictureWindow(NSWindow *window) {
+  if (!window || !std::getenv("SHAAR_ENGINE_TESTING") ||
+      std::strcmp(std::getenv("SHAAR_ENGINE_TESTING"), "1") != 0)
+    return window;
+  NSArray<NSString *> *arguments = NSProcessInfo.processInfo.arguments;
+  NSUInteger index = [arguments indexOfObject:@"--probe-data-dir"];
+  if (index == NSNotFound || index + 1 >= arguments.count ||
+      !ARCProbeRootIsOwned([NSURL fileURLWithPath:arguments[index + 1]]))
+    return window;
+  window.alphaValue = 0;
+  window.ignoresMouseEvents = YES;
+  return window;
 }
 
 static NSString *ARCPictureInPictureCommandName(ARCPictureInPictureCommand command) {
@@ -67,11 +84,12 @@ static NSString *ARCPictureInPictureCommandName(ARCPictureInPictureCommand comma
 
 - (NSWindow *)pictureInPictureVideoWindowForTabID:(NSString *)tabID {
   NSWindow *native = [self shaarPictureInPictureWindowForTabID:tabID];
-  if (native) return native;
+  if (native) return ARCHideProbePictureInPictureWindow(native);
   NSDictionary *state = [self mediaSessionStateForTabID:tabID];
   if (!state[@"pictureInPicture"]) return nil;
   for (NSWindow *window in NSApp.windows)
-    if (ARCIsPictureInPictureVideoWindow(window)) return window;
+    if (ARCIsPictureInPictureVideoWindow(window))
+      return ARCHideProbePictureInPictureWindow(window);
   return nil;
 }
 

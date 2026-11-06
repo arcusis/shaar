@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #include "chrome/browser/shaar/devtools/shaar_devtools.h"
+#include "chrome/browser/shaar/devtools/shaar_agent_bridge.h"
 #include "chrome/browser/shaar/devtools/shaar_devtools_panel.h"
 #include "chrome/browser/devtools/devtools_settings.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
@@ -1158,6 +1159,71 @@ shaar_error_code HandleDevToolsOperation(
                                                                   scope.profile))
     return Fail(error, SHAAR_WRONG_PROFILE,
                 "DevTools profile identity does not match the requested scope");
+
+  if (operation >= SHAAR_OP_PROBE_DEVTOOLS_OPEN_URL &&
+      operation <= SHAAR_OP_PROBE_DEVTOOLS_FRONTEND_ATTACHED) {
+    const char* testing = std::getenv("SHAAR_ENGINE_TESTING");
+    if (!testing || std::strcmp(testing, "1") != 0)
+      return Fail(error, SHAAR_POLICY_BLOCKED,
+                  "DevTools route probe requires testing mode");
+    if (!context->browser_tabs->IsSelectedWebContents(engine, window, tab,
+                                                        contents))
+      return Fail(error, SHAAR_NOT_READY,
+                  "DevTools route probe requires selected tab");
+    const ReplyContext probe_reply{request_id, reply, reply_context};
+    if (operation == SHAAR_OP_PROBE_DEVTOOLS_FRONTEND_ATTACHED) {
+      if (!HasEmptyVersionedSchema(args_json))
+        return Fail(error, SHAAR_INVALID_ARGUMENT,
+                    "invalid frontend attachment probe schema");
+      auto* bindings = DevToolsUIBindings::ForWebContents(contents);
+      const bool attached = bindings && bindings->agent_host();
+      Reply(probe_reply, SHAAR_OK,
+            attached ? R"({"schemaVersion":1,"attached":true})"
+                     : R"({"schemaVersion":1,"attached":false})");
+      return SHAAR_OK;
+    }
+    if (!HasEmptyVersionedSchema(args_json) &&
+        operation == SHAAR_OP_PROBE_NODE_FRONTEND)
+      return Fail(error, SHAAR_INVALID_ARGUMENT,
+                  "invalid Node frontend probe schema");
+    auto* devtools = DevToolsWindow::GetInstanceForInspectedWebContents(contents);
+    if (!devtools)
+      return Fail(error, SHAAR_NOT_READY, "DevTools frontend is not open");
+    if (operation == SHAAR_OP_PROBE_NODE_FRONTEND) {
+      DevToolsWindow::OpenNodeFrontendWindow(
+          Profile::FromBrowserContext(contents->GetBrowserContext()),
+          DevToolsOpenedByAction::kOpenForNodeFromAnotherTarget, contents);
+    } else {
+      auto envelope = base::JSONReader::Read(
+          std::string_view(args_json.data, args_json.size), base::JSON_PARSE_RFC);
+      const base::DictValue* dict = envelope && envelope->is_dict()
+                                        ? &envelope->GetDict() : nullptr;
+      const std::string* requested = dict ? dict->FindString("url") : nullptr;
+      if (!dict || dict->FindInt("schemaVersion") != 1 || !requested ||
+          *requested != "https://github.com/ChromeDevTools/chrome-devtools-mcp")
+        return Fail(error, SHAAR_INVALID_ARGUMENT,
+                    "invalid DevTools URL probe schema");
+      auto* bindings = DevToolsUIBindings::ForWebContents(
+          devtools->GetDevToolsWebContents());
+      if (!bindings)
+        return Fail(error, SHAAR_NOT_READY,
+                    "DevTools frontend bindings are unavailable");
+      bindings->ShaarProbeOpenInNewTab(*requested);
+    }
+    Reply(probe_reply, SHAAR_OK, R"({"schemaVersion":1,"submitted":true})");
+    return SHAAR_OK;
+  }
+
+  if (operation == SHAAR_OP_DEVTOOLS_CONTROL_ENABLE ||
+      operation == SHAAR_OP_DEVTOOLS_CONTROL_DISABLE ||
+      operation == SHAAR_OP_DEVTOOLS_CONTROL_STATUS) {
+    if (!HasEmptyVersionedSchema(args_json))
+      return Fail(error, SHAAR_INVALID_ARGUMENT,
+                  "invalid agent bridge operation schema");
+    return agent_bridge::HandleOperation(
+        engine, scope, window, tab, contents, identity, operation, request_id,
+        reply, reply_context, error);
+  }
 
   if (operation == SHAAR_OP_DEVTOOLS_PANEL_OPEN ||
       operation == SHAAR_OP_DEVTOOLS_PANEL_CLOSE ||

@@ -202,7 +202,7 @@ final class PrivateBrowserHost {
     case .closeTab: !store.commandIsOpen || store.session.selectedPage == nil
     case .developerTools, .inspector:
       !store.commandIsOpen && store.privatePage?.inspectorTarget != nil
-    case .inspectorCopy:
+    case .inspectorCopy, .inspectorSource, .inspectorAgentCopy:
       store.session.selectedPage.flatMap { store.privatePage?.inspectors[$0.tab.id] }?
         .aiCopy.canCopy == true
     case .reopenClosed: store.canReopenClosedTab
@@ -229,6 +229,18 @@ final class PrivateBrowserHost {
         let inspector = owner.page.inspectors[target.tabID]
       {
         Task { await inspector.aiCopy.copyElement() }
+      }
+    case .inspectorSource:
+      if let target = owner.page.inspectorTarget,
+        let inspector = owner.page.inspectors[target.tabID]
+      {
+        Task { await inspector.sourceActions.open() }
+      }
+    case .inspectorAgentCopy:
+      if let target = owner.page.inspectorTarget,
+        let inspector = owner.page.inspectors[target.tabID]
+      {
+        Task { await inspector.sourceActions.copyForAgent() }
       }
     case .newTab: store.showCommand()
     case .search: store.showAddressEditor()

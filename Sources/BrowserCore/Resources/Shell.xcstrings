@@ -1,6 +1,8 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Open source": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Open source"}},"he":{"stringUnit":{"state":"translated","value":"פתיחת קוד המקור"}}}},
+    "Copy for agent": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Copy for agent"}},"he":{"stringUnit":{"state":"translated","value":"העתקה לסוכן"}}}},
     "Open DevTools": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Open DevTools"}},"he":{"stringUnit":{"state":"translated","value":"פתיחת כלי הפיתוח"}}}},
     "Open Inspector": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Open Inspector"}},"he":{"stringUnit":{"state":"translated","value":"פתיחת כלי הבדיקה"}}}},
     "Clear Site Data": {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Clear Site Data"}},"he":{"stringUnit":{"state":"translated","value":"ניקוי נתוני האתר"}}}},

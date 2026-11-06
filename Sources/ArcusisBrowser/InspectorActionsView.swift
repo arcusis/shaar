@@ -51,15 +51,35 @@ struct InspectorActionsView: View {
           Button(InspectorL10n.string("JS path")) { model.copy(selection.jsPath, label: "JS path") }
         }
       } label: {
-        Text(InspectorL10n.string("Copy selector")).font(.system(size: 11)).foregroundStyle(
-          .secondary)
+        Image(systemName: "curlybraces").font(.system(size: 11)).foregroundStyle(.secondary)
+          .frame(width: 22, height: 24).contentShape(Rectangle())
       }.menuStyle(.borderlessButton).menuIndicator(.visible).fixedSize()
         .disabled(model.selection == nil || model.aiCopy.busy).help(
-          InspectorL10n.string("Copy selector"))
+          InspectorL10n.string("Copy selector")
+        )
+        .accessibilityLabel(InspectorL10n.string("Copy selector"))
+      InspectorIconButton(
+        actionHelp("Open source", command: .inspectorSource),
+        symbol: "arrow.up.right.square"
+      ) {
+        Task { await model.sourceActions.open() }
+      }.disabled(!model.aiCopy.canCopy || model.sourceActions.busy)
+      InspectorIconButton(
+        actionHelp("Copy for agent", command: .inspectorAgentCopy),
+        symbol: "terminal"
+      ) {
+        Task { await model.sourceActions.copyForAgent() }
+      }.disabled(!model.aiCopy.canCopy || model.sourceActions.busy)
       InspectorIconButton(InspectorL10n.string("Save element at 2×"), symbol: "camera") {
         Task { await model.styles.saveScreenshot() }
       }.disabled(model.selection?.locked != true || model.aiCopy.busy)
     }
+  }
+
+  private func actionHelp(_ title: String, command: BrowserMenuCommand) -> String {
+    let label = InspectorL10n.string(title)
+    guard let keys = ShortcutCatalog.displayKeys(for: command) else { return label }
+    return "\(label) · \u{2066}\(keys)\u{2069}"
   }
 }
 

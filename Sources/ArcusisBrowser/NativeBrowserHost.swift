@@ -16,7 +16,7 @@ enum BrowserMenuCommand: String, CaseIterable {
     developerTools
   case splitView
   case extensions, help, minimizeWindow, zoomWindow, bringAllToFront, settings, quit, createFolder
-  case checkForUpdates, inspector, inspectorCopy
+  case checkForUpdates, inspector, inspectorCopy, inspectorSource, inspectorAgentCopy
 }
 
 /// AppKit otherwise falls back from unbound Command-N to the private-window menu item.
@@ -376,6 +376,10 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     case .inspectorCopy:
       guard let target = context.engine.siteControlTarget else { return false }
       return context.engine.inspectors[target.tabID]?.aiCopy.canCopy == true
+    case .inspectorSource, .inspectorAgentCopy:
+      guard let target = context.engine.siteControlTarget else { return false }
+      guard let inspector = context.engine.inspectors[target.tabID] else { return false }
+      return inspector.aiCopy.canCopy && !inspector.sourceActions.busy
     case .splitView: return store.canSplitSelectedTab
     case .nextSpace, .previousSpace: return store.canCycleSpace
     case .reopenClosed: return store.canReopenClosedTab
@@ -551,6 +555,18 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
         let inspector = context.engine.inspectors[target.tabID]
       {
         Task { await inspector.aiCopy.copyElement() }
+      }
+    case .inspectorSource:
+      if let target = context.engine.siteControlTarget,
+        let inspector = context.engine.inspectors[target.tabID]
+      {
+        Task { await inspector.sourceActions.open() }
+      }
+    case .inspectorAgentCopy:
+      if let target = context.engine.siteControlTarget,
+        let inspector = context.engine.inspectors[target.tabID]
+      {
+        Task { await inspector.sourceActions.copyForAgent() }
       }
     case .splitView: store.splitSelectedTab()
     case .extensions: context.engine.showExtensionList()
@@ -1184,6 +1200,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     add(.hardReload, "Hard Reload", to: view)
     add(.developerTools, "Developer Tools", to: view)
     add(.inspector, "Inspect Element", to: view)
+    add(.inspectorSource, "Open source", to: view)
+    add(.inspectorAgentCopy, "Copy for agent", to: view)
     add(.inspectorCopy, "Copy for AI", to: view)
     let spaces = section("Spaces")
     add(.newSpace, "New space…", to: spaces)

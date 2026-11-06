@@ -998,6 +998,16 @@
         }
       }
     },
+    "Quick Look": {
+      "localizations": {
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "הצצה מהירה"
+          }
+        }
+      }
+    },
     "Open file": {
       "localizations": {
         "he": {

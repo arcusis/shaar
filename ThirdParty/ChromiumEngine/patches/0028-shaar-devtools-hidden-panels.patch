@@ -65,9 +65,12 @@
        return Fail(error, SHAAR_NOT_READY, "screencast command unavailable");
      }
      if (command == SHAAR_DEVTOOLS_SCREENCAST_STOP) {
-@@ -1466,9 +1477,12 @@
+@@ -1464,11 +1475,14 @@
+         params.Set("quality", 40);
+         params.Set("maxWidth", 1280);
          params.Set("maxHeight", 720);
-         params.Set("everyNthFrame", 12);
+-        params.Set("everyNthFrame", 12);
++        params.Set("everyNthFrame", 1);
          params.Set("maxFramesInFlight", 1);
 -        start_command_id_ = SendCommand("Page.startScreencast", std::move(params));
 -        if (!start_command_id_)
@@ -119,16 +122,27 @@
    base::WeakPtrFactory<PanelClient> weak_factory_{this};
 --- a/chrome/browser/shaar/devtools/shaar_devtools_viewports.cc
 +++ b/chrome/browser/shaar/devtools/shaar_devtools_viewports.cc
-@@ -154,6 +154,8 @@
+@@ -154,10 +154,17 @@
    }
  
    bool Attach() {
+-    host_ = ProtocolAgentHostFor(contents_.get());
+-    if (!host_ || !host_->AttachClient(this))
 +    if (attached_)
 +      return true;
-     host_ = ProtocolAgentHostFor(contents_.get());
-     if (!host_ || !host_->AttachClient(this))
++    // Chromium reports a detached viewport child as an "other" target. The
++    // lease owns this WebContents, so match the host by identity instead.
++    host_ = content::DevToolsAgentHost::GetOrCreateFor(contents_.get());
++    if (!host_ || host_->GetWebContents() != contents_.get() ||
++        !host_->AttachClient(this))
        return false;
-@@ -208,11 +210,15 @@
+     attached_ = true;
++    if (auto* view = contents_->GetRenderWidgetHostView())
++      view->SetSize(gfx::Size(width_, height_));
+     base::DictValue metrics;
+     metrics.Set("width", width_);
+     metrics.Set("height", height_);
+@@ -208,11 +215,16 @@
    }
  
    bool Capture(ReplyTarget reply) {
@@ -142,10 +156,11 @@
 +      capture_lease_.RunAndReset();
 +      return false;
 +    }
++    contents_->GetRenderWidgetHostView()->SetSize(gfx::Size(width_, height_));
      base::DictValue params;
      params.Set("format", "png");
      params.Set("captureBeyondViewport", false);
-@@ -352,8 +358,6 @@
+@@ -352,8 +364,6 @@
      const int id = next_viewport_id_++;
      auto viewport = std::make_unique<Viewport>(this, id, std::move(preset),
                                                  width, height, std::move(child));
@@ -154,7 +169,7 @@
      viewport->Navigate(url);
      viewports_.push_back(std::move(viewport));
      return id;
-@@ -444,9 +448,13 @@
+@@ -444,9 +454,13 @@
  };
  
  void Viewport::DidFinishNavigation(content::NavigationHandle* navigation) {

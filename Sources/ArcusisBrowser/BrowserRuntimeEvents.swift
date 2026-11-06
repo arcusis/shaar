@@ -10,6 +10,8 @@ final class BrowserRuntimeEvents {
   let runtime: ARCChromiumRuntime
   let router = BrowserRuntimeRouter()
   var onWindowClosed: ((String, Bool) -> Void)?
+  var onQuitRequested: (() -> Void)?
+  var onQuitCancelled: (() -> Void)?
   var onWindowRequest: (@MainActor @Sendable (String, String) -> String?)? {
     didSet { runtime.onWindowRequest = onWindowRequest }
   }
@@ -20,18 +22,27 @@ final class BrowserRuntimeEvents {
 
   init(runtime: ARCChromiumRuntime) {
     self.runtime = runtime
+    runtime.onQuitRequested = { [weak self] in self?.prepareForQuit() }
+    runtime.onQuitCancelled = { [weak self] in
+      self?.router.cancelQuit()
+      self?.onQuitCancelled?()
+    }
     runtime.onWindowClosed = { [weak self] id, quitting in
-      self?.router.windowClosed(id, quitting: quitting)
-      self?.onWindowClosed?(id, quitting)
+      guard let self else { return }
+      let quitting = quitting || self.router.isQuitting || self.runtime.isQuitting
+      self.router.windowClosed(id, quitting: quitting)
+      self.onWindowClosed?(id, quitting)
     }
     runtime.onNotice = { [weak self] message in
       for client in self?.router.clients ?? [] { client.onNotice?(message) }
     }
     runtime.onTabChanged = { [weak self] id, address, title, loading, back, forward in
+      guard self?.router.isQuitting == false else { return }
       self?.tabClient(id)?.onTabChanged?(id, address, title, loading, back, forward)
     }
     runtime.onTabClosed = { [weak self] id in self?.router.tabClosed(id) }
     runtime.onTabActivated = { [weak self] id, profile in
+      guard self?.router.isQuitting == false else { return }
       self?.tabClient(id)?.onTabActivated?(id, profile)
     }
     runtime.onRendererGone = { [weak self] id, profile, status, code in
@@ -41,6 +52,7 @@ final class BrowserRuntimeEvents {
       self?.tabClient(id)?.onDocumentCommitted?(id, profile)
     }
     runtime.onNewTab = { [weak self] id, profile, address, opener, foreground in
+      guard self?.router.isQuitting == false else { return }
       guard let self, let window = self.runtime.windowID(forTabID: id),
         self.router.bindTab(id, windowID: window), let client = self.tabClient(id)
       else {
@@ -171,8 +183,14 @@ final class BrowserRuntimeEvents {
   }
 
   func quit() {
-    router.prepareForQuit()
+    prepareForQuit()
     runtime.quit()
+  }
+
+  private func prepareForQuit() {
+    guard !router.isQuitting else { return }
+    router.prepareForQuit()
+    onQuitRequested?()
   }
 
   private func tabClient(_ id: String) -> BrowserRuntimeClient? {

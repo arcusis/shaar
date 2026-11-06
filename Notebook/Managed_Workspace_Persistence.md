@@ -8,6 +8,24 @@ When no workspace exists, `WorkspaceFile` reads legacy `session.json` (v1/v2/v3/
 
 Every persisted model change schedules a save. Ordinary saves run on a background queue immediately; Space switches coalesce for 250 ms. Launch, native restoration and quit can write synchronously and drain pending work. Flush ordering, backup recovery and the interval in which a crash can lose a queued change are described in [[Session_Durability]].
 
+Quit intent is shared by the native bridge, event router and managed host. A host
+Quit or native `engine.quitRequested`/`engine.willShutDown` notification checkpoints
+the workspace before teardown. Tab removal and navigation/selection updates are
+ignored during that teardown, and window closure retains its saved record even
+when an individual native callback lacks the quitting flag. Cancellation clears
+the guard so later explicit user closes still update the session.
+
+The November 6 follow-up reproduced `windows: []` with the actual hidden host and
+file writer when teardown delivered a window-close callback without that flag.
+It also reproduced dropped user-close callbacks after a canceled Quit. The
+ordinary Quit-menu native probe on shaar.13 preserved its window before the fix;
+this does not establish which exit path produced David's reported empty file.
+The separate Preview verification helper did explicitly close all normal windows
+before requesting Quit, thereby deleting their records; it now uses host Quit.
+`WorkspaceQuitPersistenceTests` checks two windows with ordinary tabs and pins,
+late teardown navigation, native/host Quit, cancellation and disk reload.
+[[Quit_Exit_Verification]] now checks saved sessions as well as process exit.
+
 A workspace file that fails to decode or validate is moved to `workspace.json.damaged` and the backup is restored. Damaged data never falls back to a stale legacy session: when no valid backup exists, both files remain preserved and temporary windows report that changes will not be saved, so an empty session never overwrites them. Valid unsaved state survives IO failure for retry. A mode-0600 `workspace.lock` is held with an exclusive OS lock until engine shutdown, preventing another app process from writing the same workspace; the lock file is retained after release. The UI-only SwiftUI preview uses in-memory sample data and does not modify the workspace or legacy source.
 
 Related: [[Session_Durability]], [[Abrupt_Restart_Durability]], [[Managed_Host_Verification]].

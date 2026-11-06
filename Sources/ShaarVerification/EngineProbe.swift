@@ -985,10 +985,10 @@ final class EngineProbe {
 
   private func auditNativeHostShutdown() {
     if let quitExitProbe {
-      let closures = quitExitProbe.auditAfterQuit()
-      checks += closures
-      if closures.isEmpty && resultError == nil {
-        resultError = ProbeFailure("Quit left a hidden host window open.")
+      do {
+        checks += try quitExitProbe.auditAfterQuit()
+      } catch {
+        if resultError == nil { resultError = error }
         passed = false
       }
       writeReport()

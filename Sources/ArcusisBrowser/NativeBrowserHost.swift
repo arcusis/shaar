@@ -122,7 +122,11 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
     self.keyWindow = keyWindow
     self.screens = screens
     super.init()
-    events.runtime.onQuitCancelled = { [weak self] in self?.restartRequested = false }
+    events.onQuitRequested = { [weak self] in
+      self?.flushGeometry()
+      self?.workspace.persistSnapshot()
+    }
+    events.onQuitCancelled = { [weak self] in self?.restartRequested = false }
   }
 
   static func makeDownloadDirectoryApplier(runtime: ARCShaarRuntime)
@@ -406,8 +410,6 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
       alert.addButton(withTitle: ShellL10n.string("Cancel"))
       guard alert.runModal() == .alertFirstButtonReturn else { return }
     }
-    flushGeometry()
-    workspace.persistSnapshot()
     events.quit()
   }
 
@@ -530,7 +532,8 @@ final class NativeBrowserHost: NSObject, NSMenuItemValidation, NSMenuDelegate {
         forEventClass: AEEventClass(kCoreEventClass), andEventID: AEEventID(kAEReopenApplication))
       reopenHandlerInstalled = false
     }
-    events.runtime.onQuitCancelled = nil
+    events.onQuitRequested = nil
+    events.onQuitCancelled = nil
     if let shortcutMonitor { NSEvent.removeMonitor(shortcutMonitor) }
     shortcutMonitor = nil
     privateHost?.detach()

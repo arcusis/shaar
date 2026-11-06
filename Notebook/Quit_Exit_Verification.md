@@ -13,6 +13,14 @@ bash scripts/test-engine.sh --quit-exit
 
 The probe loads the MV3 fixture into two disposable profiles, restores hidden host windows, then sends the host's Quit menu action. The runner times the browser exit (15 s bound) and the absence of its process group (10 s bound) from the probe's checkpoint and writes `<phase>-quit-exit.json`. Reports record whether the shutdown guard had to stop the loop; `<phase>-quit-keepalive.log` samples Chromium's keep-alive registry until the loop ends.
 
+The post-loop audit also reloads `workspace.json` after draining pending writes
+and compares every window ID and complete session against the pre-Quit snapshot.
+An exit with `windows: []`, missing ordinary tabs, changed selection or new
+closed-tab records fails. The November 6 shaar.13 hidden run passed both initial
+and restart phases with six checks each; the browser exited in 0.17/0.18 seconds
+and its helpers disappeared 0.01 seconds later. This covers the authored host
+menu route, not a physical Cmd-Q or an external process kill.
+
 The bridge publishes confirmed window closure synchronously, before the engine loop can return. Native teardown remains queued, retaining native state until the close callback unwinds. Previously the host notification was inside that queue too: a fast clean exit could leave a host context registered at the probe's post-loop audit. [[Private_Fixture_Readiness]] documents the prerequisite correction and repeated hosted verification boundary.
 
 Known engine crash: quitting while a tab navigation is pending crashes the pinned engine during teardown in about five of six runs (SIGSEGV on freed memory). The committing navigation has a non-network response and reaches `ReadyToCommitNavigation` observers after its window is gone; stopping loading tabs before Quit does not prevent it. The probe therefore quits with no navigation pending. The fix needs the engine sources.

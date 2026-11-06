@@ -8,6 +8,7 @@
 #import "ChromiumShaarExtensionsInternal.h"
 #import "ChromiumShaarPrivateSupport.h"
 #import "ChromiumShaarFeatureTransport.h"
+#import "ChromiumShaarActivation.h"
 
 #include <dlfcn.h>
 #include <cstdlib>
@@ -126,7 +127,9 @@ struct Symbols {
 #include "ChromiumShaarFeatureTransport.inc"
 
 static void ShaarEventCallback(void *context, const shaar_event *event) {
-  [(__bridge ARCShaarRuntime *)context receiveEvent:event];
+  ARCPerformShaarEventCallback(^{
+    [(__bridge ARCShaarRuntime *)context receiveEvent:event];
+  });
 }
 
 @implementation ARCShaarRuntime
@@ -197,6 +200,9 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   _shaarTesting = testing;
   const shaar_error_code result = _symbols.run(_shaarEngine, &error);
   unsetenv("SHAAR_ENGINE_TESTING");
+  // Remaining native handles are being torn down, not closed by the user.
+  _shaarQuitting = YES;
+  if (self.onQuitRequested) self.onQuitRequested();
   for (NSString *windowID in [_shaarWindows.allKeys copy]) [self finishWindowID:windowID];
   for (id observer in _hostResizeObservers.allValues)
     [NSNotificationCenter.defaultCenter removeObserver:observer];
@@ -241,6 +247,13 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
       return;
     }
     if (self.onReady) self.onReady();
+    return;
+  }
+  if (event->kind == SHAAR_EVENT_ENGINE &&
+      ([kind isEqualToString:@"engine.quitRequested"] ||
+       [kind isEqualToString:@"engine.willShutDown"])) {
+    _shaarQuitting = YES;
+    if (self.onQuitRequested) self.onQuitRequested();
     return;
   }
   if (event->kind == SHAAR_EVENT_ENGINE && [kind isEqualToString:@"engine.quitCancelled"]) {
@@ -489,10 +502,10 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
   if (![_shaarSelectedTabs[windowID] isEqualToString:tabID])
     [self closeExtensionPopupForWindowID:windowID];
   _shaarSelectedTabs[windowID] = tabID;
-  // Navigation can notify Swift while Chromium is still editing its tab strip.
-  // Activate after that edit finishes to avoid reentering TabStripModel.
+  // Native notifications must unwind before reentering TabStripModel. Host
+  // actions can activate immediately, without waiting behind Chromium's pump.
   __weak ARCShaarRuntime *weakSelf = self;
-  dispatch_async(dispatch_get_main_queue(), ^{
+  ARCDispatchShaarTabActivation(^{
     ARCShaarRuntime *owner = weakSelf;
     if (!owner || !owner->_shaarEngine || !owner->_shaarTabs[tabID] ||
         ![owner->_shaarSelectedTabs[windowID] isEqualToString:tabID]) return;
@@ -941,8 +954,13 @@ static void ShaarEventCallback(void *context, const shaar_event *event) {
 - (void)quit {
   if (!_shaarEngine) return;
   _shaarQuitting = YES;
+  if (self.onQuitRequested) self.onQuitRequested();
   shaar_error error = EmptyError();
-  _symbols.request_quit(_shaarEngine, &error);
+  shaar_error_code status = _symbols.request_quit(_shaarEngine, &error);
+  if (status != SHAAR_OK && status != SHAAR_SHUTTING_DOWN) {
+    _shaarQuitting = NO;
+    if (self.onQuitCancelled) self.onQuitCancelled();
+  }
 }
 
 - (BOOL)findInPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID

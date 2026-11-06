@@ -75,3 +75,28 @@ with a nil bridge result rather than a JavaScript error object, and the componen
 fixture is intentionally excluded from the user-extension list. The former is
 handled without accepting a success result; the latter still fails and requires
 compatible fixture coverage. Private-probe failures are outside this repair.
+
+## Follow-up on shaar.13
+
+Merge run [42180303400](https://github.com/arcusis/shaar/actions/runs/42180303400)
+still measured Space p95 636.08 ms (first two samples 636/1206 ms), while Profile
+p95 was 2.71 ms. Local activation tracing separated native submission (at most
+3.16 ms) from the unnecessary main-queue wait (up to 43.45 ms). Host selections
+now activate synchronously; only requests inside native event callbacks defer
+until the TabStripModel notification unwinds. Nested callback tests cover both
+the reentrancy guard and immediate host selection. No timer boundary or budget
+changed. With the debug harness and production shaar.13, a hidden 20/20-sample
+run measured Space p95 3.30 ms and Profile p95 1.73 ms. Hosted performance has
+not been re-established by that local result; runner load is not proven to be
+the sole source of the earlier delay.
+
+The Swift process signal 5 was reproduced in
+`privateStartPageShowsEngineControlsOnlyAfterStatusReadback`, whose base-runtime
+fixture lacked `privatePrivacyStatusForContextID:completion:`. The fixture now
+records the context-bound readback. The broader app/probe run exposed a missing
+private-find stop selector and a stale settings-reopen expectation; those are
+corrected as well. All 596 app/probe Swift Testing checks passed headlessly.
+
+The remaining private-window readiness failure is owned by the engine work and
+depends on shaar.14. The extension baseline incompatibility above is still
+reported separately. These are not hidden by a passing latency measurement.

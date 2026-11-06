@@ -110,7 +110,7 @@ struct BrowserSettingsIntegrationTests {
     controller.close()
     controller.show(for: fixture.alpha.id)
     #expect(controller.window === window && !window.isVisible)
-    #expect(controller.selectedProfileID == fixture.beta.id)
+    #expect(controller.selectedProfileID == fixture.alpha.id)
     controller.close()
   }
 

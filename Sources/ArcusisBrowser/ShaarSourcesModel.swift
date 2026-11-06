@@ -143,7 +143,8 @@ final class ShaarSourcesModel {
     await loadSelected()
   }
 
-  func findLocalFiles(framework: DevelopmentFramework?, workspaceRootOverride: String? = nil) async {
+  func findLocalFiles(framework: DevelopmentFramework?, workspaceRootOverride: String? = nil) async
+  {
     guard !sourceLoading else { return }
     guard let selected, let resourceURL = URL(string: selected.url),
       DevelopmentPage.detect(url: phase2.target.url).isDevelopmentPage,

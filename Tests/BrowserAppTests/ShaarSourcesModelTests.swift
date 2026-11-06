@@ -72,7 +72,8 @@ import Testing
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }
     let file = root.appending(path: "src/app.ts")
-    try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(
+      at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
     try Data("export const app = true".utf8).write(to: file)
     let target = SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "http://localhost:3000/")!)

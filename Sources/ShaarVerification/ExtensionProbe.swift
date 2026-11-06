@@ -39,9 +39,12 @@ final class ExtensionProbe {
     let profileB = spaces[1].profileID
     let fixtureURL = root.appending(path: "Extension")
     let extensionA = try runtime.loadProbeExtension(at: fixtureURL, profileID: profileA.uuidString)
-    try await checkExtensionManager(profileA)
+    try await checkExtensionManager(profileA, hiddenFixtureID: extensionA)
     store.perform(.space(spaces[0].id))
-    try await waitForLoadedExtension(extensionA)
+    engine.refreshExtensions()
+    try expect(
+      !engine.extensions.contains { $0.id == extensionA },
+      "profile A hides its component-loaded MV3 fixture from the product list")
     store.perform(.space(spaces[1].id))
     engine.refreshExtensions()
     try expect(
@@ -78,14 +81,11 @@ final class ExtensionProbe {
       }
       try await waitForContentScript(tab)
       engine.refreshExtensions()
-      try expect(
-        runtime.extensionActionTitle(forID: extensionA, tabID: tab) == "Open account probe",
-        "extension tooltip reads the action title from the selected tab's profile")
+      try await waitForActionTitle(
+        extensionA, tabID: tab, expected: "Open account probe",
+        check: "extension tooltip reads the action title from the selected tab's profile")
       engine.executeExtension(extensionA)
-      guard case .popup(let popup) = engine.extensionPanel else {
-        throw ExtensionProbeFailure(
-          "Native extension action did not produce a popup: \(engine.notice ?? "no notice")")
-      }
+      let popup = try await waitForExtensionPopup()
       try expect(
         popup.profileID == space.profileID && popup.tabID == space.selectedTabID,
         "popup \(index) belongs to its selected space profile and tab")
@@ -101,10 +101,10 @@ final class ExtensionProbe {
             return true; })()
           """)
       let titleChanged = try await waitForPopup(popup.id, expression: "window.probeActionTitle")
-      try expect(
-        titleChanged["done"] as? Bool == true
-          && runtime.extensionActionTitle(forID: extensionA, tabID: tab) == "Inspect account",
-        "extension tooltip reads a per-tab action title updated at runtime")
+      try expect(titleChanged["done"] as? Bool == true, "popup updates the per-tab action title")
+      try await waitForActionTitle(
+        extensionA, tabID: tab, expected: "Inspect account",
+        check: "extension tooltip reads a per-tab action title updated at runtime")
       try expect(
         initial["serviceWorker"] as? Bool == true,
         "popup \(index) connects to its MV3 service worker")
@@ -213,14 +213,19 @@ final class ExtensionProbe {
   }
 
   /// The bundled manager extension answers chrome.management without adding tabs or windows.
-  private func checkExtensionManager(_ profile: UUID) async throws {
+  private func checkExtensionManager(_ profile: UUID, hiddenFixtureID: String) async throws {
     let tabsBefore = store.session.spaces.flatMap { $0.tabs.map(\.id) }
     let nativeBefore = tabsBefore.map { runtime.nativeTabID(forID: $0.uuidString) }
     var listed = false
+    var fixtureHidden = false
     if case .value(let data)? = await manage(profile, .list) {
-      listed = (try? JSONDecoder().decode([ManagedExtension].self, from: data)) != nil
+      if let extensions = try? JSONDecoder().decode([ManagedExtension].self, from: data) {
+        listed = true
+        fixtureHidden = !extensions.contains { $0.id == hiddenFixtureID }
+      }
     }
     try expect(listed, "bundled extension manager lists the profile's extensions")
+    try expect(fixtureHidden, "extension manager hides the component-loaded MV3 fixture")
     let missing = await manage(
       profile, .setEnabled(id: String(repeating: "a", count: 32), enabled: false))
     // Shaar's native ABI rejects an unknown ID with a nil bridge result; the
@@ -238,17 +243,6 @@ final class ExtensionProbe {
       "hidden extension manager page adds no tabs to the session or native windows")
   }
 
-  private func waitForLoadedExtension(_ extensionID: String) async throws {
-    for _ in 0..<50 {
-      engine.refreshExtensions()
-      if engine.extensions.contains(where: { $0.id == extensionID }) { break }
-      try await Task.sleep(for: .milliseconds(100))
-    }
-    try expect(
-      engine.extensions.contains { $0.id == extensionID },
-      "profile A lists its loaded MV3 fixture")
-  }
-
   private func manage(
     _ profile: UUID, _ operation: ExtensionManagementOperation
   ) async -> ExtensionManagementResult? {
@@ -257,6 +251,30 @@ final class ExtensionProbe {
         continuation.resume(returning: ExtensionManagementResult(json: $0))
       }
     }
+  }
+
+  private func waitForActionTitle(
+    _ extensionID: String, tabID: String, expected: String, check: String
+  ) async throws {
+    for _ in 0..<50 {
+      if runtime.extensionActionTitle(forID: extensionID, tabID: tabID) == expected {
+        checks.append(check)
+        return
+      }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    throw ExtensionProbeFailure(check)
+  }
+
+  private func waitForExtensionPopup() async throws -> ExtensionPopupContext {
+    for _ in 0..<50 {
+      if case .popup(let popup) = engine.extensionPanel { return popup }
+      if let notice = engine.notice {
+        throw ExtensionProbeFailure("Native extension action failed: \(notice)")
+      }
+      try await Task.sleep(for: .milliseconds(100))
+    }
+    throw ExtensionProbeFailure("Native extension action did not produce a popup.")
   }
 
   private func waitForPopup(_ id: String, expression: String) async throws -> [String: Any] {

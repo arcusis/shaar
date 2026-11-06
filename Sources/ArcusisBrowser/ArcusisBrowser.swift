@@ -204,9 +204,10 @@ public enum BrowserLaunch {
     let size = NSSize(width: 760, height: 500)
     let view = FirstRunSetupView(
       store: BrowserStore.preview(showCommand: false), location: location,
-      initialStep: step, onFinish: {})
-      .frame(width: size.width, height: size.height)
-      .settingsLocalization()
+      initialStep: step, onFinish: {}
+    )
+    .frame(width: size.width, height: size.height)
+    .settingsLocalization()
     try renderOffscreen(view, to: url, size: size)
   }
 

@@ -345,7 +345,8 @@ final class ShaarPreviewProbe {
     if privateCloseLive {
       required = ["openTab", "privateWindow", "privateWindowClose", "normalTabSurvives"]
     } else if pendingQuit {
-      required = pendingPrivateQuit
+      required =
+        pendingPrivateQuit
         ? ["openTab", "privateWindow", "pendingNavigation"]
         : ["openTab", "pendingNavigation"]
     } else {

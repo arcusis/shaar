@@ -49,7 +49,7 @@
   },
   "layer": {
     "path": "ThirdParty/ChromiumEngine/layer",
-    "sha256": "5c65a8e093d3a4763ca8f511353bf3a60f8d893bcbf35910b4d37dc6fadaf8d8",
+    "sha256": "17747acecbab367ef466ddadb132d81a14a2a585f455c8b072dc26bf9cf7d23d",
     "files": {
       "chrome/browser/shaar/BUILD.gn": "5f73aeb2a2e2f7a4a75f2605d877612407cac5a2606159e99a9e3658bdc362f9",
       "chrome/browser/shaar/bookmarks/shaar_bookmarks.cc": "da94500fa2d7b3106d58dcf3afc2f46072c6cc57a6e1868d1cdd132cafa714fd",
@@ -58,7 +58,7 @@
       "chrome/browser/shaar/bookmarks/shaar_bookmarks_unittest.cc": "01301adddd0c3f0a5226efcfaf5a080df3a0423e94a9392e401a8327487bd377",
       "chrome/browser/shaar/devtools/shaar_agent_bridge.cc": "3d511dc53a49c68c5357892cb4edc1fda57a30fdd1212907669f0a1f07911a9b",
       "chrome/browser/shaar/devtools/shaar_agent_bridge.h": "5afbf3d57001d0c1dd3ab08068b9bbb18a3cecce326b7c0d25ba2852d5675600",
-      "chrome/browser/shaar/devtools/shaar_devtools.cc": "6c930eb4497849e25bbf9a6472bcf2decf3f3184c167f4737dde7143a634d2f3",
+      "chrome/browser/shaar/devtools/shaar_devtools.cc": "93c90631119f02b432e1ae249888c9cbc6bc55ca03e2fff90570d6d90991fe89",
       "chrome/browser/shaar/devtools/shaar_devtools.h": "f5fc00b3d9e29ee45f0d8f02619456edbb269215d386707f8c404f120a4a4fe5",
       "chrome/browser/shaar/devtools/shaar_devtools_lifecycle_adapter.cc": "484cd4c5e58b5eb497c422ed8b464187f25428df73c9a3e83f5fc83c7673ca72",
       "chrome/browser/shaar/devtools/shaar_devtools_panel.cc": "2a160dba7827c84e5c5aefe466aeed2e3c157b545c51536b937b7de1954d235e",
@@ -324,7 +324,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0020-shaar-safe-area-insets.patch",
-      "sha256": "2d0251fec453e39af5e658e22a381ac66704e394033c28c6c886fd532f9ec76a"
+      "sha256": "5dda749534e384f69cd62a9f076bdf776db37a09ee4c07235d70d51b54b2356e"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0021-shaar-devtools-viewports-lease.patch",

@@ -109,12 +109,15 @@ std::vector<std::unique_ptr<shaar_tab>> retired_tabs;
 uint64_t next_window_generation = 0;
 uint64_t next_tab_serial = 0;
 
-bool LiveWindow(shaar_window* window) {
+shaar_window* LiveWindow(shaar_window* window) {
   auto found = windows.find(window);
-  return found != windows.end() && found->second->generation != 0 &&
-         found->second->generation == window->generation &&
-         shaar::windows_tabs::Registry().FindWindowOwner(window) ==
-             found->second->engine;
+  if (found == windows.end())
+    return nullptr;
+  shaar_window* owned = found->second.get();
+  if (!owned->generation || !shaar::EngineIsLive(owned->engine) ||
+      shaar::windows_tabs::Registry().FindWindowOwner(owned) != owned->engine)
+    return nullptr;
+  return owned;
 }
 
 bool LiveTab(shaar_tab* tab) {
@@ -367,7 +370,11 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_window_open(
     shaar_error* error) {
   if (out)
     *out = nullptr;
-  if (!pthread_main_np() || !engine || !out || !ValidID(window_id) ||
+  if (!pthread_main_np() || !engine || !out)
+    return Result(SHAAR_INVALID_ARGUMENT, error);
+  if (!shaar::EngineIsLive(engine))
+    return Result(SHAAR_NOT_FOUND, error);
+  if (!ValidID(window_id) ||
       (kind != SHAAR_WINDOW_REGULAR && kind != SHAAR_WINDOW_PRIVATE) ||
       (kind == SHAAR_WINDOW_REGULAR && private_session) ||
       (kind == SHAAR_WINDOW_PRIVATE && !private_session))
@@ -427,8 +434,8 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_window_close(
     shaar_window* window, shaar_error* error) {
   if (!pthread_main_np() || !window)
     return Result(SHAAR_INVALID_ARGUMENT, error);
-  auto found = windows.find(window);
-  if (found == windows.end() || !LiveWindow(window))
+  window = LiveWindow(window);
+  if (!window)
     return Result(SHAAR_NOT_FOUND, error);
   shaar_engine* engine = window->engine;
   auto& registry = shaar::windows_tabs::Registry();
@@ -460,12 +467,15 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_tab_open(
     shaar_error* error) {
   if (out)
     *out = nullptr;
-  if (!pthread_main_np() || !window || !out || !ValidID(tab_id) ||
-      !ValidURL(url) || (foreground != 0 && foreground != 1))
+  if (!pthread_main_np() || !window || !out)
+    return Result(SHAAR_INVALID_ARGUMENT, error);
+  window = LiveWindow(window);
+  if (!window)
+    return Result(SHAAR_NOT_FOUND, error);
+  if (!ValidID(tab_id) || !ValidURL(url) ||
+      (foreground != 0 && foreground != 1))
     return Result(SHAAR_INVALID_ARGUMENT, error);
   std::string target;
-  if (!LiveWindow(window))
-    return Result(SHAAR_NOT_FOUND, error);
   shaar_engine* engine = window->engine;
   if (shaar::windows_tabs::Registry().EngineQuitRequested(engine))
     return Result(SHAAR_SHUTTING_DOWN, error);
@@ -490,7 +500,7 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_tab_open(
   auto& registry = shaar::windows_tabs::Registry();
   auto* state = registry.FindWindowState(engine, window);
   if (!state || state->closing)
-    return Result(SHAAR_CONFLICT, error);
+    return Result(SHAAR_NOT_FOUND, error);
   if (registry.HasTabID(engine, window,
                         std::string_view(tab_id.data, tab_id.size)))
     return Result(SHAAR_CONFLICT, error);

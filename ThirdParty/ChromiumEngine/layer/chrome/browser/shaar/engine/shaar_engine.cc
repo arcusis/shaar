@@ -8,11 +8,26 @@
 #include <pthread.h>
 
 #include <new>
+#include <memory>
+#include <unordered_set>
+#include <vector>
+
+#include "base/no_destructor.h"
 
 namespace {
 
 constexpr uint32_t kConfigMinimumSize =
     offsetof(shaar_config, event_context) + sizeof(void*);
+
+auto& LiveEngines() {
+  static base::NoDestructor<std::unordered_set<const shaar_engine*>> engines;
+  return *engines;
+}
+
+auto& RetiredEngines() {
+  static base::NoDestructor<std::vector<std::unique_ptr<shaar_engine>>> engines;
+  return *engines;
+}
 
 shaar_error_code Fail(shaar_error_code code,
                       const char* message,
@@ -35,6 +50,19 @@ shaar_error_code Fail(shaar_error_code code,
   Fail(code, literal, sizeof(literal) - 1, error)
 
 }  // namespace
+
+namespace shaar {
+
+bool EngineIsLive(const shaar_engine* engine) {
+  return LiveEngines().contains(engine);
+}
+
+void RetireEngine(shaar_engine* engine) {
+  if (LiveEngines().erase(engine))
+    RetiredEngines().emplace_back(engine);
+}
+
+}  // namespace shaar
 
 extern "C" SHAAR_EXPORT uint32_t shaar_abi_major(void) {
   return SHAAR_ENGINE_ABI_MAJOR;
@@ -75,12 +103,13 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_engine_create(
     delete engine;
     return SHAAR_FAIL(SHAAR_INVALID_ARGUMENT, "embedded NUL in config", error);
   }
+  LiveEngines().insert(engine);
   *out = engine;
   return SHAAR_FAIL(SHAAR_OK, "", error);
 }
 
 extern "C" SHAAR_EXPORT void shaar_engine_release(shaar_engine* engine) {
-  if (!engine)
+  if (!shaar::EngineIsLive(engine))
     return;
   if (engine->emitting) {
     if (!engine->run_active)
@@ -89,5 +118,5 @@ extern "C" SHAAR_EXPORT void shaar_engine_release(shaar_engine* engine) {
   }
   if (engine->run_active)
     return;
-  delete engine;
+  shaar::RetireEngine(engine);
 }

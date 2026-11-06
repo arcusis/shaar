@@ -296,7 +296,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0014-shaar-devtools-theme.patch",
-      "sha256": "5b1a8c9460d40dca8e0b04b12b5baeac4c5a0fb881e4d005dea1dab957293ea5"
+      "sha256": "abfcc6ecfeff6b8690579ef92ba239a2aefca9d24a6962bdd5e8424469b54924"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0015-shaar-framework-devtools.patch",

@@ -1,6 +1,6 @@
 --- a/chrome/browser/devtools/devtools_ui_bindings.cc
 +++ b/chrome/browser/devtools/devtools_ui_bindings.cc
-@@ -2346,6 +2346,16 @@
+@@ -2357,6 +2357,16 @@
            extensions::switches::AreExtensionsOnExtensionURLsAllowed()));
  #endif
  
@@ -123,51 +123,73 @@
                            href=${experiment.feedbackLink}
 --- a/third_party/devtools-frontend/src/front_end/design_system_tokens.css
 +++ b/third_party/devtools-frontend/src/front_end/design_system_tokens.css
-@@ -1060,3 +1060,45 @@
+@@ -1060,3 +1060,67 @@
    --ref-palette-indigo99: rgb(255 251 255 / 100%);
    --ref-palette-indigo100: rgb(255 255 255 / 100%);
  }
 +
 +/* Shaar DevTools palette. */
 +:root.shaar-theme {
++  --shaar-accent: #026748;
++  --shaar-accent-tint: #dff3e8;
++  --shaar-section: #eef6f0;
 +  --default-font-family: system-ui, sans-serif;
-+  --sys-color-surface: #fbfcfd;
-+  --sys-color-base: #f2f5f7;
-+  --sys-color-base-container: #f7f9fa;
++  --sys-color-surface: #ffffff;
++  --sys-color-base: #edf4ef;
++  --sys-color-base-container: #f6faf7;
 +  --sys-color-base-container-elevated: #ffffff;
-+  --sys-color-on-surface: #202b35;
-+  --sys-color-on-surface-subtle: #586877;
-+  --sys-color-on-base: #202b35;
-+  --sys-color-primary: #39758f;
++  --sys-color-cdt-base: #ffffff;
++  --sys-color-cdt-base-container: #ffffff;
++  --sys-color-on-surface: #18291f;
++  --sys-color-on-surface-subtle: #53665a;
++  --sys-color-on-surface-primary: var(--shaar-accent);
++  --sys-color-on-base: #18291f;
++  --sys-color-primary: var(--shaar-accent);
 +  --sys-color-on-primary: #ffffff;
-+  --sys-color-tonal-container: #e6f0f4;
-+  --sys-color-on-tonal-container: #254d61;
-+  --sys-color-outline: #8999a7;
-+  --sys-color-divider: #d8e0e5;
-+  --sys-color-divider-prominent: #aab8c1;
-+  --sys-color-state-focus-ring: #39758f;
-+  --sys-color-state-focus-select: #d5e9f0;
-+  --sys-color-cdt-base: var(--sys-color-base-container);
++  --sys-color-tonal-container: var(--shaar-accent-tint);
++  --sys-color-on-tonal-container: #064934;
++  --sys-color-neutral-container: #eaf1ec;
++  --sys-color-outline: #779b85;
++  --sys-color-divider: #d7e5dc;
++  --sys-color-divider-prominent: #9db9a8;
++  --sys-color-surface1: #f8fbf9;
++  --sys-color-surface2: #f4f9f5;
++  --sys-color-surface3: #eff7f1;
++  --sys-color-surface4: #eaf4ed;
++  --sys-color-surface5: #e4f1e8;
++  --sys-color-state-focus-ring: var(--shaar-accent);
++  --sys-color-state-focus-select: #d9f0e4;
 +}
 +
 +:root.shaar-theme.theme-with-dark-background {
-+  --sys-color-surface: #171f26;
-+  --sys-color-base: #1c2730;
-+  --sys-color-base-container: #202c35;
-+  --sys-color-base-container-elevated: #283640;
-+  --sys-color-on-surface: #e8eef1;
-+  --sys-color-on-surface-subtle: #aebfc8;
-+  --sys-color-on-base: #e8eef1;
-+  --sys-color-primary: #8fc6dc;
-+  --sys-color-on-primary: #173846;
-+  --sys-color-tonal-container: #294453;
-+  --sys-color-on-tonal-container: #d8ecf4;
-+  --sys-color-outline: #8195a0;
-+  --sys-color-divider: #374a55;
-+  --sys-color-divider-prominent: #657a86;
-+  --sys-color-state-focus-ring: #8fc6dc;
-+  --sys-color-state-focus-select: #315567;
-+  --sys-color-cdt-base: var(--sys-color-base-container);
++  --shaar-accent: #83f0b4;
++  --shaar-accent-tint: #204832;
++  --shaar-section: #1c3525;
++  --sys-color-surface: #121a15;
++  --sys-color-base: #17221b;
++  --sys-color-base-container: #1b2920;
++  --sys-color-base-container-elevated: #243328;
++  --sys-color-cdt-base: #151e18;
++  --sys-color-cdt-base-container: #151e18;
++  --sys-color-on-surface: #edf7ef;
++  --sys-color-on-surface-subtle: #a9c3b0;
++  --sys-color-on-surface-primary: var(--shaar-accent);
++  --sys-color-on-base: #edf7ef;
++  --sys-color-primary: var(--shaar-accent);
++  --sys-color-on-primary: #052719;
++  --sys-color-tonal-container: var(--shaar-accent-tint);
++  --sys-color-on-tonal-container: #d1f6df;
++  --sys-color-neutral-container: #263a2d;
++  --sys-color-outline: #85aa92;
++  --sys-color-divider: #35483a;
++  --sys-color-divider-prominent: #648672;
++  --sys-color-surface1: #18251c;
++  --sys-color-surface2: #1b2b20;
++  --sys-color-surface3: #1f3124;
++  --sys-color-surface4: #233729;
++  --sys-color-surface5: #28402e;
++  --sys-color-state-focus-ring: var(--shaar-accent);
++  --sys-color-state-focus-select: #2a6241;
 +}
 --- a/third_party/devtools-frontend/src/front_end/panels/autofill/AutofillView.ts
 +++ b/third_party/devtools-frontend/src/front_end/panels/autofill/AutofillView.ts
@@ -254,3 +276,178 @@
              <div class="separator"></div>
              <devtools-shortcut-dialog
                .data=${
+--- a/third_party/devtools-frontend/src/front_end/ui/legacy/tabbedPane.css
++++ b/third_party/devtools-frontend/src/front_end/ui/legacy/tabbedPane.css
+@@ -527,3 +527,26 @@
+ 
+   --icon-default: var(--sys-color-primary);
+ }
++
++@media (forced-colors: none) {
++  :host-context(.shaar-theme) .tabbed-pane-shadow:not(.vertical-tab-layout) .tabbed-pane-header,
++  .shaar-theme .tabbed-pane-shadow:not(.vertical-tab-layout) .tabbed-pane-header {
++    background: var(--sys-color-base-container);
++    border-bottom-color: var(--sys-color-divider-prominent);
++  }
++
++  :host-context(.shaar-theme) .tabbed-pane-shadow:not(.vertical-tab-layout) .tabbed-pane-header-contents,
++  .shaar-theme .tabbed-pane-shadow:not(.vertical-tab-layout) .tabbed-pane-header-contents {
++    background: transparent;
++  }
++
++  :host-context(.shaar-theme) .tabbed-pane-shadow:not(.vertical-tab-layout) .tabbed-pane-header-tab.selected,
++  .shaar-theme .tabbed-pane-shadow:not(.vertical-tab-layout) .tabbed-pane-header-tab.selected {
++    color: var(--sys-color-on-tonal-container);
++    background: var(--sys-color-tonal-container);
++    border-radius: 6px 6px 0 0;
++    box-shadow: inset 0 3px 0 var(--sys-color-primary),
++      0 0 0 1px var(--sys-color-divider);
++    font-weight: 600;
++  }
++}
+--- a/third_party/devtools-frontend/src/front_end/ui/legacy/toolbar.css
++++ b/third_party/devtools-frontend/src/front_end/ui/legacy/toolbar.css
+@@ -42,3 +42,11 @@
+ devtools-toolbar-input {
+   display: flex;
+ }
++
++@media (forced-colors: none) {
++  :host-context(.shaar-theme) {
++    --toolbar-height: 28px;
++
++    padding-inline: 6px;
++  }
++}
+--- a/third_party/devtools-frontend/src/front_end/ui/legacy/filter.css
++++ b/third_party/devtools-frontend/src/front_end/ui/legacy/filter.css
+@@ -178,3 +178,34 @@
+     color: HighlightText;
+   }
+ }
++
++@media (forced-colors: none) {
++  :host-context(.shaar-theme) .filter-bar,
++  .shaar-theme .filter-bar {
++    background: var(--sys-color-base-container);
++    border-bottom-color: var(--sys-color-divider-prominent);
++  }
++
++  :host-context(.shaar-theme) .filter-bitset-filter span,
++  .shaar-theme .filter-bitset-filter span {
++    background: var(--sys-color-base-container-elevated);
++    border: 1px solid var(--sys-color-divider-prominent);
++    border-radius: 5px;
++    outline: none;
++    padding-inline: 8px;
++  }
++
++  :host-context(.shaar-theme) .filter-bitset-filter span.selected,
++  .shaar-theme .filter-bitset-filter span.selected {
++    background: var(--sys-color-tonal-container);
++    border-color: var(--sys-color-primary);
++    box-shadow: inset 0 -2px 0 var(--sys-color-primary);
++    color: var(--sys-color-on-tonal-container);
++  }
++
++  :host-context(.shaar-theme) .filter-bitset-filter span:focus-visible,
++  .shaar-theme .filter-bitset-filter span:focus-visible {
++    outline: 2px solid var(--sys-color-state-focus-ring);
++    outline-offset: 2px;
++  }
++}
+--- a/third_party/devtools-frontend/src/front_end/panels/network/networkLogView.css
++++ b/third_party/devtools-frontend/src/front_end/panels/network/networkLogView.css
+@@ -473,3 +473,15 @@
+     color: HighlightText;
+   }
+ }
++
++@media (forced-colors: none) {
++  :host-context(.shaar-theme) .network-log-grid.data-grid tbody tr.revealed.selected,
++  .shaar-theme .network-log-grid.data-grid tbody tr.revealed.selected {
++    box-shadow: inset 3px 0 0 var(--sys-color-primary);
++  }
++
++  :host-context(.shaar-theme) .network-log-grid.data-grid tbody tr.revealed.selected:not(.network-error-row, .network-warning-row, .network-throttled-row),
++  .shaar-theme .network-log-grid.data-grid tbody tr.revealed.selected:not(.network-error-row, .network-warning-row, .network-throttled-row) {
++    background: var(--sys-color-tonal-container);
++  }
++}
+--- a/third_party/devtools-frontend/src/front_end/panels/elements/elementsTreeOutline.css
++++ b/third_party/devtools-frontend/src/front_end/panels/elements/elementsTreeOutline.css
+@@ -627,3 +627,11 @@
+ .tree-outline-disclosure li.elements-tree-expand-all {
+   margin: var(--sys-size-2) 0;
+ }
++
++@media (forced-colors: none) {
++  :host-context(.shaar-theme) .elements-disclosure li.selected .selection,
++  .shaar-theme .elements-disclosure li.selected .selection {
++    background: var(--sys-color-tonal-container);
++    box-shadow: inset 3px 0 0 var(--sys-color-primary);
++  }
++}
+--- a/third_party/devtools-frontend/src/front_end/panels/console/consoleView.css
++++ b/third_party/devtools-frontend/src/front_end/panels/console/consoleView.css
+@@ -685,3 +685,20 @@
+     --override-error-text-color: HighlightText;
+   }
+ }
++
++@media (forced-colors: none) {
++  :host-context(.shaar-theme) .console-message-wrapper:focus,
++  :host-context(.shaar-theme) .console-message-wrapper.console-selected,
++  .shaar-theme .console-message-wrapper:focus,
++  .shaar-theme .console-message-wrapper.console-selected {
++    box-shadow: inset 3px 0 0 var(--sys-color-primary);
++  }
++
++  :host-context(.shaar-theme) .console-message-wrapper:not(.console-error-level, .console-warning-level):focus,
++  :host-context(.shaar-theme) .console-message-wrapper:not(.console-error-level, .console-warning-level).console-selected,
++  .shaar-theme .console-message-wrapper:not(.console-error-level, .console-warning-level):focus,
++  .shaar-theme .console-message-wrapper:not(.console-error-level, .console-warning-level).console-selected {
++    background: var(--sys-color-tonal-container);
++    background-image: none;
++  }
++}
+--- a/third_party/devtools-frontend/src/front_end/ui/legacy/reportView.css
++++ b/third_party/devtools-frontend/src/front_end/ui/legacy/reportView.css
+@@ -132,3 +132,18 @@
+     color: ButtonText;
+   }
+ }
++
++@media (forced-colors: none) {
++  :host-context(.shaar-theme) .report-section-header,
++  .shaar-theme .report-section-header {
++    background: var(--shaar-section);
++    border-inline-start: 3px solid var(--sys-color-primary);
++    border-radius: 3px;
++    padding: 6px 8px;
++  }
++
++  :host-context(.shaar-theme) .report-section-title,
++  .shaar-theme .report-section-title {
++    font-weight: 600;
++  }
++}
+--- a/third_party/devtools-frontend/src/front_end/panels/elements/stylesSidebarPane.css
++++ b/third_party/devtools-frontend/src/front_end/panels/elements/stylesSidebarPane.css
+@@ -377,3 +377,16 @@
+     }
+   }
+ }
++
++@media (forced-colors: none) {
++  :host-context(.shaar-theme) .styles-section-title,
++  .shaar-theme .styles-section-title {
++    color: var(--sys-color-on-surface);
++    font-weight: 600;
++  }
++
++  :host-context(.shaar-theme) .styles-section.matched-styles:focus-within,
++  .shaar-theme .styles-section.matched-styles:focus-within {
++    box-shadow: inset 3px 0 0 var(--sys-color-primary);
++  }
++}

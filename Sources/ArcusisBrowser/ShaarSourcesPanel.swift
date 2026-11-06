@@ -4,6 +4,7 @@
 
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ShaarSourcesPanel: View {
   @Bindable var model: ShaarSourcesModel
@@ -11,6 +12,8 @@ struct ShaarSourcesPanel: View {
   @AppStorage("inspectorSourceEditor") private var sourceEditor = InspectorSourceEditor.vscode
     .rawValue
   @FocusState private var focusedURL: String?
+  @State private var localSourceStatus: String?
+  @State private var choosingProjectFolder = false
 
   var body: some View {
     HStack(spacing: 0) {
@@ -19,6 +22,17 @@ struct ShaarSourcesPanel: View {
       sourceContent.frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     .task { await model.refresh() }
+    .onChange(of: model.selectedURL) { _, _ in localSourceStatus = nil }
+    .fileImporter(
+      isPresented: $choosingProjectFolder, allowedContentTypes: [.folder]
+    ) { result in
+      guard case .success(let folder) = result else { return }
+      Task {
+        await model.findLocalFiles(
+          framework: inspector?.engine?.detectedFramework,
+          workspaceRootOverride: folder.path)
+      }
+    }
     .accessibilityIdentifier("shaar.devtools.sourcesPanel")
   }
 
@@ -117,6 +131,20 @@ struct ShaarSourcesPanel: View {
     VStack(spacing: 0) {
       header
       Divider()
+      if let message = model.sourceFailure ?? localSourceStatus {
+        HStack(spacing: 8) {
+          Text(message).foregroundStyle(.secondary)
+          Spacer(minLength: 0)
+          if model.isDevelopmentPage && model.sourceFailure != nil {
+            Button(ShellL10n.string("Choose project folder…")) {
+              choosingProjectFolder = true
+            }
+          }
+        }
+        .font(.system(size: 10))
+        .padding(.horizontal, 12).padding(.vertical, 7)
+        Divider()
+      }
       if let failure = model.failure {
         HStack(spacing: 8) {
           Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
@@ -155,6 +183,26 @@ struct ShaarSourcesPanel: View {
       Toggle(ShellL10n.string("Pretty JSON"), isOn: $model.prettyPrint)
         .toggleStyle(.checkbox).controlSize(.small)
         .disabled(!model.isJSON)
+      if model.isDevelopmentPage {
+        Button(ShellL10n.string("Find local files")) {
+          localSourceStatus = nil
+          Task { await model.findLocalFiles(framework: inspector?.engine?.detectedFramework) }
+        }
+        .buttonStyle(.plain)
+        .font(.system(size: 10))
+        .disabled(model.selected == nil || model.sourceLoading)
+        .help(ShellL10n.string("Map this resource using the development server and source map"))
+        if !model.localFiles.isEmpty {
+          Menu(ShellL10n.string("Open local file")) {
+            ForEach(model.localFiles, id: \.path) { file in
+              Button(localFileLabel(file)) {
+                openLocalFile(file)
+              }
+            }
+          }
+          .font(.system(size: 10))
+        }
+      }
       Button(ShellL10n.string("Open selected element source")) {
         Task { await inspector?.sourceActions.open() }
       }
@@ -180,6 +228,22 @@ struct ShaarSourcesPanel: View {
       .help(ShellL10n.string("Refresh resources"))
     }
     .padding(.horizontal, 12).frame(height: 36)
+  }
+
+  private func openLocalFile(_ location: InspectorSourceLocation) {
+    let editor = InspectorSourceEditor(rawValue: sourceEditor) ?? .vscode
+    if editor == .showOnly {
+      localSourceStatus = location.path
+    } else if !InspectorSourceActions.openLocation(location, editor: editor) {
+      localSourceStatus = ShellL10n.string("The selected editor could not open this file")
+    }
+  }
+
+  private func localFileLabel(_ location: InspectorSourceLocation) -> String {
+    guard let root = model.localRoot, location.path.hasPrefix(root + "/") else {
+      return (location.path as NSString).lastPathComponent
+    }
+    return String(location.path.dropFirst(root.count + 1))
   }
 
   private func emptyContent(_ message: String) -> some View {

@@ -67,6 +67,13 @@ final class InspectorSourceActions {
   @ObservationIgnored private var revision = 0
 
   init(inspector: InspectorModel) { self.inspector = inspector }
+
+  static func openLocation(_ location: InspectorSourceLocation, editor: InspectorSourceEditor)
+    -> Bool
+  {
+    guard let url = location.editorURL(editor) else { return false }
+    return NSWorkspace.shared.open(url)
+  }
   func cancel() {
     revision += 1
     failure = nil
@@ -117,9 +124,8 @@ final class InspectorSourceActions {
         InspectorSourceEditor(
           rawValue: UserDefaults.standard.string(forKey: "inspectorSourceEditor") ?? "vscode")
         ?? .vscode
-      if let path = InspectorSourceLocation.parse(source)?.editorURL(editor),
-        NSWorkspace.shared.open(path)
-      {
+      if let local = InspectorSourceLocation.parse(source),
+        Self.openLocation(local, editor: editor) {
         location = nil
       }
     } catch {

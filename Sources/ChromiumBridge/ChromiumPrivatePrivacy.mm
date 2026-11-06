@@ -215,12 +215,14 @@ BOOL ARCPrivateShaarInstallTrackerRules(shaar_private_session *session) {
   NSMutableDictionary *tab = state[@"tabs"][tabID];
   NSUInteger generation = [tab[@"requestGeneration"] unsignedIntegerValue] + 1;
   tab[@"requestGeneration"] = @(generation);
+  tab[@"navigationStage"] = @"cookie-setting";
   NSString *origin = ARCPrivateOrigin(url);
   if (origin) {
     BOOL grant = [self shaarPrivateOriginAllowed:origin
                                 sourceProfileID:context[@"sourceProfileID"]
                               excludingWindowID:nil];
     if (!SetCookie(context, origin, YES, grant, nullptr)) {
+      tab[@"navigationStage"] = @"cookie-setting-failed";
       if (self.onPrivateNavigationFailed)
         self.onPrivateNavigationFailed(contextID, windowID, tabID,
           @"Private cookie protection could not be applied.");
@@ -248,7 +250,9 @@ BOOL ARCPrivateShaarInstallTrackerRules(shaar_private_session *session) {
   }
   NSDictionary *context = state[@"contexts"][contextID];
   NSDictionary *window = state[@"windows"][windowID];
-  NSDictionary *tab = state[@"tabs"][tabID];
+  NSMutableDictionary *tab = state[@"tabs"][tabID];
+  tab[@"navigationStage"] =
+      [NSString stringWithFormat:@"site-setting-%lu", (unsigned long)index];
   BOOL submitted = ARCPrivateShaarSubmit(self, Scope(context), Window(window),
       Tab(tab), SHAAR_OP_SITE_SETTINGS_SET,
       @{@"schemaVersion": @1, @"origin": origin, @"type": types[index],
@@ -256,6 +260,8 @@ BOOL ARCPrivateShaarInstallTrackerRules(shaar_private_session *session) {
     if ([ARCPrivateShaarState(self)[@"tabs"][tabID][@"requestGeneration"]
             unsignedIntegerValue] != generation) return;
     if (reply[@"error"]) {
+      tab[@"navigationStage"] = [NSString
+          stringWithFormat:@"site-setting-%lu-failed", (unsigned long)index];
       if (self.onPrivateNavigationFailed)
         self.onPrivateNavigationFailed(contextID, windowID, tabID,
           @"Private site protections could not be applied.");
@@ -265,6 +271,9 @@ BOOL ARCPrivateShaarInstallTrackerRules(shaar_private_session *session) {
                              contextID:contextID url:url origin:origin index:index + 1
                             generation:generation];
   });
+  if (!submitted)
+    tab[@"navigationStage"] = [NSString
+        stringWithFormat:@"site-setting-%lu-rejected", (unsigned long)index];
   if (!submitted && self.onPrivateNavigationFailed)
     self.onPrivateNavigationFailed(contextID, windowID, tabID,
       @"Private site protections could not be applied.");
@@ -279,17 +288,20 @@ BOOL ARCPrivateShaarInstallTrackerRules(shaar_private_session *session) {
     return;
   NSDictionary *context = state[@"contexts"][contextID];
   NSDictionary *window = state[@"windows"][windowID];
-  NSDictionary *tab = state[@"tabs"][tabID];
+  NSMutableDictionary *tab = state[@"tabs"][tabID];
+  tab[@"navigationStage"] = @"navigation-submitting";
   BOOL submitted = ARCPrivateShaarSubmit(self, Scope(context), Window(window),
       Tab(tab), SHAAR_OP_TAB_NAVIGATE,
       @{@"schemaVersion": @1, @"url": url, @"userInitiated": @YES},
       ^(NSDictionary *reply) {
     if ([ARCPrivateShaarState(self)[@"tabs"][tabID][@"requestGeneration"]
             unsignedIntegerValue] != generation) return;
+    tab[@"navigationStage"] = reply[@"error"] ? @"navigation-failed" : @"navigation-accepted";
     if (reply[@"error"] && self.onPrivateNavigationFailed)
       self.onPrivateNavigationFailed(contextID, windowID, tabID,
         @"Private navigation failed.");
   });
+  if (!submitted) tab[@"navigationStage"] = @"navigation-rejected";
   if (!submitted && self.onPrivateNavigationFailed)
     self.onPrivateNavigationFailed(contextID, windowID, tabID,
       @"Private navigation failed.");

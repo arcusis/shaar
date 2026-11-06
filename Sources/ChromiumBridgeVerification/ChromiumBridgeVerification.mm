@@ -787,12 +787,20 @@ void ARCCompletePrivateQuitDialogCancellation(
               completion:(void (^)(BOOL))completion { completion(NO); }
 - (void)clickProbeElementInTabID:(NSString *)tabID elementID:(NSString *)elementID
                     completion:(void (^)(BOOL))completion { completion(NO); }
+- (NSDictionary *)privateNavigationProbeAuditForTabID:(NSString *)tabID { return nil; }
 - (BOOL)crashProbeTabID:(NSString *)tabID { return NO; }
 - (NSString *)probeKeepAliveState { return nil; }
 - (BOOL)probeQuitStoppedEventLoop { return NO; }
 @end
 
 @implementation ARCShaarRuntime (Verification)
+- (NSDictionary *)privateNavigationProbeAuditForTabID:(NSString *)tabID {
+  if (!ProbeCaptureAllowed()) return nil;
+  NSDictionary *tab = ARCPrivateShaarState(self)[@"tabs"][tabID];
+  if (!tab) return nil;
+  return @{@"stage": tab[@"navigationStage"] ?: @"none",
+           @"generation": tab[@"requestGeneration"] ?: @0};
+}
 - (NSString *)loadProbeExtensionAtURL:(NSURL *)url profileID:(NSString *)profileID
                                  error:(NSError **)error {
   void *library = ShaarProbeField<void *>(self, "_shaarLibrary");

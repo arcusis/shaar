@@ -936,8 +936,9 @@ final class PrivateProductHostProbe {
     }
     let observed = store.tabs.first(where: { $0.id == tabID })?.url ?? "missing tab"
     let nativeFailure = store.privatePage?.failure ?? "none"
+    let pipeline = runtime.privateNavigationProbeAudit(forTabID: tabID) ?? [:]
     throw PrivateWindowFailure(
-      "Private product navigation callback timed out: expected \(value), observed \(observed), selected tab \(store.selectedTabID), native failure \(nativeFailure)."
+      "Private product navigation callback timed out: expected \(value), observed \(observed), selected tab \(store.selectedTabID), native failure \(nativeFailure), pipeline \(pipeline)."
     )
   }
 

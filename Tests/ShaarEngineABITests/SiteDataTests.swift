@@ -86,7 +86,8 @@ struct SiteDataTests {
     let fake = FakeSiteDataEngine()
     let adapter = ShaarSiteDataAdapter(implementation: .shaar, transport: fake)
     await fake.setResponse(
-      #"{"schemaVersion":1,"cookies":[{"name":"sid","value":"abc","domain":"example.com","path":"/","secure":true,"httpOnly":true,"sameSite":"Lax","expiresUnixMs":null,"partitionSite":null,"partitionCrossSite":null,"sourceScheme":2,"sourcePort":443}]}"#)
+      #"{"schemaVersion":1,"cookies":[{"name":"sid","value":"abc","domain":"example.com","path":"/","secure":true,"httpOnly":true,"sameSite":"Lax","expiresUnixMs":null,"partitionSite":null,"partitionCrossSite":null,"sourceScheme":2,"sourcePort":443}]}"#
+    )
     let cookie = try #require(try await adapter.cookies(origin: "https://example.com").first)
     #expect(cookie.name == "sid" && cookie.httpOnly && cookie.sameSite == .lax)
     #expect(await fake.lastCall()?.operation == .siteCookieItems)
@@ -97,7 +98,8 @@ struct SiteDataTests {
       origin: "https://example.com")
     let setCall = try #require(await fake.lastCall())
     #expect(setCall.operation == .siteCookieSet)
-    let setArgs = try #require(JSONSerialization.jsonObject(with: setCall.arguments) as? [String: Any])
+    let setArgs = try #require(
+      JSONSerialization.jsonObject(with: setCall.arguments) as? [String: Any])
     #expect(setArgs["name"] as? String == "sid")
     #expect(setArgs["value"] as? String == "updated")
     try await adapter.deleteCookie(cookie, origin: "https://example.com")

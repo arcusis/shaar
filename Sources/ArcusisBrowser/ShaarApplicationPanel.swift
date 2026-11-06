@@ -179,8 +179,7 @@ struct ShaarApplicationPanel: View {
       }
       Button {
         Task {
-          if model.area == .cookies { await cookies.refresh() }
-          else { await model.refresh() }
+          if model.area == .cookies { await cookies.refresh() } else { await model.refresh() }
         }
       } label: {
         Image(systemName: "arrow.clockwise")
@@ -260,10 +259,13 @@ struct ShaarApplicationPanel: View {
           if cookies.loading {
             ProgressView().controlSize(.small).padding(28)
           } else if cookies.visibleCookies.isEmpty {
-            emptyContent(cookies.cookies.isEmpty ? "No cookies for this page" : "No matching cookies")
+            emptyContent(
+              cookies.cookies.isEmpty ? "No cookies for this page" : "No matching cookies")
           }
           ForEach(cookies.visibleCookies) { cookie in
-            Button { cookies.selectedID = cookie.id } label: {
+            Button {
+              cookies.selectedID = cookie.id
+            } label: {
               HStack(spacing: 8) {
                 Text(cookie.name).frame(width: 130, alignment: .leading).lineLimit(1)
                 Text(cookie.value).frame(maxWidth: .infinity, alignment: .leading).lineLimit(1)
@@ -273,7 +275,8 @@ struct ShaarApplicationPanel: View {
               }
               .font(.system(size: 10, design: .monospaced))
               .padding(.horizontal, 12).frame(height: 34)
-              .background(cookies.selectedID == cookie.id ? Color.accentColor.opacity(0.10) : .clear)
+              .background(
+                cookies.selectedID == cookie.id ? Color.accentColor.opacity(0.10) : .clear)
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("shaar.devtools.cookieRow")
@@ -448,10 +451,14 @@ struct ShaarApplicationPanel: View {
 
   private var footer: some View {
     HStack(spacing: 10) {
-      Text(ShellL10n.format("%d items", arguments: [
-        .integer(model.area == .cookies ? cookies.cookies.count : model.rows.count)
-      ]))
-        .foregroundStyle(.secondary)
+      Text(
+        ShellL10n.format(
+          "%d items",
+          arguments: [
+            .integer(model.area == .cookies ? cookies.cookies.count : model.rows.count)
+          ])
+      )
+      .foregroundStyle(.secondary)
       Spacer()
       if model.area == .cookies {
         Button(ShellL10n.string("Edit")) { beginCookieEdit() }

@@ -41,16 +41,19 @@ public struct ShaarSiteCookie: Equatable, Sendable, Identifiable {
   public let sourcePort: Int
 
   public var id: String {
-    [name, domain, path, partitionSite ?? "", partitionCrossSite.map(String.init) ?? "",
-     String(sourceScheme), String(sourcePort)]
-      .joined(separator: "\u{0}")
+    [
+      name, domain, path, partitionSite ?? "", partitionCrossSite.map(String.init) ?? "",
+      String(sourceScheme), String(sourcePort),
+    ]
+    .joined(separator: "\u{0}")
   }
 
   public init?(dictionary: [String: Any]) {
-    guard Set(dictionary.keys) == [
-      "name", "value", "domain", "path", "secure", "httpOnly", "sameSite",
-      "expiresUnixMs", "partitionSite", "partitionCrossSite", "sourceScheme", "sourcePort",
-    ],
+    guard
+      Set(dictionary.keys) == [
+        "name", "value", "domain", "path", "secure", "httpOnly", "sameSite",
+        "expiresUnixMs", "partitionSite", "partitionCrossSite", "sourceScheme", "sourcePort",
+      ],
       let name = dictionary["name"] as? String, name.count <= 256,
       let value = dictionary["value"] as? String, value.count <= 4096,
       let domain = dictionary["domain"] as? String, !domain.isEmpty, domain.count <= 256,

@@ -14,14 +14,18 @@ import XCTest
   let items: [ShaarSiteCookie]
   init() {
     items = [
-      ["name": "session", "value": "abc123", "domain": "example.com", "path": "/",
-       "secure": true, "httpOnly": true, "sameSite": "Lax", "expiresUnixMs": NSNull(),
-       "partitionSite": NSNull(), "partitionCrossSite": NSNull(),
-       "sourceScheme": 2, "sourcePort": 443],
-      ["name": "theme", "value": "dark", "domain": "example.com", "path": "/",
-       "secure": true, "httpOnly": false, "sameSite": "Strict", "expiresUnixMs": NSNull(),
-       "partitionSite": NSNull(), "partitionCrossSite": NSNull(),
-       "sourceScheme": 2, "sourcePort": 443],
+      [
+        "name": "session", "value": "abc123", "domain": "example.com", "path": "/",
+        "secure": true, "httpOnly": true, "sameSite": "Lax", "expiresUnixMs": NSNull(),
+        "partitionSite": NSNull(), "partitionCrossSite": NSNull(),
+        "sourceScheme": 2, "sourcePort": 443,
+      ],
+      [
+        "name": "theme", "value": "dark", "domain": "example.com", "path": "/",
+        "secure": true, "httpOnly": false, "sameSite": "Strict", "expiresUnixMs": NSNull(),
+        "partitionSite": NSNull(), "partitionCrossSite": NSNull(),
+        "sourceScheme": 2, "sourcePort": 443,
+      ],
     ].compactMap(ShaarSiteCookie.init(dictionary:))
   }
   func siteCookies(for target: SiteControlTarget) async throws -> [ShaarSiteCookie] { items }

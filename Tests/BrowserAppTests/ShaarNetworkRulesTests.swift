@@ -3,9 +3,32 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import Foundation
+import ShaarEngineABI
 import Testing
 
 @testable import ArcusisBrowser
+
+private final class FakeNetworkRulesABIEngine: ShaarDevToolsSubmitting, @unchecked Sendable {
+  private let lock = NSLock()
+  private var stored: ShaarDevToolsRequest?
+
+  var request: ShaarDevToolsRequest? {
+    lock.lock()
+    defer { lock.unlock() }
+    return stored
+  }
+
+  func submit(
+    _ request: ShaarDevToolsRequest,
+    completion: @escaping @Sendable (Result<Data, ShaarEngineError>) -> Void
+  ) throws -> UInt64 {
+    lock.lock()
+    stored = request
+    lock.unlock()
+    completion(.success(Data(#"{"schemaVersion":1}"#.utf8)))
+    return 1
+  }
+}
 
 @Suite @MainActor struct ShaarNetworkRulesTests {
   @Test func requestDraftStartsDisabledAndPreservesExactMatch() throws {
@@ -144,6 +167,32 @@ import Testing
     #expect(model.activeCount == 0)
     #expect(model.projectRoot == nil)
     #expect(model.rules.isEmpty)
+  }
+
+  @Test func leasedTransportSendsResolvedBodyToOwnedTab() async throws {
+    let target = target()
+    let fake = FakeNetworkRulesABIEngine()
+    let adapter = try #require(ShaarDevToolsAdapter(implementation: .shaar, engine: fake))
+    let transport = ShaarNetworkRulesLeasedTransport(
+      adapter: adapter, leaseID: 7,
+      scope: ShaarNavigationScope(profileID: target.profileID.uuidString),
+      windowID: UUID().uuidString, tabID: target.tabID.uuidString, target: target)
+    var rule = ShaarNetworkRule.fromRequest(request())
+    rule.bodyText = "fixture response"
+    try await transport.apply([ShaarResolvedNetworkRule(rule)], to: target)
+    let submitted = try #require(fake.request)
+    #expect(submitted.operation == .panelNetworkRules)
+    #expect(submitted.tabID == target.tabID.uuidString)
+    let root = try #require(
+      JSONSerialization.jsonObject(with: submitted.payload) as? [String: Any])
+    let rows = try #require(root["rules"] as? [[String: Any]])
+    #expect(
+      rows.first?["bodyBase64"] as? String == Data("fixture response".utf8).base64EncodedString())
+    #expect(rows.first?["bodyFilePath"] == nil)
+    let other = SiteControlTarget(tabID: UUID(), profileID: target.profileID, url: target.url)
+    await #expect(throws: ShaarNetworkRuleError.self) {
+      try await transport.apply([], to: other)
+    }
   }
 
   private func request() -> ShaarNetworkRequest {

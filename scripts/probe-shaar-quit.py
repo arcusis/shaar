@@ -51,8 +51,12 @@ def run_probe(app, output_dir, mode, number, port, timeout):
         "--probe-data-dir", str(root / "data"),
         "--probe-framework", str(app / "Contents/Frameworks/Chromium Framework.framework"),
     ]
-    if mode == "pending":
+    if mode in ("pending", "pending-private"):
         args += ["--probe-pending-quit-url", f"http://127.0.0.1:{port}/stall"]
+        if mode == "pending-private":
+            args.append("--probe-pending-private-quit")
+    elif mode == "private-close-live":
+        args.append("--probe-private-close-live")
     else:
         args += ["--probe-direct-quit", "--probe-download-url",
                  f"http://127.0.0.1:{port}/download/preview.txt"]
@@ -66,8 +70,12 @@ def run_probe(app, output_dir, mode, number, port, timeout):
     (root / "stderr.log").write_bytes(stderr)
     report = json.loads(report_path.read_text()) if report_path.exists() else {}
     results = report.get("results", {})
-    if mode == "pending":
+    if mode in ("pending", "pending-private"):
         required = {"openTab", "pendingNavigation"}
+        if mode == "pending-private":
+            required.add("privateWindow")
+    elif mode == "private-close-live":
+        required = {"openTab", "privateWindow", "privateWindowClose", "normalTabSurvives"}
     else:
         required = {
             "openTab", "navigate", "backForward", "devTools", "newWindow",
@@ -84,6 +92,9 @@ def run_probe(app, output_dir, mode, number, port, timeout):
         and report.get("visibleWindowEvidence") == []
         and set(results) == required
         and all(item.get("status") == "pass" for item in results.values())
+        and (mode != "pending-private"
+             or report.get("diagnostics", {}).get("privateWindowLiveAtQuit") is True)
+        and b"observers_.empty()" not in stderr
     )
     print(f"{mode} {number}: {'PASS' if passed else 'FAIL'} "
           f"(exit={return_code}, checks={len(results)}, report={report_path})", flush=True)
@@ -97,6 +108,10 @@ def main():
     parser.add_argument("--runs", type=int, default=6)
     parser.add_argument("--timeout", type=int, default=30)
     parser.add_argument("--output-dir", type=pathlib.Path)
+    parser.add_argument("--mode", action="append",
+                        choices=("pending", "private-live", "pending-private",
+                                 "private-close-live"),
+                        help="Run only this mode; repeat to select several modes")
     options = parser.parse_args()
     if options.runs < 1 or options.timeout < 1:
         parser.error("--runs and --timeout must be positive")
@@ -113,7 +128,7 @@ def main():
     try:
         outcomes = [
             run_probe(app, output_dir, mode, number, server.server_port, options.timeout)
-            for mode in ("pending", "private-live")
+            for mode in (options.mode or ("pending", "private-live"))
             for number in range(1, options.runs + 1)
         ]
     finally:

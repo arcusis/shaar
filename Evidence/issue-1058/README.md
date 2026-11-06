@@ -37,5 +37,8 @@ shows the cached icon while retaining the saved title.
 
 ![After cached icon](after-placeholder-icon.png)
 
-The screenshots establish the placeholder presentation only. The hidden native
-probe and focused tests cover materialization behavior separately.
+The screenshots establish the placeholder presentation only. A focused engine
+boundary test verifies first selection opens one saved placeholder and revisits
+the previous tab without reopening it. The hidden 1,440-tab native capacity
+fixture could not establish document readiness: its first assertion requires
+`nativeTabIDForID`, which the pinned bridge returns as `-1`.

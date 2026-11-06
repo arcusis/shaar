@@ -341,6 +341,10 @@
     {
       "file": "ThirdParty/ChromiumEngine/patches/0025-shaar-devtools-repro-screencast.patch",
       "sha256": "5df98a03edd6442fa8b09c2759061ad42492b85fb573b168bd781654960668f8"
+    },
+    {
+      "file": "ThirdParty/ChromiumEngine/patches/0026-shaar-devtools-dom-session-events.patch",
+      "sha256": "ba6a4881d6c113056af2b40f25caed14d4629489726453a859aca358f80b3e57"
     }
   ],
   "requiredExports": [

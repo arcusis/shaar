@@ -9,6 +9,57 @@ import XCTest
 @testable import ArcusisBrowser
 
 @MainActor final class ShaarConsoleVisualTests: XCTestCase {
+  func testUnifiedConsoleRendersOffscreenInBothAppearances() async throws {
+    guard ProcessInfo.processInfo.environment["SHAAR_UNIFIED_CONSOLE_CAPTURE"] == "1" else {
+      throw XCTSkip("Offscreen unified Console capture requires explicit opt-in")
+    }
+    _ = NSApplication.shared
+    let previous = NSApp.keyWindow
+    let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+      .appending(path: "Evidence/issue-1156")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "http://localhost:3000/dashboard")!)
+    let fixture: [ShaarDevToolsEvent] = [
+      .console(
+        ShaarConsoleEvent(
+          id: UUID(), level: .info, message: "Dashboard ready", source: "/app/Dashboard.tsx:21")),
+      .console(
+        ShaarConsoleEvent(
+          id: UUID(), level: .error, message: "GET /api/orders failed: 503",
+          source: "/app/api/orders.ts:17", origin: .server)),
+      .console(
+        ShaarConsoleEvent(
+          id: UUID(), level: .warning, message: "Slow query on /api/orders",
+          source: "localhost:8969", origin: .spotlight)),
+    ]
+    for scheme in [ColorScheme.light, .dark] {
+      let suffix = scheme == .dark ? "dark" : "light"
+      let appearance: NSAppearance.Name = scheme == .dark ? .darkAqua : .aqua
+      let inspector = InspectorModel(target: target, engine: nil)
+      let before = ShaarDevToolsModel(target: target)
+      before.section = .console
+      before.open(inspector: inspector)
+      try capture(
+        ShaarDevToolsPanel(model: before, inspector: inspector, openChromium: {}),
+        named: "before-unified-console-\(suffix)", scheme: scheme,
+        appearance: appearance, root: root)
+      before.close()
+      let after = ShaarDevToolsModel(
+        target: target, transport: ShaarDevToolsFixtureTransport(fixture: fixture))
+      after.section = .console
+      after.open(inspector: inspector)
+      for _ in 0..<30 where after.events.count < fixture.count { await Task.yield() }
+      XCTAssertEqual(after.events.count, fixture.count)
+      try capture(
+        ShaarDevToolsPanel(model: after, inspector: inspector, openChromium: {}),
+        named: "mock-unified-console-\(suffix)", scheme: scheme,
+        appearance: appearance, root: root)
+      after.close()
+    }
+    XCTAssertTrue(NSApp.keyWindow === previous)
+  }
+
   func testConsoleStatesRenderOffscreenInBothAppearances() async throws {
     guard ProcessInfo.processInfo.environment["SHAAR_CONSOLE_CAPTURE"] == "1" else {
       throw XCTSkip("Offscreen Console capture requires explicit opt-in")

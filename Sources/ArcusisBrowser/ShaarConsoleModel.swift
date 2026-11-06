@@ -14,6 +14,7 @@ struct ShaarConsoleRow: Identifiable, Equatable {
 @MainActor @Observable
 final class ShaarConsoleModel {
   var level: ShaarConsoleEvent.Level?
+  var origin: ShaarConsoleEvent.Origin?
   var search = ""
   var selectedID: UUID?
   var command = ""
@@ -118,7 +119,9 @@ final class ShaarConsoleModel {
   }
 
   func agentCopyText(for row: ShaarConsoleRow) -> String {
-    var lines = ["Console \(row.event.level.rawValue): \(row.event.message)"]
+    var lines = [
+      "\(row.event.origin.rawValue) console \(row.event.level.rawValue): \(row.event.message)"
+    ]
     if row.count > 1 { lines.append("Repeated \(row.count) times") }
     if let source = row.event.source { lines.append("Source: \(source)") }
     for frame in row.event.stack.prefix(20) {
@@ -131,15 +134,17 @@ final class ShaarConsoleModel {
   }
 
   private func matches(_ event: ShaarConsoleEvent) -> Bool {
+    guard origin == nil || origin == event.origin else { return false }
     guard level == nil || level == event.level else { return false }
     let needle = search.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !needle.isEmpty else { return true }
-    return event.message.localizedStandardContains(needle)
+    return event.origin.rawValue.localizedStandardContains(needle)
+      || event.message.localizedStandardContains(needle)
       || event.source?.localizedStandardContains(needle) == true
       || event.stack.contains { $0.source.localizedStandardContains(needle) }
   }
 
   private func repeatKey(_ event: ShaarConsoleEvent) -> String {
-    "\(event.level.rawValue)\u{0}\(event.message)\u{0}\(event.source ?? "")"
+    "\(event.origin.rawValue)\u{0}\(event.level.rawValue)\u{0}\(event.message)\u{0}\(event.source ?? "")"
   }
 }

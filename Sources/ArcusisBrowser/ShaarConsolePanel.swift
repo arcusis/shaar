@@ -31,12 +31,21 @@ struct ShaarConsolePanel: View {
 
   private var filters: some View {
     HStack(spacing: 7) {
-      filterButton("All", level: nil)
-      filterButton("Errors", level: .error)
-      filterButton("Warnings", level: .warning)
-      filterButton("Info", level: .info)
-      filterButton("Logs", level: .log)
-      Spacer(minLength: 6)
+      ScrollView(.horizontal) {
+        HStack(spacing: 7) {
+          filterButton("All", level: nil)
+          filterButton("Errors", level: .error)
+          filterButton("Warnings", level: .warning)
+          filterButton("Info", level: .info)
+          filterButton("Logs", level: .log)
+          Divider().frame(height: 16)
+          sourceFilterButton("All sources", origin: nil)
+          ForEach(ShaarConsoleEvent.Origin.allCases, id: \.self) { origin in
+            sourceFilterButton(origin.rawValue, origin: origin)
+          }
+        }
+      }
+      .scrollIndicators(.hidden)
       TextField(ShellL10n.string("Search console"), text: $model.search)
         .textFieldStyle(.roundedBorder)
         .font(.system(size: 11))
@@ -49,8 +58,21 @@ struct ShaarConsolePanel: View {
 
   private func filterButton(_ title: String, level: ShaarConsoleEvent.Level?) -> some View {
     let selected = model.level == level
+    return filterChip(title, selected: selected) { model.level = level }
+  }
+
+  private func sourceFilterButton(
+    _ title: String, origin: ShaarConsoleEvent.Origin?
+  ) -> some View {
+    let selected = model.origin == origin
+    return filterChip(title, selected: selected) { model.origin = origin }
+  }
+
+  private func filterChip(
+    _ title: String, selected: Bool, action: @escaping () -> Void
+  ) -> some View {
     return Button {
-      model.level = level
+      action()
     } label: {
       Text(ShellL10n.string(title))
         .font(.system(size: 10, weight: selected ? .semibold : .regular))
@@ -82,6 +104,12 @@ struct ShaarConsolePanel: View {
                 .font(.system(size: 11))
                 .foregroundStyle(color(for: row.event.level))
                 .frame(width: 14)
+              Text(ShellL10n.string(row.event.origin.rawValue))
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 5)
+                .frame(height: 17)
+                .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 4))
               Text(row.event.message)
                 .font(.system(size: 11, design: .monospaced))
                 .lineLimit(2)
@@ -128,6 +156,9 @@ struct ShaarConsolePanel: View {
           Text(row.event.message)
             .font(.system(size: 11, design: .monospaced))
             .textSelection(.enabled)
+          Text(ShellL10n.string(row.event.origin.rawValue))
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(.secondary)
           if let source = row.event.source { sourceLink(source, title: source) }
           if row.event.objectID != nil || !row.event.previewProperties.isEmpty {
             objectPreview(row.event)

@@ -34,11 +34,15 @@ import Testing
   }
   let file = SnapshotFile<BrowserSession>(url: root.appending(path: "session.json"))
   let session = BrowserSession.fresh()
-  // Owned directory permits writing/traversal, but neither listing nor read-only directory open.
-  // This deterministically covers errors otherwise reached only by teardown racing a writer.
-  try FileManager.default.setAttributes([.posixPermissions: 0o300], ofItemAtPath: root.path)
-  #expect(throws: (any Error).self) { try file.save(session) }
-  try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: root.path)
+  // The writer intentionally restores directory mode 0700 before writing. Inject
+  // the final flush error instead of relying on permissions that it must repair.
+  #expect(throws: POSIXError(.EIO)) {
+    try file.save(session) { directory in
+      #expect(directory.path == root.path)
+      #expect(try file.loadPrimary() == session)
+      throw POSIXError(.EIO)
+    }
+  }
   #expect(try file.loadPrimary() == session)
   #expect(try FileManager.default.contentsOfDirectory(atPath: root.path) == ["session.json"])
 }

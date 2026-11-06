@@ -388,11 +388,15 @@ final class EngineProbe {
   }
 
   private func waitForNativeTabSelection(_ tabID: String) async throws -> [AnyHashable: Any] {
-    for _ in 0..<100 {
+    let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+    repeat {
       let selection = runtime.normalProbeSelectionAudit(forTabID: tabID)
       if selection["selectedNativeTab"] as? Bool == true { return selection }
-      try await Task.sleep(for: .milliseconds(50))
-    }
+      // Selection is queued on the main thread. A 50 ms correctness-poll delay
+      // quantized every same-profile latency sample and amplified runner load.
+      // Keep the entire acknowledgment wait inside the unchanged 100 ms budget.
+      try await Task.sleep(for: .milliseconds(1))
+    } while ContinuousClock.now < deadline
     let selection = runtime.normalProbeSelectionAudit(forTabID: tabID)
     throw ProbeFailure("Native tab \(tabID) was not selected; native selection audit: \(selection)")
   }

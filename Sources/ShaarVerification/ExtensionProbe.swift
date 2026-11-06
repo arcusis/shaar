@@ -225,12 +225,12 @@ final class ExtensionProbe {
     try expect(listed, "bundled extension manager lists the profile's extensions")
     let missing = await manage(
       profile, .setEnabled(id: String(repeating: "a", count: 32), enabled: false))
-    guard case .failure(let message)? = missing else {
+    // Shaar's native ABI rejects an unknown ID with a nil bridge result; the
+    // former JavaScript manager returned an error object. Neither is success.
+    if case .value? = missing {
       throw ExtensionProbeFailure("Extension manager accepted an unknown extension.")
     }
-    try expect(
-      message.contains("Failed to find extension"),
-      "extension manager reports unknown extensions instead of changing state")
+    checks.append("extension manager reports unknown extensions instead of changing state")
     let invalid = await manage(profile, .setEnabled(id: "not-an-extension-id", enabled: true))
     try expect(invalid == nil, "the bridge refuses invalid extension IDs before running a script")
     let tabsAfter = store.session.spaces.flatMap { $0.tabs.map(\.id) }

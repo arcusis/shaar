@@ -10,7 +10,11 @@ import Testing
 @testable import ArcusisBrowser
 
 private final class SiteTargetRuntime: ARCChromiumRuntime {
+  nonisolated(unsafe) var pictureInPictureChanges: [String] = []
   override func windowID(forTabID tabID: String) -> String? { "site-target-window" }
+  override func setAutoPictureInPictureAllowed(_ allowed: Bool, tabID: String) {
+    pictureInPictureChanges.append(tabID)
+  }
 }
 
 @MainActor @Test func staleSiteControlTargetCannotChangeOldSitePreference() async throws {
@@ -31,6 +35,7 @@ private final class SiteTargetRuntime: ARCChromiumRuntime {
   let engine = try BrowserEngine(
     events: BrowserRuntimeEvents(runtime: runtime), windowID: "site-target-window",
     store: store)
+  defer { engine.suspensionTask?.cancel() }
   engine.liveTabs.insert(tab.id)
   let stale = SiteControlTarget(tabID: tab.id, profileID: profile.id, url: oldURL)
 
@@ -42,6 +47,8 @@ private final class SiteTargetRuntime: ARCChromiumRuntime {
   #expect(store.automaticPictureInPictureAllowed(for: oldURL, profileID: profile.id))
 
   let current = try #require(engine.siteControlTarget)
+  #expect(runtime.pictureInPictureChanges.isEmpty)
   try await engine.setPermission(.autoPictureInPicture, allowed: false, for: current)
   #expect(!store.automaticPictureInPictureAllowed(for: newURL, profileID: profile.id))
+  #expect(runtime.pictureInPictureChanges == [tab.id.uuidString])
 }

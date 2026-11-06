@@ -65,6 +65,7 @@ final class InspectorModel {
 
   func open() {
     guard !isOpen else { return }
+    if supportsPageTools { _ = engine?.developerModel(for: target) }
     generation += 1
     mode = .picking
     selection = nil

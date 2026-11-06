@@ -68,6 +68,9 @@ final class BrowserRuntimeEvents {
     runtime.onMediaAccess = { [weak self] id, access in
       self?.tabClient(id)?.onMediaAccess?(id, access)
     }
+    runtime.onAgentBridgeStatus = { [weak self] id, profile, status in
+      self?.tabClient(id)?.onAgentBridgeStatus?(id, profile, status)
+    }
     runtime.onMediaSessionChanged = { [weak self] id, state in
       self?.tabClient(id)?.onMediaSessionChanged?(id, state)
     }

@@ -87,6 +87,11 @@ FOUNDATION_EXPORT NSString *ARCBridgeLocalizedString(NSString *message);
                   completion:(void (NS_SWIFT_UI_ACTOR ^)(NSDictionary<NSString *, id> * _Nullable, NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
 - (void)toggleDevToolsForPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID contextID:(NSString *)contextID
                          completion:(void (NS_SWIFT_UI_ACTOR ^)(NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
+/// Remote agent control is regular-tab only. Native enforcement owns the token and listener.
+- (void)agentBridgeRequest:(NSUInteger)operation forTabID:(NSString *)tabID
+                 profileID:(NSString *)profileID windowID:(NSString *)windowID
+                completion:(void (NS_SWIFT_UI_ACTOR ^)(NSDictionary<NSString *, id> * _Nullable,
+                                                        NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
 - (void)inspectorCall:(NSString *)method params:(NSDictionary *)params tabID:(NSString *)tabID
            profileID:(NSString *)profileID windowID:(NSString *)windowID
           completion:(void (NS_SWIFT_UI_ACTOR ^)(NSDictionary<NSString *, id> * _Nullable, NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
@@ -114,6 +119,8 @@ FOUNDATION_EXPORT NSString *ARCBridgeLocalizedString(NSString *message);
 @property(copy, nullable) void (^onExternalAppRequest)(NSDictionary<NSString *, id> *request);
 @property(copy, nullable) void (^onExternalAppDismissed)(NSString *requestID);
 @property(copy, nullable) void (^onMediaAccess)(NSString *tabID, NSDictionary<NSString *, NSNumber *> *access);
+@property(copy, nullable) void (^onAgentBridgeStatus)(NSString *tabID, NSString *profileID,
+                                                      NSDictionary<NSString *, id> *status);
 /// A tab's validated Media Session state changed; `state` is nil when the tab has no media.
 @property(copy, nullable) void (NS_SWIFT_UI_ACTOR ^onMediaSessionChanged)(NSString *tabID,
     NSDictionary<NSString *, id> * _Nullable state);

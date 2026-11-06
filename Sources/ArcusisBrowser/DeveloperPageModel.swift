@@ -9,6 +9,7 @@ import Observation
 @MainActor @Observable
 final class DeveloperPageModel {
   private(set) var target: SiteControlTarget
+  let agentBridge: AgentBridgeModel
   private(set) var simulation: DeveloperSimulation
   var includeSensitiveHeaders = false
   var creatingBugReport = false
@@ -31,6 +32,16 @@ final class DeveloperPageModel {
   init(target: SiteControlTarget, engine: BrowserEngine?) {
     self.target = target
     self.engine = engine
+    agentBridge = AgentBridgeModel(target: target) { [weak engine] operation, target, completion in
+      guard let engine, !engine.isClosed else {
+        completion(nil, AgentBridgeFailure.invalidReply)
+        return
+      }
+      engine.runtime.agentBridgeRequest(
+        UInt(operation.rawValue), forTabID: target.tabID.uuidString,
+        profileID: target.profileID.uuidString, windowID: engine.windowID,
+        completion: completion)
+    }
     simulation =
       target.origin.map {
         engine?.store?.preferences.developerSimulation(on: $0, for: target.profileID)
@@ -45,6 +56,7 @@ final class DeveloperPageModel {
     let toolsChanged = toolsOpen != builtInToolsOpen
     builtInToolsOpen = toolsOpen
     if self.target != target { self.target = target }
+    agentBridge.update(target: target, committed: committed)
     if changed {
       simulation =
         target.origin.map {
@@ -175,6 +187,7 @@ final class DeveloperPageModel {
   }
 
   func close() {
+    agentBridge.close()
     closed = true
     revision += 1
     mediaMonitor?.cancel()

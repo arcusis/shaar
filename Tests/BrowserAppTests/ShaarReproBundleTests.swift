@@ -18,7 +18,8 @@ import Testing
         tag: "body", text: "", attributes: [:],
         children: [
           ShaarReproDOMNode(
-            tag: "form", text: "form-secret", attributes: [:],
+            tag: "form", text: "form-secret",
+            attributes: ["data-submitted-value": "attribute-secret"],
             children: [
               ShaarReproDOMNode(
                 tag: "input", text: "form-secret", attributes: ["value": "form-secret"],
@@ -55,6 +56,7 @@ import Testing
     let dom = String(decoding: files["dom.json"]!, as: UTF8.self)
     let har = String(decoding: files["network.har"]!, as: UTF8.self)
     #expect(!dom.contains("form-secret"))
+    #expect(!dom.contains("attribute-secret"))
     #expect(dom.contains("Safe text"))
     #expect(!har.contains("auth-secret"))
     #expect(!har.contains("cookie-secret"))

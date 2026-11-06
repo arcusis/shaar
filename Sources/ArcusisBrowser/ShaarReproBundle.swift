@@ -17,7 +17,7 @@ struct ShaarReproDOMNode: Codable, Equatable, Sendable {
       ["form", "input", "textarea", "select", "option"].contains(tag.lowercased())
       || attributes["contenteditable"]?.lowercased() == "true"
     let safeAttributes = attributes.filter { key, _ in
-      !["value", "defaultvalue", "checked", "selected"].contains(key.lowercased())
+      !form && !["value", "defaultvalue", "checked", "selected"].contains(key.lowercased())
         && !key.lowercased().hasPrefix("on")
     }
     return Self(

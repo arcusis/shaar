@@ -21,6 +21,11 @@ enum ShaarDevToolsDock: String, CaseIterable {
 
 struct ShaarConsoleEvent: Equatable, Sendable {
   enum Level: String, Sendable { case log, info, warning, error }
+  enum Origin: String, CaseIterable, Sendable {
+    case browser = "Browser"
+    case server = "Server"
+    case spotlight = "Spotlight"
+  }
   let id: UUID
   let level: Level
   let message: String
@@ -28,11 +33,12 @@ struct ShaarConsoleEvent: Equatable, Sendable {
   let stack: [ShaarConsoleFrame]
   let objectID: String?
   let previewProperties: [ShaarConsoleProperty]
+  let origin: Origin
 
   init(
     id: UUID, level: Level, message: String, source: String?,
     stack: [ShaarConsoleFrame] = [], objectID: String? = nil,
-    previewProperties: [ShaarConsoleProperty] = []
+    previewProperties: [ShaarConsoleProperty] = [], origin: Origin = .browser
   ) {
     self.id = id
     self.level = level
@@ -41,6 +47,7 @@ struct ShaarConsoleEvent: Equatable, Sendable {
     self.stack = stack
     self.objectID = objectID
     self.previewProperties = previewProperties
+    self.origin = origin
   }
 }
 

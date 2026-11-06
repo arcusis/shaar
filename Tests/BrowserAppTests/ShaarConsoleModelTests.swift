@@ -63,4 +63,21 @@ import Testing
     #expect(text.contains("render (/app/main.ts:8)"))
     #expect(text.contains("count: 4"))
   }
+
+  @Test func unifiedSourcesFilterAndCopyKeepOrigin() {
+    let model = ShaarConsoleModel()
+    let browser = ShaarConsoleEvent(id: UUID(), level: .error, message: "Failed", source: nil)
+    let server = ShaarConsoleEvent(
+      id: UUID(), level: .error, message: "Failed", source: nil, origin: .server)
+    let spotlight = ShaarConsoleEvent(
+      id: UUID(), level: .warning, message: "Slow query", source: nil, origin: .spotlight)
+    let events: [ShaarDevToolsEvent] = [.console(browser), .console(server), .console(spotlight)]
+    #expect(model.rows(from: events).map(\.count) == [1, 1, 1])
+    model.origin = .server
+    #expect(model.rows(from: events).map(\.event.id) == [server.id])
+    #expect(model.agentCopyText(for: .init(event: server, count: 1)).contains("Server"))
+    model.origin = .spotlight
+    model.search = "spotlight"
+    #expect(model.rows(from: events).map(\.event.id) == [spotlight.id])
+  }
 }

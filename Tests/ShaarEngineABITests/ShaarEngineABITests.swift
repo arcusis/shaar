@@ -48,6 +48,13 @@ struct ShaarEngineABITests {
     #expect(ShaarEngineImplementation.shippingDefault == .shaar)
   }
 
+  @Test func nativeFrameworkLoadsWhenProvided() throws {
+    guard let path = ProcessInfo.processInfo.environment["SHAAR_ENGINE_FRAMEWORK"] else { return }
+    let loader = try ShaarEngineLoader.load(frameworkURL: URL(fileURLWithPath: path))
+    #expect(loader.currentMajor() == 1)
+    #expect(loader.symbol(named: "shaar_test_devtools_geometry") != nil)
+  }
+
   @Test func loaderRejectsMismatchedMajorWithTypedError() {
     #expect(throws: ShaarEngineError.unsupportedABI(expected: 1, actual: 9)) {
       try ShaarEngineLoader(resolver: FakeEngine(mismatchedMajor: true))

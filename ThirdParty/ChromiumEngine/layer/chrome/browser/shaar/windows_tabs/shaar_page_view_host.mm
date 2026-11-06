@@ -5,7 +5,9 @@
 #include "chrome/browser/shaar/windows_tabs/shaar_page_view_host.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
 
+#include <algorithm>
 #include <unordered_map>
+#include "chrome/browser/devtools/devtools_contents_resizing_strategy.h"
 #include "chrome/browser/devtools/devtools_window.h"
 
 #include "content/public/browser/web_contents.h"
@@ -30,8 +32,13 @@ void UpdateDockedDevTools(content::WebContents* inspected,
     return;
   NSView* view = inspected->GetNativeView().GetNativeNSView();
   auto it = SelectedOwners().find((__bridge void*)view);
-  if (it != SelectedOwners().end())
+  if (it != SelectedOwners().end()) {
+    DevToolsContentsResizingStrategy strategy;
+    if (frontend)
+      DevToolsWindow::GetInTabWebContents(inspected, &strategy);
     it->second->SetDevToolsContents(frontend);
+    it->second->SetDevToolsPageBounds(strategy.bounds());
+  }
 }
 
 PageViewHost::PageViewHost(NSRect frame, NSWindow* window) {
@@ -126,7 +133,11 @@ void PageViewHost::SetSelectedWebContents(content::WebContents* contents) {
     previous->UpdateWebContentsVisibility(content::Visibility::HIDDEN);
   selected_contents_ = contents ? contents->GetWeakPtr()
                                 : base::WeakPtr<content::WebContents>();
-  SetDevToolsContents(contents ? DevToolsWindow::GetInTabWebContents(contents, nullptr) : nullptr);
+  DevToolsContentsResizingStrategy strategy;
+  content::WebContents* frontend = contents
+      ? DevToolsWindow::GetInTabWebContents(contents, &strategy) : nullptr;
+  SetDevToolsContents(frontend);
+  SetDevToolsPageBounds(strategy.bounds());
   RefreshVisibility();
 }
 
@@ -171,9 +182,30 @@ void PageViewHost::SetDevToolsView(NSView* frontend) {
       [view_ addSubview:frontend];
     }
     frontend.hidden = NO;
-    frontend.autoresizingMask = NSViewHeightSizable | NSViewMinXMargin;
+    frontend.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  } else {
+    devtools_page_bounds_ = gfx::Rect();
   }
   LayoutPages();
+}
+
+void PageViewHost::SetDevToolsPageBounds(const gfx::Rect& bounds) {
+  devtools_page_bounds_ = devtools_view_ ? bounds : gfx::Rect();
+  LayoutPages();
+}
+
+bool PageViewHost::GetDevToolsGeometry(shaar_devtools_geometry* out) const {
+  if (!out || !selected_view_ || !devtools_view_ ||
+      devtools_page_bounds_.IsEmpty())
+    return false;
+  NSView* container = selected_view_.superview;
+  if (!container || devtools_view_.superview != container)
+    return false;
+  out->container_width = NSWidth(container.bounds);
+  out->inspected_page_right = NSMaxX(selected_view_.frame);
+  out->frontend_placeholder_right = devtools_page_bounds_.right();
+  out->frontend_width = NSWidth(devtools_view_.frame);
+  return true;
 }
 
 void PageViewHost::LayoutPages() {
@@ -189,11 +221,42 @@ void PageViewHost::LayoutPages() {
     [container addSubview:devtools_view_];
   }
   NSRect bounds = container.bounds;
-  CGFloat side = devtools_view_ ? bounds.size.width * 0.4 : 0;
+  NSRect page_frame = bounds;
+  if (devtools_view_) {
+    // Chromium's DevTools frontend owns the splitter and paints a placeholder
+    // for the inspected page. It must see the full container. Cropping the
+    // frontend to a side strip leaves its placeholder as an empty dark gap.
+    devtools_view_.frame = bounds;
+    if (devtools_page_bounds_.IsEmpty()) {
+      page_frame.size.width = bounds.size.width * 0.6;
+    } else {
+      const CGFloat width = NSWidth(bounds);
+      const CGFloat height = NSHeight(bounds);
+      const CGFloat left = std::clamp(
+          static_cast<CGFloat>(devtools_page_bounds_.x()), 0.0, width);
+      const CGFloat right = std::clamp(
+          static_cast<CGFloat>(devtools_page_bounds_.right()), left, width);
+      const CGFloat top = std::clamp(
+          static_cast<CGFloat>(devtools_page_bounds_.y()), 0.0, height);
+      const CGFloat bottom = std::clamp(
+          static_cast<CGFloat>(devtools_page_bounds_.bottom()), top, height);
+      page_frame = NSMakeRect(NSMinX(bounds) + left,
+                              NSMinY(bounds) + height - bottom,
+                              right - left, bottom - top);
+    }
+    // The inspected page covers the frontend placeholder and receives input.
+    if (selected_view_) {
+      NSUInteger page_index = [container.subviews indexOfObject:selected_view_];
+      NSUInteger frontend_index =
+          [container.subviews indexOfObject:devtools_view_];
+      if (page_index != NSNotFound && frontend_index != NSNotFound &&
+          page_index < frontend_index)
+        [container addSubview:selected_view_ positioned:NSWindowAbove
+                                            relativeTo:devtools_view_];
+    }
+  }
   if (selected_view_)
-    selected_view_.frame = NSMakeRect(0, 0, bounds.size.width - side, bounds.size.height);
-  if (devtools_view_)
-    devtools_view_.frame = NSMakeRect(bounds.size.width - side, 0, side, bounds.size.height);
+    selected_view_.frame = page_frame;
   laying_out_pages_ = false;
 }
 

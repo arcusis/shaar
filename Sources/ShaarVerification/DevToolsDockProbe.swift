@@ -96,11 +96,16 @@ struct DevToolsDockProbe {
     if let previousWidth, abs(host - previousWidth) <= 10 { return false }
     if !open { return abs(page - host) <= 1 }
     guard state["sameWindow"] as? Bool == true,
-      state["sameContainer"] as? Bool == true, state["nonOverlapping"] as? Bool == true,
+      state["sameContainer"] as? Bool == true,
+      state["pageAboveFrontend"] as? Bool == true,
+      state["frontendCoversContainer"] as? Bool == true,
+      state["geometryReady"] as? Bool == true,
+      let gap = state["gap"] as? Double,
       let frontend = state["frontendWidth"] as? Double,
       let frontendHeight = state["frontendHeight"] as? Double
     else { return false }
-    return abs(page - host * 0.6) <= 2 && abs(frontend - host * 0.4) <= 2 && frontendHeight > 0
+    return gap <= 1 && page > 0 && page < host && abs(frontend - host) <= 1
+      && frontendHeight > 0
   }
 
   private func wait(_ name: String, until ready: () async throws -> Bool) async throws {

@@ -36,11 +36,13 @@ struct ShaarConsoleEvent: Equatable, Sendable {
   let objectID: String?
   let previewProperties: [ShaarConsoleProperty]
   let origin: Origin
+  let timestamp: Date
 
   init(
     id: UUID, level: Level, message: String, source: String?,
     stack: [ShaarConsoleFrame] = [], objectID: String? = nil,
-    previewProperties: [ShaarConsoleProperty] = [], origin: Origin = .browser
+    previewProperties: [ShaarConsoleProperty] = [], origin: Origin = .browser,
+    timestamp: Date = Date()
   ) {
     self.id = id
     self.level = level
@@ -50,6 +52,7 @@ struct ShaarConsoleEvent: Equatable, Sendable {
     self.objectID = objectID
     self.previewProperties = previewProperties
     self.origin = origin
+    self.timestamp = timestamp
   }
 }
 
@@ -126,6 +129,18 @@ protocol ShaarDevToolsEventTransport {
   func messages(for target: SiteControlTarget) -> AsyncStream<ShaarDevToolsTransportMessage>
 }
 
+enum ShaarLocalConsoleMessage {
+  case available
+  case unavailable
+  case event(ShaarConsoleEvent)
+}
+
+@MainActor
+protocol ShaarLocalConsoleTransport {
+  var origin: ShaarConsoleEvent.Origin { get }
+  func messages(for target: SiteControlTarget) -> AsyncStream<ShaarLocalConsoleMessage>
+}
+
 /// Production stays unavailable until shaar.17 reports its live panel capability.
 struct ShaarDevToolsPendingTransport: ShaarDevToolsEventTransport {
   func messages(for target: SiteControlTarget) -> AsyncStream<ShaarDevToolsTransportMessage> {
@@ -146,6 +161,8 @@ final class ShaarDevToolsModel {
   var rightWidth: CGFloat = 420
   private(set) var streamAvailable = false
   private(set) var events: [ShaarDevToolsEvent] = []
+  private(set) var localConsoleEvents: [ShaarConsoleEvent] = []
+  private(set) var localConsoleOrigins: Set<ShaarConsoleEvent.Origin> = []
   let console = ShaarConsoleModel()
   let network = ShaarNetworkModel()
   let phase2: ShaarPhase2Model
@@ -156,7 +173,9 @@ final class ShaarDevToolsModel {
   let repro: ShaarReproModel
   let viewports: ShaarViewportsModel
   @ObservationIgnored private let transport: any ShaarDevToolsEventTransport
+  @ObservationIgnored private let localTransports: [any ShaarLocalConsoleTransport]
   @ObservationIgnored private var eventTask: Task<Void, Never>?
+  @ObservationIgnored private var localTasks: [Task<Void, Never>] = []
   @ObservationIgnored private var streamGeneration = 0
   @ObservationIgnored private var ownedInspector: InspectorModel?
 
@@ -166,10 +185,12 @@ final class ShaarDevToolsModel {
     phase2Transport: any ShaarPhase2Transport = ShaarPhase2PendingTransport(),
     sourceLoader: @escaping @Sendable (URL) async throws -> Data = DevelopmentSourceHTTP.load,
     reproTransport: any ShaarReproTransport = ShaarReproPendingTransport(),
-    viewportsTransport: any ShaarViewportsTransport = ShaarViewportsPendingTransport()
+    viewportsTransport: any ShaarViewportsTransport = ShaarViewportsPendingTransport(),
+    localTransports: [any ShaarLocalConsoleTransport] = []
   ) {
     self.target = target
     self.transport = transport
+    self.localTransports = localTransports
     let phase2 = ShaarPhase2Model(target: target, transport: phase2Transport)
     self.phase2 = phase2
     application = ShaarApplicationModel(phase2: phase2)
@@ -187,6 +208,7 @@ final class ShaarDevToolsModel {
     }
     isOpen = true
     startStream()
+    startLocalStreams()
     phase2.open()
     viewports.open()
   }
@@ -195,8 +217,12 @@ final class ShaarDevToolsModel {
     streamGeneration += 1
     eventTask?.cancel()
     eventTask = nil
+    localTasks.forEach { $0.cancel() }
+    localTasks.removeAll()
     streamAvailable = false
     events.removeAll()
+    localConsoleEvents.removeAll()
+    localConsoleOrigins.removeAll()
     console.clearEntries()
     network.clearSelection()
     phase2.close()
@@ -216,6 +242,8 @@ final class ShaarDevToolsModel {
     performance.updateTarget(target, committed: committed)
     streamAvailable = false
     events.removeAll()
+    localConsoleEvents.removeAll()
+    localConsoleOrigins.removeAll()
     console.clearEntries()
     network.clearSelection()
     phase2.updateTarget(target, committed: committed)
@@ -227,11 +255,22 @@ final class ShaarDevToolsModel {
     streamGeneration += 1
     eventTask?.cancel()
     eventTask = nil
-    if isOpen { startStream() }
+    localTasks.forEach { $0.cancel() }
+    localTasks.removeAll()
+    if isOpen {
+      startStream()
+      startLocalStreams()
+    }
   }
 
-  var consoleCount: Int { events.reduce(0) { $0 + (isConsole($1) ? 1 : 0) } }
-  var networkCount: Int { events.count - consoleCount }
+  var consoleAvailable: Bool { streamAvailable || !localConsoleOrigins.isEmpty }
+  var consoleEvents: [ShaarDevToolsEvent] {
+    events + localConsoleEvents.map(ShaarDevToolsEvent.console)
+  }
+  var consoleCount: Int {
+    events.reduce(localConsoleEvents.count) { $0 + (isConsole($1) ? 1 : 0) }
+  }
+  var networkCount: Int { events.reduce(0) { $0 + (isConsole($1) ? 0 : 1) } }
 
   private func isConsole(_ event: ShaarDevToolsEvent) -> Bool {
     if case .console = event { return true }
@@ -251,6 +290,39 @@ final class ShaarDevToolsModel {
     }
   }
 
+  private func startLocalStreams() {
+    let target = target
+    let generation = streamGeneration
+    for transport in localTransports {
+      let task = Task { [weak self] in
+        for await message in transport.messages(for: target) {
+          guard let self, self.isOpen, self.target == target,
+            self.streamGeneration == generation
+          else { return }
+          self.receiveLocal(message, from: transport.origin)
+        }
+      }
+      localTasks.append(task)
+    }
+  }
+
+  private func receiveLocal(
+    _ message: ShaarLocalConsoleMessage, from origin: ShaarConsoleEvent.Origin
+  ) {
+    switch message {
+    case .available: localConsoleOrigins.insert(origin)
+    case .unavailable:
+      localConsoleOrigins.remove(origin)
+      localConsoleEvents.removeAll { $0.origin == origin }
+    case .event(let event):
+      guard localConsoleOrigins.contains(origin), event.origin == origin else { return }
+      localConsoleEvents.append(event)
+      if localConsoleEvents.count > 1_000 {
+        localConsoleEvents.removeFirst(localConsoleEvents.count - 1_000)
+      }
+    }
+  }
+
   private func receive(_ message: ShaarDevToolsTransportMessage) {
     switch message {
     case .streamAvailable: streamAvailable = true
@@ -266,7 +338,10 @@ final class ShaarDevToolsModel {
     }
   }
 
-  isolated deinit { eventTask?.cancel() }
+  isolated deinit {
+    eventTask?.cancel()
+    localTasks.forEach { $0.cancel() }
+  }
 }
 
 enum ShaarDevToolsSizing {

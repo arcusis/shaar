@@ -80,4 +80,15 @@ import Testing
     model.search = "spotlight"
     #expect(model.rows(from: events).map(\.event.id) == [spotlight.id])
   }
+
+  @Test func unifiedRowsFollowArrivalTimeAcrossSources() {
+    let browser = ShaarConsoleEvent(
+      id: UUID(), level: .log, message: "Browser", source: nil,
+      timestamp: Date(timeIntervalSince1970: 2))
+    let server = ShaarConsoleEvent(
+      id: UUID(), level: .log, message: "Server", source: nil, origin: .server,
+      timestamp: Date(timeIntervalSince1970: 1))
+    let rows = ShaarConsoleModel().rows(from: [.console(browser), .console(server)])
+    #expect(rows.map(\.event.message) == ["Server", "Browser"])
+  }
 }

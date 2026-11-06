@@ -33,8 +33,9 @@ final class ShaarConsoleModel {
         if case .console(let value) = event { return value }
         return nil
       } + localEntries
+    let orderedEntries = entries.sorted { $0.timestamp < $1.timestamp }
     var result: [ShaarConsoleRow] = []
-    for entry in entries where matches(entry) {
+    for entry in orderedEntries where matches(entry) {
       if let last = result.last, repeatKey(last.event) == repeatKey(entry) {
         result[result.count - 1].count += 1
       } else {

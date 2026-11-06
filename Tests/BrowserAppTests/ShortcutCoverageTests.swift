@@ -17,6 +17,7 @@ import Testing
     return (command, item)
   }
   #expect(Set(commands.map(\.0)) == Set(BrowserMenuCommand.allCases))
+  #expect(commands.first { $0.0 == .sharePage }?.1.keyEquivalent == "")
   let actionableItems = items.filter {
     !$0.isSeparatorItem && $0.action != nil && $0.submenu == nil
       && !ShortcutCatalog.unassignedTitles.contains($0.title)

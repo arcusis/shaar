@@ -179,11 +179,11 @@ struct ShaarReproPanel: View {
 
   private var capability: some View {
     HStack(spacing: 10) {
-      Image(systemName: model.available ? "record.circle" : "record.circle.slash")
-        .foregroundStyle(model.available ? Color.red : Color.secondary)
+      Image(systemName: model.recording ? "record.circle" : "record.circle.slash")
+        .foregroundStyle(model.recording ? Color.red : Color.secondary)
       Text(
         ShellL10n.string(
-          model.available ? "Recording this tab" : "Recording needs engine support"))
+          model.recording ? "Recording this tab" : "Recording needs engine support"))
       Spacer()
       Text("30 s").foregroundStyle(.secondary)
     }

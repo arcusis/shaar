@@ -8,6 +8,22 @@ import Testing
 
 @testable import ArcusisBrowser
 
+private struct MaskedFrameTransportFixture: ShaarReproTransport {
+  let available = true
+  let requiresMaskedFrames = true
+
+  func capture(for target: SiteControlTarget, seconds: Int) async throws -> ShaarReproCapture {
+    ShaarReproCapture(
+      videoMP4: Data(), durationSeconds: seconds,
+      dom: ShaarReproDOMNode(tag: "body", text: "Safe", attributes: [:], children: []),
+      console: [], network: [],
+      environment: ShaarReproEnvironment(
+        url: target.url.absoluteString, shaarVersion: "test", engineVersion: "fixture",
+        operatingSystem: "macOS", userAgent: "Fixture/1", viewportWidth: 16,
+        viewportHeight: 16))
+  }
+}
+
 @Suite @MainActor struct ShaarReproFramesTests {
   private let target = SiteControlTarget(
     tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com")!)
@@ -64,6 +80,28 @@ import Testing
         tabID: UUID(), profileID: target.profileID, url: target.url))
     #expect(shell.repro.frames.snapshot().isEmpty)
     shell.close()
+  }
+
+  @Test func productionCaptureNeedsARecentMaskedFrame() throws {
+    let model = ShaarReproModel(target: target, transport: MaskedFrameTransportFixture())
+    model.startFrames(for: target)
+    #expect(!model.available)
+    model.receiveMaskedFrame(try fixtureJPEG())
+    #expect(model.available)
+    model.stopFrames()
+    #expect(!model.available)
+  }
+
+  @Test func maskedFrameCaptureWritesEncodedBundle() async throws {
+    let model = ShaarReproModel(target: target, transport: MaskedFrameTransportFixture())
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    model.startFrames(for: target)
+    model.receiveMaskedFrame(try fixtureJPEG())
+    let file = try #require(await model.capture(to: directory))
+    let bundle = try await ShaarReproBundle.read(at: file)
+    #expect(bundle.videoMP4[4..<8].elementsEqual(Data("ftyp".utf8)))
+    #expect(bundle.manifest.durationSeconds == 1)
   }
 
   private func fixtureJPEG() throws -> Data {

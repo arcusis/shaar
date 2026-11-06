@@ -30,6 +30,11 @@ VISUAL_FILTERS = (
     "SpaceIconPickerVisualTests", "SidebarFoldersVisualTests", "CommandPanelVisualTests",
     "SettingsVisualTests",
 )
+VISUAL_SHARDS = {
+    "1": ("SidebarChromeLayoutTests", "SpaceEditorVisualTests", "SettingsVisualTests"),
+    "2": ("ExtensionManagerVisualTests", "SpaceIconPickerVisualTests", "SidebarFoldersVisualTests",
+          "CommandPanelVisualTests"),
+}
 ENGINE_MODES = ("baseline", "dev-mode", "private-multitab", "private-window", "quit-exit", "session-recovery")
 MINIMUM_REPETITIONS = {"private-window": 3, "quit-exit": 3}
 SWIFT_TEST_CRASH_PROCESSES = ("swiftpm-testing-helper", "ArcusisBrowserPackageTests")
@@ -255,12 +260,13 @@ def run_engine_shard(checks: Commands, shard: str, iterations: int) -> None:
             return
 
 
-def run_visuals(checks: Commands) -> None:
+def run_visuals(checks: Commands, shard: str) -> None:
     require_hosted_mac()
     if checks.run("visual-build", ["swift", "build", "--build-tests", "--jobs", "2", "--force-resolved-versions"]):
         return
     environment = dict(os.environ, ARCUSIS_SIDEBAR_VISUAL_CI="1")
-    for name in VISUAL_FILTERS:
+    filters = VISUAL_FILTERS if shard == "all" else VISUAL_SHARDS[shard]
+    for name in filters:
         checks.run(name, ["swift", "test", "--skip-build", "--jobs", "2", "--filter", name], env=environment)
 
 
@@ -289,6 +295,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("stage", choices=("unit", "coverage-base", "coverage-compare", "engine", "engine-build", "engine-shard", "basic-browsing", "visual", "localization", "localization-captures", "shipping", "sanitize", "dead-code"))
     parser.add_argument("--shard", choices=engine_shards(10), default="baseline-1")
+    parser.add_argument("--visual-shard", choices=("all", *VISUAL_SHARDS), default="all")
     parser.add_argument("--mode", choices=("all", *ENGINE_MODES), default="all")
     parser.add_argument("--iterations", type=int, choices=range(1, 11), default=1)
     parser.add_argument("--sanitizer", choices=("address", "thread"), default="address")
@@ -296,6 +303,8 @@ def main() -> int:
     suffix = f"-{options.mode}" if options.stage == "engine" and options.mode != "all" else ""
     if options.stage == "engine-shard":
         suffix = f"-{options.shard}"
+    if options.stage == "visual" and options.visual_shard != "all":
+        suffix = f"-{options.visual_shard}"
     suffix += f"-{options.sanitizer}" if options.stage == "sanitize" else ""
     checks = Commands(options.stage + suffix)
     try:
@@ -316,7 +325,7 @@ def main() -> int:
         elif options.stage == "basic-browsing":
             run_basic_browsing(checks)
         elif options.stage == "visual":
-            run_visuals(checks)
+            run_visuals(checks, options.visual_shard)
         elif options.stage == "localization":
             run_localization_engine(checks)
         elif options.stage == "localization-captures":

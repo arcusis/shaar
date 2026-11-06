@@ -109,6 +109,7 @@ struct ProfilePrivacyTests {
     await model.clear(siteData: false)
     await model.resetPermissions(origin: "https://example.test")
     #expect(model.sites.isEmpty)
+    #expect(model.message == "Site permissions for https://example.test reset to defaults.")
     #expect(backend.exceptions[other]?.count == 1)
     #expect(backend.calls.allSatisfy { $0.1 == selected })
     #expect(backend.calls.filter { ["data", "cache", "reset"].contains($0.0) }.count == 3)

@@ -38,6 +38,35 @@ import Testing
       == "פתיחת הגדרות \u{2068}מצלמה\u{2069}")
 }
 
+@Test @MainActor func resetPermissionActionsAndConfirmationNameTheOriginInBothLanguages() {
+  #expect(
+    BrowserSettingsAccessibility.resetPermissionsLabel(
+      origin: "https://example.test", language: .english)
+      == "Reset permissions for https://example.test")
+  #expect(
+    BrowserSettingsAccessibility.resetPermissionsLabel(
+      origin: "https://example.test", language: .hebrew)
+      == "איפוס ההרשאות עבור \u{2068}https://example.test\u{2069}")
+  #expect(
+    ProfilePrivacyModel.resetPermissionsMessage(
+      origin: "https://example.test", language: .english)
+      == "Site permissions for https://example.test reset to defaults.")
+  #expect(
+    ProfilePrivacyModel.resetPermissionsMessage(
+      origin: "https://example.test", language: .hebrew)
+      == "הרשאות האתר עבור \u{2068}https://example.test\u{2069} אופסו לברירות המחדל.")
+}
+
+@Test func macOSPermissionsGuidanceUsesEnglishAndHebrewCatalogValues() {
+  let key = "Websites can only use what macOS allows. If a site's request is blocked here, change it in System Settings."
+  #expect(
+    BrowserLocalization.string(key, table: "Settings", language: .english)
+      == key)
+  #expect(
+    BrowserLocalization.string(key, table: "Settings", language: .hebrew)
+      == "אתרים יכולים להשתמש רק בהרשאות ש‑macOS מאפשרת. אם בקשת אתר חסומה כאן, יש לשנות זאת בהגדרות המערכת.")
+}
+
 @Test @MainActor func profilePaneMasterDetailFitsLightAndDarkAppearances() {
   let id = UUID()
   let selectedProfileID = Binding<UUID?>(get: { id }, set: { _ in })

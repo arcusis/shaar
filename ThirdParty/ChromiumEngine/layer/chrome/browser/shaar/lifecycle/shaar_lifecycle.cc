@@ -236,6 +236,7 @@ std::vector<std::string> ChromeMainArguments(
       "--disable-background-mode", "--shaar-embedder"};
   if (testing) {
     arguments.push_back("--use-mock-keychain");
+    arguments.push_back("--use-fake-device-for-media-stream");
     arguments.push_back("--disable-renderer-backgrounding");
     arguments.push_back("--disable-backgrounding-occluded-windows");
     arguments.push_back("--disable-background-timer-throttling");

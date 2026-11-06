@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #include "chrome/browser/shaar/windows_tabs/shaar_page_view_host.h"
+#include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
 
 #include <unordered_map>
 
@@ -16,6 +17,11 @@ std::unordered_map<void*, PageViewHost*>& SelectedOwners() {
   return owners;
 }
 }  // namespace
+
+bool HasHiddenNativeWindow(content::WebContents* contents) {
+  NSView* view = contents ? contents->GetNativeView().GetNativeNSView() : nil;
+  return view.window && !view.window.isVisible;
+}
 
 PageViewHost::PageViewHost(NSRect frame, NSWindow* window) {
   window_ = window ?: [[NSWindow alloc] initWithContentRect:frame

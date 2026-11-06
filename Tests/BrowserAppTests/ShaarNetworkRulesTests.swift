@@ -131,6 +131,36 @@ private final class FakeNetworkRulesABIEngine: ShaarDevToolsSubmitting, @uncheck
     #expect(model.rules.isEmpty)
   }
 
+  @Test func changingActionClearsFieldsRejectedByNativeRules() async throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let model = ShaarNetworkRulesModel(
+      target: target(), store: ShaarNetworkRuleStore(root: root),
+      transport: ShaarNetworkRulesFixtureTransport())
+    model.createNew()
+    model.draft?.enabled = true
+    model.draft?.url = "http://localhost:3000/api/orders"
+    model.draft?.kind = .delay
+    model.draft?.delayMilliseconds = 450
+    try await model.saveDraft()
+    let delayed = try #require(model.rules.first)
+    model.edit(delayed)
+    model.draft?.kind = .requestHeaders
+    model.draft?.headers = [ShaarNetworkHeader(name: "X-Shaar-Probe", value: "changed")]
+    try await model.saveDraft()
+    #expect(model.activeCount == 1)
+    #expect(model.rules.first?.delayMilliseconds == 0)
+    model.edit(try #require(model.rules.first))
+    model.draft?.kind = .redirect
+    model.draft?.redirectURL = "http://localhost:3000/other"
+    try await model.saveDraft()
+    model.edit(try #require(model.rules.first))
+    model.draft?.kind = .mock
+    model.draft?.bodyText = "mocked"
+    try await model.saveDraft()
+    #expect(model.rules.first?.redirectURL == "")
+  }
+
   @Test func productionTransportKeepsSavedRulesInactive() async throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }

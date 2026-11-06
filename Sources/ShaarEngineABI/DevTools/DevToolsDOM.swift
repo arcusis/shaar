@@ -13,6 +13,11 @@ public enum ShaarDOMRelation: String, Sendable {
 public struct ShaarDOMAttribute: Equatable, Sendable {
   public let name: String
   public let value: String
+
+  public init(name: String, value: String) {
+    self.name = name
+    self.value = value
+  }
 }
 
 public struct ShaarDOMNode: Equatable, Identifiable, Sendable {

@@ -19,7 +19,7 @@ SPEC.loader.exec_module(PROBE)
 class ShaarQuitProbeTests(unittest.TestCase):
     def report(self):
         names = {
-            'openTab', 'navigate', 'backForward', 'devTools', 'newWindow',
+            'openTab', 'paint', 'navigate', 'backForward', 'devTools', 'newWindow',
             'privateWindow', 'profilesSwitch', 'extensions', 'downloads',
             'privateEngineProfileIsOffTheRecord', 'privateEngineGlobalCookiesBlocked',
             'privateEngineHTTPSOnlyEnabled', 'privateEngineReferrersDisabled',
@@ -39,6 +39,14 @@ class ShaarQuitProbeTests(unittest.TestCase):
 
     def test_accepts_complete_private_live_report(self):
         self.assertTrue(self.validate(self.report()))
+
+    def test_paint_is_required_and_must_pass(self):
+        missing = self.report()
+        del missing['results']['paint']
+        self.assertFalse(self.validate(missing))
+        failed = self.report()
+        failed['results']['paint']['status'] = 'fail'
+        self.assertFalse(self.validate(failed))
 
     def test_every_policy_is_required_and_must_pass(self):
         for name in self.report()['results']:

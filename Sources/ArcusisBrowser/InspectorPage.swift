@@ -38,7 +38,7 @@ struct PrivateInspectorPage: View {
   }
 }
 
-private struct InspectorPageLayout<Page: View>: View {
+struct InspectorPageLayout<Page: View>: View {
   let model: InspectorModel?
   let shell: ShaarDevToolsModel?
   let openChromium: () -> Void
@@ -48,18 +48,28 @@ private struct InspectorPageLayout<Page: View>: View {
   var body: some View {
     GeometryReader { geometry in
       if let shell, shell.isOpen {
-        if shell.dock == .right && geometry.size.width >= 640 {
+        if shell.dock == .floating {
+          page().frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if shell.dock == .right {
           HStack(spacing: 0) {
             page().frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
-            resizeHandle(shell: shell, vertical: false, available: geometry.size.width)
+            resizeHandle(shell: shell, side: .right, available: geometry.size.width)
             ShaarDevToolsPanel(model: shell, inspector: model, openChromium: openChromium)
               .frame(
-                width: ShaarDevToolsSizing.right(shell.rightWidth, available: geometry.size.width))
+                width: ShaarDevToolsSizing.side(shell.rightWidth, available: geometry.size.width))
+          }
+        } else if shell.dock == .left {
+          HStack(spacing: 0) {
+            ShaarDevToolsPanel(model: shell, inspector: model, openChromium: openChromium)
+              .frame(
+                width: ShaarDevToolsSizing.side(shell.leftWidth, available: geometry.size.width))
+            resizeHandle(shell: shell, side: .left, available: geometry.size.width)
+            page().frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
           }
         } else {
           VStack(spacing: 0) {
             page().frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
-            resizeHandle(shell: shell, vertical: true, available: geometry.size.height)
+            resizeHandle(shell: shell, side: .bottom, available: geometry.size.height)
             ShaarDevToolsPanel(model: shell, inspector: model, openChromium: openChromium)
               .frame(
                 height: ShaarDevToolsSizing.bottom(
@@ -69,6 +79,24 @@ private struct InspectorPageLayout<Page: View>: View {
       } else {
         inspectorLayout(in: geometry.size)
       }
+    }
+    .onAppear { syncFloatingWindow() }
+    .onChange(of: shell?.dock) { _, _ in syncFloatingWindow() }
+    .onChange(of: shell?.isOpen) { _, _ in syncFloatingWindow() }
+  }
+
+  private func syncFloatingWindow() {
+    guard let shell else { return }
+    if shell.isOpen && shell.dock == .floating {
+      if shell.floatingWindow == nil {
+        let window = ShaarDevToolsFloatingWindow(
+          model: shell, inspector: model, openChromium: openChromium)
+        shell.floatingWindow = window
+        window.present()
+      }
+    } else {
+      shell.floatingWindow?.dismiss()
+      shell.floatingWindow = nil
     }
   }
 
@@ -93,23 +121,37 @@ private struct InspectorPageLayout<Page: View>: View {
   }
 
   private func resizeHandle(
-    shell: ShaarDevToolsModel, vertical: Bool, available: CGFloat
+    shell: ShaarDevToolsModel, side: ShaarDevToolsDock, available: CGFloat
   ) -> some View {
-    Rectangle()
+    let vertical = side == .bottom
+    return Rectangle()
       .fill(Color.primary.opacity(0.12))
       .frame(width: vertical ? nil : 5, height: vertical ? 5 : nil)
       .contentShape(Rectangle())
       .gesture(
         DragGesture(minimumDistance: 2)
           .onChanged { value in
-            if dragStart == nil { dragStart = vertical ? shell.bottomHeight : shell.rightWidth }
+            if dragStart == nil {
+              switch side {
+              case .bottom: dragStart = shell.bottomHeight
+              case .right: dragStart = shell.rightWidth
+              case .left: dragStart = shell.leftWidth
+              case .floating: return
+              }
+            }
             guard let dragStart else { return }
-            if vertical {
+            switch side {
+            case .bottom:
               shell.bottomHeight = ShaarDevToolsSizing.bottom(
                 dragStart - value.translation.height, available: available)
-            } else {
-              shell.rightWidth = ShaarDevToolsSizing.right(
+            case .right:
+              shell.rightWidth = ShaarDevToolsSizing.side(
                 dragStart - value.translation.width, available: available)
+            case .left:
+              shell.leftWidth = ShaarDevToolsSizing.side(
+                dragStart + value.translation.width, available: available)
+            case .floating:
+              break
             }
           }
           .onEnded { _ in dragStart = nil }

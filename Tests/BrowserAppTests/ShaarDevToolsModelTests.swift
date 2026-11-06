@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import AppKit
 import Foundation
 import Testing
 
@@ -95,6 +96,53 @@ import Testing
     #expect(ShaarDevToolsSizing.bottom(900, available: 1_000) == 700)
     #expect(ShaarDevToolsSizing.right(100, available: 1_000) == 320)
     #expect(ShaarDevToolsSizing.right(900, available: 1_000) == 500)
+    #expect(ShaarDevToolsSizing.side(100, available: 1_000) == 320)
+    #expect(ShaarDevToolsSizing.side(900, available: 1_000) == 500)
+    #expect(ShaarDevToolsSizing.side(420, available: 620) == 310)
+  }
+
+  @Test func dockChoiceAndIndependentSizesSurviveReopening() {
+    let defaults = UserDefaults(suiteName: "ShaarDevToolsLayoutTests.\(UUID())")!
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com")!)
+    let inspector = InspectorModel(target: target, engine: nil)
+    let shell = ShaarDevToolsModel(target: target, layoutDefaults: defaults)
+    #expect(shell.dock == .right)
+    shell.open(inspector: inspector)
+    shell.section = .network
+    shell.rightWidth = 470
+    shell.leftWidth = 390
+    shell.bottomHeight = 310
+    shell.dock = .floating
+    #expect(shell.isOpen && shell.section == .network)
+    shell.dock = .left
+    #expect(shell.isOpen && shell.section == .network)
+    shell.close()
+    let reopened = ShaarDevToolsModel(target: target, layoutDefaults: defaults)
+    #expect(reopened.dock == .left)
+    #expect(reopened.rightWidth == 470)
+    #expect(reopened.leftWidth == 390)
+    #expect(reopened.bottomHeight == 310)
+  }
+
+  @Test func dockingBackFromAnUnorderedWindowKeepsTheTabPanelOpen() {
+    _ = NSApplication.shared
+    let previous = NSApp.keyWindow
+    let defaults = UserDefaults(suiteName: "ShaarDevToolsWindowTests.\(UUID())")!
+    let target = SiteControlTarget(
+      tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com")!)
+    let inspector = InspectorModel(target: target, engine: nil)
+    let shell = ShaarDevToolsModel(target: target, layoutDefaults: defaults)
+    shell.open(inspector: inspector)
+    shell.section = .network
+    shell.dock = .floating
+    shell.floatingWindow = ShaarDevToolsFloatingWindow(
+      model: shell, inspector: inspector, openChromium: {})
+    shell.dock = .right
+    #expect(shell.floatingWindow == nil)
+    #expect(shell.isOpen && shell.section == .network)
+    #expect(NSApp.keyWindow === previous)
+    shell.close()
   }
 
   @Test func reproHistoryEvictsOldEventsAndRejectsOtherTabs() {

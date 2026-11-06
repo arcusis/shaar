@@ -20,6 +20,8 @@ enum ShaarDevToolsSection: String, CaseIterable {
 enum ShaarDevToolsDock: String, CaseIterable {
   case bottom = "Dock to bottom"
   case right = "Dock to right"
+  case left = "Dock to left"
+  case floating = "Open in separate window"
 }
 
 struct ShaarConsoleEvent: Equatable, Sendable {
@@ -165,9 +167,26 @@ final class ShaarDevToolsModel {
       if section == .elements { dom.open() } else { dom.close() }
     }
   }
-  var dock: ShaarDevToolsDock = .bottom
-  var bottomHeight: CGFloat = 380
-  var rightWidth: CGFloat = 420
+  var dock: ShaarDevToolsDock = .right {
+    didSet {
+      layoutDefaults.set(dock.rawValue, forKey: "shaar.devtools.dock")
+      if oldValue == .floating && dock != .floating {
+        floatingWindow?.dismiss()
+        floatingWindow = nil
+      }
+    }
+  }
+  var bottomHeight: CGFloat = 380 {
+    didSet { layoutDefaults.set(Double(bottomHeight), forKey: "shaar.devtools.bottomHeight") }
+  }
+  var rightWidth: CGFloat = 420 {
+    didSet { layoutDefaults.set(Double(rightWidth), forKey: "shaar.devtools.rightWidth") }
+  }
+  var leftWidth: CGFloat = 420 {
+    didSet { layoutDefaults.set(Double(leftWidth), forKey: "shaar.devtools.leftWidth") }
+  }
+  @ObservationIgnored private let layoutDefaults: UserDefaults
+  @ObservationIgnored var floatingWindow: ShaarDevToolsFloatingWindow?
   private(set) var streamAvailable = false
   private(set) var events: [ShaarDevToolsEvent] = []
   private(set) var localEventsBySource: [String: [ShaarConsoleEvent]] = [:]
@@ -201,9 +220,19 @@ final class ShaarDevToolsModel {
     localTransports: [any ShaarLocalConsoleTransport] = [],
     rulesTransport: any ShaarNetworkRulesTransport = ShaarNetworkRulesPendingTransport(),
     domTransport: any ShaarDOMTransport = ShaarDOMPendingTransport(),
-    rulesStore: ShaarNetworkRuleStore = ShaarNetworkRuleStore()
+    rulesStore: ShaarNetworkRuleStore = ShaarNetworkRuleStore(),
+    layoutDefaults: UserDefaults = .standard
   ) {
     self.target = target
+    self.layoutDefaults = layoutDefaults
+    if let saved = layoutDefaults.string(forKey: "shaar.devtools.dock"),
+      let dock = ShaarDevToolsDock(rawValue: saved)
+    {
+      self.dock = dock
+    }
+    bottomHeight = Self.savedSize("shaar.devtools.bottomHeight", fallback: 380, in: layoutDefaults)
+    rightWidth = Self.savedSize("shaar.devtools.rightWidth", fallback: 420, in: layoutDefaults)
+    leftWidth = Self.savedSize("shaar.devtools.leftWidth", fallback: 420, in: layoutDefaults)
     self.transport = transport
     self.localTransports = Dictionary(
       uniqueKeysWithValues: localTransports.map { ($0.sourceID, $0) })
@@ -217,6 +246,14 @@ final class ShaarDevToolsModel {
     sources = ShaarSourcesModel(phase2: phase2, loadSourceData: sourceLoader)
     repro = ShaarReproModel(target: target, transport: reproTransport)
     viewports = ShaarViewportsModel(target: target, transport: viewportsTransport)
+  }
+
+  private static func savedSize(_ key: String, fallback: CGFloat, in defaults: UserDefaults)
+    -> CGFloat
+  {
+    guard defaults.object(forKey: key) != nil else { return fallback }
+    let size = CGFloat(defaults.double(forKey: key))
+    return size.isFinite && size > 0 ? size : fallback
   }
 
   func open(inspector: InspectorModel) {
@@ -237,6 +274,8 @@ final class ShaarDevToolsModel {
   }
 
   func close() {
+    floatingWindow?.dismiss()
+    floatingWindow = nil
     streamGeneration += 1
     eventTask?.cancel()
     eventTask = nil
@@ -449,5 +488,10 @@ enum ShaarDevToolsSizing {
 
   static func right(_ desired: CGFloat, available: CGFloat) -> CGFloat {
     min(max(320, desired), max(320, available * 0.5))
+  }
+
+  static func side(_ desired: CGFloat, available: CGFloat) -> CGFloat {
+    let maximum = max(160, min(available * 0.5, available - 180))
+    return min(max(min(320, maximum), desired), maximum)
   }
 }

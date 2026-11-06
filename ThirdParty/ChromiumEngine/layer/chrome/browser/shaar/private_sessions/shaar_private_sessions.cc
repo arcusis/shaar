@@ -270,6 +270,14 @@ shaar_error_code ConfigurePrivateProfile(Profile* otr) {
     return SHAAR_NOT_READY;
   settings->SetDefaultContentSetting(ContentSettingsType::COOKIES,
                                      CONTENT_SETTING_BLOCK);
+  // Private windows do not offer permission prompts. Otherwise requests wait
+  // indefinitely in the hidden Chromium BrowserView instead of the Shaar host.
+  for (auto type : {ContentSettingsType::MEDIASTREAM_CAMERA,
+                    ContentSettingsType::MEDIASTREAM_MIC,
+                    ContentSettingsType::GEOLOCATION,
+                    ContentSettingsType::NOTIFICATIONS}) {
+    settings->SetDefaultContentSetting(type, CONTENT_SETTING_BLOCK);
+  }
   prefs->SetBoolean(prefs::kHttpsOnlyModeEnabled, true);
   prefs->SetBoolean(prefs::kEnableReferrers, false);
   prefs->SetString(prefs::kWebRTCIPHandlingPolicy,

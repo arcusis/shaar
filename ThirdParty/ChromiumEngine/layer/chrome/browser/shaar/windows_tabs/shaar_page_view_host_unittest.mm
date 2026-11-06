@@ -71,6 +71,55 @@ TEST_F(ShaarTabVisibilityTest, HostTracksWindowOcclusionWithoutOrderingIt) {
   EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::HIDDEN);
 }
 
+TEST(ShaarPageViewHostTest, DockedFrontendResizesAndClosesWithoutClosingHost) {
+  PageViewHost host(NSMakeRect(0, 0, 800, 600));
+  NSView* page = [[NSView alloc] initWithFrame:NSZeroRect];
+  NSView* frontend = [[NSView alloc] initWithFrame:NSZeroRect];
+  ASSERT_TRUE(host.Attach(page));
+  host.SetDevToolsView(frontend);
+  EXPECT_EQ(page.window, host.window());
+  EXPECT_EQ(frontend.window, host.window());
+  EXPECT_EQ(page.frame.size.width, 480);
+  EXPECT_EQ(frontend.frame.origin.x, 480);
+  EXPECT_EQ(frontend.frame.size.width, 320);
+  EXPECT_FALSE(host.window().isVisible);
+  host.Resize(NSMakeSize(1000, 700));
+  EXPECT_EQ(page.frame.size.width, 600);
+  EXPECT_EQ(frontend.frame.origin.x, 600);
+  EXPECT_EQ(frontend.frame.size.width, 400);
+  EXPECT_EQ(frontend.frame.size.height, 700);
+  host.SetDevToolsView(nil);
+  EXPECT_EQ(frontend.superview, nil);
+  EXPECT_EQ(page.frame.size.width, 1000);
+  EXPECT_EQ(page.window, host.window());
+  EXPECT_FALSE(host.window().isVisible);
+}
+
+TEST(ShaarPageViewHostTest, DockFollowsBorrowedPageContainerAndSurvivesAppLayout) {
+  PageViewHost host(NSMakeRect(0, 0, 1000, 700));
+  NSView* page = [[NSView alloc] initWithFrame:NSZeroRect];
+  NSView* frontend = [[NSView alloc] initWithFrame:NSZeroRect];
+  NSView* app = [[NSView alloc] initWithFrame:NSMakeRect(200, 80, 800, 620)];
+  [host.view() addSubview:app];
+  ASSERT_TRUE(host.Attach(page));
+  [app addSubview:page];
+  host.SetDevToolsView(frontend);
+  EXPECT_EQ(frontend.superview, app);
+  EXPECT_EQ(page.frame.size.width, 480);
+  EXPECT_EQ(frontend.frame.origin.x, 480);
+  page.frame = app.bounds;  // Simulate ChromiumPage's SwiftUI layout callback.
+  EXPECT_EQ(page.frame.size.width, 480);
+  EXPECT_EQ(frontend.frame.size.width, 320);
+  app.frame = NSMakeRect(200, 80, 600, 500);
+  page.frame = app.bounds;
+  EXPECT_EQ(page.frame.size.width, 360);
+  EXPECT_EQ(frontend.frame.origin.x, 360);
+  host.SetDevToolsView(nil);
+  EXPECT_EQ(page.frame.size.width, 600);
+  EXPECT_EQ(frontend.superview, nil);
+  EXPECT_FALSE(host.window().isVisible);
+}
+
 TEST(ShaarPageViewHostTest, ReplacingSelectionDetachesOldViewAndResizesNewView) {
   PageViewHost host(NSMakeRect(0, 0, 800, 600));
   NSView* first = [[NSView alloc] initWithFrame:NSZeroRect];
@@ -130,6 +179,23 @@ TEST(ShaarPageViewHostTest, ReattachesSelectionAfterItsPreviousPresenterDetaches
   ASSERT_TRUE(host.Attach(tab));
   EXPECT_EQ(tab.window, host.window());
   EXPECT_EQ(tab.superview, host.view());
+}
+
+TEST(ShaarPageViewHostTest, AttachClearsChromiumDetachHiddenFlagWithoutShowingWindow) {
+  PageViewHost host(NSMakeRect(0, 0, 800, 600));
+  NSView* tab = [[NSView alloc] initWithFrame:NSZeroRect];
+  // WebContentsViewMac::ViewsHostableDetach leaves the borrowed NSView hidden.
+  tab.hidden = YES;
+  ASSERT_TRUE(host.Attach(tab));
+  EXPECT_FALSE(tab.hidden);
+  EXPECT_FALSE(tab.isHiddenOrHasHiddenAncestor);
+  EXPECT_FALSE(host.window().isVisible);
+  // A repeated BrowserView presentation/detach must also be repaired even
+  // when the native view is already in the right Shaar window.
+  tab.hidden = YES;
+  ASSERT_TRUE(host.Attach(tab));
+  EXPECT_FALSE(tab.hidden);
+  EXPECT_FALSE(host.window().isVisible);
 }
 
 TEST(ShaarPageViewHostTest, MovingViewLeavesPreviousHostEmpty) {

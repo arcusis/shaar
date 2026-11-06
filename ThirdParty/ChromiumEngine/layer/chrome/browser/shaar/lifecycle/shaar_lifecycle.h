@@ -12,11 +12,13 @@
 #include "chrome/browser/shaar/public/shaar_engine.h"
 
 class ChromeContentBrowserClient;
+class ScopedKeepAlive;
 
 namespace shaar::lifecycle {
 
 // Hook called from Chromium's browser close manager after an unload abort.
 void EngineQuitCancelled();
+std::unique_ptr<ScopedKeepAlive> CreateHostKeepAlive();
 void EngineReady(shaar_engine* engine);
 void SafeStorageUnavailable();
 void EngineWillShutDown(shaar_engine* engine);

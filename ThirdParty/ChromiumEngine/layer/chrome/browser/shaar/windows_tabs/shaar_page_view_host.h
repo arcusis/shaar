@@ -33,11 +33,19 @@ class PageViewHost final {
   bool Focus(NSView* tab_view);
   void SetSelectedWebContents(content::WebContents* contents);
   void RefreshVisibility();
+  void SetDevToolsView(NSView* frontend);
+  void SetDevToolsContents(content::WebContents* frontend);
+  void LayoutPages();
 
  private:
   __strong NSWindow* window_ = nil;
   __strong NSView* view_ = nil;
   __strong NSView* selected_view_ = nil;
+  __strong NSView* devtools_view_ = nil;
+  base::WeakPtr<content::WebContents> devtools_contents_;
+  __strong id frame_observer_ = nil;
+  __strong id page_frame_observer_ = nil;
+  bool laying_out_pages_ = false;
   base::WeakPtr<content::WebContents> selected_contents_;
   __strong id occlusion_observer_ = nil;
   __strong id miniaturize_observer_ = nil;

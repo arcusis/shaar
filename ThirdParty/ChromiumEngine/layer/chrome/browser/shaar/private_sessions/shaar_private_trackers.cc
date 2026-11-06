@@ -115,11 +115,16 @@ public:
     // issue a request while its private window is closing, and Mojo requires a
     // bound remote here even if the upstream factory is about to disconnect.
     auto upstream_receiver = upstream_loader_.BindNewPipeAndPassReceiver();
-    upstream_loader_.set_disconnect_handler(base::BindOnce(
+    auto upstream_client = upstream_client_.BindNewPipeAndPassRemote();
+    // The loader command pipe may close while response/body/completion messages
+    // are still queued on the independent client pipe. Treating that closure as
+    // ERR_ABORTED truncates successful private navigations. A disconnect on the
+    // response receiver is ordered after its messages, including OnComplete.
+    upstream_client_.set_disconnect_handler(base::BindOnce(
         &ProtectedRequest::UpstreamDisconnected, base::Unretained(this)));
     factory->CreateLoaderAndStart(
         std::move(upstream_receiver), request_id, options,
-        request, upstream_client_.BindNewPipeAndPassRemote(), annotation);
+        request, std::move(upstream_client), annotation);
   }
 
   void FollowRedirect(network::HttpRequestHeadersUpdateParams headers,

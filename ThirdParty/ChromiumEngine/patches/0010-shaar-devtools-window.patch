@@ -1,14 +1,82 @@
 --- a/chrome/browser/devtools/devtools_window.cc
 +++ b/chrome/browser/devtools/devtools_window.cc
-@@ -1409,6 +1409,11 @@
+@@ -534,7 +534,8 @@
+ #if BUILDFLAG(IS_MAC)
+   // Activate the inspected browser when undocked DevTools closes, so focus
+   // returns to the window that opened DevTools (e.g., a PWA window).
+-  if (!is_docked_ && inspected_browser_session_id_.is_valid()) {
++  if (!base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder") &&
++      !is_docked_ && inspected_browser_session_id_.is_valid()) {
+     BrowserWindowInterface* const browser =
+         GlobalBrowserCollection::GetInstance()->FindBrowserWithID(
+             inspected_browser_session_id_);
+@@ -1053,6 +1054,15 @@
+ 
+   OverrideAndSyncDevToolsRendererPrefs();
+ #else
++  if (is_docked_ && base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder")) {
++    main_web_contents_->SetDelegate(this);
++    main_web_contents_->SetIgnoreZoomGestures(true);
++    UpdateBrowserWindow();
++    PrefsTabHelper::CreateForWebContents(main_web_contents_);
++    OverrideAndSyncDevToolsRendererPrefs();
++    DoAction(action);
++    return;
++  }
+   if (is_docked_) {
+     DCHECK(can_dock_);
+     content::WebContents* inspected_web_contents = GetInspectedWebContents();
+@@ -1409,6 +1419,10 @@
    }
  #endif  // !BUILDFLAG(IS_ANDROID)
  
-+  // Shaar's backing Browser is hidden. Docking there creates an invisible
-+  // frontend and can steal the inspected tab's native compositor back.
++  // Shaar supplies the dock host; never show the hidden backing Browser.
 +  if (base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder"))
-+    can_dock = false;
++    can_dock = inspected_web_contents != nullptr;
 +
    // Create WebContents with devtools.
    GURL url(GetDevToolsURL(profile, frontend_type, frontend_url, can_dock, panel,
                            has_other_clients, browser_connection));
+--- a/chrome/browser/devtools/devtools_window_views.cc
++++ b/chrome/browser/devtools/devtools_window_views.cc
+@@ -2,6 +2,7 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "base/command_line.h"
+ #include "chrome/browser/devtools/devtools_ui_controller.h"
+ #include "chrome/browser/devtools/devtools_window.h"
+ #include "chrome/browser/ui/browser_window.h"
+@@ -21,6 +22,10 @@
+ #endif
+ 
+ using content::WebContents;
++namespace shaar::windows_tabs {
++void UpdateDockedDevTools(content::WebContents* inspected,
++                          content::WebContents* frontend);
++}  // namespace shaar::windows_tabs
+ 
+ // static
+ void DevToolsWindow::ToggleDevToolsWindow(BrowserWindowInterface* browser,
+@@ -118,6 +123,8 @@
+ }
+ 
+ void DevToolsWindow::UpdateBrowserToolbar() {
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder"))
++    return;
+   BrowserWindow* inspected_window = GetInspectedBrowserWindow();
+   if (inspected_window) {
+     inspected_window->UpdateToolbar(nullptr);
+@@ -125,6 +132,12 @@
+ }
+ 
+ void DevToolsWindow::UpdateBrowserWindow() {
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch("shaar-embedder")) {
++    shaar::windows_tabs::UpdateDockedDevTools(
++        GetInspectedWebContents(),
++        is_docked_ && life_stage_ != kClosing ? main_web_contents_.get() : nullptr);
++    return;
++  }
+   content::WebContents* inspected_web_contents = GetInspectedWebContents();
+   if (!inspected_web_contents) {
+     return;

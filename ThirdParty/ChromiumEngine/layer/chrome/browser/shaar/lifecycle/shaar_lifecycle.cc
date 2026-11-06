@@ -34,6 +34,8 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "components/keep_alive_registry/keep_alive_registry.h"
+#include "components/keep_alive_registry/scoped_keep_alive.h"
+#include "components/keep_alive_registry/keep_alive_types.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/net_errors.h"
 #include "services/network/public/mojom/web_transport.mojom.h"
@@ -60,6 +62,7 @@ struct State {
   bool closing = false;
   bool shutting_down = false;
   bool safe_storage_unavailable = false;
+  std::unique_ptr<ScopedKeepAlive> host_keep_alive;
 };
 
 State g_state;
@@ -236,9 +239,13 @@ std::vector<std::string> ChromeMainArguments(
       "--disable-background-mode", "--shaar-embedder"};
   if (testing) {
     arguments.push_back("--use-mock-keychain");
+    arguments.push_back("--use-fake-device-for-media-stream");
     arguments.push_back("--disable-renderer-backgrounding");
     arguments.push_back("--disable-backgrounding-occluded-windows");
     arguments.push_back("--disable-background-timer-throttling");
+    // Private privacy fixtures use this synthetic tracker hostname with the
+    // owned loopback server. Never send those requests to the public network.
+    arguments.push_back("--host-resolver-rules=MAP trackertest.org 127.0.0.1");
   }
   if (!locale.empty())
     arguments.push_back("--lang=" + locale);
@@ -249,9 +256,15 @@ std::unique_ptr<ChromeContentBrowserClient> CreateContentBrowserClient() {
   return std::make_unique<ShaarContentBrowserClient>(g_state.engine);
 }
 
+std::unique_ptr<ScopedKeepAlive> CreateHostKeepAlive() {
+  return std::make_unique<ScopedKeepAlive>(KeepAliveOrigin::APP_CONTROLLER,
+                                          KeepAliveRestartOption::DISABLED);
+}
+
 void EngineReady(shaar_engine* engine) {
   if (g_state.engine != engine || g_state.ready || g_state.closing)
     return;
+  g_state.host_keep_alive = CreateHostKeepAlive();
   g_state.ready = true;
   Emit(engine, kReady);
   if (g_state.safe_storage_unavailable)
@@ -270,6 +283,7 @@ void EngineQuitCancelled() {
   if (!g_state.engine || !g_state.closing || g_state.shutting_down)
     return;
   shaar::windows_tabs::Registry().CancelEngineQuit(g_state.engine);
+  g_state.host_keep_alive = CreateHostKeepAlive();
   g_state.closing = false;
   Emit(g_state.engine, kQuitCancelled);
 }
@@ -278,6 +292,7 @@ void EngineWillShutDown(shaar_engine* engine) {
   if (g_state.engine != engine || g_state.shutting_down)
     return;
   g_state.shutting_down = true;
+  g_state.host_keep_alive.reset();
   shaar::windows_tabs::Registry().BeginEngineQuit(engine);
   shaar_history::StopObservingLifecycle(engine);
   shaar::windows_tabs::StopObservingLifecycle();
@@ -395,6 +410,7 @@ extern "C" SHAAR_EXPORT shaar_error_code shaar_engine_request_quit(
   // The Mac application delegate's termination route can wait on native
   // prompts while Shaar still owns hidden browser windows. Close Chromium's
   // browsers directly so their normal unload and shutdown callbacks run.
+  g_state.host_keep_alive.reset();
   chrome::CloseAllBrowsersAndQuit();
   return Fail(SHAAR_OK, "", 0, error);
 }

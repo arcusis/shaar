@@ -28,6 +28,8 @@ jobs:
         with:
           mode: unit-coverage
       - name: Build then run unit tests with coverage and JUnit
+        env:
+          SWIFT_BACKTRACE: enable=yes,interactive=no,color=no,output-to=stderr
         run: .venv/bin/python scripts/ci-stage.py unit
       - uses: ./.github/actions/ci-evidence
         if: always()

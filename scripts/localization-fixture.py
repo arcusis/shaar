@@ -21,6 +21,8 @@ import uuid
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
+import engine_fixture
+
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "build/Shaar Verification.app"
@@ -35,6 +37,49 @@ def safe_environment():
 def redact(text):
     text = re.sub(r"(?i)(bearer\s+)[A-Za-z0-9._~+/=-]+", r"\1[REDACTED]", text)
     return re.sub(r"\b(?:sk-[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9]{20,})\b", "[REDACTED]", text)
+
+
+def run_engine_probe(arguments, environment):
+    started = time.time()
+    process = subprocess.Popen(
+        arguments, cwd=ROOT, env=environment, stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE, text=True,
+    )
+    try:
+        stdout, stderr = process.communicate(timeout=240)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.communicate()
+        raise
+    completed = subprocess.CompletedProcess(arguments, process.returncode, stdout, stderr)
+    return completed, process.pid, started
+
+
+def record_failed_probe(case_name, output, completed, pid, started, artifact):
+    artifact.mkdir(parents=True, exist_ok=True)
+    reports = []
+    if completed.returncode < 0:
+        engine_fixture.wait_until(
+            lambda: bool(engine_fixture.crash_reports_for(pid, started)),
+            engine_fixture.CRASH_REPORT_SETTLE_SECONDS,
+        )
+        reports = engine_fixture.crash_reports_for(pid, started)
+    for index, name in enumerate(reports):
+        source = engine_fixture.CRASH_REPORT_DIRECTORY / name
+        try:
+            shutil.copyfile(source, artifact / f"{case_name}-crash-{index + 1}.ips")
+        except OSError:
+            continue
+    if output.exists():
+        shutil.copyfile(output, artifact / f"{case_name}-probe.json")
+    receipt = {
+        "case": case_name, "pid": pid, "exitCode": completed.returncode,
+        "probeReportWritten": output.exists(), "crashReports": reports,
+        "stderrTail": redact(completed.stderr[-4000:]),
+    }
+    (artifact / f"{case_name}-failure.json").write_text(
+        json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8",
+    )
 
 
 class FixtureState:
@@ -169,6 +214,7 @@ def run():
     thread.start()
     reports = []
     roots = {}
+    artifact = ROOT / "build/Verification/localization-engine-evidence"
     for name in ("english", "hebrew", "language-switch"):
         profile_root = outer / name
         profile_root.mkdir(mode=0o700)
@@ -205,11 +251,9 @@ def run():
             ]
             environment = safe_environment()
             (profile_root / "Downloads").mkdir(mode=0o700, exist_ok=True)
-            completed = subprocess.run(
-                arguments, cwd=ROOT, env=environment, capture_output=True, text=True,
-                timeout=240,
-            )
+            completed, pid, started = run_engine_probe(arguments, environment)
             if completed.returncode != 0 or not output.exists():
+                record_failed_probe(case_name, output, completed, pid, started, artifact)
                 raise RuntimeError(
                     f"{language} {phase} engine probe failed ({completed.returncode}): "
                     f"{redact(completed.stderr[-1200:])}"
@@ -247,7 +291,6 @@ def run():
             print(f"{case_name}: persisted choice, navigator, direction, Accept-Language passed")
         receipt = outer / "localization-evidence.json"
         receipt.write_text(json.dumps(reports, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        artifact = ROOT / "build/Verification/localization-engine-evidence"
         artifact.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(receipt, artifact / "localization-evidence.json")
         print(f"Localization evidence: {artifact / 'localization-evidence.json'}")

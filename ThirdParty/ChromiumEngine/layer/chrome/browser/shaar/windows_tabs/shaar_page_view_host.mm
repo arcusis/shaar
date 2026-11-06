@@ -6,6 +6,7 @@
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
 
 #include <unordered_map>
+#include "chrome/browser/devtools/devtools_window.h"
 
 #include "content/public/browser/web_contents.h"
 
@@ -23,6 +24,16 @@ bool HasHiddenNativeWindow(content::WebContents* contents) {
   return view.window && !view.window.isVisible;
 }
 
+void UpdateDockedDevTools(content::WebContents* inspected,
+                          content::WebContents* frontend) {
+  if (!inspected)
+    return;
+  NSView* view = inspected->GetNativeView().GetNativeNSView();
+  auto it = SelectedOwners().find((__bridge void*)view);
+  if (it != SelectedOwners().end())
+    it->second->SetDevToolsContents(frontend);
+}
+
 PageViewHost::PageViewHost(NSRect frame, NSWindow* window) {
   window_ = window ?: [[NSWindow alloc] initWithContentRect:frame
                                         styleMask:(NSWindowStyleMaskTitled |
@@ -38,6 +49,9 @@ PageViewHost::PageViewHost(NSRect frame, NSWindow* window) {
   window_.collectionBehavior = NSWindowCollectionBehaviorFullScreenPrimary;
   [window_ orderOut:nil];
   NSNotificationCenter* center = NSNotificationCenter.defaultCenter;
+  view_.postsFrameChangedNotifications = YES;
+  frame_observer_ = [center addObserverForName:NSViewFrameDidChangeNotification
+      object:view_ queue:nil usingBlock:^(NSNotification*) { LayoutPages(); }];
   auto refresh = ^(NSNotification*) { RefreshVisibility(); };
   occlusion_observer_ = [center
       addObserverForName:NSWindowDidChangeOcclusionStateNotification
@@ -52,6 +66,7 @@ PageViewHost::PageViewHost(NSRect frame, NSWindow* window) {
 
 PageViewHost::~PageViewHost() {
   NSNotificationCenter* center = NSNotificationCenter.defaultCenter;
+  [center removeObserver:frame_observer_];
   [center removeObserver:occlusion_observer_];
   [center removeObserver:miniaturize_observer_];
   [center removeObserver:deminiaturize_observer_];
@@ -81,6 +96,7 @@ bool PageViewHost::Attach(NSView* tab_view) {
   tab_view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
   [view_ addSubview:tab_view];
   selected_view_ = tab_view;
+  LayoutPages();
   SelectedOwners()[identity] = this;
   return true;
 }
@@ -101,6 +117,7 @@ void PageViewHost::SetSelectedWebContents(content::WebContents* contents) {
     previous->UpdateWebContentsVisibility(content::Visibility::HIDDEN);
   selected_contents_ = contents ? contents->GetWeakPtr()
                                 : base::WeakPtr<content::WebContents>();
+  SetDevToolsContents(contents ? DevToolsWindow::GetInTabWebContents(contents, nullptr) : nullptr);
   RefreshVisibility();
 }
 
@@ -115,14 +132,48 @@ void PageViewHost::RefreshVisibility() {
                      : content::Visibility::OCCLUDED;
   }
   contents->UpdateWebContentsVisibility(visibility);
+  if (devtools_contents_)
+    devtools_contents_->UpdateWebContentsVisibility(visibility);
 }
 
 void PageViewHost::Resize(NSSize size) {
   if (size.width < 0 || size.height < 0)
     return;
   [view_ setFrameSize:size];
+  LayoutPages();
+}
+
+void PageViewHost::SetDevToolsContents(content::WebContents* frontend) {
+  if (devtools_contents_ && devtools_contents_.get() != frontend)
+    devtools_contents_->UpdateWebContentsVisibility(content::Visibility::HIDDEN);
+  devtools_contents_ = frontend ? frontend->GetWeakPtr() : base::WeakPtr<content::WebContents>();
+  SetDevToolsView(frontend ? frontend->GetNativeView().GetNativeNSView() : nil);
+  RefreshVisibility();
+}
+
+void PageViewHost::SetDevToolsView(NSView* frontend) {
+  if (devtools_view_ != frontend) {
+    [devtools_view_ removeFromSuperview];
+    devtools_view_ = frontend;
+  }
+  if (frontend) {
+    if (frontend.superview != view_) {
+      [frontend removeFromSuperview];
+      [view_ addSubview:frontend];
+    }
+    frontend.hidden = NO;
+    frontend.autoresizingMask = NSViewHeightSizable | NSViewMinXMargin;
+  }
+  LayoutPages();
+}
+
+void PageViewHost::LayoutPages() {
+  NSRect bounds = view_.bounds;
+  CGFloat side = devtools_view_ ? bounds.size.width * 0.4 : 0;
   if (selected_view_)
-    selected_view_.frame = view_.bounds;
+    selected_view_.frame = NSMakeRect(0, 0, bounds.size.width - side, bounds.size.height);
+  if (devtools_view_)
+    devtools_view_.frame = NSMakeRect(bounds.size.width - side, 0, side, bounds.size.height);
 }
 
 bool PageViewHost::Focus(NSView* tab_view) {

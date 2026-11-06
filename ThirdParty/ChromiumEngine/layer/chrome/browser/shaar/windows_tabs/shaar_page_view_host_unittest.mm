@@ -71,6 +71,30 @@ TEST_F(ShaarTabVisibilityTest, HostTracksWindowOcclusionWithoutOrderingIt) {
   EXPECT_EQ(web_contents()->GetVisibility(), content::Visibility::HIDDEN);
 }
 
+TEST(ShaarPageViewHostTest, DockedFrontendResizesAndClosesWithoutClosingHost) {
+  PageViewHost host(NSMakeRect(0, 0, 800, 600));
+  NSView* page = [[NSView alloc] initWithFrame:NSZeroRect];
+  NSView* frontend = [[NSView alloc] initWithFrame:NSZeroRect];
+  ASSERT_TRUE(host.Attach(page));
+  host.SetDevToolsView(frontend);
+  EXPECT_EQ(page.window, host.window());
+  EXPECT_EQ(frontend.window, host.window());
+  EXPECT_EQ(page.frame.size.width, 480);
+  EXPECT_EQ(frontend.frame.origin.x, 480);
+  EXPECT_EQ(frontend.frame.size.width, 320);
+  EXPECT_FALSE(host.window().isVisible);
+  host.Resize(NSMakeSize(1000, 700));
+  EXPECT_EQ(page.frame.size.width, 600);
+  EXPECT_EQ(frontend.frame.origin.x, 600);
+  EXPECT_EQ(frontend.frame.size.width, 400);
+  EXPECT_EQ(frontend.frame.size.height, 700);
+  host.SetDevToolsView(nil);
+  EXPECT_EQ(frontend.superview, nil);
+  EXPECT_EQ(page.frame.size.width, 1000);
+  EXPECT_EQ(page.window, host.window());
+  EXPECT_FALSE(host.window().isVisible);
+}
+
 TEST(ShaarPageViewHostTest, ReplacingSelectionDetachesOldViewAndResizesNewView) {
   PageViewHost host(NSMakeRect(0, 0, 800, 600));
   NSView* first = [[NSView alloc] initWithFrame:NSZeroRect];

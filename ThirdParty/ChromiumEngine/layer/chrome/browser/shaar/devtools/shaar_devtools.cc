@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #include "chrome/browser/shaar/devtools/shaar_devtools.h"
+#include "chrome/browser/devtools/devtools_settings.h"
 #include "chrome/browser/shaar/windows_tabs/shaar_windows_tabs.h"
 
 #include <stddef.h>
@@ -1176,14 +1177,17 @@ shaar_error_code HandleDevToolsOperation(
   const bool frontend_was_open =
       DevToolsWindow::GetInstanceForInspectedWebContents(contents) != nullptr;
   if (operation == SHAAR_OP_DEVTOOLS_UI_SHOW) {
-    // Keep the frontend in the inspected tab's exact profile, including Shaar's
-    // non-primary off-the-record sessions. The embedder patch disables docking
-    // into Chromium's hidden backing BrowserView.
+    // Shaar owns the frontend dock, including non-primary OTR profiles.
+    if (!DevToolsWindow::GetInstanceForInspectedWebContents(contents))
+      DevToolsSettings(Profile::FromBrowserContext(contents->GetBrowserContext()))
+          .Set("currentDockState", "\"right\"");
     DevToolsWindow::OpenDevToolsWindow(
         contents, Profile::FromBrowserContext(contents->GetBrowserContext()),
         DevToolsOpenedByAction::kUnknown, {});
     if (!DevToolsWindow::GetInstanceForInspectedWebContents(contents))
       return Fail(error, SHAAR_NOT_READY, "DevTools frontend could not open");
+    windows_tabs::UpdateDockedDevTools(contents,
+        DevToolsWindow::GetInstanceForInspectedWebContents(contents)->GetDevToolsWebContents());
   } else if (operation == SHAAR_OP_DEVTOOLS_UI_CLOSE) {
     if (auto* devtools =
             DevToolsWindow::GetInstanceForInspectedWebContents(contents)) {

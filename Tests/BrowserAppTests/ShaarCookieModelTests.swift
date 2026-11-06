@@ -49,12 +49,15 @@ import Testing
 
   @Test func readsFiltersEditsDeletesAndResetsForNewPage() async throws {
     let store = CookieFixture()
-    store.items = [try #require(ShaarSiteCookie(dictionary: [
-      "name": "session", "value": "old", "domain": "example.com", "path": "/",
-      "secure": true, "httpOnly": true, "sameSite": "Lax", "expiresUnixMs": NSNull(),
-      "partitionSite": NSNull(), "partitionCrossSite": NSNull(),
-      "sourceScheme": 2, "sourcePort": 443,
-    ]))]
+    store.items = [
+      try #require(
+        ShaarSiteCookie(dictionary: [
+          "name": "session", "value": "old", "domain": "example.com", "path": "/",
+          "secure": true, "httpOnly": true, "sameSite": "Lax", "expiresUnixMs": NSNull(),
+          "partitionSite": NSNull(), "partitionCrossSite": NSNull(),
+          "sourceScheme": 2, "sourcePort": 443,
+        ]))
+    ]
     let target = SiteControlTarget(
       tabID: UUID(), profileID: UUID(), url: URL(string: "https://example.com/")!)
     let model = ShaarCookieModel()

@@ -332,7 +332,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0022-shaar-devtools-dom-tree.patch",
-      "sha256": "39e2a750e35a407ba23d09f0d1d2ec39394ae7694b21d729a95f28378b3695dc"
+      "sha256": "de11c0643efcdaa76e980a41cabc821b66858bfbac26ec0313b82da99d2691ae"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0023-shaar-devtools-viewport-frames.patch",

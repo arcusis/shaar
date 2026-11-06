@@ -48,12 +48,12 @@ public struct ShaarDOMNode: Equatable, Identifiable, Sendable {
       (0...10_000).contains(count)
     else { return nil }
     let raw = fields["attributes"] as? [String] ?? []
-    guard raw.count <= 64, raw.count.isMultiple(of: 2),
-      raw.allSatisfy({ $0.utf8.count <= 4_096 })
-    else { return nil }
+    guard raw.count <= 64, raw.count.isMultiple(of: 2) else { return nil }
     var attributes: [ShaarDOMAttribute] = []
     for index in stride(from: 0, to: raw.count, by: 2) {
-      guard !raw[index].isEmpty, raw[index].utf8.count <= 256 else { return nil }
+      guard !raw[index].isEmpty, raw[index].utf8.count <= 256,
+        raw[index + 1].utf8.count <= 16_384
+      else { return nil }
       attributes.append(ShaarDOMAttribute(name: raw[index], value: raw[index + 1]))
     }
     return Self(

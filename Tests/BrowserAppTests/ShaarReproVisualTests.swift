@@ -35,9 +35,16 @@ import XCTest
     }
     let bundle = ShaarReproCapture(
       videoMP4: Data([0, 0, 0, 12] + Array("ftypisom".utf8)), durationSeconds: 24,
-      dom: ShaarReproDOMNode(tag: "body", text: "Fixture", attributes: [:], children: []),
+      dom: ShaarReproDOMNode(
+        tag: "body", text: "Fixture", attributes: [:],
+        children: [
+          ShaarReproDOMNode(tag: "p", text: "Dashboard ready", attributes: [:], children: [])
+        ]),
       console: [ShaarConsoleEvent(id: UUID(), level: .log, message: "Ready", source: nil)],
-      network: [],
+      network: [
+        ShaarNetworkEvent(
+          id: UUID(), method: "GET", url: "https://example.com/api", status: 200)
+      ],
       environment: ShaarReproEnvironment(
         url: target.url.absoluteString, shaarVersion: "test", engineVersion: "fixture",
         operatingSystem: "macOS", userAgent: "Fixture/1", viewportWidth: 1040,
@@ -49,7 +56,7 @@ import XCTest
     try FileManager.default.moveItem(at: file, to: stableFile)
     await shell.repro.open(stableFile)
     for scheme in [ColorScheme.light, .dark] {
-      try render(shell, inspector: inspector, scheme: scheme, label: "after-viewer", root: root)
+      try render(shell, inspector: inspector, scheme: scheme, label: "viewer-after", root: root)
     }
     shell.close()
     XCTAssertTrue(NSApp.keyWindow === previous)

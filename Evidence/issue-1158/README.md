@@ -11,3 +11,8 @@ offscreen without changing the key window.
 
 No live engine recording is claimed. The production capture action remains
 disabled until a tab-scoped recording capability is connected.
+
+The `viewer-before-*.png` files preserve the summary-only viewer from #1163.
+The `viewer-after-*.png` files show imported console content in the expanded
+viewer; the other tabs display video, network, DOM and environment data from
+the same local archive.

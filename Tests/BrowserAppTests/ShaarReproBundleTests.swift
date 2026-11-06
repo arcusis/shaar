@@ -70,6 +70,11 @@ import Testing
     #expect(manifest.durationSeconds == 24)
     #expect(manifest.consoleCount == 1)
     #expect(manifest.networkCount == 1)
+    let contents = try await ShaarReproBundle.read(at: file)
+    #expect(contents.console.first?.message == "Fixture warning")
+    #expect(contents.network.first?.request.url == "https://example.com/api")
+    #expect(contents.dom.children.first?.text == "[redacted]")
+    #expect(contents.videoMP4 == fixture().videoMP4)
   }
 
   @Test func fixtureTransportCreatesBundleThroughShellModel() async throws {
@@ -82,7 +87,17 @@ import Testing
     #expect(file.pathExtension == "shaarrepro")
     #expect(model.viewerManifest?.consoleCount == 1)
     #expect(model.viewerManifest?.networkCount == 1)
+    #expect(model.viewerContents?.console.first?.message == "Fixture warning")
+    let video = try #require(model.videoURL)
+    #expect(
+      try FileManager.default.attributesOfItem(atPath: video.path)[.posixPermissions] as? Int
+        == 0o600)
     #expect(model.failure == nil)
+    model.updateTarget(
+      SiteControlTarget(
+        tabID: UUID(), profileID: target.profileID, url: target.url))
+    #expect(model.viewerContents == nil)
+    #expect(!FileManager.default.fileExists(atPath: video.path))
   }
 
   @Test func productionTransportKeepsCaptureUnavailable() async {

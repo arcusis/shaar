@@ -5,7 +5,7 @@
 import Foundation
 import Observation
 
-struct ShaarReproDOMNode: Codable, Equatable {
+struct ShaarReproDOMNode: Codable, Equatable, Sendable {
   let tag: String
   let text: String
   let attributes: [String: String]
@@ -52,6 +52,38 @@ struct ShaarReproManifest: Codable, Sendable {
   let networkCount: Int
   let environment: ShaarReproEnvironment
   let redaction: String
+}
+
+struct ShaarReproConsoleRow: Codable, Sendable {
+  let level: String
+  let message: String
+  let source: String
+}
+
+struct ShaarReproHAR: Decodable, Sendable {
+  struct Log: Decodable, Sendable {
+    struct Entry: Decodable, Sendable {
+      struct Request: Decodable, Sendable {
+        let method: String
+        let url: String
+      }
+      struct Response: Decodable, Sendable { let status: Int }
+      let startedDateTime: String
+      let time: Double
+      let request: Request
+      let response: Response
+    }
+    let entries: [Entry]
+  }
+  let log: Log
+}
+
+struct ShaarReproContents: Sendable {
+  let manifest: ShaarReproManifest
+  let console: [ShaarReproConsoleRow]
+  let network: [ShaarReproHAR.Log.Entry]
+  let dom: ShaarReproDOMNode
+  let videoMP4: Data
 }
 
 struct ShaarReproCapture {
@@ -179,15 +211,45 @@ struct ShaarReproPendingTransport: ShaarReproTransport {
   }
 
   static func readManifest(at url: URL) async throws -> ShaarReproManifest {
+    guard url.isFileURL, url.pathExtension == "shaarrepro",
+      let size = try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int,
+      size <= 64 * 1024 * 1024
+    else { throw ShaarReproUnavailable() }
+    let data = try await readEntry(at: url, name: "manifest.json", limit: 65_536)
+    let manifest = try JSONDecoder().decode(ShaarReproManifest.self, from: data)
+    guard manifest.schemaVersion == 1,
+      (1...seconds).contains(manifest.durationSeconds),
+      (0...2_000).contains(manifest.consoleCount),
+      (0...2_000).contains(manifest.networkCount),
+      URL(string: manifest.environment.url) != nil
+    else { throw ShaarReproUnavailable() }
+    return manifest
+  }
+
+  static func read(at url: URL) async throws -> ShaarReproContents {
+    let manifest = try await readManifest(at: url)
+    let consoleData = try await readEntry(at: url, name: "console.json", limit: 4 * 1024 * 1024)
+    let harData = try await readEntry(at: url, name: "network.har", limit: 12 * 1024 * 1024)
+    let domData = try await readEntry(at: url, name: "dom.json", limit: 16 * 1024 * 1024)
+    let video = try await readEntry(at: url, name: "page.mp4", limit: maxVideoBytes)
+    let console = try JSONDecoder().decode([ShaarReproConsoleRow].self, from: consoleData)
+    let har = try JSONDecoder().decode(ShaarReproHAR.self, from: harData)
+    let dom = try JSONDecoder().decode(ShaarReproDOMNode.self, from: domData)
+    guard console.count == manifest.consoleCount,
+      har.log.entries.count == manifest.networkCount,
+      video.count >= 12, video[4..<8].elementsEqual(Data("ftyp".utf8))
+    else { throw ShaarReproUnavailable() }
+    return ShaarReproContents(
+      manifest: manifest, console: console, network: har.log.entries,
+      dom: dom, videoMP4: video)
+  }
+
+  private static func readEntry(at url: URL, name: String, limit: Int) async throws -> Data {
     try await Task.detached(priority: .utility) {
-      guard url.pathExtension == "shaarrepro",
-        let size = try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int,
-        size <= 64 * 1024 * 1024
-      else { throw ShaarReproUnavailable() }
       let process = Process()
       let pipe = Pipe()
       process.executableURL = URL(filePath: "/usr/bin/unzip")
-      process.arguments = ["-p", url.path, "manifest.json"]
+      process.arguments = ["-p", url.path, name]
       process.standardInput = FileHandle.nullDevice
       process.standardOutput = pipe
       process.standardError = FileHandle.nullDevice
@@ -195,7 +257,7 @@ struct ShaarReproPendingTransport: ShaarReproTransport {
       var data = Data()
       while let chunk = try pipe.fileHandleForReading.read(upToCount: 4096), !chunk.isEmpty {
         data.append(chunk)
-        if data.count > 65_536 {
+        if data.count > limit {
           process.terminate()
           process.waitUntilExit()
           throw ShaarReproUnavailable()
@@ -203,14 +265,27 @@ struct ShaarReproPendingTransport: ShaarReproTransport {
       }
       process.waitUntilExit()
       guard process.terminationStatus == 0 else { throw ShaarReproUnavailable() }
-      let manifest = try JSONDecoder().decode(ShaarReproManifest.self, from: data)
-      guard manifest.schemaVersion == 1,
-        (1...seconds).contains(manifest.durationSeconds),
-        (0...2_000).contains(manifest.consoleCount),
-        (0...2_000).contains(manifest.networkCount),
-        URL(string: manifest.environment.url) != nil
-      else { throw ShaarReproUnavailable() }
-      return manifest
+      return data
+    }.value
+  }
+
+  static func materializeVideo(_ data: Data) async throws -> URL {
+    try await Task.detached(priority: .utility) {
+      let manager = FileManager.default
+      let directory = manager.temporaryDirectory.appending(
+        path: "shaar-repro-viewer-" + UUID().uuidString)
+      try manager.createDirectory(
+        at: directory, withIntermediateDirectories: false,
+        attributes: [.posixPermissions: 0o700])
+      do {
+        let file = directory.appending(path: "page.mp4")
+        try data.write(to: file, options: .atomic)
+        try manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+        return file
+      } catch {
+        try? manager.removeItem(at: directory)
+        throw error
+      }
     }.value
   }
 }
@@ -220,8 +295,11 @@ struct ShaarReproPendingTransport: ShaarReproTransport {
   private(set) var busy = false
   private(set) var savedURL: URL?
   private(set) var viewerManifest: ShaarReproManifest?
+  private(set) var viewerContents: ShaarReproContents?
+  private(set) var videoURL: URL?
   var failure: String?
   @ObservationIgnored private let transport: any ShaarReproTransport
+  @ObservationIgnored private var viewerGeneration = 0
 
   init(target: SiteControlTarget, transport: any ShaarReproTransport = ShaarReproPendingTransport())
   {
@@ -234,8 +312,7 @@ struct ShaarReproPendingTransport: ShaarReproTransport {
   func updateTarget(_ target: SiteControlTarget, committed: Bool = false) {
     guard self.target != target || committed else { return }
     self.target = target
-    savedURL = nil
-    viewerManifest = nil
+    clearViewer()
     failure = nil
   }
 
@@ -253,8 +330,8 @@ struct ShaarReproPendingTransport: ShaarReproTransport {
         try? FileManager.default.removeItem(at: file)
         throw CancellationError()
       }
-      savedURL = file
-      viewerManifest = try await ShaarReproBundle.readManifest(at: file)
+      await open(file)
+      guard viewerContents != nil else { return nil }
       return file
     } catch {
       failure = error.localizedDescription
@@ -264,13 +341,38 @@ struct ShaarReproPendingTransport: ShaarReproTransport {
 
   func open(_ url: URL) async {
     failure = nil
-    viewerManifest = nil
-    savedURL = nil
+    clearViewer()
+    let generation = viewerGeneration
     do {
-      viewerManifest = try await ShaarReproBundle.readManifest(at: url)
+      let contents = try await ShaarReproBundle.read(at: url)
+      let video = try await ShaarReproBundle.materializeVideo(contents.videoMP4)
+      guard generation == viewerGeneration else {
+        try? FileManager.default.removeItem(at: video.deletingLastPathComponent())
+        return
+      }
+      viewerContents = contents
+      viewerManifest = contents.manifest
+      videoURL = video
       savedURL = url
     } catch {
       failure = error.localizedDescription
+    }
+  }
+
+  private func clearViewer() {
+    viewerGeneration += 1
+    if let videoURL {
+      try? FileManager.default.removeItem(at: videoURL.deletingLastPathComponent())
+    }
+    videoURL = nil
+    viewerContents = nil
+    viewerManifest = nil
+    savedURL = nil
+  }
+
+  isolated deinit {
+    if let videoURL {
+      try? FileManager.default.removeItem(at: videoURL.deletingLastPathComponent())
     }
   }
 }

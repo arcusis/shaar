@@ -45,7 +45,9 @@ import XCTest
     let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }
     let file = try await ShaarReproBundle.save(bundle, target: target, directory: directory)
-    await shell.repro.open(file)
+    let stableFile = directory.appending(path: "Fixture.shaarrepro")
+    try FileManager.default.moveItem(at: file, to: stableFile)
+    await shell.repro.open(stableFile)
     for scheme in [ColorScheme.light, .dark] {
       try render(shell, inspector: inspector, scheme: scheme, label: "after-viewer", root: root)
     }

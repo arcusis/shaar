@@ -26,6 +26,7 @@ final class InspectorStylesModel {
   @ObservationIgnored weak var inspector: InspectorModel?
   private(set) var rules: [InspectorRule] = []
   private(set) var computed: [InspectorDeclaration] = []
+  private(set) var inactiveHints: [String: String] = [:]
   private(set) var selectedID: Int?
   private(set) var failure: String?
   private(set) var busy = false
@@ -44,6 +45,7 @@ final class InspectorStylesModel {
   func reset() {
     rules = []
     computed = []
+    inactiveHints = [:]
     selectedID = nil
     overlay = false
     undoDepth = 0
@@ -149,8 +151,12 @@ final class InspectorStylesModel {
       guard inspector.isOpen, inspector.documentGeneration == generation,
         inspector.selection?.id == selection.id
       else { return }
+      let properties = Array(Set(nextRules.flatMap(\.declarations).map(\.name))).sorted()
+      let inactiveHints = (try? await inspector.evaluate(
+        InspectorInactiveCSSScript.expression(properties: properties))) as? [String: String] ?? [:]
       try receive(
-        rules: nextRules, computed: nextComputed, selectionID: selection.id, generation: generation)
+        rules: nextRules, computed: nextComputed, inactiveHints: inactiveHints,
+        selectionID: selection.id, generation: generation)
       undoDepth =
         try await inspector.evaluate("globalThis.__shaarInspectorStyles.undoDepth()") as? Int ?? 0
       failure = nil
@@ -163,7 +169,8 @@ final class InspectorStylesModel {
 
   /// Commit one bounded snapshot only while its original selection and document remain current.
   func receive(
-    rules: [InspectorRule], computed: [InspectorDeclaration], selectionID: Int, generation: Int
+    rules: [InspectorRule], computed: [InspectorDeclaration], inactiveHints: [String: String] = [:],
+    selectionID: Int, generation: Int
   ) throws {
     guard let inspector, inspector.isOpen, inspector.selection?.id == selectionID,
       inspector.documentGeneration == generation
@@ -178,6 +185,7 @@ final class InspectorStylesModel {
     else { throw InspectorFailure(InspectorL10n.string("Style data exceeds the supported size.")) }
     self.rules = rules
     self.computed = computed
+    self.inactiveHints = inactiveHints
     selectedID = selectionID
     epoch = generation
     updated = Date()

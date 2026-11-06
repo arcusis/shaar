@@ -84,6 +84,7 @@ struct InspectorAssetsData: Decodable {
 @MainActor @Observable
 final class InspectorDetailsModel {
   @ObservationIgnored weak var inspector: InspectorModel?
+  @ObservationIgnored lazy var audit = InspectorAuditModel(inspector: inspector)
   private(set) var tree: InspectorComponentTree?
   private(set) var component: InspectorComponentData?
   private(set) var accessibility: InspectorAccessibilityData?
@@ -100,6 +101,7 @@ final class InspectorDetailsModel {
   init(inspector: InspectorModel) { self.inspector = inspector }
 
   func reset() {
+    audit.reset()
     componentRequest += 1
     tree = nil
     component = nil

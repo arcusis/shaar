@@ -105,25 +105,31 @@ struct InspectorStylesView: View {
                   ) {
                     VStack(alignment: .leading, spacing: 2) {
                       ForEach(rule.declarations) { declaration in
-                        Button {
-                          property = declaration.name
-                          important = declaration.value.hasSuffix(" !important")
-                          value =
-                            important ? String(declaration.value.dropLast(11)) : declaration.value
-                        } label: {
-                          HStack(alignment: .firstTextBaseline, spacing: 4) {
-                            Text(declaration.name + ":").foregroundStyle(.secondary)
-                            Text(declaration.value).foregroundStyle(.primary)
-                            Spacer(minLength: 0)
-                          }.environment(\.layoutDirection, .leftToRight).font(
-                            .system(size: 11, design: .monospaced)
-                          ).multilineTextAlignment(
-                            .leading
+                        VStack(alignment: .leading, spacing: 1) {
+                          Button {
+                            property = declaration.name
+                            important = declaration.value.hasSuffix(" !important")
+                            value =
+                              important ? String(declaration.value.dropLast(11)) : declaration.value
+                          } label: {
+                            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                              Text(declaration.name + ":").foregroundStyle(.secondary)
+                              Text(declaration.value).foregroundStyle(.primary)
+                              Spacer(minLength: 0)
+                            }.environment(\.layoutDirection, .leftToRight).font(
+                              .system(size: 11, design: .monospaced)
+                            ).multilineTextAlignment(
+                              .leading
+                            )
+                            .padding(.vertical, 3).contentShape(Rectangle())
+                          }.buttonStyle(.plain).help(
+                            InspectorL10n.format(
+                              "Override %@ on this element", arguments: [.string(declaration.name)])
                           )
-                          .padding(.vertical, 3).contentShape(Rectangle())
-                        }.buttonStyle(.plain).help(
-                          InspectorL10n.format(
-                            "Override %@ on this element", arguments: [.string(declaration.name)]))
+                          if let reason = model.inactiveHints[declaration.name.lowercased()] {
+                            InspectorInactiveCSSHint(reason: reason)
+                          }
+                        }
                       }
                     }.padding(.leading, 2).padding(.top, 5)
                   } label: {

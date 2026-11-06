@@ -16,6 +16,8 @@ Roles, computed accessible names, ignored status and exposed properties come fro
 
 Tab position is an explicit document estimate over up to 5,000 candidates. Shadow roots, nested frames, radio groups and browser focus rules can change actual sequential order. The loopback fixture verifies the common order using trusted renderer Tab input in the headless contract. This selected-element view is not a complete page accessibility audit.
 
+The A11y panel also runs the pinned axe-core 4.14.0 audit against the current page or locked element on demand. It reports at most 300 affected elements, clears results on navigation, and clears selected-element results when the selection changes. Results are an audit aid, not a complete accessibility certification. Inactive CSS declarations show layout-based hints in the matched rules list. Both features render in the existing Inspector panel.
+
 ## Assets
 
 Images show rendered versus natural dimensions, engine-reported MIME type and exposed Resource Timing byte counts. Cached or restricted timing remains unavailable rather than receiving an invented transfer size. Downloads use Chromium's cached resource body in the correct frame/profile and a user-invoked native save panel; there is no separate URLSession request. Resource exports are bounded to 32 MiB. SVG copy preserves actual markup and rejects content above 256 KiB.
@@ -32,6 +34,8 @@ Opt-in public captures use React's public documentation for exposed component da
 - MDN accessibility: [light](Assets/Shaar_Inspector_Details/mdn-a11y-light.png), [dark](Assets/Shaar_Inspector_Details/mdn-a11y-dark.png).
 - MDN assets: [light](Assets/Shaar_Inspector_Details/mdn-assets-light.png), [dark](Assets/Shaar_Inspector_Details/mdn-assets-dark.png).
 - W3C assets: [light](Assets/Shaar_Inspector_Details/wcag-assets-light.png), [dark](Assets/Shaar_Inspector_Details/wcag-assets-dark.png).
+- Audit before: [A11y light](Assets/Shaar_Inspector_Details/mdn-a11y-light.png) / [dark](Assets/Shaar_Inspector_Details/mdn-a11y-dark.png); [CSS light](Assets/Shaar_Inspector_CSS/mdn-light.png) / [dark](Assets/Shaar_Inspector_CSS/mdn-dark.png).
+- Audit after: [A11y light](Assets/Shaar_Inspector_Audit/after-a11y-light.png) / [dark](Assets/Shaar_Inspector_Audit/after-a11y-dark.png); [CSS light](Assets/Shaar_Inspector_Audit/after-css-light.png) / [dark](Assets/Shaar_Inspector_Audit/after-css-dark.png).
 
 References: [React Fiber types](https://github.com/facebook/react/blob/main/packages/react-reconciler/src/ReactInternalTypes.js), [Vue component metadata](https://github.com/vuejs/core/blob/main/packages/runtime-core/src/component.ts), [Svelte DOM metadata](https://github.com/sveltejs/svelte/blob/main/packages/svelte/src/internal/client/dev/elements.js), [Svelte dev ancestry](https://github.com/sveltejs/svelte/blob/main/packages/svelte/src/internal/client/context.js), [CDP accessibility](https://chromedevtools.github.io/devtools-protocol/tot/Accessibility/).
 

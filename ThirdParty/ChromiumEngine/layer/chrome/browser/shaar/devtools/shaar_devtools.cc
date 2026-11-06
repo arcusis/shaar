@@ -825,7 +825,7 @@ shaar_error_code DecodeOperation(shaar_operation operation,
   }
   const int cap = *root.FindInt("capability");
   const int id = *root.FindInt("command");
-  if ((cap != kInspector && cap != kDeveloper) || id < 1 || id > 43) {
+  if ((cap != kInspector && cap != kDeveloper) || id < 1 || id > 44) {
     *reason = "unknown DevTools capability or command";
     return SHAAR_INVALID_ARGUMENT;
   }

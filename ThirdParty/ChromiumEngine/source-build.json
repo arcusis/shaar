@@ -324,7 +324,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0020-shaar-safe-area-insets.patch",
-      "sha256": "2d0251fec453e39af5e658e22a381ac66704e394033c28c6c886fd532f9ec76a"
+      "sha256": "5dda749534e384f69cd62a9f076bdf776db37a09ee4c07235d70d51b54b2356e"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0021-shaar-devtools-viewports-lease.patch",

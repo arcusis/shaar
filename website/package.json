@@ -20,6 +20,11 @@
     "dev": "wrangler dev",
     "check": "pnpm typecheck && pnpm test && pnpm lint && pnpm build && pnpm check:links"
   },
+  "pnpm": {
+    "overrides": {
+      "esbuild": "0.28.2"
+    }
+  },
   "devDependencies": {
     "@biomejs/biome": "2.6.4",
     "@fontsource-variable/geist-mono": "^5.3.0",

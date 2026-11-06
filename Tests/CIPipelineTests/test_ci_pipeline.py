@@ -48,6 +48,23 @@ SCANNING_ISSUES = load_script("sync-code-scanning-issues")
 
 
 class PipelineGateTests(unittest.TestCase):
+    def test_codeql_permissions_are_read_only_by_default_and_scoped_to_analysis(self):
+        workflow = (ROOT / ".github" / "workflows" / "ci-codeql.yml").read_text()
+        defaults = workflow.split("jobs:", 1)[0]
+        analyze = workflow.split("  analyze:\n", 1)[1].split("    runs-on:", 1)[0]
+
+        self.assertIn("permissions:\n  contents: read", defaults)
+        self.assertNotIn("security-events: write", defaults)
+        self.assertIn("permissions:\n      contents: read\n      security-events: write", analyze)
+
+    def test_website_dependency_lock_uses_only_patched_esbuild(self):
+        manifest = json.loads((ROOT / "website" / "package.json").read_text())
+        lockfile = (ROOT / "website" / "pnpm-lock.yaml").read_text()
+
+        self.assertEqual(manifest["pnpm"]["overrides"]["esbuild"], "0.28.2")
+        self.assertIn("esbuild@0.28.2:", lockfile)
+        self.assertNotIn("esbuild@0.27.7", lockfile)
+
     def test_release_gate_requires_both_exact_production_workflows_and_zero_alerts(self):
         revision = "a" * 40
         valid = {"id": 9, "head_sha": revision, "head_branch": "production", "event": "push",

@@ -12,6 +12,9 @@ struct ShaarNetworkPanel: View {
   let droppedCount: Int
   let openChromium: () -> Void
   @FocusState private var focusedRequest: String?
+  @FocusState private var focusedFilter: ShaarNetworkFilter?
+  @FocusState private var focusedDetailTab: ShaarNetworkModel.DetailTab?
+  @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
   private var rows: [ShaarNetworkRequest] {
     if events.count <= 500 && model.projection.result == nil {
@@ -56,19 +59,25 @@ struct ShaarNetworkPanel: View {
         } label: {
           Text(ShellL10n.string(filter.rawValue))
             .font(.system(size: 10, weight: selected ? .semibold : .regular))
-            .foregroundStyle(selected ? .primary : .secondary)
+            .foregroundStyle(.primary)
             .padding(.horizontal, 8)
             .frame(height: 23)
             .background(Color.primary.opacity(selected ? 0.09 : 0.04), in: Capsule())
         }
         .buttonStyle(.plain)
+        .focusable()
+        .focused($focusedFilter, equals: filter)
+        .help(ShellL10n.string(filter.accessibilityName))
+        .accessibilityHint(
+          ShellL10n.string("Use Left and Right Arrow to move through network filters."))
+        .accessibilityLabel(ShellL10n.string(filter.accessibilityName))
         .accessibilityAddTraits(selected ? .isSelected : [])
       }
       Spacer(minLength: 4)
       if rules.activeCount > 0 {
         Text(ShellL10n.format("Rules active · %d", arguments: [.integer(rules.activeCount)]))
           .font(.system(size: 10, weight: .medium))
-          .foregroundStyle(.orange)
+          .foregroundStyle(.primary)
           .padding(.horizontal, 8)
           .frame(height: 23)
           .background(Color.orange.opacity(0.1), in: Capsule())
@@ -86,10 +95,45 @@ struct ShaarNetworkPanel: View {
         .textFieldStyle(.roundedBorder)
         .font(.system(size: 11))
         .frame(width: 150)
+        .help(ShellL10n.string("Filter requests by URL"))
+        .onExitCommand { model.search = "" }
         .accessibilityIdentifier("shaar.devtools.networkSearch")
     }
     .padding(.horizontal, 12)
     .frame(height: 38)
+    .onMoveCommand { direction in moveFilter(direction) }
+  }
+
+  private func moveFilter(_ direction: MoveCommandDirection) {
+    guard let focusedFilter,
+      let index = ShaarNetworkFilter.allCases.firstIndex(of: focusedFilter)
+    else { return }
+    let forward: Bool
+    switch direction {
+    case .left: forward = false
+    case .right: forward = true
+    default: return
+    }
+    guard let next = ShaarDevToolsNavigation.adjacentIndex(
+      index, count: ShaarNetworkFilter.allCases.count, forward: forward)
+    else { return }
+    self.focusedFilter = ShaarNetworkFilter.allCases[next]
+  }
+
+  private func moveDetailTab(_ direction: MoveCommandDirection) {
+    guard let focusedDetailTab,
+      let index = ShaarNetworkModel.DetailTab.allCases.firstIndex(of: focusedDetailTab)
+    else { return }
+    let forward: Bool
+    switch direction {
+    case .left: forward = false
+    case .right: forward = true
+    default: return
+    }
+    guard let next = ShaarDevToolsNavigation.adjacentIndex(
+      index, count: ShaarNetworkModel.DetailTab.allCases.count, forward: forward)
+    else { return }
+    self.focusedDetailTab = ShaarNetworkModel.DetailTab.allCases[next]
   }
 
   private var requestList: some View {
@@ -112,7 +156,7 @@ struct ShaarNetworkPanel: View {
           if currentRows.isEmpty {
             Text(ShellL10n.string(emptyListMessage))
               .font(.system(size: 11))
-              .foregroundStyle(.secondary)
+              .foregroundStyle(.primary)
               .frame(width: 700, height: 130)
           }
           ForEach(currentRows) { row in
@@ -125,6 +169,9 @@ struct ShaarNetworkPanel: View {
             .buttonStyle(.plain)
             .focusable()
             .focused($focusedRequest, equals: row.id)
+            .accessibilityLabel(requestLabel(row))
+            .help(ShellL10n.string("Network request. Use Up and Down Arrow to change selection."))
+            .accessibilityAddTraits(model.selectedID == row.id ? .isSelected : [])
             .accessibilityIdentifier("shaar.devtools.networkRequest")
             .contextMenu {
               Button(ShellL10n.string("Create rule from request")) {
@@ -141,11 +188,21 @@ struct ShaarNetworkPanel: View {
       }
       .onMoveCommand { direction in
         guard focusedRequest != nil else { return }
-        if direction == .down { model.selectAdjacent(in: currentRows, forward: true) }
-        if direction == .up { model.selectAdjacent(in: currentRows, forward: false) }
+        if direction == .down {
+          model.selectAdjacent(in: currentRows, forward: true, from: focusedRequest)
+        }
+        if direction == .up {
+          model.selectAdjacent(in: currentRows, forward: false, from: focusedRequest)
+        }
         focusedRequest = model.selectedID
       }
     }
+  }
+
+  private func requestLabel(_ row: ShaarNetworkRequest) -> String {
+    let status = row.status.map(String.init) ?? ShellL10n.string("Pending")
+    let failure = row.failure.map { ", \(ShellL10n.string("Failed")): \($0)" } ?? ""
+    return "\(row.method), \(row.name), \(status), \(row.url)\(failure)"
   }
 
   private var emptyListMessage: String {
@@ -167,7 +224,7 @@ struct ShaarNetworkPanel: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
     .font(.system(size: 10, weight: .medium))
-    .foregroundStyle(.secondary)
+    .foregroundStyle(.primary)
     .padding(.horizontal, 12)
     .frame(height: 29)
     .background(Color.primary.opacity(0.035))
@@ -182,7 +239,7 @@ struct ShaarNetworkPanel: View {
   ) -> some View {
     HStack(spacing: 8) {
       Text(row.failure != nil ? "×" : row.status.map(String.init) ?? "·")
-        .foregroundStyle(row.isError ? .red : .primary)
+        .foregroundStyle(.primary)
         .frame(width: 48, alignment: .leading)
       Text(row.method).frame(width: 52, alignment: .leading)
       Text(row.name).lineLimit(1).frame(width: 200, alignment: .leading)
@@ -195,7 +252,17 @@ struct ShaarNetworkPanel: View {
     .font(.system(size: 10, design: .monospaced))
     .padding(.horizontal, 12)
     .frame(height: 35)
-    .background(model.selectedID == row.id ? Color.accentColor.opacity(0.10) : .clear)
+    .background(
+      model.selectedID == row.id
+        ? Color.accentColor.opacity(colorSchemeContrast == .increased ? 0.22 : 0.10)
+        : .clear)
+    .overlay {
+      if focusedRequest == row.id {
+        RoundedRectangle(cornerRadius: 3)
+          .strokeBorder(
+            Color.primary, lineWidth: colorSchemeContrast == .increased ? 2 : 1)
+      }
+    }
     .contentShape(Rectangle())
   }
 
@@ -260,7 +327,7 @@ struct ShaarNetworkPanel: View {
             } label: {
               Text(ShellL10n.string(tab.rawValue))
                 .font(.system(size: 10, weight: model.detailTab == tab ? .semibold : .regular))
-                .foregroundStyle(model.detailTab == tab ? .primary : .secondary)
+                .foregroundStyle(.primary)
                 .padding(.horizontal, 7)
                 .frame(height: 26)
                 .background {
@@ -270,11 +337,18 @@ struct ShaarNetworkPanel: View {
                 }
             }
             .buttonStyle(.plain)
+            .focusable()
+            .focused($focusedDetailTab, equals: tab)
+            .help(ShellL10n.string("Use Left and Right Arrow to move through request details."))
+            .accessibilityValue(
+              model.detailTab == tab ? ShellL10n.string("Selected") : "")
+            .accessibilityAddTraits(model.detailTab == tab ? .isSelected : [])
           }
           Spacer(minLength: 0)
         }
         .padding(.horizontal, 8)
         .frame(height: 32)
+        .onMoveCommand { direction in moveDetailTab(direction) }
         Divider()
         ScrollView {
           detailContent(selected)
@@ -286,7 +360,7 @@ struct ShaarNetworkPanel: View {
     } else {
       Text(ShellL10n.string("Select a network request"))
         .font(.system(size: 11))
-        .foregroundStyle(.secondary)
+        .foregroundStyle(.primary)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
   }
@@ -380,7 +454,7 @@ struct ShaarNetworkPanel: View {
       Text(ShellL10n.string(title)).font(.system(size: 10, weight: .semibold))
       if headers.isEmpty {
         Text(ShellL10n.string("No headers are available"))
-          .font(.system(size: 10)).foregroundStyle(.secondary)
+          .font(.system(size: 10)).foregroundStyle(.primary)
       }
       ForEach(Array(headers.enumerated()), id: \.offset) { _, header in
         detailValue(header.name, header.value)
@@ -391,7 +465,7 @@ struct ShaarNetworkPanel: View {
   private func detailValue(_ title: String, _ value: String) -> some View {
     VStack(alignment: .leading, spacing: 3) {
       Text(ShellL10n.string(title))
-        .font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
+        .font(.system(size: 10, weight: .medium)).foregroundStyle(.primary)
       Text(value).font(.system(size: 10, design: .monospaced))
         .textSelection(.enabled)
         .devToolsDataDirection()
@@ -400,7 +474,7 @@ struct ShaarNetworkPanel: View {
 
   private func emptyDetail(_ message: String) -> some View {
     Text(ShellL10n.string(message))
-      .font(.system(size: 10)).foregroundStyle(.secondary)
+      .font(.system(size: 10)).foregroundStyle(.primary)
   }
 
   private func sizeLabel(_ bytes: Int?) -> String {
@@ -420,6 +494,21 @@ struct ShaarNetworkPanel: View {
   }
 }
 
+private extension ShaarNetworkFilter {
+  var accessibilityName: String {
+    switch self {
+    case .all: "All requests"
+    case .fetch: "Fetch and XHR"
+    case .script: "JavaScript"
+    case .style: "Stylesheets"
+    case .image: "Images"
+    case .document: "Documents"
+    case .socket: "WebSockets"
+    case .errors: "Errors"
+    }
+  }
+}
+
 private struct ShaarNetworkJSONTree: View {
   let node: ShaarNetworkJSONNode
   @State private var expanded = true
@@ -428,7 +517,7 @@ private struct ShaarNetworkJSONTree: View {
     Group {
       if node.children.isEmpty {
         HStack(alignment: .firstTextBaseline, spacing: 5) {
-          Text(node.name).foregroundStyle(.secondary)
+          Text(node.name).foregroundStyle(.primary)
           Text(node.value ?? "").textSelection(.enabled)
         }
       } else {

@@ -22,6 +22,8 @@ struct ShaarDOMTreePanel: View {
   @State private var attributeName = ""
   @State private var editorValue = ""
   @State private var deleting = false
+  @FocusState private var focusedNode: Int?
+  @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
   var body: some View {
     GeometryReader { geometry in
@@ -67,7 +69,7 @@ struct ShaarDOMTreePanel: View {
       if !model.available {
         VStack(spacing: 9) {
           Image(systemName: "point.3.connected.trianglepath.dotted")
-            .font(.system(size: 22, weight: .ultraLight)).foregroundStyle(.tertiary)
+            .font(.system(size: 22, weight: .ultraLight)).foregroundStyle(.primary)
           Text(ShellL10n.string("Live DOM tree is unavailable for this tab"))
             .font(.system(size: 12, weight: .medium))
           Button(ShellL10n.string("Open Chromium DevTools"), action: openChromium)
@@ -78,7 +80,7 @@ struct ShaarDOMTreePanel: View {
       } else if model.loading && model.rows.isEmpty {
         ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
       } else if let failure = model.failure, model.rows.isEmpty {
-        Text(failure).font(.system(size: 11)).foregroundStyle(.secondary)
+        Text(failure).font(.system(size: 11)).foregroundStyle(.primary)
           .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else {
         ScrollView {
@@ -102,7 +104,7 @@ struct ShaarDOMTreePanel: View {
   private var header: some View {
     HStack(spacing: 7) {
       Image(systemName: "point.3.connected.trianglepath.dotted")
-        .font(.system(size: 12)).foregroundStyle(.secondary)
+        .font(.system(size: 12)).foregroundStyle(.primary)
       Text(ShellL10n.string("DOM tree"))
         .font(.system(size: 11, weight: .semibold))
       TextField(ShellL10n.string("Search text or selector"), text: $model.search)
@@ -110,25 +112,30 @@ struct ShaarDOMTreePanel: View {
         .font(.system(size: 11))
         .devToolsDataDirection()
         .onSubmit { Task { await model.performSearch() } }
+        .help(ShellL10n.string("Search the DOM and press Return to apply the search"))
+        .onExitCommand { model.search = "" }
       Button {
         Task { await model.performSearch() }
       } label: {
         Image(systemName: "magnifyingglass")
       }
       .help(ShellL10n.string("Find in DOM"))
+      .accessibilityLabel(ShellL10n.string("Find in DOM"))
       Button {
         Task { await model.loadDocument() }
       } label: {
         Image(systemName: "arrow.clockwise")
       }
       .help(ShellL10n.string("Refresh DOM tree"))
+      .accessibilityLabel(ShellL10n.string("Refresh DOM tree"))
       Button {
         Task { await model.undo() }
       } label: {
         Image(systemName: "arrow.uturn.backward")
       }
       .disabled(!model.canUndo)
-      .help(ShellL10n.string("Undo DOM edit"))
+      .help(ShellL10n.string("Undo DOM edit with Command-Z"))
+      .accessibilityLabel(ShellL10n.string("Undo DOM edit"))
       .keyboardShortcut("z", modifiers: .command)
     }
     .buttonStyle(.plain)
@@ -148,23 +155,25 @@ struct ShaarDOMTreePanel: View {
             .frame(width: 14, height: 20)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(ShellL10n.string("Expand or collapse node"))
+        .accessibilityLabel(
+          ShellL10n.string(model.expanded.contains(row.id) ? "Collapse node" : "Expand node"))
       } else {
         Color.clear.frame(width: 14, height: 20)
       }
       Button {
         model.select(row.id)
+        focusedNode = row.id
         Task { try? await inspector.selectDOMNode(row.id) }
       } label: {
         HStack(spacing: 5) {
           Text(nodeLabel(row.node))
-            .foregroundStyle(row.node.nodeType == 1 ? Color.accentColor : .primary)
+            .foregroundStyle(.primary)
           if !row.node.attributeSummary.isEmpty {
-            Text(row.node.attributeSummary).foregroundStyle(.secondary)
+            Text(row.node.attributeSummary).foregroundStyle(.primary)
           }
           Spacer(minLength: 0)
           if model.matches.contains(row.id) {
-            Image(systemName: "magnifyingglass.circle.fill").foregroundStyle(.orange)
+            Image(systemName: "magnifyingglass.circle.fill").foregroundStyle(.primary)
           }
         }
         .lineLimit(1)
@@ -173,10 +182,25 @@ struct ShaarDOMTreePanel: View {
         .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
+      .focusable()
+      .focused($focusedNode, equals: row.id)
+      .accessibilityLabel(rowAccessibilityLabel(row))
+      .accessibilityValue(model.selectedID == row.id ? ShellL10n.string("Selected") : "")
+      .accessibilityAddTraits(model.selectedID == row.id ? .isSelected : [])
     }
     .padding(.leading, CGFloat(row.depth) * 15 + 8)
     .padding(.trailing, 8)
-    .background(model.selectedID == row.id ? Color.accentColor.opacity(0.12) : .clear)
+    .background(
+      model.selectedID == row.id
+        ? Color.accentColor.opacity(colorSchemeContrast == .increased ? 0.22 : 0.12)
+        : .clear)
+    .overlay {
+      if focusedNode == row.id {
+        RoundedRectangle(cornerRadius: 3)
+          .strokeBorder(
+            Color.primary, lineWidth: colorSchemeContrast == .increased ? 2 : 1)
+      }
+    }
     .onHover { hovering in Task { await model.highlight(hovering ? row.id : nil) } }
     .contextMenu { rowMenu(row.node) }
     .onDrag { NSItemProvider(object: String(row.id) as NSString) }
@@ -254,10 +278,10 @@ struct ShaarDOMTreePanel: View {
             Task { try? await inspector.selectDOMNode(node.id) }
           }
           .buttonStyle(.plain)
-          .foregroundStyle(node.id == model.selectedID ? .primary : .secondary)
+          .foregroundStyle(.primary)
           if node.id != model.selectedID {
             Image(systemName: "chevron.right").font(.system(size: 7))
-              .foregroundStyle(.tertiary)
+              .foregroundStyle(.primary)
           }
         }
       }
@@ -274,7 +298,7 @@ struct ShaarDOMTreePanel: View {
     return ScrollView(.horizontal) {
       HStack(spacing: 5) {
         Text(ShellL10n.string("Classes"))
-          .foregroundStyle(.secondary)
+          .foregroundStyle(.primary)
         ForEach(classes, id: \.self) { name in
           Button {
             Task { await model.toggleClass(name) }
@@ -302,6 +326,7 @@ struct ShaarDOMTreePanel: View {
         TextEditor(text: $editorValue).font(.system(size: 11, design: .monospaced))
           .devToolsDataDirection()
           .frame(height: 180)
+          .accessibilityLabel(ShellL10n.string(editorTitle(mode)))
       } else {
         TextField(ShellL10n.string("Value"), text: $editorValue)
           .devToolsDataDirection()
@@ -337,8 +362,10 @@ struct ShaarDOMTreePanel: View {
 
   private func moveSelection(_ direction: MoveCommandDirection) {
     let rows = model.rows
-    guard !rows.isEmpty else { return }
-    let index = rows.firstIndex { $0.id == model.selectedID } ?? 0
+    guard focusedNode != nil, !rows.isEmpty else { return }
+    let index = rows.firstIndex { $0.id == focusedNode }
+      ?? rows.firstIndex { $0.id == model.selectedID }
+      ?? 0
     switch direction {
     case .up: model.select(rows[max(0, index - 1)].id)
     case .down: model.select(rows[min(rows.count - 1, index + 1)].id)
@@ -354,6 +381,13 @@ struct ShaarDOMTreePanel: View {
       }
     default: break
     }
+    focusedNode = model.selectedID
+  }
+
+  private func rowAccessibilityLabel(_ row: ShaarDOMRow) -> String {
+    [nodeLabel(row.node), row.node.attributeSummary]
+      .filter { !$0.isEmpty }
+      .joined(separator: ", ")
   }
 
   private func copy(_ value: String) {

@@ -25,6 +25,13 @@ enum ShaarDevToolsDock: String, CaseIterable {
   case floating = "Open in separate window"
 }
 
+enum ShaarDevToolsNavigation {
+  static func adjacentIndex(_ index: Int, count: Int, forward: Bool) -> Int? {
+    guard count > 0 else { return nil }
+    return min(count - 1, max(0, index + (forward ? 1 : -1)))
+  }
+}
+
 struct ShaarConsoleEvent: Equatable, Sendable {
   enum Level: String, Sendable { case log, info, warning, error }
   enum Origin: String, CaseIterable, Sendable {

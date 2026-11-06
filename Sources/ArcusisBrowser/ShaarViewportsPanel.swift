@@ -30,7 +30,7 @@ struct ShaarViewportsPanel: View {
       if let errorMessage {
         Text(errorMessage)
           .font(.system(size: 10))
-          .foregroundStyle(.red)
+          .foregroundStyle(.primary)
           .frame(maxWidth: .infinity, alignment: .leading)
           .padding(.horizontal, 14)
           .frame(height: 25)
@@ -60,7 +60,7 @@ struct ShaarViewportsPanel: View {
         .controlSize(.small)
       Spacer(minLength: 8)
       Text(ShellL10n.plural("%d viewports", count: model.frames.count))
-        .font(.system(size: 10)).foregroundStyle(.secondary)
+        .font(.system(size: 10)).foregroundStyle(.primary)
       Menu {
         ForEach(ShaarViewportPreset.allCases, id: \.self) { preset in
           Button(ShellL10n.string(preset.title)) { run(.add(preset)) }
@@ -80,9 +80,9 @@ struct ShaarViewportsPanel: View {
     VStack(spacing: 8) {
       Image(systemName: "rectangle.split.3x1")
         .font(.system(size: 23, weight: .ultraLight))
-        .foregroundStyle(.tertiary)
+        .foregroundStyle(.primary)
       Text(ShellL10n.string("Add a device to preview this page"))
-        .font(.system(size: 12)).foregroundStyle(.secondary)
+        .font(.system(size: 12)).foregroundStyle(.primary)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
@@ -97,15 +97,17 @@ struct ShaarViewportsPanel: View {
         Spacer(minLength: 3)
         Text("\(frame.preset.width) × \(frame.preset.height)")
           .font(.system(size: 10, design: .monospaced))
-          .foregroundStyle(.secondary)
+          .foregroundStyle(.primary)
         Button {
           run(.remove(frame.id))
         } label: {
           Image(systemName: "xmark")
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(
+          ShellL10n.format(
+            "Remove %@ viewport", arguments: [.string(ShellL10n.string(frame.preset.title))]))
         .disabled(model.frames.count == 1)
-        .accessibilityLabel(ShellL10n.string("Remove viewport"))
       }
       .padding(.horizontal, 9).frame(height: 30)
       Divider()
@@ -117,7 +119,7 @@ struct ShaarViewportsPanel: View {
         } else {
           Color(nsColor: .textBackgroundColor)
           Text(ShellL10n.string("Waiting for page frame"))
-            .font(.system(size: 11)).foregroundStyle(.secondary)
+            .font(.system(size: 11)).foregroundStyle(.primary)
         }
         ViewportInputSurface(
           width: frame.preset.width, height: frame.preset.height,
@@ -137,7 +139,7 @@ struct ShaarViewportsPanel: View {
         Spacer()
         Text("T \(frame.safeArea.top) · B \(frame.safeArea.bottom)")
           .font(.system(size: 10, design: .monospaced))
-          .foregroundStyle(.secondary)
+          .foregroundStyle(.primary)
       }
       .padding(.horizontal, 9).frame(height: 30)
     }
@@ -176,7 +178,7 @@ private struct SafeAreaEditor: View {
     Button(ShellL10n.string("Safe area…")) { syncDraft() }
       .font(.system(size: 10))
       .buttonStyle(.plain)
-      .foregroundStyle(Color.accentColor)
+      .foregroundStyle(.primary)
       .popover(isPresented: $editing) {
         VStack(alignment: .leading, spacing: 8) {
           Text(ShellL10n.string("Safe area insets"))

@@ -78,17 +78,17 @@ final class ShaarApplicationModel {
     }
   }
 
-  func selectAdjacent(forward: Bool) {
+  func selectAdjacent(forward: Bool, from focusedID: String? = nil) {
     let visible = visibleRows
     guard !visible.isEmpty else {
       selectedID = nil
       return
     }
-    let index = visible.firstIndex { $0.id == selectedID }
-    let next =
-      forward
-      ? min(visible.count - 1, (index ?? -1) + 1)
-      : max(0, (index ?? 1) - 1)
+    let currentID = focusedID ?? selectedID
+    let index = visible.firstIndex { $0.id == currentID }
+    let next = index.flatMap {
+      ShaarDevToolsNavigation.adjacentIndex($0, count: visible.count, forward: forward)
+    } ?? 0
     selectedID = visible[next].id
   }
 

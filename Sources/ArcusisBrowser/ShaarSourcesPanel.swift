@@ -14,6 +14,7 @@ struct ShaarSourcesPanel: View {
   @FocusState private var focusedURL: String?
   @State private var localSourceStatus: String?
   @State private var choosingProjectFolder = false
+  @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
   var body: some View {
     HStack(spacing: 0) {
@@ -42,6 +43,8 @@ struct ShaarSourcesPanel: View {
         .textFieldStyle(.roundedBorder)
         .font(.system(size: 10))
         .padding(8)
+        .help(ShellL10n.string("Filter resources. Use Up and Down Arrow to select a resource."))
+        .onExitCommand { model.search = "" }
       Divider()
       if model.loading && model.resources.isEmpty {
         ProgressView().controlSize(.small).padding(24)
@@ -51,7 +54,7 @@ struct ShaarSourcesPanel: View {
           ShellL10n.string(
             model.resources.isEmpty ? "No resources loaded" : "No matching resources")
         )
-        .font(.system(size: 10)).foregroundStyle(.secondary)
+        .font(.system(size: 10)).foregroundStyle(.primary)
         .padding(12)
         Spacer()
       } else {
@@ -60,7 +63,7 @@ struct ShaarSourcesPanel: View {
             ForEach(folders, id: \.self) { folder in
               Text(folder.isEmpty ? ShellL10n.string("Resources") : folder)
                 .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.primary)
                 .lineLimit(1)
                 .padding(.horizontal, 12).padding(.top, 11).padding(.bottom, 5)
               ForEach(model.visibleResources.filter { $0.folder == folder }) { resource in
@@ -80,7 +83,7 @@ struct ShaarSourcesPanel: View {
       }
       Divider()
       Text(ShellL10n.format("%d resources loaded", arguments: [.integer(model.resources.count)]))
-        .font(.system(size: 9)).foregroundStyle(.secondary)
+        .font(.system(size: 9)).foregroundStyle(.primary)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 12).frame(height: 31)
     }
@@ -102,18 +105,33 @@ struct ShaarSourcesPanel: View {
     } label: {
       HStack(spacing: 7) {
         Image(systemName: symbol(for: resource)).frame(width: 13)
-          .foregroundStyle(.secondary)
+          .foregroundStyle(.primary)
         Text(resource.name).lineLimit(1).devToolsDataDirection()
         Spacer(minLength: 0)
       }
       .font(.system(size: 10))
       .padding(.horizontal, 12)
       .frame(height: 27)
-      .background(model.selectedURL == resource.url ? Color.accentColor.opacity(0.10) : .clear)
+      .background(
+        model.selectedURL == resource.url
+          ? Color.accentColor.opacity(colorSchemeContrast == .increased ? 0.22 : 0.10)
+          : .clear)
     }
     .buttonStyle(.plain)
     .focusable()
     .focused($focusedURL, equals: resource.url)
+    .help(ShellL10n.string("Resource. Use Up and Down Arrow to change selection."))
+    .overlay {
+      if focusedURL == resource.url {
+        RoundedRectangle(cornerRadius: 3)
+          .strokeBorder(
+            Color.primary, lineWidth: colorSchemeContrast == .increased ? 2 : 1)
+      }
+    }
+    .accessibilityLabel("\(resource.name), \(resource.type)")
+    .accessibilityValue(
+      model.selectedURL == resource.url ? ShellL10n.string("Selected") : "")
+    .accessibilityAddTraits(model.selectedURL == resource.url ? .isSelected : [])
     .accessibilityIdentifier("shaar.devtools.sourceRow")
   }
 
@@ -133,7 +151,7 @@ struct ShaarSourcesPanel: View {
       Divider()
       if let message = model.sourceFailure ?? localSourceStatus {
         HStack(spacing: 8) {
-          Text(message).foregroundStyle(.secondary)
+          Text(message).foregroundStyle(.primary)
           Spacer(minLength: 0)
           if model.isDevelopmentPage && model.sourceFailure != nil {
             Button(ShellL10n.string("Choose project folder…")) {
@@ -147,7 +165,7 @@ struct ShaarSourcesPanel: View {
       }
       if let failure = model.failure {
         HStack(spacing: 8) {
-          Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
+          Image(systemName: "exclamationmark.triangle").foregroundStyle(.primary)
           Text(failure).lineLimit(2)
           Spacer()
           Button(ShellL10n.string("Retry")) { Task { await model.refresh() } }
@@ -168,7 +186,7 @@ struct ShaarSourcesPanel: View {
       }
       if model.truncated {
         Text(ShellL10n.string("Resource preview or list is limited"))
-          .font(.system(size: 9)).foregroundStyle(.secondary)
+          .font(.system(size: 9)).foregroundStyle(.primary)
           .frame(maxWidth: .infinity, alignment: .leading)
           .padding(8)
       }
@@ -177,7 +195,7 @@ struct ShaarSourcesPanel: View {
 
   private var header: some View {
     HStack(spacing: 8) {
-      Image(systemName: "doc.text").foregroundStyle(.secondary)
+      Image(systemName: "doc.text").foregroundStyle(.primary)
       Text(model.selected?.name ?? ShellL10n.string("Sources"))
         .font(.system(size: 11, weight: .semibold)).lineLimit(1)
       Spacer(minLength: 4)
@@ -220,6 +238,7 @@ struct ShaarSourcesPanel: View {
       }
       .menuStyle(.borderlessButton)
       .help(ShellL10n.string("Choose source editor"))
+      .accessibilityLabel(ShellL10n.string("Choose source editor"))
       Button {
         Task { await model.refresh() }
       } label: {
@@ -227,6 +246,7 @@ struct ShaarSourcesPanel: View {
       }
       .buttonStyle(.plain)
       .help(ShellL10n.string("Refresh resources"))
+      .accessibilityLabel(ShellL10n.string("Refresh resources"))
     }
     .padding(.horizontal, 12).frame(height: 36)
   }
@@ -249,7 +269,7 @@ struct ShaarSourcesPanel: View {
 
   private func emptyContent(_ message: String) -> some View {
     Text(ShellL10n.string(message))
-      .font(.system(size: 11)).foregroundStyle(.secondary)
+      .font(.system(size: 11)).foregroundStyle(.primary)
       .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
@@ -261,7 +281,7 @@ struct ShaarSourcesPanel: View {
             let line = lines[index]
             HStack(alignment: .firstTextBaseline, spacing: 13) {
               Text(String(index + 1))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.primary)
                 .frame(width: 38, alignment: .trailing)
               Text(ShaarSourceHighlight.render(String(line)))
                 .fixedSize(horizontal: true, vertical: false)

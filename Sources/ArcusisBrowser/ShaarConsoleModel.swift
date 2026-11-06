@@ -78,6 +78,16 @@ final class ShaarConsoleModel {
     propertyFailures.removeAll()
   }
 
+  func selectAdjacent(in rows: [ShaarConsoleRow], forward: Bool, from focusedID: UUID? = nil) {
+    guard !rows.isEmpty else { return }
+    let currentID = focusedID ?? selectedID
+    let current = rows.firstIndex { $0.id == currentID }
+    let next = current.flatMap {
+      ShaarDevToolsNavigation.adjacentIndex($0, count: rows.count, forward: forward)
+    } ?? 0
+    selectedID = rows[next].id
+  }
+
   func historyCommand(up: Bool) -> String? {
     guard !history.isEmpty else { return nil }
     let current = historyIndex ?? history.count

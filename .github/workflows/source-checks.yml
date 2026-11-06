@@ -301,7 +301,7 @@ jobs:
           echo "CI_SOURCE_TREE=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_ENV"
       - name: Capture English and Hebrew screens and verify native engine language
         env:
-          SWIFT_BACKTRACE: enable=yes,interactive=no,color=no,output-to=stderr,limit=128,top=0
+          SHAAR_LOCALIZATION_BACKTRACE: '1'
         run: .venv/bin/python scripts/ci-stage.py localization
       - uses: ./.github/actions/ci-evidence
         if: always()

@@ -24,6 +24,24 @@ with patch.object(sys, "path", [str(ROOT / "scripts"), *sys.path]):
 
 
 class LocalizationCrashEvidenceTests(unittest.TestCase):
+    def test_backtrace_setting_reaches_only_the_verification_child(self):
+        with patch.dict(FIXTURE.os.environ, {
+            "PATH": "/usr/bin", "SWIFT_BACKTRACE": "enable=no",
+            "SHAAR_LOCALIZATION_BACKTRACE": "1",
+        }, clear=True):
+            environment = FIXTURE.safe_environment()
+            self.assertNotIn("SWIFT_BACKTRACE", environment)
+            with patch.object(FIXTURE.subprocess, "Popen") as launch:
+                launch.return_value.pid = 123
+                launch.return_value.returncode = 0
+                launch.return_value.communicate.return_value = ("", "")
+                FIXTURE.run_engine_probe(["probe"], environment)
+                child_environment = launch.call_args.kwargs["env"]
+                self.assertEqual(
+                    child_environment["SWIFT_BACKTRACE"], FIXTURE.BACKTRACE_SETTING
+                )
+                self.assertNotIn("SWIFT_BACKTRACE", environment)
+
     def test_failed_probe_keeps_its_report_and_matching_crash(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -48,6 +66,10 @@ class LocalizationCrashEvidenceTests(unittest.TestCase):
             self.assertEqual(receipt["pid"], 4242)
             self.assertTrue(receipt["probeReportWritten"])
             self.assertNotIn("sk-abcdefghijklmnop", receipt["stderrTail"])
+            self.assertNotIn(
+                "sk-abcdefghijklmnop",
+                (artifact / "hebrew-restart-stderr.log").read_text(),
+            )
             self.assertEqual(
                 (artifact / "hebrew-restart-probe.json").read_text(), report.read_text()
             )

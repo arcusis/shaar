@@ -27,10 +27,11 @@ import engine_fixture
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "build/Shaar Verification.app"
 MARKER = ".arcusis-localization-probe"
+BACKTRACE_SETTING = "enable=yes,interactive=no,color=no,output-to=stderr,limit=128,top=0"
 
 
 def safe_environment():
-    allowed = ("PATH", "HOME", "TMPDIR", "DEVELOPER_DIR", "SDKROOT", "TOOLCHAINS", "SWIFT_BACKTRACE")
+    allowed = ("PATH", "HOME", "TMPDIR", "DEVELOPER_DIR", "SDKROOT", "TOOLCHAINS")
     return {key: os.environ[key] for key in allowed if key in os.environ}
 
 
@@ -41,6 +42,9 @@ def redact(text):
 
 def run_engine_probe(arguments, environment):
     started = time.time()
+    environment = dict(environment)
+    if os.environ.get("SHAAR_LOCALIZATION_BACKTRACE") == "1":
+        environment["SWIFT_BACKTRACE"] = BACKTRACE_SETTING
     process = subprocess.Popen(
         arguments, cwd=ROOT, env=environment, stdout=subprocess.PIPE,
         stderr=subprocess.PIPE, text=True,
@@ -57,6 +61,7 @@ def run_engine_probe(arguments, environment):
 
 def record_failed_probe(case_name, output, completed, pid, started, artifact):
     artifact.mkdir(parents=True, exist_ok=True)
+    stderr = redact(completed.stderr)
     reports = []
     if completed.returncode < 0:
         engine_fixture.wait_until(
@@ -72,10 +77,13 @@ def record_failed_probe(case_name, output, completed, pid, started, artifact):
             continue
     if output.exists():
         shutil.copyfile(output, artifact / f"{case_name}-probe.json")
+    (artifact / f"{case_name}-stderr.log").write_text(
+        stderr[-2_000_000:], encoding="utf-8",
+    )
     receipt = {
         "case": case_name, "pid": pid, "exitCode": completed.returncode,
         "probeReportWritten": output.exists(), "crashReports": reports,
-        "stderrTail": redact(completed.stderr[-4000:]),
+        "stderrTail": stderr[-4000:],
     }
     (artifact / f"{case_name}-failure.json").write_text(
         json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8",
@@ -196,7 +204,7 @@ def run():
     info["CFBundleIdentifier"] = domain
     info_path.write_bytes(plistlib.dumps(info))
     sign_command = ["codesign", "--force", "--timestamp=none", "--sign", "-"]
-    if os.environ.get("SWIFT_BACKTRACE"):
+    if os.environ.get("SHAAR_LOCALIZATION_BACKTRACE") == "1":
         entitlements = outer / "backtrace-entitlements.plist"
         entitlements.write_bytes(plistlib.dumps({"com.apple.security.get-task-allow": True}))
         sign_command.extend(["--entitlements", str(entitlements)])
@@ -260,7 +268,7 @@ def run():
                 record_failed_probe(case_name, output, completed, pid, started, artifact)
                 raise RuntimeError(
                     f"{language} {phase} engine probe failed ({completed.returncode}): "
-                    f"{redact(completed.stderr[-1200:])}"
+                    f"{redact(completed.stderr)[-1200:]}"
                 )
             report = json.loads(output.read_text(encoding="utf-8"))
             deadline = time.monotonic() + 15

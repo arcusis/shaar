@@ -58,9 +58,46 @@ private enum ShaarPanelError: Error { case unavailable }
 
 @MainActor @Observable final class ShaarDevToolsNativeTransport: ShaarDevToolsEventTransport {
   private(set) var recordingAvailable = false
+  private(set) var recordingFailure: String?
+  private(set) var recordingStarting = false
   @ObservationIgnored private let requester: any ShaarPanelRequesting
   @ObservationIgnored private let windowID: String
   @ObservationIgnored private var session: ShaarPanelSession?
+  @ObservationIgnored var onLeaseOpened: (() -> Void)?
+
+  var hasActiveLease: Bool {
+    guard let session, !session.closed else { return false }
+    return session.leaseID != nil
+  }
+
+  func activeLease(for target: SiteControlTarget) -> UInt32? {
+    guard let session, !session.closed, session.target == target else { return nil }
+    return session.leaseID
+  }
+
+  func setNetworkRules(_ rules: [ShaarResolvedNetworkRule], for target: SiteControlTarget)
+    async throws
+  {
+    guard let leaseID = activeLease(for: target), rules.count <= 32 else {
+      throw ShaarNetworkRuleError.unavailable
+    }
+    let rows = rules.map { rule -> [String: Any] in
+      let kind = ShaarNetworkRulesLeasedTransport.action(rule).kind.rawValue
+      return [
+        "method": rule.method, "url": rule.url, "kind": kind,
+        "status": rule.status,
+        "headers": rule.headers.map { ["name": $0.name, "value": $0.value] },
+        "bodyBase64": rule.bodyBase64 ?? "", "redirectURL": rule.redirectURL,
+        "delayMilliseconds": rule.delayMilliseconds,
+      ]
+    }
+    let reply = try await requester.request(
+      .panelNetworkRules, target: target,
+      payload: ["schemaVersion": 1, "leaseID": leaseID, "rules": rows])
+    guard activeLease(for: target) == leaseID, reply["schemaVersion"] as? Int == 1 else {
+      throw ShaarNetworkRuleError.unavailable
+    }
+  }
 
   init(requester: any ShaarPanelRequesting, windowID: String) {
     self.requester = requester
@@ -134,7 +171,9 @@ private enum ShaarPanelError: Error { case unavailable }
       }
       session.leaseID = leaseID
       emit(.streamAvailable, to: session)
+      onLeaseOpened?()
       guard !session.closed else { return }
+      recordingStarting = true
       do {
         _ = try await requester.request(
           .panelScreencast, target: session.target,
@@ -142,9 +181,12 @@ private enum ShaarPanelError: Error { case unavailable }
         guard self.session === session, !session.closed else { return }
         session.recording = true
         recordingAvailable = true
+        recordingFailure = nil
       } catch {
         // Console and Network remain available if video is unsupported.
+        recordingFailure = error.localizedDescription
       }
+      recordingStarting = false
     } catch {
       guard !session.closed else { return }
       emit(.streamUnavailable, to: session)
@@ -165,6 +207,7 @@ private enum ShaarPanelError: Error { case unavailable }
     guard !session.closed else { return }
     session.closed = true
     recordingAvailable = false
+    recordingStarting = false
     session.task?.cancel()
     if self.session === session { self.session = nil }
     session.continuation?.finish()

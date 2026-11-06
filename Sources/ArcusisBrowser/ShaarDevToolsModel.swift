@@ -307,6 +307,12 @@ final class ShaarDevToolsModel {
     events.reduce(localConsoleEvents.count) { $0 + (isConsole($1) ? 1 : 0) }
   }
   var networkCount: Int { events.reduce(0) { $0 + (isConsole($1) ? 0 : 1) } }
+  var nativeRecordingFailure: String? {
+    (transport as? ShaarDevToolsNativeTransport)?.recordingFailure
+  }
+  var nativeRecordingStarting: Bool {
+    (transport as? ShaarDevToolsNativeTransport)?.recordingStarting ?? false
+  }
 
   var canTapLocalLogs: Bool {
     DevelopmentModePreference.isEnabled

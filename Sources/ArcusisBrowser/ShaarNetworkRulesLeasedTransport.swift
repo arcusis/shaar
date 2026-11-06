@@ -5,6 +5,18 @@
 import Foundation
 import ShaarEngineABI
 
+/// Resolves the currently owned panel lease at send time, so a closed or
+/// navigated tab cannot reuse an earlier interception grant.
+@MainActor struct ShaarNetworkRulesNativeTransport: ShaarNetworkRulesTransport {
+  let panel: ShaarDevToolsNativeTransport
+
+  var available: Bool { panel.hasActiveLease }
+
+  func apply(_ rules: [ShaarResolvedNetworkRule], to requested: SiteControlTarget) async throws {
+    try await panel.setNetworkRules(rules, for: requested)
+  }
+}
+
 /// Binds rule application to a panel lease owned by the live DevTools stream.
 @MainActor struct ShaarNetworkRulesLeasedTransport: ShaarNetworkRulesTransport {
   let adapter: ShaarDevToolsAdapter
@@ -38,7 +50,7 @@ import ShaarEngineABI
     }
   }
 
-  private static func action(_ rule: ShaarResolvedNetworkRule) -> ShaarDevToolsNetworkRule {
+  static func action(_ rule: ShaarResolvedNetworkRule) -> ShaarDevToolsNetworkRule {
     let kind: ShaarDevToolsNetworkRuleKind
     switch rule.kind {
     case .mock: kind = .mock

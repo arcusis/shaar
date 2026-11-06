@@ -158,7 +158,8 @@ BOOL SubmitShaarDevTools(ARCShaarRuntime *runtime, shaar_scope scope,
         completion:(void (NS_SWIFT_UI_ACTOR ^)(NSDictionary<NSString *, id> *, NSError *))completion {
   if (operation != SHAAR_OP_DEVTOOLS_PANEL_OPEN &&
       operation != SHAAR_OP_DEVTOOLS_PANEL_CLOSE &&
-      operation != SHAAR_OP_DEVTOOLS_PANEL_SCREENCAST) {
+      operation != SHAAR_OP_DEVTOOLS_PANEL_SCREENCAST &&
+      operation != 1080 /* SHAAR_OP_DEVTOOLS_PANEL_NETWORK_RULES in patch 0024 */) {
     completion(nil, ShaarDevToolsError(@"This panel operation is unavailable."));
     return;
   }

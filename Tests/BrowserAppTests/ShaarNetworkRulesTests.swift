@@ -30,6 +30,18 @@ private final class FakeNetworkRulesABIEngine: ShaarDevToolsSubmitting, @uncheck
   }
 }
 
+@MainActor private final class FakePanelRulesRequester: ShaarPanelRequesting {
+  var requests: [(ShaarDevToolsOperation, SiteControlTarget, [String: Any])] = []
+
+  func request(
+    _ operation: ShaarDevToolsOperation, target: SiteControlTarget, payload: [String: Any]
+  ) async throws -> [String: Any] {
+    requests.append((operation, target, payload))
+    if operation == .panelOpen { return ["leaseID": 7] }
+    return ["schemaVersion": 1]
+  }
+}
+
 @Suite @MainActor struct ShaarNetworkRulesTests {
   @Test func requestDraftStartsDisabledAndPreservesExactMatch() throws {
     let row = ShaarNetworkRequest(
@@ -192,6 +204,40 @@ private final class FakeNetworkRulesABIEngine: ShaarDevToolsSubmitting, @uncheck
     let other = SiteControlTarget(tabID: UUID(), profileID: target.profileID, url: target.url)
     await #expect(throws: ShaarNetworkRuleError.self) {
       try await transport.apply([], to: other)
+    }
+  }
+
+  @Test func nativeRuleTransportWaitsForOwnedLeaseAndRejectsStaleTab() async throws {
+    let owner = target()
+    let requester = FakePanelRulesRequester()
+    let panel = ShaarDevToolsNativeTransport(requester: requester, windowID: UUID().uuidString)
+    let transport = ShaarNetworkRulesNativeTransport(panel: panel)
+    var rule = ShaarNetworkRule.fromRequest(request())
+    rule.bodyText = "fixture response"
+    let resolved = try ShaarResolvedNetworkRule(rule)
+    #expect(!transport.available)
+    await #expect(throws: ShaarNetworkRuleError.self) {
+      try await transport.apply([resolved], to: owner)
+    }
+    let stream = panel.messages(for: owner)
+    var iterator = stream.makeAsyncIterator()
+    #expect(await iterator.next() == .streamAvailable)
+    #expect(transport.available)
+    try await transport.apply([resolved], to: owner)
+    let submitted = try #require(requester.requests.last)
+    #expect(submitted.0 == .panelNetworkRules)
+    #expect(submitted.1 == owner)
+    #expect(submitted.2["leaseID"] as? UInt32 == 7)
+    let rows = try #require(submitted.2["rules"] as? [[String: Any]])
+    #expect(
+      rows.first?["bodyBase64"] as? String == Data("fixture response".utf8).base64EncodedString())
+    let other = SiteControlTarget(tabID: UUID(), profileID: owner.profileID, url: owner.url)
+    await #expect(throws: ShaarNetworkRuleError.self) {
+      try await transport.apply([], to: other)
+    }
+    _ = panel.messages(for: other)
+    await #expect(throws: ShaarNetworkRuleError.self) {
+      try await transport.apply([], to: owner)
     }
   }
 

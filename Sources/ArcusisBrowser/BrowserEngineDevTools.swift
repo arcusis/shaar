@@ -40,30 +40,28 @@ extension BrowserEngine {
   func showDeveloperTools(for target: SiteControlTarget) -> Bool {
     guard siteControlTarget == target else { return false }
     let inspector = inspectors[target.tabID] ?? InspectorModel(target: target, engine: self)
-    let viewportsTransport: any ShaarViewportsTransport
-    let eventTransport: any ShaarDevToolsEventTransport
-    let reproTransport: any ShaarReproTransport
-    if let shaar = runtime as? ARCShaarRuntime {
-      viewportsTransport = ShaarViewportsNativeTransport(
-        requester: ShaarViewportRuntimeRequester(
-          runtime: shaar, windowID: windowID, contextID: nil))
+    let shell: ShaarDevToolsModel
+    if let existing = shaarDevTools[target.tabID] {
+      shell = existing
+    } else if let shaar = runtime as? ARCShaarRuntime {
       let panel = ShaarDevToolsNativeTransport(
         requester: ShaarPanelRuntimeRequester(runtime: shaar, windowID: windowID),
         windowID: windowID)
-      eventTransport = panel
-      reproTransport = ShaarReproNativeTransport(
-        runtime: shaar, panel: panel, inspector: inspector)
+      shell = ShaarDevToolsModel(
+        target: target, transport: panel,
+        reproTransport: ShaarReproNativeTransport(
+          runtime: shaar, panel: panel, inspector: inspector),
+        viewportsTransport: ShaarViewportsNativeTransport(
+          requester: ShaarViewportRuntimeRequester(
+            runtime: shaar, windowID: windowID, contextID: nil)),
+        localTransports: [ShaarNextMCPConsoleTransport(), ShaarSpotlightConsoleTransport()],
+        rulesTransport: ShaarNetworkRulesNativeTransport(panel: panel))
+      panel.onLeaseOpened = { [weak shell] in shell?.rules.resume() }
     } else {
-      viewportsTransport = ShaarViewportsPendingTransport()
-      eventTransport = ShaarDevToolsPendingTransport()
-      reproTransport = ShaarReproPendingTransport()
-    }
-    let shell =
-      shaarDevTools[target.tabID]
-      ?? ShaarDevToolsModel(
-        target: target, transport: eventTransport, reproTransport: reproTransport,
-        viewportsTransport: viewportsTransport,
+      shell = ShaarDevToolsModel(
+        target: target,
         localTransports: [ShaarNextMCPConsoleTransport(), ShaarSpotlightConsoleTransport()])
+    }
     shaarDevTools[target.tabID] = shell
     inspectors[target.tabID] = inspector
     shell.updateTarget(target)

@@ -1,6 +1,7 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Browsing is available, but saved cookies and passwords are unavailable for this launch. Unlock your keychain or approve access, then restart Shaar." : { "localizations" : { "he" : { "stringUnit" : { "state" : "translated", "value" : "אפשר להמשיך לגלוש, אך קובצי Cookie וסיסמאות שמורים אינם זמינים בהפעלה זו. יש לבטל את נעילת צרור המפתחות או לאשר גישה, ואז להפעיל מחדש את Shaar." } } } },
     "Private privacy defaults could not be verified." : { "localizations" : { "he" : { "stringUnit" : { "state" : "translated", "value" : "לא ניתן לאמת את הגדרות הפרטיות של החלון הפרטי." } } } },
     "A loaded profile and a local folder are required." : { "localizations" : { "he" : { "stringUnit" : { "state" : "translated", "value" : "נדרשים פרופיל טעון ותיקייה מקומית." } } } },
     "The download folder could not be saved." : { "localizations" : { "he" : { "stringUnit" : { "state" : "translated", "value" : "לא ניתן לשמור את תיקיית ההורדות." } } } },

@@ -90,6 +90,8 @@ BOOL ARCReservedBrowserShortcut(NSString *key, NSEventModifierFlags modifiers) {
 
 @implementation ARCChromiumRuntime
 
+- (NSString *)startupNotice { return nil; }
+
 - (instancetype)initWithFrameworkURL:(NSURL *)url error:(NSError **)error {
   if (error) *error = [NSError errorWithDomain:@"org.arcusis.shaar.engine" code:1
                                      userInfo:@{NSLocalizedDescriptionKey: @"Shaar engine unavailable."}];

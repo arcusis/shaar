@@ -99,6 +99,7 @@ let package = Package(
       name: "BrowserAppTests",
       dependencies: [
         "ArcusisBrowser", "BrowserCore", "BrowserTestSupport", "ChromiumBridge", "ShaarEngineABI",
+        "ShaarEngineC",
       ],
       resources: [.copy("Snapshots/InspectorAI")]),
     .testTarget(

@@ -51,6 +51,11 @@ FOUNDATION_EXPORT NSDictionary<NSString *, id> *ARCProbePrivateEvaluationPayload
 FOUNDATION_EXPORT NSDictionary<NSString *, id> *ARCProbePrivatePrivacyPreferences(
   NSDictionary *status, NSInteger wildcardStatus);
 
+/// Reads native-owned dock geometry without retaining or reparenting its frontend.
+FOUNDATION_EXPORT NSDictionary * _Nullable ARCProbeDevToolsDockAudit(
+  ARCChromiumRuntime *runtime, NSString *tabID, NSString *windowID,
+  NSString * _Nullable contextID);
+
 @interface ARCChromiumRuntime (Verification)
 /// Grants geolocation only on the selected disposable Inspector loopback fixture.
 - (void)grantProbeGeolocationInTabID:(NSString *)tabID completion:(void (NS_SWIFT_UI_ACTOR ^)(NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;

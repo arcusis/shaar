@@ -13,6 +13,7 @@ private final class PrivateInspectorRuntime: ARCChromiumRuntime {
   var tabID = ""
   var pageView: NSView?
   var calls: [String] = []
+  var expressions: [String] = []
   var ended: [String] = []
   var opened = false
 
@@ -41,6 +42,7 @@ private final class PrivateInspectorRuntime: ARCChromiumRuntime {
       return
     }
     calls.append(method)
+    if let expression = params["expression"] as? String { expressions.append(expression) }
     completion(["result": ["value": 42]], nil)
   }
 
@@ -54,6 +56,32 @@ private final class PrivateInspectorRuntime: ARCChromiumRuntime {
 }
 
 @Suite @MainActor struct PrivateInspectorTests {
+  @Test func closingReleasedInspectorStillRemovesRendererShield() async throws {
+    let tabID = UUID()
+    let store = BrowserStore(
+      privateSession: try .privateWindow(sourceProfileID: UUID(), firstTabID: tabID))
+    let runtime = PrivateInspectorRuntime()
+    runtime.tabID = tabID.uuidString
+    runtime.pageView = NSView()
+    let session = PrivatePageSession(
+      runtime: runtime, contextID: "private-context", windowID: "private-window",
+      firstTabID: tabID, store: store)
+    let target = try #require(session.inspectorTarget)
+    var model: InspectorModel? = InspectorModel(target: target, privateSession: session)
+    weak var released = model
+    model?.open()
+    model?.close()
+    model = nil
+    for _ in 0..<20 {
+      if released == nil && runtime.expressions.contains(where: { $0.contains(".stop()") }) {
+        break
+      }
+      try await Task.sleep(for: .milliseconds(5))
+    }
+    #expect(runtime.expressions.contains(where: { $0.contains(".stop()") }))
+    #expect(released == nil)
+  }
+
   @Test func privateCommandsUseTheirOwnContextAndRetireWithTheTab() async throws {
     let tabID = UUID()
     let profileID = UUID()

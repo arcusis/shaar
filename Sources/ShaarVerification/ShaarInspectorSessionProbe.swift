@@ -43,8 +43,29 @@ struct ShaarInspectorSessionProbe {
     do {
       try await checkSession(normal)
       record("normalSequentialDOMCSS")
+      if CommandLine.arguments.contains("--probe-shaar-devtools-dock") {
+        try await DevToolsDockProbe(
+          runtime: runtime, model: normal, windowID: engine.windowID, fixture: fixture
+        ).run { record("normalDock.\($0)") }
+      }
+      if CommandLine.arguments.contains("--probe-shaar-inspector-input") {
+        engine.toggleInspector(for: target)
+        guard let model = engine.inspectors[target.tabID],
+          let view = runtime.view(forTabID: target.tabID.uuidString)
+        else { throw InspectorFailure("Product Inspector did not open.") }
+        try await InspectorInteractionProbe(model: model, view: view).run {
+          record("normalInput.\($0)")
+        }
+      }
     } catch {
       failures.append("normal: \(error)")
+    }
+    if CommandLine.arguments.contains("--probe-shaar-inspector-normal-only") {
+      guard NSApp.windows.allSatisfy({ !$0.isVisible }), failures.isEmpty else {
+        throw InspectorFailure(failures.joined(separator: "; "))
+      }
+      record("allWindowsHidden")
+      return
     }
     let privateHost = PrivateBrowserHost(
       runtime: runtime, presentsWindows: false, sourceProfileID: { profileID.uuidString })
@@ -97,6 +118,23 @@ struct ShaarInspectorSessionProbe {
       FileHandle.standardError.write(
         Data("Private native success audit: ".utf8) + bytes + Data("\n".utf8))
       record("privateSelectedViewDisplayed")
+      if CommandLine.arguments.contains("--probe-shaar-devtools-dock") {
+        try await DevToolsDockProbe(
+          runtime: runtime, model: model, windowID: owner.windowID,
+          contextID: owner.contextID, fixture: fixture
+        ).run { record("privateDock.\($0)") }
+      }
+      if CommandLine.arguments.contains("--probe-shaar-inspector-input") {
+        owner.page.toggleInspector()
+        guard let model = owner.page.inspectors[privateTarget.tabID],
+          let view = runtime.view(
+            forPrivateTabID: privateTarget.tabID.uuidString,
+            windowID: owner.windowID, contextID: owner.contextID)
+        else { throw InspectorFailure("Product private Inspector did not open.") }
+        try await InspectorInteractionProbe(model: model, view: view).run {
+          record("privateInput.\($0)")
+        }
+      }
     } catch {
       if let audit = runtime.privateProbeAudit(forContextID: owner.contextID) {
         let bytes = try JSONSerialization.data(withJSONObject: audit, options: [.sortedKeys])

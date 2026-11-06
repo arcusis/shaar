@@ -90,6 +90,48 @@ bool PrivateTabState(ARCShaarRuntime *runtime, NSString *tabID,
 
 }  // namespace
 
+NSDictionary *ARCProbeDevToolsDockAudit(ARCChromiumRuntime *baseRuntime,
+    NSString *tabID, NSString *windowID, NSString *contextID) {
+  if (!ProbeCaptureAllowed() || ![baseRuntime isKindOfClass:ARCShaarRuntime.class]) return nil;
+  auto frontend = reinterpret_cast<decltype(&shaar_devtools_frontend_view)>(
+      dlsym(RTLD_DEFAULT, "shaar_devtools_frontend_view"));
+  if (!frontend) return nil;
+  ARCShaarRuntime *runtime = (ARCShaarRuntime *)baseRuntime;
+  shaar_scope scope = {};
+  scope.size = sizeof(scope);
+  shaar_window *windowHandle = nullptr;
+  shaar_tab *tabHandle = nullptr;
+  NSView *page = nil;
+  NSView *host = nil;
+  if (contextID.length) {
+    if (![runtime privateTabOwned:tabID windowID:windowID contextID:contextID]) return nil;
+    scope.private_session = (shaar_private_session *)[PrivateContext(runtime, contextID)[@"session"] pointerValue];
+    windowHandle = (shaar_window *)[PrivateWindow(runtime, windowID)[@"handle"] pointerValue];
+    tabHandle = (shaar_tab *)[PrivateTab(runtime, tabID)[@"handle"] pointerValue];
+    page = [runtime viewForPrivateTabID:tabID windowID:windowID contextID:contextID];
+    host = [runtime hostViewForPrivateWindowID:windowID contextID:contextID];
+  } else {
+    NSString *profileID = ProbeTable(runtime, "_shaarTabProfiles")[tabID];
+    if (![runtime shaarDevToolsOwnsTabID:tabID profileID:profileID windowID:windowID]) return nil;
+    scope.profile = (shaar_profile *)[ProbeTable(runtime, "_shaarProfiles")[profileID] pointerValue];
+    windowHandle = (shaar_window *)[ProbeTable(runtime, "_shaarWindows")[windowID] pointerValue];
+    tabHandle = (shaar_tab *)[ProbeTable(runtime, "_shaarTabs")[tabID] pointerValue];
+    page = [runtime viewForTabID:tabID];
+    host = [runtime hostViewForWindowID:windowID];
+  }
+  NSView *dock = (__bridge NSView *)frontend([runtime privateEngineHandle], scope, windowHandle, tabHandle);
+  BOOL hidden = YES;
+  for (NSWindow *window in NSApp.windows) hidden &= !window.isVisible;
+  return @{@"open": @(dock != nil), @"sameWindow": @(page.window && dock.window == page.window),
+      @"sameContainer": @(page.superview && dock.superview == page.superview),
+      @"containerWidth": @(page.superview.bounds.size.width),
+      @"nonOverlapping": @(dock && NSMaxX(page.frame) <= NSMinX(dock.frame) + 1),
+      @"allWindowsHidden": @(hidden), @"pageWidth": @(page.frame.size.width),
+      @"pageHeight": @(page.frame.size.height), @"hostWidth": @(host.bounds.size.width),
+      @"frontendWidth": @(dock.frame.size.width), @"frontendHeight": @(dock.frame.size.height),
+      @"pageFrame": NSStringFromRect(page.frame), @"frontendFrame": NSStringFromRect(dock.frame)};
+}
+
 NSArray<NSDictionary *> *ARCProbeTracePrivateSelection(
     ARCChromiumRuntime *runtime, void (^action)(void)) {
   if (!ProbeCaptureAllowed() ||

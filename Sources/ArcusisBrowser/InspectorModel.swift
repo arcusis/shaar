@@ -97,8 +97,10 @@ final class InspectorModel {
     installed = false
     connection?.end(target)
     let revision = generation
-    Task { [weak self] in
-      guard let self, self.generation == revision, !self.isOpen else { return }
+    // Closing can remove the last UI owner. Keep cleanup alive until the page
+    // shield and native overlays are removed, while protecting a reopened model.
+    Task { [self] in
+      guard self.generation == revision, !self.isOpen else { return }
       _ = try? await self.evaluate("globalThis.__shaarInspectorV2?.stop(); true")
       await self.styles.clearOverlay(generation: revision)
     }

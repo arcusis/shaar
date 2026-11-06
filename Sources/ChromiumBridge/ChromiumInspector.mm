@@ -4,56 +4,14 @@
 
 #import "ChromiumRuntimeInternal.h"
 #import "ChromiumShaarPrivateSupport.h"
-#import <objc/runtime.h>
 #include "../../ThirdParty/ChromiumEngine/layer/chrome/browser/shaar/public/shaar_engine.h"
-
-namespace {
-char kShaarInspectorLeases;
-NSMutableDictionary<NSString *, NSString *> *ShaarInspectorLeases(ARCShaarRuntime *runtime) {
-  NSMutableDictionary *leases = objc_getAssociatedObject(runtime, &kShaarInspectorLeases);
-  if (!leases) {
-    leases = [NSMutableDictionary dictionary];
-    objc_setAssociatedObject(runtime, &kShaarInspectorLeases, leases, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-  }
-  return leases;
-}
-}
-
-@interface ARCShaarRuntime (InspectorLease)
-- (void)holdShaarInspectorTabID:(NSString *)tabID profileID:(NSString *)profileID
-                      windowID:(NSString *)windowID lease:(NSString *)lease;
-- (void)holdShaarPrivateInspectorTabID:(NSString *)tabID windowID:(NSString *)windowID
-                           contextID:(NSString *)contextID lease:(NSString *)lease;
-@end
 
 @implementation ARCShaarRuntime (Inspector)
 - (BOOL)beginInspectorForPrivateTabID:(NSString *)tabID windowID:(NSString *)windowID
                           contextID:(NSString *)contextID {
-  if (![self privateTabOwned:tabID windowID:windowID contextID:contextID]) return NO;
-  if (ShaarInspectorLeases(self)[tabID]) return YES;
-  NSString *lease = NSUUID.UUID.UUIDString;
-  ShaarInspectorLeases(self)[tabID] = lease;
-  [self holdShaarPrivateInspectorTabID:tabID windowID:windowID contextID:contextID lease:lease];
-  return YES;
-}
-
-- (void)holdShaarPrivateInspectorTabID:(NSString *)tabID windowID:(NSString *)windowID
-                           contextID:(NSString *)contextID lease:(NSString *)lease {
-  if (![ShaarInspectorLeases(self)[tabID] isEqual:lease]) return;
-  if (![self privateTabOwned:tabID windowID:windowID contextID:contextID]) {
-    [ShaarInspectorLeases(self) removeObjectForKey:tabID];
-    return;
-  }
-  [self shaarPrivateDevToolsCall:@"Runtime.evaluate"
-                         params:@{@"expression": @"new Promise(resolve => setTimeout(resolve, 30000))",
-                                  @"awaitPromise": @YES}
-                     capability:SHAAR_DEVTOOLS_CAPABILITY_INSPECTOR tabID:tabID
-                       windowID:windowID contextID:contextID
-                     completion:^(NSDictionary *result, NSError *error) {}];
-  __weak ARCShaarRuntime *weakSelf = self;
-  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 8 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-    [weakSelf holdShaarPrivateInspectorTabID:tabID windowID:windowID contextID:contextID lease:lease];
-  });
+  // Native owns a persistent target-bound CDP session. An awaited keepalive
+  // would block its serialized command queue and delay pick/read/stop requests.
+  return [self privateTabOwned:tabID windowID:windowID contextID:contextID];
 }
 
 - (void)privateInspectorCall:(NSString *)method params:(NSDictionary *)params tabID:(NSString *)tabID
@@ -76,35 +34,12 @@ NSMutableDictionary<NSString *, NSString *> *ShaarInspectorLeases(ARCShaarRuntim
 }
 
 - (BOOL)beginInspectorForTabID:(NSString *)tabID profileID:(NSString *)profileID windowID:(NSString *)windowID {
-  if (![self shaarDevToolsOwnsTabID:tabID profileID:profileID windowID:windowID]) return NO;
-  NSMutableDictionary *leases = ShaarInspectorLeases(self);
-  if (leases[tabID]) return YES;
-  NSString *lease = NSUUID.UUID.UUIDString;
-  leases[tabID] = lease;
-  [self holdShaarInspectorTabID:tabID profileID:profileID windowID:windowID lease:lease];
-  return YES;
-}
-
-- (void)holdShaarInspectorTabID:(NSString *)tabID profileID:(NSString *)profileID
-                      windowID:(NSString *)windowID lease:(NSString *)lease {
-  if (![ShaarInspectorLeases(self)[tabID] isEqual:lease]) return;
-  if (![self shaarDevToolsOwnsTabID:tabID profileID:profileID windowID:windowID]) {
-    [ShaarInspectorLeases(self) removeObjectForKey:tabID];
-    return;
-  }
-  [self shaarDevToolsCall:@"Runtime.evaluate"
-                  params:@{@"expression": @"new Promise(resolve => setTimeout(resolve, 30000))",
-                           @"awaitPromise": @YES}
-              capability:SHAAR_DEVTOOLS_CAPABILITY_INSPECTOR tabID:tabID
-               profileID:profileID windowID:windowID completion:^(NSDictionary *result, NSError *error) {}];
-  __weak ARCShaarRuntime *weakSelf = self;
-  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 8 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-    [weakSelf holdShaarInspectorTabID:tabID profileID:profileID windowID:windowID lease:lease];
-  });
+  return [self shaarDevToolsOwnsTabID:tabID profileID:profileID windowID:windowID];
 }
 
 - (void)endInspectorForTabID:(NSString *)tabID {
-  [ShaarInspectorLeases(self) removeObjectForKey:tabID];
+  // The page script removes its listeners and overlay. Native releases the
+  // shared target session when the tab closes; no asynchronous hold is needed.
 }
 
 - (void)inspectorCall:(NSString *)method params:(NSDictionary *)params tabID:(NSString *)tabID

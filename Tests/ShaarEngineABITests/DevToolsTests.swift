@@ -75,6 +75,27 @@ struct DevToolsTests {
     }
   }
 
+  @Test func safeAreaCommandUsesScopedDeveloperCapability() throws {
+    let fake = FakeDevToolsEngine()
+    let adapter = try #require(ShaarDevToolsAdapter(implementation: .shaar, engine: fake))
+    _ = try adapter.call(
+      capability: .developer, command: .emulationSetSafeAreaInsetsOverride,
+      parametersJSON: Data(#"{"insets":{"top":59,"bottom":34}}"#.utf8),
+      scope: ShaarNavigationScope(profileID: "profile-a"),
+      windowID: "window-a", tabID: "tab-a", completion: { _ in })
+    let request = try #require(fake.request)
+    let root = try #require(JSONSerialization.jsonObject(with: request.payload) as? [String: Any])
+    #expect(root["command"] as? UInt32 == 44)
+    #expect(root["capability"] as? UInt32 == ShaarDevToolsCapability.developer.rawValue)
+    #expect((root["params"] as? [String: [String: Int]])?["insets"]?["top"] == 59)
+    #expect(throws: ShaarEngineError.self) {
+      try adapter.call(
+        capability: .inspector, command: .emulationSetSafeAreaInsetsOverride,
+        scope: ShaarNavigationScope(profileID: "profile-a"),
+        windowID: "window-a", tabID: "tab-a", completion: { _ in })
+    }
+  }
+
   @Test func frontendUsesOnlyShowOrCloseAndRejectsMissingOwners() throws {
     let fake = FakeDevToolsEngine()
     let adapter = try #require(ShaarDevToolsAdapter(implementation: .shaar, engine: fake))

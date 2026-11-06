@@ -201,6 +201,8 @@ constexpr CommandEntry kCommands[] = {
     {SHAAR_DEVTOOLS_NETWORK_SET_COOKIE, "Network.setCookie", false, true},
     {SHAAR_DEVTOOLS_NETWORK_DELETE_COOKIES, "Network.deleteCookies", false,
      true},
+    {SHAAR_DEVTOOLS_EMULATION_SET_SAFE_AREA_INSETS_OVERRIDE,
+     "Emulation.setSafeAreaInsetsOverride", false, true},
 };
 
 struct ReplyContext {
@@ -415,6 +417,24 @@ bool ValidateParams(shaar_devtools_command command,
     case SHAAR_DEVTOOLS_ACCESSIBILITY_GET_PARTIAL_AX_TREE:
       return ParamsHaveOnly(params, {"objectId", "backendNodeId", "nodeId",
           "fetchRelatives"});
+    case SHAAR_DEVTOOLS_EMULATION_SET_SAFE_AREA_INSETS_OVERRIDE: {
+      if (!ParamsHaveOnly(params, {"insets"}))
+        return false;
+      const auto* insets = params.FindDict("insets");
+      if (!insets || insets->size() > 8)
+        return false;
+      for (const auto item : *insets) {
+        if (item.first != "top" && item.first != "right" &&
+            item.first != "bottom" && item.first != "left" &&
+            item.first != "topMax" && item.first != "rightMax" &&
+            item.first != "bottomMax" && item.first != "leftMax")
+          return false;
+        if (!item.second.is_int() || item.second.GetInt() < 0 ||
+            item.second.GetInt() > 200)
+          return false;
+      }
+      return true;
+    }
     case SHAAR_DEVTOOLS_EMULATION_SET_DEVICE_METRICS_OVERRIDE:
       return ParamsHaveOnly(params, {"width", "height", "deviceScaleFactor",
           "mobile", "scale", "screenWidth", "screenHeight", "positionX",
@@ -513,6 +533,8 @@ bool HasRequiredFields(shaar_devtools_command command,
       return HasRequiredInteger(params, "nodeId") ||
              HasRequiredInteger(params, "backendNodeId") ||
              HasRequiredString(params, "objectId");
+    case SHAAR_DEVTOOLS_EMULATION_SET_SAFE_AREA_INSETS_OVERRIDE:
+      return params.FindDict("insets") != nullptr;
     case SHAAR_DEVTOOLS_EMULATION_SET_DEVICE_METRICS_OVERRIDE:
       return HasRequiredInteger(params, "width") &&
              HasRequiredInteger(params, "height") &&

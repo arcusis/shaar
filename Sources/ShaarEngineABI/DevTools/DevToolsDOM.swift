@@ -76,8 +76,10 @@ public struct ShaarDOMSnapshot: Equatable, Sendable {
     guard let root = result["root"] as? [String: Any] else { return nil }
     var nodes: [ShaarDOMNode] = []
     var seen: Set<Int> = []
-    guard let rootID = append(root, parentID: nil, relation: .child,
-                              depth: 0, nodes: &nodes, seen: &seen)
+    guard
+      let rootID = append(
+        root, parentID: nil, relation: .child,
+        depth: 0, nodes: &nodes, seen: &seen)
     else { return nil }
     return Self(rootID: rootID, nodes: nodes)
   }
@@ -95,25 +97,32 @@ public struct ShaarDOMSnapshot: Equatable, Sendable {
     guard children.count <= 2_000, shadows.count <= 32 else { return nil }
     var childIDs: [Int] = []
     for child in children {
-      guard let childID = append(child, parentID: id, relation: .child,
-                                 depth: depth + 1, nodes: &nodes, seen: &seen)
+      guard
+        let childID = append(
+          child, parentID: id, relation: .child,
+          depth: depth + 1, nodes: &nodes, seen: &seen)
       else { return nil }
       childIDs.append(childID)
     }
     for shadow in shadows {
-      guard let childID = append(shadow, parentID: id, relation: .shadowRoot,
-                                 depth: depth + 1, nodes: &nodes, seen: &seen)
+      guard
+        let childID = append(
+          shadow, parentID: id, relation: .shadowRoot,
+          depth: depth + 1, nodes: &nodes, seen: &seen)
       else { return nil }
       childIDs.append(childID)
     }
     if let frame {
-      guard let childID = append(frame, parentID: id, relation: .frameDocument,
-                                 depth: depth + 1, nodes: &nodes, seen: &seen)
+      guard
+        let childID = append(
+          frame, parentID: id, relation: .frameDocument,
+          depth: depth + 1, nodes: &nodes, seen: &seen)
       else { return nil }
       childIDs.append(childID)
     }
-    guard let node = ShaarDOMNode.decode(
-      fields, parentID: parentID, relation: relation, childrenIDs: childIDs)
+    guard
+      let node = ShaarDOMNode.decode(
+        fields, parentID: parentID, relation: relation, childrenIDs: childIDs)
     else { return nil }
     nodes.append(node)
     return id

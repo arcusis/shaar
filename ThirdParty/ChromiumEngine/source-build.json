@@ -320,7 +320,7 @@
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0019-shaar-site-cookie-items.patch",
-      "sha256": "df97a10b33a8ebc15fecb84bffc688a8c15e3e60c298495f17eacaa6da917c73"
+      "sha256": "2fe8787eddcb03aa6c06f23ac3a25b1c5d624c14c0dd411c40c58a902019db7f"
     },
     {
       "file": "ThirdParty/ChromiumEngine/patches/0020-shaar-safe-area-insets.patch",

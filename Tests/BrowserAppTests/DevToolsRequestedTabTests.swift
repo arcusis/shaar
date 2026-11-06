@@ -15,11 +15,16 @@ struct DevToolsRequestedTabTests {
   @Test func nodeFrontendURLIsLimitedToBundledDevToolsPages() {
     var session = BrowserSession.fresh()
     let node = URL(string: "devtools://devtools/bundled/js_app.html?ws=localhost:9229/node")!
+    let discovery = URL(string: "devtools://devtools/bundled/node_app.html?remoteBase=/serve_rev")!
     let profile = session.selectedSpace.profileID
     #expect(session.open(node) == nil)
     #expect(
       session.insertNativeTab(
         BrowserTab(url: node), profileID: profile, openerID: nil,
+        foreground: true) != nil)
+    #expect(
+      session.insertNativeTab(
+        BrowserTab(url: discovery), profileID: profile, openerID: nil,
         foreground: true) != nil)
     #expect(
       session.insertNativeTab(

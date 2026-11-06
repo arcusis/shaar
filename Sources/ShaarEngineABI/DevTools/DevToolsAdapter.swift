@@ -18,7 +18,13 @@ public enum ShaarDevToolsOperation: UInt32, Sendable {
   case panelClose = 1010
   case panelGetResponseBody = 1011
   case panelPhase2Command = 1012
-  case panelNetworkRules = 1013
+  case viewportOpen = 1013
+  case viewportClose = 1014
+  case viewportAdd = 1015
+  case viewportRemove = 1016
+  case viewportAction = 1017
+  case viewportFrame = 1018
+  case panelNetworkRules = 1019
 }
 
 public enum ShaarDevToolsCapability: UInt32, Sendable {

@@ -146,6 +146,24 @@ BOOL SubmitShaarDevTools(ARCShaarRuntime *runtime, shaar_scope scope,
 
 @implementation ARCShaarRuntime (DevToolsTransport)
 
+- (void)viewportRequest:(NSUInteger)operation tabID:(NSString *)tabID
+              profileID:(NSString *)profileID windowID:(NSString *)windowID
+              contextID:(NSString *)contextID payload:(NSDictionary<NSString *, id> *)payload
+             completion:(void (NS_SWIFT_UI_ACTOR ^)(NSDictionary<NSString *, id> *, NSError *))completion {
+  if (operation < SHAAR_OP_DEVTOOLS_VIEWPORT_OPEN ||
+      operation > SHAAR_OP_DEVTOOLS_VIEWPORT_FRAME) {
+    completion(nil, ShaarDevToolsError(@"This Viewports operation is unavailable."));
+    return;
+  }
+  if (contextID.length) {
+    [self shaarPrivateDevToolsSubmit:operation tabID:tabID windowID:windowID
+                          contextID:contextID payload:payload completion:completion];
+  } else {
+    [self shaarDevToolsSubmit:operation tabID:tabID profileID:profileID
+                    windowID:windowID payload:payload completion:completion];
+  }
+}
+
 - (void)agentBridgeRequest:(NSUInteger)operation forTabID:(NSString *)tabID
                  profileID:(NSString *)profileID windowID:(NSString *)windowID
                 completion:(void (NS_SWIFT_UI_ACTOR ^)(NSDictionary<NSString *, id> *, NSError *))completion {

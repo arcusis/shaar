@@ -155,7 +155,12 @@ struct ShaarDevToolsPendingTransport: ShaarDevToolsEventTransport {
 final class ShaarDevToolsModel {
   private(set) var target: SiteControlTarget
   private(set) var isOpen = false
-  var section: ShaarDevToolsSection = .elements
+  var section: ShaarDevToolsSection = .elements {
+    didSet {
+      guard isOpen, section != oldValue else { return }
+      if section == .viewports { viewports.open() } else { viewports.close() }
+    }
+  }
   var dock: ShaarDevToolsDock = .bottom
   var bottomHeight: CGFloat = 380
   var rightWidth: CGFloat = 420
@@ -210,7 +215,7 @@ final class ShaarDevToolsModel {
     startStream()
     startLocalStreams()
     phase2.open()
-    viewports.open()
+    if section == .viewports { viewports.open() }
   }
 
   func close() {

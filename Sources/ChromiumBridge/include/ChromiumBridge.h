@@ -219,6 +219,12 @@ FOUNDATION_EXPORT NSString *ARCBridgeLocalizedString(NSString *message);
 
 /// Shaar C ABI implementation of the core profile/window/tab/navigation backend.
 @interface ARCShaarRuntime : ARCChromiumRuntime <ARCBrowserCoreBackend>
+/// Scoped Viewports lease, input, and frame operations. A missing engine operation reports an error.
+- (void)viewportRequest:(NSUInteger)operation tabID:(NSString *)tabID
+              profileID:(NSString *)profileID windowID:(NSString *)windowID
+              contextID:(nullable NSString *)contextID payload:(NSDictionary<NSString *, id> *)payload
+             completion:(void (NS_SWIFT_UI_ACTOR ^)(NSDictionary<NSString *, id> * _Nullable,
+                                                     NSError * _Nullable))completion NS_SWIFT_UI_ACTOR;
 @end
 
 @interface ARCChromiumRuntime (Extensions)
